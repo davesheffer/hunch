@@ -1,0 +1,2687 @@
+[
+  {
+    "id": "edge_e422e70020",
+    "from": "sym_3188212032",
+    "to": "sym_9e8caabda8",
+    "type": "calls",
+    "reason": "storeFor calls findRoot",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/cli/index.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_ef1a6c80b7",
+    "from": "sym_3188212032",
+    "to": "sym_6264d56eb8",
+    "type": "calls",
+    "reason": "storeFor calls brainPaths",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/cli/index.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_374d2c4884",
+    "from": "sym_37d2e70fac",
+    "to": "sym_bda955394e",
+    "type": "calls",
+    "reason": "resolveInvocation calls q",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/cli/invocation.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_19e2e64763",
+    "from": "sym_b26ad02a58",
+    "to": "sym_0c63caa8a0",
+    "type": "calls",
+    "reason": "globToRegExp calls segToRe",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/core/glob.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_21d06d531c",
+    "from": "sym_97208a8294",
+    "to": "sym_f48c80382c",
+    "type": "calls",
+    "reason": "pathMatchesGlob calls norm",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/core/glob.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_b59376d9b3",
+    "from": "sym_97208a8294",
+    "to": "sym_b26ad02a58",
+    "type": "calls",
+    "reason": "pathMatchesGlob calls globToRegExp",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/core/glob.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_7d0251e689",
+    "from": "sym_f54a45b5ef",
+    "to": "sym_5a74d29b94",
+    "type": "calls",
+    "reason": "symbolId calls shortHash",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/core/ids.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_15814e3c2c",
+    "from": "sym_74d3a2e9bd",
+    "to": "sym_5a74d29b94",
+    "type": "calls",
+    "reason": "componentId calls shortHash",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/core/ids.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_89b8411e9c",
+    "from": "sym_1ada613a64",
+    "to": "sym_5a74d29b94",
+    "type": "calls",
+    "reason": "edgeId calls shortHash",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/core/ids.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_e2f2e03409",
+    "from": "sym_871abb4df2",
+    "to": "sym_5a74d29b94",
+    "type": "calls",
+    "reason": "decisionId calls shortHash",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/core/ids.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_c20b67e335",
+    "from": "sym_5c38b4911d",
+    "to": "sym_5a74d29b94",
+    "type": "calls",
+    "reason": "bugId calls shortHash",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/core/ids.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_7c6046987b",
+    "from": "sym_16b88590c8",
+    "to": "sym_5a74d29b94",
+    "type": "calls",
+    "reason": "constraintId calls shortHash",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/core/ids.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_c5cb8bee55",
+    "from": "sym_9e8caabda8",
+    "to": "sym_4f2930d147",
+    "type": "calls",
+    "reason": "findRoot calls resolve",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/core/paths.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_bcba6422c4",
+    "from": "sym_9e8caabda8",
+    "to": "sym_938d882d9f",
+    "type": "calls",
+    "reason": "findRoot calls isDir",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/core/paths.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_31977333a4",
+    "from": "sym_815fdb47eb",
+    "to": "sym_2e868206d6",
+    "type": "calls",
+    "reason": "gitSafe calls git",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/git.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_60b0d6f50b",
+    "from": "sym_fbc5451f63",
+    "to": "sym_815fdb47eb",
+    "type": "calls",
+    "reason": "isGitRepo calls gitSafe",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/git.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_00a44f80bd",
+    "from": "sym_64db6cba68",
+    "to": "sym_815fdb47eb",
+    "type": "calls",
+    "reason": "headSha calls gitSafe",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/git.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_2de97978f3",
+    "from": "sym_c1e85563e2",
+    "to": "sym_815fdb47eb",
+    "type": "calls",
+    "reason": "revParse calls gitSafe",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/git.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_a4279f922e",
+    "from": "sym_9c164687cf",
+    "to": "sym_815fdb47eb",
+    "type": "calls",
+    "reason": "hooksDir calls gitSafe",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/git.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_a2c5c56bc1",
+    "from": "sym_aa7221e606",
+    "to": "sym_815fdb47eb",
+    "type": "calls",
+    "reason": "gitDir calls gitSafe",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/git.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_568edbde32",
+    "from": "sym_91e8631ffc",
+    "to": "sym_815fdb47eb",
+    "type": "calls",
+    "reason": "commitFiles calls gitSafe",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/git.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_9f3cb0d4ff",
+    "from": "sym_cb863afde2",
+    "to": "sym_815fdb47eb",
+    "type": "calls",
+    "reason": "commitMeta calls gitSafe",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/git.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_95522e935a",
+    "from": "sym_cb863afde2",
+    "to": "sym_91e8631ffc",
+    "type": "calls",
+    "reason": "commitMeta calls commitFiles",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/git.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_8a03ce2baa",
+    "from": "sym_f9d958acb6",
+    "to": "sym_815fdb47eb",
+    "type": "calls",
+    "reason": "commitDiff calls gitSafe",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/git.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_0c6206ae7e",
+    "from": "sym_41326cde36",
+    "to": "sym_815fdb47eb",
+    "type": "calls",
+    "reason": "fileChurn calls gitSafe",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/git.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_60fdff0329",
+    "from": "sym_9853d94477",
+    "to": "sym_815fdb47eb",
+    "type": "calls",
+    "reason": "lastCommitForFile calls gitSafe",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/git.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_7f66b58a7d",
+    "from": "sym_f1e8c6fbda",
+    "to": "sym_815fdb47eb",
+    "type": "calls",
+    "reason": "logSince calls gitSafe",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/git.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_7f2043a4c7",
+    "from": "sym_f1e8c6fbda",
+    "to": "sym_e1155c29cf",
+    "type": "calls",
+    "reason": "logSince calls windowArgs",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/git.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_64613c9421",
+    "from": "sym_be1263261e",
+    "to": "sym_815fdb47eb",
+    "type": "calls",
+    "reason": "fixCommits calls gitSafe",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/git.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_d39800f49b",
+    "from": "sym_be1263261e",
+    "to": "sym_e1155c29cf",
+    "type": "calls",
+    "reason": "fixCommits calls windowArgs",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/git.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_4abe07fe07",
+    "from": "sym_a2df62d136",
+    "to": "sym_815fdb47eb",
+    "type": "calls",
+    "reason": "trackedFiles calls gitSafe",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/git.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_199258a690",
+    "from": "sym_2f00ac7819",
+    "to": "sym_15d8a2509a",
+    "type": "calls",
+    "reason": "indexRepo calls listCodeFiles",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/indexer.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_4943826a6a",
+    "from": "sym_2f00ac7819",
+    "to": "sym_fbc5451f63",
+    "type": "calls",
+    "reason": "indexRepo calls isGitRepo",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/indexer.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_26c3b082c2",
+    "from": "sym_2f00ac7819",
+    "to": "sym_aa5f50456c",
+    "type": "calls",
+    "reason": "indexRepo calls toPosix",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/indexer.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_5ccd4353e8",
+    "from": "sym_2f00ac7819",
+    "to": "sym_6800d03191",
+    "type": "calls",
+    "reason": "indexRepo calls parseSource",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/indexer.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_e40b069023",
+    "from": "sym_2f00ac7819",
+    "to": "sym_41326cde36",
+    "type": "calls",
+    "reason": "indexRepo calls fileChurn",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/indexer.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_29f1013f1d",
+    "from": "sym_2f00ac7819",
+    "to": "sym_9853d94477",
+    "type": "calls",
+    "reason": "indexRepo calls lastCommitForFile",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/indexer.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_5bc4901f77",
+    "from": "sym_2f00ac7819",
+    "to": "sym_f54a45b5ef",
+    "type": "calls",
+    "reason": "indexRepo calls symbolId",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/indexer.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_184b49caec",
+    "from": "sym_2f00ac7819",
+    "to": "sym_6d8e5db01f",
+    "type": "calls",
+    "reason": "indexRepo calls sha1",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/indexer.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_99e873076b",
+    "from": "sym_2f00ac7819",
+    "to": "sym_2ce5da13ed",
+    "type": "calls",
+    "reason": "indexRepo calls attributeCalls",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/indexer.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_c7f331e55d",
+    "from": "sym_2f00ac7819",
+    "to": "sym_1d0c8f1bf5",
+    "type": "calls",
+    "reason": "indexRepo calls resolveName",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/indexer.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_f007889a68",
+    "from": "sym_2f00ac7819",
+    "to": "sym_617ff861b7",
+    "type": "calls",
+    "reason": "indexRepo calls addEdge",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/indexer.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_2c89dc47cf",
+    "from": "sym_2f00ac7819",
+    "to": "sym_1ada613a64",
+    "type": "calls",
+    "reason": "indexRepo calls edgeId",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/indexer.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_b3e52c20c3",
+    "from": "sym_2f00ac7819",
+    "to": "sym_1285f1c28f",
+    "type": "calls",
+    "reason": "indexRepo calls extracted",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/indexer.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_23ec3cb005",
+    "from": "sym_2f00ac7819",
+    "to": "sym_949445a607",
+    "type": "calls",
+    "reason": "indexRepo calls deriveComponents",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/indexer.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_f43ceeb69d",
+    "from": "sym_2f00ac7819",
+    "to": "sym_29c38dd437",
+    "type": "calls",
+    "reason": "indexRepo calls resolveImport",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/indexer.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_5e1c6786ed",
+    "from": "sym_15d8a2509a",
+    "to": "sym_fbc5451f63",
+    "type": "calls",
+    "reason": "listCodeFiles calls isGitRepo",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/indexer.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_6fdb5c1e38",
+    "from": "sym_15d8a2509a",
+    "to": "sym_a2df62d136",
+    "type": "calls",
+    "reason": "listCodeFiles calls trackedFiles",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/indexer.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_eb3aa43400",
+    "from": "sym_15d8a2509a",
+    "to": "sym_5a5b2eb84e",
+    "type": "calls",
+    "reason": "listCodeFiles calls walk",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/indexer.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_45ab66ee48",
+    "from": "sym_29c38dd437",
+    "to": "sym_aa5f50456c",
+    "type": "calls",
+    "reason": "resolveImport calls toPosix",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/indexer.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_18afc85c49",
+    "from": "sym_949445a607",
+    "to": "sym_b90745ce9f",
+    "type": "calls",
+    "reason": "deriveComponents calls componentDir",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/indexer.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_f4e019f9c9",
+    "from": "sym_949445a607",
+    "to": "sym_74d3a2e9bd",
+    "type": "calls",
+    "reason": "deriveComponents calls componentId",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/indexer.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_ee295ab367",
+    "from": "sym_949445a607",
+    "to": "sym_8211cca258",
+    "type": "calls",
+    "reason": "deriveComponents calls capitalize",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/indexer.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_22bbede7e2",
+    "from": "sym_949445a607",
+    "to": "sym_11010ac9dc",
+    "type": "calls",
+    "reason": "deriveComponents calls inferred",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/indexer.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_5547673439",
+    "from": "sym_6800d03191",
+    "to": "sym_008b9dc0f8",
+    "type": "calls",
+    "reason": "parseSource calls pickLanguage",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/parse.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_7830fc7abf",
+    "from": "sym_6800d03191",
+    "to": "sym_3d4a43a092",
+    "type": "calls",
+    "reason": "parseSource calls bundleFor",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/parse.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_0fade6a413",
+    "from": "sym_6800d03191",
+    "to": "sym_acc82aef14",
+    "type": "calls",
+    "reason": "parseSource calls ascendToDef",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/parse.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_913943b37c",
+    "from": "sym_e50ebb7b4d",
+    "to": "sym_8fc96bbf18",
+    "type": "calls",
+    "reason": "renderBrainSection calls loadAll",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/integrations/claudemd.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_ca3f5644f1",
+    "from": "sym_e50ebb7b4d",
+    "to": "sym_837ee1b990",
+    "type": "calls",
+    "reason": "renderBrainSection calls sev",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/integrations/claudemd.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_217738229c",
+    "from": "sym_f0a8fcb4e1",
+    "to": "sym_e50ebb7b4d",
+    "type": "calls",
+    "reason": "updateClaudeMd calls renderBrainSection",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/integrations/claudemd.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_0ef0153335",
+    "from": "sym_76837948cb",
+    "to": "sym_9c164687cf",
+    "type": "calls",
+    "reason": "installPostCommitHook calls hooksDir",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/integrations/hooks.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_1e2581b267",
+    "from": "sym_76837948cb",
+    "to": "sym_0e53febe6d",
+    "type": "calls",
+    "reason": "installPostCommitHook calls block",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/integrations/hooks.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_4d0e95ada5",
+    "from": "sym_76837948cb",
+    "to": "sym_9f3f0902e9",
+    "type": "calls",
+    "reason": "installPostCommitHook calls escapeRe",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/integrations/hooks.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_2fa535b3c2",
+    "from": "sym_5fb91b7bd2",
+    "to": "sym_8fc96bbf18",
+    "type": "calls",
+    "reason": "resolveSymbols calls loadAll",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/mcp/server.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_f736f7d194",
+    "from": "sym_a708ee9110",
+    "to": "sym_6264d56eb8",
+    "type": "calls",
+    "reason": "buildServer calls brainPaths",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/mcp/server.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_d174f124f0",
+    "from": "sym_a708ee9110",
+    "to": "sym_cc859f78a3",
+    "type": "calls",
+    "reason": "buildServer calls reindex",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/mcp/server.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_fbb0a813b9",
+    "from": "sym_a708ee9110",
+    "to": "sym_3850905bd2",
+    "type": "calls",
+    "reason": "buildServer calls search",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/mcp/server.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_8eec3a62d2",
+    "from": "sym_a708ee9110",
+    "to": "sym_2945a8c6b8",
+    "type": "calls",
+    "reason": "buildServer calls ok",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/mcp/server.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_c6ed974cca",
+    "from": "sym_a708ee9110",
+    "to": "sym_7b5e2ca6bc",
+    "type": "calls",
+    "reason": "buildServer calls provLine",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/mcp/server.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_5460e5d6f3",
+    "from": "sym_a708ee9110",
+    "to": "sym_43d055177b",
+    "type": "calls",
+    "reason": "buildServer calls why",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/mcp/server.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_222f36f834",
+    "from": "sym_a708ee9110",
+    "to": "sym_ffff1f0c4c",
+    "type": "calls",
+    "reason": "buildServer calls bugLineage",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/mcp/server.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_4e7d1091bc",
+    "from": "sym_a708ee9110",
+    "to": "sym_acdb0afe63",
+    "type": "calls",
+    "reason": "buildServer calls checkConstraints",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/mcp/server.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_e624c98333",
+    "from": "sym_a708ee9110",
+    "to": "sym_5fb91b7bd2",
+    "type": "calls",
+    "reason": "buildServer calls resolveSymbols",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/mcp/server.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_2311d5416b",
+    "from": "sym_a708ee9110",
+    "to": "sym_d237ccd18d",
+    "type": "calls",
+    "reason": "buildServer calls getDependents",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/mcp/server.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_3e1ba8a077",
+    "from": "sym_a708ee9110",
+    "to": "sym_c1e85563e2",
+    "type": "calls",
+    "reason": "buildServer calls revParse",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/mcp/server.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_cbdbced3a6",
+    "from": "sym_a708ee9110",
+    "to": "sym_871abb4df2",
+    "type": "calls",
+    "reason": "buildServer calls decisionId",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/mcp/server.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_b762077890",
+    "from": "sym_a708ee9110",
+    "to": "sym_383cbb69ef",
+    "type": "calls",
+    "reason": "buildServer calls put",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/mcp/server.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_fc2c03391d",
+    "from": "sym_a708ee9110",
+    "to": "sym_45e6041167",
+    "type": "calls",
+    "reason": "buildServer calls err",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/mcp/server.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_2815abe06d",
+    "from": "sym_b91e9afbb5",
+    "to": "sym_9e8caabda8",
+    "type": "calls",
+    "reason": "startServer calls findRoot",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/mcp/server.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_e2b5f99fb3",
+    "from": "sym_b91e9afbb5",
+    "to": "sym_a708ee9110",
+    "type": "calls",
+    "reason": "startServer calls buildServer",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/mcp/server.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_28904d4498",
+    "from": "sym_f7c2ad8fa5",
+    "to": "sym_d9b3eb8f1c",
+    "type": "calls",
+    "reason": "db calls openDb",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/brainStore.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_8493b1eefc",
+    "from": "sym_cc859f78a3",
+    "to": "sym_8fc96bbf18",
+    "type": "calls",
+    "reason": "reindex calls loadAll",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/brainStore.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_ef34677662",
+    "from": "sym_cc859f78a3",
+    "to": "sym_3ede8a26b9",
+    "type": "calls",
+    "reason": "reindex calls run",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/brainStore.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_5aa1abc83b",
+    "from": "sym_cc859f78a3",
+    "to": "sym_f937e38b1e",
+    "type": "calls",
+    "reason": "reindex calls fts",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/brainStore.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_2533b7f70e",
+    "from": "sym_f937e38b1e",
+    "to": "sym_3ede8a26b9",
+    "type": "calls",
+    "reason": "fts calls run",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/brainStore.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_40f77eb8b3",
+    "from": "sym_3850905bd2",
+    "to": "sym_358ccc1ae6",
+    "type": "calls",
+    "reason": "search calls toFtsQuery",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/brainStore.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_cbd5fddbcb",
+    "from": "sym_3850905bd2",
+    "to": "sym_cc886db33a",
+    "type": "calls",
+    "reason": "search calls likeSearch",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/brainStore.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_938547f19f",
+    "from": "sym_43d055177b",
+    "to": "sym_8fc96bbf18",
+    "type": "calls",
+    "reason": "why calls loadAll",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/brainStore.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_7fbd44284c",
+    "from": "sym_43d055177b",
+    "to": "sym_9493e800ba",
+    "type": "calls",
+    "reason": "why calls fileMatch",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/brainStore.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_c335caf8c9",
+    "from": "sym_43d055177b",
+    "to": "sym_97208a8294",
+    "type": "calls",
+    "reason": "why calls pathMatchesGlob",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/brainStore.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_33828ec1f1",
+    "from": "sym_d237ccd18d",
+    "to": "sym_567c7718d8",
+    "type": "calls",
+    "reason": "getDependents calls labelFor",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/brainStore.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_b1d3af94c8",
+    "from": "sym_9af0dc546d",
+    "to": "sym_567c7718d8",
+    "type": "calls",
+    "reason": "getDependencies calls labelFor",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/brainStore.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_e07657d6ed",
+    "from": "sym_acdb0afe63",
+    "to": "sym_8fc96bbf18",
+    "type": "calls",
+    "reason": "checkConstraints calls loadAll",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/brainStore.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_02c7251c41",
+    "from": "sym_acdb0afe63",
+    "to": "sym_97208a8294",
+    "type": "calls",
+    "reason": "checkConstraints calls pathMatchesGlob",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/brainStore.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_07af45b7fc",
+    "from": "sym_acdb0afe63",
+    "to": "sym_a881241b47",
+    "type": "calls",
+    "reason": "checkConstraints calls sev",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/brainStore.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_a579b1ab1b",
+    "from": "sym_ffff1f0c4c",
+    "to": "sym_8fc96bbf18",
+    "type": "calls",
+    "reason": "bugLineage calls loadAll",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/brainStore.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_844d8b61bb",
+    "from": "sym_ffff1f0c4c",
+    "to": "sym_3850905bd2",
+    "type": "calls",
+    "reason": "bugLineage calls search",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/brainStore.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_5cdd0db9ee",
+    "from": "sym_c59b535a56",
+    "to": "sym_8fc96bbf18",
+    "type": "calls",
+    "reason": "fragility calls loadAll",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/brainStore.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_ae1140a5c4",
+    "from": "sym_c59b535a56",
+    "to": "sym_1d3ddc7739",
+    "type": "calls",
+    "reason": "fragility calls round",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/brainStore.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_285416d6da",
+    "from": "sym_cc6cbd8e24",
+    "to": "sym_8fc96bbf18",
+    "type": "calls",
+    "reason": "allEdges calls loadAll",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/brainStore.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_ad65add413",
+    "from": "sym_383cbb69ef",
+    "to": "sym_8fc96bbf18",
+    "type": "calls",
+    "reason": "put calls loadAll",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/jsonStore.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_8ea38df2b4",
+    "from": "sym_383cbb69ef",
+    "to": "sym_95e5f5139f",
+    "type": "calls",
+    "reason": "put calls fileFor",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/jsonStore.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_dc93da5e68",
+    "from": "sym_f66a553cec",
+    "to": "sym_95e5f5139f",
+    "type": "calls",
+    "reason": "replaceAll calls fileFor",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/jsonStore.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_5679743e02",
+    "from": "sym_7d2c513fff",
+    "to": "sym_8fc96bbf18",
+    "type": "calls",
+    "reason": "get calls loadAll",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/jsonStore.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_3b8fdc5767",
+    "from": "sym_c7716287ec",
+    "to": "sym_87824224e8",
+    "type": "calls",
+    "reason": "draftDecision calls commitPrompt",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/provider.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_f2b9554135",
+    "from": "sym_c7716287ec",
+    "to": "sym_d3b47ca671",
+    "type": "calls",
+    "reason": "draftDecision calls asStrArr",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/provider.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_c6134b9a28",
+    "from": "sym_d8c7062650",
+    "to": "sym_f6dee26225",
+    "type": "calls",
+    "reason": "draftBug calls failurePrompt",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/provider.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_b49ae69dd7",
+    "from": "sym_c7716287ec_1",
+    "to": "sym_3ede8a26b9",
+    "type": "calls",
+    "reason": "draftDecision calls run",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/provider.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_2ccd9dc91e",
+    "from": "sym_c7716287ec_1",
+    "to": "sym_87824224e8",
+    "type": "calls",
+    "reason": "draftDecision calls commitPrompt",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/provider.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_ac05a9605f",
+    "from": "sym_c7716287ec_1",
+    "to": "sym_ab1bba2184",
+    "type": "calls",
+    "reason": "draftDecision calls jsonInstruction",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/provider.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_aa3d35d3de",
+    "from": "sym_c7716287ec_1",
+    "to": "sym_8622caabea",
+    "type": "calls",
+    "reason": "draftDecision calls extractJson",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/provider.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_9b9516469b",
+    "from": "sym_c7716287ec_1",
+    "to": "sym_5ae5a5a486",
+    "type": "calls",
+    "reason": "draftDecision calls str",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/provider.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_4e0b53464a",
+    "from": "sym_c7716287ec_1",
+    "to": "sym_d3b47ca671",
+    "type": "calls",
+    "reason": "draftDecision calls asStrArr",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/provider.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_b69419ec19",
+    "from": "sym_d8c7062650_1",
+    "to": "sym_3ede8a26b9",
+    "type": "calls",
+    "reason": "draftBug calls run",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/provider.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_3b96a8abbb",
+    "from": "sym_d8c7062650_1",
+    "to": "sym_f6dee26225",
+    "type": "calls",
+    "reason": "draftBug calls failurePrompt",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/provider.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_3629b3c788",
+    "from": "sym_d8c7062650_1",
+    "to": "sym_ab1bba2184",
+    "type": "calls",
+    "reason": "draftBug calls jsonInstruction",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/provider.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_36e7e42e8b",
+    "from": "sym_d8c7062650_1",
+    "to": "sym_8622caabea",
+    "type": "calls",
+    "reason": "draftBug calls extractJson",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/provider.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_4cc1999b50",
+    "from": "sym_d8c7062650_1",
+    "to": "sym_5ae5a5a486",
+    "type": "calls",
+    "reason": "draftBug calls str",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/provider.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_4b29f49bbd",
+    "from": "sym_c7716287ec_2",
+    "to": "sym_cf6099323a",
+    "type": "calls",
+    "reason": "draftDecision calls topDirs",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/provider.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_c31283fe6d",
+    "from": "sym_c7716287ec_2",
+    "to": "sym_8d8ca38f4d",
+    "type": "calls",
+    "reason": "draftDecision calls cap",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/provider.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_c3574a3c13",
+    "from": "sym_6103f9eaf1",
+    "to": "sym_64db6cba68",
+    "type": "calls",
+    "reason": "syncCommit calls headSha",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/synthesize.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_07fe4b55a3",
+    "from": "sym_6103f9eaf1",
+    "to": "sym_cb863afde2",
+    "type": "calls",
+    "reason": "syncCommit calls commitMeta",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/synthesize.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_b091642f7a",
+    "from": "sym_6103f9eaf1",
+    "to": "sym_dfb2a0090e",
+    "type": "calls",
+    "reason": "syncCommit calls selectProvider",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/synthesize.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_b0212c25bd",
+    "from": "sym_6103f9eaf1",
+    "to": "sym_f9d958acb6",
+    "type": "calls",
+    "reason": "syncCommit calls commitDiff",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/synthesize.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_18739428e0",
+    "from": "sym_6103f9eaf1",
+    "to": "sym_c228c1cc99",
+    "type": "calls",
+    "reason": "syncCommit calls draftDecisionSafe",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/synthesize.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_a3c8a18d42",
+    "from": "sym_6103f9eaf1",
+    "to": "sym_8fc96bbf18",
+    "type": "calls",
+    "reason": "syncCommit calls loadAll",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/synthesize.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_4e62323749",
+    "from": "sym_6103f9eaf1",
+    "to": "sym_97208a8294",
+    "type": "calls",
+    "reason": "syncCommit calls pathMatchesGlob",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/synthesize.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_698bf5a6cb",
+    "from": "sym_6103f9eaf1",
+    "to": "sym_871abb4df2",
+    "type": "calls",
+    "reason": "syncCommit calls decisionId",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/synthesize.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_f8755d3176",
+    "from": "sym_6103f9eaf1",
+    "to": "sym_383cbb69ef",
+    "type": "calls",
+    "reason": "syncCommit calls put",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/synthesize.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_2d5a589215",
+    "from": "sym_7183436879",
+    "to": "sym_8fc96bbf18",
+    "type": "calls",
+    "reason": "recordFailure calls loadAll",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/synthesize.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_ea61f2d37b",
+    "from": "sym_7183436879",
+    "to": "sym_9d1964b9a2",
+    "type": "calls",
+    "reason": "recordFailure calls rankSuspects",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/synthesize.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_92934f04fd",
+    "from": "sym_7183436879",
+    "to": "sym_dfb2a0090e",
+    "type": "calls",
+    "reason": "recordFailure calls selectProvider",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/synthesize.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_918085a17a",
+    "from": "sym_7183436879",
+    "to": "sym_cdff71a1f9",
+    "type": "calls",
+    "reason": "recordFailure calls recentDiffFor",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/synthesize.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_21f4cf641d",
+    "from": "sym_7183436879",
+    "to": "sym_5a7c51b94c",
+    "type": "calls",
+    "reason": "recordFailure calls draftBugSafe",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/synthesize.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_bdd6e6b703",
+    "from": "sym_7183436879",
+    "to": "sym_5c38b4911d",
+    "type": "calls",
+    "reason": "recordFailure calls bugId",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/synthesize.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_b14e1f7e37",
+    "from": "sym_7183436879",
+    "to": "sym_4ac3ad6690",
+    "type": "calls",
+    "reason": "recordFailure calls findRecurrence",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/synthesize.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_fdf04de028",
+    "from": "sym_7183436879",
+    "to": "sym_383cbb69ef",
+    "type": "calls",
+    "reason": "recordFailure calls put",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/synthesize.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_40164fb916",
+    "from": "sym_7183436879",
+    "to": "sym_4dbb42587d",
+    "type": "calls",
+    "reason": "recordFailure calls promoteConstraint",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/synthesize.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_e200ff7717",
+    "from": "sym_7183436879",
+    "to": "sym_125cbbaf35",
+    "type": "calls",
+    "reason": "recordFailure calls raiseFragility",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/synthesize.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_ae593f5094",
+    "from": "sym_4dbb42587d",
+    "to": "sym_16b88590c8",
+    "type": "calls",
+    "reason": "promoteConstraint calls constraintId",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/synthesize.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_87aa36c62b",
+    "from": "sym_4dbb42587d",
+    "to": "sym_383cbb69ef",
+    "type": "calls",
+    "reason": "promoteConstraint calls put",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/synthesize.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_dcad400dfb",
+    "from": "sym_125cbbaf35",
+    "to": "sym_8fc96bbf18",
+    "type": "calls",
+    "reason": "raiseFragility calls loadAll",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/synthesize.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_ae66b24303",
+    "from": "sym_125cbbaf35",
+    "to": "sym_97208a8294",
+    "type": "calls",
+    "reason": "raiseFragility calls pathMatchesGlob",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/synthesize.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_2c21df5173",
+    "from": "sym_125cbbaf35",
+    "to": "sym_383cbb69ef",
+    "type": "calls",
+    "reason": "raiseFragility calls put",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/synthesize.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_d53ddb9b28",
+    "from": "sym_edf2a5e3c6",
+    "to": "sym_3a906a6c90",
+    "type": "calls",
+    "reason": "salientTerms calls stripPaths",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/synthesize.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_469468875b",
+    "from": "sym_4ac3ad6690",
+    "to": "sym_edf2a5e3c6",
+    "type": "calls",
+    "reason": "findRecurrence calls salientTerms",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/synthesize.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_a33ce465b4",
+    "from": "sym_4ac3ad6690",
+    "to": "sym_8fc96bbf18",
+    "type": "calls",
+    "reason": "findRecurrence calls loadAll",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/synthesize.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_8d74de2646",
+    "from": "sym_cdff71a1f9",
+    "to": "sym_64db6cba68",
+    "type": "calls",
+    "reason": "recentDiffFor calls headSha",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/synthesize.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_8d4747d12f",
+    "from": "sym_cdff71a1f9",
+    "to": "sym_f9d958acb6",
+    "type": "calls",
+    "reason": "recentDiffFor calls commitDiff",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/synthesize.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_b51e339207",
+    "from": "sym_610aad3fa6",
+    "to": "sym_6264d56eb8",
+    "type": "calls",
+    "reason": "tempStore calls brainPaths",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "test/helpers.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_3253d27db7",
+    "from": "sym_610aad3fa6",
+    "to": "sym_d73e258d4a",
+    "type": "calls",
+    "reason": "tempStore calls ensureDirs",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "test/helpers.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_0407b3c312",
+    "from": "sym_610aad3fa6",
+    "to": "sym_c94636f66a",
+    "type": "calls",
+    "reason": "tempStore calls close",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "test/helpers.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_b8cc5cae46",
+    "from": "sym_31f173b479",
+    "to": "sym_1285f1c28f",
+    "type": "calls",
+    "reason": "prov calls extracted",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "test/helpers.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_a4d82f6d49",
+    "from": "sym_eb3d6b0aa3",
+    "to": "sym_11010ac9dc",
+    "type": "calls",
+    "reason": "inf calls inferred",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "test/helpers.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_289e511011",
+    "from": "sym_d12f6e978e",
+    "to": "sym_f23f22701a",
+    "type": "calls",
+    "reason": "gitRepo calls g",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "test/integration.test.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_f4a341d9db",
+    "from": "sym_744b192507",
+    "to": "sym_610aad3fa6",
+    "type": "calls",
+    "reason": "seed calls tempStore",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "test/store.test.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_228c274025",
+    "from": "sym_744b192507",
+    "to": "sym_31f173b479",
+    "type": "calls",
+    "reason": "seed calls prov",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "test/store.test.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_985bff1ac9",
+    "from": "sym_744b192507",
+    "to": "sym_383cbb69ef",
+    "type": "calls",
+    "reason": "seed calls put",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "test/store.test.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_251f01eb78",
+    "from": "sym_744b192507",
+    "to": "sym_cc859f78a3",
+    "type": "calls",
+    "reason": "seed calls reindex",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "test/store.test.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_6b29c53d75",
+    "from": "cmp_50037f41a9",
+    "to": "cmp_b256a6aed0",
+    "type": "depends_on",
+    "reason": "src/cli/index.ts imports src/core/paths.ts",
+    "strength": 0.6,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.9,
+      "evidence": [
+        "src/cli/index.ts:imports:../core/paths.js"
+      ]
+    }
+  },
+  {
+    "id": "edge_2a710dd10a",
+    "from": "cmp_50037f41a9",
+    "to": "cmp_cdfb395bb7",
+    "type": "depends_on",
+    "reason": "src/cli/index.ts imports src/store/brainStore.ts",
+    "strength": 0.6,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.9,
+      "evidence": [
+        "src/cli/index.ts:imports:../store/brainStore.js"
+      ]
+    }
+  },
+  {
+    "id": "edge_6916acc7b0",
+    "from": "cmp_50037f41a9",
+    "to": "cmp_e0ccfe26fe",
+    "type": "depends_on",
+    "reason": "src/cli/index.ts imports src/extractors/indexer.ts",
+    "strength": 0.6,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.9,
+      "evidence": [
+        "src/cli/index.ts:imports:../extractors/indexer.js"
+      ]
+    }
+  },
+  {
+    "id": "edge_30b79cff0f",
+    "from": "cmp_50037f41a9",
+    "to": "cmp_ba75dfc94f",
+    "type": "depends_on",
+    "reason": "src/cli/index.ts imports src/synthesis/synthesize.ts",
+    "strength": 0.6,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.9,
+      "evidence": [
+        "src/cli/index.ts:imports:../synthesis/synthesize.js"
+      ]
+    }
+  },
+  {
+    "id": "edge_e0ce949910",
+    "from": "cmp_50037f41a9",
+    "to": "cmp_863ac67d4a",
+    "type": "depends_on",
+    "reason": "src/cli/index.ts imports src/integrations/hooks.ts",
+    "strength": 0.6,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.9,
+      "evidence": [
+        "src/cli/index.ts:imports:../integrations/hooks.js"
+      ]
+    }
+  },
+  {
+    "id": "edge_2c23c4a5a5",
+    "from": "cmp_e0ccfe26fe",
+    "to": "cmp_cdfb395bb7",
+    "type": "depends_on",
+    "reason": "src/extractors/indexer.ts imports src/store/brainStore.ts",
+    "strength": 0.6,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.9,
+      "evidence": [
+        "src/extractors/indexer.ts:imports:../store/brainStore.js"
+      ]
+    }
+  },
+  {
+    "id": "edge_5fd1bdcbcf",
+    "from": "cmp_e0ccfe26fe",
+    "to": "cmp_b256a6aed0",
+    "type": "depends_on",
+    "reason": "src/extractors/indexer.ts imports src/core/ids.ts",
+    "strength": 0.6,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.9,
+      "evidence": [
+        "src/extractors/indexer.ts:imports:../core/ids.js"
+      ]
+    }
+  },
+  {
+    "id": "edge_48b533c3a8",
+    "from": "cmp_863ac67d4a",
+    "to": "cmp_cdfb395bb7",
+    "type": "depends_on",
+    "reason": "src/integrations/claudemd.ts imports src/store/brainStore.ts",
+    "strength": 0.6,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.9,
+      "evidence": [
+        "src/integrations/claudemd.ts:imports:../store/brainStore.js"
+      ]
+    }
+  },
+  {
+    "id": "edge_ea322e8d29",
+    "from": "cmp_863ac67d4a",
+    "to": "cmp_e0ccfe26fe",
+    "type": "depends_on",
+    "reason": "src/integrations/hooks.ts imports src/extractors/git.ts",
+    "strength": 0.6,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.9,
+      "evidence": [
+        "src/integrations/hooks.ts:imports:../extractors/git.js"
+      ]
+    }
+  },
+  {
+    "id": "edge_33de23873a",
+    "from": "cmp_dfa5b5acde",
+    "to": "cmp_b256a6aed0",
+    "type": "depends_on",
+    "reason": "src/mcp/server.ts imports src/core/paths.ts",
+    "strength": 0.6,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.9,
+      "evidence": [
+        "src/mcp/server.ts:imports:../core/paths.js"
+      ]
+    }
+  },
+  {
+    "id": "edge_4c82ff36d4",
+    "from": "cmp_dfa5b5acde",
+    "to": "cmp_cdfb395bb7",
+    "type": "depends_on",
+    "reason": "src/mcp/server.ts imports src/store/brainStore.ts",
+    "strength": 0.6,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.9,
+      "evidence": [
+        "src/mcp/server.ts:imports:../store/brainStore.js"
+      ]
+    }
+  },
+  {
+    "id": "edge_a8f4acf4a9",
+    "from": "cmp_dfa5b5acde",
+    "to": "cmp_e0ccfe26fe",
+    "type": "depends_on",
+    "reason": "src/mcp/server.ts imports src/extractors/git.ts",
+    "strength": 0.6,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.9,
+      "evidence": [
+        "src/mcp/server.ts:imports:../extractors/git.js"
+      ]
+    }
+  },
+  {
+    "id": "edge_d0e09f5c00",
+    "from": "cmp_cdfb395bb7",
+    "to": "cmp_b256a6aed0",
+    "type": "depends_on",
+    "reason": "src/store/brainStore.ts imports src/core/paths.ts",
+    "strength": 0.6,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.9,
+      "evidence": [
+        "src/store/brainStore.ts:imports:../core/paths.js"
+      ]
+    }
+  },
+  {
+    "id": "edge_72bc411c95",
+    "from": "cmp_ba75dfc94f",
+    "to": "cmp_cdfb395bb7",
+    "type": "depends_on",
+    "reason": "src/synthesis/synthesize.ts imports src/store/brainStore.ts",
+    "strength": 0.6,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.9,
+      "evidence": [
+        "src/synthesis/synthesize.ts:imports:../store/brainStore.js"
+      ]
+    }
+  },
+  {
+    "id": "edge_ae0c5899f8",
+    "from": "cmp_ba75dfc94f",
+    "to": "cmp_e0ccfe26fe",
+    "type": "depends_on",
+    "reason": "src/synthesis/synthesize.ts imports src/extractors/git.ts",
+    "strength": 0.6,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.9,
+      "evidence": [
+        "src/synthesis/synthesize.ts:imports:../extractors/git.js"
+      ]
+    }
+  },
+  {
+    "id": "edge_8f0740d72b",
+    "from": "cmp_ba75dfc94f",
+    "to": "cmp_b256a6aed0",
+    "type": "depends_on",
+    "reason": "src/synthesis/synthesize.ts imports src/core/ids.ts",
+    "strength": 0.6,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.9,
+      "evidence": [
+        "src/synthesis/synthesize.ts:imports:../core/ids.js"
+      ]
+    }
+  },
+  {
+    "id": "edge_df2ddf8e40",
+    "from": "cmp_a94a8fe5cc",
+    "to": "cmp_b256a6aed0",
+    "type": "depends_on",
+    "reason": "test/helpers.ts imports src/core/paths.ts",
+    "strength": 0.6,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.9,
+      "evidence": [
+        "test/helpers.ts:imports:../src/core/paths.js"
+      ]
+    }
+  },
+  {
+    "id": "edge_790bbb654a",
+    "from": "cmp_a94a8fe5cc",
+    "to": "cmp_cdfb395bb7",
+    "type": "depends_on",
+    "reason": "test/helpers.ts imports src/store/brainStore.ts",
+    "strength": 0.6,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.9,
+      "evidence": [
+        "test/helpers.ts:imports:../src/store/brainStore.js"
+      ]
+    }
+  },
+  {
+    "id": "edge_69525a48a3",
+    "from": "cmp_a94a8fe5cc",
+    "to": "cmp_e0ccfe26fe",
+    "type": "depends_on",
+    "reason": "test/indexer.test.ts imports src/extractors/indexer.ts",
+    "strength": 0.6,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.9,
+      "evidence": [
+        "test/indexer.test.ts:imports:../src/extractors/indexer.js"
+      ]
+    }
+  },
+  {
+    "id": "edge_8b997a67f2",
+    "from": "cmp_a94a8fe5cc",
+    "to": "cmp_ba75dfc94f",
+    "type": "depends_on",
+    "reason": "test/integration.test.ts imports src/synthesis/synthesize.ts",
+    "strength": 0.6,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.9,
+      "evidence": [
+        "test/integration.test.ts:imports:../src/synthesis/synthesize.js"
+      ]
+    }
+  }
+]

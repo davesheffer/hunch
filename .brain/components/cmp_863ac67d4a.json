@@ -1,0 +1,21 @@
+{
+  "id": "cmp_863ac67d4a",
+  "kind": "module",
+  "name": "Integrations",
+  "responsibility": "",
+  "paths": [
+    "src/integrations/**"
+  ],
+  "status": "active",
+  "owners": [],
+  "fragility": 0,
+  "provenance": {
+    "source": "inferred",
+    "confidence": 0.5,
+    "evidence": [
+      "src/integrations"
+    ]
+  },
+  "created_at": "2026-06-14T20:29:15.842Z",
+  "updated_at": "2026-06-14T20:29:15.842Z"
+}

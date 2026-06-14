@@ -1,0 +1,3492 @@
+[
+  {
+    "id": "sym_3188212032",
+    "file": "src/cli/index.ts",
+    "name": "storeFor",
+    "kind": "function",
+    "signature_hash": "sha1:b8fd2d2fa9f",
+    "calls": [
+      "sym_9e8caabda8",
+      "sym_6264d56eb8"
+    ],
+    "called_by": [],
+    "metrics": {
+      "loc": 6,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 2
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_79f3b3cc7f",
+    "file": "src/cli/index.ts",
+    "name": "rel",
+    "kind": "function",
+    "signature_hash": "sha1:fbd91f4ec6c",
+    "calls": [],
+    "called_by": [],
+    "metrics": {
+      "loc": 3,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_768b5a7c3c",
+    "file": "src/cli/index.ts",
+    "name": "dim",
+    "kind": "function",
+    "signature_hash": "sha1:48386967046",
+    "calls": [],
+    "called_by": [],
+    "metrics": {
+      "loc": 3,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_f43264be95",
+    "file": "src/cli/index.ts",
+    "name": "fail",
+    "kind": "function",
+    "signature_hash": "sha1:a277116dce5",
+    "calls": [],
+    "called_by": [],
+    "metrics": {
+      "loc": 4,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_31388ab002",
+    "file": "src/cli/invocation.ts",
+    "name": "ResolvedInvocation",
+    "kind": "interface",
+    "signature_hash": "sha1:7f253275b76",
+    "calls": [],
+    "called_by": [],
+    "metrics": {
+      "loc": 6,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_37d2e70fac",
+    "file": "src/cli/invocation.ts",
+    "name": "resolveInvocation",
+    "kind": "function",
+    "signature_hash": "sha1:06c68ba1b4a",
+    "calls": [
+      "sym_bda955394e"
+    ],
+    "called_by": [],
+    "metrics": {
+      "loc": 19,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_bda955394e",
+    "file": "src/cli/invocation.ts",
+    "name": "q",
+    "kind": "function",
+    "signature_hash": "sha1:bdabc6b7b9b",
+    "calls": [],
+    "called_by": [
+      "sym_37d2e70fac"
+    ],
+    "metrics": {
+      "loc": 1,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_f48c80382c",
+    "file": "src/core/glob.ts",
+    "name": "norm",
+    "kind": "function",
+    "signature_hash": "sha1:41f8ad9dda3",
+    "calls": [],
+    "called_by": [
+      "sym_97208a8294"
+    ],
+    "metrics": {
+      "loc": 3,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_0c63caa8a0",
+    "file": "src/core/glob.ts",
+    "name": "segToRe",
+    "kind": "function",
+    "signature_hash": "sha1:48f0e8e143a",
+    "calls": [],
+    "called_by": [
+      "sym_b26ad02a58"
+    ],
+    "metrics": {
+      "loc": 6,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_b26ad02a58",
+    "file": "src/core/glob.ts",
+    "name": "globToRegExp",
+    "kind": "function",
+    "signature_hash": "sha1:02b02b538e6",
+    "calls": [
+      "sym_0c63caa8a0"
+    ],
+    "called_by": [
+      "sym_97208a8294"
+    ],
+    "metrics": {
+      "loc": 31,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 1
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_97208a8294",
+    "file": "src/core/glob.ts",
+    "name": "pathMatchesGlob",
+    "kind": "function",
+    "signature_hash": "sha1:32a5718d4ae",
+    "calls": [
+      "sym_f48c80382c",
+      "sym_b26ad02a58"
+    ],
+    "called_by": [
+      "sym_43d055177b",
+      "sym_acdb0afe63",
+      "sym_6103f9eaf1",
+      "sym_125cbbaf35"
+    ],
+    "metrics": {
+      "loc": 9,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 4,
+      "fan_out": 2
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_5a74d29b94",
+    "file": "src/core/ids.ts",
+    "name": "shortHash",
+    "kind": "function",
+    "signature_hash": "sha1:42f2dfefae1",
+    "calls": [],
+    "called_by": [
+      "sym_f54a45b5ef",
+      "sym_74d3a2e9bd",
+      "sym_1ada613a64",
+      "sym_871abb4df2",
+      "sym_5c38b4911d",
+      "sym_16b88590c8"
+    ],
+    "metrics": {
+      "loc": 3,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 6,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_6d8e5db01f",
+    "file": "src/core/ids.ts",
+    "name": "sha1",
+    "kind": "function",
+    "signature_hash": "sha1:eb2ae9a1c07",
+    "calls": [],
+    "called_by": [
+      "sym_2f00ac7819"
+    ],
+    "metrics": {
+      "loc": 3,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_f54a45b5ef",
+    "file": "src/core/ids.ts",
+    "name": "symbolId",
+    "kind": "function",
+    "signature_hash": "sha1:abbd9c298c5",
+    "calls": [
+      "sym_5a74d29b94"
+    ],
+    "called_by": [
+      "sym_2f00ac7819"
+    ],
+    "metrics": {
+      "loc": 3,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 1
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_74d3a2e9bd",
+    "file": "src/core/ids.ts",
+    "name": "componentId",
+    "kind": "function",
+    "signature_hash": "sha1:1b3104ea313",
+    "calls": [
+      "sym_5a74d29b94"
+    ],
+    "called_by": [
+      "sym_949445a607"
+    ],
+    "metrics": {
+      "loc": 3,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 1
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_1ada613a64",
+    "file": "src/core/ids.ts",
+    "name": "edgeId",
+    "kind": "function",
+    "signature_hash": "sha1:aac979bc83e",
+    "calls": [
+      "sym_5a74d29b94"
+    ],
+    "called_by": [
+      "sym_2f00ac7819"
+    ],
+    "metrics": {
+      "loc": 3,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 1
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_871abb4df2",
+    "file": "src/core/ids.ts",
+    "name": "decisionId",
+    "kind": "function",
+    "signature_hash": "sha1:3a945f27080",
+    "calls": [
+      "sym_5a74d29b94"
+    ],
+    "called_by": [
+      "sym_a708ee9110",
+      "sym_6103f9eaf1"
+    ],
+    "metrics": {
+      "loc": 3,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 2,
+      "fan_out": 1
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_5c38b4911d",
+    "file": "src/core/ids.ts",
+    "name": "bugId",
+    "kind": "function",
+    "signature_hash": "sha1:740aa95ab3c",
+    "calls": [
+      "sym_5a74d29b94"
+    ],
+    "called_by": [
+      "sym_7183436879"
+    ],
+    "metrics": {
+      "loc": 3,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 1
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_16b88590c8",
+    "file": "src/core/ids.ts",
+    "name": "constraintId",
+    "kind": "function",
+    "signature_hash": "sha1:c4e05d99fc9",
+    "calls": [
+      "sym_5a74d29b94"
+    ],
+    "called_by": [
+      "sym_4dbb42587d"
+    ],
+    "metrics": {
+      "loc": 3,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 1
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_99475d055e",
+    "file": "src/core/paths.ts",
+    "name": "BrainPaths",
+    "kind": "interface",
+    "signature_hash": "sha1:5da7d21d2c2",
+    "calls": [],
+    "called_by": [],
+    "metrics": {
+      "loc": 7,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_6264d56eb8",
+    "file": "src/core/paths.ts",
+    "name": "brainPaths",
+    "kind": "function",
+    "signature_hash": "sha1:4aed835c938",
+    "calls": [],
+    "called_by": [
+      "sym_3188212032",
+      "sym_a708ee9110",
+      "sym_610aad3fa6"
+    ],
+    "metrics": {
+      "loc": 9,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 3,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_9e8caabda8",
+    "file": "src/core/paths.ts",
+    "name": "findRoot",
+    "kind": "function",
+    "signature_hash": "sha1:d1aba8d172d",
+    "calls": [
+      "sym_4f2930d147",
+      "sym_938d882d9f"
+    ],
+    "called_by": [
+      "sym_3188212032",
+      "sym_b91e9afbb5"
+    ],
+    "metrics": {
+      "loc": 19,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 2,
+      "fan_out": 2
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_938d882d9f",
+    "file": "src/core/paths.ts",
+    "name": "isDir",
+    "kind": "function",
+    "signature_hash": "sha1:7425008b260",
+    "calls": [],
+    "called_by": [
+      "sym_9e8caabda8"
+    ],
+    "metrics": {
+      "loc": 7,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_51ffd64309",
+    "file": "src/core/types.ts",
+    "name": "Provenance",
+    "kind": "type",
+    "signature_hash": "sha1:0586fd9e699",
+    "calls": [],
+    "called_by": [],
+    "metrics": {
+      "loc": 1,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_03b458740b",
+    "file": "src/core/types.ts",
+    "name": "Component",
+    "kind": "type",
+    "signature_hash": "sha1:33ad4063402",
+    "calls": [],
+    "called_by": [],
+    "metrics": {
+      "loc": 1,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_79330dc29d",
+    "file": "src/core/types.ts",
+    "name": "Edge",
+    "kind": "type",
+    "signature_hash": "sha1:51c9fcfe4a9",
+    "calls": [],
+    "called_by": [],
+    "metrics": {
+      "loc": 1,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_fe66ed61a7",
+    "file": "src/core/types.ts",
+    "name": "SymbolMetrics",
+    "kind": "type",
+    "signature_hash": "sha1:279f85e0f93",
+    "calls": [],
+    "called_by": [],
+    "metrics": {
+      "loc": 1,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_8e3ab95492",
+    "file": "src/core/types.ts",
+    "name": "Symbol",
+    "kind": "type",
+    "signature_hash": "sha1:c592c39b484",
+    "calls": [],
+    "called_by": [],
+    "metrics": {
+      "loc": 1,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_4ca0f2700c",
+    "file": "src/core/types.ts",
+    "name": "Decision",
+    "kind": "type",
+    "signature_hash": "sha1:90d74a33ce1",
+    "calls": [],
+    "called_by": [],
+    "metrics": {
+      "loc": 1,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_3e9b5e7b99",
+    "file": "src/core/types.ts",
+    "name": "BugLineage",
+    "kind": "type",
+    "signature_hash": "sha1:3702c40f86b",
+    "calls": [],
+    "called_by": [],
+    "metrics": {
+      "loc": 1,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_ad81dfea04",
+    "file": "src/core/types.ts",
+    "name": "Bug",
+    "kind": "type",
+    "signature_hash": "sha1:b7f750cac8e",
+    "calls": [],
+    "called_by": [],
+    "metrics": {
+      "loc": 1,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_528fc3d080",
+    "file": "src/core/types.ts",
+    "name": "Constraint",
+    "kind": "type",
+    "signature_hash": "sha1:aeb899b88cc",
+    "calls": [],
+    "called_by": [],
+    "metrics": {
+      "loc": 1,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_318143e0da",
+    "file": "src/core/types.ts",
+    "name": "EntityKind",
+    "kind": "type",
+    "signature_hash": "sha1:6e0b406da73",
+    "calls": [],
+    "called_by": [],
+    "metrics": {
+      "loc": 1,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_62d8435560",
+    "file": "src/core/types.ts",
+    "name": "EntityFor",
+    "kind": "type",
+    "signature_hash": "sha1:5b10f923ea6",
+    "calls": [],
+    "called_by": [],
+    "metrics": {
+      "loc": 8,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_1285f1c28f",
+    "file": "src/core/types.ts",
+    "name": "extracted",
+    "kind": "function",
+    "signature_hash": "sha1:7fb92ec96b9",
+    "calls": [],
+    "called_by": [
+      "sym_2f00ac7819",
+      "sym_31f173b479"
+    ],
+    "metrics": {
+      "loc": 3,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 2,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_11010ac9dc",
+    "file": "src/core/types.ts",
+    "name": "inferred",
+    "kind": "function",
+    "signature_hash": "sha1:55bce26d953",
+    "calls": [],
+    "called_by": [
+      "sym_949445a607",
+      "sym_eb3d6b0aa3"
+    ],
+    "metrics": {
+      "loc": 3,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 2,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_2a8d9a8dc7",
+    "file": "src/extractors/git.ts",
+    "name": "CommitMeta",
+    "kind": "interface",
+    "signature_hash": "sha1:d2aed9adb28",
+    "calls": [],
+    "called_by": [],
+    "metrics": {
+      "loc": 9,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_2e868206d6",
+    "file": "src/extractors/git.ts",
+    "name": "git",
+    "kind": "function",
+    "signature_hash": "sha1:a81fd9e2839",
+    "calls": [],
+    "called_by": [
+      "sym_815fdb47eb"
+    ],
+    "metrics": {
+      "loc": 7,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_815fdb47eb",
+    "file": "src/extractors/git.ts",
+    "name": "gitSafe",
+    "kind": "function",
+    "signature_hash": "sha1:fcd44176d2e",
+    "calls": [
+      "sym_2e868206d6"
+    ],
+    "called_by": [
+      "sym_fbc5451f63",
+      "sym_64db6cba68",
+      "sym_c1e85563e2",
+      "sym_9c164687cf",
+      "sym_aa7221e606",
+      "sym_91e8631ffc",
+      "sym_cb863afde2",
+      "sym_f9d958acb6",
+      "sym_41326cde36",
+      "sym_9853d94477",
+      "sym_f1e8c6fbda",
+      "sym_be1263261e",
+      "sym_a2df62d136"
+    ],
+    "metrics": {
+      "loc": 7,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 13,
+      "fan_out": 1
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_fbc5451f63",
+    "file": "src/extractors/git.ts",
+    "name": "isGitRepo",
+    "kind": "function",
+    "signature_hash": "sha1:55545d8abe2",
+    "calls": [
+      "sym_815fdb47eb"
+    ],
+    "called_by": [
+      "sym_2f00ac7819",
+      "sym_15d8a2509a"
+    ],
+    "metrics": {
+      "loc": 3,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 2,
+      "fan_out": 1
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_64db6cba68",
+    "file": "src/extractors/git.ts",
+    "name": "headSha",
+    "kind": "function",
+    "signature_hash": "sha1:4dcc2b83e57",
+    "calls": [
+      "sym_815fdb47eb"
+    ],
+    "called_by": [
+      "sym_6103f9eaf1",
+      "sym_cdff71a1f9"
+    ],
+    "metrics": {
+      "loc": 3,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 2,
+      "fan_out": 1
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_c1e85563e2",
+    "file": "src/extractors/git.ts",
+    "name": "revParse",
+    "kind": "function",
+    "signature_hash": "sha1:1df25026506",
+    "calls": [
+      "sym_815fdb47eb"
+    ],
+    "called_by": [
+      "sym_a708ee9110"
+    ],
+    "metrics": {
+      "loc": 4,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 1
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_9c164687cf",
+    "file": "src/extractors/git.ts",
+    "name": "hooksDir",
+    "kind": "function",
+    "signature_hash": "sha1:4d4485ede97",
+    "calls": [
+      "sym_815fdb47eb"
+    ],
+    "called_by": [
+      "sym_76837948cb"
+    ],
+    "metrics": {
+      "loc": 4,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 1
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_aa7221e606",
+    "file": "src/extractors/git.ts",
+    "name": "gitDir",
+    "kind": "function",
+    "signature_hash": "sha1:822795a1059",
+    "calls": [
+      "sym_815fdb47eb"
+    ],
+    "called_by": [],
+    "metrics": {
+      "loc": 3,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_91e8631ffc",
+    "file": "src/extractors/git.ts",
+    "name": "commitFiles",
+    "kind": "function",
+    "signature_hash": "sha1:b15686b5cca",
+    "calls": [
+      "sym_815fdb47eb"
+    ],
+    "called_by": [
+      "sym_cb863afde2"
+    ],
+    "metrics": {
+      "loc": 4,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 1
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_cb863afde2",
+    "file": "src/extractors/git.ts",
+    "name": "commitMeta",
+    "kind": "function",
+    "signature_hash": "sha1:043be157ff7",
+    "calls": [
+      "sym_815fdb47eb",
+      "sym_91e8631ffc"
+    ],
+    "called_by": [
+      "sym_6103f9eaf1"
+    ],
+    "metrics": {
+      "loc": 6,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 2
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_f9d958acb6",
+    "file": "src/extractors/git.ts",
+    "name": "commitDiff",
+    "kind": "function",
+    "signature_hash": "sha1:4c4a9b180ff",
+    "calls": [
+      "sym_815fdb47eb"
+    ],
+    "called_by": [
+      "sym_6103f9eaf1",
+      "sym_cdff71a1f9"
+    ],
+    "metrics": {
+      "loc": 4,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 2,
+      "fan_out": 1
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_41326cde36",
+    "file": "src/extractors/git.ts",
+    "name": "fileChurn",
+    "kind": "function",
+    "signature_hash": "sha1:6ea2a34ec4c",
+    "calls": [
+      "sym_815fdb47eb"
+    ],
+    "called_by": [
+      "sym_2f00ac7819"
+    ],
+    "metrics": {
+      "loc": 4,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 1
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_9853d94477",
+    "file": "src/extractors/git.ts",
+    "name": "lastCommitForFile",
+    "kind": "function",
+    "signature_hash": "sha1:9eba8f5fb16",
+    "calls": [
+      "sym_815fdb47eb"
+    ],
+    "called_by": [
+      "sym_2f00ac7819"
+    ],
+    "metrics": {
+      "loc": 4,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 1
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_e1155c29cf",
+    "file": "src/extractors/git.ts",
+    "name": "windowArgs",
+    "kind": "function",
+    "signature_hash": "sha1:f7b54325963",
+    "calls": [],
+    "called_by": [
+      "sym_f1e8c6fbda",
+      "sym_be1263261e"
+    ],
+    "metrics": {
+      "loc": 6,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 2,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_f1e8c6fbda",
+    "file": "src/extractors/git.ts",
+    "name": "logSince",
+    "kind": "function",
+    "signature_hash": "sha1:d6ace812731",
+    "calls": [
+      "sym_815fdb47eb",
+      "sym_e1155c29cf"
+    ],
+    "called_by": [],
+    "metrics": {
+      "loc": 4,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 2
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_be1263261e",
+    "file": "src/extractors/git.ts",
+    "name": "fixCommits",
+    "kind": "function",
+    "signature_hash": "sha1:f7bd6ed5441",
+    "calls": [
+      "sym_815fdb47eb",
+      "sym_e1155c29cf"
+    ],
+    "called_by": [],
+    "metrics": {
+      "loc": 7,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 2
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_a2df62d136",
+    "file": "src/extractors/git.ts",
+    "name": "trackedFiles",
+    "kind": "function",
+    "signature_hash": "sha1:0eefdb1622a",
+    "calls": [
+      "sym_815fdb47eb"
+    ],
+    "called_by": [
+      "sym_15d8a2509a"
+    ],
+    "metrics": {
+      "loc": 5,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 1
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_b1371d6518",
+    "file": "src/extractors/indexer.ts",
+    "name": "IndexResult",
+    "kind": "interface",
+    "signature_hash": "sha1:9d3f52d6b49",
+    "calls": [],
+    "called_by": [],
+    "metrics": {
+      "loc": 8,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_2f00ac7819",
+    "file": "src/extractors/indexer.ts",
+    "name": "indexRepo",
+    "kind": "function",
+    "signature_hash": "sha1:941d8462860",
+    "calls": [
+      "sym_15d8a2509a",
+      "sym_fbc5451f63",
+      "sym_aa5f50456c",
+      "sym_6800d03191",
+      "sym_41326cde36",
+      "sym_9853d94477",
+      "sym_f54a45b5ef",
+      "sym_6d8e5db01f",
+      "sym_2ce5da13ed",
+      "sym_1d0c8f1bf5",
+      "sym_617ff861b7",
+      "sym_1ada613a64",
+      "sym_1285f1c28f",
+      "sym_949445a607",
+      "sym_29c38dd437"
+    ],
+    "called_by": [],
+    "metrics": {
+      "loc": 148,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 15
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_617ff861b7",
+    "file": "src/extractors/indexer.ts",
+    "name": "addEdge",
+    "kind": "function",
+    "signature_hash": "sha1:26b06d290ba",
+    "calls": [],
+    "called_by": [
+      "sym_2f00ac7819"
+    ],
+    "metrics": {
+      "loc": 5,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_15d8a2509a",
+    "file": "src/extractors/indexer.ts",
+    "name": "listCodeFiles",
+    "kind": "function",
+    "signature_hash": "sha1:17011c79dd3",
+    "calls": [
+      "sym_fbc5451f63",
+      "sym_a2df62d136",
+      "sym_5a5b2eb84e"
+    ],
+    "called_by": [
+      "sym_2f00ac7819"
+    ],
+    "metrics": {
+      "loc": 18,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 3
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_5a5b2eb84e",
+    "file": "src/extractors/indexer.ts",
+    "name": "walk",
+    "kind": "function",
+    "signature_hash": "sha1:38599ecd488",
+    "calls": [],
+    "called_by": [
+      "sym_15d8a2509a"
+    ],
+    "metrics": {
+      "loc": 9,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_1d0c8f1bf5",
+    "file": "src/extractors/indexer.ts",
+    "name": "resolveName",
+    "kind": "function",
+    "signature_hash": "sha1:4bea632da4c",
+    "calls": [],
+    "called_by": [
+      "sym_2f00ac7819"
+    ],
+    "metrics": {
+      "loc": 15,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_29c38dd437",
+    "file": "src/extractors/indexer.ts",
+    "name": "resolveImport",
+    "kind": "function",
+    "signature_hash": "sha1:e7bb0a043b0",
+    "calls": [
+      "sym_aa5f50456c"
+    ],
+    "called_by": [
+      "sym_2f00ac7819"
+    ],
+    "metrics": {
+      "loc": 20,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 1
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_9b3ae16978",
+    "file": "src/extractors/indexer.ts",
+    "name": "ComponentDraft",
+    "kind": "interface",
+    "signature_hash": "sha1:749eb7f8b25",
+    "calls": [],
+    "called_by": [],
+    "metrics": {
+      "loc": 3,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_949445a607",
+    "file": "src/extractors/indexer.ts",
+    "name": "deriveComponents",
+    "kind": "function",
+    "signature_hash": "sha1:3d98c207fbc",
+    "calls": [
+      "sym_b90745ce9f",
+      "sym_74d3a2e9bd",
+      "sym_8211cca258",
+      "sym_11010ac9dc"
+    ],
+    "called_by": [
+      "sym_2f00ac7819"
+    ],
+    "metrics": {
+      "loc": 27,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 4
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_b90745ce9f",
+    "file": "src/extractors/indexer.ts",
+    "name": "componentDir",
+    "kind": "function",
+    "signature_hash": "sha1:49d2674b868",
+    "calls": [],
+    "called_by": [
+      "sym_949445a607"
+    ],
+    "metrics": {
+      "loc": 6,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_8211cca258",
+    "file": "src/extractors/indexer.ts",
+    "name": "capitalize",
+    "kind": "function",
+    "signature_hash": "sha1:1bc7e2d0417",
+    "calls": [],
+    "called_by": [
+      "sym_949445a607"
+    ],
+    "metrics": {
+      "loc": 3,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_aa5f50456c",
+    "file": "src/extractors/indexer.ts",
+    "name": "toPosix",
+    "kind": "function",
+    "signature_hash": "sha1:658d4c2d7db",
+    "calls": [],
+    "called_by": [
+      "sym_2f00ac7819",
+      "sym_29c38dd437"
+    ],
+    "metrics": {
+      "loc": 3,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 2,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_bf3eb2cd32",
+    "file": "src/extractors/parse.ts",
+    "name": "ParsedSymbolKind",
+    "kind": "type",
+    "signature_hash": "sha1:a34cf3a0338",
+    "calls": [],
+    "called_by": [],
+    "metrics": {
+      "loc": 1,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_58c34afd10",
+    "file": "src/extractors/parse.ts",
+    "name": "ParsedSymbol",
+    "kind": "interface",
+    "signature_hash": "sha1:b703ba8fdbb",
+    "calls": [],
+    "called_by": [],
+    "metrics": {
+      "loc": 8,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_493471ab49",
+    "file": "src/extractors/parse.ts",
+    "name": "ParsedCall",
+    "kind": "interface",
+    "signature_hash": "sha1:a41212f3435",
+    "calls": [],
+    "called_by": [],
+    "metrics": {
+      "loc": 6,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_796dc5735b",
+    "file": "src/extractors/parse.ts",
+    "name": "ParsedFile",
+    "kind": "interface",
+    "signature_hash": "sha1:24ec06c5d94",
+    "calls": [],
+    "called_by": [],
+    "metrics": {
+      "loc": 5,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_0be522994e",
+    "file": "src/extractors/parse.ts",
+    "name": "LangBundle",
+    "kind": "interface",
+    "signature_hash": "sha1:f4d9127afb2",
+    "calls": [],
+    "called_by": [],
+    "metrics": {
+      "loc": 4,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_3d4a43a092",
+    "file": "src/extractors/parse.ts",
+    "name": "bundleFor",
+    "kind": "function",
+    "signature_hash": "sha1:e22c3a0fcdf",
+    "calls": [],
+    "called_by": [
+      "sym_6800d03191"
+    ],
+    "metrics": {
+      "loc": 11,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_008b9dc0f8",
+    "file": "src/extractors/parse.ts",
+    "name": "pickLanguage",
+    "kind": "function",
+    "signature_hash": "sha1:bcb21eaa073",
+    "calls": [],
+    "called_by": [
+      "sym_6800d03191"
+    ],
+    "metrics": {
+      "loc": 6,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_6800d03191",
+    "file": "src/extractors/parse.ts",
+    "name": "parseSource",
+    "kind": "function",
+    "signature_hash": "sha1:97b83a8fcb3",
+    "calls": [
+      "sym_008b9dc0f8",
+      "sym_3d4a43a092",
+      "sym_acc82aef14"
+    ],
+    "called_by": [
+      "sym_2f00ac7819"
+    ],
+    "metrics": {
+      "loc": 65,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 3
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_acc82aef14",
+    "file": "src/extractors/parse.ts",
+    "name": "ascendToDef",
+    "kind": "function",
+    "signature_hash": "sha1:8466b67d509",
+    "calls": [],
+    "called_by": [
+      "sym_6800d03191"
+    ],
+    "metrics": {
+      "loc": 12,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_2ce5da13ed",
+    "file": "src/extractors/parse.ts",
+    "name": "attributeCalls",
+    "kind": "function",
+    "signature_hash": "sha1:421d97ccdbe",
+    "calls": [],
+    "called_by": [
+      "sym_2f00ac7819"
+    ],
+    "metrics": {
+      "loc": 18,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_e50ebb7b4d",
+    "file": "src/integrations/claudemd.ts",
+    "name": "renderBrainSection",
+    "kind": "function",
+    "signature_hash": "sha1:50e3577a9f9",
+    "calls": [
+      "sym_8fc96bbf18",
+      "sym_837ee1b990"
+    ],
+    "called_by": [
+      "sym_f0a8fcb4e1"
+    ],
+    "metrics": {
+      "loc": 41,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 2
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_f0a8fcb4e1",
+    "file": "src/integrations/claudemd.ts",
+    "name": "updateClaudeMd",
+    "kind": "function",
+    "signature_hash": "sha1:da399b3def2",
+    "calls": [
+      "sym_e50ebb7b4d"
+    ],
+    "called_by": [],
+    "metrics": {
+      "loc": 23,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_837ee1b990",
+    "file": "src/integrations/claudemd.ts",
+    "name": "sev",
+    "kind": "function",
+    "signature_hash": "sha1:9a987b25e4c",
+    "calls": [],
+    "called_by": [
+      "sym_e50ebb7b4d"
+    ],
+    "metrics": {
+      "loc": 3,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_0e53febe6d",
+    "file": "src/integrations/hooks.ts",
+    "name": "block",
+    "kind": "function",
+    "signature_hash": "sha1:c222de06e7d",
+    "calls": [],
+    "called_by": [
+      "sym_76837948cb"
+    ],
+    "metrics": {
+      "loc": 10,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_88ccc26394",
+    "file": "src/integrations/hooks.ts",
+    "name": "HookInstall",
+    "kind": "interface",
+    "signature_hash": "sha1:c1d30e0eed9",
+    "calls": [],
+    "called_by": [],
+    "metrics": {
+      "loc": 4,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_76837948cb",
+    "file": "src/integrations/hooks.ts",
+    "name": "installPostCommitHook",
+    "kind": "function",
+    "signature_hash": "sha1:ac69230ce8b",
+    "calls": [
+      "sym_9c164687cf",
+      "sym_0e53febe6d",
+      "sym_9f3f0902e9"
+    ],
+    "called_by": [],
+    "metrics": {
+      "loc": 28,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 3
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_9f3f0902e9",
+    "file": "src/integrations/hooks.ts",
+    "name": "escapeRe",
+    "kind": "function",
+    "signature_hash": "sha1:5fce8d563db",
+    "calls": [],
+    "called_by": [
+      "sym_76837948cb"
+    ],
+    "metrics": {
+      "loc": 3,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_6b9073394a",
+    "file": "src/integrations/scaffold.ts",
+    "name": "Invocation",
+    "kind": "interface",
+    "signature_hash": "sha1:8e5354f0757",
+    "calls": [],
+    "called_by": [],
+    "metrics": {
+      "loc": 4,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_d5f67ecf71",
+    "file": "src/integrations/scaffold.ts",
+    "name": "writeMcpJson",
+    "kind": "function",
+    "signature_hash": "sha1:3fa4566abed",
+    "calls": [],
+    "called_by": [],
+    "metrics": {
+      "loc": 15,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_3b35effcff",
+    "file": "src/integrations/scaffold.ts",
+    "name": "writeSlashCommands",
+    "kind": "function",
+    "signature_hash": "sha1:95c7713fcd7",
+    "calls": [],
+    "called_by": [],
+    "metrics": {
+      "loc": 16,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_b4fb749dbe",
+    "file": "src/mcp/server.ts",
+    "name": "ToolResult",
+    "kind": "type",
+    "signature_hash": "sha1:4ae4043158b",
+    "calls": [],
+    "called_by": [],
+    "metrics": {
+      "loc": 1,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_2945a8c6b8",
+    "file": "src/mcp/server.ts",
+    "name": "ok",
+    "kind": "function",
+    "signature_hash": "sha1:af137001cb6",
+    "calls": [],
+    "called_by": [
+      "sym_a708ee9110"
+    ],
+    "metrics": {
+      "loc": 1,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_45e6041167",
+    "file": "src/mcp/server.ts",
+    "name": "err",
+    "kind": "function",
+    "signature_hash": "sha1:472816d5399",
+    "calls": [],
+    "called_by": [
+      "sym_a708ee9110"
+    ],
+    "metrics": {
+      "loc": 1,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_5fb91b7bd2",
+    "file": "src/mcp/server.ts",
+    "name": "resolveSymbols",
+    "kind": "function",
+    "signature_hash": "sha1:3eaa12a0110",
+    "calls": [
+      "sym_8fc96bbf18"
+    ],
+    "called_by": [
+      "sym_a708ee9110"
+    ],
+    "metrics": {
+      "loc": 8,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 1
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_a708ee9110",
+    "file": "src/mcp/server.ts",
+    "name": "buildServer",
+    "kind": "function",
+    "signature_hash": "sha1:f53486ea388",
+    "calls": [
+      "sym_6264d56eb8",
+      "sym_cc859f78a3",
+      "sym_3850905bd2",
+      "sym_2945a8c6b8",
+      "sym_7b5e2ca6bc",
+      "sym_43d055177b",
+      "sym_ffff1f0c4c",
+      "sym_acdb0afe63",
+      "sym_5fb91b7bd2",
+      "sym_d237ccd18d",
+      "sym_c1e85563e2",
+      "sym_871abb4df2",
+      "sym_383cbb69ef",
+      "sym_45e6041167"
+    ],
+    "called_by": [
+      "sym_b91e9afbb5"
+    ],
+    "metrics": {
+      "loc": 182,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 14
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_7b5e2ca6bc",
+    "file": "src/mcp/server.ts",
+    "name": "provLine",
+    "kind": "function",
+    "signature_hash": "sha1:7ceb9c49789",
+    "calls": [],
+    "called_by": [
+      "sym_a708ee9110"
+    ],
+    "metrics": {
+      "loc": 6,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_b91e9afbb5",
+    "file": "src/mcp/server.ts",
+    "name": "startServer",
+    "kind": "function",
+    "signature_hash": "sha1:29e93c78e88",
+    "calls": [
+      "sym_9e8caabda8",
+      "sym_a708ee9110"
+    ],
+    "called_by": [],
+    "metrics": {
+      "loc": 7,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 2
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_d75702297c",
+    "file": "src/store/brainStore.ts",
+    "name": "SearchHit",
+    "kind": "interface",
+    "signature_hash": "sha1:2cd257261ad",
+    "calls": [],
+    "called_by": [],
+    "metrics": {
+      "loc": 7,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_a90dbd7d19",
+    "file": "src/store/brainStore.ts",
+    "name": "WhyResult",
+    "kind": "interface",
+    "signature_hash": "sha1:10c3500d479",
+    "calls": [],
+    "called_by": [],
+    "metrics": {
+      "loc": 8,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_4e20c8637f",
+    "file": "src/store/brainStore.ts",
+    "name": "FragileNode",
+    "kind": "interface",
+    "signature_hash": "sha1:9042a0df697",
+    "calls": [],
+    "called_by": [],
+    "metrics": {
+      "loc": 10,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_cc1fcbafc0",
+    "file": "src/store/brainStore.ts",
+    "name": "BrainStore",
+    "kind": "class",
+    "signature_hash": "sha1:6003f90cafb",
+    "calls": [],
+    "called_by": [],
+    "metrics": {
+      "loc": 283,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_de20ba03ad",
+    "file": "src/store/brainStore.ts",
+    "name": "constructor",
+    "kind": "method",
+    "signature_hash": "sha1:d828f35ebe2",
+    "calls": [],
+    "called_by": [],
+    "metrics": {
+      "loc": 3,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_f7c2ad8fa5",
+    "file": "src/store/brainStore.ts",
+    "name": "db",
+    "kind": "method",
+    "signature_hash": "sha1:3cc73494b75",
+    "calls": [
+      "sym_d9b3eb8f1c"
+    ],
+    "called_by": [],
+    "metrics": {
+      "loc": 4,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_c94636f66a",
+    "file": "src/store/brainStore.ts",
+    "name": "close",
+    "kind": "method",
+    "signature_hash": "sha1:8d1656a300c",
+    "calls": [],
+    "called_by": [
+      "sym_610aad3fa6"
+    ],
+    "metrics": {
+      "loc": 4,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_cc859f78a3",
+    "file": "src/store/brainStore.ts",
+    "name": "reindex",
+    "kind": "method",
+    "signature_hash": "sha1:5ebfd097255",
+    "calls": [
+      "sym_8fc96bbf18",
+      "sym_3ede8a26b9",
+      "sym_f937e38b1e"
+    ],
+    "called_by": [
+      "sym_a708ee9110",
+      "sym_744b192507"
+    ],
+    "metrics": {
+      "loc": 85,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 2,
+      "fan_out": 3
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_1bb6dda9ea",
+    "file": "src/store/brainStore.ts",
+    "name": "j",
+    "kind": "function",
+    "signature_hash": "sha1:3c5432f402f",
+    "calls": [],
+    "called_by": [],
+    "metrics": {
+      "loc": 1,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_f937e38b1e",
+    "file": "src/store/brainStore.ts",
+    "name": "fts",
+    "kind": "method",
+    "signature_hash": "sha1:a96637592e9",
+    "calls": [
+      "sym_3ede8a26b9"
+    ],
+    "called_by": [
+      "sym_cc859f78a3"
+    ],
+    "metrics": {
+      "loc": 3,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 1
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_3850905bd2",
+    "file": "src/store/brainStore.ts",
+    "name": "search",
+    "kind": "method",
+    "signature_hash": "sha1:11bd3967b3a",
+    "calls": [
+      "sym_358ccc1ae6",
+      "sym_cc886db33a"
+    ],
+    "called_by": [
+      "sym_a708ee9110",
+      "sym_ffff1f0c4c"
+    ],
+    "metrics": {
+      "loc": 16,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 2,
+      "fan_out": 2
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_cc886db33a",
+    "file": "src/store/brainStore.ts",
+    "name": "likeSearch",
+    "kind": "method",
+    "signature_hash": "sha1:11314c6373c",
+    "calls": [],
+    "called_by": [
+      "sym_3850905bd2"
+    ],
+    "metrics": {
+      "loc": 8,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_43d055177b",
+    "file": "src/store/brainStore.ts",
+    "name": "why",
+    "kind": "method",
+    "signature_hash": "sha1:b4b837bee30",
+    "calls": [
+      "sym_8fc96bbf18",
+      "sym_9493e800ba",
+      "sym_97208a8294"
+    ],
+    "called_by": [
+      "sym_a708ee9110"
+    ],
+    "metrics": {
+      "loc": 25,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 3
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_9493e800ba",
+    "file": "src/store/brainStore.ts",
+    "name": "fileMatch",
+    "kind": "function",
+    "signature_hash": "sha1:4fdaf62e333",
+    "calls": [],
+    "called_by": [
+      "sym_43d055177b"
+    ],
+    "metrics": {
+      "loc": 2,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_d237ccd18d",
+    "file": "src/store/brainStore.ts",
+    "name": "getDependents",
+    "kind": "method",
+    "signature_hash": "sha1:8244f50aabd",
+    "calls": [
+      "sym_567c7718d8"
+    ],
+    "called_by": [
+      "sym_a708ee9110"
+    ],
+    "metrics": {
+      "loc": 15,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 1
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_9af0dc546d",
+    "file": "src/store/brainStore.ts",
+    "name": "getDependencies",
+    "kind": "method",
+    "signature_hash": "sha1:07eeb2d4dcd",
+    "calls": [
+      "sym_567c7718d8"
+    ],
+    "called_by": [],
+    "metrics": {
+      "loc": 15,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_567c7718d8",
+    "file": "src/store/brainStore.ts",
+    "name": "labelFor",
+    "kind": "method",
+    "signature_hash": "sha1:b02f1130134",
+    "calls": [],
+    "called_by": [
+      "sym_d237ccd18d",
+      "sym_9af0dc546d"
+    ],
+    "metrics": {
+      "loc": 11,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 2,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_acdb0afe63",
+    "file": "src/store/brainStore.ts",
+    "name": "checkConstraints",
+    "kind": "method",
+    "signature_hash": "sha1:d37f10e2c67",
+    "calls": [
+      "sym_8fc96bbf18",
+      "sym_97208a8294",
+      "sym_a881241b47"
+    ],
+    "called_by": [
+      "sym_a708ee9110"
+    ],
+    "metrics": {
+      "loc": 6,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 3
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_ffff1f0c4c",
+    "file": "src/store/brainStore.ts",
+    "name": "bugLineage",
+    "kind": "method",
+    "signature_hash": "sha1:4f154783448",
+    "calls": [
+      "sym_8fc96bbf18",
+      "sym_3850905bd2"
+    ],
+    "called_by": [
+      "sym_a708ee9110"
+    ],
+    "metrics": {
+      "loc": 14,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 2
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_c59b535a56",
+    "file": "src/store/brainStore.ts",
+    "name": "fragility",
+    "kind": "method",
+    "signature_hash": "sha1:a5cb938ee3b",
+    "calls": [
+      "sym_8fc96bbf18",
+      "sym_1d3ddc7739"
+    ],
+    "called_by": [],
+    "metrics": {
+      "loc": 25,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 2
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_4f2930d147",
+    "file": "src/store/brainStore.ts",
+    "name": "resolve",
+    "kind": "method",
+    "signature_hash": "sha1:a6fae107e42",
+    "calls": [],
+    "called_by": [
+      "sym_9e8caabda8"
+    ],
+    "metrics": {
+      "loc": 7,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_cc6cbd8e24",
+    "file": "src/store/brainStore.ts",
+    "name": "allEdges",
+    "kind": "method",
+    "signature_hash": "sha1:ad6fa432916",
+    "calls": [
+      "sym_8fc96bbf18"
+    ],
+    "called_by": [],
+    "metrics": {
+      "loc": 3,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_a881241b47",
+    "file": "src/store/brainStore.ts",
+    "name": "sev",
+    "kind": "function",
+    "signature_hash": "sha1:9a987b25e4c",
+    "calls": [],
+    "called_by": [
+      "sym_acdb0afe63"
+    ],
+    "metrics": {
+      "loc": 3,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_1d3ddc7739",
+    "file": "src/store/brainStore.ts",
+    "name": "round",
+    "kind": "function",
+    "signature_hash": "sha1:ae93e2a12a5",
+    "calls": [],
+    "called_by": [
+      "sym_c59b535a56"
+    ],
+    "metrics": {
+      "loc": 3,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_358ccc1ae6",
+    "file": "src/store/brainStore.ts",
+    "name": "toFtsQuery",
+    "kind": "function",
+    "signature_hash": "sha1:5504e56ebe4",
+    "calls": [],
+    "called_by": [
+      "sym_3850905bd2"
+    ],
+    "metrics": {
+      "loc": 7,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_e76f698078",
+    "file": "src/store/db.ts",
+    "name": "DB",
+    "kind": "type",
+    "signature_hash": "sha1:2955c1f8f72",
+    "calls": [],
+    "called_by": [],
+    "metrics": {
+      "loc": 1,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_d9b3eb8f1c",
+    "file": "src/store/db.ts",
+    "name": "openDb",
+    "kind": "function",
+    "signature_hash": "sha1:b27baa46b0e",
+    "calls": [],
+    "called_by": [
+      "sym_f7c2ad8fa5"
+    ],
+    "metrics": {
+      "loc": 7,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_f5a0aa17c9",
+    "file": "src/store/db.ts",
+    "name": "openMemoryDb",
+    "kind": "function",
+    "signature_hash": "sha1:4f5d70ce769",
+    "calls": [],
+    "called_by": [],
+    "metrics": {
+      "loc": 5,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_469347c1e8",
+    "file": "src/store/jsonStore.ts",
+    "name": "JsonStore",
+    "kind": "class",
+    "signature_hash": "sha1:e0c3039c157",
+    "calls": [],
+    "called_by": [],
+    "metrics": {
+      "loc": 95,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_4d4e186ab0",
+    "file": "src/store/jsonStore.ts",
+    "name": "constructor",
+    "kind": "method",
+    "signature_hash": "sha1:70b87bc020f",
+    "calls": [],
+    "called_by": [],
+    "metrics": {
+      "loc": 1,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_d73e258d4a",
+    "file": "src/store/jsonStore.ts",
+    "name": "ensureDirs",
+    "kind": "method",
+    "signature_hash": "sha1:73957bbccac",
+    "calls": [],
+    "called_by": [
+      "sym_610aad3fa6"
+    ],
+    "metrics": {
+      "loc": 4,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_95e5f5139f",
+    "file": "src/store/jsonStore.ts",
+    "name": "fileFor",
+    "kind": "method",
+    "signature_hash": "sha1:193c8fe2f09",
+    "calls": [],
+    "called_by": [
+      "sym_383cbb69ef",
+      "sym_f66a553cec"
+    ],
+    "metrics": {
+      "loc": 5,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 2,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_8fc96bbf18",
+    "file": "src/store/jsonStore.ts",
+    "name": "loadAll",
+    "kind": "method",
+    "signature_hash": "sha1:8fe6f25b8cd",
+    "calls": [],
+    "called_by": [
+      "sym_e50ebb7b4d",
+      "sym_5fb91b7bd2",
+      "sym_cc859f78a3",
+      "sym_43d055177b",
+      "sym_acdb0afe63",
+      "sym_ffff1f0c4c",
+      "sym_c59b535a56",
+      "sym_cc6cbd8e24",
+      "sym_383cbb69ef",
+      "sym_7d2c513fff",
+      "sym_6103f9eaf1",
+      "sym_7183436879",
+      "sym_125cbbaf35",
+      "sym_4ac3ad6690"
+    ],
+    "metrics": {
+      "loc": 38,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 14,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_383cbb69ef",
+    "file": "src/store/jsonStore.ts",
+    "name": "put",
+    "kind": "method",
+    "signature_hash": "sha1:a301bc20c72",
+    "calls": [
+      "sym_8fc96bbf18",
+      "sym_95e5f5139f"
+    ],
+    "called_by": [
+      "sym_a708ee9110",
+      "sym_6103f9eaf1",
+      "sym_7183436879",
+      "sym_4dbb42587d",
+      "sym_125cbbaf35",
+      "sym_744b192507"
+    ],
+    "metrics": {
+      "loc": 14,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 6,
+      "fan_out": 2
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_f66a553cec",
+    "file": "src/store/jsonStore.ts",
+    "name": "replaceAll",
+    "kind": "method",
+    "signature_hash": "sha1:b528e400664",
+    "calls": [
+      "sym_95e5f5139f"
+    ],
+    "called_by": [],
+    "metrics": {
+      "loc": 17,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_7d2c513fff",
+    "file": "src/store/jsonStore.ts",
+    "name": "get",
+    "kind": "method",
+    "signature_hash": "sha1:45082167e38",
+    "calls": [
+      "sym_8fc96bbf18"
+    ],
+    "called_by": [],
+    "metrics": {
+      "loc": 3,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_e95ad12cc2",
+    "file": "src/synthesis/provider.ts",
+    "name": "DecisionDraft",
+    "kind": "interface",
+    "signature_hash": "sha1:8ffbda6d4e4",
+    "calls": [],
+    "called_by": [],
+    "metrics": {
+      "loc": 9,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_217f377ab1",
+    "file": "src/synthesis/provider.ts",
+    "name": "BugDraft",
+    "kind": "interface",
+    "signature_hash": "sha1:3e308d5a068",
+    "calls": [],
+    "called_by": [],
+    "metrics": {
+      "loc": 8,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_3188a7bcc7",
+    "file": "src/synthesis/provider.ts",
+    "name": "CommitInput",
+    "kind": "interface",
+    "signature_hash": "sha1:9ee7b5c6227",
+    "calls": [],
+    "called_by": [],
+    "metrics": {
+      "loc": 6,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_9509f5cc82",
+    "file": "src/synthesis/provider.ts",
+    "name": "FailureInput",
+    "kind": "interface",
+    "signature_hash": "sha1:fcd0455d0aa",
+    "calls": [],
+    "called_by": [],
+    "metrics": {
+      "loc": 6,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_790b4f8899",
+    "file": "src/synthesis/provider.ts",
+    "name": "SynthProvider",
+    "kind": "interface",
+    "signature_hash": "sha1:09a4e3947d4",
+    "calls": [],
+    "called_by": [],
+    "metrics": {
+      "loc": 6,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_af75f4f7c0",
+    "file": "src/synthesis/provider.ts",
+    "name": "AnthropicProvider",
+    "kind": "class",
+    "signature_hash": "sha1:a431c2fdb2c",
+    "calls": [],
+    "called_by": [],
+    "metrics": {
+      "loc": 50,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_ec30e7bbea",
+    "file": "src/synthesis/provider.ts",
+    "name": "available",
+    "kind": "method",
+    "signature_hash": "sha1:0f366a9384b",
+    "calls": [],
+    "called_by": [],
+    "metrics": {
+      "loc": 3,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_7202357531",
+    "file": "src/synthesis/provider.ts",
+    "name": "call",
+    "kind": "method",
+    "signature_hash": "sha1:c13ce2f4c13",
+    "calls": [],
+    "called_by": [],
+    "metrics": {
+      "loc": 16,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_c7716287ec",
+    "file": "src/synthesis/provider.ts",
+    "name": "draftDecision",
+    "kind": "method",
+    "signature_hash": "sha1:4fcf6e1b65c",
+    "calls": [
+      "sym_87824224e8",
+      "sym_d3b47ca671"
+    ],
+    "called_by": [],
+    "metrics": {
+      "loc": 12,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 2
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_d8c7062650",
+    "file": "src/synthesis/provider.ts",
+    "name": "draftBug",
+    "kind": "method",
+    "signature_hash": "sha1:e516dd41ccf",
+    "calls": [
+      "sym_f6dee26225"
+    ],
+    "called_by": [],
+    "metrics": {
+      "loc": 11,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_65160a28b5",
+    "file": "src/synthesis/provider.ts",
+    "name": "ClaudeCliProvider",
+    "kind": "class",
+    "signature_hash": "sha1:ee4102ba7cf",
+    "calls": [],
+    "called_by": [],
+    "metrics": {
+      "loc": 54,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_ec30e7bbea_1",
+    "file": "src/synthesis/provider.ts",
+    "name": "available",
+    "kind": "method",
+    "signature_hash": "sha1:9dc79aa5e29",
+    "calls": [],
+    "called_by": [],
+    "metrics": {
+      "loc": 8,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_3ede8a26b9",
+    "file": "src/synthesis/provider.ts",
+    "name": "run",
+    "kind": "method",
+    "signature_hash": "sha1:710b4b03342",
+    "calls": [],
+    "called_by": [
+      "sym_cc859f78a3",
+      "sym_f937e38b1e",
+      "sym_c7716287ec_1",
+      "sym_d8c7062650_1"
+    ],
+    "metrics": {
+      "loc": 13,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 4,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_c7716287ec_1",
+    "file": "src/synthesis/provider.ts",
+    "name": "draftDecision",
+    "kind": "method",
+    "signature_hash": "sha1:6393fc8a333",
+    "calls": [
+      "sym_3ede8a26b9",
+      "sym_87824224e8",
+      "sym_ab1bba2184",
+      "sym_8622caabea",
+      "sym_5ae5a5a486",
+      "sym_d3b47ca671"
+    ],
+    "called_by": [],
+    "metrics": {
+      "loc": 13,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 6
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_d8c7062650_1",
+    "file": "src/synthesis/provider.ts",
+    "name": "draftBug",
+    "kind": "method",
+    "signature_hash": "sha1:ace3a6279cc",
+    "calls": [
+      "sym_3ede8a26b9",
+      "sym_f6dee26225",
+      "sym_ab1bba2184",
+      "sym_8622caabea",
+      "sym_5ae5a5a486"
+    ],
+    "called_by": [],
+    "metrics": {
+      "loc": 12,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 5
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_c59f1c672e",
+    "file": "src/synthesis/provider.ts",
+    "name": "DeterministicProvider",
+    "kind": "class",
+    "signature_hash": "sha1:25b7187f0eb",
+    "calls": [],
+    "called_by": [],
+    "metrics": {
+      "loc": 38,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_ec30e7bbea_2",
+    "file": "src/synthesis/provider.ts",
+    "name": "available",
+    "kind": "method",
+    "signature_hash": "sha1:f5db2c053a3",
+    "calls": [],
+    "called_by": [],
+    "metrics": {
+      "loc": 3,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_c7716287ec_2",
+    "file": "src/synthesis/provider.ts",
+    "name": "draftDecision",
+    "kind": "method",
+    "signature_hash": "sha1:2876cf74659",
+    "calls": [
+      "sym_cf6099323a",
+      "sym_8d8ca38f4d"
+    ],
+    "called_by": [],
+    "metrics": {
+      "loc": 19,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 2
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_d8c7062650_2",
+    "file": "src/synthesis/provider.ts",
+    "name": "draftBug",
+    "kind": "method",
+    "signature_hash": "sha1:4c8fddef6cd",
+    "calls": [],
+    "called_by": [],
+    "metrics": {
+      "loc": 10,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_dfb2a0090e",
+    "file": "src/synthesis/provider.ts",
+    "name": "selectProvider",
+    "kind": "function",
+    "signature_hash": "sha1:cf9cae8e4d0",
+    "calls": [],
+    "called_by": [
+      "sym_6103f9eaf1",
+      "sym_7183436879"
+    ],
+    "metrics": {
+      "loc": 15,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 2,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_87824224e8",
+    "file": "src/synthesis/provider.ts",
+    "name": "commitPrompt",
+    "kind": "function",
+    "signature_hash": "sha1:1af686aac80",
+    "calls": [],
+    "called_by": [
+      "sym_c7716287ec",
+      "sym_c7716287ec_1"
+    ],
+    "metrics": {
+      "loc": 9,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 2,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_f6dee26225",
+    "file": "src/synthesis/provider.ts",
+    "name": "failurePrompt",
+    "kind": "function",
+    "signature_hash": "sha1:9b6f3083ba8",
+    "calls": [],
+    "called_by": [
+      "sym_d8c7062650",
+      "sym_d8c7062650_1"
+    ],
+    "metrics": {
+      "loc": 9,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 2,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_ab1bba2184",
+    "file": "src/synthesis/provider.ts",
+    "name": "jsonInstruction",
+    "kind": "function",
+    "signature_hash": "sha1:46fe54fa263",
+    "calls": [],
+    "called_by": [
+      "sym_c7716287ec_1",
+      "sym_d8c7062650_1"
+    ],
+    "metrics": {
+      "loc": 3,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 2,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_8622caabea",
+    "file": "src/synthesis/provider.ts",
+    "name": "extractJson",
+    "kind": "function",
+    "signature_hash": "sha1:c7e0fb3db26",
+    "calls": [],
+    "called_by": [
+      "sym_c7716287ec_1",
+      "sym_d8c7062650_1"
+    ],
+    "metrics": {
+      "loc": 20,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 2,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_d3b47ca671",
+    "file": "src/synthesis/provider.ts",
+    "name": "asStrArr",
+    "kind": "function",
+    "signature_hash": "sha1:cb3b1a8fdb7",
+    "calls": [],
+    "called_by": [
+      "sym_c7716287ec",
+      "sym_c7716287ec_1"
+    ],
+    "metrics": {
+      "loc": 3,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 2,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_5ae5a5a486",
+    "file": "src/synthesis/provider.ts",
+    "name": "str",
+    "kind": "function",
+    "signature_hash": "sha1:456faca23a9",
+    "calls": [],
+    "called_by": [
+      "sym_c7716287ec_1",
+      "sym_d8c7062650_1"
+    ],
+    "metrics": {
+      "loc": 3,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 2,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_cf6099323a",
+    "file": "src/synthesis/provider.ts",
+    "name": "topDirs",
+    "kind": "function",
+    "signature_hash": "sha1:81282185162",
+    "calls": [],
+    "called_by": [
+      "sym_c7716287ec_2"
+    ],
+    "metrics": {
+      "loc": 8,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_8d8ca38f4d",
+    "file": "src/synthesis/provider.ts",
+    "name": "cap",
+    "kind": "function",
+    "signature_hash": "sha1:188fdf53196",
+    "calls": [],
+    "called_by": [
+      "sym_c7716287ec_2"
+    ],
+    "metrics": {
+      "loc": 3,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_fc4df1d598",
+    "file": "src/synthesis/synthesize.ts",
+    "name": "SyncResult",
+    "kind": "interface",
+    "signature_hash": "sha1:63a49c7c155",
+    "calls": [],
+    "called_by": [],
+    "metrics": {
+      "loc": 6,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_6103f9eaf1",
+    "file": "src/synthesis/synthesize.ts",
+    "name": "syncCommit",
+    "kind": "function",
+    "signature_hash": "sha1:9f64c941840",
+    "calls": [
+      "sym_64db6cba68",
+      "sym_cb863afde2",
+      "sym_dfb2a0090e",
+      "sym_f9d958acb6",
+      "sym_c228c1cc99",
+      "sym_8fc96bbf18",
+      "sym_97208a8294",
+      "sym_871abb4df2",
+      "sym_383cbb69ef"
+    ],
+    "called_by": [],
+    "metrics": {
+      "loc": 52,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 9
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_2b4e1b512e",
+    "file": "src/synthesis/synthesize.ts",
+    "name": "FailureResult",
+    "kind": "interface",
+    "signature_hash": "sha1:58ccbc0b390",
+    "calls": [],
+    "called_by": [],
+    "metrics": {
+      "loc": 6,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_7183436879",
+    "file": "src/synthesis/synthesize.ts",
+    "name": "recordFailure",
+    "kind": "function",
+    "signature_hash": "sha1:91c97bfc1f5",
+    "calls": [
+      "sym_8fc96bbf18",
+      "sym_9d1964b9a2",
+      "sym_dfb2a0090e",
+      "sym_cdff71a1f9",
+      "sym_5a7c51b94c",
+      "sym_5c38b4911d",
+      "sym_4ac3ad6690",
+      "sym_383cbb69ef",
+      "sym_4dbb42587d",
+      "sym_125cbbaf35"
+    ],
+    "called_by": [],
+    "metrics": {
+      "loc": 67,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 10
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_4dbb42587d",
+    "file": "src/synthesis/synthesize.ts",
+    "name": "promoteConstraint",
+    "kind": "function",
+    "signature_hash": "sha1:ceff202d138",
+    "calls": [
+      "sym_16b88590c8",
+      "sym_383cbb69ef"
+    ],
+    "called_by": [
+      "sym_7183436879"
+    ],
+    "metrics": {
+      "loc": 17,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 2
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_125cbbaf35",
+    "file": "src/synthesis/synthesize.ts",
+    "name": "raiseFragility",
+    "kind": "function",
+    "signature_hash": "sha1:c866713b18c",
+    "calls": [
+      "sym_8fc96bbf18",
+      "sym_97208a8294",
+      "sym_383cbb69ef"
+    ],
+    "called_by": [
+      "sym_7183436879"
+    ],
+    "metrics": {
+      "loc": 9,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 3
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_9d1964b9a2",
+    "file": "src/synthesis/synthesize.ts",
+    "name": "rankSuspects",
+    "kind": "function",
+    "signature_hash": "sha1:90c8fa14252",
+    "calls": [],
+    "called_by": [
+      "sym_7183436879"
+    ],
+    "metrics": {
+      "loc": 11,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_3a906a6c90",
+    "file": "src/synthesis/synthesize.ts",
+    "name": "stripPaths",
+    "kind": "function",
+    "signature_hash": "sha1:9cdf0606e7b",
+    "calls": [],
+    "called_by": [
+      "sym_edf2a5e3c6"
+    ],
+    "metrics": {
+      "loc": 9,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_edf2a5e3c6",
+    "file": "src/synthesis/synthesize.ts",
+    "name": "salientTerms",
+    "kind": "function",
+    "signature_hash": "sha1:d301561fd66",
+    "calls": [
+      "sym_3a906a6c90"
+    ],
+    "called_by": [
+      "sym_4ac3ad6690"
+    ],
+    "metrics": {
+      "loc": 7,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 1
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_4ac3ad6690",
+    "file": "src/synthesis/synthesize.ts",
+    "name": "findRecurrence",
+    "kind": "function",
+    "signature_hash": "sha1:69b1106a711",
+    "calls": [
+      "sym_edf2a5e3c6",
+      "sym_8fc96bbf18"
+    ],
+    "called_by": [
+      "sym_7183436879"
+    ],
+    "metrics": {
+      "loc": 26,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 2
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_cdff71a1f9",
+    "file": "src/synthesis/synthesize.ts",
+    "name": "recentDiffFor",
+    "kind": "function",
+    "signature_hash": "sha1:6ad3fdfee8f",
+    "calls": [
+      "sym_64db6cba68",
+      "sym_f9d958acb6"
+    ],
+    "called_by": [
+      "sym_7183436879"
+    ],
+    "metrics": {
+      "loc": 4,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 2
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_c228c1cc99",
+    "file": "src/synthesis/synthesize.ts",
+    "name": "draftDecisionSafe",
+    "kind": "function",
+    "signature_hash": "sha1:726c6dbdbb9",
+    "calls": [],
+    "called_by": [
+      "sym_6103f9eaf1"
+    ],
+    "metrics": {
+      "loc": 9,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_5a7c51b94c",
+    "file": "src/synthesis/synthesize.ts",
+    "name": "draftBugSafe",
+    "kind": "function",
+    "signature_hash": "sha1:2ca0641494c",
+    "calls": [],
+    "called_by": [
+      "sym_7183436879"
+    ],
+    "metrics": {
+      "loc": 7,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_610aad3fa6",
+    "file": "test/helpers.ts",
+    "name": "tempStore",
+    "kind": "function",
+    "signature_hash": "sha1:3bb6983077d",
+    "calls": [
+      "sym_6264d56eb8",
+      "sym_d73e258d4a",
+      "sym_c94636f66a"
+    ],
+    "called_by": [
+      "sym_744b192507"
+    ],
+    "metrics": {
+      "loc": 6,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 3
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_31f173b479",
+    "file": "test/helpers.ts",
+    "name": "prov",
+    "kind": "function",
+    "signature_hash": "sha1:3cf70eee23c",
+    "calls": [
+      "sym_1285f1c28f"
+    ],
+    "called_by": [
+      "sym_744b192507"
+    ],
+    "metrics": {
+      "loc": 1,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 1
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_eb3d6b0aa3",
+    "file": "test/helpers.ts",
+    "name": "inf",
+    "kind": "function",
+    "signature_hash": "sha1:934147ac82b",
+    "calls": [
+      "sym_11010ac9dc"
+    ],
+    "called_by": [],
+    "metrics": {
+      "loc": 1,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_3c4eab5932",
+    "file": "test/indexer.test.ts",
+    "name": "fixtureRepo",
+    "kind": "function",
+    "signature_hash": "sha1:5e9da82c9a8",
+    "calls": [],
+    "called_by": [],
+    "metrics": {
+      "loc": 9,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_d12f6e978e",
+    "file": "test/integration.test.ts",
+    "name": "gitRepo",
+    "kind": "function",
+    "signature_hash": "sha1:f851268b065",
+    "calls": [
+      "sym_f23f22701a"
+    ],
+    "called_by": [],
+    "metrics": {
+      "loc": 12,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_f23f22701a",
+    "file": "test/integration.test.ts",
+    "name": "g",
+    "kind": "function",
+    "signature_hash": "sha1:ef30faeb82d",
+    "calls": [],
+    "called_by": [
+      "sym_d12f6e978e"
+    ],
+    "metrics": {
+      "loc": 1,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_9b57aa0b4c",
+    "file": "test/parse.test.ts",
+    "name": "sb",
+    "kind": "function",
+    "signature_hash": "sha1:00c2b7de924",
+    "calls": [],
+    "called_by": [],
+    "metrics": {
+      "loc": 1,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 0
+    },
+    "last_changed": ""
+  },
+  {
+    "id": "sym_744b192507",
+    "file": "test/store.test.ts",
+    "name": "seed",
+    "kind": "function",
+    "signature_hash": "sha1:bc241fed631",
+    "calls": [
+      "sym_610aad3fa6",
+      "sym_31f173b479",
+      "sym_383cbb69ef",
+      "sym_cc859f78a3"
+    ],
+    "called_by": [],
+    "metrics": {
+      "loc": 18,
+      "churn_90d": 0,
+      "bug_count": 0,
+      "fan_in": 0,
+      "fan_out": 4
+    },
+    "last_changed": ""
+  }
+]

@@ -1,0 +1,12 @@
+node_modules/
+dist/
+*.log
+
+# Brain: the SQLite index is a DERIVED artifact, rebuilt by `brain index`.
+# The JSON source of truth under .brain/ IS committed.
+.brain/brain.sqlite
+.brain/brain.sqlite-*
+.brain/*.sqlite
+.brain/*.sqlite-journal
+.brain/*.sqlite-wal
+.brain/*.sqlite-shm

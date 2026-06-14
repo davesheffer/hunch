@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "brain": {
+      "command": "/Users/nofarkulishevski/.nvm/versions/node/v20.20.2/bin/node",
+      "args": [
+        "/Users/nofarkulishevski/Documents/GitHub/brain/dist/cli/index.js",
+        "mcp"
+      ]
+    }
+  }
+}
