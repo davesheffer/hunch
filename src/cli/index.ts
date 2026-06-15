@@ -9,11 +9,12 @@
  *   why       decisions/bugs/constraints explaining a file/symbol
  *   fragile   ranked fragility report with evidence
  *   record-bug  capture a Bug from a (failing) test
+ *   test      run the suite, auto-capture failures as Bugs, resolve fixed ones
  *   mcp       start the MCP server (Claude Code connects here)
  *   doctor    environment diagnostics
  */
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { Command } from "commander";
 import { hunchPaths, findRoot } from "../core/paths.js";
@@ -21,6 +22,8 @@ import { HunchStore } from "../store/hunchStore.js";
 import { selectEmbedder } from "../store/embedder.js";
 import { indexRepo } from "../extractors/indexer.js";
 import { syncCommit, recordFailure } from "../synthesis/synthesize.js";
+import { parseTestReport } from "../extractors/testreport.js";
+import { bugId } from "../core/ids.js";
 import { selectProvider } from "../synthesis/provider.js";
 import { isGitRepo, headSha, logSince, lastChangeDate, stagedFiles, commitFiles } from "../extractors/git.js";
 import { installPostCommitHook, installPreCommitHook } from "../integrations/hooks.js";
@@ -308,6 +311,79 @@ program
     if (r.bug.lineage.recurrence_of) console.log(`  ↳ recurrence of ${r.bug.lineage.recurrence_of}`);
     if (r.constraint) console.log(`  ↳ promoted constraint ${r.constraint.id} [${r.constraint.severity}]: ${r.constraint.statement}`);
     store.close();
+  });
+
+// ---- test (failure-learning loop) -----------------------------------------
+program
+  .command("test")
+  .description("Run the test suite; capture failures as Bugs (suspects + recurrence → Constraints), mark passing tests' bugs fixed.")
+  .argument("[cmd...]", "test command to run (default: `npm test`)")
+  .option("--dry-run", "show what would be captured without writing")
+  .action(async (cmd: string[], opts: { dryRun?: boolean }) => {
+    const { store, root } = storeFor();
+    store.json.ensureDirs();
+    // Run as a shell string (not argv) so the npm/test-runner shim resolves on
+    // Windows and avoids Node's DEP0190 args+shell warning — same lesson as the
+    // claude CLI fix. The command is operator-supplied, so a shell is expected.
+    const cmdStr = cmd.length ? cmd.join(" ") : "npm test";
+    console.log(`▶ running: ${cmdStr}\n`);
+    const run = spawnSync(cmdStr, {
+      cwd: root,
+      shell: true,
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+      windowsHide: true,
+    });
+    const output = `${run.stdout ?? ""}\n${run.stderr ?? ""}`;
+    const report = parseTestReport(output);
+
+    // No TAP recognized but the run failed → capture one coarse bug from the tail
+    // rather than pretend success (silent green is the worst failure mode here).
+    let failures = report.failures;
+    if (!report.recognized && run.status !== 0) {
+      const tail = output.trim().split(/\r?\n/).slice(-40).join("\n");
+      failures = [{ test: cmdStr, message: `Test run failed (exit ${run.status}); output not TAP.\n${tail}` }];
+    }
+
+    if (opts.dryRun) {
+      console.log(`DRY RUN — exit ${run.status}, ${report.passed.length} passed, ${failures.length} failure(s):`);
+      for (const f of failures) console.log(`  ✗ ${f.test}`);
+      store.close();
+      return;
+    }
+
+    let captured = 0, recurrences = 0, promoted = 0;
+    for (const f of failures) {
+      const r = await recordFailure(store, root, f);
+      captured++;
+      if (r.bug.lineage.recurrence_of) recurrences++;
+      if (r.constraint) {
+        promoted++;
+        console.log(`  ⚠ ${r.bug.id} "${r.bug.title}" → promoted constraint ${r.constraint.id} [${r.constraint.severity}]`);
+      } else {
+        console.log(`  ✗ ${r.bug.id} "${r.bug.title}" [${r.bug.severity}]${r.bug.lineage.recurrence_of ? ` ↳ recurrence of ${r.bug.lineage.recurrence_of}` : ""}`);
+      }
+    }
+
+    // Close the loop: a test that now PASSES resolves its previously-open bug.
+    let fixed = 0;
+    const sha = isGitRepo(root) ? headSha(root) : null;
+    for (const name of report.passed) {
+      const b = store.json.get("bugs", bugId(name));
+      if (b && b.status === "open") {
+        store.json.put("bugs", { ...b, status: "fixed", lineage: { ...b.lineage, fixed_commit: sha } });
+        fixed++;
+        console.log(`  ✓ ${b.id} "${b.title}" → fixed (test passing)`);
+      }
+    }
+
+    store.reindex();
+    store.close();
+    console.log(
+      `\n${run.status === 0 ? "✓ suite passed" : "✗ suite failed"} — ` +
+      `${captured} bug(s) captured (${recurrences} recurrence, ${promoted} constraint), ${fixed} resolved.`,
+    );
+    if (run.status !== 0) process.exitCode = 1; // preserve CI semantics
   });
 
 // ---- stale (drift detection) ----------------------------------------------

@@ -110,6 +110,7 @@ The MCP tools Claude calls under the hood: `hunch_why`, `hunch_query`,
 | `hunch backfill --since 90d` | replay git history → seed decisions |
 | `hunch sync [sha]` | turn a commit into a Decision (run automatically by the hook) |
 | `hunch record-bug --test <id> --message <m>` | capture a Bug from a failing test |
+| `hunch test [cmd…]` | run the suite (default `npm test`); auto-capture failures as Bugs (suspects + recurrence→Constraints), mark passing tests' bugs fixed |
 | `hunch why <path\|symbol>` | decisions / bugs / constraints explaining a target (flags `⚠STALE`) |
 | `hunch query "<q>" [--semantic]` | full-text + graph search (`--semantic` blends in local embeddings) |
 | `hunch embed` | generate local embeddings for semantic recall (opt-in; needs `@huggingface/transformers`) |
