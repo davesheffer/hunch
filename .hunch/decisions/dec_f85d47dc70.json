@@ -1,0 +1,45 @@
+{
+  "id": "dec_f85d47dc70",
+  "title": "Expand invariant violation detection from direct scope to transitive dependencies",
+  "status": "accepted",
+  "context": "Direct file matching misses violations: editing a file that a guarded invariant depends on can break the invariant even though the guarded file wasn't edited. Example: changing JWT handling indirectly affects session management constraints.",
+  "decision": "Add blast-radius detection: compute files whose symbols depend (directly or transitively) on changed files, check constraints on reached files as 'near' violations. Powered by HunchStore.blastRadiusFiles() walking the symbol dependency graph (nearest depth per file, self excluded, capped at 4 hops).",
+  "consequences": [
+    "More invariants flagged per change (direct + near hits), reducing silent violations",
+    "Requires maintaining and walking symbol dependency graph on each check",
+    "--strict now fails on near violations too, not just direct scope hits",
+    "New --blast flag exposes dependency fan-out for transparency and reasoning",
+    "Potential noise if deep dependency chains; mitigated by depth cap and nearest-depth dedup"
+  ],
+  "alternatives_rejected": [
+    "Only check direct file scope (pre-0.4.0): misses transitive dependency violations",
+    "Expand constraint scope to include all transitive dependents: bloats definitions, less intuitive",
+    "Require explicit dependency annotations in constraints: shifts burden to users, not discoverable",
+    "Use whole-graph reachability instead of bounded blast: slower, noisier, hard to reason about"
+  ],
+  "related_components": [
+    "cmp_50037f41a9",
+    "cmp_a94a8fe5cc",
+    "cmp_cdfb395bb7"
+  ],
+  "related_files": [
+    "src/cli/index.ts",
+    "src/store/hunchStore.ts",
+    "test/check.test.ts"
+  ],
+  "supersedes": null,
+  "caused_by_bug": null,
+  "commit": "eba4256",
+  "provenance": {
+    "source": "llm_draft+human_confirmed",
+    "confidence": 0.95,
+    "evidence": [
+      "commit:eba4256",
+      "src/cli/index.ts",
+      "src/store/hunchStore.ts",
+      "test/check.test.ts"
+    ],
+    "last_verified": "2026-06-15T13:11:17.587Z"
+  },
+  "date": "2026-06-15T16:10:38+03:00"
+}
