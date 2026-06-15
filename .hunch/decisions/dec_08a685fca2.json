@@ -1,0 +1,47 @@
+{
+  "id": "dec_08a685fca2",
+  "title": "feat(store): semantic search via optional local embeddings",
+  "status": "proposed",
+  "context": "Opt-in semantic recall over Hunch records using local embeddings, with\n@huggingface/transformers as an OPTIONAL peer dep so the base install\nstays lean. Vectors live in the derived SQLite index and are reconciled\nby content hash on every `hunch index`, so they never drift from the\nJSON source of truth.\n\n- store/embedder: local embedding runtime (lazy-loaded; degrades to\n  keyword-only when the optional dep is absent)\n- store/schema + hunchStore: vector storage + hybrid keyword/semantic\n  recall ",
+  "decision": "Introduced src/cli, src/core, src/mcp, src/store, test/embed.test.ts: added Embedder, installedPackage, TransformersEmbedder, p, StubEmbedder, selectEmbedder, add, numEnv; changed shortHash; new dep(s): node:module, node:test, node:assert/strict; 2 new file(s).",
+  "consequences": [
+    "Adds dependency: node:module, node:test, node:assert/strict.",
+    "Changes shortHash (signature/behavior)."
+  ],
+  "alternatives_rejected": [],
+  "related_components": [
+    "cmp_50037f41a9",
+    "cmp_a94a8fe5cc",
+    "cmp_b256a6aed0",
+    "cmp_cdfb395bb7",
+    "cmp_dfa5b5acde"
+  ],
+  "related_files": [
+    "src/cli/index.ts",
+    "src/core/ids.ts",
+    "src/mcp/server.ts",
+    "src/store/embedder.ts",
+    "src/store/hunchStore.ts",
+    "src/store/schema.ts",
+    "test/embed.test.ts"
+  ],
+  "supersedes": null,
+  "caused_by_bug": null,
+  "commit": "a71934b",
+  "provenance": {
+    "source": "inferred",
+    "confidence": 0.45,
+    "evidence": [
+      "commit:a71934b",
+      "src/cli/index.ts",
+      "src/core/ids.ts",
+      "src/mcp/server.ts",
+      "src/store/embedder.ts",
+      "src/store/hunchStore.ts",
+      "src/store/schema.ts",
+      "test/embed.test.ts"
+    ],
+    "last_verified": "2026-06-15T11:22:49.891Z"
+  },
+  "date": "2026-06-15T14:22:49+03:00"
+}
