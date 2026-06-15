@@ -1,11 +1,19 @@
 {
   "id": "dec_f52215a721",
-  "title": "fix(hunch): harden upgrades from adversarial review (13 findings)",
+  "title": "Implement hunk-state-aware diff parsing for correct symbol classification",
   "status": "proposed",
-  "context": "- diff analyzer: hunk-state-aware parsing (content lines starting with ++/--\n  no longer misread as headers); pure renames recorded; per-file symbol\n  classification; code-only line counts; multi-line import detection\n- store: jsonStore.delete operates on raw JSON (no schema-drop); assembleContext\n  blast-radius keeps MIN depth; formatContext trims on code-point/line boundaries\n- cli: init --enforce-strict; query/context reindex before reading; check\n  --staged/--commit mutual exclusion\n- vscode",
-  "decision": "Changed code in test/upgrades.test.ts (1 file(s)).",
-  "consequences": [],
-  "alternatives_rejected": [],
+  "context": "Adversarial review revealed diff analyzer misclassified content lines starting with ++/-- as file headers, causing incorrect symbol state tracking (false 'changed' labels, missed pure renames).",
+  "decision": "Redesigned diff analyzer to track parse state (header vs. hunk content sections), classify symbols per-file rather than globally, and detect pure renames. Added 6 regression tests covering header-collision, renames, and cross-file moves.",
+  "consequences": [
+    "Symbol moves between files now tracked as add+remove per-file, not incorrectly as 'changed' within a file",
+    "Pure renames (100% similarity, no content change) now detected and recorded separately",
+    "Regression suite prevents re-introduction of these misclassifications",
+    "Store and context operations also hardened (jsonStore.delete on raw JSON, context assembly depth bounds)"
+  ],
+  "alternatives_rejected": [
+    "Single-pass line-by-line regex without state tracking (insufficient for unambiguous classification)",
+    "Accept false positives in symbol classification and defer fix"
+  ],
   "related_components": [
     "cmp_a94a8fe5cc"
   ],
@@ -16,13 +24,13 @@
   "caused_by_bug": null,
   "commit": "ed35150",
   "provenance": {
-    "source": "inferred",
-    "confidence": 0.3,
+    "source": "llm_draft",
+    "confidence": 0.65,
     "evidence": [
       "commit:ed35150",
       "test/upgrades.test.ts"
     ],
-    "last_verified": "2026-06-15T08:30:08.296Z"
+    "last_verified": "2026-06-15T11:47:03.720Z"
   },
   "date": "2026-06-15T00:13:34+03:00"
 }

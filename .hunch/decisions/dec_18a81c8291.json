@@ -1,14 +1,21 @@
 {
   "id": "dec_18a81c8291",
-  "title": "fix(hunch): harden LLM structured-output parsing (3 adversarial review rounds)",
+  "title": "Fail fast on unparseable LLM output; fallback to honest deterministic draft",
   "status": "proposed",
-  "context": "With the API/tool-use provider gone, synthesis depends on parsing free-text\n`claude -p` output into Decision/Bug drafts. Three rounds of multi-agent\nadversarial review found (and verified) defects in the parser, the\nfallback contract, and — twice — in my own fixes. Final design:\n\nParsing (provider.ts):\n- String-aware extraction: balancedEnd/sliceBalancedJson and a string-aware\n  stripTrailingCommas no longer miscount braces or corrupt a comma INSIDE a\n  string value (the old depth counter and a ",
-  "decision": "Changed src/synthesis, test/provider.test.ts: added balancedEnd, looksLikeJsonObject, topLevelJsonSlices, stripTrailingCommas, tryParseObject, parseObjectLoose, extractJsonObjects, asSeverity; changed extractJson, draftDecisionSafe, draftBugSafe; new dep(s): node:test, node:assert/strict; 1 new file(s).",
+  "context": "The parser was returning hollow/useless LLM drafts (marked \"llm_draft\") when the model output was truncated, refused, or prose-only. Silent degradation eroded reliability and falsely signaled confidence in corrupted records.",
+  "decision": "Redesigned to throw on failed JSON extraction, triggering safe wrappers (draftDecisionSafe/draftBugSafe) to return deterministic fallback drafts explicitly labeled \"inferred\" with low confidence. Also hardened the parser itself (string-aware balancing, content-based selection, explicit type coercion) to reduce false positives.",
   "consequences": [
-    "Adds dependency: node:test, node:assert/strict.",
-    "Changes extractJson, draftDecisionSafe, draftBugSafe (signature/behavior)."
+    "Output honesty: users see \"inferred\" for determinstic fallbacks, \"llm_draft\" only when real JSON was extracted",
+    "Deterministic drafts (diff-structured) are more useful than truncated/corrupted LLM attempts",
+    "Error cases are explicit, not silent",
+    "Test coverage grown from 47 to 76 (each verified repro encoded)"
   ],
-  "alternatives_rejected": [],
+  "alternatives_rejected": [
+    "Keep returning hollow drafts silently — loses honesty and reliability signal",
+    "Return best-effort partial JSON parsing — corrupts downstream logic",
+    "Retry the LLM — doesn't fix truncation and adds latency",
+    "Position-based selection — can't distinguish real answer from template/recap"
+  ],
   "related_components": [
     "cmp_a94a8fe5cc",
     "cmp_ba75dfc94f"
@@ -22,15 +29,15 @@
   "caused_by_bug": null,
   "commit": "4615d5a",
   "provenance": {
-    "source": "inferred",
-    "confidence": 0.45,
+    "source": "llm_draft+summary",
+    "confidence": 0.5,
     "evidence": [
       "commit:4615d5a",
       "src/synthesis/provider.ts",
       "src/synthesis/synthesize.ts",
       "test/provider.test.ts"
     ],
-    "last_verified": "2026-06-15T08:30:07.860Z"
+    "last_verified": "2026-06-15T11:45:35.945Z"
   },
   "date": "2026-06-15T10:24:41+03:00"
 }

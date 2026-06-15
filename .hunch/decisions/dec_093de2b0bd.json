@@ -1,13 +1,23 @@
 {
   "id": "dec_093de2b0bd",
-  "title": "feat(hunch): schema migration, team git-merge, and compaction (out of MVP)",
+  "title": "Forward-migrate schema before validation to prevent silent record loss",
   "status": "proposed",
-  "context": "Three features to take the Project Hunch past MVP, each hardened over two rounds\nof multi-agent adversarial review (25 confirmed findings fixed, incl. data-loss\nbugs the first cut introduced).\n\nSchema versioning + migration (core/migrate.ts, core/io.ts):\n- .hunch/manifest.json records the on-disk schema version; loadAll migrates raw\n  JSON UP to the current version BEFORE Zod validation, so a future schema change\n  never makes the loader silently skip (drop) old records.\n- `hunch migrate` persis",
-  "decision": "Introduced src/cli, src/core, src/integrations, src/store, test/compact.test.ts, test/merge.test.ts: added read, lf, writeFileAtomic, safeRm, Migration, Manifest, readManifest, writeManifest; new dep(s): node:child_process, node:path, node:test, node:assert/strict, node:os; 8 new file(s).",
+  "context": "MVP had no schema versioning. When schema changed, records failing new validation would silently disappear—unrecoverable data loss. Team collaboration blocked by file-level merge conflicts.",
+  "decision": "Manifest records on-disk schema_version. loadAll() upgrades raw JSON to current version BEFORE Zod validation so incompatible records can be diagnosed rather than silently dropped. Install git merge driver that merges .brain JSON by record ID semantics instead of file markers. Refuse to rewrite corrupt index; refuse to drop unmigratable records (warn loudly).",
   "consequences": [
-    "Adds dependency: node:child_process, node:path, node:test, node:assert/strict, node:os."
+    "Schema evolution is safe: records never lost due to validation failure",
+    "Manifest is source-of-truth for stored schema version, read once per load",
+    "Team merges resolve by record ID (human > confidence > recency) instead of conflict markers",
+    "Compaction uses reference-safety analysis (greatest-fixpoint) to never remove referenced records",
+    "Atomic writes (temp+rename) with Windows fallback required for consistency guarantees",
+    "Backward-incompatible records surface with warnings rather than silently disappearing"
   ],
-  "alternatives_rejected": [],
+  "alternatives_rejected": [
+    "Migrate after validation: silently drops records failing new schema (data-loss bug found in initial cut)",
+    "No versioning: impossible to support evolution without silent drift",
+    "Manual migration: unfeasible for declarative records, requires user intervention",
+    "File-level merge conflicts: lossy for concurrent edits, blocks team use"
+  ],
   "related_components": [
     "cmp_50037f41a9",
     "cmp_863ac67d4a",
@@ -32,8 +42,8 @@
   "caused_by_bug": null,
   "commit": "8ec6d7d",
   "provenance": {
-    "source": "inferred",
-    "confidence": 0.45,
+    "source": "llm_draft+summary",
+    "confidence": 0.5,
     "evidence": [
       "commit:8ec6d7d",
       "src/cli/index.ts",
@@ -45,7 +55,7 @@
       "src/store/jsonStore.ts",
       "src/store/merge.ts"
     ],
-    "last_verified": "2026-06-15T08:30:07.698Z"
+    "last_verified": "2026-06-15T11:45:17.165Z"
   },
   "date": "2026-06-15T11:18:37+03:00"
 }

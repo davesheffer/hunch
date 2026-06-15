@@ -1,11 +1,24 @@
 {
   "id": "dec_c13810566c",
-  "title": "feat: Engineering Memory OS MVP — git-native reasoning graph over the codebase",
+  "title": "Git-native reasoning graph for persistent code intent capture",
   "status": "proposed",
-  "context": "Implements DESIGN.md: a persistent \"Project Hunch\" that captures *why* the code\nis the way it is (decisions, bug lineage, invariants) and feeds it to Claude Code\nat reasoning time.\n\nComponents:\n- store/      JSON source-of-truth <-> SQLite/FTS5 index; recursive-CTE blast radius\n- extractors/ native tree-sitter symbol/call/import graph; git introspection\n- synthesis/  pluggable LLM provider (anthropic-sdk | claude-cli | deterministic)\n- mcp/        stdio MCP server: hunch_query/why/bug_lineage/ch",
-  "decision": "Introduced code in src/cli, src/core, src/extractors, src/integrations, src/mcp, src/store (26 file(s)).",
-  "consequences": [],
-  "alternatives_rejected": [],
+  "context": "Claude Code and developers lack persistent access to decision lineage, invariants, and bug patterns. Traditional comments rot; code structure alone doesn't capture intent.",
+  "decision": "Build a 'Project Brain'—a queryable graph stored in git that extracts and indexes code relationships (symbols, calls, imports) and captures decisions, bug lineage, and invariants. Expose via MCP, CLI, post-commit hooks, and auto-CLAUDE.md generation. Use native tree-sitter + SQLite/FTS5 for structured storage and lookup.",
+  "consequences": [
+    "Developers can record and query structured 'why' for any code location",
+    "Claude Code can reason about intent and decision context during interactions",
+    "Brain state stays in version control alongside code",
+    "Requires maintenance of language-specific extractors (tree-sitter grammars)",
+    "Need developer discipline to keep decision records current",
+    "Adds complexity and surface area; new subsystem must be kept in sync"
+  ],
+  "alternatives_rejected": [
+    "Pure documentation (CLAUDE.md) — lacks structured queryability and graph structure",
+    "Centralized external service — breaks git-native model, requires network, harder to version-control",
+    "WASM tree-sitter — known grammar ABI mismatches with Node 20; native implementation more reliable",
+    "Static analysis only — captures syntax but not human intent or decision context",
+    "Manual reverse-engineering from git history — doesn't scale, error-prone"
+  ],
   "related_components": [
     "cmp_50037f41a9",
     "cmp_863ac67d4a",
@@ -30,7 +43,7 @@
     "src/integrations/hooks.ts",
     "src/integrations/scaffold.ts",
     "src/mcp/server.ts",
-    "src/store/hunchStore.ts",
+    "src/store/brainStore.ts",
     "src/store/db.ts",
     "src/store/jsonStore.ts",
     "src/store/schema.ts",
@@ -48,8 +61,8 @@
   "caused_by_bug": null,
   "commit": "a2d3f81",
   "provenance": {
-    "source": "inferred",
-    "confidence": 0.3,
+    "source": "llm_draft+summary",
+    "confidence": 0.5,
     "evidence": [
       "commit:a2d3f81",
       "src/cli/index.ts",
@@ -61,7 +74,7 @@
       "src/extractors/git.ts",
       "src/extractors/indexer.ts"
     ],
-    "last_verified": "2026-06-15T08:30:08.613Z"
+    "last_verified": "2026-06-15T11:46:26.069Z"
   },
   "date": "2026-06-14T23:33:55+03:00"
 }
