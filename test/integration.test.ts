@@ -25,7 +25,7 @@ function gitRepo(): string {
   return root;
 }
 
-test("syncCommit is idempotent — re-syncing a commit updates, never duplicates (regression #5)", async () => {
+test("syncCommit early-exits on re-sync (token-thrift) and --force re-drafts in place (regression #5)", async () => {
   const root = gitRepo();
   const store = new BrainStore(brainPaths(root));
   store.json.ensureDirs();
@@ -34,10 +34,19 @@ test("syncCommit is idempotent — re-syncing a commit updates, never duplicates
   assert.equal(first.status, "written");
   const id = first.decision!.id;
 
-  // re-run on the same HEAD: same id, still exactly one decision
+  // re-run on the same HEAD: early-exit (no wasted synthesis), existing record
+  // surfaced, still exactly one decision
   const second = await syncCommit(store, root);
-  assert.equal(second.decision!.id, id, "id is derived from the commit sha, stable across runs");
+  assert.equal(second.status, "skipped");
+  assert.match(second.reason!, /already captured/);
+  assert.equal(second.decision!.id, id, "surfaces the existing commit-keyed decision");
   assert.equal(store.json.loadAll("decisions").length, 1, "no duplicate decision");
+
+  // --force re-synthesizes the same commit in place: same id, still one record
+  const forced = await syncCommit(store, root, undefined, { force: true });
+  assert.equal(forced.status, "written");
+  assert.equal(forced.decision!.id, id);
+  assert.equal(store.json.loadAll("decisions").length, 1, "force updates in place, never duplicates");
 
   store.close();
   rmSync(root, { recursive: true, force: true });

@@ -68,9 +68,41 @@ export function commitMeta(sha: string, cwd: string): CommitMeta | null {
   return { sha: full, shortSha: short, subject, body, author, date, files: commitFiles(sha, cwd) };
 }
 
-/** The unified diff for a commit, truncated to keep synthesis prompts bounded. */
+/** Machine-generated paths that carry no design "why" — lockfiles, build output,
+ *  vendored deps, snapshots, source maps. Excluded from synthesis diffs via git
+ *  pathspec BEFORE git assembles/orders the patch: a huge lockfile sorts ahead of
+ *  src/ alphabetically and would otherwise eat the byte budget and truncate the
+ *  real code change away. Exclude-only pathspecs are valid; `**` (glob magic)
+ *  matches across directories AND at the repo root. (`*.lock` covers yarn / cargo
+ *  / poetry / composer / Gemfile lockfiles.) */
+const DIFF_NOISE = [
+  ":(exclude,glob)**/package-lock.json",
+  ":(exclude,glob)**/npm-shrinkwrap.json",
+  ":(exclude,glob)**/pnpm-lock.yaml",
+  ":(exclude,glob)**/go.sum",
+  ":(exclude,glob)**/*.lock",
+  ":(exclude,glob)**/dist/**",
+  ":(exclude,glob)**/build/**",
+  ":(exclude,glob)**/out/**",
+  ":(exclude,glob)**/coverage/**",
+  ":(exclude,glob)**/.next/**",
+  ":(exclude,glob)**/node_modules/**",
+  ":(exclude,glob)**/vendor/**",
+  // the Brain's OWN machine-generated records — re-synthesizing a commit that
+  // wrote them would be circular noise, and they're large (JSON per record).
+  ":(exclude,glob)**/.brain/**",
+  ":(exclude,glob)**/*.min.js",
+  ":(exclude,glob)**/*.map",
+  ":(exclude,glob)**/*.snap",
+  ":(exclude,glob)**/__snapshots__/**",
+  ":(exclude,glob)**/*.generated.*",
+];
+
+/** The unified diff for a commit, truncated to keep synthesis prompts bounded.
+ *  Machine-generated noise (see DIFF_NOISE) is excluded so the model spends its
+ *  budget on code that encodes intent, not on regenerated lockfiles/build output. */
 export function commitDiff(sha: string, cwd: string, maxBytes = 60_000): string {
-  const out = gitSafe(["show", sha, "--no-color", "--format=", "--unified=2"], cwd);
+  const out = gitSafe(["show", sha, "--no-color", "--format=", "--unified=2", "--", ...DIFF_NOISE], cwd);
   return out.length > maxBytes ? out.slice(0, maxBytes) + "\n…(diff truncated)…" : out;
 }
 

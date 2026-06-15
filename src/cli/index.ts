@@ -121,17 +121,20 @@ program
     store.json.ensureDirs();
     const commits = logSince(opts.since, root, Number(opts.max));
     console.log(`Backfilling from ${commits.length} commit(s) since ${opts.since}…`);
-    let written = 0, skipped = 0;
+    let written = 0, skipped = 0, llm = 0, heuristic = 0;
     for (const sha of commits) {
       const r = await syncCommit(store, root, sha);
       if (r.status === "written") {
         written++;
+        if (r.provider === "claude-cli") llm++; else heuristic++;
         process.stdout.write(`  ✓ ${sha.slice(0, 8)} ${r.decision?.title.slice(0, 64) ?? ""}\n`);
       } else skipped++;
     }
     store.reindex();
     updateClaudeMd(root, store);
-    console.log(`Done: ${written} decisions seeded, ${skipped} skipped (trivial/non-code). Provider: ${(await selectProvider()).name}`);
+    // Honest tally of where the tokens went: trivial commits are seeded by the
+    // free deterministic heuristic, only substantive ones spend the LLM.
+    console.log(`Done: ${written} decision(s) seeded (${llm} via LLM, ${heuristic} heuristic), ${skipped} skipped (trivial/non-code/already-captured).`);
     store.close();
   });
 
@@ -142,11 +145,12 @@ program
   .argument("[sha]", "commit to sync (default: HEAD)")
   .option("--from-hook", "invoked by the git hook")
   .option("--quiet", "minimal output")
-  .action(async (sha: string | undefined, opts: { fromHook?: boolean; quiet?: boolean }) => {
+  .option("--force", "re-synthesize even if a decision already exists for the commit")
+  .action(async (sha: string | undefined, opts: { fromHook?: boolean; quiet?: boolean; force?: boolean }) => {
     const { store, root } = storeFor();
     if (!isGitRepo(root)) return opts.quiet ? undefined : fail("sync needs a git repo");
     store.json.ensureDirs();
-    const r = await syncCommit(store, root, sha ?? headSha(root));
+    const r = await syncCommit(store, root, sha ?? headSha(root), { force: opts.force });
     if (r.status === "written") {
       store.reindex();
       // Don't rewrite CLAUDE.md from the hook — it would dirty the working tree

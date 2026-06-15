@@ -1,11 +1,35 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { tempStore, prov } from "./helpers.js";
-import { recordFailure, salientTerms } from "../src/synthesis/synthesize.js";
+import { recordFailure, salientTerms, isSignificant } from "../src/synthesis/synthesize.js";
 import { selectProvider } from "../src/synthesis/provider.js";
+import type { DiffAnalysis } from "../src/extractors/diff.js";
 
 // Force the deterministic provider so tests never need credentials.
 process.env.BRAIN_SYNTH_PROVIDER = "deterministic";
+
+// Minimal DiffAnalysis with overrides for the field(s) under test.
+function analysis(over: Partial<DiffAnalysis> = {}): DiffAnalysis {
+  return {
+    filesAdded: [], filesDeleted: [], filesModified: [], filesRenamed: [],
+    addedSymbols: [], removedSymbols: [], changedSymbols: [],
+    addedDeps: [], removedDeps: [], addedLines: 0, removedLines: 0, ...over,
+  };
+}
+
+test("isSignificant gates the paid LLM: trivia → deterministic; real signal → LLM", () => {
+  // no structural change, no churn, one file, no body → not worth a paid call
+  assert.equal(isSignificant({ body: "" }, analysis(), ["src/a.ts"]), false);
+  // any structural change qualifies
+  assert.equal(isSignificant({ body: "" }, analysis({ addedSymbols: [{ name: "f", kind: "function" }] }), ["src/a.ts"]), true);
+  assert.equal(isSignificant({ body: "" }, analysis({ addedDeps: ["redis"] }), ["src/a.ts"]), true);
+  // churn over the line threshold qualifies
+  assert.equal(isSignificant({ body: "" }, analysis({ addedLines: 8, removedLines: 8 }), ["src/a.ts"]), true);
+  // several files qualify even with no structural delta
+  assert.equal(isSignificant({ body: "" }, analysis(), ["a.ts", "b.ts", "c.ts"]), true);
+  // an explanatory commit body (≥40 chars) qualifies (intent worth capturing)
+  assert.equal(isSignificant({ body: "x".repeat(50) }, analysis(), ["src/a.ts"]), true);
+});
 
 test("deterministic provider is always available and drafts a low-confidence decision", async () => {
   const p = await selectProvider();

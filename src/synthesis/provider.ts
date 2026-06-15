@@ -169,6 +169,14 @@ class ClaudeCliProvider implements SynthProvider {
     // draft is both more useful AND honestly labeled ("inferred", low confidence)
     // than a hollow record mislabeled as an LLM draft.
     if (!draft) throw new Error("claude-cli: no usable decision JSON in output");
+    // For a LARGE diff the model only saw the structured summary + a sample, not
+    // the full patch (commitPrompt → renderDiff). The "why" is therefore lower-
+    // fidelity than a draft made from the whole diff, so haircut the confidence
+    // and tag the source — keeping provenance honest (a summary-sourced draft must
+    // not masquerade as a full-fidelity llm_draft at 0.65).
+    if (input.diff.length > LARGE_DIFF_CHARS) {
+      return { ...draft, confidence: Math.min(draft.confidence, 0.5), source: `${draft.source}+summary` };
+    }
     return draft;
   }
 
@@ -256,13 +264,28 @@ export async function selectProvider(): Promise<SynthProvider> {
 
 // ---- prompt + parsing helpers --------------------------------------------
 
+// Above this size we stop shipping the raw patch and lean on the deterministic
+// STRUCTURED CHANGES summary + a small sample. A truncated head-slice of a giant
+// diff is an arbitrary fragment; the summary describes the WHOLE change for far
+// fewer tokens. (Draft confidence is haircut when this path is taken — see
+// ClaudeCliProvider.draftDecision.)
+const LARGE_DIFF_CHARS = 20_000;
+const DIFF_SAMPLE_CHARS = 6_000;
+
+/** The DIFF section of the commit prompt: the full patch for normal commits, or
+ *  (for a large diff) a small sample with a pointer to STRUCTURED CHANGES. */
+function renderDiff(input: CommitInput): string {
+  if (input.diff.length <= LARGE_DIFF_CHARS) return `DIFF:\n${input.diff}`;
+  return `DIFF (large patch — first ${DIFF_SAMPLE_CHARS} of ${input.diff.length} chars; rely on STRUCTURED CHANGES above for the rest):\n${input.diff.slice(0, DIFF_SAMPLE_CHARS)}`;
+}
+
 function commitPrompt(input: CommitInput): string {
   return [
     `COMMIT SUBJECT: ${input.subject}`,
     input.body ? `COMMIT BODY:\n${input.body}` : "",
     input.analysis ? `STRUCTURED CHANGES: ${summarizeDiff(input.analysis)}` : "",
     `FILES CHANGED (${input.files.length}):\n${input.files.slice(0, 40).join("\n")}`,
-    `DIFF:\n${input.diff.slice(0, 20000)}`,
+    renderDiff(input),
     `\nDistill the single most important design decision this commit represents.`,
   ].filter(Boolean).join("\n\n");
 }

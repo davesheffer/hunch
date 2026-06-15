@@ -20,6 +20,18 @@ type ToolResult = { content: Array<{ type: "text"; text: string }>; isError?: bo
 const ok = (text: string): ToolResult => ({ content: [{ type: "text", text }] });
 const err = (text: string): ToolResult => ({ content: [{ type: "text", text }], isError: true });
 
+// Read-side token budgets: every tool result is injected into a Claude Code
+// session, so an uncapped list pollutes the context window. Cap each list to its
+// highest-signal head (records are pre-sorted by severity/confidence) and tell the
+// caller what was withheld rather than truncating silently.
+const WHY_CAP = 6; // per record-type in brain_why
+const DEP_CAP = 25; // dependents in brain_get_dependents
+const QUERY_HITS = 8; // brain_query matches (was 12)
+const SEV_CONSTRAINT: Record<string, number> = { blocking: 3, warning: 2, advisory: 1 };
+const SEV_BUG: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1 };
+const more = (total: number, cap: number, hint = ""): string =>
+  total > cap ? `\n  …(+${total - cap} more${hint ? ` — ${hint}` : ""})` : "";
+
 /** Resolve a free-form target (symbol id / name / file path) to symbol records. */
 function resolveSymbols(store: BrainStore, target: string): Symbol[] {
   const syms = store.json.loadAll("symbols");
@@ -51,7 +63,7 @@ export function buildServer(root: string): McpServer {
       inputSchema: { query: z.string().describe("A natural-language question or keywords.") },
     },
     async ({ query }): Promise<ToolResult> => {
-      const hits = store.search(query, 12);
+      const hits = store.search(query, QUERY_HITS);
       if (!hits.length) return ok(`No matches for "${query}".`);
       const lines = hits.map((h) => {
         const r = store.resolve(h.ref);
@@ -72,15 +84,21 @@ export function buildServer(root: string): McpServer {
     },
     async ({ target }): Promise<ToolResult> => {
       const w = store.why(target);
+      // Highest-signal first, then cap: invariants by severity, decisions by
+      // confidence, bugs by severity — so a hot file's trim drops the tail, not
+      // the records that matter most.
+      const decisions = [...w.decisions].sort((a, b) => (b.provenance.confidence ?? 0) - (a.provenance.confidence ?? 0));
+      const constraints = [...w.constraints].sort((a, b) => (SEV_CONSTRAINT[b.severity] ?? 0) - (SEV_CONSTRAINT[a.severity] ?? 0));
+      const bugs = [...w.bugs].sort((a, b) => (SEV_BUG[b.severity] ?? 0) - (SEV_BUG[a.severity] ?? 0));
       const parts: string[] = [`Why for "${target}":`];
-      if (w.decisions.length)
-        parts.push(`\nDECISIONS:\n${w.decisions.map((d) => `  • ${d.id} [${d.status}] ${d.title}\n      ${d.decision}${provLine(d)}`).join("\n")}`);
-      if (w.constraints.length)
-        parts.push(`\nCONSTRAINTS (must not break):\n${w.constraints.map((c) => `  • ${c.id} [${c.severity}] ${c.statement}${provLine(c)}`).join("\n")}`);
-      if (w.bugs.length)
-        parts.push(`\nBUG HISTORY:\n${w.bugs.map((b) => `  • ${b.id} [${b.status}/${b.severity}] ${b.title}\n      root cause: ${b.root_cause}${provLine(b)}`).join("\n")}`);
+      if (decisions.length)
+        parts.push(`\nDECISIONS:\n${decisions.slice(0, WHY_CAP).map((d) => `  • ${d.id} [${d.status}] ${d.title}\n      ${d.decision}${provLine(d)}`).join("\n")}${more(decisions.length, WHY_CAP, "narrow the target")}`);
+      if (constraints.length)
+        parts.push(`\nCONSTRAINTS (must not break):\n${constraints.slice(0, WHY_CAP).map((c) => `  • ${c.id} [${c.severity}] ${c.statement}${provLine(c)}`).join("\n")}${more(constraints.length, WHY_CAP)}`);
+      if (bugs.length)
+        parts.push(`\nBUG HISTORY:\n${bugs.slice(0, WHY_CAP).map((b) => `  • ${b.id} [${b.status}/${b.severity}] ${b.title}\n      root cause: ${b.root_cause}${provLine(b)}`).join("\n")}${more(bugs.length, WHY_CAP)}`);
       if (w.components.length) parts.push(`\nCOMPONENTS: ${w.components.map((c) => `${c.name} (${c.id})`).join(", ")}`);
-      if (w.symbols.length) parts.push(`\nSYMBOLS: ${w.symbols.map((s) => `${s.name} [fan-in ${s.metrics.fan_in}, churn ${s.metrics.churn_90d}]`).join(", ")}`);
+      if (w.symbols.length) parts.push(`\nSYMBOLS: ${w.symbols.slice(0, WHY_CAP * 2).map((s) => `${s.name} [fan-in ${s.metrics.fan_in}, churn ${s.metrics.churn_90d}]`).join(", ")}${more(w.symbols.length, WHY_CAP * 2)}`);
       if (parts.length === 1) parts.push("\n(No recorded decisions/bugs/constraints yet for this target.)");
       return ok(parts.join("\n"));
     },
@@ -139,8 +157,10 @@ export function buildServer(root: string): McpServer {
       for (const id of ids) for (const d of store.getDependents(id)) if (!all.has(d.id)) all.set(d.id, d);
       const deps = [...all.values()].sort((a, b) => a.depth - b.depth);
       if (!deps.length) return ok(`Nothing depends on "${symbol}" (leaf node, or not indexed).`);
-      const lines = deps.map((d) => `  • [depth ${d.depth}] ${d.via} (${d.id})`);
-      return ok(`Blast radius of "${symbol}" — ${deps.length} dependent(s):\n${lines.join("\n")}`);
+      // Nearest dependents first (sorted by depth); cap the tail so a high-fan-in
+      // symbol can't flood the session context.
+      const lines = deps.slice(0, DEP_CAP).map((d) => `  • [depth ${d.depth}] ${d.via} (${d.id})`);
+      return ok(`Blast radius of "${symbol}" — ${deps.length} dependent(s):\n${lines.join("\n")}${more(deps.length, DEP_CAP, "closest shown first")}`);
     },
   );
 

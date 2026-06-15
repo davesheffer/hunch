@@ -9,7 +9,7 @@
  */
 import type { BrainStore } from "../store/brainStore.js";
 import { commitMeta, commitDiff, headSha } from "../extractors/git.js";
-import { analyzeDiff } from "../extractors/diff.js";
+import { analyzeDiff, type DiffAnalysis } from "../extractors/diff.js";
 import { selectProvider, DeterministicProvider, type SynthProvider, type DecisionDraft, type BugDraft, type CommitInput, type FailureInput } from "./provider.js";
 import { decisionId, bugId, constraintId } from "../core/ids.js";
 import { pathMatchesGlob } from "../core/glob.js";
@@ -25,8 +25,34 @@ export interface SyncResult {
   provider?: string;
 }
 
-/** Capture a Decision from a commit. Defaults to HEAD. */
-export async function syncCommit(store: BrainStore, root: string, sha?: string): Promise<SyncResult> {
+// Below this many changed code lines, a commit with no structural change and no
+// explanatory body isn't worth a paid LLM call. Tunable via BRAIN_SIG_MIN_LINES.
+const SIG_MIN_LINES = Number(process.env.BRAIN_SIG_MIN_LINES) || 12;
+const SIG_MIN_BODY = 40;
+
+/** Is a commit substantive enough to spend a paid LLM synthesis call on? Pure and
+ *  deterministic. Any structural change (symbol/dependency delta), non-trivial
+ *  churn, several files, OR an explanatory commit body signals a real decision
+ *  worth the model. Everything below (typo/tweak/one-liner with no message) falls
+ *  to the free deterministic draft — shallower but honestly low-confidence. */
+export function isSignificant(meta: { body: string }, a: DiffAnalysis, codeFiles: string[]): boolean {
+  const structural =
+    a.addedSymbols.length + a.removedSymbols.length + a.changedSymbols.length + a.addedDeps.length + a.removedDeps.length;
+  if (structural > 0) return true;
+  if (a.addedLines + a.removedLines >= SIG_MIN_LINES) return true;
+  if (codeFiles.length >= 3) return true;
+  if (meta.body.trim().length >= SIG_MIN_BODY) return true;
+  return false;
+}
+
+/** Capture a Decision from a commit. Defaults to HEAD. Pass `{ force: true }` to
+ *  re-synthesize a commit that already has an (auto-drafted) decision. */
+export async function syncCommit(
+  store: BrainStore,
+  root: string,
+  sha?: string,
+  opts: { force?: boolean } = {},
+): Promise<SyncResult> {
   const target = sha || headSha(root);
   if (!target) return { status: "skipped", reason: "no HEAD commit" };
   const meta = commitMeta(target, root);
@@ -36,9 +62,35 @@ export async function syncCommit(store: BrainStore, root: string, sha?: string):
   const codeFiles = meta.files.filter((f) => CODE_RE.test(f));
   if (codeFiles.length === 0) return { status: "skipped", reason: "no code files changed" };
 
-  const provider = await selectProvider();
+  // Seed the id from the COMMIT (stable across runs), not the LLM-generated title
+  // (which varies) — so re-syncing a commit updates rather than dupes.
+  const id = decisionId(meta.sha);
+  const existing = store.json.get("decisions", id);
+  // Never clobber a human-confirmed decision with a low-confidence auto-draft —
+  // even under --force. Skip BEFORE synthesizing so we never pay for a draft we'd
+  // throw away (the old order drafted first, then discarded it here).
+  if (existing && existing.provenance.source.includes("human_confirmed")) {
+    return { status: "skipped", reason: "human-confirmed decision exists for this commit", decision: existing };
+  }
+  // Token-thrift idempotency: a decision is already captured for this commit, so
+  // don't re-pay the LLM on a re-run (hook double-fire, overlapping backfill, or
+  // a manual replay). Re-synthesize only when explicitly forced.
+  if (existing && !opts.force) {
+    return {
+      status: "skipped",
+      reason: "decision already captured for this commit (use --force to re-synthesize)",
+      decision: existing,
+    };
+  }
+
   const diff = commitDiff(target, root);
   const analysis = analyzeDiff(diff);
+  // Significance gate: reserve the paid LLM for substantive commits; trivial ones
+  // get the FREE deterministic draft (honestly labeled "inferred"/low-confidence,
+  // so the Brain stays accurate-by-provenance). --force always uses the provider.
+  const provider = opts.force || isSignificant(meta, analysis, codeFiles)
+    ? await selectProvider()
+    : new DeterministicProvider();
   const input: CommitInput = { subject: meta.subject, body: meta.body, files: codeFiles, diff, analysis };
   const draft = await draftDecisionSafe(provider, input);
 
@@ -56,14 +108,6 @@ export async function syncCommit(store: BrainStore, root: string, sha?: string):
     ? ` Touches invariant(s): ${touchedConstraints.map((c) => `${c.id} (${c.statement})`).join("; ")}.`
     : "";
 
-  // Seed the id from the COMMIT (stable across runs), not the LLM-generated
-  // title (which varies) — so re-syncing a commit updates rather than dupes.
-  const id = decisionId(meta.sha);
-  const existing = store.json.get("decisions", id);
-  // Never clobber a human-confirmed decision with a low-confidence auto-draft.
-  if (existing && existing.provenance.source.includes("human_confirmed")) {
-    return { status: "skipped", reason: "human-confirmed decision exists for this commit", provider: provider.name };
-  }
   const decision: Decision = {
     id,
     title: draft.title,
