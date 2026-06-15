@@ -41,7 +41,7 @@ came before. Local-first, no documentation toil, no SaaS.
 ### 1. Install it
 
 ```bash
-npm install -g @hunch/cli      # puts `hunch` on your PATH
+npm install -g @davesheffer/hunch   # puts `hunch` on your PATH
 ```
 
 Or run from source (for hacking on Hunch itself):

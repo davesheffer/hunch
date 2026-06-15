@@ -2,6 +2,9 @@ node_modules/
 dist/
 *.log
 
+# npm auth: references ${NPM_TOKEN} env var, but never commit in case a real token is pasted.
+.npmrc
+
 # Hunch: the SQLite index is a DERIVED artifact, rebuilt by `hunch index`.
 # The JSON source of truth under .hunch/ IS committed.
 .hunch/hunch.sqlite
