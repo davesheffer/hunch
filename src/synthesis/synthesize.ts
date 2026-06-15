@@ -14,6 +14,7 @@ import { selectProvider, DeterministicProvider, type SynthProvider, type Decisio
 import { decisionId, bugId, constraintId } from "../core/ids.js";
 import { pathMatchesGlob } from "../core/glob.js";
 import type { Decision, Bug, Constraint, Component, Symbol } from "../core/types.js";
+import type { TestReport } from "../extractors/testreport.js";
 
 const CODE_RE = /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/;
 const SKIP_SUBJECT = /^(merge|revert|bump|chore\(deps\)|format|lint|wip)\b/i;
@@ -207,6 +208,60 @@ export async function recordFailure(
   raiseFragility(store, affectedFiles);
 
   return { status: "written", bug, constraint, provider: provider.name };
+}
+
+export interface CapturedFailure {
+  bug: Bug;
+  constraint?: Constraint;
+}
+export interface TestRunCapture {
+  results: CapturedFailure[];
+  /** Bugs resolved because their test now passes. */
+  fixed: Bug[];
+  /** True when the output wasn't recognized TAP/spec and we captured one coarse bug. */
+  fallback: boolean;
+}
+
+/** Orchestrate one `hunch test` run into graph writes: capture each failing test
+ *  as a Bug (recordFailure → suspects / recurrence / Constraint promotion), and
+ *  resolve any open Bug whose test now passes. Kept free of console I/O so the
+ *  whole capture→resolve→promote loop is unit-testable. Does NOT reindex — the
+ *  caller does, once. `status` is the runner's exit code (null if unknown). */
+export async function captureTestRun(
+  store: HunchStore,
+  root: string,
+  input: { report: TestReport; status: number | null; cmd: string; output: string },
+): Promise<TestRunCapture> {
+  const { report, status } = input;
+  // Unrecognized output that still failed → one coarse bug from the tail, rather
+  // than silently reporting success (the worst failure mode for a learning loop).
+  let failures = report.failures;
+  let fallback = false;
+  if (!report.recognized && status !== 0) {
+    const tail = input.output.trim().split(/\r?\n/).slice(-40).join("\n");
+    failures = [{ test: input.cmd, message: `Test run failed (exit ${status}); output not TAP/spec.\n${tail}` }];
+    fallback = true;
+  }
+
+  const results: CapturedFailure[] = [];
+  for (const f of failures) {
+    const r = await recordFailure(store, root, f);
+    results.push({ bug: r.bug, constraint: r.constraint });
+  }
+
+  let sha: string | null = null;
+  try { sha = headSha(root); } catch { /* not a git repo / no HEAD — leave null */ }
+  const fixed: Bug[] = [];
+  for (const name of report.passed) {
+    const b = store.json.get("bugs", bugId(name));
+    if (b && b.status === "open") {
+      const resolved: Bug = { ...b, status: "fixed", lineage: { ...b.lineage, fixed_commit: sha } };
+      store.json.put("bugs", resolved);
+      fixed.push(resolved);
+    }
+  }
+
+  return { results, fixed, fallback };
 }
 
 /** Whether a bug should auto-promote a regression Constraint (a do-not-break

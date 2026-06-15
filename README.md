@@ -167,6 +167,33 @@ concurrent edits to the graph merge **by record id** instead of throwing conflic
 committed `.gitattributes`; the per-clone driver definition is set up by each teammate's
 `hunch init`.
 
+## Continuous learning (CI)
+
+The decision half of the loop is automatic (the post-commit hook). Light up the **bug /
+constraint half** by wrapping your test run with `hunch test`:
+
+```bash
+hunch test                       # runs `npm test`; capture failures → Bugs, resolve fixed ones
+hunch test -- pytest -q          # any runner: pass the command after `--`
+```
+
+It parses TAP and the `node:test` spec reporter, captures each failing test as a **Bug**
+(ranked suspects; a recurrence or substantiated high-severity failure auto-promotes a
+do-not-break **Constraint**), and marks a previously-open bug **fixed** once its test passes
+again. It preserves the runner's exit code, so it's a drop-in CI step:
+
+```yaml
+# .github/workflows/ci.yml
+- run: npm ci
+- run: npx hunch test            # exits non-zero on failure, just like the suite
+- run: |                         # persist what was learned (optional)
+    git add .hunch && git commit -m "chore(hunch): capture test run" || true
+    git push || true
+```
+
+Repair drift after refactors with **`hunch stale --resync`** (re-synthesizes stale decisions
+from their commits via the LLM).
+
 ## Maintenance
 
 - **`hunch doctor`** — is git healthy? are you on the subscription path or the offline

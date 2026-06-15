@@ -21,9 +21,8 @@ import { hunchPaths, findRoot } from "../core/paths.js";
 import { HunchStore } from "../store/hunchStore.js";
 import { selectEmbedder } from "../store/embedder.js";
 import { indexRepo } from "../extractors/indexer.js";
-import { syncCommit, recordFailure } from "../synthesis/synthesize.js";
+import { syncCommit, recordFailure, captureTestRun } from "../synthesis/synthesize.js";
 import { parseTestReport } from "../extractors/testreport.js";
-import { bugId } from "../core/ids.js";
 import { selectProvider } from "../synthesis/provider.js";
 import { isGitRepo, headSha, logSince, lastChangeDate, stagedFiles, commitFiles } from "../extractors/git.js";
 import { installPostCommitHook, installPreCommitHook } from "../integrations/hooks.js";
@@ -337,51 +336,30 @@ program
     const output = `${run.stdout ?? ""}\n${run.stderr ?? ""}`;
     const report = parseTestReport(output);
 
-    // No TAP recognized but the run failed → capture one coarse bug from the tail
-    // rather than pretend success (silent green is the worst failure mode here).
-    let failures = report.failures;
-    if (!report.recognized && run.status !== 0) {
-      const tail = output.trim().split(/\r?\n/).slice(-40).join("\n");
-      failures = [{ test: cmdStr, message: `Test run failed (exit ${run.status}); output not TAP.\n${tail}` }];
-    }
-
     if (opts.dryRun) {
-      console.log(`DRY RUN — exit ${run.status}, ${report.passed.length} passed, ${failures.length} failure(s):`);
-      for (const f of failures) console.log(`  ✗ ${f.test}`);
+      const willFallback = !report.recognized && run.status !== 0;
+      const n = willFallback ? 1 : report.failures.length;
+      console.log(`DRY RUN — exit ${run.status}, ${report.passed.length} passed, ${n} failure(s)${willFallback ? " (fallback: output not TAP/spec)" : ""}:`);
+      for (const f of report.failures) console.log(`  ✗ ${f.test}`);
+      if (willFallback) console.log(`  ✗ ${cmdStr} (whole-suite)`);
       store.close();
       return;
     }
 
-    let captured = 0, recurrences = 0, promoted = 0;
-    for (const f of failures) {
-      const r = await recordFailure(store, root, f);
-      captured++;
-      if (r.bug.lineage.recurrence_of) recurrences++;
-      if (r.constraint) {
-        promoted++;
-        console.log(`  ⚠ ${r.bug.id} "${r.bug.title}" → promoted constraint ${r.constraint.id} [${r.constraint.severity}]`);
-      } else {
-        console.log(`  ✗ ${r.bug.id} "${r.bug.title}" [${r.bug.severity}]${r.bug.lineage.recurrence_of ? ` ↳ recurrence of ${r.bug.lineage.recurrence_of}` : ""}`);
-      }
+    const cap = await captureTestRun(store, root, { report, status: run.status, cmd: cmdStr, output });
+    for (const { bug, constraint } of cap.results) {
+      if (constraint) console.log(`  ⚠ ${bug.id} "${bug.title}" → promoted constraint ${constraint.id} [${constraint.severity}]`);
+      else console.log(`  ✗ ${bug.id} "${bug.title}" [${bug.severity}]${bug.lineage.recurrence_of ? ` ↳ recurrence of ${bug.lineage.recurrence_of}` : ""}`);
     }
-
-    // Close the loop: a test that now PASSES resolves its previously-open bug.
-    let fixed = 0;
-    const sha = isGitRepo(root) ? headSha(root) : null;
-    for (const name of report.passed) {
-      const b = store.json.get("bugs", bugId(name));
-      if (b && b.status === "open") {
-        store.json.put("bugs", { ...b, status: "fixed", lineage: { ...b.lineage, fixed_commit: sha } });
-        fixed++;
-        console.log(`  ✓ ${b.id} "${b.title}" → fixed (test passing)`);
-      }
-    }
+    for (const b of cap.fixed) console.log(`  ✓ ${b.id} "${b.title}" → fixed (test passing)`);
 
     store.reindex();
     store.close();
+    const recurrences = cap.results.filter((r) => r.bug.lineage.recurrence_of).length;
+    const promoted = cap.results.filter((r) => r.constraint).length;
     console.log(
       `\n${run.status === 0 ? "✓ suite passed" : "✗ suite failed"} — ` +
-      `${captured} bug(s) captured (${recurrences} recurrence, ${promoted} constraint), ${fixed} resolved.`,
+      `${cap.results.length} bug(s) captured (${recurrences} recurrence, ${promoted} constraint), ${cap.fixed.length} resolved.`,
     );
     if (run.status !== 0) process.exitCode = 1; // preserve CI semantics
   });
@@ -390,19 +368,38 @@ program
 program
   .command("stale")
   .description("List decisions/constraints whose files changed after they were last verified (drift).")
-  .action(() => {
+  .option("--resync", "re-synthesize stale decisions from their commit via the LLM (drift repair)")
+  .action(async (opts: { resync?: boolean }) => {
     const { store, root } = storeFor();
     const stale = store.staleness((f) => lastChangeDate(f, root));
     if (!stale.length) {
       console.log("✓ No drift detected — every verified decision/constraint is current.");
-    } else {
+      store.close();
+      return;
+    }
+    if (!opts.resync) {
       console.log(`⚠ ${stale.length} record(s) may be stale (a file in scope changed after last verification):\n`);
       for (const s of stale) {
         console.log(`  ${s.kind} ${s.id}\n      verified ${s.last_verified.slice(0, 10)} · changed ${s.changed_at.slice(0, 10)} · ${s.files.join(", ")}`);
       }
-      console.log(`\nRe-validate with: hunch review --accept <id>  (or edit the record).`);
+      console.log(`\nRepair: hunch stale --resync  (re-synthesize from commits)  ·  or  hunch review --accept <id>`);
+      store.close();
+      return;
     }
+    // --resync: regenerate each stale DECISION from its commit. Constraints have no
+    // commit to replay, so they're reported as needing manual review instead.
+    let resynced = 0, skipped = 0;
+    for (const s of stale) {
+      if (!s.kind.startsWith("decision")) { skipped++; console.log(`  · ${s.kind} ${s.id} — manual (no commit to replay)`); continue; }
+      const d = store.json.get("decisions", s.id);
+      if (!d?.commit) { skipped++; console.log(`  · ${s.id} — skipped (no source commit)`); continue; }
+      const r = await syncCommit(store, root, d.commit, { force: true });
+      if (r.status === "written") { resynced++; console.log(`  ↻ ${s.id} ← ${d.commit.slice(0, 8)} (${r.provider})`); }
+      else { skipped++; console.log(`  · ${s.id} — skipped: ${r.reason}`); }
+    }
+    store.reindex();
     store.close();
+    console.log(`\n✓ re-synthesized ${resynced} stale decision(s), ${skipped} left for manual review.`);
   });
 
 // ---- check (constraint enforcement) ---------------------------------------
