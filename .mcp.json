@@ -1,9 +1,9 @@
 {
   "mcpServers": {
     "brain": {
-      "command": "/Users/nofarkulishevski/.nvm/versions/node/v20.20.2/bin/node",
+      "command": "C:\\Program Files\\nodejs\\node.exe",
       "args": [
-        "/Users/nofarkulishevski/Documents/GitHub/brain/dist/cli/index.js",
+        "C:\\Users\\davids\\github\\brain\\dist\\cli\\index.js",
         "mcp"
       ]
     }

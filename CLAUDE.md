@@ -3,7 +3,7 @@
 <!-- BRAIN:START — auto-generated, do not edit by hand -->
 ## 🧠 Project Brain (Engineering Memory)
 
-This repo has a **Project Brain** — a curated graph of *why* the code is the way it is (decisions, bug history, invariants). It currently holds **0 decisions, 0 bugs, 0 constraints, 8 components**.
+This repo has a **Project Brain** — a curated graph of *why* the code is the way it is (decisions, bug history, invariants). It currently holds **6 decisions, 0 bugs, 0 constraints, 9 components**.
 
 **Before reasoning about or editing this codebase, consult the Brain via the `brain` MCP tools:**
 - `brain_why(target)` — why a file/symbol is shaped this way (decisions, bugs, constraints).
