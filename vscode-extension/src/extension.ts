@@ -1,16 +1,16 @@
 /**
  * Hunch — VS Code extension. A read-only visualizer over the committed
- * .brain/ JSON: a tree of decisions/invariants/bugs/fragility, "why is this file
+ * .hunch/ JSON: a tree of decisions/invariants/bugs/fragility, "why is this file
  * the way it is?" + context briefs, and a status-bar invariant counter for the
- * active file. Pairs with the Claude Code chat (which uses the brain_* MCP tools).
+ * active file. Pairs with the Claude Code chat (which uses the hunch_* MCP tools).
  */
 import * as vscode from "vscode";
 import * as cp from "node:child_process";
 import * as nodePath from "node:path";
 import {
-  loadBrain, why, fragileSymbols, constraintsInScope, isStale, sevRank,
-  type Brain, type Provenance,
-} from "./brainData.js";
+  loadHunch, why, fragileSymbols, constraintsInScope, isStale, sevRank,
+  type Hunch, type Provenance,
+} from "./hunchData.js";
 
 function workspaceRoot(): string | undefined {
   return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
@@ -40,14 +40,14 @@ type Node =
   | { kind: "group"; label: string; key: string }
   | { kind: "leaf"; label: string; description?: string; tooltip?: string; file?: string };
 
-class BrainTree implements vscode.TreeDataProvider<Node> {
+class HunchTree implements vscode.TreeDataProvider<Node> {
   private _onDidChange = new vscode.EventEmitter<void>();
   readonly onDidChangeTreeData = this._onDidChange.event;
-  private brain: Brain | null = null;
+  private hunch: Hunch | null = null;
 
   refresh(): void {
     const root = workspaceRoot();
-    this.brain = root ? loadBrain(root) : null;
+    this.hunch = root ? loadHunch(root) : null;
     this._onDidChange.fire();
   }
 
@@ -68,8 +68,8 @@ class BrainTree implements vscode.TreeDataProvider<Node> {
   }
 
   getChildren(node?: Node): Node[] {
-    const b = this.brain;
-    if (!b) return node ? [] : [{ kind: "leaf", label: "No .brain/ found — run `hunch init`" }];
+    const b = this.hunch;
+    if (!b) return node ? [] : [{ kind: "leaf", label: "No .hunch/ found — run `hunch init`" }];
     if (!node) {
       return [
         { kind: "group", label: `Invariants (${b.constraints.length})`, key: "constraints" },
@@ -143,7 +143,7 @@ function esc(s: string): string {
 }
 
 function showBrief(title: string, sections: Array<{ h: string; lines: string[] }>): void {
-  const panel = vscode.window.createWebviewPanel("brainBrief", title, vscode.ViewColumn.Beside, {});
+  const panel = vscode.window.createWebviewPanel("hunchBrief", title, vscode.ViewColumn.Beside, {});
   const body = sections
     .filter((s) => s.lines.length)
     .map((s) => `<h3>${esc(s.h)}</h3><ul>${s.lines.map((l) => `<li>${esc(l)}</li>`).join("")}</ul>`)
@@ -155,8 +155,8 @@ function showBrief(title: string, sections: Array<{ h: string; lines: string[] }
   </style></head><body><h2>${esc(title)}</h2>${body || "<p><em>Hunch has nothing recorded for this yet — it is still learning this file.</em></p>"}</body></html>`;
 }
 
-function whyBrief(brain: Brain, file: string): void {
-  const w = why(brain, file);
+function whyBrief(hunch: Hunch, file: string): void {
+  const w = why(hunch, file);
   showBrief(`🧠 Why: ${relPath(file)}`, [
     { h: "⛔ Invariants (must not break)", lines: w.constraints.map((c) => `[${c.severity}] ${c.statement}  (${c.id})`) },
     { h: "🧭 Decisions", lines: w.decisions.map((d) => `[${d.status}] ${d.title} — ${d.decision ?? ""}`) },
@@ -169,20 +169,20 @@ function whyBrief(brain: Brain, file: string): void {
 // Status bar
 // ---------------------------------------------------------------------------
 function updateStatusBar(item: vscode.StatusBarItem): void {
-  const cfg = vscode.workspace.getConfiguration("brain");
+  const cfg = vscode.workspace.getConfiguration("hunch");
   const editor = vscode.window.activeTextEditor;
   const root = workspaceRoot();
   if (!cfg.get("statusBar.enabled", true) || !editor || !root) {
     item.hide();
     return;
   }
-  const brain = loadBrain(root);
-  if (!brain) {
+  const hunch = loadHunch(root);
+  if (!hunch) {
     item.hide();
     return;
   }
   const file = relPath(editor.document.uri.fsPath);
-  const cons = constraintsInScope(brain, file);
+  const cons = constraintsInScope(hunch, file);
   if (!cons.length) {
     item.text = "$(shield) Hunch";
     item.tooltip = "No invariants for this file";
@@ -191,7 +191,7 @@ function updateStatusBar(item: vscode.StatusBarItem): void {
     item.text = `$(shield)${blocking ? "$(warning)" : ""} ${cons.length} invariant${cons.length > 1 ? "s" : ""}`;
     item.tooltip = new vscode.MarkdownString(cons.map((c) => `- **[${c.severity}]** ${c.statement}`).join("\n"));
   }
-  item.command = "brain.why";
+  item.command = "hunch.why";
   item.show();
 }
 
@@ -199,31 +199,31 @@ function updateStatusBar(item: vscode.StatusBarItem): void {
 // Activation
 // ---------------------------------------------------------------------------
 export function activate(context: vscode.ExtensionContext): void {
-  const tree = new BrainTree();
+  const tree = new HunchTree();
   tree.refresh();
-  context.subscriptions.push(vscode.window.registerTreeDataProvider("brain.tree", tree));
+  context.subscriptions.push(vscode.window.registerTreeDataProvider("hunch.tree", tree));
 
   const status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
   context.subscriptions.push(status);
 
   const activeFile = (): string | undefined => vscode.window.activeTextEditor?.document.uri.fsPath;
-  const withBrain = (fn: (b: Brain, file: string) => void) => {
+  const withHunch = (fn: (b: Hunch, file: string) => void) => {
     const root = workspaceRoot();
     const file = activeFile();
-    const brain = root ? loadBrain(root) : null;
-    if (!brain) return void vscode.window.showWarningMessage("No Hunch graph (.brain/) found — run `hunch init`.");
+    const hunch = root ? loadHunch(root) : null;
+    if (!hunch) return void vscode.window.showWarningMessage("No Hunch graph (.hunch/) found — run `hunch init`.");
     if (!file) return void vscode.window.showWarningMessage("Open a file first.");
-    fn(brain, relPath(file));
+    fn(hunch, relPath(file));
   };
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("brain.refresh", () => {
+    vscode.commands.registerCommand("hunch.refresh", () => {
       tree.refresh();
       updateStatusBar(status);
     }),
-    vscode.commands.registerCommand("brain.why", () => withBrain((b, f) => whyBrief(b, f))),
-    vscode.commands.registerCommand("brain.context", () =>
-      withBrain((b, f) => {
+    vscode.commands.registerCommand("hunch.why", () => withHunch((b, f) => whyBrief(b, f))),
+    vscode.commands.registerCommand("hunch.context", () =>
+      withHunch((b, f) => {
         const w = why(b, f);
         showBrief(`🧠 Context: ${f}`, [
           { h: "⛔ Invariants", lines: w.constraints.map((c) => `[${c.severity}] ${c.statement}`) },
@@ -235,10 +235,10 @@ export function activate(context: vscode.ExtensionContext): void {
     ),
   );
 
-  // live refresh when the Brain changes on disk
+  // live refresh when the Hunch changes on disk
   const root = workspaceRoot();
   if (root) {
-    const watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(root, ".brain/**/*.json"));
+    const watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(root, ".hunch/**/*.json"));
     const onChange = () => {
       tree.refresh();
       updateStatusBar(status);

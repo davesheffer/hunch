@@ -1,17 +1,17 @@
 # Hunch
 
-<!-- BRAIN:START — auto-generated, do not edit by hand -->
+<!-- HUNCH:START — auto-generated, do not edit by hand -->
 ## 🧠 Hunch (Engineering Memory)
 
-This repo has **Hunch** — a curated graph of *why* the code is the way it is (decisions, bug history, invariants). It currently holds **6 decisions, 0 bugs, 0 constraints, 9 components**.
+This repo has **Hunch** — a curated graph of *why* the code is the way it is (decisions, bug history, invariants). It currently holds **7 decisions, 0 bugs, 0 constraints, 9 components**.
 
-**Before reasoning about or editing this codebase, consult Hunch via the `brain_*` MCP tools:**
-- `brain_why(target)` — why a file/symbol is shaped this way (decisions, bugs, constraints).
-- `brain_check_constraints(scope)` — invariants you must not break. **Always run before editing.**
-- `brain_get_dependents(symbol)` — blast radius before a change.
-- `brain_bug_lineage(symptom)` — has this bug happened before? what was the root cause?
-- `brain_query(question)` — free-text search across all of Hunch.
-- `brain_record_decision(...)` — write back a decision after a non-trivial choice.
+**Before reasoning about or editing this codebase, consult Hunch via the `hunch_*` MCP tools:**
+- `hunch_why(target)` — why a file/symbol is shaped this way (decisions, bugs, constraints).
+- `hunch_check_constraints(scope)` — invariants you must not break. **Always run before editing.**
+- `hunch_get_dependents(symbol)` — blast radius before a change.
+- `hunch_bug_lineage(symptom)` — has this bug happened before? what was the root cause?
+- `hunch_query(question)` — free-text search across all of Hunch.
+- `hunch_record_decision(...)` — write back a decision after a non-trivial choice.
 
 _Hunch updates itself from commits and test failures. Records carry provenance + confidence; treat low-confidence items as advisory._
-<!-- BRAIN:END -->
+<!-- HUNCH:END -->

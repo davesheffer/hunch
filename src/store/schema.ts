@@ -1,8 +1,8 @@
 /**
  * SQLite schema for the DERIVED index (DESIGN.md §2.1 / §6).
  *
- * The JSON files under .brain/ are the source of truth; this database is rebuilt
- * from them by `brain index`. JSON-array/object fields are stored as TEXT (JSON)
+ * The JSON files under .hunch/ are the source of truth; this database is rebuilt
+ * from them by `hunch index`. JSON-array/object fields are stored as TEXT (JSON)
  * — we only need them indexed where we query them. Search is a single unified
  * FTS5 table; the graph is plain tables walked with recursive CTEs.
  */

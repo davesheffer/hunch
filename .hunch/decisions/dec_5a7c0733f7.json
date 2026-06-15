@@ -1,6 +1,6 @@
 {
   "id": "dec_5a7c0733f7",
-  "title": "fix(brain): drive LLM synthesis from the Claude subscription, never the API",
+  "title": "fix(hunch): drive LLM synthesis from the Claude subscription, never the API",
   "status": "proposed",
   "context": "Claude Code auth precedence puts ANTHROPIC_API_KEY above subscription OAuth and\nalways uses it in headless `-p` mode, so the old provider chain (anthropic-sdk ->\nclaude-cli -> deterministic) silently billed the pay-per-token API whenever a key\nwas in the env. Make subscription the only LLM path:\n\n- Remove the @anthropic-ai/sdk provider; chain is now claude-cli -> deterministic.\n- Strip ANTHROPIC_API_KEY/ANTHROPIC_AUTH_TOKEN from the spawned `claude` env so it\n  falls through to subscription OAut",
   "decision": "Changed src/cli, src/synthesis: removed AnthropicProvider; new dep(s): node:os.",

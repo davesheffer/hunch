@@ -1,6 +1,6 @@
 /**
  * Git post-commit hook installer (DESIGN.md §4 / §6). The hook fires the
- * learning loop after every commit. Loop-guarded via the BRAIN_SYNC env var, and
+ * learning loop after every commit. Loop-guarded via the HUNCH_SYNC env var, and
  * backgrounded so it never slows a commit down. Existing hooks are preserved —
  * we append a guarded block rather than clobbering.
  */
@@ -8,14 +8,14 @@ import { readFileSync, writeFileSync, existsSync, chmodSync, mkdirSync } from "n
 import { join } from "node:path";
 import { hooksDir } from "../extractors/git.js";
 
-const MARK = "# >>> brain post-commit >>>";
-const ENDMARK = "# <<< brain post-commit <<<";
+const MARK = "# >>> hunch post-commit >>>";
+const ENDMARK = "# <<< hunch post-commit <<<";
 
 function block(invocation: string): string {
   return [
     MARK,
-    'if [ -z "$BRAIN_SYNC" ]; then',
-    "  export BRAIN_SYNC=1",
+    'if [ -z "$HUNCH_SYNC" ]; then',
+    "  export HUNCH_SYNC=1",
     `  ( ${invocation} sync --from-hook --quiet >/dev/null 2>&1 || true ) &`,
     "fi",
     ENDMARK,
@@ -60,8 +60,8 @@ function escapeRe(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-const PRE_MARK = "# >>> brain pre-commit (constraint guard) >>>";
-const PRE_END = "# <<< brain pre-commit <<<";
+const PRE_MARK = "# >>> hunch pre-commit (constraint guard) >>>";
+const PRE_END = "# <<< hunch pre-commit <<<";
 
 /** Install a pre-commit constraint guard (DESIGN §4 enforcement). Advisory by
  *  default (prints invariants in scope, never blocks); pass strict to fail the

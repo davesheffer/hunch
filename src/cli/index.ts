@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * `hunch` CLI (DESIGN.md §6). Subcommands:
- *   init      scaffold .brain/, install hook, write .mcp.json + CLAUDE.md + slash cmds
+ *   init      scaffold .hunch/, install hook, write .mcp.json + CLAUDE.md + slash cmds
  *   index     parse repo -> symbol/dependency graph + components (no LLM)
  *   backfill  replay git history -> seed decisions (cold-start fix)
  *   sync      commit diff -> Claude/heuristic -> decision write-back (post-commit hook)
@@ -16,8 +16,8 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { Command } from "commander";
-import { brainPaths, findRoot } from "../core/paths.js";
-import { BrainStore } from "../store/brainStore.js";
+import { hunchPaths, findRoot } from "../core/paths.js";
+import { HunchStore } from "../store/hunchStore.js";
 import { indexRepo } from "../extractors/indexer.js";
 import { syncCommit, recordFailure } from "../synthesis/synthesize.js";
 import { selectProvider } from "../synthesis/provider.js";
@@ -28,17 +28,17 @@ import { updateClaudeMd } from "../integrations/claudemd.js";
 import { writeMcpJson, writeSlashCommands } from "../integrations/scaffold.js";
 import { formatContext } from "../core/format.js";
 import { readManifest, writeManifest, SCHEMA_VERSION } from "../core/migrate.js";
-import { mergeBrainJson } from "../store/merge.js";
+import { mergeHunchJson } from "../store/merge.js";
 import { planCompaction } from "../store/compact.js";
 import { resolveInvocation } from "./invocation.js";
 
 const program = new Command();
 program.name("hunch").description("Hunch — an Engineering Memory OS: a git-native reasoning graph for your codebase.").version("0.1.0");
 
-let openStore: BrainStore | null = null;
-function storeFor(): { store: BrainStore; root: string } {
+let openStore: HunchStore | null = null;
+function storeFor(): { store: HunchStore; root: string } {
   const root = findRoot();
-  const store = new BrainStore(brainPaths(root));
+  const store = new HunchStore(hunchPaths(root));
   openStore = store;
   return { store, root };
 }
@@ -46,20 +46,20 @@ function storeFor(): { store: BrainStore; root: string } {
 // ---- init -----------------------------------------------------------------
 program
   .command("init")
-  .description("Scaffold .brain/, index the repo, install the git hook, and wire up Claude Code.")
+  .description("Scaffold .hunch/, index the repo, install the git hook, and wire up Claude Code.")
   .option("--no-index", "skip the initial repo index")
   .option("--enforce", "install an advisory pre-commit constraint guard")
   .option("--enforce-strict", "install a pre-commit guard that FAILS the commit on a blocking invariant")
   .action((opts: { index: boolean; enforce?: boolean; enforceStrict?: boolean }) => {
     const root = findRoot();
-    const paths = brainPaths(root);
-    const store = new BrainStore(paths);
+    const paths = hunchPaths(root);
+    const store = new HunchStore(paths);
     openStore = store; // so the top-level error handler closes it on failure
     const inv = resolveInvocation();
     console.log(`🧠 Initializing Hunch at ${root}`);
 
     store.json.ensureDirs(); // stamps the manifest at the current version when fresh
-    console.log(`  ✓ .brain/ scaffolded (schema v${readManifest(paths).schema_version})`);
+    console.log(`  ✓ .hunch/ scaffolded (schema v${readManifest(paths).schema_version})`);
 
     if (opts.index !== false) {
       const res = indexRepo(store, root);
@@ -84,7 +84,7 @@ program
     const mcp = writeMcpJson(root, inv.mcp);
     console.log(`  ✓ wrote ${rel(root, mcp)} (registers the Hunch MCP server)`);
     const cmds = writeSlashCommands(root);
-    console.log(`  ✓ wrote ${cmds.length} slash commands (/brain-why, /brain-fix, /brain-fragile)`);
+    console.log(`  ✓ wrote ${cmds.length} slash commands (/hunch-why, /hunch-fix, /hunch-fragile)`);
     const cmd = updateClaudeMd(root, store);
     console.log(`  ✓ updated ${rel(root, cmd)} with ambient Hunch context`);
 
@@ -281,7 +281,7 @@ program
       store.close();
       return;
     }
-    const hits = new Map<string, { constraint: ReturnType<BrainStore["checkConstraints"]>[number]; files: string[] }>();
+    const hits = new Map<string, { constraint: ReturnType<HunchStore["checkConstraints"]>[number]; files: string[] }>();
     for (const f of files) {
       for (const c of store.checkConstraints(f)) {
         const e = hits.get(c.id) ?? { constraint: c, files: [] };
@@ -372,16 +372,16 @@ program
 // ---- migrate (schema versioning) ------------------------------------------
 program
   .command("migrate")
-  .description("Upgrade .brain/ records to the current schema version and stamp the manifest.")
+  .description("Upgrade .hunch/ records to the current schema version and stamp the manifest.")
   .action(() => {
     const root = findRoot();
-    const paths = brainPaths(root);
-    const store = new BrainStore(paths);
+    const paths = hunchPaths(root);
+    const store = new HunchStore(paths);
     openStore = store;
     const from = readManifest(paths).schema_version;
     if (from > SCHEMA_VERSION) {
       store.close();
-      return fail(`.brain/ is schema v${from}, newer than this hunch (v${SCHEMA_VERSION}). Upgrade hunch.`);
+      return fail(`.hunch/ is schema v${from}, newer than this hunch (v${SCHEMA_VERSION}). Upgrade hunch.`);
     }
     if (from === SCHEMA_VERSION) {
       writeManifest(paths, SCHEMA_VERSION); // record the version even if the manifest was absent
@@ -394,7 +394,7 @@ program
     store.reindex();
     console.log(`✓ Migrated v${from} → v${SCHEMA_VERSION}: ${res.migrated} record(s) upgraded.`);
     if (res.skipped) {
-      console.warn(`⚠ ${res.skipped} record(s) could NOT be migrated and will no longer load. They are preserved on disk in their old shape under .brain/ for manual recovery.`);
+      console.warn(`⚠ ${res.skipped} record(s) could NOT be migrated and will no longer load. They are preserved on disk in their old shape under .hunch/ for manual recovery.`);
     }
     store.close();
   });
@@ -434,14 +434,14 @@ program
 // ---- merge-driver (internal; git invokes this) ----------------------------
 program
   .command("merge-driver")
-  .description("(internal) git merge driver for .brain JSON — resolves concurrent edits by record id.")
+  .description("(internal) git merge driver for .hunch JSON — resolves concurrent edits by record id.")
   .argument("<base>", "%O — common ancestor")
   .argument("<ours>", "%A — current branch (also the OUTPUT file)")
   .argument("<theirs>", "%B — other branch")
   .argument("[path]", "%P — pathname being merged")
   .action((base: string, ours: string, theirs: string) => {
     const read = (p: string) => (existsSync(p) ? readFileSync(p, "utf8") : "");
-    const res = mergeBrainJson(read(base), read(ours), read(theirs));
+    const res = mergeHunchJson(read(base), read(ours), read(theirs));
     if (!res.conflict) {
       writeFileSync(ours, res.text); // %A is the merge output git reads back
       return;
@@ -470,7 +470,7 @@ program
     const { store, root } = storeFor();
     console.log(`Hunch root: ${root}`);
     console.log(`git repo:   ${isGitRepo(root) ? "yes" : "no"}  ${isGitRepo(root) ? `(HEAD ${headSha(root).slice(0, 8)})` : ""}`);
-    const onDisk = readManifest(brainPaths(root)).schema_version;
+    const onDisk = readManifest(hunchPaths(root)).schema_version;
     const schemaNote = onDisk === SCHEMA_VERSION ? "" : onDisk > SCHEMA_VERSION ? `  ⚠ newer than this Hunch (v${SCHEMA_VERSION}) — upgrade hunch` : `  ⚠ run \`hunch migrate\``;
     console.log(`schema:     v${onDisk} (hunch v${SCHEMA_VERSION})${schemaNote}`);
     const provider = await selectProvider();

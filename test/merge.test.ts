@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mergeBrainJson, mergeRecordsById, pickWinner, canon } from "../src/store/merge.js";
+import { mergeHunchJson, mergeRecordsById, pickWinner, canon } from "../src/store/merge.js";
 
 type Rec = Record<string, unknown>;
 const prov = (source: string, confidence: number, last_verified?: string) => ({ source, confidence, evidence: [], ...(last_verified ? { last_verified } : {}) });
@@ -53,35 +53,35 @@ test("both-sides change: then higher confidence, then recency", () => {
   assert.equal(pickWinner(older, newer).v, "new", "recency is order-independent");
 });
 
-test("mergeBrainJson: index ARRAY in → merged array out, sorted by id", () => {
+test("mergeHunchJson: index ARRAY in → merged array out, sorted by id", () => {
   const base = JSON.stringify([rec("a", { v: 1 })]);
   const ours = JSON.stringify([rec("a", { v: 1 }), rec("c")]);
   const theirs = JSON.stringify([rec("a", { v: 2 }), rec("b")]);
-  const res = mergeBrainJson(base, ours, theirs);
+  const res = mergeHunchJson(base, ours, theirs);
   assert.equal(res.conflict, false);
   const arr = JSON.parse(res.text) as Rec[];
   assert.deepEqual(arr.map((r) => r.id), ["a", "b", "c"]);
   assert.equal(arr.find((r) => r.id === "a")!.v, 2);
 });
 
-test("mergeBrainJson: single OBJECT in (per-record file) → single object out", () => {
+test("mergeHunchJson: single OBJECT in (per-record file) → single object out", () => {
   const base = JSON.stringify(rec("dec_1", { title: "base" }));
   const ours = JSON.stringify(rec("dec_1", { title: "base" })); // unchanged
   const theirs = JSON.stringify(rec("dec_1", { title: "theirs" }));
-  const res = mergeBrainJson(base, ours, theirs);
+  const res = mergeHunchJson(base, ours, theirs);
   assert.equal(res.conflict, false);
   const obj = JSON.parse(res.text) as Rec;
   assert.equal(Array.isArray(obj), false);
   assert.equal(obj.title, "theirs");
 });
 
-test("mergeBrainJson falls back (conflict) on non-JSON or id-less records", () => {
-  assert.equal(mergeBrainJson("[]", "not json{", "[]").conflict, true);
-  assert.equal(mergeBrainJson("[]", JSON.stringify([{ noId: 1 }]), "[]").conflict, true);
+test("mergeHunchJson falls back (conflict) on non-JSON or id-less records", () => {
+  assert.equal(mergeHunchJson("[]", "not json{", "[]").conflict, true);
+  assert.equal(mergeHunchJson("[]", JSON.stringify([{ noId: 1 }]), "[]").conflict, true);
 });
 
 test("a per-record file whose id diverges across sides → conflict, never a silent drop", () => {
-  const r = mergeBrainJson(
+  const r = mergeHunchJson(
     JSON.stringify(rec("dec_1", { title: "base" })),
     JSON.stringify(rec("dec_1", { title: "ours" })),
     JSON.stringify(rec("dec_2", { title: "theirs" })), // id rewritten

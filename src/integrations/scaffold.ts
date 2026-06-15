@@ -1,6 +1,6 @@
 /**
  * Writes the two remaining Claude Code integration surfaces (DESIGN.md §7):
- *   - .mcp.json          → registers the `brain` MCP server with Claude Code
+ *   - .mcp.json          → registers the `hunch` MCP server with Claude Code
  *   - .claude/commands/* → user-triggered slash commands for the §5 workflows
  */
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
@@ -11,7 +11,7 @@ export interface Invocation {
   args: string[]; // args BEFORE the subcommand (e.g. ["/abs/dist/cli/index.js"])
 }
 
-/** Merge a `brain` server entry into .mcp.json, preserving other servers. */
+/** Merge a `hunch` server entry into .mcp.json, preserving other servers. */
 export function writeMcpJson(root: string, inv: Invocation): string {
   const file = join(root, ".mcp.json");
   let json: { mcpServers?: Record<string, unknown> } = {};
@@ -23,7 +23,7 @@ export function writeMcpJson(root: string, inv: Invocation): string {
     }
   }
   json.mcpServers = json.mcpServers ?? {};
-  json.mcpServers.brain = { command: inv.command, args: [...inv.args, "mcp"] };
+  json.mcpServers.hunch = { command: inv.command, args: [...inv.args, "mcp"] };
   writeFileSync(file, JSON.stringify(json, null, 2) + "\n");
   return file;
 }
@@ -31,7 +31,7 @@ export function writeMcpJson(root: string, inv: Invocation): string {
 const WHY_CMD = `---
 description: Explain why a file or symbol is the way it is, from Hunch
 ---
-Use the \`brain_why\` MCP tool on **$ARGUMENTS** (a file path or symbol name).
+Use the \`hunch_why\` MCP tool on **$ARGUMENTS** (a file path or symbol name).
 
 Then summarize, with citations:
 - the **decisions** that shaped it (id + rationale),
@@ -48,11 +48,11 @@ description: Fix a bug grounded in Hunch (past root causes, constraints, blast r
 We are fixing: **$ARGUMENTS**
 
 Follow the Hunch-grounded workflow (DESIGN §5) — do NOT skip the memory lookups:
-1. \`brain_bug_lineage("$ARGUMENTS")\` — has this class of bug happened before? what was the root cause and the fix?
-2. Identify the suspect symbol/file, then \`brain_get_dependents(<symbol>)\` to learn the blast radius.
-3. \`brain_check_constraints(<scope>)\` — list invariants you must preserve.
+1. \`hunch_bug_lineage("$ARGUMENTS")\` — has this class of bug happened before? what was the root cause and the fix?
+2. Identify the suspect symbol/file, then \`hunch_get_dependents(<symbol>)\` to learn the blast radius.
+3. \`hunch_check_constraints(<scope>)\` — list invariants you must preserve.
 4. Propose a fix that honors past root causes AND constraints. Apply it and run the tests.
-5. If the fix encodes a non-trivial choice, \`brain_record_decision(...)\` so the next session is grounded in it.
+5. If the fix encodes a non-trivial choice, \`hunch_record_decision(...)\` so the next session is grounded in it.
 `;
 
 const FRAGILE_CMD = `---
@@ -69,9 +69,9 @@ export function writeSlashCommands(root: string): string[] {
   mkdirSync(dir, { recursive: true });
   const written: string[] = [];
   const files: Array<[string, string]> = [
-    ["brain-why.md", WHY_CMD],
-    ["brain-fix.md", FIX_CMD],
-    ["brain-fragile.md", FRAGILE_CMD],
+    ["hunch-why.md", WHY_CMD],
+    ["hunch-fix.md", FIX_CMD],
+    ["hunch-fragile.md", FRAGILE_CMD],
   ];
   for (const [name, body] of files) {
     const p = join(dir, name);

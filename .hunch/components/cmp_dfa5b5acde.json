@@ -1,10 +1,10 @@
 {
-  "id": "cmp_e0ccfe26fe",
+  "id": "cmp_dfa5b5acde",
   "kind": "module",
-  "name": "Extractors",
+  "name": "Mcp",
   "responsibility": "",
   "paths": [
-    "src/extractors/**"
+    "src/mcp/**"
   ],
   "status": "active",
   "owners": [],
@@ -13,9 +13,9 @@
     "source": "inferred",
     "confidence": 0.5,
     "evidence": [
-      "src/extractors"
+      "src/mcp"
     ]
   },
-  "created_at": "2026-06-15T08:29:38.551Z",
-  "updated_at": "2026-06-15T08:29:38.551Z"
+  "created_at": "2026-06-15T09:50:07.242Z",
+  "updated_at": "2026-06-15T09:50:07.242Z"
 }

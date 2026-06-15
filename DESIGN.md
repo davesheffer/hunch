@@ -55,7 +55,7 @@ flowchart LR
     VAL[Validator\n confidence + provenance + dedup]
   end
 
-  subgraph Hunch[Hunch  .brain/]
+  subgraph Hunch[Hunch  .hunch/]
     JSON[(JSON/MD source of truth\n git-tracked)]
     DB[(SQLite index\n FTS5 + graph tables)]
   end
@@ -85,14 +85,14 @@ flowchart LR
 - **Read path (reasoning loop):** user task in Claude Code → MCP tool call → context assembler retrieves relevant Hunch slice → injected into prompt → Claude reasons + acts → action triggers the write path again.
 
 ### 2.3 Local vs. remote
-- **Local (v1, the whole product for a solo dev):** file watchers, extractors, SQLite, MCP server, and the `.brain/` directory committed to the repo. **Team sync is free at v1** because Hunch lives in git — push/pull *is* the sync.
+- **Local (v1, the whole product for a solo dev):** file watchers, extractors, SQLite, MCP server, and the `.hunch/` directory committed to the repo. **Team sync is free at v1** because Hunch lives in git — push/pull *is* the sync.
 - **Remote (later, team/enterprise):** hosted sync service for merge/conflict resolution on Hunch, a web dashboard (architecture map, fragility heatmap), PR webhooks, org-wide cross-repo graph, SSO/audit. Nothing here is required to ship value to the first user.
 
 ---
 
 ## 3. "Hunch" Specification
 
-Stored under `.brain/` as JSON (machine source of truth) with optional Markdown mirrors for humans. SQLite mirrors everything for querying. Every record carries **provenance** (`source`, `confidence`, `evidence`) so nothing is a blind assertion.
+Stored under `.hunch/` as JSON (machine source of truth) with optional Markdown mirrors for humans. SQLite mirrors everything for querying. Every record carries **provenance** (`source`, `confidence`, `evidence`) so nothing is a blind assertion.
 
 ### 3.1 Core entity types
 - `Component` — architecture node (service / module / layer / external).
@@ -279,7 +279,7 @@ The win: the agent **doesn't re-discover** the revocation lesson — it's ground
 Make a commit → Hunch captures a structured `Decision` and updates the architecture map → in the next Claude Code session ask *"why does the Auth module store sessions in Redis?"* and it answers from memory, with the commit as evidence.
 
 ### MVP scope
-- `.brain/` directory in the repo (git-tracked JSON + Markdown mirrors).
+- `.hunch/` directory in the repo (git-tracked JSON + Markdown mirrors).
 - **CLI** (`hunch`): init, index, sync-on-commit, query, why, fragile.
 - **MCP server** exposing read/write tools to Claude Code.
 - **SQLite index** (FTS5 search; graph via recursive CTEs) over the JSON source of truth.
@@ -288,14 +288,14 @@ Make a commit → Hunch captures a structured `Decision` and updates the archite
 
 ### Folder structure
 ```
-brain/
-├─ .brain/                      # source of truth (committed)
+hunch/
+├─ .hunch/                      # source of truth (committed)
 │  ├─ components/*.json
 │  ├─ decisions/*.json
 │  ├─ bugs/*.json
 │  ├─ constraints/*.json
 │  ├─ symbols/index.json
-│  └─ brain.sqlite              # derived index (gitignored)
+│  └─ hunch.sqlite              # derived index (gitignored)
 ├─ src/
 │  ├─ cli/                      # commander entrypoints
 │  ├─ extractors/              # tree-sitter parsing, diff analysis, metrics
@@ -303,14 +303,14 @@ brain/
 │  ├─ store/                   # JSON <-> SQLite, schema, queries
 │  ├─ mcp/                     # MCP server + tool defs
 │  └─ integrations/            # git hooks, CLAUDE.md writer
-├─ .claude/commands/          # /brain-why, /brain-fix slash commands
+├─ .claude/commands/          # /hunch-why, /hunch-fix slash commands
 ├─ .mcp.json                  # registers the MCP server with Claude Code
 └─ CLAUDE.md                  # auto-maintained ambient context
 ```
 
 ### CLI commands
 ```bash
-hunch init                 # scaffold .brain/, install post-commit hook, write .mcp.json + CLAUDE.md
+hunch init                 # scaffold .hunch/, install post-commit hook, write .mcp.json + CLAUDE.md
 hunch index                # parse repo -> symbol/dependency graph + components (no LLM)
 hunch backfill --since 90d # replay git history -> seed decisions/bugs (cold-start fix)
 hunch sync                 # run by post-commit hook: diff -> Claude -> decision/bug write-back
@@ -324,9 +324,9 @@ hunch mcp                  # start the MCP server (Claude Code connects here)
 JSON file per entity (human-reviewable in PRs) + a SQLite mirror rebuilt by `hunch index`. **No vector DB at MVP** — SQLite FTS5 covers search; add `sqlite-vec` embeddings only when keyword search proves insufficient. Graph queries use recursive CTEs over `edges`/`symbols` tables.
 
 ### Build order (so there's a usable artifact every couple of days)
-1. `hunch init` + `.brain/` schema + SQLite store.
+1. `hunch init` + `.hunch/` schema + SQLite store.
 2. `hunch index` (tree-sitter → symbols/edges/components) → `hunch why` works locally.
-3. MCP server with `brain_query` / `brain_why` → Claude Code can read Hunch. **First end-to-end value.**
+3. MCP server with `hunch_query` / `hunch_why` → Claude Code can read Hunch. **First end-to-end value.**
 4. `post-commit` hook → `hunch sync` → Claude drafts `Decision`. **The learning loop is alive.**
 5. `hunch backfill` (history seed) + `hunch fragile` + write-back of bugs from test failures.
 
@@ -339,7 +339,7 @@ JSON file per entity (human-reviewable in PRs) + a SQLite mirror rebuilt by `hun
 | Runtime | **Node 20 + TypeScript** | Cleanest path to MCP + VS Code; one language end-to-end. |
 | CLI | `commander` (or `clipanion`) | Minimal, well-trodden. |
 | Parsing | **tree-sitter** (`web-tree-sitter`) | Multi-language symbol/dependency extraction without per-language LSP wrangling. |
-| Storage (truth) | **JSON/Markdown in `.brain/`** | Git-native, diffable, reviewable, free team sync via push/pull. |
+| Storage (truth) | **JSON/Markdown in `.hunch/`** | Git-native, diffable, reviewable, free team sync via push/pull. |
 | Storage (index) | **SQLite** (`better-sqlite3`) + **FTS5** | Fast queries, full-text search, graph via recursive CTEs. Add `sqlite-vec` later for embeddings. |
 | Synthesis (write path) | **Anthropic SDK** *or* `claude -p` headless | Runs through the existing Claude Code subscription; keep LLM calls on the write path, not every read. |
 | **Integration (decided)** | **MCP server + auto-maintained `CLAUDE.md` + slash commands** | See below. |
@@ -347,9 +347,9 @@ JSON file per entity (human-reviewable in PRs) + a SQLite mirror rebuilt by `hun
 
 ### Integration decision (you asked me to choose) — and why
 Use **all three layers**, because they serve different moments:
-1. **MCP server** — the structured, two-way API. Claude can *query* Hunch (`brain_query`, `brain_why`, `bug_lineage`, `check_constraints`, `get_dependents`) **and write back** (`record_decision`). This is the "OS syscall" layer and the real product surface. Registered via `.mcp.json` / `claude mcp add`.
+1. **MCP server** — the structured, two-way API. Claude can *query* Hunch (`hunch_query`, `hunch_why`, `bug_lineage`, `check_constraints`, `get_dependents`) **and write back** (`record_decision`). This is the "OS syscall" layer and the real product surface. Registered via `.mcp.json` / `claude mcp add`.
 2. **`CLAUDE.md`** — *ambient* context loaded every session for free. Auto-maintained to hold a pointer to Hunch + the top blocking constraints, so even a naive prompt is grounded.
-3. **Slash commands** (`.claude/commands/brain-why.md`, `brain-fix.md`) — *user-triggered* ergonomics for the common workflows from §5.
+3. **Slash commands** (`.claude/commands/hunch-why.md`, `hunch-fix.md`) — *user-triggered* ergonomics for the common workflows from §5.
 
 Layering = **ambient (CLAUDE.md) + on-demand structured (MCP) + user-triggered (slash)**. MCP alone misses always-on grounding; CLAUDE.md alone can't do structured queries or write-back. Together they cover every entry point into Claude Code, which is exactly what an "OS" should do.
 
@@ -390,12 +390,12 @@ Solo-dev / OSS wedge (free local core) → bottoms-up team adoption (paid sync +
 
 ## Appendix A — MCP tool surface (v1)
 ```
-brain_query(query: string)                 -> ranked records (FTS + graph)
-brain_why(target: path|symbol)             -> decisions/bugs/constraints for target
-brain_bug_lineage(symptom|symbol)          -> matching bugs + introduced/fixed/recurrence
-brain_check_constraints(scope: glob)       -> constraints in scope + violations
-brain_get_dependents(symbol)               -> blast radius (callers, dependent components)
-brain_record_decision(decision: Decision)  -> write-back (confidence + provenance)
+hunch_query(query: string)                 -> ranked records (FTS + graph)
+hunch_why(target: path|symbol)             -> decisions/bugs/constraints for target
+hunch_bug_lineage(symptom|symbol)          -> matching bugs + introduced/fixed/recurrence
+hunch_check_constraints(scope: glob)       -> constraints in scope + violations
+hunch_get_dependents(symbol)               -> blast radius (callers, dependent components)
+hunch_record_decision(decision: Decision)  -> write-back (confidence + provenance)
 ```
 
 ## Appendix B — Definition of done for the MVP

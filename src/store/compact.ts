@@ -1,6 +1,6 @@
 /**
- * Record compaction (bounds unbounded Brain growth). Auto-captured drafts
- * accumulate forever; `brain compact` prunes the LOW-VALUE ones — never an
+ * Record compaction (bounds unbounded Hunch growth). Auto-captured drafts
+ * accumulate forever; `hunch compact` prunes the LOW-VALUE ones — never an
  * accepted/human-confirmed decision, never an open bug, never a constraint
  * (invariants are sacred), and never a record another record still points to.
  *

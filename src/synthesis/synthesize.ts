@@ -1,13 +1,13 @@
 /**
  * The learning loop's write step (DESIGN.md §4, §5 "write_back").
- *   - syncCommit:   commit diff -> Claude/heuristic -> Decision draft -> Brain
- *   - recordFailure: failing test -> suspect ranking -> Bug draft -> Brain
+ *   - syncCommit:   commit diff -> Claude/heuristic -> Decision draft -> Hunch
+ *   - recordFailure: failing test -> suspect ranking -> Bug draft -> Hunch
  *
  * Idempotent: a Decision id is derived from (commit, title) so re-running sync on
  * the same commit updates rather than duplicates. New records are LOW-confidence
  * and `proposed` until confirmed — advisory and cheap to discard.
  */
-import type { BrainStore } from "../store/brainStore.js";
+import type { HunchStore } from "../store/hunchStore.js";
 import { commitMeta, commitDiff, headSha } from "../extractors/git.js";
 import { analyzeDiff, type DiffAnalysis } from "../extractors/diff.js";
 import { selectProvider, DeterministicProvider, type SynthProvider, type DecisionDraft, type BugDraft, type CommitInput, type FailureInput } from "./provider.js";
@@ -26,8 +26,8 @@ export interface SyncResult {
 }
 
 // Below this many changed code lines, a commit with no structural change and no
-// explanatory body isn't worth a paid LLM call. Tunable via BRAIN_SIG_MIN_LINES.
-const SIG_MIN_LINES = Number(process.env.BRAIN_SIG_MIN_LINES) || 12;
+// explanatory body isn't worth a paid LLM call. Tunable via HUNCH_SIG_MIN_LINES.
+const SIG_MIN_LINES = Number(process.env.HUNCH_SIG_MIN_LINES) || 12;
 const SIG_MIN_BODY = 40;
 
 /** Is a commit substantive enough to spend a paid LLM synthesis call on? Pure and
@@ -48,7 +48,7 @@ export function isSignificant(meta: { body: string }, a: DiffAnalysis, codeFiles
 /** Capture a Decision from a commit. Defaults to HEAD. Pass `{ force: true }` to
  *  re-synthesize a commit that already has an (auto-drafted) decision. */
 export async function syncCommit(
-  store: BrainStore,
+  store: HunchStore,
   root: string,
   sha?: string,
   opts: { force?: boolean } = {},
@@ -87,7 +87,7 @@ export async function syncCommit(
   const analysis = analyzeDiff(diff);
   // Significance gate: reserve the paid LLM for substantive commits; trivial ones
   // get the FREE deterministic draft (honestly labeled "inferred"/low-confidence,
-  // so the Brain stays accurate-by-provenance). --force always uses the provider.
+  // so the Hunch stays accurate-by-provenance). --force always uses the provider.
   const provider = opts.force || isSignificant(meta, analysis, codeFiles)
     ? await selectProvider()
     : new DeterministicProvider();
@@ -125,7 +125,7 @@ export async function syncCommit(
       source: draft.source,
       confidence: draft.confidence,
       evidence: [`commit:${meta.shortSha}`, ...codeFiles.slice(0, 8)],
-      last_verified: new Date().toISOString(), // when the Brain last re-derived this
+      last_verified: new Date().toISOString(), // when the Hunch last re-derived this
     },
     date: meta.date, // the commit date
   };
@@ -142,7 +142,7 @@ export interface FailureResult {
 
 /** Capture a Bug from a test failure. Suspects are ranked churn×recency×fan-in. */
 export async function recordFailure(
-  store: BrainStore,
+  store: HunchStore,
   root: string,
   failure: { test: string; message: string; recentDiff?: string },
 ): Promise<FailureResult> {
@@ -221,7 +221,7 @@ export function shouldPromoteConstraint(severity: Bug["severity"], rootCause: st
 }
 
 /** Turn a bug into an advisory regression constraint scoped to its files. */
-function promoteConstraint(store: BrainStore, bug: Bug): Constraint {
+function promoteConstraint(store: HunchStore, bug: Bug): Constraint {
   const scope = bug.affected_files.length ? bug.affected_files : ["**"];
   const statement = `Regression guard: "${bug.title}" must not recur.`;
   const con: Constraint = {
@@ -240,7 +240,7 @@ function promoteConstraint(store: BrainStore, bug: Bug): Constraint {
 }
 
 /** Bump fragility on components owning the affected files. */
-function raiseFragility(store: BrainStore, files: string[]): void {
+function raiseFragility(store: HunchStore, files: string[]): void {
   const comps = store.json.loadAll("components");
   for (const c of comps) {
     if (files.some((f) => c.paths.some((g) => pathMatchesGlob(f, g)))) {
@@ -302,7 +302,7 @@ export function salientTerms(text: string): Set<string> {
 /** Recurrence = a DIFFERENT prior bug whose salient terms overlap strongly with
  *  this one (in-memory, no FTS/reindex dependency, threshold-gated to avoid the
  *  over-broad OR false positives). Returns the best match above threshold. */
-function findRecurrence(store: BrainStore, text: string, excludeId: string): Bug | undefined {
+function findRecurrence(store: HunchStore, text: string, excludeId: string): Bug | undefined {
   const want = salientTerms(text);
   if (want.size === 0) return undefined;
   let best: Bug | undefined;

@@ -1,10 +1,10 @@
 {
-  "id": "cmp_50037f41a9",
+  "id": "cmp_b256a6aed0",
   "kind": "module",
-  "name": "Cli",
+  "name": "Core",
   "responsibility": "",
   "paths": [
-    "src/cli/**"
+    "src/core/**"
   ],
   "status": "active",
   "owners": [],
@@ -13,9 +13,9 @@
     "source": "inferred",
     "confidence": 0.5,
     "evidence": [
-      "src/cli"
+      "src/core"
     ]
   },
-  "created_at": "2026-06-15T08:29:38.551Z",
-  "updated_at": "2026-06-15T08:29:38.551Z"
+  "created_at": "2026-06-15T09:50:07.242Z",
+  "updated_at": "2026-06-15T09:50:07.242Z"
 }

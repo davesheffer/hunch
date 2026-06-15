@@ -1,7 +1,7 @@
 /**
  * Schema versioning + migration for the JSON source of truth.
  *
- * Records under `.brain/` carry no per-record version; instead `.brain/manifest.json`
+ * Records under `.hunch/` carry no per-record version; instead `.hunch/manifest.json`
  * records the schema generation the on-disk data was written at. On load we migrate
  * raw JSON UP to SCHEMA_VERSION *before* Zod validation — so a future schema change
  * never silently drops old records (Zod would reject an old shape and the loader
@@ -18,12 +18,12 @@ import { readFileSync, existsSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { writeFileAtomic } from "./io.js";
 import type { EntityKind } from "./types.js";
-import type { BrainPaths } from "./paths.js";
+import type { HunchPaths } from "./paths.js";
 
 /** The schema generation this build writes and reads. Bump on any breaking change. */
 export const SCHEMA_VERSION = 1;
 
-/** A repo whose `.brain/` predates manifests is treated as v1. Migrations are
+/** A repo whose `.hunch/` predates manifests is treated as v1. Migrations are
  *  numbered from 2 (each `version` is the number it PRODUCES), so a baseline repo
  *  runs every migration with version >= 2 — never author a no-op version:1 one. */
 export const BASELINE_VERSION = 1;
@@ -43,9 +43,9 @@ export interface Manifest {
   schema_version: number;
 }
 
-/** Read `.brain/manifest.json`. A missing/corrupt manifest is treated as the
- *  BASELINE version (a pre-manifest `.brain/`), so future builds still migrate it. */
-export function readManifest(paths: BrainPaths): Manifest {
+/** Read `.hunch/manifest.json`. A missing/corrupt manifest is treated as the
+ *  BASELINE version (a pre-manifest `.hunch/`), so future builds still migrate it. */
+export function readManifest(paths: HunchPaths): Manifest {
   if (!existsSync(paths.manifest)) return { schema_version: BASELINE_VERSION };
   try {
     const m = JSON.parse(readFileSync(paths.manifest, "utf8")) as Partial<Manifest>;
@@ -56,8 +56,8 @@ export function readManifest(paths: BrainPaths): Manifest {
   }
 }
 
-/** Write `.brain/manifest.json` at `version` (default: the current SCHEMA_VERSION). */
-export function writeManifest(paths: BrainPaths, version: number = SCHEMA_VERSION): void {
+/** Write `.hunch/manifest.json` at `version` (default: the current SCHEMA_VERSION). */
+export function writeManifest(paths: HunchPaths, version: number = SCHEMA_VERSION): void {
   mkdirSync(dirname(paths.manifest), { recursive: true });
   writeFileAtomic(paths.manifest, JSON.stringify({ schema_version: version }, null, 2) + "\n");
 }

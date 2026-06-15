@@ -1,8 +1,8 @@
 {
   "id": "dec_49916d02c9",
-  "title": "feat: add VS Code extension for Project Brain visualization",
+  "title": "feat: add VS Code extension for Project Hunch visualization",
   "status": "proposed",
-  "context": "- Implemented a read-only visualizer for the Engineering Memory OS in VS Code.\n- Added features including an activity-bar tree, context briefs, and a status bar invariant counter.\n- Created a self-contained read layer over the committed .brain/ JSON source.\n- Developed a tree view to display invariants, decisions, bugs, fragile symbols, and components.\n- Integrated commands for refreshing the view and displaying context for the active file.\n- Implemented live refresh functionality when .brain/ c",
+  "context": "- Implemented a read-only visualizer for the Engineering Memory OS in VS Code.\n- Added features including an activity-bar tree, context briefs, and a status bar invariant counter.\n- Created a self-contained read layer over the committed .hunch/ JSON source.\n- Developed a tree view to display invariants, decisions, bugs, fragile symbols, and components.\n- Integrated commands for refreshing the view and displaying context for the active file.\n- Implemented live refresh functionality when .hunch/ c",
   "decision": "Introduced code in src/cli, src/core, src/extractors, src/integrations, src/mcp, src/store (13 file(s)).",
   "consequences": [],
   "alternatives_rejected": [],
@@ -24,12 +24,12 @@
     "src/extractors/git.ts",
     "src/integrations/hooks.ts",
     "src/mcp/server.ts",
-    "src/store/brainStore.ts",
+    "src/store/hunchStore.ts",
     "src/store/jsonStore.ts",
     "src/synthesis/provider.ts",
     "src/synthesis/synthesize.ts",
     "test/upgrades.test.ts",
-    "vscode-extension/src/brainData.ts",
+    "vscode-extension/src/hunchData.ts",
     "vscode-extension/src/extension.ts"
   ],
   "supersedes": null,
@@ -46,7 +46,7 @@
       "src/extractors/git.ts",
       "src/integrations/hooks.ts",
       "src/mcp/server.ts",
-      "src/store/brainStore.ts",
+      "src/store/hunchStore.ts",
       "src/store/jsonStore.ts"
     ],
     "last_verified": "2026-06-15T08:30:08.453Z"

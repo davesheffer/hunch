@@ -3,12 +3,12 @@ import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { brainPaths } from "../src/core/paths.js";
-import { BrainStore } from "../src/store/brainStore.js";
+import { hunchPaths } from "../src/core/paths.js";
+import { HunchStore } from "../src/store/hunchStore.js";
 import { indexRepo } from "../src/extractors/indexer.js";
 
 function fixtureRepo(): string {
-  const root = mkdtempSync(join(tmpdir(), "brain-idx-"));
+  const root = mkdtempSync(join(tmpdir(), "hunch-idx-"));
   mkdirSync(join(root, "src/auth"), { recursive: true });
   mkdirSync(join(root, "src/billing"), { recursive: true });
   writeFileSync(join(root, "src/auth/session.ts"), `import { jwtDecode } from "./jwt.js";\nexport function verifySession(t){ return jwtDecode(t); }\n`);
@@ -19,7 +19,7 @@ function fixtureRepo(): string {
 
 test("indexRepo builds symbols, call edges, components, and cross-file blast radius", () => {
   const root = fixtureRepo();
-  const store = new BrainStore(brainPaths(root));
+  const store = new HunchStore(hunchPaths(root));
   store.json.ensureDirs();
   const res = indexRepo(store, root, { churn: false });
   store.reindex();
@@ -44,11 +44,11 @@ test("indexRepo builds symbols, call edges, components, and cross-file blast rad
 });
 
 test("same-named symbols in one file get unique, stable ids (no PK collision)", () => {
-  const root = mkdtempSync(join(tmpdir(), "brain-dup-"));
+  const root = mkdtempSync(join(tmpdir(), "hunch-dup-"));
   mkdirSync(join(root, "src"), { recursive: true });
   // two classes each with a method `run` — same (file,name,kind)
   writeFileSync(join(root, "src/svc.ts"), `class A { run(){ return 1; } }\nclass B { run(){ return 2; } }\n`);
-  const store = new BrainStore(brainPaths(root));
+  const store = new HunchStore(hunchPaths(root));
   store.json.ensureDirs();
   indexRepo(store, root, { churn: false });
   store.reindex(); // would throw UNIQUE constraint if ids collided
@@ -67,7 +67,7 @@ test("same-named symbols in one file get unique, stable ids (no PK collision)", 
 });
 
 test("member call to a top-level function does NOT create an edge; method calls do (regression #4)", () => {
-  const root = mkdtempSync(join(tmpdir(), "brain-member-"));
+  const root = mkdtempSync(join(tmpdir(), "hunch-member-"));
   mkdirSync(join(root, "src"), { recursive: true });
   writeFileSync(join(root, "src/a.ts"), `export function helper(){ return 1; }\nexport class S { method(){ return 2; } }\n`);
   writeFileSync(
@@ -77,7 +77,7 @@ test("member call to a top-level function does NOT create an edge; method calls 
       `export function viaMember(o){ return o.helper(); }\n` + // member call to a top-level fn name -> NO edge
       `export function viaMethod(s){ return s.method(); }\n`, // member call to a real method -> edge
   );
-  const store = new BrainStore(brainPaths(root));
+  const store = new HunchStore(hunchPaths(root));
   store.json.ensureDirs();
   indexRepo(store, root, { churn: false });
   store.reindex();
@@ -96,7 +96,7 @@ test("member call to a top-level function does NOT create an edge; method calls 
 
 test("indexing is deterministic — same ids on re-run", () => {
   const root = fixtureRepo();
-  const store = new BrainStore(brainPaths(root));
+  const store = new HunchStore(hunchPaths(root));
   store.json.ensureDirs();
   indexRepo(store, root, { churn: false });
   const first = store.json.loadAll("symbols").map((s) => s.id).sort();

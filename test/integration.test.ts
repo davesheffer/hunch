@@ -4,16 +4,16 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync, appendFileSync } from "n
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
-import { brainPaths, findRoot } from "../src/core/paths.js";
-import { BrainStore } from "../src/store/brainStore.js";
+import { hunchPaths, findRoot } from "../src/core/paths.js";
+import { HunchStore } from "../src/store/hunchStore.js";
 import { syncCommit } from "../src/synthesis/synthesize.js";
 import { decisionId } from "../src/core/ids.js";
 import { headSha, revParse } from "../src/extractors/git.js";
 
-process.env.BRAIN_SYNTH_PROVIDER = "deterministic";
+process.env.HUNCH_SYNTH_PROVIDER = "deterministic";
 
 function gitRepo(): string {
-  const root = mkdtempSync(join(tmpdir(), "brain-int-"));
+  const root = mkdtempSync(join(tmpdir(), "hunch-int-"));
   const g = (...a: string[]) => execFileSync("git", a, { cwd: root, stdio: ["ignore", "ignore", "ignore"] });
   g("init");
   g("config", "user.email", "t@t.co");
@@ -27,7 +27,7 @@ function gitRepo(): string {
 
 test("syncCommit early-exits on re-sync (token-thrift) and --force re-drafts in place (regression #5)", async () => {
   const root = gitRepo();
-  const store = new BrainStore(brainPaths(root));
+  const store = new HunchStore(hunchPaths(root));
   store.json.ensureDirs();
 
   const first = await syncCommit(store, root);
@@ -54,7 +54,7 @@ test("syncCommit early-exits on re-sync (token-thrift) and --force re-drafts in 
 
 test("auto-sync uses commit-keyed id and never clobbers a human-confirmed decision (regression #5)", async () => {
   const root = gitRepo();
-  const store = new BrainStore(brainPaths(root));
+  const store = new HunchStore(hunchPaths(root));
   store.json.ensureDirs();
   const sha = headSha(root);
 
@@ -99,20 +99,20 @@ test("revParse trims whitespace and never fakes a full sha for an unresolvable r
   rmSync(root, { recursive: true, force: true });
 });
 
-test("findRoot ignores a .brain regular FILE and keeps walking (regression #18)", () => {
-  const parent = mkdtempSync(join(tmpdir(), "brain-root-"));
-  mkdirSync(join(parent, ".brain")); // a real brain dir at the parent
+test("findRoot ignores a .hunch regular FILE and keeps walking (regression #18)", () => {
+  const parent = mkdtempSync(join(tmpdir(), "hunch-root-"));
+  mkdirSync(join(parent, ".hunch")); // a real hunch dir at the parent
   const child = join(parent, "child");
   mkdirSync(child);
-  writeFileSync(join(child, ".brain"), "i am a file, not a dir"); // decoy file
-  // from child, the file .brain must NOT count — root resolves to the parent dir
+  writeFileSync(join(child, ".hunch"), "i am a file, not a dir"); // decoy file
+  // from child, the file .hunch must NOT count — root resolves to the parent dir
   assert.equal(findRoot(child), parent);
   rmSync(parent, { recursive: true, force: true });
 });
 
 test("post-commit code change captures a decision linked to the changed file", async () => {
   const root = gitRepo();
-  const store = new BrainStore(brainPaths(root));
+  const store = new HunchStore(hunchPaths(root));
   store.json.ensureDirs();
   appendFileSync(join(root, "src/a.ts"), "export function b(){ return 2; }\n");
   execFileSync("git", ["add", "-A"], { cwd: root, stdio: "ignore" });

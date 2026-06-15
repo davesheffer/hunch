@@ -88,9 +88,9 @@ const DIFF_NOISE = [
   ":(exclude,glob)**/.next/**",
   ":(exclude,glob)**/node_modules/**",
   ":(exclude,glob)**/vendor/**",
-  // the Brain's OWN machine-generated records — re-synthesizing a commit that
+  // the Hunch's OWN machine-generated records — re-synthesizing a commit that
   // wrote them would be circular noise, and they're large (JSON per record).
-  ":(exclude,glob)**/.brain/**",
+  ":(exclude,glob)**/.hunch/**",
   ":(exclude,glob)**/*.min.js",
   ":(exclude,glob)**/*.map",
   ":(exclude,glob)**/*.snap",
@@ -123,7 +123,7 @@ export function lastChangeDate(file: string, cwd: string): string {
   return gitSafe(["log", "-1", "--format=%aI", "--", file], cwd);
 }
 
-/** Files staged for commit (for `brain check` pre-commit enforcement). */
+/** Files staged for commit (for `hunch check` pre-commit enforcement). */
 export function stagedFiles(cwd: string): string[] {
   const out = gitSafe(["diff", "--cached", "--name-only", "--diff-filter=ACMR"], cwd);
   return out ? out.split("\n").filter(Boolean) : [];

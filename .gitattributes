@@ -1,2 +1,2 @@
-.brain/**/*.json merge=brain
-.brain/manifest.json merge=text
+.hunch/**/*.json merge=hunch
+.hunch/manifest.json merge=text

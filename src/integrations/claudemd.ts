@@ -1,16 +1,16 @@
 /**
  * Auto-maintained CLAUDE.md (DESIGN.md §7, integration layer 2: "ambient
  * context loaded every session for free"). We own ONLY the region between the
- * BRAIN markers — any user-authored content outside it is preserved verbatim.
+ * HUNCH markers — any user-authored content outside it is preserved verbatim.
  */
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import type { BrainStore } from "../store/brainStore.js";
+import type { HunchStore } from "../store/hunchStore.js";
 
-const START = "<!-- BRAIN:START — auto-generated, do not edit by hand -->";
-const END = "<!-- BRAIN:END -->";
+const START = "<!-- HUNCH:START — auto-generated, do not edit by hand -->";
+const END = "<!-- HUNCH:END -->";
 
-export function renderBrainSection(store: BrainStore): string {
+export function renderHunchSection(store: HunchStore): string {
   const constraints = store.json
     .loadAll("constraints")
     .sort((a, b) => sev(b.severity) - sev(a.severity))
@@ -32,13 +32,13 @@ export function renderBrainSection(store: BrainStore): string {
       `**${counts.decisions} decisions, ${counts.bugs} bugs, ${counts.constraints} constraints, ${counts.components} components**.`,
   );
   lines.push("");
-  lines.push("**Before reasoning about or editing this codebase, consult Hunch via the `brain_*` MCP tools:**");
-  lines.push("- `brain_why(target)` — why a file/symbol is shaped this way (decisions, bugs, constraints).");
-  lines.push("- `brain_check_constraints(scope)` — invariants you must not break. **Always run before editing.**");
-  lines.push("- `brain_get_dependents(symbol)` — blast radius before a change.");
-  lines.push("- `brain_bug_lineage(symptom)` — has this bug happened before? what was the root cause?");
-  lines.push("- `brain_query(question)` — free-text search across all of Hunch.");
-  lines.push("- `brain_record_decision(...)` — write back a decision after a non-trivial choice.");
+  lines.push("**Before reasoning about or editing this codebase, consult Hunch via the `hunch_*` MCP tools:**");
+  lines.push("- `hunch_why(target)` — why a file/symbol is shaped this way (decisions, bugs, constraints).");
+  lines.push("- `hunch_check_constraints(scope)` — invariants you must not break. **Always run before editing.**");
+  lines.push("- `hunch_get_dependents(symbol)` — blast radius before a change.");
+  lines.push("- `hunch_bug_lineage(symptom)` — has this bug happened before? what was the root cause?");
+  lines.push("- `hunch_query(question)` — free-text search across all of Hunch.");
+  lines.push("- `hunch_record_decision(...)` — write back a decision after a non-trivial choice.");
   if (constraints.length) {
     lines.push("");
     lines.push("### ⛔ Top invariants (do not break)");
@@ -52,10 +52,10 @@ export function renderBrainSection(store: BrainStore): string {
   return lines.join("\n");
 }
 
-/** Insert/replace the BRAIN section in CLAUDE.md, preserving everything else. */
-export function updateClaudeMd(root: string, store: BrainStore): string {
+/** Insert/replace the HUNCH section in CLAUDE.md, preserving everything else. */
+export function updateClaudeMd(root: string, store: HunchStore): string {
   const file = join(root, "CLAUDE.md");
-  const section = renderBrainSection(store);
+  const section = renderHunchSection(store);
   let content = existsSync(file) ? readFileSync(file, "utf8") : "";
 
   const iStart = content.indexOf(START);

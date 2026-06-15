@@ -1,13 +1,13 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { brainPaths } from "../src/core/paths.js";
-import { BrainStore } from "../src/store/brainStore.js";
+import { hunchPaths } from "../src/core/paths.js";
+import { HunchStore } from "../src/store/hunchStore.js";
 import { extracted, inferred, type Provenance } from "../src/core/types.js";
 
-export function tempStore(): { store: BrainStore; root: string; cleanup: () => void } {
-  const root = mkdtempSync(join(tmpdir(), "brain-test-"));
-  const store = new BrainStore(brainPaths(root));
+export function tempStore(): { store: HunchStore; root: string; cleanup: () => void } {
+  const root = mkdtempSync(join(tmpdir(), "hunch-test-"));
+  const store = new HunchStore(hunchPaths(root));
   store.json.ensureDirs();
   return { store, root, cleanup: () => { store.close(); rmSync(root, { recursive: true, force: true }); } };
 }

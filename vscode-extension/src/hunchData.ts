@@ -1,6 +1,6 @@
 /**
- * Self-contained read layer over the committed .brain/ JSON source of truth.
- * No native deps, no dependency on the brain CLI — the extension is a pure
+ * Self-contained read layer over the committed .hunch/ JSON source of truth.
+ * No native deps, no dependency on the hunch CLI — the extension is a pure
  * viewer over the JSON, so it works anywhere the repo is checked out.
  */
 import * as fs from "node:fs";
@@ -19,7 +19,7 @@ export interface Decision { id: string; title: string; status?: string; decision
 export interface Bug { id: string; title: string; symptom?: string; root_cause?: string; severity?: string; status?: string; affected_files?: string[]; affected_symbols?: string[]; provenance?: Provenance; }
 export interface Constraint { id: string; statement: string; scope?: string[]; severity?: string; rationale?: string; provenance?: Provenance; }
 
-export interface Brain {
+export interface Hunch {
   root: string;
   components: Component[];
   edges: Edge[];
@@ -84,8 +84,8 @@ function readDir<T>(dir: string): T[] {
   return out;
 }
 
-export function loadBrain(root: string): Brain | null {
-  const dir = path.join(root, ".brain");
+export function loadHunch(root: string): Hunch | null {
+  const dir = path.join(root, ".hunch");
   if (!fs.existsSync(dir)) return null;
   return {
     root,
@@ -103,8 +103,8 @@ function relMatch(target: string, files: string[]): boolean {
   return files.some((f) => f === target || target.endsWith(f) || f.endsWith(target));
 }
 
-export function constraintsInScope(brain: Brain, file: string): Constraint[] {
-  return brain.constraints
+export function constraintsInScope(hunch: Hunch, file: string): Constraint[] {
+  return hunch.constraints
     .filter((c) => (c.scope ?? []).some((g) => pathMatchesGlob(file, g)))
     .sort((a, b) => sevRank(b.severity) - sevRank(a.severity));
 }
@@ -116,28 +116,28 @@ export interface WhyResult {
   dependents: Array<{ name: string; file: string }>;
 }
 
-export function why(brain: Brain, file: string): WhyResult {
-  const symsInFile = brain.symbols.filter((s) => s.file === file || s.file.endsWith(file));
+export function why(hunch: Hunch, file: string): WhyResult {
+  const symsInFile = hunch.symbols.filter((s) => s.file === file || s.file.endsWith(file));
   const symIds = new Set(symsInFile.map((s) => s.id));
   const dependents: Array<{ name: string; file: string }> = [];
-  for (const e of brain.edges) {
+  for (const e of hunch.edges) {
     if (e.type === "calls" && symIds.has(e.to)) {
-      const from = brain.symbols.find((s) => s.id === e.from);
+      const from = hunch.symbols.find((s) => s.id === e.from);
       if (from) dependents.push({ name: from.name, file: from.file });
     }
   }
   return {
-    decisions: brain.decisions.filter((d) => relMatch(file, d.related_files ?? [])),
-    bugs: brain.bugs.filter((b) => relMatch(file, b.affected_files ?? []) || (b.affected_symbols ?? []).some((s) => symIds.has(s))),
-    constraints: constraintsInScope(brain, file),
+    decisions: hunch.decisions.filter((d) => relMatch(file, d.related_files ?? [])),
+    bugs: hunch.bugs.filter((b) => relMatch(file, b.affected_files ?? []) || (b.affected_symbols ?? []).some((s) => symIds.has(s))),
+    constraints: constraintsInScope(hunch, file),
     dependents: dependents.slice(0, 20),
   };
 }
 
-export function fragileSymbols(brain: Brain, limit = 20): Array<{ name: string; file: string; score: number; evidence: string }> {
-  const maxChurn = Math.max(1, ...brain.symbols.map((s) => s.metrics?.churn_90d ?? 0));
-  const maxFanIn = Math.max(1, ...brain.symbols.map((s) => s.metrics?.fan_in ?? 0));
-  return brain.symbols
+export function fragileSymbols(hunch: Hunch, limit = 20): Array<{ name: string; file: string; score: number; evidence: string }> {
+  const maxChurn = Math.max(1, ...hunch.symbols.map((s) => s.metrics?.churn_90d ?? 0));
+  const maxFanIn = Math.max(1, ...hunch.symbols.map((s) => s.metrics?.fan_in ?? 0));
+  return hunch.symbols
     .map((s) => {
       const bug = s.metrics?.bug_count ?? 0;
       const churn = s.metrics?.churn_90d ?? 0;

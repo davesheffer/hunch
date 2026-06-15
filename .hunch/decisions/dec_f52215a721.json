@@ -1,6 +1,6 @@
 {
   "id": "dec_f52215a721",
-  "title": "fix(brain): harden upgrades from adversarial review (13 findings)",
+  "title": "fix(hunch): harden upgrades from adversarial review (13 findings)",
   "status": "proposed",
   "context": "- diff analyzer: hunk-state-aware parsing (content lines starting with ++/--\n  no longer misread as headers); pure renames recorded; per-file symbol\n  classification; code-only line counts; multi-line import detection\n- store: jsonStore.delete operates on raw JSON (no schema-drop); assembleContext\n  blast-radius keeps MIN depth; formatContext trims on code-point/line boundaries\n- cli: init --enforce-strict; query/context reindex before reading; check\n  --staged/--commit mutual exclusion\n- vscode",
   "decision": "Changed code in test/upgrades.test.ts (1 file(s)).",

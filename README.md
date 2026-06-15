@@ -18,10 +18,10 @@ came before. Local-first, no documentation toil, no SaaS.
 ## How it works
 
 ```
-   commit / test failure              .brain/  (git-tracked JSON)            Claude Code
+   commit / test failure              .hunch/  (git-tracked JSON)            Claude Code
  ┌───────────────────────┐         ┌──────────────────────────┐         ┌──────────────┐
  │ post-commit hook   ───┼────────▶│ Decisions  (why a change) │────────▶│ MCP tools     │
- │ record-bug         ───┼────────▶│ Bugs       (root causes)  │  read   │ /brain-* cmds │
+ │ record-bug         ───┼────────▶│ Bugs       (root causes)  │  read   │ /hunch-* cmds │
  │ structured diff +     │  write  │ Constraints(invariants)   │◀────────│ CLAUDE.md     │
  │ Claude (or heuristic) │         │ Components / Symbols/Edges │         │ CLI           │
  └───────────────────────┘         └──────────────────────────┘         └──────────────┘
@@ -61,14 +61,14 @@ tells you which mode you're in.
 ### 3. Initialize the repo you want a memory for
 
 ```bash
-hunch init                  # scaffold .brain/, index, install the post-commit hook,
+hunch init                  # scaffold .hunch/, index, install the post-commit hook,
                             # write .mcp.json + slash commands + CLAUDE.md, register the merge driver
 hunch backfill --since 90d  # cold start: seed decisions from recent git history
 ```
 
 `init` writes a `.mcp.json` pointing at *this machine's* node + Hunch — so **reload
-Claude Code in the repo** afterward to pick up the `brain_*` tools. (Each teammate runs
-`hunch init` once to wire up their own clone; the captured `.brain/` content is shared
+Claude Code in the repo** afterward to pick up the `hunch_*` tools. (Each teammate runs
+`hunch init` once to wire up their own clone; the captured `.hunch/` content is shared
 via git.)
 
 ### 4. Use it
@@ -87,19 +87,19 @@ normally and Claude consults Hunch, or invoke the slash commands:
 
 | Slash command | What it does |
 |---|---|
-| `/brain-why <file\|symbol>` | the decisions, invariants, and bug history behind it — with citations |
-| `/brain-fix <bug>` | fix a bug grounded in past root causes, blast radius, and constraints |
-| `/brain-fragile` | a fragility report (the riskiest code, with evidence) |
+| `/hunch-why <file\|symbol>` | the decisions, invariants, and bug history behind it — with citations |
+| `/hunch-fix <bug>` | fix a bug grounded in past root causes, blast radius, and constraints |
+| `/hunch-fragile` | a fragility report (the riskiest code, with evidence) |
 
-The MCP tools Claude calls under the hood: `brain_why`, `brain_query`,
-`brain_check_constraints`, `brain_get_dependents` (blast radius), `brain_bug_lineage`,
-`brain_context` (surgical minimal slice for a task), `brain_record_decision` (write-back).
+The MCP tools Claude calls under the hood: `hunch_why`, `hunch_query`,
+`hunch_check_constraints`, `hunch_get_dependents` (blast radius), `hunch_bug_lineage`,
+`hunch_context` (surgical minimal slice for a task), `hunch_record_decision` (write-back).
 
 **Through the CLI** — the same graph, from your terminal:
 
 | Command | What |
 |---|---|
-| `hunch init [--enforce]` | scaffold `.brain/`, index, install hook + merge driver, wire up Claude Code (`--enforce` adds a pre-commit invariant guard) |
+| `hunch init [--enforce]` | scaffold `.hunch/`, index, install hook + merge driver, wire up Claude Code (`--enforce` adds a pre-commit invariant guard) |
 | `hunch index` | parse repo → symbols / edges / components (deterministic, no LLM) |
 | `hunch backfill --since 90d` | replay git history → seed decisions |
 | `hunch sync [sha]` | turn a commit into a Decision (run automatically by the hook) |
@@ -111,7 +111,7 @@ The MCP tools Claude calls under the hood: `brain_why`, `brain_query`,
 | `hunch check [--staged\|--commit <sha>] [--strict]` | guardrail: flag changes touching a do-not-break invariant |
 | `hunch stale` | drift: records whose files changed after they were last verified |
 | `hunch review [--accept <id>\|--reject <id>]` | curate: triage / promote / drop low-confidence drafts |
-| `hunch migrate` | upgrade `.brain/` records to the current schema version |
+| `hunch migrate` | upgrade `.hunch/` records to the current schema version |
 | `hunch compact [--apply]` | prune low-value drafts to bound growth (dry-run by default) |
 | `hunch doctor` | environment diagnostics (git, auth mode, schema version, counts) |
 | `hunch mcp` | start the MCP server over stdio (Claude Code connects here) |
@@ -128,7 +128,7 @@ it stays useful offline. Either way every record is **advisory and cheap to disc
 
 ## Working as a team
 
-The `.brain/` JSON is the **source of truth**: diffable, reviewable in PRs, and synced
+The `.hunch/` JSON is the **source of truth**: diffable, reviewable in PRs, and synced
 for free over `git push` / `pull`. `hunch init` also registers a **git merge driver** so
 concurrent edits to the graph merge **by record id** instead of throwing conflict markers
 (human-confirmed beats auto, then higher confidence, then recency). The routing lives in a
@@ -139,7 +139,7 @@ committed `.gitattributes`; the per-clone driver definition is set up by each te
 
 - **`hunch doctor`** — is git healthy? are you on the subscription path or the offline
   heuristic? what schema version is on disk? how many records?
-- **`hunch migrate`** — after upgrading Hunch, bring old `.brain/` records up to the
+- **`hunch migrate`** — after upgrading Hunch, bring old `.hunch/` records up to the
   current schema (old records are migrated in memory on every read, so reads never break;
   `migrate` persists the upgrade and never drops a record it can't migrate).
 - **`hunch compact --apply`** — auto-captured drafts accumulate; compaction prunes the
@@ -150,7 +150,7 @@ committed `.gitattributes`; the per-clone driver definition is set up by each te
 ## Where it's stored
 
 ```
-.brain/
+.hunch/
 ├─ components/   one JSON file per architecture node      (curated, PR-reviewable)
 ├─ decisions/   one JSON file per Decision (ADR)
 ├─ bugs/        one JSON file per Bug
@@ -158,14 +158,14 @@ committed `.gitattributes`; the per-clone driver definition is set up by each te
 ├─ symbols/index.json   the symbol graph   (high-cardinality, single file)
 ├─ edges/index.json     the dependency graph
 ├─ manifest.json        on-disk schema version
-└─ brain.sqlite         DERIVED FTS5 + graph index, rebuilt by `hunch index` (gitignored)
+└─ hunch.sqlite         DERIVED FTS5 + graph index, rebuilt by `hunch index` (gitignored)
 ```
 
 Low-volume entities are one file per record so they read cleanly in a PR; the
 high-cardinality symbol/edge graphs are single id-sorted arrays to keep git noise down.
 SQLite is a throwaway index rebuilt from the JSON — only the JSON is committed.
 
-> Note: the on-disk directory is still `.brain/` (and the MCP tools are still `brain_*`)
+> Note: the on-disk directory is still `.hunch/` (and the MCP tools are still `hunch_*`)
 > for backward compatibility with existing graphs. A future release may migrate these to
 > `.hunch/` / `hunch_*`.
 
@@ -177,7 +177,7 @@ src/
 ├─ store/        JSON source of truth ←→ SQLite/FTS5 derived index; merge driver; compaction
 ├─ extractors/   tree-sitter parse, git introspection, the indexer
 ├─ synthesis/    write path: Claude-CLI (subscription) or deterministic fallback
-├─ mcp/          MCP stdio server (the brain_* tools)
+├─ mcp/          MCP stdio server (the hunch_* tools)
 ├─ integrations/ post-commit hook, CLAUDE.md writer, .mcp.json + slash commands, merge driver
 └─ cli/          commander entrypoint
 ```
@@ -186,7 +186,7 @@ src/
 
 A companion **[VS Code extension](vscode-extension/)** visualizes Hunch (a tree of
 decisions / invariants / bugs / fragility, a "why is this file the way it is?" action, and
-a status-bar invariant counter) by reading the committed `.brain/` JSON directly — no
+a status-bar invariant counter) by reading the committed `.hunch/` JSON directly — no
 server, no native deps.
 
 ## Notable engineering decisions
@@ -200,7 +200,7 @@ server, no native deps.
   native bindings ship Node-20 prebuilds (no compiler) and a simpler synchronous API.
 - **`better-sqlite3` pinned to `12.9.0`** — 12.10.x ships no Node-20 prebuild and would
   force a source compile; 12.9.0 has the Node-20 (ABI 115) prebuild.
-- **Atomic, durable writes.** All `.brain/` writes go through a temp-file + rename, with a
+- **Atomic, durable writes.** All `.hunch/` writes go through a temp-file + rename, with a
   Windows-safe fallback, so an interrupted write can't truncate the index; `put`/`delete`
   refuse to rewrite a corrupt index rather than flatten it.
 
@@ -209,7 +209,7 @@ server, no native deps.
 ```bash
 npm run typecheck   # tsc --noEmit
 npm test            # node:test suite (store, graph, parse, indexer, synthesis, migrate, merge, compact)
-npm run hunch -- why src/store/brainStore.ts   # run the CLI from source via tsx, no build
+npm run hunch -- why src/store/hunchStore.ts   # run the CLI from source via tsx, no build
 ```
 
 See [DESIGN.md](DESIGN.md) for the full spec. Deferred by design: embeddings / vector

@@ -1,22 +1,22 @@
 /**
- * The indexer (DESIGN.md §4 "File changes" row, and `brain index`).
+ * The indexer (DESIGN.md §4 "File changes" row, and `hunch index`).
  * Deterministic, no LLM: walk the repo, parse every TS/JS file into symbols,
  * resolve a best-effort call graph + import dependency graph, derive components
  * from the directory layout, and compute churn / fan-in / fan-out metrics.
  *
  * Writes Symbol/Edge/Component records to the JSON source of truth. The caller
- * then runs BrainStore.reindex() to refresh the SQLite index.
+ * then runs HunchStore.reindex() to refresh the SQLite index.
  */
 import { readFileSync, statSync, readdirSync } from "node:fs";
 import { join, relative, dirname, posix } from "node:path";
-import type { BrainStore } from "../store/brainStore.js";
+import type { HunchStore } from "../store/hunchStore.js";
 import { parseSource, attributeCalls } from "./parse.js";
 import { symbolId, componentId, edgeId, sha1 } from "../core/ids.js";
 import { extracted, inferred, type Symbol, type Edge, type Component } from "../core/types.js";
 import { isGitRepo, trackedFiles, fileChurn, lastCommitForFile } from "./git.js";
 
 const CODE_EXTS = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"];
-const SKIP_DIRS = new Set(["node_modules", ".git", "dist", "build", ".brain", "coverage", ".next", "out"]);
+const SKIP_DIRS = new Set(["node_modules", ".git", "dist", "build", ".hunch", "coverage", ".next", "out"]);
 
 export interface IndexResult {
   files: number;
@@ -27,7 +27,7 @@ export interface IndexResult {
   skipped: number;
 }
 
-export function indexRepo(store: BrainStore, root: string, opts: { churn?: boolean } = {}): IndexResult {
+export function indexRepo(store: HunchStore, root: string, opts: { churn?: boolean } = {}): IndexResult {
   const files = listCodeFiles(root);
   const useGit = isGitRepo(root);
 

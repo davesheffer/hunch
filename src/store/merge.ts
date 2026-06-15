@@ -1,10 +1,10 @@
 /**
- * Structured three-way merge of `.brain/` JSON for TEAM workflows.
+ * Structured three-way merge of `.hunch/` JSON for TEAM workflows.
  *
- * Concurrent branches both writing the Brain conflict on `git merge`: the
- * single-file symbols/edges index is rewritten wholesale by `brain index`, and two
+ * Concurrent branches both writing the Hunch conflict on `git merge`: the
+ * single-file symbols/edges index is rewritten wholesale by `hunch index`, and two
  * people can touch the same decision/bug/constraint. A registered git merge driver
- * (`brain merge-driver`, wired up by `brain init`) calls mergeBrainJson per
+ * (`hunch merge-driver`, wired up by `hunch init`) calls mergeHunchJson per
  * conflicted file so records merge BY ID instead of leaving conflict markers.
  *
  * Scope: git only invokes a content merge driver when the SAME path differs on both
@@ -27,9 +27,9 @@ export interface MergeResult {
   conflict: boolean;
 }
 
-/** Merge three versions of one `.brain` JSON file (an index array OR a single
+/** Merge three versions of one `.hunch` JSON file (an index array OR a single
  *  record object). Returns the merged text, or conflict=true to fall back. */
-export function mergeBrainJson(baseText: string, oursText: string, theirsText: string): MergeResult {
+export function mergeHunchJson(baseText: string, oursText: string, theirsText: string): MergeResult {
   const ours = parseSide(oursText);
   const theirs = parseSide(theirsText);
   const base = parseSide(baseText);

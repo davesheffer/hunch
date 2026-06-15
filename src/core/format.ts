@@ -1,7 +1,7 @@
 /** Render an AssembledContext as a compact, agent-ready brief: invariants first
  *  (what must not break), then the why, blast radius, and bug history — each with
  *  provenance so the agent can weight it. Shared by the CLI and the MCP tool. */
-import type { AssembledContext } from "../store/brainStore.js";
+import type { AssembledContext } from "../store/hunchStore.js";
 
 function prov(p?: { source?: string; confidence?: number; last_verified?: string }): string {
   if (!p) return "";

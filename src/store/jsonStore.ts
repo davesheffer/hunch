@@ -1,11 +1,11 @@
 /**
- * The JSON source of truth under .brain/. One file per entity (human-reviewable
+ * The JSON source of truth under .hunch/. One file per entity (human-reviewable
  * in PRs, diffable, mergeable). This layer never touches SQLite — it is the
  * authoritative read/write surface; SQLite is rebuilt from it.
  */
 import { mkdirSync, readdirSync, readFileSync, existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import type { BrainPaths } from "../core/paths.js";
+import type { HunchPaths } from "../core/paths.js";
 import { ENTITY_KINDS, SCHEMAS, type EntityKind, type EntityFor } from "../core/types.js";
 import { migrateRaw, readManifest, writeManifest, SCHEMA_VERSION } from "../core/migrate.js";
 import { writeFileAtomic } from "../core/io.js";
@@ -21,29 +21,29 @@ const encode = (v: unknown): string => JSON.stringify(v, null, 2) + "\n";
 export class JsonStore {
   private _warnedForward = false;
 
-  constructor(private readonly paths: BrainPaths) {}
+  constructor(private readonly paths: HunchPaths) {}
 
-  /** Create .brain/<kind>/ directories. Stamp the manifest at the CURRENT version
-   *  only when scaffolding a FRESH .brain/ (so `brain index`/`sync` on a brand-new
-   *  repo records the version too, not just `init`). A pre-existing .brain/ without
+  /** Create .hunch/<kind>/ directories. Stamp the manifest at the CURRENT version
+   *  only when scaffolding a FRESH .hunch/ (so `hunch index`/`sync` on a brand-new
+   *  repo records the version too, not just `init`). A pre-existing .hunch/ without
    *  a manifest is LEGACY — left unstamped so it defaults to the baseline and
-   *  `brain migrate` upgrades it. */
+   *  `hunch migrate` upgrades it. */
   ensureDirs(): void {
-    const fresh = !existsSync(this.paths.brain);
-    mkdirSync(this.paths.brain, { recursive: true });
+    const fresh = !existsSync(this.paths.hunch);
+    mkdirSync(this.paths.hunch, { recursive: true });
     for (const kind of ENTITY_KINDS) mkdirSync(this.paths.dir(kind), { recursive: true });
     if (fresh && !existsSync(this.paths.manifest)) writeManifest(this.paths, SCHEMA_VERSION);
   }
 
   /** The on-disk schema version (from the manifest), read FRESH each call so a
-   *  long-lived process (the MCP server) reflects an out-of-band `brain migrate`. */
+   *  long-lived process (the MCP server) reflects an out-of-band `hunch migrate`. */
   schemaVersion(): number {
     const v = readManifest(this.paths).schema_version;
     if (v > SCHEMA_VERSION && !this._warnedForward) {
       this._warnedForward = true;
       console.warn(
-        `[brain] .brain/ was written by a newer schema (v${v} > v${SCHEMA_VERSION}); ` +
-          `records may not load correctly — upgrade brain.`,
+        `[hunch] .hunch/ was written by a newer schema (v${v} > v${SCHEMA_VERSION}); ` +
+          `records may not load correctly — upgrade hunch.`,
       );
     }
     return v;
@@ -78,13 +78,13 @@ export class JsonStore {
       try {
         arr = JSON.parse(readFileSync(f, "utf8"));
       } catch (e) {
-        console.warn(`[brain] skipping corrupt ${kind}/${single}: ${(e as Error).message}`);
+        console.warn(`[hunch] skipping corrupt ${kind}/${single}: ${(e as Error).message}`);
         return out;
       }
       for (const raw of Array.isArray(arr) ? arr : []) {
         const r = schema.safeParse(this.migrate(kind, raw, version));
         if (r.success) out.push(r.data as EntityFor[K]);
-        else console.warn(`[brain] skipping invalid ${kind} record: ${r.error.issues[0]?.message}`);
+        else console.warn(`[hunch] skipping invalid ${kind} record: ${r.error.issues[0]?.message}`);
       }
       return out;
     }
@@ -94,12 +94,12 @@ export class JsonStore {
       try {
         raw = JSON.parse(readFileSync(join(dir, name), "utf8"));
       } catch (e) {
-        console.warn(`[brain] skipping corrupt ${kind}/${name}: ${(e as Error).message}`);
+        console.warn(`[hunch] skipping corrupt ${kind}/${name}: ${(e as Error).message}`);
         continue;
       }
       const r = schema.safeParse(this.migrate(kind, raw, version));
       if (r.success) out.push(r.data as EntityFor[K]);
-      else console.warn(`[brain] skipping invalid ${kind}/${name}: ${r.error.issues[0]?.message}`);
+      else console.warn(`[hunch] skipping invalid ${kind}/${name}: ${r.error.issues[0]?.message}`);
     }
     return out;
   }
@@ -151,7 +151,7 @@ export class JsonStore {
   /** Read a single-file index as a raw array (no validation). Missing/empty → [].
    *  A non-empty file that fails to parse THROWS — we must never silently treat a
    *  corrupt index as empty and then rewrite it, which would flatten every existing
-   *  record. (`brain index` rebuilds from scratch via replaceAll to recover.) */
+   *  record. (`hunch index` rebuilds from scratch via replaceAll to recover.) */
   private readRawArray(f: string): unknown[] {
     if (!existsSync(f)) return [];
     const text = readFileSync(f, "utf8");
@@ -160,7 +160,7 @@ export class JsonStore {
     try {
       v = JSON.parse(text);
     } catch (e) {
-      throw new Error(`refusing to rewrite ${f}: the existing index is not valid JSON (${(e as Error).message}). Fix or remove it, then re-run \`brain index\`.`);
+      throw new Error(`refusing to rewrite ${f}: the existing index is not valid JSON (${(e as Error).message}). Fix or remove it, then re-run \`hunch index\`.`);
     }
     return Array.isArray(v) ? v : [];
   }

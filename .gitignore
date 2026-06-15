@@ -2,13 +2,13 @@ node_modules/
 dist/
 *.log
 
-# Brain: the SQLite index is a DERIVED artifact, rebuilt by `brain index`.
-# The JSON source of truth under .brain/ IS committed.
-.brain/brain.sqlite
-.brain/brain.sqlite-*
-.brain/*.sqlite
-.brain/*.sqlite-journal
-.brain/*.sqlite-wal
-.brain/*.sqlite-shm
+# Hunch: the SQLite index is a DERIVED artifact, rebuilt by `hunch index`.
+# The JSON source of truth under .hunch/ IS committed.
+.hunch/hunch.sqlite
+.hunch/hunch.sqlite-*
+.hunch/*.sqlite
+.hunch/*.sqlite-journal
+.hunch/*.sqlite-wal
+.hunch/*.sqlite-shm
 # Atomic-write temp files (normally consumed by rename; ignored in case one leaks).
-.brain/**/*.tmp*
+.hunch/**/*.tmp*

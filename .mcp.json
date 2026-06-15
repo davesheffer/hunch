@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "brain": {
+    "hunch": {
       "command": "C:\\Program Files\\nodejs\\node.exe",
       "args": [
         "C:\\Users\\davids\\github\\brain\\dist\\cli\\index.js",

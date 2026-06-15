@@ -1,10 +1,10 @@
 {
-  "id": "cmp_dfa5b5acde",
+  "id": "cmp_a94a8fe5cc",
   "kind": "module",
-  "name": "Mcp",
+  "name": "Test",
   "responsibility": "",
   "paths": [
-    "src/mcp/**"
+    "test/**"
   ],
   "status": "active",
   "owners": [],
@@ -13,9 +13,9 @@
     "source": "inferred",
     "confidence": 0.5,
     "evidence": [
-      "src/mcp"
+      "test"
     ]
   },
-  "created_at": "2026-06-15T08:29:38.551Z",
-  "updated_at": "2026-06-15T08:29:38.551Z"
+  "created_at": "2026-06-15T09:50:07.242Z",
+  "updated_at": "2026-06-15T09:50:07.242Z"
 }

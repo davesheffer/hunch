@@ -1,7 +1,7 @@
 ---
 description: Explain why a file or symbol is the way it is, from Hunch
 ---
-Use the `brain_why` MCP tool on **$ARGUMENTS** (a file path or symbol name).
+Use the `hunch_why` MCP tool on **$ARGUMENTS** (a file path or symbol name).
 
 Then summarize, with citations:
 - the **decisions** that shaped it (id + rationale),

@@ -1,5 +1,5 @@
 /**
- * MCP server — the structured two-way API into the Brain (DESIGN.md §7 / App. A).
+ * MCP server — the structured two-way API into the Hunch (DESIGN.md §7 / App. A).
  * Exposes read tools (query/why/bug_lineage/check_constraints/get_dependents) and
  * a write tool (record_decision). Registered with Claude Code via .mcp.json.
  *
@@ -9,8 +9,8 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { brainPaths, findRoot } from "../core/paths.js";
-import { BrainStore } from "../store/brainStore.js";
+import { hunchPaths, findRoot } from "../core/paths.js";
+import { HunchStore } from "../store/hunchStore.js";
 import { decisionId } from "../core/ids.js";
 import { revParse } from "../extractors/git.js";
 import { formatContext } from "../core/format.js";
@@ -24,16 +24,16 @@ const err = (text: string): ToolResult => ({ content: [{ type: "text", text }], 
 // session, so an uncapped list pollutes the context window. Cap each list to its
 // highest-signal head (records are pre-sorted by severity/confidence) and tell the
 // caller what was withheld rather than truncating silently.
-const WHY_CAP = 6; // per record-type in brain_why
-const DEP_CAP = 25; // dependents in brain_get_dependents
-const QUERY_HITS = 8; // brain_query matches (was 12)
+const WHY_CAP = 6; // per record-type in hunch_why
+const DEP_CAP = 25; // dependents in hunch_get_dependents
+const QUERY_HITS = 8; // hunch_query matches (was 12)
 const SEV_CONSTRAINT: Record<string, number> = { blocking: 3, warning: 2, advisory: 1 };
 const SEV_BUG: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1 };
 const more = (total: number, cap: number, hint = ""): string =>
   total > cap ? `\n  …(+${total - cap} more${hint ? ` — ${hint}` : ""})` : "";
 
 /** Resolve a free-form target (symbol id / name / file path) to symbol records. */
-function resolveSymbols(store: BrainStore, target: string): Symbol[] {
+function resolveSymbols(store: HunchStore, target: string): Symbol[] {
   const syms = store.json.loadAll("symbols");
   const byId = syms.find((s) => s.id === target);
   if (byId) return [byId];
@@ -43,19 +43,19 @@ function resolveSymbols(store: BrainStore, target: string): Symbol[] {
 }
 
 export function buildServer(root: string): McpServer {
-  const store = new BrainStore(brainPaths(root));
+  const store = new HunchStore(hunchPaths(root));
   // Ensure the SQLite index reflects the JSON source of truth on startup.
   try {
     store.reindex();
   } catch (e) {
-    console.error("[brain-mcp] reindex on startup failed:", (e as Error).message);
+    console.error("[hunch-mcp] reindex on startup failed:", (e as Error).message);
   }
 
-  const server = new McpServer({ name: "brain", version: "0.1.0" });
+  const server = new McpServer({ name: "hunch", version: "0.1.0" });
 
-  // -- brain_query ----------------------------------------------------------
+  // -- hunch_query ----------------------------------------------------------
   server.registerTool(
-    "brain_query",
+    "hunch_query",
     {
       title: "Query Hunch",
       description:
@@ -73,9 +73,9 @@ export function buildServer(root: string): McpServer {
     },
   );
 
-  // -- brain_why ------------------------------------------------------------
+  // -- hunch_why ------------------------------------------------------------
   server.registerTool(
-    "brain_why",
+    "hunch_why",
     {
       title: "Explain why a file/symbol is the way it is",
       description:
@@ -104,9 +104,9 @@ export function buildServer(root: string): McpServer {
     },
   );
 
-  // -- brain_bug_lineage ----------------------------------------------------
+  // -- hunch_bug_lineage ----------------------------------------------------
   server.registerTool(
-    "brain_bug_lineage",
+    "hunch_bug_lineage",
     {
       title: "Find related bugs and their lineage",
       description:
@@ -124,9 +124,9 @@ export function buildServer(root: string): McpServer {
     },
   );
 
-  // -- brain_check_constraints ---------------------------------------------
+  // -- hunch_check_constraints ---------------------------------------------
   server.registerTool(
-    "brain_check_constraints",
+    "hunch_check_constraints",
     {
       title: "Check invariants in scope",
       description:
@@ -141,9 +141,9 @@ export function buildServer(root: string): McpServer {
     },
   );
 
-  // -- brain_get_dependents -------------------------------------------------
+  // -- hunch_get_dependents -------------------------------------------------
   server.registerTool(
-    "brain_get_dependents",
+    "hunch_get_dependents",
     {
       title: "Blast radius (transitive dependents)",
       description:
@@ -164,9 +164,9 @@ export function buildServer(root: string): McpServer {
     },
   );
 
-  // -- brain_context (surgical retrieval) -----------------------------------
+  // -- hunch_context (surgical retrieval) -----------------------------------
   server.registerTool(
-    "brain_context",
+    "hunch_context",
     {
       title: "Assemble the minimal relevant Hunch slice for a task",
       description:
@@ -181,9 +181,9 @@ export function buildServer(root: string): McpServer {
     },
   );
 
-  // -- brain_record_decision (write-back) -----------------------------------
+  // -- hunch_record_decision (write-back) -----------------------------------
   server.registerTool(
-    "brain_record_decision",
+    "hunch_record_decision",
     {
       title: "Record a decision (write-back)",
       description:
@@ -257,7 +257,7 @@ function provLine(record: unknown): string {
   return `\n      ⟨${p.source ?? "?"}, confidence ${p.confidence ?? "?"}${v}⟩`;
 }
 
-/** Start the stdio server (called by `brain mcp`). */
+/** Start the stdio server (called by `hunch mcp`). */
 export async function startServer(cwd: string = process.cwd()): Promise<void> {
   const root = findRoot(cwd);
   const server = buildServer(root);

@@ -1,5 +1,5 @@
 /**
- * Core entity schema for the Project Brain (DESIGN.md §3).
+ * Core entity schema for the Project Hunch (DESIGN.md §3).
  *
  * Zod is the single source of truth: TypeScript types are inferred from the
  * schemas, and the same schemas validate JSON on the write path and shape MCP

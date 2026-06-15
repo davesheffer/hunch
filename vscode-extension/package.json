@@ -8,40 +8,40 @@
     "vscode": "^1.96.0"
   },
   "categories": ["Other", "SCM Providers", "Visualization"],
-  "activationEvents": ["workspaceContains:.brain/**"],
+  "activationEvents": ["workspaceContains:.hunch/**"],
   "main": "./dist/extension.js",
   "contributes": {
     "viewsContainers": {
       "activitybar": [
         {
-          "id": "brain",
+          "id": "hunch",
           "title": "Hunch",
-          "icon": "media/brain.svg"
+          "icon": "media/hunch.svg"
         }
       ]
     },
     "views": {
-      "brain": [
-        { "id": "brain.tree", "name": "Engineering Memory", "icon": "media/brain.svg" }
+      "hunch": [
+        { "id": "hunch.tree", "name": "Engineering Memory", "icon": "media/hunch.svg" }
       ]
     },
     "commands": [
-      { "command": "brain.why", "title": "Hunch:Why is this file the way it is?", "icon": "$(question)" },
-      { "command": "brain.context", "title": "Hunch:Assemble context for this file", "icon": "$(list-tree)" },
-      { "command": "brain.refresh", "title": "Hunch:Refresh", "icon": "$(refresh)" }
+      { "command": "hunch.why", "title": "Hunch:Why is this file the way it is?", "icon": "$(question)" },
+      { "command": "hunch.context", "title": "Hunch:Assemble context for this file", "icon": "$(list-tree)" },
+      { "command": "hunch.refresh", "title": "Hunch:Refresh", "icon": "$(refresh)" }
     ],
     "menus": {
       "view/title": [
-        { "command": "brain.refresh", "when": "view == brain.tree", "group": "navigation" }
+        { "command": "hunch.refresh", "when": "view == hunch.tree", "group": "navigation" }
       ],
       "editor/title": [
-        { "command": "brain.why", "when": "resourceLangId =~ /typescript|javascript|typescriptreact|javascriptreact/", "group": "navigation" }
+        { "command": "hunch.why", "when": "resourceLangId =~ /typescript|javascript|typescriptreact|javascriptreact/", "group": "navigation" }
       ]
     },
     "configuration": {
       "title": "Hunch",
       "properties": {
-        "brain.statusBar.enabled": {
+        "hunch.statusBar.enabled": {
           "type": "boolean",
           "default": true,
           "description": "Show constraints-in-scope for the active file in the status bar."

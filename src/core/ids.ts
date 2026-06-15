@@ -1,6 +1,6 @@
 /** Stable id helpers. Symbol/component/edge ids are DETERMINISTIC (derived from
  *  their natural key) so re-indexing the same repo yields the same ids and the
- *  git diff of `.brain/` stays minimal. Decisions/bugs use a content hash too,
+ *  git diff of `.hunch/` stays minimal. Decisions/bugs use a content hash too,
  *  so the learning loop is idempotent for the same commit. */
 import { createHash } from "node:crypto";
 

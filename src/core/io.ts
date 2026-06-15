@@ -1,4 +1,4 @@
-/** Durable file writes for the Brain. */
+/** Durable file writes for the Hunch. */
 import { writeFileSync, renameSync, rmSync } from "node:fs";
 
 let counter = 0;

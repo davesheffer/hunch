@@ -1,7 +1,7 @@
 # Hunch — VS Code extension
 
-A read-only visualizer over [Hunch](../README.md) (`.brain/`) for the
-open repo. Pairs with the Claude Code chat (which uses the `brain_*` MCP tools); this gives
+A read-only visualizer over [Hunch](../README.md) (`.hunch/`) for the
+open repo. Pairs with the Claude Code chat (which uses the `hunch_*` MCP tools); this gives
 you the **human** surface.
 
 ## Features
@@ -11,10 +11,10 @@ you the **human** surface.
   of the decisions, invariants, bug history, and blast radius for the active file.
 - **Context brief** — the minimal relevant slice for a task on the current file.
 - **Status bar** — `🛡 N invariants` for the active file (⚠ if any are blocking); click → Why.
-- **Live** — refreshes automatically when `.brain/` changes on disk (e.g. after a commit).
+- **Live** — refreshes automatically when `.hunch/` changes on disk (e.g. after a commit).
 
 It is a pure reader of the committed JSON source of truth — **no native deps, no server**, and
-it works as soon as the repo has a `.brain/` directory (`hunch init`).
+it works as soon as the repo has a `.hunch/` directory (`hunch init`).
 
 ## Develop / run
 ```bash
@@ -24,4 +24,4 @@ npm run build      # -> dist/extension.js
 ```
 
 ## Settings
-- `brain.statusBar.enabled` (default `true`) — show the invariant counter for the active file.
+- `hunch.statusBar.enabled` (default `true`) — show the invariant counter for the active file.

@@ -6,7 +6,7 @@ import { selectProvider } from "../src/synthesis/provider.js";
 import type { DiffAnalysis } from "../src/extractors/diff.js";
 
 // Force the deterministic provider so tests never need credentials.
-process.env.BRAIN_SYNTH_PROVIDER = "deterministic";
+process.env.HUNCH_SYNTH_PROVIDER = "deterministic";
 
 // Minimal DiffAnalysis with overrides for the field(s) under test.
 function analysis(over: Partial<DiffAnalysis> = {}): DiffAnalysis {

@@ -1,16 +1,16 @@
 /**
- * BrainStore — the read/write query layer over the JSON source of truth and the
+ * HunchStore — the read/write query layer over the JSON source of truth and the
  * SQLite derived index. Everything the CLI and MCP server need flows through here.
  *
  *   - reindex():        JSON  -> SQLite (rebuild the derived index + FTS)
- *   - search():         FTS5 ranked query (brain_query)
+ *   - search():         FTS5 ranked query (hunch_query)
  *   - why():            decisions/bugs/constraints explaining a path/symbol
  *   - getDependents():  recursive-CTE blast radius over the call/dep graph
  *   - checkConstraints(): constraints whose scope matches a glob/path
  *   - bugLineage():     bugs matching a symptom/symbol + their lineage
  *   - fragility():      ranked fragility report with evidence
  */
-import type { BrainPaths } from "../core/paths.js";
+import type { HunchPaths } from "../core/paths.js";
 import { ENTITY_KINDS, type Component, type Constraint, type Bug, type Decision, type Symbol, type Edge } from "../core/types.js";
 import { openDb, type DB } from "./db.js";
 import { RESET_SQL } from "./schema.js";
@@ -45,11 +45,11 @@ export interface FragileNode {
   evidence: string[];
 }
 
-export class BrainStore {
+export class HunchStore {
   readonly json: JsonStore;
   private _db: DB | null = null;
 
-  constructor(private readonly paths: BrainPaths) {
+  constructor(private readonly paths: HunchPaths) {
     this.json = new JsonStore(paths);
   }
 
@@ -158,7 +158,7 @@ export class BrainStore {
 
   // ---- read path ----------------------------------------------------------
 
-  /** FTS5 ranked search (brain_query). Falls back to LIKE if the query has no
+  /** FTS5 ranked search (hunch_query). Falls back to LIKE if the query has no
    *  FTS-tokenizable terms. */
   search(query: string, limit = 12): SearchHit[] {
     const match = toFtsQuery(query);
@@ -188,7 +188,7 @@ export class BrainStore {
   }
 
   /** All decisions/bugs/constraints/symbols/components touching a file path or
-   *  symbol name (brain_why). */
+   *  symbol name (hunch_why). */
   why(target: string): WhyResult {
     const decisions = this.json.loadAll("decisions");
     const bugs = this.json.loadAll("bugs");
@@ -216,7 +216,7 @@ export class BrainStore {
   }
 
   /** Transitive blast radius: every symbol/component that (in)directly depends on
-   *  `id`, via a recursive CTE over the edges graph (brain_get_dependents). We
+   *  `id`, via a recursive CTE over the edges graph (hunch_get_dependents). We
    *  walk edges BACKWARD (edges.to = current) following call/dep/import/contains. */
   getDependents(id: string, maxDepth = 6): Array<{ id: string; depth: number; via: string }> {
     const rows = this.db.prepare(
@@ -263,7 +263,7 @@ export class BrainStore {
     return id;
   }
 
-  /** Constraints whose scope glob matches a path/glob (brain_check_constraints). */
+  /** Constraints whose scope glob matches a path/glob (hunch_check_constraints). */
   checkConstraints(scope: string): Constraint[] {
     const all = this.json.loadAll("constraints");
     return all
@@ -271,7 +271,7 @@ export class BrainStore {
       .sort((a, b) => sev(b.severity) - sev(a.severity));
   }
 
-  /** Bugs matching a symptom (FTS over bugs) or a symbol, with lineage (brain_bug_lineage). */
+  /** Bugs matching a symptom (FTS over bugs) or a symbol, with lineage (hunch_bug_lineage). */
   bugLineage(symptomOrSymbol: string): Bug[] {
     const bugs = this.json.loadAll("bugs");
     const direct = bugs.filter(
@@ -287,7 +287,7 @@ export class BrainStore {
     return bugs.filter((b) => `${b.title} ${b.symptom} ${b.root_cause}`.toLowerCase().includes(q));
   }
 
-  /** Ranked fragility report (brain fragile). fragility = weighted churn + bugs + fan-in. */
+  /** Ranked fragility report (hunch fragile). fragility = weighted churn + bugs + fan-in. */
   fragility(limit = 15): FragileNode[] {
     const syms = this.json.loadAll("symbols");
     const bugs = this.json.loadAll("bugs");
@@ -349,7 +349,7 @@ export class BrainStore {
     return out.sort((a, b) => b.changed_at.localeCompare(a.changed_at));
   }
 
-  /** The Context Assembler (DESIGN §2.1/§6): the MINIMAL relevant Brain slice for
+  /** The Context Assembler (DESIGN §2.1/§6): the MINIMAL relevant Hunch slice for
    *  a task on `target`, ordered by what matters most — invariants first, then the
    *  why, then blast radius and bug history — trimmed to a rough token budget. */
   assembleContext(target: string, budget = 1500): AssembledContext {

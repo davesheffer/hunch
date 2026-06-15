@@ -109,8 +109,8 @@ const BUG_TOOL = {
 class ClaudeCliProvider implements SynthProvider {
   readonly name = "claude-cli";
   // Default to the `haiku` alias (cheap/fast, and survives model retirements)
-  // rather than a pinned dated id; override with BRAIN_SYNTH_MODEL if needed.
-  private model = process.env.BRAIN_SYNTH_MODEL || "haiku";
+  // rather than a pinned dated id; override with HUNCH_SYNTH_MODEL if needed.
+  private model = process.env.HUNCH_SYNTH_MODEL || "haiku";
 
   async available(): Promise<boolean> {
     try {
@@ -133,8 +133,8 @@ class ClaudeCliProvider implements SynthProvider {
 
     // Single-shot text synthesis: no tools, no agentic loop. The prompt carries
     // all needed context inline, so run from a neutral cwd to avoid loading this
-    // repo's own brain MCP server / CLAUDE.md on every commit (cheaper, and no
-    // risk of the synthesis call recursing through the Brain). Auth lives in the
+    // repo's own hunch MCP server / CLAUDE.md on every commit (cheaper, and no
+    // risk of the synthesis call recursing through the Hunch). Auth lives in the
     // user's home config, not cwd, so this doesn't affect subscription billing.
     const args = ["-p", prompt, "--output-format", "json", "--model", this.model, "--max-turns", "1"];
     const { stdout } = await pexec("claude", args, {
@@ -245,9 +245,9 @@ export class DeterministicProvider implements SynthProvider {
 
 const PROVIDERS: SynthProvider[] = [new ClaudeCliProvider(), new DeterministicProvider()];
 
-/** Choose the first available provider, honoring BRAIN_SYNTH_PROVIDER override. */
+/** Choose the first available provider, honoring HUNCH_SYNTH_PROVIDER override. */
 export async function selectProvider(): Promise<SynthProvider> {
-  const forced = process.env.BRAIN_SYNTH_PROVIDER;
+  const forced = process.env.HUNCH_SYNTH_PROVIDER;
   if (forced) {
     const p = PROVIDERS.find((x) => x.name === forced);
     if (p && (await p.available())) return p;

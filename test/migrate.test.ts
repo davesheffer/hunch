@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync, readFileSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { brainPaths } from "../src/core/paths.js";
+import { hunchPaths } from "../src/core/paths.js";
 import { JsonStore } from "../src/store/jsonStore.js";
 import { writeFileAtomic } from "../src/core/io.js";
 import {
@@ -16,7 +16,7 @@ import {
 } from "../src/core/migrate.js";
 
 function tmp(): { root: string; cleanup: () => void } {
-  const root = mkdtempSync(join(tmpdir(), "brain-mig-"));
+  const root = mkdtempSync(join(tmpdir(), "hunch-mig-"));
   return { root, cleanup: () => rmSync(root, { recursive: true, force: true }) };
 }
 
@@ -48,7 +48,7 @@ test("production MIGRATIONS at the current version is a no-op", () => {
 
 test("manifest round-trips; missing/corrupt → BASELINE_VERSION", () => {
   const { root, cleanup } = tmp();
-  const paths = brainPaths(root);
+  const paths = hunchPaths(root);
   assert.equal(readManifest(paths).schema_version, BASELINE_VERSION, "missing manifest → baseline");
   writeManifest(paths, 3);
   assert.equal(readManifest(paths).schema_version, 3);
@@ -59,7 +59,7 @@ test("manifest round-trips; missing/corrupt → BASELINE_VERSION", () => {
 
 test("persistMigration rewrites loadable records and never drops an unmigratable one", () => {
   const { root, cleanup } = tmp();
-  const store = new JsonStore(brainPaths(root));
+  const store = new JsonStore(hunchPaths(root));
   store.ensureDirs();
   // one valid decision (per-record file) + one valid + one INVALID raw in the single-file index
   store.put("decisions", {
@@ -68,7 +68,7 @@ test("persistMigration rewrites loadable records and never drops an unmigratable
     caused_by_bug: null, commit: null, provenance: { source: "llm_draft", confidence: 0.3, evidence: [] },
     date: "2026-01-01T00:00:00Z",
   } as never);
-  const symIndex = join(brainPaths(root).dir("symbols"), "index.json");
+  const symIndex = join(hunchPaths(root).dir("symbols"), "index.json");
   writeFileSync(symIndex, JSON.stringify([
     { id: "sym_ok", file: "a.ts", name: "f", kind: "function", signature_hash: "", calls: [], called_by: [], metrics: { loc: 1, churn_90d: 0, bug_count: 0, fan_in: 0, fan_out: 0 }, last_changed: "" },
     { id: "sym_bad", kind: "not-a-real-kind" }, // fails Zod
@@ -85,7 +85,7 @@ test("persistMigration rewrites loadable records and never drops an unmigratable
 
 test("put() on a single-file index preserves schema-invalid siblings (never silently drops)", () => {
   const { root, cleanup } = tmp();
-  const paths = brainPaths(root);
+  const paths = hunchPaths(root);
   const store = new JsonStore(paths);
   store.ensureDirs();
   const valid = { id: "sym_v", file: "a.ts", name: "f", kind: "function", signature_hash: "", calls: [], called_by: [], metrics: { loc: 0, churn_90d: 0, bug_count: 0, fan_in: 0, fan_out: 0 }, last_changed: "" };
@@ -99,7 +99,7 @@ test("put() on a single-file index preserves schema-invalid siblings (never sile
 
 test("put()/delete() refuse to rewrite a corrupt non-empty index (no silent flatten)", () => {
   const { root, cleanup } = tmp();
-  const paths = brainPaths(root);
+  const paths = hunchPaths(root);
   const store = new JsonStore(paths);
   store.ensureDirs();
   const idx = join(paths.dir("symbols"), "index.json");
@@ -121,9 +121,9 @@ test("writeFileAtomic writes the file and leaves no temp file behind", () => {
   cleanup();
 });
 
-test("loadAll warns once and still loads when .brain/ is from a NEWER schema", () => {
+test("loadAll warns once and still loads when .hunch/ is from a NEWER schema", () => {
   const { root, cleanup } = tmp();
-  const paths = brainPaths(root);
+  const paths = hunchPaths(root);
   const store = new JsonStore(paths);
   store.ensureDirs();
   writeManifest(paths, SCHEMA_VERSION + 5); // pretend a future build wrote this
