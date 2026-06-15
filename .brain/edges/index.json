@@ -1,245 +1,5 @@
 [
   {
-    "id": "edge_e422e70020",
-    "from": "sym_3188212032",
-    "to": "sym_9e8caabda8",
-    "type": "calls",
-    "reason": "storeFor calls findRoot",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/cli/index.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_ef1a6c80b7",
-    "from": "sym_3188212032",
-    "to": "sym_6264d56eb8",
-    "type": "calls",
-    "reason": "storeFor calls brainPaths",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/cli/index.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_374d2c4884",
-    "from": "sym_37d2e70fac",
-    "to": "sym_bda955394e",
-    "type": "calls",
-    "reason": "resolveInvocation calls q",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/cli/invocation.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_19e2e64763",
-    "from": "sym_b26ad02a58",
-    "to": "sym_0c63caa8a0",
-    "type": "calls",
-    "reason": "globToRegExp calls segToRe",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/core/glob.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_21d06d531c",
-    "from": "sym_97208a8294",
-    "to": "sym_f48c80382c",
-    "type": "calls",
-    "reason": "pathMatchesGlob calls norm",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/core/glob.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_b59376d9b3",
-    "from": "sym_97208a8294",
-    "to": "sym_b26ad02a58",
-    "type": "calls",
-    "reason": "pathMatchesGlob calls globToRegExp",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/core/glob.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_7d0251e689",
-    "from": "sym_f54a45b5ef",
-    "to": "sym_5a74d29b94",
-    "type": "calls",
-    "reason": "symbolId calls shortHash",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/core/ids.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_15814e3c2c",
-    "from": "sym_74d3a2e9bd",
-    "to": "sym_5a74d29b94",
-    "type": "calls",
-    "reason": "componentId calls shortHash",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/core/ids.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_89b8411e9c",
-    "from": "sym_1ada613a64",
-    "to": "sym_5a74d29b94",
-    "type": "calls",
-    "reason": "edgeId calls shortHash",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/core/ids.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_e2f2e03409",
-    "from": "sym_871abb4df2",
-    "to": "sym_5a74d29b94",
-    "type": "calls",
-    "reason": "decisionId calls shortHash",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/core/ids.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_c20b67e335",
-    "from": "sym_5c38b4911d",
-    "to": "sym_5a74d29b94",
-    "type": "calls",
-    "reason": "bugId calls shortHash",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/core/ids.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_7c6046987b",
-    "from": "sym_16b88590c8",
-    "to": "sym_5a74d29b94",
-    "type": "calls",
-    "reason": "constraintId calls shortHash",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/core/ids.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_c5cb8bee55",
-    "from": "sym_9e8caabda8",
-    "to": "sym_4f2930d147",
-    "type": "calls",
-    "reason": "findRoot calls resolve",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/core/paths.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_bcba6422c4",
-    "from": "sym_9e8caabda8",
-    "to": "sym_938d882d9f",
-    "type": "calls",
-    "reason": "findRoot calls isDir",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/core/paths.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_31977333a4",
-    "from": "sym_815fdb47eb",
-    "to": "sym_2e868206d6",
-    "type": "calls",
-    "reason": "gitSafe calls git",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/extractors/git.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_60b0d6f50b",
-    "from": "sym_fbc5451f63",
-    "to": "sym_815fdb47eb",
-    "type": "calls",
-    "reason": "isGitRepo calls gitSafe",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/extractors/git.ts"
-      ]
-    }
-  },
-  {
     "id": "edge_00a44f80bd",
     "from": "sym_64db6cba68",
     "to": "sym_815fdb47eb",
@@ -255,776 +15,56 @@
     }
   },
   {
-    "id": "edge_2de97978f3",
-    "from": "sym_c1e85563e2",
-    "to": "sym_815fdb47eb",
+    "id": "edge_011d0a6f4b",
+    "from": "sym_c7716287ec",
+    "to": "sym_b9ad124ad8",
     "type": "calls",
-    "reason": "revParse calls gitSafe",
+    "reason": "draftDecision calls decisionDraftFromText",
     "strength": 0.8,
     "provenance": {
       "source": "extracted",
       "confidence": 0.8,
       "evidence": [
-        "src/extractors/git.ts"
+        "src/synthesis/provider.ts"
       ]
     }
   },
   {
-    "id": "edge_a4279f922e",
-    "from": "sym_9c164687cf",
-    "to": "sym_815fdb47eb",
+    "id": "edge_0407b3c312",
+    "from": "sym_610aad3fa6",
+    "to": "sym_c94636f66a",
     "type": "calls",
-    "reason": "hooksDir calls gitSafe",
+    "reason": "tempStore calls close",
     "strength": 0.8,
     "provenance": {
       "source": "extracted",
       "confidence": 0.8,
       "evidence": [
-        "src/extractors/git.ts"
+        "test/helpers.ts"
       ]
     }
   },
   {
-    "id": "edge_a2c5c56bc1",
-    "from": "sym_aa7221e606",
-    "to": "sym_815fdb47eb",
+    "id": "edge_05186028f1",
+    "from": "sym_24693481f2",
+    "to": "sym_c649780494",
     "type": "calls",
-    "reason": "gitDir calls gitSafe",
+    "reason": "pickWinner calls humanConfirmed",
     "strength": 0.8,
     "provenance": {
       "source": "extracted",
       "confidence": 0.8,
       "evidence": [
-        "src/extractors/git.ts"
+        "src/store/merge.ts"
       ]
     }
   },
   {
-    "id": "edge_568edbde32",
-    "from": "sym_91e8631ffc",
-    "to": "sym_815fdb47eb",
-    "type": "calls",
-    "reason": "commitFiles calls gitSafe",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/extractors/git.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_9f3cb0d4ff",
-    "from": "sym_cb863afde2",
-    "to": "sym_815fdb47eb",
-    "type": "calls",
-    "reason": "commitMeta calls gitSafe",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/extractors/git.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_95522e935a",
-    "from": "sym_cb863afde2",
-    "to": "sym_91e8631ffc",
-    "type": "calls",
-    "reason": "commitMeta calls commitFiles",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/extractors/git.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_8a03ce2baa",
-    "from": "sym_f9d958acb6",
-    "to": "sym_815fdb47eb",
-    "type": "calls",
-    "reason": "commitDiff calls gitSafe",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/extractors/git.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_0c6206ae7e",
-    "from": "sym_41326cde36",
-    "to": "sym_815fdb47eb",
-    "type": "calls",
-    "reason": "fileChurn calls gitSafe",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/extractors/git.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_60fdff0329",
-    "from": "sym_9853d94477",
-    "to": "sym_815fdb47eb",
-    "type": "calls",
-    "reason": "lastCommitForFile calls gitSafe",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/extractors/git.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_77ce9f2997",
-    "from": "sym_547bbf9a26",
-    "to": "sym_815fdb47eb",
-    "type": "calls",
-    "reason": "lastChangeDate calls gitSafe",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/extractors/git.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_b8e0eed791",
-    "from": "sym_18c032ca4f",
-    "to": "sym_815fdb47eb",
-    "type": "calls",
-    "reason": "stagedFiles calls gitSafe",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/extractors/git.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_7f66b58a7d",
-    "from": "sym_f1e8c6fbda",
-    "to": "sym_815fdb47eb",
-    "type": "calls",
-    "reason": "logSince calls gitSafe",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/extractors/git.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_7f2043a4c7",
-    "from": "sym_f1e8c6fbda",
-    "to": "sym_e1155c29cf",
-    "type": "calls",
-    "reason": "logSince calls windowArgs",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/extractors/git.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_64613c9421",
-    "from": "sym_be1263261e",
-    "to": "sym_815fdb47eb",
-    "type": "calls",
-    "reason": "fixCommits calls gitSafe",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/extractors/git.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_d39800f49b",
-    "from": "sym_be1263261e",
-    "to": "sym_e1155c29cf",
-    "type": "calls",
-    "reason": "fixCommits calls windowArgs",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/extractors/git.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_4abe07fe07",
-    "from": "sym_a2df62d136",
-    "to": "sym_815fdb47eb",
-    "type": "calls",
-    "reason": "trackedFiles calls gitSafe",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/extractors/git.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_199258a690",
-    "from": "sym_2f00ac7819",
-    "to": "sym_15d8a2509a",
-    "type": "calls",
-    "reason": "indexRepo calls listCodeFiles",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/extractors/indexer.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_4943826a6a",
-    "from": "sym_2f00ac7819",
-    "to": "sym_fbc5451f63",
-    "type": "calls",
-    "reason": "indexRepo calls isGitRepo",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/extractors/indexer.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_26c3b082c2",
-    "from": "sym_2f00ac7819",
-    "to": "sym_aa5f50456c",
-    "type": "calls",
-    "reason": "indexRepo calls toPosix",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/extractors/indexer.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_5ccd4353e8",
-    "from": "sym_2f00ac7819",
-    "to": "sym_6800d03191",
-    "type": "calls",
-    "reason": "indexRepo calls parseSource",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/extractors/indexer.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_e40b069023",
-    "from": "sym_2f00ac7819",
-    "to": "sym_41326cde36",
-    "type": "calls",
-    "reason": "indexRepo calls fileChurn",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/extractors/indexer.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_29f1013f1d",
-    "from": "sym_2f00ac7819",
-    "to": "sym_9853d94477",
-    "type": "calls",
-    "reason": "indexRepo calls lastCommitForFile",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/extractors/indexer.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_5bc4901f77",
-    "from": "sym_2f00ac7819",
-    "to": "sym_f54a45b5ef",
-    "type": "calls",
-    "reason": "indexRepo calls symbolId",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/extractors/indexer.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_184b49caec",
-    "from": "sym_2f00ac7819",
-    "to": "sym_6d8e5db01f",
-    "type": "calls",
-    "reason": "indexRepo calls sha1",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/extractors/indexer.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_99e873076b",
-    "from": "sym_2f00ac7819",
-    "to": "sym_2ce5da13ed",
-    "type": "calls",
-    "reason": "indexRepo calls attributeCalls",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/extractors/indexer.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_c7f331e55d",
-    "from": "sym_2f00ac7819",
-    "to": "sym_1d0c8f1bf5",
-    "type": "calls",
-    "reason": "indexRepo calls resolveName",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/extractors/indexer.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_f007889a68",
-    "from": "sym_2f00ac7819",
-    "to": "sym_617ff861b7",
-    "type": "calls",
-    "reason": "indexRepo calls addEdge",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/extractors/indexer.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_2c89dc47cf",
-    "from": "sym_2f00ac7819",
-    "to": "sym_1ada613a64",
-    "type": "calls",
-    "reason": "indexRepo calls edgeId",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/extractors/indexer.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_b3e52c20c3",
-    "from": "sym_2f00ac7819",
-    "to": "sym_1285f1c28f",
-    "type": "calls",
-    "reason": "indexRepo calls extracted",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/extractors/indexer.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_23ec3cb005",
-    "from": "sym_2f00ac7819",
-    "to": "sym_949445a607",
-    "type": "calls",
-    "reason": "indexRepo calls deriveComponents",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/extractors/indexer.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_f43ceeb69d",
-    "from": "sym_2f00ac7819",
-    "to": "sym_29c38dd437",
-    "type": "calls",
-    "reason": "indexRepo calls resolveImport",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/extractors/indexer.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_5e1c6786ed",
-    "from": "sym_15d8a2509a",
-    "to": "sym_fbc5451f63",
-    "type": "calls",
-    "reason": "listCodeFiles calls isGitRepo",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/extractors/indexer.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_6fdb5c1e38",
-    "from": "sym_15d8a2509a",
-    "to": "sym_a2df62d136",
-    "type": "calls",
-    "reason": "listCodeFiles calls trackedFiles",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/extractors/indexer.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_eb3aa43400",
-    "from": "sym_15d8a2509a",
-    "to": "sym_5a5b2eb84e",
-    "type": "calls",
-    "reason": "listCodeFiles calls walk",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/extractors/indexer.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_45ab66ee48",
-    "from": "sym_29c38dd437",
-    "to": "sym_aa5f50456c",
-    "type": "calls",
-    "reason": "resolveImport calls toPosix",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/extractors/indexer.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_18afc85c49",
-    "from": "sym_949445a607",
-    "to": "sym_b90745ce9f",
-    "type": "calls",
-    "reason": "deriveComponents calls componentDir",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/extractors/indexer.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_f4e019f9c9",
-    "from": "sym_949445a607",
-    "to": "sym_74d3a2e9bd",
-    "type": "calls",
-    "reason": "deriveComponents calls componentId",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/extractors/indexer.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_ee295ab367",
-    "from": "sym_949445a607",
-    "to": "sym_8211cca258",
-    "type": "calls",
-    "reason": "deriveComponents calls capitalize",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/extractors/indexer.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_22bbede7e2",
-    "from": "sym_949445a607",
-    "to": "sym_11010ac9dc",
-    "type": "calls",
-    "reason": "deriveComponents calls inferred",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/extractors/indexer.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_5547673439",
-    "from": "sym_6800d03191",
-    "to": "sym_008b9dc0f8",
-    "type": "calls",
-    "reason": "parseSource calls pickLanguage",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/extractors/parse.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_7830fc7abf",
-    "from": "sym_6800d03191",
-    "to": "sym_3d4a43a092",
-    "type": "calls",
-    "reason": "parseSource calls bundleFor",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/extractors/parse.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_0fade6a413",
-    "from": "sym_6800d03191",
-    "to": "sym_acc82aef14",
-    "type": "calls",
-    "reason": "parseSource calls ascendToDef",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/extractors/parse.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_913943b37c",
-    "from": "sym_e50ebb7b4d",
-    "to": "sym_8fc96bbf18",
-    "type": "calls",
-    "reason": "renderBrainSection calls loadAll",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/integrations/claudemd.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_ca3f5644f1",
-    "from": "sym_e50ebb7b4d",
-    "to": "sym_837ee1b990",
-    "type": "calls",
-    "reason": "renderBrainSection calls sev",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/integrations/claudemd.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_217738229c",
-    "from": "sym_f0a8fcb4e1",
-    "to": "sym_e50ebb7b4d",
-    "type": "calls",
-    "reason": "updateClaudeMd calls renderBrainSection",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/integrations/claudemd.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_0ef0153335",
-    "from": "sym_76837948cb",
-    "to": "sym_9c164687cf",
-    "type": "calls",
-    "reason": "installPostCommitHook calls hooksDir",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/integrations/hooks.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_1e2581b267",
-    "from": "sym_76837948cb",
-    "to": "sym_0e53febe6d",
-    "type": "calls",
-    "reason": "installPostCommitHook calls block",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/integrations/hooks.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_4d0e95ada5",
-    "from": "sym_76837948cb",
-    "to": "sym_9f3f0902e9",
-    "type": "calls",
-    "reason": "installPostCommitHook calls escapeRe",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/integrations/hooks.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_f1635da4a2",
-    "from": "sym_eb961ae48f",
-    "to": "sym_9c164687cf",
-    "type": "calls",
-    "reason": "installPreCommitHook calls hooksDir",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/integrations/hooks.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_5493cf7213",
-    "from": "sym_eb961ae48f",
-    "to": "sym_9f3f0902e9",
-    "type": "calls",
-    "reason": "installPreCommitHook calls escapeRe",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/integrations/hooks.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_2fa535b3c2",
-    "from": "sym_5fb91b7bd2",
-    "to": "sym_8fc96bbf18",
-    "type": "calls",
-    "reason": "resolveSymbols calls loadAll",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/mcp/server.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_f736f7d194",
+    "id": "edge_057792a53d",
     "from": "sym_a708ee9110",
-    "to": "sym_6264d56eb8",
+    "to": "sym_8f174cd09f",
     "type": "calls",
-    "reason": "buildServer calls brainPaths",
+    "reason": "buildServer calls formatContext",
     "strength": 0.8,
     "provenance": {
       "source": "extracted",
@@ -1035,452 +75,17 @@
     }
   },
   {
-    "id": "edge_d174f124f0",
-    "from": "sym_a708ee9110",
-    "to": "sym_cc859f78a3",
+    "id": "edge_070b72b1a1",
+    "from": "sym_13e20235c4",
+    "to": "sym_c01eb1b0a1",
     "type": "calls",
-    "reason": "buildServer calls reindex",
+    "reason": "persistMigration calls encode",
     "strength": 0.8,
     "provenance": {
       "source": "extracted",
       "confidence": 0.8,
       "evidence": [
-        "src/mcp/server.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_fbb0a813b9",
-    "from": "sym_a708ee9110",
-    "to": "sym_3850905bd2",
-    "type": "calls",
-    "reason": "buildServer calls search",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/mcp/server.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_8eec3a62d2",
-    "from": "sym_a708ee9110",
-    "to": "sym_2945a8c6b8",
-    "type": "calls",
-    "reason": "buildServer calls ok",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/mcp/server.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_c6ed974cca",
-    "from": "sym_a708ee9110",
-    "to": "sym_7b5e2ca6bc",
-    "type": "calls",
-    "reason": "buildServer calls provLine",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/mcp/server.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_5460e5d6f3",
-    "from": "sym_a708ee9110",
-    "to": "sym_43d055177b",
-    "type": "calls",
-    "reason": "buildServer calls why",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/mcp/server.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_222f36f834",
-    "from": "sym_a708ee9110",
-    "to": "sym_ffff1f0c4c",
-    "type": "calls",
-    "reason": "buildServer calls bugLineage",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/mcp/server.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_4e7d1091bc",
-    "from": "sym_a708ee9110",
-    "to": "sym_acdb0afe63",
-    "type": "calls",
-    "reason": "buildServer calls checkConstraints",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/mcp/server.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_e624c98333",
-    "from": "sym_a708ee9110",
-    "to": "sym_5fb91b7bd2",
-    "type": "calls",
-    "reason": "buildServer calls resolveSymbols",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/mcp/server.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_2311d5416b",
-    "from": "sym_a708ee9110",
-    "to": "sym_d237ccd18d",
-    "type": "calls",
-    "reason": "buildServer calls getDependents",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/mcp/server.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_0c7fed77ab",
-    "from": "sym_a708ee9110",
-    "to": "sym_82ab2a3533",
-    "type": "calls",
-    "reason": "buildServer calls assembleContext",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/mcp/server.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_3e1ba8a077",
-    "from": "sym_a708ee9110",
-    "to": "sym_c1e85563e2",
-    "type": "calls",
-    "reason": "buildServer calls revParse",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/mcp/server.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_cbdbced3a6",
-    "from": "sym_a708ee9110",
-    "to": "sym_871abb4df2",
-    "type": "calls",
-    "reason": "buildServer calls decisionId",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/mcp/server.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_b762077890",
-    "from": "sym_a708ee9110",
-    "to": "sym_383cbb69ef",
-    "type": "calls",
-    "reason": "buildServer calls put",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/mcp/server.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_fc2c03391d",
-    "from": "sym_a708ee9110",
-    "to": "sym_45e6041167",
-    "type": "calls",
-    "reason": "buildServer calls err",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/mcp/server.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_2815abe06d",
-    "from": "sym_b91e9afbb5",
-    "to": "sym_9e8caabda8",
-    "type": "calls",
-    "reason": "startServer calls findRoot",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/mcp/server.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_e2b5f99fb3",
-    "from": "sym_b91e9afbb5",
-    "to": "sym_a708ee9110",
-    "type": "calls",
-    "reason": "startServer calls buildServer",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/mcp/server.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_28904d4498",
-    "from": "sym_f7c2ad8fa5",
-    "to": "sym_d9b3eb8f1c",
-    "type": "calls",
-    "reason": "db calls openDb",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/store/brainStore.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_8493b1eefc",
-    "from": "sym_cc859f78a3",
-    "to": "sym_8fc96bbf18",
-    "type": "calls",
-    "reason": "reindex calls loadAll",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/store/brainStore.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_ef34677662",
-    "from": "sym_cc859f78a3",
-    "to": "sym_3ede8a26b9",
-    "type": "calls",
-    "reason": "reindex calls run",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/store/brainStore.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_5aa1abc83b",
-    "from": "sym_cc859f78a3",
-    "to": "sym_f937e38b1e",
-    "type": "calls",
-    "reason": "reindex calls fts",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/store/brainStore.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_2533b7f70e",
-    "from": "sym_f937e38b1e",
-    "to": "sym_3ede8a26b9",
-    "type": "calls",
-    "reason": "fts calls run",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/store/brainStore.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_40f77eb8b3",
-    "from": "sym_3850905bd2",
-    "to": "sym_358ccc1ae6",
-    "type": "calls",
-    "reason": "search calls toFtsQuery",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/store/brainStore.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_cbd5fddbcb",
-    "from": "sym_3850905bd2",
-    "to": "sym_cc886db33a",
-    "type": "calls",
-    "reason": "search calls likeSearch",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/store/brainStore.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_938547f19f",
-    "from": "sym_43d055177b",
-    "to": "sym_8fc96bbf18",
-    "type": "calls",
-    "reason": "why calls loadAll",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/store/brainStore.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_7fbd44284c",
-    "from": "sym_43d055177b",
-    "to": "sym_9493e800ba",
-    "type": "calls",
-    "reason": "why calls fileMatch",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/store/brainStore.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_c335caf8c9",
-    "from": "sym_43d055177b",
-    "to": "sym_97208a8294",
-    "type": "calls",
-    "reason": "why calls pathMatchesGlob",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/store/brainStore.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_33828ec1f1",
-    "from": "sym_d237ccd18d",
-    "to": "sym_567c7718d8",
-    "type": "calls",
-    "reason": "getDependents calls labelFor",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/store/brainStore.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_b1d3af94c8",
-    "from": "sym_9af0dc546d",
-    "to": "sym_567c7718d8",
-    "type": "calls",
-    "reason": "getDependencies calls labelFor",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/store/brainStore.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_e07657d6ed",
-    "from": "sym_acdb0afe63",
-    "to": "sym_8fc96bbf18",
-    "type": "calls",
-    "reason": "checkConstraints calls loadAll",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/store/brainStore.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_02c7251c41",
-    "from": "sym_acdb0afe63",
-    "to": "sym_97208a8294",
-    "type": "calls",
-    "reason": "checkConstraints calls pathMatchesGlob",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/store/brainStore.ts"
+        "src/store/jsonStore.ts"
       ]
     }
   },
@@ -1500,11 +105,341 @@
     }
   },
   {
-    "id": "edge_a579b1ab1b",
-    "from": "sym_ffff1f0c4c",
-    "to": "sym_8fc96bbf18",
+    "id": "edge_07fe4b55a3",
+    "from": "sym_6103f9eaf1",
+    "to": "sym_cb863afde2",
     "type": "calls",
-    "reason": "bugLineage calls loadAll",
+    "reason": "syncCommit calls commitMeta",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/synthesize.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_08e9b21fa5",
+    "from": "sym_75f676f23c",
+    "to": "sym_bc950f6288",
+    "type": "calls",
+    "reason": "why calls relMatch",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "vscode-extension/src/brainData.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_0a7e4bbcd7",
+    "from": "sym_d8c7062650",
+    "to": "sym_ab1bba2184",
+    "type": "calls",
+    "reason": "draftBug calls jsonInstruction",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/provider.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_0c6206ae7e",
+    "from": "sym_41326cde36",
+    "to": "sym_815fdb47eb",
+    "type": "calls",
+    "reason": "fileChurn calls gitSafe",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/git.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_0c7fed77ab",
+    "from": "sym_a708ee9110",
+    "to": "sym_82ab2a3533",
+    "type": "calls",
+    "reason": "buildServer calls assembleContext",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/mcp/server.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_0ef0153335",
+    "from": "sym_76837948cb",
+    "to": "sym_9c164687cf",
+    "type": "calls",
+    "reason": "installPostCommitHook calls hooksDir",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/integrations/hooks.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_0fade6a413",
+    "from": "sym_6800d03191",
+    "to": "sym_acc82aef14",
+    "type": "calls",
+    "reason": "parseSource calls ascendToDef",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/parse.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_123295f779",
+    "from": "sym_f75ed167b7",
+    "to": "sym_d212d8b14b",
+    "type": "calls",
+    "reason": "realStr calls isPlaceholder",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/provider.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_157870cad0",
+    "from": "sym_f66a553cec",
+    "to": "sym_6510b40667",
+    "type": "calls",
+    "reason": "replaceAll calls writeFileAtomic",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/jsonStore.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_15814e3c2c",
+    "from": "sym_74d3a2e9bd",
+    "to": "sym_5a74d29b94",
+    "type": "calls",
+    "reason": "componentId calls shortHash",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/core/ids.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_178aeed25a",
+    "from": "sym_24693481f2",
+    "to": "sym_56b7347cc6",
+    "type": "calls",
+    "reason": "pickWinner calls canon",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/merge.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_17f313fb7f",
+    "from": "sym_c75e922555",
+    "to": "sym_aed7c11714",
+    "type": "calls",
+    "reason": "updateStatusBar calls relPath",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "vscode-extension/src/extension.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_184b49caec",
+    "from": "sym_2f00ac7819",
+    "to": "sym_6d8e5db01f",
+    "type": "calls",
+    "reason": "indexRepo calls sha1",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/indexer.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_18739428e0",
+    "from": "sym_6103f9eaf1",
+    "to": "sym_c228c1cc99",
+    "type": "calls",
+    "reason": "syncCommit calls draftDecisionSafe",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/synthesize.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_18afc85c49",
+    "from": "sym_949445a607",
+    "to": "sym_b90745ce9f",
+    "type": "calls",
+    "reason": "deriveComponents calls componentDir",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/indexer.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_18db9ba18f",
+    "from": "sym_c649780494",
+    "to": "sym_f7439daa82",
+    "type": "calls",
+    "reason": "humanConfirmed calls provSource",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/merge.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_19516e2939",
+    "from": "sym_d71984e562",
+    "to": "sym_6510b40667",
+    "type": "calls",
+    "reason": "delete calls writeFileAtomic",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/jsonStore.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_199258a690",
+    "from": "sym_2f00ac7819",
+    "to": "sym_15d8a2509a",
+    "type": "calls",
+    "reason": "indexRepo calls listCodeFiles",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/indexer.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_19d93c92fc",
+    "from": "sym_1585ecfb0b",
+    "to": "sym_943cade32f",
+    "type": "calls",
+    "reason": "getChildren calls sevRank",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "vscode-extension/src/extension.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_19e2e64763",
+    "from": "sym_b26ad02a58",
+    "to": "sym_0c63caa8a0",
+    "type": "calls",
+    "reason": "globToRegExp calls segToRe",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/core/glob.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_1e2581b267",
+    "from": "sym_76837948cb",
+    "to": "sym_0e53febe6d",
+    "type": "calls",
+    "reason": "installPostCommitHook calls block",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/integrations/hooks.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_217738229c",
+    "from": "sym_f0a8fcb4e1",
+    "to": "sym_e50ebb7b4d",
+    "type": "calls",
+    "reason": "updateClaudeMd calls renderBrainSection",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/integrations/claudemd.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_219d114f1e",
+    "from": "sym_82ab2a3533",
+    "to": "sym_d237ccd18d",
+    "type": "calls",
+    "reason": "assembleContext calls getDependents",
     "strength": 0.8,
     "provenance": {
       "source": "extracted",
@@ -1515,11 +450,206 @@
     }
   },
   {
-    "id": "edge_844d8b61bb",
-    "from": "sym_ffff1f0c4c",
-    "to": "sym_3850905bd2",
+    "id": "edge_21d06d531c",
+    "from": "sym_97208a8294",
+    "to": "sym_f48c80382c",
     "type": "calls",
-    "reason": "bugLineage calls search",
+    "reason": "pathMatchesGlob calls norm",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/core/glob.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_21f0459bce",
+    "from": "sym_a6d93d75c6",
+    "to": "sym_2b00d47f6e",
+    "type": "calls",
+    "reason": "decReason calls ageDays",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/compact.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_21f4cf641d",
+    "from": "sym_7183436879",
+    "to": "sym_5a7c51b94c",
+    "type": "calls",
+    "reason": "recordFailure calls draftBugSafe",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/synthesize.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_222f36f834",
+    "from": "sym_a708ee9110",
+    "to": "sym_ffff1f0c4c",
+    "type": "calls",
+    "reason": "buildServer calls bugLineage",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/mcp/server.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_223e63d6ac",
+    "from": "sym_df31ea2089",
+    "to": "sym_24693481f2",
+    "type": "calls",
+    "reason": "mergeRecordsById calls pickWinner",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/merge.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_22bbede7e2",
+    "from": "sym_949445a607",
+    "to": "sym_11010ac9dc",
+    "type": "calls",
+    "reason": "deriveComponents calls inferred",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/indexer.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_2311d5416b",
+    "from": "sym_a708ee9110",
+    "to": "sym_d237ccd18d",
+    "type": "calls",
+    "reason": "buildServer calls getDependents",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/mcp/server.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_2342dfa119",
+    "from": "sym_d71984e562",
+    "to": "sym_95e5f5139f",
+    "type": "calls",
+    "reason": "delete calls fileFor",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/jsonStore.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_23ec3cb005",
+    "from": "sym_2f00ac7819",
+    "to": "sym_949445a607",
+    "type": "calls",
+    "reason": "indexRepo calls deriveComponents",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/indexer.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_24036219a2",
+    "from": "sym_df31ea2089",
+    "to": "sym_f2f7000786",
+    "type": "calls",
+    "reason": "mergeRecordsById calls byId",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/merge.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_251f01eb78",
+    "from": "sym_744b192507",
+    "to": "sym_cc859f78a3",
+    "type": "calls",
+    "reason": "seed calls reindex",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "test/store.test.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_25229d73a8",
+    "from": "sym_d73e258d4a",
+    "to": "sym_803f912202",
+    "type": "calls",
+    "reason": "ensureDirs calls writeManifest",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/jsonStore.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_252d22da14",
+    "from": "sym_e551d96773",
+    "to": "sym_32c00c06bc",
+    "type": "calls",
+    "reason": "activate calls refresh",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "vscode-extension/src/extension.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_2533b7f70e",
+    "from": "sym_f937e38b1e",
+    "to": "sym_3ede8a26b9",
+    "type": "calls",
+    "reason": "fts calls run",
     "strength": 0.8,
     "provenance": {
       "source": "extracted",
@@ -1530,26 +660,86 @@
     }
   },
   {
-    "id": "edge_5cdd0db9ee",
-    "from": "sym_c59b535a56",
-    "to": "sym_8fc96bbf18",
+    "id": "edge_258923ba8e",
+    "from": "sym_a20d4cc8fa",
+    "to": "sym_a6d93d75c6",
     "type": "calls",
-    "reason": "fragility calls loadAll",
+    "reason": "planCompaction calls decReason",
     "strength": 0.8,
     "provenance": {
       "source": "extracted",
       "confidence": 0.8,
       "evidence": [
-        "src/store/brainStore.ts"
+        "src/store/compact.ts"
       ]
     }
   },
   {
-    "id": "edge_ae1140a5c4",
-    "from": "sym_c59b535a56",
-    "to": "sym_1d3ddc7739",
+    "id": "edge_26c3b082c2",
+    "from": "sym_2f00ac7819",
+    "to": "sym_aa5f50456c",
     "type": "calls",
-    "reason": "fragility calls round",
+    "reason": "indexRepo calls toPosix",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/indexer.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_26dd265ef6",
+    "from": "sym_1525b0f15b",
+    "to": "sym_1e169341c9",
+    "type": "calls",
+    "reason": "mergeBrainJson calls hasIds",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/merge.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_2815abe06d",
+    "from": "sym_b91e9afbb5",
+    "to": "sym_9e8caabda8",
+    "type": "calls",
+    "reason": "startServer calls findRoot",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/mcp/server.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_2829633301",
+    "from": "sym_51499a878a",
+    "to": "sym_f75ed167b7",
+    "type": "calls",
+    "reason": "bugDraftFromText calls realStr",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/provider.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_2830314cd6",
+    "from": "sym_82ab2a3533",
+    "to": "sym_a881241b47",
+    "type": "calls",
+    "reason": "assembleContext calls sev",
     "strength": 0.8,
     "provenance": {
       "source": "extracted",
@@ -1575,11 +765,11 @@
     }
   },
   {
-    "id": "edge_429a567d58",
-    "from": "sym_09babc521c",
-    "to": "sym_8fc96bbf18",
+    "id": "edge_28904d4498",
+    "from": "sym_f7c2ad8fa5",
+    "to": "sym_d9b3eb8f1c",
     "type": "calls",
-    "reason": "staleness calls loadAll",
+    "reason": "db calls openDb",
     "strength": 0.8,
     "provenance": {
       "source": "extracted",
@@ -1590,17 +780,32 @@
     }
   },
   {
-    "id": "edge_5830b966a2",
-    "from": "sym_09babc521c",
-    "to": "sym_5cb368312f",
+    "id": "edge_289e511011",
+    "from": "sym_d12f6e978e",
+    "to": "sym_f23f22701a",
     "type": "calls",
-    "reason": "staleness calls check",
+    "reason": "gitRepo calls g",
     "strength": 0.8,
     "provenance": {
       "source": "extracted",
       "confidence": 0.8,
       "evidence": [
-        "src/store/brainStore.ts"
+        "test/integration.test.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_28a29ebe28",
+    "from": "sym_803f912202",
+    "to": "sym_6510b40667",
+    "type": "calls",
+    "reason": "writeManifest calls writeFileAtomic",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/core/migrate.ts"
       ]
     }
   },
@@ -1620,722 +825,32 @@
     }
   },
   {
-    "id": "edge_219d114f1e",
-    "from": "sym_82ab2a3533",
-    "to": "sym_d237ccd18d",
+    "id": "edge_29f1013f1d",
+    "from": "sym_2f00ac7819",
+    "to": "sym_9853d94477",
     "type": "calls",
-    "reason": "assembleContext calls getDependents",
+    "reason": "indexRepo calls lastCommitForFile",
     "strength": 0.8,
     "provenance": {
       "source": "extracted",
       "confidence": 0.8,
       "evidence": [
-        "src/store/brainStore.ts"
+        "src/extractors/indexer.ts"
       ]
     }
   },
   {
-    "id": "edge_acae204edf",
-    "from": "sym_82ab2a3533",
-    "to": "sym_ffff1f0c4c",
-    "type": "calls",
-    "reason": "assembleContext calls bugLineage",
-    "strength": 0.8,
+    "id": "edge_2a710dd10a",
+    "from": "cmp_50037f41a9",
+    "to": "cmp_cdfb395bb7",
+    "type": "depends_on",
+    "reason": "src/cli/index.ts imports src/store/brainStore.ts",
+    "strength": 0.6,
     "provenance": {
       "source": "extracted",
-      "confidence": 0.8,
+      "confidence": 0.9,
       "evidence": [
-        "src/store/brainStore.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_2830314cd6",
-    "from": "sym_82ab2a3533",
-    "to": "sym_a881241b47",
-    "type": "calls",
-    "reason": "assembleContext calls sev",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/store/brainStore.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_ad65add413",
-    "from": "sym_383cbb69ef",
-    "to": "sym_8fc96bbf18",
-    "type": "calls",
-    "reason": "put calls loadAll",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/store/jsonStore.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_8ea38df2b4",
-    "from": "sym_383cbb69ef",
-    "to": "sym_95e5f5139f",
-    "type": "calls",
-    "reason": "put calls fileFor",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/store/jsonStore.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_dc93da5e68",
-    "from": "sym_f66a553cec",
-    "to": "sym_95e5f5139f",
-    "type": "calls",
-    "reason": "replaceAll calls fileFor",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/store/jsonStore.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_5679743e02",
-    "from": "sym_7d2c513fff",
-    "to": "sym_8fc96bbf18",
-    "type": "calls",
-    "reason": "get calls loadAll",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/store/jsonStore.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_0563d17528",
-    "from": "sym_d71984e562",
-    "to": "sym_8fc96bbf18",
-    "type": "calls",
-    "reason": "delete calls loadAll",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/store/jsonStore.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_2342dfa119",
-    "from": "sym_d71984e562",
-    "to": "sym_95e5f5139f",
-    "type": "calls",
-    "reason": "delete calls fileFor",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/store/jsonStore.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_3b8fdc5767",
-    "from": "sym_c7716287ec",
-    "to": "sym_87824224e8",
-    "type": "calls",
-    "reason": "draftDecision calls commitPrompt",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/synthesis/provider.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_f2b9554135",
-    "from": "sym_c7716287ec",
-    "to": "sym_d3b47ca671",
-    "type": "calls",
-    "reason": "draftDecision calls asStrArr",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/synthesis/provider.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_c6134b9a28",
-    "from": "sym_d8c7062650",
-    "to": "sym_f6dee26225",
-    "type": "calls",
-    "reason": "draftBug calls failurePrompt",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/synthesis/provider.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_b49ae69dd7",
-    "from": "sym_c7716287ec_1",
-    "to": "sym_3ede8a26b9",
-    "type": "calls",
-    "reason": "draftDecision calls run",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/synthesis/provider.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_2ccd9dc91e",
-    "from": "sym_c7716287ec_1",
-    "to": "sym_87824224e8",
-    "type": "calls",
-    "reason": "draftDecision calls commitPrompt",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/synthesis/provider.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_ac05a9605f",
-    "from": "sym_c7716287ec_1",
-    "to": "sym_ab1bba2184",
-    "type": "calls",
-    "reason": "draftDecision calls jsonInstruction",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/synthesis/provider.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_aa3d35d3de",
-    "from": "sym_c7716287ec_1",
-    "to": "sym_8622caabea",
-    "type": "calls",
-    "reason": "draftDecision calls extractJson",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/synthesis/provider.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_9b9516469b",
-    "from": "sym_c7716287ec_1",
-    "to": "sym_5ae5a5a486",
-    "type": "calls",
-    "reason": "draftDecision calls str",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/synthesis/provider.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_4e0b53464a",
-    "from": "sym_c7716287ec_1",
-    "to": "sym_d3b47ca671",
-    "type": "calls",
-    "reason": "draftDecision calls asStrArr",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/synthesis/provider.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_b69419ec19",
-    "from": "sym_d8c7062650_1",
-    "to": "sym_3ede8a26b9",
-    "type": "calls",
-    "reason": "draftBug calls run",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/synthesis/provider.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_3b96a8abbb",
-    "from": "sym_d8c7062650_1",
-    "to": "sym_f6dee26225",
-    "type": "calls",
-    "reason": "draftBug calls failurePrompt",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/synthesis/provider.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_3629b3c788",
-    "from": "sym_d8c7062650_1",
-    "to": "sym_ab1bba2184",
-    "type": "calls",
-    "reason": "draftBug calls jsonInstruction",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/synthesis/provider.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_36e7e42e8b",
-    "from": "sym_d8c7062650_1",
-    "to": "sym_8622caabea",
-    "type": "calls",
-    "reason": "draftBug calls extractJson",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/synthesis/provider.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_4cc1999b50",
-    "from": "sym_d8c7062650_1",
-    "to": "sym_5ae5a5a486",
-    "type": "calls",
-    "reason": "draftBug calls str",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/synthesis/provider.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_4b29f49bbd",
-    "from": "sym_c7716287ec_2",
-    "to": "sym_cf6099323a",
-    "type": "calls",
-    "reason": "draftDecision calls topDirs",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/synthesis/provider.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_c31283fe6d",
-    "from": "sym_c7716287ec_2",
-    "to": "sym_8d8ca38f4d",
-    "type": "calls",
-    "reason": "draftDecision calls cap",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/synthesis/provider.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_c3574a3c13",
-    "from": "sym_6103f9eaf1",
-    "to": "sym_64db6cba68",
-    "type": "calls",
-    "reason": "syncCommit calls headSha",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/synthesis/synthesize.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_07fe4b55a3",
-    "from": "sym_6103f9eaf1",
-    "to": "sym_cb863afde2",
-    "type": "calls",
-    "reason": "syncCommit calls commitMeta",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/synthesis/synthesize.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_b091642f7a",
-    "from": "sym_6103f9eaf1",
-    "to": "sym_dfb2a0090e",
-    "type": "calls",
-    "reason": "syncCommit calls selectProvider",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/synthesis/synthesize.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_b0212c25bd",
-    "from": "sym_6103f9eaf1",
-    "to": "sym_f9d958acb6",
-    "type": "calls",
-    "reason": "syncCommit calls commitDiff",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/synthesis/synthesize.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_18739428e0",
-    "from": "sym_6103f9eaf1",
-    "to": "sym_c228c1cc99",
-    "type": "calls",
-    "reason": "syncCommit calls draftDecisionSafe",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/synthesis/synthesize.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_a3c8a18d42",
-    "from": "sym_6103f9eaf1",
-    "to": "sym_8fc96bbf18",
-    "type": "calls",
-    "reason": "syncCommit calls loadAll",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/synthesis/synthesize.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_4e62323749",
-    "from": "sym_6103f9eaf1",
-    "to": "sym_97208a8294",
-    "type": "calls",
-    "reason": "syncCommit calls pathMatchesGlob",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/synthesis/synthesize.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_698bf5a6cb",
-    "from": "sym_6103f9eaf1",
-    "to": "sym_871abb4df2",
-    "type": "calls",
-    "reason": "syncCommit calls decisionId",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/synthesis/synthesize.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_f8755d3176",
-    "from": "sym_6103f9eaf1",
-    "to": "sym_383cbb69ef",
-    "type": "calls",
-    "reason": "syncCommit calls put",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/synthesis/synthesize.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_2d5a589215",
-    "from": "sym_7183436879",
-    "to": "sym_8fc96bbf18",
-    "type": "calls",
-    "reason": "recordFailure calls loadAll",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/synthesis/synthesize.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_ea61f2d37b",
-    "from": "sym_7183436879",
-    "to": "sym_9d1964b9a2",
-    "type": "calls",
-    "reason": "recordFailure calls rankSuspects",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/synthesis/synthesize.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_92934f04fd",
-    "from": "sym_7183436879",
-    "to": "sym_dfb2a0090e",
-    "type": "calls",
-    "reason": "recordFailure calls selectProvider",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/synthesis/synthesize.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_918085a17a",
-    "from": "sym_7183436879",
-    "to": "sym_cdff71a1f9",
-    "type": "calls",
-    "reason": "recordFailure calls recentDiffFor",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/synthesis/synthesize.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_21f4cf641d",
-    "from": "sym_7183436879",
-    "to": "sym_5a7c51b94c",
-    "type": "calls",
-    "reason": "recordFailure calls draftBugSafe",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/synthesis/synthesize.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_bdd6e6b703",
-    "from": "sym_7183436879",
-    "to": "sym_5c38b4911d",
-    "type": "calls",
-    "reason": "recordFailure calls bugId",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/synthesis/synthesize.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_b14e1f7e37",
-    "from": "sym_7183436879",
-    "to": "sym_4ac3ad6690",
-    "type": "calls",
-    "reason": "recordFailure calls findRecurrence",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/synthesis/synthesize.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_fdf04de028",
-    "from": "sym_7183436879",
-    "to": "sym_383cbb69ef",
-    "type": "calls",
-    "reason": "recordFailure calls put",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/synthesis/synthesize.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_40164fb916",
-    "from": "sym_7183436879",
-    "to": "sym_4dbb42587d",
-    "type": "calls",
-    "reason": "recordFailure calls promoteConstraint",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/synthesis/synthesize.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_e200ff7717",
-    "from": "sym_7183436879",
-    "to": "sym_125cbbaf35",
-    "type": "calls",
-    "reason": "recordFailure calls raiseFragility",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/synthesis/synthesize.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_ae593f5094",
-    "from": "sym_4dbb42587d",
-    "to": "sym_16b88590c8",
-    "type": "calls",
-    "reason": "promoteConstraint calls constraintId",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/synthesis/synthesize.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_87aa36c62b",
-    "from": "sym_4dbb42587d",
-    "to": "sym_383cbb69ef",
-    "type": "calls",
-    "reason": "promoteConstraint calls put",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/synthesis/synthesize.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_dcad400dfb",
-    "from": "sym_125cbbaf35",
-    "to": "sym_8fc96bbf18",
-    "type": "calls",
-    "reason": "raiseFragility calls loadAll",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/synthesis/synthesize.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_ae66b24303",
-    "from": "sym_125cbbaf35",
-    "to": "sym_97208a8294",
-    "type": "calls",
-    "reason": "raiseFragility calls pathMatchesGlob",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/synthesis/synthesize.ts"
+        "src/cli/index.ts:imports:../store/brainStore.js"
       ]
     }
   },
@@ -2355,17 +870,482 @@
     }
   },
   {
-    "id": "edge_d53ddb9b28",
-    "from": "sym_edf2a5e3c6",
-    "to": "sym_3a906a6c90",
+    "id": "edge_2c23c4a5a5",
+    "from": "cmp_e0ccfe26fe",
+    "to": "cmp_cdfb395bb7",
+    "type": "depends_on",
+    "reason": "src/extractors/indexer.ts imports src/store/brainStore.ts",
+    "strength": 0.6,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.9,
+      "evidence": [
+        "src/extractors/indexer.ts:imports:../store/brainStore.js"
+      ]
+    }
+  },
+  {
+    "id": "edge_2c89dc47cf",
+    "from": "sym_2f00ac7819",
+    "to": "sym_1ada613a64",
     "type": "calls",
-    "reason": "salientTerms calls stripPaths",
+    "reason": "indexRepo calls edgeId",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/indexer.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_2ce9098014",
+    "from": "sym_24693481f2",
+    "to": "sym_fbd16af17d",
+    "type": "calls",
+    "reason": "pickWinner calls recency",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/merge.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_2d032019cc",
+    "from": "sym_e7014d011d",
+    "to": "sym_aa8f652189",
+    "type": "calls",
+    "reason": "withBrain calls activeFile",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "vscode-extension/src/extension.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_2d5a589215",
+    "from": "sym_7183436879",
+    "to": "sym_8fc96bbf18",
+    "type": "calls",
+    "reason": "recordFailure calls loadAll",
     "strength": 0.8,
     "provenance": {
       "source": "extracted",
       "confidence": 0.8,
       "evidence": [
         "src/synthesis/synthesize.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_2de97978f3",
+    "from": "sym_c1e85563e2",
+    "to": "sym_815fdb47eb",
+    "type": "calls",
+    "reason": "revParse calls gitSafe",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/git.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_2fa535b3c2",
+    "from": "sym_5fb91b7bd2",
+    "to": "sym_8fc96bbf18",
+    "type": "calls",
+    "reason": "resolveSymbols calls loadAll",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/mcp/server.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_306bf13bf7",
+    "from": "sym_87824224e8",
+    "to": "sym_1c5c6e0d21",
+    "type": "calls",
+    "reason": "commitPrompt calls summarizeDiff",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/provider.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_30b79cff0f",
+    "from": "cmp_50037f41a9",
+    "to": "cmp_ba75dfc94f",
+    "type": "depends_on",
+    "reason": "src/cli/index.ts imports src/synthesis/synthesize.ts",
+    "strength": 0.6,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.9,
+      "evidence": [
+        "src/cli/index.ts:imports:../synthesis/synthesize.js"
+      ]
+    }
+  },
+  {
+    "id": "edge_30e798cf15",
+    "from": "sym_056000a4c3",
+    "to": "sym_e5ea0616b0",
+    "type": "calls",
+    "reason": "schemaVersion calls readManifest",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/jsonStore.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_31977333a4",
+    "from": "sym_815fdb47eb",
+    "to": "sym_2e868206d6",
+    "type": "calls",
+    "reason": "gitSafe calls git",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/git.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_3253d27db7",
+    "from": "sym_610aad3fa6",
+    "to": "sym_d73e258d4a",
+    "type": "calls",
+    "reason": "tempStore calls ensureDirs",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "test/helpers.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_32cacf9ed9",
+    "from": "cmp_b256a6aed0",
+    "to": "cmp_cdfb395bb7",
+    "type": "depends_on",
+    "reason": "src/core/format.ts imports src/store/brainStore.ts",
+    "strength": 0.6,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.9,
+      "evidence": [
+        "src/core/format.ts:imports:../store/brainStore.js"
+      ]
+    }
+  },
+  {
+    "id": "edge_33828ec1f1",
+    "from": "sym_d237ccd18d",
+    "to": "sym_567c7718d8",
+    "type": "calls",
+    "reason": "getDependents calls labelFor",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/brainStore.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_33889118ab",
+    "from": "sym_e551d96773",
+    "to": "sym_9cd3f7fe96",
+    "type": "calls",
+    "reason": "activate calls workspaceRoot",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "vscode-extension/src/extension.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_33de23873a",
+    "from": "cmp_dfa5b5acde",
+    "to": "cmp_b256a6aed0",
+    "type": "depends_on",
+    "reason": "src/mcp/server.ts imports src/core/paths.ts",
+    "strength": 0.6,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.9,
+      "evidence": [
+        "src/mcp/server.ts:imports:../core/paths.js"
+      ]
+    }
+  },
+  {
+    "id": "edge_35d7732296",
+    "from": "sym_d8c7062650",
+    "to": "sym_3ede8a26b9",
+    "type": "calls",
+    "reason": "draftBug calls run",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/provider.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_374d2c4884",
+    "from": "sym_37d2e70fac",
+    "to": "sym_bda955394e",
+    "type": "calls",
+    "reason": "resolveInvocation calls q",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/cli/invocation.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_3b8fdc5767",
+    "from": "sym_c7716287ec",
+    "to": "sym_87824224e8",
+    "type": "calls",
+    "reason": "draftDecision calls commitPrompt",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/provider.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_3ddb44c494",
+    "from": "sym_383cbb69ef",
+    "to": "sym_6510b40667",
+    "type": "calls",
+    "reason": "put calls writeFileAtomic",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/jsonStore.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_3e1ba8a077",
+    "from": "sym_a708ee9110",
+    "to": "sym_c1e85563e2",
+    "type": "calls",
+    "reason": "buildServer calls revParse",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/mcp/server.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_3ef8a11331",
+    "from": "sym_32c00c06bc",
+    "to": "sym_00dd3d6bd7",
+    "type": "calls",
+    "reason": "refresh calls loadBrain",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "vscode-extension/src/extension.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_40164fb916",
+    "from": "sym_7183436879",
+    "to": "sym_4dbb42587d",
+    "type": "calls",
+    "reason": "recordFailure calls promoteConstraint",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/synthesize.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_40a841a3aa",
+    "from": "sym_c75e922555",
+    "to": "sym_9cd3f7fe96",
+    "type": "calls",
+    "reason": "updateStatusBar calls workspaceRoot",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "vscode-extension/src/extension.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_40f77eb8b3",
+    "from": "sym_3850905bd2",
+    "to": "sym_358ccc1ae6",
+    "type": "calls",
+    "reason": "search calls toFtsQuery",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/brainStore.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_4240999634",
+    "from": "sym_1585ecfb0b",
+    "to": "sym_bffc45f31a",
+    "type": "calls",
+    "reason": "getChildren calls fragileSymbols",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "vscode-extension/src/extension.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_424bd44059",
+    "from": "sym_6103f9eaf1",
+    "to": "sym_d3cd481b00",
+    "type": "calls",
+    "reason": "syncCommit calls analyzeDiff",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/synthesize.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_429a567d58",
+    "from": "sym_09babc521c",
+    "to": "sym_8fc96bbf18",
+    "type": "calls",
+    "reason": "staleness calls loadAll",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/brainStore.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_42d1801d31",
+    "from": "sym_51499a878a",
+    "to": "sym_4fae276ed8",
+    "type": "calls",
+    "reason": "bugDraftFromText calls extractJsonObjects",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/provider.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_4337282d50",
+    "from": "sym_f75ed167b7",
+    "to": "sym_5ae5a5a486",
+    "type": "calls",
+    "reason": "realStr calls str",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/provider.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_45ab66ee48",
+    "from": "sym_29c38dd437",
+    "to": "sym_aa5f50456c",
+    "type": "calls",
+    "reason": "resolveImport calls toPosix",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/indexer.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_465b807afe",
+    "from": "sym_8f174cd09f",
+    "to": "sym_7091878093",
+    "type": "calls",
+    "reason": "formatContext calls prov",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/core/format.ts"
       ]
     }
   },
@@ -2385,11 +1365,1076 @@
     }
   },
   {
-    "id": "edge_a33ce465b4",
-    "from": "sym_4ac3ad6690",
+    "id": "edge_47906e82af",
+    "from": "sym_412280cb7c",
+    "to": "sym_0d4f34271e",
+    "type": "calls",
+    "reason": "parseObjectLoose calls stripTrailingCommas",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/provider.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_48b533c3a8",
+    "from": "cmp_863ac67d4a",
+    "to": "cmp_cdfb395bb7",
+    "type": "depends_on",
+    "reason": "src/integrations/claudemd.ts imports src/store/brainStore.ts",
+    "strength": 0.6,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.9,
+      "evidence": [
+        "src/integrations/claudemd.ts:imports:../store/brainStore.js"
+      ]
+    }
+  },
+  {
+    "id": "edge_493224abd5",
+    "from": "sym_6994da53cc",
+    "to": "sym_824739e294",
+    "type": "calls",
+    "reason": "topLevelJsonSlices calls looksLikeJsonObject",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/provider.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_4943826a6a",
+    "from": "sym_2f00ac7819",
+    "to": "sym_fbc5451f63",
+    "type": "calls",
+    "reason": "indexRepo calls isGitRepo",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/indexer.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_495cd4417c",
+    "from": "sym_04547bba25",
+    "to": "sym_14915f0ee4",
+    "type": "calls",
+    "reason": "showBrief calls esc",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "vscode-extension/src/extension.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_4abe07fe07",
+    "from": "sym_a2df62d136",
+    "to": "sym_815fdb47eb",
+    "type": "calls",
+    "reason": "trackedFiles calls gitSafe",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/git.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_4c82ff36d4",
+    "from": "cmp_dfa5b5acde",
+    "to": "cmp_cdfb395bb7",
+    "type": "depends_on",
+    "reason": "src/mcp/server.ts imports src/store/brainStore.ts",
+    "strength": 0.6,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.9,
+      "evidence": [
+        "src/mcp/server.ts:imports:../store/brainStore.js"
+      ]
+    }
+  },
+  {
+    "id": "edge_4d0e95ada5",
+    "from": "sym_76837948cb",
+    "to": "sym_9f3f0902e9",
+    "type": "calls",
+    "reason": "installPostCommitHook calls escapeRe",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/integrations/hooks.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_4e7d1091bc",
+    "from": "sym_a708ee9110",
+    "to": "sym_acdb0afe63",
+    "type": "calls",
+    "reason": "buildServer calls checkConstraints",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/mcp/server.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_5493cf7213",
+    "from": "sym_eb961ae48f",
+    "to": "sym_9f3f0902e9",
+    "type": "calls",
+    "reason": "installPreCommitHook calls escapeRe",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/integrations/hooks.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_54aaa3c9f0",
+    "from": "sym_87d8ce374f",
+    "to": "sym_7973c0cb31",
+    "type": "calls",
+    "reason": "confidence calls isRec",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/merge.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_54e321e76e",
+    "from": "sym_343edf66d4",
+    "to": "sym_c75e922555",
+    "type": "calls",
+    "reason": "onChange calls updateStatusBar",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "vscode-extension/src/extension.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_5547673439",
+    "from": "sym_6800d03191",
+    "to": "sym_008b9dc0f8",
+    "type": "calls",
+    "reason": "parseSource calls pickLanguage",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/parse.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_55b1f2e109",
+    "from": "sym_4961c3a2c2",
+    "to": "sym_7973c0cb31",
+    "type": "calls",
+    "reason": "parseSide calls isRec",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/merge.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_5679743e02",
+    "from": "sym_7d2c513fff",
     "to": "sym_8fc96bbf18",
     "type": "calls",
-    "reason": "findRecurrence calls loadAll",
+    "reason": "get calls loadAll",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/jsonStore.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_568edbde32",
+    "from": "sym_91e8631ffc",
+    "to": "sym_815fdb47eb",
+    "type": "calls",
+    "reason": "commitFiles calls gitSafe",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/git.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_582719ded5",
+    "from": "sym_24693481f2",
+    "to": "sym_87d8ce374f",
+    "type": "calls",
+    "reason": "pickWinner calls confidence",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/merge.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_5830b966a2",
+    "from": "sym_09babc521c",
+    "to": "sym_5cb368312f",
+    "type": "calls",
+    "reason": "staleness calls check",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/brainStore.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_5864a2ffd9",
+    "from": "sym_7183436879",
+    "to": "sym_6b1600fe89",
+    "type": "calls",
+    "reason": "recordFailure calls shouldPromoteConstraint",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/synthesize.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_5aa1abc83b",
+    "from": "sym_cc859f78a3",
+    "to": "sym_f937e38b1e",
+    "type": "calls",
+    "reason": "reindex calls fts",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/brainStore.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_5b35e6ea0a",
+    "from": "sym_f7439daa82",
+    "to": "sym_7973c0cb31",
+    "type": "calls",
+    "reason": "provSource calls isRec",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/merge.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_5bc4901f77",
+    "from": "sym_2f00ac7819",
+    "to": "sym_f54a45b5ef",
+    "type": "calls",
+    "reason": "indexRepo calls symbolId",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/indexer.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_5c5f93c831",
+    "from": "sym_a20d4cc8fa",
+    "to": "sym_18a4279b0b",
+    "type": "calls",
+    "reason": "planCompaction calls bugReason",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/compact.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_5ccd4353e8",
+    "from": "sym_2f00ac7819",
+    "to": "sym_6800d03191",
+    "type": "calls",
+    "reason": "indexRepo calls parseSource",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/indexer.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_5cdd0db9ee",
+    "from": "sym_c59b535a56",
+    "to": "sym_8fc96bbf18",
+    "type": "calls",
+    "reason": "fragility calls loadAll",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/brainStore.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_5dc05d5a63",
+    "from": "sym_c7716287ec_1",
+    "to": "sym_8d8ca38f4d",
+    "type": "calls",
+    "reason": "draftDecision calls cap",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/provider.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_5e1c6786ed",
+    "from": "sym_15d8a2509a",
+    "to": "sym_fbc5451f63",
+    "type": "calls",
+    "reason": "listCodeFiles calls isGitRepo",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/indexer.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_5ec3a7113f",
+    "from": "sym_4fae276ed8",
+    "to": "sym_6994da53cc",
+    "type": "calls",
+    "reason": "extractJsonObjects calls topLevelJsonSlices",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/provider.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_5fd1bdcbcf",
+    "from": "cmp_e0ccfe26fe",
+    "to": "cmp_b256a6aed0",
+    "type": "depends_on",
+    "reason": "src/extractors/indexer.ts imports src/core/ids.ts",
+    "strength": 0.6,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.9,
+      "evidence": [
+        "src/extractors/indexer.ts:imports:../core/ids.js"
+      ]
+    }
+  },
+  {
+    "id": "edge_60b0d6f50b",
+    "from": "sym_fbc5451f63",
+    "to": "sym_815fdb47eb",
+    "type": "calls",
+    "reason": "isGitRepo calls gitSafe",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/git.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_60fdff0329",
+    "from": "sym_9853d94477",
+    "to": "sym_815fdb47eb",
+    "type": "calls",
+    "reason": "lastCommitForFile calls gitSafe",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/git.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_6431bf62c3",
+    "from": "sym_e7014d011d",
+    "to": "sym_00dd3d6bd7",
+    "type": "calls",
+    "reason": "withBrain calls loadBrain",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "vscode-extension/src/extension.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_64613c9421",
+    "from": "sym_be1263261e",
+    "to": "sym_815fdb47eb",
+    "type": "calls",
+    "reason": "fixCommits calls gitSafe",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/git.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_650fe17446",
+    "from": "sym_1525b0f15b",
+    "to": "sym_4961c3a2c2",
+    "type": "calls",
+    "reason": "mergeBrainJson calls parseSide",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/merge.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_66530e523a",
+    "from": "sym_83cc76a7f2",
+    "to": "sym_c8ce455279",
+    "type": "calls",
+    "reason": "rec calls prov",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "test/merge.test.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_6916acc7b0",
+    "from": "cmp_50037f41a9",
+    "to": "cmp_e0ccfe26fe",
+    "type": "depends_on",
+    "reason": "src/cli/index.ts imports src/extractors/indexer.ts",
+    "strength": 0.6,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.9,
+      "evidence": [
+        "src/cli/index.ts:imports:../extractors/indexer.js"
+      ]
+    }
+  },
+  {
+    "id": "edge_69525a48a3",
+    "from": "cmp_a94a8fe5cc",
+    "to": "cmp_e0ccfe26fe",
+    "type": "depends_on",
+    "reason": "test/indexer.test.ts imports src/extractors/indexer.ts",
+    "strength": 0.6,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.9,
+      "evidence": [
+        "test/indexer.test.ts:imports:../src/extractors/indexer.js"
+      ]
+    }
+  },
+  {
+    "id": "edge_698bf5a6cb",
+    "from": "sym_6103f9eaf1",
+    "to": "sym_871abb4df2",
+    "type": "calls",
+    "reason": "syncCommit calls decisionId",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/synthesize.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_6a7c44e755",
+    "from": "sym_e551d96773",
+    "to": "sym_aed7c11714",
+    "type": "calls",
+    "reason": "activate calls relPath",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "vscode-extension/src/extension.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_6ab79236c9",
+    "from": "sym_32c00c06bc",
+    "to": "sym_9cd3f7fe96",
+    "type": "calls",
+    "reason": "refresh calls workspaceRoot",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "vscode-extension/src/extension.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_6b29c53d75",
+    "from": "cmp_50037f41a9",
+    "to": "cmp_b256a6aed0",
+    "type": "depends_on",
+    "reason": "src/cli/index.ts imports src/core/paths.ts",
+    "strength": 0.6,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.9,
+      "evidence": [
+        "src/cli/index.ts:imports:../core/paths.js"
+      ]
+    }
+  },
+  {
+    "id": "edge_6cd0424f9d",
+    "from": "sym_51499a878a",
+    "to": "sym_8af42d54b6",
+    "type": "calls",
+    "reason": "bugDraftFromText calls asSeverity",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/provider.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_6d12273203",
+    "from": "sym_cc11a2695f",
+    "to": "sym_293313d04b",
+    "type": "calls",
+    "reason": "pathMatchesGlob calls globToRegExp",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "vscode-extension/src/brainData.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_6fdb5c1e38",
+    "from": "sym_15d8a2509a",
+    "to": "sym_a2df62d136",
+    "type": "calls",
+    "reason": "listCodeFiles calls trackedFiles",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/indexer.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_72bc411c95",
+    "from": "cmp_ba75dfc94f",
+    "to": "cmp_cdfb395bb7",
+    "type": "depends_on",
+    "reason": "src/synthesis/synthesize.ts imports src/store/brainStore.ts",
+    "strength": 0.6,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.9,
+      "evidence": [
+        "src/synthesis/synthesize.ts:imports:../store/brainStore.js"
+      ]
+    }
+  },
+  {
+    "id": "edge_72f6386cd7",
+    "from": "sym_d71984e562",
+    "to": "sym_80eb1c4aa3",
+    "type": "calls",
+    "reason": "delete calls readRawArray",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/jsonStore.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_734bab1a7f",
+    "from": "sym_c75e922555",
+    "to": "sym_00dd3d6bd7",
+    "type": "calls",
+    "reason": "updateStatusBar calls loadBrain",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "vscode-extension/src/extension.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_746ea9bdd1",
+    "from": "sym_e551d96773",
+    "to": "sym_e7014d011d",
+    "type": "calls",
+    "reason": "activate calls withBrain",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "vscode-extension/src/extension.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_75019ba667",
+    "from": "sym_df31ea2089",
+    "to": "sym_56b7347cc6",
+    "type": "calls",
+    "reason": "mergeRecordsById calls canon",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/merge.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_75b5110868",
+    "from": "sym_89d5502a58",
+    "to": "sym_aed7c11714",
+    "type": "calls",
+    "reason": "whyBrief calls relPath",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "vscode-extension/src/extension.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_77ce9f2997",
+    "from": "sym_547bbf9a26",
+    "to": "sym_815fdb47eb",
+    "type": "calls",
+    "reason": "lastChangeDate calls gitSafe",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/git.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_7808f334c0",
+    "from": "sym_c7716287ec",
+    "to": "sym_ab1bba2184",
+    "type": "calls",
+    "reason": "draftDecision calls jsonInstruction",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/provider.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_7830fc7abf",
+    "from": "sym_6800d03191",
+    "to": "sym_3d4a43a092",
+    "type": "calls",
+    "reason": "parseSource calls bundleFor",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/parse.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_790bbb654a",
+    "from": "cmp_a94a8fe5cc",
+    "to": "cmp_cdfb395bb7",
+    "type": "depends_on",
+    "reason": "test/compact.test.ts imports src/store/compact.ts",
+    "strength": 0.6,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.9,
+      "evidence": [
+        "test/compact.test.ts:imports:../src/store/compact.js"
+      ]
+    }
+  },
+  {
+    "id": "edge_7c6046987b",
+    "from": "sym_16b88590c8",
+    "to": "sym_5a74d29b94",
+    "type": "calls",
+    "reason": "constraintId calls shortHash",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/core/ids.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_7d0251e689",
+    "from": "sym_f54a45b5ef",
+    "to": "sym_5a74d29b94",
+    "type": "calls",
+    "reason": "symbolId calls shortHash",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/core/ids.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_7e331884f3",
+    "from": "sym_8622caabea",
+    "to": "sym_4fae276ed8",
+    "type": "calls",
+    "reason": "extractJson calls extractJsonObjects",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/provider.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_7f2043a4c7",
+    "from": "sym_f1e8c6fbda",
+    "to": "sym_e1155c29cf",
+    "type": "calls",
+    "reason": "logSince calls windowArgs",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/git.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_7f66b58a7d",
+    "from": "sym_f1e8c6fbda",
+    "to": "sym_815fdb47eb",
+    "type": "calls",
+    "reason": "logSince calls gitSafe",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/git.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_7fbd44284c",
+    "from": "sym_43d055177b",
+    "to": "sym_9493e800ba",
+    "type": "calls",
+    "reason": "why calls fileMatch",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/brainStore.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_815142b6af",
+    "from": "sym_e7014d011d",
+    "to": "sym_aed7c11714",
+    "type": "calls",
+    "reason": "withBrain calls relPath",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "vscode-extension/src/extension.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_819f44fdbc",
+    "from": "sym_c5bf39a575",
+    "to": "sym_ec99de2bc3",
+    "type": "calls",
+    "reason": "declsFor calls isCode",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/diff.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_834c5e166f",
+    "from": "sym_293313d04b",
+    "to": "sym_c9e58fe5c6",
+    "type": "calls",
+    "reason": "globToRegExp calls seg",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "vscode-extension/src/brainData.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_844d8b61bb",
+    "from": "sym_ffff1f0c4c",
+    "to": "sym_3850905bd2",
+    "type": "calls",
+    "reason": "bugLineage calls search",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/brainStore.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_8493b1eefc",
+    "from": "sym_cc859f78a3",
+    "to": "sym_8fc96bbf18",
+    "type": "calls",
+    "reason": "reindex calls loadAll",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/brainStore.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_8510d23d6f",
+    "from": "sym_c7716287ec_1",
+    "to": "sym_1c5c6e0d21",
+    "type": "calls",
+    "reason": "draftDecision calls summarizeDiff",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/provider.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_875634788f",
+    "from": "sym_d3cd481b00",
+    "to": "sym_2b3d152f3e",
+    "type": "calls",
+    "reason": "analyzeDiff calls stripAB",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/diff.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_87aa36c62b",
+    "from": "sym_4dbb42587d",
+    "to": "sym_383cbb69ef",
+    "type": "calls",
+    "reason": "promoteConstraint calls put",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/synthesize.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_89b8411e9c",
+    "from": "sym_1ada613a64",
+    "to": "sym_5a74d29b94",
+    "type": "calls",
+    "reason": "edgeId calls shortHash",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/core/ids.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_8a03ce2baa",
+    "from": "sym_f9d958acb6",
+    "to": "sym_815fdb47eb",
+    "type": "calls",
+    "reason": "commitDiff calls gitSafe",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/git.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_8b997a67f2",
+    "from": "cmp_a94a8fe5cc",
+    "to": "cmp_ba75dfc94f",
+    "type": "depends_on",
+    "reason": "test/integration.test.ts imports src/synthesis/synthesize.ts",
+    "strength": 0.6,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.9,
+      "evidence": [
+        "test/integration.test.ts:imports:../src/synthesis/synthesize.js"
+      ]
+    }
+  },
+  {
+    "id": "edge_8d4747d12f",
+    "from": "sym_cdff71a1f9",
+    "to": "sym_f9d958acb6",
+    "type": "calls",
+    "reason": "recentDiffFor calls commitDiff",
     "strength": 0.8,
     "provenance": {
       "source": "extracted",
@@ -2415,392 +2460,47 @@
     }
   },
   {
-    "id": "edge_8d4747d12f",
-    "from": "sym_cdff71a1f9",
-    "to": "sym_f9d958acb6",
+    "id": "edge_8ea38df2b4",
+    "from": "sym_383cbb69ef",
+    "to": "sym_95e5f5139f",
     "type": "calls",
-    "reason": "recentDiffFor calls commitDiff",
+    "reason": "put calls fileFor",
     "strength": 0.8,
     "provenance": {
       "source": "extracted",
       "confidence": 0.8,
       "evidence": [
-        "src/synthesis/synthesize.ts"
+        "src/store/jsonStore.ts"
       ]
     }
   },
   {
-    "id": "edge_b51e339207",
-    "from": "sym_610aad3fa6",
-    "to": "sym_6264d56eb8",
+    "id": "edge_8eec3a62d2",
+    "from": "sym_a708ee9110",
+    "to": "sym_2945a8c6b8",
     "type": "calls",
-    "reason": "tempStore calls brainPaths",
+    "reason": "buildServer calls ok",
     "strength": 0.8,
     "provenance": {
       "source": "extracted",
       "confidence": 0.8,
       "evidence": [
-        "test/helpers.ts"
+        "src/mcp/server.ts"
       ]
     }
   },
   {
-    "id": "edge_3253d27db7",
-    "from": "sym_610aad3fa6",
-    "to": "sym_d73e258d4a",
+    "id": "edge_8f02bd21eb",
+    "from": "sym_b9ad124ad8",
+    "to": "sym_4fae276ed8",
     "type": "calls",
-    "reason": "tempStore calls ensureDirs",
+    "reason": "decisionDraftFromText calls extractJsonObjects",
     "strength": 0.8,
     "provenance": {
       "source": "extracted",
       "confidence": 0.8,
       "evidence": [
-        "test/helpers.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_0407b3c312",
-    "from": "sym_610aad3fa6",
-    "to": "sym_c94636f66a",
-    "type": "calls",
-    "reason": "tempStore calls close",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "test/helpers.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_b8cc5cae46",
-    "from": "sym_31f173b479",
-    "to": "sym_1285f1c28f",
-    "type": "calls",
-    "reason": "prov calls extracted",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "test/helpers.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_a4d82f6d49",
-    "from": "sym_eb3d6b0aa3",
-    "to": "sym_11010ac9dc",
-    "type": "calls",
-    "reason": "inf calls inferred",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "test/helpers.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_289e511011",
-    "from": "sym_d12f6e978e",
-    "to": "sym_f23f22701a",
-    "type": "calls",
-    "reason": "gitRepo calls g",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "test/integration.test.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_f4a341d9db",
-    "from": "sym_744b192507",
-    "to": "sym_610aad3fa6",
-    "type": "calls",
-    "reason": "seed calls tempStore",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "test/store.test.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_228c274025",
-    "from": "sym_744b192507",
-    "to": "sym_31f173b479",
-    "type": "calls",
-    "reason": "seed calls prov",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "test/store.test.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_985bff1ac9",
-    "from": "sym_744b192507",
-    "to": "sym_383cbb69ef",
-    "type": "calls",
-    "reason": "seed calls put",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "test/store.test.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_251f01eb78",
-    "from": "sym_744b192507",
-    "to": "sym_cc859f78a3",
-    "type": "calls",
-    "reason": "seed calls reindex",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "test/store.test.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_6b29c53d75",
-    "from": "cmp_50037f41a9",
-    "to": "cmp_b256a6aed0",
-    "type": "depends_on",
-    "reason": "src/cli/index.ts imports src/core/paths.ts",
-    "strength": 0.6,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.9,
-      "evidence": [
-        "src/cli/index.ts:imports:../core/paths.js"
-      ]
-    }
-  },
-  {
-    "id": "edge_2a710dd10a",
-    "from": "cmp_50037f41a9",
-    "to": "cmp_cdfb395bb7",
-    "type": "depends_on",
-    "reason": "src/cli/index.ts imports src/store/brainStore.ts",
-    "strength": 0.6,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.9,
-      "evidence": [
-        "src/cli/index.ts:imports:../store/brainStore.js"
-      ]
-    }
-  },
-  {
-    "id": "edge_6916acc7b0",
-    "from": "cmp_50037f41a9",
-    "to": "cmp_e0ccfe26fe",
-    "type": "depends_on",
-    "reason": "src/cli/index.ts imports src/extractors/indexer.ts",
-    "strength": 0.6,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.9,
-      "evidence": [
-        "src/cli/index.ts:imports:../extractors/indexer.js"
-      ]
-    }
-  },
-  {
-    "id": "edge_30b79cff0f",
-    "from": "cmp_50037f41a9",
-    "to": "cmp_ba75dfc94f",
-    "type": "depends_on",
-    "reason": "src/cli/index.ts imports src/synthesis/synthesize.ts",
-    "strength": 0.6,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.9,
-      "evidence": [
-        "src/cli/index.ts:imports:../synthesis/synthesize.js"
-      ]
-    }
-  },
-  {
-    "id": "edge_e0ce949910",
-    "from": "cmp_50037f41a9",
-    "to": "cmp_863ac67d4a",
-    "type": "depends_on",
-    "reason": "src/cli/index.ts imports src/integrations/hooks.ts",
-    "strength": 0.6,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.9,
-      "evidence": [
-        "src/cli/index.ts:imports:../integrations/hooks.js"
-      ]
-    }
-  },
-  {
-    "id": "edge_2c23c4a5a5",
-    "from": "cmp_e0ccfe26fe",
-    "to": "cmp_cdfb395bb7",
-    "type": "depends_on",
-    "reason": "src/extractors/indexer.ts imports src/store/brainStore.ts",
-    "strength": 0.6,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.9,
-      "evidence": [
-        "src/extractors/indexer.ts:imports:../store/brainStore.js"
-      ]
-    }
-  },
-  {
-    "id": "edge_5fd1bdcbcf",
-    "from": "cmp_e0ccfe26fe",
-    "to": "cmp_b256a6aed0",
-    "type": "depends_on",
-    "reason": "src/extractors/indexer.ts imports src/core/ids.ts",
-    "strength": 0.6,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.9,
-      "evidence": [
-        "src/extractors/indexer.ts:imports:../core/ids.js"
-      ]
-    }
-  },
-  {
-    "id": "edge_48b533c3a8",
-    "from": "cmp_863ac67d4a",
-    "to": "cmp_cdfb395bb7",
-    "type": "depends_on",
-    "reason": "src/integrations/claudemd.ts imports src/store/brainStore.ts",
-    "strength": 0.6,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.9,
-      "evidence": [
-        "src/integrations/claudemd.ts:imports:../store/brainStore.js"
-      ]
-    }
-  },
-  {
-    "id": "edge_ea322e8d29",
-    "from": "cmp_863ac67d4a",
-    "to": "cmp_e0ccfe26fe",
-    "type": "depends_on",
-    "reason": "src/integrations/hooks.ts imports src/extractors/git.ts",
-    "strength": 0.6,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.9,
-      "evidence": [
-        "src/integrations/hooks.ts:imports:../extractors/git.js"
-      ]
-    }
-  },
-  {
-    "id": "edge_33de23873a",
-    "from": "cmp_dfa5b5acde",
-    "to": "cmp_b256a6aed0",
-    "type": "depends_on",
-    "reason": "src/mcp/server.ts imports src/core/paths.ts",
-    "strength": 0.6,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.9,
-      "evidence": [
-        "src/mcp/server.ts:imports:../core/paths.js"
-      ]
-    }
-  },
-  {
-    "id": "edge_4c82ff36d4",
-    "from": "cmp_dfa5b5acde",
-    "to": "cmp_cdfb395bb7",
-    "type": "depends_on",
-    "reason": "src/mcp/server.ts imports src/store/brainStore.ts",
-    "strength": 0.6,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.9,
-      "evidence": [
-        "src/mcp/server.ts:imports:../store/brainStore.js"
-      ]
-    }
-  },
-  {
-    "id": "edge_a8f4acf4a9",
-    "from": "cmp_dfa5b5acde",
-    "to": "cmp_e0ccfe26fe",
-    "type": "depends_on",
-    "reason": "src/mcp/server.ts imports src/extractors/git.ts",
-    "strength": 0.6,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.9,
-      "evidence": [
-        "src/mcp/server.ts:imports:../extractors/git.js"
-      ]
-    }
-  },
-  {
-    "id": "edge_d0e09f5c00",
-    "from": "cmp_cdfb395bb7",
-    "to": "cmp_b256a6aed0",
-    "type": "depends_on",
-    "reason": "src/store/brainStore.ts imports src/core/paths.ts",
-    "strength": 0.6,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.9,
-      "evidence": [
-        "src/store/brainStore.ts:imports:../core/paths.js"
-      ]
-    }
-  },
-  {
-    "id": "edge_72bc411c95",
-    "from": "cmp_ba75dfc94f",
-    "to": "cmp_cdfb395bb7",
-    "type": "depends_on",
-    "reason": "src/synthesis/synthesize.ts imports src/store/brainStore.ts",
-    "strength": 0.6,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.9,
-      "evidence": [
-        "src/synthesis/synthesize.ts:imports:../store/brainStore.js"
-      ]
-    }
-  },
-  {
-    "id": "edge_ae0c5899f8",
-    "from": "cmp_ba75dfc94f",
-    "to": "cmp_e0ccfe26fe",
-    "type": "depends_on",
-    "reason": "src/synthesis/synthesize.ts imports src/extractors/git.ts",
-    "strength": 0.6,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.9,
-      "evidence": [
-        "src/synthesis/synthesize.ts:imports:../extractors/git.js"
+        "src/synthesis/provider.ts"
       ]
     }
   },
@@ -2820,62 +2520,1847 @@
     }
   },
   {
+    "id": "edge_913943b37c",
+    "from": "sym_e50ebb7b4d",
+    "to": "sym_8fc96bbf18",
+    "type": "calls",
+    "reason": "renderBrainSection calls loadAll",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/integrations/claudemd.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_916ea955eb",
+    "from": "sym_e7014d011d",
+    "to": "sym_9cd3f7fe96",
+    "type": "calls",
+    "reason": "withBrain calls workspaceRoot",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "vscode-extension/src/extension.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_918085a17a",
+    "from": "sym_7183436879",
+    "to": "sym_cdff71a1f9",
+    "type": "calls",
+    "reason": "recordFailure calls recentDiffFor",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/synthesize.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_92934f04fd",
+    "from": "sym_7183436879",
+    "to": "sym_dfb2a0090e",
+    "type": "calls",
+    "reason": "recordFailure calls selectProvider",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/synthesize.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_938547f19f",
+    "from": "sym_43d055177b",
+    "to": "sym_8fc96bbf18",
+    "type": "calls",
+    "reason": "why calls loadAll",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/brainStore.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_95522e935a",
+    "from": "sym_cb863afde2",
+    "to": "sym_91e8631ffc",
+    "type": "calls",
+    "reason": "commitMeta calls commitFiles",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/git.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_9561355ccc",
+    "from": "sym_c7716287ec_1",
+    "to": "sym_cf6099323a",
+    "type": "calls",
+    "reason": "draftDecision calls topDirs",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/provider.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_985bff1ac9",
+    "from": "sym_744b192507",
+    "to": "sym_383cbb69ef",
+    "type": "calls",
+    "reason": "seed calls put",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "test/store.test.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_99e873076b",
+    "from": "sym_2f00ac7819",
+    "to": "sym_2ce5da13ed",
+    "type": "calls",
+    "reason": "indexRepo calls attributeCalls",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/indexer.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_9ad0aaa6ab",
+    "from": "sym_75f676f23c",
+    "to": "sym_c6ef7a8af1",
+    "type": "calls",
+    "reason": "why calls constraintsInScope",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "vscode-extension/src/brainData.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_9b155ce871",
+    "from": "sym_48db7d72bc",
+    "to": "sym_eba9589407",
+    "type": "calls",
+    "reason": "migrate calls migrateRaw",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/jsonStore.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_9c74e9bc97",
+    "from": "sym_e551d96773",
+    "to": "sym_89d5502a58",
+    "type": "calls",
+    "reason": "activate calls whyBrief",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "vscode-extension/src/extension.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_9f3cb0d4ff",
+    "from": "sym_cb863afde2",
+    "to": "sym_815fdb47eb",
+    "type": "calls",
+    "reason": "commitMeta calls gitSafe",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/git.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_a2c5c56bc1",
+    "from": "sym_aa7221e606",
+    "to": "sym_815fdb47eb",
+    "type": "calls",
+    "reason": "gitDir calls gitSafe",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/git.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_a33ce465b4",
+    "from": "sym_4ac3ad6690",
+    "to": "sym_8fc96bbf18",
+    "type": "calls",
+    "reason": "findRecurrence calls loadAll",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/synthesize.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_a3c8a18d42",
+    "from": "sym_6103f9eaf1",
+    "to": "sym_8fc96bbf18",
+    "type": "calls",
+    "reason": "syncCommit calls loadAll",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/synthesize.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_a4279f922e",
+    "from": "sym_9c164687cf",
+    "to": "sym_815fdb47eb",
+    "type": "calls",
+    "reason": "hooksDir calls gitSafe",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/git.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_a4d82f6d49",
+    "from": "sym_eb3d6b0aa3",
+    "to": "sym_11010ac9dc",
+    "type": "calls",
+    "reason": "inf calls inferred",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "test/helpers.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_a579b1ab1b",
+    "from": "sym_ffff1f0c4c",
+    "to": "sym_8fc96bbf18",
+    "type": "calls",
+    "reason": "bugLineage calls loadAll",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/brainStore.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_a7946cc282",
+    "from": "sym_13e20235c4",
+    "to": "sym_6510b40667",
+    "type": "calls",
+    "reason": "persistMigration calls writeFileAtomic",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/jsonStore.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_a8f4acf4a9",
+    "from": "cmp_dfa5b5acde",
+    "to": "cmp_e0ccfe26fe",
+    "type": "depends_on",
+    "reason": "src/mcp/server.ts imports src/extractors/git.ts",
+    "strength": 0.6,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.9,
+      "evidence": [
+        "src/mcp/server.ts:imports:../extractors/git.js"
+      ]
+    }
+  },
+  {
+    "id": "edge_acae204edf",
+    "from": "sym_82ab2a3533",
+    "to": "sym_ffff1f0c4c",
+    "type": "calls",
+    "reason": "assembleContext calls bugLineage",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/brainStore.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_adfe83a7ee",
+    "from": "sym_383cbb69ef",
+    "to": "sym_80eb1c4aa3",
+    "type": "calls",
+    "reason": "put calls readRawArray",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/jsonStore.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_ae0c5899f8",
+    "from": "cmp_ba75dfc94f",
+    "to": "cmp_e0ccfe26fe",
+    "type": "depends_on",
+    "reason": "src/synthesis/provider.ts imports src/extractors/diff.ts",
+    "strength": 0.6,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.9,
+      "evidence": [
+        "src/synthesis/provider.ts:imports:../extractors/diff.js"
+      ]
+    }
+  },
+  {
+    "id": "edge_ae1140a5c4",
+    "from": "sym_c59b535a56",
+    "to": "sym_1d3ddc7739",
+    "type": "calls",
+    "reason": "fragility calls round",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/brainStore.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_ae593f5094",
+    "from": "sym_4dbb42587d",
+    "to": "sym_16b88590c8",
+    "type": "calls",
+    "reason": "promoteConstraint calls constraintId",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/synthesize.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_b0212c25bd",
+    "from": "sym_6103f9eaf1",
+    "to": "sym_f9d958acb6",
+    "type": "calls",
+    "reason": "syncCommit calls commitDiff",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/synthesize.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_b091642f7a",
+    "from": "sym_6103f9eaf1",
+    "to": "sym_dfb2a0090e",
+    "type": "calls",
+    "reason": "syncCommit calls selectProvider",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/synthesize.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_b14e1f7e37",
+    "from": "sym_7183436879",
+    "to": "sym_4ac3ad6690",
+    "type": "calls",
+    "reason": "recordFailure calls findRecurrence",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/synthesize.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_b1a4e1f0ce",
+    "from": "sym_1585ecfb0b",
+    "to": "sym_d0a07420b5",
+    "type": "calls",
+    "reason": "getChildren calls firstFile",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "vscode-extension/src/extension.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_b1d3af94c8",
+    "from": "sym_9af0dc546d",
+    "to": "sym_567c7718d8",
+    "type": "calls",
+    "reason": "getDependencies calls labelFor",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/brainStore.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_b27dceca43",
+    "from": "cmp_863ac67d4a",
+    "to": "cmp_b256a6aed0",
+    "type": "depends_on",
+    "reason": "src/integrations/mergeDriver.ts imports src/core/io.ts",
+    "strength": 0.6,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.9,
+      "evidence": [
+        "src/integrations/mergeDriver.ts:imports:../core/io.js"
+      ]
+    }
+  },
+  {
+    "id": "edge_b3572b6315",
+    "from": "sym_d8c7062650",
+    "to": "sym_51499a878a",
+    "type": "calls",
+    "reason": "draftBug calls bugDraftFromText",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/provider.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_b3e52c20c3",
+    "from": "sym_2f00ac7819",
+    "to": "sym_1285f1c28f",
+    "type": "calls",
+    "reason": "indexRepo calls extracted",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/indexer.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_b4b2dabd8f",
+    "from": "sym_d3cd481b00",
+    "to": "sym_7604831421",
+    "type": "calls",
+    "reason": "analyzeDiff calls importOf",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/diff.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_b51e339207",
+    "from": "sym_610aad3fa6",
+    "to": "sym_6264d56eb8",
+    "type": "calls",
+    "reason": "tempStore calls brainPaths",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "test/helpers.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_b59376d9b3",
+    "from": "sym_97208a8294",
+    "to": "sym_b26ad02a58",
+    "type": "calls",
+    "reason": "pathMatchesGlob calls globToRegExp",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/core/glob.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_b5b15244a6",
+    "from": "sym_e551d96773",
+    "to": "sym_c75e922555",
+    "type": "calls",
+    "reason": "activate calls updateStatusBar",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "vscode-extension/src/extension.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_b762077890",
+    "from": "sym_a708ee9110",
+    "to": "sym_383cbb69ef",
+    "type": "calls",
+    "reason": "buildServer calls put",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/mcp/server.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_b7a6bbacef",
+    "from": "sym_1585ecfb0b",
+    "to": "sym_082798c00d",
+    "type": "calls",
+    "reason": "getChildren calls isStale",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "vscode-extension/src/extension.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_b8cc5cae46",
+    "from": "sym_31f173b479",
+    "to": "sym_1285f1c28f",
+    "type": "calls",
+    "reason": "prov calls extracted",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "test/helpers.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_b8e0eed791",
+    "from": "sym_18c032ca4f",
+    "to": "sym_815fdb47eb",
+    "type": "calls",
+    "reason": "stagedFiles calls gitSafe",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/git.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_b8f1d475f8",
+    "from": "sym_343edf66d4",
+    "to": "sym_32c00c06bc",
+    "type": "calls",
+    "reason": "onChange calls refresh",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "vscode-extension/src/extension.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_b8f2d4e780",
+    "from": "sym_5c5405f23d",
+    "to": "sym_a20d4cc8fa",
+    "type": "calls",
+    "reason": "plan calls planCompaction",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "test/compact.test.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_bcba6422c4",
+    "from": "sym_9e8caabda8",
+    "to": "sym_938d882d9f",
+    "type": "calls",
+    "reason": "findRoot calls isDir",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/core/paths.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_bd5401ffef",
+    "from": "sym_1585ecfb0b",
+    "to": "sym_e165b395df",
+    "type": "calls",
+    "reason": "getChildren calls prov",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "vscode-extension/src/extension.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_bdd6e6b703",
+    "from": "sym_7183436879",
+    "to": "sym_5c38b4911d",
+    "type": "calls",
+    "reason": "recordFailure calls bugId",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/synthesize.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_bee94ec298",
+    "from": "sym_cc11a2695f",
+    "to": "sym_3afb537a8a",
+    "type": "calls",
+    "reason": "pathMatchesGlob calls norm",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "vscode-extension/src/brainData.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_c04404cc52",
+    "from": "sym_383cbb69ef",
+    "to": "sym_c01eb1b0a1",
+    "type": "calls",
+    "reason": "put calls encode",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/jsonStore.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_c167bc625e",
+    "from": "sym_56b7347cc6",
+    "to": "sym_884fbadbb0",
+    "type": "calls",
+    "reason": "canon calls sortKeys",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/merge.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_c1e1f232c1",
+    "from": "sym_d3cd481b00",
+    "to": "sym_603a109a1f",
+    "type": "calls",
+    "reason": "analyzeDiff calls declOf",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/diff.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_c20b67e335",
+    "from": "sym_5c38b4911d",
+    "to": "sym_5a74d29b94",
+    "type": "calls",
+    "reason": "bugId calls shortHash",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/core/ids.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_c31b40a0b3",
+    "from": "sym_b9ad124ad8",
+    "to": "sym_d3b47ca671",
+    "type": "calls",
+    "reason": "decisionDraftFromText calls asStrArr",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/provider.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_c3574a3c13",
+    "from": "sym_6103f9eaf1",
+    "to": "sym_64db6cba68",
+    "type": "calls",
+    "reason": "syncCommit calls headSha",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/synthesize.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_c44d3d22ed",
+    "from": "sym_1585ecfb0b",
+    "to": "sym_eb5c83c0b6",
+    "type": "calls",
+    "reason": "getChildren calls absFile",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "vscode-extension/src/extension.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_c528885d75",
+    "from": "sym_d3cd481b00",
+    "to": "sym_c5bf39a575",
+    "type": "calls",
+    "reason": "analyzeDiff calls declsFor",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/diff.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_c5cb8bee55",
+    "from": "sym_9e8caabda8",
+    "to": "sym_4f2930d147",
+    "type": "calls",
+    "reason": "findRoot calls resolve",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/core/paths.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_c6134b9a28",
+    "from": "sym_d8c7062650",
+    "to": "sym_f6dee26225",
+    "type": "calls",
+    "reason": "draftBug calls failurePrompt",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/provider.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_c6aeb469a6",
+    "from": "sym_412280cb7c",
+    "to": "sym_8611667015",
+    "type": "calls",
+    "reason": "parseObjectLoose calls tryParseObject",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/provider.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_c6ed974cca",
+    "from": "sym_a708ee9110",
+    "to": "sym_7b5e2ca6bc",
+    "type": "calls",
+    "reason": "buildServer calls provLine",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/mcp/server.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_c7f331e55d",
+    "from": "sym_2f00ac7819",
+    "to": "sym_1d0c8f1bf5",
+    "type": "calls",
+    "reason": "indexRepo calls resolveName",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/indexer.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_ca3f5644f1",
+    "from": "sym_e50ebb7b4d",
+    "to": "sym_837ee1b990",
+    "type": "calls",
+    "reason": "renderBrainSection calls sev",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/integrations/claudemd.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_cbd5fddbcb",
+    "from": "sym_3850905bd2",
+    "to": "sym_cc886db33a",
+    "type": "calls",
+    "reason": "search calls likeSearch",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/brainStore.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_cbdbced3a6",
+    "from": "sym_a708ee9110",
+    "to": "sym_871abb4df2",
+    "type": "calls",
+    "reason": "buildServer calls decisionId",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/mcp/server.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_cbdec07c6f",
+    "from": "sym_f66a553cec",
+    "to": "sym_c01eb1b0a1",
+    "type": "calls",
+    "reason": "replaceAll calls encode",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/jsonStore.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_cc88c809fc",
+    "from": "sym_c6ef7a8af1",
+    "to": "sym_943cade32f",
+    "type": "calls",
+    "reason": "constraintsInScope calls sevRank",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "vscode-extension/src/brainData.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_cda70c0433",
+    "from": "sym_5cb368312f",
+    "to": "sym_76d15e31c9",
+    "type": "calls",
+    "reason": "check calls lastChange",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/brainStore.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_cdf69eea4e",
+    "from": "sym_c75e922555",
+    "to": "sym_c6ef7a8af1",
+    "type": "calls",
+    "reason": "updateStatusBar calls constraintsInScope",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "vscode-extension/src/extension.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_d0832622dd",
+    "from": "sym_1c5c6e0d21",
+    "to": "sym_e234379403",
+    "type": "calls",
+    "reason": "summarizeDiff calls names",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/diff.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_d0e09f5c00",
+    "from": "cmp_cdfb395bb7",
+    "to": "cmp_b256a6aed0",
+    "type": "depends_on",
+    "reason": "src/store/brainStore.ts imports src/core/paths.ts",
+    "strength": 0.6,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.9,
+      "evidence": [
+        "src/store/brainStore.ts:imports:../core/paths.js"
+      ]
+    }
+  },
+  {
+    "id": "edge_d0fbfd252b",
+    "from": "sym_8fc96bbf18",
+    "to": "sym_48db7d72bc",
+    "type": "calls",
+    "reason": "loadAll calls migrate",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/jsonStore.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_d174f124f0",
+    "from": "sym_a708ee9110",
+    "to": "sym_cc859f78a3",
+    "type": "calls",
+    "reason": "buildServer calls reindex",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/mcp/server.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_d1b05f453f",
+    "from": "sym_082798c00d",
+    "to": "sym_76d15e31c9",
+    "type": "calls",
+    "reason": "isStale calls lastChange",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "vscode-extension/src/brainData.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_d206a69f21",
+    "from": "sym_1525b0f15b",
+    "to": "sym_df31ea2089",
+    "type": "calls",
+    "reason": "mergeBrainJson calls mergeRecordsById",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/merge.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_d39800f49b",
+    "from": "sym_be1263261e",
+    "to": "sym_e1155c29cf",
+    "type": "calls",
+    "reason": "fixCommits calls windowArgs",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/git.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_d53ddb9b28",
+    "from": "sym_edf2a5e3c6",
+    "to": "sym_3a906a6c90",
+    "type": "calls",
+    "reason": "salientTerms calls stripPaths",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/synthesize.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_d68ca73159",
+    "from": "sym_00dd3d6bd7",
+    "to": "sym_eabf148e48",
+    "type": "calls",
+    "reason": "loadBrain calls readJson",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "vscode-extension/src/brainData.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_da09007e0d",
+    "from": "sym_1525b0f15b",
+    "to": "sym_42165aa62f",
+    "type": "calls",
+    "reason": "mergeBrainJson calls serialize",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/merge.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_dab5e11427",
+    "from": "sym_d3cd481b00",
+    "to": "sym_ec99de2bc3",
+    "type": "calls",
+    "reason": "analyzeDiff calls isCode",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/diff.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_dbc9bbf1e5",
+    "from": "sym_c7716287ec",
+    "to": "sym_3ede8a26b9",
+    "type": "calls",
+    "reason": "draftDecision calls run",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/provider.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_dc93da5e68",
+    "from": "sym_f66a553cec",
+    "to": "sym_95e5f5139f",
+    "type": "calls",
+    "reason": "replaceAll calls fileFor",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/jsonStore.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_dcad400dfb",
+    "from": "sym_125cbbaf35",
+    "to": "sym_8fc96bbf18",
+    "type": "calls",
+    "reason": "raiseFragility calls loadAll",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/synthesize.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_ddbba5f8e6",
+    "from": "sym_c6ef7a8af1",
+    "to": "sym_cc11a2695f",
+    "type": "calls",
+    "reason": "constraintsInScope calls pathMatchesGlob",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "vscode-extension/src/brainData.ts"
+      ]
+    }
+  },
+  {
     "id": "edge_df2ddf8e40",
     "from": "cmp_a94a8fe5cc",
     "to": "cmp_b256a6aed0",
     "type": "depends_on",
-    "reason": "test/helpers.ts imports src/core/paths.ts",
+    "reason": "test/compact.test.ts imports src/core/types.ts",
     "strength": 0.6,
     "provenance": {
       "source": "extracted",
       "confidence": 0.9,
       "evidence": [
-        "test/helpers.ts:imports:../src/core/paths.js"
+        "test/compact.test.ts:imports:../src/core/types.js"
       ]
     }
   },
   {
-    "id": "edge_790bbb654a",
-    "from": "cmp_a94a8fe5cc",
-    "to": "cmp_cdfb395bb7",
+    "id": "edge_df41c72163",
+    "from": "sym_1585ecfb0b",
+    "to": "sym_246f51b561",
+    "type": "calls",
+    "reason": "getChildren calls lastChangeMs",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "vscode-extension/src/extension.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_dfd6c280fa",
+    "from": "sym_e551d96773",
+    "to": "sym_04547bba25",
+    "type": "calls",
+    "reason": "activate calls showBrief",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "vscode-extension/src/extension.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_e07657d6ed",
+    "from": "sym_acdb0afe63",
+    "to": "sym_8fc96bbf18",
+    "type": "calls",
+    "reason": "checkConstraints calls loadAll",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/brainStore.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_e0ce949910",
+    "from": "cmp_50037f41a9",
+    "to": "cmp_863ac67d4a",
     "type": "depends_on",
-    "reason": "test/helpers.ts imports src/store/brainStore.ts",
+    "reason": "src/cli/index.ts imports src/integrations/hooks.ts",
     "strength": 0.6,
     "provenance": {
       "source": "extracted",
       "confidence": 0.9,
       "evidence": [
-        "test/helpers.ts:imports:../src/store/brainStore.js"
+        "src/cli/index.ts:imports:../integrations/hooks.js"
       ]
     }
   },
   {
-    "id": "edge_69525a48a3",
-    "from": "cmp_a94a8fe5cc",
+    "id": "edge_e200ff7717",
+    "from": "sym_7183436879",
+    "to": "sym_125cbbaf35",
+    "type": "calls",
+    "reason": "recordFailure calls raiseFragility",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/synthesize.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_e2b5f99fb3",
+    "from": "sym_b91e9afbb5",
+    "to": "sym_a708ee9110",
+    "type": "calls",
+    "reason": "startServer calls buildServer",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/mcp/server.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_e2f2e03409",
+    "from": "sym_871abb4df2",
+    "to": "sym_5a74d29b94",
+    "type": "calls",
+    "reason": "decisionId calls shortHash",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/core/ids.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_e40b069023",
+    "from": "sym_2f00ac7819",
+    "to": "sym_41326cde36",
+    "type": "calls",
+    "reason": "indexRepo calls fileChurn",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/indexer.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_e422e70020",
+    "from": "sym_3188212032",
+    "to": "sym_9e8caabda8",
+    "type": "calls",
+    "reason": "storeFor calls findRoot",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/cli/index.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_e44b2dfd97",
+    "from": "sym_13e20235c4",
+    "to": "sym_48db7d72bc",
+    "type": "calls",
+    "reason": "persistMigration calls migrate",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/jsonStore.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_e5612793a8",
+    "from": "sym_13e20235c4",
+    "to": "sym_056000a4c3",
+    "type": "calls",
+    "reason": "persistMigration calls schemaVersion",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/jsonStore.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_e624c98333",
+    "from": "sym_a708ee9110",
+    "to": "sym_5fb91b7bd2",
+    "type": "calls",
+    "reason": "buildServer calls resolveSymbols",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/mcp/server.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_e7192fa11e",
+    "from": "sym_6994da53cc",
+    "to": "sym_f205556005",
+    "type": "calls",
+    "reason": "topLevelJsonSlices calls balancedEnd",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/provider.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_e80457930a",
+    "from": "sym_fbd16af17d",
+    "to": "sym_7973c0cb31",
+    "type": "calls",
+    "reason": "recency calls isRec",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/merge.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_ea00966c5b",
+    "from": "sym_b9ad124ad8",
+    "to": "sym_f75ed167b7",
+    "type": "calls",
+    "reason": "decisionDraftFromText calls realStr",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/provider.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_ea322e8d29",
+    "from": "cmp_863ac67d4a",
     "to": "cmp_e0ccfe26fe",
     "type": "depends_on",
-    "reason": "test/indexer.test.ts imports src/extractors/indexer.ts",
+    "reason": "src/integrations/hooks.ts imports src/extractors/git.ts",
     "strength": 0.6,
     "provenance": {
       "source": "extracted",
       "confidence": 0.9,
       "evidence": [
-        "test/indexer.test.ts:imports:../src/extractors/indexer.js"
+        "src/integrations/hooks.ts:imports:../extractors/git.js"
       ]
     }
   },
   {
-    "id": "edge_8b997a67f2",
-    "from": "cmp_a94a8fe5cc",
-    "to": "cmp_ba75dfc94f",
-    "type": "depends_on",
-    "reason": "test/integration.test.ts imports src/synthesis/synthesize.ts",
-    "strength": 0.6,
+    "id": "edge_ea61f2d37b",
+    "from": "sym_7183436879",
+    "to": "sym_9d1964b9a2",
+    "type": "calls",
+    "reason": "recordFailure calls rankSuspects",
+    "strength": 0.8,
     "provenance": {
       "source": "extracted",
-      "confidence": 0.9,
+      "confidence": 0.8,
       "evidence": [
-        "test/integration.test.ts:imports:../src/synthesis/synthesize.js"
+        "src/synthesis/synthesize.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_eb3aa43400",
+    "from": "sym_15d8a2509a",
+    "to": "sym_5a5b2eb84e",
+    "type": "calls",
+    "reason": "listCodeFiles calls walk",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/indexer.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_eceb7bcc53",
+    "from": "sym_d0a07420b5",
+    "to": "sym_eb5c83c0b6",
+    "type": "calls",
+    "reason": "firstFile calls absFile",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "vscode-extension/src/extension.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_ee295ab367",
+    "from": "sym_949445a607",
+    "to": "sym_8211cca258",
+    "type": "calls",
+    "reason": "deriveComponents calls capitalize",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/indexer.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_eef43bfdf0",
+    "from": "sym_0bef124f1f",
+    "to": "sym_6510b40667",
+    "type": "calls",
+    "reason": "installMergeDriver calls writeFileAtomic",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/integrations/mergeDriver.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_ef1a6c80b7",
+    "from": "sym_3188212032",
+    "to": "sym_6264d56eb8",
+    "type": "calls",
+    "reason": "storeFor calls brainPaths",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/cli/index.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_ef34677662",
+    "from": "sym_cc859f78a3",
+    "to": "sym_3ede8a26b9",
+    "type": "calls",
+    "reason": "reindex calls run",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/brainStore.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_f007889a68",
+    "from": "sym_2f00ac7819",
+    "to": "sym_617ff861b7",
+    "type": "calls",
+    "reason": "indexRepo calls addEdge",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/indexer.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_f038a4f7c0",
+    "from": "sym_d71984e562",
+    "to": "sym_c01eb1b0a1",
+    "type": "calls",
+    "reason": "delete calls encode",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/jsonStore.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_f1635da4a2",
+    "from": "sym_eb961ae48f",
+    "to": "sym_9c164687cf",
+    "type": "calls",
+    "reason": "installPreCommitHook calls hooksDir",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/integrations/hooks.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_f436151835",
+    "from": "sym_6510b40667",
+    "to": "sym_efed873770",
+    "type": "calls",
+    "reason": "writeFileAtomic calls safeRm",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/core/io.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_f43ceeb69d",
+    "from": "sym_2f00ac7819",
+    "to": "sym_29c38dd437",
+    "type": "calls",
+    "reason": "indexRepo calls resolveImport",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/indexer.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_f4a341d9db",
+    "from": "sym_744b192507",
+    "to": "sym_610aad3fa6",
+    "type": "calls",
+    "reason": "seed calls tempStore",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "test/store.test.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_f4e019f9c9",
+    "from": "sym_949445a607",
+    "to": "sym_74d3a2e9bd",
+    "type": "calls",
+    "reason": "deriveComponents calls componentId",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/indexer.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_f72ff6507b",
+    "from": "sym_8fc96bbf18",
+    "to": "sym_056000a4c3",
+    "type": "calls",
+    "reason": "loadAll calls schemaVersion",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/jsonStore.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_f736f7d194",
+    "from": "sym_a708ee9110",
+    "to": "sym_6264d56eb8",
+    "type": "calls",
+    "reason": "buildServer calls brainPaths",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/mcp/server.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_f784544886",
+    "from": "sym_00dd3d6bd7",
+    "to": "sym_0015ef5a3d",
+    "type": "calls",
+    "reason": "loadBrain calls readDir",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "vscode-extension/src/brainData.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_f8755d3176",
+    "from": "sym_6103f9eaf1",
+    "to": "sym_383cbb69ef",
+    "type": "calls",
+    "reason": "syncCommit calls put",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/synthesize.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_fa2c732051",
+    "from": "sym_89d5502a58",
+    "to": "sym_04547bba25",
+    "type": "calls",
+    "reason": "whyBrief calls showBrief",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "vscode-extension/src/extension.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_fafd4d88d2",
+    "from": "sym_aed7c11714",
+    "to": "sym_9cd3f7fe96",
+    "type": "calls",
+    "reason": "relPath calls workspaceRoot",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "vscode-extension/src/extension.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_fbb0a813b9",
+    "from": "sym_a708ee9110",
+    "to": "sym_3850905bd2",
+    "type": "calls",
+    "reason": "buildServer calls search",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/mcp/server.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_fc2c03391d",
+    "from": "sym_a708ee9110",
+    "to": "sym_45e6041167",
+    "type": "calls",
+    "reason": "buildServer calls err",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/mcp/server.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_fdf04de028",
+    "from": "sym_7183436879",
+    "to": "sym_383cbb69ef",
+    "type": "calls",
+    "reason": "recordFailure calls put",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/synthesize.ts"
       ]
     }
   }

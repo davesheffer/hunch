@@ -8,6 +8,7 @@
   "alternatives_rejected": [],
   "related_components": [
     "cmp_50037f41a9",
+    "cmp_555e43ab1a",
     "cmp_863ac67d4a",
     "cmp_a94a8fe5cc",
     "cmp_b256a6aed0",
@@ -48,7 +49,7 @@
       "src/store/brainStore.ts",
       "src/store/jsonStore.ts"
     ],
-    "last_verified": "2026-06-14T21:10:14.510Z"
+    "last_verified": "2026-06-15T08:30:08.453Z"
   },
   "date": "2026-06-15T00:10:14+03:00"
 }

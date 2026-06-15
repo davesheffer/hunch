@@ -1,0 +1,2 @@
+.brain/**/*.json merge=brain
+.brain/manifest.json merge=text

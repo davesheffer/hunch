@@ -1,0 +1,51 @@
+{
+  "id": "dec_093de2b0bd",
+  "title": "feat(brain): schema migration, team git-merge, and compaction (out of MVP)",
+  "status": "proposed",
+  "context": "Three features to take the Project Brain past MVP, each hardened over two rounds\nof multi-agent adversarial review (25 confirmed findings fixed, incl. data-loss\nbugs the first cut introduced).\n\nSchema versioning + migration (core/migrate.ts, core/io.ts):\n- .brain/manifest.json records the on-disk schema version; loadAll migrates raw\n  JSON UP to the current version BEFORE Zod validation, so a future schema change\n  never makes the loader silently skip (drop) old records.\n- `brain migrate` persis",
+  "decision": "Introduced src/cli, src/core, src/integrations, src/store, test/compact.test.ts, test/merge.test.ts: added read, lf, writeFileAtomic, safeRm, Migration, Manifest, readManifest, writeManifest; new dep(s): node:child_process, node:path, node:test, node:assert/strict, node:os; 8 new file(s).",
+  "consequences": [
+    "Adds dependency: node:child_process, node:path, node:test, node:assert/strict, node:os."
+  ],
+  "alternatives_rejected": [],
+  "related_components": [
+    "cmp_50037f41a9",
+    "cmp_863ac67d4a",
+    "cmp_a94a8fe5cc",
+    "cmp_b256a6aed0",
+    "cmp_cdfb395bb7"
+  ],
+  "related_files": [
+    "src/cli/index.ts",
+    "src/core/io.ts",
+    "src/core/migrate.ts",
+    "src/core/paths.ts",
+    "src/integrations/mergeDriver.ts",
+    "src/store/compact.ts",
+    "src/store/jsonStore.ts",
+    "src/store/merge.ts",
+    "test/compact.test.ts",
+    "test/merge.test.ts",
+    "test/migrate.test.ts"
+  ],
+  "supersedes": null,
+  "caused_by_bug": null,
+  "commit": "8ec6d7d",
+  "provenance": {
+    "source": "inferred",
+    "confidence": 0.45,
+    "evidence": [
+      "commit:8ec6d7d",
+      "src/cli/index.ts",
+      "src/core/io.ts",
+      "src/core/migrate.ts",
+      "src/core/paths.ts",
+      "src/integrations/mergeDriver.ts",
+      "src/store/compact.ts",
+      "src/store/jsonStore.ts",
+      "src/store/merge.ts"
+    ],
+    "last_verified": "2026-06-15T08:30:07.698Z"
+  },
+  "date": "2026-06-15T11:18:37+03:00"
+}

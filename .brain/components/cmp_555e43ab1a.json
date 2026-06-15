@@ -1,10 +1,10 @@
 {
-  "id": "cmp_b256a6aed0",
+  "id": "cmp_555e43ab1a",
   "kind": "module",
-  "name": "Core",
+  "name": "Vscode-extension",
   "responsibility": "",
   "paths": [
-    "src/core/**"
+    "vscode-extension/**"
   ],
   "status": "active",
   "owners": [],
@@ -13,7 +13,7 @@
     "source": "inferred",
     "confidence": 0.5,
     "evidence": [
-      "src/core"
+      "vscode-extension"
     ]
   },
   "created_at": "2026-06-15T08:29:38.551Z",

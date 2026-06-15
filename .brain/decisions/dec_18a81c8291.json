@@ -1,0 +1,36 @@
+{
+  "id": "dec_18a81c8291",
+  "title": "fix(brain): harden LLM structured-output parsing (3 adversarial review rounds)",
+  "status": "proposed",
+  "context": "With the API/tool-use provider gone, synthesis depends on parsing free-text\n`claude -p` output into Decision/Bug drafts. Three rounds of multi-agent\nadversarial review found (and verified) defects in the parser, the\nfallback contract, and — twice — in my own fixes. Final design:\n\nParsing (provider.ts):\n- String-aware extraction: balancedEnd/sliceBalancedJson and a string-aware\n  stripTrailingCommas no longer miscount braces or corrupt a comma INSIDE a\n  string value (the old depth counter and a ",
+  "decision": "Changed src/synthesis, test/provider.test.ts: added balancedEnd, looksLikeJsonObject, topLevelJsonSlices, stripTrailingCommas, tryParseObject, parseObjectLoose, extractJsonObjects, asSeverity; changed extractJson, draftDecisionSafe, draftBugSafe; new dep(s): node:test, node:assert/strict; 1 new file(s).",
+  "consequences": [
+    "Adds dependency: node:test, node:assert/strict.",
+    "Changes extractJson, draftDecisionSafe, draftBugSafe (signature/behavior)."
+  ],
+  "alternatives_rejected": [],
+  "related_components": [
+    "cmp_a94a8fe5cc",
+    "cmp_ba75dfc94f"
+  ],
+  "related_files": [
+    "src/synthesis/provider.ts",
+    "src/synthesis/synthesize.ts",
+    "test/provider.test.ts"
+  ],
+  "supersedes": null,
+  "caused_by_bug": null,
+  "commit": "4615d5a",
+  "provenance": {
+    "source": "inferred",
+    "confidence": 0.45,
+    "evidence": [
+      "commit:4615d5a",
+      "src/synthesis/provider.ts",
+      "src/synthesis/synthesize.ts",
+      "test/provider.test.ts"
+    ],
+    "last_verified": "2026-06-15T08:30:07.860Z"
+  },
+  "date": "2026-06-15T10:24:41+03:00"
+}
