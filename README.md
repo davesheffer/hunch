@@ -135,6 +135,12 @@ hunch embed                                     # embed your records (first run 
 hunch query --semantic "auth token expiry"      # hybrid keyword + semantic recall
 ```
 
+> **Install it where `hunch` runs.** The runtime is resolved from `hunch`'s own
+> `node_modules`, so match the install scope: a globally-installed `hunch` needs the
+> global (`-g`) install above; running from a source checkout needs it in the repo
+> (`npm i @huggingface/transformers` there). If `hunch embed` reports the model "present
+> but failed to load," the scopes don't match. `hunch doctor` shows the active mode.
+
 Embeddings are **local and free** (no API — consistent with the subscription-only synthesis
 rule) and **opt-in** (the base install stays lean). The long-lived MCP server picks them up
 automatically once present. Vectors live in the derived SQLite index and are reconciled by

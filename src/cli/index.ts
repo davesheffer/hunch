@@ -225,13 +225,24 @@ program
       return;
     }
     process.stdout.write(`Embedding ${todo} doc(s) with ${embedder.id} (first run downloads the model ~90MB, one time)…\n`);
-    const res = await store.embedAll(embedder, {
-      batch: Number(opts.batch),
-      onProgress: (done, total) => process.stdout.write(`\r  ${done}/${total} embedded   `),
-    });
-    process.stdout.write("\n");
-    console.log(`✓ embedded ${res.embedded} doc(s) (${res.skipped} already current). Model: ${embedder.id}.`);
-    console.log(`  Try:  hunch query --semantic "<question>"   — the MCP server uses it automatically.`);
+    try {
+      const res = await store.embedAll(embedder, {
+        batch: Number(opts.batch),
+        onProgress: (done, total) => process.stdout.write(`\r  ${done}/${total} embedded   `),
+      });
+      process.stdout.write("\n");
+      console.log(`✓ embedded ${res.embedded} doc(s) (${res.skipped} already current). Model: ${embedder.id}.`);
+      console.log(`  Try:  hunch query --semantic "<question>"   — the MCP server uses it automatically.`);
+    } catch (e) {
+      // The availability probe (createRequire.resolve) can succeed while the
+      // runtime ESM import/model load fails — e.g. the package is only
+      // resolvable via NODE_PATH, or a native backend is missing. Degrade with
+      // an actionable hint instead of a stack trace; queries stay on keyword search.
+      process.stdout.write("\n");
+      console.log("Semantic model is present but failed to load — staying on keyword (FTS) search.");
+      console.log(`  reason: ${(e as Error).message.split("\n")[0]}`);
+      console.log("  Install @huggingface/transformers where hunch actually runs (a global `hunch` needs a global install; running from source needs it in the repo's node_modules).");
+    }
     store.close();
   });
 

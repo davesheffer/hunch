@@ -58,8 +58,13 @@ export class TransformersEmbedder implements Embedder {
         // transformers.js logs only via an opt-in progress_callback (which we never
         // pass) and onnxruntime warns to stderr, so the model load never writes to
         // stdout — safe for the MCP JSON-RPC stdio channel without redirecting it.
-        const mod = (await import(pkg)) as { pipeline: (task: string, model: string) => Promise<unknown> };
-        return (await mod.pipeline("feature-extraction", HF_MODEL)) as (
+        const mod = (await import(pkg)) as { pipeline: (task: string, model: string, opts?: unknown) => Promise<unknown> };
+        // Pin dtype to fp32 (the lib's default for this model): silences the
+        // "dtype not specified … using the default dtype (fp32)" line the lib
+        // prints to stderr on every load (it leaked into `hunch query` output),
+        // and guarantees the numbers stay consistent with vectors already
+        // persisted under this model id — changing dtype would shift them.
+        return (await mod.pipeline("feature-extraction", HF_MODEL, { dtype: "fp32" })) as (
           texts: string[],
           opts: unknown,
         ) => Promise<{ data: Float32Array }>;
