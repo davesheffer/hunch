@@ -1,0 +1,19 @@
+{
+  "id": "con_e04226bd05",
+  "type": "architecture",
+  "statement": "The MCP server must stay client-agnostic: all assistants point to the same .hunch/ graph; no Claude-only behavior in the server",
+  "scope": [
+    "src/mcp/**"
+  ],
+  "severity": "warning",
+  "enforcement": "advisory_v1",
+  "rationale": "Cursor/VS Code/Codex share one memory",
+  "source_decision": "dec_261e42920c",
+  "violations": [],
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 1,
+    "evidence": [],
+    "last_verified": "2026-06-16T13:24:32.613Z"
+  }
+}

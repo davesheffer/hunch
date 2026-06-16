@@ -2,6 +2,9 @@ node_modules/
 dist/
 *.log
 
+# Editor-local settings (the committed .vscode/mcp.json is the shared Hunch config).
+.vscode/settings.json
+
 # npm auth: references ${NPM_TOKEN} env var, but never commit in case a real token is pasted.
 .npmrc
 
