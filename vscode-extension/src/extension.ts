@@ -8,7 +8,7 @@ import * as vscode from "vscode";
 import * as cp from "node:child_process";
 import * as nodePath from "node:path";
 import {
-  loadHunch, why, fragileSymbols, constraintsInScope, isStale, sevRank,
+  loadHunch, why, fragileSymbols, constraintsInScope, nearConstraints, isStale, sevRank,
   type Hunch, type Provenance,
 } from "./hunchData.js";
 
@@ -96,12 +96,23 @@ class HunchTree implements vscode.TreeDataProvider<Node> {
           file: firstFile(root, d.related_files),
         }));
       case "bugs":
-        return b.bugs.map((bug) => ({
-          kind: "leaf", label: `[${bug.severity}/${bug.status}] ${bug.title}`,
-          description: prov(bug.provenance),
-          tooltip: `${bug.id}\nsymptom: ${bug.symptom ?? ""}\nroot cause: ${bug.root_cause ?? ""}`,
-          file: firstFile(root, bug.affected_files),
-        }));
+        return b.bugs.map((bug) => {
+          const l = bug.lineage;
+          const marks = [
+            bug.status === "fixed" ? "✓fixed" : "",
+            l?.recurrence_of ? "↻recurrence" : "",
+            l?.spawned_constraint ? "⛔→constraint" : "",
+          ].filter(Boolean).join(" ");
+          const lineage = l
+            ? `\nlineage: introduced=${l.introduced_commit ?? "?"} fixed=${l.fixed_commit ?? "—"} recurrence_of=${l.recurrence_of ?? "—"} → constraint=${l.spawned_constraint ?? "—"}`
+            : "";
+          return {
+            kind: "leaf", label: `[${bug.severity}/${bug.status}] ${bug.title}`,
+            description: `${prov(bug.provenance)}${marks ? "  " + marks : ""}`,
+            tooltip: `${bug.id}\nsymptom: ${bug.symptom ?? ""}\nroot cause: ${bug.root_cause ?? ""}${lineage}`,
+            file: firstFile(root, bug.affected_files),
+          };
+        });
       case "fragile":
         return fragileSymbols(b).map((s) => ({
           kind: "leaf", label: `${s.score.toFixed(2)}  ${s.name}`,
@@ -157,8 +168,10 @@ function showBrief(title: string, sections: Array<{ h: string; lines: string[] }
 
 function whyBrief(hunch: Hunch, file: string): void {
   const w = why(hunch, file);
+  const near = nearConstraints(hunch, file);
   showBrief(`🧠 Why: ${relPath(file)}`, [
     { h: "⛔ Invariants (must not break)", lines: w.constraints.map((c) => `[${c.severity}] ${c.statement}  (${c.id})`) },
+    { h: "⚠ Near-invariants (a guarded dependency)", lines: near.map((n) => `[${n.c.severity}] ${n.c.statement}  ·  via ${relPath(n.via)}`) },
     { h: "🧭 Decisions", lines: w.decisions.map((d) => `[${d.status}] ${d.title} — ${d.decision ?? ""}`) },
     { h: "🐞 Bug history", lines: w.bugs.map((b) => `[${b.severity}] ${b.title} — root cause: ${b.root_cause ?? ""}`) },
     { h: "💥 Blast radius (dependents)", lines: w.dependents.map((d) => `${d.name} @ ${relPath(d.file)}`) },
@@ -183,13 +196,21 @@ function updateStatusBar(item: vscode.StatusBarItem): void {
   }
   const file = relPath(editor.document.uri.fsPath);
   const cons = constraintsInScope(hunch, file);
-  if (!cons.length) {
+  const near = nearConstraints(hunch, file);
+  if (!cons.length && !near.length) {
     item.text = "$(shield) Hunch";
     item.tooltip = "No invariants for this file";
   } else {
     const blocking = cons.filter((c) => c.severity === "blocking").length;
-    item.text = `$(shield)${blocking ? "$(warning)" : ""} ${cons.length} invariant${cons.length > 1 ? "s" : ""}`;
-    item.tooltip = new vscode.MarkdownString(cons.map((c) => `- **[${c.severity}]** ${c.statement}`).join("\n"));
+    const nearSuffix = near.length ? ` +${near.length} near` : "";
+    item.text = `$(shield)${blocking ? "$(warning)" : ""} ${cons.length} invariant${cons.length === 1 ? "" : "s"}${nearSuffix}`;
+    const md = new vscode.MarkdownString(
+      [
+        ...cons.map((c) => `- **[${c.severity}]** ${c.statement}`),
+        ...near.map((n) => `- ⚠ _near_ **[${n.c.severity}]** ${n.c.statement}`),
+      ].join("\n"),
+    );
+    item.tooltip = md;
   }
   item.command = "hunch.why";
   item.show();

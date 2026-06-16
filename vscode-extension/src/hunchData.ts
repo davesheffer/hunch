@@ -16,7 +16,8 @@ export interface Component { id: string; name: string; responsibility?: string; 
 export interface Edge { id: string; from: string; to: string; type: string; }
 export interface Sym { id: string; file: string; name: string; kind: string; metrics?: { churn_90d?: number; bug_count?: number; fan_in?: number }; }
 export interface Decision { id: string; title: string; status?: string; decision?: string; related_files?: string[]; related_components?: string[]; provenance?: Provenance; }
-export interface Bug { id: string; title: string; symptom?: string; root_cause?: string; severity?: string; status?: string; affected_files?: string[]; affected_symbols?: string[]; provenance?: Provenance; }
+export interface BugLineage { introduced_commit?: string | null; detected?: string | null; fixed_commit?: string | null; recurrence_of?: string | null; spawned_decision?: string | null; spawned_constraint?: string | null; }
+export interface Bug { id: string; title: string; symptom?: string; root_cause?: string; severity?: string; status?: string; affected_files?: string[]; affected_symbols?: string[]; lineage?: BugLineage; provenance?: Provenance; }
 export interface Constraint { id: string; statement: string; scope?: string[]; severity?: string; rationale?: string; provenance?: Provenance; }
 
 export interface Hunch {
@@ -132,6 +133,55 @@ export function why(hunch: Hunch, file: string): WhyResult {
     constraints: constraintsInScope(hunch, file),
     dependents: dependents.slice(0, 20),
   };
+}
+
+// ---- blast radius + near-violations (mirrors core HunchStore) --------------
+const RADIUS_EDGES = new Set(["calls", "depends_on", "imports", "contains"]);
+
+/** Files whose symbols (in)directly depend on a symbol defined in `file` — the
+ *  blast radius of editing it, collapsed to files (nearest depth wins). Mirrors
+ *  HunchStore.blastRadiusFiles via a backward BFS over the edge graph. */
+export function blastRadiusFiles(hunch: Hunch, file: string, maxDepth = 4): Array<{ file: string; via: string; depth: number }> {
+  const byId = new Map(hunch.symbols.map((s) => [s.id, s]));
+  const incoming = new Map<string, string[]>(); // to -> [from]
+  for (const e of hunch.edges) {
+    if (!RADIUS_EDGES.has(e.type)) continue;
+    (incoming.get(e.to) ?? incoming.set(e.to, []).get(e.to)!).push(e.from);
+  }
+  const seed = hunch.symbols.filter((s) => s.file === file || s.file.endsWith(file)).map((s) => s.id);
+  const seen = new Set(seed);
+  const out = new Map<string, { file: string; via: string; depth: number }>();
+  let frontier = seed;
+  for (let depth = 1; depth <= maxDepth && frontier.length; depth++) {
+    const next: string[] = [];
+    for (const id of frontier) {
+      for (const from of incoming.get(id) ?? []) {
+        if (seen.has(from)) continue;
+        seen.add(from);
+        next.push(from);
+        const s = byId.get(from);
+        if (!s || s.file === file || s.file.endsWith(file)) continue;
+        const prev = out.get(s.file);
+        if (!prev || depth < prev.depth) out.set(s.file, { file: s.file, via: s.name, depth });
+      }
+    }
+    frontier = next;
+  }
+  return [...out.values()].sort((a, b) => a.depth - b.depth || a.file.localeCompare(b.file));
+}
+
+/** Constraints reached only THROUGH the blast radius (a guarded dependency
+ *  changed), excluding those already in `file`'s direct scope — near-violations. */
+export function nearConstraints(hunch: Hunch, file: string): Array<{ c: Constraint; via: string }> {
+  const direct = new Set(constraintsInScope(hunch, file).map((c) => c.id));
+  const out = new Map<string, { c: Constraint; via: string }>();
+  for (const b of blastRadiusFiles(hunch, file)) {
+    for (const c of constraintsInScope(hunch, b.file)) {
+      if (direct.has(c.id) || out.has(c.id)) continue;
+      out.set(c.id, { c, via: `${file} → ${b.file} (${b.via}, depth ${b.depth})` });
+    }
+  }
+  return [...out.values()];
 }
 
 export function fragileSymbols(hunch: Hunch, limit = 20): Array<{ name: string; file: string; score: number; evidence: string }> {

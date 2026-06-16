@@ -43,6 +43,13 @@ function resolveSymbols(store: HunchStore, target: string): Symbol[] {
   return syms.filter((s) => s.file === target || s.file.endsWith(target));
 }
 
+/** Resolve a target to canonical indexed file path(s) (for file-granular blast
+ *  radius). Falls back to the literal target so direct-scope checks still run. */
+function resolveFiles(store: HunchStore, target: string): string[] {
+  const files = new Set(resolveSymbols(store, target).map((s) => s.file));
+  return files.size ? [...files] : [target];
+}
+
 export function buildServer(root: string): McpServer {
   const store = new HunchStore(hunchPaths(root));
   // Ensure the SQLite index reflects the JSON source of truth on startup.
@@ -166,6 +173,41 @@ export function buildServer(root: string): McpServer {
       // symbol can't flood the session context.
       const lines = deps.slice(0, DEP_CAP).map((d) => `  • [depth ${d.depth}] ${d.via} (${d.id})`);
       return ok(`Blast radius of "${symbol}" — ${deps.length} dependent(s):\n${lines.join("\n")}${more(deps.length, DEP_CAP, "closest shown first")}`);
+    },
+  );
+
+  // -- hunch_blast_radius (dependents + near-violations) --------------------
+  server.registerTool(
+    "hunch_blast_radius",
+    {
+      title: "Blast radius + near-violations for a file",
+      description:
+        "Given a file you're about to change, return its dependency blast radius (files whose code depends on it) AND any invariants reached THROUGH that radius — 'near-violations' you could break indirectly without touching their own scope. Call before editing a widely-depended-on file. Mirrors `hunch check --blast`.",
+      inputSchema: { target: z.string().describe("A file path (e.g. src/auth/jwt.ts) or symbol.") },
+    },
+    async ({ target }): Promise<ToolResult> => {
+      type Inv = ReturnType<HunchStore["checkConstraints"]>[number];
+      const parts: string[] = [];
+      for (const file of resolveFiles(store, target)) {
+        const blast = store.blastRadiusFiles(file);
+        const directIds = new Set(store.checkConstraints(file).map((c) => c.id));
+        const near = new Map<string, { c: Inv; via: string }>();
+        for (const b of blast) {
+          for (const c of store.checkConstraints(b.file)) {
+            if (directIds.has(c.id) || near.has(c.id)) continue;
+            near.set(c.id, { c, via: `${b.file} (${b.via}, depth ${b.depth})` });
+          }
+        }
+        const blastBody = blast.length
+          ? `:\n${blast.slice(0, DEP_CAP).map((b) => `  • [depth ${b.depth}] ${b.file} (via ${b.via})`).join("\n")}${more(blast.length, DEP_CAP, "closest first")}`
+          : "";
+        const nearArr = [...near.values()];
+        const nearBody = nearArr.length
+          ? `\n  NEAR-VIOLATIONS (invariants reachable via this radius — review before editing):\n${nearArr.map((n) => `    ⚠ ${n.c.id} [${n.c.severity}] ${n.c.statement}\n        via ${n.via}`).join("\n")}`
+          : "\n  No invariants in the blast radius.";
+        parts.push(`${file} → ${blast.length} dependent file(s)${blastBody}${nearBody}`);
+      }
+      return ok(`Blast radius for "${target}":\n\n${parts.join("\n\n")}`);
     },
   );
 

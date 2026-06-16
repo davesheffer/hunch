@@ -98,7 +98,8 @@ normally and Claude consults Hunch, or invoke the slash commands:
 | `/hunch-fragile` | a fragility report (the riskiest code, with evidence) |
 
 The MCP tools Claude calls under the hood: `hunch_why`, `hunch_query`,
-`hunch_check_constraints`, `hunch_get_dependents` (blast radius), `hunch_bug_lineage`,
+`hunch_check_constraints`, `hunch_get_dependents` (blast radius), `hunch_blast_radius`
+(dependent files + near-violations a change could break indirectly), `hunch_bug_lineage`,
 `hunch_context` (surgical minimal slice for a task), `hunch_record_decision` (write-back).
 
 **Through the CLI** — the same graph, from your terminal:

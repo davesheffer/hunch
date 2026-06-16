@@ -51,9 +51,9 @@ program
   .command("init")
   .description("Scaffold .hunch/, index the repo, install the git hook, and wire up Claude Code.")
   .option("--no-index", "skip the initial repo index")
-  .option("--enforce", "install an advisory pre-commit constraint guard")
-  .option("--enforce-strict", "install a pre-commit guard that FAILS the commit on a blocking invariant")
-  .action((opts: { index: boolean; enforce?: boolean; enforceStrict?: boolean }) => {
+  .option("--no-enforce", "do not install the advisory pre-commit constraint guard")
+  .option("--enforce-strict", "make the pre-commit guard FAIL the commit on a blocking invariant (direct or near)")
+  .action((opts: { index: boolean; enforce: boolean; enforceStrict?: boolean }) => {
     const root = findRoot();
     const paths = hunchPaths(root);
     const store = new HunchStore(paths);
@@ -76,9 +76,13 @@ program
       console.log(`  ✓ post-commit hook ${h.action} (learning loop)`);
       const m = installMergeDriver(root, inv.shell);
       console.log(`  ✓ team merge driver ${m.action}`);
-      if (opts.enforce || opts.enforceStrict) {
-        const p = installPreCommitHook(root, inv.shell, !!opts.enforceStrict);
-        console.log(`  ✓ pre-commit constraint guard ${p.action} (${opts.enforceStrict ? "strict — blocks on blocking invariants" : "advisory"})`);
+      // Auto-install the pre-commit guard by default (advisory: flags invariants
+      // touched directly OR via blast radius, never blocks). Opt out with
+      // --no-enforce; --enforce-strict makes blocking near/direct hits fail the commit.
+      if (opts.enforce !== false || opts.enforceStrict) {
+        const strict = !!opts.enforceStrict;
+        const p = installPreCommitHook(root, inv.shell, strict);
+        console.log(`  ✓ pre-commit constraint guard ${p.action} (${strict ? "strict — blocks on blocking invariants, direct or near" : "advisory — flags invariants in scope or blast radius"})`);
       }
     } else {
       console.log("  ⚠ not a git repo — skipped hooks (run `git init` to enable the learning loop)");
