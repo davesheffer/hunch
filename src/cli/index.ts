@@ -667,15 +667,21 @@ program
     console.log(`schema:     v${onDisk} (hunch v${SCHEMA_VERSION})${schemaNote}`);
     const provider = await selectProvider();
     console.log(`synthesis:  ${provider.name}`);
-    // Synthesis is billed to the user's Claude SUBSCRIPTION via the `claude` CLI,
-    // never the pay-per-token API. Surface whatever stands between here and that.
-    if (provider.name === "claude-cli") {
-      const hadKey = !!(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN);
-      console.log(`            ↳ LLM synthesis billed to your Claude subscription` +
-        (hadKey ? ` (ANTHROPIC_API_KEY in env is stripped — never billed to the API)` : ``));
-    } else if (provider.name === "deterministic") {
-      console.log(dim(`            ↳ no \`claude\` CLI — synthesis uses the offline heuristic (advisory, low-confidence)`));
-      console.log(dim(`              for full synthesis: install Claude Code + \`claude /login\`, or set CLAUDE_CODE_OAUTH_TOKEN (\`claude setup-token\`) for CI`));
+    // Synthesis is billed to the user's SUBSCRIPTION via a coding-assistant CLI,
+    // never a pay-per-token API key. Surface which one — or what's missing.
+    const SUB: Record<string, { label: string; strip?: string }> = {
+      "claude-cli": { label: "Claude subscription (claude CLI)", strip: "ANTHROPIC_API_KEY" },
+      "codex-cli": { label: "ChatGPT subscription (codex CLI)", strip: "OPENAI_API_KEY" },
+      "cursor-agent": { label: "Cursor subscription (cursor-agent CLI)" },
+    };
+    const sub = SUB[provider.name];
+    if (sub) {
+      const hadKey = sub.strip && !!process.env[sub.strip];
+      console.log(`            ↳ LLM synthesis billed to your ${sub.label}` +
+        (hadKey ? ` (${sub.strip} in env is stripped — never billed to the API)` : ``));
+    } else {
+      console.log(dim(`            ↳ no assistant CLI found — synthesis uses the offline heuristic (advisory, low-confidence)`));
+      console.log(dim(`              for full synthesis install one: Claude Code (\`claude /login\`), Codex (\`codex login\`), or Cursor (\`cursor-agent login\`)`));
     }
     const c = store.reindex().counts;
     console.log(`hunch:      ${c.symbols} symbols, ${c.edges} edges, ${c.components} components, ${c.decisions} decisions, ${c.bugs} bugs, ${c.constraints} constraints`);

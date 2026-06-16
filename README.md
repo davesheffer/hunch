@@ -56,13 +56,21 @@ Either way you then type `hunch …`. From a source checkout without `npm link`,
 `node dist/cli/index.js …` (or `npm run hunch -- …` to run via tsx). The rest of this
 README uses `hunch` for brevity.
 
-### 2. (Recommended) make the `claude` CLI available
+### 2. (Recommended) make a coding-assistant CLI available
 
-Hunch's LLM synthesis is billed to your **Claude Pro/Max subscription** through the
-`claude` CLI — **never** the pay-per-token API. If `claude --version` works in your
-terminal, you get full LLM-quality capture for free. If it doesn't, Hunch still works
-using a deterministic structural heuristic (lower-confidence drafts). `hunch doctor`
-tells you which mode you're in.
+Hunch's LLM synthesis is billed to **your subscription** through a coding-assistant
+CLI — **never** a pay-per-token API key (the API key is stripped from the child env).
+Hunch auto-detects the first one present, in this order:
+
+| CLI | Subscription | Detected by |
+|---|---|---|
+| `claude` (Claude Code) | Claude Pro/Max | `claude --version` |
+| `codex` (OpenAI Codex) | ChatGPT Plus/Pro | `codex --version` |
+| `cursor-agent` (Cursor) | Cursor | `cursor-agent --version` |
+
+If none is installed, Hunch still works using a deterministic structural heuristic
+(lower-confidence drafts). `hunch doctor` tells you which mode you're in; force one
+with `HUNCH_SYNTH_PROVIDER=claude-cli|codex-cli|cursor-agent|deterministic`.
 
 ### 3. Initialize the repo you want a memory for
 

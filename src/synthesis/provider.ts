@@ -185,9 +185,59 @@ const BUG_TOOL = {
 };
 
 // --------------------------------------------------------------------------
+// Base for headless-CLI SUBSCRIPTION providers. Each one drives a coding-assistant
+// CLI billed to the user's own subscription (never a pay-per-token API key — see
+// dec_5a7c0733f7). The prompt always goes over STDIN (never argv — keeps untrusted
+// diff content out of any shell pexecIn uses on Windows), and the CLI's text output
+// is handed to the SAME mappers, so the rest of the system is provider-agnostic.
+// --------------------------------------------------------------------------
+abstract class CliSynthProvider implements SynthProvider {
+  abstract readonly name: string;
+  abstract available(): Promise<boolean>;
+  protected abstract run(prompt: string): Promise<string>;
+
+  /** Run a CLI with the prompt on stdin, stripping API-key env vars so the tool
+   *  falls through to its SUBSCRIPTION credentials. Shared by codex/cursor. */
+  protected async runCli(bin: string, args: string[], stripEnv: string[], prompt: string): Promise<string> {
+    const env = { ...process.env };
+    for (const k of stripEnv) delete env[k];
+    const { stdout } = await pexecIn(bin, args, {
+      input: prompt,
+      env,
+      cwd: tmpdir(),
+      maxBuffer: 16 * 1024 * 1024,
+      timeout: 120_000,
+    });
+    return stdout;
+  }
+
+  async draftDecision(input: CommitInput): Promise<DecisionDraft> {
+    const text = await this.run(`${SYSTEM}\n\n${commitPrompt(input)}\n\n${jsonInstruction(DECISION_TOOL.input_schema)}`);
+    const draft = decisionDraftFromText(text, input.subject);
+    // No usable LLM JSON (truncation, refusal, prose-only, or a CLI whose output
+    // shape we misread) → THROW so the safe wrapper falls back to the deterministic
+    // provider, whose draft is honestly labeled ("inferred", low confidence).
+    if (!draft) throw new Error(`${this.name}: no usable decision JSON in output`);
+    // For a LARGE diff the model only saw the structured summary + a sample — haircut
+    // the confidence and tag the source so provenance stays honest.
+    if (input.diff.length > LARGE_DIFF_CHARS) {
+      return { ...draft, confidence: Math.min(draft.confidence, 0.5), source: `${draft.source}+summary` };
+    }
+    return draft;
+  }
+
+  async draftBug(input: FailureInput): Promise<BugDraft> {
+    const text = await this.run(`${SYSTEM}\n\n${failurePrompt(input)}\n\n${jsonInstruction(BUG_TOOL.input_schema)}`);
+    const draft = bugDraftFromText(text, input.test, input.message);
+    if (!draft) throw new Error(`${this.name}: no usable bug JSON in output`);
+    return draft;
+  }
+}
+
+// --------------------------------------------------------------------------
 // Provider A: headless `claude -p` CLI — billed to the user's Claude subscription
 // --------------------------------------------------------------------------
-class ClaudeCliProvider implements SynthProvider {
+class ClaudeCliProvider extends CliSynthProvider {
   readonly name = "claude-cli";
   // Default to the `haiku` alias (cheap/fast, and survives model retirements)
   // rather than a pinned dated id; override with HUNCH_SYNTH_MODEL if needed.
@@ -202,7 +252,7 @@ class ClaudeCliProvider implements SynthProvider {
     }
   }
 
-  private async run(prompt: string): Promise<string> {
+  protected async run(prompt: string): Promise<string> {
     // Force SUBSCRIPTION auth: ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN outrank
     // subscription OAuth in Claude Code's precedence and are *always* used in
     // headless `-p` mode when present. Strip them so the CLI falls through to
@@ -244,31 +294,56 @@ class ClaudeCliProvider implements SynthProvider {
     }
     return envelope.result ?? stdout;
   }
+}
 
-  async draftDecision(input: CommitInput): Promise<DecisionDraft> {
-    const text = await this.run(`${SYSTEM}\n\n${commitPrompt(input)}\n\n${jsonInstruction(DECISION_TOOL.input_schema)}`);
-    const draft = decisionDraftFromText(text, input.subject);
-    // No usable LLM JSON (truncation, refusal, prose-only) → THROW so the safe
-    // wrapper falls back to the deterministic provider, whose diff-structured
-    // draft is both more useful AND honestly labeled ("inferred", low confidence)
-    // than a hollow record mislabeled as an LLM draft.
-    if (!draft) throw new Error("claude-cli: no usable decision JSON in output");
-    // For a LARGE diff the model only saw the structured summary + a sample, not
-    // the full patch (commitPrompt → renderDiff). The "why" is therefore lower-
-    // fidelity than a draft made from the whole diff, so haircut the confidence
-    // and tag the source — keeping provenance honest (a summary-sourced draft must
-    // not masquerade as a full-fidelity llm_draft at 0.65).
-    if (input.diff.length > LARGE_DIFF_CHARS) {
-      return { ...draft, confidence: Math.min(draft.confidence, 0.5), source: `${draft.source}+summary` };
+// --------------------------------------------------------------------------
+// Provider B1: OpenAI Codex CLI (`codex exec`) — billed to the ChatGPT subscription
+// --------------------------------------------------------------------------
+class CodexCliProvider extends CliSynthProvider {
+  readonly name = "codex-cli";
+  private model = process.env.HUNCH_CODEX_MODEL; // omit → codex uses its configured default
+
+  async available(): Promise<boolean> {
+    try {
+      await pexecIn("codex", ["--version"], { timeout: 8000 });
+      return true;
+    } catch {
+      return false;
     }
-    return draft;
   }
 
-  async draftBug(input: FailureInput): Promise<BugDraft> {
-    const text = await this.run(`${SYSTEM}\n\n${failurePrompt(input)}\n\n${jsonInstruction(BUG_TOOL.input_schema)}`);
-    const draft = bugDraftFromText(text, input.test, input.message);
-    if (!draft) throw new Error("claude-cli: no usable bug JSON in output");
-    return draft;
+  protected async run(prompt: string): Promise<string> {
+    // `codex exec --json -` reads the prompt from STDIN (the `-`), emits JSONL
+    // events. Strip OPENAI_API_KEY so it uses ChatGPT (subscription) auth, not the
+    // pay-per-token API — consistent with the subscription-only rule.
+    const args = ["exec", "--json", ...(this.model ? ["-m", this.model] : []), "-"];
+    const out = await this.runCli("codex", args, ["OPENAI_API_KEY"], prompt);
+    return extractCodexText(out);
+  }
+}
+
+// --------------------------------------------------------------------------
+// Provider B2: Cursor Agent CLI (`cursor-agent -p`) — billed to the Cursor subscription
+// --------------------------------------------------------------------------
+class CursorCliProvider extends CliSynthProvider {
+  readonly name = "cursor-agent";
+  private model = process.env.HUNCH_CURSOR_MODEL;
+
+  async available(): Promise<boolean> {
+    try {
+      await pexecIn("cursor-agent", ["--version"], { timeout: 8000 });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  protected async run(prompt: string): Promise<string> {
+    // `-p --output-format text` → final answer as plain text (no event stream to
+    // parse). `--trust` so it runs non-interactively. Prompt over stdin. Cursor's
+    // CLI uses the user's Cursor login (subscription) — no API key to strip.
+    const args = ["-p", "--output-format", "text", "--trust", ...(this.model ? ["-m", this.model] : [])];
+    return this.runCli("cursor-agent", args, [], prompt);
   }
 }
 
@@ -327,7 +402,37 @@ export class DeterministicProvider implements SynthProvider {
   }
 }
 
-const PROVIDERS: SynthProvider[] = [new ClaudeCliProvider(), new DeterministicProvider()];
+/** Extract the final assistant message from `codex exec --json` output (newline-
+ *  delimited JSON events). We take the LAST non-empty text we can find at the
+ *  shapes codex uses (item.text / text / message); if none parse, hand the raw
+ *  output to the mapper — which then either finds the JSON draft or throws (→
+ *  deterministic fallback). Tolerant by design: a schema drift degrades, never crashes. */
+export function extractCodexText(out: string): string {
+  const texts: string[] = [];
+  for (const line of out.split(/\r?\n/)) {
+    const t = line.trim();
+    if (!t.startsWith("{")) continue;
+    try {
+      const o = JSON.parse(t) as Record<string, unknown>;
+      const item = o.item as { text?: unknown } | undefined;
+      const cand = (item?.text ?? o.text ?? o.message) as unknown;
+      if (typeof cand === "string" && cand.trim()) texts.push(cand);
+    } catch {
+      /* not a JSON event line — skip */
+    }
+  }
+  return texts.length ? texts[texts.length - 1]! : out;
+}
+
+// Priority order: try each subscription CLI, then the always-available heuristic.
+// HUNCH_SYNTH_PROVIDER forces one by name (claude-cli / codex-cli / cursor-agent /
+// deterministic).
+const PROVIDERS: SynthProvider[] = [
+  new ClaudeCliProvider(),
+  new CodexCliProvider(),
+  new CursorCliProvider(),
+  new DeterministicProvider(),
+];
 
 /** Choose the first available provider, honoring HUNCH_SYNTH_PROVIDER override. */
 export async function selectProvider(): Promise<SynthProvider> {
