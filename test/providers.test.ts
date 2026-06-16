@@ -58,6 +58,50 @@ test("MCP writers MERGE — other servers and user TOML are preserved", () => {
   } finally { cleanup(); }
 });
 
+test("writeVscodeMcp tolerates JSONC (comments) and preserves other servers", () => {
+  const { root, cleanup } = tempStore();
+  try {
+    mkdirSync(join(root, ".vscode"), { recursive: true });
+    writeFileSync(join(root, ".vscode/mcp.json"), `{\n  // team servers\n  "servers": { "other": { "type": "stdio", "command": "x" } },\n}`);
+    writeVscodeMcp(root, inv);
+    const j = JSON.parse(readFileSync(join(root, ".vscode/mcp.json"), "utf8"));
+    assert.ok(j.servers.other, "comment-bearing config not clobbered");
+    assert.ok(j.servers.hunch);
+  } finally { cleanup(); }
+});
+
+test("writeVscodeMcp REFUSES to overwrite an unparseable config (no data loss)", () => {
+  const { root, cleanup } = tempStore();
+  try {
+    mkdirSync(join(root, ".vscode"), { recursive: true });
+    const broken = `{ "servers": { "other": INVALID`;
+    writeFileSync(join(root, ".vscode/mcp.json"), broken);
+    assert.throws(() => writeVscodeMcp(root, inv), /refusing to overwrite/);
+    assert.equal(readFileSync(join(root, ".vscode/mcp.json"), "utf8"), broken, "left untouched");
+  } finally { cleanup(); }
+});
+
+test("writeCodexConfig refuses to create a duplicate [mcp_servers.hunch] table", () => {
+  const { root, cleanup } = tempStore();
+  try {
+    mkdirSync(join(root, ".codex"), { recursive: true });
+    writeFileSync(join(root, ".codex/config.toml"), "[mcp_servers.hunch]\ncommand = 'old'\n");
+    assert.throws(() => writeCodexConfig(root, inv), /already defines \[mcp_servers\.hunch\]/);
+  } finally { cleanup(); }
+});
+
+test("scaffoldProviders isolates a failing assistant as a warning, not a crash", () => {
+  const { store, root, cleanup } = tempStore();
+  try {
+    mkdirSync(join(root, ".vscode"), { recursive: true });
+    writeFileSync(join(root, ".vscode/mcp.json"), "{ broken");
+    const ps = scaffoldProviders(root, inv, store);
+    const vscode = ps.find((p) => p.assistant.startsWith("VS Code"))!;
+    assert.ok(vscode.error, "VS Code reported an error");
+    assert.ok(ps.find((p) => p.assistant === "Codex CLI")?.files.length, "other assistants still scaffolded");
+  } finally { cleanup(); }
+});
+
 test("scaffolders are idempotent — re-running adds no duplicates", () => {
   const { store, root, cleanup } = tempStore();
   try {

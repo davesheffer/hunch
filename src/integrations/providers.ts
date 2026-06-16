@@ -22,14 +22,51 @@ import type { HunchStore } from "../store/hunchStore.js";
 import type { Invocation } from "./scaffold.js";
 import { renderHunchSection, upsertSection } from "./claudemd.js";
 
+/** Strip // line and block comments + trailing commas (JSONC → JSON). String-aware
+ *  (double-quoted, with escapes) so a // inside a value isn't mangled. VS Code's
+ *  .vscode/mcp.json is JSONC, so we must tolerate comments. */
+function stripJsonc(s: string): string {
+  let out = "";
+  let inStr = false;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i]!;
+    const n = s[i + 1];
+    if (inStr) {
+      out += c;
+      if (c === "\\") { out += n ?? ""; i++; continue; }
+      if (c === '"') inStr = false;
+      continue;
+    }
+    if (c === '"') { inStr = true; out += c; continue; }
+    if (c === "/" && n === "/") { while (i < s.length && s[i] !== "\n") i++; continue; }
+    if (c === "/" && n === "*") { i += 2; while (i < s.length && !(s[i] === "*" && s[i + 1] === "/")) i++; i++; continue; }
+    out += c;
+  }
+  return out.replace(/,(\s*[}\]])/g, "$1");
+}
+
+/** Read a JSON/JSONC object. Returns {} only for an ABSENT or empty file. A
+ *  non-empty file we cannot parse THROWS — overwriting it would silently wipe the
+ *  user's other MCP servers. */
 function readJsonObj(file: string): Record<string, unknown> {
   if (!existsSync(file)) return {};
+  const raw = readFileSync(file, "utf8");
+  if (!raw.trim()) return {};
   try {
-    const v = JSON.parse(readFileSync(file, "utf8"));
-    return v && typeof v === "object" ? v : {};
-  } catch {
-    return {};
+    const v = JSON.parse(stripJsonc(raw));
+    if (v && typeof v === "object" && !Array.isArray(v)) return v as Record<string, unknown>;
+    throw new Error("not a JSON object");
+  } catch (e) {
+    throw new Error(`refusing to overwrite ${file}: could not parse it (${(e as Error).message}). Fix or remove it, then re-run.`);
   }
+}
+
+/** Render a string as a TOML value: a literal '…' when safe (no escaping needed —
+ *  ideal for Windows backslash paths), else a basic "…" with escapes. */
+function tomlStr(s: string): string {
+  return !s.includes("'") && !s.includes("\n")
+    ? `'${s}'`
+    : `"${s.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 }
 function writeJson(file: string, obj: unknown): string {
   mkdirSync(dirname(file), { recursive: true });
@@ -64,27 +101,33 @@ const TOML_END = "# <<< hunch mcp <<<";
  *  TOML single-quote LITERAL strings so Windows backslashes need no escaping. */
 export function writeCodexConfig(root: string, inv: Invocation): string {
   const file = join(root, ".codex", "config.toml");
-  const argsToml = [...inv.args, "mcp"].map((a) => `'${a}'`).join(", ");
+  const argsToml = [...inv.args, "mcp"].map(tomlStr).join(", ");
   const block = [
     TOML_START,
     "[mcp_servers.hunch]",
-    `command = '${inv.command}'`,
+    `command = ${tomlStr(inv.command)}`,
     `args = [${argsToml}]`,
     TOML_END,
   ].join("\n");
-  let content = existsSync(file) ? readFileSync(file, "utf8") : "";
+
+  // Strip any prior managed block first, so `base` is the user's own TOML.
+  const content = existsSync(file) ? readFileSync(file, "utf8") : "";
   const i = content.indexOf(TOML_START);
   const j = content.indexOf(TOML_END);
-  if (i >= 0 && j > i) {
-    content = content.slice(0, i) + block + content.slice(j + TOML_END.length);
-  } else if (i >= 0 || j >= 0) {
-    const body = content.split("\n").filter((l) => !l.includes(TOML_START) && !l.includes(TOML_END)).join("\n").trimEnd();
-    content = body ? `${body}\n\n${block}\n` : `${block}\n`;
-  } else {
-    content = content.trim() ? `${content.trimEnd()}\n\n${block}\n` : `${block}\n`;
+  let base: string;
+  if (i >= 0 && j > i) base = content.slice(0, i) + content.slice(j + TOML_END.length);
+  else if (i >= 0 || j >= 0) base = content.split("\n").filter((l) => !l.includes(TOML_START) && !l.includes(TOML_END)).join("\n");
+  else base = content;
+
+  // A user-authored [mcp_servers.hunch] outside our block would make TWO tables of
+  // the same name → TOML duplicate-table error. Refuse rather than corrupt it.
+  if (/^\s*\[mcp_servers\.hunch\]/m.test(base)) {
+    throw new Error(`refusing to edit ${file}: it already defines [mcp_servers.hunch] outside Hunch's managed block. Remove it, then re-run.`);
   }
+
+  base = base.trimEnd();
   mkdirSync(dirname(file), { recursive: true });
-  writeFileSync(file, content);
+  writeFileSync(file, base ? `${base}\n\n${block}\n` : `${block}\n`);
   return file;
 }
 
@@ -112,16 +155,27 @@ export function writeCursorRule(root: string, store: HunchStore): string {
 export interface ProviderScaffold {
   assistant: string;
   files: string[];
+  /** Set when this assistant was skipped (e.g. an unparseable existing config we
+   *  refused to clobber) — surfaced as a warning, not a fatal init failure. */
+  error?: string;
 }
 
 /** Scaffold MCP config + grounding for all supported assistants. Returns a
- *  per-assistant summary for `hunch init` to print. Claude Code is handled
- *  separately by scaffold.ts (.mcp.json + slash commands + CLAUDE.md). */
+ *  per-assistant summary for `hunch init` to print. Each assistant is isolated:
+ *  a writer that refuses to clobber a malformed file degrades to a warning rather
+ *  than aborting the rest. Claude Code is handled separately by scaffold.ts. */
 export function scaffoldProviders(root: string, inv: Invocation, store: HunchStore): ProviderScaffold[] {
-  return [
-    { assistant: "Cursor", files: [writeCursorMcp(root, inv), writeCursorRule(root, store)] },
-    { assistant: "VS Code (Copilot)", files: [writeVscodeMcp(root, inv), writeCopilotInstructions(root, store)] },
-    { assistant: "Codex CLI", files: [writeCodexConfig(root, inv)] },
-    { assistant: "Any (AGENTS.md)", files: [writeAgentsMd(root, store)] },
+  const tasks: Array<[string, () => string[]]> = [
+    ["Cursor", () => [writeCursorMcp(root, inv), writeCursorRule(root, store)]],
+    ["VS Code (Copilot)", () => [writeVscodeMcp(root, inv), writeCopilotInstructions(root, store)]],
+    ["Codex CLI", () => [writeCodexConfig(root, inv)]],
+    ["Any (AGENTS.md)", () => [writeAgentsMd(root, store)]],
   ];
+  return tasks.map(([assistant, run]) => {
+    try {
+      return { assistant, files: run() };
+    } catch (e) {
+      return { assistant, files: [], error: (e as Error).message };
+    }
+  });
 }

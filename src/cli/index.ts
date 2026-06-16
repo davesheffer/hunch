@@ -101,8 +101,10 @@ program
     // Cursor / VS Code (Copilot) / Codex / AGENTS.md to the same .hunch/ graph.
     if (opts.providers !== false) {
       const ps = scaffoldProviders(root, inv.mcp, store);
-      const total = ps.reduce((a, p) => a + p.files.length, 0);
-      console.log(`  ✓ wrote ${total} multi-assistant config file(s) → ${ps.map((p) => p.assistant).join(", ")}`);
+      const ok = ps.filter((p) => !p.error);
+      const total = ok.reduce((a, p) => a + p.files.length, 0);
+      console.log(`  ✓ wrote ${total} multi-assistant config file(s) → ${ok.map((p) => p.assistant).join(", ")}`);
+      for (const p of ps) if (p.error) console.log(`  ⚠ skipped ${p.assistant}: ${p.error}`);
     }
 
     store.close();
