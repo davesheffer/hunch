@@ -21,6 +21,15 @@ test("extractCodexText falls back to raw output when there are no JSON events", 
   assert.equal(extractCodexText("plain final answer"), "plain final answer");
 });
 
+test("extractCodexText prefers the agent_message over reasoning and trailing events", () => {
+  const jsonl = [
+    '{"type":"item.completed","item":{"type":"reasoning","text":"REASONING (not the answer)"}}',
+    '{"type":"item.completed","item":{"type":"agent_message","text":"THE ANSWER"}}',
+    '{"type":"item.completed","item":{"type":"token_count","text":"123 tokens"}}',
+  ].join("\n");
+  assert.equal(extractCodexText(jsonl), "THE ANSWER");
+});
+
 test("selectProvider never throws and resolves to some provider when one is forced-unavailable", async () => {
   process.env.HUNCH_SYNTH_PROVIDER = "codex-cli"; // not installed here → must fall through
   try {

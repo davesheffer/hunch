@@ -198,7 +198,7 @@ abstract class CliSynthProvider implements SynthProvider {
 
   /** Run a CLI with the prompt on stdin, stripping API-key env vars so the tool
    *  falls through to its SUBSCRIPTION credentials. Shared by codex/cursor. */
-  protected async runCli(bin: string, args: string[], stripEnv: string[], prompt: string): Promise<string> {
+  protected async runCli(bin: string, args: string[], stripEnv: string[], prompt: string, timeoutMs = 120_000): Promise<string> {
     const env = { ...process.env };
     for (const k of stripEnv) delete env[k];
     const { stdout } = await pexecIn(bin, args, {
@@ -206,7 +206,7 @@ abstract class CliSynthProvider implements SynthProvider {
       env,
       cwd: tmpdir(),
       maxBuffer: 16 * 1024 * 1024,
-      timeout: 120_000,
+      timeout: timeoutMs,
     });
     return stdout;
   }
@@ -343,7 +343,9 @@ class CursorCliProvider extends CliSynthProvider {
     // parse). `--trust` so it runs non-interactively. Prompt over stdin. Cursor's
     // CLI uses the user's Cursor login (subscription) — no API key to strip.
     const args = ["-p", "--output-format", "text", "--trust", ...(this.model ? ["-m", this.model] : [])];
-    return this.runCli("cursor-agent", args, [], prompt);
+    // Shorter timeout than the others: cursor-agent -p is reported to hang in some
+    // headless setups; cap the stall before degrading to the deterministic provider.
+    return this.runCli("cursor-agent", args, [], prompt, 45_000);
   }
 }
 
@@ -403,24 +405,31 @@ export class DeterministicProvider implements SynthProvider {
 }
 
 /** Extract the final assistant message from `codex exec --json` output (newline-
- *  delimited JSON events). We take the LAST non-empty text we can find at the
- *  shapes codex uses (item.text / text / message); if none parse, hand the raw
- *  output to the mapper — which then either finds the JSON draft or throws (→
- *  deterministic fallback). Tolerant by design: a schema drift degrades, never crashes. */
+ *  delimited JSON events). Codex tags assistant turns as `item.type ==="agent_message"`,
+ *  but it ALSO emits `item.text` for reasoning and may append trailing events — so we
+ *  prefer the last AGENT message and only fall back to the last any-text when none is
+ *  tagged. If nothing parses, hand the raw output to the mapper (→ it finds the JSON
+ *  draft or throws → deterministic fallback). Tolerant by design: drift degrades, never crashes. */
 export function extractCodexText(out: string): string {
   const texts: string[] = [];
+  const agentTexts: string[] = [];
   for (const line of out.split(/\r?\n/)) {
     const t = line.trim();
     if (!t.startsWith("{")) continue;
     try {
       const o = JSON.parse(t) as Record<string, unknown>;
-      const item = o.item as { text?: unknown } | undefined;
+      const item = o.item as { text?: unknown; type?: unknown } | undefined;
       const cand = (item?.text ?? o.text ?? o.message) as unknown;
-      if (typeof cand === "string" && cand.trim()) texts.push(cand);
+      if (typeof cand === "string" && cand.trim()) {
+        texts.push(cand);
+        const ty = (item?.type ?? o.type) as unknown;
+        if (typeof ty === "string" && /agent|assistant|message\b/.test(ty) && !/reason/.test(ty)) agentTexts.push(cand);
+      }
     } catch {
       /* not a JSON event line — skip */
     }
   }
+  if (agentTexts.length) return agentTexts[agentTexts.length - 1]!;
   return texts.length ? texts[texts.length - 1]! : out;
 }
 
@@ -434,19 +443,29 @@ const PROVIDERS: SynthProvider[] = [
   new DeterministicProvider(),
 ];
 
+// Availability rarely changes within a process (a CLI doesn't get installed mid-run),
+// and selectProvider() runs on every sync/recordFailure — so memoize each probe.
+// Especially matters in the long-lived MCP server and on machines with NO assistant
+// CLI, where an uncached pass spawns one failing `--version` per provider every time.
+const availCache = new Map<string, Promise<boolean>>();
+function isAvailable(p: SynthProvider): Promise<boolean> {
+  let v = availCache.get(p.name);
+  if (!v) {
+    v = p.available().catch(() => false);
+    availCache.set(p.name, v);
+  }
+  return v;
+}
+
 /** Choose the first available provider, honoring HUNCH_SYNTH_PROVIDER override. */
 export async function selectProvider(): Promise<SynthProvider> {
   const forced = process.env.HUNCH_SYNTH_PROVIDER;
   if (forced) {
     const p = PROVIDERS.find((x) => x.name === forced);
-    if (p && (await p.available())) return p;
+    if (p && (await isAvailable(p))) return p;
   }
   for (const p of PROVIDERS) {
-    try {
-      if (await p.available()) return p;
-    } catch {
-      /* try next */
-    }
+    if (await isAvailable(p)) return p;
   }
   return new DeterministicProvider();
 }
