@@ -42,7 +42,35 @@ function stripJsonc(s: string): string {
     if (c === "/" && n === "*") { i += 2; while (i < s.length && !(s[i] === "*" && s[i + 1] === "/")) i++; i++; continue; }
     out += c;
   }
-  return out.replace(/,(\s*[}\]])/g, "$1");
+  return dropTrailingCommas(out);
+}
+
+/** Remove trailing commas (`,` before `}`/`]`) — string-aware, so a comma inside
+ *  a string value (e.g. "a,]") is never touched. A blanket regex would corrupt it
+ *  (the same trap test/migrate.test.ts guards against). Runs on comment-free text,
+ *  so lookahead need only skip whitespace. */
+function dropTrailingCommas(s: string): string {
+  let out = "";
+  let inStr = false;
+  let esc = false;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i]!;
+    if (inStr) {
+      out += c;
+      if (esc) esc = false;
+      else if (c === "\\") esc = true;
+      else if (c === '"') inStr = false;
+      continue;
+    }
+    if (c === '"') { inStr = true; out += c; continue; }
+    if (c === ",") {
+      let j = i + 1;
+      while (j < s.length && /\s/.test(s[j]!)) j++;
+      if (s[j] === "}" || s[j] === "]") continue; // trailing comma → drop
+    }
+    out += c;
+  }
+  return out;
 }
 
 /** Read a JSON/JSONC object. Returns {} only for an ABSENT or empty file. A
@@ -64,9 +92,16 @@ function readJsonObj(file: string): Record<string, unknown> {
 /** Render a string as a TOML value: a literal '…' when safe (no escaping needed —
  *  ideal for Windows backslash paths), else a basic "…" with escapes. */
 function tomlStr(s: string): string {
-  return !s.includes("'") && !s.includes("\n")
-    ? `'${s}'`
-    : `"${s.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+  // TOML literal '…' needs no escaping (ideal for Windows backslash paths) but
+  // can't contain a quote or newline; otherwise a basic "…" with escapes.
+  if (!/['\r\n]/.test(s)) return `'${s}'`;
+  const esc = s
+    .replace(/\\/g, "\\\\")
+    .replace(/"/g, '\\"')
+    .replace(/\n/g, "\\n")
+    .replace(/\r/g, "\\r")
+    .replace(/\t/g, "\\t");
+  return `"${esc}"`;
 }
 function writeJson(file: string, obj: unknown): string {
   mkdirSync(dirname(file), { recursive: true });

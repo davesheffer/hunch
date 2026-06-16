@@ -70,6 +70,20 @@ test("writeVscodeMcp tolerates JSONC (comments) and preserves other servers", ()
   } finally { cleanup(); }
 });
 
+test("writeVscodeMcp strips JSONC trailing commas WITHOUT corrupting string values", () => {
+  const { root, cleanup } = tempStore();
+  try {
+    mkdirSync(join(root, ".vscode"), { recursive: true });
+    // trailing commas (JSONC) + a value literally containing ",]" — the exact trap
+    // a blanket /,(\s*[}\]])/ regex would corrupt.
+    writeFileSync(join(root, ".vscode/mcp.json"), `{\n  "servers": {\n    "other": { "type": "stdio", "command": "c", "args": ["a,]"], },\n  },\n}`);
+    writeVscodeMcp(root, inv);
+    const j = JSON.parse(readFileSync(join(root, ".vscode/mcp.json"), "utf8"));
+    assert.deepEqual(j.servers.other.args, ["a,]"], "comma inside string value preserved");
+    assert.ok(j.servers.hunch);
+  } finally { cleanup(); }
+});
+
 test("writeVscodeMcp REFUSES to overwrite an unparseable config (no data loss)", () => {
   const { root, cleanup } = tempStore();
   try {
