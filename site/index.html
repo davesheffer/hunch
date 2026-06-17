@@ -633,6 +633,36 @@
           </div>
         </div>
       </div>
+
+      <!-- release log / what's new -->
+      <div class="rlog" data-rise style="--d:.24s;margin-top:56px">
+        <h3 style="font-size:.82rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0 0 22px">Release log</h3>
+
+        <div class="rlog-item" style="display:grid;grid-template-columns:120px 1fr;gap:20px;padding:20px 0;border-top:1px solid var(--line)">
+          <div><span class="rel-tag">v0.9.0</span><div style="font-size:.8rem;color:var(--muted);margin-top:8px">Jun 17, 2026</div></div>
+          <div>
+            <b>Time-Travel Memory + Regression Guard.</b>
+            <ul style="margin:8px 0 0;padding-left:18px;color:var(--ink-soft);line-height:1.6">
+              <li>Git-anchored valid-time windows on decisions &amp; constraints — query the graph <span class="mono">--as-of</span> any commit or tag.</li>
+              <li><span class="mono">hunch timeline</span> + the <span class="mono">hunch_timeline</span> MCP tool show what was believed and when it changed.</li>
+              <li>Supersede instead of delete — history stays auditable; nothing is lost.</li>
+              <li>The Regression Guard flags a diff that re-introduces deliberately-retired code; fails a strict commit when tied to a blocking invariant.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="rlog-item" style="display:grid;grid-template-columns:120px 1fr;gap:20px;padding:20px 0;border-top:1px solid var(--line)">
+          <div><span class="rel-tag">v0.8.0</span><div style="font-size:.8rem;color:var(--muted);margin-top:8px">Jun 16, 2026</div></div>
+          <div>
+            <b>Agent hooks + firmness.</b>
+            <ul style="margin:8px 0 0;padding-left:18px;color:var(--ink-soft);line-height:1.6">
+              <li>A <span class="mono">PreToolUse</span> hook injects the right memory slice before every edit — grounding enforced by the harness, not the model's recall.</li>
+              <li>Four firmness levels (off → advisory → firm → strict); strict denies an edit that touches a blocking invariant.</li>
+              <li>First-class <span class="mono">record-constraint</span> write path; rename-proof hooks; silent on unlearned files.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
     </div>
   </section>
 
