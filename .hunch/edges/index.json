@@ -45,21 +45,6 @@
     }
   },
   {
-    "id": "edge_013321ab3a",
-    "from": "sym_2cb8c75de0",
-    "to": "sym_cb863afde2",
-    "type": "calls",
-    "reason": "resolveAsOf calls commitMeta",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/cli/index.ts"
-      ]
-    }
-  },
-  {
     "id": "edge_0176c22782",
     "from": "sym_c75e922555",
     "to": "sym_ac2297b171",
@@ -300,21 +285,6 @@
     }
   },
   {
-    "id": "edge_0ef6984e08",
-    "from": "sym_264be73511",
-    "to": "sym_c1e85563e2",
-    "type": "calls",
-    "reason": "asOfInstant calls revParse",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/mcp/server.ts"
-      ]
-    }
-  },
-  {
     "id": "edge_0fade6a413",
     "from": "sym_6800d03191",
     "to": "sym_acc82aef14",
@@ -431,21 +401,6 @@
       "confidence": 0.8,
       "evidence": [
         "vscode-extension/src/hunchData.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_154949317d",
-    "from": "sym_2cb8c75de0",
-    "to": "sym_c1e85563e2",
-    "type": "calls",
-    "reason": "resolveAsOf calls revParse",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/cli/index.ts"
       ]
     }
   },
@@ -1770,6 +1725,21 @@
     }
   },
   {
+    "id": "edge_4282c7ab18",
+    "from": "sym_2c470ebb79",
+    "to": "sym_f9be9d4add",
+    "type": "calls",
+    "reason": "fileRelevant calls pathRelated",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/hunchStore.ts"
+      ]
+    }
+  },
+  {
     "id": "edge_42d1801d31",
     "from": "sym_51499a878a",
     "to": "sym_4fae276ed8",
@@ -1781,6 +1751,21 @@
       "confidence": 0.8,
       "evidence": [
         "src/synthesis/provider.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_4312dd1729",
+    "from": "sym_fa2f281da6",
+    "to": "sym_1141cec963",
+    "type": "calls",
+    "reason": "writeWindsurfMcp calls readJsonObj",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/integrations/providers.ts"
       ]
     }
   },
@@ -2021,6 +2006,21 @@
       "confidence": 0.8,
       "evidence": [
         "src/mcp/server.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_4bac83d646",
+    "from": "sym_45b5a9f25a",
+    "to": "sym_fa2f281da6",
+    "type": "calls",
+    "reason": "scaffoldProviders calls writeWindsurfMcp",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/integrations/providers.ts"
       ]
     }
   },
@@ -2276,21 +2276,6 @@
       "confidence": 0.8,
       "evidence": [
         "src/extractors/testreport.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_58be9f7cee",
-    "from": "sym_2cb8c75de0",
-    "to": "sym_fbc5451f63",
-    "type": "calls",
-    "reason": "resolveAsOf calls isGitRepo",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/cli/index.ts"
       ]
     }
   },
@@ -2775,6 +2760,21 @@
     }
   },
   {
+    "id": "edge_6cc8407393",
+    "from": "sym_a708ee9110",
+    "to": "sym_afe2366215",
+    "type": "calls",
+    "reason": "buildServer calls asOfDate",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/mcp/server.ts"
+      ]
+    }
+  },
+  {
     "id": "edge_6cd0424f9d",
     "from": "sym_51499a878a",
     "to": "sym_8af42d54b6",
@@ -3041,6 +3041,21 @@
       "confidence": 0.8,
       "evidence": [
         "vscode-extension/src/hunchData.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_7ba0545561",
+    "from": "sym_45b5a9f25a",
+    "to": "sym_6912241729",
+    "type": "calls",
+    "reason": "scaffoldProviders calls writeWindsurfRule",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/integrations/providers.ts"
       ]
     }
   },
@@ -3660,6 +3675,21 @@
     }
   },
   {
+    "id": "edge_9a66a9e76b",
+    "from": "sym_6912241729",
+    "to": "sym_43f8b248dd",
+    "type": "calls",
+    "reason": "writeWindsurfRule calls renderHunchSection",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/integrations/providers.ts"
+      ]
+    }
+  },
+  {
     "id": "edge_9a780c7d0e",
     "from": "sym_1141cec963",
     "to": "sym_af4879b9dd",
@@ -3765,11 +3795,56 @@
     }
   },
   {
+    "id": "edge_9d25b60d24",
+    "from": "sym_afe2366215",
+    "to": "sym_cb863afde2",
+    "type": "calls",
+    "reason": "asOfDate calls commitMeta",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/git.ts"
+      ]
+    }
+  },
+  {
     "id": "edge_9dc131eeff",
     "from": "sym_6cb324f0d8",
     "to": "sym_1ada613a64",
     "type": "calls",
     "reason": "supersede calls edgeId",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/hunchStore.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_9df6188285",
+    "from": "sym_fa2f281da6",
+    "to": "sym_39f0639bf0",
+    "type": "calls",
+    "reason": "writeWindsurfMcp calls writeJson",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/integrations/providers.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_9eadce79c7",
+    "from": "sym_474fa27ae4",
+    "to": "sym_f9be9d4add",
+    "type": "calls",
+    "reason": "retiredForFile calls pathRelated",
     "strength": 0.8,
     "provenance": {
       "source": "extracted",
@@ -3971,21 +4046,6 @@
       "confidence": 0.8,
       "evidence": [
         "src/store/jsonStore.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_a89c90d655",
-    "from": "sym_56f3b78efd",
-    "to": "sym_20023a0013",
-    "type": "calls",
-    "reason": "rrfFuse calls add",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/store/hunchStore.ts"
       ]
     }
   },
@@ -4245,21 +4305,6 @@
     }
   },
   {
-    "id": "edge_b43ee16cf0",
-    "from": "sym_264be73511",
-    "to": "sym_cb863afde2",
-    "type": "calls",
-    "reason": "asOfInstant calls commitMeta",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/mcp/server.ts"
-      ]
-    }
-  },
-  {
     "id": "edge_b4985bbaa3",
     "from": "sym_37773766b1",
     "to": "sym_9301e7f0e9",
@@ -4286,21 +4331,6 @@
       "confidence": 0.8,
       "evidence": [
         "src/extractors/diff.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_b558a25785",
-    "from": "sym_264be73511",
-    "to": "sym_fbc5451f63",
-    "type": "calls",
-    "reason": "asOfInstant calls isGitRepo",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/mcp/server.ts"
       ]
     }
   },
@@ -5445,21 +5475,6 @@
     }
   },
   {
-    "id": "edge_eba1d067b5",
-    "from": "sym_a708ee9110",
-    "to": "sym_264be73511",
-    "type": "calls",
-    "reason": "buildServer calls asOfInstant",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/mcp/server.ts"
-      ]
-    }
-  },
-  {
     "id": "edge_ec9b5710a0",
     "from": "sym_2372383431",
     "to": "sym_7183436879",
@@ -5876,6 +5891,36 @@
       "confidence": 0.8,
       "evidence": [
         "src/mcp/server.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_fc6f2d89b4",
+    "from": "sym_afe2366215",
+    "to": "sym_c1e85563e2",
+    "type": "calls",
+    "reason": "asOfDate calls revParse",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/git.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_fcd5f77583",
+    "from": "sym_afe2366215",
+    "to": "sym_fbc5451f63",
+    "type": "calls",
+    "reason": "asOfDate calls isGitRepo",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/extractors/git.ts"
       ]
     }
   },

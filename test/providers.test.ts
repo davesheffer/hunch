@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { tempStore } from "./helpers.js";
-import { scaffoldProviders, writeCursorMcp, writeVscodeMcp, writeCodexConfig } from "../src/integrations/providers.js";
+import { scaffoldProviders, writeCursorMcp, writeVscodeMcp, writeCodexConfig, writeWindsurfMcp } from "../src/integrations/providers.js";
 
 const inv = { command: "C:\\Program Files\\nodejs\\node.exe", args: ["C:\\repo\\dist\\cli\\index.js"] };
 
@@ -34,6 +34,28 @@ test("scaffoldProviders writes MCP config + grounding for every assistant", () =
 
     const rule = readFileSync(join(root, ".cursor/rules/hunch.mdc"), "utf8");
     assert.match(rule, /alwaysApply: true/);
+
+    const windsurf = JSON.parse(readFileSync(join(root, ".windsurf/mcp_config.json"), "utf8"));
+    assert.equal(windsurf.mcpServers.hunch.command, inv.command);
+    assert.deepEqual(windsurf.mcpServers.hunch.args, [...inv.args, "mcp"]);
+    const wrule = readFileSync(join(root, ".windsurf/rules/hunch.md"), "utf8");
+    assert.match(wrule, /trigger: always_on/);
+    assert.match(wrule, /hunch_check_constraints/);
+  } finally { cleanup(); }
+});
+
+test("writeWindsurfMcp MERGES and refuses to clobber an unparseable config", () => {
+  const { store, root, cleanup } = tempStore();
+  try {
+    mkdirSync(join(root, ".windsurf"), { recursive: true });
+    writeFileSync(join(root, ".windsurf/mcp_config.json"), JSON.stringify({ mcpServers: { other: { command: "x" } } }));
+    writeWindsurfMcp(root, inv);
+    const cfg = JSON.parse(readFileSync(join(root, ".windsurf/mcp_config.json"), "utf8"));
+    assert.ok(cfg.mcpServers.other, "pre-existing server preserved");
+    assert.ok(cfg.mcpServers.hunch, "hunch added");
+
+    writeFileSync(join(root, ".windsurf/mcp_config.json"), "{ not json");
+    assert.throws(() => writeWindsurfMcp(root, inv), /refusing to overwrite/);
   } finally { cleanup(); }
 });
 

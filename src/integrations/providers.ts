@@ -11,6 +11,7 @@
  *   Cursor      | .cursor/mcp.json        | mcpServers     | .cursor/rules/hunch.mdc
  *   VS Code     | .vscode/mcp.json        | servers (+type)| .github/copilot-instructions.md
  *   Codex CLI   | .codex/config.toml      | [mcp_servers.*]| AGENTS.md
+ *   Windsurf    | .windsurf/mcp_config.json| mcpServers    | .windsurf/rules/hunch.md
  *   (any other) | —                       | —              | AGENTS.md (cross-tool standard)
  *
  * Every writer MERGES into existing files (preserving other servers / user prose)
@@ -187,6 +188,27 @@ export function writeCursorRule(root: string, store: HunchStore): string {
   return file;
 }
 
+/** Windsurf (Cascade): .windsurf/mcp_config.json — same `mcpServers` shape as
+ *  Cursor. Repo-local (committed, shared via git) to match Hunch's other configs,
+ *  rather than the global ~/.codeium/windsurf path. Merges; refuses to clobber. */
+export function writeWindsurfMcp(root: string, inv: Invocation): string {
+  const file = join(root, ".windsurf", "mcp_config.json");
+  const json = readJsonObj(file) as { mcpServers?: Record<string, unknown> };
+  json.mcpServers = json.mcpServers ?? {};
+  json.mcpServers.hunch = { command: inv.command, args: [...inv.args, "mcp"] };
+  return writeJson(file, json);
+}
+
+/** Windsurf project rule (.windsurf/rules/hunch.md). `trigger: always_on` keeps the
+ *  Hunch grounding in Cascade's context for every request. Fully managed (overwritten). */
+export function writeWindsurfRule(root: string, store: HunchStore): string {
+  const file = join(root, ".windsurf", "rules", "hunch.md");
+  const body = `---\ntrigger: always_on\ndescription: Hunch engineering memory — consult the hunch_* MCP tools before editing\n---\n\n${renderHunchSection(store)}\n`;
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, body);
+  return file;
+}
+
 export interface ProviderScaffold {
   assistant: string;
   files: string[];
@@ -204,6 +226,7 @@ export function scaffoldProviders(root: string, inv: Invocation, store: HunchSto
     ["Cursor", () => [writeCursorMcp(root, inv), writeCursorRule(root, store)]],
     ["VS Code (Copilot)", () => [writeVscodeMcp(root, inv), writeCopilotInstructions(root, store)]],
     ["Codex CLI", () => [writeCodexConfig(root, inv)]],
+    ["Windsurf", () => [writeWindsurfMcp(root, inv), writeWindsurfRule(root, store)]],
     ["Any (AGENTS.md)", () => [writeAgentsMd(root, store)]],
   ];
   return tasks.map(([assistant, run]) => {

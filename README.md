@@ -124,6 +124,7 @@ they all consult the same memory:
 | Cursor | `.cursor/mcp.json` | `.cursor/rules/hunch.mdc` (always-applied) |
 | VS Code (Copilot) | `.vscode/mcp.json` | `.github/copilot-instructions.md` |
 | Codex CLI | `.codex/config.toml` | `AGENTS.md` |
+| Windsurf | `.windsurf/mcp_config.json` | `.windsurf/rules/hunch.md` (always-on) |
 | Anything else | — | `AGENTS.md` (cross-tool standard) |
 
 Each writer **merges** into existing files (other MCP servers and your own prose are
@@ -133,7 +134,7 @@ preserved) and is idempotent. Opt out with `hunch init --no-providers`.
 
 | Command | What |
 |---|---|
-| `hunch init` | scaffold `.hunch/`, index, install hook + merge driver, auto-install the advisory pre-commit guard, install the **Claude Code agent hooks**, and wire up **every assistant** (Claude Code, Cursor, VS Code/Copilot, Codex, AGENTS.md). Flags: `--no-enforce`, `--enforce-strict`, `--no-providers`, `--no-agent-hooks`, `--firmness <level>` |
+| `hunch init` | scaffold `.hunch/`, index, install hook + merge driver, auto-install the advisory pre-commit guard, install the **Claude Code agent hooks**, and wire up **every assistant** (Claude Code, Cursor, VS Code/Copilot, Codex, Windsurf, AGENTS.md). Flags: `--no-enforce`, `--enforce-strict`, `--no-providers`, `--no-agent-hooks`, `--firmness <level>` |
 | `hunch index` | parse repo → symbols / edges / components (deterministic, no LLM) |
 | `hunch backfill --since 90d` | replay git history → seed decisions |
 | `hunch sync [sha]` | turn a commit into a Decision (run automatically by the hook) |

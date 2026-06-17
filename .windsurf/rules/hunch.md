@@ -1,4 +1,7 @@
-# Copilot instructions
+---
+trigger: always_on
+description: Hunch engineering memory — consult the hunch_* MCP tools before editing
+---
 
 <!-- HUNCH:START — auto-generated, do not edit by hand -->
 ## 🧠 Hunch (Engineering Memory)
