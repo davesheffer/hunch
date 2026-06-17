@@ -41,15 +41,19 @@ export const MIGRATIONS: Migration[] = [
   {
     // v2: bi-temporal valid-time on decisions + constraints (Time-Travel Memory).
     // Backfill new fields from each record's existing date so a v1 graph migrates
-    // losslessly — no record is dropped, and `valid_from` (required on Decision)
-    // is always populated BEFORE the Zod pass. Defensive: input is untrusted JSON.
+    // losslessly — no record is dropped, and `valid_from` is populated BEFORE the
+    // Zod pass. Defensive: input is untrusted JSON.
     version: 2,
     description: "Add valid_from/valid_to/superseded_by/retired (decisions) and status/valid_from/valid_to (constraints)",
     up(kind, raw) {
       if (kind === "decisions") {
         const date = typeof raw.date === "string" ? raw.date : "";
         if (raw.valid_from === undefined) raw.valid_from = date;
-        if (raw.valid_to === undefined) raw.valid_to = raw.status === "superseded" ? date : null;
+        // Legacy superseded decisions have no recorded successor instant. Leave
+        // valid_to = null (historically in force) rather than = date: a zero-length
+        // [date,date) window matches NO as-of query and would hide the record from
+        // all time-travel. A later `supersede` sets a real valid_to when known.
+        if (raw.valid_to === undefined) raw.valid_to = null;
         if (raw.superseded_by === undefined) raw.superseded_by = null;
         if (raw.retired === undefined) raw.retired = { symbols: [], deps: [] };
       } else if (kind === "constraints") {

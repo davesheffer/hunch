@@ -130,11 +130,20 @@ export function stagedFiles(cwd: string): string[] {
 }
 
 /** Unified diff of the staged changes (for the Regression Guard's structural
- *  analysis). Excludes machine-generated noise like commitDiff, and is truncated
- *  to keep the parse bounded. */
-export function stagedDiff(cwd: string, maxBytes = 200_000): string {
+ *  analysis). Excludes machine-generated noise and truncates at the SAME budget as
+ *  commitDiff, so the staged and `--commit` guard paths can't diverge on big diffs. */
+export function stagedDiff(cwd: string, maxBytes = 60_000): string {
   const out = gitSafe(["diff", "--cached", "--no-color", "--unified=2", "--", ...DIFF_NOISE], cwd);
   return out.length > maxBytes ? out.slice(0, maxBytes) + "\n…(diff truncated)…" : out;
+}
+
+/** Resolve a time-travel ref (commit / tag / branch / HEAD~n) to the ISO author-
+ *  date of that commit — the instant valid-time windows are filtered against.
+ *  Undefined if it can't be resolved (not a git repo, or an unknown ref). Single
+ *  source for the CLI and MCP as-of paths so they can't drift. */
+export function asOfDate(ref: string, cwd: string): string | undefined {
+  if (!isGitRepo(cwd)) return undefined;
+  return commitMeta(revParse(ref, cwd), cwd)?.date || undefined;
 }
 
 /** Translate a backfill window spec into git-log window args.

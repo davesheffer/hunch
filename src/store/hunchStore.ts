@@ -499,9 +499,8 @@ export class HunchStore {
     const addedSyms = new Set(added.symbols);
     const addedDeps = new Set(added.deps);
     if (!addedSyms.size && !addedDeps.size) return [];
-    const fileSet = new Set(files);
     const fileRelevant = (related: string[]) =>
-      related.some((f) => fileSet.has(f) || files.some((x) => x.endsWith(f) || f.endsWith(x)));
+      related.some((f) => files.some((x) => pathRelated(x, f)));
     const decisions = this.json.loadAll("decisions");
     // decisions tied to an active blocking constraint via source_decision
     const blockingDec = new Set(
@@ -510,16 +509,24 @@ export class HunchStore {
         .map((c) => c.source_decision as string),
     );
     const out: RegressionHit[] = [];
-    for (const d of decisions) {
+    const seen = new Set<string>(); // dedup by kind+name: report each resurrected item once
+    const add = (d: Decision, kind: RegressionHit["kind"], name: string) => {
+      const key = `${kind}:${name}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push({ decision: d.id, title: d.title, kind, name, blocking: blockingDec.has(d.id), reason: d.decision || d.title });
+    };
+    // Blocking-linked decisions first, so a deduped hit keeps the higher-severity
+    // attribution (the strict guard fails on `blocking`).
+    const ordered = [...decisions].sort((a, b) => Number(blockingDec.has(b.id)) - Number(blockingDec.has(a.id)));
+    for (const d of ordered) {
       // Only IN-FORCE decisions: re-adding what an OUTDATED (superseded) decision
       // removed is not a regression against the current design.
       if (d.superseded_by || d.status === "superseded") continue;
       if (!d.retired.symbols.length && !d.retired.deps.length) continue;
       if (!fileRelevant(d.related_files)) continue;
-      const blocking = blockingDec.has(d.id);
-      const reason = d.decision || d.title;
-      for (const s of d.retired.symbols) if (addedSyms.has(s)) out.push({ decision: d.id, title: d.title, kind: "symbol", name: s, blocking, reason });
-      for (const dep of d.retired.deps) if (addedDeps.has(dep)) out.push({ decision: d.id, title: d.title, kind: "dep", name: dep, blocking, reason });
+      for (const s of d.retired.symbols) if (addedSyms.has(s)) add(d, "symbol", s);
+      for (const dep of d.retired.deps) if (addedDeps.has(dep)) add(d, "dep", dep);
     }
     return out;
   }
@@ -532,7 +539,7 @@ export class HunchStore {
     for (const d of this.json.loadAll("decisions")) {
       if (d.superseded_by || d.status === "superseded") continue;
       if (!d.retired.symbols.length && !d.retired.deps.length) continue;
-      if (!d.related_files.some((f) => f === file || f.endsWith(file) || file.endsWith(f))) continue;
+      if (!d.related_files.some((f) => pathRelated(f, file))) continue;
       out.push({ decision: d.id, title: d.title, symbols: d.retired.symbols, deps: d.retired.deps });
     }
     return out;
@@ -689,6 +696,13 @@ function sev(s: string): number {
  *  (legacy records). `valid_to` null = still in force. `asOf` undefined disables
  *  filtering (the history-inclusive default). Half-open [from, to) so a record and
  *  the one that supersedes it never both match at the supersession instant. */
+/** Do two repo paths refer to the same file? Exact match, or one is a trailing
+ *  path-SEGMENT suffix of the other (e.g. "x.ts" vs "src/x.ts") — anchored at a
+ *  "/" boundary so "re.ts" never matches "store.ts" (the bare-endsWith hazard). */
+function pathRelated(a: string, b: string): boolean {
+  return a === b || a.endsWith("/" + b) || b.endsWith("/" + a);
+}
+
 function inWindow(valid_from: string | undefined, valid_to: string | null | undefined, asOf: string | undefined): boolean {
   if (!asOf) return true;
   if (valid_from && valid_from > asOf) return false;

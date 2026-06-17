@@ -45,10 +45,29 @@ test("v2 migration backfills decision valid-time from `date` and never drops the
   assert.deepEqual(migrated.retired, { symbols: [], deps: [] });
 });
 
-test("v2 migration closes a legacy SUPERSEDED decision's window at its date", () => {
+test("v2 migration leaves a legacy SUPERSEDED decision's window OPEN (no successor instant known)", () => {
+  // Regression guard: closing valid_to at the record's OWN date produces a
+  // zero-length [date,date) window that matches NO as-of query — hiding the
+  // record from all time-travel. Legacy superseded records must stay queryable.
   const raw = { id: "dec_old", status: "superseded", date: "2026-02-02T00:00:00Z" };
   const m = migrateRaw("decisions", raw, 1) as Record<string, unknown>;
-  assert.equal(m.valid_to, "2026-02-02T00:00:00Z", "superseded → window closed");
+  assert.equal(m.valid_from, "2026-02-02T00:00:00Z");
+  assert.equal(m.valid_to, null, "no recorded successor instant → window stays open, not zero-length");
+});
+
+test("a migrated legacy-superseded decision is still visible to an as-of query", () => {
+  const { store, cleanup } = tempStore();
+  try {
+    // simulate a migrated v1 superseded record (valid_to left null by the migration)
+    store.json.put("decisions", mkDecision({
+      id: "dec_legacy_sup", title: "old approach", date: "2026-02-02T00:00:00Z",
+      valid_from: "2026-02-02T00:00:00Z", valid_to: null, status: "superseded",
+    }));
+    const after = store.why("src/auth/session.ts", { asOf: "2026-05-01T00:00:00Z" }).decisions.map((d) => d.id);
+    assert.ok(after.includes("dec_legacy_sup"), "open window → findable by time-travel (not hidden)");
+  } finally {
+    cleanup();
+  }
 });
 
 test("v2 migration backfills constraint status=active without touching scope/severity", () => {

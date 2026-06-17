@@ -13,7 +13,7 @@ import { hunchPaths, findRoot } from "../core/paths.js";
 import { HunchStore } from "../store/hunchStore.js";
 import { selectEmbedder } from "../store/embedder.js";
 import { decisionId } from "../core/ids.js";
-import { revParse, commitMeta, isGitRepo } from "../extractors/git.js";
+import { revParse, asOfDate } from "../extractors/git.js";
 import { formatContext } from "../core/format.js";
 import type { Decision, Symbol } from "../core/types.js";
 
@@ -48,14 +48,6 @@ function resolveSymbols(store: HunchStore, target: string): Symbol[] {
 function resolveFiles(store: HunchStore, target: string): string[] {
   const files = new Set(resolveSymbols(store, target).map((s) => s.file));
   return files.size ? [...files] : [target];
-}
-
-/** Resolve a time-travel ref (commit/tag/branch) to the ISO instant we filter
- *  valid-time windows against — the referenced commit's author-date. Undefined if
- *  it can't be resolved (not a git repo, or an unknown ref). */
-function asOfInstant(ref: string, root: string): string | undefined {
-  if (!isGitRepo(root)) return undefined;
-  return commitMeta(revParse(ref, root), root)?.date || undefined;
 }
 
 export function buildServer(root: string): McpServer {
@@ -106,7 +98,7 @@ export function buildServer(root: string): McpServer {
       },
     },
     async ({ target, as_of }): Promise<ToolResult> => {
-      const asOf = as_of ? asOfInstant(as_of, root) : undefined;
+      const asOf = as_of ? asOfDate(as_of, root) : undefined;
       if (as_of && !asOf) return err(`Could not resolve as_of "${as_of}" to a commit.`);
       const w = store.why(target, { asOf });
       // Highest-signal first, then cap: invariants by severity, decisions by
@@ -238,7 +230,7 @@ export function buildServer(root: string): McpServer {
       },
     },
     async ({ target, budget_tokens, as_of }): Promise<ToolResult> => {
-      const asOf = as_of ? asOfInstant(as_of, root) : undefined;
+      const asOf = as_of ? asOfDate(as_of, root) : undefined;
       if (as_of && !asOf) return err(`Could not resolve as_of "${as_of}" to a commit.`);
       return ok(formatContext(store.assembleContext(target, budget_tokens ?? 1500, { asOf })));
     },

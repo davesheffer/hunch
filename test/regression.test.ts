@@ -107,6 +107,36 @@ test("regressionHits returns nothing when the diff adds nothing retired", () => 
   }
 });
 
+test("regressionHits file-matches on path segments, not bare suffix (no `re.ts`↔`store.ts`)", () => {
+  const { store, cleanup } = tempStore();
+  try {
+    store.json.put("decisions", mkDecision({
+      id: "dec_store", related_files: ["src/store.ts"], retired: { symbols: ["login"], deps: [] },
+    }));
+    // editing src/core.ts must NOT match dec_store just because "core.ts"/"store.ts"
+    // share a bare-endsWith tail — only a true path-segment suffix counts.
+    const hits = store.regressionHits({ symbols: ["login"], deps: [] }, ["src/core.ts"]);
+    assert.equal(hits.length, 0, "segment-boundary match avoids the bare-endsWith false positive");
+  } finally {
+    cleanup();
+  }
+});
+
+test("regressionHits dedups a symbol retired by two decisions, keeping the blocking attribution", () => {
+  const { store, cleanup } = tempStore();
+  try {
+    store.json.put("decisions", mkDecision({ id: "dec_plain", retired: { symbols: ["login"], deps: [] } }));
+    store.json.put("decisions", mkDecision({ id: "dec_block", retired: { symbols: ["login"], deps: [] } }));
+    store.json.put("constraints", mkConstraint({ id: "con_b", severity: "blocking", source_decision: "dec_block" }));
+    const hits = store.regressionHits({ symbols: ["login"], deps: [] }, ["src/auth/session.ts"]);
+    assert.equal(hits.length, 1, "one hit per resurrected item");
+    assert.equal(hits[0]!.blocking, true, "deduped hit keeps the blocking-linked decision");
+    assert.equal(hits[0]!.decision, "dec_block");
+  } finally {
+    cleanup();
+  }
+});
+
 test("retiredForFile surfaces in-force retirements for agent-hook grounding", () => {
   const { store, cleanup } = tempStore();
   try {

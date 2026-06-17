@@ -24,7 +24,7 @@ import { indexRepo } from "../extractors/indexer.js";
 import { syncCommit, recordFailure, captureTestRun } from "../synthesis/synthesize.js";
 import { parseTestReport } from "../extractors/testreport.js";
 import { selectProvider } from "../synthesis/provider.js";
-import { isGitRepo, headSha, logSince, lastChangeDate, stagedFiles, commitFiles, revParse, commitMeta, stagedDiff, commitDiff } from "../extractors/git.js";
+import { isGitRepo, headSha, logSince, lastChangeDate, stagedFiles, commitFiles, asOfDate, stagedDiff, commitDiff } from "../extractors/git.js";
 import { analyzeDiff } from "../extractors/diff.js";
 import { installPostCommitHook, installPreCommitHook } from "../integrations/hooks.js";
 import { installMergeDriver } from "../integrations/mergeDriver.js";
@@ -288,15 +288,6 @@ program
   });
 
 // ---- why ------------------------------------------------------------------
-/** Resolve a user-supplied --as-of ref (tag / branch / sha / HEAD~n) to the ISO
- *  author-date of that commit — the instant we filter valid-time windows against.
- *  Returns undefined if it can't be resolved to a real commit. */
-function resolveAsOf(ref: string, root: string): string | undefined {
-  if (!isGitRepo(root)) return undefined;
-  const sha = revParse(ref, root);
-  return commitMeta(sha, root)?.date || undefined;
-}
-
 program
   .command("why")
   .description("Explain why a file/symbol is the way it is (decisions, bugs, constraints).")
@@ -304,7 +295,7 @@ program
   .option("--as-of <ref>", "time-travel: what was believed as of a commit/tag/branch (e.g. v0.7.0, HEAD~5)")
   .action((target: string, opts: { asOf?: string }) => {
     const { store, root } = storeFor();
-    const asOf = opts.asOf ? resolveAsOf(opts.asOf, root) : undefined;
+    const asOf = opts.asOf ? asOfDate(opts.asOf, root) : undefined;
     if (opts.asOf && !asOf) return fail(`could not resolve --as-of "${opts.asOf}" to a commit (need a git repo and a valid ref)`);
     const w = store.why(target, { asOf });
     const staleIds = new Set(store.staleness((f) => lastChangeDate(f, root)).map((s) => s.id));
@@ -606,7 +597,7 @@ program
   .option("--as-of <ref>", "time-travel: assemble the slice as it stood at a commit/tag/branch")
   .action((target: string, opts: { budget: string; asOf?: string }) => {
     const { store, root } = storeFor();
-    const asOf = opts.asOf ? resolveAsOf(opts.asOf, root) : undefined;
+    const asOf = opts.asOf ? asOfDate(opts.asOf, root) : undefined;
     if (opts.asOf && !asOf) return fail(`could not resolve --as-of "${opts.asOf}" to a commit`);
     store.reindex(); // reflect any out-of-band JSON edits before assembling
     process.stdout.write(formatContext(store.assembleContext(target, Number(opts.budget), { asOf })));
