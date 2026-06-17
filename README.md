@@ -340,5 +340,5 @@ npm test            # node:test suite (store, graph, parse, indexer, synthesis, 
 npm run hunch -- why src/store/hunchStore.ts   # run the CLI from source via tsx, no build
 ```
 
-See [DESIGN.md](DESIGN.md) for the full spec. Deferred by design: embeddings / vector
-search, PR/CI webhooks, a web dashboard, and multi-repo support.
+See [DESIGN.md](DESIGN.md) for the full spec. Deferred by design: PR/CI webhooks, a
+web dashboard, and multi-repo support.

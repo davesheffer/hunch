@@ -597,6 +597,8 @@
         <div class="feat" data-rise style="--d:.16s"><div class="fi">/ 04</div><h4>Works offline</h4><p>Synthesis is billed to your Claude subscription via the CLI — never the pay-per-token API. No <span class="mono">claude</span>? A deterministic heuristic keeps the loop alive.</p></div>
         <div class="feat" data-rise style="--d:.2s"><div class="fi">/ 05</div><h4>Fragility report</h4><p>Rank the riskiest code by churn × bug-count × fan-in × coverage gaps — and get the bug history behind it, not a generic lecture.</p></div>
         <div class="feat" data-rise style="--d:.24s"><div class="fi">/ 06</div><h4>Atomic &amp; durable</h4><p>Every write is temp-file + rename with a Windows-safe fallback. An interrupted write can't truncate the index; a corrupt index refuses to be flattened.</p></div>
+        <div class="feat" data-rise style="--d:.28s"><div class="fi">/ 07</div><h4>Time-travel memory</h4><p>Decisions and invariants carry a git-anchored valid-time window. Query the graph <span class="mono">--as-of</span> any commit or tag; supersession closes a window instead of deleting it, so history stays auditable.</p></div>
+        <div class="feat" data-rise style="--d:.32s"><div class="fi">/ 08</div><h4>Regression Guard</h4><p>Re-adding a symbol or dependency a decision deliberately retired gets flagged — warns always, fails a strict commit only when tied to a blocking invariant. The AI stops undoing intentional design.</p></div>
       </div>
     </div>
   </section>
@@ -605,32 +607,27 @@
   <section id="changelog" style="padding-top:40px">
     <div class="wrap">
       <span class="sec-label" data-rise>Latest release</span>
-      <h2 class="title" data-rise style="--d:.08s">New in <em>v0.8.0</em> — the agent stays grounded, on its own.</h2>
-      <p class="lead" data-rise style="--d:.14s">Telling an assistant “check the memory first” is advisory — it drifts. Now Hunch enforces it through Claude Code’s hooks: the right slice of memory is injected before every edit, at a firmness you choose.</p>
+      <h2 class="title" data-rise style="--d:.08s">New in <em>v0.9.0</em> — the codebase remembers <em>when</em>, not just why.</h2>
+      <p class="lead" data-rise style="--d:.14s">Decisions and invariants now carry a git-anchored valid-time window. Travel the graph to any commit, and stop the AI from quietly re-introducing what you deliberately retired.</p>
 
       <div class="release" data-rise style="--d:.18s">
         <div class="rel-head">
-          <span class="rel-tag">v0.8.0</span>
-          <span class="rel-meta">Agent hooks · firmness</span>
+          <span class="rel-tag">v0.9.0</span>
+          <span class="rel-meta">Time-travel · Regression Guard</span>
           <span class="rel-live"><span class="dot"></span>live on npm</span>
         </div>
         <div class="rel-body">
           <div class="rel-copy">
-            <h3>Firmness — one knob, four levels.</h3>
-            <p>Every edit fires a <span class="mono">PreToolUse</span> hook that injects the file’s decisions, invariants and blast radius straight into context. How hard it pushes is yours to set — and it’s committed, so the whole team shares one level.</p>
-            <div class="ladder" role="img" aria-label="Firmness levels: off, advisory (default), firm, strict">
-              <span class="rung">off</span>
-              <span class="rung is-default">advisory<i>default</i></span>
-              <span class="rung">firm</span>
-              <span class="rung is-strict">strict</span>
-            </div>
-            <p class="rel-note"><b>strict</b> denies an edit that would touch a <em>blocking</em> invariant — handing the invariant back as the reason. It never breaks your flow: any failure emits nothing and exits clean.</p>
+            <h3>Time-travel — ask what was true <em>then</em>.</h3>
+            <p>Every decision and constraint has a valid-time window pinned to commit dates. Supersession <b>closes</b> a window instead of deleting it, so the why-it-changed trail stays auditable. Add <span class="mono">--as-of &lt;ref&gt;</span> to any query, or read the full history with <span class="mono">hunch timeline</span>.</p>
+            <div class="rel-cmd"><span><span class="dollar">$ </span>hunch why src/auth/session.ts --as-of v0.7.0</span></div>
+            <p class="rel-note">The <b>Regression Guard</b> flags a diff that re-adds a symbol or dependency an in-force decision removed — <em>“re-adds <span class="mono">login()</span>, dec_017 dropped it for instant revocation.”</em> It warns always; it fails a <b>strict</b> commit only when the retirement is tied to a blocking invariant.</p>
           </div>
           <div class="rel-aside">
             <ul class="rel-list">
-              <li><b>record-constraint</b> — a first-class write path for the invariants your code must not break.</li>
-              <li><b>Rename-proof</b> — hooks re-bind by command tail, so moving the repo never strands them.</li>
-              <li><b>Zero-noise</b> — silent on any file the graph hasn’t learned yet.</li>
+              <li><b>Bi-temporal, git-native</b> — validity is anchored to commits; only Hunch can do this for free.</li>
+              <li><b>Invalidate, don't delete</b> — superseded decisions stay queryable, never lost.</li>
+              <li><b>MCP-first</b> — <span class="mono">as_of</span> on why/context, plus a new <span class="mono">hunch_timeline</span> tool.</li>
             </ul>
             <div class="rel-cmd"><span><span class="dollar">$ </span>npm i -g @davesheffer/hunch</span><button class="copy" id="relCopy">Copy</button></div>
           </div>
