@@ -369,7 +369,11 @@
         <span class="mark">🧠</span><span>Hunch</span>
       </a>
       <nav class="nav-links">
-        <a href="#changelog">Changelog</a>
+        <a href="#how">How it works</a>
+        <a href="#chain">The graph</a>
+        <a href="#features">Features</a>
+        <a href="#changelog">What's new</a>
+        <a href="#compare">Why it's different</a>
         <a href="#start">Get started</a>
       </nav>
       <div class="nav-cta">
@@ -403,7 +407,7 @@
           <a class="btn" href="#start" data-magnetic><span class="shine"></span>Get started
             <svg class="arw" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12L12 4M12 4H6M12 4v6"/></svg>
           </a>
-          <a class="btn ghost" href="#changelog" data-magnetic>Changelog</a>
+          <a class="btn ghost" href="#how" data-magnetic>See how it works</a>
         </div>
         <div class="hero-stats" data-rise style="--d:.35s">
           <div class="stat"><div class="n"><span data-count="22">0</span></div><div class="l">Decisions captured</div></div>
@@ -478,6 +482,127 @@
     </div>
   </section>
 
+  <!-- ───────────────  PROBLEM  ─────────────── -->
+  <div class="wrap"><div class="problem"><div class="wrap">
+    <section style="padding:96px 0">
+      <span class="sec-label" data-rise>The problem</span>
+      <p class="big-quote" data-rise style="--d:.1s">
+        Every AI session starts <span class="red">from zero</span>. The model
+        re-reads your code, re-guesses the intent, and happily <b>"fixes"</b> the thing
+        you deliberately did last month — because the <b>reasoning</b> lives in PRs,
+        Slack, and people's heads, not in the repo.
+      </p>
+      <div class="foot" data-rise style="--d:.2s">
+        <div><strong>Stateless by design</strong>Cursor and Copilot do ephemeral RAG over your <em>current</em> code. The horizon is this session — value stays flat.</div>
+        <div><strong>Intent evaporates</strong>The codebase records the final state, never the rejected alternative or the invariant you must never break.</div>
+        <div><strong>The same mistakes, again</strong>Without memory, the agent re-discovers the bug you already fixed — and undoes the workaround that prevents it.</div>
+      </div>
+    </section>
+  </div></div></div>
+
+  <!-- ───────────────  HOW IT WORKS  ─────────────── -->
+  <section id="how">
+    <div class="wrap">
+      <span class="sec-label" data-rise>How it works</span>
+      <h2 class="title" data-rise style="--d:.08s">Captured as a <em>byproduct</em> of normal work — commits and test failures.</h2>
+      <p class="lead" data-rise style="--d:.14s">Three layers, no documentation chore. Index is deterministic. Learning happens on every commit. Grounding reaches Claude Code through every door it has.</p>
+
+      <div class="steps">
+        <div class="step" data-rise style="--d:.05s">
+          <div class="idx">01 / INDEX</div>
+          <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M6 8.5v3a2 2 0 002 2h8a2 2 0 002-2v-3M12 13.5v2"/></svg></div>
+          <h3>Map the code, no LLM</h3>
+          <p>tree-sitter parses your repo into a symbol &amp; dependency graph — functions, call edges, imports, components — plus churn and fan-in metrics. Pure, fast, deterministic.</p>
+          <span class="tag">hunch index</span>
+        </div>
+        <div class="step" data-rise style="--d:.13s">
+          <div class="idx">02 / LEARN</div>
+          <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 3v4M12 17v4M5 12H1M23 12h-4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8"/><circle cx="12" cy="12" r="3"/></svg></div>
+          <h3>Turn events into memory</h3>
+          <p>Each commit becomes a structured <b>Decision</b>; a failing test becomes a <b>Bug</b> with a ranked suspect list; recurring or severe bugs are promoted into <b>Constraints</b> that raise a component's fragility.</p>
+          <span class="tag">post-commit → synthesis</span>
+        </div>
+        <div class="step" data-rise style="--d:.21s">
+          <div class="idx">03 / GROUND</div>
+          <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 2a10 10 0 100 20 10 10 0 000-20z"/><path d="M2 12h20M12 2a15 15 0 010 20M12 2a15 15 0 000 20"/></svg></div>
+          <h3>Feed it back, with citations</h3>
+          <p>Claude Code reads it through an <b>MCP server</b>, an auto-maintained <b>CLAUDE.md</b>, and <b>slash commands</b> — and every answer cites its provenance: source, confidence, evidence. Nothing is a blind assertion.</p>
+          <span class="tag">MCP + CLAUDE.md + slash</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────────────  THE CHAIN  ─────────────── -->
+  <section id="chain" style="padding-top:40px">
+    <div class="wrap">
+      <span class="sec-label" data-rise>The reasoning graph</span>
+      <h2 class="title" data-rise style="--d:.08s">A bug spawns a <em>decision</em>. A decision spawns a <em>constraint</em>.</h2>
+      <p class="lead" data-rise style="--d:.14s">The links are what let the agent answer “why” and “what must not break” with evidence, not vibes — every node attached to its components, symbols, and commits.</p>
+
+      <div class="chain">
+        <div class="link bug" data-rise style="--d:.05s">
+          <span class="badge"><svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="8" r="7"/></svg>bug_009</span>
+          <h4>Leaked token usable after reset</h4>
+          <p>A stateless JWT couldn't be revoked server-side. Caught by <span class="mono" style="color:var(--warn)">auth.revocation.spec.ts</span>, root cause attributed, severity <b>critical</b>.</p>
+          <div class="arrow">→</div>
+        </div>
+        <div class="link dec" data-rise style="--d:.13s">
+          <span class="badge"><svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="1" width="14" height="14" rx="3"/></svg>dec_017</span>
+          <h4>Store sessions in Redis, not JWT-only</h4>
+          <p>Sessions move server-side; the JWT carries only an opaque id. Alternatives rejected, consequences recorded, <b>commit a1b2c3d</b> as evidence.</p>
+          <div class="arrow">→</div>
+        </div>
+        <div class="link con" data-rise style="--d:.21s">
+          <span class="badge"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 1l6 3v4c0 4-3 6-6 7-3-1-6-3-6-7V4z"/></svg>con_004</span>
+          <h4>Revocation must be server-side</h4>
+          <p>Never trust JWT expiry alone for logout. Scoped to <span class="mono" style="color:var(--accent)">src/auth/**</span>, <b>blocking</b> — checked before any edit in that scope.</p>
+          <div class="arrow">→</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────────────  ASK WHY DEMO  ─────────────── -->
+  <section id="demo" style="padding-top:48px">
+    <div class="wrap">
+      <span class="sec-label" data-rise>In Claude Code</span>
+      <h2 class="title" data-rise style="--d:.08s;max-width:14em">Just ask the codebase <em>why</em>.</h2>
+      <div class="demo-grid">
+        <div>
+          <ul class="demo-points" data-rise style="--d:.1s">
+            <li><b>Grounded from second one.</b> The agent doesn't re-discover the revocation lesson — it reads <span class="mono">bug_009</span> and <span class="mono">con_004</span> before touching the file.</li>
+            <li><b>Blast radius, known.</b> One Hunch lookup returns every caller and dependent component before a refactor, so nothing breaks silently.</li>
+            <li><b>Evidence, not vibes.</b> Each claim carries its source, confidence, and the commit or test that proves it.</li>
+            <li><b>Write-back.</b> After a non-trivial choice, the decision is recorded — the graph gets denser as you work.</li>
+          </ul>
+        </div>
+        <div class="terminal" data-rise style="--d:.18s">
+          <div class="term-bar"><i></i><i></i><i></i><span class="ttl">claude code — why is the session module built this way?</span></div>
+          <div class="term-body" id="typed"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────────────  FEATURES  ─────────────── -->
+  <section id="features">
+    <div class="wrap">
+      <span class="sec-label" data-rise>What's inside</span>
+      <h2 class="title" data-rise style="--d:.08s">Everything is local, diffable, and yours.</h2>
+      <div class="features">
+        <div class="feat" data-rise style="--d:.04s"><div class="fi">/ 01</div><h4>MCP-native</h4><p>Claude queries Hunch for the why behind a file, the blast radius of a change, a bug's lineage, and the invariants in scope — and writes new decisions back. The structured two-way API it calls under the hood.</p></div>
+        <div class="feat" data-rise style="--d:.08s"><div class="fi">/ 02</div><h4>Provenance on everything</h4><p>Every record carries source, confidence and evidence. Inferred &lt; llm-draft &lt; human-confirmed. Low-confidence items stay advisory and cheap to discard.</p></div>
+        <div class="feat" data-rise style="--d:.12s"><div class="fi">/ 03</div><h4>Git is the sync</h4><p>The Hunch graph is plain JSON committed beside your code — the source of truth, reviewable in PRs, synced for free over push/pull. A merge driver resolves it by record id, not conflict markers.</p></div>
+        <div class="feat" data-rise style="--d:.16s"><div class="fi">/ 04</div><h4>Works offline</h4><p>Synthesis is billed to your Claude subscription via the CLI — never the pay-per-token API. No <span class="mono">claude</span>? A deterministic heuristic keeps the loop alive.</p></div>
+        <div class="feat" data-rise style="--d:.2s"><div class="fi">/ 05</div><h4>Fragility report</h4><p>Rank the riskiest code by churn × bug-count × fan-in × coverage gaps — and get the bug history behind it, not a generic lecture.</p></div>
+        <div class="feat" data-rise style="--d:.24s"><div class="fi">/ 06</div><h4>Atomic &amp; durable</h4><p>Every write is temp-file + rename with a Windows-safe fallback. An interrupted write can't truncate the index; a corrupt index refuses to be flattened.</p></div>
+        <div class="feat" data-rise style="--d:.28s"><div class="fi">/ 07</div><h4>Time-travel memory</h4><p>Decisions and invariants carry a git-anchored valid-time window. Query the graph <span class="mono">--as-of</span> any commit or tag; supersession closes a window instead of deleting it, so history stays auditable.</p></div>
+        <div class="feat" data-rise style="--d:.32s"><div class="fi">/ 08</div><h4>Regression Guard</h4><p>Re-adding a symbol or dependency a decision deliberately retired gets flagged — warns always, fails a strict commit only when tied to a blocking invariant. The AI stops undoing intentional design.</p></div>
+      </div>
+    </div>
+  </section>
+
   <!-- ───────────────  LATEST RELEASE  ─────────────── -->
   <section id="changelog" style="padding-top:40px">
     <div class="wrap">
@@ -537,9 +662,108 @@
             </ul>
           </div>
         </div>
+
+        <div class="rlog-item" style="display:grid;grid-template-columns:120px 1fr;gap:20px;padding:20px 0;border-top:1px solid var(--line)">
+          <div><span class="rel-tag">v0.7.0</span><div style="font-size:.8rem;color:var(--muted);margin-top:8px">Jun 16, 2026</div></div>
+          <div>
+            <b>Multi-CLI subscription synthesis.</b>
+            <ul style="margin:8px 0 0;padding-left:18px;color:var(--ink-soft);line-height:1.6">
+              <li>Codex and Cursor join Claude as synthesis providers — the write path bills to whichever coding subscription you already have, never a pay-per-token API.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="rlog-item" style="display:grid;grid-template-columns:120px 1fr;gap:20px;padding:20px 0;border-top:1px solid var(--line)">
+          <div><span class="rel-tag">v0.6.0</span><div style="font-size:.8rem;color:var(--muted);margin-top:8px">Jun 16, 2026</div></div>
+          <div>
+            <b>Multi-assistant compatibility.</b>
+            <ul style="margin:8px 0 0;padding-left:18px;color:var(--ink-soft);line-height:1.6">
+              <li><span class="mono">hunch init</span> scaffolds Cursor, VS Code (Copilot), Codex and <span class="mono">AGENTS.md</span> — all pointed at one <span class="mono">.hunch/</span> graph, merged idempotently into existing files.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="rlog-item" style="display:grid;grid-template-columns:120px 1fr;gap:20px;padding:20px 0;border-top:1px solid var(--line)">
+          <div><span class="rel-tag">v0.5.0</span><div style="font-size:.8rem;color:var(--muted);margin-top:8px">Jun 16, 2026</div></div>
+          <div>
+            <b>Guardrails, surfaced everywhere.</b>
+            <ul style="margin:8px 0 0;padding-left:18px;color:var(--ink-soft);line-height:1.6">
+              <li>Auto-installed pre-commit constraint guard; a new <span class="mono">hunch_blast_radius</span> MCP tool; VS Code surfaces near-violations inline.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="rlog-item" style="display:grid;grid-template-columns:120px 1fr;gap:20px;padding:20px 0;border-top:1px solid var(--line)">
+          <div><span class="rel-tag">v0.4.0</span><div style="font-size:.8rem;color:var(--muted);margin-top:8px">Jun 15, 2026</div></div>
+          <div>
+            <b>Blast-radius near-violations.</b>
+            <ul style="margin:8px 0 0;padding-left:18px;color:var(--ink-soft);line-height:1.6">
+              <li><span class="mono">hunch check</span> flags invariants reached transitively through the dependency graph — not just files directly in scope.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="rlog-item" style="display:grid;grid-template-columns:120px 1fr;gap:20px;padding:20px 0;border-top:1px solid var(--line)">
+          <div><span class="rel-tag">v0.3.0</span><div style="font-size:.8rem;color:var(--muted);margin-top:8px">Jun 15, 2026</div></div>
+          <div>
+            <b>Drift repair + hardened test loop.</b>
+            <ul style="margin:8px 0 0;padding-left:18px;color:var(--ink-soft);line-height:1.6">
+              <li><span class="mono">hunch stale --resync</span> re-synthesizes decisions whose files moved on; the test-learning loop gets sturdier suspect ranking and recurrence detection.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="rlog-item" style="display:grid;grid-template-columns:120px 1fr;gap:20px;padding:20px 0;border-top:1px solid var(--line)">
+          <div><span class="rel-tag">v0.2.0</span><div style="font-size:.8rem;color:var(--muted);margin-top:8px">Jun 15, 2026</div></div>
+          <div>
+            <b>Failure-learning loop.</b>
+            <ul style="margin:8px 0 0;padding-left:18px;color:var(--ink-soft);line-height:1.6">
+              <li><span class="mono">hunch test</span> wraps your suite: each failing test becomes a Bug with ranked suspects; recurrences and severe failures promote a do-not-break Constraint.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="rlog-item" style="display:grid;grid-template-columns:120px 1fr;gap:20px;padding:20px 0;border-top:1px solid var(--line)">
+          <div><span class="rel-tag">v0.1.2</span><div style="font-size:.8rem;color:var(--muted);margin-top:8px">Jun 15, 2026</div></div>
+          <div>
+            <b>Semantic search polish.</b>
+            <ul style="margin:8px 0 0;padding-left:18px;color:var(--ink-soft);line-height:1.6">
+              <li>Optional local embeddings degrade gracefully to keyword FTS on model-load failure; quieter startup.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="rlog-item" style="display:grid;grid-template-columns:120px 1fr;gap:20px;padding:20px 0;border-top:1px solid var(--line)">
+          <div><span class="rel-tag">v0.1.0</span><div style="font-size:.8rem;color:var(--muted);margin-top:8px">Jun 14, 2026</div></div>
+          <div>
+            <b>Initial release — Engineering Memory OS.</b>
+            <ul style="margin:8px 0 0;padding-left:18px;color:var(--ink-soft);line-height:1.6">
+              <li>Git-native decision / bug / constraint graph; tree-sitter symbol + dependency index; SQLite/FTS search.</li>
+              <li>MCP server, post-commit learning loop, auto-maintained <span class="mono">CLAUDE.md</span>, subscription-billed synthesis with a deterministic offline fallback.</li>
+              <li>Companion VS Code extension; opt-in local semantic search.</li>
+            </ul>
+          </div>
+        </div>
       </div>
     </div>
   </section>
+
+  <!-- ───────────────  COMPARE  ─────────────── -->
+  <div class="wrap"><div class="compare"><div class="wrap">
+    <section id="compare" style="padding:96px 0">
+      <span class="sec-label" data-rise>Why it's different</span>
+      <h2 class="title" data-rise style="--d:.08s">Copilot reads the blueprints fresh each morning. <em>Hunch</em> has been on-site for ten years.</h2>
+      <div class="ctable" data-rise style="--d:.14s">
+        <div class="crow head"><div class="feature">&nbsp;</div><div class="them">Cursor / Copilot</div><div class="us"><span class="mk">🧠</span> &nbsp;Hunch</div></div>
+        <div class="crow"><div class="feature">Core data model</div><div class="them">Ephemeral RAG over current code</div><div class="us"><b>Curated graph</b> of decisions, bugs, constraints</div></div>
+        <div class="crow"><div class="feature">Time horizon</div><div class="them">This session</div><div class="us">The <b>lifetime</b> of the codebase</div></div>
+        <div class="crow"><div class="feature">What it indexes</div><div class="them">Syntax + embeddings of files</div><div class="us"><b>Why</b> — intent, causality, invariants</div></div>
+        <div class="crow"><div class="feature">Write path</div><div class="them">None (read-only over code)</div><div class="us"><b>First-class</b> — it learns at commit &amp; test time</div></div>
+        <div class="crow"><div class="feature">Value over time</div><div class="them">Flat — re-derived each time</div><div class="us"><b>Compounds</b> — a flywheel</div></div>
+        <div class="crow"><div class="feature">Failure it removes</div><div class="them">“AI can't see enough code”</div><div class="us">“AI <b>repeats past mistakes</b> / breaks design”</div></div>
+      </div>
+    </section>
+  </div></div></div>
 
   <!-- ───────────────  GET STARTED  ─────────────── -->
   <section id="start">
@@ -573,6 +797,24 @@
     </div>
   </section>
 
+  <!-- ───────────────  CTA  ─────────────── -->
+  <section class="cta">
+    <div class="wrap">
+      <div class="cta-card" data-rise>
+        <h2>Make your codebase<br/><em>remember why.</em></h2>
+        <p>The longer it runs, the smarter it gets — and the more expensive it is to go back to a stateless AI.</p>
+        <div class="row">
+          <a class="btn" href="#start" data-magnetic><span class="shine"></span>Get started</a>
+          <a class="btn ghost" href="https://github.com/davesheffer/hunch/blob/main/DESIGN.md" target="_blank" rel="noopener">Read the design</a>
+        </div>
+        <div class="cmdline">
+          <span><span class="dollar">$ </span>hunch init</span>
+          <button class="copy" id="copyBtn">Copy</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- ───────────────  FOOTER  ─────────────── -->
   <footer>
     <div class="wrap">
@@ -581,8 +823,8 @@
           <a class="brand" href="#top" style="margin-bottom:14px"><span class="mark">🧠</span><span>Hunch</span></a>
           <p style="color:var(--ink-soft);font-size:14.5px;line-height:1.6;margin:0;font-weight:380">Git stores what the code is. Hunch stores why — a persistent, git-native reasoning graph for the age of AI engineering.</p>
         </div>
-        <div class="col"><h5>Product</h5><a href="#changelog">Changelog</a><a href="#start">Get started</a><a href="https://www.npmjs.com/package/@davesheffer/hunch" target="_blank" rel="noopener">npm</a></div>
-        <div class="col"><h5>Develop</h5><a href="https://github.com/davesheffer/hunch#two-ways-to-use-it" target="_blank" rel="noopener">CLI reference</a><a href="https://github.com/davesheffer/hunch/tree/main/vscode-extension" target="_blank" rel="noopener">VS Code extension</a></div>
+        <div class="col"><h5>Product</h5><a href="#how">How it works</a><a href="#chain">The graph</a><a href="#features">Features</a><a href="#changelog">What's new</a><a href="#compare">Why it's different</a></div>
+        <div class="col"><h5>Develop</h5><a href="#start">Get started</a><a href="#demo">In Claude Code</a><a href="https://github.com/davesheffer/hunch#two-ways-to-use-it" target="_blank" rel="noopener">CLI reference</a><a href="https://github.com/davesheffer/hunch/tree/main/vscode-extension" target="_blank" rel="noopener">VS Code extension</a></div>
         <div class="col"><h5>Resources</h5><a href="https://github.com/davesheffer/hunch#readme" target="_blank" rel="noopener">README</a><a href="https://github.com/davesheffer/hunch/blob/main/DESIGN.md" target="_blank" rel="noopener">DESIGN.md</a><a href="https://github.com/davesheffer/hunch" target="_blank" rel="noopener">GitHub</a><a href="https://github.com/davesheffer/hunch/blob/main/DESIGN.md#appendix-a--mcp-tool-surface-v1" target="_blank" rel="noopener">MCP tools</a></div>
       </div>
       <div class="foot-bot">
