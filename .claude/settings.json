@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"C:\\\\Program Files\\\\nodejs\\\\node.exe\" \"C:\\\\Users\\\\davids\\\\github\\\\hunch\\\\dist\\\\cli\\\\index.js\" hook"
+            "command": "npx tsx \"C:\\\\Users\\\\david\\\\Documents\\\\github\\\\hunch\\\\src\\\\cli\\\\index.ts\" hook"
           }
         ]
       }
@@ -16,7 +16,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"C:\\\\Program Files\\\\nodejs\\\\node.exe\" \"C:\\\\Users\\\\davids\\\\github\\\\hunch\\\\dist\\\\cli\\\\index.js\" hook"
+            "command": "npx tsx \"C:\\\\Users\\\\david\\\\Documents\\\\github\\\\hunch\\\\src\\\\cli\\\\index.ts\" hook"
           }
         ]
       }

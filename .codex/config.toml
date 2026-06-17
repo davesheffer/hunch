@@ -1,5 +1,5 @@
 # >>> hunch mcp (managed) >>>
 [mcp_servers.hunch]
-command = 'C:\Program Files\nodejs\node.exe'
-args = ['C:\Users\davids\github\hunch\dist\cli\index.js', 'mcp']
+command = 'npx'
+args = ['tsx', 'C:\Users\david\Documents\github\hunch\src\cli\index.ts', 'mcp']
 # <<< hunch mcp <<<

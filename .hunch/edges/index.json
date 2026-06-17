@@ -1140,6 +1140,21 @@
     }
   },
   {
+    "id": "edge_2a616bf0f3",
+    "from": "sym_010a360b82",
+    "to": "sym_e96a3d5499",
+    "type": "calls",
+    "reason": "readConfig calls defaults",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/core/config.ts"
+      ]
+    }
+  },
+  {
     "id": "edge_2a6af9ed3c",
     "from": "sym_daac570c01",
     "to": "sym_47649456f3",
@@ -1560,6 +1575,21 @@
     }
   },
   {
+    "id": "edge_3d81dd969e",
+    "from": "sym_784aeb8abe",
+    "to": "sym_2f00ac7819",
+    "type": "calls",
+    "reason": "indexed calls indexRepo",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "test/hookpolicy.test.ts"
+      ]
+    }
+  },
+  {
     "id": "edge_3d921de4d2",
     "from": "sym_b002278a20",
     "to": "sym_f5f04a2f17",
@@ -1676,6 +1706,21 @@
       "confidence": 0.8,
       "evidence": [
         "src/synthesis/provider.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_437e4aec4a",
+    "from": "sym_784aeb8abe",
+    "to": "sym_d73e258d4a",
+    "type": "calls",
+    "reason": "indexed calls ensureDirs",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "test/hookpolicy.test.ts"
       ]
     }
   },
@@ -2310,6 +2355,21 @@
     }
   },
   {
+    "id": "edge_60cea41c8c",
+    "from": "sym_784aeb8abe",
+    "to": "sym_5d2201cf9e",
+    "type": "calls",
+    "reason": "indexed calls close",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "test/hookpolicy.test.ts"
+      ]
+    }
+  },
+  {
     "id": "edge_60fdff0329",
     "from": "sym_9853d94477",
     "to": "sym_815fdb47eb",
@@ -2501,6 +2561,21 @@
       "confidence": 0.8,
       "evidence": [
         "src/store/hunchStore.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_6a0135e960",
+    "from": "sym_784aeb8abe",
+    "to": "sym_2c058517d8",
+    "type": "calls",
+    "reason": "indexed calls hunchPaths",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "test/hookpolicy.test.ts"
       ]
     }
   },
@@ -2700,6 +2775,51 @@
     }
   },
   {
+    "id": "edge_7744a9a8bb",
+    "from": "sym_ba3eb23bcb",
+    "to": "sym_71788d2ebe",
+    "type": "calls",
+    "reason": "seedBlocking calls reindex",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "test/hookpolicy.test.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_774db49f9b",
+    "from": "sym_c06e2500a7",
+    "to": "sym_b002278a20",
+    "type": "calls",
+    "reason": "blockingInScope calls checkConstraints",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/core/hookpolicy.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_778302336b",
+    "from": "sym_784aeb8abe",
+    "to": "sym_71788d2ebe",
+    "type": "calls",
+    "reason": "indexed calls reindex",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "test/hookpolicy.test.ts"
+      ]
+    }
+  },
+  {
     "id": "edge_77ce9f2997",
     "from": "sym_547bbf9a26",
     "to": "sym_815fdb47eb",
@@ -2865,6 +2985,21 @@
     }
   },
   {
+    "id": "edge_801edec0cd",
+    "from": "sym_784aeb8abe",
+    "to": "sym_8fc96bbf18",
+    "type": "calls",
+    "reason": "indexed calls loadAll",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "test/hookpolicy.test.ts"
+      ]
+    }
+  },
+  {
     "id": "edge_819f44fdbc",
     "from": "sym_c5bf39a575",
     "to": "sym_ec99de2bc3",
@@ -2906,6 +3041,21 @@
       "confidence": 0.8,
       "evidence": [
         "vscode-extension/src/extension.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_854d1b2e03",
+    "from": "sym_1181a72fcf",
+    "to": "sym_010a360b82",
+    "type": "calls",
+    "reason": "writeConfig calls readConfig",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/core/config.ts"
       ]
     }
   },
@@ -4440,6 +4590,21 @@
     }
   },
   {
+    "id": "edge_d011d83689",
+    "from": "sym_010a360b82",
+    "to": "sym_b24c20a0d9",
+    "type": "calls",
+    "reason": "readConfig calls isFirmness",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/core/config.ts"
+      ]
+    }
+  },
+  {
     "id": "edge_d0832622dd",
     "from": "sym_1c5c6e0d21",
     "to": "sym_e234379403",
@@ -4541,6 +4706,21 @@
       "confidence": 0.8,
       "evidence": [
         "src/synthesis/synthesize.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_d5e096fbc8",
+    "from": "sym_ba3eb23bcb",
+    "to": "sym_383cbb69ef",
+    "type": "calls",
+    "reason": "seedBlocking calls put",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "test/hookpolicy.test.ts"
       ]
     }
   },
@@ -4721,21 +4901,6 @@
       "confidence": 0.8,
       "evidence": [
         "src/synthesis/provider.ts"
-      ]
-    }
-  },
-  {
-    "id": "edge_e0d6459d79",
-    "from": "sym_6b4df600cc",
-    "to": "sym_b002278a20",
-    "type": "calls",
-    "reason": "blockingInScope calls checkConstraints",
-    "strength": 0.8,
-    "provenance": {
-      "source": "extracted",
-      "confidence": 0.8,
-      "evidence": [
-        "src/cli/index.ts"
       ]
     }
   },
@@ -5321,6 +5486,21 @@
       "confidence": 0.8,
       "evidence": [
         "src/store/jsonStore.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_f7807c2321",
+    "from": "cmp_a94a8fe5cc",
+    "to": "cmp_863ac67d4a",
+    "type": "depends_on",
+    "reason": "test/firmness.test.ts imports src/integrations/scaffold.ts",
+    "strength": 0.6,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.9,
+      "evidence": [
+        "test/firmness.test.ts:imports:../src/integrations/scaffold.js"
       ]
     }
   },

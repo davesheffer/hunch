@@ -2,9 +2,10 @@
   "servers": {
     "hunch": {
       "type": "stdio",
-      "command": "C:\\Program Files\\nodejs\\node.exe",
+      "command": "npx",
       "args": [
-        "C:\\Users\\davids\\github\\hunch\\dist\\cli\\index.js",
+        "tsx",
+        "C:\\Users\\david\\Documents\\github\\hunch\\src\\cli\\index.ts",
         "mcp"
       ]
     }
