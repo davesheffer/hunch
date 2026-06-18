@@ -13,7 +13,7 @@ import type { HunchStore } from "../store/hunchStore.js";
 import { parseSource, attributeCalls } from "./parse.js";
 import { symbolId, componentId, edgeId, sha1 } from "../core/ids.js";
 import { extracted, inferred, type Symbol, type Edge, type Component } from "../core/types.js";
-import { isGitRepo, trackedFiles, fileChurn, lastCommitForFile } from "./git.js";
+import { isGitRepo, trackedFiles, fileGitMetrics } from "./git.js";
 
 const CODE_EXTS = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"];
 const SKIP_DIRS = new Set(["node_modules", ".git", "dist", "build", ".hunch", "coverage", ".next", "out"]);
@@ -38,7 +38,10 @@ export function indexRepo(store: HunchStore, root: string, opts: { churn?: boole
   const fileStartByteId = new Map<string, Map<number, string>>(); // file -> (symbol startByte -> id)
   const perFileCalls: Array<{ file: string; bySym: Map<number, Map<string, boolean>> }> = [];
   const perFileImports: Array<{ file: string; imports: string[] }> = [];
-  const churnCache = new Map<string, number>();
+  // Batched per-file git metrics (churn + last commit) in TWO `git log` spawns
+  // total, instead of two per file — the dominant cost of indexing a large repo.
+  const rels = files.map((abs) => toPosix(relative(root, abs)));
+  const gitMeta = useGit ? fileGitMetrics(root, rels, opts.churn === false ? 0 : 90) : null;
   let skipped = 0;
 
   for (const abs of files) {
@@ -63,9 +66,9 @@ export function indexRepo(store: HunchStore, root: string, opts: { churn?: boole
       continue;
     }
 
-    const churn = opts.churn !== false && useGit ? (churnCache.get(rel) ?? fileChurn(rel, root)) : 0;
-    churnCache.set(rel, churn);
-    const last = useGit ? lastCommitForFile(rel, root) : "";
+    const m = gitMeta?.get(rel);
+    const churn = m?.churn ?? 0;
+    const last = m?.lastCommit ?? "";
 
     const idsInFile: string[] = [];
     const startByteId = new Map<number, string>();

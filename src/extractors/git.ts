@@ -12,17 +12,17 @@ export interface CommitMeta {
   files: string[];
 }
 
-function git(args: string[], cwd: string): string {
+function git(args: string[], cwd: string, maxBuffer = 64 * 1024 * 1024): string {
   // stdio: capture stdout, silence stderr (so "no commits yet" etc. don't leak).
   return execFileSync("git", args, {
-    cwd, encoding: "utf8", maxBuffer: 64 * 1024 * 1024,
+    cwd, encoding: "utf8", maxBuffer,
     stdio: ["ignore", "pipe", "ignore"],
   }).trim();
 }
 
-function gitSafe(args: string[], cwd: string): string {
+function gitSafe(args: string[], cwd: string, maxBuffer?: number): string {
   try {
-    return git(args, cwd);
+    return git(args, cwd, maxBuffer);
   } catch {
     return "";
   }
@@ -121,6 +121,53 @@ export function lastCommitForFile(file: string, cwd: string): string {
 /** ISO author-date of the most recent commit touching a file ("" if none). */
 export function lastChangeDate(file: string, cwd: string): string {
   return gitSafe(["log", "-1", "--format=%aI", "--", file], cwd);
+}
+
+/** Batched per-file git metrics for indexing: churn (commits touching the file in
+ *  the last `days`; pass 0 to skip) and the most-recent commit (`commit:<sha>`).
+ *
+ *  Replaces the indexer's O(files) × 2 `git log` spawns — which dominate
+ *  `hunch index` wall-time on a large repo, especially on Windows where process
+ *  creation is costly — with ONE `git log` pass each. Only paths present in `want`
+ *  are returned (every requested path gets an entry, defaulting to 0 / ""). */
+export function fileGitMetrics(
+  cwd: string,
+  want: Iterable<string>,
+  days = 90,
+): Map<string, { churn: number; lastCommit: string }> {
+  const out = new Map<string, { churn: number; lastCommit: string }>();
+  for (const f of want) out.set(f, { churn: 0, lastCommit: "" });
+  if (out.size === 0) return out;
+
+  // churn — one windowed log; tally each wanted path's appearances (= commits).
+  if (days > 0) {
+    const raw = gitSafe(["log", `--since=${days}.days.ago`, "--name-only", "--format="], cwd);
+    if (raw) {
+      for (const line of raw.split("\n")) {
+        const e = line && out.get(line);
+        if (e) e.churn++;
+      }
+    }
+  }
+
+  // last commit — one newest-first log; the FIRST time a path appears is its most
+  // recent commit. NUL-prefixed lines mark commit boundaries; the rest are paths.
+  // 256MB buffer for the all-history name-only stream on large repos.
+  const raw = gitSafe(["log", "--name-only", "--format=%x00%h"], cwd, 256 * 1024 * 1024);
+  if (raw) {
+    let remaining = out.size;
+    let sha = "";
+    for (const line of raw.split("\n")) {
+      if (line.charCodeAt(0) === 0) { sha = line.slice(1); continue; }
+      if (!line) continue;
+      const e = out.get(line);
+      if (e && !e.lastCommit && sha) {
+        e.lastCommit = `commit:${sha}`;
+        if (--remaining === 0) break; // every wanted path resolved — stop scanning
+      }
+    }
+  }
+  return out;
 }
 
 /** Files staged for commit (for `hunch check` pre-commit enforcement). */
