@@ -3,7 +3,7 @@
  * in PRs, diffable, mergeable). This layer never touches SQLite — it is the
  * authoritative read/write surface; SQLite is rebuilt from it.
  */
-import { mkdirSync, readdirSync, readFileSync, existsSync, rmSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, existsSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 import type { HunchPaths } from "../core/paths.js";
 import { ENTITY_KINDS, SCHEMAS, type EntityKind, type EntityFor } from "../core/types.js";
@@ -20,8 +20,28 @@ const encode = (v: unknown): string => JSON.stringify(v, null, 2) + "\n";
 
 export class JsonStore {
   private _warnedForward = false;
+  /** Memoized validated records per kind. loadAll() is on every read-path method
+   *  (why/checkConstraints/fragility/assembleContext…), each of which previously
+   *  re-read the directory and re-ran Zod over every record. Cache keyed by the
+   *  kind dir's mtime: every write goes through writeFileAtomic (temp + rename) or
+   *  rmSync, both of which bump the dir mtime — so an OUT-OF-BAND write by another
+   *  process self-invalidates on the next read. In-process writes also invalidate
+   *  explicitly (exact, independent of mtime granularity). */
+  private cache = new Map<EntityKind, { mtimeMs: number; data: readonly unknown[] }>();
 
   constructor(private readonly paths: HunchPaths) {}
+
+  /** Drop memoized loadAll results. Writes through this store invalidate the
+   *  affected kind automatically; call this for OUT-OF-BAND changes to .hunch/
+   *  JSON (e.g. the long-lived MCP server reacting to a file-watch, or after an
+   *  external `hunch migrate`). */
+  clearCache(): void {
+    this.cache.clear();
+  }
+
+  private invalidate(kind: EntityKind): void {
+    this.cache.delete(kind);
+  }
 
   /** Create .hunch/<kind>/ directories. Stamp the manifest at the CURRENT version
    *  only when scaffolding a FRESH .hunch/ (so `hunch index`/`sync` on a brand-new
@@ -62,9 +82,22 @@ export class JsonStore {
     return join(this.paths.dir(kind), `${id}.json`);
   }
 
-  /** Load every record of a kind, validated against its schema. Invalid records
-   *  are skipped with a warning rather than crashing the whole load. */
+  /** Load every record of a kind, validated against its schema. Memoized — the
+   *  returned array is shared and MUST be treated read-only (every caller already
+   *  derives via filter/map/sort, which copy). Invalidated on write. */
   loadAll<K extends EntityKind>(kind: K): EntityFor[K][] {
+    const dir = this.paths.dir(kind);
+    const mtimeMs = existsSync(dir) ? statSync(dir).mtimeMs : 0;
+    const hit = this.cache.get(kind);
+    if (hit && hit.mtimeMs === mtimeMs) return hit.data as EntityFor[K][];
+    const data = this.readAllFromDisk(kind);
+    this.cache.set(kind, { mtimeMs, data });
+    return data;
+  }
+
+  /** Uncached disk read + validate. Invalid records are skipped with a warning
+   *  rather than crashing the whole load. */
+  private readAllFromDisk<K extends EntityKind>(kind: K): EntityFor[K][] {
     const dir = this.paths.dir(kind);
     if (!existsSync(dir)) return [];
     const schema = SCHEMAS[kind];
@@ -123,6 +156,7 @@ export class JsonStore {
     } else {
       writeFileAtomic(this.fileFor(kind, validated.id), encode(validated));
     }
+    this.invalidate(kind);
     return validated;
   }
 
@@ -130,6 +164,7 @@ export class JsonStore {
   replaceAll<K extends EntityKind>(kind: K, records: EntityFor[K][]): void {
     const schema = SCHEMAS[kind];
     const validated = records.map((r) => schema.parse(r));
+    this.invalidate(kind);
     mkdirSync(this.paths.dir(kind), { recursive: true });
     const single = SINGLE_FILE[kind];
     if (single) {
@@ -181,11 +216,13 @@ export class JsonStore {
       const next = arr.filter((r) => (r as { id?: string })?.id !== id);
       if (next.length === arr.length) return false;
       writeFileAtomic(f, encode(next));
+      this.invalidate(kind);
       return true;
     }
     const f = this.fileFor(kind, id);
     if (!existsSync(f)) return false;
     rmSync(f);
+    this.invalidate(kind);
     return true;
   }
 
@@ -196,6 +233,7 @@ export class JsonStore {
   persistMigration(): { migrated: number; skipped: number } {
     let migrated = 0;
     let skipped = 0;
+    this.cache.clear(); // every record is rewritten; drop all memoized loads
     const version = this.schemaVersion(); // read once; we're migrating FROM this
     for (const kind of ENTITY_KINDS) {
       const dir = this.paths.dir(kind);

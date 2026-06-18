@@ -74,6 +74,11 @@ export class HunchStore {
     const tx = db.transaction(() => {
       db.exec(RESET_SQL);
       const j = (s: string) => s; // readability marker for JSON-encoded columns
+      // Prepare the FTS insert ONCE (after RESET created the table), not per row.
+      const insFts = db.prepare(`INSERT INTO search (ref, kind, title, body) VALUES (?,?,?,?)`);
+      const fts = (ref: string, kind: string, title: string, body: string): void => {
+        insFts.run(ref, kind, title, body ?? "");
+      };
 
       const comps = this.json.loadAll("components");
       const insComp = db.prepare(
@@ -86,7 +91,7 @@ export class HunchStore {
           fragility: c.fragility, ps: c.provenance.source, pc: c.provenance.confidence,
           pe: JSON.stringify(c.provenance.evidence), created_at: c.created_at, updated_at: c.updated_at,
         });
-        this.fts(db, c.id, "components", c.name, `${c.responsibility} ${c.paths.join(" ")}`);
+        fts(c.id, "components", c.name, `${c.responsibility} ${c.paths.join(" ")}`);
       }
       counts.components = comps.length;
 
@@ -107,7 +112,7 @@ export class HunchStore {
           calls: JSON.stringify(s.calls), called_by: JSON.stringify(s.called_by),
           loc: s.metrics.loc, churn: s.metrics.churn_90d, bug: s.metrics.bug_count,
           fanin: s.metrics.fan_in, fanout: s.metrics.fan_out, last: s.last_changed });
-        this.fts(db, s.id, "symbols", `${s.name} (${s.kind})`, s.file);
+        fts(s.id, "symbols", `${s.name} (${s.kind})`, s.file);
       }
       counts.symbols = syms.length;
 
@@ -121,7 +126,7 @@ export class HunchStore {
           rc: JSON.stringify(d.related_components), rf: JSON.stringify(d.related_files),
           sup: d.supersedes, cbb: d.caused_by_bug, commit: d.commit,
           ps: d.provenance.source, pc: d.provenance.confidence, pe: JSON.stringify(d.provenance.evidence), date: d.date });
-        this.fts(db, d.id, "decisions", d.title, `${d.context} ${d.decision} ${d.consequences.join(" ")}`);
+        fts(d.id, "decisions", d.title, `${d.context} ${d.decision} ${d.consequences.join(" ")}`);
       }
       counts.decisions = decs.length;
 
@@ -133,7 +138,7 @@ export class HunchStore {
         insBug.run({ id: b.id, title: b.title, symptom: b.symptom, rc: b.root_cause, sev: b.severity, status: b.status,
           af: JSON.stringify(b.affected_files), as: JSON.stringify(b.affected_symbols), lin: JSON.stringify(b.lineage),
           ps: b.provenance.source, pc: b.provenance.confidence, pe: JSON.stringify(b.provenance.evidence) });
-        this.fts(db, b.id, "bugs", b.title, `${b.symptom} ${b.root_cause}`);
+        fts(b.id, "bugs", b.title, `${b.symptom} ${b.root_cause}`);
       }
       counts.bugs = bugs.length;
 
@@ -145,7 +150,7 @@ export class HunchStore {
         insCon.run({ id: c.id, type: c.type, statement: c.statement, scope: JSON.stringify(c.scope),
           sev: c.severity, enf: c.enforcement, rat: c.rationale, sd: c.source_decision, viol: JSON.stringify(c.violations),
           ps: c.provenance.source, pc: c.provenance.confidence, pe: JSON.stringify(c.provenance.evidence) });
-        this.fts(db, c.id, "constraints", c.statement, `${c.rationale} ${c.scope.join(" ")}`);
+        fts(c.id, "constraints", c.statement, `${c.rationale} ${c.scope.join(" ")}`);
       }
       counts.constraints = cons.length;
       void j;
@@ -156,10 +161,6 @@ export class HunchStore {
     // so this is what keeps them coherent across the many reindex() call sites.
     this.pruneStaleEmbeddings();
     return { counts };
-  }
-
-  private fts(db: DB, ref: string, kind: string, title: string, body: string): void {
-    db.prepare(`INSERT INTO search (ref, kind, title, body) VALUES (?,?,?,?)`).run(ref, kind, title, body ?? "");
   }
 
   // ---- read path ----------------------------------------------------------
@@ -380,7 +381,7 @@ export class HunchStore {
    *  `id`, via a recursive CTE over the edges graph (hunch_get_dependents). We
    *  walk edges BACKWARD (edges.to = current) following call/dep/import/contains. */
   getDependents(id: string, maxDepth = 6): Array<{ id: string; depth: number; via: string }> {
-    const rows = this.db.prepare(
+    return this.db.prepare(
       /* sql */ `
       WITH RECURSIVE up(node, depth) AS (
         SELECT ?, 0
@@ -389,15 +390,18 @@ export class HunchStore {
         FROM edges e JOIN up ON e."to" = up.node
         WHERE e.type IN ('calls','depends_on','imports','contains') AND up.depth < ?
       )
-      SELECT DISTINCT up.node AS id, MIN(up.depth) AS depth FROM up
+      SELECT up.node AS id, MIN(up.depth) AS depth,
+             COALESCE(s.name || ' @ ' || s.file, c.name, up.node) AS via
+      FROM up
+      LEFT JOIN symbols s ON s.id = up.node
+      LEFT JOIN components c ON c.id = up.node
       WHERE up.node <> ? GROUP BY up.node ORDER BY depth, id`,
-    ).all(id, maxDepth, id) as Array<{ id: string; depth: number }>;
-    return rows.map((r) => ({ id: r.id, depth: r.depth, via: this.labelFor(r.id) }));
+    ).all(id, maxDepth, id) as Array<{ id: string; depth: number; via: string }>;
   }
 
   /** Symbols/components this id depends ON (forward walk) — used for refactor blast radius. */
   getDependencies(id: string, maxDepth = 6): Array<{ id: string; depth: number; via: string }> {
-    const rows = this.db.prepare(
+    return this.db.prepare(
       /* sql */ `
       WITH RECURSIVE down(node, depth) AS (
         SELECT ?, 0
@@ -406,40 +410,37 @@ export class HunchStore {
         FROM edges e JOIN down ON e."from" = down.node
         WHERE e.type IN ('calls','depends_on','imports','contains') AND down.depth < ?
       )
-      SELECT DISTINCT down.node AS id, MIN(down.depth) AS depth FROM down
+      SELECT down.node AS id, MIN(down.depth) AS depth,
+             COALESCE(s.name || ' @ ' || s.file, c.name, down.node) AS via
+      FROM down
+      LEFT JOIN symbols s ON s.id = down.node
+      LEFT JOIN components c ON c.id = down.node
       WHERE down.node <> ? GROUP BY down.node ORDER BY depth, id`,
-    ).all(id, maxDepth, id) as Array<{ id: string; depth: number }>;
-    return rows.map((r) => ({ id: r.id, depth: r.depth, via: this.labelFor(r.id) }));
-  }
-
-  private labelFor(id: string): string {
-    if (id.startsWith("sym_")) {
-      const r = this.db.prepare(`SELECT name, file FROM symbols WHERE id=?`).get(id) as { name: string; file: string } | undefined;
-      return r ? `${r.name} @ ${r.file}` : id;
-    }
-    if (id.startsWith("cmp_")) {
-      const r = this.db.prepare(`SELECT name FROM components WHERE id=?`).get(id) as { name: string } | undefined;
-      return r ? r.name : id;
-    }
-    return id;
+    ).all(id, maxDepth, id) as Array<{ id: string; depth: number; via: string }>;
   }
 
   /** Files whose symbols (in)directly DEPEND ON a symbol defined in `file` — the
    *  blast radius of editing `file`, collapsed to file granularity (nearest depth
    *  wins per file). Powers `hunch check` near-violation detection and `--blast`. */
   blastRadiusFiles(file: string, maxDepth = 4): Array<{ file: string; via: string; depth: number }> {
-    const syms = this.db.prepare(`SELECT id FROM symbols WHERE file = ?`).all(file) as Array<{ id: string }>;
-    const out = new Map<string, { file: string; via: string; depth: number }>();
-    for (const s of syms) {
-      for (const dep of this.getDependents(s.id, maxDepth)) {
-        if (!dep.id.startsWith("sym_")) continue;
-        const r = this.db.prepare(`SELECT name, file FROM symbols WHERE id=?`).get(dep.id) as { name: string; file: string } | undefined;
-        if (!r || r.file === file) continue; // ignore self-file dependents
-        const prev = out.get(r.file);
-        if (!prev || dep.depth < prev.depth) out.set(r.file, { file: r.file, via: r.name, depth: dep.depth });
-      }
-    }
-    return [...out.values()].sort((a, b) => a.depth - b.depth || a.file.localeCompare(b.file));
+    // ONE backward CTE seeded by every symbol in `file`, joined to symbols for the
+    // dependent file/name. GROUP BY file + MIN(depth): SQLite's single-min rule makes
+    // the bare `via` take the name from the nearest-depth row. The inner JOIN drops
+    // non-symbol nodes; `s.file <> ?` drops self-file dependents.
+    return this.db.prepare(
+      /* sql */ `
+      WITH RECURSIVE up(node, depth) AS (
+        SELECT id, 0 FROM symbols WHERE file = ?
+        UNION
+        SELECT e."from", up.depth + 1
+        FROM edges e JOIN up ON e."to" = up.node
+        WHERE e.type IN ('calls','depends_on','imports','contains') AND up.depth < ?
+      )
+      SELECT s.file AS file, s.name AS via, MIN(up.depth) AS depth
+      FROM up JOIN symbols s ON s.id = up.node
+      WHERE up.depth > 0 AND s.file <> ?
+      GROUP BY s.file ORDER BY depth, file`,
+    ).all(file, maxDepth, file) as Array<{ file: string; via: string; depth: number }>;
   }
 
   /** Constraints whose scope glob matches a path/glob (hunch_check_constraints).

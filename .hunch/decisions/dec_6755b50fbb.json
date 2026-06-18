@@ -1,0 +1,50 @@
+{
+  "id": "dec_6755b50fbb",
+  "title": "Delegate all writes to CLI; extension remains a pure JSON reader",
+  "status": "proposed",
+  "context": "As the extension grew from a read-only tree viewer into a full in-editor surface with write-back capability (Record Invariant, Record Bug), the question arose: should the extension write directly to .hunch/ JSON, or should it defer to the CLI?",
+  "decision": "The extension remains a pure reader of committed JSON. All writes (Record Invariant, Record Bug) delegate to the `hunch` CLI via atomic paths. The extension never edits .hunch/ JSON itself.",
+  "consequences": [
+    "Users must have the CLI installed and on PATH to write records; extension is write-capable only when paired with CLI",
+    "Data corruption impossible; all validation and atomic writes centralized in the CLI, no concurrent write races",
+    "Single source of truth for validation logic; no duplication between extension and CLI",
+    "Extension stays lightweight (no native deps, no filesystem perms beyond reading)",
+    "CLI remains the canonical authority over the .hunch/ schema and invariants"
+  ],
+  "alternatives_rejected": [
+    "Direct JSON write capability in TypeScript — risks concurrent writes, schema corruption, duplicated validation logic",
+    "Lock-file or filesystem mutex in extension — complex, error-prone, platform-specific",
+    "Embed validation logic in extension — couples CLI and extension versioning, breaks single-schema principle"
+  ],
+  "related_components": [
+    "cmp_555e43ab1a"
+  ],
+  "related_files": [
+    "vscode-extension/src/decorations.ts",
+    "vscode-extension/src/diagnostics.ts",
+    "vscode-extension/src/extension.ts",
+    "vscode-extension/src/graph.ts",
+    "vscode-extension/src/hunchData.ts",
+    "vscode-extension/src/providers.ts",
+    "vscode-extension/src/search.ts"
+  ],
+  "supersedes": null,
+  "caused_by_bug": null,
+  "commit": "8056b94",
+  "provenance": {
+    "source": "llm_draft+summary",
+    "confidence": 0.5,
+    "evidence": [
+      "commit:8056b94",
+      "vscode-extension/src/decorations.ts",
+      "vscode-extension/src/diagnostics.ts",
+      "vscode-extension/src/extension.ts",
+      "vscode-extension/src/graph.ts",
+      "vscode-extension/src/hunchData.ts",
+      "vscode-extension/src/providers.ts",
+      "vscode-extension/src/search.ts"
+    ],
+    "last_verified": "2026-06-18T07:11:50.111Z"
+  },
+  "date": "2026-06-18T10:11:34+03:00"
+}
