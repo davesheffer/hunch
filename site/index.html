@@ -700,34 +700,51 @@
       <span class="sec-label" data-rise>Changelog</span>
       <h2 class="title" data-rise style="--d:.08s">Every release, since <em>v0.1</em>.</h2>
       <div class="clog" data-rise style="--d:.14s;margin-top:36px;border-top:1px solid var(--line)">
-        <div class="clog-row"><span class="rel-tag">v0.12.1</span><span class="clog-d">Jun 18, 2026</span><span class="clog-t"><b>Guard hardening</b> — the CI guard now fetches the PR base ref and fails loudly on an unresolvable <span class="mono">--base</span>, so it can never silently pass a PR; fork-PR comments degrade gracefully.</span></div>
-        <div class="clog-row"><span class="rel-tag">v0.12.0</span><span class="clog-d">Jun 18, 2026</span><span class="clog-t"><b>CI Constraint Guard</b> — <span class="mono">hunch ci</span> scaffolds a GitHub Action that runs <span class="mono">hunch check</span> on every PR, comments the affected invariants/decisions (con_/dec_ ids), and fails on a blocking one. Memory that blocks a merge, not just advises.</span></div>
-        <div class="clog-row"><span class="rel-tag">v0.11.3</span><span class="clog-d">Jun 18, 2026</span><span class="clog-t"><b>Cleaner git</b> — <span class="mono">hunch init</span> auto-gitignores the derived SQLite index, so the working tree never goes dirty on index writes (which blocked branch switches).</span></div>
-        <div class="clog-row"><span class="rel-tag">v0.11.2</span><span class="clog-d">Jun 18, 2026</span><span class="clog-t"><b>Worktree fix</b> — correct hooks-dir resolution inside a Windows git worktree (a worktree-compatibility audit confirmed root detection, the rebuilt index, and atomic writes are worktree-safe).</span></div>
-        <div class="clog-row"><span class="rel-tag">v0.11.1</span><span class="clog-d">Jun 18, 2026</span><span class="clog-t"><b>Parallel backfill</b> — <span class="mono">hunch backfill</span> synthesizes commits through a worker pool (<span class="mono">--concurrency</span>), ~Nx faster than the old one-at-a-time replay.</span></div>
-        <div class="clog-row"><span class="rel-tag">v0.11.0</span><span class="clog-d">Jun 18, 2026</span><span class="clog-t"><b>On npm + safe strict mode</b> — install with <span class="mono">npm i -g @davesheffer/hunch</span>. <span class="mono">--strict</span> now fails a commit only on a direct, high-confidence, non-stale invariant — safe to enable on a shared repo.</span></div>
-        <div class="clog-row"><span class="rel-tag">v0.10.2</span><span class="clog-d">Jun 18, 2026</span><span class="clog-t"><b>24× faster indexing</b> — per-file <span class="mono">git log</span> spawns collapsed into two batched passes; <span class="mono">hunch index</span> drops from ~24s to ~1s on a 400-file repo.</span></div>
-        <div class="clog-row"><span class="rel-tag">v0.10.1</span><span class="clog-d">Jun 18, 2026</span><span class="clog-t"><b>Faster read path</b> — memoized record loads + collapsed graph queries across the CLI &amp; MCP server.</span></div>
-        <div class="clog-row"><span class="rel-tag">v0.10.0</span><span class="clog-d">Jun 17, 2026</span><span class="clog-t"><b>Windsurf support</b> — <span class="mono">hunch init</span> scaffolds <span class="mono">.windsurf/</span> (MCP config + always-on rule). Five assistants now wired to one graph.</span></div>
-        <div class="clog-row"><span class="rel-tag">v0.9.0</span><span class="clog-d">Jun 17, 2026</span><span class="clog-t"><b>Time-Travel Memory + Regression Guard</b> — git-anchored <span class="mono">--as-of</span> queries, <span class="mono">timeline</span>, supersede-don't-delete; guard blocks re-introducing retired code.</span></div>
-        <div class="clog-row"><span class="rel-tag">v0.8.0</span><span class="clog-d">Jun 16, 2026</span><span class="clog-t"><b>Agent hooks + firmness</b> — memory injected before every edit; four enforcement levels; first-class <span class="mono">record-constraint</span>.</span></div>
-        <div class="clog-row"><span class="rel-tag">v0.7.0</span><span class="clog-d">Jun 16, 2026</span><span class="clog-t"><b>Multi-CLI synthesis</b> — Codex &amp; Cursor join Claude; write path bills to your coding subscription.</span></div>
-        <div class="clog-row"><span class="rel-tag">v0.6.0</span><span class="clog-d">Jun 16, 2026</span><span class="clog-t"><b>Multi-assistant</b> — Cursor, VS Code (Copilot), Codex &amp; AGENTS.md wired to one graph.</span></div>
-        <div class="clog-row"><span class="rel-tag">v0.5.0</span><span class="clog-d">Jun 16, 2026</span><span class="clog-t"><b>Guardrails everywhere</b> — auto pre-commit guard, <span class="mono">hunch_blast_radius</span> MCP tool, VS Code near-violations.</span></div>
-        <div class="clog-row"><span class="rel-tag">v0.4.0</span><span class="clog-d">Jun 15, 2026</span><span class="clog-t"><b>Blast-radius near-violations</b> — <span class="mono">hunch check</span> flags invariants reached transitively.</span></div>
-        <div class="clog-row"><span class="rel-tag">v0.3.0</span><span class="clog-d">Jun 15, 2026</span><span class="clog-t"><b>Drift repair</b> — <span class="mono">hunch stale --resync</span> + hardened test-learning loop.</span></div>
-        <div class="clog-row"><span class="rel-tag">v0.2.0</span><span class="clog-d">Jun 15, 2026</span><span class="clog-t"><b>Failure-learning loop</b> — <span class="mono">hunch test</span> captures bugs from failing tests; recurrences promote constraints.</span></div>
-        <div class="clog-row"><span class="rel-tag">v0.1.2</span><span class="clog-d">Jun 15, 2026</span><span class="clog-t"><b>Semantic search polish</b> — graceful fallback to keyword FTS.</span></div>
-        <div class="clog-row"><span class="rel-tag">v0.1.0</span><span class="clog-d">Jun 14, 2026</span><span class="clog-t"><b>Initial release</b> — git-native decision/bug/constraint graph, MCP server, post-commit learning, auto CLAUDE.md, VS Code extension.</span></div>
+        <div class="clog-group">
+          <div class="clog-date">Jun 18, 2026</div>
+          <div class="clog-row"><span class="rel-tag">v0.12.1</span><span class="clog-t"><b>Guard hardening</b> — the CI guard now fetches the PR base ref and fails loudly on an unresolvable <span class="mono">--base</span>, so it can never silently pass a PR; fork-PR comments degrade gracefully.</span></div>
+          <div class="clog-row"><span class="rel-tag">v0.12.0</span><span class="clog-t"><b>CI Constraint Guard</b> — <span class="mono">hunch ci</span> scaffolds a GitHub Action that runs <span class="mono">hunch check</span> on every PR, comments the affected invariants/decisions (con_/dec_ ids), and fails on a blocking one. Memory that blocks a merge, not just advises.</span></div>
+          <div class="clog-row"><span class="rel-tag">v0.11.3</span><span class="clog-t"><b>Cleaner git</b> — <span class="mono">hunch init</span> auto-gitignores the derived SQLite index, so the working tree never goes dirty on index writes (which blocked branch switches).</span></div>
+          <div class="clog-row"><span class="rel-tag">v0.11.2</span><span class="clog-t"><b>Worktree fix</b> — correct hooks-dir resolution inside a Windows git worktree (a worktree-compatibility audit confirmed root detection, the rebuilt index, and atomic writes are worktree-safe).</span></div>
+          <div class="clog-row"><span class="rel-tag">v0.11.1</span><span class="clog-t"><b>Parallel backfill</b> — <span class="mono">hunch backfill</span> synthesizes commits through a worker pool (<span class="mono">--concurrency</span>), ~Nx faster than the old one-at-a-time replay.</span></div>
+          <div class="clog-row"><span class="rel-tag">v0.11.0</span><span class="clog-t"><b>On npm + safe strict mode</b> — install with <span class="mono">npm i -g @davesheffer/hunch</span>. <span class="mono">--strict</span> now fails a commit only on a direct, high-confidence, non-stale invariant — safe to enable on a shared repo.</span></div>
+          <div class="clog-row"><span class="rel-tag">v0.10.2</span><span class="clog-t"><b>24× faster indexing</b> — per-file <span class="mono">git log</span> spawns collapsed into two batched passes; <span class="mono">hunch index</span> drops from ~24s to ~1s on a 400-file repo.</span></div>
+          <div class="clog-row"><span class="rel-tag">v0.10.1</span><span class="clog-t"><b>Faster read path</b> — memoized record loads + collapsed graph queries across the CLI &amp; MCP server.</span></div>
+        </div>
+        <div class="clog-group">
+          <div class="clog-date">Jun 17, 2026</div>
+          <div class="clog-row"><span class="rel-tag">v0.10.0</span><span class="clog-t"><b>Windsurf support</b> — <span class="mono">hunch init</span> scaffolds <span class="mono">.windsurf/</span> (MCP config + always-on rule). Five assistants now wired to one graph.</span></div>
+          <div class="clog-row"><span class="rel-tag">v0.9.0</span><span class="clog-t"><b>Time-Travel Memory + Regression Guard</b> — git-anchored <span class="mono">--as-of</span> queries, <span class="mono">timeline</span>, supersede-don't-delete; guard blocks re-introducing retired code.</span></div>
+        </div>
+        <div class="clog-group">
+          <div class="clog-date">Jun 16, 2026</div>
+          <div class="clog-row"><span class="rel-tag">v0.8.0</span><span class="clog-t"><b>Agent hooks + firmness</b> — memory injected before every edit; four enforcement levels; first-class <span class="mono">record-constraint</span>.</span></div>
+          <div class="clog-row"><span class="rel-tag">v0.7.0</span><span class="clog-t"><b>Multi-CLI synthesis</b> — Codex &amp; Cursor join Claude; write path bills to your coding subscription.</span></div>
+          <div class="clog-row"><span class="rel-tag">v0.6.0</span><span class="clog-t"><b>Multi-assistant</b> — Cursor, VS Code (Copilot), Codex &amp; AGENTS.md wired to one graph.</span></div>
+          <div class="clog-row"><span class="rel-tag">v0.5.0</span><span class="clog-t"><b>Guardrails everywhere</b> — auto pre-commit guard, <span class="mono">hunch_blast_radius</span> MCP tool, VS Code near-violations.</span></div>
+        </div>
+        <div class="clog-group">
+          <div class="clog-date">Jun 15, 2026</div>
+          <div class="clog-row"><span class="rel-tag">v0.4.0</span><span class="clog-t"><b>Blast-radius near-violations</b> — <span class="mono">hunch check</span> flags invariants reached transitively.</span></div>
+          <div class="clog-row"><span class="rel-tag">v0.3.0</span><span class="clog-t"><b>Drift repair</b> — <span class="mono">hunch stale --resync</span> + hardened test-learning loop.</span></div>
+          <div class="clog-row"><span class="rel-tag">v0.2.0</span><span class="clog-t"><b>Failure-learning loop</b> — <span class="mono">hunch test</span> captures bugs from failing tests; recurrences promote constraints.</span></div>
+          <div class="clog-row"><span class="rel-tag">v0.1.2</span><span class="clog-t"><b>Semantic search polish</b> — graceful fallback to keyword FTS.</span></div>
+        </div>
+        <div class="clog-group">
+          <div class="clog-date">Jun 14, 2026</div>
+          <div class="clog-row"><span class="rel-tag">v0.1.0</span><span class="clog-t"><b>Initial release</b> — git-native decision/bug/constraint graph, MCP server, post-commit learning, auto CLAUDE.md, VS Code extension.</span></div>
+        </div>
       </div>
     </div>
   </section>
   <style>
-    .clog-row{display:grid;grid-template-columns:88px 124px 1fr;gap:20px;align-items:baseline;padding:15px 0;border-bottom:1px solid var(--line)}
-    .clog-d{font-family:var(--mono);font-size:12.5px;color:var(--muted-2)}
+    .clog-date{font-family:var(--mono);font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:600;padding:24px 0 6px}
+    .clog-group:first-child .clog-date{padding-top:8px}
+    .clog-row{display:grid;grid-template-columns:92px 1fr;gap:20px;align-items:baseline;padding:13px 0;border-bottom:1px solid var(--line)}
+    .clog-group:last-child .clog-row:last-child{border-bottom:none}
     .clog-t{color:var(--ink-soft);font-size:15.5px;line-height:1.55}
     .clog-t b{color:var(--ink);font-weight:550}
-    @media(max-width:680px){.clog-row{grid-template-columns:72px 1fr}.clog-d{grid-column:2;order:3;margin-top:-6px}}
+    @media(max-width:680px){.clog-row{grid-template-columns:60px 1fr;gap:12px}}
   </style>
 
   <!-- ───────────────  FOOTER  ─────────────── -->
