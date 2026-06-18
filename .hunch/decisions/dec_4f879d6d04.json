@@ -1,0 +1,44 @@
+{
+  "id": "dec_4f879d6d04",
+  "title": "Distribute Hunch via npm instead of build-from-source",
+  "status": "proposed",
+  "context": "Hunch is mature enough for public release; source-based install adds friction. Multi-assistant support (Claude Code, Cursor, VS Code, Windsurf) requires a reliable, versioned CLI.",
+  "decision": "Primary installation path is now `npm install -g @davesheffer/hunch`. Package published to npm; users no longer build locally. `hunch init` becomes the single command that wires the same graph into every assistant.",
+  "consequences": [
+    "Simpler onboarding—npm users already know how to install globals",
+    "Tool positioned as stable, versioned, maintainable product",
+    "Reduced barrier to adoption across four assistants; each can assume `hunch` is on PATH",
+    "Requires npm package maintenance and semver discipline going forward"
+  ],
+  "alternatives_rejected": [
+    "Keep build-from-source as primary (too much friction; contradicts multi-assistant story)",
+    "Support both equally (confusing; npm is canonical)",
+    "Private/internal-only distribution (can't scale cross-assistant)"
+  ],
+  "related_components": [
+    "cmp_50037f41a9"
+  ],
+  "related_files": [
+    "src/cli/index.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "622013a",
+  "valid_from": "2026-06-18T11:22:32+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft",
+    "confidence": 0.65,
+    "evidence": [
+      "commit:622013a",
+      "src/cli/index.ts"
+    ],
+    "last_verified": "2026-06-18T08:22:56.052Z"
+  },
+  "date": "2026-06-18T11:22:32+03:00"
+}
