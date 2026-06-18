@@ -5,7 +5,7 @@
  * we append a guarded block rather than clobbering.
  */
 import { readFileSync, writeFileSync, existsSync, chmodSync, mkdirSync } from "node:fs";
-import { join } from "node:path";
+import { join, isAbsolute } from "node:path";
 import { hooksDir } from "../extractors/git.js";
 
 const MARK = "# >>> hunch post-commit >>>";
@@ -29,7 +29,11 @@ export interface HookInstall {
 
 export function installPostCommitHook(root: string, invocation: string): HookInstall {
   const dir = hooksDir(root);
-  const abs = dir.startsWith("/") ? dir : join(root, dir);
+  // `git rev-parse --git-path hooks` returns a path relative to the repo in a
+  // normal checkout, but an ABSOLUTE one inside a linked worktree (the shared
+  // hooks dir). isAbsolute() handles both POSIX (/…) and Windows (C:\… / C:/…);
+  // a bare startsWith("/") misfired on Windows worktrees → a doubled junk path.
+  const abs = isAbsolute(dir) ? dir : join(root, dir);
   mkdirSync(abs, { recursive: true });
   const hookPath = join(abs, "post-commit");
   const blk = block(invocation);
@@ -70,7 +74,11 @@ const PRE_END = "# <<< hunch pre-commit <<<";
  *  Preserves any existing pre-commit hook. */
 export function installPreCommitHook(root: string, invocation: string, strict = false): HookInstall {
   const dir = hooksDir(root);
-  const abs = dir.startsWith("/") ? dir : join(root, dir);
+  // `git rev-parse --git-path hooks` returns a path relative to the repo in a
+  // normal checkout, but an ABSOLUTE one inside a linked worktree (the shared
+  // hooks dir). isAbsolute() handles both POSIX (/…) and Windows (C:\… / C:/…);
+  // a bare startsWith("/") misfired on Windows worktrees → a doubled junk path.
+  const abs = isAbsolute(dir) ? dir : join(root, dir);
   mkdirSync(abs, { recursive: true });
   const hookPath = join(abs, "pre-commit");
   const cmd = `${invocation} check --staged${strict ? " --strict" : ""}`;
