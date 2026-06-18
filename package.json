@@ -4,7 +4,7 @@
   "license": "MIT",
   "author": "Dave Sheffer <dave.sheffer1@gmail.com>",
   "description": "Hunch — an Engineering Memory OS: a persistent, git-native reasoning graph over a codebase, exposed to Claude Code via MCP.",
-  "homepage": "https://hunch.sh",
+  "homepage": "https://hunch-pi.vercel.app",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/davesheffer/hunch.git"
