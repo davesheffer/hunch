@@ -153,26 +153,46 @@ program
   });
 
 // ---- backfill -------------------------------------------------------------
+/** Run an async fn over items with at most `limit` in flight. A fixed pool of
+ *  workers pulls from a shared cursor — no per-batch barrier, so a slow item
+ *  never stalls the others. Used by backfill to overlap per-commit LLM spawns. */
+async function mapPool<T>(items: T[], limit: number, fn: (item: T, index: number) => Promise<void>): Promise<void> {
+  let next = 0;
+  const worker = async (): Promise<void> => {
+    while (next < items.length) {
+      const i = next++;
+      await fn(items[i]!, i);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, () => worker()));
+}
+
 program
   .command("backfill")
   .description("Replay git history to seed decisions (cold-start fix).")
   .option("--since <spec>", "how far back, e.g. 90d", "90d")
   .option("--max <n>", "max commits to process", "40")
-  .action(async (opts: { since: string; max: string }) => {
+  .option("--concurrency <n>", "commits to synthesize in parallel (the LLM call is the bottleneck)", "4")
+  .action(async (opts: { since: string; max: string; concurrency: string }) => {
     const { store, root } = storeFor();
     if (!isGitRepo(root)) return fail("backfill needs a git repo");
     store.json.ensureDirs();
     const commits = logSince(opts.since, root, Number(opts.max));
-    console.log(`Backfilling from ${commits.length} commit(s) since ${opts.since}…`);
+    const conc = Math.max(1, Math.min(16, Number(opts.concurrency) || 4));
+    console.log(`Backfilling from ${commits.length} commit(s) since ${opts.since} (concurrency ${conc})…`);
     let written = 0, skipped = 0, llm = 0, heuristic = 0;
-    for (const sha of commits) {
+    // The per-commit cost is the Claude synthesis spawn; run several at once. Safe:
+    // each commit drafts independently and writes its OWN decision file atomically,
+    // and the store's JS-side reads/writes run synchronously between awaits (single
+    // thread) — only the LLM spawns overlap. reindex() runs once, after the pool.
+    await mapPool(commits, conc, async (sha) => {
       const r = await syncCommit(store, root, sha);
       if (r.status === "written") {
         written++;
         if (r.provider === "claude-cli") llm++; else heuristic++;
         process.stdout.write(`  ✓ ${sha.slice(0, 8)} ${r.decision?.title.slice(0, 64) ?? ""}\n`);
       } else skipped++;
-    }
+    });
     store.reindex();
     updateClaudeMd(root, store);
     // Honest tally of where the tokens went: trivial commits are seeded by the
