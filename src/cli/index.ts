@@ -29,6 +29,7 @@ import { analyzeDiff } from "../extractors/diff.js";
 import { isStrictBlocker } from "../core/strictgate.js";
 import { installPostCommitHook, installPreCommitHook } from "../integrations/hooks.js";
 import { installMergeDriver } from "../integrations/mergeDriver.js";
+import { ensureGitignore } from "../integrations/gitignore.js";
 import { updateClaudeMd } from "../integrations/claudemd.js";
 import { writeMcpJson, writeSlashCommands, installClaudeHooks } from "../integrations/scaffold.js";
 import { scaffoldProviders } from "../integrations/providers.js";
@@ -78,6 +79,12 @@ program
 
     store.json.ensureDirs(); // stamps the manifest at the current version when fresh
     console.log(`  ✓ .hunch/ scaffolded (schema v${readManifest(paths).schema_version})`);
+
+    // Exclude the derived SQLite index BEFORE it's written, so the working tree
+    // never goes dirty on the MCP server's index writes (which blocks branch
+    // switches). The .hunch/*.json graph stays tracked.
+    const gi = ensureGitignore(root);
+    if (gi.action !== "unchanged") console.log(`  ✓ .gitignore ${gi.action} (Hunch runtime index excluded)`);
 
     if (opts.index !== false) {
       const res = indexRepo(store, root);
@@ -143,6 +150,7 @@ program
   .action(() => {
     const { store, root } = storeFor();
     store.json.ensureDirs();
+    ensureGitignore(root); // keep the derived SQLite index out of git (idempotent)
     const res = indexRepo(store, root);
     const { counts } = store.reindex();
     updateClaudeMd(root, store);
