@@ -702,6 +702,7 @@
       <div class="clog" data-rise style="--d:.14s;margin-top:36px;border-top:1px solid var(--line)">
         <div class="clog-group">
           <div class="clog-date">Jun 20, 2026</div>
+          <div class="clog-row"><span class="rel-tag">v0.14.0</span><span class="clog-t"><b>Causal Merge Verdict</b> — new <span class="mono">hunch_merge_verdict</span> MCP tool (and enriched <span class="mono">hunch check</span> / CI guard) replays a diff against memory and returns a cited <b>BLOCK / WARN / PASS</b> — for each invariant it shows the decision that motivated it and the bug whose root cause spawned it, so a change that re-opens a closed bug or deletes scar-tissue is caught with its <em>why</em>. Deterministic, no LLM; blocks only on direct blocking invariants + blocking-linked regressions.</span></div>
           <div class="clog-row"><span class="rel-tag">v0.13.0</span><span class="clog-t"><b>Never Twice — corrections become enforced invariants</b> — new <span class="mono">hunch_record_correction</span> MCP tool: when you correct the agent ("no — never call X here"), Hunch mints a scoped, human-confirmed Constraint that the pre-edit hook and CI guard then hold <em>every</em> assistant to. The <span class="mono">UserPromptSubmit</span> hook nudges the agent to persist a rule whenever a prompt reads like a correction, so the same mistake can't recur next session.</span></div>
         </div>
         <div class="clog-group">

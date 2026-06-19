@@ -26,9 +26,7 @@ import { syncCommit, recordFailure, captureTestRun } from "../synthesis/synthesi
 import { parseTestReport } from "../extractors/testreport.js";
 import { selectProvider } from "../synthesis/provider.js";
 import { isGitRepo, headSha, logSince, lastChangeDate, stagedFiles, commitFiles, asOfDate, stagedDiff, commitDiff, rangeFiles, rangeDiff, revExists } from "../extractors/git.js";
-import { analyzeDiff } from "../extractors/diff.js";
-import { isStrictBlocker } from "../core/strictgate.js";
-import { renderText, renderMarkdown, reportFailsStrict, type CheckReport, type CheckDirect } from "../core/checkreport.js";
+import { renderText, renderMarkdown, reportFailsStrict, type CheckReport } from "../core/checkreport.js";
 import { installPostCommitHook, installPreCommitHook } from "../integrations/hooks.js";
 import { installMergeDriver } from "../integrations/mergeDriver.js";
 import { ensureGitignore } from "../integrations/gitignore.js";
@@ -546,51 +544,14 @@ program
       store.close();
       return;
     }
-    type Inv = ReturnType<HunchStore["checkConstraints"]>[number];
-
-    // 1) DIRECT — a changed file matches a constraint's scope.
-    const direct = new Map<string, { c: Inv; files: string[] }>();
-    for (const f of files) for (const c of store.checkConstraints(f)) {
-      const e = direct.get(c.id) ?? { c, files: [] };
-      e.files.push(f);
-      direct.set(c.id, e);
-    }
-    // 2) NEAR — reached only through the blast radius (a guarded dependency changed).
-    const near = new Map<string, { c: Inv; via: string[] }>();
-    for (const f of files) for (const b of store.blastRadiusFiles(f)) for (const c of store.checkConstraints(b.file)) {
-      if (direct.has(c.id)) continue; // already a direct hit
-      const e = near.get(c.id) ?? { c, via: [] };
-      e.via.push(`${f} → ${b.file} (${b.via}, depth ${b.depth})`);
-      near.set(c.id, e);
-    }
-    // 3) REGRESSION — does the diff RE-ADD something an in-force decision retired?
+    // DIRECT (scope match) + NEAR (blast radius) + REGRESSION (re-added retired
+    // code) + the hardened strict gate + causal `why` citations — all assembled by
+    // the shared store.buildCheckReport (also used by the hunch_merge_verdict tool).
     const diff = opts.commit ? commitDiff(opts.commit, root) : opts.base ? rangeDiff(opts.base, root) : stagedDiff(root);
-    const an = analyzeDiff(diff);
-    const regHits = store.regressionHits({ symbols: an.addedSymbols.map((s) => s.name), deps: an.addedDeps }, files);
-
-    // Hardened strict gate (strictgate.ts): only DIRECT + high-confidence + non-stale
-    // can fail. near/stale/low-confidence stay advisory — safe on a shared repo / PR.
-    const staleConstraintIds = opts.strict
-      ? new Set(store.staleness((f) => lastChangeDate(f, root)).filter((s) => s.kind === "constraint").map((s) => s.id))
-      : new Set<string>();
-    const directReport: CheckDirect[] = [...direct.values()].map(({ c, files: fs }) => {
-      const stale = staleConstraintIds.has(c.id);
-      const strictBlocks = isStrictBlocker(c, stale);
-      return {
-        id: c.id, severity: c.severity ?? "advisory", statement: c.statement, rationale: c.rationale ?? "",
-        files: fs, strictBlocks,
-        downgrade: c.severity === "blocking" && !strictBlocks ? (stale ? "stale" : "low-confidence") : undefined,
-      };
-    });
-    const report: CheckReport = {
-      fileCount: files.length,
+    const report: CheckReport = store.buildCheckReport(files, diff, {
       strict: !!opts.strict,
-      direct: directReport,
-      near: [...near.values()].map(({ c, via }) => ({ id: c.id, severity: c.severity ?? "advisory", statement: c.statement, via })),
-      regressions: regHits.map((h) => ({ kind: h.kind, name: h.name, decision: h.decision, title: h.title, reason: h.reason, blocking: h.blocking })),
-      strictBlockers: directReport.filter((d) => d.strictBlocks).length,
-      regBlocking: regHits.filter((h) => h.blocking).length,
-    };
+      lastChange: (f) => lastChangeDate(f, root),
+    });
 
     if (opts.blast && !markdown) {
       console.log(`Blast radius of ${files.length} changed file(s):`);

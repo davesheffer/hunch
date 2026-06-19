@@ -1,0 +1,47 @@
+{
+  "id": "dec_e1117f74ee",
+  "title": "Build \"Causal Merge Verdict\" (deterministic v1) as the next game-changer",
+  "status": "accepted",
+  "context": "A 50-agent game-changer workflow diverged bold concepts across 6 strategic lenses, validated demand/competitors on the web, and adversarially scored each on a moat-weighted rubric. Causal Merge Verdict scored highest (76; differentiation 82). The synthesizer instead recommended Constraint P&L (64), but that concept's headline 'mistakes prevented' ROI rests on an unobservable counterfactual — the pre-edit hook is fire-and-forget with no post-edit callback — so I overrode it. User confirmed Causal Merge Verdict.",
+  "decision": "Ship a DETERMINISTIC v1 only: a 'causal verdict' over a diff that, for each flagged invariant, joins constraint → source_decision (the why) → bug lineage (the failure that motivated it) and emits one cited verdict (pass | warn | block). Block iff a blocking invariant is directly hit OR a deliberately-retired symbol/dep tied to a blocking invariant is re-added (reuse checkConstraints + strictgate isStrictBlocker + the Regression Guard). Expose as a new MCP tool hunch_merge_verdict(base) callable by any assistant before opening/merging a PR, and enrich the existing hunch check / CI guard output with the causal citations. EXPLICITLY DEFER the LLM 'intent-drift / decision-contradiction' legs — that is where a blocking gate's precision collapses (the concept's main kill-risk).",
+  "consequences": [
+    "Differentiation = citing the WHY (decision+bug lineage) a diff-only reviewer (CodeRabbit/Greptile) structurally cannot, NOT a smarter LLM judge.",
+    "Avoid false-positive gate decay: only the deterministic legs block; ambiguous/causal-narrative parts are advisory context.",
+    "Cold-start: a fresh repo has no retired signals/bug lineage, so verdicts are sparse until history accrues — acceptable; reuse backfill."
+  ],
+  "alternatives_rejected": [
+    "Constraint P&L — ROI number rests on an unobservable counterfactual (no post-edit callback); moat IS trust in that number",
+    "Memory Federation — strong moat narrative but zero day-one pull (needs repo #2 + teammates) and unbuilt cross-repo ID-rewrite/semantic-scope primitives",
+    "LLM intent-drift legs of Causal Merge Verdict — precision collapses where a blocking gate cannot afford it"
+  ],
+  "related_components": [],
+  "related_files": [
+    "src/core/checkreport.ts",
+    "src/core/strictgate.ts",
+    "src/store/hunchStore.ts",
+    "src/mcp/server.ts",
+    "src/cli/index.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-06-19T22:39:40.343Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 0.95,
+    "evidence": [
+      "src/core/checkreport.ts",
+      "src/core/strictgate.ts",
+      "src/store/hunchStore.ts",
+      "src/mcp/server.ts",
+      "src/cli/index.ts"
+    ]
+  },
+  "date": "2026-06-19T22:39:40.343Z"
+}

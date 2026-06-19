@@ -4,6 +4,15 @@
  *  then renders it as text (terminal, unchanged) or markdown (a PR comment posted
  *  by the GitHub Action). The exit-code decision lives with the caller. */
 
+/** The causal chain behind an invariant — the WHY a diff-only reviewer can't see:
+ *  the decision that motivated the guard, and the bug whose root cause spawned it.
+ *  Resolved deterministically from the graph (constraint→source_decision→bug). */
+export interface CausalWhy {
+  constraint_id: string;
+  decision?: { id: string; title: string; decision: string };
+  bug?: { id: string; title: string; root_cause: string };
+}
+
 export interface CheckDirect {
   id: string;
   severity: string;
@@ -14,6 +23,8 @@ export interface CheckDirect {
   strictBlocks: boolean;
   /** If a blocking invariant is downgraded to advisory under strict, why. */
   downgrade?: "stale" | "low-confidence";
+  /** The causal citation (the "why this guard exists") — present when the graph links it. */
+  why?: CausalWhy;
 }
 export interface CheckNear { id: string; severity: string; statement: string; via: string[]; }
 export interface CheckRegression { kind: string; name: string; decision: string; title: string; reason: string; blocking: boolean; }
@@ -41,6 +52,33 @@ export function reportFailsStrict(r: CheckReport): boolean {
 
 const mark = (s: string): string => (s === "blocking" ? "⛔" : s === "warning" ? "⚠" : "·");
 
+const clip = (s: string, n = 160): string => (s.length > n ? s.slice(0, n - 1).trimEnd() + "…" : s);
+
+/** The deterministic VERDICT for a merge: block (a hard gate fired), warn (touches
+ *  memory but nothing hard-blocks), or pass (touches no recorded memory at all). */
+export function verdict(r: CheckReport): "block" | "warn" | "pass" {
+  if (r.strictBlockers > 0 || r.regBlocking > 0) return "block";
+  return reportIsClean(r) ? "pass" : "warn";
+}
+
+/** Causal "why" citation, terminal form (appended to a direct hit). */
+function whyText(why?: CausalWhy): string {
+  if (!why) return "";
+  const out: string[] = [];
+  if (why.decision) out.push(`\n      ↳ why: “${why.decision.title}” (${why.decision.id})${why.decision.decision ? ` — ${clip(why.decision.decision)}` : ""}`);
+  if (why.bug) out.push(`\n      ↳ guards against: ${why.bug.title} — ${clip(why.bug.root_cause)} (${why.bug.id})`);
+  return out.join("");
+}
+
+/** Causal "why" citation, markdown form (returns bullet lines). */
+function whyMd(why?: CausalWhy): string[] {
+  if (!why) return [];
+  const out: string[] = [];
+  if (why.decision) out.push(`  - 🧠 _why:_ “${why.decision.title}” (\`${why.decision.id}\`)`);
+  if (why.bug) out.push(`  - 🐞 _guards against:_ ${clip(why.bug.title, 100)} — ${clip(why.bug.root_cause)} (\`${why.bug.id}\`)`);
+  return out;
+}
+
 // ---------------------------------------------------------------------------
 // Terminal text (unchanged from the inline CLI output it replaces)
 // ---------------------------------------------------------------------------
@@ -55,7 +93,7 @@ export function renderText(r: CheckReport): string {
       const note = r.strict && c.severity === "blocking" && !c.strictBlocks
         ? c.downgrade === "stale" ? "  (advisory: stale)" : "  (advisory: low confidence)"
         : "";
-      out.push(`  ${mark(c.severity)} [${c.severity}] ${c.statement}${note}\n      ${c.id} · in: ${c.files.join(", ")}\n      rationale: ${c.rationale || "—"}`);
+      out.push(`  ${mark(c.severity)} [${c.severity}] ${c.statement}${note}\n      ${c.id} · in: ${c.files.join(", ")}\n      rationale: ${c.rationale || "—"}${whyText(c.why)}`);
     }
   }
   if (r.near.length) {
@@ -102,6 +140,7 @@ export function renderMarkdown(r: CheckReport): string {
       out.push(`- **[${c.severity}] ${c.statement}** — \`${c.id}\`${note}`);
       out.push(`  - in: ${c.files.map((f) => `\`${f}\``).join(", ")}`);
       if (c.rationale) out.push(`  - _${c.rationale}_`);
+      for (const line of whyMd(c.why)) out.push(line);
     }
     out.push("");
   }

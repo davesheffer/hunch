@@ -14,8 +14,9 @@ import { HunchStore } from "../store/hunchStore.js";
 import { selectEmbedder } from "../store/embedder.js";
 import { decisionId } from "../core/ids.js";
 import { buildCorrectionConstraint } from "../core/correction.js";
-import { revParse, asOfDate } from "../extractors/git.js";
+import { revParse, asOfDate, revExists, lastChangeDate, rangeFiles, rangeDiff, commitFiles, commitDiff, stagedFiles, stagedDiff } from "../extractors/git.js";
 import { formatContext } from "../core/format.js";
+import { renderMarkdown, verdict } from "../core/checkreport.js";
 import type { Decision, Symbol } from "../core/types.js";
 
 type ToolResult = { content: Array<{ type: "text"; text: string }>; isError?: boolean };
@@ -366,6 +367,41 @@ export function buildServer(root: string): McpServer {
         return ok(`${existing ? "Updated" : "Recorded"} ${rec.severity} constraint ${rec.id}: "${rec.statement}" (scope: ${rec.scope.join(", ")}). It now ${enforce}.`);
       } catch (e) {
         return err(`Failed to record correction: ${(e as Error).message}`);
+      }
+    },
+  );
+
+  // -- hunch_merge_verdict (Causal Merge Verdict — read-only, client-agnostic) --
+  server.registerTool(
+    "hunch_merge_verdict",
+    {
+      title: "Causal merge verdict: is this change safe against the recorded WHY?",
+      description:
+        "Before opening or merging a PR, replay a diff against engineering memory and return ONE verdict — BLOCK / WARN / PASS. For each invariant DIRECTLY in scope it cites WHY the guard exists (the decision that motivated it + the bug whose root cause spawned it); it also lists invariants reached via blast radius (near, advisory) and any deliberately-retired code the diff re-introduces. Deterministic, no LLM. Omit base AND commit to check STAGED changes; pass base (e.g. origin/main) for a PR range, or commit for a single commit. Call this before merging a widely-scoped change.",
+      inputSchema: {
+        base: z.string().optional().describe("Diff against this base ref (e.g. origin/main) — for a PR/branch."),
+        commit: z.string().optional().describe("Diff a single commit (sha/ref). Omit base AND commit to check staged changes."),
+      },
+    },
+    async ({ base, commit }): Promise<ToolResult> => {
+      try {
+        if (base && commit) return err("Pass at most one of base/commit (omit both to check staged changes).");
+        if (base && !revExists(base, root)) return err(`base ref "${base}" does not resolve (in CI, fetch the base branch first).`);
+        if (commit && !revExists(commit, root)) return err(`commit "${commit}" does not resolve.`);
+        const files = commit ? commitFiles(commit, root) : base ? rangeFiles(base, root) : stagedFiles(root);
+        const scope = commit ? `commit ${commit}` : base ? `${base}..HEAD` : "staged changes";
+        if (!files.length) return ok(`VERDICT: ✅ PASS — no changed files in ${scope}.`);
+        const diff = commit ? commitDiff(commit, root) : base ? rangeDiff(base, root) : stagedDiff(root);
+        const report = store.buildCheckReport(files, diff, { strict: true, lastChange: (f) => lastChangeDate(f, root) });
+        const v = verdict(report);
+        const head = v === "block"
+          ? "VERDICT: ⛔ BLOCK — this change breaks a recorded invariant or re-opens a known bug."
+          : v === "warn"
+            ? "VERDICT: ⚠ WARN — this change touches engineering memory; review the cited why below before merge."
+            : "VERDICT: ✅ PASS — touches no recorded invariants and re-introduces nothing deliberately retired.";
+        return ok(`${head}\n(scope: ${scope}, ${files.length} file(s))\n\n${renderMarkdown(report)}`);
+      } catch (e) {
+        return err(`Failed to compute merge verdict: ${(e as Error).message}`);
       }
     },
   );

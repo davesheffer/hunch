@@ -18,6 +18,9 @@ import { selectEmbedder, type Embedder } from "./embedder.js";
 import { JsonStore } from "./jsonStore.js";
 import { pathMatchesGlob } from "../core/glob.js";
 import { edgeId } from "../core/ids.js";
+import { isStrictBlocker } from "../core/strictgate.js";
+import { analyzeDiff } from "../extractors/diff.js";
+import type { CheckReport, CheckDirect, CausalWhy } from "../core/checkreport.js";
 
 export interface SearchHit {
   ref: string;
@@ -455,6 +458,72 @@ export class HunchStore {
       .filter((c) => c.scope.some((g) => pathMatchesGlob(scope, g) || pathMatchesGlob(g, scope) || g === scope))
       .filter((c) => (asOf ? inWindow(c.valid_from, c.valid_to, asOf) : c.status !== "retired"))
       .sort((a, b) => sev(b.severity) - sev(a.severity));
+  }
+
+  /** The causal chain behind a constraint — the WHY a diff-only reviewer can't see.
+   *  Deterministic graph join: constraint → source_decision (the decision that
+   *  motivated the guard) → the bug whose root cause spawned it (via
+   *  lineage.spawned_constraint, else the source decision's caused_by_bug). Read-only. */
+  causalChain(constraintId: string): CausalWhy {
+    const out: CausalWhy = { constraint_id: constraintId };
+    const c = this.json.get("constraints", constraintId);
+    if (!c) return out;
+    const dec = c.source_decision ? this.json.get("decisions", c.source_decision) : null;
+    if (dec) out.decision = { id: dec.id, title: dec.title, decision: dec.decision };
+    const bugs = this.json.loadAll("bugs");
+    // Deterministic when several bugs link one constraint (the verdict claims to be
+    // deterministic): highest severity first, then lowest id — never filesystem order.
+    const SEV: Record<string, number> = { critical: 3, high: 2, medium: 1, low: 0 };
+    const linked = bugs
+      .filter((b) => b.lineage?.spawned_constraint === constraintId)
+      .sort((a, b) => (SEV[b.severity] ?? 0) - (SEV[a.severity] ?? 0) || a.id.localeCompare(b.id));
+    const bug = linked[0] ?? (dec?.caused_by_bug ? bugs.find((b) => b.id === dec.caused_by_bug) : undefined);
+    if (bug) out.bug = { id: bug.id, title: bug.title, root_cause: bug.root_cause };
+    return out;
+  }
+
+  /** Assemble a CheckReport from a diff: direct invariant hits, near hits (blast
+   *  radius), and regressions (re-added retired code), with the hardened strict
+   *  gate and a causal `why` citation per direct hit. Read-only — shared by
+   *  `hunch check`, the CI guard, and hunch_merge_verdict so they never drift. */
+  buildCheckReport(files: string[], diff: string, opts: { strict: boolean; lastChange?: (f: string) => string }): CheckReport {
+    const direct = new Map<string, { c: Constraint; files: string[] }>();
+    for (const f of files) for (const c of this.checkConstraints(f)) {
+      const e = direct.get(c.id) ?? { c, files: [] };
+      e.files.push(f);
+      direct.set(c.id, e);
+    }
+    const near = new Map<string, { c: Constraint; via: string[] }>();
+    for (const f of files) for (const b of this.blastRadiusFiles(f)) for (const c of this.checkConstraints(b.file)) {
+      if (direct.has(c.id)) continue;
+      const e = near.get(c.id) ?? { c, via: [] };
+      e.via.push(`${f} → ${b.file} (${b.via}, depth ${b.depth})`);
+      near.set(c.id, e);
+    }
+    const an = analyzeDiff(diff);
+    const regHits = this.regressionHits({ symbols: an.addedSymbols.map((s) => s.name), deps: an.addedDeps }, files);
+    const staleIds = opts.strict && opts.lastChange
+      ? new Set(this.staleness(opts.lastChange).filter((s) => s.kind === "constraint").map((s) => s.id))
+      : new Set<string>();
+    const directReport: CheckDirect[] = [...direct.values()].map(({ c, files: fs }) => {
+      const stale = staleIds.has(c.id);
+      const strictBlocks = isStrictBlocker(c, stale);
+      return {
+        id: c.id, severity: c.severity ?? "advisory", statement: c.statement, rationale: c.rationale ?? "",
+        files: fs, strictBlocks,
+        downgrade: c.severity === "blocking" && !strictBlocks ? (stale ? "stale" : "low-confidence") : undefined,
+        why: this.causalChain(c.id),
+      };
+    });
+    return {
+      fileCount: files.length,
+      strict: opts.strict,
+      direct: directReport,
+      near: [...near.values()].map(({ c, via }) => ({ id: c.id, severity: c.severity ?? "advisory", statement: c.statement, via })),
+      regressions: regHits.map((h) => ({ kind: h.kind, name: h.name, decision: h.decision, title: h.title, reason: h.reason, blocking: h.blocking })),
+      strictBlockers: directReport.filter((d) => d.strictBlocks).length,
+      regBlocking: regHits.filter((h) => h.blocking).length,
+    };
   }
 
   /** Time-travel: the decision history for a target — every decision touching it,

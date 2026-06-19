@@ -220,6 +220,31 @@ repo-wide (`**`) rule is only blocking when you pass `applies_to_all`, so one co
 can't silently gate the whole tree. Because it's the *same* constraint machinery, a
 correction is enforced exactly like a hand-authored invariant — see firmness above.
 
+## Causal Merge Verdict: does this change re-open a closed bug?
+
+A diff-only reviewer (CodeRabbit, Greptile) sees *what* changed. It can't see that the line
+you're deleting is the fix for an incident, or that the symbol you're re-adding was
+deliberately retired. Hunch can — because it holds the **why**.
+
+`hunch_merge_verdict` (MCP tool) and `hunch check` replay a diff against the graph and return
+one verdict — **BLOCK / WARN / PASS** — that *cites the reasoning*, not just the rule:
+
+```text
+VERDICT: ⛔ BLOCK — this change breaks a recorded invariant or re-opens a known bug.
+
+⛔ pay() must verify the session before charging — con_pay
+   🧠 why: "Charge must verify the session first" (dec_pay)
+   🐞 guards against: Double-charge on unverified session — pay() charged without verifying (bug_trunc)
+```
+
+It's **deterministic** (no LLM): for every invariant *directly* in scope it walks
+constraint → `source_decision` → the bug whose root cause spawned it; it flags invariants
+reached transitively (blast radius, advisory) and any deliberately-retired code the diff
+re-introduces. BLOCK fires only on a direct, high-confidence, non-stale **blocking** invariant
+or a blocking-linked regression — near-hits stay advisory, so it's safe as a merge gate. Call
+it before opening a PR (`{}` checks staged changes; pass `base: "origin/main"` for the range);
+the CI Constraint Guard renders the same cited verdict as a PR comment.
+
 ## Semantic search (optional)
 
 By default `hunch query` and the `hunch_query` MCP tool use fast keyword (FTS) search —
