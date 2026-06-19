@@ -236,7 +236,10 @@ for free over `git push` / `pull`. `hunch init` also registers a **git merge dri
 concurrent edits to the graph merge **by record id** instead of throwing conflict markers
 (human-confirmed beats auto, then higher confidence, then recency). The routing lives in a
 committed `.gitattributes`; the per-clone driver definition is set up by each teammate's
-`hunch init`.
+`hunch init`. The graph is **OS-agnostic**: paths are stored and matched in POSIX form, and
+an installed Hunch registers its MCP server by package name (`npx -y @davesheffer/hunch`)
+rather than an absolute path — so a teammate on Windows, macOS, or Linux shares the same
+`.hunch/` and the same committed config without per-machine fixups.
 
 ## Continuous learning (CI)
 
@@ -358,6 +361,10 @@ delegate to the `hunch` CLI.
 - **Atomic, durable writes.** All `.hunch/` writes go through a temp-file + rename, with a
   Windows-safe fallback, so an interrupted write can't truncate the index; `put`/`delete`
   refuse to rewrite a corrupt index rather than flatten it.
+- **OS-agnostic by construction.** Git emits `/`-separated paths on every platform, so the
+  graph is the source of truth in POSIX form; any free-form target is canonicalized before
+  comparison, so `src\auth\x.ts` and `src/auth/x.ts` resolve to the same records. Generated
+  configs that get committed reference Hunch by package name, never a machine-local path.
 
 ## Develop
 

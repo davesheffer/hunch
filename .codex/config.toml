@@ -1,5 +1,0 @@
-# >>> hunch mcp (managed) >>>
-[mcp_servers.hunch]
-command = 'npx'
-args = ['tsx', 'C:\Users\david\Documents\github\hunch\src\cli\index.ts', 'mcp']
-# <<< hunch mcp <<<

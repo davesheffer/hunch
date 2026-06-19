@@ -701,6 +701,10 @@
       <h2 class="title" data-rise style="--d:.08s">Every release, since <em>v0.1</em>.</h2>
       <div class="clog" data-rise style="--d:.14s;margin-top:36px;border-top:1px solid var(--line)">
         <div class="clog-group">
+          <div class="clog-date">Jun 19, 2026</div>
+          <div class="clog-row"><span class="rel-tag">v0.12.2</span><span class="clog-t"><b>OS-agnostic, end to end</b> — an installed Hunch now writes a path-free <span class="mono">npx&nbsp;-y&nbsp;@davesheffer/hunch</span> MCP entry, so a committed config works on any teammate's OS; and every <span class="mono">why</span>&nbsp;/&nbsp;<span class="mono">context</span>&nbsp;/ blast-radius lookup normalizes path separators, so a Windows target like <span class="mono">src\auth\x.ts</span> resolves identically to <span class="mono">src/auth/x.ts</span>.</span></div>
+        </div>
+        <div class="clog-group">
           <div class="clog-date">Jun 18, 2026</div>
           <div class="clog-row"><span class="rel-tag">v0.12.1</span><span class="clog-t"><b>Guard hardening</b> — the CI guard now fetches the PR base ref and fails loudly on an unresolvable <span class="mono">--base</span>, so it can never silently pass a PR; fork-PR comments degrade gracefully.</span></div>
           <div class="clog-row"><span class="rel-tag">v0.12.0</span><span class="clog-t"><b>CI Constraint Guard</b> — <span class="mono">hunch ci</span> scaffolds a GitHub Action that runs <span class="mono">hunch check</span> on every PR, comments the affected invariants/decisions (con_/dec_ ids), and fails on a blocking one. Memory that blocks a merge, not just advises.</span></div>

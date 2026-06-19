@@ -141,7 +141,7 @@ program
     }
 
     store.close();
-    console.log("\nNext: make a commit (the hook captures a decision), then ask Claude Code \"why is X built this way?\"");
+    console.log("\nNext: make a commit (the hook captures a decision), then ask your coding assistant \"why is X built this way?\"");
     console.log("Cold start? Seed from history:  hunch backfill --since 90d");
   });
 

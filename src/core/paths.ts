@@ -5,6 +5,15 @@ import { dirname, resolve } from "node:path";
 
 export const HUNCH_DIR = ".hunch";
 
+/** Canonicalize a free-form path/target to repo-relative POSIX form. Hunch stores
+ *  every path with forward slashes (git emits "/" on all OSes), so any user- or
+ *  agent-supplied target must be normalized before comparison — otherwise a
+ *  Windows caller passing `src\auth\session.ts` never matches the stored
+ *  `src/auth/session.ts`. Safe on symbol names too: they contain no backslashes. */
+export function toPosixTarget(target: string): string {
+  return target.replace(/\\/g, "/").replace(/^\.\//, "");
+}
+
 export interface HunchPaths {
   /** Repo root (where .hunch/ lives). */
   root: string;

@@ -5,8 +5,19 @@ dist/
 # VS Code extension build artifact — distribute via GitHub Releases / registries, not git.
 *.vsix
 
-# Editor-local settings (the committed .vscode/mcp.json is the shared Hunch config).
+# Editor-local settings.
 .vscode/settings.json
+
+# Per-machine MCP/provider configs. In a SOURCE CHECKOUT (hacking on Hunch
+# itself) these point at this machine's local source path, so they cannot be
+# OS-agnostic and must not be committed — each contributor regenerates them with
+# `npm run dev -- init`. (End users who `npm i -g @davesheffer/hunch` get a
+# package-named, OS-agnostic config that IS safe to commit; see resolveInvocation.)
+.mcp.json
+.cursor/mcp.json
+.vscode/mcp.json
+.windsurf/mcp_config.json
+.codex/config.toml
 
 # npm auth: references ${NPM_TOKEN} env var, but never commit in case a real token is pasted.
 .npmrc

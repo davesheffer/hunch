@@ -9,7 +9,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { hunchPaths, findRoot } from "../core/paths.js";
+import { hunchPaths, findRoot, toPosixTarget } from "../core/paths.js";
 import { HunchStore } from "../store/hunchStore.js";
 import { selectEmbedder } from "../store/embedder.js";
 import { decisionId } from "../core/ids.js";
@@ -35,6 +35,7 @@ const more = (total: number, cap: number, hint = ""): string =>
 
 /** Resolve a free-form target (symbol id / name / file path) to symbol records. */
 function resolveSymbols(store: HunchStore, target: string): Symbol[] {
+  target = toPosixTarget(target);
   const syms = store.json.loadAll("symbols");
   const byId = syms.find((s) => s.id === target);
   if (byId) return [byId];
@@ -47,7 +48,7 @@ function resolveSymbols(store: HunchStore, target: string): Symbol[] {
  *  radius). Falls back to the literal target so direct-scope checks still run. */
 function resolveFiles(store: HunchStore, target: string): string[] {
   const files = new Set(resolveSymbols(store, target).map((s) => s.file));
-  return files.size ? [...files] : [target];
+  return files.size ? [...files] : [toPosixTarget(target)];
 }
 
 export function buildServer(root: string): McpServer {

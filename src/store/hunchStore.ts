@@ -10,7 +10,7 @@
  *   - bugLineage():     bugs matching a symptom/symbol + their lineage
  *   - fragility():      ranked fragility report with evidence
  */
-import type { HunchPaths } from "../core/paths.js";
+import { toPosixTarget, type HunchPaths } from "../core/paths.js";
 import { ENTITY_KINDS, type Component, type Constraint, type Bug, type Decision, type Symbol, type Edge } from "../core/types.js";
 import { openDb, type DB } from "./db.js";
 import { RESET_SQL, embedHash } from "./schema.js";
@@ -349,6 +349,7 @@ export class HunchStore {
    *  instant — "what did we believe as of commit X?". Omit `asOf` for the full,
    *  history-inclusive view (backward-compatible default). */
   why(target: string, opts: { asOf?: string } = {}): WhyResult {
+    target = toPosixTarget(target);
     const decisions = this.json.loadAll("decisions");
     const bugs = this.json.loadAll("bugs");
     const constraints = this.json.loadAll("constraints");
@@ -628,6 +629,7 @@ export class HunchStore {
    *  a task on `target`, ordered by what matters most — invariants first, then the
    *  why, then blast radius and bug history — trimmed to a rough token budget. */
   assembleContext(target: string, budget = 1500, opts: { asOf?: string } = {}): AssembledContext {
+    target = toPosixTarget(target);
     const w = this.why(target, opts);
     const symIds = w.symbols.map((s) => s.id);
     const blast = new Map<string, { id: string; depth: number; via: string }>();
