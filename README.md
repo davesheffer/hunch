@@ -109,8 +109,10 @@ The MCP tools Claude calls under the hood: `hunch_why`, `hunch_query`,
 `hunch_check_constraints`, `hunch_get_dependents` (blast radius), `hunch_blast_radius`
 (dependent files + near-violations a change could break indirectly), `hunch_bug_lineage`,
 `hunch_context` (surgical minimal slice for a task), `hunch_timeline` (a target's decision
-history over time), `hunch_record_decision` (write-back). `hunch_why` and `hunch_context`
-take an optional `as_of` (commit/tag/branch) to **time-travel** the graph to a past state.
+history over time), `hunch_merge_verdict` (a cited BLOCK/WARN/PASS over a diff — see below),
+and the write-backs `hunch_record_decision`, `hunch_record_correction` (turn a correction into
+an enforced invariant — see below). `hunch_why` and `hunch_context` take an optional `as_of`
+(commit/tag/branch) to **time-travel** the graph to a past state.
 
 ### Works with any MCP assistant
 
