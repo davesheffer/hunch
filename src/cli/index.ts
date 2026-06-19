@@ -17,7 +17,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { execFileSync, spawnSync } from "node:child_process";
 import { join, relative } from "node:path";
 import { Command } from "commander";
-import { hunchPaths, findRoot } from "../core/paths.js";
+import { hunchPaths, findRoot, toPosixTarget } from "../core/paths.js";
 import { HunchStore } from "../store/hunchStore.js";
 import { selectEmbedder } from "../store/embedder.js";
 import { indexRepo } from "../extractors/indexer.js";
@@ -59,7 +59,7 @@ function storeFor(): { store: HunchStore; root: string } {
 // ---- init -----------------------------------------------------------------
 program
   .command("init")
-  .description("Scaffold .hunch/, index the repo, install the git hook, and wire up Claude Code.")
+  .description("Scaffold .hunch/, index the repo, install the git hook, and wire up your coding assistants (Claude Code, Cursor, VS Code, Windsurf, Codex).")
   .option("--no-index", "skip the initial repo index")
   .option("--no-enforce", "do not install the advisory pre-commit constraint guard")
   .option("--enforce-strict", "make the pre-commit guard FAIL the commit on a direct, high-confidence, non-stale blocking invariant")
@@ -401,7 +401,7 @@ program
     if (!SEV.includes(opts.severity)) return fail(`--severity must be one of: ${SEV.join(", ")}`);
     const { store, root } = storeFor();
     store.json.ensureDirs();
-    const scope = opts.scope.split(",").map((s) => s.trim()).filter(Boolean);
+    const scope = opts.scope.split(",").map((s) => toPosixTarget(s.trim())).filter(Boolean);
     const c = store.json.put("constraints", {
       id: constraintId(statement),
       type: opts.type,

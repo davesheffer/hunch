@@ -310,7 +310,7 @@ export function buildServer(root: string): McpServer {
           consequences: decision.consequences ?? [],
           alternatives_rejected: decision.alternatives_rejected ?? [],
           related_components: decision.related_components ?? existing?.related_components ?? [],
-          related_files: decision.related_files ?? existing?.related_files ?? [],
+          related_files: (decision.related_files ?? existing?.related_files ?? []).map(toPosixTarget),
           supersedes: decision.supersedes ?? existing?.supersedes ?? null,
           superseded_by: existing?.superseded_by ?? null,
           caused_by_bug: existing?.caused_by_bug ?? null,
@@ -318,7 +318,7 @@ export function buildServer(root: string): McpServer {
           valid_from: existing?.valid_from ?? now,
           valid_to: existing?.valid_to ?? null,
           retired: existing?.retired ?? { symbols: [], deps: [] },
-          provenance: { source, confidence: 0.95, evidence: decision.related_files ?? existing?.provenance.evidence ?? [] },
+          provenance: { source, confidence: 0.95, evidence: (decision.related_files ?? existing?.provenance.evidence ?? []).map(toPosixTarget) },
           date: now,
         };
         store.json.put("decisions", rec);
