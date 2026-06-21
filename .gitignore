@@ -33,10 +33,3 @@ dist/
 .hunch/*.sqlite-shm
 # Atomic-write temp files (normally consumed by rename; ignored in case one leaks).
 .hunch/**/*.tmp*
-# >>> hunch (derived runtime index — regenerable from .hunch/*.json) >>>
-.hunch/*.sqlite
-.hunch/*.sqlite-shm
-.hunch/*.sqlite-wal
-.hunch/*.sqlite-journal
-.hunch/**/*.tmp*
-# <<< hunch <<<

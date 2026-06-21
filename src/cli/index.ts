@@ -37,7 +37,7 @@ import { scaffoldProviders } from "../integrations/providers.js";
 import { healClaudeConfigCaseSplit } from "../integrations/claudeConfig.js";
 import { formatContext } from "../core/format.js";
 import { readConfig, writeConfig, FIRMNESS_LEVELS, isFirmness, type Firmness } from "../core/config.js";
-import { blockingInScope, vetoInScope } from "../core/hookpolicy.js";
+import { blockingInScope, vetoInScope, proposedEditLines } from "../core/hookpolicy.js";
 import { draftTripwires, knownRepoDeps } from "../synthesis/tripwires.js";
 import { constraintId } from "../core/ids.js";
 import type { Constraint } from "../core/types.js";
@@ -750,7 +750,7 @@ program
     try {
       const evt = JSON.parse(await readStdin()) as {
         hook_event_name?: string;
-        tool_input?: { file_path?: string; new_string?: string; content?: string };
+        tool_input?: { file_path?: string; new_string?: string; content?: string; edits?: Array<{ new_string?: string }> };
         prompt?: string;
       };
       const root = findRoot();
@@ -790,11 +790,12 @@ program
           emitDeny(deny.reason);
           return;
         }
-        // Veto Guard (live): the proposed edit text — Edit's new_string or Write's
-        // content — re-introduces an approach an in-force decision REJECTED. The
-        // agent self-corrects before staging. Only human-confirmed tripwires deny.
-        const proposed = evt.tool_input?.new_string ?? evt.tool_input?.content ?? "";
-        const vetoDeny = proposed ? vetoInScope(store, target, proposed.split("\n")) : null;
+        // Veto Guard (live): the proposed edit text re-introduces an approach an
+        // in-force decision REJECTED. Covers Edit (new_string), Write (content), and
+        // MultiEdit (edits[].new_string). The agent self-corrects before staging;
+        // only human-confirmed tripwires deny.
+        const proposedLines = proposedEditLines(evt.tool_input);
+        const vetoDeny = proposedLines.length ? vetoInScope(store, target, proposedLines) : null;
         if (vetoDeny) {
           emitDeny(vetoDeny.reason);
           return;

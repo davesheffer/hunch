@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { hunchPaths } from "../src/core/paths.js";
 import { HunchStore } from "../src/store/hunchStore.js";
 import { indexRepo } from "../src/extractors/indexer.js";
-import { blockingInScope, vetoInScope } from "../src/core/hookpolicy.js";
+import { blockingInScope, vetoInScope, proposedEditLines } from "../src/core/hookpolicy.js";
 import { prov } from "./helpers.js";
 
 // jwt.ts ← session.ts ← charge.ts : a 2-hop dependency chain (mirrors check.test).
@@ -135,5 +135,28 @@ test("vetoInScope returns null when the proposed edit adds nothing forbidden", (
     seedVeto(store, "src/**");
     assert.equal(vetoInScope(store, fileOf("charge"), ["const x = 1;"]), null);
     assert.equal(vetoInScope(store, fileOf("charge"), []), null);
+  } finally { cleanup(); }
+});
+
+test("proposedEditLines extracts text from Edit, Write, and MultiEdit tool inputs", () => {
+  assert.deepEqual(proposedEditLines({ new_string: "a\nb" }), ["a", "b"], "Edit");
+  assert.deepEqual(proposedEditLines({ content: "x\ny" }), ["x", "y"], "Write");
+  assert.deepEqual(
+    proposedEditLines({ edits: [{ new_string: "p" }, { new_string: "q\nr" }] }),
+    ["p", "q", "r"],
+    "MultiEdit flattens every edit's new_string",
+  );
+  assert.deepEqual(proposedEditLines({}), [], "no edit text → empty");
+  assert.deepEqual(proposedEditLines(undefined), [], "missing tool_input → empty");
+});
+
+test("vetoInScope denies a MultiEdit whose edits[] re-introduce a rejected dependency", () => {
+  const { store, fileOf, cleanup } = indexed();
+  try {
+    seedVeto(store, "src/**");
+    const lines = proposedEditLines({ edits: [{ new_string: "const a = 1;" }, { new_string: 'import axios from "axios";' }] });
+    const hit = vetoInScope(store, fileOf("charge"), lines);
+    assert.ok(hit, "the forbidden import in a later MultiEdit chunk is caught");
+    assert.match(hit!.reason, /REVERSE decision dec_ext/);
   } finally { cleanup(); }
 });

@@ -143,12 +143,12 @@ Veto rides the existing rails — no new enforcement surface is required.
    ([src/core/hookpolicy.ts](../src/core/hookpolicy.ts)): `vetoInScope(store, file, proposedAddedLines)`
    returns the deny text *before* the edit is staged. The refusal states only the decision and the
    receipt — never how to lower enforcement (mirrors `hookpolicy`).
-   - **Hook caveat (honest).** The current hook reads only `tool_input.file_path`
-     ([src/cli/index.ts](../src/cli/index.ts)); it does **not** read the proposed edit text. To veto
-     live, the hook must first extract `new_string` (Edit) / `content` (Write) from `tool_input` and
-     feed those as `proposedAddedLines`. The `dep` tier only sees `import axios …` if that import is
-     in *this* edit — a `Write` of the whole file carries it; an incremental `Edit` of a call site
-     may not. So the `dep` block is rock-solid at commit/CI (a real diff) and best-effort live.
+   - **Hook caveat (honest).** The hook extracts the proposed edit text from `tool_input`
+     ([src/cli/index.ts](../src/cli/index.ts)) across all three edit tools — `new_string` (Edit),
+     `content` (Write), and `edits[].new_string` (MultiEdit) — and feeds them as `proposedAddedLines`.
+     The `dep` tier only sees `import axios …` if that import is in *this* edit — a `Write` of the
+     whole file carries it; an incremental `Edit` of a call site may not. So the `dep` block is
+     rock-solid at commit/CI (a real diff) and best-effort live.
 3. **MCP — no new tool.** Once `CheckReport` carries vetoes, they surface through the existing
    read-only `hunch_merge_verdict`, which renders the *whole* report
    ([src/mcp/server.ts](../src/mcp/server.ts)). An agent replaying its patch before a PR gets vetoes

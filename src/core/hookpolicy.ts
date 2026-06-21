@@ -39,6 +39,17 @@ export function blockingInScope(store: HunchStore, file: string): BlockingHit | 
  *  The deny text states ONLY the decision + receipt (what was rejected, what was
  *  chosen) — never how to supersede or disable the guard, so an autonomous agent
  *  cannot be coached into reversing a decision to land its edit (dec_a466655539). */
+/** Flatten the proposed-edit text from a PreToolUse `tool_input` across all three
+ *  edit tools — Edit (`new_string`), Write (`content`), MultiEdit (`edits[].new_string`)
+ *  — into candidate added lines for the Veto Guard. Empty input → []. */
+export function proposedEditLines(
+  toolInput: { new_string?: string; content?: string; edits?: Array<{ new_string?: string }> } | undefined,
+): string[] {
+  const parts = [toolInput?.new_string, toolInput?.content, ...(toolInput?.edits ?? []).map((e) => e?.new_string)]
+    .filter((s): s is string => !!s);
+  return parts.length ? parts.join("\n").split("\n") : [];
+}
+
 export function vetoInScope(store: HunchStore, file: string, proposedAddedLines: string[]): BlockingHit | null {
   const hit = store.vetoForFileEdit(file, proposedAddedLines).find((v) => v.blocks);
   if (!hit) return null;

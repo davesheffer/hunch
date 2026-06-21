@@ -36,6 +36,11 @@ export function ensureGitignore(root: string): GitignoreResult {
   }
   const cur = readFileSync(path, "utf8");
   if (cur.includes(MARK)) return { path, action: "unchanged" }; // already managed
+  // Already covered by the user's OWN entries (e.g. a hand-written, commented
+  // section listing the same patterns)? Don't append a redundant managed block —
+  // that would leave two copies of every ignore. Keep the .gitignore clean.
+  const lines = new Set(cur.split("\n").map((l) => l.trim()));
+  if (ENTRIES.every((e) => lines.has(e))) return { path, action: "unchanged" };
   const sep = cur.endsWith("\n") || cur.length === 0 ? "" : "\n";
   writeFileSync(path, `${cur}${sep}${block}\n`);
   return { path, action: "appended" };

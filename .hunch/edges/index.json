@@ -45,6 +45,21 @@
     }
   },
   {
+    "id": "edge_00a7580d45",
+    "from": "sym_6103f9eaf1",
+    "to": "sym_3c2262c0f5",
+    "type": "calls",
+    "reason": "syncCommit calls draftTripwires",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/synthesize.ts"
+      ]
+    }
+  },
+  {
     "id": "edge_00fa4753b7",
     "from": "sym_c51c7024d1",
     "to": "sym_d46d11350d",
@@ -191,6 +206,21 @@
       "confidence": 0.8,
       "evidence": [
         "src/store/merge.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_053a46823b",
+    "from": "sym_add973e254",
+    "to": "sym_f1a7d419e1",
+    "type": "calls",
+    "reason": "isStrictBlocker calls isHumanConfirmed",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/core/strictgate.ts"
       ]
     }
   },
@@ -2190,6 +2220,21 @@
     }
   },
   {
+    "id": "edge_3c802de98c",
+    "from": "sym_6ff1f4f5c8",
+    "to": "sym_53e929a0f0",
+    "type": "calls",
+    "reason": "matchTripwire calls importsDep",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/hunchStore.ts"
+      ]
+    }
+  },
+  {
     "id": "edge_3ce22507e3",
     "from": "sym_a124f3c98f",
     "to": "sym_6e9bd0ad39",
@@ -2955,6 +3000,21 @@
     }
   },
   {
+    "id": "edge_5577c6580c",
+    "from": "sym_6103f9eaf1",
+    "to": "sym_655cc44afe",
+    "type": "calls",
+    "reason": "syncCommit calls knownRepoDeps",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/synthesize.ts"
+      ]
+    }
+  },
+  {
     "id": "edge_55b1f2e109",
     "from": "sym_4961c3a2c2",
     "to": "sym_7973c0cb31",
@@ -3641,6 +3701,21 @@
       "confidence": 0.8,
       "evidence": [
         "vscode-extension/src/extension.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_67bce8e87b",
+    "from": "sym_139f365c21",
+    "to": "sym_f1a7d419e1",
+    "type": "calls",
+    "reason": "isVetoBlocker calls isHumanConfirmed",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/core/strictgate.ts"
       ]
     }
   },
@@ -4421,6 +4496,21 @@
       "confidence": 0.8,
       "evidence": [
         "src/synthesis/synthesize.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_88d660de9f",
+    "from": "sym_53e929a0f0",
+    "to": "sym_4c48f00e62",
+    "type": "calls",
+    "reason": "importsDep calls escapeRe",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/store/hunchStore.ts"
       ]
     }
   },
@@ -5471,6 +5561,21 @@
       "confidence": 0.8,
       "evidence": [
         "test/verdict.test.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_ab10090195",
+    "from": "sym_8a22b1da48",
+    "to": "sym_7cc3f4a03d",
+    "type": "calls",
+    "reason": "mentions calls escapeRe",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/tripwires.ts"
       ]
     }
   },
@@ -6611,6 +6716,21 @@
       "confidence": 0.8,
       "evidence": [
         "vscode-extension/src/hunchData.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_d31b634136",
+    "from": "sym_3c2262c0f5",
+    "to": "sym_ca29c323a6",
+    "type": "calls",
+    "reason": "draftTripwires calls dirGlobs",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/tripwires.ts"
       ]
     }
   },
@@ -7796,6 +7916,21 @@
       "confidence": 0.8,
       "evidence": [
         "src/store/hunchStore.ts"
+      ]
+    }
+  },
+  {
+    "id": "edge_fa1390bb7a",
+    "from": "sym_3c2262c0f5",
+    "to": "sym_8a22b1da48",
+    "type": "calls",
+    "reason": "draftTripwires calls mentions",
+    "strength": 0.8,
+    "provenance": {
+      "source": "extracted",
+      "confidence": 0.8,
+      "evidence": [
+        "src/synthesis/tripwires.ts"
       ]
     }
   },
