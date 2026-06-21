@@ -85,6 +85,17 @@ Claude Code in the repo** afterward to pick up the `hunch_*` tools. (Each teamma
 `hunch init` once to wire up their own clone; the captured `.hunch/` content is shared
 via git.)
 
+> **Prefer `hunch init` (project-local `.mcp.json`) over a global `claude mcp add`.**
+> `.mcp.json` is registered by file path, so it's robust. A global `claude mcp add`
+> writes to `~/.claude.json` keyed by the raw working-directory string — and **on
+> Windows** that's a trap: drive letters are case-insensitive (`c:\` and `C:\` are the
+> same folder) but Claude Code compares the key case-sensitively, so it can create two
+> project blocks for one directory and a session that resolves to the *other* casing
+> sees no `hunch_*` tools (registration looked fine, the tools just aren't there). If
+> you hit this, run **`hunch doctor`** — on Windows it detects the split and heals it
+> (merging the MCP servers across both casings, after backing up `~/.claude.json`).
+> `hunch init` runs the same heal automatically at the end.
+
 ### 4. Use it
 
 ```bash
