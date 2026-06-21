@@ -34,6 +34,7 @@ import { writeCiWorkflow } from "../integrations/ciAction.js";
 import { updateClaudeMd } from "../integrations/claudemd.js";
 import { writeMcpJson, writeSlashCommands, installClaudeHooks } from "../integrations/scaffold.js";
 import { scaffoldProviders } from "../integrations/providers.js";
+import { healClaudeConfigCaseSplit } from "../integrations/claudeConfig.js";
 import { formatContext } from "../core/format.js";
 import { readConfig, writeConfig, FIRMNESS_LEVELS, isFirmness, type Firmness } from "../core/config.js";
 import { blockingInScope } from "../core/hookpolicy.js";
@@ -112,7 +113,10 @@ program
     }
 
     const mcp = writeMcpJson(root, inv.mcp);
-    console.log(`  ✓ wrote ${rel(root, mcp)} (registers the Hunch MCP server)`);
+    // .mcp.json is the CANONICAL registration: Claude Code resolves it by file path,
+    // so it's immune to the Windows ~/.claude.json drive-letter case-split that a
+    // global `claude mcp add` is prone to (see `hunch doctor`).
+    console.log(`  ✓ wrote ${rel(root, mcp)} (registers the Hunch MCP server — canonical, path-keyed; prefer over a global \`claude mcp add\`)`);
     const cmds = writeSlashCommands(root);
     console.log(`  ✓ wrote ${cmds.length} slash commands (/hunch-why, /hunch-fix, /hunch-fragile)`);
     const cmd = updateClaudeMd(root, store);
@@ -138,6 +142,11 @@ program
       console.log(`  ✓ wrote ${total} multi-assistant config file(s) → ${ok.map((p) => p.assistant).join(", ")}`);
       for (const p of ps) if (p.error) console.log(`  ⚠ skipped ${p.assistant}: ${p.error}`);
     }
+
+    // Windows self-heal: if an earlier global `claude mcp add` left a drive-letter
+    // case-split in ~/.claude.json, merge it so hunch resolves under either casing.
+    // No-op (silent) off Windows.
+    reportClaudeConfigHeal();
 
     store.close();
     console.log("\nNext: make a commit (the hook captures a decision), then ask your coding assistant \"why is X built this way?\"");
@@ -918,11 +927,36 @@ program
     } else {
       console.log(dim(`semantic:   off (keyword search only) — enable: npm i -g @huggingface/transformers && hunch embed`));
     }
+    // Windows: detect/heal the Claude Code ~/.claude.json drive-letter case-split
+    // that silently hides the hunch_* MCP tools. No-op (silent) off Windows.
+    reportClaudeConfigHeal();
     store.close();
   });
 
 function rel(root: string, p: string): string {
   return p.startsWith(root) ? p.slice(root.length + 1) : p;
+}
+
+/** Run the Windows ~/.claude.json drive-letter case-split heal and print what it
+ *  did. Silent + no-op off Windows. A parse refusal is surfaced as a warning, never
+ *  thrown out of doctor/init (those commands must still complete). */
+function reportClaudeConfigHeal(): void {
+  let res;
+  try {
+    res = healClaudeConfigCaseSplit();
+  } catch (e) {
+    console.log(`  ⚠ Claude config: ${(e as Error).message}`);
+    return;
+  }
+  if (!res.applicable) return; // non-Windows: the case-split bug can't occur
+  if (!res.changed) {
+    console.log(dim(`Claude config: no drive-letter project split (${res.file})`));
+    return;
+  }
+  for (const g of res.groups) {
+    console.log(`✓ healed Claude Code project case-split: mirrored [${g.servers.join(", ")}] across ${g.casings.join("  ·  ")}`);
+  }
+  console.log(dim(`  ↳ backup: ${res.backup}`));
 }
 function dim(s: string): string {
   return `\x1b[2m${s}\x1b[0m`;
