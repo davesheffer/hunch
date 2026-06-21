@@ -1,6 +1,6 @@
 {
   "name": "@davesheffer/hunch",
-  "version": "0.14.0",
+  "version": "0.14.1",
   "license": "MIT",
   "author": "Dave Sheffer <dave.sheffer1@gmail.com>",
   "description": "Hunch — an Engineering Memory OS: a persistent, git-native reasoning graph over a codebase, exposed to Claude Code via MCP.",
