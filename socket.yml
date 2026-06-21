@@ -1,0 +1,16 @@
+# Socket.dev project config — https://docs.socket.dev/docs/socket-yml
+#
+# Scanning is scoped to code that actually ships. Per-alert triage (the reviewed,
+# accepted dependency alerts: @emnapi/runtime, @hono/node-server, tar-stream) is
+# documented in SECURITY.md and should be acknowledged in the Socket dashboard —
+# we deliberately do NOT globally disable security categories here, so a genuinely
+# new obfuscated/network/dynamic-exec dependency still surfaces.
+version: 2
+
+# Don't scan non-shipped files (tests, the marketing site, the memory graph).
+# The npm package ships only dist/**/*.js (see package.json "files").
+projectIgnorePaths:
+  - test/**
+  - site/**
+  - .hunch/**
+  - "**/*.test.ts"

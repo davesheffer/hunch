@@ -1,0 +1,45 @@
+# Hunch — Release. Publishes to npm WITH provenance (a signed, verifiable
+# attestation linking the tarball to this repo + this workflow run) whenever a
+# GitHub Release is published. Consumers can verify the package was built here,
+# unmodified — the single strongest supply-chain trust signal npm offers.
+#
+# One-time setup:
+#   1. Create an npm Granular Access / Automation token with publish rights for
+#      @davesheffer/hunch, store it as the repo secret NPM_TOKEN.
+#   2. Cut a release: bump version, tag, then publish a GitHub Release. This runs.
+# Provenance also needs publishConfig.provenance:true (set in package.json) and
+# the id-token:write permission below (OIDC) — both already wired.
+name: Release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  id-token: write # OIDC — required for npm provenance attestation
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+          cache: npm
+
+      - name: Install (locked)
+        run: npm ci
+
+      # Gate the publish on a green build: tests must pass before anything ships.
+      # `prepublishOnly` (npm run build) runs automatically inside npm publish.
+      - name: Test
+        run: npm test
+
+      - name: Publish with provenance
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
