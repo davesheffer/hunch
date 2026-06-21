@@ -1,0 +1,43 @@
+# Hunch — CI. Typecheck, test, build, and a supply-chain audit gate on every
+# push to main and every PR. Pairs with hunch-guard.yml (the invariant guard).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # npm ci installs the EXACT, integrity-hashed lockfile tree (no drift,
+      # no silent minor bumps) — the deterministic counterpart to `npm install`.
+      - name: Install (locked)
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      # Supply-chain gate: fail ONLY on a high/critical advisory in the deps we
+      # actually ship (--omit=dev drops dev-only noise). A new CVE on a shipped
+      # transitive turns the build red instead of silently riding along.
+      # Tighten to `--audit-level=moderate` if you want a stricter bar.
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high

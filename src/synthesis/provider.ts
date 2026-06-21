@@ -234,6 +234,21 @@ abstract class CliSynthProvider implements SynthProvider {
   }
 }
 
+// A model id comes from a HUNCH_*_MODEL env var and ends up as an argv token that,
+// on Windows, pexecIn joins into the cmd.exe line (shell:true, to resolve the npm
+// `.cmd` shim). The untrusted prompt always travels via stdin — never argv — so the
+// ONLY non-literal token reaching that shell line is this model id. Reject anything
+// with whitespace or a cmd.exe metacharacter so a poisoned env var can't smuggle
+// `& evil.exe` into the line; fall back to the provider default rather than crash on
+// a mere typo. (pexecIn itself stays general — callers may legitimately pass a
+// pre-quoted path token — so the guard lives here, at the untrusted-input source.)
+const MODEL_RE = /^[A-Za-z0-9._:/-]+$/;
+export function safeModel(v: string | undefined, fallback: string): string;
+export function safeModel(v: string | undefined, fallback: undefined): string | undefined;
+export function safeModel(v: string | undefined, fallback: string | undefined): string | undefined {
+  return v && MODEL_RE.test(v) ? v : fallback;
+}
+
 // --------------------------------------------------------------------------
 // Provider A: headless `claude -p` CLI — billed to the user's Claude subscription
 // --------------------------------------------------------------------------
@@ -241,7 +256,7 @@ class ClaudeCliProvider extends CliSynthProvider {
   readonly name = "claude-cli";
   // Default to the `haiku` alias (cheap/fast, and survives model retirements)
   // rather than a pinned dated id; override with HUNCH_SYNTH_MODEL if needed.
-  private model = process.env.HUNCH_SYNTH_MODEL || "haiku";
+  private model = safeModel(process.env.HUNCH_SYNTH_MODEL, "haiku");
 
   async available(): Promise<boolean> {
     try {
@@ -301,7 +316,7 @@ class ClaudeCliProvider extends CliSynthProvider {
 // --------------------------------------------------------------------------
 class CodexCliProvider extends CliSynthProvider {
   readonly name = "codex-cli";
-  private model = process.env.HUNCH_CODEX_MODEL; // omit → codex uses its configured default
+  private model = safeModel(process.env.HUNCH_CODEX_MODEL, undefined); // omit → codex uses its configured default
 
   async available(): Promise<boolean> {
     try {
@@ -327,7 +342,7 @@ class CodexCliProvider extends CliSynthProvider {
 // --------------------------------------------------------------------------
 class CursorCliProvider extends CliSynthProvider {
   readonly name = "cursor-agent";
-  private model = process.env.HUNCH_CURSOR_MODEL;
+  private model = safeModel(process.env.HUNCH_CURSOR_MODEL, undefined);
 
   async available(): Promise<boolean> {
     try {
