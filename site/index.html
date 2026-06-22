@@ -234,6 +234,7 @@
     background:rgba(39,66,255,.07);padding:4px 10px;border-radius:7px}
 
   /* chain (bug→decision→constraint) */
+  #chain{padding-top:40px}
   .chain{display:grid;grid-template-columns:repeat(3,1fr);gap:0;margin-top:54px;
     background:var(--surface);border:1px solid var(--line);border-radius:22px;box-shadow:var(--shadow);overflow:hidden}
   @media(max-width:880px){.chain{grid-template-columns:1fr}}
@@ -253,6 +254,7 @@
   .link:last-child .arrow{display:none}
 
   /* terminal demo */
+  #demo{padding-top:48px}
   .demo-grid{display:grid;grid-template-columns:.95fr 1.05fr;gap:48px;align-items:center;margin-top:8px}
   @media(max-width:980px){.demo-grid{grid-template-columns:1fr;gap:32px}}
   .terminal{background:#15140f;border-radius:18px;box-shadow:var(--shadow-lg);overflow:hidden;border:1px solid #2a2820}
@@ -318,6 +320,7 @@
 
   /* compare */
   .compare{background:var(--paper-2);border-radius:36px}
+  #compare{padding:96px 0}
   .ctable{margin-top:48px;border:1px solid var(--line);border-radius:20px;overflow:hidden;background:var(--surface);box-shadow:var(--shadow)}
   .crow{display:grid;grid-template-columns:1.3fr 1fr 1fr;align-items:stretch}
   .crow>div{padding:20px 24px;border-bottom:1px solid var(--line);font-size:15px}
@@ -603,7 +606,7 @@
   </section>
 
   <!-- ───────────────  THE CHAIN  ─────────────── -->
-  <section id="chain" style="padding-top:40px">
+  <section id="chain">
     <div class="wrap">
       <span class="sec-label" data-rise>The reasoning graph</span>
       <h2 class="title" data-rise style="--d:.08s">A bug spawns a <em>decision</em>. A decision spawns a <em>constraint</em>.</h2>
@@ -633,7 +636,7 @@
   </section>
 
   <!-- ───────────────  ASK WHY DEMO  ─────────────── -->
-  <section id="demo" style="padding-top:48px">
+  <section id="demo">
     <div class="wrap">
       <span class="sec-label" data-rise>In Claude Code</span>
       <h2 class="title" data-rise style="--d:.08s;max-width:14em">Just ask the codebase <em>why</em>.</h2>
@@ -810,6 +813,7 @@
     </div>
   </section>
   <style>
+    #changelog{padding:40px 0 96px}
     .clog-date{font-family:var(--mono);font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:600;padding:24px 0 6px}
     .clog-group:first-child .clog-date{padding-top:8px}
     .clog-row{display:grid;grid-template-columns:92px 1fr;gap:20px;align-items:baseline;padding:13px 0;border-bottom:1px solid var(--line)}
