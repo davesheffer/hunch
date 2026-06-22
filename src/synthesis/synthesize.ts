@@ -10,7 +10,7 @@
 import type { HunchStore } from "../store/hunchStore.js";
 import { commitMeta, commitDiff, headSha } from "../extractors/git.js";
 import { analyzeDiff, type DiffAnalysis } from "../extractors/diff.js";
-import { selectProvider, DeterministicProvider, type SynthProvider, type DecisionDraft, type BugDraft, type CommitInput, type FailureInput } from "./provider.js";
+import { selectProvider, selectEnsemble, DeterministicProvider, type SynthProvider, type DecisionDraft, type BugDraft, type CommitInput, type FailureInput } from "./provider.js";
 import { decisionId, bugId, constraintId } from "../core/ids.js";
 import { pathMatchesGlob } from "../core/glob.js";
 import { draftTripwires, knownRepoDeps } from "./tripwires.js";
@@ -53,7 +53,7 @@ export async function syncCommit(
   store: HunchStore,
   root: string,
   sha?: string,
-  opts: { force?: boolean; private?: boolean } = {},
+  opts: { force?: boolean; private?: boolean; deep?: boolean } = {},
 ): Promise<SyncResult> {
   const target = sha || headSha(root);
   if (!target) return { status: "skipped", reason: "no HEAD commit" };
@@ -90,9 +90,14 @@ export async function syncCommit(
   // Significance gate: reserve the paid LLM for substantive commits; trivial ones
   // get the FREE deterministic draft (honestly labeled "inferred"/low-confidence,
   // so the Hunch stays accurate-by-provenance). --force always uses the provider.
-  const provider = opts.force || isSignificant(meta, analysis, codeFiles)
-    ? await selectProvider()
-    : new DeterministicProvider();
+  // Deep Synthesis (--deep): ensemble every available subscription CLI and reconcile
+  // their drafts (agreement-weighted, confidence capped below the strict gate). Falls
+  // back to the normal single-provider path when no CLI is available. Opt-in only.
+  const provider = opts.deep
+    ? (await selectEnsemble()) ?? await selectProvider()
+    : opts.force || isSignificant(meta, analysis, codeFiles)
+      ? await selectProvider()
+      : new DeterministicProvider();
   const input: CommitInput = { subject: meta.subject, body: meta.body, files: codeFiles, diff, analysis };
   const draft = await draftDecisionSafe(provider, input);
 

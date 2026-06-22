@@ -485,6 +485,90 @@ export async function selectProvider(): Promise<SynthProvider> {
   return new DeterministicProvider();
 }
 
+// ---- Deep Synthesis: ensemble of subscription CLIs ------------------------
+// Opt-in (backfill/sync --deep): fan a commit out to EVERY available subscription
+// CLI, drop failures, and reconcile the drafts. Subscription-only (the workers are
+// the same CLI providers, so ANTHROPIC_API_KEY stripping is inherited). NEVER used on
+// the guard path; confidence is capped below the strict gate so output stays advisory.
+
+/** All available subscription-CLI workers (claude/codex/cursor), excluding the
+ *  deterministic fallback — the pool Deep Synthesis fans a commit out to. */
+export async function selectWorkers(): Promise<SynthProvider[]> {
+  const out: SynthProvider[] = [];
+  for (const p of PROVIDERS) {
+    if (p.name === "deterministic") continue; // workers are real subscription CLIs only
+    if (await isAvailable(p)) out.push(p);
+  }
+  return out;
+}
+
+const tokens = (d: DecisionDraft): Set<string> =>
+  new Set(`${d.title} ${d.decision}`.toLowerCase().match(/[a-z0-9_]{3,}/g) ?? []);
+
+/** Mean pairwise Jaccard overlap of the drafts' identifying text (0..1) — how much the
+ *  independent workers AGREE. Drives the merged confidence. */
+function meanAgreement(drafts: DecisionDraft[]): number {
+  if (drafts.length < 2) return 1;
+  const sets = drafts.map(tokens);
+  let sum = 0, pairs = 0;
+  for (let i = 0; i < sets.length; i++) for (let j = i + 1; j < sets.length; j++) {
+    const a = sets[i]!, b = sets[j]!;
+    let inter = 0; for (const t of a) if (b.has(t)) inter++;
+    const union = a.size + b.size - inter;
+    sum += union ? inter / union : 0; pairs++; // two empty drafts don't meaningfully "agree"
+  }
+  return pairs ? sum / pairs : 1;
+}
+
+const dedupLines = (xs: string[]): string[] => [...new Set(xs.map((s) => s.trim()).filter(Boolean))];
+
+/** Reconcile N worker drafts into one. DETERMINISTIC (no second LLM call): the richest
+ *  draft is the spine; alternatives/consequences are unioned; confidence is AGREEMENT-
+ *  WEIGHTED and CAPPED at 0.78 — below STRICT_MIN_CONFIDENCE (0.8) — so an ensemble
+ *  auto-draft can never arm enforcement. */
+export function mergeDecisionDrafts(drafts: DecisionDraft[]): DecisionDraft {
+  const primary = [...drafts].sort((a, b) => b.confidence - a.confidence || b.decision.length - a.decision.length)[0]!;
+  const agreement = meanAgreement(drafts);
+  return {
+    title: primary.title,
+    context: primary.context,
+    decision: primary.decision,
+    consequences: dedupLines(drafts.flatMap((d) => d.consequences)),
+    alternatives_rejected: dedupLines(drafts.flatMap((d) => d.alternatives_rejected)),
+    confidence: Math.min(0.78, 0.55 + 0.23 * agreement),
+    source: "llm_draft+ensemble",
+  };
+}
+
+export class EnsembleProvider implements SynthProvider {
+  readonly name = "ensemble";
+  constructor(private readonly workers: SynthProvider[]) {}
+  async available(): Promise<boolean> { return this.workers.length > 0; }
+
+  async draftDecision(input: CommitInput): Promise<DecisionDraft> {
+    if (!this.workers.length) throw new Error("ensemble: no subscription CLI workers available");
+    const settled = await Promise.allSettled(this.workers.map((w) => w.draftDecision(input)));
+    const drafts = settled.flatMap((s) => (s.status === "fulfilled" ? [s.value] : []));
+    if (!drafts.length) throw new Error("ensemble: all workers failed");
+    return drafts.length === 1 ? drafts[0]! : mergeDecisionDrafts(drafts);
+  }
+
+  async draftBug(input: FailureInput): Promise<BugDraft> {
+    // Bug ensembling is deferred — use the first worker that succeeds.
+    for (const w of this.workers) {
+      try { return await w.draftBug(input); } catch { /* try next */ }
+    }
+    throw new Error("ensemble: all workers failed for bug");
+  }
+}
+
+/** Build the Deep-Synthesis provider, or null if no subscription CLI is available
+ *  (the caller then falls back to the normal single-provider path). */
+export async function selectEnsemble(): Promise<EnsembleProvider | null> {
+  const workers = await selectWorkers();
+  return workers.length ? new EnsembleProvider(workers) : null;
+}
+
 // ---- prompt + parsing helpers --------------------------------------------
 
 // Above this size we stop shipping the raw patch and lean on the deterministic

@@ -86,6 +86,12 @@ afterward to pick up the `hunch_*` tools. Each teammate runs `hunch init` once; 
 > Synthesis is billed to **your coding-assistant subscription** (Claude/Codex/Cursor CLI),
 > **never** a pay-per-token API key — and falls back to a deterministic heuristic if no CLI
 > is present. Details: [Synthesis & billing](https://hunch-pi.vercel.app/docs#synthesis).
+>
+> **Deep Synthesis** (`backfill --deep` / `sync --deep`): if you're signed into more than one
+> CLI, fan the commit out to *all* of them and reconcile the drafts into one — confidence is
+> **agreement-weighted** (capped below the enforcement threshold, so it stays advisory).
+> Subscription-only, never on the guard path, and it degrades to the single-provider path with
+> one CLI.
 > On Windows, prefer `hunch init` over a global `claude mcp add`; if tools don't appear,
 > `hunch doctor` heals it ([why](https://hunch-pi.vercel.app/docs#windows)).
 
@@ -168,7 +174,9 @@ env var, no shell-profile edit** (and `HUNCH_PRIVATE_DIR` still overrides per-sh
 default-off** (no config → fully inert), and **leak-safe by construction**: committed files and
 the CI PR comment render *public-only*, so a private record can't reach a public surface. Record
 sensitive items with `private: true` (`hunch_record_decision` / `hunch_record_correction`);
-post-commit synthesis can route there too. → [docs](https://hunch-pi.vercel.app/docs#private)
+post-commit synthesis can route there too, and `hunch private --auto-commit` (opt-in)
+auto-commits + pushes each capture to the private repo — recursion-safe, staging only `.hunch/`.
+→ [docs](https://hunch-pi.vercel.app/docs#private)
 
 ## Continuous learning (CI)
 

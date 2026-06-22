@@ -303,6 +303,9 @@ if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElem
       </table>
       <p>If none is installed, Hunch still works with a deterministic structural heuristic (lower-confidence drafts). <code>hunch doctor</code> tells you which mode you’re in; force one with the <code>HUNCH_SYNTH_PROVIDER</code> env var:</p>
       <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">terminal</span><button class="copy">Copy</button></div><pre><span class="k">export</span> HUNCH_SYNTH_PROVIDER=claude-cli   <span class="c"># | codex-cli | cursor-agent | deterministic</span></pre></div>
+      <p><strong>Deep Synthesis <span class="pill ok">v0.18</span>.</strong> If you’re signed into more than one assistant CLI, <code>--deep</code> fans the commit out to <em>all</em> of them and reconciles the independent drafts into one: the richest draft is the spine, alternatives &amp; consequences are unioned, and confidence is <strong>agreement-weighted</strong> (more independent agreement → higher score, capped below the enforcement threshold so it stays advisory). Slower; subscription-only; never on the guard path; degrades to the single-provider path with one CLI.</p>
+      <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">terminal</span><button class="copy">Copy</button></div><pre><span class="k">hunch</span> backfill --deep        <span class="c"># ensemble across CLIs, historical commits</span>
+<span class="k">hunch</span> sync &lt;sha&gt; --deep       <span class="c"># ensemble a single commit</span></pre></div>
     </section>
 
     <section id="mcp">

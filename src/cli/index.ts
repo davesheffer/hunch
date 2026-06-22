@@ -198,7 +198,8 @@ program
   .option("--since <spec>", "how far back, e.g. 90d", "90d")
   .option("--max <n>", "max commits to process", "40")
   .option("--concurrency <n>", "commits to synthesize in parallel (the LLM call is the bottleneck)", "4")
-  .action(async (opts: { since: string; max: string; concurrency: string }) => {
+  .option("--deep", "Deep Synthesis: ensemble every available subscription CLI per commit and reconcile their drafts (slower, higher-quality; advisory)")
+  .action(async (opts: { since: string; max: string; concurrency: string; deep?: boolean }) => {
     const { store, root } = storeFor();
     if (!isGitRepo(root)) return fail("backfill needs a git repo");
     store.json.ensureDirs();
@@ -211,7 +212,7 @@ program
     // and the store's JS-side reads/writes run synchronously between awaits (single
     // thread) — only the LLM spawns overlap. reindex() runs once, after the pool.
     await mapPool(commits, conc, async (sha) => {
-      const r = await syncCommit(store, root, sha);
+      const r = await syncCommit(store, root, sha, { deep: opts.deep });
       if (r.status === "written") {
         written++;
         if (r.provider === "claude-cli") llm++; else heuristic++;
@@ -236,12 +237,13 @@ program
   .option("--force", "re-synthesize even if a decision already exists for the commit")
   .option("--private", "write the synthesized decision into the private overlay (HUNCH_PRIVATE_DIR), not the public repo — for a repo whose memory is kept private")
   .option("--commit", "after a capture, also git add+commit+push the repo the decision landed in (opt-in; best-effort) — the private store under --private, else this repo")
-  .action(async (sha: string | undefined, opts: { fromHook?: boolean; quiet?: boolean; force?: boolean; private?: boolean; commit?: boolean }) => {
+  .option("--deep", "Deep Synthesis: ensemble every available subscription CLI and reconcile their drafts (agreement-weighted, advisory). Slower; subscription-only")
+  .action(async (sha: string | undefined, opts: { fromHook?: boolean; quiet?: boolean; force?: boolean; private?: boolean; commit?: boolean; deep?: boolean }) => {
     const { store, root } = storeFor();
     if (!isGitRepo(root)) return opts.quiet ? undefined : fail("sync needs a git repo");
     if (opts.private && !store.hasPrivate) { store.close(); return opts.quiet ? undefined : fail("--private needs HUNCH_PRIVATE_DIR set to a private store"); }
     store.json.ensureDirs();
-    const r = await syncCommit(store, root, sha ?? headSha(root), { force: opts.force, private: opts.private });
+    const r = await syncCommit(store, root, sha ?? headSha(root), { force: opts.force, private: opts.private, deep: opts.deep });
     if (r.status === "written") {
       store.reindex();
       // Don't rewrite CLAUDE.md from the hook — it would dirty the working tree
