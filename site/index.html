@@ -940,11 +940,12 @@
   var hamburger = document.getElementById('navHamburger');
   var navLinks = document.querySelector('.nav-links');
   if(hamburger && navLinks){
-    function toggleMenu(open){
-      var isOpen = open !== undefined ? open : !navLinks.classList.contains('open');
+    function toggleMenu(forceOpen){
+      var isOpen = forceOpen !== undefined ? forceOpen : !navLinks.classList.contains('open');
       navLinks.classList.toggle('open', isOpen);
       hamburger.classList.toggle('is-open', isOpen);
       hamburger.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+      hamburger.setAttribute('aria-label', isOpen ? 'Close menu' : 'Open menu');
     }
     hamburger.addEventListener('click', function(){ toggleMenu(); });
     navLinks.querySelectorAll('a').forEach(function(a){
