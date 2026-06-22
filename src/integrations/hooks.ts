@@ -11,16 +11,18 @@ import { hooksDir } from "../extractors/git.js";
 const MARK = "# >>> hunch post-commit >>>";
 const ENDMARK = "# <<< hunch post-commit <<<";
 
-function block(invocation: string, opts: { private?: boolean } = {}): string {
+function block(invocation: string, opts: { private?: boolean; commit?: boolean } = {}): string {
   // --private routes the auto-synthesized decision into the HUNCH_PRIVATE_DIR overlay
-  // instead of the public repo. The hook script is local (.git/hooks/), never committed,
-  // so a repo whose memory is kept private leaves no trace of this in the public tree.
+  // instead of the public repo. --commit (opt-in) also commits & pushes the repo the
+  // decision landed in (the private store under --private, else this repo). The hook
+  // script is local (.git/hooks/), never committed.
   const priv = opts.private ? " --private" : "";
+  const commit = opts.commit ? " --commit" : "";
   return [
     MARK,
     'if [ -z "$HUNCH_SYNC" ]; then',
     "  export HUNCH_SYNC=1",
-    `  ( ${invocation} sync --from-hook --quiet${priv} >/dev/null 2>&1 || true ) &`,
+    `  ( ${invocation} sync --from-hook --quiet${priv}${commit} >/dev/null 2>&1 || true ) &`,
     "fi",
     ENDMARK,
   ].join("\n");
@@ -31,7 +33,7 @@ export interface HookInstall {
   action: "created" | "appended" | "updated" | "unchanged";
 }
 
-export function installPostCommitHook(root: string, invocation: string, opts: { private?: boolean } = {}): HookInstall {
+export function installPostCommitHook(root: string, invocation: string, opts: { private?: boolean; commit?: boolean } = {}): HookInstall {
   const dir = hooksDir(root);
   // `git rev-parse --git-path hooks` returns a path relative to the repo in a
   // normal checkout, but an ABSOLUTE one inside a linked worktree (the shared

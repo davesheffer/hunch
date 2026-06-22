@@ -72,7 +72,8 @@ program
   .option("--no-agent-hooks", "skip installing the Claude Code agent hooks (.claude/settings.json)")
   .option("--firmness <level>", "agent-hook firmness: off | advisory | firm | strict")
   .option("--private-sync", "post-commit synthesis writes captured decisions into the private overlay (HUNCH_PRIVATE_DIR), never the public repo")
-  .action((opts: { index: boolean; enforce: boolean; enforceStrict?: boolean; providers: boolean; agentHooks: boolean; firmness?: string; privateSync?: boolean }) => {
+  .option("--auto-commit", "opt-in: the post-commit hook also git add+commit+pushes the captured decision (the repo it landed in)")
+  .action((opts: { index: boolean; enforce: boolean; enforceStrict?: boolean; providers: boolean; agentHooks: boolean; firmness?: string; privateSync?: boolean; autoCommit?: boolean }) => {
     // Validate --firmness up front, before any side effects (indexing, git hooks,
     // .mcp.json) or opening the store — a bad value must not leave a half-init.
     if (opts.firmness !== undefined && !isFirmness(opts.firmness)) {
@@ -102,8 +103,8 @@ program
     }
 
     if (isGitRepo(root)) {
-      const h = installPostCommitHook(root, inv.shell, { private: opts.privateSync });
-      console.log(`  ✓ post-commit hook ${h.action} (learning loop)${opts.privateSync ? " — syncs to the private overlay" : ""}`);
+      const h = installPostCommitHook(root, inv.shell, { private: opts.privateSync, commit: opts.autoCommit });
+      console.log(`  ✓ post-commit hook ${h.action} (learning loop)${opts.privateSync ? " — syncs to the private overlay" : ""}${opts.autoCommit ? " — auto-commit+push on" : ""}`);
       const m = installMergeDriver(root, inv.shell);
       console.log(`  ✓ team merge driver ${m.action}`);
       // Auto-install the pre-commit guard by default (advisory: flags invariants
@@ -234,7 +235,8 @@ program
   .option("--quiet", "minimal output")
   .option("--force", "re-synthesize even if a decision already exists for the commit")
   .option("--private", "write the synthesized decision into the private overlay (HUNCH_PRIVATE_DIR), not the public repo — for a repo whose memory is kept private")
-  .action(async (sha: string | undefined, opts: { fromHook?: boolean; quiet?: boolean; force?: boolean; private?: boolean }) => {
+  .option("--commit", "after a capture, also git add+commit+push the repo the decision landed in (opt-in; best-effort) — the private store under --private, else this repo")
+  .action(async (sha: string | undefined, opts: { fromHook?: boolean; quiet?: boolean; force?: boolean; private?: boolean; commit?: boolean }) => {
     const { store, root } = storeFor();
     if (!isGitRepo(root)) return opts.quiet ? undefined : fail("sync needs a git repo");
     if (opts.private && !store.hasPrivate) { store.close(); return opts.quiet ? undefined : fail("--private needs HUNCH_PRIVATE_DIR set to a private store"); }
@@ -245,6 +247,19 @@ program
       // Don't rewrite CLAUDE.md from the hook — it would dirty the working tree
       // on every commit. `hunch index`/`init` refresh it intentionally instead.
       if (!opts.fromHook) updateClaudeMd(root, store);
+      // Opt-in: persist the captured decision in the repo it landed in (private store
+      // under --private, else this repo). Best-effort — a non-repo dir / offline push
+      // just no-ops. Stage ONLY the hunch dir (never sweep unrelated working-tree
+      // changes), and set HUNCH_SYNC=1 so the commit we create can't re-trigger this
+      // hook (no recursion, including on a manual `hunch sync --commit`).
+      const commitTarget = opts.commit ? (opts.private ? store.privateDir : hunchPaths(root).hunch) : undefined;
+      if (commitTarget) {
+        const g = (args: string[]): void => { spawnSync("git", ["-C", commitTarget, ...args], { stdio: "ignore", env: { ...process.env, HUNCH_SYNC: "1" } }); };
+        g(["add", "--", "."]);
+        g(["commit", "-m", `hunch: capture ${r.decision?.id ?? "decision"}`]);
+        g(["push"]);
+        if (!opts.quiet) console.log(`  ↳ committed + pushed ${r.decision?.id} (${commitTarget})`);
+      }
       if (!opts.quiet) console.log(`✓ captured decision ${r.decision?.id} via ${r.provider}: "${r.decision?.title}"`);
     } else if (!opts.quiet) {
       console.log(`· skipped: ${r.reason}`);
@@ -258,7 +273,8 @@ program
   .description("Enable a PRIVATE memory overlay — sensitive decisions/bugs/constraints kept in a separate location, unioned into local queries, never committed here. Writes a gitignored .hunch/local.json so it's auto-detected (no env var needed).")
   .option("--repo <url>", "clone a private git repo to use as the store (into ./.hunch-private)")
   .option("--no-hook", "don't switch the post-commit hook to private sync")
-  .action((dir: string | undefined, opts: { repo?: string; hook: boolean }) => {
+  .option("--auto-commit", "opt-in: the post-commit hook also git add+commit+pushes the private repo after each capture")
+  .action((dir: string | undefined, opts: { repo?: string; hook: boolean; autoCommit?: boolean }) => {
     const root = findRoot();
     const paths = hunchPaths(root);
     // 1) resolve the private store's hunch dir (holds decisions/, bugs/, …)
@@ -289,8 +305,8 @@ program
     let hookNote = "";
     if (opts.hook && isGitRepo(root)) {
       const inv = resolveInvocation();
-      const h = installPostCommitHook(root, inv.shell, { private: true });
-      hookNote = `  ✓ post-commit hook ${h.action} — captured decisions route here\n`;
+      const h = installPostCommitHook(root, inv.shell, { private: true, commit: opts.autoCommit });
+      hookNote = `  ✓ post-commit hook ${h.action} — captured decisions route here${opts.autoCommit ? " (auto-commit+push on)" : ""}\n`;
     }
     console.log(
       `✓ private overlay enabled → ${hunchDir}\n` +
