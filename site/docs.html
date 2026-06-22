@@ -101,6 +101,10 @@
   h1.page{font-family:var(--serif);font-weight:520;font-size:clamp(30px,5vw,46px);line-height:1.06;letter-spacing:-.02em;margin:10px 0 14px;overflow-wrap:break-word}
   .lead{font-size:18px;line-height:1.6;color:var(--ink-soft);max-width:60ch;margin:0 0 8px}
   section{scroll-margin-top:84px;padding-top:46px}
+  /* GSAP reveals: sections start hidden ONLY under .gsap-on (added pre-paint by the
+     head script). If GSAP is blocked or reduced-motion is set, .gsap-on isn't kept
+     and everything just shows — content is never stuck hidden. */
+  html.gsap-on main section{opacity:0;transform:translateY(16px)}
   section.first{padding-top:24px}
   h2{font-size:25px;font-weight:600;letter-spacing:-.02em;margin:0 0 14px;padding-bottom:12px;border-bottom:1px solid var(--line-soft);scroll-margin-top:84px}
   h3{font-size:17.5px;font-weight:600;letter-spacing:-.01em;margin:30px 0 10px}
@@ -163,6 +167,9 @@
   footer{border-top:1px solid var(--line-soft);padding:30px 56px;color:var(--muted);font-size:13px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px}
   @media(max-width:920px){footer{padding:24px}}
 </style>
+<script>/* hide sections before first paint only when we'll animate them (no flash);
+  the body script removes this if GSAP fails to load, so content is never stuck. */
+if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElement.classList.add('gsap-on');</script>
 </head>
 <body>
 
@@ -549,6 +556,7 @@ Agent: hunch_record_correction({ rule: "never import lodash; use src/utils",
   <span><a class="link" href="index.html">hunch-pi.vercel.app</a> · <a class="link" href="https://www.npmjs.com/package/@davesheffer/hunch" target="_blank" rel="noopener">npm</a> · <a class="link" href="https://github.com/davesheffer/hunch" target="_blank" rel="noopener">GitHub</a></span>
 </footer>
 
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js" integrity="sha384-g4NTh/Iv5PPU4xPyhEWqPcwtNXOvdaDI8LLnyYfyNZOjKJeYQyjzQ9X5275eBjpt" crossorigin="anonymous"></script>
 <script>
   // copy buttons
   document.querySelectorAll(".code").forEach((block) => {
@@ -597,6 +605,33 @@ Agent: hunch_record_correction({ rule: "never import lodash; use src/utils",
   // sticky top-bar shadow
   const topBar = document.querySelector("header.top");
   addEventListener("scroll", () => { topBar.style.boxShadow = scrollY > 8 ? "0 1px 0 rgba(22,21,15,.06)" : "none"; });
+
+  // section reveals — subtle fade + rise as each enters. We read LIVE geometry on
+  // every (rAF-throttled) scroll frame and reveal any still-hidden section that's in
+  // the viewport: impossible to miss even on a fast flick (unlike batched observers),
+  // so docs content can never get stuck hidden. If GSAP didn't load, drop .gsap-on.
+  if (window.gsap && document.documentElement.classList.contains("gsap-on")) {
+    const secs = [...document.querySelectorAll("main section")];
+    let ticking = false;
+    const reveal = () => {
+      ticking = false;
+      for (const s of secs) {
+        if (s.dataset.shown) continue;
+        const r = s.getBoundingClientRect();
+        if (r.top < innerHeight && r.bottom > 0) {
+          s.dataset.shown = "1";
+          gsap.to(s, { opacity: 1, y: 0, duration: 0.55, ease: "power2.out" });
+        }
+      }
+    };
+    addEventListener("scroll", () => { if (!ticking) { ticking = true; requestAnimationFrame(reveal); } }, { passive: true });
+    addEventListener("scrollend", reveal);   // reveal whatever we land on, even after a jump
+    addEventListener("resize", reveal);
+    addEventListener("load", reveal);
+    reveal();
+  } else {
+    document.documentElement.classList.remove("gsap-on");
+  }
 </script>
 </body>
 </html>
