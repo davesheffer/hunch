@@ -85,7 +85,24 @@
   .nav-links a::after{content:"";position:absolute;left:0;bottom:-5px;height:1.5px;width:0;background:var(--ink);transition:width .35s var(--ease)}
   .nav-links a:hover::after{width:100%}
   .nav-cta{display:flex;align-items:center;gap:14px}
-  @media(max-width:860px){.nav-links{display:none}}
+  @media(max-width:860px){.nav-links{display:none;position:absolute;top:100%;left:0;right:0;
+    flex-direction:column;align-items:flex-start;gap:20px;font-size:16px;
+    background:rgba(245,243,238,.97);backdrop-filter:saturate(1.4) blur(16px);
+    border-bottom:1px solid var(--line);padding:20px 28px 28px;z-index:49;
+    animation:navSlide .25s var(--ease) both}
+  .nav-links.open{display:flex}
+  .nav-links.open a::after{display:none}}
+  @keyframes navSlide{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:none}}
+  .nav-hamburger{display:none;flex-direction:column;justify-content:center;gap:5px;
+    cursor:pointer;padding:6px 4px;background:none;border:none;border-radius:8px;
+    transition:background .2s;margin-left:4px}
+  .nav-hamburger:hover{background:rgba(22,21,15,.06)}
+  .nav-hamburger span{display:block;width:20px;height:2px;background:var(--ink);border-radius:2px;
+    transition:transform .3s var(--ease),opacity .3s}
+  .nav-hamburger.is-open span:nth-child(1){transform:translateY(7px) rotate(45deg)}
+  .nav-hamburger.is-open span:nth-child(2){opacity:0;transform:scaleX(0)}
+  .nav-hamburger.is-open span:nth-child(3){transform:translateY(-7px) rotate(-45deg)}
+  @media(max-width:860px){.nav-hamburger{display:flex}}
 
   .btn{
     --bg:var(--ink);--fg:var(--paper);
@@ -370,7 +387,32 @@
   .foot-bot{display:flex;justify-content:space-between;align-items:center;margin-top:46px;padding-top:24px;border-top:1px solid var(--line);color:var(--muted-2);font-size:13px;flex-wrap:wrap;gap:12px}
 
   /* reveal helpers for children stagger handled in JS via --d */
-</style>
+
+  /* ─── MOBILE SPACING & OVERFLOW FIXES ─── */
+  .term-bar .ttl{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1}
+
+  @media(max-width:768px){
+    section{padding:72px 0}
+    .hero{padding:88px 0 40px}
+    .cta{padding:72px 0 80px}
+    .cta-card{border-radius:28px;padding:52px 24px}
+  }
+  @media(max-width:480px){
+    .wrap{padding:0 18px}
+    .nav-cta .btn.sm:not(.ghost){display:none}
+    .hero-stats{gap:20px}
+    .hero-stats .stat .n{font-size:28px}
+    section{padding:56px 0}
+    .hero{padding:84px 0 32px}
+    .cta{padding:56px 0 64px}
+    .cta-card{padding:40px 20px;border-radius:22px}
+    .graph-card{border-radius:18px}
+    .problem{border-radius:22px}
+    .problem .foot{gap:24px}
+    .clog-row{grid-template-columns:1fr;gap:6px}
+    .clog-row .rel-tag{width:max-content}
+    .eds{grid-template-columns:1fr}
+  }</style>
 </head>
 <body>
   <div class="progress" id="progress"></div>
@@ -396,6 +438,9 @@
           Star
         </a>
         <a class="btn sm" href="#start"><span class="shine"></span>Get started</a>
+        <button class="nav-hamburger" id="navHamburger" aria-label="Open menu" aria-expanded="false">
+          <span></span><span></span><span></span>
+        </button>
       </div>
     </div>
   </header>
@@ -890,6 +935,23 @@
   }
   wireCopy('copyBtn','hunch init');
   wireCopy('relCopy','npm i -g @davesheffer/hunch');
+
+  /* ── hamburger nav ── */
+  var hamburger = document.getElementById('navHamburger');
+  var navLinks = document.querySelector('.nav-links');
+  if(hamburger && navLinks){
+    function toggleMenu(open){
+      var isOpen = open !== undefined ? open : !navLinks.classList.contains('open');
+      navLinks.classList.toggle('open', isOpen);
+      hamburger.classList.toggle('is-open', isOpen);
+      hamburger.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    }
+    hamburger.addEventListener('click', function(){ toggleMenu(); });
+    navLinks.querySelectorAll('a').forEach(function(a){
+      a.addEventListener('click', function(){ toggleMenu(false); });
+    });
+    document.addEventListener('keydown', function(e){ if(e.key==='Escape') toggleMenu(false); });
+  }
 
   /* ── current year ── */
   var yr=document.getElementById('yr'); if(yr){ try{ yr.textContent=new Date().getFullYear(); }catch(e){} }
