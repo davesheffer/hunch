@@ -297,7 +297,7 @@
   /* latest release */
   .release{margin-top:52px;background:var(--surface);border:1px solid var(--line);border-radius:26px;box-shadow:var(--shadow-lg);overflow:hidden}
   .rel-head{display:flex;align-items:center;gap:15px;padding:19px 30px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,var(--surface),#fffefb)}
-  .rel-tag{font-family:var(--mono);font-size:13px;font-weight:600;letter-spacing:.01em;color:var(--paper);background:var(--ink);padding:6px 13px;border-radius:100px}
+  .rel-tag{font-family:var(--mono);font-size:13px;font-weight:600;letter-spacing:.01em;color:var(--paper);background:var(--ink);padding:6px 13px;border-radius:100px;white-space:nowrap;justify-self:start}
   .rel-meta{font-family:var(--mono);font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted-2)}
   .rel-live{margin-left:auto;display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11.5px;letter-spacing:.04em;color:var(--ok)}
   .rel-live .dot{width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 0 rgba(31,157,104,.5);animation:pulse 2.4s infinite}
@@ -803,11 +803,11 @@
   <style>
     .clog-date{font-family:var(--mono);font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:600;padding:24px 0 6px}
     .clog-group:first-child .clog-date{padding-top:8px}
-    .clog-row{display:grid;grid-template-columns:92px 1fr;gap:20px;align-items:baseline;padding:13px 0;border-bottom:1px solid var(--line)}
+    .clog-row{display:grid;grid-template-columns:max-content 1fr;gap:20px;align-items:baseline;padding:13px 0;border-bottom:1px solid var(--line)}
     .clog-group:last-child .clog-row:last-child{border-bottom:none}
     .clog-t{color:var(--ink-soft);font-size:15.5px;line-height:1.55}
     .clog-t b{color:var(--ink);font-weight:550}
-    @media(max-width:680px){.clog-row{grid-template-columns:60px 1fr;gap:12px}}
+    @media(max-width:680px){.clog-row{gap:12px}}
   </style>
 
   <!-- ───────────────  FOOTER  ─────────────── -->
