@@ -221,7 +221,7 @@ src/
 
 Everything lives under `.hunch/` as git-tracked JSON (the source of truth); SQLite is a
 throwaway derived index. → [storage layout](https://hunch-pi.vercel.app/docs#storage) ·
-[DESIGN.md](DESIGN.md) for the full conceptual model.
+[the docs](https://hunch-pi.vercel.app/docs) for the full conceptual model.
 
 ## Notable engineering decisions
 
@@ -247,5 +247,5 @@ npm run build           # compile to dist/ (the published artifact)
 ```
 
 Hunch is pure TypeScript ESM, Node ≥ 20, licensed **Apache-2.0**. See
-[CONTRIBUTING.md](CONTRIBUTING.md), [DESIGN.md](DESIGN.md), and the full
+[CONTRIBUTING.md](CONTRIBUTING.md) and the full
 [developer docs](https://hunch-pi.vercel.app/docs#develop).

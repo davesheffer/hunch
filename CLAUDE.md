@@ -31,7 +31,7 @@ Data flows: **events → extract → synthesize → store → ground**. Source o
 - `src/mcp/server.ts` — MCP server (`hunch mcp`) exposing the `hunch_*` tools; must stay client-agnostic.
 - `src/integrations/` — writers that wire Hunch into a repo: `scaffold.ts`, `providers.ts`, `hooks.ts` (git post-commit), `claudemd.ts` (regenerates the auto block below), `ciAction.ts` (CI Constraint Guard), `mergeDriver.ts`, `gitignore.ts`.
 
-The constraints in the auto-generated section below are **enforced invariants**, not suggestions — `hunch check` and the CI guard fail on blocking ones. Read `DESIGN.md` for the full conceptual model.
+The constraints in the auto-generated section below are **enforced invariants**, not suggestions — `hunch check` and the CI guard fail on blocking ones.
 
 <!-- HUNCH:START — auto-generated, do not edit by hand -->
 ## 🧠 Hunch (Engineering Memory)

@@ -60,6 +60,9 @@ export class HunchStore {
   /** The resolved private-overlay hunch dir (from env or .hunch/local.json), or undefined
    *  when no overlay is configured. Surfaced so `hunch doctor` reflects the true state. */
   readonly privateDir?: string;
+  /** Whether private writes should auto commit+push the private repo (from local.json
+   *  `autoCommit`, set by `hunch private --auto-commit`). Read by the MCP write tools. */
+  readonly privateAutoCommit: boolean;
   /** When true, recs() ignores the private overlay (public-only). Set transiently by
    *  buildCheckReport({publicOnly}) so any PUBLICLY-POSTED report (the CI PR comment)
    *  can never render a private record — a publicly-posted output is a leak surface
@@ -72,23 +75,26 @@ export class HunchStore {
     // Private overlay location: env (override, for CI / portability) → else a gitignored
     // local config (.hunch/local.json) so `hunch private` enables it with NO env var, and
     // the MCP server / hook pick it up automatically. Relative paths resolve from root.
-    const priv = process.env.HUNCH_PRIVATE_DIR?.trim() || this.localPrivateDir();
+    const local = this.localConfig();
+    const priv = process.env.HUNCH_PRIVATE_DIR?.trim() || local.privateDir;
     if (priv) {
       this.privateDir = resolve(this.paths.root, priv);
       this.privateJson = new JsonStore(hunchPathsForDir(this.privateDir));
     }
+    this.privateAutoCommit = !!(priv && local.autoCommit);
   }
 
-  /** The private-overlay path from the gitignored `.hunch/local.json` (per-machine,
-   *  never committed). Tolerant: undefined on missing/invalid so reads never crash. */
-  private localPrivateDir(): string | undefined {
+  /** The private-overlay config from the gitignored `.hunch/local.json` (per-machine,
+   *  never committed). Tolerant: returns {} on missing/invalid so reads never crash. */
+  private localConfig(): { privateDir?: string; autoCommit?: boolean } {
     try {
       const f = join(this.paths.hunch, "local.json");
-      if (!existsSync(f)) return undefined;
-      const v = JSON.parse(readFileSync(f, "utf8")) as { privateDir?: unknown };
-      return typeof v.privateDir === "string" && v.privateDir.trim() ? v.privateDir.trim() : undefined;
+      if (!existsSync(f)) return {};
+      const v = JSON.parse(readFileSync(f, "utf8")) as { privateDir?: unknown; autoCommit?: unknown };
+      const privateDir = typeof v.privateDir === "string" && v.privateDir.trim() ? v.privateDir.trim() : undefined;
+      return { privateDir, autoCommit: v.autoCommit === true };
     } catch {
-      return undefined;
+      return {};
     }
   }
 

@@ -29,7 +29,7 @@ import { indexRepo } from "../extractors/indexer.js";
 import { syncCommit, recordFailure, captureTestRun } from "../synthesis/synthesize.js";
 import { parseTestReport } from "../extractors/testreport.js";
 import { selectProvider } from "../synthesis/provider.js";
-import { isGitRepo, headSha, logSince, lastChangeDate, stagedFiles, commitFiles, asOfDate, stagedDiff, commitDiff, rangeFiles, rangeDiff, revExists } from "../extractors/git.js";
+import { isGitRepo, headSha, logSince, lastChangeDate, stagedFiles, commitFiles, asOfDate, stagedDiff, commitDiff, rangeFiles, rangeDiff, revExists, commitAndPushHunch } from "../extractors/git.js";
 import { renderText, renderMarkdown, reportFailsStrict, type CheckReport } from "../core/checkreport.js";
 import { installPostCommitHook, installPreCommitHook } from "../integrations/hooks.js";
 import { installMergeDriver } from "../integrations/mergeDriver.js";
@@ -256,10 +256,7 @@ program
       // hook (no recursion, including on a manual `hunch sync --commit`).
       const commitTarget = opts.commit ? (opts.private ? store.privateDir : hunchPaths(root).hunch) : undefined;
       if (commitTarget) {
-        const g = (args: string[]): void => { spawnSync("git", ["-C", commitTarget, ...args], { stdio: "ignore", env: { ...process.env, HUNCH_SYNC: "1" } }); };
-        g(["add", "--", "."]);
-        g(["commit", "-m", `hunch: capture ${r.decision?.id ?? "decision"}`]);
-        g(["push"]);
+        commitAndPushHunch(commitTarget, `hunch: capture ${r.decision?.id ?? "decision"}`);
         if (!opts.quiet) console.log(`  ↳ committed + pushed ${r.decision?.id} (${commitTarget})`);
       }
       if (!opts.quiet) console.log(`✓ captured decision ${r.decision?.id} via ${r.provider}: "${r.decision?.title}"`);
@@ -275,9 +272,19 @@ program
   .description("Enable a PRIVATE memory overlay — sensitive decisions/bugs/constraints kept in a separate location, unioned into local queries, never committed here. Writes a gitignored .hunch/local.json so it's auto-detected (no env var needed).")
   .option("--repo <url>", "clone a private git repo to use as the store (into ./.hunch-private)")
   .option("--no-hook", "don't switch the post-commit hook to private sync")
-  .option("--auto-commit", "opt-in: the post-commit hook also git add+commit+pushes the private repo after each capture")
-  .action((dir: string | undefined, opts: { repo?: string; hook: boolean; autoCommit?: boolean }) => {
+  .option("--auto-commit", "opt-in: also git add+commit+push the private repo after each capture (post-commit hook AND MCP private writes)")
+  .option("--sync", "flush the configured private store now (git add+commit+push) — catches records made via MCP between commits")
+  .action((dir: string | undefined, opts: { repo?: string; hook: boolean; autoCommit?: boolean; sync?: boolean }) => {
     const root = findRoot();
+    if (opts.sync) {
+      const s = new HunchStore(hunchPaths(root));
+      const target = s.privateDir;
+      s.close();
+      if (!target) return fail("no private overlay configured — run `hunch private` first");
+      commitAndPushHunch(target, "hunch: sync private memory");
+      console.log(`✓ flushed private store → ${target}`);
+      return;
+    }
     const paths = hunchPaths(root);
     // 1) resolve the private store's hunch dir (holds decisions/, bugs/, …)
     let hunchDir: string;
@@ -301,7 +308,7 @@ program
     // a store elsewhere on disk. Resolution (env || local.json) re-resolves against root.
     const rel = relative(root, hunchDir);
     const stored = rel && !rel.startsWith("..") && !isAbsolute(rel) ? toPosixTarget(rel) : hunchDir;
-    writeFileAtomic(join(paths.hunch, "local.json"), JSON.stringify({ privateDir: stored }, null, 2) + "\n");
+    writeFileAtomic(join(paths.hunch, "local.json"), JSON.stringify({ privateDir: stored, autoCommit: !!opts.autoCommit }, null, 2) + "\n");
     ensureGitignore(root); // keeps .hunch/local.json + .hunch-private/ out of git
     // 4) route post-commit synthesis to the overlay (local hook, never committed)
     let hookNote = "";

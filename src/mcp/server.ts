@@ -14,7 +14,7 @@ import { HunchStore } from "../store/hunchStore.js";
 import { selectEmbedder } from "../store/embedder.js";
 import { decisionId } from "../core/ids.js";
 import { buildCorrectionConstraint } from "../core/correction.js";
-import { revParse, asOfDate, revExists, lastChangeDate, rangeFiles, rangeDiff, commitFiles, commitDiff, stagedFiles, stagedDiff } from "../extractors/git.js";
+import { revParse, asOfDate, revExists, lastChangeDate, rangeFiles, rangeDiff, commitFiles, commitDiff, stagedFiles, stagedDiff, commitAndPushHunch } from "../extractors/git.js";
 import { formatContext } from "../core/format.js";
 import { renderMarkdown, verdict } from "../core/checkreport.js";
 import { HUNCH_VERSION } from "../core/version.js";
@@ -338,9 +338,16 @@ export function buildServer(root: string): McpServer {
         // the public store, so skip it for a private record (a v1 limitation, not a leak).
         const superseded = decision.supersedes && !decision.private ? store.supersede(decision.supersedes, rec) : null;
         store.reindex();
+        // Auto-flush the private repo when configured (hunch private --auto-commit), so a
+        // record made via MCP between public commits is committed+pushed immediately.
+        let flushed = "";
+        if (decision.private && store.privateAutoCommit && store.privateDir) {
+          commitAndPushHunch(store.privateDir, `hunch: capture ${id}`);
+          flushed = " (committed + pushed to the private repo)";
+        }
         const supNote = superseded ? ` Superseded ${superseded.id} (window closed at ${rec.valid_from}).` : "";
         const note = decision.commit && !fullSha ? ` (note: commit "${decision.commit}" could not be resolved — recorded as a standalone decision, not linked to a commit)` : "";
-        const where = decision.private ? " [PRIVATE overlay — not committed to this repo]" : "";
+        const where = decision.private ? ` [PRIVATE overlay — not committed to this repo]${flushed}` : "";
         return ok(`Recorded decision ${id}: "${rec.title}" (status ${rec.status}, ${source}).${where}${supNote}${note}`);
       } catch (e) {
         return err(`Failed to record decision: ${(e as Error).message}`);
@@ -376,10 +383,15 @@ export function buildServer(root: string): McpServer {
         if (input.private) store.putPrivate("constraints", rec);
         else store.json.put("constraints", rec);
         store.reindex();
+        let flushed = "";
+        if (input.private && store.privateAutoCommit && store.privateDir) {
+          commitAndPushHunch(store.privateDir, `hunch: capture ${rec.id}`);
+          flushed = " (committed + pushed to the private repo)";
+        }
         const enforce = rec.severity === "blocking"
           ? "blocks a DIRECT edit to its scope at strict firmness, and fails a PR whose diff touches that scope (CI guard); blast-radius hits and lower firmness stay advisory"
           : "flags violating edits and PRs (advisory)";
-        const where = input.private ? " [PRIVATE overlay — not committed to this repo]" : "";
+        const where = input.private ? ` [PRIVATE overlay — not committed to this repo]${flushed}` : "";
         return ok(`${existing ? "Updated" : "Recorded"} ${rec.severity} constraint ${rec.id}: "${rec.statement}" (scope: ${rec.scope.join(", ")}).${where} It now ${enforce}.`);
       } catch (e) {
         return err(`Failed to record correction: ${(e as Error).message}`);

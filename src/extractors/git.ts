@@ -32,6 +32,23 @@ export function isGitRepo(cwd: string): boolean {
   return gitSafe(["rev-parse", "--is-inside-work-tree"], cwd) === "true";
 }
 
+/** Best-effort: stage ONLY the hunch dir, commit, and push the repo it lives in. Shared by
+ *  the post-commit auto-commit (CLI sync --commit), MCP private writes, and `hunch private
+ *  --sync`. HUNCH_SYNC=1 stops the created commit from re-triggering the post-commit hook
+ *  (no recursion). Stages with a pathspec scoped to `hunchDir`, so it never sweeps unrelated
+ *  working-tree changes. Never throws — a non-repo dir / offline push just no-ops. */
+export function commitAndPushHunch(hunchDir: string, message: string): void {
+  const env = { ...process.env, HUNCH_SYNC: "1" };
+  const run = (args: string[]): void => {
+    try {
+      execFileSync("git", ["-C", hunchDir, ...args], { stdio: "ignore", env });
+    } catch { /* best-effort: nothing staged / not a repo / offline */ }
+  };
+  run(["add", "--", "."]);
+  run(["commit", "-m", message]);
+  run(["push"]);
+}
+
 export function headSha(cwd: string): string {
   return gitSafe(["rev-parse", "HEAD"], cwd);
 }
