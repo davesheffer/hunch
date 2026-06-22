@@ -1,7 +1,7 @@
 {
   "name": "@davesheffer/hunch",
   "version": "0.15.1",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "author": "Dave Sheffer <dave.sheffer1@gmail.com>",
   "description": "Hunch — an Engineering Memory OS: a persistent, git-native reasoning graph over a codebase, exposed to Claude Code via MCP.",
   "homepage": "https://hunch-pi.vercel.app",
@@ -17,7 +17,9 @@
     "hunch": "dist/cli/index.js"
   },
   "files": [
-    "dist/**/*.js"
+    "dist/**/*.js",
+    "LICENSE",
+    "NOTICE"
   ],
   "publishConfig": {
     "access": "public",
