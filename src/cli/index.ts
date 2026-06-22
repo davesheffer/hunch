@@ -69,7 +69,8 @@ program
   .option("--no-providers", "skip scaffolding non-Claude assistant configs (Cursor / VS Code / Codex / AGENTS.md)")
   .option("--no-agent-hooks", "skip installing the Claude Code agent hooks (.claude/settings.json)")
   .option("--firmness <level>", "agent-hook firmness: off | advisory | firm | strict")
-  .action((opts: { index: boolean; enforce: boolean; enforceStrict?: boolean; providers: boolean; agentHooks: boolean; firmness?: string }) => {
+  .option("--private-sync", "post-commit synthesis writes captured decisions into the private overlay (HUNCH_PRIVATE_DIR), never the public repo")
+  .action((opts: { index: boolean; enforce: boolean; enforceStrict?: boolean; providers: boolean; agentHooks: boolean; firmness?: string; privateSync?: boolean }) => {
     // Validate --firmness up front, before any side effects (indexing, git hooks,
     // .mcp.json) or opening the store — a bad value must not leave a half-init.
     if (opts.firmness !== undefined && !isFirmness(opts.firmness)) {
@@ -99,8 +100,8 @@ program
     }
 
     if (isGitRepo(root)) {
-      const h = installPostCommitHook(root, inv.shell);
-      console.log(`  ✓ post-commit hook ${h.action} (learning loop)`);
+      const h = installPostCommitHook(root, inv.shell, { private: opts.privateSync });
+      console.log(`  ✓ post-commit hook ${h.action} (learning loop)${opts.privateSync ? " — syncs to the private overlay" : ""}`);
       const m = installMergeDriver(root, inv.shell);
       console.log(`  ✓ team merge driver ${m.action}`);
       // Auto-install the pre-commit guard by default (advisory: flags invariants
@@ -230,11 +231,13 @@ program
   .option("--from-hook", "invoked by the git hook")
   .option("--quiet", "minimal output")
   .option("--force", "re-synthesize even if a decision already exists for the commit")
-  .action(async (sha: string | undefined, opts: { fromHook?: boolean; quiet?: boolean; force?: boolean }) => {
+  .option("--private", "write the synthesized decision into the private overlay (HUNCH_PRIVATE_DIR), not the public repo — for a repo whose memory is kept private")
+  .action(async (sha: string | undefined, opts: { fromHook?: boolean; quiet?: boolean; force?: boolean; private?: boolean }) => {
     const { store, root } = storeFor();
     if (!isGitRepo(root)) return opts.quiet ? undefined : fail("sync needs a git repo");
+    if (opts.private && !store.hasPrivate) { store.close(); return opts.quiet ? undefined : fail("--private needs HUNCH_PRIVATE_DIR set to a private store"); }
     store.json.ensureDirs();
-    const r = await syncCommit(store, root, sha ?? headSha(root), { force: opts.force });
+    const r = await syncCommit(store, root, sha ?? headSha(root), { force: opts.force, private: opts.private });
     if (r.status === "written") {
       store.reindex();
       // Don't rewrite CLAUDE.md from the hook — it would dirty the working tree

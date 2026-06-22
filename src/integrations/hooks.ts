@@ -11,12 +11,16 @@ import { hooksDir } from "../extractors/git.js";
 const MARK = "# >>> hunch post-commit >>>";
 const ENDMARK = "# <<< hunch post-commit <<<";
 
-function block(invocation: string): string {
+function block(invocation: string, opts: { private?: boolean } = {}): string {
+  // --private routes the auto-synthesized decision into the HUNCH_PRIVATE_DIR overlay
+  // instead of the public repo. The hook script is local (.git/hooks/), never committed,
+  // so a repo whose memory is kept private leaves no trace of this in the public tree.
+  const priv = opts.private ? " --private" : "";
   return [
     MARK,
     'if [ -z "$HUNCH_SYNC" ]; then',
     "  export HUNCH_SYNC=1",
-    `  ( ${invocation} sync --from-hook --quiet >/dev/null 2>&1 || true ) &`,
+    `  ( ${invocation} sync --from-hook --quiet${priv} >/dev/null 2>&1 || true ) &`,
     "fi",
     ENDMARK,
   ].join("\n");
@@ -27,7 +31,7 @@ export interface HookInstall {
   action: "created" | "appended" | "updated" | "unchanged";
 }
 
-export function installPostCommitHook(root: string, invocation: string): HookInstall {
+export function installPostCommitHook(root: string, invocation: string, opts: { private?: boolean } = {}): HookInstall {
   const dir = hooksDir(root);
   // `git rev-parse --git-path hooks` returns a path relative to the repo in a
   // normal checkout, but an ABSOLUTE one inside a linked worktree (the shared
@@ -36,7 +40,7 @@ export function installPostCommitHook(root: string, invocation: string): HookIns
   const abs = isAbsolute(dir) ? dir : join(root, dir);
   mkdirSync(abs, { recursive: true });
   const hookPath = join(abs, "post-commit");
-  const blk = block(invocation);
+  const blk = block(invocation, opts);
 
   if (!existsSync(hookPath)) {
     writeFileSync(hookPath, `#!/bin/sh\n${blk}\n`);

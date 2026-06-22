@@ -53,7 +53,7 @@ export async function syncCommit(
   store: HunchStore,
   root: string,
   sha?: string,
-  opts: { force?: boolean } = {},
+  opts: { force?: boolean; private?: boolean } = {},
 ): Promise<SyncResult> {
   const target = sha || headSha(root);
   if (!target) return { status: "skipped", reason: "no HEAD commit" };
@@ -146,7 +146,10 @@ export async function syncCommit(
     },
     date: meta.date, // the commit date
   };
-  store.json.put("decisions", decision);
+  // Route to the PRIVATE overlay when asked (post-commit sync in a repo whose memory
+  // is kept private) — keeps auto-captured decisions out of the public repo entirely.
+  if (opts.private) store.putPrivate("decisions", decision);
+  else store.json.put("decisions", decision);
   return { status: "written", decision, provider: provider.name };
 }
 
