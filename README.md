@@ -135,6 +135,16 @@ forbidden dependency) — code that never existed, so a diff reviewer is blind t
 decision carries machine-checkable **tripwires**; re-introduce one and Hunch blocks it with
 the receipt of what you rejected and why. → [docs](https://hunch-pi.vercel.app/docs#veto)
 
+### Redundancy Guard — "this already exists"
+
+An agent works from a *local* context window, so it re-implements a helper that already
+lives three modules over, or re-adds a dependency the codebase already has — sprawl a
+diff-only reviewer can't see, but Hunch's symbol graph can. Add a function or class already
+defined elsewhere and `hunch check` / the CI guard / `hunch_merge_verdict` flag it with the
+existing location. Deterministic and **advisory** — it never blocks; tuned to stay quiet
+(stopword + length filters, scoped to the change's own project root, move-aware so a
+refactor isn't mistaken for a duplicate). → [docs](https://hunch-pi.vercel.app/docs#redundancy)
+
 Plus the **Regression Guard** (re-adding deliberately-retired code) and the
 **[CI Constraint Guard](https://hunch-pi.vercel.app/docs#ci)** (`hunch ci` — a PR gate that
 comments the affected `con_`/`dec_` ids and fails on a blocking one).

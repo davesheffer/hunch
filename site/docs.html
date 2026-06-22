@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Docs — Hunch · Engineering Memory OS</title>
-<meta name="description" content="Hunch documentation — install, initialize, wire up your coding assistant over MCP, and use the guards (Never Twice, Causal Merge Verdict, Decision Guard, CI Constraint Guard). Complete CLI and MCP reference." />
+<meta name="description" content="Hunch documentation — install, initialize, wire up your coding assistant over MCP, and use the guards (Never Twice, Causal Merge Verdict, Decision Guard, Redundancy Guard, CI Constraint Guard). Complete CLI and MCP reference." />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400..600&family=Inter:wght@400;450;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
@@ -228,6 +228,7 @@ if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElem
       <a href="#merge-verdict">Causal Merge Verdict</a>
       <a href="#veto">Decision Guard</a>
       <a href="#regression">Regression Guard</a>
+      <a href="#redundancy">Redundancy Guard</a>
       <a href="#ci">CI Constraint Guard</a>
     </div>
     <div class="nav-group">
@@ -426,7 +427,7 @@ Agent: hunch_record_correction({ rule: "never import lodash; use src/utils",
 
     <section id="merge-verdict">
       <h2>Causal Merge Verdict <span class="pill ok">v0.14</span><a class="anchor" href="#merge-verdict">#</a></h2>
-      <p>A diff-only reviewer sees <em>what</em> changed. It can’t see that the line you’re deleting is the fix for an incident, or that the symbol you’re re-adding was deliberately retired. Hunch can — because it holds the <em>why</em>.</p>
+      <p>A diff-only reviewer sees <em>what</em> changed. It can’t see that the line you’re deleting is the fix for an incident, that the symbol you’re re-adding was deliberately retired, or that the helper you’re adding already exists three modules over. Hunch can — because it holds the <em>why</em> and the whole graph.</p>
       <p><code>hunch_merge_verdict</code> (and <code>hunch check</code> / the CI guard) replays a diff against the graph and returns one cited verdict — <b>BLOCK / WARN / PASS</b> — that shows the reasoning, not just the rule:</p>
       <div class="code" data-lang="text"><div class="code-head"><span class="lbl">hunch_merge_verdict</span><button class="copy">Copy</button></div><pre><span class="d">VERDICT: ⛔ BLOCK</span> — this change breaks a recorded invariant or re-opens a known bug.
 
@@ -446,6 +447,15 @@ Agent: hunch_record_correction({ rule: "never import lodash; use src/utils",
     <section id="regression">
       <h2>Regression Guard<a class="anchor" href="#regression">#</a></h2>
       <p>Re-adding a symbol or dependency that an in-force decision deliberately <strong>retired</strong> gets flagged — warns always, fails a strict commit only when the retirement is tied to a blocking invariant. The agent stops undoing intentional design. The pre-edit hook also surfaces what a decision retired from a file (“don’t re-add <code>login</code> here — dec_017 removed it”), and the commit-time <code>hunch check</code> does the actual gating.</p>
+    </section>
+
+    <section id="redundancy">
+      <h2>Redundancy Guard <span class="pill ok">v0.16</span><a class="anchor" href="#redundancy">#</a></h2>
+      <p>Coding agents work from a <em>local</em> context window, so they re-implement a helper that already lives three modules over, or re-add a dependency the codebase already has — sprawl a diff-only reviewer can’t see. Hunch holds the whole symbol graph, so a diff that adds a function or class already defined elsewhere is flagged with its existing location.</p>
+      <div class="code" data-lang="text"><div class="code-head"><span class="lbl">hunch check</span><button class="copy">Copy</button></div><pre>Possibly re-implements 1 symbol(s) that already exist (advisory — review, never blocks):
+
+  ⟲ adds function `formatDate` — already defined in src/util/date.ts</pre></div>
+      <p>It’s <strong>deterministic</strong> and <strong>advisory</strong> — it never blocks a commit or fails <code>--strict</code>; it surfaces in <code>hunch check</code>, the CI guard, and <code>hunch_merge_verdict</code> alongside the other dimensions. Tuned to stay quiet: stopword + length filters, scoped to the change’s own top-level project root (so <code>src/</code> never trips over <code>test/</code> or a sub-project), and move-aware — a refactor that relocates a symbol isn’t mistaken for a duplicate.</p>
     </section>
 
     <section id="ci">
@@ -471,7 +481,7 @@ Agent: hunch_record_correction({ rule: "never import lodash; use src/utils",
           <tr><td><code>timeline</code></td><td>The decision history for a file/symbol over time.</td></tr>
           <tr><td><code>context</code></td><td>Assemble the minimal relevant Hunch slice for a task.</td></tr>
           <tr><td><code>fragile</code></td><td>Ranked fragility report with evidence.</td></tr>
-          <tr><td><code>check</code></td><td>Flag changes that touch a do-not-break invariant (local + CI guard).</td></tr>
+          <tr><td><code>check</code></td><td>Flag changes that touch a do-not-break invariant (local + CI guard); also flags (advisory) symbols you add that already exist elsewhere.</td></tr>
           <tr><td><code>veto</code></td><td>Decision Guard — flag changes that reverse a rejected alternative.</td></tr>
           <tr><td><code>ci</code></td><td>Scaffold the CI Constraint Guard (GitHub Action).</td></tr>
           <tr><td><code>record-constraint</code></td><td>Record an invariant the codebase must not break.</td></tr>

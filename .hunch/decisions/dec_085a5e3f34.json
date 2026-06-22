@@ -1,0 +1,49 @@
+{
+  "id": "dec_085a5e3f34",
+  "title": "feat(guard): redundancy / \"this already exists\" advisory (v0.16.0)",
+  "status": "proposed",
+  "context": "Coding agents work from a local context window, so they re-implement\nhelpers and re-add code that already lives elsewhere. Hunch sees the\nwhole symbol graph: a diff that adds a function/class already defined in\nanother file is now flagged (advisory — never blocks) in `hunch check`,\nthe CI guard, and `hunch_merge_verdict`.\n\nTuned for precision and hardened via a 21-agent adversarial review swarm:\nstopword + length filters, scoped to the change's own top-level project\nroot (src/ never trips over t Touches invariant(s): con_902759b3dc (All JSON writes to .hunch/ must be atomic (temp-file + rename) so an interrupted write can never truncate the index); con_a87360128b (Semantic vectors are a derived layer in SQLite, never the source of truth; reconcile by content hash on reindex).",
+  "decision": "Introduced src/cli, src/core, src/store, test/checkreport.test.ts, test/redundancy.test.ts: added CheckRedundant, sym; new dep(s): node:test, node:assert/strict; 1 new file(s).",
+  "consequences": [
+    "Adds dependency: node:test, node:assert/strict."
+  ],
+  "alternatives_rejected": [],
+  "rejected_tripwires": [],
+  "related_components": [
+    "cmp_50037f41a9",
+    "cmp_a94a8fe5cc",
+    "cmp_b256a6aed0",
+    "cmp_cdfb395bb7"
+  ],
+  "related_files": [
+    "src/cli/index.ts",
+    "src/core/checkreport.ts",
+    "src/store/hunchStore.ts",
+    "test/checkreport.test.ts",
+    "test/redundancy.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "2f2b342",
+  "valid_from": "2026-06-23T00:03:09+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "inferred",
+    "confidence": 0.45,
+    "evidence": [
+      "commit:2f2b342",
+      "src/cli/index.ts",
+      "src/core/checkreport.ts",
+      "src/store/hunchStore.ts",
+      "test/checkreport.test.ts",
+      "test/redundancy.test.ts"
+    ],
+    "last_verified": "2026-06-22T21:03:10.848Z"
+  },
+  "date": "2026-06-23T00:03:09+03:00"
+}

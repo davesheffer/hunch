@@ -527,7 +527,7 @@ program
 // ---- check (constraint enforcement) ---------------------------------------
 program
   .command("check")
-  .description("Flag changes that touch a do-not-break invariant — the local guardrail AND the CI/PR Constraint Guard.")
+  .description("Flag changes that touch a do-not-break invariant — the local guardrail AND the CI/PR Constraint Guard. Also flags (advisory) symbols you add that already exist elsewhere — possible re-implementation/sprawl.")
   .option("--staged", "check git staged files (default)")
   .option("--commit <sha>", "check a specific commit's files")
   .option("--base <ref>", "check a PR/branch: files changed vs <ref> (e.g. origin/main) — for CI")
@@ -557,8 +557,9 @@ program
       return;
     }
     // DIRECT (scope match) + NEAR (blast radius) + REGRESSION (re-added retired
-    // code) + the hardened strict gate + causal `why` citations — all assembled by
-    // the shared store.buildCheckReport (also used by the hunch_merge_verdict tool).
+    // code) + REDUNDANT (adds a symbol already defined elsewhere — advisory) + the
+    // hardened strict gate + causal `why` citations — all assembled by the shared
+    // store.buildCheckReport (also used by the hunch_merge_verdict tool).
     const diff = opts.commit ? commitDiff(opts.commit, root) : opts.base ? rangeDiff(opts.base, root) : stagedDiff(root);
     const report: CheckReport = store.buildCheckReport(files, diff, {
       strict: !!opts.strict,

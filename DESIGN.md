@@ -21,7 +21,7 @@ Today's AI coding tools are **stateless**. Every session re-reads the code, re-d
 - **The institutional memory of an engineering org.** When an engineer leaves, their knowledge doesn't. New hires "ask the codebase why" and get accurate, sourced answers.
 - **A reasoning substrate, not a feature.** Every AI action (fix, refactor, review, plan) is grounded in accumulated decisions, bug history, and constraints — so the AI stops making the same mistakes and stops undoing intentional design.
 - **The system of record for engineering intent.** ADRs, postmortems, tribal Slack threads, and "don't touch this" comments collapse into one structured, living graph that is generated as a byproduct of normal work — not extra documentation toil.
-- **A trust layer for autonomous agents.** As agents take on more work, the bottleneck becomes *grounding and guardrails*. The Hunch is the guardrail: constraints are enforced, blast radius is known, regressions are remembered, and approaches a decision *rejected* are **vetoed** before they re-enter the codebase (see [docs/veto.md](docs/veto.md)).
+- **A trust layer for autonomous agents.** As agents take on more work, the bottleneck becomes *grounding and guardrails*. The Hunch is the guardrail: constraints are enforced, blast radius is known, regressions are remembered, code that re-implements what already exists is surfaced, and approaches a decision *rejected* are **vetoed** before they re-enter the codebase (see [docs/veto.md](docs/veto.md)).
 
 ### Why it's fundamentally different from Cursor / Copilot / autocomplete
 | | Cursor / Copilot | Engineering Memory OS |
