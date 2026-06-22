@@ -197,6 +197,8 @@
 
   /* ─────────────────────────────  SECTIONS  ─────────────────────────── */
   section{position:relative;padding:104px 0}
+  #compare{padding:96px 0}
+  #changelog{padding:40px 0 96px}
   .sec-label{font-family:var(--mono);font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);display:flex;align-items:center;gap:12px}
   .sec-label::before{content:"";width:30px;height:1px;background:var(--accent)}
   h2.title{font-family:var(--serif);font-weight:370;letter-spacing:-.02em;line-height:1.06;
@@ -206,6 +208,7 @@
 
   /* problem statement big editorial */
   .problem{background:var(--ink);color:var(--paper);border-radius:36px;margin:0 0;}
+  .problem section{padding:96px 0}
   .problem .wrap{padding-top:14px;padding-bottom:14px}
   .problem .sec-label{color:#9db0ff}.problem .sec-label::before{background:#9db0ff}
   .big-quote{font-family:var(--serif);font-weight:330;letter-spacing:-.02em;line-height:1.12;
@@ -393,6 +396,9 @@
 
   @media(max-width:768px){
     section{padding:72px 0}
+    .problem section{padding:72px 0}
+    #compare{padding:72px 0}
+    #changelog{padding:40px 0 72px}
     .hero{padding:88px 0 40px}
     .cta{padding:72px 0 80px}
     .cta-card{border-radius:28px;padding:52px 24px}
@@ -404,6 +410,9 @@
     .hero-stats{gap:20px}
     .hero-stats .stat .n{font-size:28px}
     section{padding:56px 0}
+    .problem section{padding:56px 0}
+    #compare{padding:56px 0}
+    #changelog{padding:40px 0 56px}
     .hero{padding:84px 0 32px}
     .cta{padding:56px 0 64px}
     .cta-card{padding:40px 20px;border-radius:22px}
@@ -544,7 +553,7 @@
 
   <!-- ───────────────  PROBLEM  ─────────────── -->
   <div class="wrap"><div class="problem"><div class="wrap">
-    <section style="padding:96px 0">
+    <section>
       <span class="sec-label" data-rise>The problem</span>
       <p class="big-quote" data-rise style="--d:.1s">
         Every AI session starts <span class="red">from zero</span>. The model
@@ -669,7 +678,7 @@
 
   <!-- ───────────────  COMPARE  ─────────────── -->
   <div class="wrap"><div class="compare"><div class="wrap">
-    <section id="compare" style="padding:96px 0">
+    <section id="compare">
       <span class="sec-label" data-rise>Why it's different</span>
       <h2 class="title" data-rise style="--d:.08s">Copilot reads the blueprints fresh each morning. <em>Hunch</em> has been on-site for ten years.</h2>
       <div class="ctable" data-rise style="--d:.14s">
@@ -745,7 +754,7 @@
   </section>
 
   <!-- ───────────────  CHANGELOG  ─────────────── -->
-  <section id="changelog" style="padding:40px 0 96px">
+  <section id="changelog">
     <div class="wrap">
       <span class="sec-label" data-rise>Changelog</span>
       <h2 class="title" data-rise style="--d:.08s">Every release, since <em>v0.1</em>.</h2>
