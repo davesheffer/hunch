@@ -85,7 +85,24 @@
   .nav-links a::after{content:"";position:absolute;left:0;bottom:-5px;height:1.5px;width:0;background:var(--ink);transition:width .35s var(--ease)}
   .nav-links a:hover::after{width:100%}
   .nav-cta{display:flex;align-items:center;gap:14px}
-  @media(max-width:860px){.nav-links{display:none}}
+  @media(max-width:860px){.nav-links{display:none;position:absolute;top:100%;left:0;right:0;
+    flex-direction:column;align-items:flex-start;gap:20px;font-size:16px;
+    background:rgba(245,243,238,.97);backdrop-filter:saturate(1.4) blur(16px);
+    border-bottom:1px solid var(--line);padding:20px 28px 28px;z-index:49;
+    animation:navSlide .25s var(--ease) both}
+  .nav-links.open{display:flex}
+  .nav-links.open a::after{display:none}}
+  @keyframes navSlide{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:none}}
+  .nav-hamburger{display:none;flex-direction:column;justify-content:center;gap:5px;
+    cursor:pointer;padding:6px 4px;background:none;border:none;border-radius:8px;
+    transition:background .2s;margin-left:4px}
+  .nav-hamburger:hover{background:rgba(22,21,15,.06)}
+  .nav-hamburger span{display:block;width:20px;height:2px;background:var(--ink);border-radius:2px;
+    transition:transform .3s var(--ease),opacity .3s}
+  .nav-hamburger.is-open span:nth-child(1){transform:translateY(7px) rotate(45deg)}
+  .nav-hamburger.is-open span:nth-child(2){opacity:0;transform:scaleX(0)}
+  .nav-hamburger.is-open span:nth-child(3){transform:translateY(-7px) rotate(-45deg)}
+  @media(max-width:860px){.nav-hamburger{display:flex}}
 
   .btn{
     --bg:var(--ink);--fg:var(--paper);
@@ -180,6 +197,8 @@
 
   /* ─────────────────────────────  SECTIONS  ─────────────────────────── */
   section{position:relative;padding:104px 0}
+  #compare{padding:96px 0}
+  #changelog{padding:40px 0 96px}
   .sec-label{font-family:var(--mono);font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);display:flex;align-items:center;gap:12px}
   .sec-label::before{content:"";width:30px;height:1px;background:var(--accent)}
   h2.title{font-family:var(--serif);font-weight:370;letter-spacing:-.02em;line-height:1.06;
@@ -189,6 +208,7 @@
 
   /* problem statement big editorial */
   .problem{background:var(--ink);color:var(--paper);border-radius:36px;margin:0 0;}
+  .problem section{padding:96px 0}
   .problem .wrap{padding-top:14px;padding-bottom:14px}
   .problem .sec-label{color:#9db0ff}.problem .sec-label::before{background:#9db0ff}
   .big-quote{font-family:var(--serif);font-weight:330;letter-spacing:-.02em;line-height:1.12;
@@ -214,6 +234,7 @@
     background:rgba(39,66,255,.07);padding:4px 10px;border-radius:7px}
 
   /* chain (bug→decision→constraint) */
+  #chain{padding-top:40px}
   .chain{display:grid;grid-template-columns:repeat(3,1fr);gap:0;margin-top:54px;
     background:var(--surface);border:1px solid var(--line);border-radius:22px;box-shadow:var(--shadow);overflow:hidden}
   @media(max-width:880px){.chain{grid-template-columns:1fr}}
@@ -233,6 +254,7 @@
   .link:last-child .arrow{display:none}
 
   /* terminal demo */
+  #demo{padding-top:48px}
   .demo-grid{display:grid;grid-template-columns:.95fr 1.05fr;gap:48px;align-items:center;margin-top:8px}
   @media(max-width:980px){.demo-grid{grid-template-columns:1fr;gap:32px}}
   .terminal{background:#15140f;border-radius:18px;box-shadow:var(--shadow-lg);overflow:hidden;border:1px solid #2a2820}
@@ -370,7 +392,39 @@
   .foot-bot{display:flex;justify-content:space-between;align-items:center;margin-top:46px;padding-top:24px;border-top:1px solid var(--line);color:var(--muted-2);font-size:13px;flex-wrap:wrap;gap:12px}
 
   /* reveal helpers for children stagger handled in JS via --d */
-</style>
+
+  /* ─── MOBILE SPACING & OVERFLOW FIXES ─── */
+  .term-bar .ttl{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1}
+
+  @media(max-width:768px){
+    section{padding:72px 0}
+    .problem section{padding:72px 0}
+    #compare{padding:72px 0}
+    #changelog{padding:40px 0 72px}
+    .hero{padding:88px 0 40px}
+    .cta{padding:72px 0 80px}
+    .cta-card{border-radius:28px;padding:52px 24px}
+  }
+  @media(max-width:480px){
+    .wrap{padding:0 18px}
+    .nav-links{padding-left:18px;padding-right:18px}
+    .nav-cta .btn.sm:not(.ghost){display:none}
+    .hero-stats{gap:20px}
+    .hero-stats .stat .n{font-size:28px}
+    section{padding:56px 0}
+    .problem section{padding:56px 0}
+    #compare{padding:56px 0}
+    #changelog{padding:40px 0 56px}
+    .hero{padding:84px 0 32px}
+    .cta{padding:56px 0 64px}
+    .cta-card{padding:40px 20px;border-radius:22px}
+    .graph-card{border-radius:18px}
+    .problem{border-radius:22px}
+    .problem .foot{gap:24px}
+    .clog-row{grid-template-columns:1fr;gap:6px}
+    .clog-row .rel-tag{width:max-content}
+    .eds{grid-template-columns:1fr}
+  }</style>
 </head>
 <body>
   <div class="progress" id="progress"></div>
@@ -396,6 +450,9 @@
           Star
         </a>
         <a class="btn sm" href="#start"><span class="shine"></span>Get started</a>
+        <button type="button" class="nav-hamburger" id="navHamburger" aria-label="Open menu" aria-expanded="false">
+          <span></span><span></span><span></span>
+        </button>
       </div>
     </div>
   </header>
@@ -498,7 +555,7 @@
 
   <!-- ───────────────  PROBLEM  ─────────────── -->
   <div class="wrap"><div class="problem"><div class="wrap">
-    <section style="padding:96px 0">
+    <section>
       <span class="sec-label" data-rise>The problem</span>
       <p class="big-quote" data-rise style="--d:.1s">
         Every AI session starts <span class="red">from zero</span>. The model
@@ -548,7 +605,7 @@
   </section>
 
   <!-- ───────────────  THE CHAIN  ─────────────── -->
-  <section id="chain" style="padding-top:40px">
+  <section id="chain">
     <div class="wrap">
       <span class="sec-label" data-rise>The reasoning graph</span>
       <h2 class="title" data-rise style="--d:.08s">A bug spawns a <em>decision</em>. A decision spawns a <em>constraint</em>.</h2>
@@ -578,7 +635,7 @@
   </section>
 
   <!-- ───────────────  ASK WHY DEMO  ─────────────── -->
-  <section id="demo" style="padding-top:48px">
+  <section id="demo">
     <div class="wrap">
       <span class="sec-label" data-rise>In Claude Code</span>
       <h2 class="title" data-rise style="--d:.08s;max-width:14em">Just ask the codebase <em>why</em>.</h2>
@@ -623,7 +680,7 @@
 
   <!-- ───────────────  COMPARE  ─────────────── -->
   <div class="wrap"><div class="compare"><div class="wrap">
-    <section id="compare" style="padding:96px 0">
+    <section id="compare">
       <span class="sec-label" data-rise>Why it's different</span>
       <h2 class="title" data-rise style="--d:.08s">Copilot reads the blueprints fresh each morning. <em>Hunch</em> has been on-site for ten years.</h2>
       <div class="ctable" data-rise style="--d:.14s">
@@ -699,7 +756,7 @@
   </section>
 
   <!-- ───────────────  CHANGELOG  ─────────────── -->
-  <section id="changelog" style="padding:40px 0 96px">
+  <section id="changelog">
     <div class="wrap">
       <span class="sec-label" data-rise>Changelog</span>
       <h2 class="title" data-rise style="--d:.08s">Every release, since <em>v0.1</em>.</h2>
@@ -890,6 +947,24 @@
   }
   wireCopy('copyBtn','hunch init');
   wireCopy('relCopy','npm i -g @davesheffer/hunch');
+
+  /* ── hamburger nav ── */
+  var hamburger = document.getElementById('navHamburger');
+  var navLinks = document.querySelector('.nav-links');
+  if(hamburger && navLinks){
+    function toggleMenu(forceOpen){
+      var isOpen = forceOpen !== undefined ? forceOpen : !navLinks.classList.contains('open');
+      navLinks.classList.toggle('open', isOpen);
+      hamburger.classList.toggle('is-open', isOpen);
+      hamburger.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+      hamburger.setAttribute('aria-label', isOpen ? 'Close menu' : 'Open menu');
+    }
+    hamburger.addEventListener('click', function(){ toggleMenu(); });
+    navLinks.querySelectorAll('a').forEach(function(a){
+      a.addEventListener('click', function(){ toggleMenu(false); });
+    });
+    document.addEventListener('keydown', function(e){ if(e.key==='Escape') toggleMenu(false); });
+  }
 
   /* ── current year ── */
   var yr=document.getElementById('yr'); if(yr){ try{ yr.textContent=new Date().getFullYear(); }catch(e){} }
