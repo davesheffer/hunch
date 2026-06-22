@@ -15,7 +15,8 @@
  */
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { execFileSync, spawnSync } from "node:child_process";
-import { join, relative } from "node:path";
+import { join, relative, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { Command } from "commander";
 import { hunchPaths, findRoot, toPosixTarget } from "../core/paths.js";
 import { looksLikeCorrection, CORRECTION_NUDGE } from "../core/correction.js";
@@ -46,8 +47,22 @@ import { mergeHunchJson } from "../store/merge.js";
 import { planCompaction } from "../store/compact.js";
 import { resolveInvocation } from "./invocation.js";
 
+/** The real package version — read from package.json (at the package root, two up
+ *  from dist/cli/ in the published tarball, and from src/cli/ in dev) so the CLI
+ *  never drifts from what npm shipped. A hardcoded literal here silently lied
+ *  (every release reported 0.1.0 regardless of the actual installed version). */
+const HUNCH_VERSION = (() => {
+  try {
+    const pkgPath = join(dirname(fileURLToPath(import.meta.url)), "../../package.json");
+    const v = (JSON.parse(readFileSync(pkgPath, "utf8")) as { version?: unknown }).version;
+    return typeof v === "string" ? v : "0.0.0";
+  } catch {
+    return "0.0.0";
+  }
+})();
+
 const program = new Command();
-program.name("hunch").description("Hunch — an Engineering Memory OS: a git-native reasoning graph for your codebase.").version("0.1.0");
+program.name("hunch").description("Hunch — an Engineering Memory OS: a git-native reasoning graph for your codebase.").version(HUNCH_VERSION);
 
 let openStore: HunchStore | null = null;
 function storeFor(): { store: HunchStore; root: string } {
