@@ -166,6 +166,12 @@
   /* fade-up util */
   [data-rise]{opacity:0;transform:translateY(14px);transition:opacity .8s var(--ease-out),transform .8s var(--ease-out);transition-delay:var(--d,0s)}
   [data-rise].in{opacity:1;transform:none}
+  /* when GSAP drives the reveals it sets inline styles every frame — disable the
+     CSS transition so the two don't fight (fallback path keeps the transition). */
+  html.gsap-on [data-rise]{transition:none}
+  /* let GSAP fully own the headline words: clear the CSS translateY(110%) start
+     (which would compound with GSAP's transform) and hide via opacity instead. */
+  html.gsap-on .line-mask>span{transform:none;opacity:0}
 
   /* ─────────────────────────────  HERO GRAPH  ───────────────────────── */
   .graph-card{
@@ -829,6 +835,8 @@
     </div>
   </footer>
 
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js" integrity="sha384-g4NTh/Iv5PPU4xPyhEWqPcwtNXOvdaDI8LLnyYfyNZOjKJeYQyjzQ9X5275eBjpt" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js" integrity="sha384-Z3REaz79l2IaAZqJsSABtTbhjgOUYyV3p90XNnAPCSHg3EMTz1fouunq9WZRtj3d" crossorigin="anonymous"></script>
 <script>
 (function(){
   var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -844,20 +852,51 @@
   }
   window.addEventListener('scroll', onScroll, {passive:true}); onScroll();
 
-  /* ── hero headline mask reveal ── */
-  window.addEventListener('load', function(){
-    document.querySelectorAll('[data-word]').forEach(function(el,i){
+  /* ── hero entrance + scroll reveals ──
+     GSAP (ScrollTrigger) drives these when available; otherwise we fall back to
+     the CSS-transition path so the site is never left with hidden content. */
+  var words = document.querySelectorAll('[data-word]');
+  var rises = document.querySelectorAll('[data-rise]');
+  var GSAP  = window.gsap && window.ScrollTrigger;
+
+  function revealWordsFallback(){
+    words.forEach(function(el,i){
       el.style.transition='transform 1s cubic-bezier(.16,1,.3,1)';
       el.style.transitionDelay=(0.08*i)+'s';
       requestAnimationFrame(function(){ el.style.transform='translateY(0)'; });
     });
-  });
+  }
 
-  /* ── generic rise reveals ── */
-  var io = new IntersectionObserver(function(entries){
-    entries.forEach(function(en){ if(en.isIntersecting){ en.target.classList.add('in'); io.unobserve(en.target); }});
-  }, {threshold:.16, rootMargin:'0px 0px -8% 0px'});
-  document.querySelectorAll('[data-rise]').forEach(function(el){ io.observe(el); });
+  if (reduce || !GSAP) {
+    /* fallback — reveal everything, no fancy transitions */
+    window.addEventListener('load', revealWordsFallback);
+    if (reduce) {
+      rises.forEach(function(el){ el.classList.add('in'); });
+    } else {
+      var io = new IntersectionObserver(function(entries){
+        entries.forEach(function(en){ if(en.isIntersecting){ en.target.classList.add('in'); io.unobserve(en.target); }});
+      }, {threshold:.16, rootMargin:'0px 0px -8% 0px'});
+      rises.forEach(function(el){ io.observe(el); });
+    }
+  } else {
+    document.documentElement.classList.add('gsap-on');
+    gsap.registerPlugin(ScrollTrigger);
+    /* hero headline: masked words slide up in a stagger. Driven by ScrollTrigger
+       (fires on load for the in-view hero) rather than an autoplay tween, which
+       can stall if the tab isn't focused when the script runs. */
+    gsap.fromTo(words, {y:26, opacity:0}, {y:0, opacity:1, duration:0.9, ease:'power3.out', stagger:0.09,
+      scrollTrigger:{ trigger:'.hero-title', start:'top 95%', once:true }});
+    /* scroll reveals: each element fades + slides up as it enters. A per-element
+       trigger with once:true is reliable even on fast scroll (batch can drop
+       items); we reuse the authored --d delay for the in-group stagger. */
+    gsap.utils.toArray(rises).forEach(function(el){
+      var m = (el.getAttribute('style')||'').match(/--d:\s*([\d.]+)s/);
+      gsap.to(el, {opacity:1, y:0, duration:0.8, ease:'power3.out', delay: m?parseFloat(m[1]):0,
+        scrollTrigger:{ trigger:el, start:'top bottom', once:true }});
+    });
+    /* re-measure once fonts/images settle so triggers fire at the right spots */
+    window.addEventListener('load', function(){ ScrollTrigger.refresh(); });
+  }
 
   /* ── animated counters ── */
   var cio = new IntersectionObserver(function(entries){
