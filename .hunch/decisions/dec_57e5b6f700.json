@@ -1,0 +1,164 @@
+{
+  "id": "dec_57e5b6f700",
+  "title": "Tripwires decouple provenance from decision—enable progressive enforcement",
+  "status": "proposed",
+  "context": "Regression Guard catches re-adding retired code. Rejected alternatives (prose in alternatives_rejected field) never existed in code, so re-introducing them is undetected. Need machine-checkable signals for rejected approaches without blocking too early. Touches invariant(s): con_03a0b94b2e (The agent hook must never block an edit on failure: any error or unrecognized input emits nothing and exits 0); con_2ce3f2a547 (Synthesis must run on the Claude subscription, never the pay-per-token API: strip ANTHROPIC_API_KEY and ANTHROPIC_AUTH_TOKEN from the spawned env); con_902759b3dc (All JSON writes to .hunch/ must be atomic (temp-file + rename) so an interrupted write can never truncate the index); con_a87360128b (Semantic vectors are a derived layer in SQLite, never the source of truth; reconcile by content hash on reindex); con_e04226bd05 (The MCP server must stay client-agnostic: all assistants point to the same .hunch/ graph; no Claude-only behavior in the server).",
+  "decision": "Rejected alternatives become tripwires (forbidden deps/symbols/patterns scoped by glob). Tripwires carry their OWN provenance (llm_draft vs human_confirmed), independent of decision's confidence. Only human-confirmed tripwires block; llm_draft is advisory regardless of decision tier. Enforcement is deterministic: set-intersection over vouched records, no model in block path.",
+  "consequences": [
+    "Rejected alternatives (previously uncatchable prose) become machine-checkable",
+    "Progressive enforcement: advisory llm_draft → human confirm → hard block, prevents premature over-blocking",
+    "Deterministic blocking path (set operations on human-vouched tripwires only, no inference)",
+    "Enforcement power scales with curation: more confirmed tripwires = more catching power",
+    "Agents prevented from re-introducing rejected approaches (closes regression guard gap for prose decisions)"
+  ],
+  "alternatives_rejected": [
+    "Inherit tripwire provenance from decision—can't support advisory-only phase",
+    "Block immediately on any tripwire match—over-aggressive, blocks early drafts",
+    "Semantic-tier only enforcement—can't be deterministic without human signals",
+    "New dedicated MCP tool for veto—rejected per dec_bfc5d05de7"
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Inherit tripwire provenance from decision—can't support advisory-only phase",
+      "scope": [
+        "src/cli/**",
+        "src/core/**",
+        "src/extractors/**",
+        "src/mcp/**",
+        "src/store/**",
+        "src/synthesis/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Block immediately on any tripwire match—over-aggressive, blocks early drafts",
+      "scope": [
+        "src/cli/**",
+        "src/core/**",
+        "src/extractors/**",
+        "src/mcp/**",
+        "src/store/**",
+        "src/synthesis/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Semantic-tier only enforcement—can't be deterministic without human signals",
+      "scope": [
+        "src/cli/**",
+        "src/core/**",
+        "src/extractors/**",
+        "src/mcp/**",
+        "src/store/**",
+        "src/synthesis/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "New dedicated MCP tool for veto—rejected per dec_bfc5d05de7",
+      "scope": [
+        "src/cli/**",
+        "src/core/**",
+        "src/extractors/**",
+        "src/mcp/**",
+        "src/store/**",
+        "src/synthesis/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_50037f41a9",
+    "cmp_a94a8fe5cc",
+    "cmp_b256a6aed0",
+    "cmp_ba75dfc94f",
+    "cmp_cdfb395bb7",
+    "cmp_dfa5b5acde",
+    "cmp_e0ccfe26fe"
+  ],
+  "related_files": [
+    "src/cli/index.ts",
+    "src/core/checkreport.ts",
+    "src/core/hookpolicy.ts",
+    "src/core/strictgate.ts",
+    "src/core/types.ts",
+    "src/extractors/diff.ts",
+    "src/mcp/server.ts",
+    "src/store/hunchStore.ts",
+    "src/synthesis/synthesize.ts",
+    "src/synthesis/tripwires.ts",
+    "test/checkreport.test.ts",
+    "test/hookpolicy.test.ts",
+    "test/synthesis.test.ts",
+    "test/tripwires.test.ts",
+    "test/upgrades.test.ts",
+    "test/veto.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "8c5965d",
+  "valid_from": "2026-06-21T16:21:19+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft+summary",
+    "confidence": 0.5,
+    "evidence": [
+      "commit:8c5965d",
+      "src/cli/index.ts",
+      "src/core/checkreport.ts",
+      "src/core/hookpolicy.ts",
+      "src/core/strictgate.ts",
+      "src/core/types.ts",
+      "src/extractors/diff.ts",
+      "src/mcp/server.ts",
+      "src/store/hunchStore.ts"
+    ],
+    "last_verified": "2026-06-21T13:22:07.830Z"
+  },
+  "date": "2026-06-21T16:21:19+03:00"
+}

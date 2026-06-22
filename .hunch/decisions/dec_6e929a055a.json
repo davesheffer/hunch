@@ -1,0 +1,118 @@
+{
+  "id": "dec_6e929a055a",
+  "title": "Validate model IDs before shell invocation to prevent injection",
+  "status": "proposed",
+  "context": "Model IDs from HUNCH_*_MODEL env vars become argv tokens in a Windows cmd.exe line (shell:true). Untrusted commit/diff content is already stdin-only, so these env vars are the lone non-literal token reaching the shell—a poisoned value could smuggle commands like `& evil.exe`. Touches invariant(s): con_2ce3f2a547 (Synthesis must run on the Claude subscription, never the pay-per-token API: strip ANTHROPIC_API_KEY and ANTHROPIC_AUTH_TOKEN from the spawned env).",
+  "decision": "Add `safeModel()` function: whitelist-validate model IDs against regex `/^[A-Za-z0-9._:/-]+$/`, reject any whitespace or cmd.exe metacharacters, and fall back to the provider's default instead of crashing.",
+  "consequences": [
+    "Closes the only shell-injection attack surface on Windows",
+    "Typos in HUNCH_*_MODEL env vars silently fall back to defaults instead of crashing",
+    "Model ID pattern is now constrained to alphanumeric, dots, underscores, colons, forward/backslashes",
+    "Adds 3 test cases covering valid ids, injection attempts, and missing/empty env vars"
+  ],
+  "alternatives_rejected": [
+    "Reject and crash on invalid model ID (worse UX than fallback)",
+    "Quote or escape argv tokens (cmd.exe line-join escaping is unreliable)",
+    "Route model ID through stdin instead (breaks provider API contracts)",
+    "Remove env var override capability (loses flexibility for custom/test models)"
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Reject and crash on invalid model ID (worse UX than fallback)",
+      "scope": [
+        "src/synthesis/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Quote or escape argv tokens (cmd.exe line-join escaping is unreliable)",
+      "scope": [
+        "src/synthesis/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Route model ID through stdin instead (breaks provider API contracts)",
+      "scope": [
+        "src/synthesis/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Remove env var override capability (loses flexibility for custom/test models)",
+      "scope": [
+        "src/synthesis/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_a94a8fe5cc",
+    "cmp_ba75dfc94f"
+  ],
+  "related_files": [
+    "src/synthesis/provider.ts",
+    "test/cliproviders.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "045fe1b",
+  "valid_from": "2026-06-21T09:33:58+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft",
+    "confidence": 0.65,
+    "evidence": [
+      "commit:045fe1b",
+      "src/synthesis/provider.ts",
+      "test/cliproviders.test.ts"
+    ],
+    "last_verified": "2026-06-21T06:34:14.304Z"
+  },
+  "date": "2026-06-21T09:33:58+03:00"
+}

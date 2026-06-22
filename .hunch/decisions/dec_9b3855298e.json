@@ -1,0 +1,114 @@
+{
+  "id": "dec_9b3855298e",
+  "title": "Abstract proposed-edit extraction into testable proposedEditLines helper",
+  "status": "proposed",
+  "context": "Veto Guard only examined Edit and Write tool inputs, leaving MultiEdit edits invisible to rejection logic. Inline extraction was untestable and would need duplication to support future edit tools. Touches invariant(s): con_03a0b94b2e (The agent hook must never block an edit on failure: any error or unrecognized input emits nothing and exits 0); con_8460b6770f (Config/provider writers must merge idempotently into existing user files and refuse to clobber an unparseable file).",
+  "decision": "Extract proposed-edit text uniformly across all three edit tools (Edit.new_string, Write.content, MultiEdit.edits[].new_string) into a pure helper function proposedEditLines(tool_input) → string[]. Single source of truth for edit normalization.",
+  "consequences": [
+    "Veto Guard now catches rejected patterns in MultiEdit edits, closing the coverage gap",
+    "Edit-text extraction is testable in isolation with explicit test cases for each tool type",
+    "Easier to extend to future edit tools without modifying veto guard logic",
+    "Edge cases (undefined input, empty edits, mixed tools in one call) handled uniformly"
+  ],
+  "alternatives_rejected": [
+    "Continue inline conditional extraction in index.ts (harder to test, difficult to maintain)",
+    "Support only Edit/Write and document MultiEdit as unsupported (incomplete security coverage)",
+    "Create separate extractors per tool (unnecessary branching, tight coupling to hook)"
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Continue inline conditional extraction in index.ts (harder to test, difficult to maintain)",
+      "scope": [
+        "src/cli/**",
+        "src/core/**",
+        "src/integrations/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Support only Edit/Write and document MultiEdit as unsupported (incomplete security coverage)",
+      "scope": [
+        "src/cli/**",
+        "src/core/**",
+        "src/integrations/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Create separate extractors per tool (unnecessary branching, tight coupling to hook)",
+      "scope": [
+        "src/cli/**",
+        "src/core/**",
+        "src/integrations/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_50037f41a9",
+    "cmp_863ac67d4a",
+    "cmp_a94a8fe5cc",
+    "cmp_b256a6aed0"
+  ],
+  "related_files": [
+    "src/cli/index.ts",
+    "src/core/hookpolicy.ts",
+    "src/integrations/gitignore.ts",
+    "test/gitignore.test.ts",
+    "test/hookpolicy.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "b89951c",
+  "valid_from": "2026-06-21T16:30:56+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft",
+    "confidence": 0.65,
+    "evidence": [
+      "commit:b89951c",
+      "src/cli/index.ts",
+      "src/core/hookpolicy.ts",
+      "src/integrations/gitignore.ts",
+      "test/gitignore.test.ts",
+      "test/hookpolicy.test.ts"
+    ],
+    "last_verified": "2026-06-21T13:31:19.080Z"
+  },
+  "date": "2026-06-21T16:30:56+03:00"
+}

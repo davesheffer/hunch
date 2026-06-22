@@ -1,0 +1,112 @@
+{
+  "id": "dec_14ab64fb59",
+  "title": "Read CLI version from package.json at runtime, not hardcoded",
+  "status": "proposed",
+  "context": "The CLI's --version flag was hardcoded to 0.1.0, so hunch --version reported 0.1.0 on every release regardless of what npm actually installed. This masked which build users were running and made troubleshooting impossible.",
+  "decision": "Read the version from package.json dynamically at module load time using an IIFE. Resolve the path relative to the current file location (../../package.json) to handle both dev (src/cli/) and production (dist/cli/) layouts. Fallback to 0.0.0 if the read fails.",
+  "consequences": [
+    "Version now always reflects the actual installed/dev version",
+    "Adds file I/O cost at module load (minimal, one-time via IIFE)",
+    "Users can now accurately report which build they have",
+    "Eliminates sync drift between CLI and npm package.json",
+    "Depends on package.json being accessible at runtime in the expected location"
+  ],
+  "alternatives_rejected": [
+    "Hardcoded literal (was the old approach; caused silent version lies)",
+    "Environment variable or CLI argument (requires external tooling changes)",
+    "Build-time version injection (requires CI/build system changes)",
+    "Querying npm directly (adds dependency and network latency)"
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Hardcoded literal (was the old approach; caused silent version lies)",
+      "scope": [
+        "src/cli/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Environment variable or CLI argument (requires external tooling changes)",
+      "scope": [
+        "src/cli/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Build-time version injection (requires CI/build system changes)",
+      "scope": [
+        "src/cli/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Querying npm directly (adds dependency and network latency)",
+      "scope": [
+        "src/cli/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_50037f41a9"
+  ],
+  "related_files": [
+    "src/cli/index.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "3c191dd",
+  "valid_from": "2026-06-22T14:39:36+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft",
+    "confidence": 0.65,
+    "evidence": [
+      "commit:3c191dd",
+      "src/cli/index.ts"
+    ],
+    "last_verified": "2026-06-22T11:39:56.405Z"
+  },
+  "date": "2026-06-22T14:39:36+03:00"
+}

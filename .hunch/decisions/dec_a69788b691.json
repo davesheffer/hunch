@@ -1,0 +1,107 @@
+{
+  "id": "dec_a69788b691",
+  "title": "Mirror MCP config union across casing variants instead of merging to one canonical",
+  "status": "proposed",
+  "context": "Windows drive letters are case-insensitive, but Claude Code's global config (~/.claude.json) stores projects by raw cwd string with case-sensitive key comparison. A global `claude mcp add` can create two project blocks for the same directory (e.g., `c:/Users/me/repo` vs `C:/Users/me/repo`), and sessions resolving to the non-populated casing see no hunch_* tools. Touches invariant(s): con_8460b6770f (Config/provider writers must merge idempotently into existing user files and refuse to clobber an unparseable file).",
+  "decision": "When healing a case-split, compute the UNION of MCP servers + enabled/disabled lists across all casing variants, then MIRROR that union back into EVERY casing block. Never delete casings or collapse to a single canonical key.",
+  "consequences": [
+    "Guarantees whichever casing a session resolves to, the MCP config is present — no dead casings",
+    "Idempotent: re-running the heal makes no change once merged",
+    "Preserves other keys in each project block (merge-only, never clobber)",
+    "Backs up ~/.claude.json before any write (timestamped copy)",
+    "Only touches MCP-related keys: mcpServers, enabledMcpjsonServers, disabledMcpjsonServers"
+  ],
+  "alternatives_rejected": [
+    "Collapse to canonical lowercase and delete uppercase casings: sessions resolving to uppercase would get fresh empty blocks re-created by Claude → hunch missing again",
+    "Delete both and ask user to re-run `claude mcp add`: destructive, shifts burden to user",
+    "Collapse to canonical and rename within the file: same problem — unpredictable which casing wins"
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Collapse to canonical lowercase and delete uppercase casings: sessions resolving to uppercase would get fresh empty blocks re-created by Claude → hunch missing again",
+      "scope": [
+        "src/cli/**",
+        "src/integrations/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Delete both and ask user to re-run `claude mcp add`: destructive, shifts burden to user",
+      "scope": [
+        "src/cli/**",
+        "src/integrations/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Collapse to canonical and rename within the file: same problem — unpredictable which casing wins",
+      "scope": [
+        "src/cli/**",
+        "src/integrations/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_50037f41a9",
+    "cmp_863ac67d4a",
+    "cmp_a94a8fe5cc"
+  ],
+  "related_files": [
+    "src/cli/index.ts",
+    "src/integrations/claudeConfig.ts",
+    "test/claudeconfig.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "173b5cd",
+  "valid_from": "2026-06-21T12:19:58+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft",
+    "confidence": 0.65,
+    "evidence": [
+      "commit:173b5cd",
+      "src/cli/index.ts",
+      "src/integrations/claudeConfig.ts",
+      "test/claudeconfig.test.ts"
+    ],
+    "last_verified": "2026-06-21T09:20:14.080Z"
+  },
+  "date": "2026-06-21T12:19:58+03:00"
+}
