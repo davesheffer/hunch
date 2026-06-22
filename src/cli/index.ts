@@ -20,6 +20,7 @@ import { fileURLToPath } from "node:url";
 import { Command } from "commander";
 import { hunchPaths, findRoot, toPosixTarget } from "../core/paths.js";
 import { looksLikeCorrection, CORRECTION_NUDGE } from "../core/correction.js";
+import { HUNCH_VERSION } from "../core/version.js";
 import { HunchStore } from "../store/hunchStore.js";
 import { selectEmbedder } from "../store/embedder.js";
 import { indexRepo } from "../extractors/indexer.js";
@@ -46,20 +47,6 @@ import { readManifest, writeManifest, SCHEMA_VERSION } from "../core/migrate.js"
 import { mergeHunchJson } from "../store/merge.js";
 import { planCompaction } from "../store/compact.js";
 import { resolveInvocation } from "./invocation.js";
-
-/** The real package version — read from package.json (at the package root, two up
- *  from dist/cli/ in the published tarball, and from src/cli/ in dev) so the CLI
- *  never drifts from what npm shipped. A hardcoded literal here silently lied
- *  (every release reported 0.1.0 regardless of the actual installed version). */
-const HUNCH_VERSION = (() => {
-  try {
-    const pkgPath = join(dirname(fileURLToPath(import.meta.url)), "../../package.json");
-    const v = (JSON.parse(readFileSync(pkgPath, "utf8")) as { version?: unknown }).version;
-    return typeof v === "string" ? v : "0.0.0";
-  } catch {
-    return "0.0.0";
-  }
-})();
 
 const program = new Command();
 program.name("hunch").description("Hunch — an Engineering Memory OS: a git-native reasoning graph for your codebase.").version(HUNCH_VERSION);

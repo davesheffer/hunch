@@ -17,6 +17,7 @@ import { buildCorrectionConstraint } from "../core/correction.js";
 import { revParse, asOfDate, revExists, lastChangeDate, rangeFiles, rangeDiff, commitFiles, commitDiff, stagedFiles, stagedDiff } from "../extractors/git.js";
 import { formatContext } from "../core/format.js";
 import { renderMarkdown, verdict } from "../core/checkreport.js";
+import { HUNCH_VERSION } from "../core/version.js";
 import type { Decision, Symbol } from "../core/types.js";
 
 type ToolResult = { content: Array<{ type: "text"; text: string }>; isError?: boolean };
@@ -66,7 +67,7 @@ export function buildServer(root: string): McpServer {
   // hunch_query and stays warm — and hybridSearch degrades to FTS until then.
   const embedderReady = selectEmbedder();
 
-  const server = new McpServer({ name: "hunch", version: "0.1.0" });
+  const server = new McpServer({ name: "hunch", version: HUNCH_VERSION });
 
   // -- hunch_query ----------------------------------------------------------
   server.registerTool(
