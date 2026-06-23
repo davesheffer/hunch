@@ -66,3 +66,47 @@ test("EnsembleProvider: all workers fail → throws; available() reflects the po
   assert.equal(await e.available(), true);
   assert.equal(await new EnsembleProvider([]).available(), false);
 });
+
+// A worker that counts how many times it's sampled (self-consistency depth).
+const counting = (): { p: SynthProvider; calls: () => number } => {
+  let n = 0;
+  const p: SynthProvider = {
+    name: "solo",
+    available: async () => true,
+    draftDecision: async () => { n++; return DRAFT({ decision: `take path ${n}` }); },
+    draftBug: async (): Promise<BugDraft> => { throw new Error("not used"); },
+  };
+  return { p, calls: () => n };
+};
+
+test("EnsembleProvider: a single CLI is sampled `samples` times and reconciled (self-consistency)", async () => {
+  const { p, calls } = counting();
+  const out = await new EnsembleProvider([p], { samples: 3 }).draftDecision(INPUT);
+  assert.equal(calls(), 3, "the lone CLI is sampled `samples` times");
+  assert.equal(out.samples, 3, "telemetry records the reconciliation breadth");
+  assert.match(out.source, /ensemble/);
+  assert.ok(out.confidence < STRICT_MIN_CONFIDENCE, "self-consistency stays advisory");
+});
+
+test("EnsembleProvider: samples default is 1 (passthrough) for direct construction", async () => {
+  const { p, calls } = counting();
+  const out = await new EnsembleProvider([p]).draftDecision(INPUT);
+  assert.equal(calls(), 1, "no extra sampling unless asked");
+  assert.equal(out.source, "llm_draft", "single draft passes through un-merged");
+});
+
+test("EnsembleProvider: samples is clamped to a sane 1..5 band", async () => {
+  const { p, calls } = counting();
+  await new EnsembleProvider([p], { samples: 99 }).draftDecision(INPUT);
+  assert.equal(calls(), 5, "runaway sample counts are capped");
+});
+
+test("EnsembleProvider: a NaN/garbage samples value falls back to 1 (never 0 tasks → throw)", async () => {
+  // A typo'd --samples reaches here as NaN; without a finite guard the clamp yields
+  // NaN → Array.from({length:NaN}) is empty → 'all workers failed' → --deep silently
+  // collapses to the deterministic draft. Must degrade to a real sample instead.
+  const { p, calls } = counting();
+  const out = await new EnsembleProvider([p], { samples: NaN }).draftDecision(INPUT);
+  assert.ok(calls() >= 1, "the lone CLI is still sampled at least once");
+  assert.equal(out.source, "llm_draft", "single sample passes through (not an error fallback)");
+});

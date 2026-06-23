@@ -112,6 +112,23 @@ export interface DecisionDraft {
   alternatives_rejected: string[];
   confidence: number;
   source: string;
+  // Optional synthesis telemetry (surfaced in `hunch review`, never schema-bound):
+  // how many independent drafts were reconciled, their mean agreement, and the
+  // verifier's grounded-ness. Undefined on the plain single-shot path.
+  samples?: number;
+  agreement?: number;
+  grounded?: number;
+}
+
+/** A skeptical audit of a DecisionDraft against the commit it was derived from.
+ *  `grounded` is 0..1 (how well decision+consequences are supported by the diff);
+ *  the lists name draft entries the evidence does NOT support (likely hallucinated).
+ *  Used to PRUNE unsupported alternatives/consequences and to LOWER confidence —
+ *  never to raise it or arm enforcement (auto stays advisory; dec_9a2f2fe72a). */
+export interface VerifyVerdict {
+  grounded: number;
+  unsupported_alternatives: string[];
+  unsupported_claims: string[];
 }
 
 export interface BugDraft {
@@ -144,6 +161,10 @@ export interface SynthProvider {
   available(): Promise<boolean>;
   draftDecision(input: CommitInput): Promise<DecisionDraft>;
   draftBug(input: FailureInput): Promise<BugDraft>;
+  /** Optional skeptical audit of a draft against its commit (the Critic pass).
+   *  Only the LLM-backed CLI providers implement it; the deterministic provider
+   *  and the bare ensemble omit it, so callers must feature-detect. */
+  verifyDecision?(input: CommitInput, draft: DecisionDraft): Promise<VerifyVerdict>;
 }
 
 const SYSTEM = `You are the synthesis engine of an Engineering Memory OS. You turn raw
@@ -181,6 +202,28 @@ const BUG_TOOL = {
       severity: { type: "string", enum: ["low", "medium", "high", "critical"] },
     },
     required: ["title", "symptom", "root_cause", "severity"],
+  },
+};
+
+const VERIFY_TOOL = {
+  name: "emit_verdict",
+  description: "Emit a skeptical audit of a synthesized decision against its commit.",
+  input_schema: {
+    type: "object" as const,
+    properties: {
+      grounded: { type: "number", description: "0..1: how well decision+consequences are supported by the ACTUAL diff. Be strict." },
+      unsupported_alternatives: {
+        type: "array",
+        items: { type: "string" },
+        description: "VERBATIM entries from alternatives_rejected that the diff/message does NOT evidence (likely hallucinated). Copy them exactly.",
+      },
+      unsupported_claims: {
+        type: "array",
+        items: { type: "string" },
+        description: "VERBATIM consequences not supported by the diff.",
+      },
+    },
+    required: ["grounded", "unsupported_alternatives", "unsupported_claims"],
   },
 };
 
@@ -231,6 +274,17 @@ abstract class CliSynthProvider implements SynthProvider {
     const draft = bugDraftFromText(text, input.test, input.message);
     if (!draft) throw new Error(`${this.name}: no usable bug JSON in output`);
     return draft;
+  }
+
+  /** The Critic pass: audit a draft against its commit. Same subscription-only
+   *  run() path (API keys stripped), so this never bills the pay-per-token API.
+   *  Throws on unusable output so verifyDecisionSafe degrades to the un-audited
+   *  draft (a verifier failure must never lose the draft — dec_18a81c8291). */
+  async verifyDecision(input: CommitInput, draft: DecisionDraft): Promise<VerifyVerdict> {
+    const text = await this.run(`${VERIFY_SYSTEM}\n\n${verifyPrompt(input, draft)}\n\n${jsonInstruction(VERIFY_TOOL.input_schema)}`);
+    const verdict = verdictFromText(text);
+    if (!verdict) throw new Error(`${this.name}: no usable verdict JSON in output`);
+    return verdict;
   }
 }
 
@@ -525,7 +579,8 @@ const dedupLines = (xs: string[]): string[] => [...new Set(xs.map((s) => s.trim(
 /** Reconcile N worker drafts into one. DETERMINISTIC (no second LLM call): the richest
  *  draft is the spine; alternatives/consequences are unioned; confidence is AGREEMENT-
  *  WEIGHTED and CAPPED at 0.78 — below STRICT_MIN_CONFIDENCE (0.8) — so an ensemble
- *  auto-draft can never arm enforcement. */
+ *  auto-draft can never arm enforcement. `samples`/`agreement` ride along as advisory
+ *  telemetry for `hunch review` (not schema-bound). */
 export function mergeDecisionDrafts(drafts: DecisionDraft[]): DecisionDraft {
   const primary = [...drafts].sort((a, b) => b.confidence - a.confidence || b.decision.length - a.decision.length)[0]!;
   const agreement = meanAgreement(drafts);
@@ -537,17 +592,40 @@ export function mergeDecisionDrafts(drafts: DecisionDraft[]): DecisionDraft {
     alternatives_rejected: dedupLines(drafts.flatMap((d) => d.alternatives_rejected)),
     confidence: Math.min(0.78, 0.55 + 0.23 * agreement),
     source: "llm_draft+ensemble",
+    samples: drafts.length,
+    agreement: Math.round(agreement * 100) / 100,
   };
 }
 
+// Default self-consistency depth when only ONE subscription CLI is installed (the
+// common case): sample it this many times and reconcile, so single-CLI users get
+// ensemble-like robustness. Tunable per-call via `--samples`.
+const DEFAULT_SAMPLES = 2;
+
 export class EnsembleProvider implements SynthProvider {
   readonly name = "ensemble";
-  constructor(private readonly workers: SynthProvider[]) {}
+  private readonly samples: number;
+  constructor(private readonly workers: SynthProvider[], opts: { samples?: number } = {}) {
+    // Default 1 (single worker → passthrough); the self-consistency policy default
+    // lives at the selection layer (selectEnsemble). Coerce to a finite integer in a
+    // sane 1..5 band — a NaN here would make decisionTasks build ZERO tasks and throw,
+    // silently collapsing --deep to the deterministic fallback (callers also sanitize).
+    const n = Math.trunc(Number(opts.samples));
+    this.samples = Number.isFinite(n) ? Math.max(1, Math.min(5, n)) : 1;
+  }
   async available(): Promise<boolean> { return this.workers.length > 0; }
+
+  /** The draft tasks to fan out: one per distinct CLI when several are installed
+   *  (cross-model ensemble), else N self-consistency samples of the single CLI. */
+  private decisionTasks(input: CommitInput): Array<() => Promise<DecisionDraft>> {
+    if (this.workers.length >= 2) return this.workers.map((w) => () => w.draftDecision(input));
+    const w = this.workers[0]!;
+    return Array.from({ length: this.samples }, () => () => w.draftDecision(input));
+  }
 
   async draftDecision(input: CommitInput): Promise<DecisionDraft> {
     if (!this.workers.length) throw new Error("ensemble: no subscription CLI workers available");
-    const settled = await Promise.allSettled(this.workers.map((w) => w.draftDecision(input)));
+    const settled = await Promise.allSettled(this.decisionTasks(input).map((t) => t()));
     const drafts = settled.flatMap((s) => (s.status === "fulfilled" ? [s.value] : []));
     if (!drafts.length) throw new Error("ensemble: all workers failed");
     return drafts.length === 1 ? drafts[0]! : mergeDecisionDrafts(drafts);
@@ -563,11 +641,109 @@ export class EnsembleProvider implements SynthProvider {
 }
 
 /** Build the Deep-Synthesis provider, or null if no subscription CLI is available
- *  (the caller then falls back to the normal single-provider path). */
-export async function selectEnsemble(): Promise<EnsembleProvider | null> {
+ *  (the caller then falls back to the normal single-provider path). `samples` sets
+ *  the self-consistency depth for the single-CLI case. */
+export async function selectEnsemble(opts: { samples?: number } = {}): Promise<EnsembleProvider | null> {
   const workers = await selectWorkers();
-  return workers.length ? new EnsembleProvider(workers) : null;
+  // The self-consistency policy default (DEFAULT_SAMPLES) is applied HERE, not in the
+  // provider — so a single CLI under --deep is sampled N times, while direct
+  // construction stays passthrough. `--samples 1` opts back out.
+  return workers.length ? new EnsembleProvider(workers, { samples: opts.samples ?? DEFAULT_SAMPLES }) : null;
 }
+
+/** Pick a CLI provider to run the Critic pass (subscription-only, like the workers).
+ *  Returns null when no assistant CLI is installed — verification then no-ops and the
+ *  un-audited draft stands (graceful degradation; dec_18a81c8291). */
+export async function selectVerifier(): Promise<SynthProvider | null> {
+  const workers = await selectWorkers();
+  return workers[0] ?? null;
+}
+
+// ---- Verification (the Critic pass) ---------------------------------------
+// Audit a draft against the commit it came from, then PRUNE unsupported
+// alternatives/consequences and LOWER confidence on weak grounding. It may only
+// reduce trust, never raise it past the cap — auto-drafts stay advisory and a human
+// `hunch review --accept` remains the ONLY path to enforcement (dec_9a2f2fe72a).
+
+const VERIFY_SYSTEM = `You are a skeptical auditor for an Engineering Memory OS. You are given a
+synthesized decision record and the ACTUAL commit it was derived from. Your job is to
+flag everything the record asserts that the evidence does NOT support — be strict; when
+in doubt, flag it. Do not invent new content; only judge what is present.`;
+
+function verifyPrompt(input: CommitInput, draft: DecisionDraft): string {
+  const alts = draft.alternatives_rejected.length
+    ? draft.alternatives_rejected.map((a, i) => `  ${i + 1}. ${a}`).join("\n")
+    : "  (none)";
+  const cons = draft.consequences.length ? draft.consequences.map((c) => `  - ${c}`).join("\n") : "  (none)";
+  return [
+    `COMMIT SUBJECT: ${input.subject}`,
+    input.body ? `COMMIT BODY:\n${input.body}` : "",
+    input.analysis ? `STRUCTURED CHANGES: ${summarizeDiff(input.analysis)}` : "",
+    renderDiff(input),
+    `CANDIDATE DECISION UNDER AUDIT:`,
+    `  decision: ${draft.decision}`,
+    `  consequences:\n${cons}`,
+    `  alternatives_rejected:\n${alts}`,
+    `\nReturn grounded (0..1) and the VERBATIM alternatives_rejected / consequences the evidence does NOT support.`,
+  ].filter(Boolean).join("\n\n");
+}
+
+/** Map model text → VerifyVerdict, or null when nothing usable parses (→ the caller
+ *  keeps the un-audited draft). Tolerant of arrays-as-strings and missing fields. */
+export function verdictFromText(text: string): VerifyVerdict | null {
+  for (const obj of extractJsonObjects(text)) {
+    const hasGrounded = typeof obj.grounded === "number";
+    const ua = asStrArr(obj.unsupported_alternatives);
+    const uc = asStrArr(obj.unsupported_claims);
+    if (!hasGrounded && !ua.length && !uc.length) continue; // unrelated object
+    const grounded = typeof obj.grounded === "number" ? clamp01(obj.grounded) : 1;
+    return { grounded, unsupported_alternatives: ua, unsupported_claims: uc };
+  }
+  return null;
+}
+
+const norm = (s: string): string => s.trim().toLowerCase().replace(/\s+/g, " ");
+
+/** True if `flagged` names `entry` — exact normalized match, or a substantial
+ *  (≥8 char) containment either way, to absorb minor rewording by the auditor
+ *  without nuking unrelated entries. */
+function flaggedMatches(entry: string, flagged: string[]): boolean {
+  const e = norm(entry);
+  if (!e) return false;
+  return flagged.some((f) => {
+    const n = norm(f);
+    if (!n) return false;
+    if (n === e) return true;
+    return n.length >= 8 && e.length >= 8 && (e.includes(n) || n.includes(e));
+  });
+}
+
+/** Apply a verdict to a draft: drop unsupported alternatives (so they never scaffold
+ *  tripwires) and consequences, and scale confidence DOWN by grounding. Confidence is
+ *  clamped so it can only fall — verification never arms a stronger claim than the
+ *  draft already made (R2). Records `grounded` as advisory telemetry. */
+export function applyVerdict(draft: DecisionDraft, v: VerifyVerdict): DecisionDraft {
+  const alternatives_rejected = draft.alternatives_rejected.filter((a) => !flaggedMatches(a, v.unsupported_alternatives));
+  const consequences = draft.consequences.filter((c) => !flaggedMatches(c, v.unsupported_claims));
+  const grounded = clamp01(v.grounded);
+  // Penalize weak grounding; (0.5 + 0.5*grounded) ∈ [0.5,1], so this only lowers.
+  const confidence = Math.min(draft.confidence, Math.round(draft.confidence * (0.5 + 0.5 * grounded) * 100) / 100);
+  const source = draft.source.includes("verified") ? draft.source : `${draft.source}+verified`;
+  return { ...draft, alternatives_rejected, consequences, confidence, grounded, source };
+}
+
+/** Run the Critic pass and apply it, degrading to the un-audited draft on any failure
+ *  or when the provider can't verify (deterministic / no CLI). Never throws. */
+export async function verifyDecisionSafe(verifier: SynthProvider | null, input: CommitInput, draft: DecisionDraft): Promise<DecisionDraft> {
+  if (!verifier?.verifyDecision) return draft;
+  try {
+    return applyVerdict(draft, await verifier.verifyDecision(input, draft));
+  } catch {
+    return draft;
+  }
+}
+
+const clamp01 = (n: number): number => (Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : 1);
 
 // ---- prompt + parsing helpers --------------------------------------------
 

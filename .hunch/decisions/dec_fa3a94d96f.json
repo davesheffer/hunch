@@ -1,0 +1,52 @@
+{
+  "id": "dec_fa3a94d96f",
+  "title": "Inward orchestration for synthesis: Critic verify pass + single-CLI self-consistency, advisory-only",
+  "status": "proposed",
+  "context": "Synthesis already orchestrates assistant CLIs to BUILD the graph (the 'inward' direction). Rather than turn Hunch into a general-purpose harness (the 'outward' direction, which would break the client-agnostic posture and compete with Claude Code/Cursor/Codex), we invest in harness patterns pointed inward to make the graph more trustworthy and the `hunch review` queue sharper — the capture->review->enforce funnel where Hunch's value actually converts.",
+  "decision": "Added three things to the synthesis write path, all opt-in and subscription-only: (1) a Critic/verify pass (`--verify`, auto under `--deep`) — CliSynthProvider.verifyDecision audits a draft against its commit and prunes unsupported alternatives_rejected (BEFORE they scaffold tripwires) and consequences, and can only LOWER confidence via grounded-ness, never raise it; (2) self-consistency sampling — when only one assistant CLI is installed, `--deep` samples it N times (default 2 via selectEnsemble, override `--samples`) and reconciles via the existing mergeDecisionDrafts, bringing ensemble robustness to the single-CLI majority; (3) synthesis telemetry (provider/samples/agreement/grounded) parked in provenance.evidence as a `synth:` line and surfaced in `hunch review`.",
+  "consequences": [
+    "Verification only prunes/re-ranks/down-weights — it can never push an auto-draft to >=0.8 confidence, status accepted, or arm a tripwire (R2 preserved; dec_9a2f2fe72a). Human `hunch review --accept` stays the only path to enforcement.",
+    "All new LLM calls reuse CliSynthProvider.run()/runCli() which strip ANTHROPIC_API_KEY/ANTHROPIC_AUTH_TOKEN (con_2ce3f2a547 preserved).",
+    "Any verifier/ensemble failure degrades to the un-audited / single-provider / deterministic draft and never aborts syncCommit (dec_18a81c8291).",
+    "Telemetry rides in provenance.evidence, avoiding a schema change (con_947c578b2c).",
+    "A non-numeric --samples (NaN) was caught in adversarial review collapsing --deep to a deterministic draft; fixed with parseSamples() at the CLI boundary AND a Number.isFinite/Math.trunc guard in the EnsembleProvider clamp."
+  ],
+  "alternatives_rejected": [
+    "Make Hunch a general-purpose agent harness like the outward harnesses — rejected: breaks client-agnostic neutrality and competes with its own distribution channel.",
+    "Let verification RAISE confidence on well-grounded drafts — rejected: violates the rule that no automated step arms enforcement.",
+    "Default verification on for every commit (incl. the background post-commit hook) — rejected: silent extra subscription spend; kept opt-in for cost discipline (dec_e09ddd9c8a)."
+  ],
+  "rejected_tripwires": [],
+  "related_components": [
+    "cmp_ba75dfc94f"
+  ],
+  "related_files": [
+    "src/synthesis/provider.ts",
+    "src/synthesis/synthesize.ts",
+    "src/cli/index.ts",
+    "test/verify.test.ts",
+    "test/ensemble.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-06-23T20:21:32.988Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 0.95,
+    "evidence": [
+      "src/synthesis/provider.ts",
+      "src/synthesis/synthesize.ts",
+      "src/cli/index.ts",
+      "test/verify.test.ts",
+      "test/ensemble.test.ts"
+    ]
+  },
+  "date": "2026-06-23T20:21:32.988Z"
+}

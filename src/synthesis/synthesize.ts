@@ -10,7 +10,7 @@
 import type { HunchStore } from "../store/hunchStore.js";
 import { commitMeta, commitDiff, headSha } from "../extractors/git.js";
 import { analyzeDiff, type DiffAnalysis } from "../extractors/diff.js";
-import { selectProvider, selectEnsemble, DeterministicProvider, type SynthProvider, type DecisionDraft, type BugDraft, type CommitInput, type FailureInput } from "./provider.js";
+import { selectProvider, selectEnsemble, selectVerifier, verifyDecisionSafe, DeterministicProvider, type SynthProvider, type DecisionDraft, type BugDraft, type CommitInput, type FailureInput } from "./provider.js";
 import { decisionId, bugId, constraintId } from "../core/ids.js";
 import { pathMatchesGlob } from "../core/glob.js";
 import { draftTripwires, knownRepoDeps } from "./tripwires.js";
@@ -53,7 +53,7 @@ export async function syncCommit(
   store: HunchStore,
   root: string,
   sha?: string,
-  opts: { force?: boolean; private?: boolean; deep?: boolean } = {},
+  opts: { force?: boolean; private?: boolean; deep?: boolean; verify?: boolean; samples?: number } = {},
 ): Promise<SyncResult> {
   const target = sha || headSha(root);
   if (!target) return { status: "skipped", reason: "no HEAD commit" };
@@ -93,13 +93,29 @@ export async function syncCommit(
   // Deep Synthesis (--deep): ensemble every available subscription CLI and reconcile
   // their drafts (agreement-weighted, confidence capped below the strict gate). Falls
   // back to the normal single-provider path when no CLI is available. Opt-in only.
+  // --verify forces the LLM provider (auditing a deterministic draft is pointless) and,
+  // like --deep, runs the Critic pass below. Subscription-only throughout (con_2ce3f2a547).
+  const wantVerify = !!(opts.verify || opts.deep);
   const provider = opts.deep
-    ? (await selectEnsemble()) ?? await selectProvider()
-    : opts.force || isSignificant(meta, analysis, codeFiles)
+    ? (await selectEnsemble({ samples: opts.samples })) ?? await selectProvider()
+    : opts.force || opts.verify || isSignificant(meta, analysis, codeFiles)
       ? await selectProvider()
       : new DeterministicProvider();
   const input: CommitInput = { subject: meta.subject, body: meta.body, files: codeFiles, diff, analysis };
-  const draft = await draftDecisionSafe(provider, input);
+  let draft = await draftDecisionSafe(provider, input);
+  // The Critic pass: audit the draft against the commit, PRUNE unsupported alternatives
+  // (BEFORE they scaffold tripwires below) and consequences, and lower confidence on weak
+  // grounding. No-ops when no assistant CLI is available; never raises trust (dec_9a2f2fe72a).
+  if (wantVerify) draft = await verifyDecisionSafe(await selectVerifier(), input, draft);
+
+  // Advisory synthesis telemetry for `hunch review` — which provider ran, how many drafts
+  // were reconciled, their agreement, and the verifier's grounding. Rides in `evidence`
+  // (no schema change → respects forward-migration invariant con_947c578b2c).
+  const synthBits = [`provider=${provider.name}`];
+  if (draft.samples) synthBits.push(`samples=${draft.samples}`);
+  if (draft.agreement != null) synthBits.push(`agreement=${draft.agreement}`);
+  if (draft.grounded != null) synthBits.push(`grounded=${draft.grounded}`);
+  const synthEvidence = `synth:${synthBits.join(" ")}`;
 
   const components = store.json.loadAll("components");
   const relatedComponents = components
@@ -146,7 +162,7 @@ export async function syncCommit(
     provenance: {
       source: draft.source,
       confidence: draft.confidence,
-      evidence: [`commit:${meta.shortSha}`, ...codeFiles.slice(0, 8)],
+      evidence: [`commit:${meta.shortSha}`, synthEvidence, ...codeFiles.slice(0, 8)],
       last_verified: new Date().toISOString(), // when the Hunch last re-derived this
     },
     date: meta.date, // the commit date
