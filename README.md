@@ -87,11 +87,14 @@ afterward to pick up the `hunch_*` tools. Each teammate runs `hunch init` once; 
 > **never** a pay-per-token API key — and falls back to a deterministic heuristic if no CLI
 > is present. Details: [Synthesis & billing](https://hunch-pi.vercel.app/docs#synthesis).
 >
-> **Deep Synthesis** (`backfill --deep` / `sync --deep`): if you're signed into more than one
-> CLI, fan the commit out to *all* of them and reconcile the drafts into one — confidence is
-> **agreement-weighted** (capped below the enforcement threshold, so it stays advisory).
-> Subscription-only, never on the guard path, and it degrades to the single-provider path with
-> one CLI.
+> **Deep Synthesis** (`backfill --deep` / `sync --deep`): reconcile multiple independent drafts
+> into one — fan out across every signed-in CLI, or, with a single CLI, sample it N times for
+> **self-consistency** (`--samples`, default 2). Confidence is **agreement-weighted** (capped
+> below the enforcement threshold, so it stays advisory). Add `--verify` (auto under `--deep`)
+> for a **Critic pass** that audits each draft against its commit — pruning unsupported
+> rejected-alternatives before they become tripwires and down-weighting weak grounding; it only
+> ever *lowers* confidence, never arming enforcement. Subscription-only, never on the guard path;
+> degrades to the single-provider draft when no CLI is available.
 > On Windows, prefer `hunch init` over a global `claude mcp add`; if tools don't appear,
 > `hunch doctor` heals it ([why](https://hunch-pi.vercel.app/docs#windows)).
 
