@@ -19,12 +19,14 @@ test("applyVerdict: prunes unsupported alternatives so they never scaffold tripw
   const out = applyVerdict(DRAFT(), v);
   assert.deepEqual(out.alternatives_rejected, ["no cache at all"]);
   assert.match(out.source, /verified/);
+  assert.equal(out.pruned, 1, "the prune count is recorded for review telemetry");
 });
 
 test("applyVerdict: prunes unsupported consequences", () => {
   const v: VerifyVerdict = { grounded: 1, unsupported_alternatives: [], unsupported_claims: ["more memory use"] };
   const out = applyVerdict(DRAFT(), v);
   assert.deepEqual(out.consequences, ["faster reads"]);
+  assert.equal(out.pruned, 1);
 });
 
 test("applyVerdict: grounded=1 keeps confidence; weak grounding LOWERS it; never raises (R2)", () => {

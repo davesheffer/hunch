@@ -118,6 +118,7 @@ export async function syncCommit(
   // The Critic was requested (--verify/--deep) but didn't apply — surface WHY
   // (unavailable / failed) so a skipped audit is never mistaken for a clean one.
   else if (draft.verifyOutcome && draft.verifyOutcome !== "applied") synthBits.push(`verify=${draft.verifyOutcome}`);
+  if (draft.pruned) synthBits.push(`pruned=${draft.pruned}`); // the Critic's visible value
   const synthEvidence = `synth:${synthBits.join(" ")}`;
 
   const components = store.json.loadAll("components");

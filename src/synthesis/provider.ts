@@ -118,6 +118,8 @@ export interface DecisionDraft {
   samples?: number;
   agreement?: number;
   grounded?: number;
+  // How many unsupported alternatives + consequences the Critic pruned (its visible value).
+  pruned?: number;
   // Outcome of the Critic pass when it was REQUESTED (--verify/--deep): "applied"
   // when the audit ran, "unavailable" when no CLI could verify, "failed" when the
   // call errored after a retry. Lets telemetry distinguish "verified, nothing to
@@ -730,11 +732,14 @@ function flaggedMatches(entry: string, flagged: string[]): boolean {
 export function applyVerdict(draft: DecisionDraft, v: VerifyVerdict): DecisionDraft {
   const alternatives_rejected = draft.alternatives_rejected.filter((a) => !flaggedMatches(a, v.unsupported_alternatives));
   const consequences = draft.consequences.filter((c) => !flaggedMatches(c, v.unsupported_claims));
+  // The Critic's visible value: how many unsupported items it removed (alternatives
+  // never become tripwires; consequences never mislead). Surfaced in `hunch review`.
+  const pruned = (draft.alternatives_rejected.length - alternatives_rejected.length) + (draft.consequences.length - consequences.length);
   const grounded = clamp01(v.grounded);
   // Penalize weak grounding; (0.5 + 0.5*grounded) ∈ [0.5,1], so this only lowers.
   const confidence = Math.min(draft.confidence, Math.round(draft.confidence * (0.5 + 0.5 * grounded) * 100) / 100);
   const source = draft.source.includes("verified") ? draft.source : `${draft.source}+verified`;
-  return { ...draft, alternatives_rejected, consequences, confidence, grounded, source, verifyOutcome: "applied" };
+  return { ...draft, alternatives_rejected, consequences, confidence, grounded, source, verifyOutcome: "applied", pruned };
 }
 
 /** Run the Critic pass and apply it, degrading to the un-audited draft when the

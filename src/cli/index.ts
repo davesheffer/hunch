@@ -31,6 +31,7 @@ import { parseTestReport } from "../extractors/testreport.js";
 import { selectProvider } from "../synthesis/provider.js";
 import { isGitRepo, headSha, logSince, lastChangeDate, stagedFiles, commitFiles, asOfDate, stagedDiff, commitDiff, rangeFiles, rangeDiff, revExists, commitAndPushHunch } from "../extractors/git.js";
 import { renderText, renderMarkdown, reportFailsStrict, type CheckReport } from "../core/checkreport.js";
+import { partitionReview, READY_MIN_GROUNDED, type ReviewItem } from "../core/reviewqueue.js";
 import { installPostCommitHook, installPreCommitHook } from "../integrations/hooks.js";
 import { installMergeDriver } from "../integrations/mergeDriver.js";
 import { ensureGitignore } from "../integrations/gitignore.js";
@@ -44,7 +45,7 @@ import { readConfig, writeConfig, FIRMNESS_LEVELS, isFirmness, type Firmness } f
 import { blockingInScope, vetoInScope, proposedEditLines } from "../core/hookpolicy.js";
 import { draftTripwires, knownRepoDeps } from "../synthesis/tripwires.js";
 import { constraintId } from "../core/ids.js";
-import type { Constraint } from "../core/types.js";
+import type { Constraint, Decision } from "../core/types.js";
 import { readManifest, writeManifest, SCHEMA_VERSION } from "../core/migrate.js";
 import { mergeHunchJson } from "../store/merge.js";
 import { planCompaction } from "../store/compact.js";
@@ -927,59 +928,91 @@ program
   });
 
 // ---- review (curate loop) -------------------------------------------------
+/** Promote a draft to accepted/human-confirmed and CONFIRM its drafted tripwires —
+ *  this is how the Veto Guard goes advisory → blocking ("confirm rides hunch review";
+ *  dec_a466655539). Returns the new source tag and how many tripwires can now actually
+ *  block (non-empty forbids) so bulk enforcement is never silent. */
+function acceptDecision(store: HunchStore, d: Decision): { source: string; armed: number } {
+  const source = d.provenance.source.includes("llm_draft") ? "llm_draft+human_confirmed" : "human_confirmed";
+  const now = new Date().toISOString();
+  const confirmedTws = (d.rejected_tripwires ?? []).map((tw) => ({
+    ...tw,
+    provenance: {
+      ...tw.provenance,
+      source: tw.provenance.source.includes("human_confirmed")
+        ? tw.provenance.source
+        : tw.provenance.source.includes("llm_draft")
+          ? "llm_draft+human_confirmed"
+          : "human_confirmed",
+      last_verified: now,
+    },
+  }));
+  store.json.put("decisions", { ...d, status: "accepted", rejected_tripwires: confirmedTws, provenance: { ...d.provenance, source, confidence: 0.95, last_verified: now } });
+  const armed = confirmedTws.filter((tw) => tw.forbids.deps.length || tw.forbids.symbols.length || tw.forbids.patterns.length).length;
+  return { source, armed };
+}
+
+/** Print one draft for the review listing: id/status/source/confidence, the Critic's
+ *  prune count (its visible value), the title, a decision snippet, and the raw synth line. */
+function printReviewItem(it: ReviewItem): void {
+  const { d, synth } = it;
+  const pruneNote = synth.pruned ? `  · Critic pruned ${synth.pruned} unsupported` : "";
+  const synthLine = synth.raw ? `\n      ↳ ${synth.raw}` : "";
+  console.log(`  ${d.id} [${d.status}, ${d.provenance.source} ${d.provenance.confidence}]${pruneNote}\n      ${d.title}\n      ${d.decision.slice(0, 120)}${synthLine}`);
+}
+
 program
   .command("review")
-  .description("Triage low-confidence drafts: list, accept (promote), or reject.")
-  .option("--accept <id>", "promote a decision to accepted/human-confirmed")
+  .description("Triage drafts: segmented list, accept/reject one, or batch-accept Critic-verified drafts.")
+  .option("--accept <id>", "promote a decision to accepted/human-confirmed (confirms its tripwires)")
   .option("--reject <id>", "delete a draft decision")
-  .action((opts: { accept?: string; reject?: string }) => {
+  .option("--accept-verified", "batch-accept every Critic-verified, well-grounded draft (>= --min-grounded)")
+  .option("--min-grounded <n>", "grounded-ness threshold for the ready group / --accept-verified", String(READY_MIN_GROUNDED))
+  .action((opts: { accept?: string; reject?: string; acceptVerified?: boolean; minGrounded?: string }) => {
     const { store, root } = storeFor();
+    const minGrounded = Number.isFinite(Number(opts.minGrounded)) ? Number(opts.minGrounded) : READY_MIN_GROUNDED;
     if (opts.accept) {
       const d = store.json.get("decisions", opts.accept);
-      if (!d) return fail(`decision ${opts.accept} not found`);
-      const source = d.provenance.source.includes("llm_draft") ? "llm_draft+human_confirmed" : "human_confirmed";
-      const now = new Date().toISOString();
-      // Accepting a decision also CONFIRMS its drafted tripwires — this is how the
-      // Veto Guard goes from advisory to blocking ("confirm rides hunch review").
-      const tws = d.rejected_tripwires ?? [];
-      const confirmedTws = tws.map((tw) => ({
-        ...tw,
-        provenance: {
-          ...tw.provenance,
-          source: tw.provenance.source.includes("human_confirmed")
-            ? tw.provenance.source
-            : tw.provenance.source.includes("llm_draft")
-              ? "llm_draft+human_confirmed"
-              : "human_confirmed",
-          last_verified: now,
-        },
-      }));
-      store.json.put("decisions", { ...d, status: "accepted", rejected_tripwires: confirmedTws, provenance: { ...d.provenance, source, confidence: 0.95, last_verified: now } });
+      if (!d) { store.close(); return fail(`decision ${opts.accept} not found`); }
+      const { source, armed } = acceptDecision(store, d);
       store.reindex();
       updateClaudeMd(root, store);
-      const twNote = confirmedTws.length ? `, ${confirmedTws.length} tripwire(s) now blocking` : "";
-      console.log(`✓ accepted ${opts.accept} (now ${source}, confidence 0.95${twNote})`);
+      console.log(`✓ accepted ${opts.accept} (now ${source}, confidence 0.95${armed ? `, ${armed} tripwire(s) now blocking` : ""})`);
     } else if (opts.reject) {
       const ok2 = store.json.delete("decisions", opts.reject);
       store.reindex();
       console.log(ok2 ? `✓ rejected and removed ${opts.reject}` : `decision ${opts.reject} not found`);
+    } else if (opts.acceptVerified) {
+      // Batch path: only Critic-verified, well-grounded drafts qualify — still the
+      // human-driven accept gate (the operator runs this), just over a safe subset.
+      const proposed = store.json.loadAll("decisions").filter((d) => d.status === "proposed");
+      const { ready } = partitionReview(proposed, minGrounded);
+      if (!ready.length) {
+        console.log(`✓ No Critic-verified drafts at grounded ≥ ${minGrounded} to batch-accept.`);
+      } else {
+        let armedTotal = 0;
+        for (const it of ready) armedTotal += acceptDecision(store, it.d).armed;
+        store.reindex();
+        updateClaudeMd(root, store);
+        console.log(`✓ accepted ${ready.length} verified draft(s); ${armedTotal} tripwire(s) now blocking.`);
+        for (const it of ready) console.log(`   ${it.d.id}  grounded=${it.synth.grounded ?? "?"}  ${it.d.title}`);
+      }
     } else {
-      const drafts = store.json.loadAll("decisions")
-        .filter((d) => d.status === "proposed" || d.provenance.confidence < 0.6)
-        .sort((a, b) => a.provenance.confidence - b.provenance.confidence);
-      if (!drafts.length) {
+      const drafts = store.json.loadAll("decisions").filter((d) => d.status === "proposed" || d.provenance.confidence < 0.6);
+      const { ready, scrutiny } = partitionReview(drafts, minGrounded);
+      if (!ready.length && !scrutiny.length) {
         console.log("✓ No low-confidence drafts to review.");
       } else {
-        console.log(`${drafts.length} draft(s) awaiting review (lowest confidence first):\n`);
-        for (const d of drafts) {
-          // Surface synthesis telemetry (provider / reconciliation breadth / verifier
-          // grounding) parked in evidence, so the reviewer sees WHY the confidence is
-          // what it is and can confirm or reject at a glance.
-          const synth = (d.provenance.evidence ?? []).find((e) => e.startsWith("synth:"));
-          const synthLine = synth ? `\n      ↳ ${synth.slice("synth:".length).trim()}` : "";
-          console.log(`  ${d.id} [${d.status}, ${d.provenance.source} ${d.provenance.confidence}]\n      ${d.title}\n      ${d.decision.slice(0, 120)}${synthLine}`);
+        if (ready.length) {
+          console.log(`✓ ${ready.length} ready to confirm — Critic-verified, grounded ≥ ${minGrounded} (best first):\n`);
+          for (const it of ready) printReviewItem(it);
+          console.log(`\n   Batch-confirm all: hunch review --accept-verified\n`);
         }
-        console.log(`\nAccept:  hunch review --accept <id>\nReject:  hunch review --reject <id>`);
+        if (scrutiny.length) {
+          console.log(`⚠ ${scrutiny.length} need scrutiny — unverified / low-grounded (lowest confidence first):\n`);
+          for (const it of scrutiny) printReviewItem(it);
+        }
+        console.log(`\nAccept: hunch review --accept <id>   Reject: hunch review --reject <id>`);
       }
     }
     store.close();
