@@ -192,6 +192,14 @@ async function mapPool<T>(items: T[], limit: number, fn: (item: T, index: number
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, () => worker()));
 }
 
+/** Parse a `--samples` flag into a finite positive count, or undefined so the ensemble
+ *  uses its default depth. A typo'd value (`--samples abc`) must NOT become NaN — that
+ *  would silently collapse --deep to the deterministic fallback. */
+function parseSamples(v: string | undefined): number | undefined {
+  const n = Number(v);
+  return v != null && Number.isFinite(n) && n > 0 ? Math.trunc(n) : undefined;
+}
+
 program
   .command("backfill")
   .description("Replay git history to seed decisions (cold-start fix).")
@@ -199,7 +207,9 @@ program
   .option("--max <n>", "max commits to process", "40")
   .option("--concurrency <n>", "commits to synthesize in parallel (the LLM call is the bottleneck)", "4")
   .option("--deep", "Deep Synthesis: ensemble every available subscription CLI per commit and reconcile their drafts (slower, higher-quality; advisory)")
-  .action(async (opts: { since: string; max: string; concurrency: string; deep?: boolean }) => {
+  .option("--verify", "Critic pass: audit each draft against its commit, prune unsupported alternatives/consequences, down-weight weak grounding (extra subscription call; advisory)")
+  .option("--samples <n>", "self-consistency depth when only one CLI is installed: sample it n times per commit and reconcile (default 2 under --deep)")
+  .action(async (opts: { since: string; max: string; concurrency: string; deep?: boolean; verify?: boolean; samples?: string }) => {
     const { store, root } = storeFor();
     if (!isGitRepo(root)) return fail("backfill needs a git repo");
     store.json.ensureDirs();
@@ -211,11 +221,13 @@ program
     // each commit drafts independently and writes its OWN decision file atomically,
     // and the store's JS-side reads/writes run synchronously between awaits (single
     // thread) — only the LLM spawns overlap. reindex() runs once, after the pool.
+    const samples = parseSamples(opts.samples);
     await mapPool(commits, conc, async (sha) => {
-      const r = await syncCommit(store, root, sha, { deep: opts.deep });
+      const r = await syncCommit(store, root, sha, { deep: opts.deep, verify: opts.verify, samples });
       if (r.status === "written") {
         written++;
-        if (r.provider === "claude-cli") llm++; else heuristic++;
+        // Any non-deterministic provider (claude/codex/cursor/ensemble) is an LLM draft.
+        if (r.provider && r.provider !== "deterministic") llm++; else heuristic++;
         process.stdout.write(`  ✓ ${sha.slice(0, 8)} ${r.decision?.title.slice(0, 64) ?? ""}\n`);
       } else skipped++;
     });
@@ -238,12 +250,14 @@ program
   .option("--private", "write the synthesized decision into the private overlay (HUNCH_PRIVATE_DIR), not the public repo — for a repo whose memory is kept private")
   .option("--commit", "after a capture, also git add+commit+push the repo the decision landed in (opt-in; best-effort) — the private store under --private, else this repo")
   .option("--deep", "Deep Synthesis: ensemble every available subscription CLI and reconcile their drafts (agreement-weighted, advisory). Slower; subscription-only")
-  .action(async (sha: string | undefined, opts: { fromHook?: boolean; quiet?: boolean; force?: boolean; private?: boolean; commit?: boolean; deep?: boolean }) => {
+  .option("--verify", "Critic pass: audit the draft against its commit, prune unsupported alternatives/consequences, down-weight weak grounding (extra subscription call; advisory)")
+  .option("--samples <n>", "self-consistency depth when only one CLI is installed: sample it n times and reconcile (default 2 under --deep)")
+  .action(async (sha: string | undefined, opts: { fromHook?: boolean; quiet?: boolean; force?: boolean; private?: boolean; commit?: boolean; deep?: boolean; verify?: boolean; samples?: string }) => {
     const { store, root } = storeFor();
     if (!isGitRepo(root)) return opts.quiet ? undefined : fail("sync needs a git repo");
     if (opts.private && !store.hasPrivate) { store.close(); return opts.quiet ? undefined : fail("--private needs HUNCH_PRIVATE_DIR set to a private store"); }
     store.json.ensureDirs();
-    const r = await syncCommit(store, root, sha ?? headSha(root), { force: opts.force, private: opts.private, deep: opts.deep });
+    const r = await syncCommit(store, root, sha ?? headSha(root), { force: opts.force, private: opts.private, deep: opts.deep, verify: opts.verify, samples: parseSamples(opts.samples) });
     if (r.status === "written") {
       store.reindex();
       // Don't rewrite CLAUDE.md from the hook — it would dirty the working tree
@@ -958,7 +972,12 @@ program
       } else {
         console.log(`${drafts.length} draft(s) awaiting review (lowest confidence first):\n`);
         for (const d of drafts) {
-          console.log(`  ${d.id} [${d.status}, ${d.provenance.source} ${d.provenance.confidence}]\n      ${d.title}\n      ${d.decision.slice(0, 120)}`);
+          // Surface synthesis telemetry (provider / reconciliation breadth / verifier
+          // grounding) parked in evidence, so the reviewer sees WHY the confidence is
+          // what it is and can confirm or reject at a glance.
+          const synth = (d.provenance.evidence ?? []).find((e) => e.startsWith("synth:"));
+          const synthLine = synth ? `\n      ↳ ${synth.slice("synth:".length).trim()}` : "";
+          console.log(`  ${d.id} [${d.status}, ${d.provenance.source} ${d.provenance.confidence}]\n      ${d.title}\n      ${d.decision.slice(0, 120)}${synthLine}`);
         }
         console.log(`\nAccept:  hunch review --accept <id>\nReject:  hunch review --reject <id>`);
       }
