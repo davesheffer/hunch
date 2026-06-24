@@ -23,19 +23,11 @@ dist/
 # npm auth: references ${NPM_TOKEN} env var, but never commit in case a real token is pasted.
 .npmrc
 
-# Hunch: the SQLite index is a DERIVED artifact, rebuilt by `hunch index`.
-# The JSON source of truth under .hunch/ IS committed.
-.hunch/hunch.sqlite
-.hunch/hunch.sqlite-*
-.hunch/*.sqlite
-.hunch/*.sqlite-journal
-.hunch/*.sqlite-wal
-.hunch/*.sqlite-shm
-# Atomic-write temp files (normally consumed by rename; ignored in case one leaks).
-.hunch/**/*.tmp*
-# Hunch: a local PRIVATE overlay store (HUNCH_PRIVATE_DIR) for sensitive memory —
-# kept OUT of this (public) repo. Point it at a separate private repo, or use this
-# conventional in-repo path which is ignored here.
+# Hunch: this repo's engineering memory is kept PRIVATE in a separate overlay
+# (the .hunch-private/ store, pointed at by .hunch/local.json). The ENTIRE .hunch/
+# tree — JSON graph (decisions/bugs/constraints/components/symbols/edges), the
+# derived SQLite index, and the local.json pointer — is gitignored. This public
+# repo is CODE-ONLY; no engineering memory is published here.
+.hunch/
+# The PRIVATE overlay store itself (HUNCH_PRIVATE_DIR / `hunch private`), never committed.
 .hunch-private/
-# Per-machine private-overlay pointer written by `hunch private` (never committed).
-.hunch/local.json
