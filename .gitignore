@@ -31,3 +31,12 @@ dist/
 .hunch/
 # The PRIVATE overlay store itself (HUNCH_PRIVATE_DIR / `hunch private`), never committed.
 .hunch-private/
+# >>> hunch (derived runtime index — regenerable from .hunch/*.json) >>>
+.hunch/*.sqlite
+.hunch/*.sqlite-shm
+.hunch/*.sqlite-wal
+.hunch/*.sqlite-journal
+.hunch/**/*.tmp*
+.hunch/local.json
+.hunch-private/
+# <<< hunch <<<
