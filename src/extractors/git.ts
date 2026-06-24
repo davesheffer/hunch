@@ -218,6 +218,13 @@ export function rangeFiles(base: string, cwd: string, head = "HEAD"): string[] {
   return out ? out.split("\n").filter(Boolean) : [];
 }
 
+/** Commit subjects on `head` since `base` (2-dot: commits added by the task),
+ *  oldest-first, for distilling a runbook's ordered steps (roadmap #5). */
+export function rangeSubjects(base: string, cwd: string, head = "HEAD", max = 50): string[] {
+  const out = gitSafe(["log", "--reverse", `-n${max}`, "--format=%s", `${base}..${head}`], cwd);
+  return out ? out.split("\n").filter(Boolean) : [];
+}
+
 /** The PR's unified diff vs `base` (3-dot), for the Regression Guard's structural
  *  analysis. Same noise-exclusion + truncation budget as commit/staged diffs. */
 export function rangeDiff(base: string, cwd: string, head = "HEAD", maxBytes = 60_000): string {

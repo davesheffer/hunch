@@ -189,8 +189,27 @@ export const ConstraintSchema = z.object({
 });
 export type Constraint = z.infer<typeof ConstraintSchema>;
 
-/** The six entity collections, keyed by their on-disk directory name. */
-export const ENTITY_KINDS = ["components", "edges", "symbols", "decisions", "bugs", "constraints"] as const;
+/** A reusable "how" for a recurring task — trajectory/runbook memory (roadmap #5).
+ *  ADVISORY retrieval context only; never enters any block path. Distilled from a
+ *  commit range, surfaced through the same FTS+graph retrieval as every record. */
+export const RunbookSchema = z.object({
+  id: z.string().describe("rb_*"),
+  task: z.string().describe("the recurring task this answers"),
+  trigger: z.array(z.string()).default([]).describe("phrases/intents that should surface it"),
+  steps: z.array(z.string()).default([]).describe("ordered procedure"),
+  files: z.array(z.string()).default([]).describe("canonical files the task touches (drift-checkable)"),
+  gotchas: z.array(z.string()).default([]),
+  outcome: z.string().default("").describe("what 'done' looks like"),
+  source_range: z.string().nullable().default(null).describe("the commit range it was distilled from"),
+  valid_from: z.string().optional(),
+  valid_to: z.string().nullable().default(null),
+  provenance: ProvenanceSchema,
+  date: z.string(),
+});
+export type Runbook = z.infer<typeof RunbookSchema>;
+
+/** The entity collections, keyed by their on-disk directory name. */
+export const ENTITY_KINDS = ["components", "edges", "symbols", "decisions", "bugs", "constraints", "runbooks"] as const;
 export type EntityKind = (typeof ENTITY_KINDS)[number];
 
 export const SCHEMAS = {
@@ -200,6 +219,7 @@ export const SCHEMAS = {
   decisions: DecisionSchema,
   bugs: BugSchema,
   constraints: ConstraintSchema,
+  runbooks: RunbookSchema,
 } as const;
 
 export type EntityFor = {
@@ -209,6 +229,7 @@ export type EntityFor = {
   decisions: Decision;
   bugs: Bug;
   constraints: Constraint;
+  runbooks: Runbook;
 };
 
 /** Default provenance helper for deterministic (extracted) records. */

@@ -226,6 +226,14 @@ export class HunchStore {
         fts(c.id, "constraints", c.statement, `${c.rationale} ${c.scope.join(" ")}`);
       }
       counts.constraints = cons.length;
+
+      // Runbooks (roadmap #5): advisory "how" records — no dedicated SQL table, they
+      // ride the unified `search` FTS so they retrieve through the same FTS+graph path.
+      const runbooks = this.recs("runbooks");
+      for (const r of runbooks) {
+        fts(r.id, "runbooks", r.task, `${r.trigger.join(" ")} ${r.steps.join(" ")} ${r.gotchas.join(" ")} ${r.outcome} ${r.files.join(" ")}`);
+      }
+      counts.runbooks = runbooks.length;
       void j;
     });
     tx();

@@ -40,6 +40,12 @@ export function bugId(seed: string): string {
   return "bug_" + shortHash(seed);
 }
 
+/** Runbook id seeded by its task; trim + lowercase so re-capturing the same task
+ *  is idempotent rather than minting a duplicate. */
+export function runbookId(seed: string): string {
+  return "rb_" + shortHash(seed.trim().toLowerCase());
+}
+
 /** Constraint id seeded by its statement. Trim + lowercase so trivial
  *  whitespace/case variants of the same rule collapse to one id (idempotent
  *  re-capture), instead of minting a duplicate constraint. */

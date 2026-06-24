@@ -29,7 +29,9 @@ import { indexRepo } from "../extractors/indexer.js";
 import { syncCommit, recordFailure, captureTestRun } from "../synthesis/synthesize.js";
 import { parseTestReport } from "../extractors/testreport.js";
 import { selectProvider } from "../synthesis/provider.js";
-import { isGitRepo, headSha, logSince, lastChangeDate, stagedFiles, commitFiles, asOfDate, stagedDiff, commitDiff, rangeFiles, rangeDiff, revExists, commitAndPushHunch, gitUntrackCached } from "../extractors/git.js";
+import { isGitRepo, headSha, logSince, lastChangeDate, stagedFiles, commitFiles, asOfDate, stagedDiff, commitDiff, rangeFiles, rangeDiff, rangeSubjects, revExists, commitAndPushHunch, gitUntrackCached } from "../extractors/git.js";
+import { runbookId } from "../core/ids.js";
+import type { Runbook } from "../core/types.js";
 import { renderText, renderMarkdown, reportFailsStrict, type CheckReport } from "../core/checkreport.js";
 import { partitionReview, READY_MIN_GROUNDED, type ReviewItem } from "../core/reviewqueue.js";
 import { installPostCommitHook, installPreCommitHook } from "../integrations/hooks.js";
@@ -443,6 +445,45 @@ program
       console.log(`\n  ${misses.length} case(s) with no expected hit — curate or tune:`);
       for (const m of misses.slice(0, 10)) console.log(`    · "${m.query}"`);
     }
+    store.close();
+  });
+
+// ---- runbook (distill reusable "how" from a commit range; roadmap #5) ------
+program
+  .command("runbook")
+  .description("Distill a reusable runbook (the 'how' of a recurring task) from a commit range. Advisory; refine before relying on it.")
+  .argument("<range>", "commit range: <base>..<head>, or <base> (→ <base>..HEAD)")
+  .requiredOption("--task <task>", "the recurring task this runbook answers")
+  .option("--private", "write into the private overlay (HUNCH_PRIVATE_DIR), not the committed repo")
+  .action((range: string, opts: { task: string; private?: boolean }) => {
+    const { store, root } = storeFor();
+    if (opts.private && !store.hasPrivate) { store.close(); return fail("--private needs HUNCH_PRIVATE_DIR set to a private store"); }
+    const [base, head = "HEAD"] = range.split("..");
+    if (!base || !revExists(base, root)) { store.close(); return fail(`base ref "${base ?? ""}" not found (range: ${range})`); }
+    const steps = rangeSubjects(base, root, head);
+    const files = rangeFiles(base, root, head);
+    if (!steps.length && !files.length) { store.close(); return fail(`no commits or changes in range ${range}`); }
+    const now = new Date().toISOString();
+    const rec: Runbook = {
+      id: runbookId(opts.task),
+      task: opts.task,
+      trigger: [opts.task],
+      steps, // already oldest-first (chronological procedure)
+      files,
+      gotchas: [],
+      outcome: "",
+      source_range: range,
+      valid_from: now,
+      valid_to: null,
+      // Deterministic draft (commit subjects + changed files); advisory, low-confidence.
+      // Refine steps/gotchas by hand. LLM enrichment is a later tier.
+      provenance: { source: "extracted", confidence: 0.5, evidence: [range] },
+      date: now,
+    };
+    if (opts.private) store.putPrivate("runbooks", rec); else store.json.put("runbooks", rec);
+    store.reindex();
+    console.log(`✓ runbook ${rec.id} — "${rec.task}"  (${rec.steps.length} steps, ${rec.files.length} files)${opts.private ? " [private overlay]" : ""}`);
+    console.log(dim("  advisory, deterministic draft — refine the steps/gotchas; surfaced via `hunch query` and MCP."));
     store.close();
   });
 
