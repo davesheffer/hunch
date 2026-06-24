@@ -43,6 +43,7 @@ import { healClaudeConfigCaseSplit } from "../integrations/claudeConfig.js";
 import { formatContext } from "../core/format.js";
 import { readConfig, writeConfig, FIRMNESS_LEVELS, isFirmness, type Firmness } from "../core/config.js";
 import { blockingInScope, vetoInScope, proposedEditLines } from "../core/hookpolicy.js";
+import { loadGoldenSet, evaluateGraphLift } from "../eval/harness.js";
 import { draftTripwires, knownRepoDeps } from "../synthesis/tripwires.js";
 import { constraintId } from "../core/ids.js";
 import type { Constraint, Decision } from "../core/types.js";
@@ -401,6 +402,45 @@ program
     } else {
       console.log(`Top matches for "${q}"${how}:\n`);
       for (const h of hits) console.log(`• [${h.kind}] ${h.ref} — ${h.title}\n    ${h.snippet}`);
+    }
+    store.close();
+  });
+
+// ---- eval (retrieval quality; measures the graph-stream lift) --------------
+program
+  .command("eval")
+  .description("Measure retrieval quality (Recall@k, MRR) over a golden set, and A/B the dependency-graph stream.")
+  .requiredOption("--file <path>", "golden set JSON: [{ query, expected: [refs], note? }]")
+  .option("--k <n>", "top-k cutoff", "10")
+  .option("--semantic", "also blend the semantic stream (requires `hunch embed`; default is deterministic FTS + graph)")
+  .action(async (opts: { file: string; k: string; semantic?: boolean }) => {
+    const { store } = storeFor();
+    store.reindex(); // reflect any out-of-band JSON edits before scoring
+    let cases;
+    try {
+      cases = loadGoldenSet(readFileSync(opts.file, "utf8"));
+    } catch (e) {
+      store.close();
+      return fail(`could not load golden set: ${(e as Error).message}`);
+    }
+    if (!cases.length) { store.close(); return fail("golden set is empty"); }
+    const k = Math.max(1, parseInt(opts.k, 10) || 10);
+    // Default is deterministic (FTS + graph, no model). --semantic only adds the
+    // semantic leg when embeddings actually exist; otherwise it's still FTS + graph.
+    const embedder = opts.semantic ? await selectEmbedder() : undefined;
+    const lift = await evaluateGraphLift(store, cases, { k, embedder });
+    const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
+    const dpt = (x: number) => `${x >= 0 ? "+" : ""}${(x * 100).toFixed(1)}pt`;
+    const dnum = (x: number) => `${x >= 0 ? "+" : ""}${x.toFixed(3)}`;
+    console.log(`Eval over ${cases.length} case(s), k=${k}${opts.semantic ? " (semantic + graph + FTS)" : " (FTS + graph)"}\n`);
+    console.log(`                Recall@${k}    MRR      hit-rate`);
+    console.log(`  graph OFF     ${pct(lift.off.recallAtK).padStart(7)}    ${lift.off.mrr.toFixed(3)}    ${pct(lift.off.hitRate)}`);
+    console.log(`  graph ON      ${pct(lift.on.recallAtK).padStart(7)}    ${lift.on.mrr.toFixed(3)}    ${pct(lift.on.hitRate)}`);
+    console.log(`  graph LIFT    ${dpt(lift.recallDelta).padStart(7)}    ${dnum(lift.mrrDelta)}`);
+    const misses = lift.on.perCase.filter((c) => c.found === 0);
+    if (misses.length) {
+      console.log(`\n  ${misses.length} case(s) with no expected hit — curate or tune:`);
+      for (const m of misses.slice(0, 10)) console.log(`    · "${m.query}"`);
     }
     store.close();
   });

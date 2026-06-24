@@ -350,11 +350,14 @@ export class HunchStore {
    *  sync FTS (zero added latency) when there's no embedder or no vectors yet, so
    *  the lean install and fallback regressions are unaffected. Pass
    *  `embedder: null` to FORCE FTS-only without auto-selecting. */
-  async hybridSearch(query: string, limit = 12, opts: { embedder?: Embedder | null } = {}): Promise<SearchHit[]> {
+  async hybridSearch(query: string, limit = 12, opts: { embedder?: Embedder | null; graphWeight?: number } = {}): Promise<SearchHit[]> {
     // Explicit `embedder: null` forces pure FTS-only (no semantic, no graph) — the
     // documented escape hatch and the lean-fallback regression guard.
     if (opts.embedder === null) return this.search(query, limit);
     const embedder = opts.embedder !== undefined ? opts.embedder : await selectEmbedder();
+    // graphWeight override lets the eval harness A/B the graph stream (0 = off) on one
+    // store without re-loading the module const; defaults to the configured weight.
+    const gw = opts.graphWeight ?? RRF_W_GRAPH;
 
     const fts = this.search(query, Math.max(limit, 50));
     let sem: SearchHit[] = [];
@@ -369,9 +372,9 @@ export class HunchStore {
     // The graph stream is model-free, so it contributes even on a lean (no-embeddings)
     // install. With neither semantic nor graph signal, return pure FTS so the
     // zero-fusion-overhead fast path is preserved.
-    const graph = this.graphExpand([...fts, ...sem], 50);
+    const graph = this.graphExpand([...fts, ...sem], 50, gw);
     if (!sem.length && !graph.length) return fts.slice(0, limit);
-    return this.rrfFuse(fts, sem, graph, limit);
+    return this.rrfFuse(fts, sem, graph, limit, gw);
   }
 
   /** Brute-force exact cosine top-n over stored vectors for one model. Vectors are
@@ -411,7 +414,7 @@ export class HunchStore {
    *  weight keeps exact symbol/path matches from being displaced by paraphrase or
    *  neighbor hits. An empty list contributes nothing, so 2-stream behavior is exactly
    *  preserved when graph (or sem) is absent. */
-  private rrfFuse(fts: SearchHit[], sem: SearchHit[], graph: SearchHit[], limit: number): SearchHit[] {
+  private rrfFuse(fts: SearchHit[], sem: SearchHit[], graph: SearchHit[], limit: number, graphWeight = RRF_W_GRAPH): SearchHit[] {
     const acc = new Map<string, { hit: SearchHit; score: number }>();
     const add = (list: SearchHit[], weight: number) =>
       list.forEach((hit, i) => {
@@ -421,7 +424,7 @@ export class HunchStore {
       });
     add(fts, RRF_W_FTS);
     add(sem, RRF_W_SEM);
-    add(graph, RRF_W_GRAPH);
+    add(graph, graphWeight);
     return [...acc.values()].sort((a, b) => b.score - a.score).slice(0, limit).map((e) => ({ ...e.hit, score: e.score }));
   }
 
@@ -432,8 +435,8 @@ export class HunchStore {
    *  neighbor accrues GAMMA-decayed support per linking seed (one pulled in by several
    *  top seeds ranks higher); seeds themselves are excluded, so this only ADDS context.
    *  Deterministic, model-free (runs on a lean install too), one indexed query per seed. */
-  private graphExpand(seeds: SearchHit[], n: number): SearchHit[] {
-    if (RRF_W_GRAPH <= 0) return [];
+  private graphExpand(seeds: SearchHit[], n: number, weight = RRF_W_GRAPH): SearchHit[] {
+    if (weight <= 0) return [];
     const symSeeds = seeds.filter((h) => h.ref.startsWith("sym_"));
     if (!symSeeds.length) return [];
     const seen = new Set(seeds.map((h) => h.ref)); // never re-surface a seed
