@@ -44,6 +44,7 @@ import { formatContext } from "../core/format.js";
 import { readConfig, writeConfig, FIRMNESS_LEVELS, isFirmness, type Firmness } from "../core/config.js";
 import { blockingInScope, vetoInScope, proposedEditLines } from "../core/hookpolicy.js";
 import { loadGoldenSet, evaluateGraphLift } from "../eval/harness.js";
+import { computeDrift } from "../core/drift.js";
 import { draftTripwires, knownRepoDeps } from "../synthesis/tripwires.js";
 import { constraintId } from "../core/ids.js";
 import type { Constraint, Decision } from "../core/types.js";
@@ -1234,6 +1235,17 @@ program
     }
     // Windows: detect/heal the Claude Code ~/.claude.json drive-letter case-split
     // that silently hides the hunch_* MCP tools. No-op (silent) off Windows.
+    // Memory drift: deterministic, advisory smoke detector for memory that has
+    // fallen out of sync with the code/docs (dead file refs, dangling supersedes,
+    // docs still marked "proposed"). Never blocks; never auto-fixes.
+    const drift = computeDrift(store, root);
+    if (drift.findings.length) {
+      console.log(`drift:      ⚠ ${drift.findings.length} finding(s) — memory may be out of sync with the code:`);
+      for (const f of drift.findings.slice(0, 20)) console.log(`              · [${f.kind}] ${f.id} — ${f.detail}`);
+      if (drift.findings.length > 20) console.log(dim(`              … and ${drift.findings.length - 20} more`));
+    } else {
+      console.log(`drift:      ✓ no stale refs, dangling supersedes, or stale "proposed" docs`);
+    }
     reportClaudeConfigHeal();
     store.close();
   });
