@@ -37,6 +37,7 @@ import { renderText, renderMarkdown, reportFailsStrict, type CheckReport } from 
 import { partitionReview, READY_MIN_GROUNDED, type ReviewItem } from "../core/reviewqueue.js";
 import { installPostCommitHook, installPreCommitHook } from "../integrations/hooks.js";
 import { ensureSharedOverlayPointer } from "../integrations/worktree.js";
+import { flushPrivate } from "../integrations/sync.js";
 import { installMergeDriver } from "../integrations/mergeDriver.js";
 import { ensureGitignore, ignoreHunchMemory, HUNCH_MEMORY_DIRS } from "../integrations/gitignore.js";
 import { writeCiWorkflow } from "../integrations/ciAction.js";
@@ -314,7 +315,7 @@ program
   .description("Enable a PRIVATE memory overlay — sensitive decisions/bugs/constraints kept in a separate location, unioned into local queries, never committed here. Writes a gitignored .hunch/local.json so it's auto-detected (no env var needed).")
   .option("--repo <url>", "clone a private git repo to use as the store (into ./.hunch-private)")
   .option("--no-hook", "don't switch the post-commit hook to private sync")
-  .option("--auto-commit", "opt-in: also git add+commit+push the private repo after each capture (post-commit hook AND MCP private writes)")
+  .option("--no-auto-commit", "DON'T auto commit+push the overlay after each capture (default: ON — fully automated two-way sync, never push by hand)")
   .option("--sync", "flush the configured private store now (git add+commit+push) — catches records made via MCP between commits")
   .option("--migrate", "ONE-TIME: move this repo's EXISTING public .hunch memory into the overlay, then make the public repo code-only — untrack + gitignore the memory tree and regenerate grounding so no memory is published here")
   .action((dir: string | undefined, opts: { repo?: string; hook: boolean; autoCommit?: boolean; sync?: boolean; migrate?: boolean }) => {
@@ -343,6 +344,12 @@ program
     }
     // 2) create the layout (decisions/, manifest, …) so it's queryable immediately
     new JsonStore(hunchPathsForDir(hunchDir)).ensureDirs();
+    const inv = resolveInvocation();
+    // Install the structured merge driver IN the overlay repo so concurrent captures from
+    // multiple machines/worktrees merge by RECORD ID (no manual conflict resolution) when the
+    // two-way auto-sync pulls before pushing. The overlay repo root is the parent of its .hunch.
+    const overlayRoot = hunchPathsForDir(hunchDir).root;
+    if (isGitRepo(overlayRoot)) installMergeDriver(overlayRoot, inv.shell);
     // 3) record the path in a GITIGNORED local config — auto-detected, no env var, and
     //    the MCP server picks it up too. Atomic write (con_902759b3dc) since it's under .hunch/.
     mkdirSync(paths.hunch, { recursive: true }); // tolerate a repo where `hunch init` hasn't run yet
@@ -364,7 +371,6 @@ program
     // 4) route post-commit synthesis to the overlay (local hook, never committed)
     let hookNote = "";
     if (opts.hook && isGitRepo(root)) {
-      const inv = resolveInvocation();
       const h = installPostCommitHook(root, inv.shell, { private: true, commit: opts.autoCommit });
       hookNote = `  ✓ post-commit hook ${h.action} — captured decisions route here${opts.autoCommit ? " (auto-commit+push on)" : ""}\n`;
     }
@@ -634,6 +640,7 @@ program
       }
     }
     store.reindex();
+    if (opts.private && (dec || con)) flushPrivate(store, `hunch: capture ${dec + con} inline intent(s)`);
     if (!intents.length) console.log("No `hunch-why:` / `hunch-rule:` comments found.");
     else console.log(`✓ captured ${dec} decision(s) + ${con} constraint(s) from inline comments${opts.private ? " [private overlay]" : ""}`);
     store.close();

@@ -14,7 +14,7 @@ import { HunchStore } from "../store/hunchStore.js";
 import { selectEmbedder } from "../store/embedder.js";
 import { decisionId } from "../core/ids.js";
 import { buildCorrectionConstraint } from "../core/correction.js";
-import { revParse, asOfDate, revExists, lastChangeDate, rangeFiles, rangeDiff, commitFiles, commitDiff, stagedFiles, stagedDiff, commitAndPushHunch } from "../extractors/git.js";
+import { revParse, asOfDate, revExists, lastChangeDate, rangeFiles, rangeDiff, commitFiles, commitDiff, stagedFiles, stagedDiff, commitAndPushHunch, pullHunch } from "../extractors/git.js";
 import { formatContext } from "../core/format.js";
 import type { Runbook } from "../core/types.js";
 import { compareCandidates } from "../core/compare.js";
@@ -59,6 +59,12 @@ function resolveFiles(store: HunchStore, target: string): string[] {
 
 export function buildServer(root: string): McpServer {
   const store = new HunchStore(hunchPaths(root));
+  // Two-way sync (read side): pull the private overlay's remote on startup, so THIS machine's
+  // session sees memory captured on other machines/worktrees before we index — making the
+  // overlay genuinely one source of truth. Best-effort, leaves a clean tree, never blocks start.
+  if (store.privateDir) {
+    try { pullHunch(store.privateDir); } catch { /* offline / no remote — proceed with local */ }
+  }
   // Ensure the SQLite index reflects the JSON source of truth on startup.
   try {
     store.reindex();

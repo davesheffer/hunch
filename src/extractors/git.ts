@@ -55,7 +55,40 @@ export function commitAndPushHunch(hunchDir: string, message: string): void {
     };
     run(["add", "--", "."]);
     run(["commit", "-m", message]);
-    run(["push"]);
+    // Two-way sync: MERGE the remote BEFORE pushing, so a push can never be rejected
+    // non-fast-forward (the cause of memory piling up unpushed across machines). The .hunch
+    // merge driver resolves same-record conflicts by id; non-overlapping records merge cleanly
+    // without it. On an unresolved conflict / offline, mergeRemote aborts to a clean tree and we
+    // skip the push — the local commit stays and syncs on the next write (never lost).
+    if (mergeRemote(hunchDir, env)) run(["push"]);
+  } finally {
+    try { rmSync(lock, { recursive: true, force: true }); } catch { /* released best-effort */ }
+  }
+}
+
+/** Merge the overlay's remote into the local branch (pull, no rebase), leaving a CLEAN tree
+ *  whether it succeeds or not. Returns true when the branch is safe to push (merged, or there's
+ *  no upstream to merge), false when a conflict was aborted (caller skips the push and retries
+ *  on the next write). Never throws. */
+function mergeRemote(hunchDir: string, env: NodeJS.ProcessEnv): boolean {
+  const tryGit = (args: string[]): boolean => {
+    try { execFileSync("git", ["-C", hunchDir, ...args], { stdio: "ignore", env }); return true; }
+    catch { return false; }
+  };
+  if (!tryGit(["rev-parse", "--abbrev-ref", "@{upstream}"])) return true; // no remote/offline → push no-ops
+  if (tryGit(["pull", "--no-edit", "--no-rebase", "--autostash"])) return true;
+  tryGit(["merge", "--abort"]); // conflict the driver couldn't resolve → restore a clean tree
+  return false;
+}
+
+/** Best-effort READ-side sync: merge the overlay's remote into the local branch (e.g. on MCP
+ *  server start) so this machine/session sees other machines' memory. Never throws; leaves a
+ *  clean tree. Serialized with the commit lock so it can't race a concurrent flush. */
+export function pullHunch(hunchDir: string): void {
+  const lock = join(hunchDir, ".hunch-commit.lock");
+  if (!acquireCommitLock(lock)) return;
+  try {
+    mergeRemote(hunchDir, { ...process.env, HUNCH_SYNC: "1" });
   } finally {
     try { rmSync(lock, { recursive: true, force: true }); } catch { /* released best-effort */ }
   }
