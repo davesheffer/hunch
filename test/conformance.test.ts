@@ -55,6 +55,43 @@ test("conformance proves code SATISFIES intent and catches direct-vs-transitive 
   } finally { cleanup(); }
 });
 
+test("Architectural Conformance: a controller bypassing the service layer to reach the DB flips satisfied→violated (the wedge)", () => {
+  function layered(apiBody: string) {
+    const root = mkdtempSync(join(tmpdir(), "hunch-arch-"));
+    mkdirSync(join(root, "src/api"), { recursive: true });
+    mkdirSync(join(root, "src/services"), { recursive: true });
+    mkdirSync(join(root, "src/db"), { recursive: true });
+    writeFileSync(join(root, "src/db/client.ts"), "export function dbQuery(sql){ return sql; }\n");
+    writeFileSync(join(root, "src/services/orders.ts"), 'import { dbQuery } from "../db/client.js";\nexport function fetchOrders(u){ return dbQuery(u); }\n');
+    writeFileSync(join(root, "src/api/orders.ts"), apiBody);
+    const store = new HunchStore(hunchPaths(root));
+    store.json.ensureDirs();
+    indexRepo(store, root, { churn: false });
+    store.reindex();
+    return { store, cleanup: () => { store.close(); rmSync(root, { recursive: true, force: true }); } };
+  }
+  // "controllers must not reach the DB directly" — a layering rule no pattern-matcher can express.
+  const INV = [{ assert: "not-calls", subject: "listOrders", object: "dbQuery", transitive: false }];
+
+  // through the service layer → invariant holds
+  const ok = layered('import { fetchOrders } from "../services/orders.js";\nexport function listOrders(u){ return fetchOrders(u); }\n');
+  try {
+    ok.store.json.put("decisions", DEC("dec_layer", INV));
+    ok.store.reindex();
+    assert.equal(checkConformance(ok.store)[0]!.satisfied, true, "going through the service: architecture holds");
+  } finally { ok.cleanup(); }
+
+  // an AI "optimization" hits the DB directly (a legitimate internal import — passes any linter) → VIOLATED
+  const bad = layered('import { dbQuery } from "../db/client.js";\nexport function listOrders(u){ return dbQuery(u); }\n');
+  try {
+    bad.store.json.put("decisions", DEC("dec_layer", INV));
+    bad.store.reindex();
+    const r = checkConformance(bad.store);
+    assert.equal(r[0]!.satisfied, false, "controller bypassed the service to reach the DB directly — architecture VIOLATED");
+    assert.match(r[0]!.detail, /VIOLATED/);
+  } finally { bad.cleanup(); }
+});
+
 test("conformance catches DRIFT: code that stopped honoring the intent flips to violated", () => {
   // charge no longer calls verifySession — the recorded intent is now false of the code.
   const { store, cleanup } = indexedRepo("export function charge(t){ return t; }\n");

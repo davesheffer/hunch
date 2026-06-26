@@ -1,9 +1,9 @@
 {
   "name": "@davesheffer/hunch",
-  "version": "0.37.0",
+  "version": "0.38.0",
   "license": "Apache-2.0",
   "author": "Dave Sheffer <dave.sheffer1@gmail.com>",
-  "description": "Hunch — an Engineering Memory OS: a persistent, git-native graph of the decisions, bugs, and rules behind your code, served to any MCP coding assistant (Claude Code, Cursor, Copilot, Windsurf, Codex).",
+  "description": "Architectural Conformance for AI-generated code: a git-native graph that deterministically blocks AI changes which break your architecture — the semantic invariants (layering, must-reach, dependency direction) pattern-SAST can't express — grounded in the decisions and bugs behind each rule, across any MCP assistant (Claude Code, Cursor, Copilot, Windsurf, Codex).",
   "homepage": "https://hunch-pi.vercel.app",
   "repository": {
     "type": "git",

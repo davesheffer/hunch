@@ -1,4 +1,4 @@
-# 🧠 Hunch — Engineering Memory OS
+# 🧠 Hunch — Architectural Conformance for AI code
 
 [![npm version](https://img.shields.io/npm/v/@davesheffer/hunch?color=2742ff&label=npm)](https://www.npmjs.com/package/@davesheffer/hunch)
 [![npm downloads](https://img.shields.io/npm/dw/@davesheffer/hunch?color=2742ff)](https://www.npmjs.com/package/@davesheffer/hunch)
@@ -6,19 +6,28 @@
 [![node](https://img.shields.io/badge/node-%E2%89%A520-2742ff)](https://nodejs.org)
 [![MCP](https://img.shields.io/badge/MCP-native-2742ff)](https://modelcontextprotocol.io)
 
-> Git stores *what* the code is. **Hunch** stores ***why*** it is that way — a persistent,
-> git-native reasoning graph over your codebase, surfaced to Claude Code at reasoning time
-> so the AI stops re-deriving understanding and stops undoing intentional design.
-
-### ⚡ 60-second start
+> **A linter checks whether code matches a *pattern*. Hunch checks whether code still matches your *architecture*** —
+> and blocks the AI change that breaks it, citing the decision and the past bug it would reopen.
+> The semantic invariants pattern-SAST can't express (layering, must-reach, dependency direction),
+> enforced deterministically over a **git-native** graph of *why* — across any MCP assistant.
 
 ```bash
 npm i -g @davesheffer/hunch
-cd your-repo && hunch init && hunch backfill --since 90d
-hunch why src/some/file.ts     # …or just ask Claude Code: "why is X built this way?"
+cd your-repo && hunch init
+
+# record an architectural invariant — the kind Semgrep/SonarQube structurally can't express
+hunch conform --add "controllers never reach the DB directly — go through the service layer" \
+  --assert not-calls --subject listOrders --object dbQuery --why "the Mar-2025 N+1 meltdown"
+
+hunch conform --strict     # ✅/⛔ deterministic gate — wire into CI; runs on every AI change
 ```
 
-<sub>Works with **Claude Code, Cursor, Copilot, Windsurf & Google Antigravity** from one shared graph.</sub>
+> An AI "optimizes" the controller to query the DB directly. **Semgrep: green. SonarQube: green.**
+> (it's a legitimate internal import — no bad pattern.) **Hunch: ⛔ BLOCKED** — *"listOrders now reaches
+> dbQuery — VIOLATED · why: the Mar-2025 N+1 meltdown · prevents recurrence of bug_0317."* See
+> [`demo/architectural-conformance.sh`](demo/architectural-conformance.sh).
+
+<sub>Works with **Claude Code, Cursor, Copilot, Windsurf & Google Antigravity** from one shared, git-native graph.</sub>
 
 ### 📚 **[Read the full documentation → hunch-pi.vercel.app/docs](https://hunch-pi.vercel.app/docs)**
 

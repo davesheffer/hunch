@@ -684,32 +684,73 @@ program
     store.close();
   });
 
-// ---- conform (intent-conformance: does code still satisfy the recorded why) ----
+// ---- conform (Architectural Conformance: does the code still satisfy recorded intent) ----
 program
   .command("conform")
-  .description("Intent-conformance: prove the code still SATISFIES each in-force decision's recorded intent (deterministic, over the graph). Surfaces where code drifted from the why — even with no diff in scope.")
-  .option("--strict", "exit non-zero if any intent is violated")
-  .action((opts: { strict?: boolean }) => {
-    const { store } = storeFor();
+  .description("Architectural Conformance: prove the code still SATISFIES each recorded architectural invariant (deterministic, over the graph) — the semantic rules pattern-SAST can't express: layering, must-reach, dependency direction. Catches AI changes that pass a linter but break the architecture.")
+  .option("--strict", "exit non-zero if any invariant is violated (use as a CI gate)")
+  .option("--add <title>", "record an architectural invariant instead of checking, e.g. --add \"controllers never touch the DB directly\"")
+  .option("--assert <kind>", "calls | not-calls | imports | not-imports | exists  (with --add)")
+  .option("--subject <sym>", "the symbol/file:name the invariant is about  (with --add)")
+  .option("--object <sym>", "the symbol it must reach (calls/imports) or must NOT reach (not-calls/not-imports)  (with --add)")
+  .option("--transitive", "evaluate reachability transitively, not just direct edges  (with --add)")
+  .option("--why <text>", "why it holds — the rationale, surfaced in the block receipt  (with --add)")
+  .option("--bug <id>", "the bug id this invariant prevents recurring — surfaced in the receipt  (with --add)")
+  .action((opts: { strict?: boolean; add?: string; assert?: string; subject?: string; object?: string; transitive?: boolean; why?: string; bug?: string }) => {
+    const { store, root } = storeFor();
+    if (opts.add) {
+      const ASSERTS = ["calls", "not-calls", "imports", "not-imports", "exists"];
+      if (!opts.assert || !ASSERTS.includes(opts.assert)) return fail(`--assert must be one of: ${ASSERTS.join(", ")}`);
+      if (!opts.subject) return fail("--subject is required with --add");
+      if (opts.assert !== "exists" && !opts.object) return fail(`--object is required for --assert ${opts.assert}`);
+      store.json.ensureDirs();
+      const now = new Date().toISOString();
+      const arrow = opts.assert.startsWith("not-") ? "↛" : "→";
+      const d = store.json.put("decisions", {
+        id: decisionId(`conform:${opts.add}:${opts.subject}:${opts.object ?? ""}`),
+        title: opts.add,
+        status: "accepted",
+        context: opts.why ?? "",
+        decision: `Architectural invariant: ${opts.subject} ${opts.assert}${opts.object ? ` ${opts.object}` : ""}.`,
+        caused_by_bug: opts.bug ?? null,
+        conformance: [{ assert: opts.assert, subject: opts.subject, object: opts.assert === "exists" ? undefined : opts.object, transitive: !!opts.transitive }],
+        provenance: { source: "human_confirmed", confidence: 1, evidence: [], last_verified: now },
+        date: now,
+        valid_from: now,
+      } as never);
+      store.reindex();
+      refreshExistingGrounding(root, store); // the invariant reaches every assistant's grounding
+      console.log(`✓ recorded architectural invariant ${d.id}: "${opts.add}"`);
+      console.log(`  ${opts.subject} ${arrow} ${opts.object ?? ""}${opts.transitive ? " (transitive)" : ""}   [${opts.assert}]`);
+      console.log(`  enforce on every change:  hunch conform --strict   (wire into CI alongside hunch ci)`);
+      store.close();
+      return;
+    }
     store.reindex();
     const results = checkConformance(store);
     if (!results.length) {
-      console.log("No conformance predicates recorded yet.");
-      console.log(dim("  Add a `conformance` predicate to a decision (e.g. { assert: \"calls\", subject: \"pay\", object: \"verifySession\" }) to prove the code honors its intent."));
+      console.log("No architectural invariants recorded yet.");
+      console.log(dim('  Record one:  hunch conform --add "controllers never touch the DB directly" --assert not-calls --subject OrdersController --object dbQuery'));
       store.close();
       return;
     }
     const violations = results.filter((r) => !r.satisfied);
-    console.log(`Intent-conformance: ${results.length - violations.length}/${results.length} satisfied\n`);
+    console.log(`Architectural conformance: ${results.length - violations.length}/${results.length} invariants satisfied\n`);
     for (const r of results) {
       console.log(`  ${r.satisfied ? "✅" : "⛔"} ${r.decision} — "${r.title}"`);
       console.log(`     ${r.assert} ${r.subject}${r.object ? ` → ${r.object}` : ""}: ${r.detail}`);
+      if (!r.satisfied) {
+        // The receipt — WHY this invariant exists, which pattern-SAST can't tell you.
+        const dec = store.json.get("decisions", r.decision);
+        if (dec?.context) console.log(`       ↳ why: ${dec.context}`);
+        if (dec?.caused_by_bug) console.log(`       ↳ prevents recurrence of: ${dec.caused_by_bug}`);
+      }
     }
     if (violations.length) {
-      console.log(`\n⛔ ${violations.length} intent(s) the code no longer satisfies.`);
+      console.log(`\n⛔ ${violations.length} architectural invariant(s) the code no longer satisfies — an AI change drifted from the recorded architecture.`);
       if (opts.strict) process.exitCode = 1;
     } else {
-      console.log(`\n✅ the code satisfies every recorded intent.`);
+      console.log(`\n✅ the code satisfies every recorded architectural invariant.`);
     }
     store.close();
   });
