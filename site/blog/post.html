@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>The Hunch Blog</title>
+<meta name="description" content="Architectural Conformance for AI code — notes, benchmarks and arguments." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,300..500&family=Inter:wght@300;400;450;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --paper:#f5f3ee; --paper-2:#efece4; --surface:#fffdf9;
+    --ink:#16150f; --ink-soft:#34322a; --muted:#747166; --muted-2:#8a877b;
+    --line:rgba(22,21,15,.10); --line-2:rgba(22,21,15,.06);
+    --accent:#2742ff; --accent-deep:#1a2fcf; --warn:#ff543d; --ok:#1f9d68;
+    --shadow:0 1px 2px rgba(22,21,15,.04), 0 12px 40px -16px rgba(22,21,15,.18);
+    --r:18px; --maxw:1180px; --ease:cubic-bezier(.22,1,.36,1);
+    --serif:"Fraunces",Georgia,serif; --sans:"Inter",system-ui,sans-serif; --mono:"JetBrains Mono",ui-monospace,monospace;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);line-height:1.7;-webkit-font-smoothing:antialiased}
+  a{color:inherit;text-decoration:none}
+  ::selection{background:var(--accent);color:#fff}
+  .wrap{max-width:var(--maxw);margin:0 auto;padding:0 28px}
+
+  .nav{position:sticky;top:0;z-index:50;backdrop-filter:saturate(1.4) blur(14px);background:rgba(245,243,238,.72);border-bottom:1px solid var(--line)}
+  .nav-row{display:flex;align-items:center;justify-content:space-between;height:66px}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:600;letter-spacing:-.02em;font-size:18px}
+  .brand .mark{display:inline-grid;place-items:center;width:30px;height:30px;border-radius:9px;background:var(--surface);border:1px solid var(--line);box-shadow:var(--shadow);transition:transform .3s var(--ease)}
+  .brand:hover .mark{transform:rotate(-8deg) scale(1.06)}
+  .nav-links{display:flex;gap:26px;font-size:14.5px;color:var(--ink-soft)}
+  .nav-links a{opacity:.82}.nav-links a:hover{opacity:1;color:var(--accent)}.nav-links a.active{color:var(--accent);opacity:1}
+  .btn{display:inline-flex;align-items:center;gap:8px;padding:9px 16px;border-radius:11px;font-weight:500;font-size:14px;background:var(--accent);color:#fff;transition:transform .2s var(--ease),box-shadow .2s}
+  .btn:hover{transform:translateY(-1px);box-shadow:0 10px 24px -10px rgba(39,66,255,.6)}
+  @media(max-width:760px){.nav-links{display:none}}
+
+  .article{max-width:720px;margin:0 auto;padding:0 28px}
+  .back{display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);font-size:12.5px;letter-spacing:.04em;color:var(--muted-2);margin:46px 0 26px}
+  .back:hover{color:var(--accent)}
+  .tag{display:inline-block;font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--accent-deep);background:rgba(39,66,255,.06);border:1px solid rgba(39,66,255,.14);padding:3px 9px;border-radius:7px}
+  .meta{font-family:var(--mono);font-size:12.5px;color:var(--muted-2)}
+  .head{border-bottom:1px solid var(--line);padding-bottom:30px;margin-bottom:36px}
+  .head .row{display:flex;align-items:center;gap:12px;margin-bottom:20px}
+  h1.title{font-family:var(--serif);font-weight:420;font-size:clamp(30px,4.4vw,46px);line-height:1.07;letter-spacing:-.02em;margin:0}
+  .dek{color:var(--muted-2);font-size:18px;line-height:1.55;margin:18px 0 0;font-family:var(--serif);font-style:italic;font-weight:340}
+
+  /* prose */
+  .prose{font-size:17.5px;color:var(--ink-soft)}
+  .prose p{margin:0 0 20px}
+  .prose .lead{font-size:20px;line-height:1.6;color:var(--ink);margin-bottom:26px}
+  .prose h2{font-family:var(--serif);font-weight:460;font-size:27px;line-height:1.15;letter-spacing:-.01em;color:var(--ink);margin:42px 0 16px}
+  .prose ul{margin:0 0 22px;padding-left:22px}.prose li{margin:0 0 9px}
+  .prose a{color:var(--accent);border-bottom:1px solid rgba(39,66,255,.3)}.prose a:hover{border-color:var(--accent)}
+  .prose strong{color:var(--ink);font-weight:600}
+  .prose code{font-family:var(--mono);font-size:.86em;background:rgba(22,21,15,.05);border:1px solid var(--line-2);padding:1.5px 6px;border-radius:6px}
+  .prose pre{background:#15172a;color:#e6e8ff;border-radius:14px;padding:20px 22px;overflow:auto;margin:0 0 24px;box-shadow:var(--shadow);font-size:13.5px;line-height:1.65}
+  .prose pre code{background:none;border:none;padding:0;font-size:inherit;color:inherit}
+  .prose blockquote{margin:0 0 24px;padding:6px 0 6px 22px;border-left:3px solid var(--accent);font-family:var(--serif);font-style:italic;font-size:20px;line-height:1.5;color:var(--ink)}
+  .prose table{width:100%;border-collapse:collapse;margin:0 0 26px;font-size:15px}
+  .prose th,.prose td{text-align:left;padding:11px 14px;border-bottom:1px solid var(--line)}
+  .prose th{font-family:var(--mono);font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted-2);font-weight:500}
+  .prose tbody tr:hover{background:rgba(39,66,255,.03)}
+  .prose td b{color:var(--ink)}
+  .prose .muted{color:var(--muted-2);font-size:15px;border-top:1px solid var(--line);padding-top:20px;margin-top:34px}
+
+  .cta{max-width:720px;margin:48px auto 0;padding:0 28px}
+  .cta-box{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:30px 32px;box-shadow:var(--shadow);display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap}
+  .cta-box h4{font-family:var(--serif);font-weight:440;font-size:21px;margin:0 0 6px}
+  .cta-box p{margin:0;color:var(--muted-2);font-size:14.5px}
+  .cta-box code{font-family:var(--mono);font-size:13px;background:rgba(22,21,15,.05);padding:2px 7px;border-radius:6px}
+
+  .nextprev{max-width:720px;margin:40px auto 0;padding:0 28px;display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .np{display:block;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px 20px;transition:transform .2s var(--ease),border-color .2s}
+  .np:hover{transform:translateY(-2px);border-color:rgba(39,66,255,.3)}
+  .np .lbl{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted-2)}
+  .np .t{font-family:var(--serif);font-size:16px;line-height:1.2;margin-top:6px;color:var(--ink)}
+  .np.next{text-align:right}
+  @media(max-width:680px){.nextprev{grid-template-columns:1fr}.np.next{text-align:left}}
+
+  footer{border-top:1px solid var(--line);margin-top:64px;padding:38px 0;color:var(--muted-2);font-size:14px}
+  footer .wrap{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px}
+  footer a{color:var(--accent)}
+  .notfound{max-width:720px;margin:90px auto;text-align:center;padding:0 28px}
+</style>
+</head>
+<body>
+  <header class="nav">
+    <div class="wrap nav-row">
+      <a class="brand" href="../index.html"><span class="mark">🧠</span><span>Hunch</span></a>
+      <nav class="nav-links">
+        <a href="../index.html#how">How it works</a>
+        <a href="../index.html#features">Features</a>
+        <a href="../docs.html">Docs</a>
+        <a href="index.html" class="active">Blog</a>
+        <a href="../index.html#start">Get started</a>
+      </nav>
+      <a class="btn" href="../index.html#start">Get started</a>
+    </div>
+  </header>
+
+  <main id="main"></main>
+
+  <footer>
+    <div class="wrap">
+      <span>© Hunch — Architectural Conformance for AI code.</span>
+      <span><a href="index.html">← All posts</a> · <a href="https://github.com/davesheffer/hunch" target="_blank" rel="noopener">GitHub</a></span>
+    </div>
+  </footer>
+
+  <script src="posts.js"></script>
+  <script>
+    const fmt = (d) => new Date(d + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    const slug = new URLSearchParams(location.search).get("slug");
+    const posts = (window.POSTS || []).slice().sort((a, b) => b.date.localeCompare(a.date));
+    const i = posts.findIndex((p) => p.slug === slug);
+    const p = posts[i];
+    const main = document.getElementById("main");
+
+    if (!p) {
+      main.innerHTML = '<div class="notfound"><h1 class="title">Not found</h1><p style="color:var(--muted-2)">That post does not exist. <a href="index.html" style="color:var(--accent)">Back to the blog &rarr;</a></p></div>';
+    } else {
+      document.title = p.title + " — The Hunch Blog";
+      const prev = posts[i + 1]; // older
+      const next = posts[i - 1]; // newer
+      main.innerHTML = `
+        <article class="article">
+          <a class="back" href="index.html">← The Hunch Blog</a>
+          <header class="head">
+            <div class="row"><span class="tag">${p.tag}</span><span class="meta">${fmt(p.date)} · ${p.read}</span></div>
+            <h1 class="title">${p.title}</h1>
+            <p class="dek">${p.dek}</p>
+          </header>
+          <div class="prose">${p.body}</div>
+        </article>
+        <div class="cta"><div class="cta-box">
+          <div><h4>Hold your architecture, on every AI change.</h4><p>One invariant, one gate, no model in it. <code>npm i -g @davesheffer/hunch</code></p></div>
+          <a class="btn" href="../index.html#start">Get started</a>
+        </div></div>
+        <nav class="nextprev">
+          ${prev ? `<a class="np prev" href="post.html?slug=${prev.slug}"><div class="lbl">← Older</div><div class="t">${prev.title}</div></a>` : '<span></span>'}
+          ${next ? `<a class="np next" href="post.html?slug=${next.slug}"><div class="lbl">Newer →</div><div class="t">${next.title}</div></a>` : '<span></span>'}
+        </nav>`;
+    }
+  </script>
+</body>
+</html>
