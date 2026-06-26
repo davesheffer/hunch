@@ -409,7 +409,8 @@ program
   .description("Create a git worktree already wired into Hunch — it shares this repo's memory (the private overlay), with zero per-worktree setup.")
   .option("-b, --branch <name>", "create the worktree on a NEW branch")
   .option("--no-share", "don't register the overlay at the git common dir (the worktree won't see private memory)")
-  .action((path: string, opts: { branch?: string; share: boolean }) => {
+  .option("--no-index", "don't build the new worktree's code graph (skip if you'll index later)")
+  .action((path: string, opts: { branch?: string; share: boolean; index: boolean }) => {
     const root = findRoot();
     if (!isGitRepo(root)) return fail("`hunch worktree` needs a git repo");
     const dest = resolve(root, path);
@@ -433,9 +434,28 @@ program
     } else {
       shareNote = `  · no private overlay configured — run \`hunch private\` to share memory across worktrees`;
     }
+    // 3) build the new worktree's CODE GRAPH (symbols/edges → blast-radius / dependents).
+    //    Indexed IN-PROCESS (uses THIS install's tree-sitter, so the worktree needs no
+    //    node_modules) and ONLY when the graph isn't already committed in the checkout —
+    //    re-parsing a normal repo would just dirty its tracked .hunch/*.json. Writes the
+    //    derived (gitignored) index, never the working tree.
+    let indexNote = "";
+    if (opts.index !== false) {
+      const wstore = new HunchStore(hunchPaths(dest));
+      wstore.json.ensureDirs();
+      if (wstore.json.loadAll("symbols").length === 0) {
+        const res = indexRepo(wstore, dest);
+        wstore.reindex();
+        indexNote = `\n  ✓ indexed ${res.files} file(s) → ${res.symbols} symbols — blast-radius ready (code graph isn't committed here)`;
+      } else {
+        wstore.reindex(); // committed graph already in the checkout → just build the derived SQLite
+        indexNote = `\n  ✓ code graph present in the checkout — blast-radius ready`;
+      }
+      wstore.close();
+    }
     console.log(
       `✓ worktree created → ${dest}${opts.branch ? ` (new branch ${opts.branch})` : ""}\n` +
-      `${shareNote}\n` +
+      `${shareNote}${indexNote}\n` +
       `  hooks + MCP server are shared (worktree-aware) — open your assistant in the new worktree to start.\n` +
       `  (needs \`hunch\` installed globally; a worktree has no node_modules of its own)`,
     );
