@@ -13,6 +13,7 @@
 import type { HunchStore } from "../store/hunchStore.js";
 import { verdict } from "../core/checkreport.js";
 import { pathMatchesGlob } from "../core/glob.js";
+import { effectiveForbids } from "../core/constraintmatch.js";
 
 /** "catch" = should be surfaced (block OR warn); block/warn/pass = an exact expected verdict. */
 export type Expect = "block" | "warn" | "pass" | "catch";
@@ -84,7 +85,17 @@ export function generateGuardCases(store: HunchStore): GuardCase[] {
     .recs("constraints")
     .filter((c) => c.status === "active" && c.severity === "blocking" && c.scope.length && isVouched(c.provenance?.source));
   for (const c of blocking) {
-    cases.push({ name: `CATCH · ${c.statement.slice(0, 56)}`, files: [pathForGlob(c.scope[0]!)], expect: "catch" });
+    const file = pathForGlob(c.scope[0]!);
+    const line = violatingLine(c);
+    if (line) {
+      // CONTENT-MATCHED (dep/symbol): synthesize the REAL violation in scoped code and require a
+      // hard BLOCK — content is verified per commit, so a vouched matcher must block (not just warn).
+      cases.push({ name: `BLOCK · ${c.statement.slice(0, 56)}`, files: [file], diff: addLineDiff(file, line), expect: "block" });
+    } else {
+      // scope-only (or pattern-only, which we can't synthesize): a change in scope must at least be
+      // SURFACED (block or warn) — staleness/firmness decides which.
+      cases.push({ name: `CATCH · ${c.statement.slice(0, 56)}`, files: [file], expect: "catch" });
+    }
   }
   for (const p of ["docs/__eval__notes.md", "scripts/__eval__.txt", ".github/__eval__.yml"]) {
     if (!blocking.some((c) => c.scope.some((g) => pathMatchesGlob(p, g)))) {
@@ -92,6 +103,21 @@ export function generateGuardCases(store: HunchStore): GuardCase[] {
     }
   }
   return cases;
+}
+
+/** A line of scoped code that actually trips a constraint's matcher — an import of the
+ *  forbidden dep, or a call to the forbidden symbol. null when there's no synthesizable
+ *  violation (scope-only, or a free-form regex we can't reverse). */
+function violatingLine(c: Parameters<typeof effectiveForbids>[0]): string | null {
+  const f = effectiveForbids(c);
+  if (f?.deps.length) return `import _x from "${f.deps[0]}";`;
+  if (f?.symbols.length) return `const _v = ${f.symbols[0]}();`;
+  return null;
+}
+
+/** A minimal unified diff that ADDS `line` to a (code) file, for a synthetic eval case. */
+function addLineDiff(file: string, line: string): string {
+  return `diff --git a/${file} b/${file}\n--- a/${file}\n+++ b/${file}\n@@ -1,1 +1,2 @@\n const __base = 1;\n+${line}\n`;
 }
 
 const isVouched = (source?: string): boolean => !!source && (source.includes("human_confirmed") || source === "derived");
