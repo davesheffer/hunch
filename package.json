@@ -1,6 +1,6 @@
 {
   "name": "@davesheffer/hunch",
-  "version": "0.34.1",
+  "version": "0.35.0",
   "license": "Apache-2.0",
   "author": "Dave Sheffer <dave.sheffer1@gmail.com>",
   "description": "Hunch — an Engineering Memory OS: a persistent, git-native graph of the decisions, bugs, and rules behind your code, served to any MCP coding assistant (Claude Code, Cursor, Copilot, Windsurf, Codex).",
