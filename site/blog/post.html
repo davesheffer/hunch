@@ -88,15 +88,13 @@
 <body>
   <header class="nav">
     <div class="wrap nav-row">
-      <a class="brand" href="../index.html"><span class="mark">🧠</span><span>Hunch</span></a>
+      <a class="brand" href="/"><span class="mark">🧠</span><span>Hunch</span></a>
       <nav class="nav-links">
-        <a href="../index.html#how">How it works</a>
-        <a href="../index.html#features">Features</a>
-        <a href="../docs.html">Docs</a>
-        <a href="index.html" class="active">Blog</a>
-        <a href="../index.html#start">Get started</a>
+        <a href="/#how">How it works</a>
+        <a href="/docs">Docs</a>
+        <a href="/blog" class="active">Blog</a>
       </nav>
-      <a class="btn" href="../index.html#start">Get started</a>
+      <a class="btn" href="/#start">Get started</a>
     </div>
   </header>
 
@@ -105,11 +103,11 @@
   <footer>
     <div class="wrap">
       <span>© Hunch — Architectural Conformance for AI code.</span>
-      <span><a href="index.html">← All posts</a> · <a href="https://github.com/davesheffer/hunch" target="_blank" rel="noopener">GitHub</a></span>
+      <span><a href="/blog">← All posts</a> · <a href="https://github.com/davesheffer/hunch" target="_blank" rel="noopener">GitHub</a></span>
     </div>
   </footer>
 
-  <script src="posts.js"></script>
+  <script src="/blog/posts.js"></script>
   <script>
     const fmt = (d) => new Date(d + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
     const slug = new URLSearchParams(location.search).get("slug");
@@ -119,14 +117,14 @@
     const main = document.getElementById("main");
 
     if (!p) {
-      main.innerHTML = '<div class="notfound"><h1 class="title">Not found</h1><p style="color:var(--muted-2)">That post does not exist. <a href="index.html" style="color:var(--accent)">Back to the blog &rarr;</a></p></div>';
+      main.innerHTML = '<div class="notfound"><h1 class="title">Not found</h1><p style="color:var(--muted-2)">That post does not exist. <a href="/blog" style="color:var(--accent)">Back to the blog &rarr;</a></p></div>';
     } else {
       document.title = p.title + " — The Hunch Blog";
       const prev = posts[i + 1]; // older
       const next = posts[i - 1]; // newer
       main.innerHTML = `
         <article class="article">
-          <a class="back" href="index.html">← The Hunch Blog</a>
+          <a class="back" href="/blog">← The Hunch Blog</a>
           <header class="head">
             <div class="row"><span class="tag">${p.tag}</span><span class="meta">${fmt(p.date)} · ${p.read}</span></div>
             <h1 class="title">${p.title}</h1>
@@ -136,11 +134,11 @@
         </article>
         <div class="cta"><div class="cta-box">
           <div><h4>Hold your architecture, on every AI change.</h4><p>One invariant, one gate, no model in it. <code>npm i -g @davesheffer/hunch</code></p></div>
-          <a class="btn" href="../index.html#start">Get started</a>
+          <a class="btn" href="/#start">Get started</a>
         </div></div>
         <nav class="nextprev">
-          ${prev ? `<a class="np prev" href="post.html?slug=${prev.slug}"><div class="lbl">← Older</div><div class="t">${prev.title}</div></a>` : '<span></span>'}
-          ${next ? `<a class="np next" href="post.html?slug=${next.slug}"><div class="lbl">Newer →</div><div class="t">${next.title}</div></a>` : '<span></span>'}
+          ${prev ? `<a class="np prev" href="/blog/post?slug=${prev.slug}"><div class="lbl">← Older</div><div class="t">${prev.title}</div></a>` : '<span></span>'}
+          ${next ? `<a class="np next" href="/blog/post?slug=${next.slug}"><div class="lbl">Newer →</div><div class="t">${next.title}</div></a>` : '<span></span>'}
         </nav>`;
     }
   </script>

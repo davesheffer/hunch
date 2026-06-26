@@ -89,15 +89,13 @@
 <body>
   <header class="nav">
     <div class="wrap nav-row">
-      <a class="brand" href="../index.html"><span class="mark">🧠</span><span>Hunch</span></a>
+      <a class="brand" href="/"><span class="mark">🧠</span><span>Hunch</span></a>
       <nav class="nav-links">
-        <a href="../index.html#how">How it works</a>
-        <a href="../index.html#features">Features</a>
-        <a href="../docs.html">Docs</a>
-        <a href="index.html" class="active">Blog</a>
-        <a href="../index.html#start">Get started</a>
+        <a href="/#how">How it works</a>
+        <a href="/docs">Docs</a>
+        <a href="/blog" class="active">Blog</a>
       </nav>
-      <a class="btn" href="../index.html#start">Get started</a>
+      <a class="btn" href="/#start">Get started</a>
     </div>
   </header>
 
@@ -122,11 +120,11 @@
   <footer>
     <div class="wrap">
       <span>© Hunch — Architectural Conformance for AI code · git-native, MCP-native.</span>
-      <span><a href="https://github.com/davesheffer/hunch" target="_blank" rel="noopener">GitHub</a> · <a href="../docs.html">Docs</a> · <a href="https://www.npmjs.com/package/@davesheffer/hunch" target="_blank" rel="noopener">npm</a></span>
+      <span><a href="https://github.com/davesheffer/hunch" target="_blank" rel="noopener">GitHub</a> · <a href="/docs">Docs</a> ·<a href="https://www.npmjs.com/package/@davesheffer/hunch" target="_blank" rel="noopener">npm</a></span>
     </div>
   </footer>
 
-  <script src="posts.js"></script>
+  <script src="/blog/posts.js"></script>
   <script>
     const ARROW = '<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12L12 4M12 4H6M12 4v6"/></svg>';
     const fmt = (d) => new Date(d + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
@@ -135,7 +133,7 @@
     const rest = posts.filter((p) => p !== pinned);
 
     document.getElementById("featured").innerHTML = `
-      <a class="feature" href="post.html?slug=${pinned.slug}">
+      <a class="feature" href="/blog/post?slug=${pinned.slug}">
         <div class="feature-copy">
           <div class="row"><span class="pin">★ Pinned</span><span class="tag">${pinned.tag}</span><span class="meta">${fmt(pinned.date)} · ${pinned.read}</span></div>
           <h2>${pinned.title}</h2>
@@ -158,7 +156,7 @@
       </a>`;
 
     document.getElementById("grid").innerHTML = rest.map((p) => `
-      <a class="card" href="post.html?slug=${p.slug}">
+      <a class="card" href="/blog/post?slug=${p.slug}">
         <div class="row"><span class="tag">${p.tag}</span><span class="meta">${p.read}</span></div>
         <h3>${p.title}</h3>
         <p>${p.dek}</p>

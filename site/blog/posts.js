@@ -82,7 +82,7 @@ hunch conform --strict   # also runs inside hunch check --strict and the CI gate
 <p>Semgrep lets you write custom rules, and they're good — for patterns. The moment the rule needs to know <em>where a symbol sits in the architecture</em> and <em>what it can reach</em>, you're outside what a pattern engine can express. SonarQube's custom rules need a Java plugin and an AST walk; even then there's no notion of "the architecture" — just the file under the cursor. The tools are structurally local. Architecture is global.</p>
 <h2>And AI makes this the main event</h2>
 <p>When humans wrote code slowly, architectural drift was slow too — caught in review, by people who held the system in their heads. AI generates thousands of lines a session, from a local context window that doesn't hold your layering. The violations it ships are overwhelmingly the <em>semantic</em> kind: a shortcut that's locally reasonable and globally wrong, with no bad pattern to flag. Your linter is green while your architecture erodes.</p>
-<p>The fix isn't a better pattern. It's a different primitive: compile the rule into a <strong>reachability check over the graph your tools already build</strong>, and enforce it deterministically. That's <a href="post.html?slug=architectural-conformance-explained">architectural conformance</a> — and it's the one class of AI mistake the incumbents structurally can't reach.</p>
+<p>The fix isn't a better pattern. It's a different primitive: compile the rule into a <strong>reachability check over the graph your tools already build</strong>, and enforce it deterministically. That's <a href="/blog/post?slug=architectural-conformance-explained">architectural conformance</a> — and it's the one class of AI mistake the incumbents structurally can't reach.</p>
 `,
   },
 
@@ -101,7 +101,7 @@ hunch conform --strict   # also runs inside hunch check --strict and the CI gate
 <h2>The melting iceberg</h2>
 <p>There's a second finding that should worry anyone betting the farm on context. Stronger models violate <em>less</em> unprompted (Opus 33% vs Sonnet 67% vs Haiku 73%). So as models improve, prevention has less to prevent — and what's left, it prevents less reliably. The value of a probabilistic nudge is shrinking from both ends.</p>
 <h2>What survives</h2>
-<p>The thing that doesn't depend on the model's mood is a gate with no model in it — one that blocks the violating change in CI regardless of what the AI decided or how confidently it decided it. Injection is the assist. The <a href="post.html?slug=prevent-and-catch">deterministic gate is the guarantee</a>. You need both, and the benchmark is why.</p>
+<p>The thing that doesn't depend on the model's mood is a gate with no model in it — one that blocks the violating change in CI regardless of what the AI decided or how confidently it decided it. Injection is the assist. The <a href="/blog/post?slug=prevent-and-catch">deterministic gate is the guarantee</a>. You need both, and the benchmark is why.</p>
 `,
   },
 
@@ -128,7 +128,7 @@ hunch conform --strict   # also runs inside hunch check --strict and the CI gate
 <h2>Drift, not just diffs</h2>
 <p>Because it checks the <em>state</em> of the graph, conformance catches violations a diff-based tool can't see — including drift introduced indirectly. If a refactor three modules away makes <code>charge</code> stop reaching <code>verifySession</code>, no line in <code>charge.ts</code> changed, yet the intent is now false of the code. Conformance flags it. The recorded "why" still holds; the code no longer honors it.</p>
 <h2>Where it runs</h2>
-<p>The same check runs in three places: <code>hunch conform</code> on demand, <code>hunch check --strict</code> at commit time (so it's in the pre-commit hook), and the <code>hunch ci</code> PR gate — which blocks the merge, with the <a href="post.html?slug=the-receipt">receipt</a>. One predicate, enforced everywhere, no model in the loop.</p>
+<p>The same check runs in three places: <code>hunch conform</code> on demand, <code>hunch check --strict</code> at commit time (so it's in the pre-commit hook), and the <code>hunch ci</code> PR gate — which blocks the merge, with the <a href="/blog/post?slug=the-receipt">receipt</a>. One predicate, enforced everywhere, no model in the loop.</p>
 `,
   },
 
