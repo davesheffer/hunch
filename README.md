@@ -172,6 +172,12 @@ Plus the **Regression Guard** (re-adding deliberately-retired code) and the
 **[CI Constraint Guard](https://hunch-pi.vercel.app/docs#ci)** (`hunch ci` — a PR gate that
 comments the affected `con_`/`dec_` ids and fails on a blocking one).
 
+Give a blocking rule a content matcher — `record-constraint "…" --scope "src/**" --severity
+blocking --match "lodash"` — and it blocks the *actual* violation across the file's whole life
+(matched against added code; comments ignored) instead of relaxing to advisory after the file
+is edited again. It's a deterministic guard for the obvious/accidental violation, not a
+bypass-proof boundary.
+
 ## Working as a team
 
 The `.hunch/` JSON is the **source of truth** — diffable, reviewable in PRs, synced for free

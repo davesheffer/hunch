@@ -68,6 +68,23 @@ test("scope-only rule DOWNGRADES to advisory when stale (the gap content-matchin
   } finally { cleanup(); }
 });
 
+test("content-matched rule does NOT fire on a comment that merely names the term", () => {
+  const { store, cleanup } = tempStore();
+  try {
+    seed(store, { match: "lodash" });
+    // a deliberately-avoiding COMMENT is not a violation — must not block (the confirmed FP)
+    const report = store.buildCheckReport(["src/cart.ts"], diffAdding("// we deliberately avoid lodash here"), {
+      strict: true, lastChange: STALE_LAST_CHANGE,
+    });
+    assert.equal(report.direct.length, 0, "a comment mentioning the term is not flagged");
+    // but the import specifier (a string) IS still caught — stripping comments must not strip strings
+    const real = store.buildCheckReport(["src/cart.ts"], diffAdding('import _ from "lodash";'), {
+      strict: true, lastChange: STALE_LAST_CHANGE,
+    });
+    assert.equal(real.strictBlockers, 1, "the real import (a string specifier) still blocks");
+  } finally { cleanup(); }
+});
+
 test("blockingInScope (edit-time hook) denies ONLY the violating edit", () => {
   const { store, cleanup } = tempStore();
   try {

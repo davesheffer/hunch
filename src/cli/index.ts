@@ -885,6 +885,12 @@ program
     store.reindex();
     updateClaudeMd(root, store);
     console.log(`✓ recorded ${c.severity} constraint ${c.id}: "${c.statement}" (scope: ${scope.join(", ") || "repo"})`);
+    if (c.severity === "blocking" && !c.match) {
+      // The default path's sharp edge: a scope-only blocking rule fails OPEN once any
+      // file in scope is committed after today (staleness). Point the user at the fix.
+      console.log(`  ⚠ scope-only — this will downgrade to advisory once a file in scope is changed after today.`);
+      console.log(`    To block the actual violation across the file's life, add a content matcher, e.g.  --match "lodash"`);
+    }
     store.close();
   });
 

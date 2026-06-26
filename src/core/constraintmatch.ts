@@ -18,8 +18,18 @@ export function constraintMatcher(pattern?: string | null): RegExp | null {
   }
 }
 
-/** True iff any ADDED line trips the constraint's content matcher. */
+/** The enforceable CODE of an added line: a comment carries no invariant, so a rule
+ *  must not fire on it (a `// we avoid lodash` note is not a violation). We strip
+ *  comments but NOT string literals — the thing a matcher most often targets, an
+ *  import specifier (`from "lodash"`), IS a string, so stripping strings would blind
+ *  the matcher to the real violation. A comment-only line → "". */
+export function matchableCode(line: string): string {
+  if (/^\s*(\/\/|\/\*|\*)/.test(line)) return ""; // // line, /* block, or * JSDoc-continuation
+  return line.replace(/\s+\/\/.*$/, ""); // drop a trailing inline // comment (keeps "://" in URLs/strings)
+}
+
+/** True iff any ADDED line's CODE trips the constraint's content matcher. */
 export function contentViolates(re: RegExp | null, addedLines: string[]): boolean {
   if (!re) return false;
-  return addedLines.some((l) => re.test(l));
+  return addedLines.some((l) => re.test(matchableCode(l)));
 }

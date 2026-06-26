@@ -70,6 +70,13 @@ printf 'export function median(x){return x}\n' >> src/cart.ts; git add -A; futur
 OUT=$($HUNCH check --commit HEAD --strict 2>&1); CODE=$?
 if [ $CODE -eq 0 ] && ! echo "$OUT" | grep -qi "lodash"; then ok "content-matched rule stays QUIET on a compliant edit (no false positive)"; else no "content-matched rule false-flagged a compliant edit (code=$CODE)"; fi
 
+# 2d — PRECISION: a COMMENT that merely names the term is not a violation (no false positive)
+mkcase '--match lodash'
+printf '// we deliberately avoid lodash in this module\nexport function median(x){return x}\n' >> src/cart.ts; git add -A; future 4 "feat: median + a comment about lodash" >/dev/null
+$HUNCH check --commit HEAD --strict >/dev/null 2>&1
+[ $? -eq 0 ] && ok "content-matched rule ignores a comment that names the term (matches code, not comments)" \
+             || no "content-matched rule false-blocked a comment (FP regressed)"
+
 # ============================================================================
 printf '\n\033[1m── %d passed, %d failed ──\033[0m\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ] || exit 1
