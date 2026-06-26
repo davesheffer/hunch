@@ -7,6 +7,8 @@ import { execFileSync } from "node:child_process";
 import { gitCommonDir, isLinkedWorktree, currentBranch, commitAndPushHunch } from "../src/extractors/git.js";
 import { HunchStore } from "../src/store/hunchStore.js";
 import { hunchPaths } from "../src/core/paths.js";
+import { ensureSharedOverlayPointer } from "../src/integrations/worktree.js";
+import { readFileSync } from "node:fs";
 
 const g = (cwd: string, ...a: string[]): void => { execFileSync("git", a, { cwd, stdio: ["ignore", "ignore", "ignore"] }); };
 
@@ -97,6 +99,45 @@ test("P3: commitAndPushHunch never throws, and a held lock makes it a no-op (ski
     mkdirSync(join(root, ".hunch-commit.lock"), { recursive: true });
     assert.doesNotThrow(() => commitAndPushHunch(root, "hunch: test 2"));
     assert.ok(existsSync(join(root, ".hunch-commit.lock")), "a live held lock is left intact (owner releases it)");
+  } finally {
+    cleanup();
+  }
+});
+
+test("ensureSharedOverlayPointer: registers an absolute pointer at the common dir; idempotent; a later worktree resolves it", () => {
+  const { root, cleanup } = tempRepo();
+  const overlay = join(mkdtempSync(join(tmpdir(), "hunch-ovl-")), ".hunch");
+  try {
+    assert.equal(ensureSharedOverlayPointer(root, overlay, true), true, "writes the shared pointer");
+    const file = join(gitCommonDir(root), "hunch", "local.json");
+    const v = JSON.parse(readFileSync(file, "utf8"));
+    assert.equal(v.privateDir, resolve(overlay), "stored ABSOLUTE so worktrees resolve it");
+    assert.equal(v.autoCommit, true);
+
+    // idempotent: a second call returns true and doesn't churn the content
+    const before = readFileSync(file, "utf8");
+    assert.equal(ensureSharedOverlayPointer(root, overlay, true), true);
+    assert.equal(readFileSync(file, "utf8"), before, "no rewrite when already current");
+
+    // a fresh worktree (no per-worktree pointer) now resolves the overlay
+    const wt = `${root}-wt2`;
+    g(root, "worktree", "add", "-q", "-b", "feat2", wt);
+    const store = new HunchStore(hunchPaths(wt));
+    assert.equal(store.privateDir, resolve(overlay));
+    store.close();
+    g(root, "worktree", "remove", "--force", wt);
+    rmSync(wt, { recursive: true, force: true });
+  } finally {
+    rmSync(overlay, { recursive: true, force: true });
+    cleanup();
+  }
+});
+
+test("ensureSharedOverlayPointer: no overlay configured → no-op (returns false, writes nothing)", () => {
+  const { root, cleanup } = tempRepo();
+  try {
+    assert.equal(ensureSharedOverlayPointer(root, undefined, false), false);
+    assert.equal(existsSync(join(gitCommonDir(root), "hunch", "local.json")), false);
   } finally {
     cleanup();
   }

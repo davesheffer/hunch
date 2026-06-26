@@ -36,6 +36,7 @@ import { extractInlineIntent } from "../extractors/comments.js";
 import { renderText, renderMarkdown, reportFailsStrict, type CheckReport } from "../core/checkreport.js";
 import { partitionReview, READY_MIN_GROUNDED, type ReviewItem } from "../core/reviewqueue.js";
 import { installPostCommitHook, installPreCommitHook } from "../integrations/hooks.js";
+import { ensureSharedOverlayPointer } from "../integrations/worktree.js";
 import { installMergeDriver } from "../integrations/mergeDriver.js";
 import { ensureGitignore, ignoreHunchMemory, HUNCH_MEMORY_DIRS } from "../integrations/gitignore.js";
 import { writeCiWorkflow } from "../integrations/ciAction.js";
@@ -164,6 +165,16 @@ program
     // case-split in ~/.claude.json, merge it so hunch resolves under either casing.
     // No-op (silent) off Windows.
     reportClaudeConfigHeal();
+
+    // Worktree-seamless: register any configured overlay at the git common dir so EVERY
+    // worktree of this repo auto-discovers it (also backfills pre-0.32 single-worktree setups),
+    // and note when we're initializing inside a linked worktree (memory is shared, not separate).
+    if (ensureSharedOverlayPointer(root, store.privateDir, store.privateAutoCommit)) {
+      console.log(`  ✓ private overlay registered at the git common dir — shared by every worktree of this repo`);
+    }
+    if (isLinkedWorktree(root)) {
+      console.log(`  ✓ linked worktree — sharing the repo's hooks + memory (no separate setup needed)`);
+    }
 
     store.close();
     console.log("\nNext: make a commit (the hook captures a decision), then ask your coding assistant \"why is X built this way?\"");
@@ -346,12 +357,8 @@ program
     // (current + future, any branch) auto-discovers the same memory with zero per-worktree
     // setup. Stored ABSOLUTE — a linked worktree resolves relative paths from its OWN root, so
     // only an absolute path survives the move. Lives under .git/ (never tracked; nothing to ignore).
-    const commonDir = gitCommonDir(root);
     let worktreeNote = "";
-    if (commonDir) {
-      const sharedDir = join(commonDir, "hunch");
-      mkdirSync(sharedDir, { recursive: true });
-      writeFileAtomic(join(sharedDir, "local.json"), JSON.stringify({ privateDir: hunchDir, autoCommit: !!opts.autoCommit }, null, 2) + "\n");
+    if (ensureSharedOverlayPointer(root, hunchDir, !!opts.autoCommit)) {
       worktreeNote = `  ✓ registered in the git common dir — shared by every worktree of this repo, on any branch\n`;
     }
     // 4) route post-commit synthesis to the overlay (local hook, never committed)
@@ -393,6 +400,44 @@ program
       migrateNote +
       `  record sensitive items with private:true (hunch_record_decision / hunch_record_correction)\n` +
       `  override per-shell with HUNCH_PRIVATE_DIR; CI / public PR comments stay public-only.`,
+    );
+  });
+
+// ---- worktree (one-command worktree wired into Hunch) ----------------------
+program
+  .command("worktree <path>")
+  .description("Create a git worktree already wired into Hunch — it shares this repo's memory (the private overlay), with zero per-worktree setup.")
+  .option("-b, --branch <name>", "create the worktree on a NEW branch")
+  .option("--no-share", "don't register the overlay at the git common dir (the worktree won't see private memory)")
+  .action((path: string, opts: { branch?: string; share: boolean }) => {
+    const root = findRoot();
+    if (!isGitRepo(root)) return fail("`hunch worktree` needs a git repo");
+    const dest = resolve(root, path);
+    if (existsSync(dest)) return fail(`path already exists: ${dest}`);
+    // 1) create the worktree (on a new branch if asked, else a checkout of HEAD)
+    const r = spawnSync("git", ["-C", root, "worktree", "add", ...(opts.branch ? ["-b", opts.branch] : []), dest], { stdio: "inherit" });
+    if (r.status !== 0) return fail("git worktree add failed");
+    // 2) register the overlay at the SHARED git common dir so the new worktree (and every
+    //    other) auto-discovers the same memory — also backfills pre-0.32 single-worktree setups.
+    const store = new HunchStore(hunchPaths(root));
+    const overlay = store.privateDir;
+    const autoCommit = store.privateAutoCommit;
+    store.close();
+    let shareNote: string;
+    if (!opts.share) {
+      shareNote = `  · --no-share — the worktree will NOT see private memory`;
+    } else if (overlay && ensureSharedOverlayPointer(root, overlay, autoCommit)) {
+      shareNote = `  ✓ memory shared via the git common dir — this worktree sees the same decisions / bugs / constraints`;
+    } else if (overlay) {
+      shareNote = `  · could not register the shared overlay pointer (no git common dir?)`;
+    } else {
+      shareNote = `  · no private overlay configured — run \`hunch private\` to share memory across worktrees`;
+    }
+    console.log(
+      `✓ worktree created → ${dest}${opts.branch ? ` (new branch ${opts.branch})` : ""}\n` +
+      `${shareNote}\n` +
+      `  hooks + MCP server are shared (worktree-aware) — open your assistant in the new worktree to start.\n` +
+      `  (needs \`hunch\` installed globally; a worktree has no node_modules of its own)`,
     );
   });
 

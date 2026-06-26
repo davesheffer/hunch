@@ -185,6 +185,16 @@ is **OS-agnostic**: paths are stored in POSIX form and an installed Hunch regist
 server by package name, so Windows / macOS / Linux teammates share one memory without
 per-machine fixups. → [docs](https://hunch-pi.vercel.app/docs#team)
 
+### Branches & worktrees
+
+Memory follows you across every branch and **git worktree**, with no per-worktree setup. The
+private overlay is registered once at the repo's **git common dir** (shared by all worktrees), so
+a fresh `git worktree add` on any branch sees the same decisions, bugs, and invariants. Create one
+already wired in with **`hunch worktree <path> [-b <branch>]`**, or just run `hunch init` / `hunch
+private` once and every worktree picks it up. Auto-captured decisions are tagged with their branch,
+and concurrent overlay writes are serialized — so parallel worktrees never corrupt or lose memory.
+`hunch doctor` confirms a worktree is sharing.
+
 ## Private memory (public repo, private context)
 
 Open-source your code without open-sourcing your *reasoning*. **`hunch private`** sets up a
