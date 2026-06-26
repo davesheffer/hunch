@@ -49,6 +49,7 @@ import { formatContext } from "../core/format.js";
 import { readConfig, writeConfig, FIRMNESS_LEVELS, isFirmness, type Firmness } from "../core/config.js";
 import { blockingInScope, vetoInScope, proposedEditLines } from "../core/hookpolicy.js";
 import { loadGoldenSet, evaluateGraphLift } from "../eval/harness.js";
+import { loadGuardCases, evalGuards, generateGuardCases } from "../eval/guards.js";
 import { computeDrift } from "../core/drift.js";
 import { compareCandidates } from "../core/compare.js";
 import { checkConformance } from "../core/conformance.js";
@@ -506,17 +507,53 @@ program
 // ---- eval (retrieval quality; measures the graph-stream lift) --------------
 program
   .command("eval")
-  .description("Measure retrieval quality (Recall@k, MRR) over a golden set, and A/B the dependency-graph stream.")
-  .requiredOption("--file <path>", "golden set JSON: [{ query, expected: [refs], note? }]")
+  .description("Measure quality over a golden set: retrieval (Recall@k, MRR) or, with --guards, ENFORCEMENT (block/warn/pass precision & recall).")
+  .option("--file <path>", "golden set JSON — retrieval: [{ query, expected }]; guards: [{ name, files, expect }]")
+  .option("--guards", "score the GUARDS instead of retrieval: did the gate block the bad changes and pass the good ones?")
+  .option("--generate", "with --guards: scaffold a starter golden set from the live graph (and run it)")
   .option("--k <n>", "top-k cutoff", "10")
   .option("--semantic", "also blend the semantic stream (requires `hunch embed`; default is deterministic FTS + graph)")
   .option("--kind <kind>", "restrict scoring to one record kind (e.g. runbooks) — scoped retrieval")
-  .action(async (opts: { file: string; k: string; semantic?: boolean; kind?: string }) => {
+  .action(async (opts: { file?: string; guards?: boolean; generate?: boolean; k: string; semantic?: boolean; kind?: string }) => {
     const { store } = storeFor();
     store.reindex(); // reflect any out-of-band JSON edits before scoring
+
+    // ── Guard eval: did the gate BLOCK the bad changes and PASS the good ones? Runs each
+    //    case through the SAME buildCheckReport → verdict path the live guards use. ──
+    if (opts.guards) {
+      if (!opts.generate && !opts.file) { store.close(); return fail("guard eval needs --file <golden.json> or --generate"); }
+      let gcases;
+      try {
+        gcases = opts.generate ? generateGuardCases(store) : loadGuardCases(readFileSync(opts.file!, "utf8"));
+      } catch (e) {
+        store.close();
+        return fail(`guard eval: ${(e as Error).message}`);
+      }
+      if (!gcases.length) { store.close(); return fail("no guard cases — `--generate` needs vouched blocking constraints in the graph, or pass --file"); }
+      if (opts.generate && opts.file) writeFileAtomic(opts.file, JSON.stringify(gcases, null, 2) + "\n");
+      const r = evalGuards(store, gcases);
+      const pct = (n: number, d: number) => (d ? `${((n / d) * 100).toFixed(0)}%` : "—");
+      console.log(`Guard eval over ${r.total} case(s) — does the gate catch bad changes and stay quiet on good ones?\n`);
+      console.log(`  CAUGHT          ${r.surfaced}/${r.shouldSurface} changes to guarded code surfaced   (${pct(r.surfaced, r.shouldSurface)})  — nothing slips silently through`);
+      console.log(`     └ of those   ${r.hardBlocked} hard-block the merge, ${r.surfaced - r.hardBlocked} warn   — stale/low-confidence rules warn; re-verify to harden`);
+      console.log(`  FALSE-POSITIVE  ${r.falsePositives}/${r.shouldPass} unrelated changes flagged           (${pct(r.falsePositives, r.shouldPass)} — lower is safer to enable)`);
+      console.log(`  ACCURACY        ${(r.accuracy * 100).toFixed(0)}% exact verdict match\n`);
+      const wrong = r.perCase.filter((p) => !p.ok);
+      if (wrong.length) {
+        console.log(`  ${wrong.length} mismatch(es) to review (relabel a generated case, or fix a guard):`);
+        for (const w of wrong.slice(0, 12)) console.log(`    · ${w.name} — expected ${w.expect}, got ${w.got}`);
+      } else {
+        console.log(`  ✓ every case matched its expected verdict.`);
+      }
+      store.close();
+      return;
+    }
+
+    // ── Retrieval eval (default) ──
+    if (!opts.file) { store.close(); return fail("retrieval eval needs --file <golden.json> (or use --guards)"); }
     let cases;
     try {
-      cases = loadGoldenSet(readFileSync(opts.file, "utf8"));
+      cases = loadGoldenSet(readFileSync(opts.file!, "utf8"));
     } catch (e) {
       store.close();
       return fail(`could not load golden set: ${(e as Error).message}`);
