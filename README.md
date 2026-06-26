@@ -27,6 +27,10 @@ hunch conform --strict     # ✅/⛔ deterministic gate — wire into CI; runs o
 > dbQuery — VIOLATED · why: the Mar-2025 N+1 meltdown · prevents recurrence of bug_0317."* See
 > [`demo/architectural-conformance.sh`](demo/architectural-conformance.sh).
 
+**It works both ways — prevent *and* catch:**
+- **Prevent** — in a controlled test (n=12, Sonnet), giving the agent the layering invariant flipped a "make this endpoint faster" task from **6/6 agents bypassing the service layer → 0/6**. Every one of those violations passes a linter clean.
+- **Catch** — `hunch check --strict` (the pre-commit hook + the [`hunch ci`](https://hunch-pi.vercel.app/docs#ci) PR gate) **blocks** the change that breaks the architecture, with the receipt — deterministically, no model in the gate.
+
 <sub>Works with **Claude Code, Cursor, Copilot, Windsurf & Google Antigravity** from one shared, git-native graph.</sub>
 
 ### 📚 **[Read the full documentation → hunch-pi.vercel.app/docs](https://hunch-pi.vercel.app/docs)**
