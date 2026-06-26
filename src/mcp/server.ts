@@ -14,6 +14,7 @@ import { HunchStore } from "../store/hunchStore.js";
 import { selectEmbedder } from "../store/embedder.js";
 import { decisionId } from "../core/ids.js";
 import { buildCorrectionConstraint } from "../core/correction.js";
+import { knownRepoDeps } from "../synthesis/tripwires.js";
 import { revParse, asOfDate, revExists, lastChangeDate, rangeFiles, rangeDiff, commitFiles, commitDiff, stagedFiles, stagedDiff, commitAndPushHunch, pullHunch } from "../extractors/git.js";
 import { formatContext } from "../core/format.js";
 import type { Runbook } from "../core/types.js";
@@ -412,7 +413,7 @@ export function buildServer(root: string): McpServer {
     async (input): Promise<ToolResult> => {
       try {
         if (!input.rule || !input.rule.trim()) return err("rule is required — state the invariant in plain words.");
-        const rec = buildCorrectionConstraint(input, new Date().toISOString());
+        const rec = buildCorrectionConstraint({ ...input, knownDeps: knownRepoDeps(root) }, new Date().toISOString());
         // Private corrections go to the overlay (enforced locally via the merged read,
         // never rendered into the public CI comment, which is public-only by construction).
         const existing = input.private ? undefined : store.json.get("constraints", rec.id);

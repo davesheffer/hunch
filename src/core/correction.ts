@@ -57,6 +57,10 @@ export interface CorrectionInput {
   rationale?: string;
   /** id of the decision this correction derives from, if any. */
   source_decision?: string;
+  /** The repo's real dependency names (package.json). When given, a dep matcher is
+   *  auto-derived ONLY for a dep that actually exists — so a non-dependency phrasing
+   *  never silently mints a never-firing rule. */
+  knownDeps?: string[];
 }
 
 /**
@@ -90,8 +94,9 @@ export function buildCorrectionConstraint(input: CorrectionInput, now: string): 
     match: null,
     // Best-effort precise matcher from the rule text ("never import lodash" → forbids lodash),
     // so the seamless capture path mints enforcement that survives file churn, not a scope-only
-    // rule that goes stale. null when nothing derivable → falls back to scope-based.
-    forbids: deriveForbids(rule),
+    // rule that goes stale. Validated against the repo's real deps when supplied → never mints a
+    // never-firing rule for a non-dependency. null when nothing derivable → falls back to scope.
+    forbids: deriveForbids(rule, input.knownDeps),
     rationale: input.rationale ?? "Captured from a human correction of the agent (Never Twice).",
     source_decision: input.source_decision ?? null,
     violations: [],

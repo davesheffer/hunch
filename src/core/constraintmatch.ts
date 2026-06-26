@@ -84,7 +84,7 @@ export function importedDeps(lines: string[]): Set<string> {
  *  correction → enforced constraint) mints a PRECISE matcher, not a scope-only rule that
  *  goes stale. Conservative: only fires on an explicit import/require verb + a
  *  module-shaped token; returns null otherwise (caller falls back to scope-only). */
-export function deriveForbids(rule: string): Forbids | null {
+export function deriveForbids(rule: string, knownDeps?: readonly string[]): Forbids | null {
   // Derive ONLY from a NEGATIVE rule with an UNAMBIGUOUS import verb. "use"/"add" are
   // deliberately excluded: "don't use react hooks" names hooks, not react, and "never use
   // synchronous fs" names no dependency at all — over-deriving there mints a wrong or
@@ -95,6 +95,17 @@ export function deriveForbids(rule: string): Forbids | null {
   if (!m || !m[1]) return null;
   const dep = m[1].replace(/[).,;:'"`]+$/, "").toLowerCase();
   if (!dep || dep.length < 2 || /\s/.test(dep) || STOP_TOKENS.has(dep)) return null;
+  // When the caller can supply the repo's real dependencies, only auto-mint a matcher for a
+  // dep that ACTUALLY exists — so a typo or a non-dependency concept ("never import the old
+  // helper") doesn't silently create a never-firing rule. Submodule-aware both ways. No list
+  // supplied (no/unreadable package.json) → skip validation rather than reject everything.
+  if (knownDeps && knownDeps.length) {
+    const ok = knownDeps.some((d) => {
+      const k = d.toLowerCase();
+      return k === dep || dep.startsWith(`${k}/`) || k.startsWith(`${dep}/`);
+    });
+    if (!ok) return null;
+  }
   return { deps: [dep], symbols: [], patterns: [] };
 }
 

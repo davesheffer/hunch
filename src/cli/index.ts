@@ -875,7 +875,11 @@ program
     // common "never import X" rule is precise + staleness-immune by default, not scope-only.
     let forbids = deps.length || symbols.length ? { deps, symbols, patterns: [] as string[] } : null;
     let derived = false;
-    if (!forbids && !opts.match) { forbids = deriveForbids(statement); derived = !!forbids; }
+    if (!forbids && !opts.match) {
+      const deps = knownRepoDeps(root);
+      forbids = deriveForbids(statement, deps.length ? deps : undefined);
+      derived = !!forbids;
+    }
     const c = store.json.put("constraints", {
       id: constraintId(statement),
       type: opts.type,

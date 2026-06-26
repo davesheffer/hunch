@@ -124,9 +124,18 @@ test("deriveForbids derives a dep ONLY from an unambiguous import verb (conserva
   assert.equal(deriveForbids("always validate the session"), null, "no import verb → nothing derived");
 });
 
+test("deriveForbids validates against the repo's real deps when supplied (no never-firing rules)", () => {
+  assert.deepEqual(deriveForbids("never import lodash", ["lodash", "zod"])?.deps, ["lodash"], "real dep → derived");
+  assert.equal(deriveForbids("never import lodash", ["zod", "commander"]), null, "not a dependency → not derived");
+  assert.deepEqual(deriveForbids("never import lodash")?.deps, ["lodash"], "no list supplied → no validation (back-compat)");
+  assert.deepEqual(deriveForbids("never import lodash", ["lodash/fp"])?.deps, ["lodash"], "submodule dep counts");
+});
+
 test("buildCorrectionConstraint auto-attaches the dep matcher (Never-Twice enforces precisely)", () => {
   const c = buildCorrectionConstraint({ rule: "never import lodash", scope_hint_file: "src/cart.ts", severity: "blocking" }, VERIFIED);
   assert.deepEqual(c.forbids?.deps, ["lodash"], "correction → precise, staleness-immune rule");
+  const c2 = buildCorrectionConstraint({ rule: "never import lodash", scope_hint_file: "src/cart.ts", severity: "blocking", knownDeps: ["zod"] }, VERIFIED);
+  assert.equal(c2.forbids, null, "correction naming a non-dependency → falls back to scope-only (no wrong rule)");
 });
 
 // ── migration ─────────────────────────────────────────────────────────────
