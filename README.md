@@ -53,11 +53,11 @@ came before. Local-first, no documentation toil, no SaaS.
  └───────────────────────┘         └──────────────────────────┘         └──────────────┘
 ```
 
-- **Index** (no LLM): tree-sitter parses your repo into a symbol/dependency graph —
-  functions, call edges, imports, components — plus churn and fan-in metrics.
+- **Index** (no LLM): Hunch maps your repo — how functions, files, and components
+  connect — so it can see the ripple effect of any change.
 - **Learn**: each commit becomes a structured **Decision** (an ADR); a failing test
-  becomes a **Bug** with a ranked suspect list; recurring or severe bugs are promoted
-  into **Constraints** (do-not-break invariants) and raise a component's *fragility*.
+  becomes a **Bug** with its likely cause; recurring or severe bugs are promoted
+  into **Constraints** (do-not-break rules) and flag the riskiest parts of the code.
 - **Ground**: any MCP assistant reads it through an **MCP server**, an auto-maintained
   **`CLAUDE.md`**, and **slash commands** — every answer cites `provenance`
   (source + confidence + evidence), so nothing is a blind assertion.
@@ -78,7 +78,7 @@ combination is the moat:
 | **Lifetime** | the session; often auto-expiring | the **lifetime of the codebase** — non-destructive supersede/veto keeps the *why-it-changed* trail |
 | **Clients** | one vendor's agent | **client-agnostic** — one `.hunch/` graph serves Claude Code, Cursor, Copilot & Windsurf via MCP |
 | **What's stored** | opaque extracted "facts" | **structured ADRs** — decisions with rejected-alternatives, bug lineage, and invariants |
-| **Enforcement** | advisory / just-in-time hints | **fail-closed deterministic guards** — no model in the block path; a commit fails on a human-vouched, set-intersection match |
+| **Enforcement** | advisory / just-in-time hints | **fail-closed guards** — no model in the block path; a commit fails only on a rule you've vouched for |
 | **Trust** | take it on faith | **provenance on every record** (source + confidence + evidence) and a measurable retrieval signal (`hunch eval`) |
 
 The short version: **git tracks *what* changed; Hunch tracks *why*** — locally, durably, and under
@@ -94,7 +94,7 @@ hunch backfill --since 90d          # cold start: seed decisions from recent git
 hunch why src/auth/session.ts       # …then ask your assistant: "why is X built this way?"
 ```
 
-`hunch init` scaffolds `.hunch/`, indexes the repo, installs the git hooks + merge driver,
+`hunch init` scaffolds `.hunch/`, indexes the repo, installs the git hooks,
 writes `.mcp.json` + slash commands + an auto-maintained `CLAUDE.md`, and wires up **every
 detected assistant** (Claude Code, Cursor, VS Code/Copilot, Windsurf, Codex, Google Antigravity) to the same
 graph — merging idempotently into existing files. **Reload your assistant in the repo**
@@ -105,14 +105,11 @@ afterward to pick up the `hunch_*` tools. Each teammate runs `hunch init` once; 
 > **never** a pay-per-token API key — and falls back to a deterministic heuristic if no CLI
 > is present. Details: [Synthesis & billing](https://hunch-pi.vercel.app/docs#synthesis).
 >
-> **Deep Synthesis** (`backfill --deep` / `sync --deep`): reconcile multiple independent drafts
-> into one — fan out across every signed-in CLI, or, with a single CLI, sample it N times for
-> **self-consistency** (`--samples`, default 2). Confidence is **agreement-weighted** (capped
-> below the enforcement threshold, so it stays advisory). Add `--verify` (auto under `--deep`)
-> for a **Critic pass** that audits each draft against its commit — pruning unsupported
-> rejected-alternatives before they become tripwires and down-weighting weak grounding; it only
-> ever *lowers* confidence, never arming enforcement. Subscription-only, never on the guard path;
-> degrades to the single-provider draft when no CLI is available.
+> **Deep Synthesis** (`backfill --deep` / `sync --deep`): gathers several independent takes on a
+> change and reconciles them into one more-trustworthy note — trusting it more when they agree.
+> Add `--verify` to fact-check the note against the commit and drop anything it doesn't support.
+> It always stays *advisory* until you confirm it. Subscription-only; falls back to a single
+> draft when only one assistant is available.
 > On Windows, prefer `hunch init` over a global `claude mcp add`; if tools don't appear,
 > `hunch doctor` heals it ([why](https://hunch-pi.vercel.app/docs#windows)).
 
@@ -120,7 +117,7 @@ afterward to pick up the `hunch_*` tools. Each teammate runs `hunch init` once; 
 [MCP & assistants](https://hunch-pi.vercel.app/docs#mcp) ·
 [MCP tools](https://hunch-pi.vercel.app/docs#mcp-tools) ·
 [slash commands](https://hunch-pi.vercel.app/docs#slash) ·
-[the 22-command CLI](https://hunch-pi.vercel.app/docs#cli)
+[the full CLI reference](https://hunch-pi.vercel.app/docs#cli)
 
 ## Enforcement: memory that holds the line
 
@@ -152,14 +149,14 @@ VERDICT: ⛔ BLOCK — this change breaks a recorded invariant or re-opens a kno
    🐞 guards against: Double-charge on unverified session (bug_…)
 ```
 
-Deterministic (no LLM), and safe as a merge gate — it blocks only on a direct,
-high-confidence, non-stale blocking invariant. → [docs](https://hunch-pi.vercel.app/docs#merge-verdict)
+No model in the loop, so it's safe as a merge gate — it blocks only on a high-confidence rule
+you've confirmed, and warns on everything softer. → [docs](https://hunch-pi.vercel.app/docs#merge-verdict)
 
 ### Decision Guard (Veto) — re-introducing a *rejected* approach is blocked
 
 The most expensive reversal is re-adding an approach a decision **rejected** (latency, a
 forbidden dependency) — code that never existed, so a diff reviewer is blind to it. A
-decision carries machine-checkable **tripwires**; re-introduce one and Hunch blocks it with
+decision remembers what it rejected; re-introduce that approach and Hunch blocks it with
 the receipt of what you rejected and why. → [docs](https://hunch-pi.vercel.app/docs#veto)
 
 ### Redundancy Guard — "this already exists"
@@ -168,9 +165,8 @@ An agent works from a *local* context window, so it re-implements a helper that 
 lives three modules over, or re-adds a dependency the codebase already has — sprawl a
 diff-only reviewer can't see, but Hunch's symbol graph can. Add a function or class already
 defined elsewhere and `hunch check` / the CI guard / `hunch_merge_verdict` flag it with the
-existing location. Deterministic and **advisory** — it never blocks; tuned to stay quiet
-(stopword + length filters, scoped to the change's own project root, move-aware so a
-refactor isn't mistaken for a duplicate). → [docs](https://hunch-pi.vercel.app/docs#redundancy)
+existing location. **Advisory** — it never blocks, and it's tuned to stay quiet so a refactor
+that just moves code isn't mistaken for a duplicate. → [docs](https://hunch-pi.vercel.app/docs#redundancy)
 
 Plus the **Regression Guard** (re-adding deliberately-retired code) and the
 **[CI Constraint Guard](https://hunch-pi.vercel.app/docs#ci)** (`hunch ci` — a PR gate that
@@ -179,20 +175,17 @@ comments the affected `con_`/`dec_` ids and fails on a blocking one).
 ## Working as a team
 
 The `.hunch/` JSON is the **source of truth** — diffable, reviewable in PRs, synced for free
-over `git push` / `pull`. `hunch init` registers a git **merge driver** so concurrent edits
-merge **by record id** (human-confirmed beats auto, then confidence, then recency). The graph
-is **OS-agnostic**: paths are stored in POSIX form and an installed Hunch registers its MCP
-server by package name, so Windows / macOS / Linux teammates share one memory without
-per-machine fixups. → [docs](https://hunch-pi.vercel.app/docs#team)
+over `git push` / `pull`. `hunch init` sets things up so concurrent edits from different
+teammates merge cleanly instead of throwing conflict markers, and it's **OS-agnostic** —
+Windows / macOS / Linux teammates share one memory with no per-machine fixups.
+→ [docs](https://hunch-pi.vercel.app/docs#team)
 
 ### Branches & worktrees
 
-Memory follows you across every branch and **git worktree**, with no per-worktree setup. The
-private overlay is registered once at the repo's **git common dir** (shared by all worktrees), so
-a fresh `git worktree add` on any branch sees the same decisions, bugs, and invariants. Create one
+Memory follows you across every branch and **git worktree**, with no per-worktree setup — a
+fresh `git worktree add` on any branch sees the same decisions, bugs, and invariants. Create one
 already wired in with **`hunch worktree <path> [-b <branch>]`**, or just run `hunch init` / `hunch
-private` once and every worktree picks it up. Auto-captured decisions are tagged with their branch,
-and concurrent overlay writes are serialized — so parallel worktrees never corrupt or lose memory.
+private` once and every worktree picks it up. Parallel worktrees never corrupt or lose memory, and
 `hunch doctor` confirms a worktree is sharing.
 
 ## Private memory (public repo, private context)
@@ -233,7 +226,7 @@ Drop `npx hunch test` into CI, and `hunch ci` to scaffold the PR merge gate.
 
 `hunch query` uses fast keyword search out of the box. For recall on paraphrases, opt into
 **local embeddings** (`npm i -g @huggingface/transformers && hunch embed`) — local, free, and
-opt-in. Vectors live in the derived SQLite index and never drift from the JSON source of truth.
+opt-in, and it never drifts from your committed memory.
 
 ## VS Code
 
@@ -246,44 +239,12 @@ counter. It reads the committed `.hunch/` JSON directly; writes delegate to the 
 
 ## Architecture
 
-```
-src/
-├─ core/         types (Zod schema), ids, paths, glob, schema migration, atomic file I/O
-├─ store/        JSON source of truth ←→ SQLite/FTS5 derived index; merge driver; compaction
-├─ extractors/   tree-sitter parse, git introspection, the indexer
-├─ synthesis/    write path: subscription CLI (Claude/Codex/Cursor) or deterministic fallback
-├─ mcp/          MCP stdio server (the hunch_* tools)
-├─ integrations/ post-commit hook, CLAUDE.md writer, .mcp.json + slash commands, merge driver
-└─ cli/          commander entrypoint
-```
-
-Everything lives under `.hunch/` as git-tracked JSON (the source of truth); SQLite is a
-throwaway derived index. → [storage layout](https://hunch-pi.vercel.app/docs#storage) ·
-[the docs](https://hunch-pi.vercel.app/docs) for the full conceptual model.
-
-## Notable engineering decisions
-
-- **Subscription-billed synthesis, never the API.** The write path drives your Claude
-  subscription via the `claude` CLI; `ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN` are
-  stripped from the child env to force subscription auth. A deterministic, no-LLM fallback
-  means the loop never hard-requires credentials.
-- **Native `tree-sitter` (0.21.1)**, not web-tree-sitter — the prebuilt WASM grammars have an
-  incompatible ABI; the native bindings ship Node-20 prebuilds and a simpler synchronous API.
-- **`better-sqlite3` pinned to `12.9.0`** — 12.10.x ships no Node-20 prebuild.
-- **Atomic, durable writes.** All `.hunch/` writes go through temp-file + rename; an
-  interrupted write can't truncate the index, and `put`/`delete` refuse to rewrite a corrupt one.
-- **OS-agnostic by construction.** Paths are canonicalized to POSIX before comparison, and
-  committed configs reference Hunch by package name, never a machine-local path.
+Everything lives under `.hunch/` as plain git-tracked JSON — the source of truth; a fast local
+index is built from it and is throwaway. Subscription-billed synthesis (never a pay-per-token
+API key) with a no-LLM fallback, and atomic writes so an interrupted write can't corrupt your
+memory. → [the docs](https://hunch-pi.vercel.app/docs) for the conceptual model.
 
 ## Develop
 
-```bash
-npm run dev -- <args>   # run the CLI from source via tsx (no build step)
-npm run typecheck       # strict tsc — the gate
-npm test                # node:test suite
-npm run build           # compile to dist/ (the published artifact)
-```
-
-Hunch is pure TypeScript ESM, Node ≥ 20, licensed **Apache-2.0**. See
-[CONTRIBUTING.md](CONTRIBUTING.md) and the full
-[developer docs](https://hunch-pi.vercel.app/docs#develop).
+Hunch is open source — pure TypeScript ESM, Node ≥ 20, licensed **Apache-2.0**. Contributions
+welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) and the [repo](https://github.com/davesheffer/hunch).
