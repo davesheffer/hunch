@@ -54,16 +54,48 @@ export function commitAndPushHunch(hunchDir: string, message: string): void {
       } catch { /* best-effort: nothing staged / not a repo / offline */ }
     };
     run(["add", "--", "."]);
-    run(["commit", "-m", message]);
-    // Two-way sync: MERGE the remote BEFORE pushing, so a push can never be rejected
-    // non-fast-forward (the cause of memory piling up unpushed across machines). The .hunch
-    // merge driver resolves same-record conflicts by id; non-overlapping records merge cleanly
-    // without it. On an unresolved conflict / offline, mergeRemote aborts to a clean tree and we
-    // skip the push — the local commit stays and syncs on the next write (never lost).
-    if (mergeRemote(hunchDir, env)) run(["push"]);
+    // SAFETY BACKSTOP (critical — bug_overlay_clobber): a memory sync is PURELY ADDITIVE small
+    // JSON. If the staged set contains a DELETION, rename, or any non-.json file, hunchDir is NOT
+    // a clean overlay store — most dangerously, the overlay was never its own git repo so `git -C`
+    // walked UP to the PROJECT repo. Committing/pushing there would overwrite/delete the user's
+    // code (we shipped exactly this). Refuse hard: unstage and bail without committing or pushing.
+    if (!stagedIsMemoryOnly(hunchDir, env)) {
+      try { execFileSync("git", ["-C", hunchDir, "reset", "-q", "--", "."], { stdio: "ignore", env }); } catch { /* best-effort unstage */ }
+      console.error(`hunch: refusing to auto-commit memory at "${hunchDir}" — the staged change includes deletions or non-memory files, so this is not a clean overlay repo. Nothing was committed or pushed. (Use \`hunch shared --repo <url>\` so the overlay is its OWN git repo.)`);
+      return;
+    }
+    // Only sync+push when a memory commit was actually created — never run pull/push against the
+    // enclosing repo on an empty stage. Two-way sync: MERGE the remote BEFORE pushing so a push
+    // can't be rejected non-fast-forward; the .hunch merge driver resolves same-record conflicts
+    // by id. On conflict/offline, mergeRemote aborts to a clean tree and we skip the push.
+    let committed = false;
+    try { execFileSync("git", ["-C", hunchDir, "commit", "-m", message], { stdio: "ignore", env }); committed = true; } catch { /* nothing staged / not a repo */ }
+    if (committed && mergeRemote(hunchDir, env)) run(["push"]);
   } finally {
     try { rmSync(lock, { recursive: true, force: true }); } catch { /* released best-effort */ }
   }
+}
+
+/** Is the staged set a clean, MEMORY-ONLY change — only JSON record adds/updates, nothing else?
+ *  The overlay store is entirely JSON (decisions/, bugs/, …, manifest.json). A real memory sync
+ *  is purely additive; a DELETION, rename, or any non-.json staged path means hunchDir is NOT a
+ *  clean overlay repo (e.g. it resolved to the project repo), so committing there would clobber
+ *  code. Empty stage ⇒ false (nothing to commit). The transient mkdir lock is ignored. */
+function stagedIsMemoryOnly(hunchDir: string, env: NodeJS.ProcessEnv): boolean {
+  let out = "";
+  try { out = execFileSync("git", ["-C", hunchDir, "diff", "--cached", "--name-status"], { encoding: "utf8", env }); }
+  catch { return false; }
+  const lines = out.split("\n").map((l) => l.trim()).filter(Boolean);
+  if (!lines.length) return false;
+  for (const line of lines) {
+    const parts = line.split("\t");
+    const status = (parts[0] ?? "").trim();
+    const path = (parts[parts.length - 1] ?? "").trim();
+    if (path.includes(".hunch-commit.lock")) continue; // transient lock dir, never a record
+    if (!/^[AM]$/.test(status)) return false; // only Add / Modify — any D/R/C/T → not a memory sync
+    if (!path.endsWith(".json")) return false; // the store is entirely JSON records
+  }
+  return true;
 }
 
 /** Merge the overlay's remote into the local branch (pull, no rebase), leaving a CLEAN tree

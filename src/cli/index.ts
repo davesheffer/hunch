@@ -85,9 +85,10 @@ program
   .option("--no-providers", "skip scaffolding non-Claude assistant configs (Cursor / VS Code / Codex / AGENTS.md)")
   .option("--no-agent-hooks", "skip installing the Claude Code agent hooks (.claude/settings.json)")
   .option("--firmness <level>", "agent-hook firmness: off | advisory | firm | strict")
-  .option("--private-sync", "post-commit synthesis writes captured decisions into the private overlay (HUNCH_PRIVATE_DIR), never the public repo")
+  .option("--private-sync", "post-commit synthesis writes captured decisions into the overlay repo (HUNCH_PRIVATE_DIR), never the public store")
+  .option("--shared-sync", "alias of --private-sync (for teams using one shared overlay repo for any code repo)")
   .option("--auto-commit", "opt-in: the post-commit hook also git add+commit+pushes the captured decision (the repo it landed in)")
-  .action((opts: { index: boolean; enforce: boolean; enforceStrict?: boolean; providers: boolean; agentHooks: boolean; firmness?: string; privateSync?: boolean; autoCommit?: boolean }) => {
+  .action((opts: { index: boolean; enforce: boolean; enforceStrict?: boolean; providers: boolean; agentHooks: boolean; firmness?: string; privateSync?: boolean; sharedSync?: boolean; autoCommit?: boolean }) => {
     // Validate --firmness up front, before any side effects (indexing, git hooks,
     // .mcp.json) or opening the store — a bad value must not leave a half-init.
     if (opts.firmness !== undefined && !isFirmness(opts.firmness)) {
@@ -117,8 +118,9 @@ program
     }
 
     if (isGitRepo(root)) {
-      const h = installPostCommitHook(root, inv.shell, { private: opts.privateSync, commit: opts.autoCommit });
-      console.log(`  ✓ post-commit hook ${h.action} (learning loop)${opts.privateSync ? " — syncs to the private overlay" : ""}${opts.autoCommit ? " — auto-commit+push on" : ""}`);
+      const syncToOverlay = !!(opts.privateSync || opts.sharedSync);
+      const h = installPostCommitHook(root, inv.shell, { private: syncToOverlay, commit: opts.autoCommit });
+      console.log(`  ✓ post-commit hook ${h.action} (learning loop)${syncToOverlay ? " — syncs to the shared overlay" : ""}${opts.autoCommit ? " — auto-commit+push on" : ""}`);
       const m = installMergeDriver(root, inv.shell);
       console.log(`  ✓ team merge driver ${m.action}`);
       // Auto-install the pre-commit guard by default (advisory: flags invariants
@@ -275,17 +277,19 @@ program
   .option("--from-hook", "invoked by the git hook")
   .option("--quiet", "minimal output")
   .option("--force", "re-synthesize even if a decision already exists for the commit")
-  .option("--private", "write the synthesized decision into the private overlay (HUNCH_PRIVATE_DIR), not the public repo — for a repo whose memory is kept private")
+  .option("--private", "write the synthesized decision into the configured overlay (HUNCH_PRIVATE_DIR), not the public store")
+  .option("--overlay", "alias of --private")
   .option("--commit", "after a capture, also git add+commit+push the repo the decision landed in (opt-in; best-effort) — the private store under --private, else this repo")
   .option("--deep", "Deep Synthesis: ensemble every available subscription CLI and reconcile their drafts (agreement-weighted, advisory). Slower; subscription-only")
   .option("--verify", "Critic pass: audit the draft against its commit, prune unsupported alternatives/consequences, down-weight weak grounding (extra subscription call; advisory)")
   .option("--samples <n>", "self-consistency depth when only one CLI is installed: sample it n times and reconcile (default 2 under --deep)")
-  .action(async (sha: string | undefined, opts: { fromHook?: boolean; quiet?: boolean; force?: boolean; private?: boolean; commit?: boolean; deep?: boolean; verify?: boolean; samples?: string }) => {
+  .action(async (sha: string | undefined, opts: { fromHook?: boolean; quiet?: boolean; force?: boolean; private?: boolean; overlay?: boolean; commit?: boolean; deep?: boolean; verify?: boolean; samples?: string }) => {
     const { store, root } = storeFor();
     if (!isGitRepo(root)) return opts.quiet ? undefined : fail("sync needs a git repo");
-    if (opts.private && !store.hasPrivate) { store.close(); return opts.quiet ? undefined : fail("--private needs HUNCH_PRIVATE_DIR set to a private store"); }
+    const toOverlay = !!(opts.private || opts.overlay);
+    if (toOverlay && !store.hasPrivate) { store.close(); return opts.quiet ? undefined : fail("--private/--overlay needs HUNCH_PRIVATE_DIR set to an overlay store"); }
     store.json.ensureDirs();
-    const r = await syncCommit(store, root, sha ?? headSha(root), { force: opts.force, private: opts.private, deep: opts.deep, verify: opts.verify, samples: parseSamples(opts.samples) });
+    const r = await syncCommit(store, root, sha ?? headSha(root), { force: opts.force, private: toOverlay, deep: opts.deep, verify: opts.verify, samples: parseSamples(opts.samples) });
     if (r.status === "written") {
       store.reindex();
       // Don't rewrite grounding from the hook — it would dirty the working tree on
@@ -300,7 +304,7 @@ program
       // just no-ops. Stage ONLY the hunch dir (never sweep unrelated working-tree
       // changes), and set HUNCH_SYNC=1 so the commit we create can't re-trigger this
       // hook (no recursion, including on a manual `hunch sync --commit`).
-      const commitTarget = opts.commit ? (opts.private ? store.privateDir : hunchPaths(root).hunch) : undefined;
+      const commitTarget = opts.commit ? (toOverlay ? store.privateDir : hunchPaths(root).hunch) : undefined;
       if (commitTarget) {
         commitAndPushHunch(commitTarget, `hunch: capture ${r.decision?.id ?? "decision"}`);
         if (!opts.quiet) console.log(`  ↳ committed + pushed ${r.decision?.id} (${commitTarget})`);
@@ -313,6 +317,120 @@ program
   });
 
 // ---- private (one-command setup for the private memory overlay) ------------
+type OverlaySetupOpts = { repo?: string; hook: boolean; autoCommit?: boolean; sync?: boolean; migrate?: boolean };
+
+function configureOverlay(dir: string | undefined, opts: OverlaySetupOpts, mode: "private" | "shared"): void {
+  const root = findRoot();
+  const paths = hunchPaths(root);
+  const commandName = mode === "private" ? "private" : "shared";
+
+  if (opts.sync) {
+    const s = new HunchStore(hunchPaths(root));
+    const target = s.privateDir;
+    s.close();
+    if (!target) return fail(`no overlay configured — run \`hunch ${commandName}\` first`);
+    commitAndPushHunch(target, "hunch: sync overlay memory");
+    console.log(`✓ flushed overlay store → ${target}`);
+    return;
+  }
+
+  // 1) resolve the overlay store's hunch dir (holds decisions/, bugs/, …)
+  let hunchDir: string;
+  if (opts.repo) {
+    const dest = join(root, ".hunch-private");
+    if (!existsSync(dest)) {
+      const r = spawnSync("git", ["clone", opts.repo, dest], { stdio: "inherit" });
+      if (r.status !== 0) return fail(`git clone failed for ${opts.repo}`);
+    }
+    hunchDir = join(dest, ".hunch");
+  } else {
+    hunchDir = dir ? resolve(root, dir) : join(root, ".hunch-private", ".hunch");
+  }
+
+  // 2) create the layout (decisions/, manifest, …) so it's queryable immediately
+  new JsonStore(hunchPathsForDir(hunchDir)).ensureDirs();
+  const inv = resolveInvocation();
+  // Install the structured merge driver IN the overlay repo so concurrent captures from
+  // multiple machines/worktrees merge by RECORD ID (no manual conflict resolution) when the
+  // two-way auto-sync pulls before pushing. The overlay repo root is the parent of its .hunch.
+  const overlayRoot = hunchPathsForDir(hunchDir).root;
+  // CRITICAL (bug_overlay_clobber): with --auto-commit, the overlay MUST be its own git repo.
+  // Otherwise the post-commit auto-commit (commitAndPushHunch) runs `git -C overlayDir …` which
+  // walks UP to the PROJECT repo and can commit memory over your code. Initialize a standalone
+  // repo when one isn't there (a local repo with no remote just accumulates commits — safe).
+  if (opts.autoCommit && !isGitRepo(overlayRoot)) {
+    spawnSync("git", ["init", "-q", overlayRoot], { stdio: "ignore" });
+  }
+  if (isGitRepo(overlayRoot)) installMergeDriver(overlayRoot, inv.shell);
+
+  // 3) record the path in a GITIGNORED local config — auto-detected, no env var, and
+  //    the MCP server picks it up too. Atomic write (con_902759b3dc) since it's under .hunch/.
+  mkdirSync(paths.hunch, { recursive: true }); // tolerate a repo where `hunch init` hasn't run yet
+  // Store a repo-relative POSIX path when the store lives INSIDE the repo (portable +
+  // OS-clean — survives a repo move, resolves the same on any OS); an absolute path for
+  // a store elsewhere on disk. Resolution (env || local.json) re-resolves against root.
+  const rel = relative(root, hunchDir);
+  const stored = rel && !rel.startsWith("..") && !isAbsolute(rel) ? toPosixTarget(rel) : hunchDir;
+  writeFileAtomic(join(paths.hunch, "local.json"), JSON.stringify({ privateDir: stored, autoCommit: !!opts.autoCommit }, null, 2) + "\n");
+  ensureGitignore(root); // keeps .hunch/local.json + .hunch-private/ out of git
+
+  // Also register the overlay at the SHARED git common dir, so EVERY worktree of this repo
+  // (current + future, any branch) auto-discovers the same memory with zero per-worktree
+  // setup. Stored ABSOLUTE — a linked worktree resolves relative paths from its OWN root, so
+  // only an absolute path survives the move. Lives under .git/ (never tracked; nothing to ignore).
+  let worktreeNote = "";
+  if (ensureSharedOverlayPointer(root, hunchDir, !!opts.autoCommit)) {
+    worktreeNote = "  ✓ registered in the git common dir — shared by every worktree of this repo, on any branch\n";
+  }
+
+  // 4) route post-commit synthesis to the overlay (local hook, never committed)
+  let hookNote = "";
+  if (opts.hook && isGitRepo(root)) {
+    const h = installPostCommitHook(root, inv.shell, { private: true, commit: opts.autoCommit });
+    hookNote = `  ✓ post-commit hook ${h.action} — captured decisions route here${opts.autoCommit ? " (auto-commit+push on)" : ""}\n`;
+  }
+
+  // 5) one-time migration: MOVE existing public memory INTO the overlay, then make
+  //    THIS repo code-only. Records are absorbed (union by id) BEFORE the public
+  //    store is emptied, so an interrupted run never loses memory.
+  let migrateNote = "";
+  if (opts.migrate) {
+    const pub = new JsonStore(paths);
+    const priv = new JsonStore(hunchPathsForDir(hunchDir));
+    const res = movePublicMemoryToPrivate(pub, priv);
+    for (const kind of ENTITY_KINDS) pub.dropAll(kind); // public store now empty on disk
+    if (isGitRepo(root)) gitUntrackCached(root, HUNCH_MEMORY_DIRS); // stop publishing it
+    ignoreHunchMemory(root);
+    const gstore = new HunchStore(paths); // public store is empty → grounding shows no memory
+    const grounding = regenerateGrounding(root, gstore);
+    gstore.close();
+    commitAndPushHunch(hunchDir, "hunch: absorb public memory into private overlay"); // durable
+    const breakdown = Object.entries(res.moved).map(([k, n]) => `${n} ${k}`).join(", ") || "0 records";
+    migrateNote =
+      `  ✓ migrated public memory → overlay (${breakdown}); public store emptied\n` +
+      `  ✓ untracked + gitignored the .hunch memory tree — this repo is now CODE-ONLY\n` +
+      `  ✓ regenerated ${grounding.length} grounding file(s) (CLAUDE.md, AGENTS.md, …) — no public memory shown\n` +
+      `  ✓ committed + pushed the private overlay (best-effort)\n` +
+      `  next: review, then commit the PUBLIC repo:\n` +
+      `      git add -A && git commit -m "chore: move engineering memory to a private overlay" && git push\n`;
+  }
+
+  const lead = mode === "private"
+    ? `✓ private overlay enabled → ${hunchDir}\n`
+    : `✓ shared overlay enabled → ${hunchDir}\n`;
+  const tail = mode === "private"
+    ? "  record sensitive items with private:true (hunch_record_decision / hunch_record_correction)\n  override per-shell with HUNCH_PRIVATE_DIR; CI / public PR comments stay public-only."
+    : "  this works for any repo (public or private): one shared memory source across teammates, branches, and worktrees.\n  override per-shell with HUNCH_PRIVATE_DIR if needed.";
+  console.log(
+    lead +
+    "  ✓ recorded in .hunch/local.json (gitignored) — auto-detected, no env var or shell-profile edit\n" +
+    worktreeNote +
+    hookNote +
+    migrateNote +
+    tail,
+  );
+}
+
 program
   .command("private [dir]")
   .description("Enable a PRIVATE memory overlay — sensitive decisions/bugs/constraints kept in a separate location, unioned into local queries, never committed here. Writes a gitignored .hunch/local.json so it's auto-detected (no env var needed).")
@@ -321,101 +439,21 @@ program
   .option("--no-auto-commit", "DON'T auto commit+push the overlay after each capture (default: ON — fully automated two-way sync, never push by hand)")
   .option("--sync", "flush the configured private store now (git add+commit+push) — catches records made via MCP between commits")
   .option("--migrate", "ONE-TIME: move this repo's EXISTING public .hunch memory into the overlay, then make the public repo code-only — untrack + gitignore the memory tree and regenerate grounding so no memory is published here")
-  .action((dir: string | undefined, opts: { repo?: string; hook: boolean; autoCommit?: boolean; sync?: boolean; migrate?: boolean }) => {
-    const root = findRoot();
-    if (opts.sync) {
-      const s = new HunchStore(hunchPaths(root));
-      const target = s.privateDir;
-      s.close();
-      if (!target) return fail("no private overlay configured — run `hunch private` first");
-      commitAndPushHunch(target, "hunch: sync private memory");
-      console.log(`✓ flushed private store → ${target}`);
-      return;
-    }
-    const paths = hunchPaths(root);
-    // 1) resolve the private store's hunch dir (holds decisions/, bugs/, …)
-    let hunchDir: string;
-    if (opts.repo) {
-      const dest = join(root, ".hunch-private");
-      if (!existsSync(dest)) {
-        const r = spawnSync("git", ["clone", opts.repo, dest], { stdio: "inherit" });
-        if (r.status !== 0) return fail(`git clone failed for ${opts.repo}`);
-      }
-      hunchDir = join(dest, ".hunch");
-    } else {
-      hunchDir = dir ? resolve(root, dir) : join(root, ".hunch-private", ".hunch");
-    }
-    // 2) create the layout (decisions/, manifest, …) so it's queryable immediately
-    new JsonStore(hunchPathsForDir(hunchDir)).ensureDirs();
-    const inv = resolveInvocation();
-    // Install the structured merge driver IN the overlay repo so concurrent captures from
-    // multiple machines/worktrees merge by RECORD ID (no manual conflict resolution) when the
-    // two-way auto-sync pulls before pushing. The overlay repo root is the parent of its .hunch.
-    const overlayRoot = hunchPathsForDir(hunchDir).root;
-    if (isGitRepo(overlayRoot)) installMergeDriver(overlayRoot, inv.shell);
-    // 3) record the path in a GITIGNORED local config — auto-detected, no env var, and
-    //    the MCP server picks it up too. Atomic write (con_902759b3dc) since it's under .hunch/.
-    mkdirSync(paths.hunch, { recursive: true }); // tolerate a repo where `hunch init` hasn't run yet
-    // Store a repo-relative POSIX path when the store lives INSIDE the repo (portable +
-    // OS-clean — survives a repo move, resolves the same on any OS); an absolute path for
-    // a store elsewhere on disk. Resolution (env || local.json) re-resolves against root.
-    const rel = relative(root, hunchDir);
-    const stored = rel && !rel.startsWith("..") && !isAbsolute(rel) ? toPosixTarget(rel) : hunchDir;
-    writeFileAtomic(join(paths.hunch, "local.json"), JSON.stringify({ privateDir: stored, autoCommit: !!opts.autoCommit }, null, 2) + "\n");
-    ensureGitignore(root); // keeps .hunch/local.json + .hunch-private/ out of git
-    // Also register the overlay at the SHARED git common dir, so EVERY worktree of this repo
-    // (current + future, any branch) auto-discovers the same memory with zero per-worktree
-    // setup. Stored ABSOLUTE — a linked worktree resolves relative paths from its OWN root, so
-    // only an absolute path survives the move. Lives under .git/ (never tracked; nothing to ignore).
-    let worktreeNote = "";
-    if (ensureSharedOverlayPointer(root, hunchDir, !!opts.autoCommit)) {
-      worktreeNote = `  ✓ registered in the git common dir — shared by every worktree of this repo, on any branch\n`;
-    }
-    // 4) route post-commit synthesis to the overlay (local hook, never committed)
-    let hookNote = "";
-    if (opts.hook && isGitRepo(root)) {
-      const h = installPostCommitHook(root, inv.shell, { private: true, commit: opts.autoCommit });
-      hookNote = `  ✓ post-commit hook ${h.action} — captured decisions route here${opts.autoCommit ? " (auto-commit+push on)" : ""}\n`;
-    }
-    // 5) one-time migration: MOVE existing public memory INTO the overlay, then make
-    //    THIS repo code-only. Records are absorbed (union by id) BEFORE the public
-    //    store is emptied, so an interrupted run never loses memory.
-    let migrateNote = "";
-    if (opts.migrate) {
-      const pub = new JsonStore(paths);
-      const priv = new JsonStore(hunchPathsForDir(hunchDir));
-      const res = movePublicMemoryToPrivate(pub, priv);
-      for (const kind of ENTITY_KINDS) pub.dropAll(kind); // public store now empty on disk
-      if (isGitRepo(root)) gitUntrackCached(root, HUNCH_MEMORY_DIRS); // stop publishing it
-      ignoreHunchMemory(root);
-      const gstore = new HunchStore(paths); // public store is empty → grounding shows no memory
-      const grounding = regenerateGrounding(root, gstore);
-      gstore.close();
-      commitAndPushHunch(hunchDir, "hunch: absorb public memory into private overlay"); // durable
-      const breakdown = Object.entries(res.moved).map(([k, n]) => `${n} ${k}`).join(", ") || "0 records";
-      migrateNote =
-        `  ✓ migrated public memory → overlay (${breakdown}); public store emptied\n` +
-        `  ✓ untracked + gitignored the .hunch memory tree — this repo is now CODE-ONLY\n` +
-        `  ✓ regenerated ${grounding.length} grounding file(s) (CLAUDE.md, AGENTS.md, …) — no public memory shown\n` +
-        `  ✓ committed + pushed the private overlay (best-effort)\n` +
-        `  next: review, then commit the PUBLIC repo:\n` +
-        `      git add -A && git commit -m "chore: move engineering memory to a private overlay" && git push\n`;
-    }
-    console.log(
-      `✓ private overlay enabled → ${hunchDir}\n` +
-      `  ✓ recorded in .hunch/local.json (gitignored) — auto-detected, no env var or shell-profile edit\n` +
-      worktreeNote +
-      hookNote +
-      migrateNote +
-      `  record sensitive items with private:true (hunch_record_decision / hunch_record_correction)\n` +
-      `  override per-shell with HUNCH_PRIVATE_DIR; CI / public PR comments stay public-only.`,
-    );
-  });
+  .action((dir: string | undefined, opts: OverlaySetupOpts) => configureOverlay(dir, opts, "private"));
+
+program
+  .command("shared [dir]")
+  .description("Enable a SHARED memory overlay repo for this project (works for any repo: private or public). Memory stays in one location, shared across teammates, branches, and worktrees.")
+  .option("--repo <url>", "clone a git repo to use as the shared memory store (into ./.hunch-private)")
+  .option("--no-hook", "don't switch the post-commit hook to overlay sync")
+  .option("--no-auto-commit", "DON'T auto commit+push the overlay after each capture (default: ON — fully automated two-way sync)")
+  .option("--sync", "flush the configured overlay store now (git add+commit+push)")
+  .action((dir: string | undefined, opts: OverlaySetupOpts) => configureOverlay(dir, opts, "shared"));
 
 // ---- worktree (one-command worktree wired into Hunch) ----------------------
 program
   .command("worktree <path>")
-  .description("Create a git worktree already wired into Hunch — it shares this repo's memory (the private overlay), with zero per-worktree setup.")
+  .description("Create a git worktree already wired into Hunch — it shares this repo's memory overlay, with zero per-worktree setup.")
   .option("-b, --branch <name>", "create the worktree on a NEW branch")
   .option("--no-share", "don't register the overlay at the git common dir (the worktree won't see private memory)")
   .option("--no-index", "don't build the new worktree's code graph (skip if you'll index later)")
@@ -441,7 +479,7 @@ program
     } else if (overlay) {
       shareNote = `  · could not register the shared overlay pointer (no git common dir?)`;
     } else {
-      shareNote = `  · no private overlay configured — run \`hunch private\` to share memory across worktrees`;
+      shareNote = `  · no overlay configured — run \`hunch shared\` (or \`hunch private\`) to share memory across worktrees`;
     }
     // 3) build the new worktree's CODE GRAPH (symbols/edges → blast-radius / dependents).
     //    Indexed IN-PROCESS (uses THIS install's tree-sitter, so the worktree needs no
@@ -1655,7 +1693,7 @@ program
     console.log(`hunch:      ${c.symbols} symbols, ${c.edges} edges, ${c.components} components, ${c.decisions} decisions, ${c.bugs} bugs, ${c.constraints} constraints`);
     console.log(store.privateDir
       ? `private:    on → ${store.privateDir} (local overlay — unioned into queries; never committed or posted publicly)`
-      : dim(`private:    off — run \`hunch private\` to keep sensitive memory in a separate repo (or set HUNCH_PRIVATE_DIR)`));
+      : dim(`private:    off — run \`hunch shared\` (or \`hunch private\`) to use one overlay repo across teammates/worktrees (or set HUNCH_PRIVATE_DIR)`));
     // Worktree posture: linked worktrees share ONE memory via the git common dir. Only
     // surfaced in a linked worktree (no noise in a normal single checkout), so a
     // "memory missing here" symptom has an obvious cause + fix.
@@ -1664,7 +1702,7 @@ program
       const sharedPtr = !!common && existsSync(join(common, "hunch", "local.json"));
       console.log(store.privateDir
         ? `worktree:   linked — sharing the repo's memory${sharedPtr ? " via the git common dir" : ""}`
-        : dim(`worktree:   linked, but no overlay resolved here — run \`hunch private\` once (any worktree) so all worktrees share it`));
+        : dim(`worktree:   linked, but no overlay resolved here — run \`hunch shared\` (or \`hunch private\`) once (any worktree) so all worktrees share it`));
     }
     // Semantic search is opt-in and local. Report availability + coverage without
     // loading the model (selectEmbedder only probes; embeddingStats just counts rows).
