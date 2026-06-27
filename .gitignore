@@ -40,3 +40,7 @@ dist/
 .hunch/local.json
 .hunch-private/
 # <<< hunch <<<
+
+# private GTM/launch playbooks — keep local, never publish
+blog/LAUNCH.md
+blog/*.private.md
