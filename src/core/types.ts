@@ -129,6 +129,12 @@ export type ConformancePredicate = z.infer<typeof ConformancePredicateSchema>;
 export const DecisionSchema = z.object({
   id: z.string().describe("dec_*"),
   title: z.string(),
+  // The drift-detection anchor (decision-grounding). Exactly one topic per decision;
+  // it is the join key detection/grounding use to relate a doc section, a decision,
+  // and a code region. null = un-anchored: the decision is still valid, it is just
+  // invisible to doc≠graph detection until a topic is attached (honest, bounded —
+  // the system protects what's tagged and doesn't pretend to protect what isn't).
+  topic: z.string().nullable().default(null).describe("decision-grounding anchor; one topic per decision, null = un-anchored"),
   status: z.enum(["proposed", "accepted", "rejected", "superseded"]).default("proposed"),
   context: z.string().default(""),
   decision: z.string().default(""),
@@ -148,6 +154,13 @@ export const DecisionSchema = z.object({
   // from `date`, and the capture paths always set it); undefined = always-started.
   valid_from: z.string().optional().describe("ISO instant the decision took effect (commit date)"),
   valid_to: z.string().nullable().default(null).describe("ISO instant it was superseded (null = in force)"),
+  // Freshness clock (decision-grounding). When the decision was last captured,
+  // explicitly affirmed ("still current"), or re-verified against live code/doc.
+  // Distinct from valid_from (when it took effect): a decision can be in-force yet
+  // stale. Grounding surfaces the age and downgrades a sufficiently-aged decision
+  // from hard authority to advisory — the guard against injecting a rotted decision
+  // as truth. Optional so legacy records validate; the migration backfills it.
+  last_affirmed_at: z.string().optional().describe("ISO instant last captured/affirmed/re-verified; drives grounding age-downgrade"),
   retired: RetiredSignalSchema.default({ symbols: [], deps: [] }),
   conformance: z.array(ConformancePredicateSchema).optional().describe("deterministic intent-conformance checks over the graph"),
   provenance: ProvenanceSchema,

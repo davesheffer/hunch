@@ -528,11 +528,12 @@ program
         const id = decisionId(`inline:${it.file}:${it.text}`);
         const prev = store.recs("decisions").find((d) => d.id === id); // preserve window for idempotent re-capture
         const rec: Decision = {
-          id, title: it.text, status: "accepted",
+          id, title: it.text, topic: prev?.topic ?? null, status: "accepted",
           context: `Captured from an inline hunch-why comment (${it.file}:${it.line}).`,
           decision: it.text, consequences: [], alternatives_rejected: [], rejected_tripwires: [],
           related_components: [], related_files: [it.file], supersedes: null, superseded_by: null,
           caused_by_bug: null, commit: null, valid_from: prev?.valid_from ?? now, valid_to: null,
+          last_affirmed_at: now, // re-capturing an inline hunch re-affirms it now
           retired: { symbols: [], deps: [] },
           provenance: { source: "human_confirmed", confidence: 0.9, evidence: ev }, date: prev?.date ?? now,
         };

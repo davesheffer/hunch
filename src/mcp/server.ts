@@ -22,6 +22,7 @@ import { checkConformance } from "../core/conformance.js";
 import { renderMarkdown, verdict } from "../core/checkreport.js";
 import { HUNCH_VERSION } from "../core/version.js";
 import type { Decision, Symbol } from "../core/types.js";
+import { liveForTopic, historyForTopic, rejectedForTopic } from "../core/topics.js";
 
 type ToolResult = { content: Array<{ type: "text"; text: string }>; isError?: boolean };
 const ok = (text: string): ToolResult => ({ content: [{ type: "text", text }] });
@@ -89,6 +90,32 @@ export function buildServer(root: string): McpServer {
         return `• [${h.kind}] ${h.ref} — ${h.title}\n    ${h.snippet}${provLine(r?.record)}`;
       });
       return ok(`Top matches for "${query}":\n\n${lines.join("\n")}`);
+    },
+  );
+
+  // -- hunch_current_decision (decision-grounding: current(topic)) ----------
+  server.registerTool(
+    "hunch_current_decision",
+    {
+      title: "Current decision for a topic",
+      description:
+        "Decision-grounding: return the single CURRENT (accepted, non-superseded) decision anchored to a topic — the authoritative answer a doc or diff is checked against, plus what it rejected. If a topic has NO current decision, or an unresolved collision (>1 live), it says so and injects nothing (fail-safe).",
+      inputSchema: { topic: z.string().describe("the decision anchor, e.g. 'auth-transport'") },
+    },
+    async ({ topic }): Promise<ToolResult> => {
+      const decs = store.recs("decisions");
+      const live = liveForTopic(decs, topic);
+      if (live.length === 0) return ok(`No current decision for topic "${topic}". (Un-anchored, or never captured.)`);
+      if (live.length > 1) {
+        const list = live.map((d) => `${d.id} ("${d.title}")`).join(", ");
+        return ok(`Topic "${topic}" has an UNRESOLVED collision (${live.length} live decisions): ${list}.\nGrounding injects nothing until this is resolved — supersede one, or split the topic.`);
+      }
+      const d = live[0]!;
+      const rejected = rejectedForTopic(decs, topic);
+      const rej = rejected.length ? `\n    rejected: ${rejected.join("; ")}` : "";
+      const hist = historyForTopic(decs, topic);
+      const chain = hist.length > 1 ? `\n    history: ${hist.length} decisions on this topic (current is newest)` : "";
+      return ok(`Current decision for "${topic}": ${d.id} — "${d.title}" (${d.status}).\n    ${d.decision}${rej}${chain}${provLine(d)}`);
     },
   );
 
@@ -304,6 +331,7 @@ export function buildServer(root: string): McpServer {
           alternatives_rejected: z.array(z.string()).optional(),
           related_files: z.array(z.string()).optional(),
           related_components: z.array(z.string()).optional(),
+          topic: z.string().optional().describe("decision-grounding anchor — one topic per decision; enables doc≠graph drift detection for it. Omit to leave un-anchored."),
           status: z.enum(["proposed", "accepted", "rejected", "superseded"]).optional(),
           commit: z.string().optional(),
           supersedes: z.string().optional().describe("id of a decision this one replaces — closes its valid-time window (invalidate, don't delete)"),
@@ -336,6 +364,7 @@ export function buildServer(root: string): McpServer {
         const rec: Decision = {
           id,
           title: decision.title,
+          topic: decision.topic ?? existing?.topic ?? null,
           status: decision.status ?? "accepted",
           context: decision.context ?? existing?.context ?? "",
           decision: decision.decision ?? existing?.decision ?? "",
@@ -350,10 +379,30 @@ export function buildServer(root: string): McpServer {
           commit: decision.commit ?? existing?.commit ?? null,
           valid_from: existing?.valid_from ?? now,
           valid_to: existing?.valid_to ?? null,
+          last_affirmed_at: now, // recording a decision affirms it as of now (freshness clock)
           retired: existing?.retired ?? { symbols: [], deps: [] },
           provenance: { source, confidence: 0.95, evidence: (decision.related_files ?? existing?.provenance.evidence ?? []).map(toPosixTarget) },
           date: now,
         };
+        // Decision-grounding uniqueness guard (§4 Enforcement): never create a SECOND
+        // live decision for one topic. If this accepted decision is anchored to a topic
+        // that already has a DIFFERENT live decision and does not supersede it, refuse —
+        // present both and let the human resolve (supersede / split the topic / discard).
+        // The machine never auto-supersedes; a re-record of the same id, or one that
+        // supersedes the incumbent, is allowed through.
+        if (rec.topic && rec.status === "accepted") {
+          const others = liveForTopic(store.recs("decisions"), rec.topic).filter(
+            (d) => d.id !== id && d.id !== decision.supersedes,
+          );
+          if (others.length) {
+            const list = others.map((d) => `${d.id} ("${d.title}")`).join(", ");
+            return err(
+              `Topic "${rec.topic}" already has a live decision: ${list}. ` +
+                `Hunch will not create a second current decision for one topic. Resolve it: ` +
+                `re-record with supersedes:"${others[0]!.id}" to replace it (linked), pick a distinct topic to split, or discard this capture.`,
+            );
+          }
+        }
         // Route the write: private records go to the HUNCH_PRIVATE_DIR overlay (never
         // the committed repo); everything else to the public store. putPrivate throws
         // if no private store is configured, so "private" can't silently fall public.

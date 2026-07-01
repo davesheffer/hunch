@@ -138,6 +138,9 @@ export async function syncCommit(
   const decision: Decision = {
     id,
     title: draft.title,
+    // Auto-synthesized decisions are un-anchored (topic null) — a topic is a human
+    // act, never a machine guess. Preserve one an earlier human capture attached.
+    topic: existing?.topic ?? null,
     status: existing?.status === "accepted" ? "accepted" : "proposed",
     context: draft.context + constraintNote,
     decision: draft.decision,
@@ -160,6 +163,9 @@ export async function syncCommit(
     // window an earlier sync/supersession already set on this same commit's record).
     valid_from: existing?.valid_from ?? meta.date,
     valid_to: existing?.valid_to ?? null,
+    // Freshness clock: an auto-derived decision is affirmed as of its commit date
+    // (not a human affirmation). Preserve a later explicit affirm if one exists.
+    last_affirmed_at: existing?.last_affirmed_at ?? meta.date,
     // What this commit DELETED — the Regression Guard later matches a re-adding
     // diff against this (recompute from the fresh analysis, even on --force).
     retired: { symbols: analysis.removedSymbols.map((s) => s.name), deps: analysis.removedDeps },

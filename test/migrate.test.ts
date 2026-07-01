@@ -46,6 +46,32 @@ test("production MIGRATIONS at the current version is a no-op", () => {
   assert.deepEqual(migrateRaw("decisions", rec, SCHEMA_VERSION), rec);
 });
 
+test("v3 migrates a v2 decision: topic→null, last_affirmed_at←valid_from", () => {
+  // A v2-shaped decision (has valid_from/valid_to, no topic/last_affirmed_at) run
+  // FROM v2 → current. topic is never guessed (→ null); freshness backfills from the
+  // effect-time, preferring valid_from over date.
+  const v2 = { id: "dec_1", title: "t", valid_from: "2025-06-01T00:00:00Z", valid_to: null, date: "2025-06-02T00:00:00Z" };
+  const out = migrateRaw("decisions", { ...v2 }, 2) as Record<string, unknown>;
+  assert.equal(out.topic, null, "legacy decision migrates un-anchored, never auto-topic'd");
+  assert.equal(out.last_affirmed_at, "2025-06-01T00:00:00Z", "freshness backfilled from valid_from");
+});
+
+test("v1 decision migrates through v2+v3: valid_from set, then freshness from it", () => {
+  // From baseline: v2 backfills valid_from = date, then v3 seeds last_affirmed_at from it.
+  const v1 = { id: "dec_2", title: "t", date: "2025-01-05T00:00:00Z" };
+  const out = migrateRaw("decisions", { ...v1 }, BASELINE_VERSION) as Record<string, unknown>;
+  assert.equal(out.valid_from, "2025-01-05T00:00:00Z", "v2 backfill ran first");
+  assert.equal(out.topic, null, "v3 anchor is null");
+  assert.equal(out.last_affirmed_at, "2025-01-05T00:00:00Z", "v3 freshness from valid_from(=date)");
+});
+
+test("v3 leaves an already-topic'd / already-affirmed decision untouched", () => {
+  const rec = { id: "dec_3", title: "t", topic: "auth-transport", last_affirmed_at: "2026-05-05T00:00:00Z", valid_from: "2020-01-01T00:00:00Z", date: "2020-01-01T00:00:00Z" };
+  const out = migrateRaw("decisions", { ...rec }, 2) as Record<string, unknown>;
+  assert.equal(out.topic, "auth-transport", "existing topic preserved");
+  assert.equal(out.last_affirmed_at, "2026-05-05T00:00:00Z", "existing freshness not clobbered by backfill");
+});
+
 test("manifest round-trips; missing/corrupt → BASELINE_VERSION", () => {
   const { root, cleanup } = tmp();
   const paths = hunchPaths(root);

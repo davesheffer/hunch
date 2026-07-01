@@ -21,7 +21,7 @@ import type { EntityKind } from "./types.js";
 import type { HunchPaths } from "./paths.js";
 
 /** The schema generation this build writes and reads. Bump on any breaking change. */
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 /** A repo whose `.hunch/` predates manifests is treated as v1. Migrations are
  *  numbered from 2 (each `version` is the number it PRODUCES), so a baseline repo
@@ -60,6 +60,31 @@ export const MIGRATIONS: Migration[] = [
         if (raw.status === undefined) raw.status = "active";
         if (raw.valid_to === undefined) raw.valid_to = null;
         // valid_from is optional on constraints; leave unset for legacy records.
+      }
+      return raw;
+    },
+  },
+  {
+    // v3: decision-grounding anchor + freshness clock. `topic` is the drift-detection
+    // join key; it is NEVER auto-guessed (an LLM guess at scale = the semantic firing
+    // the design forbids), so legacy decisions migrate to null (un-anchored) and are
+    // anchored later by an explicit human act. `last_affirmed_at` backfills from the
+    // decision's existing effect-time so old decisions have a real freshness value
+    // rather than reading as brand-new — v2 has already set valid_from by the time
+    // this runs (migrations apply in ascending version order).
+    version: 3,
+    description: "Add topic (grounding anchor, default null) + last_affirmed_at (freshness clock) to decisions",
+    up(kind, raw) {
+      if (kind === "decisions") {
+        if (raw.topic === undefined) raw.topic = null;
+        if (raw.last_affirmed_at === undefined) {
+          const validFrom = typeof raw.valid_from === "string" && raw.valid_from ? raw.valid_from : undefined;
+          const date = typeof raw.date === "string" && raw.date ? raw.date : undefined;
+          const seed = validFrom ?? date;
+          // Only set when we have a real instant; leave unset (optional) otherwise so
+          // we never stamp an empty string that later reads as a valid timestamp.
+          if (seed) raw.last_affirmed_at = seed;
+        }
       }
       return raw;
     },
