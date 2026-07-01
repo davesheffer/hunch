@@ -473,7 +473,12 @@ The migration **must not** auto-assign `topic` (an LLM guess at scale = the bann
 
 ### 9.5 Forward-compat hazard (mixed-version teams)
 
-`DecisionSchema` is a non-strict `z.object`, so it **strips unknown keys.** An **older** Hunch binary opening a v3 repo (manifest `schema_version: 3` > its own `SCHEMA_VERSION: 2`) runs no applicable migration, passes the raw record to Zod, and **silently drops `topic`/`last_affirmed_at` on any rewrite** — data attrition in a mixed-version team. Mitigation (as shipped): `JsonStore.schemaVersion()` **warns once** when `manifest.schema_version > SCHEMA_VERSION` (`"written by a newer schema … upgrade hunch"`) and still loads — the tested, non-destructive behavior. It deliberately does *not* hard-refuse: a read-only refuse would break the current warn-and-load contract (and its test), so it is left as a warning. The residual attrition risk is real but bounded to teams running mixed Hunch versions mid-rollout; pin a minimum version once v3 ships.
+Historically `DecisionSchema` was a non-strict `z.object` that **stripped unknown keys** — so an older binary opening a newer repo silently dropped the newer fields on any rewrite (data attrition in a mixed-version team). Two mitigations ship:
+
+1. **`DecisionSchema` is now `.passthrough()`** — a reader PRESERVES unknown newer fields across the load→validate→persist round-trip instead of stripping them, closing the attrition for any *future* skew (a v3 binary reading v4+ data).
+2. **`JsonStore.schemaVersion()` warns once** when `manifest.schema_version > SCHEMA_VERSION` (`"written by a newer schema … upgrade hunch"`) and still loads — the tested, non-destructive contract. It deliberately does *not* hard-refuse: a read-only refuse would break warn-and-load (and its test).
+
+The one window neither fully covers is an **already-shipped v2 binary reading v3 data** (it predates the passthrough) — pin a minimum hunch version for that rollout window.
 
 ### 9.6 Reversibility
 

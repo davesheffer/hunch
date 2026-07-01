@@ -165,7 +165,11 @@ export const DecisionSchema = z.object({
   conformance: z.array(ConformancePredicateSchema).optional().describe("deterministic intent-conformance checks over the graph"),
   provenance: ProvenanceSchema,
   date: z.string(),
-});
+}).passthrough();
+// passthrough(): unknown keys survive the load→validate→persist round-trip instead of
+// being stripped. Forward-compat guard (DESIGN §9.5) — a newer schema's fields (e.g. a
+// future v4) are PRESERVED by this (v3) reader on any rewrite, rather than silently
+// dropped, so a mixed-version team doesn't lose data written by a newer binary.
 export type Decision = z.infer<typeof DecisionSchema>;
 
 export const BugLineageSchema = z.object({
