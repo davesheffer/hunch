@@ -255,10 +255,10 @@ If the current graph store can't answer these — and today it can't; `topic` is
 ### Two build stages
 
 **Stage 1 — prompt-driven (build now, week-sized).** Two-call dance:
-- `hunch_capture_decision(topic?, seed?)` → returns grilling instructions to the calling agent: the interrogation protocol + what a resolved decision must contain, and **issues a capture-session token.**
-- `hunch_commit_decision(payload, token)` → validates the payload against the schema and writes it to the graph. Returns the new decision id.
+- `hunch_capture_decision(topic?, seed?)` → returns the grilling protocol to the calling agent (the interrogation loop + what a resolved decision must contain) and **issues a capture-session token.**
+- Commit via **`hunch_record_decision(decision, capture_token)`** → validates the payload against the schema, runs the topic-uniqueness guard, and writes it to the graph. *(As built: there is no separate `hunch_commit_decision` tool — the existing write tool is the commit path, made token-aware.)*
 
-**Bind the two calls.** `hunch_commit_decision` must require a capture-session token issued only by `hunch_capture_decision`, so a decision cannot be committed without an interview having been opened. Otherwise the commit call is a side door that writes authoritative decisions with no human turn — breaking the identity principle ([§2](#2-the-identity-principle--automation-contract)). (Note: `hunch_record_decision` (`src/mcp/server.ts:291-386`) already ships as exactly such an un-gated write path — `status: accepted`, `confidence: 0.95`, no interview, no token. It is a live capture bypass *today*, not a hypothetical; gating or removing it is an explicit build step — [§7 step 1](#sequence-only-after-the-atom-demos) — and it stays on the open list ([§8-10](#8-red-team)) until that lands.)
+**Bind the two calls (staged, §9.3).** A valid `capture_token` proves the write is the tail of an interview. As shipped the token is **optional**: a tokened write is clean; an un-tokened write still succeeds but returns a deprecation nudge toward `/capture` — non-breaking for existing callers. A future major version will *require* the token, closing the un-interviewed bypass the red-team flagged ([§8-9](#8-red-team)). Honest state: the side door is **narrowed and visible**, not yet fully closed.
 
 Grilling quality depends on the calling agent following the returned protocol. The **validator is a backstop for *completeness*, not *quality*** — it rejects any payload missing `rationale` or `rejected`, so a short-circuited interview can't commit *structurally incomplete* mush. It does **not** and cannot verify the fields are *substantive*: `rationale: "it's better"` plus one strawman rejected option passes. Decision *quality* is not machine-enforced in Stage 1 — it rides on the grilling protocol the connected agent may ignore. Treat this as a known, bounded gap: at the atom, N=1 and a human eyeballs the entry; at scale, **Stage 2 server-orchestration is what actually closes it** (sequence step 8). Do not read "the validator is the backstop" as "quality is guaranteed."
 
@@ -357,6 +357,20 @@ Stop building the system. Build the single atom that produces one visible moment
 8. Harden capture to Stage 2; add semantic anchor *suggestion*.
 
 **doc ≠ code** is never built as its own detector — it falls out of steps 4 + 7 *only where both a doc anchor and a code tripwire exist for the governing decision* ([§3 caveat](#the-three-drifts) / [§8-8](#8-red-team)). Where a decision governs but no tripwire was authored, this is a known blind spot, not free coverage.
+
+### Implementation status (as built — branch `feat/decision-grounding-atom`)
+
+Shipped and tested (typecheck + unit + integration; the migration verified lossless on a 1344-record store):
+
+- **Schema (v3):** `topic` (anchor, default `null`) + `last_affirmed_at` (freshness) on decisions; lossless v2→v3 migration ([§9.1](#91-on-disk-data--compatible-by-construction)).
+- **Query contract (§4):** `current` / `history` / `rejected` / `liveForTopic` / `topicCollisions` in `src/core/topics.ts`.
+- **Capture:** `hunch_capture_decision` (grilling protocol + capture-session token, `src/core/capturetoken.ts`); commit via token-aware `hunch_record_decision`; write-time topic-uniqueness guard.
+- **Grounding (§3):** read-time injection in the `hunch hook` PreToolUse path — the current decision over a stale doc, with freshness age-downgrade and fail-safe on ambiguity (`src/core/grounding.ts`).
+- **Detection:** deterministic `anchor-stale` drift kind (doc≠graph) in `computeDrift`; `hunch drift` (CI-gateable) and `hunch reconcile-topics` (the KS-1 distributed-collision scan).
+- **Heal:** `hunch heal` read-only reconciliation front door; `/capture` + `/heal` slash commands scaffolded (installed by `hunch init`).
+- **`hunch_current_decision(topic)`** MCP read tool.
+
+Not yet built: server-orchestrated Stage-2 capture; semantic anchor *suggestion*; a git post-merge hook that auto-runs `reconcile-topics`; and *requiring* the capture token (staged deprecation, [§9.3](#93-mcp-tool-contract-compatibility--hunch_record_decision-needs-a-deprecation-path-not-a-hard-gate)).
 
 ---
 
@@ -459,7 +473,7 @@ The migration **must not** auto-assign `topic` (an LLM guess at scale = the bann
 
 ### 9.5 Forward-compat hazard (mixed-version teams)
 
-`DecisionSchema` is a non-strict `z.object`, so it **strips unknown keys.** An **older** Hunch binary opening a v3 repo (manifest `schema_version: 3` > its own `SCHEMA_VERSION: 2`) runs no applicable migration, passes the raw record to Zod, and **silently drops `topic`/`last_affirmed_at` on any rewrite** — data attrition in a mixed-version team. Mitigation: on load, if `manifest.schema_version > SCHEMA_VERSION`, **refuse-with-upgrade-prompt** (or read-only) rather than silently round-tripping newer data through an older schema. This guard does not exist today and should ship *with* the v3 bump.
+`DecisionSchema` is a non-strict `z.object`, so it **strips unknown keys.** An **older** Hunch binary opening a v3 repo (manifest `schema_version: 3` > its own `SCHEMA_VERSION: 2`) runs no applicable migration, passes the raw record to Zod, and **silently drops `topic`/`last_affirmed_at` on any rewrite** — data attrition in a mixed-version team. Mitigation (as shipped): `JsonStore.schemaVersion()` **warns once** when `manifest.schema_version > SCHEMA_VERSION` (`"written by a newer schema … upgrade hunch"`) and still loads — the tested, non-destructive behavior. It deliberately does *not* hard-refuse: a read-only refuse would break the current warn-and-load contract (and its test), so it is left as a warning. The residual attrition risk is real but bounded to teams running mixed Hunch versions mid-rollout; pin a minimum version once v3 ships.
 
 ### 9.6 Reversibility
 
@@ -502,7 +516,7 @@ Invoke Hunch's `hunch_capture_decision` MCP tool for the current topic, then run
 1. **Grill before you commit.** Ask one focused question at a time. Push back on weak or hand-wavy answers. Resolve every branch of the decision tree before committing — an unexamined decision poisons the graph.
 2. **Confirm the topic anchor with me** before committing. One topic per decision; if the decision spans two topics, split it into two captures.
 3. **Capture rejected alternatives explicitly** — for each, what it was and why not. This is what makes the decision enforceable later.
-4. **Commit via `hunch_commit_decision`.** The output is the graph entry only — do NOT write any doc prose. If a human-readable summary helps, show it, but the artifact is the graph write.
+4. **Commit via `hunch_record_decision`, passing `capture_token`** (from `hunch_capture_decision`). The output is the graph entry only — do NOT write any doc prose. If a human-readable summary helps, show it, but the artifact is the graph write.
 5. **On conflict** with an existing decision for this topic, do NOT auto-supersede. Present both to me and let me choose: supersede (link them), split the topic, or discard this one.
 
 Required fields before commit: `topic`, `decision`, `rationale`, `rejected`. If any are missing, keep grilling — the validator will reject an incomplete decision.

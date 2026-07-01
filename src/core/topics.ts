@@ -47,3 +47,24 @@ export function rejectedForTopic(decisions: readonly Decision[], topic: string):
   const cur = currentForTopic(decisions, topic);
   return cur ? [...cur.alternatives_rejected] : [];
 }
+
+/** Every topic with MORE THAN ONE live decision — the invariant violations a post-merge
+ *  reconcile pass surfaces for human resolution. This is the distributed half of §4
+ *  Enforcement: the content merge driver merges by id and is NOT invoked for cross-file
+ *  ADD/ADD, so two branches each adding an `accepted` decision for one topic land both
+ *  files with no collision. This scan catches them after the merge. Keyed by topic;
+ *  value is the colliding live set (length >= 2), each sorted by id for stable output. */
+export function topicCollisions(decisions: readonly Decision[]): Map<string, Decision[]> {
+  const byTopic = new Map<string, Decision[]>();
+  for (const d of decisions) {
+    if (!d.topic || !isLive(d)) continue;
+    const arr = byTopic.get(d.topic);
+    if (arr) arr.push(d);
+    else byTopic.set(d.topic, [d]);
+  }
+  const collisions = new Map<string, Decision[]>();
+  for (const [topic, arr] of byTopic) {
+    if (arr.length >= 2) collisions.set(topic, [...arr].sort((a, b) => a.id.localeCompare(b.id)));
+  }
+  return collisions;
+}

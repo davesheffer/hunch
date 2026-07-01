@@ -67,6 +67,33 @@ test("drift doc-stale: a 'proposed' doc that references shipped code is flagged;
   assert.equal(stale[0]!.id, "docs/stale.md");
 });
 
+test("drift anchor-stale: a file anchored to a superseded decision (topic has a current successor) flags; a carried-forward file does not", (t) => {
+  const { store, root, cleanup } = tempStore();
+  t.after(cleanup);
+  mkdirSync(join(root, "docs"), { recursive: true });
+  writeFileSync(join(root, "docs", "api.md"), "# API\nUse REST.\n");
+  writeFileSync(join(root, "docs", "carried.md"), "# API v2\nUse GraphQL.\n");
+  // superseded REST decision anchored to BOTH docs; the current GraphQL decision only claims carried.md
+  store.json.put("decisions", DEC({ id: "dec_rest", topic: "api-format", status: "superseded", superseded_by: "dec_gql", related_files: ["docs/api.md", "docs/carried.md"] }) as never);
+  store.json.put("decisions", DEC({ id: "dec_gql", topic: "api-format", title: "Use GraphQL", related_files: ["docs/carried.md"] }) as never);
+
+  const anchor = computeDrift(store, root).findings.filter((f) => f.kind === "anchor-stale");
+  assert.equal(anchor.length, 1, "only the doc the current decision does NOT carry forward flags");
+  assert.equal(anchor[0]!.id, "dec_rest");
+  assert.match(anchor[0]!.detail, /docs\/api\.md/);
+  assert.match(anchor[0]!.detail, /dec_gql/);
+});
+
+test("drift anchor-stale: un-anchored (topic null) superseded decision is not flagged (no semantic firing)", (t) => {
+  const { store, root, cleanup } = tempStore();
+  t.after(cleanup);
+  mkdirSync(join(root, "docs"), { recursive: true });
+  writeFileSync(join(root, "docs", "x.md"), "x\n");
+  store.json.put("decisions", DEC({ id: "dec_old", topic: null, status: "superseded", superseded_by: "dec_new", related_files: ["docs/x.md"] }) as never);
+  store.json.put("decisions", DEC({ id: "dec_new", topic: null, related_files: [] }) as never);
+  assert.equal(computeDrift(store, root).findings.filter((f) => f.kind === "anchor-stale").length, 0);
+});
+
 test("drift: a healthy graph + repo yields no findings", (t) => {
   const { store, root, cleanup } = tempStore();
   t.after(cleanup);

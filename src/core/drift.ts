@@ -11,8 +11,9 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join, extname } from "node:path";
 import type { HunchStore } from "../store/hunchStore.js";
+import { currentForTopic } from "./topics.js";
 
-export type DriftKind = "dead-ref" | "supersede" | "doc-stale";
+export type DriftKind = "dead-ref" | "supersede" | "doc-stale" | "anchor-stale";
 
 export interface DriftFinding {
   kind: DriftKind;
@@ -57,6 +58,28 @@ export function computeDrift(store: HunchStore, root: string): DriftReport {
           id: d.id,
           detail: `supersedes "${d.supersedes}", but it is still in force (status=${target.status}, superseded_by=${target.superseded_by ?? "null"})`,
         });
+      }
+    }
+
+    // 4. ANCHOR-STALE (doc≠graph, decision-grounding) — a derived view still anchored
+    //    to a SUPERSEDED decision while a current decision exists for the same topic.
+    //    Fully deterministic: it fires only on the explicit topic anchor plus a live
+    //    successor (never on a semantic guess), and only for a file the current
+    //    decision does NOT itself claim (so a view carried forward isn't flagged).
+    //    Advisory, like every drift kind — grounding already overrides it at read time.
+    if (d.topic && (d.status === "superseded" || d.superseded_by)) {
+      const current = currentForTopic(decisions, d.topic);
+      if (current && current.id !== d.id) {
+        const carried = new Set(current.related_files ?? []);
+        for (const f of d.related_files ?? []) {
+          if (!f || f.includes("*") || carried.has(f)) continue;
+          if (!existsSync(join(root, f))) continue; // missing file is history → dead-ref's job
+          findings.push({
+            kind: "anchor-stale",
+            id: d.id,
+            detail: `"${f}" is anchored to superseded decision ${d.id} (topic "${d.topic}"); the current decision is ${current.id} — "${current.title}". Reconcile the file with the current decision.`,
+          });
+        }
       }
     }
   }

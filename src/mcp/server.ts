@@ -23,6 +23,8 @@ import { renderMarkdown, verdict } from "../core/checkreport.js";
 import { HUNCH_VERSION } from "../core/version.js";
 import type { Decision, Symbol } from "../core/types.js";
 import { liveForTopic, historyForTopic, rejectedForTopic } from "../core/topics.js";
+import { issueCaptureToken as issueToken, consumeCaptureToken as consumeToken } from "../core/capturetoken.js";
+import { randomUUID } from "node:crypto";
 
 type ToolResult = { content: Array<{ type: "text"; text: string }>; isError?: boolean };
 const ok = (text: string): ToolResult => ({ content: [{ type: "text", text }] });
@@ -39,6 +41,27 @@ const SEV_CONSTRAINT: Record<string, number> = { blocking: 3, warning: 2, adviso
 const SEV_BUG: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1 };
 const more = (total: number, cap: number, hint = ""): string =>
   total > cap ? `\n  …(+${total - cap} more${hint ? ` — ${hint}` : ""})` : "";
+
+// Capture-session tokens live in src/core/capturetoken.ts (pure + testable). These
+// thin wrappers bind the process clock and id source at the call site.
+const issueCaptureToken = (): string => issueToken(randomUUID, Date.now());
+const consumeCaptureToken = (token: string | undefined): boolean => consumeToken(token, Date.now());
+
+/** The interrogation protocol returned by hunch_capture_decision. */
+function grillingProtocol(topic: string | undefined, token: string): string {
+  return [
+    "You are capturing an engineering decision into Hunch's graph. Run the GRILLING LOOP, then commit.",
+    "",
+    "RULES:",
+    "1. Grill ONE focused question at a time. Push back on hand-wavy answers. Resolve every branch of the decision tree before committing — an unexamined decision poisons the graph.",
+    `2. Confirm the TOPIC anchor with the human before committing${topic ? ` (proposed: "${topic}")` : ""}. Exactly one topic per decision; if it spans two, split into two captures.`,
+    "3. Capture REJECTED alternatives explicitly — for each, what it was and why not. This is what makes the decision enforceable (Veto/drift check against it).",
+    `4. Commit with hunch_record_decision, passing capture_token:"${token}" and the confirmed topic. The artifact is the graph write, not prose.`,
+    "5. On CONFLICT with an existing live decision for the topic, do NOT auto-supersede — Hunch refuses and presents both; let the human choose to supersede (link), split the topic, or discard.",
+    "",
+    "Required before commit: topic, title, decision, context (the rationale/why), alternatives_rejected. Missing any → keep grilling.",
+  ].join("\n");
+}
 
 /** Resolve a free-form target (symbol id / name / file path) to symbol records. */
 function resolveSymbols(store: HunchStore, target: string): Symbol[] {
@@ -315,6 +338,24 @@ export function buildServer(root: string): McpServer {
     },
   );
 
+  // -- hunch_capture_decision (decision-grounding: the grilling front door) --
+  server.registerTool(
+    "hunch_capture_decision",
+    {
+      title: "Capture a decision (grilling interview)",
+      description:
+        "Start a decision-capture interview: returns the grilling protocol (interrogate ONE question at a time until the decision tree is resolved) plus a capture-session token. Grill the human, then commit via hunch_record_decision with the token + confirmed topic. Use for '/capture', 'record this decision', 'grill me on this'. The token proves the write is the tail of an interview, not a silent guess.",
+      inputSchema: {
+        topic: z.string().optional().describe("proposed topic anchor (confirm with the human before committing)"),
+        seed: z.string().optional().describe("what the decision is about, to focus the first question"),
+      },
+    },
+    async ({ topic, seed }): Promise<ToolResult> => {
+      const token = issueCaptureToken();
+      return ok(`${grillingProtocol(topic, token)}${seed ? `\n\nSeed: ${seed}` : ""}`);
+    },
+  );
+
   // -- hunch_record_decision (write-back) -----------------------------------
   server.registerTool(
     "hunch_record_decision",
@@ -337,9 +378,10 @@ export function buildServer(root: string): McpServer {
           supersedes: z.string().optional().describe("id of a decision this one replaces — closes its valid-time window (invalidate, don't delete)"),
           private: z.boolean().optional().describe("write into the PRIVATE overlay store (HUNCH_PRIVATE_DIR) instead of the committed repo — for sensitive decisions kept out of a public repo. Errors if no private store is configured."),
         }),
+        capture_token: z.string().optional().describe("token from hunch_capture_decision — proves this write is the tail of a grilling interview. Omit only for a quick manual record (a deprecation nudge is returned)."),
       },
     },
-    async ({ decision }): Promise<ToolResult> => {
+    async ({ decision, capture_token }): Promise<ToolResult> => {
       try {
         // Commit-keyed on the CANONICAL full sha (resolved via git rev-parse), so a
         // human passing the short sha they see in `commit` produces the SAME id as
@@ -424,10 +466,17 @@ export function buildServer(root: string): McpServer {
           commitAndPushHunch(store.privateDir, `hunch: capture ${id}`);
           flushed = " (committed + pushed to the private repo)";
         }
+        // Capture-session gate (staged deprecation, §9.3): a token proves an interview
+        // preceded the write. No token still writes (non-breaking), but returns a nudge
+        // toward /capture so the un-interviewed bypass is visible, not silent.
+        const gated = consumeCaptureToken(capture_token);
+        const captureNote = gated
+          ? " [captured via interview]"
+          : "\n\n⚠ Recorded WITHOUT a capture interview. Prefer /capture (hunch_capture_decision), which grills the decision to a resolved state before writing — the graph should hold a well-examined decision, not a guess. (A future major version will require a capture token here.)";
         const supNote = superseded ? ` Superseded ${superseded.id} (window closed at ${rec.valid_from}).` : "";
         const note = decision.commit && !fullSha ? ` (note: commit "${decision.commit}" could not be resolved — recorded as a standalone decision, not linked to a commit)` : "";
         const where = decision.private ? ` [PRIVATE overlay — not committed to this repo]${flushed}` : "";
-        return ok(`Recorded decision ${id}: "${rec.title}" (status ${rec.status}, ${source}).${where}${supNote}${note}`);
+        return ok(`Recorded decision ${id}: "${rec.title}" (status ${rec.status}, ${source}).${where}${supNote}${note}${captureNote}`);
       } catch (e) {
         return err(`Failed to record decision: ${(e as Error).message}`);
       }

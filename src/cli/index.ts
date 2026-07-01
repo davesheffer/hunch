@@ -47,6 +47,7 @@ import { formatContext } from "../core/format.js";
 import { readConfig, writeConfig, FIRMNESS_LEVELS, isFirmness, type Firmness } from "../core/config.js";
 import { blockingInScope, vetoInScope, proposedEditLines } from "../core/hookpolicy.js";
 import { groundDecisions, renderGrounding } from "../core/grounding.js";
+import { topicCollisions } from "../core/topics.js";
 import { loadGoldenSet, evaluateGraphLift } from "../eval/harness.js";
 import { computeDrift } from "../core/drift.js";
 import { compareCandidates } from "../core/compare.js";
@@ -1298,6 +1299,73 @@ program
       console.warn(`⚠ ${res.skipped} record(s) could NOT be migrated and will no longer load. They are preserved on disk in their old shape under .hunch/ for manual recovery.`);
     }
     store.close();
+  });
+
+// ---- reconcile-topics (decision-grounding §4 Enforcement) -----------------
+program
+  .command("reconcile-topics")
+  .description("Find topics with more than one live decision (the invariant a git merge can violate) and surface them for human resolution. Exits non-zero if any collision exists — wire into a post-merge hook or CI.")
+  .action(() => {
+    const { store } = storeFor();
+    try {
+      const collisions = topicCollisions(store.recs("decisions"));
+      if (collisions.size === 0) {
+        console.log("✓ No topic collisions — every topic has at most one live decision.");
+        return;
+      }
+      console.error(`⚠ ${collisions.size} topic(s) have more than one live decision — the graph cannot say which is current. Resolve each (supersede one, or split the topic):\n`);
+      for (const [topic, decs] of collisions) {
+        console.error(`  topic "${topic}":`);
+        for (const d of decs) console.error(`    - ${d.id} — "${d.title}" (${d.status})`);
+      }
+      console.error(`\nResolve: re-record one with supersedes:<other-id> to link it over the other, or give one a distinct topic to split.`);
+      process.exitCode = 1;
+    } finally {
+      store.close();
+    }
+  });
+
+// ---- drift (doc≠graph detector; advisory + CI-gateable) -------------------
+program
+  .command("drift")
+  .description("Detect memory drift: dead refs, dangling supersedes, stale 'proposed' docs, and doc≠graph anchor-stale (a file still anchored to a superseded decision while a current one exists). Exits non-zero if any anchor-stale drift is found — the doc≠graph gate.")
+  .action(() => {
+    const { store, root } = storeFor();
+    try {
+      const { findings } = computeDrift(store, root);
+      if (!findings.length) {
+        console.log("✓ No drift — memory is in sync with the code/docs.");
+        return;
+      }
+      for (const f of findings.slice(0, 50)) console.log(`· [${f.kind}] ${f.id} — ${f.detail}`);
+      const anchor = findings.filter((f) => f.kind === "anchor-stale").length;
+      console.log(`\n${findings.length} finding(s)${anchor ? `, ${anchor} doc≠graph (anchor-stale)` : ""}.`);
+      if (anchor) process.exitCode = 1; // the deterministic doc≠graph drift gates CI/hooks
+    } finally {
+      store.close();
+    }
+  });
+
+// ---- heal (decision-grounded drift reconciliation front door) -------------
+program
+  .command("heal")
+  .description("Decision-grounded drift reconciliation: report doc≠graph anchor-stale sections with the current decision to reconcile toward. Read-only — proposes, never rewrites. Escalate to /capture only if the DECISION (not the doc) is stale.")
+  .action(() => {
+    const { store, root } = storeFor();
+    try {
+      const anchor = computeDrift(store, root).findings.filter((f) => f.kind === "anchor-stale");
+      if (!anchor.length) {
+        console.log("✓ No doc≠graph drift to heal — every anchored view matches its current decision.");
+        return;
+      }
+      console.log(`${anchor.length} anchored section(s) drifted from the graph:\n`);
+      for (const f of anchor) console.log(`· ${f.detail}`);
+      console.log(`\nHeal A (doc stale): edit each file to match its CURRENT decision — a prose fix.`);
+      console.log(`Heal B (decision stale): only if the DECISION is wrong now, run /capture (hunch_capture_decision) to supersede it, then re-derive the doc.`);
+      console.log(`Hunch never rewrites prose for you; this is a read-only reconciliation report.`);
+    } finally {
+      store.close();
+    }
   });
 
 // ---- compact (bound Hunch growth) -----------------------------------------

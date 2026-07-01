@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Decision } from "../src/core/types.js";
-import { isLive, liveForTopic, currentForTopic, historyForTopic, rejectedForTopic } from "../src/core/topics.js";
+import { isLive, liveForTopic, currentForTopic, historyForTopic, rejectedForTopic, topicCollisions } from "../src/core/topics.js";
 
 /** Minimal valid Decision with sane defaults; override per test. */
 function dec(over: Partial<Decision>): Decision {
@@ -58,6 +58,25 @@ test("historyForTopic returns the full chain newest-first", () => {
     dec({ id: "dec_other", topic: "logging", valid_from: "2025-01-01T00:00:00Z" }),
   ];
   assert.deepEqual(historyForTopic(decs, "api-format").map((d) => d.id), ["dec_new", "dec_old"]);
+});
+
+test("topicCollisions finds only topics with >1 live decision, sorted by id", () => {
+  const decs = [
+    dec({ id: "dec_a", topic: "api-format" }),           // collision with dec_b
+    dec({ id: "dec_b", topic: "api-format" }),
+    dec({ id: "dec_solo", topic: "logging" }),           // single — not a collision
+    dec({ id: "dec_old", topic: "auth", status: "superseded", superseded_by: "dec_new", valid_to: "2025-06-01T00:00:00Z" }),
+    dec({ id: "dec_new", topic: "auth" }),               // only one LIVE on 'auth' — not a collision
+    dec({ id: "dec_null", topic: null }),                // un-anchored — ignored
+  ];
+  const cols = topicCollisions(decs);
+  assert.deepEqual([...cols.keys()], ["api-format"], "only the topic with 2 live decisions");
+  assert.deepEqual(cols.get("api-format")!.map((d) => d.id), ["dec_a", "dec_b"], "sorted by id");
+});
+
+test("topicCollisions is empty on a healthy graph", () => {
+  const decs = [dec({ id: "dec_1", topic: "a" }), dec({ id: "dec_2", topic: "b" })];
+  assert.equal(topicCollisions(decs).size, 0);
 });
 
 test("rejectedForTopic returns the current decision's rejected alternatives; empty on collision", () => {
