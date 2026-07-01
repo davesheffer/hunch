@@ -58,11 +58,26 @@ test("a superseded local reference grounds to the CURRENT successor", () => {
   assert.equal(g[0]!.decision.id, "dec_new", "grounds to the current decision, not the stale one the file references");
 });
 
-test("no freshness clock → treated as authoritative (can't prove stale)", () => {
+test("no freshness clock → ADVISORY (can't prove fresh, so never hard authority)", () => {
   const d = dec({ id: "dec_1", topic: "auth", decision: "x", last_affirmed_at: undefined });
   const g = groundDecisions([d], [d], NOW);
   assert.equal(g[0]!.ageDays, null);
-  assert.equal(g[0]!.authority, "authoritative");
+  assert.equal(g[0]!.authority, "advisory", "unknown freshness is never injected as hard authority");
+});
+
+test("a FUTURE last_affirmed_at (clock skew / corruption) is anomalous → advisory, not hard authority", () => {
+  const d = dec({ id: "dec_1", topic: "auth", decision: "x", last_affirmed_at: new Date(NOW + 5 * 86_400_000).toISOString() });
+  const g = groundDecisions([d], [d], NOW);
+  assert.equal(g[0]!.ageDays, null, "a future age is not clamped to 0 (which would read as freshest)");
+  assert.equal(g[0]!.authority, "advisory", "an impossible freshness clock must not upgrade a rotted decision to authority");
+});
+
+test("target scope: a topic's current decision only grounds a file it actually governs (M2)", () => {
+  const old = dec({ id: "dec_old", topic: "cache", decision: "old", status: "superseded", superseded_by: "dec_new", valid_to: daysAgo(30), related_files: ["handler.ts", "job.ts"] });
+  const cur = dec({ id: "dec_new", topic: "cache", decision: "new", last_affirmed_at: daysAgo(5), related_files: ["job.ts"] });
+  assert.equal(groundDecisions([old], [old, cur], NOW, "job.ts").length, 1, "successor governs job.ts → grounded");
+  assert.equal(groundDecisions([old], [old, cur], NOW, "handler.ts").length, 0, "successor dropped handler.ts → not grounded (no false authority)");
+  assert.equal(groundDecisions([old], [old, cur], NOW).length, 1, "no target → topic-level grounding (backwards compatible)");
 });
 
 test("end-to-end: grounding surfaces the current decision for an edited anchored file (the atom)", (t) => {

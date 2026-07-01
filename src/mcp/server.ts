@@ -22,7 +22,7 @@ import { checkConformance } from "../core/conformance.js";
 import { renderMarkdown, verdict } from "../core/checkreport.js";
 import { HUNCH_VERSION } from "../core/version.js";
 import type { Decision, Symbol } from "../core/types.js";
-import { liveForTopic, historyForTopic, rejectedForTopic } from "../core/topics.js";
+import { liveForTopic, historyForTopic, rejectedForTopic, captureConflicts } from "../core/topics.js";
 import { issueCaptureToken as issueToken, consumeCaptureToken as consumeToken } from "../core/capturetoken.js";
 import { randomUUID } from "node:crypto";
 
@@ -426,22 +426,38 @@ export function buildServer(root: string): McpServer {
           provenance: { source, confidence: 0.95, evidence: (decision.related_files ?? existing?.provenance.evidence ?? []).map(toPosixTarget) },
           date: now,
         };
+        // Freshness clock (§6 rubber-stamp guard): re-recording an UNCHANGED decision
+        // (e.g. an agent adding a related_file to a rotted decision) must NOT reset its
+        // freshness — that would re-elevate a stale decision to hard authority. Only a
+        // substantive change (or a brand-new decision) re-affirms; preserve otherwise.
+        if (existing && existing.last_affirmed_at
+          && rec.decision === existing.decision && rec.context === existing.context
+          && rec.status === existing.status && rec.title === existing.title) {
+          rec.last_affirmed_at = existing.last_affirmed_at;
+        }
         // Decision-grounding uniqueness guard (§4 Enforcement): never create a SECOND
         // live decision for one topic. If this accepted decision is anchored to a topic
         // that already has a DIFFERENT live decision and does not supersede it, refuse —
         // present both and let the human resolve (supersede / split the topic / discard).
-        // The machine never auto-supersedes; a re-record of the same id, or one that
-        // supersedes the incumbent, is allowed through.
+        // The machine never auto-supersedes; a re-record of the same id is allowed through.
         if (rec.topic && rec.status === "accepted") {
-          const others = liveForTopic(store.recs("decisions"), rec.topic).filter(
-            (d) => d.id !== id && d.id !== decision.supersedes,
-          );
+          // Exclude ONLY the incumbent this write will actually close — one resolvable in
+          // the SAME store the write lands in. A cross-store supersede (public write vs a
+          // private incumbent, or vice-versa) would no-op and leave two live decisions, so
+          // it is treated as unresolved (willClose=null) → the guard fires and refuses.
+          const willClose = decision.supersedes && store.decisionInStore(decision.supersedes, !!decision.private)
+            ? decision.supersedes
+            : null;
+          const others = captureConflicts(store.recs("decisions"), rec.topic, id, willClose);
           if (others.length) {
             const list = others.map((d) => `${d.id} ("${d.title}")`).join(", ");
+            const crossStore = decision.supersedes && !willClose
+              ? ` (note: supersedes:"${decision.supersedes}" is not in the ${decision.private ? "private" : "public"} store, so it can't be closed from here)`
+              : "";
             return err(
-              `Topic "${rec.topic}" already has a live decision: ${list}. ` +
+              `Topic "${rec.topic}" already has a live decision: ${list}.${crossStore} ` +
                 `Hunch will not create a second current decision for one topic. Resolve it: ` +
-                `re-record with supersedes:"${others[0]!.id}" to replace it (linked), pick a distinct topic to split, or discard this capture.`,
+                `re-record with supersedes:<id> to replace it (linked, same store), pick a distinct topic to split, or discard this capture.`,
             );
           }
         }
@@ -471,8 +487,10 @@ export function buildServer(root: string): McpServer {
         // toward /capture so the un-interviewed bypass is visible, not silent.
         const gated = consumeCaptureToken(capture_token);
         const captureNote = gated
-          ? " [captured via interview]"
-          : "\n\n⚠ Recorded WITHOUT a capture interview. Prefer /capture (hunch_capture_decision), which grills the decision to a resolved state before writing — the graph should hold a well-examined decision, not a guess. (A future major version will require a capture token here.)";
+          ? " [via capture front door]"
+          : capture_token
+            ? "" // a token was presented but is unknown to THIS process (server restart/expiry) — don't shame a genuine interview
+            : "\n\n⚠ Recorded WITHOUT a capture interview. Prefer /capture (hunch_capture_decision), which grills the decision to a resolved state before writing — the graph should hold a well-examined decision, not a guess. (A future major version will require a capture token here.)";
         const supNote = superseded ? ` Superseded ${superseded.id} (window closed at ${rec.valid_from}).` : "";
         const note = decision.commit && !fullSha ? ` (note: commit "${decision.commit}" could not be resolved — recorded as a standalone decision, not linked to a commit)` : "";
         const where = decision.private ? ` [PRIVATE overlay — not committed to this repo]${flushed}` : "";

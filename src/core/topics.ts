@@ -48,6 +48,22 @@ export function rejectedForTopic(decisions: readonly Decision[], topic: string):
   return cur ? [...cur.alternatives_rejected] : [];
 }
 
+/** The live decisions that would COLLIDE if an `accepted` decision `selfId` is written
+ *  on `topic` while superseding `willCloseId` (or null if it supersedes nothing). The
+ *  self record and the incumbent this write will actually close are excluded; anything
+ *  left is a second live decision the write must not create (the capture guard refuses
+ *  when this is non-empty). `willCloseId` MUST be an incumbent the write can truly close
+ *  (same store) — a cross-store supersede that will no-op must be passed as null so the
+ *  incumbent stays counted and the write is refused. */
+export function captureConflicts(
+  decisions: readonly Decision[],
+  topic: string,
+  selfId: string,
+  willCloseId: string | null,
+): Decision[] {
+  return liveForTopic(decisions, topic).filter((d) => d.id !== selfId && d.id !== willCloseId);
+}
+
 /** Every topic with MORE THAN ONE live decision — the invariant violations a post-merge
  *  reconcile pass surfaces for human resolution. This is the distributed half of §4
  *  Enforcement: the content merge driver merges by id and is NOT invoked for cross-file

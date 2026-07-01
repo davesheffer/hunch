@@ -16,6 +16,7 @@
  */
 import type { Decision } from "./types.js";
 import { currentForTopic } from "./topics.js";
+import { toPosixTarget } from "./paths.js";
 
 /** Days since last affirmation beyond which a decision is injected as advisory, not
  *  authoritative. Half a year: long enough not to nag fresh decisions, short enough
@@ -30,12 +31,26 @@ export interface Grounding {
   authority: "authoritative" | "advisory";
 }
 
-/** Whole days between an ISO instant and `nowMs`, floored at 0; null if absent/unparseable. */
+/** Whole days between an ISO instant and `nowMs`; null if absent, unparseable, or in
+ *  the FUTURE. A negative age (affirmed in the future) is an anomalous freshness clock
+ *  — clock skew across machines in a git-shared graph, a merge carrying a future-dated
+ *  winner, or hand-edited JSON — and must NOT be clamped to 0 (which would read as the
+ *  freshest possible and upgrade a rotted decision to hard authority). null → advisory. */
 function ageDaysOf(last: string | undefined, nowMs: number): number | null {
   if (!last) return null;
   const t = Date.parse(last);
   if (Number.isNaN(t)) return null;
-  return Math.max(0, Math.floor((nowMs - t) / 86_400_000));
+  const age = Math.floor((nowMs - t) / 86_400_000);
+  return age < 0 ? null : age;
+}
+
+/** Does the decision explicitly govern this file? Posix-normalized exact match against
+ *  its related_files — grounding only injects a topic's current decision over a file
+ *  the current decision actually claims (not one a superseded predecessor listed but the
+ *  successor dropped). Mirrors the drift detector's carried-forward guard. */
+function relatesToFile(d: Decision, target: string): boolean {
+  const t = toPosixTarget(target);
+  return (d.related_files ?? []).some((f) => toPosixTarget(f) === t);
 }
 
 /** For every topic among the file-scoped decisions, resolve the CURRENT decision for
@@ -46,6 +61,7 @@ export function groundDecisions(
   fileDecisions: readonly Decision[],
   allDecisions: readonly Decision[],
   nowMs: number,
+  target?: string,
 ): Grounding[] {
   const topics = new Set<string>();
   for (const d of fileDecisions) if (d.topic) topics.add(d.topic);
@@ -53,8 +69,16 @@ export function groundDecisions(
   for (const topic of topics) {
     const cur = currentForTopic(allDecisions, topic);
     if (!cur) continue; // none or unresolved collision → inject nothing
+    // Scope guard: when grounding for a specific edit target, only inject the current
+    // decision over a file it actually governs. A superseded predecessor may have
+    // anchored this file while the successor narrowed scope and dropped it — grounding
+    // must not assert authority over a file the current decision no longer claims.
+    if (target && !relatesToFile(cur, target)) continue;
     const ageDays = ageDaysOf(cur.last_affirmed_at, nowMs);
-    const authority = ageDays !== null && ageDays > GROUNDING_STALE_DAYS ? "advisory" : "authoritative";
+    // Conservative: an unknown age (no clock, or a future/anomalous one) is NOT proof of
+    // freshness, so it grades advisory, never hard authority. Only a decision affirmed
+    // within the window is injected as graph-over-doc truth.
+    const authority = ageDays === null || ageDays > GROUNDING_STALE_DAYS ? "advisory" : "authoritative";
     out.push({ topic, decision: cur, ageDays, authority });
   }
   return out;

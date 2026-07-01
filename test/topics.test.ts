@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Decision } from "../src/core/types.js";
-import { isLive, liveForTopic, currentForTopic, historyForTopic, rejectedForTopic, topicCollisions } from "../src/core/topics.js";
+import { isLive, liveForTopic, currentForTopic, historyForTopic, rejectedForTopic, topicCollisions, captureConflicts } from "../src/core/topics.js";
 
 /** Minimal valid Decision with sane defaults; override per test. */
 function dec(over: Partial<Decision>): Decision {
@@ -77,6 +77,19 @@ test("topicCollisions finds only topics with >1 live decision, sorted by id", ()
 test("topicCollisions is empty on a healthy graph", () => {
   const decs = [dec({ id: "dec_1", topic: "a" }), dec({ id: "dec_2", topic: "b" })];
   assert.equal(topicCollisions(decs).size, 0);
+});
+
+test("captureConflicts: the capture guard's decision — excludes self and the incumbent it will close", () => {
+  const decs = [dec({ id: "dec_live", topic: "auth" })];
+  // a new accepted decision on 'auth' superseding nothing → conflicts with the live one
+  assert.deepEqual(captureConflicts(decs, "auth", "dec_new", null).map((d) => d.id), ["dec_live"]);
+  // superseding the incumbent (same store, willClose set) → no conflict, the write is allowed
+  assert.deepEqual(captureConflicts(decs, "auth", "dec_new", "dec_live"), []);
+  // re-recording the same id → excluded as self → no conflict (idempotent upgrade)
+  assert.deepEqual(captureConflicts(decs, "auth", "dec_live", null), []);
+  // CROSS-STORE (M1): a supersede that can't be closed here is passed as willClose=null,
+  // so the incumbent stays counted and the write is refused — never two live decisions.
+  assert.deepEqual(captureConflicts(decs, "auth", "dec_new", null).map((d) => d.id), ["dec_live"]);
 });
 
 test("rejectedForTopic returns the current decision's rejected alternatives; empty on collision", () => {

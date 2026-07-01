@@ -1161,7 +1161,7 @@ program
       // Decision-grounding (§3): for any topic-anchored decision touching this file,
       // inject the CURRENT decision for that topic over whatever a stale doc asserts.
       // Aged decisions downgrade to advisory; ambiguous topics inject nothing.
-      const grounding = renderGrounding(groundDecisions(ctx.decisions, store.recs("decisions"), Date.now()));
+      const grounding = renderGrounding(groundDecisions(ctx.decisions, store.recs("decisions"), Date.now(), target));
       if (grounding) text += `\n\n${grounding}`;
       emitContext("PreToolUse", text);
     } catch {
@@ -1333,14 +1333,19 @@ program
     const { store, root } = storeFor();
     try {
       const { findings } = computeDrift(store, root);
-      if (!findings.length) {
+      // Surface topic collisions too: currentForTopic returns null on an unresolved
+      // collision, which SUPPRESSES anchor-stale for that topic — so a collided-and-
+      // drifted topic would otherwise read green. A collision is itself a gate failure.
+      const collisions = topicCollisions(store.recs("decisions"));
+      if (!findings.length && collisions.size === 0) {
         console.log("✓ No drift — memory is in sync with the code/docs.");
         return;
       }
       for (const f of findings.slice(0, 50)) console.log(`· [${f.kind}] ${f.id} — ${f.detail}`);
+      for (const [topic, decs] of collisions) console.log(`· [topic-collision] "${topic}" has ${decs.length} live decisions: ${decs.map((d) => d.id).join(", ")} — run \`hunch reconcile-topics\``);
       const anchor = findings.filter((f) => f.kind === "anchor-stale").length;
-      console.log(`\n${findings.length} finding(s)${anchor ? `, ${anchor} doc≠graph (anchor-stale)` : ""}.`);
-      if (anchor) process.exitCode = 1; // the deterministic doc≠graph drift gates CI/hooks
+      console.log(`\n${findings.length} finding(s)${anchor ? `, ${anchor} doc≠graph (anchor-stale)` : ""}${collisions.size ? `, ${collisions.size} topic-collision(s)` : ""}.`);
+      if (anchor || collisions.size) process.exitCode = 1; // deterministic doc≠graph drift + collisions gate CI/hooks
     } finally {
       store.close();
     }

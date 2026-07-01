@@ -84,6 +84,19 @@ test("drift anchor-stale: a file anchored to a superseded decision (topic has a 
   assert.match(anchor[0]!.detail, /dec_gql/);
 });
 
+test("drift anchor-stale: a file still governed by another LIVE decision is not flagged (orphan-only, M5)", (t) => {
+  const { store, root, cleanup } = tempStore();
+  t.after(cleanup);
+  mkdirSync(join(root, "docs"), { recursive: true });
+  writeFileSync(join(root, "docs", "shared.md"), "shared\n");
+  // dec_rest (superseded) anchors shared.md; a DIFFERENT live decision still claims it →
+  // not orphaned → NOT anchor-stale (a routine supersession must not red the CI gate).
+  store.json.put("decisions", DEC({ id: "dec_rest", topic: "api-format", status: "superseded", superseded_by: "dec_gql", related_files: ["docs/shared.md"] }) as never);
+  store.json.put("decisions", DEC({ id: "dec_gql", topic: "api-format", related_files: [] }) as never);
+  store.json.put("decisions", DEC({ id: "dec_other", topic: "docs-policy", related_files: ["docs/shared.md"] }) as never);
+  assert.equal(computeDrift(store, root).findings.filter((f) => f.kind === "anchor-stale").length, 0, "governed by a live decision → carried, not flagged");
+});
+
 test("drift anchor-stale: un-anchored (topic null) superseded decision is not flagged (no semantic firing)", (t) => {
   const { store, root, cleanup } = tempStore();
   t.after(cleanup);

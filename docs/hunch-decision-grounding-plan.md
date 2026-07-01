@@ -364,8 +364,8 @@ Shipped and tested (typecheck + unit + integration; the migration verified lossl
 
 - **Schema (v3):** `topic` (anchor, default `null`) + `last_affirmed_at` (freshness) on decisions; lossless v2→v3 migration ([§9.1](#91-on-disk-data--compatible-by-construction)).
 - **Query contract (§4):** `current` / `history` / `rejected` / `liveForTopic` / `topicCollisions` in `src/core/topics.ts`.
-- **Capture:** `hunch_capture_decision` (grilling protocol + capture-session token, `src/core/capturetoken.ts`); commit via token-aware `hunch_record_decision`; write-time topic-uniqueness guard.
-- **Grounding (§3):** read-time injection in the `hunch hook` PreToolUse path — the current decision over a stale doc, with freshness age-downgrade and fail-safe on ambiguity (`src/core/grounding.ts`).
+- **Capture:** `hunch_capture_decision` (grilling protocol + capture-session token, `src/core/capturetoken.ts`); commit via token-aware `hunch_record_decision`; write-time topic-uniqueness guard (**store-scoped — a cross-store supersede that can't close its target is refused, never silently leaving two live decisions**).
+- **Grounding (§3):** read-time injection in the `hunch hook` PreToolUse path — the current decision over a stale doc, **scoped to the edited file the current decision actually governs**, with a freshness downgrade (aged / unknown / future-dated clock → advisory, never hard authority) and fail-safe on ambiguity (`src/core/grounding.ts`).
 - **Detection:** deterministic `anchor-stale` drift kind (doc≠graph) in `computeDrift`; `hunch drift` (CI-gateable) and `hunch reconcile-topics` (the KS-1 distributed-collision scan).
 - **Heal:** `hunch heal` read-only reconciliation front door; `/capture` + `/heal` slash commands scaffolded (installed by `hunch init`).
 - **`hunch_current_decision(topic)`** MCP read tool.

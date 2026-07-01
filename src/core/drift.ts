@@ -11,7 +11,8 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join, extname } from "node:path";
 import type { HunchStore } from "../store/hunchStore.js";
-import { currentForTopic } from "./topics.js";
+import { currentForTopic, isLive } from "./topics.js";
+import { toPosixTarget } from "./paths.js";
 
 export type DriftKind = "dead-ref" | "supersede" | "doc-stale" | "anchor-stale";
 
@@ -32,6 +33,11 @@ export function computeDrift(store: HunchStore, root: string): DriftReport {
   const findings: DriftFinding[] = [];
   const decisions = store.recs("decisions");
   const byId = new Map(decisions.map((d) => [d.id, d] as const));
+  // Files any LIVE decision (any topic) still claims. A file governed by a live decision
+  // is NOT orphaned to a stale one — only a file listed solely by superseded decisions is
+  // anchor-stale. This keeps the doc≠graph gate's false-positive rate ~zero: a routine
+  // narrowing supersession (successor lists fewer files) never flags files still governed.
+  const liveFiles = new Set(decisions.filter(isLive).flatMap((d) => (d.related_files ?? []).map(toPosixTarget)));
 
   for (const d of decisions) {
     // 1. DEAD-REFERENCE — only for in-force decisions; a superseded one referencing
@@ -70,10 +76,12 @@ export function computeDrift(store: HunchStore, root: string): DriftReport {
     if (d.topic && (d.status === "superseded" || d.superseded_by)) {
       const current = currentForTopic(decisions, d.topic);
       if (current && current.id !== d.id) {
-        const carried = new Set(current.related_files ?? []);
         for (const f of d.related_files ?? []) {
-          if (!f || f.includes("*") || carried.has(f)) continue;
-          if (!existsSync(join(root, f))) continue; // missing file is history → dead-ref's job
+          // Skip globs/empties, files still governed by ANY live decision (carried), and
+          // missing files (that's dead-ref's job, and only for history). Posix-normalize
+          // both sides so a ./-prefix or backslash never re-flags a genuinely carried file.
+          if (!f || f.includes("*") || liveFiles.has(toPosixTarget(f))) continue;
+          if (!existsSync(join(root, f))) continue;
           findings.push({
             kind: "anchor-stale",
             id: d.id,
