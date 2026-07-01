@@ -26,10 +26,24 @@ you the **human** surface.
 - **"Why is this file/symbol the way it is?"** — a full brief: decisions, invariants, bug history,
   and blast radius. Plus a **status bar** invariant counter for the active file.
 
+### Grounding
+- **Topic-anchored decisions** — a decision can carry an optional `topic` (the drift-detection
+  anchor); the pre-edit brief surfaces a file's *current* decision for its topic with
+  doc-precedence framing (follow the graph, not a stale doc) plus what that decision **rejected**.
+- **doc≠graph drift** — a deterministic `anchor-stale` drift fires when a file is still anchored to a
+  **superseded** decision while a current one exists for its topic. Surface it from the CLI with
+  `hunch drift` (CI-gateable) or `hunch doctor`; `hunch reconcile-topics` catches the >1-live-per-topic
+  case a git merge can introduce, and the scaffolded `/heal` command / `hunch heal` do a read-only
+  doc↔graph reconciliation (never rewriting prose silently). This is the doc≠graph spoke — it
+  **complements** Architectural Conformance (graph≠code), it doesn't replace it.
+
 ### Write back
 - **Record Invariant…** / **Record Bug…** delegate to the `hunch` CLI (atomic, validated writes —
   the extension never edits `.hunch/` JSON itself). Set `hunch.cliPath` if the CLI isn't on `PATH`.
-  Decisions are recorded from Claude Code chat via the `hunch_record_decision` MCP tool.
+  Decisions are recorded from Claude Code chat — either `hunch_record_decision` (now **gated**: a
+  store-scoped uniqueness guard refuses a second live decision for the same `topic`, so a topic is
+  never silently two) or `hunch_capture_decision`, which returns a one-question-at-a-time grilling
+  protocol (also wired as the scaffolded `/capture` slash command).
 
 ### Live
 - Refreshes automatically when `.hunch/` changes on disk (e.g. after a commit).

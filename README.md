@@ -98,6 +98,45 @@ combination is the moat:
 The short version: **git tracks *what* changed; Hunch tracks *why*** — locally, durably, and under
 your control, with guards that actually hold the line instead of just suggesting.
 
+## Decision-grounding: memory that stays true to the doc
+
+Architectural Conformance keeps the *code* honest to the graph (**graph ≠ code**). Decision-grounding
+is its complement — it keeps your *docs* honest to the graph (**doc ≠ graph**). A comment or a README
+says one thing; the decision that actually governs the file says another. Both are "memory that stays
+true"; you want both.
+
+The anchor is one optional field. A decision can carry a **`topic`** — the thing it's the current answer
+for (e.g. `"auth.session"`) — and topic gives you a query contract: **current** (the one live answer),
+**history** (the supersede trail), and **rejected** (what was ruled out and why). It's fully
+backward-compatible: `topic` defaults to `null`, there's **no schema bump**, and existing graphs load
+unchanged.
+
+- **Read-time grounding.** The pre-edit (PreToolUse) hook now surfaces a file's topic-anchored decisions
+  *before* the AI writes — with doc-precedence framing ("follow the graph, not a stale doc") and what each
+  decision **rejected**, so the model doesn't happily re-add the approach you already ruled out.
+- **`anchor-stale` drift — deterministic, no guessing.** A new drift kind fires when a file is still
+  anchored to a **superseded** decision while a **current** one exists for its topic. It shows up in
+  `hunch doctor` and in a CI-gateable `hunch drift`:
+
+  ```bash
+  hunch drift        # ⛔ exits non-zero on anchor-stale drift or a topic collision (>1 live decision)
+  ```
+
+  It only fires on **explicit** topic anchors — no semantic guessing, no false positives on prose it can't
+  read.
+- **Capture, gated.** `hunch_record_decision` now enforces a store-scoped **uniqueness guard**: it refuses
+  a *second* live decision for a topic (you're never silently governed by two). The richer path is the new
+  **`hunch_capture_decision`** tool — it returns a one-question-at-a-time grilling protocol plus a
+  capture-session token; `record_decision` accepts an optional `capture_token`. Un-token'd writes still
+  work, they just get a nudge toward `/capture`. **`hunch_current_decision(topic)`** returns the one answer
+  that currently governs a topic.
+- **`hunch reconcile-topics`.** A git merge is the one thing that can create two live decisions for a
+  topic. This scans for it and exits non-zero — wire it into a post-merge hook or CI.
+- **`hunch heal`** + the **`/capture`** and **`/heal`** slash commands (scaffolded by `hunch init`) do
+  **read-only** doc↔graph reconciliation — they surface the mismatch and never rewrite your prose silently.
+
+→ [docs](https://hunch-pi.vercel.app/docs#grounding)
+
 ## Getting started
 
 ```bash
@@ -181,6 +220,10 @@ diff-only reviewer can't see, but Hunch's symbol graph can. Add a function or cl
 defined elsewhere and `hunch check` / the CI guard / `hunch_merge_verdict` flag it with the
 existing location. **Advisory** — it never blocks, and it's tuned to stay quiet so a refactor
 that just moves code isn't mistaken for a duplicate. → [docs](https://hunch-pi.vercel.app/docs#redundancy)
+
+See also **[Decision-grounding](#decision-grounding-memory-that-stays-true-to-the-doc)** — the doc ≠ graph
+complement: topic anchors, read-time grounding in the pre-edit hook, and a deterministic `anchor-stale`
+drift check (`hunch drift`) that fails CI when a file still points at a superseded decision.
 
 Plus the **Regression Guard** (re-adding deliberately-retired code) and the
 **[CI Constraint Guard](https://hunch-pi.vercel.app/docs#ci)** (`hunch ci` — a PR gate that

@@ -396,7 +396,9 @@ if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElem
           <tr><td><code>hunch_context</code></td><td>The minimal relevant slice for a task — invariants, why, bug history, blast radius.</td></tr>
           <tr><td><code>hunch_timeline</code></td><td>A target’s decision history over time, with valid-time windows.</td></tr>
           <tr><td><code>hunch_merge_verdict</code></td><td>A cited <b>BLOCK / WARN / PASS</b> over a diff (see <a class="link" href="#merge-verdict">below</a>).</td></tr>
-          <tr><td><code>hunch_record_decision</code></td><td>Write-back: persist a new Decision (ADR) with provenance.</td></tr>
+          <tr><td><code>hunch_record_decision</code></td><td>Write-back: persist a new Decision (ADR) with provenance. Gated by <b>topic</b> — refuses a second live decision for a topic that already has one (never silently two); accepts an optional <code>capture_token</code>.</td></tr>
+          <tr><td><code>hunch_capture_decision</code></td><td>Start a capture session — returns a one-question-at-a-time grilling protocol plus a <code>capture_token</code> to hand back to <code>hunch_record_decision</code>.</td></tr>
+          <tr><td><code>hunch_current_decision</code></td><td>The single in-force decision for a <b>topic</b> — the drift-detection anchor (with what it rejected).</td></tr>
           <tr><td><code>hunch_record_correction</code></td><td>Write-back: turn a correction into an enforced invariant (see <a class="link" href="#never-twice">Never Twice</a>).</td></tr>
           <tr><td><code>hunch_runbook</code></td><td>The proven steps for a recurring task (e.g. “add an MCP tool”) — kind-scoped retrieval over runbooks.</td></tr>
           <tr><td><code>hunch_compare</code></td><td>Rank N candidate branches/commits by architectural fit (fewest invariant hits) — the “evaluate 5 solutions” check.</td></tr>
@@ -414,6 +416,8 @@ if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElem
           <tr><td><code>/hunch-why &lt;file|symbol&gt;</code></td><td>The decisions, invariants, and bug history behind it — with citations.</td></tr>
           <tr><td><code>/hunch-fix &lt;bug&gt;</code></td><td>Fix a bug grounded in past root causes, blast radius, and constraints.</td></tr>
           <tr><td><code>/hunch-fragile</code></td><td>A fragility report — the riskiest code, with evidence.</td></tr>
+          <tr><td><code>/capture</code></td><td>Grill you through a decision one question at a time, then persist it against its <b>topic</b> (via <code>hunch_capture_decision</code>).</td></tr>
+          <tr><td><code>/heal</code></td><td>Read-only doc↔graph reconciliation — surface where a doc disagrees with the graph; never rewrites prose silently.</td></tr>
         </tbody>
       </table>
     </section>
@@ -505,6 +509,9 @@ Agent: hunch_record_correction({ rule: "never import lodash; use src/utils",
           <tr><td><code>fragile</code></td><td>Ranked fragility report with evidence.</td></tr>
           <tr><td><code>check</code></td><td>Flag changes that touch a do-not-break invariant (local + CI guard); also flags (advisory) symbols you add that already exist elsewhere.</td></tr>
           <tr><td><code>veto</code></td><td>Decision Guard — flag changes that reverse a rejected alternative.</td></tr>
+          <tr><td><code>drift</code></td><td>Flag doc≠graph drift — a file anchored to a <em>superseded</em> decision while a current one exists for its <b>topic</b> (<code>anchor-stale</code>), plus topic collisions. Deterministic; exits non-zero for CI.</td></tr>
+          <tr><td><code>reconcile-topics</code></td><td>Scan for &gt;1 live decision per <b>topic</b> (an invariant a git merge can violate) and exit non-zero. Wire into a post-merge hook / CI.</td></tr>
+          <tr><td><code>heal</code></td><td>Read-only doc↔graph reconciliation — report where prose and the graph disagree; never rewrites docs silently.</td></tr>
           <tr><td><code>ci</code></td><td>Scaffold the CI Constraint Guard (GitHub Action).</td></tr>
           <tr><td><code>record-constraint</code></td><td>Record an invariant the codebase must not break.</td></tr>
           <tr><td><code>record-bug</code></td><td>Capture a Bug from a failing test (symptom + suspects).</td></tr>
