@@ -824,6 +824,16 @@ export class HunchStore {
     return this.supersedeIn(this.json, oldId, by);
   }
 
+  /** Look up a decision by id in a SPECIFIC store — the public store, or the private
+   *  overlay when `priv` is true — NOT the union. The capture guard uses this to know
+   *  whether a supersede will actually close its target: `supersede`/`supersedePrivate`
+   *  each look in only one store, so a cross-store supersede silently no-ops and would
+   *  leave two live decisions on one topic. Returns undefined if absent (or no overlay). */
+  decisionInStore(id: string, priv: boolean): Decision | undefined {
+    const store = priv ? this.privateJson : this.json;
+    return store?.get("decisions", id);
+  }
+
   /** Private-overlay counterpart of `supersede`: close + link the old decision inside
    *  the HUNCH_PRIVATE_DIR store, so a PRIVATE decision can supersede another private
    *  one (the MCP record path is private→private). A private write never mutates the

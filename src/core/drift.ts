@@ -11,8 +11,10 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join, extname } from "node:path";
 import type { HunchStore } from "../store/hunchStore.js";
+import { toPosixTarget } from "./paths.js";
+import { currentForTopic, isLive } from "./topics.js";
 
-export type DriftKind = "dead-ref" | "supersede" | "doc-stale";
+export type DriftKind = "dead-ref" | "supersede" | "doc-stale" | "anchor-stale";
 
 export interface DriftFinding {
   kind: DriftKind;
@@ -31,6 +33,11 @@ export function computeDrift(store: HunchStore, root: string): DriftReport {
   const findings: DriftFinding[] = [];
   const decisions = store.recs("decisions");
   const byId = new Map(decisions.map((d) => [d.id, d] as const));
+  // Files any LIVE decision (any topic) still claims. A file governed by a live decision
+  // is NOT orphaned to a stale one — only a file listed solely by superseded decisions is
+  // anchor-stale. Keeps the doc≠graph gate's false-positive rate ~zero: a routine
+  // narrowing supersession (successor lists fewer files) never flags files still governed.
+  const liveFiles = new Set(decisions.filter(isLive).flatMap((d) => (d.related_files ?? []).map(toPosixTarget)));
 
   for (const d of decisions) {
     // 1. DEAD-REFERENCE — only for in-force decisions; a superseded one referencing
@@ -57,6 +64,25 @@ export function computeDrift(store: HunchStore, root: string): DriftReport {
           id: d.id,
           detail: `supersedes "${d.supersedes}", but it is still in force (status=${target.status}, superseded_by=${target.superseded_by ?? "null"})`,
         });
+      }
+    }
+
+    // 4. ANCHOR-STALE (doc≠graph, decision-grounding) — a derived view still anchored
+    //    to a SUPERSEDED decision while a current one exists for the same topic. Fully
+    //    deterministic: fires only on the explicit topic anchor + a live successor
+    //    (never a semantic guess), and only for a file NO live decision claims. Advisory.
+    if (d.topic && (d.status === "superseded" || d.superseded_by)) {
+      const current = currentForTopic(decisions, d.topic);
+      if (current && current.id !== d.id) {
+        for (const f of d.related_files ?? []) {
+          if (!f || f.includes("*") || liveFiles.has(toPosixTarget(f))) continue;
+          if (!existsSync(join(root, f))) continue; // missing file is history → dead-ref's job
+          findings.push({
+            kind: "anchor-stale",
+            id: d.id,
+            detail: `"${f}" is anchored to superseded decision ${d.id} (topic "${d.topic}"); the current decision is ${current.id} — "${current.title}". Reconcile the file with the current decision.`,
+          });
+        }
       }
     }
   }

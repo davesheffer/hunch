@@ -129,6 +129,13 @@ export type ConformancePredicate = z.infer<typeof ConformancePredicateSchema>;
 export const DecisionSchema = z.object({
   id: z.string().describe("dec_*"),
   title: z.string(),
+  // Decision-grounding anchor: the join key that relates a doc section, a decision,
+  // and a code region for drift detection. Exactly one topic per decision; null =
+  // un-anchored (still valid, just invisible to doc≠graph detection until tagged —
+  // honest and bounded). Optional-with-default, so every legacy record validates with
+  // no migration (Zod fills null on read); grounding freshness reuses the existing
+  // valid-time / last_verified signals rather than a separate clock.
+  topic: z.string().nullable().default(null).describe("decision-grounding anchor; one topic per decision, null = un-anchored"),
   status: z.enum(["proposed", "accepted", "rejected", "superseded"]).default("proposed"),
   context: z.string().default(""),
   decision: z.string().default(""),

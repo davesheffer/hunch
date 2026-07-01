@@ -143,6 +143,9 @@ export async function syncCommit(
   const decision: Decision = {
     id,
     title: draft.title,
+    // Auto-synthesized decisions are un-anchored (topic null) — a topic is a human
+    // act, never a machine guess. Preserve one an earlier human capture attached.
+    topic: existing?.topic ?? null,
     status: existing?.status === "accepted" ? "accepted" : "proposed",
     context: draft.context + constraintNote,
     decision: draft.decision,

@@ -24,6 +24,9 @@ import { checkConformance } from "../core/conformance.js";
 import { renderMarkdown, verdict } from "../core/checkreport.js";
 import { HUNCH_VERSION } from "../core/version.js";
 import type { Decision, Symbol } from "../core/types.js";
+import { liveForTopic, historyForTopic, rejectedForTopic, captureConflicts } from "../core/topics.js";
+import { issueCaptureToken as issueToken, consumeCaptureToken as consumeToken } from "../core/capturetoken.js";
+import { randomUUID } from "node:crypto";
 
 type ToolResult = { content: Array<{ type: "text"; text: string }>; isError?: boolean };
 const ok = (text: string): ToolResult => ({ content: [{ type: "text", text }] });
@@ -40,6 +43,27 @@ const SEV_CONSTRAINT: Record<string, number> = { blocking: 3, warning: 2, adviso
 const SEV_BUG: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1 };
 const more = (total: number, cap: number, hint = ""): string =>
   total > cap ? `\n  …(+${total - cap} more${hint ? ` — ${hint}` : ""})` : "";
+
+// Capture-session tokens live in src/core/capturetoken.ts (pure + testable). These
+// thin wrappers bind the process clock and id source at the call site (§5 Stage 1).
+const issueCaptureToken = (): string => issueToken(randomUUID, Date.now());
+const consumeCaptureToken = (token: string | undefined): boolean => consumeToken(token, Date.now());
+
+/** The interrogation protocol returned by hunch_capture_decision. */
+function grillingProtocol(topic: string | undefined, token: string): string {
+  return [
+    "You are capturing an engineering decision into Hunch's graph. Run the GRILLING LOOP, then commit.",
+    "",
+    "RULES:",
+    "1. Grill ONE focused question at a time. Push back on hand-wavy answers. Resolve every branch of the decision tree before committing — an unexamined decision poisons the graph.",
+    `2. Confirm the TOPIC anchor with the human before committing${topic ? ` (proposed: "${topic}")` : ""}. Exactly one topic per decision; if it spans two, split into two captures.`,
+    "3. Capture REJECTED alternatives explicitly — for each, what it was and why not. This is what makes the decision enforceable (Veto/drift check against it).",
+    `4. Commit with hunch_record_decision, passing capture_token:"${token}" and the confirmed topic. The artifact is the graph write, not prose.`,
+    "5. On CONFLICT with an existing live decision for the topic, do NOT auto-supersede — Hunch refuses and presents both; let the human choose to supersede (link), split the topic, or discard.",
+    "",
+    "Required before commit: topic, title, decision, context (the rationale/why), alternatives_rejected. Missing any → keep grilling.",
+  ].join("\n");
+}
 
 /** Resolve a free-form target (symbol id / name / file path) to symbol records. */
 function resolveSymbols(store: HunchStore, target: string): Symbol[] {
@@ -296,6 +320,50 @@ export function buildServer(root: string): McpServer {
     },
   );
 
+  // -- hunch_capture_decision (decision-grounding: the grilling front door) --
+  server.registerTool(
+    "hunch_capture_decision",
+    {
+      title: "Capture a decision (grilling interview)",
+      description:
+        "Start a decision-capture interview: returns the grilling protocol (interrogate ONE question at a time until the decision tree is resolved) plus a capture-session token. Grill the human, then commit via hunch_record_decision with the token + confirmed topic. Use for '/capture', 'record this decision', 'grill me on this'. The token proves the write is the tail of an interview, not a silent guess.",
+      inputSchema: {
+        topic: z.string().optional().describe("proposed topic anchor (confirm with the human before committing)"),
+        seed: z.string().optional().describe("what the decision is about, to focus the first question"),
+      },
+    },
+    async ({ topic, seed }): Promise<ToolResult> => {
+      const token = issueCaptureToken();
+      return ok(`${grillingProtocol(topic, token)}${seed ? `\n\nSeed: ${seed}` : ""}`);
+    },
+  );
+
+  // -- hunch_current_decision (decision-grounding: current(topic)) ----------
+  server.registerTool(
+    "hunch_current_decision",
+    {
+      title: "Current decision for a topic",
+      description:
+        "Decision-grounding: return the single CURRENT (accepted, non-superseded) decision anchored to a topic — the authoritative answer a doc or diff is checked against, plus what it rejected. If a topic has NO current decision, or an unresolved collision (>1 live), it says so and injects nothing (fail-safe).",
+      inputSchema: { topic: z.string().describe("the decision anchor, e.g. 'auth-transport'") },
+    },
+    async ({ topic }): Promise<ToolResult> => {
+      const decs = store.recs("decisions");
+      const live = liveForTopic(decs, topic);
+      if (live.length === 0) return ok(`No current decision for topic "${topic}". (Un-anchored, or never captured.)`);
+      if (live.length > 1) {
+        const list = live.map((d) => `${d.id} ("${d.title}")`).join(", ");
+        return ok(`Topic "${topic}" has an UNRESOLVED collision (${live.length} live decisions): ${list}.\nGrounding injects nothing until this is resolved — supersede one, or split the topic.`);
+      }
+      const d = live[0]!;
+      const rejected = rejectedForTopic(decs, topic);
+      const rej = rejected.length ? `\n    rejected: ${rejected.join("; ")}` : "";
+      const hist = historyForTopic(decs, topic);
+      const chain = hist.length > 1 ? `\n    history: ${hist.length} decisions on this topic (current is newest)` : "";
+      return ok(`Current decision for "${topic}": ${d.id} — "${d.title}" (${d.status}).\n    ${d.decision}${rej}${chain}${provLine(d)}`);
+    },
+  );
+
   // -- hunch_record_decision (write-back) -----------------------------------
   server.registerTool(
     "hunch_record_decision",
@@ -312,14 +380,16 @@ export function buildServer(root: string): McpServer {
           alternatives_rejected: z.array(z.string()).optional(),
           related_files: z.array(z.string()).optional(),
           related_components: z.array(z.string()).optional(),
+          topic: z.string().optional().describe("decision-grounding anchor — one topic per decision; enables doc≠graph drift detection for it. Omit to leave un-anchored."),
           status: z.enum(["proposed", "accepted", "rejected", "superseded"]).optional(),
           commit: z.string().optional(),
           supersedes: z.string().optional().describe("id of a decision this one replaces — closes its valid-time window (invalidate, don't delete)"),
           private: z.boolean().optional().describe("write into the PRIVATE overlay store (HUNCH_PRIVATE_DIR) instead of the committed repo — for sensitive decisions kept out of a public repo. Errors if no private store is configured."),
         }),
+        capture_token: z.string().optional().describe("token from hunch_capture_decision — proves this write is the tail of a grilling interview. Omit only for a quick manual record (a deprecation nudge is returned)."),
       },
     },
-    async ({ decision }): Promise<ToolResult> => {
+    async ({ decision, capture_token }): Promise<ToolResult> => {
       try {
         // Commit-keyed on the CANONICAL full sha (resolved via git rev-parse), so a
         // human passing the short sha they see in `commit` produces the SAME id as
@@ -344,6 +414,7 @@ export function buildServer(root: string): McpServer {
         const rec: Decision = {
           id,
           title: decision.title,
+          topic: decision.topic ?? existing?.topic ?? null,
           status: decision.status ?? "accepted",
           context: decision.context ?? existing?.context ?? "",
           decision: decision.decision ?? existing?.decision ?? "",
@@ -362,6 +433,29 @@ export function buildServer(root: string): McpServer {
           provenance: { source, confidence: 0.95, evidence: (decision.related_files ?? existing?.provenance.evidence ?? []).map(toPosixTarget) },
           date: now,
         };
+        // Decision-grounding uniqueness guard (§4 Enforcement): never create a SECOND
+        // live decision for one topic. Exclude ONLY the incumbent this write will
+        // actually close — one resolvable in the SAME store the write lands in. A
+        // cross-store supersede (public write vs a private incumbent, or vice-versa)
+        // would no-op and leave two live decisions, so it is treated as unresolved
+        // (willClose=null) → the guard fires and refuses. Same-id re-record is allowed.
+        if (rec.topic && rec.status === "accepted") {
+          const willClose = decision.supersedes && store.decisionInStore(decision.supersedes, !!decision.private)
+            ? decision.supersedes
+            : null;
+          const others = captureConflicts(store.recs("decisions"), rec.topic, id, willClose);
+          if (others.length) {
+            const list = others.map((d) => `${d.id} ("${d.title}")`).join(", ");
+            const crossStore = decision.supersedes && !willClose
+              ? ` (note: supersedes:"${decision.supersedes}" is not in the ${decision.private ? "private" : "public"} store, so it can't be closed from here)`
+              : "";
+            return err(
+              `Topic "${rec.topic}" already has a live decision: ${list}.${crossStore} ` +
+                `Hunch will not create a second current decision for one topic. Resolve it: ` +
+                `re-record with supersedes:<id> to replace it (linked, same store), pick a distinct topic to split, or discard this capture.`,
+            );
+          }
+        }
         // Route the write: private records go to the HUNCH_PRIVATE_DIR overlay (never
         // the committed repo); everything else to the public store. putPrivate throws
         // if no private store is configured, so "private" can't silently fall public.
@@ -383,10 +477,20 @@ export function buildServer(root: string): McpServer {
           commitAndPushHunch(store.privateDir, `hunch: capture ${id}`);
           flushed = " (committed + pushed to the private repo)";
         }
+        // Capture-session gate (staged deprecation, §9.3): a token proves an interview
+        // preceded the write. No token still writes (non-breaking), but returns a nudge
+        // toward /capture so the un-interviewed bypass is visible, not silent. A token
+        // presented but unknown to THIS process (server restart/expiry) is not shamed.
+        const gated = consumeCaptureToken(capture_token);
+        const captureNote = gated
+          ? " [via capture front door]"
+          : capture_token
+            ? ""
+            : "\n\n⚠ Recorded WITHOUT a capture interview. Prefer /capture (hunch_capture_decision), which grills the decision to a resolved state before writing — the graph should hold a well-examined decision, not a guess. (A future major version will require a capture token here.)";
         const supNote = superseded ? ` Superseded ${superseded.id} (window closed at ${rec.valid_from}).` : "";
         const note = decision.commit && !fullSha ? ` (note: commit "${decision.commit}" could not be resolved — recorded as a standalone decision, not linked to a commit)` : "";
         const where = decision.private ? ` [PRIVATE overlay — not committed to this repo]${flushed}` : "";
-        return ok(`Recorded decision ${id}: "${rec.title}" (status ${rec.status}, ${source}).${where}${supNote}${note}`);
+        return ok(`Recorded decision ${id}: "${rec.title}" (status ${rec.status}, ${source}).${where}${supNote}${note}${captureNote}`);
       } catch (e) {
         return err(`Failed to record decision: ${(e as Error).message}`);
       }
