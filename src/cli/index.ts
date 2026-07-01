@@ -46,6 +46,7 @@ import { healClaudeConfigCaseSplit } from "../integrations/claudeConfig.js";
 import { formatContext } from "../core/format.js";
 import { readConfig, writeConfig, FIRMNESS_LEVELS, isFirmness, type Firmness } from "../core/config.js";
 import { blockingInScope, vetoInScope, proposedEditLines } from "../core/hookpolicy.js";
+import { groundDecisions, renderGrounding } from "../core/grounding.js";
 import { loadGoldenSet, evaluateGraphLift } from "../eval/harness.js";
 import { computeDrift } from "../core/drift.js";
 import { compareCandidates } from "../core/compare.js";
@@ -1156,6 +1157,11 @@ program
         const items = retired.map((r) => `${[...r.symbols, ...r.deps].join(", ")} (${r.decision})`).join("; ");
         text += `\n\n⚠ Deliberately RETIRED from this file — do not re-introduce without cause: ${items}.`;
       }
+      // Decision-grounding (§3): for any topic-anchored decision touching this file,
+      // inject the CURRENT decision for that topic over whatever a stale doc asserts.
+      // Aged decisions downgrade to advisory; ambiguous topics inject nothing.
+      const grounding = renderGrounding(groundDecisions(ctx.decisions, store.recs("decisions"), Date.now()));
+      if (grounding) text += `\n\n${grounding}`;
       emitContext("PreToolUse", text);
     } catch {
       // swallow — never block an edit on a hook failure
