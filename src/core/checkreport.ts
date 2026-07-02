@@ -55,6 +55,49 @@ export function reportIsClean(r: CheckReport): boolean {
   return r.direct.length === 0 && r.near.length === 0 && r.regressions.length === 0 && r.vetoes.length === 0 && r.redundant.length === 0;
 }
 
+/** PR impact (read-only, advisory): the dependency + memory surface of a change.
+ *  Composes the SAME primitives as CheckReport so impact and gating never disagree. */
+export interface ImpactReport {
+  files: string[];
+  /** Files whose code (in)directly depends on the changed files — nearest depth wins. */
+  blast: Array<{ file: string; via: string; depth: number }>;
+  report: CheckReport;
+  /** In-force decisions concerning the touched files. */
+  decisions: Array<{ id: string; title: string; status: string }>;
+}
+
+/** Terminal/markdown-lite rendering of an ImpactReport (hunch impact / hunch_pr_impact). */
+export function renderImpact(im: ImpactReport, scope: string): string {
+  const out: string[] = [];
+  out.push(`Impact of ${scope} — ${im.files.length} changed file(s) → ${im.blast.length} dependent file(s):`);
+  if (im.blast.length) {
+    const cap = 20;
+    for (const b of im.blast.slice(0, cap)) out.push(`  • [depth ${b.depth}] ${b.file} (via ${b.via})`);
+    if (im.blast.length > cap) out.push(`  …(+${im.blast.length - cap} more, closest first)`);
+  } else {
+    out.push("  (nothing in the graph depends on these files)");
+  }
+  const r = im.report;
+  if (r.direct.length) {
+    out.push(`\nInvariants DIRECTLY in scope (${r.direct.length}):`);
+    for (const d of r.direct) out.push(`  ${mark(d.severity)} ${d.id} [${d.severity}] ${d.statement}`);
+  }
+  if (r.near.length) {
+    out.push(`\nInvariants reached via blast radius (${r.near.length}, advisory):`);
+    for (const n of r.near) out.push(`  ${mark(n.severity)} ${n.id} [${n.severity}] ${n.statement}\n      via ${n.via[0] ?? ""}`);
+  }
+  if (im.decisions.length) {
+    const cap = 10;
+    out.push(`\nDecisions concerning the touched files (${im.decisions.length}):`);
+    for (const d of im.decisions.slice(0, cap)) out.push(`  • ${d.id} [${d.status}] ${clip(d.title, 100)}`);
+    if (im.decisions.length > cap) out.push(`  …(+${im.decisions.length - cap} more)`);
+  }
+  if (!r.direct.length && !r.near.length && !im.decisions.length) {
+    out.push("\nNo recorded invariants or decisions touch this change.");
+  }
+  return out.join("\n");
+}
+
 /** True when --strict should FAIL the commit/PR. */
 export function reportFailsStrict(r: CheckReport): boolean {
   return r.strict && (r.strictBlockers > 0 || r.regBlocking > 0 || r.vetoBlocking > 0);

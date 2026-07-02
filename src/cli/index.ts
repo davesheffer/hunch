@@ -35,7 +35,7 @@ import { runbookId, decisionId } from "../core/ids.js";
 import { deriveForbids, effectiveForbids } from "../core/constraintmatch.js";
 import type { Runbook } from "../core/types.js";
 import { extractInlineIntent } from "../extractors/comments.js";
-import { renderText, renderMarkdown, reportFailsStrict, type CheckReport } from "../core/checkreport.js";
+import { renderText, renderMarkdown, renderImpact, reportFailsStrict, type CheckReport } from "../core/checkreport.js";
 import { partitionReview, READY_MIN_GROUNDED, type ReviewItem } from "../core/reviewqueue.js";
 import { installPostCommitHook, installPreCommitHook } from "../integrations/hooks.js";
 import { ensureSharedOverlayPointer } from "../integrations/worktree.js";
@@ -1703,6 +1703,67 @@ program
       const anchor = findings.filter((f) => f.kind === "anchor-stale").length;
       console.log(`\n${findings.length} finding(s)${anchor ? `, ${anchor} doc≠graph (anchor-stale)` : ""}${collisions.size ? `, ${collisions.size} topic-collision(s)` : ""}.`);
       if (anchor || collisions.size) process.exitCode = 1;
+    } finally {
+      store.close();
+    }
+  });
+
+// ---- path (shortest dependency chain) --------------------------------------
+program
+  .command("path")
+  .description("Shortest dependency path between two symbols/files/components — 'how does A reach B?'. Walks call/import/dependency/contains edges in either direction. Read-only.")
+  .argument("<from>", "symbol id/name or file path")
+  .argument("<to>", "symbol id/name or file path")
+  .option("--max-depth <n>", "maximum hops to search", "8")
+  .action((from: string, to: string, opts: { maxDepth: string }) => {
+    const { store } = storeFor();
+    try {
+      store.reindex(); // reflect out-of-band JSON edits before walking the graph
+      const A = store.resolveNodeIds(from);
+      const B = store.resolveNodeIds(to);
+      if (!A.length) return fail(`"${from}" resolves to no indexed symbol/component (run \`hunch index\`?).`);
+      if (!B.length) return fail(`"${to}" resolves to no indexed symbol/component.`);
+      let best: Array<{ id: string; via: string }> | null = null;
+      for (const a of A.slice(0, 4)) {
+        for (const b of B.slice(0, 4)) {
+          const p = store.shortestPath(a, b, Number(opts.maxDepth) || 8);
+          if (p && (!best || p.length < best.length)) best = p;
+        }
+      }
+      if (!best) {
+        console.log(`No path between "${from}" and "${to}" within ${opts.maxDepth} hop(s).`);
+        process.exitCode = 1;
+        return;
+      }
+      const last = best.length - 1;
+      console.log(`${last} hop(s):`);
+      best.forEach((n, i) => console.log(`  ${i === 0 ? "┌" : i === last ? "└" : "├"} ${n.via}${n.via === n.id ? "" : `  (${n.id})`}`));
+    } finally {
+      store.close();
+    }
+  });
+
+// ---- impact (PR impact — read-only, advisory) ------------------------------
+program
+  .command("impact")
+  .description("PR impact: the dependency + memory surface of a change — dependent files reached, invariants direct/near, and the decisions concerned. Read-only, advisory (gating is `hunch check`). Omit base and --commit to inspect staged changes.")
+  .argument("[base]", "diff against this base ref (e.g. origin/main) for a branch/PR")
+  .option("--commit <sha>", "impact of a single commit")
+  .action((base: string | undefined, opts: { commit?: string }) => {
+    const { store, root } = storeFor();
+    try {
+      if (base && opts.commit) return fail("Pass at most one of [base] / --commit.");
+      if (base && !revExists(base, root)) return fail(`base ref "${base}" does not resolve.`);
+      if (opts.commit && !revExists(opts.commit, root)) return fail(`commit "${opts.commit}" does not resolve.`);
+      store.reindex(); // reflect out-of-band JSON edits before reading the graph
+      const files = opts.commit ? commitFiles(opts.commit, root) : base ? rangeFiles(base, root) : stagedFiles(root);
+      const scope = opts.commit ? `commit ${opts.commit}` : base ? `${base}..HEAD` : "staged changes";
+      if (!files.length) {
+        console.log(`No changed files in ${scope}.`);
+        return;
+      }
+      const diff = opts.commit ? commitDiff(opts.commit, root) : base ? rangeDiff(base, root) : stagedDiff(root);
+      console.log(renderImpact(store.prImpact(files, diff), scope));
     } finally {
       store.close();
     }

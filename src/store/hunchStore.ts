@@ -24,7 +24,7 @@ import { edgeId } from "../core/ids.js";
 import { isStrictBlocker, isVetoBlocker, type VetoTier } from "../core/strictgate.js";
 import { effectiveForbids, matchForbids, type ForbidMatch } from "../core/constraintmatch.js";
 import { analyzeDiff, type DiffAnalysis } from "../extractors/diff.js";
-import type { CheckReport, CheckDirect, CausalWhy } from "../core/checkreport.js";
+import type { CheckReport, CheckDirect, CausalWhy, ImpactReport } from "../core/checkreport.js";
 
 export interface SearchHit {
   ref: string;
@@ -692,6 +692,79 @@ export class HunchStore {
       WHERE up.depth > 0 AND s.file <> ?
       GROUP BY s.file ORDER BY depth, file`,
     ).all(file, maxDepth, file) as Array<{ file: string; via: string; depth: number }>;
+  }
+
+  /** Shortest undirected path between two graph nodes (symbols/components) over
+   *  call/dep/import/contains edges — "how does A reach B?" (hunch path / hunch_path).
+   *  BFS via a recursive CTE; visited ids ride a |-delimited list so cycles terminate.
+   *  Returns the node chain in order, or null when no path exists within maxDepth. */
+  shortestPath(fromId: string, toId: string, maxDepth = 8): Array<{ id: string; via: string }> | null {
+    if (fromId === toId) return [{ id: fromId, via: this.nodeLabel(fromId) }];
+    const row = this.db.prepare(
+      /* sql */ `
+      WITH RECURSIVE step(node, path, depth) AS (
+        SELECT ?, '|' || ? || '|', 0
+        UNION
+        SELECT x.nb, step.path || x.nb || '|', step.depth + 1
+        FROM (
+          SELECT e."from" AS frm, e."to" AS nb FROM edges e WHERE e.type IN ('calls','depends_on','imports','contains')
+          UNION ALL
+          SELECT e."to" AS frm, e."from" AS nb FROM edges e WHERE e.type IN ('calls','depends_on','imports','contains')
+        ) x JOIN step ON x.frm = step.node
+        WHERE step.depth < ? AND instr(step.path, '|' || x.nb || '|') = 0
+      )
+      SELECT path FROM step WHERE node = ? ORDER BY depth LIMIT 1`,
+    ).get(fromId, fromId, maxDepth, toId) as { path: string } | undefined;
+    if (!row) return null;
+    const ids = row.path.split("|").filter(Boolean);
+    return ids.map((id) => ({ id, via: this.nodeLabel(id) }));
+  }
+
+  /** Human label for a graph node id: "name @ file" for a symbol, the component name,
+   *  or the id itself when unindexed. */
+  nodeLabel(id: string): string {
+    const s = this.db.prepare(`SELECT name || ' @ ' || file AS v FROM symbols WHERE id = ?`).get(id) as { v: string } | undefined;
+    if (s) return s.v;
+    const c = this.db.prepare(`SELECT name AS v FROM components WHERE id = ?`).get(id) as { v: string } | undefined;
+    return c?.v ?? id;
+  }
+
+  /** Resolve a free-form target (symbol id / name / file path, component id / name)
+   *  to graph node ids — symbols win over components, exact file before suffix. */
+  resolveNodeIds(target: string): string[] {
+    const t = toPosixTarget(target);
+    const sym = this.db.prepare(
+      `SELECT id FROM symbols WHERE id = ? OR name = ? OR file = ? OR file LIKE ? LIMIT 20`,
+    ).all(t, t, t, `%/${t}`) as Array<{ id: string }>;
+    if (sym.length) return sym.map((r) => r.id);
+    const cmp = this.db.prepare(`SELECT id FROM components WHERE id = ? OR name = ? LIMIT 5`).all(t, t) as Array<{ id: string }>;
+    return cmp.map((r) => r.id);
+  }
+
+  /** PR impact (read-only, ADVISORY — never gates): the dependency + memory surface
+   *  of a change. Composes the SAME primitives as buildCheckReport (blast radius,
+   *  scope-matched constraints, why) so impact and gating can never disagree. */
+  prImpact(files: string[], diff: string): ImpactReport {
+    const changed = new Set(files.map(toPosixTarget));
+    const blast = new Map<string, { file: string; via: string; depth: number }>();
+    for (const f of changed) {
+      for (const b of this.blastRadiusFiles(f)) {
+        if (changed.has(b.file)) continue;
+        const prev = blast.get(b.file);
+        if (!prev || b.depth < prev.depth) blast.set(b.file, b);
+      }
+    }
+    const report = this.buildCheckReport([...changed], diff, { strict: false });
+    const decisions = new Map<string, { id: string; title: string; status: string }>();
+    for (const f of changed) {
+      for (const d of this.why(f).decisions) decisions.set(d.id, { id: d.id, title: d.title, status: d.status });
+    }
+    return {
+      files: [...changed],
+      blast: [...blast.values()].sort((a, b) => a.depth - b.depth || a.file.localeCompare(b.file)),
+      report,
+      decisions: [...decisions.values()],
+    };
   }
 
   /** Constraints whose scope glob matches a path/glob (hunch_check_constraints).

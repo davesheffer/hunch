@@ -23,7 +23,7 @@ import { formatContext } from "../core/format.js";
 import type { Runbook } from "../core/types.js";
 import { compareCandidates } from "../core/compare.js";
 import { checkConformance } from "../core/conformance.js";
-import { renderMarkdown, verdict } from "../core/checkreport.js";
+import { renderMarkdown, renderImpact, verdict } from "../core/checkreport.js";
 import { HUNCH_VERSION } from "../core/version.js";
 import type { Decision, Symbol } from "../core/types.js";
 import { liveForTopic, historyForTopic, rejectedForTopic, captureConflicts } from "../core/topics.js";
@@ -588,6 +588,65 @@ export function buildServer(root: string): McpServer {
       } catch (e) {
         return err(`Failed to compute merge verdict: ${(e as Error).message}`);
       }
+    },
+  );
+
+  // -- hunch_pr_impact (read-only impact surface — advisory, never gates) ----
+  server.registerTool(
+    "hunch_pr_impact",
+    {
+      title: "PR impact: the dependency + memory surface of a change",
+      description:
+        "Given a change (staged, a branch vs base, or a single commit), return its IMPACT SURFACE: the files whose code transitively depends on the changed files, the invariants directly in scope and those reached via blast radius, and the recorded decisions concerning the touched files. Read-only and advisory — use hunch_merge_verdict for the gate. Call before review to know what a PR can break and which recorded intent it touches. Omit base AND commit for staged changes.",
+      inputSchema: {
+        base: z.string().optional().describe("Diff against this base ref (e.g. origin/main) — for a PR/branch."),
+        commit: z.string().optional().describe("Impact of a single commit (sha/ref). Omit base AND commit for staged changes."),
+      },
+    },
+    async ({ base, commit }): Promise<ToolResult> => {
+      try {
+        if (base && commit) return err("Pass at most one of base/commit (omit both for staged changes).");
+        if (base && !revExists(base, root)) return err(`base ref "${base}" does not resolve (in CI, fetch the base branch first).`);
+        if (commit && !revExists(commit, root)) return err(`commit "${commit}" does not resolve.`);
+        const files = commit ? commitFiles(commit, root) : base ? rangeFiles(base, root) : stagedFiles(root);
+        const scope = commit ? `commit ${commit}` : base ? `${base}..HEAD` : "staged changes";
+        if (!files.length) return ok(`No changed files in ${scope}.`);
+        const diff = commit ? commitDiff(commit, root) : base ? rangeDiff(base, root) : stagedDiff(root);
+        return ok(renderImpact(store.prImpact(files, diff), scope));
+      } catch (e) {
+        return err(`Failed to compute impact: ${(e as Error).message}`);
+      }
+    },
+  );
+
+  // -- hunch_path (shortest dependency chain) --------------------------------
+  server.registerTool(
+    "hunch_path",
+    {
+      title: "Shortest dependency path between two nodes",
+      description:
+        "How does A reach B? Returns the shortest chain of call/import/dependency/contains edges connecting two symbols, files, or components — walked in either direction. Use to understand coupling before a refactor, to verify the actual route behind a must-reach invariant, or to explain why editing A shows up in B's blast radius. Deterministic, read-only.",
+      inputSchema: {
+        from: z.string().describe("Start: a symbol id/name or file path."),
+        to: z.string().describe("End: a symbol id/name or file path."),
+        max_depth: z.number().optional().describe("Maximum hops to search (default 8)."),
+      },
+    },
+    async ({ from, to, max_depth }): Promise<ToolResult> => {
+      const A = store.resolveNodeIds(from);
+      const B = store.resolveNodeIds(to);
+      if (!A.length) return err(`"${from}" resolves to no indexed symbol/component (is the repo indexed?).`);
+      if (!B.length) return err(`"${to}" resolves to no indexed symbol/component.`);
+      let best: Array<{ id: string; via: string }> | null = null;
+      for (const a of A.slice(0, 4)) {
+        for (const b of B.slice(0, 4)) {
+          const p = store.shortestPath(a, b, max_depth ?? 8);
+          if (p && (!best || p.length < best.length)) best = p;
+        }
+      }
+      if (!best) return ok(`No path between "${from}" and "${to}" within ${max_depth ?? 8} hop(s) — they are not connected in the indexed graph.`);
+      const chain = best.map((n, i) => `  ${i === 0 ? "┌" : i === best!.length - 1 ? "└" : "├"} ${n.via}`).join("\n");
+      return ok(`${best.length - 1} hop(s) from "${from}" to "${to}":\n${chain}`);
     },
   );
 
