@@ -1,0 +1,113 @@
+{
+  "id": "dec_36649546d9",
+  "title": "Gate documentation drift to decision graph; refuse deployment of contradictory prose",
+  "topic": null,
+  "status": "proposed",
+  "context": "Agent-trusted markdown (AGENTS.md, CLAUDE.md) rots silently. Stale instructions are executed with full repo authority, causing agents to 'fix' code back toward superseded patterns. Prose has no truth-maintenance story; nothing keeps it synchronized with actual decisions.",
+  "decision": "Anchor markdown sections to Hunch decision topics via HTML comments. Optional pinning locks prose to specific decisions. Stale pins trigger doc-anchor-stale findings that gate CI (`hunch drift` exits non-zero), preventing deployment of repos whose own instructions contradict their decisions.",
+  "consequences": [
+    "Pinned prose sections can no longer silently drift from their grounding decisions",
+    "CI gates on documentation accuracy when pinned, making stale docs a hard blocker",
+    "Agents see current decision + rejected alternatives at edit time, following the graph not the prose",
+    "Unpinned sections ground but never gate, allowing gradual migration without breakage",
+    "Repos can now prove their instructions are correct against the decision record"
+  ],
+  "alternatives_rejected": [
+    "Advisory-only grounding (agents still follow stale prose with full authority)",
+    "Manual documentation reviews (human process, doesn't scale, doesn't catch drift automatically)",
+    "Semantic analysis of prose meaning (too fragile, requires LLM, generates false positives)",
+    "Unpinned grounding only (prevents gating, leaves stale drift undetected)"
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Advisory-only grounding (agents still follow stale prose with full authority)",
+      "scope": [
+        "site/blog/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Manual documentation reviews (human process, doesn't scale, doesn't catch drift automatically)",
+      "scope": [
+        "site/blog/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Semantic analysis of prose meaning (too fragile, requires LLM, generates false positives)",
+      "scope": [
+        "site/blog/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Unpinned grounding only (prevents gating, leaves stale drift undetected)",
+      "scope": [
+        "site/blog/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [],
+  "related_files": [
+    "site/blog/posts.js"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "8ebd25b",
+  "valid_from": "2026-07-02T10:03:17+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft",
+    "confidence": 0.65,
+    "evidence": [
+      "commit:8ebd25b",
+      "synth:provider=claude-cli",
+      "branch:main",
+      "site/blog/posts.js"
+    ],
+    "last_verified": "2026-07-02T07:03:33.283Z"
+  },
+  "date": "2026-07-02T10:03:17+03:00"
+}
