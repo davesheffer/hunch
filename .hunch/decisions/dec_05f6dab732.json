@@ -1,0 +1,178 @@
+{
+  "id": "dec_05f6dab732",
+  "title": "Adopted-docs pattern: wiki-managed copies pin stale docs to current decisions",
+  "topic": null,
+  "status": "proposed",
+  "context": "Docs drift from code decisions inevitably. Manual sync fails. Need deterministic reconciliation that never loses the original (source of truth for prose) and keeps private decisions out of public repos. Touches invariant(s): con_2ce3f2a547 (Synthesis must run on the Claude subscription, never the pay-per-token API: strip ANTHROPIC_API_KEY and ANTHROPIC_AUTH_TOKEN from the spawned env); con_8460b6770f (Config/provider writers must merge idempotently into existing user files and refuse to clobber an unparseable file).",
+  "decision": "Stale repo docs become wiki-managed read-only adopted copies, re-pinned to current decision with graph corrections inline. Freshness deterministic (input hash + tamper tripwire), not scheduled. Separate public/private homes: committed wiki/ vs private overlay, preventing secret leaks.",
+  "consequences": [
+    "Drift is always detected and surfaced (not silent)",
+    "Original docs never rewritten (adoption preserves prose intent)",
+    "Docs automatically heal to current decision state when --heal runs",
+    "Private decisions structurally cannot leak into committed wiki pages",
+    "Requires CI drift gate to enforce adoption adoption (no accidental commits)"
+  ],
+  "alternatives_rejected": [
+    "Silent doc drift / hope devs notice",
+    "Manual doc maintenance (unreliable, human-gated)",
+    "Scheduled background regen (non-deterministic, timing side effects)",
+    "Single unified doc store (can't separate public/private safely)",
+    "In-place doc rewrites (loses original prose, kills audit trail)"
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Silent doc drift / hope devs notice",
+      "scope": [
+        "src/cli/**",
+        "src/core/**",
+        "src/integrations/**",
+        "src/synthesis/**",
+        "src/wiki/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Manual doc maintenance (unreliable, human-gated)",
+      "scope": [
+        "src/cli/**",
+        "src/core/**",
+        "src/integrations/**",
+        "src/synthesis/**",
+        "src/wiki/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Scheduled background regen (non-deterministic, timing side effects)",
+      "scope": [
+        "src/cli/**",
+        "src/core/**",
+        "src/integrations/**",
+        "src/synthesis/**",
+        "src/wiki/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Single unified doc store (can't separate public/private safely)",
+      "scope": [
+        "src/cli/**",
+        "src/core/**",
+        "src/integrations/**",
+        "src/synthesis/**",
+        "src/wiki/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "In-place doc rewrites (loses original prose, kills audit trail)",
+      "scope": [
+        "src/cli/**",
+        "src/core/**",
+        "src/integrations/**",
+        "src/synthesis/**",
+        "src/wiki/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_50037f41a9",
+    "cmp_863ac67d4a",
+    "cmp_a94a8fe5cc",
+    "cmp_b256a6aed0",
+    "cmp_ba75dfc94f"
+  ],
+  "related_files": [
+    "src/cli/index.ts",
+    "src/core/docscan.ts",
+    "src/core/drift.ts",
+    "src/integrations/claudemd.ts",
+    "src/integrations/providers.ts",
+    "src/synthesis/provider.ts",
+    "src/wiki/adopt.ts",
+    "src/wiki/wiki.ts",
+    "test/wiki.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "29db9a7",
+  "valid_from": "2026-07-02T16:27:37+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [
+      "markdownDocs"
+    ],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft+summary",
+    "confidence": 0.5,
+    "evidence": [
+      "commit:29db9a7",
+      "synth:provider=claude-cli",
+      "branch:main",
+      "src/cli/index.ts",
+      "src/core/docscan.ts",
+      "src/core/drift.ts",
+      "src/integrations/claudemd.ts",
+      "src/integrations/providers.ts",
+      "src/synthesis/provider.ts",
+      "src/wiki/adopt.ts",
+      "src/wiki/wiki.ts"
+    ],
+    "last_verified": "2026-07-02T13:27:56.494Z"
+  },
+  "date": "2026-07-02T16:27:37+03:00"
+}
