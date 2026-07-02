@@ -7,31 +7,31 @@
 <meta name="description" content="Hunch documentation — install, initialize, wire up your coding assistant over MCP, and use the guards (Never Twice, Causal Merge Verdict, Decision Guard, Redundancy Guard, CI Constraint Guard). Complete CLI and MCP reference." />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400..600&family=Inter:wght@400;450;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
 <style>
   :root{
-    --bg:#ffffff;
-    --bg-soft:#fbfaf8;
-    --ink:#16150f;
-    --ink-soft:#3d3b32;
-    --muted:#6f6c63;
-    --line:rgba(22,21,15,.10);
-    --line-soft:rgba(22,21,15,.06);
-    --accent:#2742ff;
-    --accent-deep:#1a2fcf;
-    --accent-wash:rgba(39,66,255,.07);
-    --warn:#e0432d;
-    --warn-wash:rgba(224,67,45,.07);
+    --bg:#fbfcfb;
+    --bg-soft:#f0f2f0;
+    --ink:#1c201e;
+    --ink-soft:#3c4440;
+    --muted:#66706b;
+    --line:rgba(28,32,30,.10);
+    --line-soft:rgba(28,32,30,.055);
+    --accent:#3a6b58;
+    --accent-deep:#2c523f;
+    --accent-wash:rgba(58,107,88,.07);
+    --warn:#b4543e;
+    --warn-wash:rgba(180,84,62,.08);
     --ok:#1f9d68;
     --ok-wash:rgba(31,157,104,.08);
-    --code-bg:#fbfaf8;
+    --code-bg:#f0f2f0;
     --r:12px;
     --sidebar:280px;
     --toc:230px;
     --ease:cubic-bezier(.22,1,.36,1);
-    --serif:"Fraunces",Georgia,serif;
-    --sans:"Inter",system-ui,-apple-system,sans-serif;
-    --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,monospace;
+    --serif:"IBM Plex Mono",ui-monospace,monospace;
+    --sans:"IBM Plex Sans",system-ui,sans-serif;
+    --mono:"IBM Plex Mono",ui-monospace,monospace;
   }
   *{box-sizing:border-box}
   html{scroll-behavior:smooth}
@@ -52,7 +52,7 @@
   }
   .top-row{width:100%;max-width:1400px;margin:0 auto;padding:0 24px;display:flex;align-items:center;justify-content:space-between;gap:20px}
   .brand{display:flex;align-items:center;gap:10px;font-weight:600;font-size:16px;letter-spacing:-.01em}
-  .brand .dot{width:22px;height:22px;border-radius:7px;background:var(--ink);color:#fff;display:grid;place-items:center;font-size:13px}
+  .brand .dot{width:8px;height:8px;border-radius:50%;background:var(--accent);display:inline-block}
   .brand .tag{font-family:var(--mono);font-size:11px;font-weight:500;color:var(--muted);border:1px solid var(--line);border-radius:6px;padding:2px 7px;margin-left:4px}
   .top-links{display:flex;align-items:center;gap:26px;font-size:14px;color:var(--ink-soft)}
   .top-links a{font-weight:450;transition:color .2s}
@@ -92,7 +92,7 @@
     .menu-btn{display:flex}
     body.nav-open .scrim{opacity:1;pointer-events:auto}
   }
-  .scrim{position:fixed;inset:60px 0 0;background:rgba(22,21,15,.32);opacity:0;pointer-events:none;transition:opacity .3s;z-index:35}
+  .scrim{position:fixed;inset:60px 0 0;background:rgba(28,32,30,.32);opacity:0;pointer-events:none;transition:opacity .3s;z-index:35}
 
   /* ---------- content ---------- */
   main{padding:48px 56px 120px;min-width:0;max-width:860px}
@@ -123,7 +123,7 @@
 
   /* code blocks */
   .code{position:relative;margin:0 0 20px;border:1px solid var(--line);border-radius:var(--r);background:var(--code-bg);overflow:hidden}
-  .code-head{display:flex;align-items:center;justify-content:space-between;padding:8px 14px;border-bottom:1px solid var(--line-soft);background:rgba(22,21,15,.015)}
+  .code-head{display:flex;align-items:center;justify-content:space-between;padding:8px 14px;border-bottom:1px solid var(--line-soft);background:rgba(28,32,30,.015)}
   .code-head .lbl{font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:.04em}
   .copy{font-family:var(--mono);font-size:11px;color:var(--muted);background:none;border:1px solid var(--line);border-radius:6px;padding:3px 9px;cursor:pointer;transition:.18s}
   .copy:hover{color:var(--accent);border-color:var(--accent)}
@@ -178,7 +178,7 @@ if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElem
     <div style="display:flex;align-items:center;gap:14px">
       <button class="menu-btn" id="menuBtn" aria-label="Toggle navigation"><span></span></button>
       <a class="brand" href="/">
-        <span class="dot">🧠</span> Hunch <span class="tag">docs</span>
+        <span class="dot" aria-hidden="true"></span> hunch <span class="tag">docs</span>
       </a>
     </div>
     <nav class="top-links">
@@ -259,7 +259,7 @@ if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElem
 
     <section id="install">
       <h2>Install<a class="anchor" href="#install">#</a></h2>
-      <p>Hunch needs <strong>Node ≥ 20</strong>. Install the CLI globally — that puts a <code>hunch</code> binary on your PATH:</p>
+      <p>Hunch needs <strong>Node ≥ 22.13</strong>. Install the CLI globally — that puts a <code>hunch</code> binary on your PATH:</p>
       <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">terminal</span><button class="copy">Copy</button></div><pre><span class="k">npm</span> install -g @davesheffer/hunch</pre></div>
       <p>Or run from source (for hacking on Hunch itself):</p>
       <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">terminal</span><button class="copy">Copy</button></div><pre><span class="k">git</span> clone https://github.com/davesheffer/hunch &amp;&amp; <span class="k">cd</span> hunch
@@ -642,7 +642,7 @@ Agent: hunch_record_correction({ rule: "never import lodash; use src/utils",
 </div>
 
 <footer>
-  <span>🧠 Hunch — engineering memory. Apache-2.0.</span>
+  <span>hunch — engineering memory. Apache-2.0.</span>
   <span><a class="link" href="/">Home</a> · <a class="link" href="/blog">Blog</a> · <a class="link" href="/changelog">Changelog</a> · <a class="link" href="https://www.npmjs.com/package/@davesheffer/hunch" target="_blank" rel="noopener">npm</a> · <a class="link" href="https://github.com/davesheffer/hunch" target="_blank" rel="noopener">GitHub</a></span>
 </footer>
 
@@ -694,7 +694,7 @@ Agent: hunch_record_correction({ rule: "never import lodash; use src/utils",
 
   // sticky top-bar shadow
   const topBar = document.querySelector("header.top");
-  addEventListener("scroll", () => { topBar.style.boxShadow = scrollY > 8 ? "0 1px 0 rgba(22,21,15,.06)" : "none"; });
+  addEventListener("scroll", () => { topBar.style.boxShadow = scrollY > 8 ? "0 1px 0 rgba(28,32,30,.06)" : "none"; });
 
   // section reveals — subtle fade + rise as each enters. We read LIVE geometry on
   // every (rAF-throttled) scroll frame and reveal any still-hidden section that's in
@@ -728,13 +728,13 @@ Agent: hunch_record_correction({ rule: "never import lodash; use src/utils",
 <style>
   .hb-launch{position:fixed;right:20px;bottom:20px;z-index:60;display:flex;align-items:center;gap:9px;
     padding:12px 16px;border:none;border-radius:100px;background:var(--accent);color:#fff;cursor:pointer;
-    font:600 14px/1 var(--sans);box-shadow:0 8px 26px rgba(39,66,255,.32);transition:transform .15s var(--ease),box-shadow .15s}
-  .hb-launch:hover{transform:translateY(-1px);box-shadow:0 12px 32px rgba(39,66,255,.4)}
+    font:600 14px/1 var(--sans);box-shadow:0 8px 26px rgba(58,107,88,.32);transition:transform .15s var(--ease),box-shadow .15s}
+  .hb-launch:hover{transform:translateY(-1px);box-shadow:0 12px 32px rgba(58,107,88,.4)}
   .hb-launch svg{width:17px;height:17px}
   .hb-launch.hide{display:none}
   .hb-panel{position:fixed;right:20px;bottom:20px;z-index:61;width:380px;max-width:calc(100vw - 32px);
     height:560px;max-height:calc(100vh - 40px);display:none;flex-direction:column;background:var(--bg);
-    border:1px solid var(--line);border-radius:16px;box-shadow:0 24px 60px rgba(22,21,15,.22);overflow:hidden}
+    border:1px solid var(--line);border-radius:16px;box-shadow:0 24px 60px rgba(28,32,30,.22);overflow:hidden}
   .hb-panel.open{display:flex;animation:hb-in .22s var(--ease)}
   @keyframes hb-in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
   .hb-head{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line);background:var(--bg-soft)}
@@ -747,7 +747,7 @@ Agent: hunch_record_correction({ rule: "never import lodash; use src/utils",
   .hb-msg{max-width:88%;padding:10px 13px;border-radius:13px;font:450 13.5px/1.5 var(--sans);word-wrap:break-word}
   .hb-msg.bot{align-self:flex-start;background:var(--bg-soft);border:1px solid var(--line-soft);color:var(--ink-soft);border-bottom-left-radius:4px}
   .hb-msg.user{align-self:flex-end;background:var(--accent);color:#fff;border-bottom-right-radius:4px}
-  .hb-msg.bot code{font:600 12px var(--mono);background:rgba(39,66,255,.08);color:var(--accent-deep);padding:1px 5px;border-radius:5px}
+  .hb-msg.bot code{font:600 12px var(--mono);background:rgba(58,107,88,.08);color:var(--accent-deep);padding:1px 5px;border-radius:5px}
   .hb-msg.bot a{color:var(--accent);font-weight:600;text-decoration:none}
   .hb-msg.bot a:hover{text-decoration:underline}
   .hb-msg.bot b{color:var(--ink);font-weight:650}
@@ -842,7 +842,7 @@ Agent: hunch_record_correction({ rule: "never import lodash; use src/utils",
     {q:"Could it leak my secrets, API keys or .env?", kw:["secret","secrets","env","env file","read my env","credentials","password","passwords","leak my secrets","leak secrets","api keys in","keys in the notes","sensitive data in notes"], a:`Hunch stores short <b>reasoning notes</b> — not copies of your files — and never reads your <code>.env</code>. Whatever your AI assistant normally sees in a diff is handled by that assistant as usual; Hunch adds no new exposure. For anything sensitive, keep those notes in a separate <b>private</b> repo. → <a href="#private">Private memory</a>`},
     {q:"Does it phone home or have telemetry?", kw:["telemetry","phone home","phones home","analytics","usage tracking","tracking","spyware","track me","send analytics","data collection","collect data","report back"], a:`No telemetry, no analytics, no phoning home. Hunch runs entirely on your machine and you can read every line of it (it's open source). Nothing is reported to anyone. → <a href="#overview">Overview</a>`},
     {q:"How do I update Hunch?", kw:["update","updating","upgrade","upgrading","latest version","newest version","new version","update hunch","update it"], a:`Re-run the install with <code>@latest</code>: <code>npm i -g @davesheffer/hunch@latest</code>. Your <code>.hunch/</code> data carries forward automatically (old records are migrated to the new format). → <a href="#install">Install</a>`},
-    {q:"What are the requirements? (Node version)", kw:["requirement","requirements","node version","node 20","node 18","what node","system requirements","prerequisite","prerequisites","what do i need installed","need to install","docker","container","devcontainer","dev container","codespaces"], a:`Just <b>Node 20+</b> and a <b>git</b> repo — that's it. It runs anywhere Node does, including Docker, dev containers and Codespaces. (Node 18 won't work; upgrade to 20 or newer.) → <a href="#install">Install</a>`},
+    {q:"What are the requirements? (Node version)", kw:["requirement","requirements","node version","node 20","node 18","what node","system requirements","prerequisite","prerequisites","what do i need installed","need to install","docker","container","devcontainer","dev container","codespaces"], a:`Just <b>Node 22.13+</b> and a <b>git</b> repo — that's it. It runs anywhere Node does, including Docker, dev containers and Codespaces. (Node 18 won't work; upgrade to 20 or newer.) → <a href="#install">Install</a>`},
     {q:"Does it work on big repos or monorepos?", kw:["big repo","large repo","huge repo","huge monorepo","monorepo","mono repo","repo size","max repo","maximum repo","million line","large codebase","big codebase","many files","how many files","chokes","workspaces","multiple packages","packages in one repo","scale","scales","indexing time","take forever","eat all my memory"], a:`Yes. Indexing is <b>incremental</b> — the first pass on a large repo is a one-time cost, then it only re-reads what changed, so it stays fast. Monorepos with many packages are fine. There's no hard repo-size limit. → <a href="#graph">The reasoning graph</a>`},
     {q:"Do I need git? Does it work without git?", kw:["without git","not in git","no git","need git","git required","require git","mercurial","svn","subversion","not git","do i need git"], a:`Hunch is <b>git-native</b> — it stores memory as files committed to your repo and learns from your commit history, so it needs a git repo. If your project isn't in git yet, run <code>git init</code> first. Mercurial and SVN aren't supported. → <a href="#initialize">Initialize a repo</a>`},
     {q:"Is my memory safe from corruption?", kw:["corrupt","corrupted","corruption","sqlite index","index get corrupted","rebuild","rebuild the index","reindex","atomic write","atomic writes","schema migration","migration","migrate","drop records","manually edit","edited the json","broke the json","data integrity","compatible","version mismatch","newer version than"], a:`Yes. The JSON in <code>.hunch/</code> is the source of truth and is written <b>atomically</b> (write-temp-then-rename), so an interrupted write can't truncate it. The fast SQLite index is just derived — rebuild it anytime with <code>hunch index</code>. Old records are auto-migrated to the current format before use and never silently dropped, so teammates on different versions stay compatible. → <a href="#storage">Where it's stored</a>`},
@@ -855,7 +855,7 @@ Agent: hunch_record_correction({ rule: "never import lodash; use src/utils",
     {q:"Is there an audit log of who changed a note?", kw:["audit","audit log","who changed","who added","who wrote","siem","track changes","accountability","change history"], a:`Yes, effectively. Every note records its <b>provenance</b> (where it came from and how it was confirmed), and because the memory is committed to git you get a full history — <code>git log</code> / <code>git blame</code> on the <code>.hunch/</code> files shows who changed what and when. → <a href="#provenance">Provenance</a>`},
     {q:"Does it train an AI model on my code?", kw:["train","training","train a model","train on my code","model training","fine tune","fine-tune","learn to train","used for training"], a:`No. Hunch does not train or fine-tune any model on your code. It only stores short notes and hands the relevant ones to <b>your</b> assistant at the moment it's needed. → <a href="#synthesis">Synthesis</a>`},
     {q:"Can I use my own or a local LLM?", kw:["custom llm","fine tuned","fine-tuned model","my own model","local llm","local model","ollama","self hosted model","self-hosted","bring my own model"], a:`Synthesis runs whichever assistant <b>CLI</b> you have (Claude, Codex or Cursor), so a custom or local model works if it's reachable through one of those. With no model at all, the deterministic built-in method still writes notes. → <a href="#synthesis">Synthesis</a>`},
-    {q:"Is there a desktop or phone app?", kw:["desktop app","gui","graphical","is there an app","phone","mobile","ios","android","web app","run on my phone"], a:`No GUI app — Hunch is a command-line tool plus an MCP server that your AI assistant talks to. It runs anywhere Node 20+ runs (Mac, Windows, Linux), but not on a phone. → <a href="#install">Install</a>`},
+    {q:"Is there a desktop or phone app?", kw:["desktop app","gui","graphical","is there an app","phone","mobile","ios","android","web app","run on my phone"], a:`No GUI app — Hunch is a command-line tool plus an MCP server that your AI assistant talks to. It runs anywhere Node 22.13+ runs (Mac, Windows, Linux), but not on a phone. → <a href="#install">Install</a>`},
     {q:"Who makes Hunch? Is there a company or sales?", kw:["who made","who makes","who built","company","sales","invoice","phone number","contact","maintainer","per seat","seat pricing","subscription to renew","renew","talk to someone","support contact"], a:`Hunch is a free, open-source project (Apache-2.0) by Dave Sheffer — there's no company, no sales team, no per-seat pricing and nothing to renew. Questions and bug reports go through GitHub issues. → <a href="#develop">Develop &amp; contribute</a>`},
     {q:"Does it integrate with Jira, Slack or Linear?", kw:["jira","slack","linear","integrate","integration","integrations","webhook","post to slack","post the notes","ticket","asana"], a:`Not directly. Hunch lives in your repo and connects to AI assistants over MCP — it doesn't post to Jira, Slack or Linear today. Since the memory is plain JSON, you could build such a hook yourself. → <a href="#mcp">MCP &amp; assistants</a>`},
     {q:"What can't Hunch do? (limitations)", kw:["cant do","can t do","cant","what cant","cannot do","limitation","limitations","drawbacks","downside","downsides","weakness","weaknesses","what it doesnt do","not good at","shortcomings","biggest limitation"], a:`Being honest: deep <b>code-structure</b> parsing is TypeScript/JavaScript today (the "why" — decisions, bugs, rules — works for any language). It needs a <b>git</b> repo. Notes are only as good as your commits and corrections, and auto-guesses stay advisory until <b>you</b> confirm them. It won't write or refactor your code — it only remembers and advises. → <a href="#overview">Overview</a>`},

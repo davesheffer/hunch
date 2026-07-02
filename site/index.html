@@ -3,941 +3,645 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Hunch — Architectural Conformance for AI code</title>
-<meta name="description" content="Git stores what the code is. Hunch stores why — a persistent, git-native reasoning graph over your codebase, surfaced to Claude Code at reasoning time." />
+<title>Hunch — your codebase remembers why</title>
+<meta name="description" content="Git stores what the code is. Hunch stores why — a git-native reasoning graph of decisions, bugs, and invariants, enforced deterministically across any MCP assistant." />
+<meta property="og:title" content="Hunch — your codebase remembers why" />
+<meta property="og:description" content="Architectural Conformance for AI code: a git-native graph of decisions, bugs, and invariants that blocks AI changes which break your architecture." />
+<meta property="og:image" content="https://hunch-pi.vercel.app/hunch-og.png" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,300..500&family=Inter:wght@300;400;450;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
 <style>
-  /* ─────────────────────────────  TOKENS  ───────────────────────────── */
+  /* ──────────────────────────── tokens ──────────────────────────── */
   :root{
-    --paper:#f5f3ee;          /* warm paper background */
-    --paper-2:#efece4;        /* slightly deeper section */
-    --surface:#fffdf9;        /* card surface */
-    --ink:#16150f;            /* near-black text */
-    --ink-soft:#3d3b32;
-    --muted:#74716691;        /* secondary text */
-    --muted-2:#8a877b;
-    --line:rgba(22,21,15,.10);
-    --line-2:rgba(22,21,15,.06);
-    --accent:#2742ff;         /* electric cobalt */
-    --accent-deep:#1a2fcf;
-    --warn:#ff543d;           /* bug / signal coral */
-    --ok:#1f9d68;
-    --shadow:0 1px 2px rgba(22,21,15,.04), 0 12px 40px -16px rgba(22,21,15,.18);
-    --shadow-lg:0 2px 8px rgba(22,21,15,.05), 0 40px 80px -40px rgba(22,21,15,.30);
-    --r:18px;
-    --maxw:1180px;
-    --ease:cubic-bezier(.22,1,.36,1);
-    --ease-out:cubic-bezier(.16,1,.3,1);
-    --serif:"Fraunces",Georgia,serif;
-    --sans:"Inter",system-ui,sans-serif;
-    --mono:"JetBrains Mono",ui-monospace,monospace;
+    --bg:#f7f8f7;          /* fog */
+    --bg-2:#eff1ef;        /* mist panel */
+    --surface:#fcfdfc;     /* raised, barely */
+    --ink:#1c201e;         /* spruce black */
+    --ink-2:#3c4440;
+    --mut:#66706b;         /* lichen */
+    --mut-2:#8b948f;
+    --line:rgba(28,32,30,.10);
+    --line-2:rgba(28,32,30,.055);
+    --moss:#3a6b58;        /* the one accent */
+    --moss-ink:#2c523f;
+    --moss-wash:rgba(58,107,88,.07);
+    --ember:#b4543e;       /* ONLY for blocked / drift semantics */
+    --r:12px;
+    --maxw:1060px;
+    --measure:660px;
+    --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,monospace;
+    --sans:"IBM Plex Sans",system-ui,sans-serif;
+    --ease:cubic-bezier(.25,.6,.3,1);
+    color-scheme:light;
   }
 
   *{box-sizing:border-box}
   html{scroll-behavior:smooth}
   @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
   body{
-    margin:0;background:var(--paper);color:var(--ink);
-    font-family:var(--sans);font-weight:400;line-height:1.5;
+    margin:0;background:var(--bg);color:var(--ink);
+    font-family:var(--sans);font-size:16.5px;line-height:1.65;
     -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
-    overflow-x:hidden;
-  }
-  /* grain + warmth overlay */
-  body::before{
-    content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.28;
-    background:
-      radial-gradient(120% 80% at 12% -8%, rgba(39,66,255,.06), transparent 55%),
-      radial-gradient(90% 70% at 100% 0%, rgba(255,84,61,.04), transparent 50%);
-    mix-blend-mode:multiply;
+    overflow-x:clip;
   }
   a{color:inherit;text-decoration:none}
-  ::selection{background:var(--accent);color:#fff}
-
-  .wrap{max-width:var(--maxw);margin:0 auto;padding:0 28px;position:relative;z-index:2}
+  p a,li a,td a{color:var(--moss);text-decoration:underline;text-underline-offset:3px;text-decoration-thickness:1px;text-decoration-color:rgba(58,107,88,.4)}
+  p a:hover,li a:hover,td a:hover{text-decoration-color:var(--moss)}
+  ::selection{background:var(--moss);color:#fff}
+  :focus-visible{outline:2px solid var(--moss);outline-offset:3px;border-radius:4px}
+  code,kbd{font-family:var(--mono);font-size:.86em;background:var(--bg-2);border:1px solid var(--line-2);border-radius:5px;padding:.1em .38em}
   .mono{font-family:var(--mono)}
-  .serif{font-family:var(--serif)}
 
-  /* scroll progress */
-  .progress{position:fixed;top:0;left:0;height:2px;width:0;z-index:60;background:var(--accent);opacity:.8}
+  .wrap{max-width:var(--maxw);margin:0 auto;padding:0 24px}
 
-  /* ─────────────────────────────  NAV  ──────────────────────────────── */
-  header.nav{
-    position:fixed;top:0;left:0;right:0;z-index:50;
-    transition:background .4s var(--ease), border-color .4s, padding .4s, backdrop-filter .4s;
-    border-bottom:1px solid transparent;padding:18px 0;
+  /* ──────────────────────────── nav ──────────────────────────── */
+  .nav{position:sticky;top:0;z-index:50;background:color-mix(in srgb,var(--bg) 92%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--line-2)}
+  .nav-in{display:flex;align-items:center;gap:26px;height:60px}
+  .brand{font-family:var(--mono);font-weight:500;font-size:15px;letter-spacing:-.01em;display:flex;align-items:center;gap:9px}
+  .brand .dot{width:8px;height:8px;border-radius:50%;background:var(--moss);display:inline-block}
+  .nav-links{display:flex;gap:22px;margin-left:auto;align-items:center}
+  .nav-links a{font-size:14px;color:var(--mut);transition:color .15s var(--ease)}
+  .nav-links a:hover{color:var(--ink)}
+  .btn{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:13.5px;font-weight:500;
+    padding:9px 16px;border-radius:9px;border:1px solid var(--ink);background:var(--ink);color:var(--bg);
+    transition:background .16s var(--ease),color .16s var(--ease)}
+  .btn:hover{background:var(--moss-ink);border-color:var(--moss-ink);color:#fff}
+  .btn.ghost{background:transparent;color:var(--ink);border-color:var(--line)}
+  .btn.ghost:hover{background:var(--bg-2);color:var(--ink)}
+  @media (max-width:720px){
+    .nav-links a.hide-s{display:none}
+    .nav-in{gap:14px}
+    .nav-links{gap:14px}
+    .btn{padding:8px 13px;font-size:13px}
   }
-  header.nav.scrolled{
-    background:rgba(245,243,238,.72);backdrop-filter:saturate(1.4) blur(14px);
-    border-bottom:1px solid var(--line);padding:12px 0;
+
+  /* ──────────────────────────── hero ──────────────────────────── */
+  .hero.wrap{padding:104px 24px 96px}
+  .eyebrow{font-family:var(--mono);font-size:12.5px;letter-spacing:.06em;color:var(--mut);text-transform:lowercase}
+  h1{
+    font-family:var(--mono);font-weight:300;letter-spacing:-.035em;
+    font-size:clamp(38px,6.2vw,64px);line-height:1.12;margin:22px 0 0;max-width:15ch;
   }
-  .nav-row{display:flex;align-items:center;justify-content:space-between;gap:24px}
-  .brand{display:flex;align-items:center;gap:10px;font-weight:600;letter-spacing:-.02em;font-size:18px}
-  .brand .mark{
-    width:30px;height:30px;border-radius:9px;display:grid;place-items:center;
-    background:var(--ink);color:var(--paper);font-size:16px;
-    box-shadow:0 6px 18px -8px rgba(22,21,15,.6);transition:transform .5s var(--ease);
+  h1 b{font-weight:500;color:var(--moss-ink)}
+  .hero p.lede{max-width:var(--measure);color:var(--ink-2);font-size:18px;margin:28px 0 0}
+  .hero-cta{display:flex;gap:12px;margin-top:36px;flex-wrap:wrap;align-items:center}
+  .hero-facts{margin-top:56px;font-family:var(--mono);font-size:13px;color:var(--mut);display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .hero-facts span::after{content:"·";margin-left:10px;color:var(--mut-2)}
+  .hero-facts span:last-child::after{content:""}
+
+  /* load-in: one quiet moment */
+  .rise{opacity:0;transform:translateY(10px);animation:rise .7s var(--ease) forwards}
+  .rise.d1{animation-delay:.08s}.rise.d2{animation-delay:.16s}.rise.d3{animation-delay:.26s}.rise.d4{animation-delay:.4s}
+  @keyframes rise{to{opacity:1;transform:none}}
+  @media (prefers-reduced-motion:reduce){.rise{animation:none;opacity:1;transform:none}}
+
+  /* ──────────────────────── terminal (the calm demo) ─────────────────── */
+  .term{
+    margin-top:72px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);
+    overflow:hidden;max-width:820px;
   }
-  .brand:hover .mark{transform:rotate(-8deg) scale(1.06)}
-  .nav-links{display:flex;align-items:center;gap:30px;font-size:14.5px;color:var(--ink-soft)}
-  .nav-links a{position:relative;font-weight:450}
-  .nav-links a::after{content:"";position:absolute;left:0;bottom:-5px;height:1.5px;width:0;background:var(--ink);transition:width .35s var(--ease)}
-  .nav-links a:hover::after{width:100%}
-  .nav-cta{display:flex;align-items:center;gap:14px}
-
-  /* mobile menu (hamburger → right-side drawer) */
-  .nav-burger{display:none;position:relative;z-index:60;width:44px;height:40px;border:1px solid var(--line);
-    border-radius:11px;background:var(--surface);cursor:pointer;align-items:center;justify-content:center}
-  .nav-burger span,.nav-burger span::before,.nav-burger span::after{content:"";display:block;position:absolute;
-    width:18px;height:2px;border-radius:2px;background:var(--ink);transition:transform .3s var(--ease),opacity .2s}
-  .nav-burger span::before{transform:translateY(-6px)}
-  .nav-burger span::after{transform:translateY(6px)}
-  body.menu-open .nav-burger span{background:transparent}
-  body.menu-open .nav-burger span::before{transform:rotate(45deg)}
-  body.menu-open .nav-burger span::after{transform:rotate(-45deg)}
-  .nav-menu{position:fixed;top:0;right:0;z-index:55;height:100vh;height:100dvh;width:min(84vw,340px);
-    background:var(--surface);border-left:1px solid var(--line);box-shadow:var(--shadow-lg);
-    padding:92px 26px 32px;display:flex;flex-direction:column;gap:2px;overflow-y:auto;
-    transform:translateX(102%);transition:transform .42s var(--ease)}
-  body.menu-open .nav-menu{transform:none}
-  .nav-menu > a{font-size:18px;font-weight:500;color:var(--ink);padding:13px 2px;border-bottom:1px solid var(--line)}
-  .nav-menu > a:last-of-type{border-bottom:none}
-  .nav-menu-cta{display:flex;flex-direction:column;gap:11px;margin-top:22px}
-  .nav-menu-cta .btn{width:100%;justify-content:center}
-  .nav-scrim{position:fixed;inset:0;z-index:54;background:rgba(22,21,15,.42);opacity:0;pointer-events:none;
-    transition:opacity .42s var(--ease)}
-  body.menu-open .nav-scrim{opacity:1;pointer-events:auto}
-  body.menu-open{overflow:hidden}
-  @media(max-width:860px){
-    .nav-links{display:none}
-    .nav-cta{display:none}
-    .nav-burger{display:inline-flex}
+  .term-bar{display:flex;align-items:center;gap:8px;padding:11px 16px;border-bottom:1px solid var(--line-2);
+    font-family:var(--mono);font-size:12px;color:var(--mut-2)}
+  .term-bar i{width:9px;height:9px;border-radius:50%;background:var(--bg-2);border:1px solid var(--line);display:inline-block}
+  .term pre{
+    margin:0;padding:22px 24px 26px;font-family:var(--mono);font-size:13.5px;line-height:1.75;
+    color:var(--ink-2);white-space:pre-wrap;word-break:break-word;min-height:230px;
   }
-  @media(min-width:861px){ .nav-menu,.nav-scrim{display:none} }
-
-  .btn{
-    --bg:var(--ink);--fg:var(--paper);
-    display:inline-flex;align-items:center;gap:9px;font-weight:500;font-size:14.5px;
-    padding:11px 20px;border-radius:100px;background:var(--bg);color:var(--fg);
-    border:1px solid transparent;cursor:pointer;position:relative;overflow:hidden;
-    transition:transform .25s var(--ease), box-shadow .35s, background .3s;
-    will-change:transform;letter-spacing:-.01em;
-  }
-  .btn:hover{transform:translateY(-2px);box-shadow:0 14px 30px -12px rgba(22,21,15,.5)}
-  .btn:active{transform:translateY(0)}
-  .btn .arw{transition:transform .3s var(--ease)}
-  .btn:hover .arw{transform:translate(3px,-3px)}
-  .btn.ghost{--bg:transparent;--fg:var(--ink);border-color:var(--line)}
-  .btn.ghost:hover{background:var(--surface);box-shadow:var(--shadow)}
-  .btn.sm{padding:9px 16px;font-size:13.5px}
-  .btn .shine{display:none}
-
-  /* ─────────────────────────────  HERO  ─────────────────────────────── */
-  .hero{padding:105px 0 70px;position:relative}
-  .hero-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:54px;align-items:center}
-  @media(max-width:980px){.hero-grid{grid-template-columns:1fr;gap:36px}.hero{padding:88px 0 40px}}
-
-  .eyebrow{
-    display:inline-flex;align-items:center;gap:9px;font-family:var(--mono);
-    font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-soft);
-    padding:7px 14px;border:1px solid var(--line);border-radius:100px;background:var(--surface);
-    box-shadow:var(--shadow);
-  }
-  .eyebrow .dot{width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 0 rgba(31,157,104,.5);animation:pulse 2.4s infinite}
-  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(31,157,104,.45)}70%{box-shadow:0 0 0 9px rgba(31,157,104,0)}100%{box-shadow:0 0 0 0 rgba(31,157,104,0)}}
-
-  h1.hero-title{
-    font-family:var(--serif);font-weight:380;letter-spacing:-.025em;line-height:1.0;
-    font-size:clamp(44px,6.6vw,82px);margin:26px 0 0;font-optical-sizing:auto;
-  }
-  h1.hero-title em{font-style:italic;color:var(--accent)}
-  .line-mask{display:block;overflow:hidden}
-  .line-mask>span{display:block;transform:translateY(110%);will-change:transform}
-  .hero-sub{
-    margin:28px 0 0;font-size:clamp(16px,1.5vw,18.5px);line-height:1.62;
-    color:var(--ink-soft);max-width:30em;font-weight:380;
-  }
-  .hero-actions{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
-  .hero-stats{display:flex;gap:34px;margin-top:46px;flex-wrap:wrap}
-  .stat .n{font-family:var(--serif);font-size:34px;font-weight:420;letter-spacing:-.02em;line-height:1}
-  .stat .l{font-family:var(--mono);font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted-2);margin-top:7px}
-
-  /* fade-up util */
-  [data-rise]{opacity:0;transform:translateY(14px);transition:opacity .8s var(--ease-out),transform .8s var(--ease-out);transition-delay:var(--d,0s)}
-  [data-rise].in{opacity:1;transform:none}
-  /* when GSAP drives the reveals it sets inline styles every frame — disable the
-     CSS transition so the two don't fight (fallback path keeps the transition). */
-  html.gsap-on [data-rise]{transition:none}
-  /* let GSAP fully own the headline words: clear the CSS translateY(110%) start
-     (which would compound with GSAP's transform) and hide via opacity instead. */
-  html.gsap-on .line-mask>span{transform:none;opacity:0}
-
-  /* ─────────────────────────────  HERO GRAPH  ───────────────────────── */
-  .graph-card{
-    position:relative;background:
-      linear-gradient(180deg,var(--surface),#fffefb);
-    border:1px solid var(--line);border-radius:24px;box-shadow:var(--shadow-lg);
-    padding:20px;overflow:hidden;
-  }
-  .graph-card::before{
-    content:"";position:absolute;inset:0;opacity:.5;pointer-events:none;
-    background-image:linear-gradient(var(--line-2) 1px,transparent 1px),linear-gradient(90deg,var(--line-2) 1px,transparent 1px);
-    background-size:26px 26px;mask:radial-gradient(120% 100% at 50% 0,#000,transparent 75%);
-  }
-  .graph-head{display:flex;align-items:center;justify-content:space-between;margin:4px 6px 10px;position:relative}
-  .graph-head .t{font-family:var(--mono);font-size:11.5px;letter-spacing:.06em;color:var(--muted-2)}
-  .dots{display:flex;gap:6px}.dots i{width:9px;height:9px;border-radius:50%;background:var(--line);display:block}
-  .dots i:first-child{background:#ffcd5a}.dots i:nth-child(2){background:#7ee0a8}
-  svg.graph{display:block;width:100%;height:auto}
-
-  .gnode circle{transition:transform .4s var(--ease)}
-  .gnode .label{font-family:var(--mono);font-size:11px;fill:var(--ink)}
-  .gnode .kind{font-family:var(--mono);font-size:8.5px;letter-spacing:.08em;text-transform:uppercase}
-  .gnode .pill{fill:var(--surface);stroke:var(--line);}
-  .edge{fill:none;stroke:var(--line);stroke-width:1.6;stroke-dasharray:1;stroke-dashoffset:1;}
-  .edge.draw{transition:stroke-dashoffset 1.1s var(--ease-out);stroke-dashoffset:0}
-  .gnode{opacity:0;transform:translateY(8px) scale(.92);transform-box:fill-box;transform-origin:center;
-    transition:opacity .6s var(--ease),transform .6s var(--ease)}
-  .gnode.show{opacity:1;transform:none}
-  .legend{display:flex;gap:18px;margin:12px 8px 4px;flex-wrap:wrap}
-  .legend span{display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);font-size:11px;color:var(--muted-2)}
-  .legend i{width:9px;height:9px;border-radius:3px;display:block}
-
-  /* ─────────────────────────────  MARQUEE  ──────────────────────────── */
-  .marquee{border-top:1px solid var(--line);border-bottom:1px solid var(--line);
-    margin-top:70px;padding:18px 0;overflow:hidden;background:var(--paper-2);mask:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent)}
-  .track{display:flex;gap:54px;width:max-content;animation:scroll 60s linear infinite;font-family:var(--mono);font-size:12.5px;color:var(--muted-2);letter-spacing:.02em}
-  .track:hover{animation-play-state:paused}
-  .track span{display:inline-flex;align-items:center;gap:54px;white-space:nowrap}
-  .track span::after{content:"✦";color:var(--accent);font-size:11px}
-  @keyframes scroll{to{transform:translateX(-50%)}}
-
-  /* ─────────────────────────────  SECTIONS  ─────────────────────────── */
-  section{position:relative;padding:104px 0}
-  .sec-label{font-family:var(--mono);font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);display:flex;align-items:center;gap:12px}
-  .sec-label::before{content:"";width:30px;height:1px;background:var(--accent)}
-  h2.title{font-family:var(--serif);font-weight:370;letter-spacing:-.02em;line-height:1.06;
-    font-size:clamp(32px,4.4vw,54px);margin:20px 0 0;max-width:16em}
-  h2.title em{font-style:italic;color:var(--accent)}
-  .lead{font-size:18px;color:var(--ink-soft);max-width:34em;margin-top:20px;line-height:1.6;font-weight:380}
-
-  /* problem statement big editorial */
-  .problem{background:var(--ink);color:var(--paper);border-radius:36px;margin:0 0;}
-  .problem .wrap{padding-top:14px;padding-bottom:14px}
-  .problem .sec-label{color:#9db0ff}.problem .sec-label::before{background:#9db0ff}
-  .big-quote{font-family:var(--serif);font-weight:330;letter-spacing:-.02em;line-height:1.12;
-    font-size:clamp(28px,4.2vw,52px);margin:26px 0 0}
-  .big-quote b{font-weight:330;color:#fff;background:linear-gradient(transparent 62%, rgba(39,66,255,.55) 0);}
-  .big-quote .red{color:#ff8e7d}
-  .problem .foot{display:flex;gap:40px;flex-wrap:wrap;margin-top:46px;color:#c9c6bd;font-size:15px;max-width:60em}
-  .problem .foot div{flex:1 1 220px}
-  .problem .foot strong{color:#fff;font-weight:500;display:block;margin-bottom:6px;font-size:14px}
-
-  /* steps */
-  .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;margin-top:56px}
-  @media(max-width:880px){.steps{grid-template-columns:1fr}}
-  .step{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:30px 28px 34px;
-    position:relative;overflow:hidden;transition:transform .5s var(--ease),box-shadow .5s,border-color .5s}
-  .step:hover{transform:translateY(-3px);box-shadow:var(--shadow);border-color:var(--line)}
-  .step .idx{font-family:var(--mono);font-size:12px;color:var(--muted-2);letter-spacing:.1em}
-  .step .ic{width:46px;height:46px;border-radius:13px;display:grid;place-items:center;margin:14px 0 18px;
-    background:linear-gradient(160deg,#fff,#f0eee7);border:1px solid var(--line);color:var(--accent)}
-  .step h3{font-family:var(--serif);font-weight:430;font-size:23px;letter-spacing:-.01em;margin:0 0 10px}
-  .step p{margin:0;color:var(--ink-soft);font-size:15px;line-height:1.6;font-weight:380}
-  .step .tag{display:inline-block;margin-top:16px;font-family:var(--mono);font-size:11px;color:var(--accent);
-    background:rgba(39,66,255,.07);padding:4px 10px;border-radius:7px}
-
-  /* chain (bug→decision→constraint) */
-  .chain{display:grid;grid-template-columns:repeat(3,1fr);gap:0;margin-top:54px;
-    background:var(--surface);border:1px solid var(--line);border-radius:22px;box-shadow:var(--shadow);overflow:hidden}
-  @media(max-width:880px){.chain{grid-template-columns:1fr}}
-  .link{padding:34px 30px;position:relative;border-right:1px solid var(--line)}
-  .link:last-child{border-right:none}
-  @media(max-width:880px){.link{border-right:none;border-bottom:1px solid var(--line)}.link:last-child{border-bottom:none}}
-  .link .badge{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;
-    display:inline-flex;align-items:center;gap:7px;padding:5px 11px;border-radius:100px;font-weight:500}
-  .link.bug .badge{background:rgba(255,84,61,.10);color:var(--warn)}
-  .link.dec .badge{background:rgba(22,21,15,.06);color:var(--ink)}
-  .link.con .badge{background:rgba(39,66,255,.10);color:var(--accent)}
-  .link h4{font-family:var(--serif);font-weight:430;font-size:21px;margin:16px 0 8px;letter-spacing:-.01em}
-  .link p{margin:0;color:var(--ink-soft);font-size:14.5px;line-height:1.58;font-weight:380}
-  .link .arrow{position:absolute;right:-13px;top:50%;transform:translateY(-50%);z-index:3;
-    width:26px;height:26px;border-radius:50%;background:var(--ink);color:var(--paper);display:grid;place-items:center;font-size:13px;box-shadow:var(--shadow)}
-  @media(max-width:880px){.link .arrow{right:50%;top:auto;bottom:-13px;transform:translateX(50%) rotate(90deg)}}
-  .link:last-child .arrow{display:none}
-
-  /* terminal demo */
-  .demo-grid{display:grid;grid-template-columns:.95fr 1.05fr;gap:48px;align-items:center;margin-top:8px}
-  @media(max-width:980px){.demo-grid{grid-template-columns:1fr;gap:32px}}
-  .terminal{background:#15140f;border-radius:18px;box-shadow:var(--shadow-lg);overflow:hidden;border:1px solid #2a2820}
-  .term-bar{display:flex;align-items:center;gap:8px;padding:13px 16px;background:#1c1b14;border-bottom:1px solid #2a2820}
-  .term-bar i{width:11px;height:11px;border-radius:50%;background:#3a382e;display:block}
-  .term-bar i:first-child{background:#ff5f57}.term-bar i:nth-child(2){background:#febc2e}.term-bar i:nth-child(3){background:#28c840}
-  .term-bar .ttl{margin-left:8px;font-family:var(--mono);font-size:12px;color:#85827a}
-  .term-body{padding:22px 22px 26px;font-family:var(--mono);font-size:13.5px;line-height:1.85;color:#d7d4c8;min-height:316px}
-  .term-body .pr{color:#6fe39a}.term-body .you{color:#fff}
-  .term-body .mut{color:#85827a}
-  .term-body .acc{color:#8fa2ff}
-  .term-body .red{color:#ff8e7d}
-  .term-body .cite{color:#caa86a}
-  .cursor{display:inline-block;width:8px;height:16px;background:#6fe39a;vertical-align:-2px;animation:blink 1.05s steps(1) infinite;margin-left:2px}
+  .term .c-cmd{color:var(--ink);font-weight:500}
+  .term .c-id{color:var(--moss-ink);font-weight:500}
+  .term .c-key{color:var(--mut)}
+  .term .c-warn{color:var(--ember)}
+  .caret{display:inline-block;width:7px;height:15px;background:var(--moss);vertical-align:-2px;animation:blink 1.1s steps(1) infinite}
   @keyframes blink{50%{opacity:0}}
-  .demo-points li{list-style:none;margin:0 0 18px;padding-left:30px;position:relative;color:var(--ink-soft);font-size:15.5px;line-height:1.55}
-  .demo-points li::before{content:"";position:absolute;left:0;top:7px;width:16px;height:16px;border-radius:5px;
-    background:var(--accent);box-shadow:0 0 0 4px rgba(39,66,255,.12);}
-  .demo-points li b{color:var(--ink);font-weight:560}
-  .demo-points{padding:0;margin:26px 0 0}
+  @media (prefers-reduced-motion:reduce){.caret{animation:none}}
 
-  /* feature grid */
-  .features{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:54px}
-  @media(max-width:980px){.features{grid-template-columns:repeat(2,1fr)}}
-  @media(max-width:620px){.features{grid-template-columns:1fr}}
-  .feat{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:26px 24px;
-    transition:transform .45s var(--ease),box-shadow .45s,background .45s;position:relative;overflow:hidden}
-  .feat:hover{transform:translateY(-2px);box-shadow:var(--shadow)}
-  .feat .fi{font-family:var(--mono);font-size:12px;color:var(--accent);letter-spacing:.06em}
-  .feat h4{font-family:var(--serif);font-weight:440;font-size:19px;margin:14px 0 8px;letter-spacing:-.01em}
-  .feat p{margin:0;color:var(--ink-soft);font-size:14px;line-height:1.55;font-weight:380}
+  /* ──────────────────────────── sections ──────────────────────────── */
+  section{padding:96px 0}
+  .sec-head{max-width:var(--measure)}
+  h2{font-family:var(--mono);font-weight:400;letter-spacing:-.025em;font-size:clamp(26px,3.4vw,36px);line-height:1.25;margin:14px 0 0}
+  .sec-head p{color:var(--ink-2);margin:18px 0 0}
+  .panel{background:var(--bg-2)}
 
-  /* latest release */
-  .release{margin-top:52px;background:var(--surface);border:1px solid var(--line);border-radius:26px;box-shadow:var(--shadow-lg);overflow:hidden}
-  .rel-head{display:flex;align-items:center;gap:15px;padding:19px 30px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,var(--surface),#fffefb)}
-  .rel-tag{font-family:var(--mono);font-size:13px;font-weight:600;letter-spacing:.01em;color:var(--paper);background:var(--ink);padding:6px 13px;border-radius:100px;white-space:nowrap;justify-self:start}
-  .rel-meta{font-family:var(--mono);font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted-2)}
-  .rel-live{margin-left:auto;display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11.5px;letter-spacing:.04em;color:var(--ok)}
-  .rel-live .dot{width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 0 rgba(31,157,104,.5);animation:pulse 2.4s infinite}
-  .rel-body{display:grid;grid-template-columns:1.22fr .92fr}
-  @media(max-width:880px){.rel-body{grid-template-columns:1fr}}
-  .rel-copy{padding:36px 32px;border-right:1px solid var(--line)}
-  @media(max-width:880px){.rel-copy{border-right:none;border-bottom:1px solid var(--line)}}
-  .rel-copy h3{font-family:var(--serif);font-weight:430;font-size:24px;letter-spacing:-.01em;margin:0 0 12px}
-  .rel-copy p{margin:0;color:var(--ink-soft);font-size:15px;line-height:1.62;font-weight:380}
-  .rel-note{margin-top:20px!important;font-size:13.5px!important}
-  .rel-note b{color:var(--ink);font-weight:560}
-  .ladder{display:flex;gap:5px;margin:26px 0 6px;padding:5px;background:var(--paper-2);border:1px solid var(--line);border-radius:14px}
-  .rung{flex:1;text-align:center;font-family:var(--mono);font-size:12.5px;color:var(--muted-2);padding:10px 6px;border-radius:10px;position:relative;transition:background .35s var(--ease),color .35s,box-shadow .35s}
-  .rung.is-default{background:var(--surface);color:var(--ink);box-shadow:var(--shadow);font-weight:600}
-  .rung.is-default i{position:absolute;top:-8px;left:50%;transform:translateX(-50%);font-style:normal;font-size:8px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);background:var(--surface);padding:0 6px;border-radius:6px}
-  .rung.is-strict{color:var(--warn)}
-  .rel-aside{padding:36px 32px;display:flex;flex-direction:column;justify-content:space-between;gap:26px;background:var(--paper-2)}
-  .rel-list{list-style:none;margin:0;padding:0}
-  .rel-list li{position:relative;padding-left:25px;margin-bottom:17px;font-size:14px;line-height:1.55;color:var(--ink-soft);font-weight:380}
-  .rel-list li:last-child{margin-bottom:0}
-  .rel-list li::before{content:"";position:absolute;left:0;top:6px;width:13px;height:13px;border-radius:4px;background:var(--accent);box-shadow:0 0 0 4px rgba(39,66,255,.1)}
-  .rel-list li b{color:var(--ink);font-weight:560;font-family:var(--mono);font-size:13px;letter-spacing:-.01em}
-  .rel-cmd{display:flex;align-items:center;gap:12px;font-family:var(--mono);font-size:13px;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:11px 14px}
-  .rel-cmd .dollar{color:var(--ok);user-select:none}
-  .rel-cmd .copy{margin-left:auto;cursor:pointer;border:none;background:var(--ink);color:var(--paper);border-radius:7px;padding:6px 12px;font-family:var(--mono);font-size:11.5px;transition:transform .2s var(--ease),background .3s}
-  .rel-cmd .copy:hover{transform:translateY(-1px)}
+  /* the twist — the page's own decision chips */
+  .dnote{position:relative;display:inline-block}
+  .dnote>button{
+    font-family:var(--mono);font-size:11.5px;color:var(--mut);background:none;border:none;cursor:pointer;
+    padding:2px 1px;border-bottom:1px dotted var(--mut-2);letter-spacing:.02em;
+  }
+  .dnote>button:hover,.dnote>button[aria-expanded="true"]{color:var(--moss-ink);border-bottom-color:var(--moss)}
+  .dnote .pop{
+    display:none;position:absolute;left:0;top:calc(100% + 8px);z-index:30;width:min(340px,calc(100vw - 40px));
+    background:var(--ink);color:var(--bg);border-radius:10px;padding:12px 14px;
+    font-size:13px;line-height:1.55;font-family:var(--sans);
+    animation:pop-in .18s var(--ease);
+  }
+  @keyframes pop-in{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+  .dnote .pop b{font-family:var(--mono);font-weight:500;font-size:11.5px;color:#a7c4b5;display:block;margin-bottom:4px}
+  .dnote>button[aria-expanded="true"]+.pop,.dnote:hover .pop{display:block}
+  @media (prefers-reduced-motion:reduce){.dnote .pop{animation:none}}
+  .sec-label{display:flex;align-items:baseline;gap:14px}
+  .sec-label .eyebrow{white-space:nowrap}
 
-  /* compare */
-  .compare{background:var(--paper-2);border-radius:36px}
-  .ctable{margin-top:48px;border:1px solid var(--line);border-radius:20px;overflow:hidden;background:var(--surface);box-shadow:var(--shadow)}
-  .crow{display:grid;grid-template-columns:1.3fr 1fr 1fr;align-items:stretch}
-  .crow>div{padding:20px 24px;border-bottom:1px solid var(--line);font-size:15px}
-  .crow:last-child>div{border-bottom:none}
-  .crow .h{font-family:var(--mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted-2)}
-  .crow.head>div{background:var(--paper-2);font-weight:600}
-  .crow .feature{font-weight:500;color:var(--ink)}
-  .crow .them{color:var(--muted-2);border-left:1px solid var(--line)}
-  .crow .us{color:var(--ink);border-left:1px solid var(--line);background:rgba(39,66,255,.035);font-weight:450}
-  .crow .us b{color:var(--accent);font-weight:600}
-  .crow.head .us{background:var(--ink);color:#fff}
-  .crow.head .us .mk{color:#fff}
-  @media(max-width:760px){.crow{grid-template-columns:1fr 1fr}.crow .feature{grid-column:1/-1;border-bottom:none;padding-bottom:4px}}
+  /* problem cards */
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:52px}
+  @media (max-width:860px){.grid3{grid-template-columns:1fr}}
+  .card{
+    background:var(--surface);border:1px solid var(--line-2);border-radius:var(--r);padding:26px 24px;
+    transition:border-color .16s var(--ease),background .16s var(--ease);
+  }
+  .card:hover{border-color:var(--line);background:#fff}
+  .card h3{font-family:var(--mono);font-weight:500;font-size:15px;letter-spacing:-.01em;margin:0 0 10px}
+  .card p{margin:0;font-size:14.5px;color:var(--mut);line-height:1.6}
 
-  /* getting started */
-  .gs-grid{display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center;margin-top:8px}
-  @media(max-width:980px){.gs-grid{grid-template-columns:1fr;gap:30px}}
-  .code{background:#15140f;border-radius:18px;box-shadow:var(--shadow-lg);overflow:hidden;border:1px solid #2a2820}
-  .code .term-body{min-height:0;font-size:13.5px;line-height:2}
-  .code .cmt{color:#7c7a6f}.code .cmd{color:#d7d4c8}.code .fl{color:#8fa2ff}.code .dollar{color:#6fe39a;user-select:none}
-  .gs-steps{counter-reset:s}
-  .gs-step{display:flex;gap:18px;padding:18px 0;border-bottom:1px solid var(--line)}
-  .gs-step:last-child{border-bottom:none}
-  .gs-step .num{counter-increment:s;flex:0 0 auto;width:34px;height:34px;border-radius:10px;display:grid;place-items:center;
-    background:var(--ink);color:var(--paper);font-family:var(--mono);font-size:14px}
-  .gs-step .num::before{content:counter(s)}
-  .gs-step h4{margin:4px 0 5px;font-size:16px;font-weight:560}
-  .gs-step p{margin:0;color:var(--ink-soft);font-size:14.5px;line-height:1.55;font-weight:380}
-  .gs-step code{font-family:var(--mono);font-size:13px;background:rgba(39,66,255,.08);color:var(--accent-deep);padding:2px 7px;border-radius:6px}
-  /* editors wired up by `hunch init` */
-  .eds{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:26px}
-  @media(max-width:760px){.eds{grid-template-columns:repeat(2,1fr)}}
-  @media(max-width:420px){.eds{grid-template-columns:1fr}}
-  .ed{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px;transition:transform .4s var(--ease),box-shadow .4s,border-color .4s}
-  .ed:hover{transform:translateY(-2px);box-shadow:var(--shadow)}
-  .ed .en{font-weight:560;font-size:15px;display:flex;align-items:center;gap:9px;letter-spacing:-.01em}
-  .ed .en .ic{font-size:17px;line-height:1}
-  .ed .ef{font-family:var(--mono);font-size:11.5px;color:var(--muted-2);margin-top:11px;line-height:1.65;display:block}
-  .ed .ef b{display:block;color:var(--accent-deep);font-weight:500;margin-bottom:2px}
-  .eds-note{font-family:var(--mono);font-size:12px;color:var(--muted-2);margin-top:16px}
-  .eds-note a{color:var(--accent);border-bottom:1px solid transparent;transition:border-color .25s}
-  .eds-note a:hover{border-color:var(--accent)}
+  /* how it works — a real sequence */
+  .steps{margin-top:56px;border-top:1px solid var(--line);max-width:820px}
+  .step{display:grid;grid-template-columns:92px 1fr auto;gap:22px;align-items:baseline;padding:30px 0;border-bottom:1px solid var(--line)}
+  @media (max-width:720px){.step{grid-template-columns:60px 1fr}.step .step-cmd{grid-column:2}}
+  .step-n{font-family:var(--mono);font-size:12.5px;color:var(--mut);letter-spacing:.05em}
+  .step h3{margin:0 0 8px;font-size:17.5px;font-weight:600;letter-spacing:-.01em}
+  .step p{margin:0;color:var(--mut);font-size:15px;max-width:52ch}
+  .step-cmd{font-family:var(--mono);font-size:12.5px;color:var(--moss-ink);white-space:nowrap}
 
-  /* final CTA */
-  .cta{position:relative;text-align:center;padding:120px 0 130px}
-  .cta-card{background:var(--ink);color:var(--paper);border-radius:40px;padding:80px 40px;position:relative;overflow:hidden}
-  .cta-card::before{content:"";position:absolute;inset:0;opacity:.4;
-    background:radial-gradient(80% 120% at 50% -20%, rgba(39,66,255,.5), transparent 60%),radial-gradient(60% 80% at 100% 120%, rgba(255,84,61,.35), transparent 55%)}
-  .cta-card>*{position:relative}
-  .cta h2{font-family:var(--serif);font-weight:350;font-size:clamp(34px,5.2vw,62px);letter-spacing:-.02em;line-height:1.04;margin:0}
-  .cta h2 em{font-style:italic;color:#9db0ff}
-  .cta p{color:#c9c6bd;font-size:18px;margin:22px auto 0;max-width:30em;font-weight:380}
-  .cta .row{display:flex;gap:14px;justify-content:center;margin-top:38px;flex-wrap:wrap}
-  .cta .btn{--bg:var(--paper);--fg:var(--ink)}
-  .cta .btn.ghost{--bg:transparent;--fg:#fff;border-color:rgba(255,255,255,.24)}
-  .cta .btn.ghost:hover{background:rgba(255,255,255,.06)}
-  .cta .cmdline{margin-top:42px;font-family:var(--mono);font-size:14px;color:#d7d4c8;
-    display:inline-flex;align-items:center;gap:14px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);
-    padding:12px 18px;border-radius:12px}
-  .cta .cmdline .dollar{color:#6fe39a}
-  .cta .copy{cursor:pointer;border:none;background:rgba(255,255,255,.1);color:#fff;border-radius:8px;padding:6px 11px;font-family:var(--mono);font-size:12px;transition:background .3s}
-  .cta .copy:hover{background:rgba(255,255,255,.2)}
+  /* chain: bug → decision → constraint */
+  .chain{display:grid;grid-template-columns:1fr auto 1fr auto 1fr;gap:12px;align-items:stretch;margin-top:56px}
+  @media (max-width:900px){.chain{grid-template-columns:1fr}.chain .arr{transform:rotate(90deg);justify-self:center}}
+  .chain .arr{align-self:center;color:var(--mut-2);font-family:var(--mono)}
+  .node{background:var(--surface);border:1px solid var(--line-2);border-radius:var(--r);padding:22px}
+  .node .tag{font-family:var(--mono);font-size:11.5px;letter-spacing:.04em;color:var(--mut)}
+  .node .tag.b{color:var(--ember)}
+  .node .tag.d{color:var(--moss-ink)}
+  .node h3{font-size:15.5px;font-weight:600;margin:10px 0 8px;letter-spacing:-.01em}
+  .node p{margin:0;font-size:13.5px;color:var(--mut);line-height:1.6}
+
+  /* features — grouped, unfoldable */
+  .fgroups{margin-top:56px;display:grid;gap:52px}
+  .fgroup .glabel{font-family:var(--mono);font-size:12.5px;letter-spacing:.06em;color:var(--moss-ink);margin-bottom:6px}
+  .fgroup .gwhy{font-size:14px;color:var(--mut);margin:0 0 18px;max-width:60ch}
+  details.f{border-top:1px solid var(--line-2)}
+  details.f:last-child{border-bottom:1px solid var(--line-2)}
+  details.f summary{
+    list-style:none;cursor:pointer;display:flex;align-items:baseline;gap:16px;padding:15px 4px;
+    transition:background .14s var(--ease);border-radius:6px;
+  }
+  details.f summary::-webkit-details-marker{display:none}
+  details.f summary:hover{background:var(--moss-wash)}
+  details.f summary .fname{font-weight:600;font-size:15px;letter-spacing:-.01em;min-width:210px}
+  details.f summary .fhint{color:var(--mut);font-size:13.5px;flex:1}
+  details.f summary .fplus{font-family:var(--mono);color:var(--mut-2);font-size:13px;transition:transform .18s var(--ease)}
+  details.f[open] summary .fplus{transform:rotate(45deg)}
+  details.f .fbody{padding:2px 4px 20px;max-width:70ch;color:var(--ink-2);font-size:14.5px}
+  details.f .fbody code{font-size:.85em}
+  @media (max-width:720px){details.f summary{flex-wrap:wrap}details.f summary .fhint{display:none}}
+
+  /* comparison */
+  .cmp{margin-top:56px;border:1px solid var(--line-2);border-radius:var(--r);overflow:hidden;background:var(--surface)}
+  .cmp table{width:100%;border-collapse:collapse;font-size:14.5px}
+  .cmp th,.cmp td{text-align:left;padding:15px 20px;border-bottom:1px solid var(--line-2);vertical-align:top}
+  .cmp tr:last-child td{border-bottom:none}
+  .cmp thead th{font-family:var(--mono);font-size:12.5px;letter-spacing:.04em;font-weight:500;color:var(--mut);background:var(--bg-2)}
+  .cmp td:first-child{color:var(--mut);font-size:13.5px;width:22%}
+  .cmp td:nth-child(2){color:var(--mut)}
+  .cmp td:nth-child(3) b{color:var(--moss-ink)}
+  @media (max-width:720px){.cmp{overflow-x:auto}.cmp table{min-width:560px}}
+
+  /* quickstart */
+  .qs{display:grid;grid-template-columns:1.05fr .95fr;gap:44px;margin-top:56px;align-items:start}
+  @media (max-width:900px){.qs{grid-template-columns:1fr}}
+  .qs-steps .step{grid-template-columns:1fr;padding:22px 0}
+  .qs-term{position:sticky;top:84px}
+  .copyline{display:flex;align-items:center;gap:10px;margin-top:14px}
+  .copyline code{flex:1;padding:12px 14px;font-size:13.5px;background:var(--surface);border:1px solid var(--line);border-radius:9px}
+  .copybtn{font-family:var(--mono);font-size:12.5px;padding:10px 14px;border-radius:9px;border:1px solid var(--line);background:var(--surface);cursor:pointer;color:var(--mut);transition:color .15s,border-color .15s}
+  .copybtn:hover{color:var(--ink);border-color:var(--ink)}
+
+  /* providers */
+  .prov{display:flex;flex-wrap:wrap;gap:10px;margin-top:30px}
+  .prov span{font-family:var(--mono);font-size:12.5px;color:var(--mut);border:1px solid var(--line-2);border-radius:999px;padding:7px 14px;background:var(--surface)}
+
+  /* CTA */
+  .cta{padding:120px 0 128px;text-align:left}
+  .cta h2{font-size:clamp(30px,4.4vw,46px);max-width:18ch}
+  .cta p{color:var(--mut);max-width:52ch;margin:20px 0 0}
+  .cta .hero-cta{margin-top:34px}
+
+  /* grounded footer note */
+  .wrap.grounded{border-top:1px solid var(--line-2);padding:26px 24px;font-family:var(--mono);font-size:12.5px;color:var(--mut)}
+  .grounded b{color:var(--moss-ink);font-weight:500}
 
   /* footer */
-  footer{padding:60px 0 50px;border-top:1px solid var(--line)}
-  .foot-row{display:flex;justify-content:space-between;gap:30px;flex-wrap:wrap;align-items:flex-start}
-  .foot-row .col h5{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted-2);margin:0 0 14px}
-  .foot-row .col a{display:block;color:var(--ink-soft);font-size:14.5px;margin-bottom:9px;transition:color .25s}
-  .foot-row .col a:hover{color:var(--accent)}
-  .foot-bot{display:flex;justify-content:space-between;align-items:center;margin-top:46px;padding-top:24px;border-top:1px solid var(--line);color:var(--muted-2);font-size:13px;flex-wrap:wrap;gap:12px}
-
-  /* reveal helpers for children stagger handled in JS via --d */
+  footer{border-top:1px solid var(--line-2);padding:56px 0 72px;background:var(--bg-2)}
+  .foot{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:32px}
+  @media (max-width:820px){.foot{grid-template-columns:1fr 1fr}}
+  .foot h4{font-family:var(--mono);font-size:12px;letter-spacing:.06em;color:var(--mut);font-weight:500;margin:0 0 14px}
+  .foot a{display:block;font-size:14px;color:var(--ink-2);padding:4px 0}
+  .foot a:hover{color:var(--moss-ink)}
+  .foot .about{font-size:14px;color:var(--mut);max-width:34ch;margin-top:12px}
 </style>
 </head>
 <body>
-  <div class="progress" id="progress"></div>
 
-  <!-- ───────────────  NAV  ─────────────── -->
-  <header class="nav" id="nav">
-    <div class="wrap nav-row">
-      <a class="brand" href="#top">
-        <span class="mark">🧠</span><span>Hunch</span>
-      </a>
-      <nav class="nav-links">
-        <a href="#how">How it works</a>
-        <a href="/docs">Docs</a>
-        <a href="/blog">Blog</a>
-      </nav>
-      <div class="nav-cta">
-        <a class="btn ghost sm" href="https://github.com/davesheffer/hunch" target="_blank" rel="noopener">
-          <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38v-1.3c-2.23.49-2.7-1.07-2.7-1.07-.36-.93-.89-1.18-.89-1.18-.73-.5.05-.49.05-.49.81.06 1.23.83 1.23.83.72 1.23 1.88.87 2.34.67.07-.52.28-.87.51-1.07-1.78-.2-3.65-.89-3.65-3.96 0-.87.31-1.59.83-2.15-.08-.2-.36-1.02.08-2.13 0 0 .67-.21 2.2.82a7.6 7.6 0 014 0c1.53-1.03 2.2-.82 2.2-.82.44 1.11.16 1.93.08 2.13.52.56.83 1.28.83 2.15 0 3.08-1.87 3.76-3.65 3.96.29.25.54.73.54 1.48v2.2c0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
-          Star
-        </a>
-        <a class="btn sm" href="#start"><span class="shine"></span>Get started</a>
-      </div>
-      <button class="nav-burger" id="burger" aria-label="Open menu" aria-expanded="false" aria-controls="navMenu"><span></span></button>
+<nav class="nav" aria-label="Main">
+  <div class="wrap nav-in">
+    <a class="brand" href="/"><span class="dot" aria-hidden="true"></span>hunch</a>
+    <div class="nav-links">
+      <a href="#how" class="hide-s">How it works</a>
+      <a href="#inside" class="hide-s">Features</a>
+      <a href="docs.html">Docs</a>
+      <a href="blog/">Blog</a>
+      <a href="changelog.html" class="hide-s">Changelog</a>
+      <a href="https://github.com/davesheffer/hunch" class="hide-s">GitHub</a>
+      <a class="btn" href="#start">Get started</a>
     </div>
-  </header>
+  </div>
+</nav>
 
-  <!-- mobile menu -->
-  <div class="nav-scrim" id="navScrim"></div>
-  <nav class="nav-menu" id="navMenu" aria-label="Mobile">
-    <a href="#how">How it works</a>
-    <a href="/docs">Docs</a>
-    <a href="/blog">Blog</a>
-    <a href="#start">Get started</a>
-    <div class="nav-menu-cta">
-      <a class="btn ghost" href="https://github.com/davesheffer/hunch" target="_blank" rel="noopener">Star on GitHub</a>
-      <a class="btn" href="https://www.npmjs.com/package/@davesheffer/hunch" target="_blank" rel="noopener">npm ↗</a>
-    </div>
-  </nav>
+<!-- ─────────────────────────── hero ─────────────────────────── -->
+<header class="hero wrap">
+  <p class="eyebrow rise">architectural conformance for AI code · git-native · local-first</p>
+  <h1 class="rise d1">Let AI fly.<br /><b>Hunch holds the line.</b></h1>
+  <p class="lede rise d2">
+    The invariants pattern-SAST can't express — layering, must-reach, dependency direction —
+    enforced deterministically over a git-native graph of <em>why</em>. When an AI change breaks
+    your architecture, Hunch blocks it, citing the decision and the past bug it would reopen.
+    Across any MCP assistant.
+  </p>
+  <div class="hero-cta rise d3">
+    <a class="btn" href="#start">Get started</a>
+    <a class="btn ghost" href="blog/">Read the benchmark</a>
+  </div>
+  <div class="hero-facts rise d3">
+    <span>plain files in your repo</span><span>no SaaS, $0</span><span>works offline</span><span>Apache-2.0</span>
+  </div>
 
-  <!-- ───────────────  HERO  ─────────────── -->
-  <a id="top"></a>
-  <section class="hero">
-    <div class="wrap hero-grid">
-      <div class="hero-copy">
-        <span class="eyebrow" data-rise><span class="dot"></span>Architectural Conformance for AI code · git-native</span>
-        <h1 class="hero-title">
-          <span class="line-mask"><span data-word>Let <em>AI</em> fly.</span></span>
-          <span class="line-mask"><span data-word><em>Hunch</em> holds</span></span>
-          <span class="line-mask"><span data-word>the line.</span></span>
-        </h1>
-        <p class="hero-sub" data-rise style="--d:.15s">
-          The semantic invariants pattern-SAST can't express — layering, must-reach, dependency
-          direction — enforced deterministically over a git-native graph of <em>why</em>. When an AI
-          change breaks your architecture, Hunch blocks it, citing the decision and the past bug it
-          would reopen. Across any MCP assistant.
-        </p>
-        <div class="hero-actions" data-rise style="--d:.25s">
-          <a class="btn" href="#start" data-magnetic><span class="shine"></span>Get started
-            <svg class="arw" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12L12 4M12 4H6M12 4v6"/></svg>
-          </a>
-          <a class="btn ghost" href="/blog/post?slug=ai-ignores-your-architecture" data-magnetic>Read the benchmark →</a>
-        </div>
-        <div class="hero-stats" data-rise style="--d:.35s">
-          <div class="stat"><div class="n"><span data-count="22">0</span></div><div class="l">Decisions captured</div></div>
-          <div class="stat"><div class="n"><span data-count="9">0</span></div><div class="l">Components mapped</div></div>
-          <div class="stat"><div class="n"><span data-count="0">0</span><span style="color:var(--accent)">↯</span></div><div class="l">SaaS required</div></div>
-        </div>
+  <div class="term rise d4" aria-label="Terminal demo: hunch answers why">
+    <div class="term-bar"><i></i><i></i><i></i>&nbsp; your-repo — hunch</div>
+    <pre id="demo" aria-live="off"></pre>
+  </div>
+</header>
+
+<!-- ─────────────────────────── problem ─────────────────────────── -->
+<section id="problem">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-label">
+        <span class="eyebrow">the problem</span>
+        <span class="dnote"><button aria-expanded="false" aria-describedby="dn2">dec_site_002</button>
+          <span class="pop" role="tooltip" id="dn2"><b>why this section leads</b>Engineers trust a symptom they've felt over a feature list. The page opens with the failure mode, not the product.</span>
+        </span>
       </div>
+      <h2>Every AI session starts from zero.</h2>
+      <p>The model re-reads your code, re-guesses the intent, and happily "fixes" the thing you
+      deliberately did last month — because the reasoning lives in PRs, Slack, and people's heads,
+      not in the repo.</p>
+    </div>
+    <div class="grid3">
+      <div class="card"><h3>Stateless by design</h3><p>Cursor and Copilot do ephemeral RAG over your current code. The horizon is this session — value stays flat.</p></div>
+      <div class="card"><h3>Intent evaporates</h3><p>The codebase records the final state, never the rejected alternative or the invariant you must never break.</p></div>
+      <div class="card"><h3>The same mistakes, again</h3><p>Without memory, the agent re-discovers the bug you already fixed — and undoes the workaround that prevents it.</p></div>
+    </div>
+  </div>
+</section>
 
-      <!-- HERO GRAPH -->
-      <div class="graph-card" data-rise style="--d:.2s">
-        <div class="graph-head">
-          <span class="t">hunch · reasoning graph</span>
-          <span class="dots"><i></i><i></i><i></i></span>
-        </div>
-        <svg class="graph" id="graph" viewBox="0 0 560 430" aria-label="A reasoning graph linking a commit, bug, decision, constraint, component and symbol.">
-          <!-- edges -->
-          <g id="edges" stroke-linecap="round">
-            <path class="edge" data-edge d="M118,86 C180,110 200,150 250,190"/>      <!-- commit -> decision -->
-            <path class="edge" data-edge d="M120,318 C170,280 200,250 250,212"/>     <!-- bug -> decision -->
-            <path class="edge" data-edge d="M360,200 C410,210 430,255 442,300" stroke="var(--accent)"/> <!-- decision -> constraint -->
-            <path class="edge" data-edge d="M340,178 C390,150 410,120 440,104"/>     <!-- decision -> component -->
-            <path class="edge" data-edge d="M150,330 C260,360 360,360 430,338" stroke="var(--warn)"/>   <!-- bug -> symbol -->
-            <path class="edge" data-edge d="M455,330 C470,255 470,180 460,120"/>     <!-- constraint -> component -->
-          </g>
-          <!-- nodes -->
-          <g class="gnode" data-node style="--n:0">
-            <rect class="pill" x="52" y="62" width="132" height="46" rx="11"/>
-            <circle cx="74" cy="85" r="6" fill="var(--muted-2)"/>
-            <text class="kind" x="90" y="80" fill="var(--muted-2)">commit</text>
-            <text class="label" x="90" y="95">a1b2c3d</text>
-          </g>
-          <g class="gnode" data-node style="--n:1">
-            <rect class="pill" x="54" y="296" width="120" height="46" rx="11"/>
-            <circle cx="76" cy="319" r="6" fill="var(--warn)"/>
-            <text class="kind" x="92" y="314" fill="var(--warn)">bug_009</text>
-            <text class="label" x="92" y="329">leaked token</text>
-          </g>
-          <g class="gnode" data-node style="--n:2">
-            <rect class="pill" x="246" y="170" width="118" height="46" rx="11" stroke="var(--ink)" stroke-width="1.4"/>
-            <circle cx="268" cy="193" r="6" fill="var(--ink)"/>
-            <text class="kind" x="284" y="188" fill="var(--ink)">decision</text>
-            <text class="label" x="284" y="203">Redis sessions</text>
-          </g>
-          <g class="gnode" data-node style="--n:3">
-            <rect class="pill" x="396" y="298" width="128" height="46" rx="11" stroke="var(--accent)" stroke-width="1.4"/>
-            <circle cx="418" cy="321" r="6" fill="var(--accent)"/>
-            <text class="kind" x="434" y="316" fill="var(--accent)">constraint</text>
-            <text class="label" x="434" y="331">con_004</text>
-          </g>
-          <g class="gnode" data-node style="--n:4">
-            <rect class="pill" x="402" y="82" width="116" height="46" rx="11"/>
-            <circle cx="424" cy="105" r="6" fill="var(--ink-soft)"/>
-            <text class="kind" x="440" y="100" fill="var(--muted-2)">component</text>
-            <text class="label" x="440" y="115">cmp_auth</text>
-          </g>
-        </svg>
-        <div class="legend">
-          <span><i style="background:var(--warn)"></i>Bug</span>
-          <span><i style="background:var(--ink)"></i>Decision</span>
-          <span><i style="background:var(--accent)"></i>Constraint</span>
-          <span><i style="background:var(--muted-2)"></i>Component</span>
-        </div>
+<!-- ─────────────────────────── how ─────────────────────────── -->
+<section id="how" class="panel">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-label">
+        <span class="eyebrow">how it works</span>
+        <span class="dnote"><button aria-expanded="false" aria-describedby="dn3">dec_site_003</button>
+          <span class="pop" role="tooltip" id="dn3"><b>why three numbered steps</b>The pipeline really has three layers — index, learn, ground. The numbers are the architecture, not marketing rhythm.</span>
+        </span>
+      </div>
+      <h2>Memory as a byproduct of normal work.</h2>
+      <p>No documentation chore. The index is deterministic, learning happens on every commit, and
+      grounding reaches your assistant through every door it has.</p>
+    </div>
+    <div class="steps">
+      <div class="step">
+        <span class="step-n">01 / index</span>
+        <div><h3>Map the code, no LLM</h3><p>Hunch maps how functions, files, and components connect, so it can see the ripple effect of any change. Fast, entirely on your machine.</p></div>
+        <span class="step-cmd">hunch index</span>
+      </div>
+      <div class="step">
+        <span class="step-n">02 / learn</span>
+        <div><h3>Turn events into memory</h3><p>Each commit becomes a structured <em>decision</em>; a failing test becomes a <em>bug</em> with its likely cause; recurring or severe bugs are promoted into <em>constraints</em> — rules the AI must respect.</p></div>
+        <span class="step-cmd">post-commit → synthesis</span>
+      </div>
+      <div class="step">
+        <span class="step-n">03 / ground</span>
+        <div><h3>Feed it back, with citations</h3><p>Your assistant reads it through an MCP server, an auto-maintained CLAUDE.md, and slash commands — every answer cites its source, confidence, and evidence.</p></div>
+        <span class="step-cmd">MCP + CLAUDE.md + hooks</span>
       </div>
     </div>
+  </div>
+</section>
 
-    <!-- MARQUEE -->
-    <div class="marquee" aria-hidden="true">
-      <div class="track">
-        <span>Local-first&nbsp;&nbsp;Git-native&nbsp;&nbsp;No documentation toil&nbsp;&nbsp;Provenance on every claim&nbsp;&nbsp;Works offline&nbsp;&nbsp;MCP-native&nbsp;&nbsp;Subscription-billed&nbsp;&nbsp;Code-aware</span>
-        <span>Local-first&nbsp;&nbsp;Git-native&nbsp;&nbsp;No documentation toil&nbsp;&nbsp;Provenance on every claim&nbsp;&nbsp;Works offline&nbsp;&nbsp;MCP-native&nbsp;&nbsp;Subscription-billed&nbsp;&nbsp;Code-aware</span>
+<!-- ─────────────────────────── graph ─────────────────────────── -->
+<section id="graph">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow">the reasoning graph</span>
+      <h2>A bug spawns a decision. A decision spawns a constraint.</h2>
+      <p>The links are what let an agent answer "why" and "what must not break" with evidence —
+      every node attached to its components, symbols, and commits.</p>
+    </div>
+    <div class="chain">
+      <div class="node">
+        <span class="tag b">bug_009 · critical</span>
+        <h3>Leaked token usable after reset</h3>
+        <p>A stateless JWT couldn't be revoked server-side. Caught by <code>auth.revocation.spec.ts</code>, root cause attributed.</p>
+      </div>
+      <span class="arr" aria-hidden="true">→</span>
+      <div class="node">
+        <span class="tag d">dec_017 · accepted</span>
+        <h3>Store sessions in Redis, not JWT-only</h3>
+        <p>Sessions move server-side; the JWT carries only an opaque id. Alternatives rejected, consequences recorded, <code>commit a1b2c3d</code> as evidence.</p>
+      </div>
+      <span class="arr" aria-hidden="true">→</span>
+      <div class="node">
+        <span class="tag">con_004 · blocking</span>
+        <h3>Revocation must be server-side</h3>
+        <p>Never trust JWT expiry alone for logout. Scoped to <code>src/auth/**</code> — checked before any edit in that scope.</p>
       </div>
     </div>
-  </section>
+  </div>
+</section>
 
-  <!-- ───────────────  PROBLEM  ─────────────── -->
-  <div class="wrap"><div class="problem"><div class="wrap">
-    <section style="padding:96px 0">
-      <span class="sec-label" data-rise>The problem</span>
-      <p class="big-quote" data-rise style="--d:.1s">
-        Every AI session starts <span class="red">from zero</span>. The model
-        re-reads your code, re-guesses the intent, and happily <b>"fixes"</b> the thing
-        you deliberately did last month — because the <b>reasoning</b> lives in PRs,
-        Slack, and people's heads, not in the repo.
-      </p>
-      <div class="foot" data-rise style="--d:.2s">
-        <div><strong>Stateless by design</strong>Cursor and Copilot do ephemeral RAG over your <em>current</em> code. The horizon is this session — value stays flat.</div>
-        <div><strong>Intent evaporates</strong>The codebase records the final state, never the rejected alternative or the invariant you must never break.</div>
-        <div><strong>The same mistakes, again</strong>Without memory, the agent re-discovers the bug you already fixed — and undoes the workaround that prevents it.</div>
+<!-- ─────────────────────────── features ─────────────────────────── -->
+<section id="inside" class="panel">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-label">
+        <span class="eyebrow">what's inside</span>
+        <span class="dnote"><button aria-expanded="false" aria-describedby="dn4">dec_site_004</button>
+          <span class="pop" role="tooltip" id="dn4"><b>why four groups, not a top-20 list</b>Twenty numbered cards hide the architecture. The groups are the product's real jobs: remember, guard, retrieve, share.</span>
+        </span>
       </div>
-    </section>
-  </div></div></div>
+      <h2>Everything is local, diffable, and yours.</h2>
+      <p>Twenty capabilities, four jobs. Unfold what you care about.</p>
+    </div>
 
-  <!-- ───────────────  HOW IT WORKS  ─────────────── -->
-  <section id="how">
-    <div class="wrap">
-      <span class="sec-label" data-rise>How it works</span>
-      <h2 class="title" data-rise style="--d:.08s">Captured as a <em>byproduct</em> of normal work — commits and test failures.</h2>
-      <p class="lead" data-rise style="--d:.14s">Three layers, no documentation chore. Index is deterministic. Learning happens on every commit. Grounding reaches Claude Code through every door it has.</p>
+    <div class="fgroups">
+      <div class="fgroup">
+        <div class="glabel">memory / — what the graph holds</div>
+        <p class="gwhy">Records with provenance, safe writes, and a time axis — memory you can audit.</p>
+        <details class="f"><summary><span class="fname">Provenance on everything</span><span class="fhint">source, confidence, evidence — on every record</span><span class="fplus">+</span></summary>
+          <div class="fbody">Every record is tagged with where it came from and how sure Hunch is. A quick auto-guess stays advisory; only what you've confirmed is trusted enough to block.</div></details>
+        <details class="f"><summary><span class="fname">Git is the sync</span><span class="fhint">plain files beside your code, merge-clean</span><span class="fplus">+</span></summary>
+          <div class="fbody">The graph is plain files committed beside your code — reviewable in PRs, synced for free over push/pull. Teammates' edits merge cleanly with a record-id merge driver, no conflict markers.</div></details>
+        <details class="f"><summary><span class="fname">Atomic &amp; durable</span><span class="fhint">interrupted writes can't truncate the index</span><span class="fplus">+</span></summary>
+          <div class="fbody">Every write is temp-file + rename with a Windows-safe fallback. An interrupted write can't truncate the index; a corrupt index refuses to be flattened.</div></details>
+        <details class="f"><summary><span class="fname">Time-travel memory</span><span class="fhint">query the graph as of any commit</span><span class="fplus">+</span></summary>
+          <div class="fbody">Decisions and invariants carry a git-anchored valid-time window. Query <code>--as-of</code> any commit or tag; supersession closes a window instead of deleting it, so history stays auditable.</div></details>
+        <details class="f"><summary><span class="fname">Private memory</span><span class="fhint">open-source the code, not the reasoning</span><span class="fplus">+</span></summary>
+          <div class="fbody"><code>hunch private</code> keeps sensitive decisions in a separate private repo, unioned into local queries — never committed here. The CI PR comment renders public-only by construction.</div></details>
+        <details class="f"><summary><span class="fname">Decision-grounding</span><span class="fhint">doc≠graph drift, caught deterministically</span><span class="fplus">+</span></summary>
+          <div class="fbody">Anchor a decision to a <code>topic</code> and the pre-edit hook surfaces the file's live decision — follow the graph, not a stale doc — plus what it rejected. <code>/capture</code> grills a decision one question at a time before it's written; <code>hunch drift</code> gates CI on anchor-stale docs; one live decision per topic, never silently two.</div></details>
+      </div>
 
-      <div class="steps">
-        <div class="step" data-rise style="--d:.05s">
-          <div class="idx">01 / INDEX</div>
-          <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M6 8.5v3a2 2 0 002 2h8a2 2 0 002-2v-3M12 13.5v2"/></svg></div>
-          <h3>Map the code, no LLM</h3>
-          <p>Hunch maps your repo — how functions, files, and components connect — so it can see the ripple effect of any change. Fast, and runs entirely on your machine.</p>
-          <span class="tag">hunch index</span>
-        </div>
-        <div class="step" data-rise style="--d:.13s">
-          <div class="idx">02 / LEARN</div>
-          <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 3v4M12 17v4M5 12H1M23 12h-4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8"/><circle cx="12" cy="12" r="3"/></svg></div>
-          <h3>Turn events into memory</h3>
-          <p>Each commit becomes a structured <b>Decision</b>; a failing test becomes a <b>Bug</b> with its likely cause; recurring or severe bugs are promoted into <b>Constraints</b> — rules the AI must respect.</p>
-          <span class="tag">post-commit → synthesis</span>
-        </div>
-        <div class="step" data-rise style="--d:.21s">
-          <div class="idx">03 / GROUND</div>
-          <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 2a10 10 0 100 20 10 10 0 000-20z"/><path d="M2 12h20M12 2a15 15 0 010 20M12 2a15 15 0 000 20"/></svg></div>
-          <h3>Feed it back, with citations</h3>
-          <p>Claude Code reads it through an <b>MCP server</b>, an auto-maintained <b>CLAUDE.md</b>, and <b>slash commands</b> — and every answer cites its provenance: source, confidence, evidence. Nothing is a blind assertion.</p>
-          <span class="tag">MCP + CLAUDE.md + slash</span>
-        </div>
+      <div class="fgroup">
+        <div class="glabel">guards / — what it stops</div>
+        <p class="gwhy">Deterministic checks over the graph. Advisory by default; blocking only on what you've confirmed.</p>
+        <details class="f"><summary><span class="fname">Regression Guard</span><span class="fhint">stop re-adding what a decision retired</span><span class="fplus">+</span></summary>
+          <div class="fbody">Re-adding a symbol or dependency a decision deliberately retired gets flagged — warns always, fails a strict commit only when tied to a blocking invariant.</div></details>
+        <details class="f"><summary><span class="fname">Veto — Decision Guard</span><span class="fhint">stop re-introducing what you rejected</span><span class="fplus">+</span></summary>
+          <div class="fbody">Regression catches retired <em>code</em>; Veto catches rejected <em>approaches</em> — the alternative that never existed in code. Blocks the commit, CI, and the live edit with a cited receipt, and only on a reversal you've confirmed.</div></details>
+        <details class="f"><summary><span class="fname">Redundancy Guard</span><span class="fhint">"this already exists, three modules over"</span><span class="fplus">+</span></summary>
+          <div class="fbody">Agents work from a local context window, so they re-implement helpers that already exist. Hunch sees the whole codebase and flags the duplicate with its existing location. Advisory — tuned quiet, so moved code isn't mistaken for a duplicate.</div></details>
+        <details class="f"><summary><span class="fname">CI Constraint Guard</span><span class="fhint">memory that blocks a merge</span><span class="fplus">+</span></summary>
+          <div class="fbody">A GitHub Action comments the invariants and decisions a PR touches (with <code>con_</code>/<code>dec_</code> ids) and fails the check on a direct, high-confidence, non-stale blocking invariant.</div></details>
+        <details class="f"><summary><span class="fname">Causal Merge Verdict</span><span class="fhint">BLOCK / WARN / PASS, with the why</span><span class="fplus">+</span></summary>
+          <div class="fbody"><code>hunch_merge_verdict</code> replays a diff against the graph and returns a cited verdict — the decision behind each guard and the bug whose root cause spawned it. It catches a change that re-opens a closed bug; a diff-only reviewer can't.</div></details>
+        <details class="f"><summary><span class="fname">Intent-conformance</span><span class="fhint">does pay still reach verifySession?</span><span class="fplus">+</span></summary>
+          <div class="fbody">Every other guard asks "did this diff touch a guarded file?". <code>hunch conform</code> asks whether the code still <em>satisfies</em> each recorded decision — layering, must-reach, dependency direction — flagged even with no diff in scope.</div></details>
+        <details class="f"><summary><span class="fname">Never Twice</span><span class="fhint">correct the agent once, it holds forever</span><span class="fplus">+</span></summary>
+          <div class="fbody">"No — never call X here" once, and <code>hunch_record_correction</code> mints a scoped, human-confirmed invariant the pre-edit hook and CI guard hold every assistant to. The same mistake can't recur next session.</div></details>
+      </div>
+
+      <div class="fgroup">
+        <div class="glabel">retrieval / — how the why comes back</div>
+        <p class="gwhy">Grounding that reaches the agent at reasoning time, with citations.</p>
+        <details class="f"><summary><span class="fname">MCP-native, two-way</span><span class="fhint">query the why; write decisions back</span><span class="fplus">+</span></summary>
+          <div class="fbody">Assistants query the why behind a file, the blast radius of a change, a bug's lineage, and the invariants in scope — and record new decisions back into the graph as you work.</div></details>
+        <details class="f"><summary><span class="fname">Graph-augmented retrieval</span><span class="fhint">+41.7pt recall@10 over plain search</span><span class="fplus">+</span></summary>
+          <div class="fbody"><code>hunch_query</code> uses your code's own connections to surface the cross-file evidence a "why" question needs. Measured +41.7pt recall@10 on a cross-file benchmark — and it works without embeddings.</div></details>
+        <details class="f"><summary><span class="fname">Runbook memory</span><span class="fhint">the proven steps for recurring tasks</span><span class="fplus">+</span></summary>
+          <div class="fbody">The <em>how</em> layer beside the why. <code>hunch runbook</code> distills a reusable procedure from a commit range; <code>hunch_runbook(task)</code> returns it — kind-scoped, so "how do I add an MCP tool?" finds the runbook, not the whole graph.</div></details>
+        <details class="f"><summary><span class="fname">Fragility report</span><span class="fhint">the riskiest code, with its bug history</span><span class="fplus">+</span></summary>
+          <div class="fbody">Rank the riskiest code in your repo — churn, bug lineage, fan-in — and get the real history behind it, not a generic lecture.</div></details>
+        <details class="f"><summary><span class="fname">Deep Synthesis</span><span class="fhint">several takes, reconciled, fact-checked</span><span class="fplus">+</span></summary>
+          <div class="fbody"><code>--deep</code> gathers independent takes on a change and reconciles them into one note — trusting it more when they agree — then fact-checks it against the commit. Always advisory; billed to your subscription.</div></details>
+      </div>
+
+      <div class="fgroup">
+        <div class="glabel">team / — sharing and judging</div>
+        <p class="gwhy">One source of truth across branches, worktrees, teammates, and agents.</p>
+        <details class="f"><summary><span class="fname">Works offline, $0 SaaS</span><span class="fhint">subscription-billed synthesis, heuristic fallback</span><span class="fplus">+</span></summary>
+          <div class="fbody">Synthesis runs on your Claude subscription via the CLI — never the pay-per-token API. No <code>claude</code> on the machine? A deterministic heuristic keeps the loop alive.</div></details>
+        <details class="f"><summary><span class="fname">Shared team memory</span><span class="fhint">one store; fresh clones auto-connect</span><span class="fplus">+</span></summary>
+          <div class="fbody"><code>hunch shared --repo</code> routes every capture to one store across branches, worktrees, teammates, and agents. A committed <code>team.json</code> lets a fresh clone wire itself on <code>hunch init</code> — behind a strict URL allowlist.</div></details>
+        <details class="f"><summary><span class="fname">Multi-candidate verdict</span><span class="fhint">rank 5 agent solutions in 10 minutes</span><span class="fplus">+</span></summary>
+          <div class="fbody"><code>hunch compare</code> ranks N candidate branches by architectural fit: fewest invariant hits, no reversed decisions, least sprawl. The "evaluate five solutions" check.</div></details>
       </div>
     </div>
-  </section>
+  </div>
+</section>
 
-  <!-- ───────────────  THE CHAIN  ─────────────── -->
-  <section id="chain" style="padding-top:40px">
-    <div class="wrap">
-      <span class="sec-label" data-rise>The reasoning graph</span>
-      <h2 class="title" data-rise style="--d:.08s">A bug spawns a <em>decision</em>. A decision spawns a <em>constraint</em>.</h2>
-      <p class="lead" data-rise style="--d:.14s">The links are what let the agent answer “why” and “what must not break” with evidence, not vibes — every node attached to its components, symbols, and commits.</p>
-
-      <div class="chain">
-        <div class="link bug" data-rise style="--d:.05s">
-          <span class="badge"><svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="8" r="7"/></svg>bug_009</span>
-          <h4>Leaked token usable after reset</h4>
-          <p>A stateless JWT couldn't be revoked server-side. Caught by <span class="mono" style="color:var(--warn)">auth.revocation.spec.ts</span>, root cause attributed, severity <b>critical</b>.</p>
-          <div class="arrow">→</div>
-        </div>
-        <div class="link dec" data-rise style="--d:.13s">
-          <span class="badge"><svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="1" width="14" height="14" rx="3"/></svg>dec_017</span>
-          <h4>Store sessions in Redis, not JWT-only</h4>
-          <p>Sessions move server-side; the JWT carries only an opaque id. Alternatives rejected, consequences recorded, <b>commit a1b2c3d</b> as evidence.</p>
-          <div class="arrow">→</div>
-        </div>
-        <div class="link con" data-rise style="--d:.21s">
-          <span class="badge"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 1l6 3v4c0 4-3 6-6 7-3-1-6-3-6-7V4z"/></svg>con_004</span>
-          <h4>Revocation must be server-side</h4>
-          <p>Never trust JWT expiry alone for logout. Scoped to <span class="mono" style="color:var(--accent)">src/auth/**</span>, <b>blocking</b> — checked before any edit in that scope.</p>
-          <div class="arrow">→</div>
-        </div>
+<!-- ─────────────────────────── compare ─────────────────────────── -->
+<section id="different">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-label">
+        <span class="eyebrow">why it's different</span>
+        <span class="dnote"><button aria-expanded="false" aria-describedby="dn5">dec_site_005</button>
+          <span class="pop" role="tooltip" id="dn5"><b>why one competitor column</b>The contrast is stateless vs compounding — a property, not a vendor war. Naming more tools would blur the only axis that matters.</span>
+        </span>
       </div>
+      <h2>Copilot reads the blueprints fresh each morning. Hunch has been on-site for ten years.</h2>
     </div>
-  </section>
-
-  <!-- ───────────────  ASK WHY DEMO  ─────────────── -->
-  <section id="demo" style="padding-top:48px">
-    <div class="wrap">
-      <span class="sec-label" data-rise>In Claude Code</span>
-      <h2 class="title" data-rise style="--d:.08s;max-width:14em">Just ask the codebase <em>why</em>.</h2>
-      <div class="demo-grid">
-        <div>
-          <ul class="demo-points" data-rise style="--d:.1s">
-            <li><b>Grounded from second one.</b> The agent doesn't re-discover the revocation lesson — it reads <span class="mono">bug_009</span> and <span class="mono">con_004</span> before touching the file.</li>
-            <li><b>Blast radius, known.</b> One Hunch lookup returns every caller and dependent component before a refactor, so nothing breaks silently.</li>
-            <li><b>Evidence, not vibes.</b> Each claim carries its source, confidence, and the commit or test that proves it.</li>
-            <li><b>Write-back.</b> After a non-trivial choice, the decision is recorded — the graph gets denser as you work.</li>
-          </ul>
-        </div>
-        <div class="terminal" data-rise style="--d:.18s">
-          <div class="term-bar"><i></i><i></i><i></i><span class="ttl">claude code — why is the session module built this way?</span></div>
-          <div class="term-body" id="typed"></div>
-        </div>
-      </div>
+    <div class="cmp">
+      <table>
+        <thead><tr><th></th><th>Cursor / Copilot</th><th>Hunch</th></tr></thead>
+        <tbody>
+          <tr><td>Core data model</td><td>Ephemeral RAG over current code</td><td><b>Curated graph</b> of decisions, bugs, constraints</td></tr>
+          <tr><td>Time horizon</td><td>This session</td><td>The <b>lifetime</b> of the codebase</td></tr>
+          <tr><td>What it indexes</td><td>Syntax + embeddings of files</td><td><b>Why</b> — intent, causality, invariants</td></tr>
+          <tr><td>Write path</td><td>None — read-only over code</td><td><b>First-class</b> — it learns at commit &amp; test time</td></tr>
+          <tr><td>Value over time</td><td>Flat — re-derived each time</td><td><b>Compounds</b> — a flywheel</td></tr>
+          <tr><td>Failure it removes</td><td>"AI can't see enough code"</td><td>"AI <b>repeats past mistakes</b> / breaks design"</td></tr>
+        </tbody>
+      </table>
     </div>
-  </section>
+  </div>
+</section>
 
-  <!-- ───────────────  FEATURES  ─────────────── -->
-  <section id="features">
-    <div class="wrap">
-      <span class="sec-label" data-rise>What's inside</span>
-      <h2 class="title" data-rise style="--d:.08s">Everything is local, diffable, and yours.</h2>
-      <div class="features">
-        <div class="feat" data-rise style="--d:.04s"><div class="fi">/ 01</div><h4>MCP-native</h4><p>Claude queries Hunch for the why behind a file, the blast radius of a change, a bug's lineage, and the invariants in scope — and writes new decisions back. The structured two-way API it calls under the hood.</p></div>
-        <div class="feat" data-rise style="--d:.08s"><div class="fi">/ 02</div><h4>Provenance on everything</h4><p>Every record is tagged with where it came from and how sure Hunch is. A quick auto-guess stays advisory; only what you've confirmed is trusted enough to block.</p></div>
-        <div class="feat" data-rise style="--d:.12s"><div class="fi">/ 03</div><h4>Git is the sync</h4><p>The Hunch graph is plain files committed beside your code — the source of truth, reviewable in PRs, synced for free over push/pull. Teammates' edits merge cleanly, with no conflict markers.</p></div>
-        <div class="feat" data-rise style="--d:.16s"><div class="fi">/ 04</div><h4>Works offline</h4><p>Synthesis is billed to your Claude subscription via the CLI — never the pay-per-token API. No <span class="mono">claude</span>? A deterministic heuristic keeps the loop alive.</p></div>
-        <div class="feat" data-rise style="--d:.2s"><div class="fi">/ 05</div><h4>Fragility report</h4><p>Rank the riskiest code in your repo — and get the real bug history behind it, not a generic lecture.</p></div>
-        <div class="feat" data-rise style="--d:.24s"><div class="fi">/ 06</div><h4>Atomic &amp; durable</h4><p>Every write is temp-file + rename with a Windows-safe fallback. An interrupted write can't truncate the index; a corrupt index refuses to be flattened.</p></div>
-        <div class="feat" data-rise style="--d:.28s"><div class="fi">/ 07</div><h4>Time-travel memory</h4><p>Decisions and invariants carry a git-anchored valid-time window. Query the graph <span class="mono">--as-of</span> any commit or tag; supersession closes a window instead of deleting it, so history stays auditable.</p></div>
-        <div class="feat" data-rise style="--d:.32s"><div class="fi">/ 08</div><h4>Regression Guard</h4><p>Re-adding a symbol or dependency a decision deliberately retired gets flagged — warns always, fails a strict commit only when tied to a blocking invariant. The AI stops undoing intentional design.</p></div>
-        <div class="feat" data-rise style="--d:.36s"><div class="fi">/ 09</div><h4>CI Constraint Guard</h4><p>A GitHub Action runs on every PR — comments the invariants and decisions a change affects (with <span class="mono">con_</span>/<span class="mono">dec_</span> ids) and <b>fails the check</b> on a direct, high-confidence, non-stale blocking invariant. Memory that blocks a merge, not just advises.</p></div>
-        <div class="feat" data-rise style="--d:.4s"><div class="fi">/ 10</div><h4>Never Twice</h4><p>Correct the agent once — "no, never call X here" — and <span class="mono">hunch_record_correction</span> mints a scoped, human-confirmed invariant the pre-edit hook and CI guard hold <b>every</b> assistant to. The same mistake can't recur next session.</p></div>
-        <div class="feat" data-rise style="--d:.44s"><div class="fi">/ 11</div><h4>Causal Merge Verdict</h4><p><span class="mono">hunch_merge_verdict</span> replays a diff against the graph and returns a cited <b>BLOCK / WARN / PASS</b> — showing the decision that motivated each guard and the bug whose root cause spawned it. It catches a change that re-opens a closed bug; a diff-only reviewer can't.</p></div>
-        <div class="feat" data-rise style="--d:.48s"><div class="fi">/ 12</div><h4>Veto — Decision Guard</h4><p>The Regression Guard catches re-adding code you <em>retired</em>; <b>Veto</b> catches re-introducing an approach you <em>rejected</em> — the alternative that never existed in code. It blocks the commit, CI, and the live edit with a cited receipt — and only on a reversal you've confirmed, so day-one stays advisory.</p></div>
-        <div class="feat" data-rise style="--d:.52s"><div class="fi">/ 13</div><h4>Redundancy Guard</h4><p>Agents work from a <em>local</em> context window, so they re-implement a helper that already lives three modules over. Hunch sees your whole codebase: add a function or class already defined elsewhere and it's flagged with the existing location. <b>Advisory</b> — never blocks, and tuned to stay quiet so a refactor that just moves code isn't mistaken for a duplicate.</p></div>
-        <div class="feat" data-rise style="--d:.56s"><div class="fi">/ 14</div><h4>Deep Synthesis</h4><p><span class="mono">--deep</span> gathers several independent takes on a change and reconciles them into one note — trusting it more when they agree — then fact-checks it against the commit. A more trustworthy note that always stays advisory. Subscription-only; works with whichever assistants you're signed into.</p></div>
-        <div class="feat" data-rise style="--d:.6s"><div class="fi">/ 15</div><h4>Private memory</h4><p>Open-source your code without open-sourcing your <em>reasoning</em>. <span class="mono">hunch private</span> keeps sensitive decisions/bugs/constraints in a <em>separate private repo</em> that Hunch unions into local queries — never committed here, and the CI PR comment renders <b>public-only by construction</b>. One command (writes a gitignored <span class="mono">.hunch/local.json</span> — no env var); each capture is auto-committed &amp; pushed to the private repo by default, recursion-safe (<span class="mono">--no-auto-commit</span> to opt out).</p></div>
-        <div class="feat" data-rise style="--d:.64s"><div class="fi">/ 16</div><h4>Graph-augmented retrieval</h4><p><span class="mono">hunch_query</span> uses your code's own connections to surface the cross-file evidence a “why” question needs — the context plain search misses on its own. Measured <b>+41.7pt recall@10</b> on a cross-file benchmark, and it works without embeddings.</p></div>
-        <div class="feat" data-rise style="--d:.68s"><div class="fi">/ 17</div><h4>Runbook memory</h4><p>The <em>how</em> layer beside the why. <span class="mono">hunch runbook</span> distills a reusable procedure from a commit range; <span class="mono">hunch_runbook(task)</span> returns the proven steps for a recurring task — <b>kind-scoped</b> retrieval, so “how do I add an MCP tool?” finds the runbook, not the whole graph. Advisory; an agent reuses a procedure instead of re-deriving it.</p></div>
-        <div class="feat" data-rise style="--d:.72s"><div class="fi">/ 18</div><h4>Multi-candidate verdict</h4><p><span class="mono">hunch compare</span> — give it N candidate branches/commits (several agent-generated solutions to one task) and it ranks them by <b>architectural fit</b>: the candidate that trips the fewest rules, reverses no decisions, and adds the least sprawl wins. The “evaluate 5 solutions in 10 minutes” check.</p></div>
-        <div class="feat" data-rise style="--d:.76s"><div class="fi">/ 19</div><h4>Intent-conformance</h4><p><b>Prove the code still satisfies the recorded <em>why</em>.</b> Every other guard asks “did this diff touch a guarded file?”. <span class="mono">hunch conform</span> asks the deeper question — does <span class="mono">pay</span> still reach <span class="mono">verifySession</span>? If the code drifts so it no longer honors a recorded decision's intent, it’s flagged <em>even with no diff in scope</em>. A new kind of correctness, beside types and tests.</p></div>
-        <div class="feat" data-rise style="--d:.8s"><div class="fi">/ 20</div><h4>Decision-grounding</h4><p>Conformance guards <em>graph≠code</em>; grounding guards <em>doc≠graph</em>. Anchor a decision to a <span class="mono">topic</span> and the pre-edit hook surfaces the file's live decision with doc-precedence — <b>follow the graph, not a stale doc</b> — plus what it <em>rejected</em>. When a file is still anchored to a superseded decision, a deterministic <span class="mono">anchor-stale</span> drift fires in <span class="mono">hunch doctor</span> and CI-gateable <span class="mono">hunch drift</span>. A store-scoped guard refuses a <b>second live decision per topic</b> — never silently two. Decisions get in by being <b>grilled</b>: <span class="mono">/capture</span> (<span class="mono">hunch_capture_decision</span>) interrogates you one question at a time until the decision is resolved — topic, rationale, and the alternatives you rejected — then writes it against its <span class="mono">topic</span>. No semantic guessing; fires only on explicit anchors.</p></div>
-      </div>
+<!-- ─────────────────────────── quickstart ─────────────────────────── -->
+<section id="start" class="panel">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow">get started</span>
+      <h2>One npm install — wired into every assistant.</h2>
     </div>
-  </section>
-
-  <!-- ───────────────  COMPARE  ─────────────── -->
-  <div class="wrap"><div class="compare"><div class="wrap">
-    <section id="compare" style="padding:96px 0">
-      <span class="sec-label" data-rise>Why it's different</span>
-      <h2 class="title" data-rise style="--d:.08s">Copilot reads the blueprints fresh each morning. <em>Hunch</em> has been on-site for ten years.</h2>
-      <div class="ctable" data-rise style="--d:.14s">
-        <div class="crow head"><div class="feature">&nbsp;</div><div class="them">Cursor / Copilot</div><div class="us"><span class="mk">🧠</span> &nbsp;Hunch</div></div>
-        <div class="crow"><div class="feature">Core data model</div><div class="them">Ephemeral RAG over current code</div><div class="us"><b>Curated graph</b> of decisions, bugs, constraints</div></div>
-        <div class="crow"><div class="feature">Time horizon</div><div class="them">This session</div><div class="us">The <b>lifetime</b> of the codebase</div></div>
-        <div class="crow"><div class="feature">What it indexes</div><div class="them">Syntax + embeddings of files</div><div class="us"><b>Why</b> — intent, causality, invariants</div></div>
-        <div class="crow"><div class="feature">Write path</div><div class="them">None (read-only over code)</div><div class="us"><b>First-class</b> — it learns at commit &amp; test time</div></div>
-        <div class="crow"><div class="feature">Value over time</div><div class="them">Flat — re-derived each time</div><div class="us"><b>Compounds</b> — a flywheel</div></div>
-        <div class="crow"><div class="feature">Failure it removes</div><div class="them">“AI can't see enough code”</div><div class="us">“AI <b>repeats past mistakes</b> / breaks design”</div></div>
-      </div>
-    </section>
-  </div></div></div>
-
-  <!-- ───────────────  GET STARTED  ─────────────── -->
-  <section id="start">
-    <div class="wrap">
-      <span class="sec-label" data-rise>Get started</span>
-      <h2 class="title" data-rise style="--d:.08s">One <em>npm install</em> — wired into every assistant.</h2>
-      <div class="gs-grid">
-        <div class="code" data-rise style="--d:.12s">
-          <div class="term-bar"><i></i><i></i><i></i><span class="ttl">~/your-repo</span></div>
-          <div class="term-body">
-            <div><span class="cmt"># install from npm — Node 20+ (puts `hunch` on PATH)</span></div>
-            <div><span class="dollar">$ </span><span class="cmd">npm install <span class="fl">-g</span> @davesheffer/hunch</span></div>
-            <div style="height:10px"></div>
-            <div><span class="cmt"># index + hooks + wire up EVERY assistant</span></div>
-            <div><span class="dollar">$ </span><span class="cmd">cd your-repo &amp;&amp; hunch init</span></div>
-            <div style="height:10px"></div>
-            <div><span class="cmt"># cold start: seed decisions from git history</span></div>
-            <div><span class="dollar">$ </span><span class="cmd">hunch backfill <span class="fl">--since</span> 90d</span></div>
-            <div style="height:10px"></div>
-            <div><span class="cmt"># the "why" behind any file or symbol</span></div>
-            <div><span class="dollar">$ </span><span class="cmd">hunch why src/auth/session.ts</span></div>
+    <div class="qs">
+      <div class="qs-steps">
+        <div class="steps" style="margin-top:0">
+          <div class="step">
+            <div><h3>Install it</h3><p>Node 22.13+. <code>npm install -g @davesheffer/hunch</code> puts a global <code>hunch</code> on your PATH. That's the whole install — no build step, no native compiles, no SaaS.</p></div>
+          </div>
+          <div class="step">
+            <div><h3>Initialize — wires every assistant</h3><p>One <code>hunch init</code> indexes the repo, installs the hooks + merge driver, and writes MCP config + rules for Claude Code, Cursor, VS Code, Windsurf, Codex &amp; Antigravity — all pointing at the same <code>.hunch/</code> graph.</p></div>
+          </div>
+          <div class="step">
+            <div><h3>Seed the memory</h3><p><code>hunch backfill --since 90d</code> replays recent history, so an empty graph isn't your day-one experience.</p></div>
+          </div>
+          <div class="step">
+            <div><h3>Just ask</h3><p>In any of those editors: <em>"why is the session module built this way?"</em> — answered from memory, with the commit as evidence.</p></div>
           </div>
         </div>
-        <div class="gs-steps" data-rise style="--d:.18s">
-          <div class="gs-step"><div class="num"></div><div><h4>Install it</h4><p>Node 20+. <code>npm install -g @davesheffer/hunch</code> puts a global <code>hunch</code> on your PATH. That's the whole install — no build, no SaaS.</p></div></div>
-          <div class="gs-step"><div class="num"></div><div><h4>Initialize — wires every assistant</h4><p>One <code>hunch init</code> indexes the repo, installs the hooks + merge driver, and writes MCP config + rules for <b>Claude Code, Cursor, VS Code, Windsurf, Codex &amp; Google Antigravity</b> — all pointing at the same <code>.hunch/</code> graph. Reload your editor to pick up the tools.</p></div></div>
-          <div class="gs-step"><div class="num"></div><div><h4>Seed the memory</h4><p><code>hunch backfill --since 90d</code> replays recent history so an empty graph isn't your day-1 experience.</p></div></div>
-          <div class="gs-step"><div class="num"></div><div><h4>Just ask</h4><p>In any of those editors: <em>“why is the session module built this way?”</em> — and it answers from memory, with the commit as evidence.</p></div></div>
+        <div class="prov" aria-label="Supported assistants">
+          <span>Claude Code</span><span>Cursor</span><span>VS Code</span><span>Windsurf</span><span>Codex</span><span>Antigravity</span><span>AGENTS.md</span>
         </div>
       </div>
+      <div class="qs-term">
+        <div class="term" style="margin-top:0">
+          <div class="term-bar"><i></i><i></i><i></i>&nbsp; ~/your-repo</div>
+          <pre style="min-height:0"><span class="c-key"># install from npm — Node 22.13+</span>
+<span class="c-cmd">$ npm install -g @davesheffer/hunch</span>
 
-      <!-- one init → every assistant -->
-      <p class="lead" data-rise style="--d:.06s;margin-top:42px;max-width:40em">One <code style="font-family:var(--mono);font-size:.85em;background:rgba(39,66,255,.08);color:var(--accent-deep);padding:2px 7px;border-radius:6px">hunch init</code> wires the same graph into every door your AI knocks on — the MCP server is client-agnostic, so each assistant reads the same <span class="mono">.hunch/</span>.</p>
-      <div class="eds" data-rise style="--d:.1s">
-        <div class="ed"><div class="en"><span class="ic">🧠</span>Claude Code</div><span class="ef"><b>.mcp.json</b>CLAUDE.md · slash commands · agent hooks</span></div>
-        <div class="ed"><div class="en"><span class="ic">▟</span>Cursor</div><span class="ef"><b>.cursor/mcp.json</b>.cursor/rules/hunch.mdc</span></div>
-        <div class="ed"><div class="en"><span class="ic">⧉</span>VS Code</div><span class="ef"><b>.vscode/mcp.json</b>.github/copilot-instructions.md</span></div>
-        <div class="ed"><div class="en"><span class="ic">🌊</span>Windsurf</div><span class="ef"><b>.windsurf/mcp_config.json</b>.windsurf/rules/hunch.md</span></div>
-      </div>
-      <p class="eds-note" data-rise style="--d:.14s">Plus AGENTS.md / Codex, and a VS Code visualizer extension on <a href="https://open-vsx.org/extension/davesheffer/hunch-vscode" target="_blank" rel="noopener">Open VSX</a>. Skip any with <span class="mono">hunch init --no-providers</span>.</p>
-    </div>
-  </section>
+<span class="c-key"># index + hooks + wire up every assistant</span>
+<span class="c-cmd">$ cd your-repo && hunch init</span>
 
-  <!-- ───────────────  CTA  ─────────────── -->
-  <section class="cta">
-    <div class="wrap">
-      <div class="cta-card" data-rise>
-        <h2>Make your codebase<br/><em>remember why.</em></h2>
-        <p>The longer it runs, the smarter it gets — and the more expensive it is to go back to a stateless AI.</p>
-        <div class="row">
-          <a class="btn" href="#start" data-magnetic><span class="shine"></span>Get started</a>
-          <a class="btn ghost" href="docs.html">Read the docs</a>
+<span class="c-key"># cold start: seed decisions from history</span>
+<span class="c-cmd">$ hunch backfill --since 90d</span>
+
+<span class="c-key"># the "why" behind any file or symbol</span>
+<span class="c-cmd">$ hunch why src/auth/session.ts</span></pre>
         </div>
-        <div class="cmdline">
-          <span><span class="dollar">$ </span>hunch init</span>
-          <button class="copy" id="copyBtn">Copy</button>
+        <div class="copyline">
+          <code id="install-cmd">npm i -g @davesheffer/hunch && hunch init</code>
+          <button class="copybtn" data-copy="#install-cmd">copy</button>
         </div>
       </div>
     </div>
-  </section>
+  </div>
+</section>
 
-  <!-- ───────────────  CHANGELOG  ─────────────── -->
-
-  <!-- ───────────────  FOOTER  ─────────────── -->
-  <footer>
-    <div class="wrap">
-      <div class="foot-row">
-        <div class="col" style="max-width:300px">
-          <a class="brand" href="#top" style="margin-bottom:14px"><span class="mark">🧠</span><span>Hunch</span></a>
-          <p style="color:var(--ink-soft);font-size:14.5px;line-height:1.6;margin:0;font-weight:380">Git stores what the code is. Hunch stores why — a persistent, git-native reasoning graph for the age of AI engineering.</p>
-        </div>
-        <div class="col"><h5>Product</h5><a href="#how">How it works</a><a href="#chain">The graph</a><a href="#features">Features</a><a href="/changelog">Changelog</a><a href="#compare">Why it's different</a></div>
-        <div class="col"><h5>Develop</h5><a href="#start">Get started</a><a href="#demo">In Claude Code</a><a href="https://github.com/davesheffer/hunch#two-ways-to-use-it" target="_blank" rel="noopener">CLI reference</a><a href="https://github.com/davesheffer/hunch/tree/main/vscode-extension" target="_blank" rel="noopener">VS Code extension</a></div>
-        <div class="col"><h5>Resources</h5><a href="https://github.com/davesheffer/hunch#readme" target="_blank" rel="noopener">README</a><a href="/docs">Docs</a><a href="/blog">Blog</a><a href="/docs#mcp-tools">MCP tools</a></div>
-        <div class="col"><h5>Connect</h5><a href="https://github.com/davesheffer" target="_blank" rel="noopener">GitHub ↗</a><a href="https://www.npmjs.com/package/@davesheffer/hunch" target="_blank" rel="noopener">npm ↗</a><a id="li-link" href="https://www.linkedin.com/in/davidsheffer/" target="_blank" rel="noopener">LinkedIn ↗</a><a id="mail-link" href="#">Email</a></div>
-      </div>
-      <div class="foot-bot">
-        <span>© <span id="yr">2026</span> Hunch — Engineering Memory OS. All rights reserved.</span>
-        <span class="mono">Local-first &amp; git-native · made with intent</span>
-      </div>
+<!-- ─────────────────────────── cta ─────────────────────────── -->
+<section class="cta">
+  <div class="wrap">
+    <h2>Make your codebase remember why.</h2>
+    <p>The longer it runs, the smarter it gets — and the more expensive it is to go back to a stateless AI.</p>
+    <div class="hero-cta">
+      <a class="btn" href="#start">Get started</a>
+      <a class="btn ghost" href="docs.html">Read the docs</a>
     </div>
-  </footer>
+  </div>
+</section>
 
-<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js" integrity="sha384-g4NTh/Iv5PPU4xPyhEWqPcwtNXOvdaDI8LLnyYfyNZOjKJeYQyjzQ9X5275eBjpt" crossorigin="anonymous"></script>
-<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js" integrity="sha384-Z3REaz79l2IaAZqJsSABtTbhjgOUYyV3p90XNnAPCSHg3EMTz1fouunq9WZRtj3d" crossorigin="anonymous"></script>
+<div class="wrap grounded">
+  <span class="dnote"><button aria-expanded="false" aria-describedby="dn1">dec_site_001</button>
+    <span class="pop" role="tooltip" id="dn1" style="top:auto;bottom:calc(100% + 8px)"><b>why the headline is set in mono</b>The product is a CLI. The headline is set in its own material — the terminal — at a light weight, so it reads calm, not loud.</span>
+  </span>
+  &nbsp; this page is <b>grounded</b> — 5 decisions annotate why it looks the way it does. hover any <b>dec_site_*</b>.
+</div>
+
+<footer>
+  <div class="wrap foot">
+    <div>
+      <a class="brand" href="/"><span class="dot" aria-hidden="true"></span>hunch</a>
+      <p class="about">Git stores what the code is. Hunch stores why — a persistent, git-native reasoning graph for the age of AI engineering.</p>
+    </div>
+    <div>
+      <h4>product</h4>
+      <a href="#how">How it works</a>
+      <a href="#inside">Features</a>
+      <a href="#different">Why it's different</a>
+      <a href="changelog.html">Changelog</a>
+    </div>
+    <div>
+      <h4>develop</h4>
+      <a href="#start">Get started</a>
+      <a href="docs.html">Docs</a>
+      <a href="docs.html#mcp">MCP tools</a>
+      <a href="https://open-vsx.org/extension/davesheffer/hunch-vscode">VS Code extension</a>
+    </div>
+    <div>
+      <h4>connect</h4>
+      <a href="https://github.com/davesheffer/hunch">GitHub ↗</a>
+      <a href="https://www.npmjs.com/package/@davesheffer/hunch">npm ↗</a>
+      <a href="blog/">Blog</a>
+    </div>
+  </div>
+</footer>
+
 <script>
-(function(){
-  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-  /* ── scroll progress + nav ── */
-  var nav = document.getElementById('nav');
-  var prog = document.getElementById('progress');
-  function onScroll(){
-    var y = window.scrollY || document.documentElement.scrollTop;
-    nav.classList.toggle('scrolled', y > 24);
-    var h = document.documentElement.scrollHeight - window.innerHeight;
-    prog.style.width = (h>0 ? (y/h*100) : 0) + '%';
-  }
-  window.addEventListener('scroll', onScroll, {passive:true}); onScroll();
-
-  /* ── hero entrance + scroll reveals ──
-     GSAP (ScrollTrigger) drives these when available; otherwise we fall back to
-     the CSS-transition path so the site is never left with hidden content. */
-  var words = document.querySelectorAll('[data-word]');
-  var rises = document.querySelectorAll('[data-rise]');
-  var GSAP  = window.gsap && window.ScrollTrigger;
-
-  function revealWordsFallback(){
-    words.forEach(function(el,i){
-      el.style.transition='transform 1s cubic-bezier(.16,1,.3,1)';
-      el.style.transitionDelay=(0.08*i)+'s';
-      requestAnimationFrame(function(){ el.style.transform='translateY(0)'; });
-    });
-  }
-
-  if (reduce || !GSAP) {
-    /* fallback — reveal everything, no fancy transitions */
-    window.addEventListener('load', revealWordsFallback);
-    if (reduce) {
-      rises.forEach(function(el){ el.classList.add('in'); });
-    } else {
-      var io = new IntersectionObserver(function(entries){
-        entries.forEach(function(en){ if(en.isIntersecting){ en.target.classList.add('in'); io.unobserve(en.target); }});
-      }, {threshold:.16, rootMargin:'0px 0px -8% 0px'});
-      rises.forEach(function(el){ io.observe(el); });
-    }
-  } else {
-    document.documentElement.classList.add('gsap-on');
-    gsap.registerPlugin(ScrollTrigger);
-    /* hero headline: masked words slide up in a stagger. Driven by ScrollTrigger
-       (fires on load for the in-view hero) rather than an autoplay tween, which
-       can stall if the tab isn't focused when the script runs. */
-    gsap.fromTo(words, {y:26, opacity:0}, {y:0, opacity:1, duration:0.9, ease:'power3.out', stagger:0.09,
-      scrollTrigger:{ trigger:'.hero-title', start:'top 95%', once:true }});
-    /* scroll reveals: each element fades + slides up as it enters. A per-element
-       trigger with once:true is reliable even on fast scroll (batch can drop
-       items); we reuse the authored --d delay for the in-group stagger. */
-    gsap.utils.toArray(rises).forEach(function(el){
-      var m = (el.getAttribute('style')||'').match(/--d:\s*([\d.]+)s/);
-      gsap.to(el, {opacity:1, y:0, duration:0.8, ease:'power3.out', delay: m?parseFloat(m[1]):0,
-        scrollTrigger:{ trigger:el, start:'top bottom', once:true }});
-    });
-    /* re-measure once fonts/images settle so triggers fire at the right spots */
-    window.addEventListener('load', function(){ ScrollTrigger.refresh(); });
-  }
-
-  /* ── animated counters ── */
-  var cio = new IntersectionObserver(function(entries){
-    entries.forEach(function(en){
-      if(!en.isIntersecting) return;
-      var el = en.target, target = +el.getAttribute('data-count'), dur=1100, t0=null;
-      function step(ts){ if(!t0)t0=ts; var p=Math.min((ts-t0)/dur,1); var e=1-Math.pow(1-p,3);
-        el.textContent = Math.round(target*e); if(p<1) requestAnimationFrame(step); }
-      requestAnimationFrame(step); cio.unobserve(el);
-    });
-  }, {threshold:.6});
-  document.querySelectorAll('[data-count]').forEach(function(el){ cio.observe(el); });
-
-  /* ── hero graph assembly ── */
-  var graph = document.getElementById('graph');
-  var gio = new IntersectionObserver(function(entries){
-    entries.forEach(function(en){
-      if(!en.isIntersecting) return;
-      var nodes = graph.querySelectorAll('[data-node]');
-      var edges = graph.querySelectorAll('[data-edge]');
-      nodes.forEach(function(n){ var d=(+n.style.getPropertyValue('--n')||0)*140; setTimeout(function(){ n.classList.add('show'); }, d); });
-      edges.forEach(function(e,i){ setTimeout(function(){ e.classList.add('draw'); }, 280 + i*130); });
-      gio.unobserve(graph);
-    });
-  }, {threshold:.3});
-  if(graph) gio.observe(graph);
-
-  /* ── terminal typing ── */
-  var typed = document.getElementById('typed');
-  var script = [
-    {t:'pr', s:'❯ '}, {t:'you', s:'why is the session module built this way?\n'},
-    {t:'mut', s:'\n  ↳ Hunch · why(src/auth/session.ts)\n\n'},
-    {t:'d', s:'Sessions are stored server-side in Redis; the JWT carries\nonly an opaque session id.\n\n'},
-    {t:'acc', s:'  dec_017 '}, {t:'d', s:'· Store sessions in Redis, not JWT-only\n'},
-    {t:'red', s:'  bug_009 '}, {t:'d', s:'· Stateless JWT could not be revoked after a\n          token leak — forced logout was impossible.\n'},
-    {t:'con', s:'  con_004 '}, {t:'d', s:'· Revocation must be server-side  '}, {t:'mut', s:'[blocking]\n\n'},
-    {t:'cite', s:'  provenance: llm_draft+human_confirmed · 0.95 · commit a1b2c3d\n'}
+  // hero terminal: one calm, slow typing pass. reduced-motion → instant.
+  const LINES = [
+    ['c-cmd', '$ hunch why src/auth/session.ts'],
+    ['', ''],
+    ['c-id',  'dec_017 · Store sessions in Redis, not JWT-only'],
+    ['c-key', '  why       revocation must work server-side'],
+    ['c-key', '  rejected  stateless JWT — bug_009: token usable after reset'],
+    ['c-warn','  guard     con_004 · blocking · src/auth/**'],
+    ['c-key', '  evidence  commit a1b2c3d · auth.revocation.spec.ts'],
   ];
-  function cls(t){ return t==='pr'?'pr':t==='you'?'you':t==='mut'?'mut':t==='acc'?'acc':t==='red'?'red':t==='con'?'acc':t==='cite'?'cite':''; }
-  function runType(){
-    typed.innerHTML=''; var ci=0;
-    var caret=document.createElement('span'); caret.className='cursor';
-    function nextChunk(){
-      if(ci>=script.length){ typed.appendChild(caret); return; }
-      var chunk=script[ci], span=document.createElement('span');
-      span.className=cls(chunk.t); typed.appendChild(span);
-      var j=0, str=chunk.s;
-      // instantaneous for citation/labels, char-typed for the conversational lines
-      var instant = (chunk.t!=='you' && chunk.t!=='d');
-      if(reduce){ span.textContent=str; ci++; nextChunk(); return; }
-      function tick(){
-        if(j>=str.length){ ci++; setTimeout(nextChunk, instant?40:140); return; }
-        span.textContent += str[j++];
-        typed.appendChild(caret);
-        typed.scrollTop = typed.scrollHeight;
-        setTimeout(tick, instant?6:(str[j-1]==='\n'?70:22));
-      }
-      tick();
+  const pre = document.getElementById('demo');
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function esc(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
+  function render(upTo, chars) {
+    let html = '';
+    LINES.slice(0, upTo).forEach(([cls, text]) => { html += cls ? `<span class="${cls}">${esc(text)}</span>\n` : '\n'; });
+    if (chars != null && upTo < LINES.length) {
+      const [cls, text] = LINES[upTo];
+      html += `<span class="${cls}">${esc(text.slice(0, chars))}</span><span class="caret"></span>`;
     }
-    nextChunk();
+    pre.innerHTML = html;
   }
-  var tio = new IntersectionObserver(function(entries){
-    entries.forEach(function(en){ if(en.isIntersecting){ runType(); tio.unobserve(en.target); }});
-  }, {threshold:.4});
-  if(typed) tio.observe(typed);
+  if (reduced) { render(LINES.length, null); }
+  else {
+    let line = 0, ch = 0;
+    (function tick() {
+      if (line >= LINES.length) { render(LINES.length, null); return; }
+      const text = LINES[line][1];
+      if (ch <= text.length) { render(line, ch); ch += 1; setTimeout(tick, line === 0 ? 34 : 10); }
+      else { line += 1; ch = 0; setTimeout(tick, line === 1 ? 420 : 90); }
+    })();
+  }
 
-  /* ── copy buttons ── */
-  function wireCopy(id, text){
-    var b=document.getElementById(id);
-    if(!b) return;
-    b.addEventListener('click', function(){
-      navigator.clipboard && navigator.clipboard.writeText(text);
-      var o=b.textContent; b.textContent='Copied ✓';
-      setTimeout(function(){ b.textContent=o; }, 1600);
+  // decision chips: click toggles (touch); hover handled by CSS. Keep the pop
+  // inside the viewport — a chip near the right edge would push it off-screen.
+  function clampPop(note) {
+    const pop = note.querySelector('.pop');
+    if (!pop) return;
+    pop.style.left = '0px';
+    const r = pop.getBoundingClientRect();
+    const over = r.right - (window.innerWidth - 16);
+    if (over > 0) pop.style.left = `${-over}px`;
+  }
+  document.querySelectorAll('.dnote').forEach(note => {
+    note.addEventListener('mouseenter', () => clampPop(note));
+  });
+  document.querySelectorAll('.dnote > button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const open = btn.getAttribute('aria-expanded') === 'true';
+      document.querySelectorAll('.dnote > button[aria-expanded="true"]').forEach(b => b.setAttribute('aria-expanded', 'false'));
+      btn.setAttribute('aria-expanded', String(!open));
+      if (!open) clampPop(btn.closest('.dnote'));
     });
-  }
-  wireCopy('copyBtn','hunch init');
-  wireCopy('relCopy','npm i -g @davesheffer/hunch');
+  });
+  document.addEventListener('click', e => {
+    if (!e.target.closest('.dnote')) document.querySelectorAll('.dnote > button[aria-expanded="true"]').forEach(b => b.setAttribute('aria-expanded', 'false'));
+  });
 
-  /* ── current year ── */
-  var yr=document.getElementById('yr'); if(yr){ try{ yr.textContent=new Date().getFullYear(); }catch(e){} }
-})();
+  // copy button
+  document.querySelectorAll('.copybtn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const code = document.querySelector(btn.dataset.copy);
+      try { await navigator.clipboard.writeText(code.textContent); btn.textContent = 'copied'; setTimeout(() => btn.textContent = 'copy', 1600); } catch {}
+    });
+  });
 </script>
-<script>
-  /* mobile menu */
-  (function(){
-    var burger=document.getElementById('burger'),
-        scrim=document.getElementById('navScrim'),
-        menu=document.getElementById('navMenu');
-    if(!burger||!menu) return;
-    function closeMenu(){ document.body.classList.remove('menu-open'); burger.setAttribute('aria-expanded','false'); }
-    function toggleMenu(){ var open=document.body.classList.toggle('menu-open'); burger.setAttribute('aria-expanded', open?'true':'false'); }
-    burger.addEventListener('click', toggleMenu);
-    if(scrim) scrim.addEventListener('click', closeMenu);
-    menu.querySelectorAll('a').forEach(function(a){ a.addEventListener('click', closeMenu); });
-    addEventListener('keydown', function(e){ if(e.key==='Escape') closeMenu(); });
-    addEventListener('resize', function(){ if(window.innerWidth>860) closeMenu(); });
-  })();
-  // contact email assembled at runtime — keeps a plain address out of the static HTML (anti-scrape)
-  (function(){ var a=document.getElementById('mail-link'); if(a){ a.href='mailto:'+'dave.sheffer1'+'@'+'gmail.com'; } })();
-</script>
-<!-- Vercel Web Analytics + Speed Insights: privacy-friendly, cookieless, no DB, no secrets.
-     Enable both in the Vercel project (Analytics tab) for the scripts to report. -->
 <script defer src="/_vercel/insights/script.js"></script>
 <script defer src="/_vercel/speed-insights/script.js"></script>
 </body>
