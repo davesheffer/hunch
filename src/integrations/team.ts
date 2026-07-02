@@ -19,13 +19,33 @@ export interface TeamConfig {
   shared_repo: string;
 }
 
-/** The committed team pointer, or null. Tolerant — an invalid file reads as absent. */
+/** SECURITY GATE for team.json's URL. team.json is COMMITTED — in a freshly cloned
+ *  (possibly untrusted) repo it is attacker-controlled, and ensureTeamOverlay auto-clones
+ *  it on MCP server start. Without this gate a value like `--upload-pack=…` (argument
+ *  smuggling) or `ext::sh -c …` (git's ext transport) is remote code execution from
+ *  merely opening a repo. Allow only https:// / ssh:// / git:// / scp-style git@host:path,
+ *  and never anything that could parse as a git flag. */
+export function safeGitUrl(url: string): string | null {
+  const u = url.trim();
+  if (!u || u.startsWith("-")) return null; // flag smuggling
+  if (/^(https|ssh|git):\/\/[^\s]+$/i.test(u)) return u;
+  if (/^[A-Za-z0-9_.-]+@[A-Za-z0-9_.:-]+:[^\s]+$/.test(u) && !u.includes("::")) return u; // scp-like, excludes ext::
+  // A plain absolute path (POSIX / Windows drive / UNC) — a network-mount team store or a
+  // local test remote. Safe: a local clone never executes hooks or remote helpers. The
+  // file:// URL FORM stays rejected (no legitimate team.json uses it; keeps the gate tight).
+  if (u.startsWith("/") || /^[A-Za-z]:[\\/]/.test(u) || u.startsWith("\\\\")) return u;
+  return null;
+}
+
+/** The committed team pointer, or null. Tolerant — an invalid file reads as absent, and
+ *  a URL that fails the safety gate reads as absent too (never propagated to a consumer). */
 export function readTeamConfig(root: string): TeamConfig | null {
   try {
     const file = join(hunchPaths(root).hunch, "team.json");
     if (!existsSync(file)) return null;
     const v = JSON.parse(readFileSync(file, "utf8")) as { shared_repo?: unknown };
-    return typeof v.shared_repo === "string" && v.shared_repo.trim() ? { shared_repo: v.shared_repo.trim() } : null;
+    const url = typeof v.shared_repo === "string" ? safeGitUrl(v.shared_repo) : null;
+    return url ? { shared_repo: url } : null;
   } catch {
     return null;
   }
@@ -56,7 +76,13 @@ export function ensureTeamOverlay(root: string): string | null {
     const anchor = mainWorktreeRoot(root);
     const dest = join(anchor, ".hunch-private");
     if (!existsSync(dest)) {
-      const r = spawnSync("git", ["clone", team.shared_repo, dest], { stdio: "ignore" });
+      // Defense in depth on top of safeGitUrl: `--` stops flag parsing, the protocol
+      // allowlist + ext:: kill-switch block command-running transports, and no terminal
+      // prompt means a private remote can't hang a headless MCP/agent start.
+      const r = spawnSync("git", ["-c", "protocol.ext.allow=never", "clone", "--", team.shared_repo, dest], {
+        stdio: "ignore",
+        env: { ...process.env, GIT_ALLOW_PROTOCOL: "https:ssh:git:file", GIT_TERMINAL_PROMPT: "0" },
+      });
       if (r.status !== 0) return null; // offline / no access — stay unwired, never crash
     }
     const hunchDir = join(dest, ".hunch");

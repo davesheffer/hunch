@@ -14,7 +14,7 @@ import { execFileSync } from "node:child_process";
 import { HunchStore } from "../src/store/hunchStore.js";
 import { hunchPaths } from "../src/core/paths.js";
 import { ensureSharedOverlayPointer } from "../src/integrations/worktree.js";
-import { ensureTeamOverlay, writeTeamConfig, readTeamConfig } from "../src/integrations/team.js";
+import { ensureTeamOverlay, writeTeamConfig, readTeamConfig, safeGitUrl } from "../src/integrations/team.js";
 import { mainWorktreeRoot } from "../src/extractors/git.js";
 import type { Decision } from "../src/core/types.js";
 
@@ -148,6 +148,29 @@ test("team.json auto-discovery: a fresh clone wires itself to the shared store (
       assert.equal(ensureTeamOverlay(clone), null); // idempotent: already wired → no-op
     });
   } finally { rmSync(base, { recursive: true, force: true }); }
+});
+
+test("team.json URL gate: flag smuggling, ext:: transport, and file:// never reach git clone (drive-by RCE guard)", () => {
+  // team.json is COMMITTED — attacker-controlled in a cloned repo, auto-consumed on MCP start.
+  assert.equal(safeGitUrl("--upload-pack=touch$IFS/tmp/pwned"), null); // argument smuggling
+  assert.equal(safeGitUrl("-oProxyCommand=evil"), null);
+  assert.equal(safeGitUrl("ext::sh -c evil"), null); // git ext transport = command execution
+  assert.equal(safeGitUrl("file:///etc"), null);
+  assert.equal(safeGitUrl(""), null);
+  assert.equal(safeGitUrl("https://github.com/team/memory.git"), "https://github.com/team/memory.git");
+  assert.equal(safeGitUrl("git@github.com:team/memory.git"), "git@github.com:team/memory.git");
+  assert.equal(safeGitUrl("ssh://git@host/team/memory.git"), "ssh://git@host/team/memory.git");
+  assert.equal(safeGitUrl("/mnt/shared/memory.git"), "/mnt/shared/memory.git"); // network-mount / local remote
+
+  // readTeamConfig applies the gate, so no consumer (init/doctor/MCP start) ever sees a hostile URL.
+  const { root, cleanup } = repo();
+  try {
+    withoutPrivateEnv(() => {
+      writeFileSync(join(root, ".hunch", "team.json"), JSON.stringify({ shared_repo: "--upload-pack=evil" }) + "\n");
+      assert.equal(readTeamConfig(root), null);
+      assert.equal(ensureTeamOverlay(root), null); // and auto-wiring refuses outright
+    });
+  } finally { cleanup(); }
 });
 
 test("putWhereItLives updates the holding store — an overlay record never forks a public copy", () => {
