@@ -1711,19 +1711,43 @@ program
 // ---- heal (decision-grounded drift reconciliation front door) -------------
 program
   .command("heal")
-  .description("Decision-grounded drift reconciliation: report doc≠graph anchor-stale sections with the current decision to reconcile toward. Read-only — proposes, never rewrites. Escalate to /capture only if the DECISION (not the doc) is stale.")
+  .description("Drift reconciliation front door: every `hunch drift` finding with its next action — doc≠graph anchor-stale (reconcile toward the current decision), dead refs, dangling supersedes, stale 'proposed' docs. Read-only — proposes, never rewrites. Escalate to /capture only if the DECISION (not the doc) is stale.")
   .action(() => {
     const { store, root } = storeFor();
     try {
-      const anchor = computeDrift(store, root).findings.filter((f) => f.kind === "anchor-stale");
-      if (!anchor.length) {
-        console.log("✓ No doc≠graph drift to heal — every anchored view matches its current decision.");
+      const findings = computeDrift(store, root).findings;
+      if (!findings.length) {
+        console.log("✓ No drift to heal — memory matches the code and docs.");
         return;
       }
-      console.log(`${anchor.length} anchored section(s) drifted from the graph:\n`);
-      for (const f of anchor) console.log(`· ${f.detail}`);
-      console.log(`\nHeal A (doc stale): edit each file to match its CURRENT decision — a prose fix.`);
-      console.log(`Heal B (decision stale): only if the DECISION is wrong now, run /capture (hunch_capture_decision) to supersede it, then re-derive the doc.`);
+      // Every drift kind heals here — `hunch drift` reporting N findings while heal
+      // says "nothing to heal" reads as a broken loop (bug_drift_heal_asymmetry).
+      const kind = (k: string) => findings.filter((f) => f.kind === k);
+      const anchor = kind("anchor-stale");
+      if (anchor.length) {
+        console.log(`${anchor.length} anchored section(s) drifted from the graph (doc≠graph):\n`);
+        for (const f of anchor) console.log(`· ${f.detail}`);
+        console.log(`\nHeal A (doc stale): edit each file to match its CURRENT decision — a prose fix.`);
+        console.log(`Heal B (decision stale): only if the DECISION is wrong now, run /capture (hunch_capture_decision) to supersede it, then re-derive the doc.\n`);
+      }
+      const dead = kind("dead-ref");
+      if (dead.length) {
+        console.log(`${dead.length} dead reference(s) — an in-force decision points at a file that no longer exists:\n`);
+        for (const f of dead) console.log(`· ${f.id} — ${f.detail}`);
+        console.log(`\nHeal: update the decision's related_files to the file's new location — or supersede the decision if it no longer applies.\n`);
+      }
+      const dangling = kind("supersede");
+      if (dangling.length) {
+        console.log(`${dangling.length} dangling supersede(s) — the old decision was never properly closed:\n`);
+        for (const f of dangling) console.log(`· ${f.id} — ${f.detail}`);
+        console.log(`\nHeal: run \`hunch supersede <old> --by <new>\` to close the window and link them.\n`);
+      }
+      const docStale = kind("doc-stale");
+      if (docStale.length) {
+        console.log(`${docStale.length} stale doc(s) — still marked proposed/not-implemented but the code shipped:\n`);
+        for (const f of docStale) console.log(`· ${f.id} — ${f.detail}`);
+        console.log(`\nHeal: update the doc's status marker to match reality.\n`);
+      }
       console.log(`Hunch never rewrites prose for you; this is a read-only reconciliation report.`);
     } finally {
       store.close();

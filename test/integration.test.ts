@@ -110,6 +110,18 @@ test("findRoot ignores a .hunch regular FILE and keeps walking (regression #18)"
   rmSync(parent, { recursive: true, force: true });
 });
 
+test("findRoot stops at the .git boundary — an ancestor .hunch never hijacks a fresh repo", () => {
+  const parent = mkdtempSync(join(tmpdir(), "hunch-root-"));
+  mkdirSync(join(parent, ".hunch")); // stray .hunch above the repo (the ~/.hunch shape)
+  const repo = join(parent, "repo");
+  mkdirSync(join(repo, ".git"), { recursive: true }); // fresh repo, no .hunch yet
+  assert.equal(findRoot(repo), repo); // the repo boundary wins over the ancestor .hunch
+  const sub = join(repo, "src");
+  mkdirSync(sub);
+  assert.equal(findRoot(sub), repo); // and from a subdir of the repo
+  rmSync(parent, { recursive: true, force: true });
+});
+
 test("post-commit code change captures a decision linked to the changed file", async () => {
   const root = gitRepo();
   const store = new HunchStore(hunchPaths(root));
