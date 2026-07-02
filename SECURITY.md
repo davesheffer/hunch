@@ -23,9 +23,10 @@ controls:
 ### Packages that run install scripts
 
 Only native-build tooling, all mainstream:
-`better-sqlite3` (SQLite binding), `tree-sitter` / `tree-sitter-typescript` /
-`tree-sitter-javascript` (parsers). The `@huggingface/transformers` embedder is an
-**optional peer** — not installed unless you opt into local semantic vectors.
+`tree-sitter` / `tree-sitter-typescript` / `tree-sitter-javascript` (parsers).
+SQLite is Node's built-in `node:sqlite` — no native binding is installed for it.
+The `@huggingface/transformers` embedder is an **optional peer** — not installed
+unless you opt into local semantic vectors.
 
 ## Socket.dev alert triage
 
@@ -39,7 +40,6 @@ Socket dashboard. None is reachable malicious behavior.
 | URL strings | `dist/integrations/providers.js` | `github.com` in a code comment. False positive. |
 | Obfuscated code / dynamic `Function` | `@emnapi/runtime` (optional, 3 hops via HF transformers → sharp) | Minified WASM Node-API runtime; `new Function` is env detection. Socket-rated low. Not installed for normal consumers. |
 | Network access (`http`) | `@hono/node-server` (via `@modelcontextprotocol/sdk`) | The SDK's optional HTTP transport. Hunch is stdio-only; the module is never loaded. |
-| Tar traversal | `tar-stream` (via `better-sqlite3` → `prebuild-install`) | Install-time only; patched versions; `npm audit` clean. |
 
 ## Patching a transitive dependency before its parent
 
@@ -51,7 +51,7 @@ to refresh the lockfile:
 {
   "overrides": {
     "tar-fs": "^2.1.4"            // pin a fixed version everywhere it resolves
-    // or scope it: "better-sqlite3": { "tar-fs": "^2.1.4" }
+    // or scope it: "some-parent": { "tar-fs": "^2.1.4" }
   }
 }
 ```

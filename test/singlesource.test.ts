@@ -9,7 +9,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, mkdirSync, writeFileSync, existsSync, readFileSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { HunchStore } from "../src/store/hunchStore.js";
 import { hunchPaths } from "../src/core/paths.js";
@@ -95,7 +95,7 @@ test("the git-common-dir pointer carries the mode — a fresh worktree routes un
       mkdirSync(overlay, { recursive: true });
       assert.ok(ensureSharedOverlayPointer(root, overlay, true, "shared"));
 
-      const wt = join(root, "..", `${root.split("/").pop()}-wt`);
+      const wt = join(root, "..", `${basename(root)}-wt`);
       g(root, "worktree", "add", "-q", wt, "-b", "wt-branch");
       try {
         mkdirSync(join(wt, ".hunch"), { recursive: true }); // no local.json here — must fall back to the shared pointer

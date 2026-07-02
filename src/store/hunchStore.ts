@@ -14,7 +14,7 @@ import { resolve, join } from "node:path";
 import { existsSync, readFileSync } from "node:fs";
 import { toPosixTarget, hunchPathsForDir, type HunchPaths } from "../core/paths.js";
 import { ENTITY_KINDS, type Component, type Constraint, type Bug, type Decision, type Symbol, type Edge, type RejectedTripwire, type EntityKind, type EntityFor } from "../core/types.js";
-import { openDb, type DB } from "./db.js";
+import { openDb, withTx, type DB } from "./db.js";
 import { RESET_SQL, embedHash } from "./schema.js";
 import { selectEmbedder, type Embedder } from "./embedder.js";
 import { JsonStore } from "./jsonStore.js";
@@ -218,7 +218,7 @@ export class HunchStore {
   reindex(): { counts: Record<string, number> } {
     const db = this.db;
     const counts: Record<string, number> = {};
-    const tx = db.transaction(() => {
+    withTx(db, () => {
       db.exec(RESET_SQL);
       const j = (s: string) => s; // readability marker for JSON-encoded columns
       // Prepare the FTS insert ONCE (after RESET created the table), not per row.
@@ -310,7 +310,6 @@ export class HunchStore {
       counts.runbooks = runbooks.length;
       void j;
     });
-    tx();
     // Reconcile embeddings AFTER the FTS rebuild (model-free): drop vectors whose
     // source doc vanished or whose text changed. Embeddings are NOT in RESET_SQL,
     // so this is what keeps them coherent across the many reindex() call sites.
@@ -372,10 +371,9 @@ export class HunchStore {
     const rows = this.db.prepare(`SELECT ref, doc_hash FROM embeddings`).all() as Array<{ ref: string; doc_hash: string }>;
     const del = this.db.prepare(`DELETE FROM embeddings WHERE ref = ?`);
     let pruned = 0;
-    const tx = this.db.transaction(() => {
+    withTx(this.db, () => {
       for (const r of rows) if (live.get(r.ref) !== r.doc_hash) { del.run(r.ref); pruned++; }
     });
-    tx();
     return pruned;
   }
 
@@ -414,13 +412,12 @@ export class HunchStore {
     for (let i = 0; i < todo.length; i += batchSize) {
       const slice = todo.slice(i, i + batchSize);
       const vecs = await embedder.embed(slice.map((d) => `${d.title}\n${d.body}`));
-      const tx = this.db.transaction(() => {
+      withTx(this.db, () => {
         slice.forEach((d, j) => {
           const v = vecs[j];
           if (v) { ins.run(d.ref, d.kind, model, embedder.dim, d.hash, vecToBlob(v)); embedded++; }
         });
       });
-      tx();
       attempted += slice.length;
       opts.onProgress?.(attempted, todo.length);
     }
@@ -512,7 +509,7 @@ export class HunchStore {
     const dim = qvec.length;
     const rows = this.db.prepare(
       `SELECT ref, kind, vec FROM embeddings WHERE model = ? AND dim = ?${kind ? " AND kind = ?" : ""}`,
-    ).all(...(kind ? [model, dim, kind] : [model, dim])) as Array<{ ref: string; kind: string; vec: Buffer }>;
+    ).all(...(kind ? [model, dim, kind] : [model, dim])) as Array<{ ref: string; kind: string; vec: Uint8Array }>;
     const scored: Array<{ ref: string; kind: string; score: number }> = [];
     for (const r of rows) {
       if (r.vec.byteLength !== dim * 4) continue; // corrupt/legacy row — skip, don't read past it
@@ -1266,7 +1263,7 @@ function numEnv(name: string, dflt: number): number {
 
 /** Pack a vector's exact bytes for SQLite. Explicit offset+length so a SUBARRAY
  *  view (byteOffset != 0) writes only its slice, not the whole backing buffer.
- *  better-sqlite3 copies on bind, so the returned view never aliases the row. */
+ *  node:sqlite copies on bind, so the returned view never aliases the row. */
 function vecToBlob(v: Float32Array): Buffer {
   return Buffer.from(v.buffer, v.byteOffset, v.byteLength);
 }
@@ -1274,7 +1271,7 @@ function vecToBlob(v: Float32Array): Buffer {
 /** Decode a stored BLOB into an ALIGNED Float32Array — copy bytes into a fresh
  *  ArrayBuffer rather than viewing the (possibly mis-aligned, pooled) Buffer,
  *  which would throw RangeError on a non-4-multiple byteOffset. */
-function blobToVec(buf: Buffer, dim: number): Float32Array {
+function blobToVec(buf: Uint8Array, dim: number): Float32Array {
   const ab = new ArrayBuffer(dim * 4);
   new Uint8Array(ab).set(new Uint8Array(buf.buffer, buf.byteOffset, dim * 4));
   return new Float32Array(ab);

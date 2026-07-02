@@ -4,7 +4,7 @@
 [![npm version](https://img.shields.io/npm/v/@davesheffer/hunch?color=2742ff&label=npm)](https://www.npmjs.com/package/@davesheffer/hunch)
 [![npm downloads](https://img.shields.io/npm/dw/@davesheffer/hunch?color=2742ff)](https://www.npmjs.com/package/@davesheffer/hunch)
 [![license](https://img.shields.io/npm/l/@davesheffer/hunch?color=2742ff)](LICENSE)
-[![node](https://img.shields.io/badge/node-%E2%89%A520-2742ff)](https://nodejs.org)
+[![node](https://img.shields.io/badge/node-%E2%89%A522.13-2742ff)](https://nodejs.org)
 [![MCP](https://img.shields.io/badge/MCP-native-2742ff)](https://modelcontextprotocol.io)
 
 > **A linter checks whether code matches a *pattern*. Hunch checks whether code still matches your *architecture*** —
@@ -140,7 +140,7 @@ unchanged.
 ## Getting started
 
 ```bash
-npm install -g @davesheffer/hunch   # Node ≥ 20; puts `hunch` on your PATH
+npm install -g @davesheffer/hunch   # Node ≥ 22.13; puts `hunch` on your PATH
 cd your-repo
 hunch init                          # scaffold .hunch/, index, install hooks, wire up assistants
 hunch backfill --since 90d          # cold start: seed decisions from recent git history
@@ -320,5 +320,5 @@ memory. → [the docs](https://hunch-pi.vercel.app/docs) for the conceptual mode
 
 ## Develop
 
-Hunch is open source — pure TypeScript ESM, Node ≥ 20, licensed **Apache-2.0**. Contributions
+Hunch is open source — pure TypeScript ESM, Node ≥ 22.13, licensed **Apache-2.0**. Contributions
 welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) and the [repo](https://github.com/davesheffer/hunch).

@@ -11,7 +11,7 @@ required. Don't submit code you don't have the right to license this way.
 
 ## Dev setup
 
-Node ≥ 20. No build step at dev time — everything runs from source via `tsx`.
+Node ≥ 22.13. No build step at dev time — everything runs from source via `tsx`.
 
 ```bash
 npm install
