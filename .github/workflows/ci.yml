@@ -18,7 +18,7 @@ jobs:
 
       - uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       # npm ci installs the EXACT, integrity-hashed lockfile tree (no drift,
