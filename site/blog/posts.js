@@ -63,6 +63,45 @@ hunch conform --strict   # also runs inside hunch check --strict and the CI gate
   },
 
   {
+    slug: "agents-md-is-lying-to-your-agent",
+    title: "Your AGENTS.md is lying to your agent — and nothing checks it",
+    dek: "The ecosystem standardized on markdown memory: AGENTS.md, CLAUDE.md, rules files. It's committed, it's reviewable — and it rots silently, with full authority. v1.1 makes it a drift surface.",
+    date: "2026-07-02", tag: "Release", read: "5 min",
+    body: `
+<p class="lead">Sixty-thousand-plus repos now carry an <code>AGENTS.md</code>. Add the <code>CLAUDE.md</code>s, the Cursor rules, the Windsurf rules — the industry has quietly standardized on <em>prose in the repo</em> as the way to teach an agent how a codebase works. Committed, diffable, reviewable. One problem: <strong>nothing keeps it true.</strong></p>
+
+<h2>Stale docs aren't neutral — they're wrong instructions with full authority</h2>
+<p>In March you wrote it down, like a good team: <em>"Sessions are server-side cookies. Never use JWT."</em> In June an incident forced the reversal — sessions moved to rotated JWTs, the decision was made deliberately, the code changed. The doc still says cookies.</p>
+<p>Here's the part that stings: your agent reads that doc <em>first</em>, on every task, with total trust. A stale line in <code>AGENTS.md</code> isn't missing context — it's an <strong>actively wrong instruction delivered with the authority of the repo itself</strong>. The agent will "fix" your JWT code back toward cookies and cite your own documentation while doing it.</p>
+<p>Prose has no truth-maintenance story. It doesn't know what superseded it. It can't fail a build. Every memory feature that <em>writes</em> markdown shares this hole: writing is easy, <strong>re-checking is the product</strong>.</p>
+
+<h2>v1.1: anchor the prose to the decision graph</h2>
+<p>Hunch already keeps one live answer per decision <b>topic</b> — current, history, and what was rejected. v1.1 lets a markdown section declare which topic it describes, with one HTML comment:</p>
+<pre><code>&lt;!-- hunch:topic auth.session --&gt;                 grounds only
+&lt;!-- hunch:topic auth.session dec_a1b2c3d4e5 --&gt;  pinned: prose written against that decision</code></pre>
+<p>Two things happen, both deterministic:</p>
+<ul>
+<li><strong>Grounding at edit time.</strong> Whenever an assistant touches the file, it's told the topic's <em>current</em> decision and what was <em>rejected</em> — follow the graph, not the prose being edited. The stale cookie paragraph loses its authority the moment it disagrees with the graph.</li>
+<li><strong>Drift that gates.</strong> A <em>pinned</em> section whose decision has since been superseded fires <code>doc-anchor-stale</code> — and <code>hunch drift</code> exits non-zero, so CI can refuse to ship a repo whose own instructions are lying:</li>
+</ul>
+<pre><code>$ hunch drift
+· [doc-anchor-stale] AGENTS.md — line 12: prose pinned to superseded dec_a1b2c3d4e5
+  (topic "auth.session"); the current decision is dec_f6g7h8i9j0 — "Sessions via
+  rotated JWT". Reconcile the prose with it, then re-pin.
+
+1 finding(s), 1 doc≠graph (anchor-stale).   # exit code 1</code></pre>
+<p>Only an explicit pin can fire — never a semantic guess about what your prose "probably" means. Unpinned markers ground but never gate. And <code>hunch heal</code> walks the reconciliation read-only: it shows you exactly which section drifted and which decision to rewrite it against. It never touches your prose.</p>
+
+<h2>Why this is the point, not a feature</h2>
+<p>We benchmarked context injection <a class="link" href="/blog/post.html?slug=ai-ignores-your-architecture">earlier this year</a>: telling the model the rule cut violations 58% → 16% — and the frontier model still ignored a rule it was shown 60% of the time. The lesson generalizes: <strong>anything advisory decays</strong> — model attention, prose docs, memory features. What holds is the thing that can say no.</p>
+<p>That's the same spine Hunch runs on everywhere: the code is held to the graph (Architectural Conformance), and now the docs are too. <strong>Memory that gates, not just recalls.</strong></p>
+
+<h2>Also in v1.1</h2>
+<p><code>hunch impact</code> shows what a change actually reaches before review — dependent files, invariants, decisions concerned — and <code>hunch path A B</code> walks the shortest dependency chain between any two points in the codebase. Both read-only, both instant, no LLM.</p>
+<pre><code>npm i -g @davesheffer/hunch && hunch init   # Node 22.13+; wires every assistant</code></pre>
+`,
+  },
+  {
     slug: "the-violation-your-linter-cant-see",
     title: "The violation your linter can't see",
     dek: "Semgrep, SonarQube and ESLint match patterns. The most expensive AI mistakes aren't patterns — they're properties of the call graph. Here's the structural gap, and why no amount of YAML closes it.",
