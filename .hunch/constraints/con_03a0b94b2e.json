@@ -1,0 +1,21 @@
+{
+  "id": "con_03a0b94b2e",
+  "type": "correctness",
+  "statement": "The agent hook must never block an edit on failure: any error or unrecognized input emits nothing and exits 0",
+  "scope": [
+    "src/core/hookpolicy.ts"
+  ],
+  "severity": "warning",
+  "enforcement": "advisory_v1",
+  "rationale": "A hook crash must not break the user's edit flow",
+  "source_decision": null,
+  "violations": [],
+  "status": "active",
+  "valid_to": null,
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 1,
+    "evidence": [],
+    "last_verified": "2026-06-16T10:29:10.885Z"
+  }
+}

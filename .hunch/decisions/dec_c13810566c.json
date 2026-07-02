@@ -1,0 +1,87 @@
+{
+  "id": "dec_c13810566c",
+  "title": "Git-native reasoning graph for persistent code intent capture",
+  "status": "accepted",
+  "context": "Claude Code and developers lack persistent access to decision lineage, invariants, and bug patterns. Traditional comments rot; code structure alone doesn't capture intent.",
+  "decision": "Build a 'Project Brain'—a queryable graph stored in git that extracts and indexes code relationships (symbols, calls, imports) and captures decisions, bug lineage, and invariants. Expose via MCP, CLI, post-commit hooks, and auto-CLAUDE.md generation. Use native tree-sitter + SQLite/FTS5 for structured storage and lookup.",
+  "consequences": [
+    "Developers can record and query structured 'why' for any code location",
+    "Claude Code can reason about intent and decision context during interactions",
+    "Brain state stays in version control alongside code",
+    "Requires maintenance of language-specific extractors (tree-sitter grammars)",
+    "Need developer discipline to keep decision records current",
+    "Adds complexity and surface area; new subsystem must be kept in sync"
+  ],
+  "alternatives_rejected": [
+    "Pure documentation (CLAUDE.md) — lacks structured queryability and graph structure",
+    "Centralized external service — breaks git-native model, requires network, harder to version-control",
+    "WASM tree-sitter — known grammar ABI mismatches with Node 20; native implementation more reliable",
+    "Static analysis only — captures syntax but not human intent or decision context",
+    "Manual reverse-engineering from git history — doesn't scale, error-prone"
+  ],
+  "related_components": [
+    "cmp_50037f41a9",
+    "cmp_863ac67d4a",
+    "cmp_a94a8fe5cc",
+    "cmp_b256a6aed0",
+    "cmp_ba75dfc94f",
+    "cmp_cdfb395bb7",
+    "cmp_dfa5b5acde",
+    "cmp_e0ccfe26fe"
+  ],
+  "related_files": [
+    "src/cli/index.ts",
+    "src/cli/invocation.ts",
+    "src/core/glob.ts",
+    "src/core/ids.ts",
+    "src/core/paths.ts",
+    "src/core/types.ts",
+    "src/extractors/git.ts",
+    "src/extractors/indexer.ts",
+    "src/extractors/parse.ts",
+    "src/integrations/claudemd.ts",
+    "src/integrations/hooks.ts",
+    "src/integrations/scaffold.ts",
+    "src/mcp/server.ts",
+    "src/store/hunchStore.ts",
+    "src/store/db.ts",
+    "src/store/jsonStore.ts",
+    "src/store/schema.ts",
+    "src/synthesis/provider.ts",
+    "src/synthesis/synthesize.ts",
+    "test/glob.test.ts",
+    "test/helpers.ts",
+    "test/indexer.test.ts",
+    "test/integration.test.ts",
+    "test/parse.test.ts",
+    "test/store.test.ts",
+    "test/synthesis.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "a2d3f81",
+  "valid_from": "2026-06-14T23:33:55+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft+human_confirmed",
+    "confidence": 0.95,
+    "evidence": [
+      "commit:a2d3f81",
+      "src/cli/index.ts",
+      "src/cli/invocation.ts",
+      "src/core/glob.ts",
+      "src/core/ids.ts",
+      "src/core/paths.ts",
+      "src/core/types.ts",
+      "src/extractors/git.ts",
+      "src/extractors/indexer.ts"
+    ],
+    "last_verified": "2026-06-15T13:05:01.033Z"
+  },
+  "date": "2026-06-14T23:33:55+03:00"
+}

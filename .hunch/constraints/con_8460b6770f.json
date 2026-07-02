@@ -1,0 +1,21 @@
+{
+  "id": "con_8460b6770f",
+  "type": "correctness",
+  "statement": "Config/provider writers must merge idempotently into existing user files and refuse to clobber an unparseable file",
+  "scope": [
+    "src/integrations/**"
+  ],
+  "severity": "blocking",
+  "enforcement": "advisory_v1",
+  "rationale": "Never destroy a user's other MCP servers or prose",
+  "source_decision": "dec_261e42920c",
+  "violations": [],
+  "status": "active",
+  "valid_to": null,
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 1,
+    "evidence": [],
+    "last_verified": "2026-06-16T10:29:10.725Z"
+  }
+}

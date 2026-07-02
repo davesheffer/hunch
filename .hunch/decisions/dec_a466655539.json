@@ -1,0 +1,44 @@
+{
+  "id": "dec_a466655539",
+  "title": "Veto blocks only on human-confirmed tripwires across all tiers",
+  "status": "accepted",
+  "context": "A RejectedTripwire carries its own provenance, separate from the rejecting decision. The deck's isVetoBlocker let the dep tier block on confidence >= 0.8 alone (mirroring isStrictBlocker), so a high-confidence LLM-drafted tripwire could fail a build with no human vouch. That makes the 'progressive enforcement / day-one never blocks' DX promise false and reopens the hallucinated-veto risk con_2ce3f2a547-style determinism is meant to avoid.",
+  "decision": "isVetoBlocker returns true only when the matched tripwire's provenance source includes human_confirmed — for EVERY tier (dep, symbol, pattern). An llm_draft tripwire never blocks regardless of confidence; it only warns (advisory). Confidence ranks the advisory and orders evidence, but never substitutes for the human vouch. One predictable rule: confirmed -> blocks.",
+  "consequences": [
+    "Progressive enforcement is real: a freshly-drafted graph blocks nothing; confirming one tripwire flips the same diff to a strict failure (observable in exit code)",
+    "No model output can fail a commit — the block is a set-intersection over a human-vouched record (no prompt-injection / no hallucinated veto)",
+    "Mental model is one line a developer can hold: 'it blocks only what I confirmed'",
+    "Curation cost is higher than confidence-only blocking, offset by auto-drafting at capture + one-key confirm in hunch review"
+  ],
+  "alternatives_rejected": [
+    "Let the dep tier block on confidence >= 0.8 without a human vouch (mirrors isStrictBlocker; but an LLM self-score is not a licence to fail a commit, and it breaks day-one-advisory)",
+    "Key the gate on the rejecting decision's provenance instead of the tripwire's (a draft tripwire on any high-confidence decision would block — the hallucinated-veto failure)",
+    "Make symbol/pattern blockable but keep dep on confidence (inconsistent rule, harder to reason about)"
+  ],
+  "related_components": [],
+  "related_files": [
+    "src/core/strictgate.ts",
+    "src/store/hunchStore.ts",
+    "src/core/types.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "d55ef00",
+  "valid_from": "2026-06-21T15:47:36+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 0.9,
+    "evidence": [
+      "src/core/strictgate.ts:22",
+      "src/core/checkreport.ts:49"
+    ],
+    "last_verified": "2026-06-21T15:47:36+03:00"
+  },
+  "date": "2026-06-21T15:47:36+03:00"
+}

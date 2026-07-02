@@ -1,0 +1,68 @@
+{
+  "id": "dec_093de2b0bd",
+  "title": "Forward-migrate schema before validation to prevent silent record loss",
+  "status": "accepted",
+  "context": "MVP had no schema versioning. When schema changed, records failing new validation would silently disappear—unrecoverable data loss. Team collaboration blocked by file-level merge conflicts.",
+  "decision": "Manifest records on-disk schema_version. loadAll() upgrades raw JSON to current version BEFORE Zod validation so incompatible records can be diagnosed rather than silently dropped. Install git merge driver that merges .brain JSON by record ID semantics instead of file markers. Refuse to rewrite corrupt index; refuse to drop unmigratable records (warn loudly).",
+  "consequences": [
+    "Schema evolution is safe: records never lost due to validation failure",
+    "Manifest is source-of-truth for stored schema version, read once per load",
+    "Team merges resolve by record ID (human > confidence > recency) instead of conflict markers",
+    "Compaction uses reference-safety analysis (greatest-fixpoint) to never remove referenced records",
+    "Atomic writes (temp+rename) with Windows fallback required for consistency guarantees",
+    "Backward-incompatible records surface with warnings rather than silently disappearing"
+  ],
+  "alternatives_rejected": [
+    "Migrate after validation: silently drops records failing new schema (data-loss bug found in initial cut)",
+    "No versioning: impossible to support evolution without silent drift",
+    "Manual migration: unfeasible for declarative records, requires user intervention",
+    "File-level merge conflicts: lossy for concurrent edits, blocks team use"
+  ],
+  "related_components": [
+    "cmp_50037f41a9",
+    "cmp_863ac67d4a",
+    "cmp_a94a8fe5cc",
+    "cmp_b256a6aed0",
+    "cmp_cdfb395bb7"
+  ],
+  "related_files": [
+    "src/cli/index.ts",
+    "src/core/io.ts",
+    "src/core/migrate.ts",
+    "src/core/paths.ts",
+    "src/integrations/mergeDriver.ts",
+    "src/store/compact.ts",
+    "src/store/jsonStore.ts",
+    "src/store/merge.ts",
+    "test/compact.test.ts",
+    "test/merge.test.ts",
+    "test/migrate.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "8ec6d7d",
+  "valid_from": "2026-06-15T11:18:37+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft+human_confirmed",
+    "confidence": 0.95,
+    "evidence": [
+      "commit:8ec6d7d",
+      "src/cli/index.ts",
+      "src/core/io.ts",
+      "src/core/migrate.ts",
+      "src/core/paths.ts",
+      "src/integrations/mergeDriver.ts",
+      "src/store/compact.ts",
+      "src/store/jsonStore.ts",
+      "src/store/merge.ts"
+    ],
+    "last_verified": "2026-06-15T13:04:59.832Z"
+  },
+  "date": "2026-06-15T11:18:37+03:00"
+}

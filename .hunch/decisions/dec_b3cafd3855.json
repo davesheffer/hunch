@@ -1,0 +1,100 @@
+{
+  "id": "dec_b3cafd3855",
+  "title": "Replace better-sqlite3 with Node's built-in node:sqlite (v1.0.0)",
+  "topic": "store.sqlite-driver",
+  "status": "accepted",
+  "context": "better-sqlite3 was Hunch's only remaining native SQLite dependency: prebuild-install (its installer) is deprecated upstream with no fix coming, node-gyp fallback builds fail on machines without toolchains, and Windows global upgrades hit EPERM when a running node process holds better_sqlite3.node locked. The derived index uses only FTS5, WAL, recursive CTEs, and plain BLOBs — all covered by node:sqlite (unflagged since Node 22.13, verified live). Vectors were already brute-force JS, no loadable extension needed.",
+  "decision": "Swap the driver in src/store/db.ts to node:sqlite DatabaseSync, loaded via createRequire with a targeted suppression of ONLY its ExperimentalWarning (hunch's stderr reaches humans, hooks, and MCP clients on every invocation). Add withTx() (BEGIN/COMMIT/ROLLBACK) since node:sqlite has no transaction() helper; type BLOB rows as Uint8Array (what node:sqlite returns). Engines floor moves >=20 -> >=22.13.0 (Node 20 is past EOL since April 2026); CI/guard/release workflows move to Node 22 so the publish-gating test run can pass. Shipped as 1.0.0 — the engines bump is breaking.",
+  "consequences": [
+    "Zero install-time native builds for SQLite; ~130 fewer transitive install packages; no prebuild-install deprecation warning; no Windows EPERM on global upgrade",
+    "Node 20 and 22.0-22.12 users cannot install >=1.0.0 (engines refuses)",
+    "node:sqlite is still marked experimental in Node 22-24: API surface used (DatabaseSync/prepare/all/get/run/exec) is stable in practice, but a future Node change is absorbed in db.ts, the single wrapper",
+    "The ExperimentalWarning suppression in db.ts must stay scoped to the exact warning text — swallowing more would hide real deprecations from users",
+    "SECURITY.md: better-sqlite3 install-script and tar-stream Socket-triage entries removed; tree-sitter parsers are the only remaining native builds"
+  ],
+  "alternatives_rejected": [
+    "Keep better-sqlite3 and wait out the prebuild-install deprecation: upstream (12.11.1) still depends on it, no fix planned — the warning and the Windows EPERM class stay forever",
+    "Dual-driver fallback (node:sqlite with better-sqlite3 fallback for Node 20): two codepaths to test for a runtime that is already past EOL — complexity without a constituency",
+    "Suppress the ExperimentalWarning via NODE_OPTIONS/--disable-warning in a bin wrapper: not portable across Windows bin shims; in-process scoped suppression at module load is deterministic everywhere"
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Keep better-sqlite3 despite upstream deprecation and native-build fragility",
+      "scope": [
+        "src/store/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Wait for node:sqlite to land unflagged on Node 20 LTS (but Node 20 is past EOL; Node 22 is current LTS)",
+      "scope": [
+        "src/store/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Adopt a different SQLite binding (would not solve the fundamental native-build problem class)",
+      "scope": [
+        "src/store/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [],
+  "related_files": [
+    "src/store/db.ts",
+    "src/store/hunchStore.ts",
+    "package.json",
+    ".github/workflows/release.yml"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "341145d",
+  "valid_from": "2026-07-02T08:19:22+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": [
+      "better-sqlite3"
+    ]
+  },
+  "provenance": {
+    "source": "llm_draft+human_confirmed",
+    "confidence": 0.95,
+    "evidence": [
+      "src/store/db.ts",
+      "src/store/hunchStore.ts",
+      "package.json",
+      ".github/workflows/release.yml"
+    ]
+  },
+  "date": "2026-07-02T05:26:11.767Z"
+}

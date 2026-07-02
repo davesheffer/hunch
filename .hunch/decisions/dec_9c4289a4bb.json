@@ -1,0 +1,48 @@
+{
+  "id": "dec_9c4289a4bb",
+  "title": "Publicly-posted output is a leak surface: CI guard renders public-only by construction",
+  "status": "accepted",
+  "context": "The leakage review swarm (21 agents, 16/17 confirmed) found the private-overlay's leak-safety guarantee (dec_d7bad4ccb7) only covered COMMITTED files. But the CI Constraint Guard runs `hunch check --format markdown` and posts it as a PUBLIC PR comment, and buildCheckReport is fully recs-backed (checkConstraints/vetoHits/regressionHits/causalChain) — so a private constraint matching a changed file WOULD render into a public PR comment if HUNCH_PRIVATE_DIR were ever set in CI. Safe only by convention (env unset in CI), not by construction.",
+  "decision": "Extend the leak-safety invariant: a PUBLICLY-POSTED output (PR comment, shared CI log) is a leak surface equal to a committed file. Add a publicOnly mode to buildCheckReport (a transient suppressPrivate flag gating recs() to public-only) and a `hunch check --public-only` flag. The scaffolded CI guard (ciAction.ts) now ALWAYS passes --public-only AND sets env HUNCH_PRIVATE_DIR=\"\" on the guard step (defense-in-depth) — so the public PR comment is public-only BY CONSTRUCTION regardless of env. LOCAL `hunch check` and the pre-edit hook stay merged, so private constraints are still ENFORCED locally. Also: gitignore scaffolder excludes .hunch-private/; hunch_record_correction gained private routing (a sensitive rule enforced locally, never posted); private writes skip the public `existing` lookup so a private record never inherits public fields.",
+  "consequences": [
+    "A private constraint is enforced on the developer's machine (pre-edit hook + local check) but can never appear in the CI PR comment — the two surfaces are intentionally asymmetric.",
+    "merge_verdict (MCP) stays merged: its output is returned to the local assistant, not auto-posted; the user owns whether to paste it publicly (documented).",
+    "Locked in by a regression test: renderMarkdown over a report built with publicOnly contains none of a private constraint's text, while the merged report does."
+  ],
+  "alternatives_rejected": [
+    "Tag each rendered record with private-origin and redact in markdown — more code + a redaction-miss risk; a clean public-only read at the source is simpler and provably complete.",
+    "Make markdown format imply public-only — would surprise local users who want private memory in a local markdown report; an explicit --public-only flag (always set by the CI scaffold) is clearer."
+  ],
+  "related_components": [],
+  "related_files": [
+    "src/store/hunchStore.ts",
+    "src/cli/index.ts",
+    "src/integrations/ciAction.ts",
+    "src/integrations/gitignore.ts",
+    "src/mcp/server.ts",
+    "test/private-overlay.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-06-22T21:53:35.755Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 0.95,
+    "evidence": [
+      "src/store/hunchStore.ts",
+      "src/cli/index.ts",
+      "src/integrations/ciAction.ts",
+      "src/integrations/gitignore.ts",
+      "src/mcp/server.ts",
+      "test/private-overlay.test.ts"
+    ]
+  },
+  "date": "2026-06-22T21:53:35.755Z"
+}

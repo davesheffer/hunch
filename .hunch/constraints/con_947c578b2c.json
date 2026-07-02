@@ -1,0 +1,22 @@
+{
+  "id": "con_947c578b2c",
+  "type": "correctness",
+  "statement": "Forward-migrate raw JSON to the current schema BEFORE Zod validation; never silently drop unmigratable records",
+  "scope": [
+    "src/core/migrate.ts",
+    "src/store/jsonStore.ts"
+  ],
+  "severity": "blocking",
+  "enforcement": "advisory_v1",
+  "rationale": "Prevents silent record loss on schema change",
+  "source_decision": "dec_093de2b0bd",
+  "violations": [],
+  "status": "active",
+  "valid_to": null,
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 1,
+    "evidence": [],
+    "last_verified": "2026-06-16T10:29:10.567Z"
+  }
+}

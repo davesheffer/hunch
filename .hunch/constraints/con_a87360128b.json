@@ -1,0 +1,21 @@
+{
+  "id": "con_a87360128b",
+  "type": "architecture",
+  "statement": "Semantic vectors are a derived layer in SQLite, never the source of truth; reconcile by content hash on reindex",
+  "scope": [
+    "src/store/**"
+  ],
+  "severity": "blocking",
+  "enforcement": "advisory_v1",
+  "rationale": "JSON under .hunch/ is the source of truth; vectors are rebuildable",
+  "source_decision": "dec_08a685fca2",
+  "violations": [],
+  "status": "active",
+  "valid_to": null,
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 1,
+    "evidence": [],
+    "last_verified": "2026-06-16T10:29:10.225Z"
+  }
+}

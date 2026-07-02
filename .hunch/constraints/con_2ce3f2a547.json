@@ -1,0 +1,21 @@
+{
+  "id": "con_2ce3f2a547",
+  "type": "security",
+  "statement": "Synthesis must run on the Claude subscription, never the pay-per-token API: strip ANTHROPIC_API_KEY and ANTHROPIC_AUTH_TOKEN from the spawned env",
+  "scope": [
+    "src/synthesis/**"
+  ],
+  "severity": "blocking",
+  "enforcement": "advisory_v1",
+  "rationale": "Avoid silent API billing; force subscription/OAuth auth",
+  "source_decision": "dec_5a7c0733f7",
+  "violations": [],
+  "status": "active",
+  "valid_to": null,
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 1,
+    "evidence": [],
+    "last_verified": "2026-06-16T10:29:10.398Z"
+  }
+}

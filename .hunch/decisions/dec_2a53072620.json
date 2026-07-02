@@ -1,0 +1,48 @@
+{
+  "id": "dec_2a53072620",
+  "title": "Build deterministic Memory Drift checks in `hunch doctor` (dead-reference / doc-lies / contradiction)",
+  "status": "accepted",
+  "context": "This session surfaced real drift in Hunch's own memory: docs/veto.md, DESIGN.md and deep-synthesis.md all read 'proposed/no code yet' while the features had shipped, and a fresh decision (dec_1f5b265c80) contradicted roadmap #1. Decided after concluding that an AUTONOMOUS background cleanup/optimization agent is the wrong tool — an LLM auto-mutating the graph violates the model-out-of-the-block-path moat (see veto.md, dec_a466655539) and fails the recorded six-axis rubric on measurability + differentiation. Maintenance should be deterministic and human-gated. Roadmap item #7 in expansion-research.md.",
+  "decision": "Add a deterministic (NO-LLM) drift dimension to `hunch doctor` (optionally CI). Three checks comparing existing records against the symbol/dep graph Hunch already builds: (1) DEAD-REFERENCE — a decision/constraint's related_files / related symbols / retired sets that no longer exist in src/ -> flag stale; (2) DOC-LIES — a doc whose status says 'proposed'/'not yet implemented' while the symbol/feature it names exists in the graph -> flag stale-status (the exact veto.md/DESIGN.md bug); (3) CONTRADICTION — two in-force decisions with overlapping scope and opposing tripwires/rules -> flag supersede candidate. Emit an ADVISORY drift report (mirrors the redundancy guard rendering). NEVER blocks, NEVER auto-fixes — a human reads it and confirms via the existing review/supersede flow. Reuses the symbols store + checkreport renderers; no new infra and no model in the loop.",
+  "consequences": [
+    "Catches the exact drift this session found by hand; keeps docs and records honest as the graph grows.",
+    "Stays on the moat: deterministic, model-out-of-the-block-path, advisory-only.",
+    "Low effort — reuses the symbol/dep graph (indexer) + checkreport render path; pairs with roadmap #2 (eval harness) as quality infrastructure.",
+    "Doc-lies check is a light heuristic scan (status phrase + symbol-name presence) — advisory by nature, never a gate."
+  ],
+  "alternatives_rejected": [
+    "Autonomous background cleanup/optimization AGENT — REJECTED: an LLM that auto-mutates the graph violates the model-out-of-the-block-path moat (veto.md, dec_a466655539), burns subscription tokens continuously, and fails the rubric's measurability + differentiation axes. The moat IS that no model sits in the loop.",
+    "Always-on daemon/watcher process — REJECTED: maintenance is deterministic and event-light; a scheduled hook / CI step or on-demand `hunch doctor` run covers it without a resident process.",
+    "Periodic LLM advisory reconciler (drafts -> review queue) — DEFERRED, not rejected: viable for SEMANTIC drift the deterministic checks can't judge, but only worth it once the graph is large; at 61 decisions solo the deterministic checks + occasional manual passes suffice.",
+    "Auto-fix / auto-supersede — REJECTED: writing or superseding records without human confirm breaks the human_confirmed provenance ladder (dec_57e5b6f700, dec_a466655539); drift checks advise, humans decide."
+  ],
+  "rejected_tripwires": [],
+  "related_components": [],
+  "related_files": [
+    "src/cli/index.ts",
+    "src/core/checkreport.ts",
+    "src/store/hunchStore.ts",
+    "src/extractors/indexer.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-06-24T08:11:10.011Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 0.95,
+    "evidence": [
+      "src/cli/index.ts",
+      "src/core/checkreport.ts",
+      "src/store/hunchStore.ts",
+      "src/extractors/indexer.ts"
+    ]
+  },
+  "date": "2026-06-24T08:11:10.011Z"
+}

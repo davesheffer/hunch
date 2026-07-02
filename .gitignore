@@ -23,12 +23,16 @@ dist/
 # npm auth: references ${NPM_TOKEN} env var, but never commit in case a real token is pasted.
 .npmrc
 
-# Hunch: this repo's engineering memory is kept PRIVATE in a separate overlay
-# (the .hunch-private/ store, pointed at by .hunch/local.json). The ENTIRE .hunch/
-# tree — JSON graph (decisions/bugs/constraints/components/symbols/edges), the
-# derived SQLite index, and the local.json pointer — is gitignored. This public
-# repo is CODE-ONLY; no engineering memory is published here.
-.hunch/
+# Hunch: this repo's FULL engineering memory lives in a PRIVATE overlay
+# (the .hunch-private/ store, pointed at by the gitignored .hunch/local.json).
+# A CURATED subset — foundational decisions whose substance is already public in
+# commit messages, plus the enforced constraints — is committed under .hunch/ so
+# the repo demos its own graph. Everything else in .hunch/ stays local-only.
+.hunch/*
+!.hunch/manifest.json
+!.hunch/decisions/
+!.hunch/constraints/
+!.hunch/components/
 # The PRIVATE overlay store itself (HUNCH_PRIVATE_DIR / `hunch private`), never committed.
 .hunch-private/
 # >>> hunch (derived runtime index — regenerable from .hunch/*.json) >>>

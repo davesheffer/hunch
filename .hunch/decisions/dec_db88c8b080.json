@@ -1,0 +1,66 @@
+{
+  "id": "dec_db88c8b080",
+  "title": "Single source of truth for memory: one deterministic resolver, one home per record, mode-gated unified routing (shared), worktree-stable anchor, committed team.json discovery",
+  "topic": "memory.single-source",
+  "status": "accepted",
+  "context": "Owner requirement: in all modes/branches/worktrees/teams/agents/workflows, memory must resolve to ONE place. A review had confirmed four splits: (1) non-private captures never reached the shared overlay (split-brain); (2) `hunch shared` run from a linked worktree anchored the store + an absolute pointer inside a removable worktree (silent total memory loss); (3) `--repo <url>` was silently ignored when .hunch-private existed; (4) teammates/agents had no committed pointer to discover the store. NOTE on dec_221334c43e: it rejected 'route ALL captures to the overlay when one is configured' because IMPLICIT routing silently changes what private-mode users publish. This decision implements the same outcome gated on an EXPLICITLY CHOSEN mode instead — not a reversal.",
+  "decision": "(1) MODE, persisted with no schema bump: local.json + the git-common-dir pointer gain mode:\"private\"|\"shared\" (absent → \"private\", so existing configs keep split routing on upgrade). store.mode/store.unified expose it. (2) ONE HOME PER RECORD: HunchStore.captureHome(isPrivate) is the single routing rule — explicit private:true → overlay (throws if none); unified (shared) mode → overlay for EVERY capture; else public. Every capture path funnels through putCapture (MCP record_decision/record_correction incl. supersede routing, syncCommit decisions, test-failure bugs + promoted constraints, runbooks, inline intents, conform --add, record-constraint), updates go through putWhereItLives (never fork a copy across stores), lookups through getRec, and flushCapture follows captureHome so the auto-commit lands where the record did. (3) WORKTREE-STABLE ANCHOR: mainWorktreeRoot() (git common dir, .git-suffix → parent) anchors the default .hunch-private at the MAIN checkout — a `git worktree remove` can no longer take the store down; normal repos are unchanged. (4) --repo NEVER SILENTLY IGNORED: same remote → pullHunch freshen; no remote → attach origin + fetch/merge --allow-unrelated-histories + push -u (best-effort); different remote → hard fail with both URLs. (5) TEAM DISCOVERY: `hunch shared --repo` publishes COMMITTED .hunch/team.json {shared_repo}; ensureTeamOverlay() auto-wires a fresh clone (clone → merged local.json preserving an autoCommit opt-out per con_8460b6770f → pointer, mode shared) and runs on `hunch init` and MCP server start (best-effort, never blocks); `hunch private` never publishes its URL. (6) DOCTOR tells the truth: mode-labeled status, loud DEAD-POINTER finding (the store reader degrades to [] silently — doctor is where loss becomes visible), and a team.json connect hint.",
+  "consequences": [
+    "hunch shared becomes UNIFIED: decisions/bugs/constraints/runbooks all land in the overlay repo — branch-independent, worktree-shared, auto-commit+pushed; the committed public .hunch/ stays for the derived index and private-mode/public-mode records",
+    "Legacy shared setups (no mode field) keep split behavior until `hunch shared` is re-run — an explicit upgrade, never a silent routing change (honors dec_221334c43e's rejection rationale)",
+    "Fresh clone + `hunch init` (or any MCP-connected agent/workflow session) auto-connects to the team store from team.json — zero manual setup for teammates and headless agents",
+    "In shared mode, public grounding docs and the public-only CI comment will not show unified captures (they render public-only by construction) — the team store is the authority instead",
+    "test/singlesource.test.ts locks the mode routing, the mode-carrying worktree pointer, team.json auto-wiring end-to-end (bare remote → clone → visible team decision, idempotent re-run), and no-fork updates (suite 384 pass)"
+  ],
+  "alternatives_rejected": [
+    "Anchor the overlay inside the git common dir (.git/hunch/overlay): invisible to users, breaks the documented .hunch-private convention and HUNCH_PRIVATE_DIR ergonomics; main-worktree-root keeps normal repos byte-identical",
+    "Have HunchStore lazily clone from team.json in its constructor: network I/O in every store construction (hooks, checks) — discovery belongs in explicit entry points (init, doctor hint, MCP start)",
+    "Auto-merge a different --repo URL into an existing overlay: silently re-pointing a memory store is the same class of surprise as the bug being fixed — refuse loudly instead",
+    "Route by presence-of-overlay instead of an explicit mode (already rejected in dec_221334c43e): implicit unification silently hides records from the public store for private-mode users"
+  ],
+  "rejected_tripwires": [],
+  "related_components": [
+    "Store",
+    "Integrations",
+    "CLI",
+    "MCP",
+    "Synthesis"
+  ],
+  "related_files": [
+    "src/store/hunchStore.ts",
+    "src/integrations/team.ts",
+    "src/integrations/worktree.ts",
+    "src/integrations/sync.ts",
+    "src/extractors/git.ts",
+    "src/cli/index.ts",
+    "src/mcp/server.ts",
+    "src/synthesis/synthesize.ts",
+    "test/singlesource.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-07-02T02:43:28.991Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 0.95,
+    "evidence": [
+      "src/store/hunchStore.ts",
+      "src/integrations/team.ts",
+      "src/integrations/worktree.ts",
+      "src/integrations/sync.ts",
+      "src/extractors/git.ts",
+      "src/cli/index.ts",
+      "src/mcp/server.ts",
+      "src/synthesis/synthesize.ts",
+      "test/singlesource.test.ts"
+    ]
+  },
+  "date": "2026-07-02T02:43:28.991Z"
+}

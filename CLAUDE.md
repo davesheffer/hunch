@@ -33,12 +33,12 @@ Data flows: **events → extract → synthesize → store → ground**. Source o
 - `src/mcp/server.ts` — MCP server (`hunch mcp`) exposing the `hunch_*` tools; must stay client-agnostic. Decision-grounding adds `hunch_capture_decision` (returns a one-question-at-a-time grilling protocol + a capture-session token) and `hunch_current_decision(topic)`; `hunch_record_decision` is now GATED by the store-scoped uniqueness guard (refuses a SECOND live decision per topic — never silently two) and accepts an optional `capture_token` (un-token'd writes still work but get nudged toward `/capture`).
 - `src/integrations/` — writers that wire Hunch into a repo: `scaffold.ts`, `providers.ts`, `hooks.ts` (git post-commit), `claudemd.ts` (regenerates the auto block below), `ciAction.ts` (CI Constraint Guard), `mergeDriver.ts`, `gitignore.ts`.
 
-This repo's engineering memory (decisions, bug history, enforced invariants) is kept in a **private overlay**, not published in this public repo — so the auto-generated section below shows no records here. Maintainers with the overlay configured (`hunch private`) see the full graph via the `hunch_*` MCP tools, and `hunch check` / the CI guard still enforce the private invariants locally.
+This repo's full engineering memory lives in a **private overlay**; a **curated subset** — foundational decisions whose substance is already public in commit messages, plus the enforced constraints — is committed under `.hunch/` so the repo demos its own graph (the counts below). Maintainers with the overlay configured (`hunch private`) see the full graph via the `hunch_*` MCP tools.
 
 <!-- HUNCH:START — auto-generated, do not edit by hand -->
 ## 🧠 Hunch (Engineering Memory)
 
-This repo has **Hunch** — a curated graph of *why* the code is the way it is (decisions, bug history, invariants). It currently holds **0 decisions, 0 bugs, 0 constraints, 10 components**.
+This repo has **Hunch** — a curated graph of *why* the code is the way it is (decisions, bug history, invariants). It currently holds **12 decisions, 0 bugs, 7 constraints, 10 components**.
 
 **Before reasoning about or editing this codebase, consult Hunch via the `hunch_*` MCP tools:**
 - `hunch_why(target)` — why a file/symbol is shaped this way (decisions, bugs, constraints).
@@ -50,6 +50,15 @@ This repo has **Hunch** — a curated graph of *why* the code is the way it is (
 - `hunch_compare(candidates)` — rank N candidate branches/commits by architectural fit (fewest invariant hits).
 - `hunch_conformance()` — does the code still SATISFY recorded intent? (e.g. `pay` still reaches `verifySession`). Run before a refactor.
 - `hunch_record_decision(...)` — write back a decision after a non-trivial choice.
+
+### ⛔ Top invariants (do not break)
+- **[blocking]** Synthesis must run on the Claude subscription, never the pay-per-token API: strip ANTHROPIC_API_KEY and ANTHROPIC_AUTH_TOKEN from the spawned env _(scope: src/synthesis/**; con_2ce3f2a547)_
+- **[blocking]** Config/provider writers must merge idempotently into existing user files and refuse to clobber an unparseable file _(scope: src/integrations/**; con_8460b6770f)_
+- **[blocking]** All JSON writes to .hunch/ must be atomic (temp-file + rename) so an interrupted write can never truncate the index _(scope: src/store/**, src/core/io.ts; con_902759b3dc)_
+- **[blocking]** Forward-migrate raw JSON to the current schema BEFORE Zod validation; never silently drop unmigratable records _(scope: src/core/migrate.ts, src/store/jsonStore.ts; con_947c578b2c)_
+- **[blocking]** Semantic vectors are a derived layer in SQLite, never the source of truth; reconcile by content hash on reindex _(scope: src/store/**; con_a87360128b)_
+- **[warning]** The agent hook must never block an edit on failure: any error or unrecognized input emits nothing and exits 0 _(scope: src/core/hookpolicy.ts; con_03a0b94b2e)_
+- **[warning]** The MCP server must stay client-agnostic: all assistants point to the same .hunch/ graph; no Claude-only behavior in the server _(scope: src/mcp/**; con_e04226bd05)_
 
 _Hunch updates itself from commits and test failures. Records carry provenance + confidence; treat low-confidence items as advisory._
 <!-- HUNCH:END -->

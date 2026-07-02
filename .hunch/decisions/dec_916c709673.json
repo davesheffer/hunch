@@ -1,0 +1,47 @@
+{
+  "id": "dec_916c709673",
+  "title": "Ship intent-conformance (the inversion) — prove code satisfies the recorded WHY over the graph",
+  "status": "accepted",
+  "context": "After the research roadmap was exhausted, an unbounded-thinking pass reframed Hunch's endgame: as code generation commoditizes, value moves from the code to the JUDGMENT (why this, what's forbidden, what failed). The deepest move that falls out is the INVERSION — treat recorded intent as authoritative and code as a projection that must conform to it. This is the first concrete, shippable experiment toward that: a new correctness class beside types and tests.",
+  "decision": "Add intent-conformance. A Decision carries optional `conformance` predicates (assert: calls / not-calls / imports / not-imports / exists; subject/object as symbol name|id|file:name; transitive flag) that COMPILE the decision's intent into a deterministic reachability check over the symbol/dependency graph Hunch already builds. checkConformance(store) evaluates every in-force decision's predicates via getDependencies reachability; a violated predicate means the code drifted from the recorded intent EVEN WITH NO DIFF IN SCOPE (e.g. `pay` stopped reaching `verifySession`). Surfaced as `hunch conform [--strict]` and the hunch_conformance() MCP tool (advertised in grounding). No model in the check — pure graph reachability, preserving the model-out-of-the-block-path moat. Proven by tests: direct-vs-transitive, existence, and drift detection (removing the call flips satisfied→violated).",
+  "consequences": [
+    "Introduces a new, deterministic correctness class — intent-conformance — that catches SILENT intent erosion a diff-only guard structurally cannot see (no file in scope changed, but the intent is now false of the code).",
+    "Reuses the existing call/dep graph (getDependencies) — no new analysis engine; the inversion rides infra already shipped (#1 graph).",
+    "Honest limits: reachability conflates calls/imports (edge-type precision deferred); predicates are hand-authored today (auto-suggesting them from the birthing commit's analyzeDiff is the natural next step); deletion of the subject is itself reported as a violation.",
+    "Strategic seed: if code can be PROVEN against intent, the next steps are generating code that satisfies intent and treating Hunch as the source of truth with code as a cache — the boundary-less direction."
+  ],
+  "alternatives_rejected": [
+    "LLM judge of 'does the code satisfy this prose intent' — REJECTED: non-deterministic and off-moat; compile the intent into a graph predicate the dev vouches for instead (same shape as veto tripwires, but for POSITIVE must-hold invariants).",
+    "Stay diff-scoped (status quo guards only) — INSUFFICIENT: misses drift where the guarded file wasn't touched but the intent eroded elsewhere in the graph.",
+    "Edge-type-precise reachability (calls-only vs imports-only) in v1 — DEFERRED: the unified getDependencies walk is the cheap 90%; refine when a real case needs the distinction."
+  ],
+  "rejected_tripwires": [],
+  "related_components": [],
+  "related_files": [
+    "src/core/conformance.ts",
+    "src/core/types.ts",
+    "src/cli/index.ts",
+    "src/mcp/server.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-06-25T13:15:04.629Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 0.95,
+    "evidence": [
+      "src/core/conformance.ts",
+      "src/core/types.ts",
+      "src/cli/index.ts",
+      "src/mcp/server.ts"
+    ]
+  },
+  "date": "2026-06-25T13:15:04.629Z"
+}
