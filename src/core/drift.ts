@@ -7,15 +7,21 @@
  *   - dead-ref:   an in-force decision points at a file that no longer exists.
  *   - supersede:  A claims to supersede B, but B was never properly closed.
  *   - doc-stale:  a doc marked "proposed / not yet implemented" references shipped code.
+ *   - wiki-stale: a generated wiki page's graph inputs changed since generation
+ *                 (hash-compared via .hunch/wiki-manifest.json; only when a wiki
+ *                 was adopted — see src/wiki/wiki.ts). Advisory, healed by
+ *                 `hunch wiki --heal`, never a gate.
  */
-import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { join, extname } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { HunchStore } from "../store/hunchStore.js";
 import { toPosixTarget } from "./paths.js";
 import { currentForTopic, isLive } from "./topics.js";
 import { parseDocAnchors } from "./docanchors.js";
+import { markdownDocs, STALE_MARKER, SRC_REF } from "./docscan.js";
+import { computeWikiDrift } from "../wiki/wiki.js";
 
-export type DriftKind = "dead-ref" | "supersede" | "doc-stale" | "anchor-stale" | "doc-anchor-stale" | "doc-anchor-dangling";
+export type DriftKind = "dead-ref" | "supersede" | "doc-stale" | "anchor-stale" | "doc-anchor-stale" | "doc-anchor-dangling" | "wiki-stale";
 
 export interface DriftFinding {
   kind: DriftKind;
@@ -26,9 +32,6 @@ export interface DriftFinding {
 export interface DriftReport {
   findings: DriftFinding[];
 }
-
-const STALE_MARKER = /\b(proposed|not yet implemented|no code yet)\b/i;
-const SRC_REF = /\bsrc\/[A-Za-z0-9_\-/]+\.ts\b/g;
 
 export function computeDrift(store: HunchStore, root: string): DriftReport {
   const findings: DriftFinding[] = [];
@@ -94,8 +97,10 @@ export function computeDrift(store: HunchStore, root: string): DriftReport {
 
     // 3. DOC-STALE — a doc that still advertises "proposed / not implemented" while
     //    referencing code that exists. Heuristic + advisory; scoped to the repo's own
-    //    markdown (node_modules and sub-projects skipped).
-    if (STALE_MARKER.test(text.slice(0, 1500))) {
+    //    markdown (node_modules and sub-projects skipped). GENERATED wiki pages are
+    //    exempt: they quote decision prose verbatim (which may legitimately contain
+    //    "proposed"), and their staleness is already hash-gated (wiki-stale).
+    if (!text.startsWith("<!-- hunch:wiki ") && STALE_MARKER.test(text.slice(0, 1500))) {
       const existing = (text.match(SRC_REF) ?? []).find((r) => existsSync(join(root, r)));
       if (existing) {
         findings.push({ kind: "doc-stale", id: doc.rel, detail: `marked proposed/not-implemented but references shipped code (${existing})` });
@@ -125,6 +130,11 @@ export function computeDrift(store: HunchStore, root: string): DriftReport {
     }
   }
 
+  // 6. WIKI-STALE — generated wiki pages whose graph inputs drifted (or whose
+  //    component vanished). Deterministic hash comparison against the manifest;
+  //    fires only when a wiki was adopted. Advisory like every other kind here.
+  findings.push(...computeWikiDrift(store, root));
+
   return { findings };
 }
 
@@ -134,30 +144,4 @@ function safeRead(path: string): string {
   } catch {
     return "";
   }
-}
-
-const SKIP_DIRS = new Set(["node_modules", ".git", ".hunch", ".hunch-private", "dist", "vscode-extension", "site"]);
-
-/** Bounded walk for repo markdown (root + docs/, depth-limited; heavy/irrelevant trees skipped). */
-function markdownDocs(root: string): Array<{ path: string; rel: string }> {
-  const out: Array<{ path: string; rel: string }> = [];
-  const walk = (dir: string, rel: string, depth: number): void => {
-    if (depth > 4) return;
-    let entries;
-    try {
-      entries = readdirSync(dir, { withFileTypes: true });
-    } catch {
-      return;
-    }
-    for (const e of entries) {
-      if (e.isDirectory()) {
-        if (e.name.startsWith(".") || SKIP_DIRS.has(e.name)) continue;
-        walk(join(dir, e.name), rel ? `${rel}/${e.name}` : e.name, depth + 1);
-      } else if (extname(e.name) === ".md") {
-        out.push({ path: join(dir, e.name), rel: rel ? `${rel}/${e.name}` : e.name });
-      }
-    }
-  };
-  walk(root, "", 0);
-  return out;
 }

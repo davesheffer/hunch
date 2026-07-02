@@ -120,6 +120,17 @@ graphs are unaffected until you opt in.
   one topic**. `hunch reconcile-topics` catches the one case a git merge can create, for human resolution.
 - **`hunch heal`** + the **`/heal`** slash command do **read-only** doc↔graph reconciliation — they show
   exactly what disagrees and never rewrite your prose silently.
+- **`hunch wiki`** — a generated component wiki + **specs ledger** rendered *from* the graph. Every repo
+  doc is graded deterministically (✅ grounded / ⚠ stale / ◻ unverified); a stale doc is **adopted** — a
+  wiki-managed copy re-pinned to the current decision with the correction inline, while your original
+  file is never touched (and the copy retires once you heal the original). Freshness is hash-gated:
+  `hunch drift` names exactly which pages went stale, `hunch wiki --heal` regenerates only those, and
+  `hunch wiki --check` is the CI gate. With a private overlay, `hunch wiki --private` renders the FULL
+  graph into the overlay repo — nothing private ever lands in the committed wiki.
+
+  ```bash
+  npm run build && bash demo/wiki.sh   # watch a spec go stale, get adopted + healed, then released
+  ```
 
 → [docs](https://hunch-pi.vercel.app/docs#grounding)
 

@@ -35,6 +35,10 @@ dist/
 !.hunch/decisions/
 !.hunch/constraints/
 !.hunch/components/
+# THIS repo's generated wiki stays out of the public repo (we use the PRIVATE
+# overlay wiki via `hunch wiki --private`). Other repos may commit theirs —
+# committing wiki/ + .hunch/wiki-manifest.json is what enables the CI drift gate.
+/wiki/
 # The PRIVATE overlay store itself (HUNCH_PRIVATE_DIR / `hunch private`), never committed.
 .hunch-private/
 # >>> hunch (derived runtime index — regenerable from .hunch/*.json) >>>

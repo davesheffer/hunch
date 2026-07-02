@@ -6,11 +6,12 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import type { HunchStore } from "../store/hunchStore.js";
+import { wikiSummary } from "../wiki/wiki.js";
 
 const START = "<!-- HUNCH:START — auto-generated, do not edit by hand -->";
 const END = "<!-- HUNCH:END -->";
 
-export function renderHunchSection(store: HunchStore): string {
+export function renderHunchSection(store: HunchStore, root?: string): string {
   const constraints = store.json
     .loadAll("constraints")
     .sort((a, b) => sev(b.severity) - sev(a.severity))
@@ -42,6 +43,13 @@ export function renderHunchSection(store: HunchStore): string {
   lines.push("- `hunch_compare(candidates)` — rank N candidate branches/commits by architectural fit (fewest invariant hits).");
   lines.push("- `hunch_conformance()` — does the code still SATISFY recorded intent? (e.g. `pay` still reaches `verifySession`). Run before a refactor.");
   lines.push("- `hunch_record_decision(...)` — write back a decision after a non-trivial choice.");
+  const wiki = root ? wikiSummary(root) : null;
+  if (wiki) {
+    lines.push("");
+    lines.push(
+      `📖 Component wiki: \`${wiki.dir}/\` (${wiki.pages} page(s)) — a GENERATED view of this graph; the graph stays the source of truth. Stale pages surface in \`hunch drift\`; regenerate with \`hunch wiki --heal\`.`,
+    );
+  }
   if (constraints.length) {
     lines.push("");
     lines.push("### ⛔ Top invariants (do not break)");
@@ -80,7 +88,7 @@ export function upsertSection(file: string, section: string, fallbackTitle: stri
 
 /** Insert/replace the HUNCH section in CLAUDE.md, preserving everything else. */
 export function updateClaudeMd(root: string, store: HunchStore): string {
-  return upsertSection(join(root, "CLAUDE.md"), renderHunchSection(store), `# ${root.split("/").pop()}`);
+  return upsertSection(join(root, "CLAUDE.md"), renderHunchSection(store, root), `# ${root.split("/").pop()}`);
 }
 
 function sev(s: string): number {

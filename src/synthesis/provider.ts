@@ -172,6 +172,11 @@ export interface SynthProvider {
    *  Only the LLM-backed CLI providers implement it; the deterministic provider
    *  and the bare ensemble omit it, so callers must feature-detect. */
   verifyDecision?(input: CommitInput, draft: DecisionDraft): Promise<VerifyVerdict>;
+  /** Optional free-form grounded prose (the wiki's Overview section). Only the
+   *  LLM-backed CLI providers implement it — same subscription-only run() path
+   *  (API keys stripped) — so callers must feature-detect and degrade to a
+   *  deterministic template when absent. */
+  draftProse?(prompt: string): Promise<string>;
 }
 
 const SYSTEM = `You are the synthesis engine of an Engineering Memory OS. You turn raw
@@ -281,6 +286,15 @@ abstract class CliSynthProvider implements SynthProvider {
     const draft = bugDraftFromText(text, input.test, input.message);
     if (!draft) throw new Error(`${this.name}: no usable bug JSON in output`);
     return draft;
+  }
+
+  /** Grounded prose for the wiki. Same subscription-only run() path (API keys
+   *  stripped). Throws on empty output so the caller falls back to its
+   *  deterministic template page. */
+  async draftProse(prompt: string): Promise<string> {
+    const text = (await this.run(prompt)).trim();
+    if (!text) throw new Error(`${this.name}: empty prose output`);
+    return text;
   }
 
   /** The Critic pass: audit a draft against its commit. Same subscription-only

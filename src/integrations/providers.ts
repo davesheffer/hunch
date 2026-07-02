@@ -199,19 +199,19 @@ export function writeCodexConfig(root: string, inv: Invocation): string {
 /** AGENTS.md — the cross-tool ambient-instruction standard (Codex and a growing
  *  set of assistants read it). Marker-delimited so user prose is preserved. */
 export function writeAgentsMd(root: string, store: HunchStore): string {
-  return upsertSection(join(root, "AGENTS.md"), renderHunchSection(store), "# AGENTS.md");
+  return upsertSection(join(root, "AGENTS.md"), renderHunchSection(store, root), "# AGENTS.md");
 }
 
 /** GitHub Copilot custom instructions (VS Code / github.com). Same grounding. */
 export function writeCopilotInstructions(root: string, store: HunchStore): string {
-  return upsertSection(join(root, ".github", "copilot-instructions.md"), renderHunchSection(store), "# Copilot instructions");
+  return upsertSection(join(root, ".github", "copilot-instructions.md"), renderHunchSection(store, root), "# Copilot instructions");
 }
 
 /** Cursor project rule (.mdc = frontmatter + body). `alwaysApply` keeps the Hunch
  *  grounding in context for every request. Fully managed by Hunch (overwritten). */
 export function writeCursorRule(root: string, store: HunchStore): string {
   const file = join(root, ".cursor", "rules", "hunch.mdc");
-  const body = `---\ndescription: Hunch engineering memory — consult the hunch_* MCP tools before editing\nalwaysApply: true\n---\n\n${renderHunchSection(store)}\n`;
+  const body = `---\ndescription: Hunch engineering memory — consult the hunch_* MCP tools before editing\nalwaysApply: true\n---\n\n${renderHunchSection(store, root)}\n`;
   mkdirSync(dirname(file), { recursive: true });
   writeFileSync(file, body);
   return file;
@@ -232,7 +232,7 @@ export function writeWindsurfMcp(root: string, inv: Invocation): string {
  *  Hunch grounding in Cascade's context for every request. Fully managed (overwritten). */
 export function writeWindsurfRule(root: string, store: HunchStore): string {
   const file = join(root, ".windsurf", "rules", "hunch.md");
-  const body = `---\ntrigger: always_on\ndescription: Hunch engineering memory — consult the hunch_* MCP tools before editing\n---\n\n${renderHunchSection(store)}\n`;
+  const body = `---\ntrigger: always_on\ndescription: Hunch engineering memory — consult the hunch_* MCP tools before editing\n---\n\n${renderHunchSection(store, root)}\n`;
   mkdirSync(dirname(file), { recursive: true });
   writeFileSync(file, body);
   return file;

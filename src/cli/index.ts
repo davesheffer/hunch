@@ -53,6 +53,7 @@ import { blockingInScope, vetoInScope, proposedEditLines } from "../core/hookpol
 import { loadGoldenSet, evaluateGraphLift } from "../eval/harness.js";
 import { loadGuardCases, evalGuards, generateGuardCases } from "../eval/guards.js";
 import { computeDrift } from "../core/drift.js";
+import { generateWiki, wikiStatus, wikiPrompt, publicHome, privateHome, readWikiManifestAt, type WikiPack } from "../wiki/wiki.js";
 import { topicCollisions, renderGrounding } from "../core/topics.js";
 import { parseDocAnchors, renderDocGrounding } from "../core/docanchors.js";
 import { compareCandidates } from "../core/compare.js";
@@ -1796,6 +1797,104 @@ program
     }
   });
 
+// ---- wiki (generated component wiki — a derived VIEW of the graph) ----------
+program
+  .command("wiki")
+  .description("Generate a component wiki from the graph — pages are a derived VIEW (the graph stays the source of truth), pinned with hunch:topic anchors and freshness-hashed into a wiki-manifest. Stale pages surface as wiki-stale in `hunch drift`; --heal regenerates ONLY those. Prose via a subscription CLI when available; deterministic template otherwise. Default: PUBLIC-store records only, written to <repo>/wiki/. With --private: the FULL graph (overlay included), written into the private overlay repo — never committed here.")
+  .option("--dir <dir>", "output directory (default: wiki/, or the manifest's dir once adopted)")
+  .option("--heal", "regenerate only new/stale pages (manifest hash mismatch) and remove orphans")
+  .option("--check", "report stale pages and exit non-zero (CI gate); writes nothing")
+  .option("--no-llm", "skip LLM prose; deterministic template pages only")
+  .option("--private", "render the FULL graph (private overlay included) and write the wiki into the OVERLAY repo — nothing lands in this repo")
+  .action(async (opts: { dir?: string; heal?: boolean; check?: boolean; llm?: boolean; private?: boolean }) => {
+    const { store, root } = storeFor();
+    try {
+      store.reindex(); // reflect out-of-band JSON edits before reading the graph
+      // The home pairs source with destination: overlay-inclusive reads may only
+      // ever land in the overlay repo (a committed public page is a leak surface).
+      const home = opts.private ? privateHome(store, opts.dir) : publicHome(root, opts.dir);
+      if (!home) return fail("no private overlay configured — run `hunch private` (or `hunch shared`) first.");
+      // A union-fed wiki must never land inside the public work tree: refuse the
+      // degenerate overlay layout where the overlay's parent IS this repo's root.
+      if (home.kind === "private" && resolve(home.pagesRoot) === resolve(root)) {
+        return fail("the private overlay resolves directly under this repo's root — a private wiki here would land in the committed tree. Point the overlay at its own directory (e.g. .hunch-private/.hunch) and re-run.");
+      }
+      const manifest = readWikiManifestAt(home.manifestPath);
+      // A wiki lives where its manifest says; a different --dir would strand the
+      // old directory (its pages aren't orphans — their components are live).
+      if (manifest && opts.dir && manifest.dir !== opts.dir) {
+        return fail(`wiki already adopted at "${manifest.dir}/" — omit --dir (or delete ${manifest.dir}/ and the wiki manifest first, then re-run with --dir ${opts.dir}).`);
+      }
+      // CI-safe: checking a repo that never adopted a wiki is a no-op, not a failure.
+      if (opts.check && !manifest) {
+        console.log("✓ No wiki adopted here (no wiki manifest) — nothing to check.");
+        return;
+      }
+      const status = wikiStatus(store, home, root);
+      const healHint = `hunch wiki --heal${home.kind === "private" ? " --private" : ""}`;
+
+      if (opts.check) {
+        const stale = status.entries.filter((e) => e.state !== "fresh");
+        const staleAdoptions = status.adoptions.filter((a) => a.state !== "fresh");
+        const specsStale = status.specs.state !== "fresh";
+        const indexStale = status.index.state !== "fresh";
+        const orphanCount = status.orphans.length + status.adoptionOrphans.length;
+        if (!stale.length && !staleAdoptions.length && !specsStale && !indexStale && !orphanCount) {
+          console.log(`✓ Wiki is fresh — ${status.entries.length + status.adoptions.length + 2} page(s) match the graph and the doc ledger.`);
+          return;
+        }
+        for (const e of stale) console.log(`· ${e.page} — ${e.state === "new" ? "no page generated yet" : e.reason}`);
+        for (const a of staleAdoptions) console.log(`· ${a.page} — ${a.state === "new" ? `stale doc "${a.doc.rel}" awaits adoption` : `adopted copy of "${a.doc.rel}" out of date`}`);
+        if (specsStale) console.log(`· ${status.specs.page} — the repo's doc freshness snapshot changed`);
+        if (indexStale) console.log(`· ${status.index.page} — the index's inputs moved`);
+        for (const p of status.adoptionOrphans) console.log(`· ${p} — original healed or removed; copy retires`);
+        for (const p of status.orphans) console.log(`· ${p} — no current artifact claims this page`);
+        console.log(`\n${stale.length + staleAdoptions.length + (specsStale ? 1 : 0) + (indexStale ? 1 : 0) + orphanCount} stale page(s) — run \`${healHint}\`.`);
+        process.exitCode = 1;
+        return;
+      }
+
+      // An empty graph still needs --heal reachable for orphan/adoption cleanup —
+      // only a plain generate demands components (a broken drift↔heal loop
+      // otherwise: drift says "remove with --heal", --heal refuses to run).
+      if (!status.entries.length && !opts.heal) return fail("no active components in the graph — run `hunch index` first.");
+
+      // Prose is optional garnish on the deterministic skeleton: subscription CLI
+      // only (same rule as synthesis), feature-detected, and any failure degrades
+      // to a template page — generation never depends on a model being present.
+      let prose: ((pack: WikiPack, excerpts: string) => Promise<string | null>) | undefined;
+      if (opts.llm !== false) {
+        const provider = await selectProvider();
+        if (provider.draftProse) {
+          console.log(`Prose via ${provider.name} (subscription); the drift-bearing skeleton stays deterministic.`);
+          prose = (pack, excerpts) => provider.draftProse!(wikiPrompt(pack, excerpts));
+        } else {
+          console.log("No subscription CLI available — deterministic template pages.");
+        }
+      }
+
+      const res = await generateWiki(store, root, home, {
+        now: new Date().toISOString(),
+        only: opts.heal ? "stale" : "all",
+        prose,
+        log: (l) => console.log(l),
+      });
+      if (!res.written.length && !res.removed.length) {
+        console.log(`✓ Nothing to regenerate — ${res.unchanged} page(s) already fresh.`);
+        return;
+      }
+      const dest = home.kind === "private" ? `${join(home.pagesRoot, home.dir)} (private overlay repo — NOT committed here)` : `${home.dir}/`;
+      console.log(
+        `\n✓ ${res.written.length} page(s) written${res.removed.length ? `, ${res.removed.length} orphan(s) removed` : ""}${res.unchanged ? `, ${res.unchanged} fresh page(s) untouched` : ""} → ${dest}`,
+      );
+      // Committed grounding docs advertise the PUBLIC wiki only — they must not
+      // reveal that (or what) a private overlay wiki exists.
+      if (home.kind === "public") refreshExistingGrounding(root, store);
+    } finally {
+      store.close();
+    }
+  });
+
 // ---- heal (decision-grounded drift reconciliation front door) -------------
 program
   .command("heal")
@@ -1841,6 +1940,12 @@ program
         console.log(`${docStale.length} stale doc(s) — still marked proposed/not-implemented but the code shipped:\n`);
         for (const f of docStale) console.log(`· ${f.id} — ${f.detail}`);
         console.log(`\nHeal: update the doc's status marker to match reality.\n`);
+      }
+      const wikiStale = kind("wiki-stale");
+      if (wikiStale.length) {
+        console.log(`${wikiStale.length} generated wiki page(s) drifted from the graph:\n`);
+        for (const f of wikiStale) console.log(`· ${f.id} — ${f.detail}`);
+        console.log(`\nHeal: run \`hunch wiki --heal\` — regenerates only the stale pages (the wiki is a derived view; never edit it by hand).\n`);
       }
       console.log(`Hunch never rewrites prose for you; this is a read-only reconciliation report.`);
     } finally {
