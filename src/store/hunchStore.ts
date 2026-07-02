@@ -66,6 +66,14 @@ export class HunchStore {
    *  `--no-auto-commit` (hunch init/private/shared) persists `autoCommit: false` in
    *  local.json to opt out. Read by the MCP write tools and `hunch sync`. */
   readonly autoCommit: boolean;
+  /** How memory is homed: "public" (no overlay — the repo-tracked .hunch/ is the one store),
+   *  "private" (overlay holds ONLY private:true records; public records stay committed here),
+   *  or "shared" (the overlay IS the store — every capture routes there, one source of truth
+   *  across branches, worktrees, teammates, and agents). Absent `mode` in an existing
+   *  config reads as "private" — no behavior change on upgrade. */
+  readonly mode: "public" | "private" | "shared";
+  /** mode === "shared" with a configured overlay: ALL captures route to the overlay. */
+  readonly unified: boolean;
   /** autoCommit AND a private overlay is configured: private writes auto commit+push the
    *  overlay repo. (Public writes auto-commit the repo-tracked .hunch/ WITHOUT pushing —
    *  see commitAndPushHunch push:false / bug_overlay_clobber.) */
@@ -92,18 +100,57 @@ export class HunchStore {
     // An absent local.json (plain `hunch init`, or an env-configured overlay) defaults ON.
     this.autoCommit = local.autoCommit !== false;
     this.privateAutoCommit = !!(priv && this.autoCommit);
+    // Mode: no overlay → "public". With an overlay, an absent `mode` reads as "private"
+    // (the pre-mode behavior — split routing), so existing setups are unchanged on upgrade;
+    // only an explicit `hunch shared` opts a repo into unified routing.
+    this.mode = priv ? (local.mode ?? "private") : "public";
+    this.unified = this.mode === "shared" && !!this.privateJson;
+  }
+
+  /** Where a capture belongs: an explicit private:true always goes to the overlay
+   *  (putPrivate throws rather than silently landing public when none is configured);
+   *  otherwise the overlay in unified ("shared") mode, else the public store. ONE home
+   *  per record — the single-source-of-truth contract. */
+  captureHome(isPrivate = false): "private" | "public" {
+    if (isPrivate) return "private";
+    return this.unified ? "private" : "public";
+  }
+
+  /** Write a capture to its ONE home (see captureHome). Every capture path — MCP tools,
+   *  post-commit synthesis, inline intents, record-constraint/conform, runbooks — funnels
+   *  through here so all modes, branches, worktrees, teams, and agents agree on where
+   *  memory lives. */
+  putCapture<K extends EntityKind>(kind: K, record: EntityFor[K], isPrivate = false): EntityFor[K] {
+    return this.captureHome(isPrivate) === "private" ? this.putPrivate(kind, record) : this.json.put(kind, record);
+  }
+
+  /** Read a record by id from wherever it lives (private overlay wins on collision). */
+  getRec<K extends EntityKind>(kind: K, id: string): EntityFor[K] | undefined {
+    return this.privateJson?.get(kind, id) ?? this.json.get(kind, id);
+  }
+
+  /** Update an EXISTING record in the store that holds it — an overlay record must never
+   *  fork a public copy on update (and vice versa). Falls back to captureHome routing for
+   *  a record that exists nowhere yet. */
+  putWhereItLives<K extends EntityKind>(kind: K, record: EntityFor[K]): EntityFor[K] {
+    const id = (record as { id: string }).id;
+    if (this.privateJson?.get(kind, id)) return this.putPrivate(kind, record);
+    if (this.json.get(kind, id)) return this.json.put(kind, record);
+    return this.putCapture(kind, record);
   }
 
   /** The private-overlay config from the gitignored `.hunch/local.json` (per-machine,
    *  never committed). Tolerant: returns {} on missing/invalid so reads never crash.
-   *  `autoCommit` is tri-state: true/false when the file says so, undefined when unset. */
-  private localConfig(): { privateDir?: string; autoCommit?: boolean } {
-    const read = (file: string): { privateDir?: string; autoCommit?: boolean } => {
+   *  `autoCommit` is tri-state: true/false when the file says so, undefined when unset.
+   *  `mode` records HOW the overlay was set up ("private" split vs "shared" unified). */
+  private localConfig(): { privateDir?: string; autoCommit?: boolean; mode?: "private" | "shared" } {
+    const read = (file: string): { privateDir?: string; autoCommit?: boolean; mode?: "private" | "shared" } => {
       try {
         if (!existsSync(file)) return {};
-        const v = JSON.parse(readFileSync(file, "utf8")) as { privateDir?: unknown; autoCommit?: unknown };
+        const v = JSON.parse(readFileSync(file, "utf8")) as { privateDir?: unknown; autoCommit?: unknown; mode?: unknown };
         const privateDir = typeof v.privateDir === "string" && v.privateDir.trim() ? v.privateDir.trim() : undefined;
-        return { privateDir, autoCommit: typeof v.autoCommit === "boolean" ? v.autoCommit : undefined };
+        const mode = v.mode === "private" || v.mode === "shared" ? v.mode : undefined;
+        return { privateDir, autoCommit: typeof v.autoCommit === "boolean" ? v.autoCommit : undefined, mode };
       } catch {
         return {};
       }

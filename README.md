@@ -254,8 +254,11 @@ shared` (or `hunch private`) once and every worktree picks it up. Parallel workt
 `hunch doctor` confirms a worktree is sharing.
 
 Need one **single source of truth** for memory in any repo (private or public)?
-Use **`hunch shared --repo <url>`**. It writes to one shared overlay repo and, by default,
-auto-commits + pushes captures so teammates/other worktrees stay in sync automatically.
+Use **`hunch shared --repo <url>`**. Every capture — decisions, bugs, constraints, runbooks —
+routes to one shared overlay repo and, by default, auto-commits + pushes so teammates/other
+worktrees stay in sync automatically. It also publishes a committed **`.hunch/team.json`**
+pointing at the store, so a fresh clone auto-connects on `hunch init` (agents and CI wire up
+the same way via the MCP server) — everyone, on every branch, resolves the same memory.
 
 ## Private memory (public repo, private context)
 

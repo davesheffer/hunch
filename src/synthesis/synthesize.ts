@@ -179,10 +179,9 @@ export async function syncCommit(
     },
     date: meta.date, // the commit date
   };
-  // Route to the PRIVATE overlay when asked (post-commit sync in a repo whose memory
-  // is kept private) — keeps auto-captured decisions out of the public repo entirely.
-  if (opts.private) store.putPrivate("decisions", decision);
-  else store.json.put("decisions", decision);
+  // Route to the record's ONE home: the overlay when asked (--private) or in unified
+  // ("shared") mode; else the public store. Same contract as every other capture path.
+  store.putCapture("decisions", decision, opts.private);
   return { status: "written", decision, provider: provider.name };
 }
 
@@ -247,7 +246,7 @@ export async function recordFailure(
       evidence: [`test:${failure.test}`, ...affectedFiles.slice(0, 6)],
     },
   };
-  store.json.put("bugs", bug);
+  store.putCapture("bugs", bug);
 
   // Promotion (DESIGN §4): a recurrence or a SUBSTANTIATED high-severity bug raises
   // a regression Constraint to stop it coming back, and bumps fragility.
@@ -255,7 +254,7 @@ export async function recordFailure(
   if (shouldPromoteConstraint(draft.severity, bug.root_cause, !!prior)) {
     constraint = promoteConstraint(store, bug);
     bug.lineage.spawned_constraint = constraint.id;
-    store.json.put("bugs", bug); // re-persist with the link
+    store.putWhereItLives("bugs", bug); // re-persist with the link, in the same home
   }
   raiseFragility(store, affectedFiles);
 
@@ -305,10 +304,10 @@ export async function captureTestRun(
   try { sha = headSha(root); } catch { /* not a git repo / no HEAD — leave null */ }
   const fixed: Bug[] = [];
   for (const name of report.passed) {
-    const b = store.json.get("bugs", bugId(name));
+    const b = store.getRec("bugs", bugId(name)); // a unified-mode bug lives in the overlay
     if (b && b.status === "open") {
       const resolved: Bug = { ...b, status: "fixed", lineage: { ...b.lineage, fixed_commit: sha } };
-      store.json.put("bugs", resolved);
+      store.putWhereItLives("bugs", resolved);
       fixed.push(resolved);
     }
   }
@@ -348,7 +347,7 @@ function promoteConstraint(store: HunchStore, bug: Bug): Constraint {
     valid_to: null,
     provenance: { source: "derived", confidence: Math.min(0.9, bug.provenance.confidence + 0.2), evidence: [`bug:${bug.id}`] },
   };
-  return store.json.put("constraints", con);
+  return store.putCapture("constraints", con);
 }
 
 /** Bump fragility on components owning the affected files. */

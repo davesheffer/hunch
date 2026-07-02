@@ -18,6 +18,7 @@ import { knownRepoDeps } from "../synthesis/tripwires.js";
 import { refreshExistingGrounding } from "../integrations/providers.js";
 import { revParse, asOfDate, revExists, lastChangeDate, rangeFiles, rangeDiff, commitFiles, commitDiff, stagedFiles, stagedDiff, pullHunch } from "../extractors/git.js";
 import { flushCapture } from "../integrations/sync.js";
+import { ensureTeamOverlay } from "../integrations/team.js";
 import { formatContext } from "../core/format.js";
 import type { Runbook } from "../core/types.js";
 import { compareCandidates } from "../core/compare.js";
@@ -85,6 +86,11 @@ function resolveFiles(store: HunchStore, target: string): string[] {
 }
 
 export function buildServer(root: string): McpServer {
+  // Team auto-discovery: a committed .hunch/team.json advertises the shared store — a
+  // fresh clone (a new teammate, a headless agent, a CI workflow) wires itself BEFORE the
+  // store is constructed, so every consumer resolves the same single source of truth.
+  // Best-effort: offline / no team.json → proceed exactly as before.
+  try { ensureTeamOverlay(root); } catch { /* never block server start */ }
   const store = new HunchStore(hunchPaths(root));
   // Two-way sync (read side): pull the private overlay's remote on startup, so THIS machine's
   // session sees memory captured on other machines/worktrees before we index — making the
@@ -457,10 +463,11 @@ export function buildServer(root: string): McpServer {
             );
           }
         }
-        // Route the write: private records go to the HUNCH_PRIVATE_DIR overlay (never
-        // the committed repo); everything else to the public store. putPrivate throws
-        // if no private store is configured, so "private" can't silently fall public.
-        if (decision.private) store.putPrivate("decisions", rec);
+        // Route the write to its ONE home (captureHome): an explicit private:true goes to
+        // the overlay (putPrivate throws rather than silently falling public); in unified
+        // ("shared") mode EVERY capture goes to the overlay; else the public store.
+        const home = store.captureHome(!!decision.private);
+        if (home === "private") store.putPrivate("decisions", rec);
         else store.json.put("decisions", rec);
         // Invalidate, don't delete: closing the superseded decision's valid-time window
         // (+ a supersedes edge) preserves the why-it-changed trail. Route the close to the
@@ -468,14 +475,14 @@ export function buildServer(root: string): McpServer {
         // private overlay; a public one in the committed store. A private write never
         // mutates the public store.
         const superseded = decision.supersedes
-          ? (decision.private ? store.supersedePrivate(decision.supersedes, rec) : store.supersede(decision.supersedes, rec))
+          ? (home === "private" ? store.supersedePrivate(decision.supersedes, rec) : store.supersede(decision.supersedes, rec))
           : null;
         store.reindex();
         // Auto-flush the store the record landed in (on by default in every mode): a private
         // record commits+pushes its overlay repo; a public one commits .hunch/ in THIS repo
         // (commit only — it rides the user's next push, never auto-pushing their code branch).
         const flush = flushCapture(store, hunchPaths(root).hunch, !!decision.private, `hunch: capture ${id}`);
-        const flushed = flush === "pushed" ? " (committed + pushed to the private repo)"
+        const flushed = flush === "pushed" ? ` (committed + pushed to the ${store.mode === "shared" ? "shared team store" : "private repo"})`
           : flush === "committed" ? " (auto-committed to .hunch/ — rides your next push)" : "";
         // Capture-session gate (staged deprecation, §9.3): a token proves an interview
         // preceded the write. No token still writes (non-breaking), but returns a nudge
@@ -489,7 +496,9 @@ export function buildServer(root: string): McpServer {
             : "\n\n⚠ Recorded WITHOUT a capture interview. Prefer /capture (hunch_capture_decision), which grills the decision to a resolved state before writing — the graph should hold a well-examined decision, not a guess. (A future major version will require a capture token here.)";
         const supNote = superseded ? ` Superseded ${superseded.id} (window closed at ${rec.valid_from}).` : "";
         const note = decision.commit && !fullSha ? ` (note: commit "${decision.commit}" could not be resolved — recorded as a standalone decision, not linked to a commit)` : "";
-        const where = decision.private ? ` [PRIVATE overlay — not committed to this repo]${flushed}` : flushed;
+        const where = decision.private
+          ? ` [PRIVATE overlay — not committed to this repo]${flushed}`
+          : home === "private" ? ` [SHARED store — one source of truth for the whole team]${flushed}` : flushed;
         return ok(`Recorded decision ${id}: "${rec.title}" (status ${rec.status}, ${source}).${where}${supNote}${note}${captureNote}`);
       } catch (e) {
         return err(`Failed to record decision: ${(e as Error).message}`);
@@ -521,22 +530,25 @@ export function buildServer(root: string): McpServer {
         const rec = buildCorrectionConstraint({ ...input, knownDeps: knownRepoDeps(root) }, new Date().toISOString());
         // Private corrections go to the overlay (enforced locally via the merged read,
         // never rendered into the public CI comment, which is public-only by construction).
-        const existing = input.private ? undefined : store.json.get("constraints", rec.id);
-        if (input.private) store.putPrivate("constraints", rec);
+        const home = store.captureHome(!!input.private);
+        const existing = home === "private" ? undefined : store.json.get("constraints", rec.id);
+        if (home === "private") store.putPrivate("constraints", rec);
         else store.json.put("constraints", rec);
         store.reindex();
         // Propagate the new rule to EVERY assistant's ambient grounding (Cursor/Copilot/
         // Windsurf/AGENTS.md/CLAUDE.md), so a correction captured in one assistant is held
         // by all of them. Public only — a private rule must never render into committed
         // grounding. Refresh-only: it never scaffolds a doc the project opted out of.
-        if (!input.private) refreshExistingGrounding(root, store);
+        if (home === "public") refreshExistingGrounding(root, store); // overlay rules never render into committed grounding
         const flush = flushCapture(store, hunchPaths(root).hunch, !!input.private, `hunch: capture ${rec.id}`);
-        const flushed = flush === "pushed" ? " (committed + pushed to the private repo)"
+        const flushed = flush === "pushed" ? ` (committed + pushed to the ${store.mode === "shared" ? "shared team store" : "private repo"})`
           : flush === "committed" ? " (auto-committed to .hunch/ — rides your next push)" : "";
         const enforce = rec.severity === "blocking"
           ? "blocks a DIRECT edit to its scope at strict firmness, and fails a PR whose diff touches that scope (CI guard); blast-radius hits and lower firmness stay advisory"
           : "flags violating edits and PRs (advisory)";
-        const where = input.private ? ` [PRIVATE overlay — not committed to this repo]${flushed}` : flushed;
+        const where = input.private
+          ? ` [PRIVATE overlay — not committed to this repo]${flushed}`
+          : home === "private" ? ` [SHARED store — one source of truth for the whole team]${flushed}` : flushed;
         return ok(`${existing ? "Updated" : "Recorded"} ${rec.severity} constraint ${rec.id}: "${rec.statement}" (scope: ${rec.scope.join(", ")}).${where} It now ${enforce}.`);
       } catch (e) {
         return err(`Failed to record correction: ${(e as Error).message}`);

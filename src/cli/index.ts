@@ -29,7 +29,8 @@ import { indexRepo } from "../extractors/indexer.js";
 import { syncCommit, recordFailure, captureTestRun } from "../synthesis/synthesize.js";
 import { parseTestReport } from "../extractors/testreport.js";
 import { selectProvider } from "../synthesis/provider.js";
-import { isGitRepo, headSha, logSince, lastChangeDate, stagedFiles, commitFiles, asOfDate, stagedDiff, commitDiff, rangeFiles, rangeDiff, rangeSubjects, revExists, commitAndPushHunch, gitUntrackCached, gitCommonDir, isLinkedWorktree } from "../extractors/git.js";
+import { isGitRepo, headSha, logSince, lastChangeDate, stagedFiles, commitFiles, asOfDate, stagedDiff, commitDiff, rangeFiles, rangeDiff, rangeSubjects, revExists, commitAndPushHunch, pullHunch, gitUntrackCached, gitCommonDir, isLinkedWorktree, mainWorktreeRoot } from "../extractors/git.js";
+import { writeTeamConfig, ensureTeamOverlay, readTeamConfig } from "../integrations/team.js";
 import { runbookId, decisionId } from "../core/ids.js";
 import { deriveForbids, effectiveForbids } from "../core/constraintmatch.js";
 import type { Runbook } from "../core/types.js";
@@ -97,6 +98,10 @@ program
     }
     const root = findRoot();
     const paths = hunchPaths(root);
+    // Team auto-discovery FIRST: a committed .hunch/team.json advertises the shared
+    // store — a fresh clone wires itself to it before anything reads memory, so every
+    // teammate/agent resolves the same single source of truth with zero manual setup.
+    const teamWired = ensureTeamOverlay(root);
     const store = new HunchStore(paths);
     openStore = store; // so the top-level error handler closes it on failure
     const inv = resolveInvocation();
@@ -104,6 +109,7 @@ program
 
     store.json.ensureDirs(); // stamps the manifest at the current version when fresh
     console.log(`  ✓ .hunch/ scaffolded (schema v${readManifest(paths).schema_version})`);
+    if (teamWired) console.log(`  ✓ connected to the team's shared memory store (from .hunch/team.json) → ${teamWired}`);
 
     // Exclude the derived SQLite index BEFORE it's written, so the working tree
     // never goes dirty on the MCP server's index writes (which blocks branch
@@ -185,7 +191,7 @@ program
     // Worktree-seamless: register any configured overlay at the git common dir so EVERY
     // worktree of this repo auto-discovers it (also backfills pre-0.32 single-worktree setups),
     // and note when we're initializing inside a linked worktree (memory is shared, not separate).
-    if (ensureSharedOverlayPointer(root, store.privateDir, store.privateAutoCommit)) {
+    if (ensureSharedOverlayPointer(root, store.privateDir, store.privateAutoCommit, store.mode === "shared" ? "shared" : "private")) {
       console.log(`  ✓ private overlay registered at the git common dir — shared by every worktree of this repo`);
     }
     if (isLinkedWorktree(root)) {
@@ -298,7 +304,9 @@ program
   .action(async (sha: string | undefined, opts: { fromHook?: boolean; quiet?: boolean; force?: boolean; private?: boolean; overlay?: boolean; commit?: boolean; deep?: boolean; verify?: boolean; samples?: string }) => {
     const { store, root } = storeFor();
     if (!isGitRepo(root)) return opts.quiet ? undefined : fail("sync needs a git repo");
-    const toOverlay = !!(opts.private || opts.overlay);
+    // In unified ("shared") mode every capture routes to the overlay — the sync path
+    // must agree with captureHome so all writers home records identically.
+    const toOverlay = !!(opts.private || opts.overlay || store.unified);
     if (toOverlay && !store.hasPrivate) { store.close(); return opts.quiet ? undefined : fail("--private/--overlay needs HUNCH_PRIVATE_DIR set to an overlay store"); }
     store.json.ensureDirs();
     const r = await syncCommit(store, root, sha ?? headSha(root), { force: opts.force, private: toOverlay, deep: opts.deep, verify: opts.verify, samples: parseSamples(opts.samples) });
@@ -352,15 +360,40 @@ function configureOverlay(dir: string | undefined, opts: OverlaySetupOpts, mode:
 
   // 1) resolve the overlay store's hunch dir (holds decisions/, bugs/, …)
   let hunchDir: string;
+  // Anchor the default store at the MAIN worktree root: a linked worktree can be
+  // `git worktree remove`d, which would take the store (and every other worktree's
+  // absolute pointer to it) down with it. An explicit [dir] still resolves from here.
+  const anchor = mainWorktreeRoot(root);
   if (opts.repo) {
-    const dest = join(root, ".hunch-private");
+    const dest = join(anchor, ".hunch-private");
     if (!existsSync(dest)) {
       const r = spawnSync("git", ["clone", opts.repo, dest], { stdio: "inherit" });
       if (r.status !== 0) return fail(`git clone failed for ${opts.repo}`);
+    } else {
+      // NEVER silently ignore --repo when the store dir already exists: same remote →
+      // freshen; no remote → attach + converge; different remote → refuse loudly.
+      const cur = spawnSync("git", ["-C", dest, "remote", "get-url", "origin"], { encoding: "utf8" });
+      const existingUrl = cur.status === 0 ? cur.stdout.trim() : "";
+      if (existingUrl === opts.repo) {
+        pullHunch(join(dest, ".hunch"));
+        console.log(`  · ${dest} already tracks ${opts.repo} — pulled the latest memory`);
+      } else if (!existingUrl) {
+        if (!isGitRepo(dest)) spawnSync("git", ["init", "-q", dest], { stdio: "ignore" });
+        spawnSync("git", ["-C", dest, "remote", "add", "origin", opts.repo], { stdio: "ignore" });
+        spawnSync("git", ["-C", dest, "fetch", "-q", "origin"], { stdio: "ignore" });
+        spawnSync("git", ["-C", dest, "merge", "-q", "--no-edit", "--allow-unrelated-histories", "FETCH_HEAD"], { stdio: "ignore" });
+        spawnSync("git", ["-C", dest, "push", "-q", "-u", "origin", "HEAD"], { stdio: "ignore" });
+        console.log(`  · attached the existing local store ${dest} to ${opts.repo} (merged + pushed, best-effort)`);
+      } else {
+        return fail(
+          `${dest} already tracks a DIFFERENT remote:\n    current: ${existingUrl}\n    requested: ${opts.repo}\n` +
+          `Refusing to silently re-point your memory. Move that directory aside, or pass an explicit dir: \`hunch ${commandName} <dir> --repo <url>\`.`,
+        );
+      }
     }
     hunchDir = join(dest, ".hunch");
   } else {
-    hunchDir = dir ? resolve(root, dir) : join(root, ".hunch-private", ".hunch");
+    hunchDir = dir ? resolve(root, dir) : join(anchor, ".hunch-private", ".hunch");
   }
 
   // 2) create the layout (decisions/, manifest, …) so it's queryable immediately
@@ -387,15 +420,25 @@ function configureOverlay(dir: string | undefined, opts: OverlaySetupOpts, mode:
   // a store elsewhere on disk. Resolution (env || local.json) re-resolves against root.
   const rel = relative(root, hunchDir);
   const stored = rel && !rel.startsWith("..") && !isAbsolute(rel) ? toPosixTarget(rel) : hunchDir;
-  writeFileAtomic(join(paths.hunch, "local.json"), JSON.stringify({ privateDir: stored, autoCommit: !!opts.autoCommit }, null, 2) + "\n");
+  writeFileAtomic(join(paths.hunch, "local.json"), JSON.stringify({ privateDir: stored, autoCommit: !!opts.autoCommit, mode }, null, 2) + "\n");
   ensureGitignore(root); // keeps .hunch/local.json + .hunch-private/ out of git
+
+  // SHARED mode with a remote: publish the store's URL in a COMMITTED team.json, so a
+  // fresh clone / new teammate / headless agent auto-connects on `hunch init` (or MCP
+  // server start) — everyone resolves the same single source of truth. Private mode
+  // never publishes its URL.
+  let teamNote = "";
+  if (mode === "shared" && opts.repo) {
+    writeTeamConfig(root, { shared_repo: opts.repo });
+    teamNote = "  ✓ published .hunch/team.json (commit it) — teammates, worktrees, and agents auto-connect\n";
+  }
 
   // Also register the overlay at the SHARED git common dir, so EVERY worktree of this repo
   // (current + future, any branch) auto-discovers the same memory with zero per-worktree
   // setup. Stored ABSOLUTE — a linked worktree resolves relative paths from its OWN root, so
   // only an absolute path survives the move. Lives under .git/ (never tracked; nothing to ignore).
   let worktreeNote = "";
-  if (ensureSharedOverlayPointer(root, hunchDir, !!opts.autoCommit)) {
+  if (ensureSharedOverlayPointer(root, hunchDir, !!opts.autoCommit, mode)) {
     worktreeNote = "  ✓ registered in the git common dir — shared by every worktree of this repo, on any branch\n";
   }
 
@@ -436,11 +479,12 @@ function configureOverlay(dir: string | undefined, opts: OverlaySetupOpts, mode:
     : `✓ shared overlay enabled → ${hunchDir}\n`;
   const tail = mode === "private"
     ? "  record sensitive items with private:true (hunch_record_decision / hunch_record_correction)\n  override per-shell with HUNCH_PRIVATE_DIR; CI / public PR comments stay public-only."
-    : "  this works for any repo (public or private): one shared memory source across teammates, branches, and worktrees.\n  override per-shell with HUNCH_PRIVATE_DIR if needed.";
+    : "  UNIFIED: every capture (decisions, bugs, constraints, runbooks) routes HERE — one source of truth\n  across branches, worktrees, teammates, and agents. Override per-shell with HUNCH_PRIVATE_DIR if needed.";
   console.log(
     lead +
     "  ✓ recorded in .hunch/local.json (gitignored) — auto-detected, no env var or shell-profile edit\n" +
     worktreeNote +
+    teamNote +
     hookNote +
     migrateNote +
     tail,
@@ -681,7 +725,7 @@ program
       provenance: { source: "extracted", confidence: 0.5, evidence: [range] },
       date: now,
     };
-    if (opts.private) store.putPrivate("runbooks", rec); else store.json.put("runbooks", rec);
+    store.putCapture("runbooks", rec, opts.private);
     store.reindex();
     console.log(`✓ runbook ${rec.id} — "${rec.task}"  (${rec.steps.length} steps, ${rec.files.length} files)${opts.private ? " [private overlay]" : ""}`);
     console.log(dim("  advisory, deterministic draft — refine the steps/gotchas; surfaced via `hunch query` and MCP."));
@@ -713,7 +757,7 @@ program
           retired: { symbols: [], deps: [] },
           provenance: { source: "human_confirmed", confidence: 0.9, evidence: ev }, date: prev?.date ?? now,
         };
-        if (opts.private) store.putPrivate("decisions", rec); else store.json.put("decisions", rec);
+        store.putCapture("decisions", rec, opts.private);
         dec++;
       } else {
         const id = constraintId(`inline:${it.file}:${it.text}`);
@@ -728,7 +772,7 @@ program
           valid_from: prev?.valid_from ?? now, valid_to: null,
           provenance: { source: "human_confirmed", confidence: 0.9, evidence: ev },
         };
-        if (opts.private) store.putPrivate("constraints", rec); else store.json.put("constraints", rec);
+        store.putCapture("constraints", rec, opts.private);
         con++;
       }
     }
@@ -761,7 +805,7 @@ program
       store.json.ensureDirs();
       const now = new Date().toISOString();
       const arrow = opts.assert.startsWith("not-") ? "↛" : "→";
-      const d = store.json.put("decisions", {
+      const d = store.putCapture("decisions", {
         id: decisionId(`conform:${opts.add}:${opts.subject}:${opts.object ?? ""}`),
         title: opts.add,
         status: "accepted",
@@ -976,7 +1020,7 @@ program
       forbids = deriveForbids(statement, deps.length ? deps : undefined);
       derived = !!forbids;
     }
-    const c = store.json.put("constraints", {
+    const c = store.putCapture("constraints", {
       id: constraintId(statement),
       type: opts.type,
       statement,
@@ -1245,7 +1289,7 @@ vetoCmd
       if (!d.alternatives_rejected.length) continue;
       if ((d.rejected_tripwires?.length ?? 0) > 0) continue; // never clobber existing tripwires
       const tws = draftTripwires(d.alternatives_rejected, d.related_files, knownDeps);
-      store.json.put("decisions", { ...d, rejected_tripwires: tws });
+      store.putWhereItLives("decisions", { ...d, rejected_tripwires: tws });
       drafted += tws.length;
       touched++;
     }
@@ -1507,7 +1551,7 @@ function acceptDecision(store: HunchStore, d: Decision): { source: string; armed
       last_verified: now,
     },
   }));
-  store.json.put("decisions", { ...d, status: "accepted", rejected_tripwires: confirmedTws, provenance: { ...d.provenance, source, confidence: 0.95, last_verified: now } });
+  store.putWhereItLives("decisions", { ...d, status: "accepted", rejected_tripwires: confirmedTws, provenance: { ...d.provenance, source, confidence: 0.95, last_verified: now } });
   const armed = confirmedTws.filter((tw) => tw.forbids.deps.length || tw.forbids.symbols.length || tw.forbids.patterns.length).length;
   return { source, armed };
 }
@@ -1780,9 +1824,22 @@ program
     }
     const c = store.reindex().counts;
     console.log(`hunch:      ${c.symbols} symbols, ${c.edges} edges, ${c.components} components, ${c.decisions} decisions, ${c.bugs} bugs, ${c.constraints} constraints`);
-    console.log(store.privateDir
-      ? `private:    on → ${store.privateDir} (local overlay — unioned into queries; never committed or posted publicly)`
-      : dim(`private:    off — run \`hunch shared\` (or \`hunch private\`) to use one overlay repo across teammates/worktrees (or set HUNCH_PRIVATE_DIR)`));
+    // Overlay status speaks the TRUE mode, and a dead pointer is a loud finding, not a
+    // silent empty store: the JSON reader degrades to [] when the target dir is missing,
+    // so this is the one place the loss is visible.
+    if (store.privateDir && !existsSync(store.privateDir)) {
+      console.log(`overlay:    ⛔ POINTER IS DEAD → ${store.privateDir} does not exist — shared/private memory is NOT being read.`);
+      console.log(`            fix: re-run \`hunch ${store.mode === "shared" ? "shared" : "private"} --repo <url>\` (or restore the directory); the pointer lives in .hunch/local.json / the git common dir`);
+    } else if (store.privateDir) {
+      console.log(store.mode === "shared"
+        ? `shared:     on → ${store.privateDir} (UNIFIED — every capture routes here; one source of truth across branches, worktrees, teammates, agents)`
+        : `private:    on → ${store.privateDir} (local overlay — unioned into queries; never committed or posted publicly)`);
+    } else {
+      const team = readTeamConfig(root);
+      console.log(team
+        ? `overlay:    off, but .hunch/team.json advertises the team store (${team.shared_repo}) — run \`hunch init\` to auto-connect`
+        : dim(`private:    off — run \`hunch shared\` (or \`hunch private\`) to use one overlay repo across teammates/worktrees (or set HUNCH_PRIVATE_DIR)`));
+    }
     // Worktree posture: linked worktrees share ONE memory via the git common dir. Only
     // surfaced in a linked worktree (no noise in a normal single checkout), so a
     // "memory missing here" symptom has an obvious cause + fix.

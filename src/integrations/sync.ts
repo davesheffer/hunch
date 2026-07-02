@@ -25,7 +25,9 @@ export function flushCapture(
   isPrivate: boolean,
   message: string,
 ): "pushed" | "committed" | null {
-  if (isPrivate) {
+  // Follow the same routing as HunchStore.captureHome: unified ("shared") mode homes
+  // EVERY capture in the overlay, so the flush must go there too — one source of truth.
+  if (store.captureHome(isPrivate) === "private") {
     if (store.privateAutoCommit && store.privateDir) {
       commitAndPushHunch(store.privateDir, message);
       return "pushed";

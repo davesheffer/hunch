@@ -1,7 +1,7 @@
 /** Deterministic git introspection for the extractor + learning loop.
  *  No LLM here — just parsing what git already knows. */
 import { execFileSync } from "node:child_process";
-import { isAbsolute, resolve, join } from "node:path";
+import { isAbsolute, resolve, join, basename, dirname } from "node:path";
 import { mkdirSync, rmSync, statSync, realpathSync } from "node:fs";
 
 export interface CommitMeta {
@@ -32,6 +32,18 @@ function gitSafe(args: string[], cwd: string, maxBuffer?: number): string {
 
 export function isGitRepo(cwd: string): boolean {
   return gitSafe(["rev-parse", "--is-inside-work-tree"], cwd) === "true";
+}
+
+/** The MAIN worktree's root — the stable anchor for an overlay store. A linked worktree
+ *  can be `git worktree remove`d, so anything anchored inside it (an overlay clone, an
+ *  absolute pointer target) silently dies for every OTHER worktree; the main checkout
+ *  can't be removed. Falls back to `root` when the layout isn't the standard `.git` dir
+ *  (or not a git repo), preserving today's behavior. */
+export function mainWorktreeRoot(root: string): string {
+  const common = gitCommonDir(root);
+  if (!common) return root;
+  const abs = resolve(root, common);
+  return basename(abs) === ".git" ? dirname(abs) : root;
 }
 
 /** Best-effort: stage ONLY the hunch dir, commit, and push the repo it lives in. Shared by

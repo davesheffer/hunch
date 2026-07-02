@@ -12,13 +12,15 @@ import { writeFileAtomic } from "../core/io.js";
 /** Register the resolved private overlay at the shared git common dir, so every worktree
  *  of this repo auto-discovers the same memory. Idempotent (writes only when missing or
  *  changed). Stored ABSOLUTE — a worktree resolves relative paths from its OWN root.
- *  Returns true once the shared pointer is in place (memory is worktree-shared), false when
- *  there's no overlay configured or no git common dir. Reused by `init`/`worktree`/`private`. */
-export function ensureSharedOverlayPointer(root: string, overlayDir: string | undefined, autoCommit: boolean): boolean {
+ *  Carries the overlay MODE so every worktree routes captures identically (shared =
+ *  unified store, private = split). Returns true once the shared pointer is in place
+ *  (memory is worktree-shared), false when there's no overlay configured or no git
+ *  common dir. Reused by `init`/`worktree`/`private`/`shared`. */
+export function ensureSharedOverlayPointer(root: string, overlayDir: string | undefined, autoCommit: boolean, mode: "private" | "shared" = "private"): boolean {
   const common = overlayDir ? gitCommonDir(root) : "";
   if (!common || !overlayDir) return false;
   const file = join(common, "hunch", "local.json");
-  const want = JSON.stringify({ privateDir: resolve(overlayDir), autoCommit }, null, 2) + "\n";
+  const want = JSON.stringify({ privateDir: resolve(overlayDir), autoCommit, mode }, null, 2) + "\n";
   try {
     if (!(existsSync(file) && readFileSync(file, "utf8") === want)) {
       mkdirSync(join(common, "hunch"), { recursive: true });
