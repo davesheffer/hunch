@@ -105,35 +105,21 @@ is its complement — it keeps your *docs* honest to the graph (**doc ≠ graph*
 says one thing; the decision that actually governs the file says another. Both are "memory that stays
 true"; you want both.
 
-The anchor is one optional field. A decision can carry a **`topic`** — the thing it's the current answer
-for (e.g. `"auth.session"`) — and topic gives you a query contract: **current** (the one live answer),
-**history** (the supersede trail), and **rejected** (what was ruled out and why). It's fully
-backward-compatible: `topic` defaults to `null`, there's **no schema bump**, and existing graphs load
-unchanged.
+A decision can be anchored to a **topic** (e.g. `"auth.session"`), and a topic always has one live
+answer: the **current** decision, its **history**, and what was **rejected** along the way. Existing
+graphs are unaffected until you opt in.
 
-- **Read-time grounding.** The pre-edit (PreToolUse) hook now surfaces a file's topic-anchored decisions
-  *before* the AI writes — with doc-precedence framing ("follow the graph, not a stale doc") and what each
-  decision **rejected**, so the model doesn't happily re-add the approach you already ruled out.
-- **`anchor-stale` drift — deterministic, no guessing.** A new drift kind fires when a file is still
-  anchored to a **superseded** decision while a **current** one exists for its topic. It shows up in
-  `hunch doctor` and in a CI-gateable `hunch drift`:
-
-  ```bash
-  hunch drift        # ⛔ exits non-zero on anchor-stale drift or a topic collision (>1 live decision)
-  ```
-
-  It only fires on **explicit** topic anchors — no semantic guessing, no false positives on prose it can't
-  read.
-- **Capture, gated.** `hunch_record_decision` now enforces a store-scoped **uniqueness guard**: it refuses
-  a *second* live decision for a topic (you're never silently governed by two). The richer path is the new
-  **`hunch_capture_decision`** tool — it returns a one-question-at-a-time grilling protocol plus a
-  capture-session token; `record_decision` accepts an optional `capture_token`. Un-token'd writes still
-  work, they just get a nudge toward `/capture`. **`hunch_current_decision(topic)`** returns the one answer
-  that currently governs a topic.
-- **`hunch reconcile-topics`.** A git merge is the one thing that can create two live decisions for a
-  topic. This scans for it and exits non-zero — wire it into a post-merge hook or CI.
-- **`hunch heal`** + the **`/capture`** and **`/heal`** slash commands (scaffolded by `hunch init`) do
-  **read-only** doc↔graph reconciliation — they surface the mismatch and never rewrite your prose silently.
+- **Read-time grounding.** Before the AI edits a file — or a markdown doc like `AGENTS.md` — it's told
+  which decision is *current* (follow the graph, not a stale doc) and what was **rejected**, so it
+  doesn't re-add the approach you already ruled out.
+- **Drift, caught deterministically.** Prose or a file still describing a **superseded** decision is
+  flagged in `hunch doctor`, and `hunch drift` exits non-zero so CI can gate on it. It only fires on
+  explicit anchors — never a semantic guess.
+- **Capture, interviewed.** `/capture` walks a decision to a resolved state — topic, rationale, and
+  rejected alternatives — before it's written, and the graph refuses to hold **two live decisions on
+  one topic**. `hunch reconcile-topics` catches the one case a git merge can create, for human resolution.
+- **`hunch heal`** + the **`/heal`** slash command do **read-only** doc↔graph reconciliation — they show
+  exactly what disagrees and never rewrite your prose silently.
 
 → [docs](https://hunch-pi.vercel.app/docs#grounding)
 
@@ -230,12 +216,10 @@ Plus the **Regression Guard** (re-adding deliberately-retired code) and the
 comments the affected `con_`/`dec_` ids and fails on a blocking one).
 
 Name the actual violation — `record-constraint "…" --scope "src/**" --severity blocking
---forbid-dep "lodash"` — and it blocks the *real* change across the file's whole life instead
-of relaxing to advisory after the file is edited again. The dep matcher reads the **parsed
-import**, so a comment or string naming the module can't false-positive and a submodule
-(`lodash/groupBy`) is still caught; a correction your assistant records gets the same matcher
-automatically. (`--match <regex>` remains a lint-grade textual fallback.) None of these are a
-bypass-proof boundary — deliberate indirection can still route around any rule.
+--forbid-dep "lodash"` — and it blocks the *real* change for the file's whole life, while staying
+quiet on edits that don't break the rule. A comment or string that merely mentions the module can't
+false-positive. None of these are a bypass-proof boundary — deliberate indirection can still route
+around any rule.
 
 ## Working as a team
 
@@ -263,24 +247,15 @@ the same way via the MCP server) — everyone, on every branch, resolves the sam
 ## Private memory (public repo, private context)
 
 Open-source your code without open-sourcing your *reasoning*. **`hunch private`** sets up a
-separate private store in one command — Hunch unions it into every query and guard **locally**
-(MCP and the pre-edit hook see your sensitive decisions/bugs/constraints) while your public
-`.hunch/` stays clean. It writes a gitignored `.hunch/local.json` so it's auto-detected — **no
-env var, no shell-profile edit** (and `HUNCH_PRIVATE_DIR` still overrides per-shell). **Opt-in,
-default-off** (no config → fully inert), and **leak-safe by construction**: committed files and
-the CI PR comment render *public-only*, so a private record can't reach a public surface. Record
-sensitive items with `private: true` (`hunch_record_decision` / `hunch_record_correction`);
-post-commit synthesis can route there too. Every capture is **auto-committed by default** to the
-store it lands in — the private repo is committed + pushed; a public capture is committed to
-`.hunch/` only and rides your next push (Hunch never pushes or merges your code branch) —
-recursion-safe, staging only `.hunch/`. Opt out with `--no-auto-commit`.
+separate private store in one command: your local queries, guards, and assistants see the
+sensitive decisions — but they're never committed to the public repo, and public outputs (like
+the CI PR comment) **can never contain them, by construction**. Opt-in, default-off; captures are
+auto-committed to the store they land in (opt out with `--no-auto-commit`), and Hunch never
+touches your code branch.
 
 Already published a repo *with* its `.hunch/` memory and want it private after the fact?
-`hunch private --repo <url> --migrate` does it in one shot: it **moves** your existing public
-records into the overlay (union by id — nothing is lost), empties the public store, untracks +
-gitignores the `.hunch/` memory tree, and regenerates the assistant grounding (CLAUDE.md, AGENTS.md,
-…) so the repo becomes **code-only**. It commits the private overlay for you and prints the one
-`git` command to commit the now-clean public repo.
+**`hunch private --repo <url> --migrate`** moves the existing memory into the private store —
+nothing lost — and leaves the public repo code-only, telling you the one `git` command left to run.
 → [docs](https://hunch-pi.vercel.app/docs#private)
 
 ## Continuous learning (CI)
