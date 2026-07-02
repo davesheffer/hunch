@@ -47,7 +47,7 @@ import { updateClaudeMd } from "../integrations/claudemd.js";
 import { writeMcpJson, writeSlashCommands, installClaudeHooks } from "../integrations/scaffold.js";
 import { scaffoldProviders, regenerateGrounding, refreshExistingGrounding } from "../integrations/providers.js";
 import { healClaudeConfigCaseSplit } from "../integrations/claudeConfig.js";
-import { formatContext } from "../core/format.js";
+import { formatContext, formatStructure } from "../core/format.js";
 import { readConfig, writeConfig, FIRMNESS_LEVELS, isFirmness, type Firmness } from "../core/config.js";
 import { blockingInScope, vetoInScope, proposedEditLines } from "../core/hookpolicy.js";
 import { loadGoldenSet, evaluateGraphLift } from "../eval/harness.js";
@@ -1750,6 +1750,21 @@ program
       const last = best.length - 1;
       console.log(`${last} hop(s):`);
       best.forEach((n, i) => console.log(`  ${i === 0 ? "┌" : i === last ? "└" : "├"} ${n.via}${n.via === n.id ? "" : `  (${n.id})`}`));
+    } finally {
+      store.close();
+    }
+  });
+
+// ---- structure (graph-served orientation — the anti-grep) -------------------
+program
+  .command("structure")
+  .description("The indexed shape of the repo, a directory, a file, or a symbol — orient from the graph instead of grep rounds. No target: repo map. Read-only.")
+  .argument("[target]", "a directory, file path, or exact symbol name (omit for the repo map)")
+  .action((target: string | undefined) => {
+    const { store } = storeFor();
+    try {
+      store.reindex(); // reflect out-of-band JSON edits before reading the graph
+      console.log(formatStructure(store.structure(target)));
     } finally {
       store.close();
     }

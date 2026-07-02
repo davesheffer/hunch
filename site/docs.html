@@ -411,6 +411,7 @@ if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElem
           <tr><td><code>hunch_check_constraints</code></td><td>Invariants whose scope matches a path/glob — call before editing.</td></tr>
           <tr><td><code>hunch_get_dependents</code></td><td>Transitive dependents of a symbol — the blast radius.</td></tr>
           <tr><td><code>hunch_blast_radius</code></td><td>Dependent files + near-violations a change could break indirectly.</td></tr>
+          <tr><td><code>hunch_structure</code></td><td>The indexed shape of the repo / a dir / a file / a symbol — orient from the graph instead of grep rounds; tells the agent exactly which file to read.</td></tr>
           <tr><td><code>hunch_pr_impact</code></td><td>The impact surface of a change (staged / branch / commit): dependent files reached, invariants direct &amp; near, decisions concerned. Advisory — the gate stays <code>hunch_merge_verdict</code>.</td></tr>
           <tr><td><code>hunch_path</code></td><td>Shortest dependency chain between two symbols/files/components, either direction — "how does A reach B?".</td></tr>
           <tr><td><code>hunch_bug_lineage</code></td><td>Bugs matching a symptom/symbol with their introduced→fixed→recurred lineage.</td></tr>
@@ -530,6 +531,7 @@ Agent: hunch_record_correction({ rule: "never import lodash; use src/utils",
           <tr><td><code>fragile</code></td><td>Ranked fragility report with evidence.</td></tr>
           <tr><td><code>check</code></td><td>Flag changes that touch a do-not-break invariant (local + CI guard); also flags (advisory) symbols you add that already exist elsewhere.</td></tr>
           <tr><td><code>veto</code></td><td>Decision Guard — flag changes that reverse a rejected alternative.</td></tr>
+          <tr><td><code>structure</code></td><td>Repo map / dir contents / file outline / symbol definition — from the graph, no grep. <code>hunch structure src/auth</code></td></tr>
           <tr><td><code>impact</code></td><td>The impact surface of a change — dependents reached, invariants, decisions concerned. <code>hunch impact origin/main</code>, <code>--commit &lt;sha&gt;</code>, or staged by default. Advisory.</td></tr>
           <tr><td><code>path</code></td><td>Shortest dependency chain between two points: <code>hunch path chargeUser verifySession</code>.</td></tr>
           <tr><td><code>drift</code></td><td>Flag doc≠graph drift — a file anchored to a <em>superseded</em> decision (<code>anchor-stale</code>), a markdown pin to a superseded/missing decision (<a class="link" href="#grounding">topic anchors</a>), plus topic collisions. Deterministic; exits non-zero for CI.</td></tr>

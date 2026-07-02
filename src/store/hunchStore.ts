@@ -767,6 +767,79 @@ export class HunchStore {
     };
   }
 
+  /** Structure view (hunch_structure / hunch structure): serve the indexed shape of
+   *  the repo so an agent ORIENTS from the graph instead of running grep/glob rounds.
+   *  Resolution: no target -> repo map; a directory -> its files+symbols; a file ->
+   *  its outline; a symbol name -> exact definition site(s) with one-hop neighbors.
+   *  Deterministic, read-only, straight from the derived index. */
+  structure(target?: string): StructureView {
+    if (!target || !target.trim()) {
+      const components = this.recs("components").map((c) => ({ id: c.id, name: c.name, responsibility: c.responsibility, paths: c.paths }));
+      const rows = this.db.prepare(`SELECT file, count(*) AS n FROM symbols GROUP BY file`).all() as Array<{ file: string; n: number }>;
+      const dirs = new Map<string, { files: number; symbols: number }>();
+      for (const r of rows) {
+        const dir = r.file.includes("/") ? r.file.slice(0, r.file.lastIndexOf("/")) : ".";
+        const e = dirs.get(dir) ?? { files: 0, symbols: 0 };
+        e.files++; e.symbols += r.n;
+        dirs.set(dir, e);
+      }
+      return {
+        kind: "repo",
+        components,
+        dirs: [...dirs.entries()].map(([dir, v]) => ({ dir, ...v })).sort((a, b) => b.symbols - a.symbols),
+      };
+    }
+    const t = toPosixTarget(target.trim()).replace(/\/+$/, "");
+    // FILE: exact path or unique suffix
+    const fileRows = this.db.prepare(
+      `SELECT id, name, kind, loc, fan_in, fan_out FROM symbols WHERE file = ? ORDER BY fan_in DESC, name`,
+    ).all(t) as Array<{ id: string; name: string; kind: string; loc: number; fan_in: number; fan_out: number }>;
+    const fileHit = fileRows.length ? t : (this.db.prepare(`SELECT DISTINCT file FROM symbols WHERE file LIKE ?`).all(`%/${t}`) as Array<{ file: string }>).map((r) => r.file);
+    const file = typeof fileHit === "string" ? fileHit : fileHit.length === 1 ? fileHit[0]! : null;
+    if (file) {
+      const syms = fileRows.length ? fileRows : this.db.prepare(
+        `SELECT id, name, kind, loc, fan_in, fan_out FROM symbols WHERE file = ? ORDER BY fan_in DESC, name`,
+      ).all(file) as typeof fileRows;
+      return {
+        kind: "file",
+        file,
+        symbols: syms.map((r) => ({ ...r, callers: this.edgeNeighbors(r.id, "in", 5) })),
+      };
+    }
+    // DIRECTORY: any indexed file under the prefix
+    const dirFiles = this.db.prepare(
+      `SELECT file, name, kind, fan_in FROM symbols WHERE file LIKE ? ORDER BY file, fan_in DESC`,
+    ).all(`${t}/%`) as Array<{ file: string; name: string; kind: string; fan_in: number }>;
+    if (dirFiles.length) {
+      const byFile = new Map<string, Array<{ name: string; kind: string; fan_in: number }>>();
+      for (const r of dirFiles) {
+        const list = byFile.get(r.file) ?? [];
+        list.push({ name: r.name, kind: r.kind, fan_in: r.fan_in });
+        byFile.set(r.file, list);
+      }
+      return { kind: "dir", dir: t, files: [...byFile.entries()].map(([f, symbols]) => ({ file: f, symbols })) };
+    }
+    // SYMBOL: exact name
+    const named = this.db.prepare(
+      `SELECT id, name, kind, file, fan_in, fan_out FROM symbols WHERE name = ? LIMIT 10`,
+    ).all(t) as Array<{ id: string; name: string; kind: string; file: string; fan_in: number; fan_out: number }>;
+    if (named.length) {
+      return {
+        kind: "symbol",
+        matches: named.map((m) => ({ ...m, callers: this.edgeNeighbors(m.id, "in", 6), callees: this.edgeNeighbors(m.id, "out", 6) })),
+      };
+    }
+    return { kind: "none", target: t };
+  }
+
+  /** Labelled one-hop edge neighbors of a node ("in" = who reaches it, "out" = what it reaches). */
+  private edgeNeighbors(id: string, dir: "in" | "out", limit: number): string[] {
+    const sql = dir === "in"
+      ? `SELECT e."from" AS nb FROM edges e WHERE e."to" = ? AND e.type IN ('calls','depends_on','imports','contains') LIMIT ?`
+      : `SELECT e."to" AS nb FROM edges e WHERE e."from" = ? AND e.type IN ('calls','depends_on','imports','contains') LIMIT ?`;
+    return (this.db.prepare(sql).all(id, limit) as Array<{ nb: string }>).map((r) => this.nodeLabel(r.nb));
+  }
+
   /** Constraints whose scope glob matches a path/glob (hunch_check_constraints).
    *  By default only ACTIVE invariants are returned — a retired constraint is no
    *  longer enforced. Pass `{ asOf }` to instead return the invariants in force at
@@ -1231,6 +1304,14 @@ export class HunchStore {
     return ctx;
   }
 }
+
+/** The graph-served repo shape (hunch_structure) — orient without grep rounds. */
+export type StructureView =
+  | { kind: "repo"; components: Array<{ id: string; name: string; responsibility: string; paths: string[] }>; dirs: Array<{ dir: string; files: number; symbols: number }> }
+  | { kind: "dir"; dir: string; files: Array<{ file: string; symbols: Array<{ name: string; kind: string; fan_in: number }> }> }
+  | { kind: "file"; file: string; symbols: Array<{ id: string; name: string; kind: string; loc: number; fan_in: number; fan_out: number; callers: string[] }> }
+  | { kind: "symbol"; matches: Array<{ id: string; name: string; kind: string; file: string; fan_in: number; fan_out: number; callers: string[]; callees: string[] }> }
+  | { kind: "none"; target: string };
 
 export interface StaleRecord {
   kind: string;

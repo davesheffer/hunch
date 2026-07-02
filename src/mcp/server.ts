@@ -19,7 +19,7 @@ import { refreshExistingGrounding } from "../integrations/providers.js";
 import { revParse, asOfDate, revExists, lastChangeDate, rangeFiles, rangeDiff, commitFiles, commitDiff, stagedFiles, stagedDiff, pullHunch } from "../extractors/git.js";
 import { flushCapture } from "../integrations/sync.js";
 import { ensureTeamOverlay } from "../integrations/team.js";
-import { formatContext } from "../core/format.js";
+import { formatContext, formatStructure } from "../core/format.js";
 import type { Runbook } from "../core/types.js";
 import { compareCandidates } from "../core/compare.js";
 import { checkConformance } from "../core/conformance.js";
@@ -589,6 +589,20 @@ export function buildServer(root: string): McpServer {
         return err(`Failed to compute merge verdict: ${(e as Error).message}`);
       }
     },
+  );
+
+  // -- hunch_structure (graph-served orientation — the anti-grep) ------------
+  server.registerTool(
+    "hunch_structure",
+    {
+      title: "The indexed shape of the repo / a dir / a file / a symbol",
+      description:
+        "Orient WITHOUT grep/glob rounds: the graph already holds the repo's structure. No target → repo map (components + directories by symbol weight). A directory → its files with their symbols. A file → its outline (symbols, fan-in/out, callers). An exact symbol name → its definition site(s) with one-hop neighbors. Call this FIRST when exploring unfamiliar code — it tells you exactly which file to read, instead of searching for it.",
+      inputSchema: {
+        target: z.string().optional().describe("A directory, file path, or exact symbol name. Omit for the repo map."),
+      },
+    },
+    async ({ target }): Promise<ToolResult> => ok(formatStructure(store.structure(target))),
   );
 
   // -- hunch_pr_impact (read-only impact surface — advisory, never gates) ----
