@@ -1,0 +1,24 @@
+{
+  "id": "con_547fff76bd",
+  "type": "correctness",
+  "statement": "This repo's generated wiki must never be committed to the public repo — private overlay wiki only (hunch wiki --private); wiki/ stays gitignored",
+  "scope": [
+    "wiki/**"
+  ],
+  "severity": "blocking",
+  "enforcement": "advisory_v1",
+  "match": null,
+  "forbids": null,
+  "rationale": "",
+  "source_decision": null,
+  "violations": [],
+  "status": "active",
+  "valid_from": "2026-07-02T13:02:20.601Z",
+  "valid_to": null,
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 1,
+    "evidence": [],
+    "last_verified": "2026-07-02T13:02:20.602Z"
+  }
+}

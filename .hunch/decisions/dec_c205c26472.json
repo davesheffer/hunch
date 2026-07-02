@@ -1,0 +1,49 @@
+{
+  "id": "dec_c205c26472",
+  "title": "Wiki freshness closes over EVERY generated artifact: one page state machine, page-key orphans, and a written-bytes tamper tripwire",
+  "topic": "wiki.freshness-closure",
+  "status": "accepted",
+  "context": "E2E audit (self-review + two independent adversarial agents) of the wiki pipeline. Privacy verdict: zero leak paths — the WikiHome source→destination pairing held everywhere. Correctness found real lifecycle holes: the README index lived outside the freshness system (repo-wide constraint changes / README deletion invisible forever), component renames and --dir changes stranded old pages that could later fire unhealable gating drift, adopted-copy pin healing used first-occurrence string replace (mangled prose ids, healed only one marker per line), --check failed CI on repos that never adopted a wiki, an empty graph made --heal unreachable while drift kept demanding it, and hand-edited pages passed --check as fresh forever.",
+  "decision": "(1) ONE state machine — pageState() — grades every generated artifact (component pages, adopted copies, specs ledger, and now the README index under reserved id '_index', hashed over its real inputs: rows, repo-wide invariants, doc counts). (2) Orphans are computed by PAGE KEY (manifest entries no current artifact claims), not component-id liveness — renames, retired adoptions, and abandoned paths all retire on --heal; nothing generated is ever stranded. (3) The manifest records the written page's content hash ('bytes'): a hand-edited or merge-mangled page grades stale (\"edited by hand\") and --heal restores the derived view — the 'do not edit by hand' contract finally has a tripwire (optional field; pre-bytes manifests degrade gracefully). (4) Adopted-copy healing rewrites pins ONLY inside their own marker (anchored regex, all markers per line); bare decision ids in prose are never touched; the adoption hash now covers rejected alternatives (they render). (5) CLI jurisdiction guards: --check on a never-adopted repo is a green no-op (CI-safe); --dir mismatch with an adopted manifest is refused; --heal stays reachable on an empty graph for cleanup; --private refuses a degenerate overlay whose parent IS the repo root. (6) --dir is normalized to POSIX-no-trailing-slash before becoming committed manifest keys.",
+  "consequences": [
+    "Every artifact answers to the same drift verb; a wiki where `hunch wiki --check` is green is now byte-faithful, complete, and unstranded — not just input-fresh",
+    "Existing manifests upgrade in place: missing '_index'/'bytes' simply grade new/skip-tamper until the next heal writes them",
+    "computeWikiDrift cost grows by one file read per otherwise-fresh page (tamper check) — bounded by page count",
+    "Known accepted residuals: relation links are not hash-covered (a slug reassignment can leave a fresh page linking to a renamed sibling until its own inputs move); local `hunch drift` output on overlay machines names private page paths (labels only — established local-output doctrine); the private index banner shows even in shared mode (conservative)"
+  ],
+  "alternatives_rejected": [
+    "Leaving the README outside freshness ('rewritten on any write anyway'): a repo-wide-only constraint change writes nothing, so the index staled silently forever",
+    "Orphan detection by component-id liveness (the original): correct for deletions, blind to renames and --dir moves — stranded pages later fire doc-anchor-stale that no heal can clear",
+    "Hashing page bytes as a freshness INPUT instead of a separate tamper field: would conflate 'inputs moved' with 'output touched' and break the inputs-only hashing contract",
+    "Healing pins with plain string replace on the line: first occurrence may be prose, not the marker — corrupted copy is byte-stable and therefore unhealable"
+  ],
+  "rejected_tripwires": [],
+  "related_components": [],
+  "related_files": [
+    "src/wiki/wiki.ts",
+    "src/wiki/adopt.ts",
+    "src/cli/index.ts",
+    "test/wiki.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-07-02T13:25:28.787Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 0.95,
+    "evidence": [
+      "src/wiki/wiki.ts",
+      "src/wiki/adopt.ts",
+      "src/cli/index.ts",
+      "test/wiki.test.ts"
+    ]
+  },
+  "date": "2026-07-02T13:25:28.787Z"
+}
