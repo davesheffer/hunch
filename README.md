@@ -131,6 +131,7 @@ cd your-repo
 hunch init                          # scaffold .hunch/, index, install hooks, wire up assistants
 hunch backfill --since 90d          # cold start: seed decisions from recent git history
 hunch why src/auth/session.ts       # …then ask your assistant: "why is X built this way?"
+hunch structure src/auth            # the map, from the graph — no grep rounds
 ```
 
 **Claude Code users — one-step plugin install** (MCP tools + `/hunch:capture`, `/hunch:heal`, `/hunch:why`, `/hunch:fix`, `/hunch:fragile`):
