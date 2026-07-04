@@ -13,6 +13,7 @@
  *   mcp       start the MCP server (Claude Code connects here)
  *   doctor    environment diagnostics
  */
+import "./preflight.js"; // MUST stay the first import — Node-version gate before node:sqlite loads
 import { existsSync, readFileSync, writeFileSync, mkdirSync, realpathSync } from "node:fs";
 import { execFileSync, spawnSync } from "node:child_process";
 import { join, relative, dirname, basename, resolve, isAbsolute } from "node:path";
