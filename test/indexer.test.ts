@@ -43,6 +43,42 @@ test("indexRepo builds symbols, call edges, components, and cross-file blast rad
   rmSync(root, { recursive: true, force: true });
 });
 
+test("reindex preserves component enrichment and does not churn timestamps", () => {
+  const root = fixtureRepo();
+  const store = new HunchStore(hunchPaths(root));
+  store.json.ensureDirs();
+  indexRepo(store, root, { churn: false });
+
+  // curate: enrichment written onto the stored record (what raiseFragility /
+  // a human curation pass does)
+  const auth = store.json.loadAll("components").find((c) => c.name === "Auth")!;
+  store.json.put("components", {
+    ...auth,
+    responsibility: "Session verification",
+    fragility: 0.4,
+    provenance: { ...auth.provenance, source: "human", confidence: 0.95 },
+  });
+  const before = store.json.loadAll("components").find((c) => c.id === auth.id)!;
+
+  indexRepo(store, root, { churn: false }); // unchanged layout → byte-identical record
+  const after = store.json.loadAll("components").find((c) => c.id === auth.id)!;
+  assert.equal(after.responsibility, "Session verification", "curated responsibility survives reindex");
+  assert.equal(after.fragility, 0.4, "raised fragility survives reindex");
+  assert.equal(after.provenance.source, "human", "upgraded provenance survives reindex");
+  assert.equal(after.created_at, before.created_at, "created_at is stable");
+  assert.equal(after.updated_at, before.updated_at, "updated_at untouched when nothing changed");
+
+  // layout change for the same component → record updates, created_at still stable
+  writeFileSync(join(root, "src/auth/mfa.ts"), `export function mfa(){ return true; }\n`);
+  indexRepo(store, root, { churn: false });
+  const grown = store.json.loadAll("components").find((c) => c.id === auth.id)!;
+  assert.equal(grown.created_at, before.created_at, "created_at survives a real change");
+  assert.equal(grown.responsibility, "Session verification", "enrichment survives a real change");
+
+  store.close();
+  rmSync(root, { recursive: true, force: true });
+});
+
 test("same-named symbols in one file get unique, stable ids (no PK collision)", () => {
   const root = mkdtempSync(join(tmpdir(), "hunch-dup-"));
   mkdirSync(join(root, "src"), { recursive: true });

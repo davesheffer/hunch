@@ -173,7 +173,28 @@ export function indexRepo(store: HunchStore, root: string, opts: { churn?: boole
   // persist
   store.json.replaceAll("symbols", symbols);
   store.json.replaceAll("edges", edges);
-  const compsOut: Component[] = components.map(({ _files, ...c }) => c);
+  // Components are derived-but-ENRICHED records: layout facts (paths, kind, name)
+  // come from this scan, while curation/synthesis (responsibility, owners, status,
+  // fragility from raiseFragility, upgraded provenance) lives only on the stored
+  // record and must survive a reindex. Timestamps are preserved so an unchanged
+  // component is byte-identical — reindexing must not churn git.
+  const prior = new Map(store.json.loadAll("components").map((c) => [c.id, c] as const));
+  const stamp = (c: Component): string => JSON.stringify({ ...c, created_at: "", updated_at: "" });
+  const compsOut: Component[] = components.map(({ _files, ...draft }) => {
+    const prev = prior.get(draft.id);
+    if (!prev) return draft;
+    const merged: Component = {
+      ...draft,
+      responsibility: prev.responsibility || draft.responsibility,
+      owners: prev.owners.length ? prev.owners : draft.owners,
+      status: prev.status,
+      fragility: Math.max(prev.fragility, draft.fragility),
+      provenance: prev.provenance.source !== "inferred" ? prev.provenance : draft.provenance,
+      created_at: prev.created_at,
+      updated_at: prev.updated_at,
+    };
+    return stamp(merged) === stamp(prev) ? prev : { ...merged, updated_at: draft.updated_at };
+  });
   store.json.replaceAll("components", compsOut);
 
   return { files: files.length, symbols: symbols.length, edges: edges.length, components: compsOut.length, skipped };
