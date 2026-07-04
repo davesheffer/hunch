@@ -11,15 +11,23 @@ export interface Invocation {
   args: string[]; // args BEFORE the subcommand (e.g. ["/abs/dist/cli/index.js"])
 }
 
-/** Merge a `hunch` server entry into .mcp.json, preserving other servers. */
+/** Merge a `hunch` server entry into .mcp.json, preserving other servers.
+ *  A non-empty file we cannot parse THROWS instead of being silently replaced
+ *  (con_8460b6770f — it may hold the user's other MCP servers); the caller
+ *  degrades that to a warning. */
 export function writeMcpJson(root: string, inv: Invocation): string {
   const file = join(root, ".mcp.json");
   let json: { mcpServers?: Record<string, unknown> } = {};
   if (existsSync(file)) {
-    try {
-      json = JSON.parse(readFileSync(file, "utf8"));
-    } catch {
-      json = {};
+    const raw = readFileSync(file, "utf8");
+    if (raw.trim()) {
+      try {
+        const v = JSON.parse(raw);
+        if (!v || typeof v !== "object" || Array.isArray(v)) throw new Error("not a JSON object");
+        json = v as { mcpServers?: Record<string, unknown> };
+      } catch (e) {
+        throw new Error(`refusing to overwrite ${file}: could not parse it (${(e as Error).message}). Fix or remove it, then re-run.`);
+      }
     }
   }
   json.mcpServers = json.mcpServers ?? {};

@@ -155,11 +155,16 @@ program
       console.log("  ⚠ not a git repo — skipped hooks (run `git init` to enable the learning loop)");
     }
 
-    const mcp = writeMcpJson(root, inv.mcp);
     // .mcp.json is the CANONICAL registration: Claude Code resolves it by file path,
     // so it's immune to the Windows ~/.claude.json drive-letter case-split that a
-    // global `claude mcp add` is prone to (see `hunch doctor`).
-    console.log(`  ✓ wrote ${rel(root, mcp)} (registers the Hunch MCP server — canonical, path-keyed; prefer over a global \`claude mcp add\`)`);
+    // global `claude mcp add` is prone to (see `hunch doctor`). An unparseable
+    // existing file is refused (con_8460b6770f) — warn and continue, never clobber.
+    try {
+      const mcp = writeMcpJson(root, inv.mcp);
+      console.log(`  ✓ wrote ${rel(root, mcp)} (registers the Hunch MCP server — canonical, path-keyed; prefer over a global \`claude mcp add\`)`);
+    } catch (e) {
+      console.log(`  ⚠ skipped .mcp.json: ${(e as Error).message}`);
+    }
     const cmds = writeSlashCommands(root);
     console.log(`  ✓ wrote ${cmds.length} slash commands (/hunch-why, /hunch-fix, /hunch-fragile)`);
     const cmd = updateClaudeMd(root, store);
