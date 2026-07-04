@@ -204,7 +204,11 @@ export function indexRepo(store: HunchStore, root: string, opts: { churn?: boole
 
 function listCodeFiles(root: string): string[] {
   if (isGitRepo(root)) {
-    const tracked = trackedFiles(root, CODE_EXTS).map((f) => join(root, f));
+    // Apply SKIP_DIRS to the git-tracked list too: a repo that (accidentally)
+    // tracks node_modules/ or dist/ must not flood the graph with vendored symbols.
+    const tracked = trackedFiles(root, CODE_EXTS)
+      .filter((f) => !f.split(/[\\/]/).some((seg) => SKIP_DIRS.has(seg)))
+      .map((f) => join(root, f));
     if (tracked.length > 0) return tracked; // else fall through (nothing committed yet)
   }
   const out: string[] = [];

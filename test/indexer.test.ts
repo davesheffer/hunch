@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { hunchPaths } from "../src/core/paths.js";
@@ -75,6 +76,27 @@ test("reindex preserves component enrichment and does not churn timestamps", () 
   assert.equal(grown.created_at, before.created_at, "created_at survives a real change");
   assert.equal(grown.responsibility, "Session verification", "enrichment survives a real change");
 
+  store.close();
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("GIT-TRACKED vendored dirs (node_modules, dist) are excluded from indexing", () => {
+  const root = fixtureRepo();
+  // a repo that TRACKS vendored code: `git ls-files` returns it, the walk never runs
+  mkdirSync(join(root, "node_modules/lib"), { recursive: true });
+  mkdirSync(join(root, "dist"), { recursive: true });
+  writeFileSync(join(root, "node_modules/lib/vendored.ts"), `export function vendored(){ return 1; }\n`);
+  writeFileSync(join(root, "dist/build-output.ts"), `export function built(){ return 1; }\n`);
+  const g = (...args: string[]) => execFileSync("git", ["-C", root, ...args], { stdio: "ignore" });
+  g("init", "-q");
+  g("-c", "user.email=t@t", "-c", "user.name=t", "add", "-f", "-A");
+  g("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "vendored tracked");
+  const store = new HunchStore(hunchPaths(root));
+  store.json.ensureDirs();
+  const res = indexRepo(store, root, { churn: false });
+  assert.equal(res.files, 3, "only the 3 real source files are indexed");
+  const files = new Set(store.json.loadAll("symbols").map((s) => s.file.replace(/\\/g, "/")));
+  assert.ok(![...files].some((f) => f.includes("node_modules") || f.startsWith("dist/")), `vendored files indexed: ${[...files].join(", ")}`);
   store.close();
   rmSync(root, { recursive: true, force: true });
 });
