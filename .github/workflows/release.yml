@@ -42,7 +42,20 @@ jobs:
       - name: Test
         run: npm test
 
+      # Tag push AND a later GitHub Release for the same version both trigger this
+      # workflow — make the second run a green no-op instead of a red "version
+      # already exists" publish failure.
+      - name: Skip if this version is already on npm
+        id: gate
+        run: |
+          V=$(node -p "require('./package.json').version")
+          if [ "$(npm view "@davesheffer/hunch@$V" version 2>/dev/null)" = "$V" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "@davesheffer/hunch@$V already published — skipping."
+          fi
+
       - name: Publish with provenance
+        if: steps.gate.outputs.skip != 'true'
         run: npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
