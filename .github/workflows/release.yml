@@ -6,7 +6,8 @@
 # One-time setup:
 #   1. Create an npm Granular Access / Automation token with publish rights for
 #      @davesheffer/hunch, store it as the repo secret NPM_TOKEN.
-#   2. Cut a release: bump version, tag, then publish a GitHub Release. This runs.
+#   2. Cut a release: bump version (`npm version patch`) and push the tag — the
+#      tag push publishes. Publishing a GitHub Release (also) works.
 # Provenance also needs publishConfig.provenance:true (set in package.json) and
 # the id-token:write permission below (OIDC) — both already wired.
 name: Release
@@ -14,6 +15,8 @@ name: Release
 on:
   release:
     types: [published]
+  push:
+    tags: ["v*"] # a version-tag push publishes directly — no GitHub Release needed
 
 permissions:
   contents: read
