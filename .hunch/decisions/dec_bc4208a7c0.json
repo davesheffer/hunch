@@ -1,0 +1,45 @@
+{
+  "id": "dec_bc4208a7c0",
+  "title": "Auto-commit reporting is honest: commitAndPushHunch returns its actual outcome and capture replies never claim a skipped commit",
+  "topic": "capture.flush-honesty",
+  "status": "accepted",
+  "context": "MCP capture replies said \"auto-committed to .hunch/ — rides your next push\" even when commitAndPushHunch quietly skipped (memory-only backstop tripped by e.g. a missing .gitignore staging hunch.sqlite*, lock held, or nothing staged) — flushCapture returned \"committed\"/\"pushed\" unconditionally. Found by a live MCP e2e in an un-initialized repo.",
+  "decision": "commitAndPushHunch now returns \"pushed\" | \"committed\" | null reflecting what actually happened (push is tracked directly, so a no-upstream/offline push reports \"committed\", not \"pushed\"); flushCapture propagates that result instead of asserting outcomes; the MCP server maps it via one flushNote helper — a skipped commit adds no suffix (record is on disk; next flush sweeps it), and an overlay commit whose push failed says so with a retry hint (`hunch private --sync`).",
+  "consequences": [
+    "capture replies can no longer claim a commit that did not happen",
+    "a private capture whose push fails is visibly deferred instead of reported as pushed",
+    "quiet-skip sweep semantics unchanged — null means the record still rides the next successful flush"
+  ],
+  "alternatives_rejected": [
+    "Keep unconditional return values and only reword the message: still lies whenever the backstop/lock skips",
+    "Make the public-store skip loud (stderr): the quiet-skip was a deliberate choice — a non-memory staged set there is usually the user's own work, not a misconfiguration",
+    "Report null as an explicit warning suffix in MCP replies: auto-commit-off users would see noise on every capture; silence is accurate for both"
+  ],
+  "rejected_tripwires": [],
+  "related_components": [],
+  "related_files": [
+    "src/extractors/git.ts",
+    "src/integrations/sync.ts",
+    "src/mcp/server.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-07-04T04:03:32.900Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 0.95,
+    "evidence": [
+      "src/extractors/git.ts",
+      "src/integrations/sync.ts",
+      "src/mcp/server.ts"
+    ]
+  },
+  "date": "2026-07-04T04:03:32.900Z"
+}
