@@ -543,6 +543,7 @@ Agent: hunch_record_correction({ rule: "never import lodash; use src/utils",
           <tr><td><code>context</code></td><td>Assemble the minimal relevant Hunch slice for a task.</td></tr>
           <tr><td><code>fragile</code></td><td>Ranked fragility report with evidence.</td></tr>
           <tr><td><code>check</code></td><td>Flag changes that touch a do-not-break invariant (local + CI guard); also flags (advisory) symbols you add that already exist elsewhere.</td></tr>
+          <tr><td><code>status</code></td><td>Enforcement readiness at a glance — what's enforcing, what's waiting for confirmation, what went stale.</td></tr>
           <tr><td><code>veto</code></td><td>Decision Guard — flag changes that reverse a rejected alternative.</td></tr>
           <tr><td><code>structure</code></td><td>Repo map / dir contents / file outline / symbol definition — from the graph, no grep. <code>hunch structure src/auth</code></td></tr>
           <tr><td><code>impact</code></td><td>The impact surface of a change — dependents reached, invariants, decisions concerned. <code>hunch impact origin/main</code>, <code>--commit &lt;sha&gt;</code>, or staged by default. Advisory.</td></tr>
@@ -569,6 +570,8 @@ Agent: hunch_record_correction({ rule: "never import lodash; use src/utils",
           <tr><td><code>runbook</code></td><td>Distill a reusable runbook from a commit range, or <code>--find &lt;query&gt;</code> to look one up.</td></tr>
           <tr><td><code>eval</code></td><td>Score retrieval quality (Recall@k, MRR) over a golden set; A/B the graph stream. <code>--kind runbooks</code></td></tr>
           <tr><td><code>capture-comments</code></td><td>Lift inline <code>hunch-why:</code> / <code>hunch-rule:</code> comments into the graph (decisions + constraints).</td></tr>
+          <tr><td><code>hook</code></td><td>The agent pre-edit hook handler (installed by <code>init</code>; reads the event JSON on stdin) — injects relevant memory before an edit, and at <a class="link" href="#firmness">strict firmness</a> denies edits that hit a blocking invariant. Never blocks on its own failure.</td></tr>
+          <tr><td><code>merge-driver</code></td><td>(internal) git merge driver for <code>.hunch/</code> JSON — resolves concurrent edits by record id, no conflict markers. Wired by <code>init</code>.</td></tr>
         </tbody>
       </table>
     </section>
