@@ -1,0 +1,117 @@
+{
+  "id": "dec_fbd7791c04",
+  "title": "Return actual commit outcome to prevent false success claims",
+  "topic": null,
+  "status": "proposed",
+  "context": "commitAndPushHunch had a void return type, so callers always reported success even when the commit was skipped (lock held, safety backstop refusal, empty stage) or push failed (offline/no upstream). MCP responses claimed 'auto-committed' or 'pushed' regardless of what actually happened. Touches invariant(s): con_8460b6770f (Config/provider writers must merge idempotently into existing user files and refuse to clobber an unparseable file); con_e04226bd05 (The MCP server must stay client-agnostic: all assistants point to the same .hunch/ graph; no Claude-only behavior in the server).",
+  "decision": "Changed commitAndPushHunch return type from void to 'pushed' | 'committed' | null. Callers now receive truth: null = nothing happened, 'committed' = commit created but push deferred/failed, 'pushed' = actually pushed. MCP server only claims success that occurred. Skipped commits remain on disk for next flush (eventually-consistent retry).",
+  "consequences": [
+    "Callers must decide what to report to users based on actual outcome, not assumption",
+    "User-facing messages now honest: skip says nothing, committed says 'rides next push', pushed says 'pushed'",
+    "flushNote() helper centralizes message logic to prevent future false claims",
+    "Test assertions now verify the function reports skips correctly (not as commits)"
+  ],
+  "alternatives_rejected": [
+    "Keep void, add separate status-check mechanism (complexity without solving the root issue of callers not knowing what happened)",
+    "Throw on failure (breaks the eventually-consistent retry pattern where failed commits are swept up on next flush)",
+    "Encode 'attempted' vs 'succeeded' in the message string itself (doesn't give callers semantic return value to key decisions on)"
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Keep void, add separate status-check mechanism (complexity without solving the root issue of callers not knowing what happened)",
+      "scope": [
+        "src/extractors/**",
+        "src/integrations/**",
+        "src/mcp/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Throw on failure (breaks the eventually-consistent retry pattern where failed commits are swept up on next flush)",
+      "scope": [
+        "src/extractors/**",
+        "src/integrations/**",
+        "src/mcp/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Encode 'attempted' vs 'succeeded' in the message string itself (doesn't give callers semantic return value to key decisions on)",
+      "scope": [
+        "src/extractors/**",
+        "src/integrations/**",
+        "src/mcp/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_863ac67d4a",
+    "cmp_a94a8fe5cc",
+    "cmp_dfa5b5acde",
+    "cmp_e0ccfe26fe"
+  ],
+  "related_files": [
+    "src/extractors/git.ts",
+    "src/integrations/sync.ts",
+    "src/mcp/server.ts",
+    "test/autocommit.test.ts",
+    "test/overlay-commit-guard.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "54d88bb",
+  "valid_from": "2026-07-04T07:05:07+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft",
+    "confidence": 0.65,
+    "evidence": [
+      "commit:54d88bb",
+      "synth:provider=claude-cli",
+      "branch:main",
+      "src/extractors/git.ts",
+      "src/integrations/sync.ts",
+      "src/mcp/server.ts",
+      "test/autocommit.test.ts",
+      "test/overlay-commit-guard.test.ts"
+    ],
+    "last_verified": "2026-07-04T04:05:24.768Z"
+  },
+  "date": "2026-07-04T07:05:07+03:00"
+}
