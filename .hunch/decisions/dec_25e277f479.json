@@ -1,0 +1,35 @@
+{
+  "id": "dec_25e277f479",
+  "title": "Roadmap: retrieval ranking — recency + provenance-weighted scoring over bare FTS",
+  "topic": "roadmap.retrieval-ranking",
+  "status": "proposed",
+  "context": "Agent-observed: FTS finds records but ranks them badly — 'work on the wiki' ranked the release runbook above the wiki runbook written minutes earlier; hunch_runbook('add a CLI subcommand') surfaced nothing relevant. When ranking misses, agents fall back to grep — the exact failure hunch exists to prevent.",
+  "decision": "Blend FTS score with recency (valid_from decay), provenance weight (human_confirmed > llm_draft), and trigger-phrase exact-match boosts for runbooks; evaluate against the golden set in hunch eval before/after.",
+  "consequences": [],
+  "alternatives_rejected": [],
+  "rejected_tripwires": [],
+  "related_components": [],
+  "related_files": [
+    "src/store/hunchStore.ts",
+    "src/eval/harness.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-07-05T05:38:21.552Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 0.95,
+    "evidence": [
+      "src/store/hunchStore.ts",
+      "src/eval/harness.ts"
+    ]
+  },
+  "date": "2026-07-05T05:38:21.552Z"
+}
