@@ -1,0 +1,35 @@
+{
+  "id": "dec_29eff08c69",
+  "title": "Roadmap: expose the wiki over MCP (hunch_wiki_status / hunch_now)",
+  "topic": "roadmap.wiki-mcp-surface",
+  "status": "proposed",
+  "context": "The wiki and the now-view are CLI-only; assistants can't ask 'which pages are stale' or 'what's on the roadmap' through the hunch_* tools. The MCP server must stay client-agnostic (con_e04226bd05); the runbook says mirror CLI ↔ MCP.",
+  "decision": "Add read-only MCP tools mirroring wikiStatus + nowData (public-store only for anything that could be pasted — same jurisdiction rules as the pages).",
+  "consequences": [],
+  "alternatives_rejected": [],
+  "rejected_tripwires": [],
+  "related_components": [],
+  "related_files": [
+    "src/mcp/server.ts",
+    "src/wiki/wiki.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-07-05T05:20:17.487Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 0.95,
+    "evidence": [
+      "src/mcp/server.ts",
+      "src/wiki/wiki.ts"
+    ]
+  },
+  "date": "2026-07-05T05:20:17.487Z"
+}
