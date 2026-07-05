@@ -12,6 +12,7 @@ import { commitMeta, commitDiff, headSha, currentBranch } from "../extractors/gi
 import { analyzeDiff, type DiffAnalysis } from "../extractors/diff.js";
 import { selectProvider, selectEnsemble, selectVerifier, verifyDecisionSafe, DeterministicProvider, type SynthProvider, type DecisionDraft, type BugDraft, type CommitInput, type FailureInput } from "./provider.js";
 import { decisionId, bugId, constraintId } from "../core/ids.js";
+import { commitCoveredBy } from "../core/dupdetect.js";
 import { pathMatchesGlob } from "../core/glob.js";
 import { draftTripwires, knownRepoDeps } from "./tripwires.js";
 import type { Decision, Bug, Constraint, Component, Symbol } from "../core/types.js";
@@ -82,6 +83,20 @@ export async function syncCommit(
       status: "skipped",
       reason: "decision already captured for this commit (use --force to re-synthesize)",
       decision: existing,
+    };
+  }
+
+  // Duplicate-factory gate (deterministic, pre-LLM): the human recorded this
+  // choice via MCP minutes-to-days ago (commit: null, different id), and now the
+  // post-commit hook would re-draft the same content under a commit-keyed id —
+  // review triage measured 7 of 14 queued drafts as exactly this. A recent
+  // human-confirmed decision claiming this commit's files → skip the draft (and
+  // the subscription call). Recency-windowed; --force overrides.
+  const covered = commitCoveredBy(codeFiles, meta.subject, store.recs("decisions"), Date.now());
+  if (covered && !opts.force) {
+    return {
+      status: "skipped",
+      reason: `already covered by ${covered.id} — "${covered.title}" (recorded ${covered.hoursAgo}h ago, claims ${covered.fileOverlapPct}% of this commit's files; --force to draft anyway)`,
     };
   }
 

@@ -52,6 +52,7 @@ import { formatContext, formatStructure } from "../core/format.js";
 import { readConfig, writeConfig, FIRMNESS_LEVELS, isFirmness, type Firmness } from "../core/config.js";
 import { blockingInScope, vetoInScope, proposedEditLines } from "../core/hookpolicy.js";
 import { injectionMode } from "../core/hookcache.js";
+import { draftDuplicateOf } from "../core/dupdetect.js";
 import { loadGoldenSet, evaluateGraphLift } from "../eval/harness.js";
 import { loadGuardCases, evalGuards, generateGuardCases } from "../eval/guards.js";
 import { computeDrift } from "../core/drift.js";
@@ -1651,8 +1652,9 @@ program
   .option("--accept <id>", "promote a decision to accepted/human-confirmed (confirms its tripwires)")
   .option("--reject <id>", "delete a draft decision")
   .option("--accept-verified", "batch-accept every Critic-verified, well-grounded draft (>= --min-grounded)")
+  .option("--reject-duplicates", "batch-reject drafts that near-duplicate an accepted record (deterministic term+file similarity — hygiene, not judgment)")
   .option("--min-grounded <n>", "grounded-ness threshold for the ready group / --accept-verified", String(READY_MIN_GROUNDED))
-  .action((opts: { accept?: string; reject?: string; acceptVerified?: boolean; minGrounded?: string }) => {
+  .action((opts: { accept?: string; reject?: string; acceptVerified?: boolean; rejectDuplicates?: boolean; minGrounded?: string }) => {
     const { store, root } = storeFor();
     const minGrounded = Number.isFinite(Number(opts.minGrounded)) ? Number(opts.minGrounded) : READY_MIN_GROUNDED;
     if (opts.accept) {
@@ -1666,6 +1668,25 @@ program
       const ok2 = store.json.delete("decisions", opts.reject);
       store.reindex();
       console.log(ok2 ? `✓ rejected and removed ${opts.reject}` : `decision ${opts.reject} not found`);
+    } else if (opts.rejectDuplicates) {
+      // Deterministic hygiene, not a trust decision (dec_a466655539 stays intact):
+      // only drafts, only against ACCEPTED records, conservative threshold.
+      const all = store.json.loadAll("decisions");
+      const drafts = all.filter((d) => d.status === "proposed" && !d.provenance.source.includes("human_confirmed"));
+      const dupes = drafts
+        .map((d) => ({ d, m: draftDuplicateOf(d, all) }))
+        .filter((x): x is { d: Decision; m: NonNullable<ReturnType<typeof draftDuplicateOf>> } => !!x.m);
+      if (!dupes.length) {
+        console.log("✓ No near-duplicate drafts.");
+      } else {
+        let removed = 0;
+        for (const { d, m } of dupes) {
+          if (store.json.delete("decisions", d.id)) removed++;
+          console.log(`  ✗ ${d.id} — "${d.title}"\n      duplicate of ${m.of.id} — "${m.of.title}" (${Math.round(m.score * 100)}%)`);
+        }
+        store.reindex();
+        console.log(`\n✓ Rejected ${removed} duplicate draft(s). Accepted records untouched.`);
+      }
     } else if (opts.acceptVerified) {
       // Batch path: only Critic-verified, well-grounded drafts qualify — still the
       // human-driven accept gate (the operator runs this), just over a safe subset.
@@ -1694,7 +1715,14 @@ program
         }
         if (scrutiny.length) {
           console.log(`⚠ ${scrutiny.length} need scrutiny — unverified / low-grounded (lowest confidence first):\n`);
-          for (const it of scrutiny) printReviewItem(it);
+          const all = store.json.loadAll("decisions");
+          let dupCount = 0;
+          for (const it of scrutiny) {
+            printReviewItem(it);
+            const m = draftDuplicateOf(it.d, all);
+            if (m) { dupCount++; console.log(`      ⚠ likely DUPLICATE of ${m.of.id} — "${m.of.title}" (${Math.round(m.score * 100)}%)`); }
+          }
+          if (dupCount) console.log(`\n   Batch-reject the ${dupCount} duplicate(s): hunch review --reject-duplicates`);
         }
         console.log(`\nAccept: hunch review --accept <id>   Reject: hunch review --reject <id>`);
       }
