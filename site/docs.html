@@ -521,7 +521,7 @@ Agent: hunch_record_correction({ rule: "never import lodash; use src/utils",
 
     <section id="ci">
       <h2>CI Constraint Guard<a class="anchor" href="#ci">#</a></h2>
-      <p>Memory that blocks a merge, not just advises. <code>hunch ci</code> scaffolds a GitHub Action that runs <code>hunch check</code> on every PR, comments the affected invariants and decisions (with <code>con_</code>/<code>dec_</code> ids and the causal <em>why</em>), and <strong>fails the check</strong> on a direct, high-confidence, non-stale blocking invariant.</p>
+      <p>Memory that can hold a merge — when you've asked it to. <code>hunch ci</code> scaffolds a GitHub Action that runs <code>hunch check</code> on every PR and comments the affected invariants and decisions (with <code>con_</code>/<code>dec_</code> ids and the causal <em>why</em>). The check fails only on a direct, high-confidence, non-stale blocking invariant — a rule you confirmed yourself.</p>
       <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">terminal</span><button class="copy">Copy</button></div><pre><span class="k">hunch</span> ci    <span class="c"># scaffold .github/workflows/ + the PR comment action</span></pre></div>
       <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">run a check locally</span><button class="copy">Copy</button></div><pre><span class="k">hunch</span> check --staged --strict      <span class="c"># gate staged changes</span>
 <span class="k">hunch</span> check --base origin/main      <span class="c"># gate a PR range (used in CI)</span></pre></div>

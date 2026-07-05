@@ -6,7 +6,7 @@
 <title>Hunch — your codebase remembers why</title>
 <meta name="description" content="Git stores what the code is. Hunch stores why — a git-native reasoning graph of decisions, bugs, and invariants, enforced deterministically across any MCP assistant." />
 <meta property="og:title" content="Hunch — your codebase remembers why" />
-<meta property="og:description" content="Architectural Conformance for AI code: a git-native graph of decisions, bugs, and invariants that blocks AI changes which break your architecture." />
+<meta property="og:description" content="Architectural Conformance for AI code: a git-native graph of decisions, bugs, and invariants that keeps AI changes true to your architecture — with the receipt for every call." />
 <meta property="og:image" content="https://hunch-pi.vercel.app/hunch-og.png" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -261,17 +261,19 @@
   <p class="eyebrow rise">architectural conformance for AI code · git-native · local-first</p>
   <h1 class="rise d1">Let AI fly.<br /><b>Hunch holds the line.</b></h1>
   <p class="lede rise d2">
-    The invariants pattern-SAST can't express — layering, must-reach, dependency direction —
-    enforced deterministically over a git-native graph of <em>why</em>. When an AI change breaks
-    your architecture, Hunch blocks it, citing the decision and the past bug it would reopen.
-    <b>Memory that gates, not just recalls.</b>
+    Your repo remembers what changed. Hunch teaches it to remember <em>why</em> — the decisions,
+    the trade-offs, the bugs you already paid for — and keeps every AI session consistent with
+    them. The invariants a pattern tool can't see (layering, must-reach, dependency direction)
+    are held quietly, deterministically, from a git-native graph. When a change would undo
+    something you chose on purpose, Hunch shows the receipt: the decision, and the bug it
+    protects you from. <b>Advisory by default. Memory that holds, not just recalls.</b>
   </p>
   <div class="hero-cta rise d3">
     <a class="btn" href="#start">Get started</a>
     <a class="btn ghost" href="blog/">Read the benchmark</a>
   </div>
   <div class="hero-facts rise d3">
-    <span>plain files in your repo</span><span>no SaaS, $0</span><span>works offline</span><span>Apache-2.0</span>
+    <span>plain files in your repo</span><span>advisory by default</span><span>no SaaS, $0</span><span>works offline</span><span>Apache-2.0</span>
   </div>
 
   <div class="term rise d4" aria-label="Terminal demo: hunch answers why">
@@ -411,7 +413,7 @@
           <div class="fbody">Re-introducing an approach you rejected — even one that never existed in code — is caught with a receipt: what you rejected, what you chose instead, and why.</div></details>
         <details class="f"><summary><span class="fname">Redundancy Guard</span><span class="fhint">"this already exists, three modules over"</span><span class="fplus">+</span></summary>
           <div class="fbody">The agent writes a helper that already exists three modules over; Hunch points at the original. Tuned quiet — a refactor that just moves code isn't mistaken for a duplicate.</div></details>
-        <details class="f"><summary><span class="fname">CI Constraint Guard</span><span class="fhint">memory that blocks a merge</span><span class="fplus">+</span></summary>
+        <details class="f"><summary><span class="fname">CI Constraint Guard</span><span class="fhint">memory that can hold a merge — when you ask it to</span><span class="fplus">+</span></summary>
           <div class="fbody">Every PR gets a comment naming the invariants and decisions it touches — and the check fails when a confirmed blocking rule is actually broken.</div></details>
         <details class="f"><summary><span class="fname">Causal Merge Verdict</span><span class="fhint">BLOCK / WARN / PASS, with the why</span><span class="fplus">+</span></summary>
           <div class="fbody">One verdict per diff — BLOCK / WARN / PASS — with each rule cited back to the decision behind it and the bug it prevents reopening. Catches what a diff-only reviewer can't.</div></details>
