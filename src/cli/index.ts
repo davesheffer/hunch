@@ -56,6 +56,7 @@ import { loadGoldenSet, evaluateGraphLift } from "../eval/harness.js";
 import { loadGuardCases, evalGuards, generateGuardCases } from "../eval/guards.js";
 import { computeDrift } from "../core/drift.js";
 import { generateWiki, wikiStatus, wikiPrompt, publicHome, privateHome, readWikiManifestAt, nowData, type WikiPack } from "../wiki/wiki.js";
+import { adoptProsePrompt } from "../wiki/adopt.js";
 import { topicCollisions, renderGrounding } from "../core/topics.js";
 import { parseDocAnchors, renderDocGrounding } from "../core/docanchors.js";
 import { compareCandidates } from "../core/compare.js";
@@ -1871,8 +1872,9 @@ program
   .option("--heal", "regenerate only new/stale pages (manifest hash mismatch) and remove orphans")
   .option("--check", "report stale pages and exit non-zero (CI gate); writes nothing")
   .option("--no-llm", "skip LLM prose; deterministic template pages only")
+  .option("--prose-heal", "also LLM-rewrite each adopted copy's reconciled overview (subscription; the deterministic corrections always remain)")
   .option("--private", "render the FULL graph (private overlay included) and write the wiki into the OVERLAY repo — nothing lands in this repo")
-  .action(async (opts: { dir?: string; heal?: boolean; check?: boolean; llm?: boolean; private?: boolean }) => {
+  .action(async (opts: { dir?: string; heal?: boolean; check?: boolean; llm?: boolean; proseHeal?: boolean; private?: boolean }) => {
     const { store, root } = storeFor();
     try {
       store.reindex(); // reflect out-of-band JSON edits before reading the graph
@@ -1928,14 +1930,17 @@ program
       // Prose is optional garnish on the deterministic skeleton: subscription CLI
       // only (same rule as synthesis), feature-detected, and any failure degrades
       // to a template page — generation never depends on a model being present.
+      if (opts.proseHeal && opts.llm === false) return fail("--prose-heal needs the LLM — drop --no-llm.");
       let prose: ((pack: WikiPack, excerpts: string) => Promise<string | null>) | undefined;
+      let adoptionProse: ((doc: Parameters<typeof adoptProsePrompt>[0], content: string) => Promise<string | null>) | undefined;
       if (opts.llm !== false) {
         const provider = await selectProvider();
         if (provider.draftProse) {
           console.log(`Prose via ${provider.name} (subscription); the drift-bearing skeleton stays deterministic.`);
           prose = (pack, excerpts) => provider.draftProse!(wikiPrompt(pack, excerpts));
+          if (opts.proseHeal) adoptionProse = (doc, content) => provider.draftProse!(adoptProsePrompt(doc, content, status.decisions));
         } else {
-          console.log("No subscription CLI available — deterministic template pages.");
+          console.log(`No subscription CLI available — deterministic template pages${opts.proseHeal ? " (prose-heal skipped)" : ""}.`);
         }
       }
 
@@ -1943,6 +1948,7 @@ program
         now: new Date().toISOString(),
         only: opts.heal ? "stale" : "all",
         prose,
+        adoptionProse,
         log: (l) => console.log(l),
       });
       if (!res.written.length && !res.removed.length) {

@@ -320,8 +320,10 @@ export class HunchStore {
 
   // ---- read path ----------------------------------------------------------
 
-  /** FTS5 ranked search (hunch_query). Falls back to LIKE if the query has no
-   *  FTS-tokenizable terms. */
+  /** FTS5 ranked search — the RAW bm25 primitive, no priors. Callers wanting
+   *  relevance ordering (liveness/provenance/recency + topic-chain promotion)
+   *  go through hybridSearch/searchScoped, where rerankByPriors applies.
+   *  Falls back to LIKE if the query has no FTS-tokenizable terms. */
   search(query: string, limit = 12): SearchHit[] {
     const match = toFtsQuery(query);
     // No FTS-tokenizable terms (e.g. a CJK-only query) — degrade to LIKE rather

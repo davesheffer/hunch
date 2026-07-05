@@ -110,8 +110,11 @@ export interface WikiPack {
    *  is the wiki-dir-relative path of the doc's wiki-managed copy (stale docs
    *  only), assigned by wikiStatus — the single slug authority. */
   docs: Array<{ path: string; title: string; status: string; adopted: string | null }>;
-  dependsOn: Array<{ id: string; name: string }>;
-  usedBy: Array<{ id: string; name: string }>;
+  /** `slug` is the related page's filename stem, assigned by wikiStatus (the
+   *  slug authority) and HASHED with the pack — a sibling rename re-renders
+   *  every page that links to it (closes the dec_c205c26472 residual). */
+  dependsOn: Array<{ id: string; name: string; slug: string | null }>;
+  usedBy: Array<{ id: string; name: string; slug: string | null }>;
 }
 
 /** "src/store/**" → "src/store/"; "src/core/io.ts" → "src/core/io.ts". */
@@ -139,6 +142,7 @@ export function assemblePack(
   source: WikiSource = "public",
   repoDocs: readonly RepoDoc[] = [],
   adoptedPageByRel: ReadonlyMap<string, string> = new Map(),
+  slugById: ReadonlyMap<string, string> = new Map(),
 ): WikiPack {
   const read = <K extends EntityKind>(kind: K): EntityFor[K][] => (source === "all" ? store.recs(kind) : store.json.loadAll(kind));
   const prefixes = component.paths.map(globPrefix);
@@ -183,7 +187,8 @@ export function assemblePack(
     if (e.from === component.id && componentsById.has(e.to) && e.to !== component.id) dependsOn.set(e.to, componentsById.get(e.to)!.name);
     if (e.to === component.id && componentsById.has(e.from) && e.from !== component.id) usedBy.set(e.from, componentsById.get(e.from)!.name);
   }
-  const rel = (m: Map<string, string>) => [...m].map(([id, name]) => ({ id, name })).sort((a, b) => a.id.localeCompare(b.id));
+  const rel = (m: Map<string, string>) =>
+    [...m].map(([id, name]) => ({ id, name, slug: slugById.get(id) ?? null })).sort((a, b) => a.id.localeCompare(b.id));
 
   const docs = repoDocs
     .filter((doc) => doc.srcRefs.some((f) => owns(prefixes, f)))
@@ -242,7 +247,7 @@ const DOC_BADGE: Record<string, string> = { grounded: "✅ grounded", stale: "�
 /** `docsLinkable`: pages in the MAIN repo can relative-link ../<doc>; a private
  *  home's pages live in the OVERLAY repo where those paths don't resolve, so
  *  they render doc paths as plain text instead. */
-export function renderPage(pack: WikiPack, prose: string | null, slugById: Map<string, string>, docsLinkable = true): string {
+export function renderPage(pack: WikiPack, prose: string | null, docsLinkable = true): string {
   const c = pack.component;
   const L: string[] = [];
   L.push(`<!-- hunch:wiki ${c.id} — GENERATED from the Hunch graph by \`hunch wiki\`; the graph is the source of truth. Edit records (/capture, hunch_record_decision), then \`hunch wiki --heal\` — do not edit this page by hand. -->`);
@@ -292,7 +297,7 @@ export function renderPage(pack: WikiPack, prose: string | null, slugById: Map<s
 
   if (pack.dependsOn.length || pack.usedBy.length) {
     L.push("## Relations", "");
-    const link = (r: { id: string; name: string }) => { const s = slugById.get(r.id); return s ? `[${r.name}](${s}.md)` : r.name; };
+    const link = (r: { name: string; slug: string | null }) => (r.slug ? `[${r.name}](${r.slug}.md)` : r.name);
     if (pack.dependsOn.length) L.push(`- Depends on: ${pack.dependsOn.map(link).join(", ")}`);
     if (pack.usedBy.length) L.push(`- Used by: ${pack.usedBy.map(link).join(", ")}`);
     L.push("");
@@ -584,10 +589,14 @@ export function wikiStatus(store: HunchStore, home: WikiHome, srcRoot: string): 
   }
   const adoptedPageByRel = new Map(adoptions.map((a) => [a.doc.rel, a.page.slice(home.dir.length + 1)] as const));
 
+  // Slugs FIRST (single authority): packs embed their relations' slugs, so the
+  // freshness hash covers cross-page links — a sibling rename re-renders every
+  // page that links to it instead of leaving a fresh page pointing at a ghost.
   const taken = new Set<string>();
+  const slugById = new Map(components.map((c) => [c.id, slugFor(c.name, c.id, taken)] as const));
   const entries: WikiEntry[] = components.map((c) => {
-    const pack = assemblePack(store, c, home.source, docs, adoptedPageByRel);
-    const slug = slugFor(c.name, c.id, taken);
+    const pack = assemblePack(store, c, home.source, docs, adoptedPageByRel, slugById);
+    const slug = slugById.get(c.id)!;
     const page = `${home.dir}/${slug}.md`;
     const hash = packHash(pack);
     const { state, reason } = pageState(home, page, c.id, hash, manifest?.pages[page]);
@@ -648,6 +657,10 @@ export interface GenerateOptions {
   only: "all" | "stale";
   /** Optional grounded-prose hook (subscription CLI). null/throw → template-only page. */
   prose?: (pack: WikiPack, excerpts: string) => Promise<string | null>;
+  /** Optional prose-heal for ADOPTED copies (--prose-heal): an LLM "reconciled
+   *  overview" under the banner. null/throw → deterministic copy, exactly as
+   *  without the flag; output is never hashed (same doctrine as page prose). */
+  adoptionProse?: (doc: RepoDoc, content: string) => Promise<string | null>;
   log?: (line: string) => void;
 }
 
@@ -691,7 +704,6 @@ export async function generateWiki(
   const nowTarget = opts.only === "all" || status.now.state !== "fresh";
   const log = opts.log ?? (() => {});
 
-  const slugById = new Map(status.entries.map((e) => [e.pack.component.id, e.slug] as const));
   const written: string[] = [];
   /** Written-bytes ledger — the hand-edit tripwire recorded per page. */
   const bytesByPage = new Map<string, string>();
@@ -711,7 +723,7 @@ export async function generateWiki(
         prose = null; // template-only page; never fail generation on a CLI hiccup
       }
     }
-    put(e.page, renderPage(e.pack, prose, slugById, home.kind === "public"));
+    put(e.page, renderPage(e.pack, prose, home.kind === "public"));
     log(`  ✎ ${e.page}${e.state === "fresh" ? "" : ` (${e.state})`}${prose ? "" : " [template]"}`);
   }
 
@@ -725,8 +737,16 @@ export async function generateWiki(
   const adoptionTargets = status.adoptions.filter((a) => opts.only === "all" || a.state !== "fresh");
   if (adoptionTargets.length) mkdirSync(join(home.pagesRoot, home.dir, "docs"), { recursive: true });
   for (const a of adoptionTargets) {
-    put(a.page, renderAdoptedDoc(a.doc, a.content, status.decisions));
-    log(`  ✚ ${a.page}${a.state === "fresh" ? "" : ` (${a.state})`} [adopted from ${a.doc.rel}]`);
+    let reconciled: string | null = null;
+    if (opts.adoptionProse) {
+      try {
+        reconciled = await opts.adoptionProse(a.doc, a.content);
+      } catch {
+        reconciled = null; // deterministic copy; a CLI hiccup never fails adoption
+      }
+    }
+    put(a.page, renderAdoptedDoc(a.doc, a.content, status.decisions, reconciled));
+    log(`  ✚ ${a.page}${a.state === "fresh" ? "" : ` (${a.state})`} [adopted from ${a.doc.rel}]${reconciled ? " [prose-healed]" : ""}`);
   }
 
   if (nowTarget) {

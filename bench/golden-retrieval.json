@@ -1,12 +1,73 @@
 [
-  { "query": "why are wiki pages regenerated only when stale", "expected": ["dec_c205c26472"], "note": "freshness closure decision" },
-  { "query": "adopt stale docs into the wiki", "expected": ["dec_a2899939d9"], "note": "adoption decision" },
-  { "query": "retrieval ranking roadmap", "expected": ["dec_25e277f479"], "note": "live roadmap item should outrank history" },
-  { "query": "private overlay leak wiki", "expected": ["dec_710fd0fb4f", "dec_9b8d8aade0"], "note": "home pairing + jurisdiction" },
-  { "query": "component wiki derived view", "expected": ["dec_710fd0fb4f"], "note": "LIVE decision must outrank its superseded predecessor dec_9a0cd88f0a" },
-  { "query": "subscription api key stripped synthesis", "expected": ["dec_5a7c0733f7"], "note": "subscription-only synthesis" },
-  { "query": "atomic json writes truncate index", "expected": ["con_902759b3dc"], "note": "constraint retrieval" },
-  { "query": "doc grading jurisdiction private successor", "expected": ["dec_9b8d8aade0"], "note": "jurisdiction grading" },
-  { "query": "session start orientation hook", "expected": ["dec_39bc7c8bee"], "note": "recent ergonomics decision" },
-  { "query": "injection dedup token burn", "expected": ["dec_7cce5bcd8a"], "note": "hookcache decision" }
+  {
+    "query": "why are wiki pages regenerated only when stale",
+    "expected": [
+      "dec_c205c26472"
+    ],
+    "note": "freshness closure decision"
+  },
+  {
+    "query": "adopt stale docs into the wiki",
+    "expected": [
+      "dec_a2899939d9"
+    ],
+    "note": "adoption decision"
+  },
+  {
+    "query": "retrieval ranking roadmap",
+    "expected": [
+      "dec_e622668785"
+    ],
+    "note": "expects the topic's CURRENT decision — was dec_25e277f479 until its supersession; golden refs must follow the chain (or lean on topic-chain promotion)"
+  },
+  {
+    "query": "private overlay leak wiki",
+    "expected": [
+      "dec_710fd0fb4f",
+      "dec_9b8d8aade0"
+    ],
+    "note": "home pairing + jurisdiction"
+  },
+  {
+    "query": "component wiki derived view",
+    "expected": [
+      "dec_710fd0fb4f"
+    ],
+    "note": "LIVE decision must outrank its superseded predecessor dec_9a0cd88f0a"
+  },
+  {
+    "query": "subscription api key stripped synthesis",
+    "expected": [
+      "dec_5a7c0733f7"
+    ],
+    "note": "subscription-only synthesis"
+  },
+  {
+    "query": "atomic json writes truncate index",
+    "expected": [
+      "con_902759b3dc"
+    ],
+    "note": "constraint retrieval"
+  },
+  {
+    "query": "doc grading jurisdiction private successor",
+    "expected": [
+      "dec_9b8d8aade0"
+    ],
+    "note": "jurisdiction grading"
+  },
+  {
+    "query": "session start orientation hook",
+    "expected": [
+      "dec_39bc7c8bee"
+    ],
+    "note": "recent ergonomics decision"
+  },
+  {
+    "query": "injection dedup token burn",
+    "expected": [
+      "dec_7cce5bcd8a"
+    ],
+    "note": "hookcache decision"
+  }
 ]

@@ -119,7 +119,7 @@ test("assemblePack: component-level edges resolve to depends-on / used-by names"
   store.json.put("components", CMP({ id: "cmp_core", name: "Core", paths: ["src/core/**"] }) as never);
   store.json.put("edges", { id: "edge_1", from: "cmp_store", to: "cmp_core", type: "depends_on", reason: "", strength: 0.8, provenance: prov(0.9) } as never);
   const pack = assemblePack(store, CMP() as never);
-  assert.deepEqual(pack.dependsOn, [{ id: "cmp_core", name: "Core" }]);
+  assert.deepEqual(pack.dependsOn, [{ id: "cmp_core", name: "Core", slug: null }]);
   assert.deepEqual(pack.usedBy, []);
 });
 
@@ -154,14 +154,14 @@ test("renderPage: deterministic skeleton carries hunch:topic pins, constraint id
   t.after(cleanup);
   seed(store);
   const pack = assemblePack(store, CMP() as never);
-  const page = renderPage(pack, null, new Map());
+  const page = renderPage(pack, null);
   assert.match(page, /<!-- hunch:wiki cmp_store /);
   assert.match(page, /<!-- hunch:topic store\.write-durability dec_atomic -->/, "topic'd decision is PINNED for doc-anchor drift");
   assert.match(page, /con_atomic/);
   assert.match(page, /\| `loadAll` \| function \|/);
   assert.match(page, /bug_trunc/);
   assert.doesNotMatch(page, /2026-07-02/, "no timestamps in page bodies — regen must be byte-identical");
-  assert.equal(page, renderPage(pack, null, new Map()), "render is deterministic");
+  assert.equal(page, renderPage(pack, null), "render is deterministic");
 });
 
 test("renderPage: prose slots in as Overview; absent prose leaves a complete template page", (t) => {
@@ -169,9 +169,9 @@ test("renderPage: prose slots in as Overview; absent prose leaves a complete tem
   t.after(cleanup);
   seed(store);
   const pack = assemblePack(store, CMP() as never);
-  const withProse = renderPage(pack, "This layer persists the graph (dec_atomic).", new Map());
+  const withProse = renderPage(pack, "This layer persists the graph (dec_atomic).");
   assert.match(withProse, /## Overview\n\nThis layer persists the graph/);
-  assert.doesNotMatch(renderPage(pack, null, new Map()), /## Overview/);
+  assert.doesNotMatch(renderPage(pack, null), /## Overview/);
 });
 
 test("slugFor: kebab-cases, dodges readme, and disambiguates collisions", () => {
@@ -643,4 +643,52 @@ test("now page: recent ledger + roadmap from proposed decisions; recording/accep
   assert.match(after, /## 🗺 Roadmap[\s\S]*_Empty\./, "accepted item left the roadmap by itself");
   assert.match(after, /## 🔥 Recent[\s\S]*Add cursor pagination/);
   assert.equal(readWikiManifestAt(home.manifestPath)?.pages["wiki/now.md"]?.component, "_now");
+});
+
+test("relation-link hashing: renaming a sibling re-renders the pages that LINK to it (dec_c205c26472 residual closed)", async (t) => {
+  const { store, root, cleanup } = tempStore();
+  t.after(cleanup);
+  seed(store);
+  store.json.put("components", CMP({ id: "cmp_core", name: "Core", paths: ["src/core/**"] }) as never);
+  store.json.put("edges", { id: "edge_1", from: "cmp_store", to: "cmp_core", type: "depends_on", reason: "", strength: 0.8, provenance: prov(0.9) } as never);
+  const home = publicHome(root, "wiki");
+  await generateWiki(store, root, home, { now: NOW, only: "all" });
+  assert.match(readFileSync(join(root, "wiki", "store-layer.md"), "utf8"), /\[Core\]\(core\.md\)/);
+  assert.equal(computeWikiDrift(store, root).length, 0);
+
+  store.json.put("components", CMP({ id: "cmp_core", name: "Kernel", paths: ["src/core/**"] }) as never); // rename → slug moves
+  const findings = computeWikiDrift(store, root);
+  assert.ok(findings.some((f) => f.id === "wiki/store-layer.md"), "the LINKING page goes stale, not just the renamed one");
+  await generateWiki(store, root, home, { now: NOW, only: "stale" });
+  assert.match(readFileSync(join(root, "wiki", "store-layer.md"), "utf8"), /\[Kernel\]\(kernel\.md\)/, "link re-rendered to the new slug");
+  assert.equal(computeWikiDrift(store, root).length, 0);
+});
+
+test("prose-heal: an adopted copy gains the reconciled overview; failure or absence keeps the deterministic copy byte-identical", async (t) => {
+  const { store, root, cleanup } = tempStore();
+  t.after(cleanup);
+  seed(store);
+  store.json.put("decisions", DEC({ status: "superseded", superseded_by: "dec_v2" }) as never);
+  store.json.put("decisions", DEC({ id: "dec_v2", topic: "store.write-durability", title: "fsync then rename", supersedes: "dec_atomic" }) as never);
+  mkdirSync(join(root, "docs"), { recursive: true });
+  writeFileSync(join(root, "docs", "durability.md"), "# Durability\n<!-- hunch:topic store.write-durability dec_atomic -->\nOld prose.\n");
+  const home = publicHome(root, "wiki");
+
+  await generateWiki(store, root, home, { now: NOW, only: "all" });
+  const plain = readFileSync(join(root, "wiki", "docs", "docs-durability.md"), "utf8");
+  assert.doesNotMatch(plain, /Reconciled overview/);
+
+  await generateWiki(store, root, home, {
+    now: NOW, only: "all",
+    adoptionProse: async (doc) => `This doc now reflects cursor durability for ${doc.rel} (dec_v2).`,
+  });
+  const healed = readFileSync(join(root, "wiki", "docs", "docs-durability.md"), "utf8");
+  assert.match(healed, /## 🩹 Reconciled overview[\s\S]*cursor durability[\s\S]*deterministic, authoritative layer/);
+  assert.match(healed, /🧭 Graph correction/, "deterministic corrections remain under the prose");
+
+  await generateWiki(store, root, home, {
+    now: NOW, only: "all",
+    adoptionProse: async () => { throw new Error("CLI exploded"); },
+  });
+  assert.equal(readFileSync(join(root, "wiki", "docs", "docs-durability.md"), "utf8"), plain, "prose failure degrades to the exact deterministic copy");
 });

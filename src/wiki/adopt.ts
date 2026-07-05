@@ -60,8 +60,35 @@ export function adoptionHash(content: string, decisions: readonly Decision[], do
     .digest("hex").slice(0, 16);
 }
 
-/** Render the wiki-managed copy of a stale doc, healed against the graph. */
-export function renderAdoptedDoc(doc: RepoDoc, content: string, decisions: readonly Decision[]): string {
+/** Prompt for the optional PROSE-HEAL tier (dec roadmap.adoption-prose-heal):
+ *  a subscription-CLI rewrite of what the stale doc SHOULD say now. The output
+ *  is garnish on the deterministic skeleton — never hashed, never a substitute
+ *  for the graph corrections rendered below it. */
+export function adoptProsePrompt(doc: RepoDoc, content: string, decisions: readonly Decision[]): string {
+  const topical = doc.topics
+    .map((t) => {
+      const cur = currentForTopic(decisions, t);
+      return cur ? `topic "${t}" → CURRENT decision ${cur.id} — ${cur.title}: ${clip(cur.decision, 400)}` : null;
+    })
+    .filter((x): x is string => !!x);
+  return `You are the documentation engine of an Engineering Memory OS. A repo doc went STALE
+against the decision graph. Write the short RECONCILED version: what this doc should say NOW,
+grounded ONLY in the current decisions below — never invent behavior, cite decision ids inline
+like (dec_xxx). Plain markdown paragraphs, no headings or lists, 100-180 words.
+
+## The stale doc (${doc.rel})
+${content.slice(0, 4000)}
+
+## Current decisions for its topics
+${topical.join("\n") || "(none — the doc is stale for non-pin reasons: " + doc.issues.join("; ") + ")"}
+
+Write the reconciled version now.`;
+}
+
+/** Render the wiki-managed copy of a stale doc, healed against the graph.
+ *  `reconciled` (optional, LLM prose-heal) slots in under the banner; the
+ *  deterministic corrections below remain the authoritative layer. */
+export function renderAdoptedDoc(doc: RepoDoc, content: string, decisions: readonly Decision[], reconciled: string | null = null): string {
   const byId = new Map(decisions.map((d) => [d.id, d] as const));
   const lines = content.split("\n");
   const out: string[] = [];
@@ -72,6 +99,9 @@ export function renderAdoptedDoc(doc: RepoDoc, content: string, decisions: reado
   // no inline correction below, so the banner is its only visible explanation.
   for (const i of doc.issues) out.push(`> - ${i}`);
   out.push("");
+  if (reconciled) {
+    out.push("## 🩹 Reconciled overview", "", reconciled.trim(), "", "_LLM-drafted from the current decisions (subscription); the graph corrections below are the deterministic, authoritative layer._", "");
+  }
 
   const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   for (const raw of lines) {
