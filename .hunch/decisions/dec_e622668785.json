@@ -1,0 +1,46 @@
+{
+  "id": "dec_e622668785",
+  "title": "Retrieval ranks by graph priors: liveness × provenance × recency + topic-chain successor promotion — measured lift, no model",
+  "topic": "roadmap.retrieval-ranking",
+  "status": "accepted",
+  "context": "Shipped from the roadmap with the eval gate it demanded. Baseline on the new committed golden set (bench/golden-retrieval.json, 10 real cases): Recall@10 90%, MRR 0.693, one dead miss — a query that lexically matched only a SUPERSEDED decision while the live successor never entered the candidate pool.",
+  "decision": "Post-fusion rerank in hybridSearch + searchScoped (rerankByPriors): rank-based blend — 1/(60+i) × liveness(0.6 if superseded/retired/rejected) × provenance(1.0 human_confirmed / 0.85 llm_draft / 0.75 extracted-inferred) × recency(0.7 + 0.3·½^(age/90d)) — so bm25's negative scale never leaks and priors are BOUNDED: old or superseded records dim, never disappear. Runbook trigger phrases matching the query boost ×1.5 in scoped retrieval. TOPIC-CHAIN PROMOTION: a superseded decision in the pool injects its topic's CURRENT decision at the predecessor's rank (×0.98) — the reader asked about the topic; the graph's one live answer must surface even when only history matches lexically; fires even on a single-hit pool (the common lone-stale-match case). Measured after: Recall@10 100%, MRR 0.787 (+13.6% rel), hit-rate 100%; full suite green incl. graphrank regressions (ties keep fused order — stable sort).",
+  "consequences": [
+    "bench/golden-retrieval.json is committed — `hunch eval --file bench/golden-retrieval.json` is now a regression gate for any future retrieval change",
+    "rerank reads recs() per hit (cached loadAll) — bounded by pool size (≤50)",
+    "raw store.search() stays a pure FTS primitive (context-fallback and internal feeders untouched); priors apply at the retrieval surfaces: hybridSearch, searchScoped, searchRunbooks"
+  ],
+  "alternatives_rejected": [
+    "Score-space blending with bm25 values: bm25 is negative and corpus-dependent — rank-space (RRF-style) composes cleanly with the existing fusion",
+    "Unbounded recency/provenance weights: canonical old decisions must stay findable; floors (0.7 recency, 0.6 liveness) keep history one notch down, not gone",
+    "Swapping the superseded hit for its successor: history is a legitimate answer — promotion ADDS the current truth above it, never erases the trail",
+    "LLM reranking: no model in the retrieval path — same doctrine as the guards"
+  ],
+  "rejected_tripwires": [],
+  "related_components": [],
+  "related_files": [
+    "src/store/hunchStore.ts",
+    "bench/golden-retrieval.json",
+    "test/rankpriors.test.ts"
+  ],
+  "supersedes": "dec_25e277f479",
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-07-05T06:02:55.688Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 0.95,
+    "evidence": [
+      "src/store/hunchStore.ts",
+      "bench/golden-retrieval.json",
+      "test/rankpriors.test.ts"
+    ]
+  },
+  "date": "2026-07-05T06:02:55.688Z"
+}
