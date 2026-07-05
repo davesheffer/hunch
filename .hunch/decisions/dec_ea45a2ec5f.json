@@ -1,0 +1,48 @@
+{
+  "id": "dec_ea45a2ec5f",
+  "title": "Draft dedup is automated as hygiene, never as judgment: pre-draft coverage gate + review-time duplicate flags",
+  "topic": "capture.draft-dedup",
+  "status": "accepted",
+  "context": "Review triage measured the duplicate factory: 7 of 14 queued auto-drafts re-described decisions a human had already recorded (record via MCP with commit:null, then commit — the post-commit hook re-drafts the same content under a commit-keyed id, so sha-idempotency never fires). Auto-REVIEW stays rejected (dec_a466655539: the vouch is human); duplicate DETECTION is deterministic and safe to automate.",
+  "decision": "src/core/dupdetect.ts, two model-free layers sharing one term tokenizer. (1) PRE-DRAFT: syncCommit skips synthesis when a live human-confirmed decision recorded within 14 days claims ≥60% of the commit's files (or ≥34% + 2 files with subject-term corroboration) — the skip names the covering decision and saves the subscription call; recency-windowed so an OLD decision on the same files never suppresses new work; --force overrides; recs()-based so a private capture covers a public commit. (2) REVIEW-TIME: `hunch review` annotates drafts that near-duplicate an accepted record (term Jaccard + file-overlap boost, conservative 0.35 threshold) and `--reject-duplicates` batch-rejects exactly those — drafts only, accepted records untouchable.",
+  "consequences": [
+    "The record-then-commit workflow (this session's dominant pattern) no longer mints queue noise — this very decision's shipping commit is the first live exercise of the gate",
+    "hunch review output stays honest: duplicates are FLAGGED with their twin and score, and batch-rejection is an explicit operator command",
+    "Coverage skips are visible in sync output (named decision, age, overlap %) — never a silent drop (con_947c578b2c spirit)"
+  ],
+  "alternatives_rejected": [
+    "Auto-accepting Critic-verified drafts unattended: acceptance ARMS blocking enforcement — the human vouch is the product's trust story, not a bottleneck to optimize away",
+    "Post-draft content comparison as the only layer: detecting the duplicate after paying the LLM wastes the call the pre-draft gate saves",
+    "A long/no recency window on coverage: any file with decision history would never draft again — 14 days covers record-then-commit workflows without silencing the future",
+    "Folding duplicates INTO the covering decision automatically: silent record mutation; a skip with a named reason keeps the audit trail"
+  ],
+  "rejected_tripwires": [],
+  "related_components": [],
+  "related_files": [
+    "src/core/dupdetect.ts",
+    "src/synthesis/synthesize.ts",
+    "src/cli/index.ts",
+    "test/dupdetect.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-07-05T06:35:14.939Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 0.95,
+    "evidence": [
+      "src/core/dupdetect.ts",
+      "src/synthesis/synthesize.ts",
+      "src/cli/index.ts",
+      "test/dupdetect.test.ts"
+    ]
+  },
+  "date": "2026-07-05T06:35:14.939Z"
+}
