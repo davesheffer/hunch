@@ -1,0 +1,35 @@
+{
+  "id": "dec_c059382df8",
+  "title": "Roadmap: release v1.3.0 — ship two weeks of agent-ergonomics + wiki work to the binaries that actually run",
+  "topic": "roadmap.release-1-3-0",
+  "status": "proposed",
+  "context": "Everything since v1.2.3 is built, tested, and pushed — but the hook-side improvements are INERT on every machine until released: the post-commit hook runs the global binary, proven three times this session (stale hook minted a duplicate draft the new gate would have skipped; injection dedup and SessionStart orientation can't fire from source). Built ≠ deployed.",
+  "decision": "Cut v1.3.0 per rb_cut_release_01: version bump, changelog + site entries for — drift-gated wiki extras (relation-hash links, prose-heal), specs ledger + doc adoption hardening, hunch now + the NOW page + human-vouched roadmap, retrieval priors + topic-chain promotion (Recall@10 90→100%, MRR 0.693→0.789, committed golden gate), hunch_now/hunch_wiki_status MCP, session-deduped hook injections + SessionStart orientation, content-matched blocking constraints + conformance dogfood, context task-fallback + moment-grouped grounding, draft-dedup coverage gate. Then npm i -g on both machines so the hooks go live — and the dedup gate's first real fire is observable.",
+  "consequences": [],
+  "alternatives_rejected": [],
+  "rejected_tripwires": [],
+  "related_components": [],
+  "related_files": [
+    "package.json",
+    "site/changelog.html"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-07-05T06:39:13.214Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 0.95,
+    "evidence": [
+      "package.json",
+      "site/changelog.html"
+    ]
+  },
+  "date": "2026-07-05T06:39:13.214Z"
+}
