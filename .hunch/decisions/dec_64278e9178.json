@@ -1,0 +1,35 @@
+{
+  "id": "dec_64278e9178",
+  "title": "Roadmap: hunch must dogfood Architectural Conformance — its own graph has zero conformance predicates",
+  "topic": "roadmap.conformance-dogfood",
+  "status": "proposed",
+  "context": "Smoke audit: `hunch conform` on hunch itself returns 'No architectural invariants recorded yet' — the README-headline feature is unused in the flagship repo. The wiki's core intents are conformance-expressible (e.g. renderAdoptedDoc must not-call writeFileSync directly; public-home reads must reach loadAll not recs).",
+  "decision": "Record 3-5 conformance predicates over hunch's own graph (subscription-strip reaches pexecIn, wiki public home not-calls recs, upsertSection reached by every grounding writer) so `hunch conform --strict` guards the invariants the constraints only describe in prose.",
+  "consequences": [],
+  "alternatives_rejected": [],
+  "rejected_tripwires": [],
+  "related_components": [],
+  "related_files": [
+    "src/core/conformance.ts",
+    ".hunch/decisions"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-07-05T05:26:52.566Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 0.95,
+    "evidence": [
+      "src/core/conformance.ts",
+      ".hunch/decisions"
+    ]
+  },
+  "date": "2026-07-05T05:26:52.566Z"
+}
