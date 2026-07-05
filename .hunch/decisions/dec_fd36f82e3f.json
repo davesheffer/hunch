@@ -1,0 +1,39 @@
+{
+  "id": "dec_fd36f82e3f",
+  "title": "README first touch leads with memory-you-gain, not enforcement: advisory-by-default is the headline reassurance, one moment of teeth max",
+  "topic": "readme.first-touch-tone",
+  "status": "accepted",
+  "context": "Owner feedback on the hero: 'a lot of block and breaks and scary things' — first-time users met ⛔ BLOCKED / VIOLATED / meltdown before seeing what they get. The strongest reassurance wasn't even stated: DEFAULT_FIRMNESS is advisory — Hunch never blocks anything until the user opts in.",
+  "decision": "Rewrote the README opening: hero leads with 'your repo remembers why' and keeping AI sessions consistent with your own decisions; the gate appears as a safety net with a receipt, not a police action. Quickstart says 'advisory by default — nothing blocks until you say so' on the init line and demos plain `hunch conform` (--strict mentioned as the when-you're-ready step). The killer scenario stays (it IS the product) but as 'quietly flags it … you decide what happens next'; exactly one moment of teeth (strict, labeled opt-in). Benchmark numbers stay (verifiable) reframed from 'even Opus ignored you' to 'reminders help; the check catches what reminders miss'. Competitor names dropped from the hero in favor of 'pattern tools' (tightens compliance with the verifiable-properties stance). Rule for future edits: benefit first, receipts over threats, blocking always described as opt-in.",
+  "consequences": [],
+  "alternatives_rejected": [
+    "Keeping the ⛔ BLOCKED hero for punch: converts the already-convinced, bounces the first-timer the README exists for",
+    "Removing the gate story entirely: the deterministic catch IS the differentiator — soften the framing, never the substance",
+    "Naming Semgrep/SonarQube in the hero contrast: category-level 'pattern tools' says the same verifiable thing with less spice (consistent with the positioning decision)"
+  ],
+  "rejected_tripwires": [],
+  "related_components": [],
+  "related_files": [
+    "README.md",
+    "site/index.html"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-07-05T06:50:24.513Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 0.95,
+    "evidence": [
+      "README.md",
+      "site/index.html"
+    ]
+  },
+  "date": "2026-07-05T06:50:24.513Z"
+}
