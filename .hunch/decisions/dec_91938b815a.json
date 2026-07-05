@@ -2,7 +2,7 @@
   "id": "dec_91938b815a",
   "title": "ESM import-order gating for Node version check before dependency load",
   "topic": null,
-  "status": "proposed",
+  "status": "accepted",
   "context": "CLI crashes on Node < 22.13 with cryptic ERR_UNKNOWN_BUILTIN_MODULE when import graph tries to load node:sqlite. The engines field is not enforced by npm/npx, so users with old Node can still run the CLI. Must not block the edit-hook subcommand (con_03a0b94b2e).",
   "decision": "Create a zero-dependency preflight module and import it first in the entry point. ESM evaluates it before the rest of the graph, allowing Node version check to run before any modules that depend on node:sqlite load. Hook subcommand exits 0 silently; other commands exit 1 with actionable upgrade message.",
   "consequences": [
@@ -30,9 +30,10 @@
         "patterns": []
       },
       "provenance": {
-        "source": "llm_draft",
+        "source": "llm_draft+human_confirmed",
         "confidence": 0.5,
-        "evidence": []
+        "evidence": [],
+        "last_verified": "2026-07-05T06:29:07.831Z"
       }
     },
     {
@@ -46,9 +47,10 @@
         "patterns": []
       },
       "provenance": {
-        "source": "llm_draft",
+        "source": "llm_draft+human_confirmed",
         "confidence": 0.5,
-        "evidence": []
+        "evidence": [],
+        "last_verified": "2026-07-05T06:29:07.831Z"
       }
     },
     {
@@ -62,9 +64,10 @@
         "patterns": []
       },
       "provenance": {
-        "source": "llm_draft",
+        "source": "llm_draft+human_confirmed",
         "confidence": 0.5,
-        "evidence": []
+        "evidence": [],
+        "last_verified": "2026-07-05T06:29:07.831Z"
       }
     },
     {
@@ -78,9 +81,10 @@
         "patterns": []
       },
       "provenance": {
-        "source": "llm_draft",
+        "source": "llm_draft+human_confirmed",
         "confidence": 0.5,
-        "evidence": []
+        "evidence": [],
+        "last_verified": "2026-07-05T06:29:07.831Z"
       }
     }
   ],
@@ -102,8 +106,8 @@
     "deps": []
   },
   "provenance": {
-    "source": "llm_draft",
-    "confidence": 0.65,
+    "source": "llm_draft+human_confirmed",
+    "confidence": 0.95,
     "evidence": [
       "commit:24f8831",
       "synth:provider=claude-cli",
@@ -111,7 +115,7 @@
       "src/cli/index.ts",
       "src/cli/preflight.ts"
     ],
-    "last_verified": "2026-07-04T04:13:37.916Z"
+    "last_verified": "2026-07-05T06:29:07.831Z"
   },
   "date": "2026-07-04T07:13:18+03:00"
 }

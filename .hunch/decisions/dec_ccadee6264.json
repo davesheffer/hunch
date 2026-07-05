@@ -2,7 +2,7 @@
   "id": "dec_ccadee6264",
   "title": "Apply SKIP_DIRS filter to git-tracked files, not just filesystem walk",
   "topic": null,
-  "status": "proposed",
+  "status": "accepted",
   "context": "Repos that accidentally track vendored code (node_modules/, dist/) had those symbols indexed because the exclusion filter only guarded the filesystem fallback path, not the git ls-files path.",
   "decision": "Filter git-tracked files through SKIP_DIRS before processing, ensuring consistent exclusion behavior regardless of discovery path (git vs filesystem walk).",
   "consequences": [
@@ -28,9 +28,10 @@
         "patterns": []
       },
       "provenance": {
-        "source": "llm_draft",
+        "source": "llm_draft+human_confirmed",
         "confidence": 0.5,
-        "evidence": []
+        "evidence": [],
+        "last_verified": "2026-07-05T06:29:09.229Z"
       }
     },
     {
@@ -45,9 +46,10 @@
         "patterns": []
       },
       "provenance": {
-        "source": "llm_draft",
+        "source": "llm_draft+human_confirmed",
         "confidence": 0.5,
-        "evidence": []
+        "evidence": [],
+        "last_verified": "2026-07-05T06:29:09.229Z"
       }
     },
     {
@@ -62,9 +64,10 @@
         "patterns": []
       },
       "provenance": {
-        "source": "llm_draft",
+        "source": "llm_draft+human_confirmed",
         "confidence": 0.5,
-        "evidence": []
+        "evidence": [],
+        "last_verified": "2026-07-05T06:29:09.229Z"
       }
     }
   ],
@@ -87,8 +90,8 @@
     "deps": []
   },
   "provenance": {
-    "source": "llm_draft",
-    "confidence": 0.65,
+    "source": "llm_draft+human_confirmed",
+    "confidence": 0.95,
     "evidence": [
       "commit:25dd388",
       "synth:provider=claude-cli",
@@ -96,7 +99,7 @@
       "src/extractors/indexer.ts",
       "test/indexer.test.ts"
     ],
-    "last_verified": "2026-07-04T22:09:12.118Z"
+    "last_verified": "2026-07-05T06:29:09.229Z"
   },
   "date": "2026-07-05T01:08:53+03:00"
 }

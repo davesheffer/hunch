@@ -2,7 +2,7 @@
   "id": "dec_e8fa4bded6",
   "title": "Ensure --find searches fresh index; reindex before each search",
   "topic": null,
-  "status": "proposed",
+  "status": "accepted",
   "context": "Runbooks written out-of-band (MCP on another machine, direct JSON edits) were invisible to --find until another command triggered an index rebuild. Users expected search to show current state.",
   "decision": "Add unconditional reindex() call before searchRunbooks() in --find mode, mirroring the behavior of hunch query. Accept the reindex cost for consistency.",
   "consequences": [
@@ -27,9 +27,10 @@
         "patterns": []
       },
       "provenance": {
-        "source": "llm_draft",
+        "source": "llm_draft+human_confirmed",
         "confidence": 0.5,
-        "evidence": []
+        "evidence": [],
+        "last_verified": "2026-07-05T06:29:10.229Z"
       }
     },
     {
@@ -43,9 +44,10 @@
         "patterns": []
       },
       "provenance": {
-        "source": "llm_draft",
+        "source": "llm_draft+human_confirmed",
         "confidence": 0.5,
-        "evidence": []
+        "evidence": [],
+        "last_verified": "2026-07-05T06:29:10.229Z"
       }
     },
     {
@@ -59,9 +61,10 @@
         "patterns": []
       },
       "provenance": {
-        "source": "llm_draft",
+        "source": "llm_draft+human_confirmed",
         "confidence": 0.5,
-        "evidence": []
+        "evidence": [],
+        "last_verified": "2026-07-05T06:29:10.229Z"
       }
     }
   ],
@@ -82,15 +85,15 @@
     "deps": []
   },
   "provenance": {
-    "source": "llm_draft",
-    "confidence": 0.65,
+    "source": "llm_draft+human_confirmed",
+    "confidence": 0.95,
     "evidence": [
       "commit:32a34e8",
       "synth:provider=claude-cli",
       "branch:main",
       "src/cli/index.ts"
     ],
-    "last_verified": "2026-07-02T07:07:37.914Z"
+    "last_verified": "2026-07-05T06:29:10.229Z"
   },
   "date": "2026-07-02T10:07:25+03:00"
 }

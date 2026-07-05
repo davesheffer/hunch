@@ -2,7 +2,7 @@
   "id": "dec_36649546d9",
   "title": "Gate documentation drift to decision graph; refuse deployment of contradictory prose",
   "topic": null,
-  "status": "proposed",
+  "status": "accepted",
   "context": "Agent-trusted markdown (AGENTS.md, CLAUDE.md) rots silently. Stale instructions are executed with full repo authority, causing agents to 'fix' code back toward superseded patterns. Prose has no truth-maintenance story; nothing keeps it synchronized with actual decisions.",
   "decision": "Anchor markdown sections to Hunch decision topics via HTML comments. Optional pinning locks prose to specific decisions. Stale pins trigger doc-anchor-stale findings that gate CI (`hunch drift` exits non-zero), preventing deployment of repos whose own instructions contradict their decisions.",
   "consequences": [
@@ -30,9 +30,10 @@
         "patterns": []
       },
       "provenance": {
-        "source": "llm_draft",
+        "source": "llm_draft+human_confirmed",
         "confidence": 0.5,
-        "evidence": []
+        "evidence": [],
+        "last_verified": "2026-07-05T06:29:06.572Z"
       }
     },
     {
@@ -46,9 +47,10 @@
         "patterns": []
       },
       "provenance": {
-        "source": "llm_draft",
+        "source": "llm_draft+human_confirmed",
         "confidence": 0.5,
-        "evidence": []
+        "evidence": [],
+        "last_verified": "2026-07-05T06:29:06.572Z"
       }
     },
     {
@@ -62,9 +64,10 @@
         "patterns": []
       },
       "provenance": {
-        "source": "llm_draft",
+        "source": "llm_draft+human_confirmed",
         "confidence": 0.5,
-        "evidence": []
+        "evidence": [],
+        "last_verified": "2026-07-05T06:29:06.572Z"
       }
     },
     {
@@ -78,9 +81,10 @@
         "patterns": []
       },
       "provenance": {
-        "source": "llm_draft",
+        "source": "llm_draft+human_confirmed",
         "confidence": 0.5,
-        "evidence": []
+        "evidence": [],
+        "last_verified": "2026-07-05T06:29:06.572Z"
       }
     }
   ],
@@ -99,15 +103,15 @@
     "deps": []
   },
   "provenance": {
-    "source": "llm_draft",
-    "confidence": 0.65,
+    "source": "llm_draft+human_confirmed",
+    "confidence": 0.95,
     "evidence": [
       "commit:8ebd25b",
       "synth:provider=claude-cli",
       "branch:main",
       "site/blog/posts.js"
     ],
-    "last_verified": "2026-07-02T07:03:33.283Z"
+    "last_verified": "2026-07-05T06:29:06.572Z"
   },
   "date": "2026-07-02T10:03:17+03:00"
 }

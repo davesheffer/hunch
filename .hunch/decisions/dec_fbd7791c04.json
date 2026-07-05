@@ -2,7 +2,7 @@
   "id": "dec_fbd7791c04",
   "title": "Return actual commit outcome to prevent false success claims",
   "topic": null,
-  "status": "proposed",
+  "status": "accepted",
   "context": "commitAndPushHunch had a void return type, so callers always reported success even when the commit was skipped (lock held, safety backstop refusal, empty stage) or push failed (offline/no upstream). MCP responses claimed 'auto-committed' or 'pushed' regardless of what actually happened. Touches invariant(s): con_8460b6770f (Config/provider writers must merge idempotently into existing user files and refuse to clobber an unparseable file); con_e04226bd05 (The MCP server must stay client-agnostic: all assistants point to the same .hunch/ graph; no Claude-only behavior in the server).",
   "decision": "Changed commitAndPushHunch return type from void to 'pushed' | 'committed' | null. Callers now receive truth: null = nothing happened, 'committed' = commit created but push deferred/failed, 'pushed' = actually pushed. MCP server only claims success that occurred. Skipped commits remain on disk for next flush (eventually-consistent retry).",
   "consequences": [
@@ -31,9 +31,10 @@
         "patterns": []
       },
       "provenance": {
-        "source": "llm_draft",
+        "source": "llm_draft+human_confirmed",
         "confidence": 0.5,
-        "evidence": []
+        "evidence": [],
+        "last_verified": "2026-07-05T06:29:11.352Z"
       }
     },
     {
@@ -50,9 +51,10 @@
         "patterns": []
       },
       "provenance": {
-        "source": "llm_draft",
+        "source": "llm_draft+human_confirmed",
         "confidence": 0.5,
-        "evidence": []
+        "evidence": [],
+        "last_verified": "2026-07-05T06:29:11.352Z"
       }
     },
     {
@@ -69,9 +71,10 @@
         "patterns": []
       },
       "provenance": {
-        "source": "llm_draft",
+        "source": "llm_draft+human_confirmed",
         "confidence": 0.5,
-        "evidence": []
+        "evidence": [],
+        "last_verified": "2026-07-05T06:29:11.352Z"
       }
     }
   ],
@@ -99,8 +102,8 @@
     "deps": []
   },
   "provenance": {
-    "source": "llm_draft",
-    "confidence": 0.65,
+    "source": "llm_draft+human_confirmed",
+    "confidence": 0.95,
     "evidence": [
       "commit:54d88bb",
       "synth:provider=claude-cli",
@@ -111,7 +114,7 @@
       "test/autocommit.test.ts",
       "test/overlay-commit-guard.test.ts"
     ],
-    "last_verified": "2026-07-04T04:05:24.768Z"
+    "last_verified": "2026-07-05T06:29:11.352Z"
   },
   "date": "2026-07-04T07:05:07+03:00"
 }

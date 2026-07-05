@@ -2,7 +2,7 @@
   "id": "dec_093a1cfe5b",
   "title": "Serve indexed repo structure directly from the graph instead of requiring agents to grep",
   "topic": null,
-  "status": "proposed",
+  "status": "accepted",
   "context": "Agents exploring unfamiliar code waste multiple grep/glob/read rounds rediscovering structure and dependencies that the dependency graph already holds. This is inefficient—the structure is already indexed. Touches invariant(s): con_902759b3dc (All JSON writes to .hunch/ must be atomic (temp-file + rename) so an interrupted write can never truncate the index); con_a87360128b (Semantic vectors are a derived layer in SQLite, never the source of truth; reconcile by content hash on reindex); con_e04226bd05 (The MCP server must stay client-agnostic: all assistants point to the same .hunch/ graph; no Claude-only behavior in the server).",
   "decision": "Introduced `hunch_structure` tool that serves deterministic, multi-resolution answers directly from the graph: repo map (no target), directory contents (target dir), file outline (target file), or symbol definition with one-hop neighbors (exact name). Single interface, zero grep rounds, tells agents exactly which file to read first try.",
   "consequences": [
@@ -32,9 +32,10 @@
         "patterns": []
       },
       "provenance": {
-        "source": "llm_draft",
+        "source": "llm_draft+human_confirmed",
         "confidence": 0.5,
-        "evidence": []
+        "evidence": [],
+        "last_verified": "2026-07-05T06:29:03.979Z"
       }
     },
     {
@@ -52,9 +53,10 @@
         "patterns": []
       },
       "provenance": {
-        "source": "llm_draft",
+        "source": "llm_draft+human_confirmed",
         "confidence": 0.5,
-        "evidence": []
+        "evidence": [],
+        "last_verified": "2026-07-05T06:29:03.979Z"
       }
     },
     {
@@ -72,9 +74,10 @@
         "patterns": []
       },
       "provenance": {
-        "source": "llm_draft",
+        "source": "llm_draft+human_confirmed",
         "confidence": 0.5,
-        "evidence": []
+        "evidence": [],
+        "last_verified": "2026-07-05T06:29:03.979Z"
       }
     }
   ],
@@ -103,8 +106,8 @@
     "deps": []
   },
   "provenance": {
-    "source": "llm_draft",
-    "confidence": 0.65,
+    "source": "llm_draft+human_confirmed",
+    "confidence": 0.95,
     "evidence": [
       "commit:1a279f4",
       "synth:provider=claude-cli",
@@ -115,7 +118,7 @@
       "src/store/hunchStore.ts",
       "test/structure.test.ts"
     ],
-    "last_verified": "2026-07-02T07:49:53.043Z"
+    "last_verified": "2026-07-05T06:29:03.979Z"
   },
   "date": "2026-07-02T10:49:34+03:00"
 }

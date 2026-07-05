@@ -2,7 +2,7 @@
   "id": "dec_20f0bbaae5",
   "title": "Refuse unparseable .mcp.json instead of silently clobbering it",
   "topic": null,
-  "status": "proposed",
+  "status": "accepted",
   "context": "writeMcpJson was silently replacing corrupt .mcp.json files with fresh configs, destroying other MCP servers the user had registered there. This violates constraint con_8460b6770f and risks data loss. Touches invariant(s): con_8460b6770f (Config/provider writers must merge idempotently into existing user files and refuse to clobber an unparseable file).",
   "decision": "writeMcpJson now throws when encountering a non-empty, unparseable .mcp.json file. The caller (init CLI) catches the error, warns the user, and continues. Init no longer silently loses user data.",
   "consequences": [
@@ -30,9 +30,10 @@
         "patterns": []
       },
       "provenance": {
-        "source": "llm_draft",
+        "source": "llm_draft+human_confirmed",
         "confidence": 0.5,
-        "evidence": []
+        "evidence": [],
+        "last_verified": "2026-07-05T06:29:05.313Z"
       }
     },
     {
@@ -48,9 +49,10 @@
         "patterns": []
       },
       "provenance": {
-        "source": "llm_draft",
+        "source": "llm_draft+human_confirmed",
         "confidence": 0.5,
-        "evidence": []
+        "evidence": [],
+        "last_verified": "2026-07-05T06:29:05.313Z"
       }
     },
     {
@@ -66,9 +68,10 @@
         "patterns": []
       },
       "provenance": {
-        "source": "llm_draft",
+        "source": "llm_draft+human_confirmed",
         "confidence": 0.5,
-        "evidence": []
+        "evidence": [],
+        "last_verified": "2026-07-05T06:29:05.313Z"
       }
     }
   ],
@@ -93,8 +96,8 @@
     "deps": []
   },
   "provenance": {
-    "source": "llm_draft",
-    "confidence": 0.65,
+    "source": "llm_draft+human_confirmed",
+    "confidence": 0.95,
     "evidence": [
       "commit:d8442f6",
       "synth:provider=claude-cli",
@@ -103,7 +106,7 @@
       "src/integrations/scaffold.ts",
       "test/mcpjson.test.ts"
     ],
-    "last_verified": "2026-07-04T21:34:52.559Z"
+    "last_verified": "2026-07-05T06:29:05.313Z"
   },
   "date": "2026-07-05T00:34:33+03:00"
 }
