@@ -1,0 +1,41 @@
+{
+  "id": "dec_5141920439",
+  "title": "The strict-gate era closes: all four blocking constraints content-matched, a87 expressed as conformance predicates",
+  "topic": "agent.gate-precision",
+  "status": "accepted",
+  "context": "Rounds 1-3 shipped store-layer changes through a documented script workaround because con_902759b3dc and con_a87360128b were scope-only: every Edit under src/store/** denied at strict firmness regardless of content. a87 ('vectors derived, never source of truth') resists a text matcher by nature — the violation is a data-flow direction, not a line pattern.",
+  "decision": "Two-layer close. EDIT-time: con_902759b3dc forbids added raw writes (writeFileSync/writeFile patterns — the actual atomicity bypass); con_a87360128b forbids re-adding better-sqlite3 (the retired dep) or new direct DatabaseSync usage (the drift toward sqlite-as-truth); both stores updated (overlay copy wins recs dedupe). COMMIT/CONFORM-time: a87's real invariant lives as conformance predicates on its source decision dec_08a685fca2 — loadAll not-calls openDb, loadAll not-calls DatabaseSync (transitive: the JSON read path can never touch sqlite), pruneStaleEmbeddings calls embedHash (reconciliation is content-hash-driven) — all green. Proof of era-close: the first clean Edit-tool write to hunchStore.ts since the gates existed passed with grounding injected, no deny, no script.",
+  "consequences": [],
+  "alternatives_rejected": [
+    "A text matcher faking a87's data-flow invariant (patterns like 'sqlite.*source of truth'): never-firing rules are worse than blunt ones — the predicate layer is where flow invariants belong",
+    "Narrowing a87's scope to db.ts/schema.ts/embedder.ts: hunchStore's reindex/reconcile paths are exactly where the invariant matters",
+    "Lowering firmness: precision, not permissiveness — same call as round 2's matchers"
+  ],
+  "rejected_tripwires": [],
+  "related_components": [],
+  "related_files": [
+    ".hunch/constraints/con_902759b3dc.json",
+    ".hunch/constraints/con_a87360128b.json",
+    ".hunch/decisions/dec_08a685fca2.json"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-07-05T06:20:41.668Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 0.95,
+    "evidence": [
+      ".hunch/constraints/con_902759b3dc.json",
+      ".hunch/constraints/con_a87360128b.json",
+      ".hunch/decisions/dec_08a685fca2.json"
+    ]
+  },
+  "date": "2026-07-05T06:20:41.668Z"
+}

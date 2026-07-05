@@ -17,5 +17,14 @@
     "confidence": 1,
     "evidence": [],
     "last_verified": "2026-06-16T10:29:10.225Z"
+  },
+  "forbids": {
+    "deps": [
+      "better-sqlite3"
+    ],
+    "symbols": [
+      "DatabaseSync"
+    ],
+    "patterns": []
   }
 }

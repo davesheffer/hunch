@@ -59,5 +59,25 @@
     ],
     "last_verified": "2026-06-15T13:04:59.544Z"
   },
-  "date": "2026-06-15T14:22:49+03:00"
+  "date": "2026-06-15T14:22:49+03:00",
+  "conformance": [
+    {
+      "assert": "not-calls",
+      "subject": "loadAll",
+      "object": "openDb",
+      "transitive": true
+    },
+    {
+      "assert": "not-calls",
+      "subject": "loadAll",
+      "object": "DatabaseSync",
+      "transitive": true
+    },
+    {
+      "assert": "calls",
+      "subject": "pruneStaleEmbeddings",
+      "object": "embedHash",
+      "transitive": false
+    }
+  ]
 }
