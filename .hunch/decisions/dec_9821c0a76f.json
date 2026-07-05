@@ -1,0 +1,33 @@
+{
+  "id": "dec_9821c0a76f",
+  "title": "Roadmap: hash-cover relation links between wiki pages (close the dec_c205c26472 residual)",
+  "topic": "roadmap.wiki-relation-links",
+  "status": "proposed",
+  "context": "Accepted residual from the e2e audit: relation links use slugById, which is not part of any page hash — a slug reassignment (new same-name component) can leave a fresh page linking to a renamed sibling until its own inputs move.",
+  "decision": "Fold each page's resolved relation slugs into its freshness hash (two-pass wikiStatus: slugs first, packs second) so a sibling rename re-renders every page that links to it.",
+  "consequences": [],
+  "alternatives_rejected": [],
+  "rejected_tripwires": [],
+  "related_components": [],
+  "related_files": [
+    "src/wiki/wiki.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-07-05T05:20:31.152Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 0.95,
+    "evidence": [
+      "src/wiki/wiki.ts"
+    ]
+  },
+  "date": "2026-07-05T05:20:31.152Z"
+}
