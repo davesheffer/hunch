@@ -60,3 +60,5 @@ blog/*.private.md
 .env.*
 *.local.json
 api/.env
+
+bench/results/

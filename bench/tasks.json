@@ -1,0 +1,69 @@
+{
+  "tasks": [
+    {
+      "id": "q1-capture-flow",
+      "kind": "question",
+      "prompt": "Explain end-to-end what happens when an agent records a decision through this repo's MCP server: which tool is called, what validations/guards run, where the record can land and what decides that, and what happens after the write. Be specific with function and file names. Answer in prose, no code changes.",
+      "checklist": [
+        "hunch_record_decision",
+        "captureHome|capture home",
+        "captureConflicts|uniqueness|one live decision per topic",
+        "supersede",
+        "reindex",
+        "flush|auto-?commit",
+        "capture_token|capture token",
+        "overlay|private store"
+      ]
+    },
+    {
+      "id": "q2-doc-drift",
+      "kind": "question",
+      "prompt": "How does this repo detect that markdown documentation has gone stale relative to the decision graph? Cover every deterministic mechanism, what can fire drift and what cannot, and what gates CI. Answer in prose, no code changes.",
+      "checklist": [
+        "doc-anchor-stale",
+        "doc-anchor-dangling",
+        "hunch:topic",
+        "pin",
+        "unpinned|explicit pin",
+        "anchor-stale",
+        "reconcile-topics|collision",
+        "heal"
+      ]
+    },
+    {
+      "id": "w1-collision-null",
+      "kind": "question",
+      "prompt": "In this repo, currentForTopic returns null when a topic has MORE than one live decision instead of picking one. Why was it designed that way? Answer in prose, no code changes.",
+      "checklist": [
+        "fail-?safe|fails? safe",
+        "ambiguous|collision",
+        "never.{0,40}(inject|authorit)|authorit.{0,40}never",
+        "reconcile|resolve"
+      ]
+    },
+    {
+      "id": "w2-api-key-strip",
+      "kind": "question",
+      "prompt": "This repo's synthesis layer deletes ANTHROPIC_API_KEY and ANTHROPIC_AUTH_TOKEN from the environment before spawning the coding-assistant CLI. Why? Answer in prose, no code changes.",
+      "checklist": [
+        "subscription",
+        "pay-per-token|per-token|API (billing|charges|costs)|charged",
+        "constraint|invariant|con_2ce3f2a547"
+      ]
+    },
+    {
+      "id": "f1-guard-keying",
+      "kind": "fix",
+      "prompt": "Two tests in test/captureguard.test.ts are failing. Run `npx tsx --test test/captureguard.test.ts` to see the failures, diagnose the root cause in the product code, and fix it. Do NOT modify the tests.",
+      "testFile": "test/captureguard.test.ts",
+      "revert": "guard-keying"
+    },
+    {
+      "id": "f2-docanchor-dedupe",
+      "kind": "fix",
+      "prompt": "A test in test/docanchors.test.ts is failing. Run `npx tsx --test test/docanchors.test.ts` to see the failure, diagnose the root cause in the product code, and fix it. Do NOT modify the tests.",
+      "testFile": "test/docanchors.test.ts",
+      "revert": "docanchor-dedupe"
+    }
+  ]
+}
