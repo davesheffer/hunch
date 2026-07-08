@@ -5,7 +5,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { writeFileSync } from "node:fs";
+import { writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { tempStore, prov } from "./helpers.js";
 import { computeDrift } from "../src/core/drift.js";
@@ -105,4 +105,18 @@ test("renderDocGrounding: stale-pin warning survives an earlier unpinned marker 
     decisions,
   );
   assert.match(out, /PINNED to dec_old1111111/, "topic dedupe must not hide a later stale pin");
+});
+
+test("drift scans .claude/skills prose: a stale pin in a skill file fires doc-anchor-stale", (t) => {
+  const { store, root, cleanup } = tempStore();
+  t.after(cleanup);
+  store.json.put("decisions", DEC({ id: "dec_old1111111", topic: "auth.session", status: "superseded", superseded_by: "dec_new2222222" }) as never);
+  store.json.put("decisions", DEC({ id: "dec_new2222222", topic: "auth.session", title: "Sessions via JWT", valid_from: "2026-02-01T00:00:00Z" }) as never);
+  mkdirSync(join(root, ".claude", "skills", "my-skill"), { recursive: true });
+  writeFileSync(join(root, ".claude", "skills", "my-skill", "SKILL.md"), "<!-- hunch:topic auth.session dec_old1111111 -->\nDoctrine written against the old decision.\n");
+
+  const findings = computeDrift(store, root).findings.filter((f) => f.kind === "doc-anchor-stale");
+  assert.equal(findings.length, 1, "skill prose is drift-checked like any spec");
+  assert.equal(findings[0]!.id, ".claude/skills/my-skill/SKILL.md");
+  assert.match(findings[0]!.detail, /dec_new2222222/);
 });

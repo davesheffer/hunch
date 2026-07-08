@@ -127,3 +127,34 @@ test("hunch_capture_decision: deciding=true prepends the verdict loop; default s
   assert.ok(!plain.includes("VERDICT LOOP"), "default capture is unchanged");
   assert.match(plain, /GRILLING LOOP/);
 });
+
+test("record quality nudge: unattacked / no-flip-condition records get ONE advisory line; a full record gets none", async (t) => {
+  const s = await sharedSetup();
+  let client: Client | undefined;
+  t.after(() => s.cleanup(client));
+  client = await s.connect();
+
+  const token = async () => {
+    const text = ((await client!.callTool({ name: "hunch_capture_decision", arguments: {} })) as ToolText)
+      .content.map((c) => c.text ?? "").join("\n");
+    return /capture_token:"([^"]+)"/.exec(text)![1]!;
+  };
+
+  const rec = async (decision: Record<string, unknown>) => {
+    const res = (await client!.callTool({ name: "hunch_record_decision", arguments: { decision, capture_token: await token() } })) as ToolText;
+    return res.content.map((c) => c.text ?? "").join("\n");
+  };
+
+  const unattacked = await rec({ title: "no alternatives", topic: "q.unattacked", status: "accepted", decision: "d" });
+  assert.match(unattacked, /Unattacked record/);
+
+  const noFlip = await rec({ title: "has alternatives", topic: "q.noflip", status: "accepted", decision: "d", alternatives_rejected: ["did not do X because Y"] });
+  assert.match(noFlip, /revisit if/);
+  assert.ok(!noFlip.includes("Unattacked"), "only one nudge fires");
+
+  const full = await rec({ title: "full record", topic: "q.full", status: "accepted", decision: "d", alternatives_rejected: ["rejected X — revisit if Z happens"] });
+  assert.ok(!full.includes("△"), "a full record gets no nudge");
+
+  const proposed = await rec({ title: "roadmap intent", topic: "q.proposed", status: "proposed", decision: "d" });
+  assert.ok(!proposed.includes("△"), "proposed roadmap records are exempt");
+});

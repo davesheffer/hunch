@@ -93,6 +93,20 @@ function grillingProtocol(topic: string | undefined, token: string, deciding = f
   ].join("\n");
 }
 
+/** Deterministic quality nudge for a freshly recorded ACCEPTED decision: an
+ *  unattacked record (no rejected alternatives) or rejections without a
+ *  "revisit if" flip condition get ONE advisory line — never a gate. */
+function qualityNudge(rec: Decision): string {
+  if (rec.status !== "accepted") return "";
+  if (!rec.alternatives_rejected.length) {
+    return `\n\n△ Unattacked record: no alternatives_rejected. The graph can only veto what was explicitly rejected — next time run hunch_capture_decision(deciding:true) so rejections come from attacks that actually ran.`;
+  }
+  if (!rec.alternatives_rejected.some((a) => /revisit if/i.test(a))) {
+    return `\n\n△ Tip: none of the ${rec.alternatives_rejected.length} rejected alternative(s) carries a "revisit if …" flip condition — embed one per rejection so a future session knows when the call expires.`;
+  }
+  return "";
+}
+
 /** Resolve a free-form target (symbol id / name / file path) to symbol records. */
 function resolveSymbols(store: HunchStore, target: string): Symbol[] {
   target = toPosixTarget(target);
@@ -591,12 +605,15 @@ export function buildServer(root: string): McpServer {
           : capture_token
             ? ""
             : `\n\n⚠ Recorded WITHOUT a capture interview — the record stands, but harden it NOW in one exchange instead of switching flows: answer the first grilling question directly — "What alternative did you seriously consider and reject for '${rec.title.slice(0, 60)}', and what breaks if a future session re-introduces it?" — then fold the answer into alternatives_rejected via hunch_record_decision(supersedes: ${id}) or start the full interview with hunch_capture_decision. (A future major version will require a capture token here.)`;
+        // Quality nudge only when the untokened deprecation nudge isn't already
+        // grilling — one advisory voice per response, never two.
+        const quality = gated || capture_token ? qualityNudge(rec) : "";
         const supNote = superseded ? ` Superseded ${superseded.id} (window closed at ${rec.valid_from}).` : "";
         const note = decision.commit && !fullSha ? ` (note: commit "${decision.commit}" could not be resolved — recorded as a standalone decision, not linked to a commit)` : "";
         const where = decision.private
           ? ` [PRIVATE overlay — not committed to this repo]${flushed}`
           : home === "private" ? ` [SHARED store — one source of truth for the whole team]${flushed}` : flushed;
-        return ok(`Recorded decision ${id}: "${rec.title}" (status ${rec.status}, ${source}).${where}${supNote}${note}${captureNote}`);
+        return ok(`Recorded decision ${id}: "${rec.title}" (status ${rec.status}, ${source}).${where}${supNote}${note}${captureNote}${quality}`);
       } catch (e) {
         return err(`Failed to record decision: ${(e as Error).message}`);
       }

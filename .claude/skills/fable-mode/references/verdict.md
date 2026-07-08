@@ -1,3 +1,4 @@
+<!-- hunch:topic capture.verdict-loop dec_58f016807f -->
 # Fable Mode — Verdict playbook
 
 Design decisions, red teams, "which option is right." Not for execution work —

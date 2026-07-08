@@ -47,6 +47,12 @@ export function markdownDocs(root: string): Array<{ path: string; rel: string }>
     }
   };
   walk(root, "", 0);
+  // Agent-facing prose lives under dot-dirs the general walk skips: skills and
+  // commands are exactly the docs that rot against the graph (a skill preaching
+  // a superseded decision misleads every future session) — scan them explicitly.
+  for (const sub of [".claude/skills", ".claude/commands"]) {
+    walk(join(root, sub), sub, 1);
+  }
   return out;
 }
 
