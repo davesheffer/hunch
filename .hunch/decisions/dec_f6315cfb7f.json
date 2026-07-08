@@ -1,0 +1,41 @@
+{
+  "id": "dec_f6315cfb7f",
+  "title": "Capture uniqueness guard keys willClose on captureHome, not the private flag — cross-store supersede is always a refusal, never a silent two-live no-op",
+  "topic": "capture.uniqueness-guard",
+  "status": "accepted",
+  "context": "Runtime repro through the real MCP handler (InMemoryTransport) showed two failure directions in unified ('shared') mode, where captureHome routes EVERY capture to the overlay regardless of the private flag: (1) a supersede of a PUBLIC incumbent passed the flag-keyed guard, landed in the overlay, and supersedePrivate no-op'd — two live decisions on one topic, the exact §4 invariant the guard exists to prevent; (2) a supersede of an OVERLAY incumbent with private:false was falsely refused ('not in the public store') though write and close both route to the overlay. One root cause: decisionInStore was keyed on !!decision.private while routing used captureHome(!!decision.private). Attacks that FAILED during the red team (tested-safe surface): reconcile-topics does catch the collision post-merge (mitigation exists, but write-path guard is the primary defense); recs() union means the guard always SEES the incumbent — only the willClose exclusion was wrong.",
+  "decision": "Resolve home = captureHome(!!decision.private) BEFORE the uniqueness guard and key the incumbent lookup on home === 'private'. Fixes the false refusal fully (overlay incumbent now closes correctly in shared mode) and converts the corruption case into a fail-safe refusal (public incumbent in shared mode: guard fires, names the store the write lands in). Regression-tested through the real MCP handler in test/captureguard.test.ts.",
+  "consequences": [],
+  "alternatives_rejected": [
+    "Supersede-where-it-lives (a shared-mode capture closing a PUBLIC incumbent in the committed .hunch/): rejected — a capture write mutating the committed public store crosses the write-routing contract ('a private write never mutates the public store'); revisit if shared-mode teams hit the refusal often enough that topic collisions show up in real reconcile-topics runs",
+    "Keep flag-keying and rely on hunch reconcile-topics to catch collisions after the fact: rejected — CI catch-after is a mitigation, not enforcement; the write path is the §4 primary defense and 'never silently two' is its contract",
+    "Route the close via putWhereItLives-style store discovery: rejected for now as a larger surface change with the same fail-safe outcome reachable by a one-line keying fix; revisit alongside supersede-where-it-lives if the refusal proves noisy"
+  ],
+  "rejected_tripwires": [],
+  "related_components": [
+    "MCP"
+  ],
+  "related_files": [
+    "src/mcp/server.ts",
+    "test/captureguard.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-07-08T07:07:07.527Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 0.95,
+    "evidence": [
+      "src/mcp/server.ts",
+      "test/captureguard.test.ts"
+    ]
+  },
+  "date": "2026-07-08T07:07:07.527Z"
+}
