@@ -117,11 +117,20 @@ export function onEdit(state: PipelineState, path: string, profiles = DEFAULT_PR
   };
 }
 
-/** A shell command ran. Verify-shaped + after an edit → the edits are covered. */
+/** A shell command ran. After an edit, it counts as verification when it is
+ *  verify-shaped for an active domain, a generic runner (`node --test`,
+ *  `node -e` assertions), or names an edited file — a bespoke check on the
+ *  thing you changed is verification, and uncredited real checks are how a
+ *  gate gets disabled out of annoyance (first live false-negative: an HTML
+ *  structure assertion via `node -e` was blocked on 2026-07-08). */
 export function onCommand(state: PipelineState, command: string, profiles = DEFAULT_PROFILES): PipelineState {
-  if (state.editedFiles.length && verifyPattern(state, profiles).test(command)) {
-    return { ...state, verifyAfterEdit: true };
-  }
+  if (!state.editedFiles.length) return state;
+  const editedFileNamed = state.editedFiles.some((f) => {
+    const base = f.replace(/\\/g, "/").split("/").pop();
+    return !!base && command.includes(base);
+  });
+  const verifyShaped = verifyPattern(state, profiles).test(command) || /node (--test|-e\b)/.test(command);
+  if (verifyShaped || editedFileNamed) return { ...state, verifyAfterEdit: true };
   return state;
 }
 

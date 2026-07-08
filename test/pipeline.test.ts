@@ -49,6 +49,25 @@ test("non-verify command does not satisfy the gate", () => {
   assert.equal(st.verifyAfterEdit, false);
 });
 
+test("bespoke node -e / node --test checks count as verification", () => {
+  let st = onEdit(emptyState(), "src/core/topics.ts");
+  st = onCommand(st, 'node -e "assert(require(\'./x\'))"');
+  assert.equal(st.verifyAfterEdit, true);
+  let st2 = onEdit(emptyState(), "src/core/topics.ts");
+  st2 = onCommand(st2, "node --test test/");
+  assert.equal(st2.verifyAfterEdit, true);
+});
+
+test("a command naming an edited file counts as verification", () => {
+  let st = onEdit(emptyState(), "site/changelog.html");
+  st = onCommand(st, "htmlhint site/changelog.html");
+  assert.equal(st.verifyAfterEdit, true);
+  // ...but a command naming an unrelated file does not
+  let st2 = onEdit(emptyState(), "site/changelog.html");
+  st2 = onCommand(st2, "cat README.md");
+  assert.equal(st2.verifyAfterEdit, false);
+});
+
 test("doc-only edits never arm the gate", () => {
   const st = onEdit(emptyState(), "README.md");
   assert.equal(st.verifyAfterEdit, true);
