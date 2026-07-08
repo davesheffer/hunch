@@ -1,0 +1,97 @@
+{
+  "id": "dec_8dc263b43e",
+  "title": "Hero graph alone suffices; drop terminal demo",
+  "topic": null,
+  "status": "proposed",
+  "context": "Hero section contained both graph visualization and animated terminal demo, both demonstrating identical functionality. Parallel presentations created redundancy and visual clutter above the fold.",
+  "decision": "Removed animated terminal demo from hero section. Kept graph as sole interactive focal point. Terminal interface remains discoverable by scrolling.",
+  "consequences": [
+    "Simpler hero with unified focal point",
+    "Reduced page complexity and visual noise",
+    "JavaScript animation code eliminated (~40 lines)",
+    "Terminal users must scroll to find CLI interface"
+  ],
+  "alternatives_rejected": [
+    "Retain both demos for interface variety",
+    "Keep terminal instead of graph",
+    "Separate demos into distinct sections"
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Retain both demos for interface variety",
+      "scope": [
+        ".claude/pipeline/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Keep terminal instead of graph",
+      "scope": [
+        ".claude/pipeline/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Separate demos into distinct sections",
+      "scope": [
+        ".claude/pipeline/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_59ede50a3f"
+  ],
+  "related_files": [
+    ".claude/pipeline/track.mjs"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "27c8c1d",
+  "valid_from": "2026-07-08T15:05:59+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft",
+    "confidence": 0.65,
+    "evidence": [
+      "commit:27c8c1d",
+      "synth:provider=claude-cli",
+      "branch:main",
+      ".claude/pipeline/track.mjs"
+    ],
+    "last_verified": "2026-07-08T12:07:11.122Z"
+  },
+  "date": "2026-07-08T15:05:59+03:00"
+}
