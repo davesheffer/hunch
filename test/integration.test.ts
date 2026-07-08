@@ -136,3 +136,38 @@ test("post-commit code change captures a decision linked to the changed file", a
   store.close();
   rmSync(root, { recursive: true, force: true });
 });
+
+function pythonGitRepo(): string {
+  const root = mkdtempSync(join(tmpdir(), "hunch-int-py-"));
+  const g = (...a: string[]) => execFileSync("git", a, { cwd: root, stdio: ["ignore", "ignore", "ignore"] });
+  g("init");
+  g("config", "user.email", "t@t.co");
+  g("config", "user.name", "t");
+  mkdirSync(join(root, "src"), { recursive: true });
+  writeFileSync(join(root, "src/a.py"), "def a():\n    return 1\n");
+  g("add", "-A");
+  g("commit", "-m", "feat: add a");
+  return root;
+}
+
+test("syncCommit synthesizes a decision from a Python commit (regression: was 'no code files changed')", async () => {
+  const root = pythonGitRepo();
+  const store = new HunchStore(hunchPaths(root));
+  store.json.ensureDirs();
+
+  // second commit with enough structural delta to be significant: a new function
+  // definition is itself a structural-delta signal per Task 6's DECL_PATTERNS fix.
+  writeFileSync(
+    join(root, "src/a.py"),
+    "def a():\n    return 1\n\ndef b(x):\n    return a() + x\n",
+  );
+  execFileSync("git", ["add", "-A"], { cwd: root, stdio: "ignore" });
+  execFileSync("git", ["commit", "-m", "feat: add b"], { cwd: root, stdio: "ignore" });
+
+  const r = await syncCommit(store, root);
+  assert.equal(r.status, "written", `expected written, got skipped: ${r.reason}`);
+  assert.ok(r.decision, "decision was recorded");
+
+  store.close();
+  rmSync(root, { recursive: true, force: true });
+});

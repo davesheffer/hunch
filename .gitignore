@@ -3,6 +3,9 @@ dist/
 *.log
 .vercel/
 
+# Local git worktrees for isolated feature-branch work.
+.worktrees/
+
 # VS Code extension build artifact — distribute via GitHub Releases / registries, not git.
 *.vsix
 

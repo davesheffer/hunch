@@ -45,12 +45,26 @@ const DECL_PATTERNS: Array<{ kind: SymbolChange["kind"]; re: RegExp }> = [
   { kind: "type", re: /^\s*(?:export\s+)?type\s+([A-Za-z_$][\w$]*)\s*[=<]/ },
   { kind: "const", re: /^\s*(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?(?:\([^)]*\)|[A-Za-z_$][\w$]*)\s*=>/ },
   { kind: "const", re: /^\s*(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?function/ },
+  { kind: "function", re: /^\s*(?:async\s+)?def\s+([A-Za-z_]\w*)\s*\(/ },
+  // No Python-specific class pattern needed: the generic TS `class` pattern above has no
+  // trailing-syntax requirement (no `{`/`:`), so it already matches Python's
+  // `class Foo(Bar):` header too, and — since declOf() returns on the first match —
+  // always wins for Python class lines before any Python-specific pattern would run.
 ];
+import { languageFor } from "./languages.js";
+
 const IMPORT_RE = /^\s*import\s+(?:[^'"]*from\s+)?['"]([^'"]+)['"]/;
 const CONT_IMPORT_RE = /^\s*\}?\s*from\s+['"]([^'"]+)['"]/; // multi-line: "} from 'x'"
 const REQUIRE_RE = /\brequire\(\s*['"]([^'"]+)['"]\s*\)/;
-const CODE_EXT = /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/;
-const isCode = (p: string) => !!p && CODE_EXT.test(p);
+// "import os" / "import a.b.c" / "import os as o" / "import os, sys" / trailing "# comment".
+// Anchored to the END of the line (optional "as alias", comma-separated modules, comment)
+// so it matches a COMPLETE Python import statement only — this deliberately rejects
+// TypeScript's `import Foo = Bar.Baz;` (import-equals), which would otherwise falsely
+// look like a Python "import Foo" prefix match.
+const PY_IMPORT_RE =
+  /^\s*import\s+([A-Za-z_][\w.]*)(?:\s+as\s+\w+)?(?:\s*,\s*[A-Za-z_][\w.]*(?:\s+as\s+\w+)?)*\s*(?:#.*)?$/;
+const PY_FROM_IMPORT_RE = /^\s*from\s+([.\w]+)\s+import\s+/; // "from os import path" / "from . import x"
+const isCode = (p: string) => !!p && languageFor(p) !== null;
 
 function declOf(line: string): SymbolChange | null {
   for (const { kind, re } of DECL_PATTERNS) {
@@ -60,7 +74,12 @@ function declOf(line: string): SymbolChange | null {
   return null;
 }
 function importOf(line: string): string | null {
-  const m = IMPORT_RE.exec(line) ?? CONT_IMPORT_RE.exec(line) ?? REQUIRE_RE.exec(line);
+  const m =
+    IMPORT_RE.exec(line) ??
+    CONT_IMPORT_RE.exec(line) ??
+    REQUIRE_RE.exec(line) ??
+    PY_FROM_IMPORT_RE.exec(line) ??
+    PY_IMPORT_RE.exec(line);
   return m ? m[1]! : null;
 }
 function stripAB(p: string): string {
