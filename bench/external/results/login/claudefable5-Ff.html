@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Sign in · Hunch</title>
+<style>
+  /* ---------- tokens ---------- */
+  :root {
+    --spruce:      #16201d;   /* graph side, always dark */
+    --spruce-2:    #1d2925;   /* raised surface on spruce */
+    --pale:        #e9efe9;   /* text on spruce */
+    --moss:        #7f9488;   /* muted meta on spruce */
+    --amber:       #c97016;   /* the hunch spark */
+    --amber-soft:  #e8944040; /* amber glow, 25% */
+
+    --paper:       #eff2ef;   /* form side, light */
+    --ink:         #1b2421;
+    --ink-soft:    #55635c;
+    --field:       #ffffff;
+    --field-line:  #c3ccc5;
+    --accent:      #b25f0a;   /* amber tuned for light bg contrast */
+
+    --serif: "Charter", "Bitstream Charter", Georgia, "Times New Roman", serif;
+    --mono:  ui-monospace, "Cascadia Code", "SF Mono", Menlo, Consolas, monospace;
+    --sans:  system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+    --radius: 8px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper:      #101815;
+      --ink:        #e6ece7;
+      --ink-soft:   #93a49a;
+      --field:      #182220;
+      --field-line: #33413b;
+      --accent:     #e89440;  /* brighter amber on dark */
+    }
+  }
+
+  /* ---------- base ---------- */
+  * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; }
+  body {
+    font-family: var(--sans);
+    color: var(--ink);
+    background: var(--paper);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .split {
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: grid;
+    grid-template-columns: minmax(0, 5fr) minmax(0, 4fr);
+  }
+
+  /* ---------- left: the record ---------- */
+  .record-panel {
+    background:
+      radial-gradient(120% 90% at 15% 0%, #22312b 0%, var(--spruce) 55%);
+    color: var(--pale);
+    padding: clamp(2rem, 5vw, 4.5rem);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 3rem;
+  }
+
+  .brand {
+    font-family: var(--mono);
+    font-size: 1rem;
+    letter-spacing: .02em;
+    color: var(--pale);
+  }
+  .brand b { font-weight: 700; }
+  .brand .tld { color: var(--moss); font-weight: 400; }
+
+  .record { max-width: 34rem; }
+
+  .rec-line {
+    animation: rise .55s cubic-bezier(.2,.7,.2,1) both;
+    animation-delay: calc(var(--i) * 90ms);
+  }
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: none; }
+  }
+
+  .anchor {
+    font-family: var(--mono);
+    font-size: .8rem;
+    color: var(--moss);
+    overflow-wrap: anywhere;
+  }
+  .anchor .id { color: var(--amber); filter: brightness(1.35); }
+
+  .rec-head {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .4rem .9rem;
+    margin-top: 1.4rem;
+    font-family: var(--mono);
+    font-size: .78rem;
+  }
+  .chip {
+    border: 1px solid #34443d;
+    border-radius: 999px;
+    padding: .18rem .65rem;
+    color: var(--moss);
+  }
+  .chip.current {
+    color: #16110a;
+    background: #e89440;
+    border-color: #e89440;
+    font-weight: 600;
+  }
+
+  .rec-title {
+    font-family: var(--serif);
+    font-weight: 400;
+    font-size: clamp(1.7rem, 3.4vw, 2.5rem);
+    line-height: 1.16;
+    margin-top: 1.1rem;
+    letter-spacing: -0.01em;
+  }
+  .rec-title em { font-style: italic; color: #f3d9b8; }
+
+  .rec-body {
+    font-family: var(--serif);
+    font-size: 1.02rem;
+    line-height: 1.65;
+    color: #c7d2c9;
+    margin-top: 1rem;
+    max-width: 30rem;
+  }
+
+  .rejected { margin-top: 1.6rem; }
+  .rejected-label {
+    font-family: var(--mono);
+    font-size: .72rem;
+    text-transform: uppercase;
+    letter-spacing: .14em;
+    color: var(--moss);
+  }
+  .rejected ul { list-style: none; padding: 0; margin: .6rem 0 0; }
+  .rejected li {
+    font-family: var(--mono);
+    font-size: .82rem;
+    line-height: 1.5;
+    padding: .45rem 0;
+    border-top: 1px solid #26332d;
+    color: #a9b8ad;
+  }
+  .rejected li s { color: #6f8177; text-decoration-color: #4a5a51; }
+  .rejected li .x { color: var(--amber); filter: brightness(1.3); margin-right: .5rem; }
+
+  .provenance {
+    font-family: var(--mono);
+    font-size: .75rem;
+    color: var(--moss);
+    display: flex;
+    align-items: baseline;
+    gap: .5rem;
+    flex-wrap: wrap;
+  }
+  .caret {
+    display: inline-block;
+    width: .55em; height: 1.1em;
+    background: var(--amber);
+    filter: brightness(1.3);
+    vertical-align: text-bottom;
+    animation: blink 1.1s steps(1) infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* ---------- right: the form ---------- */
+  .form-panel {
+    display: grid;
+    place-items: center;
+    padding: clamp(1.5rem, 4vw, 4rem);
+  }
+  .form-box { width: min(23.5rem, 100%); }
+
+  h1 {
+    font-family: var(--serif);
+    font-weight: 400;
+    font-size: 1.85rem;
+    letter-spacing: -0.01em;
+  }
+  .sub {
+    margin-top: .5rem;
+    color: var(--ink-soft);
+    font-size: .95rem;
+    line-height: 1.5;
+  }
+
+  form { margin-top: 2.2rem; }
+
+  .fieldset { display: grid; gap: 1.15rem; }
+
+  .fld label {
+    display: block;
+    font-family: var(--mono);
+    font-size: .74rem;
+    text-transform: uppercase;
+    letter-spacing: .12em;
+    color: var(--ink-soft);
+    margin-bottom: .45rem;
+  }
+  .fld .box { position: relative; }
+  .fld input {
+    width: 100%;
+    font: inherit;
+    font-size: 1rem;
+    color: var(--ink);
+    background: var(--field);
+    border: 1px solid var(--field-line);
+    border-radius: var(--radius);
+    padding: .78rem .9rem;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  .fld input::placeholder { color: var(--ink-soft); opacity: .55; }
+  .fld input:hover { border-color: color-mix(in srgb, var(--field-line), var(--ink) 25%); }
+  .fld input:focus-visible {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--amber-soft);
+  }
+  .fld input[aria-invalid="true"] { border-color: #b3403a; }
+
+  .toggle-pw {
+    position: absolute;
+    top: 50%; right: .5rem;
+    transform: translateY(-50%);
+    font-family: var(--mono);
+    font-size: .72rem;
+    letter-spacing: .06em;
+    color: var(--ink-soft);
+    background: none;
+    border: 0;
+    border-radius: 5px;
+    padding: .35rem .5rem;
+    cursor: pointer;
+  }
+  .toggle-pw:hover { color: var(--accent); }
+
+  .err {
+    display: none;
+    margin-top: .45rem;
+    font-size: .82rem;
+    color: #b3403a;
+    line-height: 1.4;
+  }
+  .err.show { display: block; }
+  @media (prefers-color-scheme: dark) {
+    .err { color: #e2857f; }
+    .fld input[aria-invalid="true"] { border-color: #c9615b; }
+  }
+
+  .row {
+    margin-top: 1.35rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .remember {
+    display: inline-flex;
+    align-items: center;
+    gap: .6rem;
+    font-size: .9rem;
+    color: var(--ink-soft);
+    cursor: pointer;
+  }
+  .remember input {
+    appearance: none;
+    width: 1.15rem; height: 1.15rem;
+    flex: none;
+    border: 1.5px solid var(--field-line);
+    border-radius: 4px;
+    background: var(--field);
+    cursor: pointer;
+    display: grid;
+    place-items: center;
+    transition: background .15s, border-color .15s;
+  }
+  .remember input:checked {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+  .remember input:checked::after {
+    content: "";
+    width: .62rem; height: .34rem;
+    border-left: 2px solid var(--paper);
+    border-bottom: 2px solid var(--paper);
+    transform: translateY(-15%) rotate(-45deg);
+  }
+  .remember input:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  .forgot {
+    font-size: .9rem;
+    color: var(--accent);
+    text-decoration: none;
+    border-radius: 3px;
+  }
+  .forgot:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+  .submit {
+    margin-top: 1.6rem;
+    width: 100%;
+    font: inherit;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #fdf6ec;
+    background: var(--spruce);
+    border: 0;
+    border-radius: var(--radius);
+    padding: .85rem 1rem;
+    cursor: pointer;
+    transition: background .15s, transform .1s;
+  }
+  .submit:hover { background: #24332d; }
+  .submit:active { transform: translateY(1px); }
+  .submit[disabled] { opacity: .7; cursor: default; }
+  @media (prefers-color-scheme: dark) {
+    .submit { background: var(--accent); color: #180f04; }
+    .submit:hover { background: #f0a558; }
+  }
+
+  a:focus-visible, .toggle-pw:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .submit:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+  }
+
+  .status {
+    margin-top: 1rem;
+    font-family: var(--mono);
+    font-size: .8rem;
+    color: var(--accent);
+    min-height: 1.2em;
+  }
+
+  .foot {
+    margin-top: 2.6rem;
+    padding-top: 1.2rem;
+    border-top: 1px solid var(--field-line);
+    font-size: .85rem;
+    color: var(--ink-soft);
+    line-height: 1.55;
+  }
+  .foot code {
+    font-family: var(--mono);
+    font-size: .78rem;
+    background: color-mix(in srgb, var(--field-line), transparent 60%);
+    border-radius: 4px;
+    padding: .08rem .35rem;
+  }
+
+  /* ---------- responsive ---------- */
+  @media (max-width: 880px) {
+    .split { grid-template-columns: 1fr; }
+    .record-panel {
+      min-height: 0;
+      padding: 1.4rem 1.5rem;
+      gap: 1.1rem;
+    }
+    /* collapse the record to its anchor strip on small screens */
+    .rec-head, .rec-body, .rejected, .provenance .conf { display: none; }
+    .rec-title { font-size: 1.25rem; margin-top: .8rem; }
+    .record { margin-top: .2rem; }
+    .provenance { display: none; }
+    .form-panel { padding: 2rem 1.5rem 3rem; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .rec-line { animation: none; }
+    .caret { animation: none; }
+    * { transition-duration: .01ms !important; }
+  }
+</style>
+</head>
+<body>
+<div class="split">
+
+  <!-- The page documents itself in Hunch's own decision format -->
+  <aside class="record-panel" aria-label="Why this sign-in is the way it is — a Hunch decision record">
+    <div class="brand rec-line" style="--i:0"><b>hunch</b><span class="tld"> · engineering memory</span></div>
+
+    <div class="record">
+      <p class="anchor rec-line" style="--i:1">&lt;!-- hunch:topic sign-in <span class="id">dec_a41b0c37e2</span> --&gt;</p>
+
+      <div class="rec-head rec-line" style="--i:2">
+        <span class="chip current">status: current</span>
+        <span class="chip">topic: sign-in</span>
+      </div>
+
+      <h2 class="rec-title rec-line" style="--i:3">Why this door is <em>the way it is.</em></h2>
+
+      <p class="rec-body rec-line" style="--i:4">
+        Your graph remembers the arguments your team already settled — decisions,
+        bug lineage, the constraints that must not break. Signing in scopes that
+        memory to you: your private overlay, your provenance, your corrections.
+      </p>
+
+      <div class="rejected rec-line" style="--i:5">
+        <p class="rejected-label">rejected alternatives</p>
+        <ul>
+          <li><span class="x">✗</span><s>magic links</s> — an email roundtrip loses to a password manager every time</li>
+          <li><span class="x">✗</span><s>SSO-only</s> — solo maintainers with a private overlay come first</li>
+        </ul>
+      </div>
+    </div>
+
+    <p class="provenance rec-line" style="--i:6">
+      <span>provenance: commit 7cca005</span>
+      <span class="conf">· confidence 0.96</span>
+      <span class="caret" aria-hidden="true"></span>
+    </p>
+  </aside>
+
+  <main class="form-panel">
+    <div class="form-box">
+      <h1>Sign in</h1>
+      <p class="sub">Pick up where your graph left off.</p>
+
+      <form id="login" novalidate>
+        <div class="fieldset">
+          <div class="fld">
+            <label for="email">Email</label>
+            <div class="box">
+              <input type="email" id="email" name="email" autocomplete="email"
+                     placeholder="you@team.dev" required>
+            </div>
+            <p class="err" id="email-err" aria-live="polite"></p>
+          </div>
+
+          <div class="fld">
+            <label for="password">Password</label>
+            <div class="box">
+              <input type="password" id="password" name="password"
+                     autocomplete="current-password" placeholder="••••••••••••"
+                     required minlength="8" style="padding-right:3.6rem">
+              <button type="button" class="toggle-pw" id="toggle-pw"
+                      aria-pressed="false" aria-label="Show password">show</button>
+            </div>
+            <p class="err" id="password-err" aria-live="polite"></p>
+          </div>
+        </div>
+
+        <div class="row">
+          <label class="remember">
+            <input type="checkbox" name="remember" id="remember" checked>
+            Keep me signed in
+          </label>
+          <a class="forgot" href="#reset">Forgot password?</a>
+        </div>
+
+        <button type="submit" class="submit" id="submit">Open my graph</button>
+        <p class="status" id="status" role="status" aria-live="polite"></p>
+      </form>
+
+      <p class="foot">
+        No account yet? Hunch runs in your repo — start with
+        <code>npx hunch init</code>, then ask your maintainer for an overlay invite.
+      </p>
+    </div>
+  </main>
+</div>
+
+<script>
+  const form = document.getElementById('login');
+  const email = document.getElementById('email');
+  const password = document.getElementById('password');
+  const submit = document.getElementById('submit');
+  const status = document.getElementById('status');
+
+  const fail = (input, msg) => {
+    input.setAttribute('aria-invalid', 'true');
+    const err = document.getElementById(input.id + '-err');
+    err.textContent = msg;
+    err.classList.add('show');
+  };
+  const clear = (input) => {
+    input.removeAttribute('aria-invalid');
+    const err = document.getElementById(input.id + '-err');
+    err.textContent = '';
+    err.classList.remove('show');
+  };
+  [email, password].forEach(i => i.addEventListener('input', () => clear(i)));
+
+  // show / hide password
+  const toggle = document.getElementById('toggle-pw');
+  toggle.addEventListener('click', () => {
+    const hidden = password.type === 'password';
+    password.type = hidden ? 'text' : 'password';
+    toggle.textContent = hidden ? 'hide' : 'show';
+    toggle.setAttribute('aria-pressed', String(hidden));
+    toggle.setAttribute('aria-label', hidden ? 'Hide password' : 'Show password');
+  });
+
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    let ok = true;
+
+    if (!email.value.trim()) {
+      fail(email, 'Enter the email on your Hunch account.'); ok = false;
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.value.trim())) {
+      fail(email, 'That doesn’t look like an email address. Check for a typo.'); ok = false;
+    }
+    if (!password.value) {
+      fail(password, 'Enter your password, or use “Forgot password?” below.'); ok = false;
+    } else if (password.value.length < 8) {
+      fail(password, 'Passwords are at least 8 characters.'); ok = false;
+    }
+    if (!ok) { (email.hasAttribute('aria-invalid') ? email : password).focus(); return; }
+
+    submit.disabled = true;
+    submit.textContent = 'Opening…';
+    status.textContent = 'recalling your graph — 51 decisions, 8 constraints…';
+  });
+</script>
+</body>
+</html>

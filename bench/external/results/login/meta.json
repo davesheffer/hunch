@@ -92,5 +92,15 @@
     "bytes": 16982,
     "turns": 4,
     "durationMs": 198735
+  },
+  {
+    "model": "claude-fable-5",
+    "arm": "F",
+    "slug": "claudefable5-Ff",
+    "forced": true,
+    "produced": true,
+    "bytes": 15382,
+    "turns": 4,
+    "durationMs": 154203
   }
 ]
