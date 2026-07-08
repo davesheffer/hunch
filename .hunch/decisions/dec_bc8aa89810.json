@@ -1,0 +1,53 @@
+{
+  "id": "dec_bc8aa89810",
+  "title": "Skill delivery enforced via hooks (verification pipeline), not hoped for via skill files",
+  "topic": "agent.skill-delivery",
+  "status": "accepted",
+  "context": "Zod bench 2026-07-08: fable-mode skill installed as a file was read in 0/20 S-arm sessions across Haiku/Sonnet/Opus — pass rates identical to bare arms (21/21 pair agreement). Forcing the read (prompt naming the skill) flipped FAIL→PASS on the discriminating task zod-5937 for both Opus and Haiku; rewriting the skill description as a pushy trigger got Opus to read it organically and pass, but Haiku still ignored it. Every PASS had a transcript-verified Skill invocation; every FAIL had none.",
+  "decision": "Ship delivery as harness enforcement: src/core/pipeline.ts + hunch hook handles PostToolUse (records product edits + verify-shaped commands as observable facts) and Stop (refuses turn-end with unverified product edits, max 2 blocks/turn). Operating loop injected at SessionStart. No new config knob — firmness governs (advisory=inject+nag, firm/strict=stop-gate); HUNCH_PIPELINE=0 kills. State is per-session tmpdir scratch, never .hunch/. Released as v1.4.0.",
+  "consequences": [
+    "Turn-end at firm/strict requires a verify-shaped command after the last product edit or an explicit impossibility statement",
+    "Gate evaluates observable facts only (commands, exit-shaped patterns), never model claims",
+    "Max-2-blocks per turn guarantees a broken gate degrades to advisory, never a lockout",
+    "Docs, .claude/ and .hunch/ edits never arm the gate"
+  ],
+  "alternatives_rejected": [
+    "Pushy skill descriptions alone — works for Opus-class, measured insufficient for Haiku-class (ignored even MANDATORY phrasing)",
+    "Naming the skill in every prompt — works but depends on the user remembering; not a product mechanism",
+    "New pipeline config knob — firmness already expresses enforcement appetite; a second knob invites contradictory states",
+    "Storing pipeline state in .hunch/ — it is derived, disposable, single-writer scratch; .hunch is the durable graph"
+  ],
+  "rejected_tripwires": [],
+  "related_components": [
+    "Core",
+    "CLI",
+    "Integrations"
+  ],
+  "related_files": [
+    "src/core/pipeline.ts",
+    "src/cli/index.ts",
+    "src/integrations/scaffold.ts",
+    "test/pipeline.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-07-08T11:40:22.798Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 0.95,
+    "evidence": [
+      "src/core/pipeline.ts",
+      "src/cli/index.ts",
+      "src/integrations/scaffold.ts",
+      "test/pipeline.test.ts"
+    ]
+  },
+  "date": "2026-07-08T11:40:22.798Z"
+}
