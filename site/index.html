@@ -90,6 +90,24 @@
   .hero-facts span::after{content:"·";margin-left:10px;color:var(--mut-2)}
   .hero-facts span:last-child::after{content:""}
 
+  /* ───────────── hero art: the graph that holds the line ─────────────
+     full-bleed behind the hero text; a soft wash keeps the measure readable.
+     the cursor is an agent: edges near it illuminate. */
+  header.hero{position:relative;overflow:visible}
+  .hero-art{ /* true full-bleed: break out of the centered wrap */
+    position:absolute;top:-60px;bottom:-40px;left:50%;width:100vw;
+    transform:translateX(-50%);z-index:-1;
+    pointer-events:none;user-select:none;
+  }
+  .hero-art canvas{width:100%;height:100%;display:block}
+  .hero-art::after{ /* readability wash over the text column */
+    content:"";position:absolute;inset:0;
+    background:
+      radial-gradient(680px 520px at 24% 34%, var(--bg) 38%, color-mix(in srgb,var(--bg) 55%,transparent) 68%, transparent 88%),
+      linear-gradient(to bottom, color-mix(in srgb,var(--bg) 65%,transparent), transparent 22%, transparent 78%, var(--bg));
+  }
+  @media (max-width:760px){.hero-art{opacity:.5}}
+
   /* load-in: one quiet moment */
   .rise{opacity:0;transform:translateY(10px);animation:rise .7s var(--ease) forwards}
   .rise.d1{animation-delay:.08s}.rise.d2{animation-delay:.16s}.rise.d3{animation-delay:.26s}.rise.d4{animation-delay:.4s}
@@ -258,6 +276,11 @@
 
 <!-- ─────────────────────────── hero ─────────────────────────── -->
 <header class="hero wrap">
+  <!-- the graph that holds the line, full-bleed: decisions ● guard code ▢;
+       agent edits streak in and the guarded edges HOLD (moss pulse + receipt) —
+       rarely, the strict flavor blocks (ember). The cursor is an agent too:
+       edges near it illuminate. Decorative: aria-hidden, pointer-events none. -->
+  <div class="hero-art" aria-hidden="true"><canvas id="holdline"></canvas></div>
   <p class="eyebrow rise">architectural conformance for AI code · git-native · local-first</p>
   <h1 class="rise d1">Let AI fly.<br /><b>Hunch holds the line.</b></h1>
   <p class="lede rise d2">
@@ -584,6 +607,250 @@
     </div>
   </div>
 </footer>
+
+<script>
+  // hero art v2 — "the graph that holds the line", full-bleed.
+  // Two depth layers of a memory graph behind the hero; agent edits streak in
+  // continuously, guarded edges HOLD them (traveling pulse + shockwave ring +
+  // typewriter receipt). The cursor is an agent too: edges near it illuminate,
+  // and the layers parallax against it. Moss = held, ember = blocked (rare,
+  // the labeled exception — receipts over threats). Reduced motion: one still.
+  (() => {
+    const cv = document.getElementById("holdline");
+    if (!cv || !cv.getContext) return;
+    const ctx = cv.getContext("2d");
+    const MOSS = [58, 107, 88], MOSSINK = [44, 82, 63], EMBER = [180, 84, 62], INK = [28, 32, 30];
+    const rgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
+    let W = 0, H = 0, dpr = 1;
+    function size() {
+      dpr = Math.min(devicePixelRatio || 1, 2);
+      W = cv.clientWidth; H = cv.clientHeight;
+      cv.width = W * dpr; cv.height = H * dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      layout();
+    }
+
+    // deterministic constellation — it's a memory, it persists between visits
+    let seed = 20260708;
+    const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+    const layers = [
+      { n: 52, edges: [], nodes: [], depth: 0.45, alpha: 0.45, par: 7 },   // far
+      { n: 34, edges: [], nodes: [], depth: 1.0,  alpha: 1.0,  par: 16 },  // near
+    ];
+    function layout() {
+      seed = 20260708;
+      for (const L of layers) {
+        L.nodes = []; L.edges = [];
+        for (let i = 0; i < L.n; i++) {
+          // bias the constellation rightward; the CSS wash owns the text column
+          const gx = Math.pow(rnd(), 0.72);
+          L.nodes.push({
+            x: 40 + gx * (W - 80), y: 30 + rnd() * (H - 60),
+            kind: i % 3 === 2 ? 1 : 0, r: (1.6 + rnd() * 2.2) * L.depth,
+            px: rnd() * 6.28, py: rnd() * 6.28,
+          });
+        }
+        for (let i = 0; i < L.n; i++) {
+          const cand = [];
+          for (let j = 0; j < L.n; j++) {
+            if (j === i) continue;
+            const dx = L.nodes[i].x - L.nodes[j].x, dy = L.nodes[i].y - L.nodes[j].y;
+            const d2 = dx * dx + dy * dy;
+            if (d2 < 240 * 240) cand.push([d2, j]);
+          }
+          cand.sort((a, b) => a[0] - b[0]);
+          for (const [, j] of cand.slice(0, 2)) {
+            if (!L.edges.some((e) => (e.a === i && e.b === j) || (e.a === j && e.b === i)))
+              L.edges.push({ a: i, b: j, guarded: L.nodes[i].kind === 1 || L.nodes[j].kind === 1 });
+          }
+        }
+      }
+    }
+    size(); addEventListener("resize", size);
+
+    const RECEIPTS = ["dec_8b2e · held", "dec_a466 · held", "dec_e0a3 · held", "dec_fd36 · held"];
+    const BLOCKS = ["con_9027 · blocked", "con_2ce3 · blocked"];
+    const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    // cursor-as-agent
+    const mouse = { x: -9999, y: -9999, tx: -9999, ty: -9999, ox: 0, oy: 0 };
+    addEventListener("mousemove", (e) => {
+      const r = cv.getBoundingClientRect();
+      mouse.tx = e.clientX - r.left; mouse.ty = e.clientY - r.top;
+    }, { passive: true });
+
+    let t = 0, streaks = [], events = [], nextStreak = 350, running = true; // first strike lands above the fold, fast
+    const near = layers[1];
+    const guarded = () => near.edges.filter((e) => e.guarded);
+
+    function spawnStreak(now) {
+      const g = guarded(); if (!g.length) return;
+      const e = g[(Math.random() * g.length) | 0];
+      const [ax, ay] = pos(near, near.nodes[e.a]), [bx, by] = pos(near, near.nodes[e.b]);
+      const mx = (ax + bx) / 2, my = (ay + by) / 2;
+      const ang = Math.random() * 6.28;
+      const R = Math.max(W, H) * 0.62;
+      streaks.push({
+        e, t0: now, dur: 820 + Math.random() * 380,
+        sx: mx + Math.cos(ang) * R, sy: my + Math.sin(ang) * R * 0.7,
+        mx, my, trail: [],
+        blocked: Math.random() < 0.18,
+      });
+    }
+    function pos(L, n) {
+      const dx = reduce ? 0 : Math.sin(t / 3600 + n.px) * 3 * L.depth;
+      const dy = reduce ? 0 : Math.cos(t / 4300 + n.py) * 3 * L.depth;
+      return [n.x + dx + mouse.ox * L.par, n.y + dy + mouse.oy * L.par];
+    }
+
+    function frame(now) {
+      if (!running) return;
+      t = now;
+      // eased parallax from cursor
+      const nx = mouse.tx > -9000 ? (mouse.tx / W - 0.5) : 0;
+      const ny = mouse.ty > -9000 ? (mouse.ty / H - 0.5) : 0;
+      mouse.ox += (nx - mouse.ox) * 0.04; mouse.oy += (ny - mouse.oy) * 0.04;
+      mouse.x += (mouse.tx - mouse.x) * 0.2; mouse.y += (mouse.ty - mouse.y) * 0.2;
+
+      ctx.clearRect(0, 0, W, H);
+
+      for (const L of layers) {
+        // edges — cursor illuminates what it approaches
+        for (const e of L.edges) {
+          const [ax, ay] = pos(L, L.nodes[e.a]), [bx, by] = pos(L, L.nodes[e.b]);
+          const cx = (ax + bx) / 2, cy = (ay + by) / 2;
+          const md = Math.hypot(mouse.x - cx, mouse.y - cy);
+          const lit = L === near ? Math.max(0, 1 - md / 170) : 0;
+          let a = (e.guarded ? 0.4 : 0.16) * L.alpha + lit * 0.5;
+          let lw = (e.guarded ? 1.3 : 0.9) * L.depth + lit * 1.1;
+          let col = e.guarded ? MOSS : INK;
+          ctx.strokeStyle = rgba(col, a); ctx.lineWidth = lw;
+          if (e.guarded && L === near) { // the line is alive: slow dash shimmer
+            ctx.setLineDash([3, 7]); ctx.lineDashOffset = -t / 55;
+          }
+          ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+          ctx.setLineDash([]);
+        }
+        // nodes
+        for (const n of L.nodes) {
+          const [x, y] = pos(L, n);
+          const md = Math.hypot(mouse.x - x, mouse.y - y);
+          const swell = L === near ? Math.max(0, 1 - md / 110) * 1.6 : 0;
+          if (n.kind === 1) { // decision — a living ember of memory: breathing halo
+            const breathe = 0.5 + 0.5 * Math.sin(t / 1600 + n.px * 3);
+            ctx.fillStyle = rgba(MOSS, (0.14 + 0.1 * breathe) * L.alpha);
+            ctx.beginPath(); ctx.arc(x, y, (n.r + 6 + 2.5 * breathe) * L.depth, 0, 7); ctx.fill();
+            ctx.fillStyle = rgba(MOSS, 0.95 * L.alpha);
+            ctx.shadowColor = rgba(MOSS, 0.45 + 0.3 * swell); ctx.shadowBlur = 8 + 10 * swell;
+            ctx.beginPath(); ctx.arc(x, y, n.r + 1 + swell * 1.6, 0, 7); ctx.fill();
+            ctx.shadowBlur = 0;
+          } else {
+            ctx.strokeStyle = rgba(INK, 0.62 * L.alpha); ctx.lineWidth = 1;
+            const s = n.r + swell;
+            ctx.strokeRect(x - s, y - s, s * 2, s * 2);
+          }
+        }
+      }
+
+      // agent streaks with glowing trails
+      if (!reduce && now > nextStreak) { spawnStreak(now); nextStreak = now + 900 + Math.random() * 900; }
+      streaks = streaks.filter((s) => {
+        const k = (now - s.t0) / s.dur;
+        if (k >= 1) {
+          events.push({ e: s.e, t0: now, blocked: s.blocked, mx: s.mx, my: s.my,
+            chip: s.blocked ? BLOCKS[(Math.random() * BLOCKS.length) | 0] : RECEIPTS[(Math.random() * RECEIPTS.length) | 0] });
+          return false;
+        }
+        const ease = k * k * (3 - 2 * k);
+        const x = s.sx + (s.mx - s.sx) * ease, y = s.sy + (s.my - s.sy) * ease;
+        s.trail.push([x, y]);
+        if (s.trail.length > 22) s.trail.shift();
+        for (let i = 1; i < s.trail.length; i++) {
+          const a = (i / s.trail.length) * 0.55;
+          ctx.strokeStyle = rgba(INK, a); ctx.lineWidth = 1 + (i / s.trail.length) * 1.4;
+          ctx.beginPath(); ctx.moveTo(s.trail[i - 1][0], s.trail[i - 1][1]); ctx.lineTo(s.trail[i][0], s.trail[i][1]); ctx.stroke();
+        }
+        ctx.shadowColor = rgba(INK, 0.6); ctx.shadowBlur = 7;
+        ctx.fillStyle = rgba(INK, 0.95);
+        ctx.beginPath(); ctx.arc(x, y, 2.8, 0, 7); ctx.fill();
+        ctx.shadowBlur = 0;
+        return true;
+      });
+
+      // hold events: edge flash + traveling pulse + shockwave ring + receipt
+      events = events.filter((ev) => {
+        const dt = now - ev.t0;
+        if (dt > 3400) return false;
+        const col = ev.blocked ? EMBER : MOSS;
+        const [ax, ay] = pos(near, near.nodes[ev.e.a]), [bx, by] = pos(near, near.nodes[ev.e.b]);
+        // edge flash
+        const flash = Math.sin(Math.min(1, dt / 1400) * Math.PI);
+        ctx.strokeStyle = rgba(col, 0.15 + 0.8 * flash);
+        ctx.lineWidth = 1.4 + 2.2 * flash;
+        ctx.shadowColor = rgba(col, 0.55 * flash); ctx.shadowBlur = 12 * flash;
+        ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+        ctx.shadowBlur = 0;
+        // traveling pulses out from the impact point, both directions
+        if (dt < 1300) {
+          const pk = dt / 1300;
+          for (const dir of [1, -1]) {
+            const px = ev.mx + (bx - ax) * 0.5 * pk * dir, py = ev.my + (by - ay) * 0.5 * pk * dir;
+            ctx.fillStyle = rgba(col, 0.9 * (1 - pk));
+            ctx.beginPath(); ctx.arc(px, py, 2.2, 0, 7); ctx.fill();
+          }
+        }
+        // shockwave ring + delayed echo
+        if (dt < 1100) {
+          const rk = dt / 1100;
+          ctx.strokeStyle = rgba(col, 0.65 * (1 - rk));
+          ctx.lineWidth = 2 * (1 - rk) + 0.5;
+          ctx.beginPath(); ctx.arc(ev.mx, ev.my, 8 + rk * 130, 0, 7); ctx.stroke();
+        }
+        if (dt > 240 && dt < 1350) {
+          const rk = (dt - 240) / 1110;
+          ctx.strokeStyle = rgba(col, 0.3 * (1 - rk));
+          ctx.lineWidth = 1.1 * (1 - rk) + 0.3;
+          ctx.beginPath(); ctx.arc(ev.mx, ev.my, 6 + rk * 96, 0, 7); ctx.stroke();
+        }
+        // receipt chip, typewriter
+        if (dt > 260) {
+          const shown = Math.min(ev.chip.length, Math.floor((dt - 260) / 34));
+          const a = dt > 2700 ? Math.max(0, (3400 - dt) / 700) : 1;
+          ctx.font = "500 12.5px 'IBM Plex Mono',monospace";
+          ctx.textAlign = ev.mx < W * 0.55 ? "left" : "right";
+          ctx.fillStyle = rgba(ev.blocked ? EMBER : MOSSINK, a);
+          ctx.fillText(ev.chip.slice(0, shown), ev.mx + (ev.mx < W * 0.55 ? 14 : -14), ev.my - 14);
+        }
+        return true;
+      });
+
+      if (!reduce) requestAnimationFrame(frame);
+    }
+
+    if (reduce) { // one composed still: lit guarded edge, mid-ring, full receipt
+      const g = guarded();
+      if (g.length) {
+        const e = g[0];
+        const [ax, ay] = pos(near, near.nodes[e.a]), [bx, by] = pos(near, near.nodes[e.b]);
+        events.push({ e, t0: -700, blocked: false, mx: (ax + bx) / 2, my: (ay + by) / 2, chip: RECEIPTS[0] });
+        t = 0; frame(0);
+      } else frame(0);
+    } else {
+      const io = "IntersectionObserver" in window
+        ? new IntersectionObserver((en) => {
+            const vis = en[0].isIntersecting && !document.hidden;
+            if (vis && !running) { running = true; requestAnimationFrame(frame); }
+            if (!vis) running = false;
+          }) : null;
+      io?.observe(cv);
+      document.addEventListener("visibilitychange", () => {
+        if (document.hidden) running = false;
+        else if (!running) { running = true; requestAnimationFrame(frame); }
+      });
+      requestAnimationFrame(frame);
+    }
+  })();
+</script>
 
 <script>
   // hero terminal: one calm, slow typing pass. reduced-motion → instant.
