@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Sign in · hunch</title>
+<meta name="color-scheme" content="light dark" />
+<style>
+  /* ============ Tokens ============ */
+  :root {
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+
+    /* The archive panel is fixed deep-ink in BOTH modes. */
+    --archive-bg:    #100E17;
+    --archive-grad:  radial-gradient(120% 90% at 15% 0%, #1b1726 0%, #100E17 55%, #0b0910 100%);
+    --archive-fg:    #E9E6F0;
+    --archive-muted: #8B8499;
+    --archive-line:  #2A2636;
+    --amber:         #F0A93C;
+    --amber-soft:    rgba(240,169,60,.16);
+
+    /* Form side — light mode. */
+    --bg:        #ECEAF1;
+    --card:      #FFFFFF;
+    --fg:        #17141F;
+    --muted:     #6B6577;
+    --field-bg:  #F6F5F9;
+    --field-bd:  #DCD9E4;
+    --field-bdf: #B5741A;
+    --link:      #A86A14;
+    --btn-bg:    #E7982F;
+    --btn-fg:    #1A1206;
+    --focus:     #C8811E;
+    --shadow:    0 24px 60px -28px rgba(28,20,10,.32), 0 4px 14px -8px rgba(20,16,30,.18);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:        #0C0A12;
+      --card:      #16131F;
+      --fg:        #E9E6F0;
+      --muted:     #8B8499;
+      --field-bg:  #100E17;
+      --field-bd:  #2B2738;
+      --field-bdf: #F0A93C;
+      --link:      #F0A93C;
+      --btn-bg:    #F0A93C;
+      --btn-fg:    #14100A;
+      --focus:     #F0A93C;
+      --shadow:    0 30px 70px -30px rgba(0,0,0,.7);
+    }
+  }
+
+  /* ============ Base ============ */
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    font-family: var(--sans);
+    color: var(--fg);
+    background: var(--bg);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  .stage {
+    min-height: 100%;
+    display: grid;
+    grid-template-columns: 1.15fr .85fr;
+  }
+
+  /* ============ Archive panel (signature) ============ */
+  .archive {
+    position: relative;
+    background: var(--archive-grad);
+    color: var(--archive-fg);
+    padding: clamp(2rem, 4vw, 3.5rem);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 2rem;
+    overflow: hidden;
+    isolation: isolate;
+  }
+  /* faint ledger grid */
+  .archive::before {
+    content: "";
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(var(--archive-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--archive-line) 1px, transparent 1px);
+    background-size: 72px 72px;
+    opacity: .12;
+    -webkit-mask-image: radial-gradient(120% 90% at 30% 20%, #000 30%, transparent 75%);
+            mask-image: radial-gradient(120% 90% at 30% 20%, #000 30%, transparent 75%);
+    z-index: -1;
+  }
+
+  .brand {
+    display: flex;
+    align-items: baseline;
+    gap: .85rem;
+    flex-wrap: wrap;
+  }
+  .wordmark {
+    font-family: var(--mono);
+    font-size: 1.5rem;
+    font-weight: 600;
+    letter-spacing: -.02em;
+    display: inline-flex;
+    align-items: center;
+    gap: .12em;
+  }
+  .wordmark .caret {
+    width: .5ch; height: 1.05em;
+    background: var(--amber);
+    display: inline-block;
+    transform: translateY(.12em);
+    animation: blink 1.15s steps(1) infinite;
+  }
+  @keyframes blink { 0%,50%{opacity:1} 51%,100%{opacity:0} }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: .68rem;
+    letter-spacing: .26em;
+    text-transform: uppercase;
+    color: var(--archive-muted);
+  }
+
+  /* graph signature */
+  .graph-wrap {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 200px;
+    position: relative;
+  }
+  .graph { width: min(100%, 420px); height: auto; overflow: visible; }
+
+  .edge {
+    stroke: var(--amber);
+    stroke-width: 1.2;
+    fill: none;
+    opacity: .30;
+    stroke-dasharray: var(--len);
+    stroke-dashoffset: var(--len);
+    animation: draw 1s ease forwards;
+  }
+  @keyframes draw { to { stroke-dashoffset: 0; } }
+
+  .node {
+    opacity: 0;
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: pop .5s cubic-bezier(.2,.9,.3,1.4) forwards;
+  }
+  @keyframes pop { from { opacity:0; transform: scale(.2);} to {opacity:1; transform: scale(1);} }
+
+  .node.dot   { fill: var(--archive-bg); stroke: var(--archive-muted); stroke-width: 1.4; }
+  .node.dec   { fill: var(--amber); stroke: none; }
+  .node.cur   { fill: var(--amber); stroke: none; }
+  .pulse {
+    fill: none; stroke: var(--amber); stroke-width: 1.4;
+    transform-box: fill-box; transform-origin: center;
+    animation: pulse 2.6s ease-out infinite;
+    animation-delay: 1.4s;
+  }
+  @keyframes pulse {
+    0%   { opacity:.9; transform: scale(1); }
+    70%  { opacity:0;  transform: scale(3.4); }
+    100% { opacity:0;  transform: scale(3.4); }
+  }
+  /* stagger */
+  .e1{animation-delay:.15s} .e2{animation-delay:.28s} .e3{animation-delay:.4s}
+  .e4{animation-delay:.5s}  .e5{animation-delay:.6s}  .e6{animation-delay:.68s}
+  .e7{animation-delay:.76s} .e8{animation-delay:.84s} .e9{animation-delay:.92s}
+  .n1{animation-delay:.55s} .n2{animation-delay:.65s} .n3{animation-delay:.75s}
+  .n4{animation-delay:.85s} .n5{animation-delay:.95s} .n6{animation-delay:1s}
+  .n7{animation-delay:1.05s} .ncur{animation-delay:1.15s}
+
+  .graph-cap {
+    font-family: var(--mono);
+    font-size: .72rem;
+    fill: var(--archive-muted);
+    opacity: 0;
+    animation: fade .6s ease forwards 1.3s;
+  }
+  @keyframes fade { to { opacity: 1; } }
+
+  .pitch { max-width: 26ch; }
+  .pitch h1 {
+    font-family: var(--mono);
+    font-weight: 600;
+    font-size: clamp(1.4rem, 2.4vw, 2rem);
+    line-height: 1.18;
+    letter-spacing: -.035em;
+    margin: 0 0 1rem;
+    color: var(--archive-fg);
+  }
+  .pitch h1 em { color: var(--amber); font-style: normal; }
+  .stat {
+    font-family: var(--mono);
+    font-size: .74rem;
+    line-height: 1.7;
+    color: var(--archive-muted);
+    letter-spacing: .01em;
+  }
+  .stat b { color: var(--archive-fg); font-weight: 600; }
+
+  /* ============ Form panel ============ */
+  .panel {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: clamp(1.5rem, 4vw, 3rem);
+  }
+  .card {
+    width: min(100%, 400px);
+    background: var(--card);
+    border: 1px solid var(--field-bd);
+    border-radius: 18px;
+    box-shadow: var(--shadow);
+    padding: clamp(1.6rem, 3.5vw, 2.4rem);
+  }
+  .card h2 {
+    font-size: 1.5rem;
+    letter-spacing: -.02em;
+    margin: 0 0 .35rem;
+  }
+  .card .lede { margin: 0 0 1.75rem; color: var(--muted); font-size: .93rem; }
+
+  .field { margin-bottom: 1.1rem; }
+  .field label {
+    display: block;
+    font-family: var(--mono);
+    font-size: .72rem;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: .5rem;
+  }
+  .control { position: relative; }
+  input[type="email"],
+  input[type="password"],
+  input[type="text"].pw {
+    width: 100%;
+    font-family: var(--sans);
+    font-size: 1rem;
+    color: var(--fg);
+    background: var(--field-bg);
+    border: 1.5px solid var(--field-bd);
+    border-radius: 11px;
+    padding: .82rem .95rem;
+    transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
+  }
+  input::placeholder { color: color-mix(in srgb, var(--muted) 70%, transparent); }
+  input:focus-visible {
+    outline: none;
+    border-color: var(--field-bdf);
+    box-shadow: 0 0 0 4px var(--amber-soft);
+    background: var(--card);
+  }
+  /* password + toggle */
+  .control.pw input { padding-right: 3.4rem; }
+  .toggle {
+    position: absolute;
+    top: 50%; right: .5rem;
+    transform: translateY(-50%);
+    display: inline-flex;
+    align-items: center;
+    height: 2rem; padding: 0 .55rem;
+    border: 0; background: transparent;
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: .68rem;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    border-radius: 7px;
+    cursor: pointer;
+  }
+  .toggle:hover { color: var(--fg); }
+  .toggle:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+
+  .row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin: .35rem 0 1.5rem;
+    flex-wrap: wrap;
+  }
+  .remember {
+    display: inline-flex;
+    align-items: center;
+    gap: .6rem;
+    font-size: .9rem;
+    color: var(--fg);
+    cursor: pointer;
+    user-select: none;
+  }
+  .remember input {
+    appearance: none; -webkit-appearance: none;
+    width: 1.2rem; height: 1.2rem;
+    margin: 0;
+    border: 1.5px solid var(--field-bd);
+    border-radius: 6px;
+    background: var(--field-bg);
+    display: grid; place-content: center;
+    cursor: pointer;
+    transition: background .15s ease, border-color .15s ease;
+  }
+  .remember input::after {
+    content: "";
+    width: .42rem; height: .72rem;
+    border: solid var(--btn-fg);
+    border-width: 0 2.5px 2.5px 0;
+    transform: rotate(45deg) scale(0);
+    transition: transform .15s ease;
+    margin-top: -2px;
+  }
+  .remember input:checked {
+    background: var(--btn-bg);
+    border-color: var(--btn-bg);
+  }
+  .remember input:checked::after { transform: rotate(45deg) scale(1); }
+  .remember input:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+  .forgot {
+    font-size: .88rem;
+    color: var(--link);
+    text-decoration: none;
+    font-weight: 500;
+  }
+  .forgot:hover { text-decoration: underline; }
+  .forgot:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 3px;
+    border-radius: 3px;
+  }
+
+  .submit {
+    width: 100%;
+    font-family: var(--sans);
+    font-size: 1rem;
+    font-weight: 600;
+    letter-spacing: .01em;
+    color: var(--btn-fg);
+    background: var(--btn-bg);
+    border: 0;
+    border-radius: 11px;
+    padding: .92rem 1rem;
+    cursor: pointer;
+    transition: transform .12s ease, filter .15s ease, box-shadow .15s ease;
+    box-shadow: 0 8px 20px -10px color-mix(in srgb, var(--btn-bg) 80%, transparent);
+  }
+  .submit:hover { filter: brightness(1.04); }
+  .submit:active { transform: translateY(1px); }
+  .submit:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 3px;
+  }
+  .submit[aria-busy="true"] { filter: saturate(.6) brightness(.95); cursor: progress; }
+
+  .foot {
+    margin-top: 1.5rem;
+    padding-top: 1.35rem;
+    border-top: 1px solid var(--field-bd);
+    font-size: .88rem;
+    color: var(--muted);
+    text-align: center;
+  }
+  .foot a { color: var(--link); text-decoration: none; font-weight: 500; }
+  .foot a:hover { text-decoration: underline; }
+  .foot a:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; border-radius: 3px; }
+
+  /* ============ Responsive ============ */
+  @media (max-width: 860px) {
+    .stage { grid-template-columns: 1fr; }
+    .archive {
+      flex-direction: row;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1.4rem clamp(1.25rem, 5vw, 2rem);
+      gap: 1rem;
+    }
+    .archive .graph-wrap { display: none; }
+    .pitch { max-width: none; }
+    .pitch h1 { font-size: 1.05rem; margin-bottom: .5rem; }
+    .stat { font-size: .68rem; }
+    .brand { flex-direction: column; align-items: flex-start; gap: .35rem; }
+  }
+  @media (max-width: 560px) {
+    .archive { flex-direction: column; align-items: flex-start; }
+    .pitch h1 { font-size: 1.15rem; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation: none !important;
+      transition: none !important;
+    }
+    .edge { stroke-dashoffset: 0; opacity: .30; }
+    .node, .graph-cap { opacity: 1; }
+    .pulse { display: none; }
+    .wordmark .caret { opacity: 1; }
+  }
+</style>
+</head>
+<body>
+  <main class="stage">
+
+    <!-- ============ Archive / signature ============ -->
+    <section class="archive" aria-hidden="true">
+      <div class="brand">
+        <span class="wordmark">hunch<span class="caret"></span></span>
+        <span class="eyebrow">Engineering Memory OS</span>
+      </div>
+
+      <div class="graph-wrap">
+        <svg class="graph" viewBox="0 0 400 320" role="presentation" focusable="false">
+          <!-- edges (var(--len) ≈ segment length for the draw animation) -->
+          <line class="edge e1" style="--len:118" x1="58"  y1="70"  x2="150" y2="48"/>
+          <line class="edge e2" style="--len:112" x1="150" y1="48"  x2="252" y2="82"/>
+          <line class="edge e3" style="--len:96"  x1="252" y1="82"  x2="336" y2="140"/>
+          <line class="edge e4" style="--len:150" x1="58"  y1="70"  x2="188" y2="160"/>
+          <line class="edge e5" style="--len:112" x1="150" y1="48"  x2="188" y2="160"/>
+          <line class="edge e6" style="--len:110" x1="252" y1="82"  x2="188" y2="160"/>
+          <line class="edge e7" style="--len:120" x1="188" y1="160" x2="228" y2="266"/>
+          <line class="edge e8" style="--len:140" x1="188" y1="160" x2="90"  y2="240"/>
+          <line class="edge e9" style="--len:180" x1="90"  y1="240" x2="58"  y2="70"/>
+          <line class="edge e6" style="--len:140" x1="336" y1="140" x2="188" y2="160"/>
+
+          <!-- nodes -->
+          <circle class="node dot  n1" cx="58"  cy="70"  r="6"/>
+          <circle class="node dec  n2" cx="150" cy="48"  r="7"/>
+          <circle class="node dot  n3" cx="252" cy="82"  r="6"/>
+          <circle class="node dot  n4" cx="336" cy="140" r="6"/>
+          <circle class="node dot  n6" cx="228" cy="266" r="6"/>
+          <circle class="node dot  n7" cx="90"  cy="240" r="6"/>
+
+          <!-- current decision (pulses) -->
+          <circle class="pulse" cx="188" cy="160" r="9"/>
+          <circle class="node cur ncur" cx="188" cy="160" r="9"/>
+          <text class="graph-cap" x="206" y="164">dec_ce5c15a3e5</text>
+        </svg>
+      </div>
+
+      <div class="pitch">
+        <h1>The graph remembers, <em>so you don't have to.</em></h1>
+        <p class="stat">
+          <b>51</b> decisions &nbsp;·&nbsp; <b>1</b> bug that never came back &nbsp;·&nbsp; <b>8</b> constraints held
+        </p>
+      </div>
+    </section>
+
+    <!-- ============ Sign-in ============ -->
+    <section class="panel">
+      <form class="card" id="signin" novalidate>
+        <h2>Sign in</h2>
+        <p class="lede">Pick up where the graph left off.</p>
+
+        <div class="field">
+          <label for="email">Email</label>
+          <div class="control">
+            <input id="email" name="email" type="email"
+                   autocomplete="email" inputmode="email"
+                   placeholder="you@team.dev" required
+                   autofocus />
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="password">Password</label>
+          <div class="control pw">
+            <input id="password" name="password" type="password"
+                   autocomplete="current-password"
+                   placeholder="Your password" required
+                   minlength="8" />
+            <button type="button" class="toggle" id="pwToggle"
+                    aria-label="Show password" aria-pressed="false"
+                    aria-controls="password">Show</button>
+          </div>
+        </div>
+
+        <div class="row">
+          <label class="remember">
+            <input type="checkbox" name="remember" id="remember" checked />
+            Keep me signed in
+          </label>
+          <a class="forgot" href="#reset">Forgot password?</a>
+        </div>
+
+        <button type="submit" class="submit" id="submit">Sign in</button>
+
+        <p class="foot">New here? <a href="#start">Start your graph</a></p>
+      </form>
+    </section>
+  </main>
+
+  <script>
+    (function () {
+      // Password visibility toggle
+      var pw = document.getElementById('password');
+      var toggle = document.getElementById('pwToggle');
+      toggle.addEventListener('click', function () {
+        var show = pw.type === 'password';
+        pw.type = show ? 'text' : 'password';
+        toggle.textContent = show ? 'Hide' : 'Show';
+        toggle.setAttribute('aria-pressed', String(show));
+        toggle.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+        pw.focus({ preventScroll: true });
+      });
+
+      // Demo submit — no backend; report progress honestly.
+      var form = document.getElementById('signin');
+      var submit = document.getElementById('submit');
+      form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        if (!form.checkValidity()) { form.reportValidity(); return; }
+        submit.setAttribute('aria-busy', 'true');
+        submit.disabled = true;
+        submit.textContent = 'Signing in…';
+        // Placeholder for real auth. Revert so the demo stays usable.
+        setTimeout(function () {
+          submit.removeAttribute('aria-busy');
+          submit.disabled = false;
+          submit.textContent = 'Sign in';
+        }, 1400);
+      });
+    })();
+  </script>
+</body>
+</html>

@@ -62,5 +62,35 @@
     "bytes": 12896,
     "turns": 4,
     "durationMs": 130411
+  },
+  {
+    "model": "claude-haiku-4-5-20251001",
+    "arm": "F",
+    "slug": "claudehaiku4520251001-Ff",
+    "forced": true,
+    "produced": true,
+    "bytes": 9012,
+    "turns": 4,
+    "durationMs": 56894
+  },
+  {
+    "model": "claude-sonnet-5",
+    "arm": "F",
+    "slug": "claudesonnet5-Ff",
+    "forced": true,
+    "produced": true,
+    "bytes": 13533,
+    "turns": 7,
+    "durationMs": 237909
+  },
+  {
+    "model": "claude-opus-4-8",
+    "arm": "F",
+    "slug": "claudeopus48-Ff",
+    "forced": true,
+    "produced": true,
+    "bytes": 16982,
+    "turns": 4,
+    "durationMs": 198735
   }
 ]

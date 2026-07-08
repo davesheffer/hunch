@@ -1,0 +1,16 @@
+{
+  "model": "claude-haiku-4-5-20251001",
+  "rows": [
+    {
+      "task": "zod-5937",
+      "arm": "S",
+      "model": "claude-haiku-4-5-20251001",
+      "score": "PASS",
+      "scoreNum": 1,
+      "turns": 51,
+      "hunchCalls": 0,
+      "durationMs": 310828,
+      "answer": ""
+    }
+  ]
+}

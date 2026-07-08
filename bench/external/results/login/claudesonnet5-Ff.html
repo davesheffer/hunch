@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="color-scheme" content="light dark" />
+<title>Sign in · Hunch</title>
+<style>
+  :root {
+    --paper: #ECEAE3;
+    --paper-raised: #F7F6F1;
+    --ink: #1A1B18;
+    --ink-soft: #55564D;
+    --line: #D8D5C9;
+    --signal: #1E8A73;
+    --signal-strong: #146B58;
+    --signal-soft: rgba(30, 138, 115, 0.12);
+    --shadow: 0 1px 2px rgba(26, 27, 24, 0.04), 0 18px 40px -20px rgba(26, 27, 24, 0.28);
+
+    --font-serif: "Iowan Old Style", "Palatino Linotype", "URW Palladio L", Georgia, serif;
+    --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #15181A;
+      --paper-raised: #1D2124;
+      --ink: #EDEAE0;
+      --ink-soft: #9B9E93;
+      --line: #2B3033;
+      --signal: #3FC9A5;
+      --signal-strong: #2FA88A;
+      --signal-soft: rgba(63, 201, 165, 0.14);
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 18px 44px -20px rgba(0, 0, 0, 0.6);
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    padding: 1.5rem;
+    position: relative;
+    overflow-x: hidden;
+  }
+
+  .scene {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    overflow: hidden;
+  }
+
+  .scene svg {
+    width: 100%;
+    height: 100%;
+  }
+
+  .scene circle {
+    fill: var(--signal);
+    opacity: 0.4;
+  }
+
+  .scene line {
+    stroke: var(--signal);
+    stroke-width: 1;
+    opacity: 0.22;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .scene .n1 { animation: pulse 7s ease-in-out infinite; }
+    .scene .n2 { animation: pulse 8.5s ease-in-out infinite 1.2s; }
+    .scene .n3 { animation: pulse 6.5s ease-in-out infinite 2.4s; }
+    .scene .n4 { animation: pulse 9s ease-in-out infinite 0.6s; }
+    .scene .n5 { animation: pulse 7.5s ease-in-out infinite 3s; }
+    @keyframes pulse {
+      0%, 100% { opacity: 0.28; r: 3; }
+      50% { opacity: 0.7; r: 4; }
+    }
+  }
+
+  .card-wrap {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: 420px;
+  }
+
+  .card {
+    background: var(--paper-raised);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    padding: 2.5rem 2.25rem 2rem;
+    box-shadow: var(--shadow);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .card::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: var(--signal-strong);
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .brand svg {
+    flex: none;
+  }
+
+  .brand .mark {
+    stroke: var(--signal-strong);
+  }
+
+  .wordmark {
+    font-family: var(--font-mono);
+    font-size: 0.95rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--ink);
+  }
+
+  .eyebrow {
+    margin: 0.35rem 0 0;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: lowercase;
+    color: var(--ink-soft);
+  }
+
+  h1 {
+    font-family: var(--font-serif);
+    font-weight: 400;
+    font-size: clamp(1.75rem, 1.45rem + 1.3vw, 2.25rem);
+    line-height: 1.15;
+    margin: 1.5rem 0 0.5rem;
+    color: var(--ink);
+  }
+
+  h1 em {
+    font-style: italic;
+    color: var(--signal-strong);
+    font-weight: 500;
+  }
+
+  .subhead {
+    margin: 0 0 1.75rem;
+    font-size: 0.95rem;
+    line-height: 1.5;
+    color: var(--ink-soft);
+    max-width: 32ch;
+  }
+
+  form {
+    display: flex;
+    flex-direction: column;
+    gap: 1.1rem;
+  }
+
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+
+  .field-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+  }
+
+  label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    color: var(--ink);
+  }
+
+  .input-shell {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+
+  input[type="email"],
+  input[type="password"],
+  input[type="text"] {
+    width: 100%;
+    font-family: var(--font-mono);
+    font-size: 0.95rem;
+    color: var(--ink);
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 0.75rem 0.85rem;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  input.has-toggle {
+    padding-right: 3.6rem;
+  }
+
+  input::placeholder {
+    color: var(--ink-soft);
+    opacity: 0.7;
+  }
+
+  input:focus-visible {
+    outline: none;
+    border-color: var(--signal-strong);
+    box-shadow: 0 0 0 3px var(--signal-soft);
+  }
+
+  .toggle-visibility {
+    position: absolute;
+    right: 0.5rem;
+    background: none;
+    border: none;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.02em;
+    color: var(--signal-strong);
+    cursor: pointer;
+    padding: 0.4rem 0.5rem;
+    border-radius: 6px;
+  }
+
+  .toggle-visibility:hover {
+    background: var(--signal-soft);
+  }
+
+  .toggle-visibility:focus-visible {
+    outline: 2px solid var(--signal-strong);
+    outline-offset: 2px;
+  }
+
+  .row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.5rem 1rem;
+    margin-top: 0.1rem;
+  }
+
+  .checkbox {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    color: var(--ink-soft);
+    cursor: pointer;
+  }
+
+  .checkbox input {
+    accent-color: var(--signal-strong);
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+  }
+
+  .checkbox input:focus-visible {
+    outline: 2px solid var(--signal-strong);
+    outline-offset: 2px;
+  }
+
+  a {
+    color: var(--signal-strong);
+    font-size: 0.85rem;
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+  }
+
+  a:hover {
+    border-bottom-color: currentColor;
+  }
+
+  a:focus-visible,
+  button:focus-visible {
+    outline: 2px solid var(--signal-strong);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  .submit {
+    margin-top: 0.35rem;
+    width: 100%;
+    background: var(--signal-strong);
+    color: var(--paper-raised);
+    font-family: var(--font-sans);
+    font-size: 0.95rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    border: none;
+    border-radius: 10px;
+    padding: 0.85rem 1rem;
+    cursor: pointer;
+    transition: transform 0.1s ease, opacity 0.15s ease;
+  }
+
+  .submit:hover {
+    opacity: 0.92;
+  }
+
+  .submit:active {
+    transform: translateY(1px);
+  }
+
+  .submit:disabled {
+    cursor: default;
+    opacity: 0.75;
+  }
+
+  .status {
+    min-height: 1.1rem;
+    margin: 0;
+    font-size: 0.82rem;
+    color: var(--signal-strong);
+  }
+
+  .forgot-note {
+    margin: -0.4rem 0 0;
+    font-size: 0.8rem;
+    color: var(--ink-soft);
+  }
+
+  .forgot-note[hidden] {
+    display: none;
+  }
+
+  footer.card-footer {
+    margin-top: 1.75rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--line);
+    text-align: center;
+  }
+
+  .stats {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.02em;
+    color: var(--ink-soft);
+  }
+
+  @media (max-width: 420px) {
+    .card {
+      padding: 2rem 1.5rem 1.75rem;
+      border-radius: 14px;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+    }
+  }
+</style>
+</head>
+<body>
+
+  <div class="scene" aria-hidden="true">
+    <svg viewBox="0 0 400 300" preserveAspectRatio="xMidYMid slice" focusable="false">
+      <g>
+        <line x1="40" y1="50" x2="120" y2="30" />
+        <line x1="120" y1="30" x2="200" y2="70" />
+        <line x1="200" y1="70" x2="300" y2="40" />
+        <line x1="300" y1="40" x2="370" y2="90" />
+        <line x1="40" y1="50" x2="30" y2="150" />
+        <line x1="120" y1="30" x2="110" y2="140" />
+        <line x1="200" y1="70" x2="190" y2="160" />
+        <line x1="300" y1="40" x2="270" y2="150" />
+        <line x1="370" y1="90" x2="350" y2="180" />
+        <line x1="30" y1="150" x2="110" y2="140" />
+        <line x1="110" y1="140" x2="190" y2="160" />
+        <line x1="190" y1="160" x2="270" y2="150" />
+        <line x1="270" y1="150" x2="350" y2="180" />
+        <line x1="30" y1="150" x2="60" y2="240" />
+        <line x1="110" y1="140" x2="150" y2="230" />
+        <line x1="190" y1="160" x2="230" y2="250" />
+        <line x1="270" y1="150" x2="320" y2="260" />
+        <line x1="60" y1="240" x2="150" y2="230" />
+        <line x1="150" y1="230" x2="230" y2="250" />
+        <line x1="230" y1="250" x2="320" y2="260" />
+      </g>
+      <g>
+        <circle class="n1" cx="40" cy="50" r="3" />
+        <circle cx="120" cy="30" r="3" />
+        <circle class="n2" cx="200" cy="70" r="3" />
+        <circle cx="300" cy="40" r="3" />
+        <circle class="n3" cx="370" cy="90" r="3" />
+        <circle cx="30" cy="150" r="3" />
+        <circle class="n4" cx="110" cy="140" r="3" />
+        <circle cx="190" cy="160" r="3" />
+        <circle class="n5" cx="270" cy="150" r="3" />
+        <circle cx="350" cy="180" r="3" />
+        <circle class="n2" cx="60" cy="240" r="3" />
+        <circle cx="150" cy="230" r="3" />
+        <circle class="n1" cx="230" cy="250" r="3" />
+        <circle cx="320" cy="260" r="3" />
+      </g>
+    </svg>
+  </div>
+
+  <main class="card-wrap">
+    <div class="card">
+      <div class="brand">
+        <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
+          <g class="mark" fill="none" stroke-width="1.6" stroke-linecap="round">
+            <line x1="6" y1="17" x2="18" y2="8" />
+            <circle cx="6" cy="17" r="2.25" fill="var(--signal-strong)" stroke="none" />
+            <circle cx="18" cy="8" r="2.25" fill="var(--signal-strong)" stroke="none" />
+          </g>
+        </svg>
+        <span class="wordmark">hunch</span>
+      </div>
+      <p class="eyebrow">engineering memory os</p>
+
+      <h1>Remember <em>why</em>.</h1>
+      <p class="subhead">Sign in to pick up the graph where you left off.</p>
+
+      <form id="login-form" novalidate>
+        <div class="field">
+          <label for="email">Email</label>
+          <div class="input-shell">
+            <input
+              type="email"
+              id="email"
+              name="email"
+              autocomplete="username"
+              placeholder="you@company.com"
+              required
+            />
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="field-head">
+            <label for="password">Password</label>
+          </div>
+          <div class="input-shell">
+            <input
+              type="password"
+              id="password"
+              name="password"
+              class="has-toggle"
+              autocomplete="current-password"
+              minlength="8"
+              required
+            />
+            <button type="button" class="toggle-visibility" id="toggle-visibility" aria-pressed="false" aria-label="Show password">Show</button>
+          </div>
+        </div>
+
+        <div class="row">
+          <label class="checkbox" for="remember">
+            <input type="checkbox" id="remember" name="remember" />
+            Keep me signed in
+          </label>
+          <a href="#" id="forgot-link">Forgot password?</a>
+        </div>
+        <p class="forgot-note" id="forgot-note" hidden>If that address is in the graph, we've sent a reset link.</p>
+
+        <button type="submit" class="submit" id="submit-btn">Sign in</button>
+        <p class="status" id="status" aria-live="polite"></p>
+      </form>
+
+      <footer class="card-footer">
+        <p class="stats">51 decisions · 8 constraints · 11 components · git-native</p>
+      </footer>
+    </div>
+  </main>
+
+  <script>
+    (function () {
+      var toggleBtn = document.getElementById('toggle-visibility');
+      var passwordInput = document.getElementById('password');
+
+      toggleBtn.addEventListener('click', function () {
+        var isHidden = passwordInput.type === 'password';
+        passwordInput.type = isHidden ? 'text' : 'password';
+        toggleBtn.textContent = isHidden ? 'Hide' : 'Show';
+        toggleBtn.setAttribute('aria-pressed', String(isHidden));
+        toggleBtn.setAttribute('aria-label', isHidden ? 'Hide password' : 'Show password');
+      });
+
+      var forgotLink = document.getElementById('forgot-link');
+      var forgotNote = document.getElementById('forgot-note');
+
+      forgotLink.addEventListener('click', function (e) {
+        e.preventDefault();
+        forgotNote.hidden = false;
+      });
+
+      var form = document.getElementById('login-form');
+      var submitBtn = document.getElementById('submit-btn');
+      var status = document.getElementById('status');
+
+      form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        if (!form.checkValidity()) {
+          form.reportValidity();
+          return;
+        }
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Signing in…';
+        status.textContent = 'Loading your graph…';
+        setTimeout(function () {
+          submitBtn.textContent = 'Signed in ✓';
+          status.textContent = 'Signed in. Welcome back.';
+        }, 900);
+      });
+    })();
+  </script>
+
+</body>
+</html>
