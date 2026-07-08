@@ -52,6 +52,18 @@ import { formatContext, formatStructure } from "../core/format.js";
 import { readConfig, writeConfig, FIRMNESS_LEVELS, isFirmness, type Firmness } from "../core/config.js";
 import { blockingInScope, vetoInScope, proposedEditLines } from "../core/hookpolicy.js";
 import { injectionMode } from "../core/hookcache.js";
+import {
+  PIPELINE_LOOP,
+  UNVERIFIED_NAG,
+  loadPipelineState,
+  onCommand,
+  onEdit,
+  onPrompt,
+  onSkill,
+  pipelineEnabled,
+  savePipelineState,
+  stopVerdict,
+} from "../core/pipeline.js";
 import { draftDuplicateOf } from "../core/dupdetect.js";
 import { loadGoldenSet, evaluateGraphLift } from "../eval/harness.js";
 import { loadGuardCases, evalGuards, generateGuardCases } from "../eval/guards.js";
@@ -1476,7 +1488,8 @@ program
       const evt = JSON.parse(await readStdin()) as {
         hook_event_name?: string;
         session_id?: string;
-        tool_input?: { file_path?: string; new_string?: string; content?: string; edits?: Array<{ new_string?: string }> };
+        tool_name?: string;
+        tool_input?: { file_path?: string; new_string?: string; content?: string; edits?: Array<{ new_string?: string }>; command?: string; skill?: string };
         prompt?: string;
       };
       const root = findRoot();
@@ -1484,11 +1497,44 @@ program
       const firmness = readConfig(paths).firmness;
       if (firmness === "off") return;
 
+      // Verification pipeline (delivery enforced, not hoped for — see core/pipeline.ts).
+      // PostToolUse records facts; Stop gates on them. Both are pipeline-only events,
+      // handled before the grounding dispatch below.
+      if (evt.hook_event_name === "PostToolUse" && evt.session_id && pipelineEnabled()) {
+        let st = loadPipelineState(evt.session_id);
+        if (/^(Edit|Write|MultiEdit)$/.test(evt.tool_name ?? "")) {
+          const p = evt.tool_input?.file_path;
+          if (p) st = onEdit(st, toRepoRel(root, p));
+        } else if (evt.tool_name === "Bash" || evt.tool_name === "PowerShell") {
+          st = onCommand(st, String(evt.tool_input?.command ?? ""));
+        } else if (evt.tool_name === "Skill") {
+          st = onSkill(st, String(evt.tool_input?.skill ?? ""));
+        }
+        savePipelineState(evt.session_id, st);
+        return;
+      }
+      if (evt.hook_event_name === "Stop" && evt.session_id && pipelineEnabled()) {
+        const st = loadPipelineState(evt.session_id);
+        const verdict = stopVerdict(st, firmness);
+        if (verdict.block) {
+          savePipelineState(evt.session_id, verdict.state);
+          process.stdout.write(JSON.stringify({ decision: "block", reason: verdict.reason }));
+        }
+        return;
+      }
+
       if (evt.hook_event_name === "UserPromptSubmit") {
         // When the prompt reads like a correction ("no / that's wrong / never X"),
         // nudge the agent to PERSIST it as an enforced constraint (Never Twice) —
         // not just obey it this once and forget it next session.
-        const text = looksLikeCorrection(evt.prompt) ? `${HOOK_REMINDER}\n\n${CORRECTION_NUDGE}` : HOOK_REMINDER;
+        let text = looksLikeCorrection(evt.prompt) ? `${HOOK_REMINDER}\n\n${CORRECTION_NUDGE}` : HOOK_REMINDER;
+        // Pipeline turn bookkeeping (fresh block budget) + the one nag that must
+        // repeat: edits from an earlier turn still unverified.
+        if (evt.session_id && pipelineEnabled()) {
+          const st = onPrompt(loadPipelineState(evt.session_id));
+          savePipelineState(evt.session_id, st);
+          if (!st.verifyAfterEdit) text += `\n\n${UNVERIFIED_NAG}`;
+        }
         // Once per session is enough for the availability reminder — repeating it
         // every prompt burns context for zero information. A correction nudge has
         // different content, so it always comes through (dec_244397d920).
@@ -1506,7 +1552,11 @@ program
         try {
           const decisions = s.json.loadAll("decisions");
           const { recent, roadmap, pendingReview } = nowData(decisions, 3);
-          if (!decisions.length) return;
+          if (!decisions.length) {
+            // Fresh graph: nothing to orient on, but the operating loop still ships.
+            if (pipelineEnabled()) emitContext("SessionStart", PIPELINE_LOOP);
+            return;
+          }
           const L: string[] = [];
           L.push(`🧠 Hunch orientation — ${decisions.length} decision(s) in the graph.`);
           if (recent.length) {
@@ -1518,6 +1568,9 @@ program
           }
           if (pendingReview > 0) L.push(`${pendingReview} auto-draft(s) awaiting \`hunch review\`.`);
           L.push("Orient further: hunch_context(task) · hunch_structure() · `hunch now`.");
+          // The operating loop rides session start — guaranteed delivery, once
+          // (the zod bench showed ambient skills are read in ~0% of sessions).
+          if (pipelineEnabled()) L.push("", PIPELINE_LOOP);
           emitContext("SessionStart", L.join("\n"));
         } finally {
           s.close();

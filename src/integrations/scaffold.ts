@@ -161,6 +161,17 @@ export function installClaudeHooks(root: string, hookCmd: string): ClaudeHookIns
     ...keep(json.hooks.SessionStart),
     { hooks: [{ type: "command", command: hookCmd }] },
   ];
+  // Verification pipeline (core/pipeline.ts): PostToolUse records observable
+  // facts (edits, verify commands); Stop refuses to end a turn with unverified
+  // product edits at firm/strict firmness. Delivery is enforced, not hoped for.
+  json.hooks.PostToolUse = [
+    ...keep(json.hooks.PostToolUse),
+    { matcher: "Edit|Write|MultiEdit|Bash|PowerShell|Skill", hooks: [{ type: "command", command: hookCmd }] },
+  ];
+  json.hooks.Stop = [
+    ...keep(json.hooks.Stop),
+    { hooks: [{ type: "command", command: hookCmd }] },
+  ];
 
   const next = JSON.stringify(json, null, 2) + "\n";
   if (existed && before === next) return { path: file, action: "unchanged" };
