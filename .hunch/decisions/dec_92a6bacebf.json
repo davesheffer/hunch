@@ -1,0 +1,46 @@
+{
+  "id": "dec_92a6bacebf",
+  "title": "Shipped: Review Queue draft-triage UI in the VS Code extension",
+  "topic": "review-queue-ui",
+  "status": "accepted",
+  "context": "Implements the build committed in dec_df253f50b4. Kept the extension a pure reader: the partition logic (parseSynth/reviewQueue) is ported into hunchData.ts as pure offline shaping, and every accept/reject/batch delegates to the `hunch review` CLI via a single runHunch choke-point — the extension never mutates .hunch/ JSON itself (honors the Delegate-all-writes invariant). Webview is CSP-locked and self-contained, mirroring graph.ts. Verified: reviewQueue over the live .hunch/ matches the CLI exactly (0 ready, 10 scrutiny, identical ids/order).",
+  "decision": "Added a Review Queue webview to the VS Code extension (hunch.review command + inbox button in the Hunch view title bar). It renders the same READY / SCRUTINY split as `hunch review` as a card list — each draft shows title, decision text, rejected alternatives, badges (status/topic/critic-verified/confidence/grounded) and clickable related files — with per-card Accept / Reject and batch Accept-all-verified / Reject-near-duplicates. Delivers the roadmap intent in dec_df253f50b4 (draft triage is the one moment a human must be in the loop).",
+  "consequences": [
+    "Draft triage no longer requires copying decision ids into a shell.",
+    "Inline edit remains unbuilt until a CLI edit verb lands — tracked as follow-up.",
+    "The strategy veto (no standalone web app, dec_df253f50b4) stays live on its own topic."
+  ],
+  "alternatives_rejected": [
+    "Let the extension write .hunch/ JSON directly for speed — violates the Delegate-all-writes invariant; all writes must go through the CLI's atomic paths.",
+    "Inline draft EDITING in v1 — deferred: no `hunch review --edit` CLI verb exists, and the no-direct-write invariant forbids the extension patching JSON. Edit needs a new CLI command first."
+  ],
+  "rejected_tripwires": [],
+  "related_components": [],
+  "related_files": [
+    "vscode-extension/src/review.ts",
+    "vscode-extension/src/hunchData.ts",
+    "vscode-extension/src/extension.ts",
+    "vscode-extension/package.json"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "42396b9",
+  "valid_from": "2026-07-08T13:25:39.935Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 0.95,
+    "evidence": [
+      "vscode-extension/src/review.ts",
+      "vscode-extension/src/hunchData.ts",
+      "vscode-extension/src/extension.ts",
+      "vscode-extension/package.json"
+    ]
+  },
+  "date": "2026-07-08T13:25:39.935Z"
+}
