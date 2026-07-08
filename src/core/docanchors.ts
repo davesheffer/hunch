@@ -54,8 +54,11 @@ export function renderDocGrounding(anchors: readonly DocAnchor[], decisions: rea
     let line = `• topic "${a.topic}" → current decision ${current.id} — "${current.title}": ${clip(current.decision)}`;
     const rejected = rejectedForTopic(decisions, a.topic);
     if (rejected.length) line += `\n    rejected: ${rejected.slice(0, 3).map((r) => clip(r, 90)).join("; ")}`;
-    if (a.pin && a.pin !== current.id) {
-      line += `\n    ⚠ this section is PINNED to ${a.pin}, which is no longer current — reconcile the prose with ${current.id}, then re-pin.`;
+    // Scan ALL markers for this topic, not just the first: the topic dedupe must not
+    // let an earlier unpinned marker swallow a later marker's stale-pin warning.
+    const stalePin = anchors.find((x) => x.topic === a.topic && x.pin && x.pin !== current.id)?.pin;
+    if (stalePin) {
+      line += `\n    ⚠ this section is PINNED to ${stalePin}, which is no longer current — reconcile the prose with ${current.id}, then re-pin.`;
     }
     parts.push(line);
   }

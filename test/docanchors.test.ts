@@ -91,3 +91,18 @@ test("renderDocGrounding: current decision + rejected alternatives + stale-pin w
 
   assert.equal(renderDocGrounding([{ topic: "unknown.topic", pin: null, line: 1 }], decisions), "");
 });
+
+test("renderDocGrounding: stale-pin warning survives an earlier unpinned marker on the same topic (order independence)", () => {
+  const decisions = [
+    DEC({ id: "dec_old1111111", topic: "auth.session", status: "superseded", superseded_by: "dec_new2222222" }),
+    DEC({ id: "dec_new2222222", topic: "auth.session", valid_from: "2026-02-01T00:00:00Z" }),
+  ] as unknown as Decision[];
+  const out = renderDocGrounding(
+    [
+      { topic: "auth.session", pin: null, line: 1 },              // unpinned marker first — used to swallow the ⚠
+      { topic: "auth.session", pin: "dec_old1111111", line: 5 },  // stale pin later in the doc
+    ],
+    decisions,
+  );
+  assert.match(out, /PINNED to dec_old1111111/, "topic dedupe must not hide a later stale pin");
+});

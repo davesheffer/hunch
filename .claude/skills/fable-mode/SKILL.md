@@ -81,6 +81,7 @@ task: read each one that applies. The gates never change; their teeth do.
 - `references/backend.md` — APIs, services, data, contracts, migrations.
 - `references/qa.md` — writing/fixing tests, test plans, flake hunts.
 - `references/infra.md` — CI/CD, build systems, config, deploys, scripts.
+- `references/verdict.md` — design decisions, red teams, "which option is right."
 
 No playbook matches (pure algorithm, docs, research)? Proceed with the core
 gates — they are domain-complete on their own.

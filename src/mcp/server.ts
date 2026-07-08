@@ -63,9 +63,23 @@ const more = (total: number, cap: number, hint = ""): string =>
 const issueCaptureToken = (): string => issueToken(randomUUID, Date.now());
 const consumeCaptureToken = (token: string | undefined): boolean => consumeToken(token, Date.now());
 
-/** The interrogation protocol returned by hunch_capture_decision. */
-function grillingProtocol(topic: string | undefined, token: string): string {
-  return [
+/** The interrogation protocol returned by hunch_capture_decision. With `deciding`,
+ *  the choice is NOT yet made: the verdict loop runs first so the record's
+ *  alternatives_rejected are attacks that actually ran — not post-hoc fiction. */
+function grillingProtocol(topic: string | undefined, token: string, deciding = false): string {
+  const verdict = [
+    "The decision is NOT yet made — run the VERDICT LOOP first (one question at a time), then the grilling rules below.",
+    "",
+    "VERDICT LOOP:",
+    "A. SPLIT — one separable call per verdict, one topic per call. If the ask bundles several decisions, split and run each.",
+    "B. CANDIDATES — elicit at least TWO real options (include do-nothing when sane). One candidate = anchoring; keep asking.",
+    "C. ATTACK — attack each candidate from INDEPENDENT lenses: product, technical, strategy, economics, and self-consistency (does it contradict a recorded decision or constraint? cite dec_/con_ ids). Every attack cites evidence observed this session; no evidence → mark it plausible and weigh it less.",
+    "D. CONVERGE — two or more independent landing attacks kill a candidate. Keep the FAILED attacks too — they are the tested-safe surface; fold them into context. No convergence → prefer the candidate whose failure is REVERSIBLE.",
+    "E. TRIPWIRES — for each rejected candidate, ask what future evidence would make it right after all; embed it in the rejected alternative ('rejected X — revisit if Y').",
+    "",
+    "",
+  ].join("\n");
+  return (deciding ? verdict : "") + [
     "You are capturing an engineering decision into Hunch's graph. Run the GRILLING LOOP, then commit.",
     "",
     "RULES:",
@@ -415,11 +429,12 @@ export function buildServer(root: string): McpServer {
       inputSchema: {
         topic: z.string().optional().describe("proposed topic anchor (confirm with the human before committing)"),
         seed: z.string().optional().describe("what the decision is about, to focus the first question"),
+        deciding: z.boolean().optional().describe("the choice is NOT yet made — prepend the verdict loop (candidates → evidenced attacks → convergence → tripwires) so alternatives_rejected come from attacks that actually ran, then grill and record as usual"),
       },
     },
-    async ({ topic, seed }): Promise<ToolResult> => {
+    async ({ topic, seed, deciding }): Promise<ToolResult> => {
       const token = issueCaptureToken();
-      return ok(`${grillingProtocol(topic, token)}${seed ? `\n\nSeed: ${seed}` : ""}`);
+      return ok(`${grillingProtocol(topic, token, !!deciding)}${seed ? `\n\nSeed: ${seed}` : ""}`);
     },
   );
 
@@ -518,21 +533,27 @@ export function buildServer(root: string): McpServer {
           provenance: { source, confidence: 0.95, evidence: (decision.related_files ?? existing?.provenance.evidence ?? []).map(toPosixTarget) },
           date: now,
         };
+        // Where this write will actually land (see captureHome). Resolved BEFORE the
+        // uniqueness guard: in unified ("shared") mode home is the overlay even when
+        // private:false, so the guard must key its incumbent lookup on HOME, not on
+        // the flag — keying on the flag let a shared-mode supersede of a public
+        // incumbent pass the guard and then no-op the close (two live decisions).
+        const home = store.captureHome(!!decision.private);
         // Decision-grounding uniqueness guard (§4 Enforcement): never create a SECOND
         // live decision for one topic. Exclude ONLY the incumbent this write will
         // actually close — one resolvable in the SAME store the write lands in. A
-        // cross-store supersede (public write vs a private incumbent, or vice-versa)
+        // cross-store supersede (the incumbent lives where this write can't close it)
         // would no-op and leave two live decisions, so it is treated as unresolved
         // (willClose=null) → the guard fires and refuses. Same-id re-record is allowed.
         if (rec.topic && rec.status === "accepted") {
-          const willClose = decision.supersedes && store.decisionInStore(decision.supersedes, !!decision.private)
+          const willClose = decision.supersedes && store.decisionInStore(decision.supersedes, home === "private")
             ? decision.supersedes
             : null;
           const others = captureConflicts(store.recs("decisions"), rec.topic, id, willClose);
           if (others.length) {
             const list = others.map((d) => `${d.id} ("${d.title}")`).join(", ");
             const crossStore = decision.supersedes && !willClose
-              ? ` (note: supersedes:"${decision.supersedes}" is not in the ${decision.private ? "private" : "public"} store, so it can't be closed from here)`
+              ? ` (note: supersedes:"${decision.supersedes}" is not in the ${home} store this write lands in, so it can't be closed from here)`
               : "";
             return err(
               `Topic "${rec.topic}" already has a live decision: ${list}.${crossStore} ` +
@@ -541,10 +562,9 @@ export function buildServer(root: string): McpServer {
             );
           }
         }
-        // Route the write to its ONE home (captureHome): an explicit private:true goes to
-        // the overlay (putPrivate throws rather than silently falling public); in unified
-        // ("shared") mode EVERY capture goes to the overlay; else the public store.
-        const home = store.captureHome(!!decision.private);
+        // Route the write to its ONE home: an explicit private:true goes to the overlay
+        // (putPrivate throws rather than silently falling public); in unified ("shared")
+        // mode EVERY capture goes to the overlay; else the public store.
         if (home === "private") store.putPrivate("decisions", rec);
         else store.json.put("decisions", rec);
         // Invalidate, don't delete: closing the superseded decision's valid-time window
