@@ -123,16 +123,16 @@ export async function syncCommit(
   const provider = localOnly
     ? new DeterministicProvider()
     : opts.deep
-    ? (await selectEnsemble({ samples: opts.samples })) ?? await selectProvider()
+    ? (await selectEnsemble({ samples: opts.samples })) ?? await selectProvider({ root })
     : opts.force || opts.verify || isSignificant(meta, analysis, codeFiles)
-      ? await selectProvider()
+      ? await selectProvider({ root })
       : new DeterministicProvider();
   const input: CommitInput = { subject: meta.subject, body: meta.body, files: codeFiles, diff, analysis };
   let draft = await draftDecisionSafe(provider, input);
   // The Critic pass: audit the draft against the commit, PRUNE unsupported alternatives
   // (BEFORE they scaffold tripwires below) and consequences, and lower confidence on weak
   // grounding. No-ops when no assistant CLI is available; never raises trust (dec_9a2f2fe72a).
-  if (wantVerify) draft = await verifyDecisionSafe(await selectVerifier(), input, draft);
+  if (wantVerify) draft = await verifyDecisionSafe(await selectVerifier({ root }), input, draft);
 
   // Advisory synthesis telemetry for `hunch review` — which provider ran, how many drafts
   // were reconciled, their agreement, and the verifier's grounding. Rides in `evidence`
@@ -236,7 +236,7 @@ export async function recordFailure(
   // A private bug may contain a stack trace, customer data, or secrets. Keep the
   // whole capture local unless the caller deliberately routes it through a shared
   // (non-private) workflow.
-  const provider: SynthProvider = opts.private ? new DeterministicProvider() : await selectProvider();
+  const provider: SynthProvider = opts.private ? new DeterministicProvider() : await selectProvider({ root });
   const input: FailureInput = {
     test: failure.test,
     message: failure.message,

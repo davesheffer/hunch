@@ -29,7 +29,14 @@ import { selectEmbedder } from "../store/embedder.js";
 import { indexRepo } from "../extractors/indexer.js";
 import { syncCommit, recordFailure, captureTestRun } from "../synthesis/synthesize.js";
 import { parseTestReport } from "../extractors/testreport.js";
-import { selectProvider } from "../synthesis/provider.js";
+import {
+  readSynthesisPreference,
+  resolveSynthesisProvider,
+  selectProvider,
+  SYNTH_PREFERENCES,
+  writeSynthesisPreference,
+  type SynthPreference,
+} from "../synthesis/provider.js";
 import { isGitRepo, headSha, logSince, lastChangeDate, stagedFiles, workingFiles, commitFiles, asOfDate, stagedDiff, workingDiff, commitDiff, rangeFiles, rangeDiff, rangeSubjects, revExists, commitAndPushHunch, pullHunch, gitUntrackCached, gitCommonDir, isLinkedWorktree, mainWorktreeRoot } from "../extractors/git.js";
 import { writeTeamConfig, ensureTeamOverlay, readTeamConfig } from "../integrations/team.js";
 import { runbookId, decisionId } from "../core/ids.js";
@@ -456,7 +463,18 @@ function configureOverlay(dir: string | undefined, opts: OverlaySetupOpts, mode:
   // a store elsewhere on disk. Resolution (env || local.json) re-resolves against root.
   const rel = relative(root, hunchDir);
   const stored = rel && !rel.startsWith("..") && !isAbsolute(rel) ? toPosixTarget(rel) : hunchDir;
-  writeFileAtomic(join(paths.hunch, "local.json"), JSON.stringify({ privateDir: stored, autoCommit: !!opts.autoCommit, mode }, null, 2) + "\n");
+  const localFile = join(paths.hunch, "local.json");
+  let existingLocal: Record<string, unknown> = {};
+  if (existsSync(localFile)) {
+    try {
+      const parsed = JSON.parse(readFileSync(localFile, "utf8")) as unknown;
+      if (!parsed || Array.isArray(parsed) || typeof parsed !== "object") throw new Error("not an object");
+      existingLocal = parsed as Record<string, unknown>;
+    } catch {
+      return fail(`refusing to overwrite malformed local configuration: ${localFile}`);
+    }
+  }
+  writeFileAtomic(localFile, JSON.stringify({ ...existingLocal, privateDir: stored, autoCommit: !!opts.autoCommit, mode }, null, 2) + "\n");
   ensureGitignore(root); // keeps .hunch/local.json + .hunch-private/ out of git
 
   // SHARED mode with a remote: publish the store's URL in a COMMITTED team.json, so a
@@ -1463,6 +1481,47 @@ program
     console.log(`✓ firmness set to ${next} (takes effect on the next agent edit — no restart needed).`);
   });
 
+// ---- provider (per-user synthesis subscription choice) -------------------
+program
+  .command("provider")
+  .description("Show or set the local coding-assistant subscription Hunch may use for synthesis. Never changes team config.")
+  .argument("[name]", `auto | ${SYNTH_PREFERENCES.filter((p) => p !== "auto").join(" | ")} (omit to inspect)`)
+  .action(async (value: string | undefined) => {
+    const root = findRoot();
+    if (value != null) {
+      const preference = value.trim();
+      if (!(SYNTH_PREFERENCES as readonly string[]).includes(preference)) {
+        return fail(`provider must be one of: ${SYNTH_PREFERENCES.join(", ")}`);
+      }
+      try {
+        writeSynthesisPreference(root, preference as SynthPreference);
+      } catch (error) {
+        return fail(error instanceof Error ? error.message : String(error));
+      }
+      console.log(`✓ local synthesis preference set to ${preference} (gitignored; it never changes a teammate's billing choice).`);
+    }
+
+    const resolution = await resolveSynthesisProvider({ root });
+    const envValue = process.env.HUNCH_SYNTH_PROVIDER?.trim();
+    const local = readSynthesisPreference(root);
+    const hasValidEnv = !!envValue && (SYNTH_PREFERENCES as readonly string[]).includes(envValue);
+    console.log(`selected:    ${resolution.provider.name} (${resolution.source})`);
+    console.log(`preference:  ${hasValidEnv ? `environment: ${envValue}` : `local: ${local}`}`);
+    if (envValue && !hasValidEnv) console.log(dim(`HUNCH_SYNTH_PROVIDER=${envValue} is unknown and is being ignored.`));
+    console.log("available:");
+    for (const status of resolution.statuses) {
+      const billing = status.subscription ? ` — ${status.subscription}` : "";
+      console.log(`  ${status.available ? "✓" : "·"} ${status.name}: ${status.label}${billing}`);
+    }
+    if (resolution.source === "ambiguous") {
+      const choices = resolution.statuses.filter((s) => s.name !== "deterministic" && s.available).map((s) => `hunch provider ${s.name}`);
+      console.log(dim("Multiple subscription CLIs are available, so Hunch uses the free deterministic fallback rather than guessing which plan to spend."));
+      console.log(`choose one:  ${choices.join("  or  ")}`);
+    } else if (resolution.source === "unavailable-preference") {
+      console.log(dim(`Your ${resolution.preference} preference is not available; Hunch is using the local deterministic fallback.`));
+    }
+  });
+
 // ---- status (enforcement readiness at a glance) ---------------------------
 program
   .command("status")
@@ -1852,7 +1911,7 @@ program
       // and any per-draft failure degrades to "not judged" (kept for a human).
       const verdicts = new Map<string, RelevanceVerdict>();
       if (opts.llm !== false && !opts.private) {
-        const provider = await selectProvider();
+        const provider = await selectProvider({ root });
         if (provider.judgeDraft) {
           // The candidate pool for duplicate_of / restatement: the LIVE, vouched records.
           const existing: ExistingDecisionRef[] = all
@@ -2143,7 +2202,7 @@ program
       let prose: ((pack: WikiPack, excerpts: string) => Promise<string | null>) | undefined;
       let adoptionProse: ((doc: Parameters<typeof adoptProsePrompt>[0], content: string) => Promise<string | null>) | undefined;
       if (opts.llm !== false) {
-        const provider = await selectProvider();
+        const provider = await selectProvider({ root });
         if (provider.draftProse) {
           console.log(`Prose via ${provider.name} (subscription); the drift-bearing skeleton stays deterministic.`);
           prose = (pack, excerpts) => provider.draftProse!(wikiPrompt(pack, excerpts));
@@ -2359,23 +2418,21 @@ program
     const onDisk = readManifest(hunchPaths(root)).schema_version;
     const schemaNote = onDisk === SCHEMA_VERSION ? "" : onDisk > SCHEMA_VERSION ? `  ⚠ newer than this Hunch (v${SCHEMA_VERSION}) — upgrade hunch` : `  ⚠ run \`hunch migrate\``;
     console.log(`schema:     v${onDisk} (hunch v${SCHEMA_VERSION})${schemaNote}`);
-    const provider = await selectProvider();
-    console.log(`synthesis:  ${provider.name}`);
-    // Synthesis is billed to the user's SUBSCRIPTION via a coding-assistant CLI,
-    // never a pay-per-token API key. Surface which one — or what's missing.
-    const SUB: Record<string, { label: string; strip?: string }> = {
-      "claude-cli": { label: "Claude subscription (claude CLI)", strip: "ANTHROPIC_API_KEY" },
-      "codex-cli": { label: "ChatGPT subscription (codex CLI)", strip: "OPENAI_API_KEY" },
-      "cursor-agent": { label: "Cursor subscription (cursor-agent CLI)" },
-    };
-    const sub = SUB[provider.name];
-    if (sub) {
-      const hadKey = sub.strip && !!process.env[sub.strip];
-      console.log(`            ↳ LLM synthesis billed to your ${sub.label}` +
-        (hadKey ? ` (${sub.strip} in env is stripped — never billed to the API)` : ``));
+    const resolution = await resolveSynthesisProvider({ root });
+    const provider = resolution.provider;
+    console.log(`synthesis:  ${provider.name} (${resolution.source})`);
+    const selected = resolution.statuses.find((s) => s.name === provider.name);
+    if (selected?.subscription) {
+      console.log(`            ↳ LLM synthesis uses your ${selected.subscription}; provider API credentials are not used.`);
+    } else if (resolution.source === "ambiguous") {
+      const names = resolution.statuses.filter((s) => s.name !== "deterministic" && s.available).map((s) => s.name);
+      console.log(dim(`            ↳ ${names.join(", ")} are available; Hunch will not guess which subscription to spend.`));
+      console.log(dim(`              choose one locally: ${names.map((name) => `hunch provider ${name}`).join("  or  ")}`));
+    } else if (resolution.source === "unavailable-preference") {
+      console.log(dim(`            ↳ ${resolution.preference} was selected but is unavailable; using the offline heuristic.`));
     } else {
-      console.log(dim(`            ↳ no assistant CLI found — synthesis uses the offline heuristic (advisory, low-confidence)`));
-      console.log(dim(`              for full synthesis install one: Claude Code (\`claude /login\`), Codex (\`codex login\`), or Cursor (\`cursor-agent login\`)`));
+      console.log(dim(`            ↳ no assistant CLI found — synthesis uses the offline heuristic (advisory, low-confidence).`));
+      console.log(dim(`              install or log into Claude Code, Codex, or Cursor; then select one with \`hunch provider <name>\`.`));
     }
     const c = store.reindex().counts;
     console.log(`hunch:      ${c.symbols} symbols, ${c.edges} edges, ${c.components} components, ${c.decisions} decisions, ${c.bugs} bugs, ${c.constraints} constraints`);

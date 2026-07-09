@@ -1,0 +1,52 @@
+{
+  "id": "dec_65b058de66",
+  "title": "Select synthesis providers per user without guessing subscription billing",
+  "topic": "synthesis-provider",
+  "status": "accepted",
+  "context": "Hunch supported Claude Code, Codex, and Cursor synthesis CLIs, but normal selection used registry order. On a machine with multiple installed CLIs that silently chose Claude first, even when the user could intend to use a different existing subscription. A committed setting would be equally unsafe because it could spend a teammate's plan. The no-direct-API rule remains essential, but must apply to every supported provider rather than one vendor.",
+  "decision": "Resolve normal synthesis in this order: a valid HUNCH_SYNTH_PROVIDER shell override; a gitignored per-user `.hunch/local.json` preference managed by `hunch provider <name>`; automatic selection only when exactly one subscription CLI is available; otherwise use the deterministic local fallback. Never infer which of several installed subscriptions to bill. Claude, Codex, and Cursor implement the same SynthProvider contract; each provider strips any API credential that would override its subscription CLI auth. Deep synthesis remains explicit opt-in and may fan out to all available subscription CLIs.",
+  "consequences": [
+    "`hunch provider` makes the active choice, availability, and safe fallback visible; `hunch doctor` reports why a provider was selected.",
+    "The local choice merges into `.hunch/local.json`, which is gitignored, so it preserves overlay settings and never becomes a team billing policy.",
+    "When several assistant CLIs are installed but no choice is made, normal capture, verification, auto-review, and wiki prose stay deterministic and free instead of silently spending a plan.",
+    "The blocking synthesis invariant is provider-agnostic: direct Anthropic/OpenAI SDK or endpoint use in synthesis remains forbidden, while the existing CLI-only execution paths remain allowed."
+  ],
+  "alternatives_rejected": [
+    "Keep Claude-first registry order: it is a hidden product preference and can bill the wrong subscription.",
+    "Persist a provider in committed Hunch configuration: one developer's choice must not decide another developer's subscription usage.",
+    "Prompt the user interactively during every automatic hook: hooks must be non-blocking and unattended; deterministic fallback is safe and predictable.",
+    "Make a direct API provider configurable: it creates a separate billing path and violates the local subscription-only model."
+  ],
+  "related_components": [
+    "cmp_50037f41a9",
+    "cmp_ba75dfc94f"
+  ],
+  "related_files": [
+    "src/synthesis/provider.ts",
+    "src/synthesis/synthesize.ts",
+    "src/cli/index.ts",
+    "test/provider-selection.test.ts"
+  ],
+  "supersedes": "dec_5a7c0733f7",
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-07-10T00:00:00+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 1,
+    "evidence": [
+      "src/synthesis/provider.ts",
+      "src/synthesis/synthesize.ts",
+      "src/cli/index.ts",
+      "test/provider-selection.test.ts"
+    ],
+    "last_verified": "2026-07-10T00:00:00+03:00"
+  },
+  "date": "2026-07-10T00:00:00+03:00"
+}

@@ -1,7 +1,7 @@
 {
   "id": "dec_5a7c0733f7",
   "title": "Drive synthesis from Claude subscription, never the pay-per-token API",
-  "status": "accepted",
+  "status": "superseded",
   "context": "Claude Code auth precedence puts ANTHROPIC_API_KEY above subscription OAuth and always uses it in headless `-p` mode, so users with an API key silently billed the pay-per-token API instead of their subscription whenever synthesis ran.",
   "decision": "Removed AnthropicProvider entirely; ClaudeCliProvider now strips ANTHROPIC_API_KEY and ANTHROPIC_AUTH_TOKEN from its spawned env to force subscription auth (CLAUDE_CODE_OAUTH_TOKEN / `/login`). Synthesis runs from tmpdir (neutral cwd, no tools, --max-turns 1) to avoid loading the repo's brain MCP server. Updated doctor to surface auth path and remediation.",
   "consequences": [
@@ -26,11 +26,11 @@
     "src/synthesis/provider.ts"
   ],
   "supersedes": null,
-  "superseded_by": null,
+  "superseded_by": "dec_65b058de66",
   "caused_by_bug": null,
   "commit": "55253d7",
   "valid_from": "2026-06-15T09:40:46+03:00",
-  "valid_to": null,
+  "valid_to": "2026-07-10T00:00:00+03:00",
   "retired": {
     "symbols": [],
     "deps": []

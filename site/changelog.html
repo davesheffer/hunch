@@ -87,6 +87,10 @@
 
     <div class="clog">
       <div class="clog-group">
+        <div class="clog-date">Jul 10, 2026</div>
+        <div class="clog-row"><span class="rel-tag">v1.7.0</span><span class="clog-t"><b>Subscription choice without vendor lock-in</b> — Hunch now understands the coding-assistant CLIs available on <em>your</em> machine. Select Claude Code, Codex, or Cursor once with <span class="mono">hunch provider &lt;name&gt;</span>; an environment override still wins for a shell or CI run. If several subscriptions are installed and no choice has been made, Hunch deliberately stays on its free deterministic path instead of guessing whose plan to bill. The same policy now governs capture, verification, auto-review, and wiki prose, while Deep Synthesis remains an explicit multi-provider action.</span></div>
+      </div>
+      <div class="clog-group">
         <div class="clog-date">Jul 8, 2026</div>
         <div class="clog-row"><span class="rel-tag">v1.4.0</span><span class="clog-t"><b>The verification pipeline — delivery enforced, not hoped for</b> — measured on real zod bugs: instruction skills installed as files were read in <b>0/20</b> sessions, and pass rates matched no-skill exactly; guaranteed delivery of the same content flipped hard-bug diagnosis FAIL→PASS on every discriminating cell (Opus <em>and</em> Haiku — Haiku+skill solved what bare Opus couldn't). So the operating loop — <em>scope → evidence → change → verify → attack → report</em> — now ships in the hooks: <span class="mono">PostToolUse</span> records observable facts (product edits, verify-shaped commands), <span class="mono">Stop</span> refuses to end a turn with unverified product edits (<b>firm/strict</b> only, max twice per turn — a broken gate degrades to advisory, never a lockout), <span class="mono">SessionStart</span> injects the loop once. Facts, not claims. No new knob — firmness governs; <span class="mono">HUNCH_PIPELINE=0</span> kills. Plus a <a href="/cookbook" style="text-decoration:underline">cookbook</a> of copy-paste recipes, incl. how to write skill descriptions that actually fire.</span></div>
       </div>

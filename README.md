@@ -62,6 +62,12 @@ it adds a native lifecycle adapter too.
 Your memory is plain JSON that you own. Hunch adds a SQLite index only as a rebuildable derived
 layer—your decisions never disappear into a proprietary hosted memory system.
 
+Synthesis is just as portable: Hunch can use Claude Code, Codex, or Cursor through the subscription
+CLI you choose. It never guesses which of several installed subscriptions to bill—set your local,
+gitignored preference with `hunch provider codex-cli` (or `claude-cli` / `cursor-agent`); otherwise
+Hunch uses a subscription only when exactly one is available, and falls back to deterministic local
+drafting when the choice is ambiguous.
+
 ```text
 Claude Code  ─┐
 Cursor       ├── MCP ──> .hunch/ reasoning graph ──> deterministic checks

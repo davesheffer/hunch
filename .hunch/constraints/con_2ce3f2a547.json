@@ -1,14 +1,14 @@
 {
   "id": "con_2ce3f2a547",
   "type": "security",
-  "statement": "Synthesis must run on the Claude subscription, never the pay-per-token API: strip ANTHROPIC_API_KEY and ANTHROPIC_AUTH_TOKEN from the spawned env",
+  "statement": "Synthesis must use an explicitly selected coding-assistant subscription CLI or the deterministic local fallback; never call a pay-per-token API",
   "scope": [
     "src/synthesis/**"
   ],
   "severity": "blocking",
   "enforcement": "advisory_v1",
-  "rationale": "Avoid silent API billing; force subscription/OAuth auth",
-  "source_decision": "dec_5a7c0733f7",
+  "rationale": "Avoid silent API billing and never guess which installed assistant subscription a user intends to spend. Provider-specific API credentials must be stripped from child processes where the CLI would otherwise prefer them.",
+  "source_decision": "dec_65b058de66",
   "violations": [],
   "status": "active",
   "valid_to": null,
@@ -20,12 +20,15 @@
   },
   "forbids": {
     "deps": [
-      "@anthropic-ai/sdk"
+      "@anthropic-ai/sdk",
+      "openai"
     ],
     "symbols": [],
     "patterns": [
       "api\\.anthropic\\.com",
-      "new Anthropic\\("
+      "new Anthropic\\(",
+      "api\\.openai\\.com",
+      "new OpenAI\\("
     ]
   }
 }
