@@ -109,7 +109,7 @@ import { movePublicMemoryToPrivate } from "../store/privateMigrate.js";
 import { ENTITY_KINDS } from "../core/types.js";
 import { planCompaction } from "../store/compact.js";
 import { repairDecisionReference } from "../core/refrepair.js";
-import { resolveInvocation } from "./invocation.js";
+import { resolveInvocation, dim, synthesisStatusLines } from "./invocation.js";
 
 const program = new Command();
 program.name("hunch").description("Hunch — an Engineering Memory OS: a git-native reasoning graph for your codebase.").version(HUNCH_VERSION);
@@ -3786,19 +3786,12 @@ program
     const resolution = await resolveSynthesisProvider({ root });
     const provider = resolution.provider;
     console.log(`synthesis:  ${provider.name} (${resolution.source})`);
-    const selected = resolution.statuses.find((s) => s.name === provider.name);
-    if (selected?.subscription) {
-      console.log(`            ↳ LLM synthesis uses your ${selected.subscription}; provider API credentials are not used.`);
-    } else if (resolution.source === "ambiguous") {
-      const names = resolution.statuses.filter((s) => s.name !== "deterministic" && s.available).map((s) => s.name);
-      console.log(dim(`            ↳ ${names.join(", ")} are available; Hunch will not guess which subscription to spend.`));
-      console.log(dim(`              choose one locally: ${names.map((name) => `hunch provider ${name}`).join("  or  ")}`));
-    } else if (resolution.source === "unavailable-preference") {
-      console.log(dim(`            ↳ ${resolution.preference} was selected but is unavailable; using the offline heuristic.`));
-    } else {
-      console.log(dim(`            ↳ no assistant CLI found — synthesis uses the offline heuristic (advisory, low-confidence).`));
-      console.log(dim(`              install or log into Claude Code, Codex, or Cursor; then select one with \`hunch provider <name>\`.`));
-    }
+    // Synthesis is billed to the user's SUBSCRIPTION via a coding-assistant CLI
+    // (or run through a configured local/self-hosted endpoint), never a
+    // pay-per-token API key. Surface which one — or what's missing (issue #9:
+    // openai-compat has no `subscription` and must not fall through to the
+    // "no assistant CLI found" branch).
+    for (const line of synthesisStatusLines(resolution, process.env)) console.log(line);
     const c = store.reindex().counts;
     console.log(`hunch:      ${c.symbols} symbols, ${c.edges} edges, ${c.components} components, ${c.decisions} decisions, ${c.bugs} bugs, ${c.constraints} constraints`);
     try {
@@ -3887,9 +3880,6 @@ function reportClaudeConfigHeal(): void {
     console.log(`✓ healed Claude Code project case-split: mirrored [${g.servers.join(", ")}] across ${g.casings.join("  ·  ")}`);
   }
   console.log(dim(`  ↳ backup: ${res.backup}`));
-}
-function dim(s: string): string {
-  return `\x1b[2m${s}\x1b[0m`;
 }
 function fail(msg: string): void {
   console.error(`error: ${msg}`);
