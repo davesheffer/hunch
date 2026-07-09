@@ -18,14 +18,15 @@ import * as nodePath from "node:path";
 import {
   loadHunch, why, constraintsInScope, nearConstraints, isStale, sevRank,
   staleRecords, lineageChains, symbolSignals, bugsForSymbol, fragileSymbols,
-  type Hunch, type Provenance, type LineageNode, type Bug,
+  reviewQueue, type Hunch, type Provenance, type LineageNode, type Bug, type ReviewItem,
 } from "./hunchData.js";
 import { HunchCodeLensProvider, HunchHoverProvider } from "./providers.js";
 import { HunchDiagnostics } from "./diagnostics.js";
 import { HunchDecorations } from "./decorations.js";
 import { showGraph, refreshGraph } from "./graph.js";
-import { showReview, refreshReview } from "./review.js";
 import { runSearch } from "./search.js";
+import { acceptDraft, rejectDraft, acceptVerified, rejectDuplicates, openDraftFile, draftBrief, autoReview } from "./review.js";
+import { runCommandHub } from "./commands.js";
 
 function workspaceRoot(): string | undefined {
   return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
@@ -70,9 +71,9 @@ class HunchCache {
 // ---------------------------------------------------------------------------
 type Cmd = { command: string; args: unknown[] };
 type Node =
-  | { kind: "group"; label: string; key: string }
-  | { kind: "leaf"; label: string; description?: string; tooltip?: string; file?: string; cmd?: Cmd }
-  | { kind: "tree"; label: string; description?: string; tooltip?: string; file?: string; children: Node[] };
+  | { kind: "group"; label: string; key: string; description?: string; contextValue?: string }
+  | { kind: "leaf"; label: string; description?: string; tooltip?: string; file?: string; cmd?: Cmd; contextValue?: string; draftId?: string; icon?: string }
+  | { kind: "tree"; label: string; description?: string; tooltip?: string; file?: string; children: Node[]; contextValue?: string };
 
 class HunchTree implements vscode.TreeDataProvider<Node> {
   private _onDidChange = new vscode.EventEmitter<void>();
@@ -83,8 +84,11 @@ class HunchTree implements vscode.TreeDataProvider<Node> {
 
   getTreeItem(n: Node): vscode.TreeItem {
     if (n.kind === "group") {
-      const item = new vscode.TreeItem(n.label, vscode.TreeItemCollapsibleState.Collapsed);
+      const expanded = n.key === "review" || n.key === "review.ready";
+      const item = new vscode.TreeItem(n.label, expanded ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.Collapsed);
       item.iconPath = new vscode.ThemeIcon(GROUP_ICONS[n.key] ?? "circle-outline");
+      item.description = n.description;
+      if (n.contextValue) item.contextValue = n.contextValue;
       return item;
     }
     const collapsible = n.kind === "tree" && n.children.length
@@ -93,6 +97,8 @@ class HunchTree implements vscode.TreeDataProvider<Node> {
     const item = new vscode.TreeItem(n.label, collapsible);
     item.description = n.description;
     item.tooltip = n.tooltip ?? n.label;
+    if (n.kind === "leaf" && n.icon) item.iconPath = new vscode.ThemeIcon(n.icon);
+    if (n.contextValue) item.contextValue = n.contextValue;
     if (n.file) {
       item.command = { command: "vscode.open", title: "Open", arguments: [vscode.Uri.file(n.file)] };
       item.resourceUri = vscode.Uri.file(n.file);
@@ -109,7 +115,10 @@ class HunchTree implements vscode.TreeDataProvider<Node> {
     if (!node) {
       const stale = staleRecords(b, (f) => lastChangeMs(b.root, f));
       const chains = lineageChains(b);
+      const rq = reviewQueue(b);
+      const pending = rq.ready.length + rq.scrutiny.length;
       return [
+        ...(pending ? [{ kind: "group" as const, label: `Review queue (${pending})`, key: "review", contextValue: "hunch.reviewQueue" }] : []),
         { kind: "group", label: `Invariants (${b.constraints.length})`, key: "constraints" },
         { kind: "group", label: `Decisions (${b.decisions.length})`, key: "decisions" },
         { kind: "group", label: `Bugs (${b.bugs.length})`, key: "bugs" },
@@ -122,6 +131,17 @@ class HunchTree implements vscode.TreeDataProvider<Node> {
     if (node.kind !== "group") return [];
     const root = b.root;
     switch (node.key) {
+      case "review": {
+        const rq = reviewQueue(b);
+        const groups: Node[] = [];
+        if (rq.ready.length) groups.push({ kind: "group", label: `Ready to confirm (${rq.ready.length})`, key: "review.ready", contextValue: "hunch.reviewReady" });
+        if (rq.scrutiny.length) groups.push({ kind: "group", label: `Needs scrutiny (${rq.scrutiny.length})`, key: "review.scrutiny" });
+        return groups;
+      }
+      case "review.ready":
+        return reviewQueue(b).ready.map((it) => draftLeaf(it));
+      case "review.scrutiny":
+        return reviewQueue(b).scrutiny.map((it) => draftLeaf(it));
       case "constraints":
         return [...b.constraints].sort((x, y) => sevRank(y.severity) - sevRank(x.severity)).map((c) => ({
           kind: "leaf", label: `[${c.severity}] ${c.statement}`,
@@ -161,10 +181,28 @@ class HunchTree implements vscode.TreeDataProvider<Node> {
 }
 
 const GROUP_ICONS: Record<string, string> = {
+  review: "checklist", "review.ready": "pass", "review.scrutiny": "eye",
   constraints: "shield", decisions: "lightbulb", bugs: "bug", lineage: "history",
   fragile: "flame", components: "package", stale: "warning",
 };
 const STALE_ICON: Record<string, string> = { constraint: "⛔", decision: "🧭", bug: "🐞", component: "📦" };
+
+/** One draft in the review queue. Clicking opens a read-only brief; inline
+ *  ✓/✗/edit actions (contextValue "hunch.draft") delegate to the CLI. */
+function draftLeaf(it: ReviewItem): Node {
+  const g = it.synth.grounded != null ? `grounded ${it.synth.grounded}` : `conf ${it.confidence}`;
+  const tag = it.vouched ? "roadmap" : it.verified ? "verified" : "unverified";
+  return {
+    kind: "leaf",
+    label: it.d.title,
+    description: `${tag} · ${g}`,
+    tooltip: `${it.d.id} [${it.d.status}, ${it.d.provenance?.source ?? "?"}]\n${(it.d.decision ?? "").slice(0, 200)}`,
+    icon: it.vouched ? "milestone" : it.verified ? "verified" : "question",
+    contextValue: "hunch.draft",
+    draftId: it.d.id,
+    cmd: { command: "hunch.reviewDraft", args: [it.d.id] },
+  };
+}
 
 function bugLeaf(root: string, bug: Bug): Node {
   const l = bug.lineage;
@@ -236,6 +274,28 @@ function showBrief(title: string, sections: Array<{ h: string; lines: string[] }
   </style></head><body><h2>${esc(title)}</h2>${body || "<p><em>Hunch has nothing recorded for this yet — it is still learning this file.</em></p>"}</body></html>`;
 }
 
+/** Render CLI output (from the command hub) in a self-contained webview. */
+function showOutput(title: string, body: string): void {
+  const panel = vscode.window.createWebviewPanel("hunchOutput", `Hunch — ${title}`, vscode.ViewColumn.Beside, {});
+  panel.webview.html = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+    body{font-family:var(--vscode-editor-font-family,monospace);padding:8px 16px;color:var(--vscode-foreground);background:var(--vscode-editor-background)}
+    h2{font-family:var(--vscode-font-family);border-bottom:1px solid var(--vscode-panel-border);font-size:14px}
+    pre{white-space:pre-wrap;word-break:break-word;font-size:12px;line-height:1.45}
+  </style></head><body><h2><code>${esc(title)}</code></h2><pre>${esc(body)}</pre></body></html>`;
+}
+
+/** Resolve a draft id from either a raw id (command arg) or a tree Node (context menu). */
+function draftIdOf(x?: string | Node): string | undefined {
+  if (typeof x === "string") return x;
+  if (x && x.kind === "leaf") return x.draftId;
+  return undefined;
+}
+
+/** The current title of a draft (for confirmation dialogs), or its id as a fallback. */
+function titleOf(cache: HunchCache, id: string): string {
+  return cache.get()?.decisions.find((d) => d.id === id)?.title ?? id;
+}
+
 function whyBrief(hunch: Hunch, file: string): void {
   const w = why(hunch, file);
   const near = nearConstraints(hunch, file);
@@ -300,28 +360,6 @@ function updateStatusBar(item: vscode.StatusBarItem, cache: HunchCache): void {
 // ---------------------------------------------------------------------------
 function cliCommand(): string {
   return vscode.workspace.getConfiguration("hunch").get("cliPath", "hunch");
-}
-
-/** Run `hunch <args>` at the repo root under a progress toast. Resolves once the
- *  CLI exits; surfaces stderr on failure. The single choke-point for every
- *  extension write — the extension itself never touches .hunch/ JSON. */
-function runHunch(root: string, args: string[], title: string, onDone: () => void): Thenable<void> {
-  const q = (s: string) => (/^[\w.\-/=]+$/.test(s) ? s : `"${s.replace(/"/g, '\\"')}"`);
-  const cmd = `${cliCommand()} ${args.map(q).join(" ")}`;
-  return vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title }, () =>
-    new Promise<void>((resolve) => {
-      cp.exec(cmd, { cwd: root }, (err, stdout, stderr) => {
-        if (err) {
-          vscode.window.showErrorMessage(`Hunch CLI failed (${cliCommand()}). ${stderr || err.message}. Set "hunch.cliPath" if the CLI is elsewhere.`);
-        } else {
-          const last = stdout.trim().split("\n").filter(Boolean).pop();
-          if (last) vscode.window.showInformationMessage(last);
-          onDone();
-        }
-        resolve();
-      });
-    }),
-  );
 }
 
 async function recordConstraint(root: string, cache: HunchCache, onDone: () => void): Promise<void> {
@@ -435,7 +473,7 @@ export function activate(context: vscode.ExtensionContext): void {
     codeLens.refresh();
     refreshActive();
     const h = cache.get();
-    if (h) { refreshGraph(h); refreshReview(h); }
+    if (h) refreshGraph(h);
   };
 
   const activeFile = (): string | undefined => vscode.window.activeTextEditor?.document.uri.fsPath;
@@ -483,13 +521,6 @@ export function activate(context: vscode.ExtensionContext): void {
       if (!h || !root) return void vscode.window.showWarningMessage("No Hunch graph (.hunch/) found.");
       showGraph(h, root);
     }),
-    vscode.commands.registerCommand("hunch.review", () => {
-      const h = cache.get();
-      if (!h || !root) return void vscode.window.showWarningMessage("No Hunch graph (.hunch/) found.");
-      // Every accept/reject delegates to `hunch review …`; refreshAll re-reads the
-      // graph and re-renders the panel from the new .hunch/ state.
-      showReview(h, root, (args) => runHunch(root, ["review", ...args], "Hunch: applying review…", refreshAll));
-    }),
     vscode.commands.registerCommand("hunch.revealScope", (scopes: string[]) => {
       if (root) void revealScope(root, scopes ?? []);
     }),
@@ -498,6 +529,38 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     vscode.commands.registerCommand("hunch.recordBug", () => {
       if (root) void recordBug(root, cache, refreshAll);
+    }),
+    // --- review queue: draft triage (delegates writes to the CLI) ----------
+    vscode.commands.registerCommand("hunch.reviewDraft", (idOrNode?: string | Node) => {
+      const id = draftIdOf(idOrNode);
+      const h = cache.get();
+      if (!h || !id) return;
+      const it = [...reviewQueue(h).ready, ...reviewQueue(h).scrutiny].find((x) => x.d.id === id);
+      if (it) draftBrief(it, showBrief);
+    }),
+    vscode.commands.registerCommand("hunch.acceptDraft", (node?: Node) => {
+      const id = draftIdOf(node); if (root && id) void acceptDraft(root, id, titleOf(cache, id), refreshAll);
+    }),
+    vscode.commands.registerCommand("hunch.rejectDraft", (node?: Node) => {
+      const id = draftIdOf(node); if (root && id) void rejectDraft(root, id, titleOf(cache, id), refreshAll);
+    }),
+    vscode.commands.registerCommand("hunch.editDraft", (node?: Node) => {
+      const id = draftIdOf(node); if (root && id) void openDraftFile(root, id);
+    }),
+    vscode.commands.registerCommand("hunch.acceptVerified", () => {
+      const h = cache.get();
+      if (root && h) void acceptVerified(root, reviewQueue(h).ready.length, refreshAll);
+    }),
+    vscode.commands.registerCommand("hunch.rejectDuplicates", () => {
+      if (root) void rejectDuplicates(root, refreshAll);
+    }),
+    vscode.commands.registerCommand("hunch.autoReview", () => {
+      if (root) void autoReview(root, showOutput, refreshAll);
+    }),
+    // --- command hub: drive the CLI from a GUI -----------------------------
+    vscode.commands.registerCommand("hunch.runCommand", () => {
+      if (!root) return void vscode.window.showWarningMessage("No workspace folder open.");
+      void runCommandHub(root, showOutput, refreshAll);
     }),
   );
 

@@ -1,0 +1,42 @@
+{
+  "id": "dec_17106deb8c",
+  "title": "Measured: Hunch context injection flips agent violation 100%→0%, robust to noise — the open risk is DELIVERY, not heeding",
+  "status": "proposed",
+  "context": "Red-team raised a fair, unfalsified concern: Hunch's hooks/MCP fire (plumbing runs), but it was unproven that the LLM actually HEEDS injected memory — the priors (banner blindness, always-on noise) suggested injection might change ~nothing. We needed the experiment, not faith.",
+  "decision": "Ran a controlled behavior experiment: a repo with lodash installed + a recorded blocking rule 'never import lodash — use src/utils', and a task (groupByStatus) whose reflexive answer is _.groupBy. Spawned independent fresh Sonnet agents in three arms (6 each), scoring each output for a lodash import. Results: OFF (task only) = 6/6 violated (100%); ON-clean (task + the 1 rule) = 0/6 (0%); ON-noisy (rule buried as 1 of ~12 records — auth/PII/migration/money rules + decisions + bugs) = 0/6 (0%). Combined ON 0/12 vs OFF 6/6.",
+  "consequences": [
+    "HEEDING is proven: when the relevant rule is in the prompt — clean OR buried in a dozen irrelevant records — a capable model picks it out and obeys it (100%→0%). The 'injection is ignored / banner-blindness / always-on noise' red-team prediction is empirically refuted.",
+    "The value is real and large CONDITIONAL ON delivery. The remaining risk relocates entirely to DELIVERY (does the hook/MCP reliably get the right rule into the prompt at the right moment, esp. in the 5 non-Claude-Code clients with no edit-time hook) and longevity (long sessions) — both untested here because the context was hand-placed.",
+    "Roadmap implication: stop building more capture/guard features and more 'smarter injection on faith'; the high-value frontier is proving + strengthening DELIVERY (tight per-file scoping + cross-client proactivity), since heeding is no longer in doubt.",
+    "Reusable harness: the experiment is a repeatable behavior-eval (agent-on vs agent-off violation rate) — the natural extension of `hunch eval --guards` from 'does the gate fire' to 'does the agent's behavior change'."
+  ],
+  "alternatives_rejected": [
+    "Trust that injection works because the hooks fire (rejected — plumbing firing ≠ behavior change; had to measure).",
+    "Conclude injection is weak per the red-team priors (rejected — the data shows a large, noise-robust effect)."
+  ],
+  "rejected_tripwires": [],
+  "related_components": [],
+  "related_files": [
+    "demo/hunch-blocks-it.sh",
+    "src/eval/guards.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-06-26T19:27:22.308Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 0.95,
+    "evidence": [
+      "demo/hunch-blocks-it.sh",
+      "src/eval/guards.ts"
+    ]
+  },
+  "date": "2026-06-26T19:27:22.308Z"
+}

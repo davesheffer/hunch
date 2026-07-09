@@ -2,7 +2,7 @@
   "name": "hunch-vscode",
   "displayName": "Hunch",
   "description": "Visualize and query Hunch (an Engineering Memory OS) for the current repo — decisions, invariants, bug history, fragility — right in VS Code.",
-  "version": "0.2.1",
+  "version": "0.4.0",
   "publisher": "davesheffer",
   "license": "MIT",
   "author": "Dave Sheffer <dave.sheffer1@gmail.com>",
@@ -56,22 +56,41 @@
       { "command": "hunch.context", "title": "Assemble context for this file", "category": "Hunch", "icon": "$(list-tree)" },
       { "command": "hunch.search", "title": "Search memory", "category": "Hunch", "icon": "$(search)" },
       { "command": "hunch.graph", "title": "Component Graph", "category": "Hunch", "icon": "$(type-hierarchy)" },
-      { "command": "hunch.review", "title": "Review Queue (triage drafts)", "category": "Hunch", "icon": "$(inbox)" },
       { "command": "hunch.recordConstraint", "title": "Record Invariant…", "category": "Hunch" },
       { "command": "hunch.recordBug", "title": "Record Bug…", "category": "Hunch" },
       { "command": "hunch.revealScope", "title": "Reveal Invariant Scope", "category": "Hunch" },
+      { "command": "hunch.runCommand", "title": "Run Command…", "category": "Hunch", "icon": "$(terminal)" },
+      { "command": "hunch.reviewDraft", "title": "Review Draft", "category": "Hunch" },
+      { "command": "hunch.acceptDraft", "title": "Confirm Decision", "category": "Hunch", "icon": "$(check)" },
+      { "command": "hunch.rejectDraft", "title": "Reject Draft", "category": "Hunch", "icon": "$(trash)" },
+      { "command": "hunch.editDraft", "title": "Edit Draft", "category": "Hunch", "icon": "$(edit)" },
+      { "command": "hunch.acceptVerified", "title": "Confirm All Verified Drafts", "category": "Hunch", "icon": "$(check-all)" },
+      { "command": "hunch.rejectDuplicates", "title": "Reject Duplicate Drafts", "category": "Hunch", "icon": "$(clear-all)" },
+      { "command": "hunch.autoReview", "title": "Auto-review Drafts (harness)…", "category": "Hunch", "icon": "$(sparkle)" },
       { "command": "hunch.refresh", "title": "Refresh", "category": "Hunch", "icon": "$(refresh)" }
     ],
     "menus": {
       "commandPalette": [
         { "command": "hunch.revealScope", "when": "false" },
+        { "command": "hunch.reviewDraft", "when": "false" },
+        { "command": "hunch.acceptDraft", "when": "false" },
+        { "command": "hunch.rejectDraft", "when": "false" },
+        { "command": "hunch.editDraft", "when": "false" },
         { "command": "hunch.whySymbol", "when": "editorIsOpen" }
       ],
       "view/title": [
-        { "command": "hunch.review", "when": "view == hunch.tree", "group": "navigation@1" },
+        { "command": "hunch.runCommand", "when": "view == hunch.tree", "group": "navigation@1" },
         { "command": "hunch.search", "when": "view == hunch.tree", "group": "navigation@2" },
         { "command": "hunch.graph", "when": "view == hunch.tree", "group": "navigation@3" },
         { "command": "hunch.refresh", "when": "view == hunch.tree", "group": "navigation@4" }
+      ],
+      "view/item/context": [
+        { "command": "hunch.acceptDraft", "when": "view == hunch.tree && viewItem == hunch.draft", "group": "inline@1" },
+        { "command": "hunch.editDraft", "when": "view == hunch.tree && viewItem == hunch.draft", "group": "inline@2" },
+        { "command": "hunch.rejectDraft", "when": "view == hunch.tree && viewItem == hunch.draft", "group": "inline@3" },
+        { "command": "hunch.acceptVerified", "when": "view == hunch.tree && viewItem == hunch.reviewReady", "group": "inline@1" },
+        { "command": "hunch.autoReview", "when": "view == hunch.tree && viewItem == hunch.reviewQueue", "group": "inline@1" },
+        { "command": "hunch.rejectDuplicates", "when": "view == hunch.tree && viewItem == hunch.reviewQueue", "group": "inline@2" }
       ],
       "editor/title": [
         { "command": "hunch.why", "when": "resourceLangId =~ /typescript|javascript|typescriptreact|javascriptreact|python|go|rust/", "group": "navigation" }

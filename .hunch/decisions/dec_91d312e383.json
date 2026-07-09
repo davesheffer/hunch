@@ -1,0 +1,41 @@
+{
+  "id": "dec_91d312e383",
+  "title": "Huge-project effectiveness test (nestjs/nest, 1683 files): deterministic enforcement is effective + precise at scale; behavioral prevention is situational (capable models often don't commit the violation unprompted)",
+  "status": "proposed",
+  "context": "Validate that Hunch is effective on a large REAL codebase (not a toy), both mechanics-at-scale and the Hunch-on/off behavioral test. Cloned nestjs/nest (1683 TS/JS files, 2125 tracked).",
+  "decision": "Ran three things on the cloned repo with the v0.36.1 built binary. (1) SCALE: hunch init+index in ~1s, building a real graph (5709 symbols, 2812 edges, 6 components); hunch why returns real symbols; hunch check is ~instant. (2) DETERMINISTIC ENFORCEMENT of a REAL architectural invariant ('packages/core must stay HTTP-platform-agnostic — never import express', --forbid-dep express, scope packages/core/**): 5/5 correct — real `import express` BLOCKED; benign edit silent; a COMMENT naming express silent (parsed-import immunity holds at scale); `import type { Express } from express` BLOCKED (type imports caught); the same import in the out-of-scope platform-express package ALLOWED (scope correct). (3) BEHAVIORAL on/off (Sonnet, 6+6 per task, real nest framing): two tasks ('getClientIp' tempting express; 'deepMerge' tempting lodash) both gave 0% violation in BOTH arms — the capable model didn't reach for the dep unprompted (used node:http / hand-rolled native). Injection still measurably shifted behavior (express: ON 6/6 adopted the rule's opaque-type guidance vs OFF 6/6 concrete node:http type), just didn't PREVENT a violation because none occurred.",
+  "consequences": [
+    "Deterministic enforcement (the guard) is the dependable moat and it WORKS at scale: precise (comment-immune, scope-correct, catches type-only imports), fast (~instant over 5709 symbols), on a real architectural invariant. This is the strongest result of the whole arc.",
+    "Behavioral prevention is SITUATIONAL: the on/off violation-prevention signal only appears when the violation is one the model is actually tempted to commit. The earlier controlled experiment (lodash INSTALLED + a 'group the orders' use-task) hit 100%->0%; realistic nest 'add a helper' tasks with a capable model produced 0%/0% nulls because the model implemented natively. So injection's value depends on whether the agent would have violated — the deterministic guard is the backstop for when it does.",
+    "Methodology note for future behavioral tests: to elicit a violation you must (a) establish the dep as installed/available and (b) phrase the task as 'use X' not 'implement a helper that does X'. Otherwise capable models don't take the bait and the test is a null.",
+    "Cross-client delivery remains the untouched next initiative; this test used the Claude-family agent + the deterministic guard (client-agnostic)."
+  ],
+  "alternatives_rejected": [],
+  "rejected_tripwires": [],
+  "related_components": [],
+  "related_files": [
+    "src/core/constraintmatch.ts",
+    "src/store/hunchStore.ts",
+    "demo/real-world-scenarios.sh"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-06-26T20:47:09.429Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 0.95,
+    "evidence": [
+      "src/core/constraintmatch.ts",
+      "src/store/hunchStore.ts",
+      "demo/real-world-scenarios.sh"
+    ]
+  },
+  "date": "2026-06-26T20:47:09.429Z"
+}

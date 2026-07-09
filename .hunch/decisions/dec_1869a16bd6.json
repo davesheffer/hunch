@@ -1,0 +1,47 @@
+{
+  "id": "dec_1869a16bd6",
+  "title": "Shipped both delivery fixes: realpath the hook path + content-matched constraints (record-constraint --match) that survive file churn",
+  "status": "proposed",
+  "context": "dec_e0a36efbf5 diagnosed two real delivery gaps end-to-end. This implements and proves both.",
+  "decision": "FIX 1: toRepoRel (cli/index.ts) now realpath-normalizes both root and abs via a realpathNorm() that resolves the longest existing ancestor (handles a not-yet-created file), so the edit-time hook still delivers under a symlinked root (/tmp, /var, symlinked $HOME) instead of silently emitting 0 bytes. FIX 2: constraints gain an optional `match` regex (ConstraintSchema.match; `hunch record-constraint --match <regex>`). A content-matched invariant is decided by whether an ADDED diff/edit line actually trips the regex — verifiable per commit — so isStrictBlocker is called with stale=false for it: it keeps blocking the real violation across the file's whole life, and stays QUIET on edits that touch scope but don't break the rule (dropped from the direct report → no false positive). Wired through buildCheckReport (commit/CI gate, via analyzeDiff.addedLinesByFile) and blockingInScope (edit-time deny, now passed proposedEditLines). New shared helper src/core/constraintmatch.ts (constraintMatcher compiles defensively — bad regex is inert; contentViolates). Scope-only constraints are unchanged (still staleness-gated).",
+  "consequences": [
+    "Users who want reliable enforcement should record the invariant WITH a content matcher, e.g. record-constraint \"never import lodash\" --scope src/** --severity blocking --match \"lodash\" — it then blocks the actual lodash-adding commit/edit regardless of how often the file has changed since, and never fires on innocent edits.",
+    "Proven: test/contentmatch.test.ts (4 tests: blocks-when-stale, silent-on-compliant, scope-only-contrast, hook-denies-only-the-violation) + demo/real-world-scenarios.sh runs the BUILT binary through a symlinked-root repo and a churned-file lifecycle (5/5 pass). Full suite 346/347 (1 optional-embedder skip), typecheck clean.",
+    "Committed on branch fix/delivery-symlink-and-content-matched-constraints (6568295); not yet merged to main or released.",
+    "Schema gained a nullable field with default null — old constraints migrate transparently (Zod default); three internal constraint constructors (correction, synthesis promote, inline-rule capture) set match:null."
+  ],
+  "alternatives_rejected": [],
+  "rejected_tripwires": [],
+  "related_components": [],
+  "related_files": [
+    "src/core/constraintmatch.ts",
+    "src/store/hunchStore.ts",
+    "src/core/hookpolicy.ts",
+    "src/cli/index.ts",
+    "test/contentmatch.test.ts",
+    "demo/real-world-scenarios.sh"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-06-26T19:57:29.462Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 0.95,
+    "evidence": [
+      "src/core/constraintmatch.ts",
+      "src/store/hunchStore.ts",
+      "src/core/hookpolicy.ts",
+      "src/cli/index.ts",
+      "test/contentmatch.test.ts",
+      "demo/real-world-scenarios.sh"
+    ]
+  },
+  "date": "2026-06-26T19:57:29.462Z"
+}

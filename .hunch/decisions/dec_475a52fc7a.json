@@ -1,0 +1,43 @@
+{
+  "id": "dec_475a52fc7a",
+  "title": "Implemented the corrected-strategy priorities: trustworthy-or-silent auto-capture (0.36.2) + honest guard-eval for content-matched rules (0.36.3)",
+  "status": "proposed",
+  "context": "After the GOAT red-team relocated the priority to capture quality (#1) and benchmark credibility (#3) — not 'more enforcement' — implemented the two cleanest finishable items end-to-end.",
+  "decision": "0.36.2 — capture quality: deriveForbids now takes the repo's real deps (knownRepoDeps from package.json) and auto-mints a dep matcher ONLY for a dep that actually exists. 'never import foo' where foo is a typo/non-dependency falls back to a scope-only rule + the warning instead of silently minting a never-firing rule (which also used to suppress the warning). Threaded through both capture paths (CLI record-constraint + hunch_record_correction via CorrectionInput.knownDeps set in the client-agnostic server). Submodule-aware; skips validation when no package.json. 0.36.3 — benchmark honesty: generateGuardCases synthesizes the REAL violation (import the forbidden dep / call the forbidden symbol) for content-matched constraints and requires a hard BLOCK, instead of a diff-less case the matcher could never trip; scope-only rules keep the surface-or-warn 'catch'. The eval number now separates rules that hard-block their real violation from rules that only warn.",
+  "consequences": [
+    "Auto-capture is now trustworthy-or-silent: it never mints a wrong/never-firing rule — the #1 corrected priority (the loop's input must be accurate or the whole moat is moot).",
+    "hunch eval --guards is now an HONEST benchmark for the precise matchers: on a repo with a --forbid-dep rule + a scope-only rule it reports 'CAUGHT 2/2 — 1 hard-block, 1 warn' (the dep rule was previously mis-counted as a miss). This is the credibility move (#3): a number that distinguishes enforceable from advisory.",
+    "Both verified end-to-end on the built binary and shipped to npm (0.36.2, 0.36.3); full suite 354 pass / 1 skip; typecheck clean.",
+    "Still-open from the corrected strategy (not yet implemented): the advisory-first ACTIVATION nudge ('N rules enforcing, M drafts to confirm, K went stale') and cross-client portability of edit-time grounding — the two larger initiatives."
+  ],
+  "alternatives_rejected": [],
+  "rejected_tripwires": [],
+  "related_components": [],
+  "related_files": [
+    "src/core/constraintmatch.ts",
+    "src/core/correction.ts",
+    "src/mcp/server.ts",
+    "src/eval/guards.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-06-26T21:03:52.171Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 0.95,
+    "evidence": [
+      "src/core/constraintmatch.ts",
+      "src/core/correction.ts",
+      "src/mcp/server.ts",
+      "src/eval/guards.ts"
+    ]
+  },
+  "date": "2026-06-26T21:03:52.171Z"
+}

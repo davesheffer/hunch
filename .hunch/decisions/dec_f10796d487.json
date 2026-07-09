@@ -1,0 +1,44 @@
+{
+  "id": "dec_f10796d487",
+  "title": "Completed the corrected GOAT strategy: hunch status (activation) + cross-client grounding propagation (portability) — v0.37.0",
+  "status": "proposed",
+  "context": "Final two of the four corrected-strategy priorities (capture quality + benchmark shipped in 0.36.2/0.36.3; activation + portability here).",
+  "decision": "ACTIVATION (#2 advisory-first trust): added `hunch status` — an enforcement-readiness dashboard showing firmness (+ plain-English meaning), ARMED confirmed blocking invariants split precise-vs-scope-only, drafts to confirm (ready/scrutiny via partitionReview), stale rules (store.staleness), and a nudge when precise rules are armed but firmness isn't strict. Reuses existing helpers; no new infra. PORTABILITY (#3): a recorded rule now propagates to EVERY assistant's grounding, not just CLAUDE.md — root cause was that record-constraint / review --accept / --accept-verified / the record-removal path only called updateClaudeMd (CLAUDE.md), leaving AGENTS.md / Copilot / Cursor / Windsurf stale until the next index/sync. Swapped those four call sites to refreshExistingGrounding (all five docs, refresh-only), and added the same to the hunch_record_correction MCP path (public-only — a private rule must never render into committed grounding).",
+  "consequences": [
+    "A rule taught once (CLI or a correction via any assistant's MCP) is now held by every assistant pointed at the repo — the cross-client portability the GOAT thesis named, for the GROUNDING surface (the deterministic guard was already client-agnostic at commit/CI). True edit-time DENY in non-Claude clients remains vendor-blocked (no equivalent hook API) — unchanged.",
+    "`hunch status` closes the activation gap (the moat sat dormant until you remembered to confirm/set strict): one screen tells you what's enforcing and the exact next action.",
+    "Refresh-only + public-only by construction: Claude-only projects are unchanged; private rules never leak into committed grounding (con_e04226bd05 client-agnostic invariant preserved).",
+    "Verified end-to-end: a rule recorded once lands in all 5 grounding docs; status shows the armed rule + firmness nudge. test/selfheal.test.ts +1 (multi-client propagation); full suite 355 pass; shipped to npm (0.37.0).",
+    "All four corrected-strategy priorities are now implemented: capture quality (0.36.2), benchmark honesty (0.36.3), activation + portability (0.37.0)."
+  ],
+  "alternatives_rejected": [],
+  "rejected_tripwires": [],
+  "related_components": [],
+  "related_files": [
+    "src/cli/index.ts",
+    "src/mcp/server.ts",
+    "src/integrations/providers.ts",
+    "test/selfheal.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-06-26T21:14:31.613Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 0.95,
+    "evidence": [
+      "src/cli/index.ts",
+      "src/mcp/server.ts",
+      "src/integrations/providers.ts",
+      "test/selfheal.test.ts"
+    ]
+  },
+  "date": "2026-06-26T21:14:31.613Z"
+}

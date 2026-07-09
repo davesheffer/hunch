@@ -1,0 +1,42 @@
+{
+  "id": "dec_f70ae911e7",
+  "title": "Static subpages under site/ must use ABSOLUTE paths — cleanUrls+trailingSlash:false breaks relative refs",
+  "status": "accepted",
+  "context": "The Hunch blog (site/blog/) shipped with relative refs (<script src=posts.js>, href=post.html?slug=…) and the posts didn't render on the deployed site.",
+  "decision": "Root cause: vercel.json sets cleanUrls:true + trailingSlash:false, so site/blog/index.html is served at the URL /blog (no trailing slash). A browser resolves a relative URL against /blog's parent directory (/), so <script src=\"posts.js\"> requested /posts.js → 404 → window.POSTS undefined → zero posts rendered. (It worked on the post page, served at /blog/post, whose base dir IS /blog/.) Fix: every asset and inter-page link on a static subpage must be ROOT-ABSOLUTE — /blog/posts.js, /blog/post?slug=…, /, /docs, /blog — not relative and not ../. ",
+  "consequences": [
+    "Any NEW static page added under site/ in a subdirectory must use absolute paths for scripts/links, or it will silently 404 its assets on the deployed site (while working locally via file://, which masks the bug).",
+    "Clean URLs in links: use /blog/post?slug=x (the clean form) not /blog/post.html?slug=x to avoid a redirect hop; cleanUrls maps /blog/post → /blog/post.html and preserves the query string.",
+    "Validate a static page's render by executing its inline script in node with window/document shims (catches runtime errors that a parse-only --check misses)."
+  ],
+  "alternatives_rejected": [],
+  "rejected_tripwires": [],
+  "related_components": [],
+  "related_files": [
+    "vercel.json",
+    "site/blog/index.html",
+    "site/blog/post.html",
+    "site/blog/posts.js"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-06-26T22:33:06.423Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 0.95,
+    "evidence": [
+      "vercel.json",
+      "site/blog/index.html",
+      "site/blog/post.html",
+      "site/blog/posts.js"
+    ]
+  },
+  "date": "2026-06-26T22:33:06.423Z"
+}

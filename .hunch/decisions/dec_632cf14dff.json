@@ -1,0 +1,41 @@
+{
+  "id": "dec_632cf14dff",
+  "title": "bug_overlay_clobber: overlay auto-commit could commit memory OVER the project repo (−305k) — fixed with a memory-only staged-set guard + standalone-repo init (v0.38.3)",
+  "status": "accepted",
+  "context": "A real, contained incident on a user's repo: in shared+commit mode, the Hunch post-commit auto-sync committed the private overlay store over the project repo (−305k lines) and pushed it. User disabled the hook, reset+force-pushed the good commit, audited all branches — contained to the branch tip, fully restored. MCP recording/query were unaffected (overlay-only); only the auto-commit hook was broken.",
+  "decision": "Root cause: commitAndPushHunch(hunchDir) runs `git -C hunchDir add -- . / commit / pull --no-rebase --autostash / push` and TRUSTED that hunchDir is a dedicated overlay git repo. When the overlay was never its own repo (a plain .hunch-private dir from `hunch shared` with no --repo), `git -C` walks UP to the PROJECT repo, so those destructive ops (esp. pull --autostash + push) hit the user's code. Fix (defense in depth): (1) RUNTIME BACKSTOP in commitAndPushHunch — a memory sync is purely additive JSON, so refuse to commit if the staged set has ANY deletion/rename or non-.json file (unstage + bail, no commit, no push), and only pull/push after a real memory commit was created. New helper stagedIsMemoryOnly() inspects `git diff --cached --name-status`. (2) SETUP GUARD in configureOverlay — when --auto-commit is on but the overlay root isn't its own git repo, `git init` it standalone so git can't escape to the project. test/overlay-commit-guard.test.ts locks both (refuses deletion, refuses mixed non-JSON, commits clean JSON). Full suite 359 pass. Shipped 0.38.3.",
+  "consequences": [
+    "INVARIANT (do not remove): the overlay auto-commit must NEVER commit a staged set containing a deletion or a non-.json file — a memory sync is additive JSON only. The guard in commitAndPushHunch (stagedIsMemoryOnly) and its test are the enforcement; removing either re-opens a data-loss bug.",
+    "Any future change to commitAndPushHunch / the overlay sync must preserve: (a) only-push-after-a-real-commit, and (b) the memory-only staged-set check. The `git add -- .` is cwd-scoped so it alone can't stage the whole repo, but pull --autostash + push on the enclosing repo is the lethal part — the guard now blocks the commit that precedes them.",
+    "Severity: data-loss grade, and it was LIVE on npm (0.36–0.38.2 had the unsafe path). 0.38.3 is the fix; users on `hunch shared/private --auto-commit` should upgrade. The default (no --auto-commit) and MCP record/query were never affected.",
+    "Honest reflection for the launch narrative: Hunch is positioned as the tool that PREVENTS AI/automation from breaking your repo, and its own auto-commit hook nearly destroyed one. The git-native design is exactly why it was fully recoverable (reset + force-push), which is a point in favor of git-native memory — but the auto-commit feature shipped without this guard and a test, which is the real lesson."
+  ],
+  "alternatives_rejected": [],
+  "rejected_tripwires": [],
+  "related_components": [],
+  "related_files": [
+    "src/extractors/git.ts",
+    "src/cli/index.ts",
+    "test/overlay-commit-guard.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-06-27T21:26:17.699Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 0.95,
+    "evidence": [
+      "src/extractors/git.ts",
+      "src/cli/index.ts",
+      "test/overlay-commit-guard.test.ts"
+    ]
+  },
+  "date": "2026-06-27T21:26:17.699Z"
+}

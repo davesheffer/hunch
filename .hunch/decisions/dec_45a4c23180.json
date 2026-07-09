@@ -1,0 +1,49 @@
+{
+  "id": "dec_45a4c23180",
+  "title": "v0.36.0: parsed-import constraint matcher (forbids) + auto-derive on capture — replaces the shallow regex with the precise machinery the codebase already had",
+  "status": "proposed",
+  "context": "Red-team of v0.35's `--match` regex confirmed two real holes: comment/string false-positives (incl. block-comment bodies) and submodule misses; and the SEAMLESS capture paths (correction, synthesis) still minted scope-only rules that silently go stale. The precise matcher already existed: the Veto Guard's tripwire ladder over analyzeDiff.addedDeps.",
+  "decision": "Added `forbids: { deps, symbols, patterns }` to constraints and routed matching through a single shared matchForbids (src/core/constraintmatch.ts) that HunchStore.matchTripwire now delegates to — so the Veto Guard and content-matched constraints use ONE audited matcher. The dep tier matches the PARSED import set (addedDeps) gated by importsDep on scoped lines, so comments/strings naming the module can't false-positive and a submodule (lodash/groupBy) is caught by 'lodash' (prefix). record-constraint --forbid-dep/--forbid-symbol; --match kept as a lint-grade textual fallback (now comment-stripped via matchableCode). deriveForbids() auto-extracts a forbidden dep from a NEGATIVE natural-language rule ('never import lodash' -> deps:['lodash']; gated on a negative cue so 'always use react' never forbids react; stop-token list); wired into buildCorrectionConstraint (Never-Twice) and as a record-constraint fallback. Content-matched rules stay staleness-immune (isStrictBlocker stale=false). buildCheckReport + blockingInScope both use it (the hook parses imports from proposed lines via importedDeps).",
+  "consequences": [
+    "The v0.35 confirmed edges are gone BY CONSTRUCTION (the dep tier parses the import, not raw text): comment FP, block-comment-body FP, string FP, and the submodule miss — all fixed.",
+    "Never-Twice corrections now mint PRECISE, staleness-immune enforcement automatically — the seamless path the original 'is it creating real impact?' question was about. This is the highest-value change of the arc.",
+    "Recommended usage: --forbid-dep <pkg> for import rules (or just record 'never import X' and it auto-derives); --forbid-symbol for identifiers; --match only for genuinely textual rules.",
+    "Still NOT a bypass-proof boundary: dynamic import / aliasing / re-export can route around it (it's a deterministic guard, positioned as such in docs). And deriveForbids is heuristic — it only fires on negative-cue + import/use verbs, conservative by design (misses are safe, over-derivation gated).",
+    "Tests: test/contentmatch.test.ts rewritten (11 cases); full suite 353 pass / 1 skip; demo/real-world-scenarios.sh 8/8; pre-0.36 constraints migrate via Zod default. Shared-matcher refactor left all veto/hookpolicy tests green.",
+    "Shipped v0.36.0 to npm (live). The cross-client delivery gap (5/6 assistants lack an edit-time hook) remains the next, separate initiative."
+  ],
+  "alternatives_rejected": [],
+  "rejected_tripwires": [],
+  "related_components": [],
+  "related_files": [
+    "src/core/constraintmatch.ts",
+    "src/store/hunchStore.ts",
+    "src/core/hookpolicy.ts",
+    "src/core/correction.ts",
+    "src/cli/index.ts",
+    "test/contentmatch.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-06-26T20:32:52.891Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 0.95,
+    "evidence": [
+      "src/core/constraintmatch.ts",
+      "src/store/hunchStore.ts",
+      "src/core/hookpolicy.ts",
+      "src/core/correction.ts",
+      "src/cli/index.ts",
+      "test/contentmatch.test.ts"
+    ]
+  },
+  "date": "2026-06-26T20:32:52.891Z"
+}

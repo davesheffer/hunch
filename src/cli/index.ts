@@ -65,6 +65,8 @@ import {
   stopVerdict,
 } from "../core/pipeline.js";
 import { draftDuplicateOf } from "../core/dupdetect.js";
+import { planAutoReview, planMutations, type AutoReviewPlan, type AutoReviewEntry } from "../core/autoreview.js";
+import type { RelevanceVerdict, ExistingDecisionRef } from "../synthesis/provider.js";
 import { loadGoldenSet, evaluateGraphLift } from "../eval/harness.js";
 import { loadGuardCases, evalGuards, generateGuardCases } from "../eval/guards.js";
 import { computeDrift } from "../core/drift.js";
@@ -1782,6 +1784,83 @@ program
     }
     store.close();
   });
+
+// ---- auto-review (harness-driven triage) ----------------------------------
+/** One line per plan entry. */
+function printAutoEntry(e: AutoReviewEntry): void {
+  console.log(`  ${e.d.id}  ${e.d.title.slice(0, 66)}\n      ${dim(e.reason)}`);
+}
+
+program
+  .command("auto-review")
+  .description("Harness-driven draft triage: delegate relevance to the coding-assistant CLI, then dedup, auto-confirm the verified+relevant, and delete duplicates/irrelevant. Dry-run unless --apply.")
+  .option("--apply", "execute the plan (accept/delete). Without it, print the plan and change nothing.")
+  .option("--min-grounded <n>", "grounded-ness threshold for the auto-accept gate", String(READY_MIN_GROUNDED))
+  .option("--min-reject-confidence <n>", "minimum harness confidence to DELETE an irrelevant draft (else kept for a human)", "0.7")
+  .option("--no-llm", "skip the harness judgment (dedup + grounding only — no relevance deletion)")
+  .action(async (opts: { apply?: boolean; minGrounded?: string; minRejectConfidence?: string; llm?: boolean }) => {
+    const { store, root } = storeFor();
+    try {
+      const minGrounded = Number.isFinite(Number(opts.minGrounded)) ? Number(opts.minGrounded) : READY_MIN_GROUNDED;
+      const minRejectConfidence = Number.isFinite(Number(opts.minRejectConfidence)) ? Number(opts.minRejectConfidence) : 0.7;
+      const all = store.json.loadAll("decisions");
+      // Same draft set `hunch review` / `hunch status` triage.
+      const drafts = all.filter((d) => d.status === "proposed" || d.provenance.confidence < 0.6);
+      if (!drafts.length) { console.log("✓ No drafts to auto-review."); return; }
+
+      // Delegate relevance to the harness (subscription CLI) — feature-detected,
+      // and any per-draft failure degrades to "not judged" (kept for a human).
+      const verdicts = new Map<string, RelevanceVerdict>();
+      if (opts.llm !== false) {
+        const provider = await selectProvider();
+        if (provider.judgeDraft) {
+          // The candidate pool for duplicate_of / restatement: the LIVE, vouched records.
+          const existing: ExistingDecisionRef[] = all
+            .filter((d) => d.provenance.source.includes("human_confirmed") && d.status !== "superseded" && d.status !== "rejected")
+            .map((d) => ({ id: d.id, title: d.title, decision: d.decision }));
+          console.log(`Judging ${drafts.length} draft(s) via ${provider.name} (subscription)…`);
+          for (const d of drafts) {
+            try {
+              verdicts.set(d.id, await provider.judgeDraft(d, existing.filter((e) => e.id !== d.id)));
+            } catch {
+              /* transient / unparseable — leave unjudged, planner keeps it for a human */
+            }
+          }
+        } else {
+          console.log(dim("No subscription CLI available — relevance judgment skipped (dedup + grounding only)."));
+        }
+      }
+
+      const plan = planAutoReview(drafts, all, verdicts, { minGrounded, minRejectConfidence });
+      printAutoReviewPlan(plan);
+
+      if (!opts.apply) {
+        const n = planMutations(plan);
+        console.log(`\n${dim(`Dry run — nothing changed. Re-run with --apply to ${n ? `apply ${n} change(s)` : "confirm (no changes)"}.`)}`);
+        return;
+      }
+
+      // Apply: accept the verified+relevant, delete duplicates + irrelevant.
+      let accepted = 0, deleted = 0, armedTotal = 0;
+      for (const e of plan.accept) { armedTotal += acceptDecision(store, e.d).armed; accepted++; }
+      for (const e of [...plan.rejectDuplicate, ...plan.rejectIrrelevant]) { if (store.json.delete("decisions", e.d.id)) deleted++; }
+      if (accepted || deleted) {
+        store.reindex();
+        if (accepted) refreshExistingGrounding(root, store); // confirmations must reach every assistant's grounding
+      }
+      console.log(`\n✓ auto-review applied: ${accepted} accepted${armedTotal ? ` (${armedTotal} tripwire(s) now blocking)` : ""}, ${deleted} deleted, ${plan.keep.length} kept for review.`);
+    } finally {
+      store.close();
+    }
+  });
+
+/** Print the four buckets of an auto-review plan (skipping empty ones). */
+function printAutoReviewPlan(plan: AutoReviewPlan): void {
+  if (plan.accept.length) { console.log(`\n✓ ACCEPT — verified, grounded, harness-relevant (${plan.accept.length}):`); plan.accept.forEach(printAutoEntry); }
+  if (plan.rejectDuplicate.length) { console.log(`\n✗ DELETE (duplicate) — restates an accepted record (${plan.rejectDuplicate.length}):`); plan.rejectDuplicate.forEach(printAutoEntry); }
+  if (plan.rejectIrrelevant.length) { console.log(`\n✗ DELETE (irrelevant) — harness judged not worth keeping (${plan.rejectIrrelevant.length}):`); plan.rejectIrrelevant.forEach(printAutoEntry); }
+  if (plan.keep.length) { console.log(`\n⏳ KEEP for human review (${plan.keep.length}):`); plan.keep.forEach(printAutoEntry); }
+}
 
 // ---- mcp ------------------------------------------------------------------
 program

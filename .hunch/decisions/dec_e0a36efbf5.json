@@ -1,0 +1,44 @@
+{
+  "id": "dec_e0a36efbf5",
+  "title": "Delivery test: edit-time hook DELIVERS+DENIES on normal repos; real gaps are (a) a symlink-path bug that silently no-ops the hook and (b) staleness retracting the commit/CI hard-block",
+  "status": "proposed",
+  "context": "Heeding was proven (100→0%). Open question was DELIVERY: does Hunch actually get the right rule in front of the model at the right moment, via the real hook/MCP path (not hand-placed)? Ran the hook end-to-end in throwaway repos.",
+  "decision": "Built a fresh repo + a `record-constraint --scope src/** --severity blocking` rule, then fired the real `hunch hook` PreToolUse event and the strict check. FIRST run (under /var/folders, a macOS symlink to /private/var) the hook emitted 0 bytes — looked like a delivery failure. RE-RAN under a non-symlinked $HOME path: advisory hook delivered 307 bytes (full '# Hunch context' incl. the invariant) and strict hook returned decision:deny. So the auto-push hook WORKS on normal repos; the 0-byte run was a test artifact. Root cause located: toRepoRel(root,abs)=relative() with no realpath normalization (cli/index.ts:1608) — under a symlinked root the relative path gets a '..' prefix and the hook's out-of-repo guard bails silently (same class as the earlier isLinkedWorktree /var fix). Separately, confirmed (under $HOME, not a path artifact): staged change to a guarded file blocks at --strict (exit 1), but once the change is COMMITTED, `hunch check --commit --strict` returns exit 0 — the rule is treated as stale because the file's last commit post-dates the rule's last_verified, so the commit/CI gate downgrades to advisory.",
+  "consequences": [
+    "CORRECTION to the prior session narrative: the automatic edit-time hook is NOT dormant on normal repos — it delivers context (advisory) and denies (strict). Almost reported a false 'hook is broken'; caught by re-testing on a clean path.",
+    "REAL BUG (narrow but genuine): repos under a symlinked root (/var, /tmp, some CI/enterprise/home-symlink setups) silently get ZERO hook delivery, because toRepoRel doesn't realpath-normalize root+abs before relative(). Cheap, safe fix: realpathSync both before relative(). Same fix pattern already applied to isLinkedWorktree.",
+    "REAL ENFORCEMENT LIMIT: the freshness gate retracts the COMMIT/CI strict hard-block once the guarded file is committed after the rule was last verified (the normal file lifecycle). Edit-time strict deny still bit in the test even post-commit, so the inconsistency between the edit-hook strict path and the commit/check strict path is worth understanding — but the CI guard (check --commit/--base) is where teeth quietly relax. This is the same 'stale → warn not block' the guard-eval measured and the live CI guard showed on PR #5.",
+    "FIX DIRECTION for enforcement: auto-bump a rule's last_verified when a commit touches the guarded file WITHOUT violating it (rule demonstrably still holds) so it stays fresh and keeps its commit/CI teeth; only a violating change should face the gate. Or add a 'permanent invariant' flag that opts out of staleness."
+  ],
+  "alternatives_rejected": [
+    "Report the hook as broken based on the /var run (rejected — it was a macOS symlink artifact; re-test on $HOME showed 307 bytes + deny).",
+    "Treat staleness-downgrade as fine (rejected — it silently relaxes the CI guard exactly over a file's normal lifecycle; it's the mechanism behind 'rules went stale')."
+  ],
+  "rejected_tripwires": [],
+  "related_components": [],
+  "related_files": [
+    "src/cli/index.ts",
+    "src/store/hunchStore.ts",
+    "src/core/strictgate.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-06-26T19:40:31.317Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 0.95,
+    "evidence": [
+      "src/cli/index.ts",
+      "src/store/hunchStore.ts",
+      "src/core/strictgate.ts"
+    ]
+  },
+  "date": "2026-06-26T19:40:31.317Z"
+}

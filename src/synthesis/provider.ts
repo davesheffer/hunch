@@ -19,6 +19,7 @@
 import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
 import { summarizeDiff, type DiffAnalysis } from "../extractors/diff.js";
+import type { Decision } from "../core/types.js";
 
 const IS_WIN = process.platform === "win32";
 
@@ -147,6 +148,29 @@ export interface BugDraft {
   source: string;
 }
 
+/** A harness judgment of one auto-drafted decision, used by `hunch auto-review`
+ *  to decide keep vs delete. `relevant` = does this record a real, reusable design
+ *  choice worth keeping (not noise, not a mechanical restatement)? `duplicate_of`
+ *  names an existing decision id this merely restates. The judge NEVER approves —
+ *  approval stays gated on the Critic's grounding (dec_a466655539); this only adds
+ *  the "is it worth keeping at all" signal the deterministic layers can't express. */
+export interface RelevanceVerdict {
+  relevant: boolean;
+  /** 0..1 confidence in the relevance call. */
+  confidence: number;
+  /** id of an existing decision this draft duplicates, or null. */
+  duplicate_of: string | null;
+  /** one-line justification (for the review plan / audit trail). */
+  reason: string;
+}
+
+/** A decision already in the store, reduced to what the relevance judge needs. */
+export interface ExistingDecisionRef {
+  id: string;
+  title: string;
+  decision: string;
+}
+
 export interface CommitInput {
   subject: string;
   body: string;
@@ -177,6 +201,10 @@ export interface SynthProvider {
    *  (API keys stripped) — so callers must feature-detect and degrade to a
    *  deterministic template when absent. */
   draftProse?(prompt: string): Promise<string>;
+  /** Optional harness judgment of an auto-drafted decision's relevance, for
+   *  `hunch auto-review`. Same subscription-only run() path (API keys stripped);
+   *  only the LLM-backed CLI providers implement it, so callers feature-detect. */
+  judgeDraft?(draft: Decision, existing: ExistingDecisionRef[]): Promise<RelevanceVerdict>;
 }
 
 const SYSTEM = `You are the synthesis engine of an Engineering Memory OS. You turn raw
@@ -214,6 +242,21 @@ const BUG_TOOL = {
       severity: { type: "string", enum: ["low", "medium", "high", "critical"] },
     },
     required: ["title", "symptom", "root_cause", "severity"],
+  },
+};
+
+const RELEVANCE_TOOL = {
+  name: "emit_relevance",
+  description: "Judge whether an auto-drafted decision is worth keeping in the memory graph.",
+  input_schema: {
+    type: "object" as const,
+    properties: {
+      relevant: { type: "boolean", description: "true if this records a REAL, reusable design choice worth keeping. false if it is noise: a mechanical restatement of the diff, a trivial/obvious change, or content unsupported by the evidence." },
+      confidence: { type: "number", description: "0..1 confidence in the relevant call. Be honest; low when unsure." },
+      duplicate_of: { type: ["string", "null"], description: "id (dec_...) of an existing decision this merely restates, from the EXISTING DECISIONS list. null if none." },
+      reason: { type: "string", description: "one short line justifying the call." },
+    },
+    required: ["relevant", "confidence", "duplicate_of", "reason"],
   },
 };
 
@@ -305,6 +348,16 @@ abstract class CliSynthProvider implements SynthProvider {
     const text = await this.run(`${VERIFY_SYSTEM}\n\n${verifyPrompt(input, draft)}\n\n${jsonInstruction(VERIFY_TOOL.input_schema)}`);
     const verdict = verdictFromText(text);
     if (!verdict) throw new Error(`${this.name}: no usable verdict JSON in output`);
+    return verdict;
+  }
+
+  /** Judge whether an auto-drafted decision is worth keeping (for auto-review).
+   *  Same subscription-only run() path (API keys stripped). Throws on unusable
+   *  output so the caller can degrade to a keep-for-human verdict. */
+  async judgeDraft(draft: Decision, existing: ExistingDecisionRef[]): Promise<RelevanceVerdict> {
+    const text = await this.run(`${RELEVANCE_SYSTEM}\n\n${relevancePrompt(draft, existing)}\n\n${jsonInstruction(RELEVANCE_TOOL.input_schema)}`);
+    const verdict = relevanceFromText(text);
+    if (!verdict) throw new Error(`${this.name}: no usable relevance JSON in output`);
     return verdict;
   }
 }
@@ -707,6 +760,42 @@ function verifyPrompt(input: CommitInput, draft: DecisionDraft): string {
     `  alternatives_rejected:\n${alts}`,
     `\nReturn grounded (0..1) and the VERBATIM alternatives_rejected / consequences the evidence does NOT support.`,
   ].filter(Boolean).join("\n\n");
+}
+
+const RELEVANCE_SYSTEM = `You are a strict curator for an Engineering Memory OS. You are given ONE auto-drafted
+decision and a list of decisions ALREADY in the graph. Decide if the draft is worth keeping:
+a REAL, reusable design choice (an architectural or policy decision a future engineer would
+want to know). Mark it NOT relevant if it merely restates what the diff mechanically did, is
+trivial/obvious, or is a near-duplicate of an existing decision (name that decision's id in
+duplicate_of). When genuinely unsure, keep it (relevant=true, low confidence) — deletion is
+destructive.`;
+
+function relevancePrompt(draft: Decision, existing: ExistingDecisionRef[]): string {
+  const ex = existing.length
+    ? existing.map((e) => `  ${e.id}: ${e.title} — ${e.decision.slice(0, 160)}`).join("\n")
+    : "  (none)";
+  return [
+    `DRAFT UNDER REVIEW (id ${draft.id}):`,
+    `  title: ${draft.title}`,
+    `  decision: ${(draft.decision ?? "").slice(0, 800)}`,
+    (draft.alternatives_rejected ?? []).length ? `  alternatives_rejected:\n${(draft.alternatives_rejected ?? []).map((a) => `    - ${a}`).join("\n")}` : "",
+    (draft.related_files ?? []).length ? `  related_files: ${(draft.related_files ?? []).join(", ")}` : "",
+    `\nEXISTING DECISIONS (candidates for duplicate_of):\n${ex}`,
+    `\nReturn relevant, confidence (0..1), duplicate_of (an existing id or null), and a one-line reason.`,
+  ].filter(Boolean).join("\n\n");
+}
+
+/** Map model text → RelevanceVerdict, or null when nothing usable parses (→ the
+ *  caller keeps the draft for a human). Tolerant of missing/loose fields. */
+export function relevanceFromText(text: string): RelevanceVerdict | null {
+  for (const obj of extractJsonObjects(text)) {
+    if (typeof obj.relevant !== "boolean") continue; // the one required signal
+    const dup = typeof obj.duplicate_of === "string" && obj.duplicate_of.trim() ? obj.duplicate_of.trim() : null;
+    const conf = typeof obj.confidence === "number" ? clamp01(obj.confidence) : 0.5;
+    const reason = typeof obj.reason === "string" ? obj.reason.trim() : "";
+    return { relevant: obj.relevant, confidence: conf, duplicate_of: dup, reason };
+  }
+  return null;
 }
 
 /** Map model text → VerifyVerdict, or null when nothing usable parses (→ the caller

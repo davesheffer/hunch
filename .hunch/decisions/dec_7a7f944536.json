@@ -1,0 +1,54 @@
+{
+  "id": "dec_7a7f944536",
+  "title": "VS Code extension gains a GUI command surface: review queue + curated command hub",
+  "topic": "vscode-extension-gui-surface",
+  "status": "accepted",
+  "context": "User asked to continue developing the VS Code extension and to let a human drive Hunch through a graphical interface for the commands (\"at least some\"). The extension (v0.2.1) was a mature read-only viewer; the recorded roadmap (dec_df253f50b4) committed the next build to a review-queue UI for draft triage inside this extension.",
+  "decision": "Extend the existing VS Code extension (v0.2.1 -> v0.3.0) with three GUI surfaces so a human can drive Hunch from the editor, not just a terminal: (1) a Review Queue section at the top of the activity-bar tree that segments drafts exactly like `hunch review` — Ready-to-confirm (Critic-verified, grounded >= 0.7) vs Needs-scrutiny (worst-confidence-first), with inline Confirm/Edit/Reject per draft and batch Confirm-verified / Reject-duplicates on the group nodes; (2) a 'Run Hunch Command…' QuickPick hub (src/commands.ts, HUNCH_COMMANDS) over a CURATED set of ~15 human-driven verbs — now/status/doctor/fragile/stale/drift/check/conform/impact/query/why/timeline/heal/reconcile-topics/review — rendering CLI stdout (ANSI-stripped) in a webview; (3) status/health surfaced through that hub rather than a blocking tree section, keeping the tree a fast pure-JSON read. All writes delegate to the `hunch` CLI via a single seam (src/cli.ts runHunch/runHunchWithProgress) — the extension never writes .hunch/ JSON itself. Draft segmentation is a faithful port of src/core/reviewqueue.ts into src/hunchData.ts (reviewQueue/reviewDrafts/parseSynth) so the GUI and CLI never diverge.",
+  "consequences": [
+    "The on-roadmap review-queue UI (dec_df253f50b4) is shipped; drafts are now triageable from the editor.",
+    "New modules: vscode-extension/src/cli.ts, review.ts, commands.ts; hunchData.ts gains the reviewQueue port.",
+    "reviewqueue.ts logic is now duplicated (ported) in the extension — if the CLI's partition rules change, hunchData.ts must be updated in lockstep."
+  ],
+  "alternatives_rejected": [
+    "GUI-wrap all ~40 CLI commands: most are setup/CI/plumbing (init, mcp, hook, ci, migrate, merge-driver, embed, backfill, sync) with no interactive value — a curated ~15-verb hub covers the human-driven surface without 40 hand-built forms.",
+    "Build the review queue as a dedicated webview panel with cards/edit-in-place: heavier than the current viewer's tree-based style; user chose the lighter tree-section + inline-actions approach, and editing is served by opening the draft's JSON file (the CLI owns the store).",
+    "Drive Status/health from a blocking tree section that shells out on every render: would slow the pure-JSON tree (git + CLI on refresh); surfacing it on-demand via the command hub keeps the tree fast.",
+    "Have the extension write accept/reject directly to .hunch/ JSON: violates the standing 'delegate all writes to CLI; extension is a pure JSON reader' invariant."
+  ],
+  "rejected_tripwires": [],
+  "related_components": [
+    "cmp_555e43ab1a"
+  ],
+  "related_files": [
+    "vscode-extension/src/extension.ts",
+    "vscode-extension/src/hunchData.ts",
+    "vscode-extension/src/review.ts",
+    "vscode-extension/src/commands.ts",
+    "vscode-extension/src/cli.ts",
+    "vscode-extension/package.json"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-07-09T03:25:24.057Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 0.95,
+    "evidence": [
+      "vscode-extension/src/extension.ts",
+      "vscode-extension/src/hunchData.ts",
+      "vscode-extension/src/review.ts",
+      "vscode-extension/src/commands.ts",
+      "vscode-extension/src/cli.ts",
+      "vscode-extension/package.json"
+    ]
+  },
+  "date": "2026-07-09T03:25:24.057Z"
+}

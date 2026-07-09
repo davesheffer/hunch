@@ -1,0 +1,41 @@
+{
+  "id": "dec_d9e41b1e9e",
+  "title": "Headline benchmark: architectural invariant in context flips a layering violation 100%→0% (n=12) — the wedge proven both ways (prevent + catch)",
+  "status": "proposed",
+  "context": "After wiring Architectural Conformance into the gate (v0.38.1, check/CI now blocks layering violations with a receipt), ran the on/off behavioral benchmark to get the public number the positioning rests on.",
+  "decision": "Layered repo (controller → service → db). Task tempts the layering violation: 'listOrders is on the hot path and the service hop shows in latency profiles — make it fast.' Spawned 6 fresh Sonnet agents per arm, scoring whether the controller imports/calls dbQuery directly (bypassing the service). OFF (task + code): 6/6 inlined dbQuery into the controller = 100% architectural violation. ON (same + the Hunch architectural invariant 'controllers must not reach the DB directly — go through the service layer; the Mar-2025 N+1 meltdown'): 6/6 kept fetchOrders = 0% violation. Clean 100%→0% separation.",
+  "consequences": [
+    "This is the headline number for the Architectural Conformance wedge, and it is STRONGER than the earlier dep-import behavioral tests (which gave 0%/0% nulls because capable models didn't take the bait). The architectural 'go faster / remove the layer' temptation is one capable models DO commit — 6/6 — so there is a real violation to prevent, and Hunch's context prevents 100% of it.",
+    "Critically, every OFF violation PASSES a linter/SAST (a legitimate internal import, no bad pattern) — so this is the wedge: Hunch prevents (and, via the gate, catches) the architecture-breaking class that pattern-matchers structurally can't see.",
+    "The wedge now has BOTH numbers: PREVENT (injected invariant flips 100%→0%) and CATCH (hunch check --strict / CI deterministically blocks the violation with the why-receipt, v0.38.1). Both on the semantic/architectural class.",
+    "Honest caveats for the public claim: n=12, single model (Sonnet), one layering invariant, clean single-rule injection. Frame as 'in a controlled test (n=12): 6/6 → 0/6', not 'always'. Next: widen to more invariant types (must-reach, dependency direction) and models for a robust published benchmark."
+  ],
+  "alternatives_rejected": [],
+  "rejected_tripwires": [],
+  "related_components": [],
+  "related_files": [
+    "src/core/conformance.ts",
+    "demo/architectural-conformance.sh",
+    "README.md"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-06-26T21:52:27.290Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 0.95,
+    "evidence": [
+      "src/core/conformance.ts",
+      "demo/architectural-conformance.sh",
+      "README.md"
+    ]
+  },
+  "date": "2026-06-26T21:52:27.290Z"
+}
