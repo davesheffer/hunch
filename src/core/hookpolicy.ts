@@ -11,6 +11,14 @@ export interface BlockingHit {
    *  ONLY the invariant — never how to disable the guard, so an autonomous agent
    *  cannot be coached into lowering enforcement to get its edit through. */
   reason: string;
+  /** Structured provenance for the catch-log (core/events.ts). `reason` alone can't
+   *  be aggregated; these carry which rule earned its keep. A constraint block sets
+   *  `constraint`; a veto block sets `decision`. IDS ONLY — never rule TEXT: the hook
+   *  writes to the PUBLIC repo's events.log but can enforce a PRIVATE overlay rule, so
+   *  the log must stay leak-safe (an opaque id resolves to text only where that record
+   *  is visible). No subject/object/assert here — a plain block has no conformance
+   *  predicate to report (dec_6253f7e6d6). */
+  event: { kind: "constraint" | "veto"; constraint?: string; decision?: string };
 }
 
 /** Return a BlockingHit if editing `file` (repo-relative) hits a blocking
@@ -28,6 +36,7 @@ export function blockingInScope(store: HunchStore, file: string, proposedAddedLi
     if (forbids && !matchForbids(forbids, addedDeps, proposedAddedLines)) continue;
     return {
       reason: `Hunch: editing ${file} would touch a BLOCKING invariant — "${c.statement}" (${c.id}). Do not proceed unless this change is meant to modify that invariant; otherwise preserve it.`,
+      event: { kind: "constraint", constraint: c.id },
     };
   }
   for (const b of store.blastRadiusFiles(file)) {
@@ -39,6 +48,7 @@ export function blockingInScope(store: HunchStore, file: string, proposedAddedLi
       if (effectiveForbids(c)) continue;
       return {
         reason: `Hunch: ${file} is in the blast radius of a BLOCKING invariant — "${c.statement}" (${c.id}; via ${b.file}, ${b.via} depth ${b.depth}). Verify the invariant still holds before editing.`,
+        event: { kind: "constraint", constraint: c.id },
       };
     }
   }
@@ -66,5 +76,6 @@ export function vetoInScope(store: HunchStore, file: string, proposedAddedLines:
   if (!hit) return null;
   return {
     reason: `Hunch: editing ${file} would REVERSE decision ${hit.decision} — you rejected "${hit.alternative}" and chose "${hit.chosen}". Do not re-introduce the rejected approach; preserve the chosen design.`,
+    event: { kind: "veto", decision: hit.decision },
   };
 }

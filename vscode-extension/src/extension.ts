@@ -18,25 +18,33 @@ import * as nodePath from "node:path";
 import {
   loadHunch, why, constraintsInScope, nearConstraints, isStale, sevRank,
   staleRecords, lineageChains, symbolSignals, bugsForSymbol, fragileSymbols,
-  reviewQueue, type Hunch, type Provenance, type LineageNode, type Bug, type ReviewItem,
+  reviewQueue, recordFilePath, type Hunch, type Provenance, type LineageNode, type Bug, type ReviewItem,
 } from "./hunchData.js";
 import { HunchCodeLensProvider, HunchHoverProvider } from "./providers.js";
-import { HunchDiagnostics } from "./diagnostics.js";
+import { HunchDiagnostics, HunchCodeActionProvider } from "./diagnostics.js";
 import { HunchDecorations } from "./decorations.js";
 import { showGraph, refreshGraph } from "./graph.js";
 import { runSearch } from "./search.js";
-import { acceptDraft, rejectDraft, acceptVerified, rejectDuplicates, openDraftFile, draftBrief, autoReview } from "./review.js";
-import { runCommandHub } from "./commands.js";
+import { acceptDraft, rejectDraft, acceptVerified, rejectDuplicates, openDraftFile, draftBrief } from "./review.js";
+import { runHunchWithProgress } from "./cli.js";
+import { openReviewConsole } from "./reviewConsole.js";
+import { openConsole } from "./console.js";
+import { openHome, refreshHome } from "./home.js";
+import { registerLmTools } from "./lmTools.js";
+import { fetchStats, renderStatusItem, showStatsPanel } from "./stats.js";
 
 function workspaceRoot(): string | undefined {
   return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 }
 
+/** Workspace-relative path in POSIX form. The .hunch/ graph stores forward-slash
+ *  paths, so Windows fsPath backslashes MUST be normalized here or every
+ *  `===`/`endsWith` match in hunchData silently returns nothing on Windows. */
 function relPath(file: string): string {
   const root = workspaceRoot();
-  if (!root) return file;
+  if (!root) return file.replace(/\\/g, "/");
   const prefix = root.endsWith(nodePath.sep) ? root : root + nodePath.sep;
-  return file.startsWith(prefix) ? file.slice(prefix.length) : file;
+  return (file.startsWith(prefix) ? file.slice(prefix.length) : file).replace(/\\/g, "/");
 }
 
 /** git author-date (ms) of the last commit touching a file; 0 if unknown. */
@@ -72,8 +80,8 @@ class HunchCache {
 type Cmd = { command: string; args: unknown[] };
 type Node =
   | { kind: "group"; label: string; key: string; description?: string; contextValue?: string }
-  | { kind: "leaf"; label: string; description?: string; tooltip?: string; file?: string; cmd?: Cmd; contextValue?: string; draftId?: string; icon?: string }
-  | { kind: "tree"; label: string; description?: string; tooltip?: string; file?: string; children: Node[]; contextValue?: string };
+  | { kind: "leaf"; label: string; description?: string; tooltip?: string; file?: string; cmd?: Cmd; contextValue?: string; draftId?: string; icon?: string; recordFile?: string }
+  | { kind: "tree"; label: string; description?: string; tooltip?: string; file?: string; children: Node[]; contextValue?: string; recordFile?: string };
 
 class HunchTree implements vscode.TreeDataProvider<Node> {
   private _onDidChange = new vscode.EventEmitter<void>();
@@ -148,6 +156,8 @@ class HunchTree implements vscode.TreeDataProvider<Node> {
           description: prov(c.provenance) + (isStale(c, (f) => lastChangeMs(root, f)) ? " ⚠stale" : ""),
           tooltip: `${c.id}\nscope: ${(c.scope ?? []).join(", ")}\n${c.rationale ?? ""}`,
           cmd: { command: "hunch.revealScope", args: [c.scope ?? []] },
+          contextValue: "hunch.record",
+          recordFile: recordFilePath(root, c.id) ?? undefined,
         }));
       case "decisions":
         return b.decisions.map((d) => ({
@@ -155,6 +165,8 @@ class HunchTree implements vscode.TreeDataProvider<Node> {
           description: prov(d.provenance) + (isStale(d, (f) => lastChangeMs(root, f)) ? " ⚠stale" : ""),
           tooltip: `${d.id}\n${d.decision ?? ""}`,
           file: firstFile(root, d.related_files),
+          contextValue: "hunch.record",
+          recordFile: recordFilePath(root, d.id) ?? undefined,
         }));
       case "bugs":
         return b.bugs.map((bug) => bugLeaf(root, bug));
@@ -219,6 +231,8 @@ function bugLeaf(root: string, bug: Bug): Node {
     description: `${prov(bug.provenance)}${marks ? "  " + marks : ""}`,
     tooltip: `${bug.id}\nsymptom: ${bug.symptom ?? ""}\nroot cause: ${bug.root_cause ?? ""}${lineage}`,
     file: firstFile(root, bug.affected_files),
+    contextValue: "hunch.record",
+    recordFile: recordFilePath(root, bug.id) ?? undefined,
   };
 }
 
@@ -272,16 +286,6 @@ function showBrief(title: string, sections: Array<{ h: string; lines: string[] }
     h2{border-bottom:1px solid var(--vscode-panel-border)} h3{margin-top:1.2em}
     li{margin:.3em 0;line-height:1.4} code{color:var(--vscode-textPreformat-foreground)}
   </style></head><body><h2>${esc(title)}</h2>${body || "<p><em>Hunch has nothing recorded for this yet — it is still learning this file.</em></p>"}</body></html>`;
-}
-
-/** Render CLI output (from the command hub) in a self-contained webview. */
-function showOutput(title: string, body: string): void {
-  const panel = vscode.window.createWebviewPanel("hunchOutput", `Hunch — ${title}`, vscode.ViewColumn.Beside, {});
-  panel.webview.html = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
-    body{font-family:var(--vscode-editor-font-family,monospace);padding:8px 16px;color:var(--vscode-foreground);background:var(--vscode-editor-background)}
-    h2{font-family:var(--vscode-font-family);border-bottom:1px solid var(--vscode-panel-border);font-size:14px}
-    pre{white-space:pre-wrap;word-break:break-word;font-size:12px;line-height:1.45}
-  </style></head><body><h2><code>${esc(title)}</code></h2><pre>${esc(body)}</pre></body></html>`;
 }
 
 /** Resolve a draft id from either a raw id (command arg) or a tree Node (context menu). */
@@ -357,11 +361,9 @@ function updateStatusBar(item: vscode.StatusBarItem, cache: HunchCache): void {
 
 // ---------------------------------------------------------------------------
 // Write-path: delegate to the `hunch` CLI (never write .hunch/ JSON directly).
+// Both commands go through the shared cli.ts seam — argv arrays, no hand-rolled
+// shell strings (quoting/injection and the Windows .cmd shim live in ONE place).
 // ---------------------------------------------------------------------------
-function cliCommand(): string {
-  return vscode.workspace.getConfiguration("hunch").get("cliPath", "hunch");
-}
-
 async function recordConstraint(root: string, cache: HunchCache, onDone: () => void): Promise<void> {
   const activeFile = vscode.window.activeTextEditor ? relPath(vscode.window.activeTextEditor.document.uri.fsPath) : "";
   const statement = await vscode.window.showInputBox({ title: "Record invariant", prompt: "The invariant the codebase must not break", placeHolder: "vectors are derived, never the source of truth" });
@@ -372,26 +374,15 @@ async function recordConstraint(root: string, cache: HunchCache, onDone: () => v
   if (!severity) return;
   const rationale = await vscode.window.showInputBox({ title: "Record invariant — rationale (optional)", prompt: "Why it must hold" }) ?? "";
 
-  const q = (s: string) => `"${s.replace(/"/g, '\\"')}"`;
-  const args = [`record-constraint`, q(statement), `--severity`, severity];
-  if (scope.trim()) args.push(`--scope`, q(scope.trim()));
-  if (rationale.trim()) args.push(`--rationale`, q(rationale.trim()));
-  const cmd = `${cliCommand()} ${args.join(" ")}`;
-
-  await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: "Hunch: recording invariant…" }, () =>
-    new Promise<void>((resolve) => {
-      cp.exec(cmd, { cwd: root }, (err, stdout, stderr) => {
-        if (err) {
-          vscode.window.showErrorMessage(`Hunch CLI failed (${cliCommand()}). ${stderr || err.message}. Set "hunch.cliPath" if the CLI is elsewhere.`);
-        } else {
-          vscode.window.showInformationMessage((stdout.trim().split("\n").pop()) || "Hunch: invariant recorded.");
-          cache.reload();
-          onDone();
-        }
-        resolve();
-      });
-    }),
-  );
+  const args = ["record-constraint", statement, "--severity", severity];
+  if (scope.trim()) args.push("--scope", scope.trim());
+  if (rationale.trim()) args.push("--rationale", rationale.trim());
+  const res = await runHunchWithProgress(root, args, "Hunch: recording invariant…");
+  if (res.ok) {
+    vscode.window.showInformationMessage(res.stdout.trim().split("\n").pop() || "Hunch: invariant recorded.");
+    cache.reload();
+    onDone();
+  }
 }
 
 async function recordBug(root: string, cache: HunchCache, onDone: () => void): Promise<void> {
@@ -399,17 +390,12 @@ async function recordBug(root: string, cache: HunchCache, onDone: () => void): P
   if (!test) return;
   const message = await vscode.window.showInputBox({ title: "Record bug — failure", prompt: "Failure message / stack" });
   if (!message) return;
-  const q = (s: string) => `"${s.replace(/"/g, '\\"')}"`;
-  const cmd = `${cliCommand()} record-bug --test ${q(test)} --message ${q(message)}`;
-  await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: "Hunch: recording bug…" }, () =>
-    new Promise<void>((resolve) => {
-      cp.exec(cmd, { cwd: root }, (err, stdout, stderr) => {
-        if (err) vscode.window.showErrorMessage(`Hunch CLI failed (${cliCommand()}). ${stderr || err.message}.`);
-        else { vscode.window.showInformationMessage(stdout.trim().split("\n").pop() || "Hunch: bug recorded."); cache.reload(); onDone(); }
-        resolve();
-      });
-    }),
-  );
+  const res = await runHunchWithProgress(root, ["record-bug", "--test", test, "--message", message], "Hunch: recording bug…");
+  if (res.ok) {
+    vscode.window.showInformationMessage(res.stdout.trim().split("\n").pop() || "Hunch: bug recorded.");
+    cache.reload();
+    onDone();
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -446,6 +432,16 @@ export function activate(context: vscode.ExtensionContext): void {
   const status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
   context.subscriptions.push(status);
 
+  // The ambient compounding-value item: a pane of glass over `hunch stats --json`
+  // (dec_6253f7e6d6). Refreshed on activation + on any .hunch/ change (incl. the
+  // append-only events.log) — never on keystroke, since it's repo-global, not
+  // per-file. Shelling out is async, so it lands a beat after the graph changes.
+  const statsItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 99);
+  context.subscriptions.push(statsItem);
+  const refreshStats = async (): Promise<void> => {
+    renderStatusItem(statsItem, root ? await fetchStats(root) : null);
+  };
+
   const codeLens = new HunchCodeLensProvider(() => cache.get(), relPath);
   const hover = new HunchHoverProvider(() => cache.get(), relPath);
   const diagnostics = new HunchDiagnostics(() => cache.get(), relPath);
@@ -459,7 +455,15 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.languages.registerCodeLensProvider(SELECTOR, codeLens),
     vscode.languages.registerHoverProvider(SELECTOR, hover),
+    vscode.languages.registerCodeActionsProvider(
+      { scheme: "file" },
+      new HunchCodeActionProvider(() => cache.get(), (kind, id) => nodePath.join(root ?? "", ".hunch", kind, `${id}.json`)),
+      HunchCodeActionProvider.metadata,
+    ),
   );
+
+  // Language-model tools: zero-MCP-setup graph access for any chat agent.
+  registerLmTools(context, () => cache.get(), () => root);
 
   const refreshActive = () => {
     const ed = vscode.window.activeTextEditor;
@@ -472,6 +476,8 @@ export function activate(context: vscode.ExtensionContext): void {
     tree.refresh();
     codeLens.refresh();
     refreshActive();
+    void refreshStats();
+    refreshHome();
     const h = cache.get();
     if (h) refreshGraph(h);
   };
@@ -555,12 +561,28 @@ export function activate(context: vscode.ExtensionContext): void {
       if (root) void rejectDuplicates(root, refreshAll);
     }),
     vscode.commands.registerCommand("hunch.autoReview", () => {
-      if (root) void autoReview(root, showOutput, refreshAll);
+      if (root) openReviewConsole(root, refreshAll);
     }),
-    // --- command hub: drive the CLI from a GUI -----------------------------
+    // --- Hunch Home: the one screen you open every day ----------------------
+    vscode.commands.registerCommand("hunch.home", () => {
+      if (!root) return void vscode.window.showWarningMessage("No workspace folder open.");
+      openHome({ root, getHunch: () => cache.get(), lastChange: (f) => lastChangeMs(root, f), onWrite: refreshAll });
+    }),
+    // --- the Hunch Console: chat-style surface over the curated CLI verbs ---
     vscode.commands.registerCommand("hunch.runCommand", () => {
       if (!root) return void vscode.window.showWarningMessage("No workspace folder open.");
-      void runCommandHub(root, showOutput, refreshAll);
+      openConsole(root, () => cache.get(), refreshAll);
+    }),
+    // --- open any record's JSON from a tree leaf ----------------------------
+    vscode.commands.registerCommand("hunch.openRecord", (node?: Node) => {
+      const file = node && node.kind !== "group" ? node.recordFile : undefined;
+      if (file) void vscode.commands.executeCommand("vscode.open", vscode.Uri.file(file));
+      else vscode.window.showInformationMessage("Hunch: no record file for this entry (it may live in the private overlay).");
+    }),
+    // --- compounding-value panel (pane of glass over `hunch stats --json`) --
+    vscode.commands.registerCommand("hunch.stats", async () => {
+      if (!root) return void vscode.window.showWarningMessage("No workspace folder open.");
+      showStatsPanel(await fetchStats(root));
     }),
   );
 
@@ -571,6 +593,12 @@ export function activate(context: vscode.ExtensionContext): void {
     watcher.onDidCreate(refreshAll);
     watcher.onDidDelete(refreshAll);
     context.subscriptions.push(watcher);
+    // The catch-log is append-only .log, not .json — a gate firing must refresh the
+    // ambient number without a full graph reload. Cheap: just re-shell `hunch stats`.
+    const logWatcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(root, ".hunch/events.log"));
+    logWatcher.onDidChange(() => void refreshStats());
+    logWatcher.onDidCreate(() => void refreshStats());
+    context.subscriptions.push(logWatcher);
   }
 
   // keep in-editor signal in sync with the active editor / edits
@@ -587,6 +615,7 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   refreshActive();
+  void refreshStats();
 }
 
 export function deactivate(): void {

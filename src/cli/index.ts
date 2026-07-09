@@ -37,7 +37,7 @@ import { deriveForbids, effectiveForbids } from "../core/constraintmatch.js";
 import type { Runbook } from "../core/types.js";
 import { extractInlineIntent } from "../extractors/comments.js";
 import { renderText, renderMarkdown, renderImpact, reportFailsStrict, type CheckReport } from "../core/checkreport.js";
-import { partitionReview, READY_MIN_GROUNDED, type ReviewItem } from "../core/reviewqueue.js";
+import { partitionReview, parseSynth, isReady, READY_MIN_GROUNDED, type ReviewItem } from "../core/reviewqueue.js";
 import { installPostCommitHook, installPreCommitHook } from "../integrations/hooks.js";
 import { ensureSharedOverlayPointer } from "../integrations/worktree.js";
 import { flushCapture } from "../integrations/sync.js";
@@ -51,6 +51,8 @@ import { healClaudeConfigCaseSplit } from "../integrations/claudeConfig.js";
 import { formatContext, formatStructure } from "../core/format.js";
 import { readConfig, writeConfig, FIRMNESS_LEVELS, isFirmness, type Firmness } from "../core/config.js";
 import { blockingInScope, vetoInScope, proposedEditLines } from "../core/hookpolicy.js";
+import { appendEvent, readEvents } from "../core/events.js";
+import { computeStats, formatStats } from "../core/stats.js";
 import { injectionMode } from "../core/hookcache.js";
 import {
   PIPELINE_LOOP,
@@ -65,7 +67,7 @@ import {
   stopVerdict,
 } from "../core/pipeline.js";
 import { draftDuplicateOf } from "../core/dupdetect.js";
-import { planAutoReview, planMutations, type AutoReviewPlan, type AutoReviewEntry } from "../core/autoreview.js";
+import { planAutoReview, planMutations, resolveSelection, type AutoReviewPlan, type AutoReviewEntry } from "../core/autoreview.js";
 import type { RelevanceVerdict, ExistingDecisionRef } from "../synthesis/provider.js";
 import { loadGoldenSet, evaluateGraphLift } from "../eval/harness.js";
 import { loadGuardCases, evalGuards, generateGuardCases } from "../eval/guards.js";
@@ -1478,6 +1480,57 @@ program
     store.close();
   });
 
+// ---- stats (the one data contract: stock → return → compounding) ----------
+/** Parse a duration like `7d`, `24h`, `30m`, `2w` into ms. Unknown → 7d. */
+function parseSince(s: string): { ms: number; label: string } {
+  const m = /^(\d+)\s*([mhdw])$/.exec(s.trim());
+  if (!m) return { ms: 7 * 864e5, label: "7d" };
+  const n = Number(m[1]);
+  const u = m[2] as "m" | "h" | "d" | "w";
+  const unit: Record<"m" | "h" | "d" | "w", number> = { m: 6e4, h: 36e5, d: 864e5, w: 7 * 864e5 };
+  return { ms: n * unit[u], label: `${n}${u}` };
+}
+
+program
+  .command("stats")
+  .description("The compounding-value receipt: STOCK (what's accumulated) → RETURN (what it caught) → COMPOUNDING (payback). The single data source for every surface (CLI, extension, proof-curve). Read-only. Public store by default; --private unions the overlay (local terminal only).")
+  .option("--json", "emit the machine contract (schema hunch.stats/1) instead of the human receipt")
+  .option("--since <dur>", "window for 'recent' return (e.g. 7d, 24h, 2w)", "7d")
+  .option("--private", "union the private overlay (decisions/bugs/constraints + its catch-log) — never for a publicly-shared surface")
+  .action((opts: { json?: boolean; since: string; private?: boolean }) => {
+    const { store, root } = storeFor();
+    try {
+      if (opts.private && !store.hasPrivate) return fail("no private overlay configured — run `hunch private` (or `hunch shared`) first.");
+      // Public surfaces (extension status bar, proof-curve) must NEVER render a private
+      // record — a leak. Default = public store only (json.loadAll); --private unions the
+      // overlay for a LOCAL terminal glance, mirroring `hunch now --private`.
+      const load = <K extends "decisions" | "constraints" | "bugs" | "components" | "runbooks">(kind: K) =>
+        opts.private ? store.recs(kind) : store.json.loadAll(kind);
+      // Catch-log: the repo-tracked .hunch/events.log always; the overlay's own log too
+      // under --private (a private repo's gate writes there). Aggregation is union-safe.
+      const events = readEvents(hunchPaths(root));
+      if (opts.private && store.privateDir) events.push(...readEvents(hunchPathsForDir(store.privateDir)));
+      const since = parseSince(opts.since);
+      const now = Date.now();
+      const staleConstraints = store.staleness((f) => lastChangeDate(f, root)).filter((s) => s.kind === "constraint").length;
+      const stats = computeStats({
+        decisions: load("decisions"),
+        constraints: load("constraints"),
+        bugs: load("bugs"),
+        componentIds: load("components").map((c) => c.id),
+        runbooksCount: load("runbooks").length,
+        events,
+        staleConstraints,
+        now,
+        windowStart: now - since.ms,
+        windowLabel: since.label,
+      });
+      console.log(opts.private && !opts.json ? `${formatStats(stats)}  (union incl. private overlay — do not paste publicly)` : opts.json ? JSON.stringify(stats, null, 2) : formatStats(stats));
+    } finally {
+      store.close();
+    }
+  });
+
 // ---- hook (Claude Code agent-hook handler) --------------------------------
 program
   .command("hook")
@@ -1604,6 +1657,7 @@ program
         const proposedLines = proposedEditLines(evt.tool_input);
         const deny = blockingInScope(store, target, proposedLines);
         if (deny) {
+          appendEvent(paths, { at: new Date().toISOString(), file: target, ...deny.event });
           emitDeny(deny.reason);
           return;
         }
@@ -1612,6 +1666,7 @@ program
         // only human-confirmed tripwires deny.
         const vetoDeny = proposedLines.length ? vetoInScope(store, target, proposedLines) : null;
         if (vetoDeny) {
+          appendEvent(paths, { at: new Date().toISOString(), file: target, ...vetoDeny.event });
           emitDeny(vetoDeny.reason);
           return;
         }
@@ -1791,6 +1846,38 @@ function printAutoEntry(e: AutoReviewEntry): void {
   console.log(`  ${e.d.id}  ${e.d.title.slice(0, 66)}\n      ${dim(e.reason)}`);
 }
 
+/** Serialize a draft for the --json `start` event (Review Console card seed). */
+function draftCard(d: Decision, minGrounded: number): unknown {
+  const synth = parseSynth(d.provenance?.evidence);
+  return {
+    id: d.id, title: d.title, decision: d.decision, status: d.status,
+    source: d.provenance?.source ?? "?", confidence: d.provenance?.confidence ?? null,
+    alternatives_rejected: d.alternatives_rejected ?? [],
+    related_files: d.related_files ?? [],
+    synth: { grounded: synth.grounded ?? null, agreement: synth.agreement ?? null, pruned: synth.pruned ?? null, verify: synth.verify ?? null },
+    ready: isReady(d, synth, minGrounded), // Critic-verified + grounded — the auto-accept floor
+  };
+}
+
+/** Reduce a plan to id/reason/telemetry per entry for the --json `plan` event. */
+function planWire(plan: AutoReviewPlan): unknown {
+  const wire = (es: AutoReviewEntry[]) => es.map((e) => ({ id: e.d.id, reason: e.reason, grounded: e.grounded ?? null, verdict: e.verdict ?? null }));
+  return { accept: wire(plan.accept), rejectDuplicate: wire(plan.rejectDuplicate), rejectIrrelevant: wire(plan.rejectIrrelevant), keep: wire(plan.keep) };
+}
+
+/** Execute an accept/delete set against the store (shared by the whole-plan apply
+ *  and the Review Console's apply-by-id). Reindexes + refreshes grounding once. */
+function applySelection(store: HunchStore, root: string, acceptDs: Decision[], deleteDs: Decision[]): { accepted: number; deleted: number; armed: number } {
+  let accepted = 0, deleted = 0, armed = 0;
+  for (const d of acceptDs) { armed += acceptDecision(store, d).armed; accepted++; }
+  for (const d of deleteDs) { if (store.json.delete("decisions", d.id)) deleted++; }
+  if (accepted || deleted) {
+    store.reindex();
+    if (accepted) refreshExistingGrounding(root, store); // confirmations must reach every assistant's grounding
+  }
+  return { accepted, deleted, armed };
+}
+
 program
   .command("auto-review")
   .description("Harness-driven draft triage: delegate relevance to the coding-assistant CLI, then dedup, auto-confirm the verified+relevant, and delete duplicates/irrelevant. Dry-run unless --apply.")
@@ -1798,15 +1885,46 @@ program
   .option("--min-grounded <n>", "grounded-ness threshold for the auto-accept gate", String(READY_MIN_GROUNDED))
   .option("--min-reject-confidence <n>", "minimum harness confidence to DELETE an irrelevant draft (else kept for a human)", "0.7")
   .option("--no-llm", "skip the harness judgment (dedup + grounding only — no relevance deletion)")
-  .action(async (opts: { apply?: boolean; minGrounded?: string; minRejectConfidence?: string; llm?: boolean }) => {
+  .option("--json", "emit NDJSON events (start / judged / plan / applied) for tooling — the VS Code Review Console streams these; suppresses pretty output")
+  .option("--accept <ids>", "apply mode: accept EXACTLY these comma-separated draft ids (requires --apply; skips judging — the console's per-card override)")
+  .option("--delete <ids>", "apply mode: delete EXACTLY these comma-separated draft ids (requires --apply; skips judging)")
+  .action(async (opts: { apply?: boolean; minGrounded?: string; minRejectConfidence?: string; llm?: boolean; json?: boolean; accept?: string; delete?: string }) => {
     const { store, root } = storeFor();
+    const emit = (o: unknown): void => { if (opts.json) console.log(JSON.stringify(o)); };
+    const idList = (s?: string): string[] => (s ? s.split(",").map((x) => x.trim()).filter(Boolean) : []);
     try {
       const minGrounded = Number.isFinite(Number(opts.minGrounded)) ? Number(opts.minGrounded) : READY_MIN_GROUNDED;
       const minRejectConfidence = Number.isFinite(Number(opts.minRejectConfidence)) ? Number(opts.minRejectConfidence) : 0.7;
       const all = store.json.loadAll("decisions");
       // Same draft set `hunch review` / `hunch status` triage.
       const drafts = all.filter((d) => d.status === "proposed" || d.provenance.confidence < 0.6);
-      if (!drafts.length) { console.log("✓ No drafts to auto-review."); return; }
+
+      // ---- explicit apply-by-id (Review Console per-card override) -----------
+      // A HUMAN clicking Accept/Reject in the console IS the vouch, so this can
+      // confirm a draft the machine-gated planner would only KEEP — same authority
+      // as `hunch review --accept`; dec_a466655539's gate is about the MACHINE only.
+      if (opts.accept !== undefined || opts.delete !== undefined) {
+        if (!opts.apply) return fail("--accept/--delete require --apply.");
+        const sel = resolveSelection(drafts, idList(opts.accept), idList(opts.delete));
+        if (sel.unknown.length) {
+          const msg = `refusing to apply — not current drafts (moved or unknown): ${sel.unknown.join(", ")}`;
+          emit({ event: "error", message: msg });
+          return fail(msg);
+        }
+        const res = applySelection(store, root, sel.accept, sel.delete);
+        emit({ event: "applied", accepted: res.accepted, deleted: res.deleted, armed: res.armed, kept: drafts.length - res.accepted - res.deleted });
+        if (!opts.json) console.log(`✓ auto-review applied: ${res.accepted} accepted${res.armed ? ` (${res.armed} tripwire(s) now blocking)` : ""}, ${res.deleted} deleted.`);
+        return;
+      }
+
+      if (!drafts.length) {
+        emit({ event: "start", drafts: [] });
+        emit({ event: "plan", plan: planWire({ accept: [], rejectDuplicate: [], rejectIrrelevant: [], keep: [] }) });
+        if (!opts.json) console.log("✓ No drafts to auto-review.");
+        return;
+      }
+
+      emit({ event: "start", drafts: drafts.map((d) => draftCard(d, minGrounded)) });
 
       // Delegate relevance to the harness (subscription CLI) — feature-detected,
       // and any per-draft failure degrades to "not judged" (kept for a human).
@@ -1818,37 +1936,40 @@ program
           const existing: ExistingDecisionRef[] = all
             .filter((d) => d.provenance.source.includes("human_confirmed") && d.status !== "superseded" && d.status !== "rejected")
             .map((d) => ({ id: d.id, title: d.title, decision: d.decision }));
-          console.log(`Judging ${drafts.length} draft(s) via ${provider.name} (subscription)…`);
+          if (!opts.json) console.log(`Judging ${drafts.length} draft(s) via ${provider.name} (subscription)…`);
           for (const d of drafts) {
             try {
-              verdicts.set(d.id, await provider.judgeDraft(d, existing.filter((e) => e.id !== d.id)));
+              const v = await provider.judgeDraft(d, existing.filter((e) => e.id !== d.id));
+              verdicts.set(d.id, v);
+              emit({ event: "judged", id: d.id, verdict: v });
             } catch {
               /* transient / unparseable — leave unjudged, planner keeps it for a human */
+              emit({ event: "judged", id: d.id, verdict: null });
             }
           }
         } else {
-          console.log(dim("No subscription CLI available — relevance judgment skipped (dedup + grounding only)."));
+          emit({ event: "no_provider" });
+          if (!opts.json) console.log(dim("No subscription CLI available — relevance judgment skipped (dedup + grounding only)."));
         }
       }
 
       const plan = planAutoReview(drafts, all, verdicts, { minGrounded, minRejectConfidence });
-      printAutoReviewPlan(plan);
+      emit({ event: "plan", plan: planWire(plan) });
+      if (!opts.json) printAutoReviewPlan(plan);
 
       if (!opts.apply) {
-        const n = planMutations(plan);
-        console.log(`\n${dim(`Dry run — nothing changed. Re-run with --apply to ${n ? `apply ${n} change(s)` : "confirm (no changes)"}.`)}`);
+        if (!opts.json) {
+          const n = planMutations(plan);
+          console.log(`\n${dim(`Dry run — nothing changed. Re-run with --apply to ${n ? `apply ${n} change(s)` : "confirm (no changes)"}.`)}`);
+        }
         return;
       }
 
-      // Apply: accept the verified+relevant, delete duplicates + irrelevant.
-      let accepted = 0, deleted = 0, armedTotal = 0;
-      for (const e of plan.accept) { armedTotal += acceptDecision(store, e.d).armed; accepted++; }
-      for (const e of [...plan.rejectDuplicate, ...plan.rejectIrrelevant]) { if (store.json.delete("decisions", e.d.id)) deleted++; }
-      if (accepted || deleted) {
-        store.reindex();
-        if (accepted) refreshExistingGrounding(root, store); // confirmations must reach every assistant's grounding
-      }
-      console.log(`\n✓ auto-review applied: ${accepted} accepted${armedTotal ? ` (${armedTotal} tripwire(s) now blocking)` : ""}, ${deleted} deleted, ${plan.keep.length} kept for review.`);
+      // Apply the WHOLE plan (backward-compatible path): accept verified+relevant,
+      // delete duplicates + irrelevant.
+      const res = applySelection(store, root, plan.accept.map((e) => e.d), [...plan.rejectDuplicate, ...plan.rejectIrrelevant].map((e) => e.d));
+      emit({ event: "applied", accepted: res.accepted, deleted: res.deleted, armed: res.armed, kept: plan.keep.length });
+      if (!opts.json) console.log(`\n✓ auto-review applied: ${res.accepted} accepted${res.armed ? ` (${res.armed} tripwire(s) now blocking)` : ""}, ${res.deleted} deleted, ${plan.keep.length} kept for review.`);
     } finally {
       store.close();
     }

@@ -1,7 +1,8 @@
 {
   "id": "dec_f10796d487",
   "title": "Completed the corrected GOAT strategy: hunch status (activation) + cross-client grounding propagation (portability) — v0.37.0",
-  "status": "proposed",
+  "topic": null,
+  "status": "accepted",
   "context": "Final two of the four corrected-strategy priorities (capture quality + benchmark shipped in 0.36.2/0.36.3; activation + portability here).",
   "decision": "ACTIVATION (#2 advisory-first trust): added `hunch status` — an enforcement-readiness dashboard showing firmness (+ plain-English meaning), ARMED confirmed blocking invariants split precise-vs-scope-only, drafts to confirm (ready/scrutiny via partitionReview), stale rules (store.staleness), and a nudge when precise rules are armed but firmness isn't strict. Reuses existing helpers; no new infra. PORTABILITY (#3): a recorded rule now propagates to EVERY assistant's grounding, not just CLAUDE.md — root cause was that record-constraint / review --accept / --accept-verified / the record-removal path only called updateClaudeMd (CLAUDE.md), leaving AGENTS.md / Copilot / Cursor / Windsurf stale until the next index/sync. Swapped those four call sites to refreshExistingGrounding (all five docs, refresh-only), and added the same to the hunch_record_correction MCP path (public-only — a private rule must never render into committed grounding).",
   "consequences": [
@@ -38,7 +39,8 @@
       "src/mcp/server.ts",
       "src/integrations/providers.ts",
       "test/selfheal.test.ts"
-    ]
+    ],
+    "last_verified": "2026-07-09T13:28:44.557Z"
   },
   "date": "2026-06-26T21:14:31.613Z"
 }

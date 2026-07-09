@@ -8,7 +8,7 @@
  * refreshes the tree once the CLI write lands.
  */
 import * as vscode from "vscode";
-import { runHunch, runHunchWithProgress } from "./cli.js";
+import { runHunchWithProgress } from "./cli.js";
 import { decisionFilePath, type Decision, type ReviewItem } from "./hunchData.js";
 
 /** Confirm a draft → accepted/human_confirmed (arms its tripwires). */
@@ -60,42 +60,9 @@ export async function rejectDuplicates(root: string, onDone: () => void): Promis
   if (res.ok) { vscode.window.showInformationMessage(res.stdout.trim().split("\n").pop() || "Hunch: duplicates handled."); onDone(); }
 }
 
-/** Harness-driven auto-review. ALWAYS shows the dry-run plan first (delegates to
- *  `hunch auto-review`), then asks whether to apply it — a human sees exactly what
- *  would be confirmed/deleted before any mutation. `showOutput` renders the plan. */
-export async function autoReview(root: string, showOutput: (title: string, body: string) => void, onDone: () => void): Promise<void> {
-  const plan = await vscode.window.withProgress(
-    { location: vscode.ProgressLocation.Notification, title: "Hunch: auto-review — judging drafts via the harness…" },
-    () => runHunch(root, ["auto-review"], 600_000),
-  );
-  const body = stripAnsiText([plan.stdout, plan.stderr].filter((s) => s.trim()).join("\n")) || `(no output — exit ${plan.code})`;
-  showOutput("auto-review (dry run)", body);
-  if (!plan.ok) {
-    vscode.window.showErrorMessage(`Hunch auto-review failed. ${(plan.stderr || `exit ${plan.code}`).trim().split("\n").slice(-2).join(" ")}`);
-    return;
-  }
-  // Nothing to apply? (planner prints "apply 0 change(s)" / "No drafts").
-  if (/apply 0 change|No drafts to auto-review/.test(body)) {
-    vscode.window.showInformationMessage("Hunch auto-review: nothing to apply — see the plan.");
-    return;
-  }
-  const pick = await vscode.window.showWarningMessage(
-    "Apply this auto-review plan?",
-    { modal: true, detail: "Confirms the verified + harness-relevant drafts and DELETES duplicates / harness-irrelevant ones. Everything else is kept for you. See the plan panel for the exact list." },
-    "Apply plan",
-  );
-  if (pick !== "Apply plan") return;
-  const res = await runHunchWithProgress(root, ["auto-review", "--apply"], "Hunch: applying auto-review plan…");
-  if (res.ok) {
-    vscode.window.showInformationMessage(stripAnsiText(res.stdout).trim().split("\n").pop() || "Hunch: auto-review applied.");
-    onDone();
-  }
-}
-
-/** Local ANSI stripper (same as commands.stripAnsi; kept here to avoid a cycle). */
-function stripAnsiText(s: string): string {
-  return s.replace(new RegExp(String.fromCharCode(27) + "\\[[0-9;]*m", "g"), "");
-}
+/** Auto-review moved to a dedicated interactive surface — see reviewConsole.ts
+ *  (the live Review Console: streams the harness judgment + per-card override).
+ *  This module keeps the tree's single-draft accept/reject/edit actions. */
 
 /** Open a draft's JSON file so the reviewer can edit it before confirming. */
 export async function openDraftFile(root: string, id: string): Promise<void> {

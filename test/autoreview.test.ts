@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { planAutoReview, planMutations } from "../src/core/autoreview.js";
+import { planAutoReview, planMutations, resolveSelection } from "../src/core/autoreview.js";
 import type { Decision } from "../src/core/types.js";
 import type { RelevanceVerdict } from "../src/synthesis/provider.js";
 
@@ -64,6 +64,30 @@ test("keep: an unjudged draft (no harness verdict) is never deleted", () => {
   const plan = planAutoReview([d], [d], new Map());
   assert.deepEqual(plan.keep.map((e) => e.d.id), ["dec_nj"]);
   assert.equal(planMutations(plan), 0);
+});
+
+test("resolveSelection: partitions accept/delete ids against the live draft set", () => {
+  const a = D({ id: "dec_a" }), b = D({ id: "dec_b" }), c = D({ id: "dec_c" });
+  const sel = resolveSelection([a, b, c], ["dec_a"], ["dec_b"]);
+  assert.deepEqual(sel.accept.map((d) => d.id), ["dec_a"]);
+  assert.deepEqual(sel.delete.map((d) => d.id), ["dec_b"]);
+  assert.deepEqual(sel.unknown, []);
+});
+
+test("resolveSelection: an id that isn't a current draft is refused (never mutated by a stale id)", () => {
+  const a = D({ id: "dec_a" });
+  const sel = resolveSelection([a], ["dec_a"], ["dec_gone"]);
+  assert.deepEqual(sel.accept.map((d) => d.id), ["dec_a"]);
+  assert.deepEqual(sel.delete, []);
+  assert.deepEqual(sel.unknown, ["dec_gone"]);
+});
+
+test("resolveSelection: an id in BOTH lists resolves to accept (the non-destructive verb)", () => {
+  const a = D({ id: "dec_a" });
+  const sel = resolveSelection([a], ["dec_a"], ["dec_a"]);
+  assert.deepEqual(sel.accept.map((d) => d.id), ["dec_a"]);
+  assert.deepEqual(sel.delete, []);
+  assert.deepEqual(sel.unknown, ["dec_a"]); // the delete claim is reported, not silently dropped
 });
 
 test("buckets are disjoint and cover every draft", () => {

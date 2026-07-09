@@ -1,15 +1,10 @@
 /**
- * "Run Hunch Command…" — a graphical hub over the human-driven CLI verbs, so a
- * user can drive Hunch from the editor instead of a terminal. Deliberately a
- * CURATED subset: read/inspect/check/heal commands that make sense interactively.
- * Setup + CI + plumbing (init, mcp, hook, ci, migrate, merge-driver, embed,
+ * The curated command catalog behind the Hunch Console (console.ts) — the
+ * human-driven CLI verbs that make sense interactively, with the metadata the
+ * console needs for slash-autocomplete. Deliberately a CURATED subset:
+ * setup + CI + plumbing (init, mcp, hook, ci, migrate, merge-driver, embed,
  * backfill, sync) are intentionally excluded — they aren't interactive.
- *
- * Each command shells out through the shared CLI seam and renders stdout in a
- * self-contained webview (ANSI stripped) — the extension writes nothing itself.
  */
-import * as vscode from "vscode";
-import { runHunch } from "./cli.js";
 
 export interface HunchCommandDef {
   /** argv passed to the CLI (first element is the subcommand). */
@@ -42,29 +37,6 @@ export const HUNCH_COMMANDS: HunchCommandDef[] = [
   { args: ["review"], label: "$(checklist) Review — segmented draft list", detail: "The full triage list (ready / needs scrutiny). Approve/reject from the tree." },
   { args: ["auto-review"], label: "$(sparkle) Auto-review (dry run) — harness triage plan", detail: "Delegate relevance to the harness; print the accept/delete/keep plan. Changes nothing (dry run)." },
 ];
-
-/** Open the QuickPick, run the chosen command (prompting for its arg if any),
- *  and render output. `onWrite` fires after commands that may mutate the store. */
-export async function runCommandHub(root: string, showOutput: (title: string, body: string) => void, onWrite: () => void): Promise<void> {
-  const items = HUNCH_COMMANDS.map((c) => ({ label: c.label, detail: c.detail, def: c }));
-  const pick = await vscode.window.showQuickPick(items, { title: "Run Hunch Command", placeHolder: "Pick a Hunch command to run", matchOnDetail: true });
-  if (!pick) return;
-  const def = pick.def;
-  const args = [...def.args];
-  if (def.arg) {
-    const v = await vscode.window.showInputBox({ title: def.label.replace(/\$\([^)]*\)\s*/, ""), prompt: def.arg.prompt, placeHolder: def.arg.placeHolder });
-    if (v === undefined) return; // cancelled
-    if (v.trim()) args.push(...v.trim().split(/\s+/));
-  }
-  const title = `hunch ${args.join(" ")}`;
-  const res = await vscode.window.withProgress(
-    { location: vscode.ProgressLocation.Notification, title: `Hunch: running \`${title}\`…` },
-    () => runHunch(root, args),
-  );
-  const body = stripAnsi([res.stdout, res.stderr].filter((s) => s.trim()).join("\n")) || `(no output — exit ${res.code})`;
-  showOutput(title, body);
-  onWrite();
-}
 
 /** Strip ANSI SGR sequences so CLI color output renders cleanly in the webview.
  *  ESC is built from its code point to keep a raw control char out of the source. */

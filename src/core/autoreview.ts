@@ -113,3 +113,33 @@ export function planAutoReview(
 export function planMutations(plan: AutoReviewPlan): number {
   return plan.accept.length + plan.rejectDuplicate.length + plan.rejectIrrelevant.length;
 }
+
+/** A caller's EXPLICIT accept/delete choice (from the Review Console's per-card
+ *  override), resolved against the live draft set. Ids that aren't a current draft
+ *  — already accepted/superseded, or plain unknown — land in `unknown` so an
+ *  apply-by-id can never mutate a non-draft record by a stale id (the console holds
+ *  a snapshot; the store may have moved). An id claimed by BOTH lists resolves to
+ *  accept (the safer, non-destructive verb) and is reported as unknown for delete. */
+export interface ResolvedSelection {
+  accept: Decision[];
+  delete: Decision[];
+  unknown: string[];
+}
+
+export function resolveSelection(drafts: Decision[], acceptIds: string[], deleteIds: string[]): ResolvedSelection {
+  const byId = new Map(drafts.map((d) => [d.id, d]));
+  const claimed = new Set<string>();
+  const pick = (ids: string[]): { out: Decision[]; unknown: string[] } => {
+    const out: Decision[] = [];
+    const unknown: string[] = [];
+    for (const id of ids) {
+      const d = byId.get(id);
+      if (!d || claimed.has(id)) unknown.push(id);
+      else { claimed.add(id); out.push(d); }
+    }
+    return { out, unknown };
+  };
+  const a = pick(acceptIds); // accept wins an id contested with delete
+  const del = pick(deleteIds);
+  return { accept: a.out, delete: del.out, unknown: [...a.unknown, ...del.unknown] };
+}
