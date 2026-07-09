@@ -45,6 +45,8 @@
   .head .row{display:flex;align-items:center;gap:12px;margin-bottom:20px}
   h1.title{font-family:var(--serif);font-weight:420;font-size:clamp(30px,4.4vw,46px);line-height:1.07;letter-spacing:-.02em;margin:0}
   .dek{color:var(--muted-2);font-size:18px;line-height:1.55;margin:18px 0 0;font-family:var(--serif);font-style:italic;font-weight:340}
+  .cover-art{margin:0 0 38px;border:1px solid var(--line);border-radius:16px;overflow:hidden;background:#151515;box-shadow:0 26px 54px -38px rgba(28,32,30,.5)}
+  .cover-art img{width:100%;display:block;aspect-ratio:3/2;object-fit:cover}
 
   /* prose */
   .prose{font-size:17.5px;color:var(--ink-soft)}
@@ -64,6 +66,9 @@
   .prose tbody tr:hover{background:rgba(58,107,88,.03)}
   .prose td b{color:var(--ink)}
   .prose .muted{color:var(--muted-2);font-size:15px;border-top:1px solid var(--line);padding-top:20px;margin-top:34px}
+  .prose .inline-art{margin:34px 0 30px;padding:0;border:1px solid var(--line);border-radius:16px;overflow:hidden;background:var(--surface);box-shadow:0 22px 48px -36px rgba(28,32,30,.42)}
+  .prose .inline-art img{display:block;width:100%;aspect-ratio:3/2;object-fit:cover}
+  .prose .inline-art figcaption{padding:11px 15px;font-family:var(--mono);font-size:11px;line-height:1.45;color:var(--muted-2);border-top:1px solid var(--line)}
 
   .cta{max-width:720px;margin:48px auto 0;padding:0 28px}
   .cta-box{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:30px 32px;box-shadow:var(--shadow);display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap}
@@ -130,6 +135,7 @@
             <h1 class="title">${p.title}</h1>
             <p class="dek">${p.dek}</p>
           </header>
+          ${p.cover ? `<figure class="cover-art"><img src="${p.cover.src}" alt="${p.cover.alt}" /></figure>` : ""}
           <div class="prose">${p.body}</div>
         </article>
         <div class="cta"><div class="cta-box">

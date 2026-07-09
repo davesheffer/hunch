@@ -1,6 +1,7 @@
 node_modules/
 dist/
 *.log
+.vercel/
 
 # VS Code extension build artifact — distribute via GitHub Releases / registries, not git.
 *.vsix

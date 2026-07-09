@@ -2,7 +2,7 @@
  *  No LLM here — just parsing what git already knows. */
 import { execFileSync } from "node:child_process";
 import { isAbsolute, resolve, join, basename, dirname } from "node:path";
-import { mkdirSync, rmSync, statSync, realpathSync } from "node:fs";
+import { mkdirSync, rmSync, statSync, realpathSync, readFileSync } from "node:fs";
 
 export interface CommitMeta {
   sha: string;
@@ -360,6 +360,15 @@ export function stagedFiles(cwd: string): string[] {
   return out ? out.split("\n").filter(Boolean) : [];
 }
 
+/** Files changed anywhere in the working tree compared with HEAD: both staged
+ * and unstaged tracked files, plus untracked files. This powers the local,
+ * pre-commit Change Gate; it never mutates the index or asks an agent/model. */
+export function workingFiles(cwd: string): string[] {
+  const changed = gitSafe(["diff", "HEAD", "--name-only", "--diff-filter=ACMR"], cwd).split("\n").filter(Boolean);
+  const untracked = gitSafe(["ls-files", "--others", "--exclude-standard"], cwd).split("\n").filter(Boolean);
+  return [...new Set([...changed, ...untracked])].sort();
+}
+
 /** Does a ref resolve to a commit in this repo? Lets `--base` fail LOUDLY on an
  *  unfetched/typo'd ref instead of silently diffing against nothing (a vacuous
  *  CI pass), since the diff helpers below swallow git errors to "". */
@@ -393,6 +402,27 @@ export function rangeDiff(base: string, cwd: string, head = "HEAD", maxBytes = 6
  *  commitDiff, so the staged and `--commit` guard paths can't diverge on big diffs. */
 export function stagedDiff(cwd: string, maxBytes = 60_000): string {
   const out = gitSafe(["diff", "--cached", "--no-color", "--unified=2", "--", ...DIFF_NOISE], cwd);
+  return out.length > maxBytes ? out.slice(0, maxBytes) + "\n…(diff truncated)…" : out;
+}
+
+/** Unified diff of the complete local working tree vs HEAD. Git's normal diff
+ * includes both staged and unstaged tracked edits; untracked text files are
+ * appended as synthetic additions so guards can also see their added symbols.
+ * Binary/unreadable files remain in workingFiles (scope checks still apply) but
+ * intentionally contribute no synthetic content to regression analysis. */
+export function workingDiff(cwd: string, maxBytes = 60_000): string {
+  let out = gitSafe(["diff", "HEAD", "--no-color", "--unified=2", "--", ...DIFF_NOISE], cwd);
+  const tracked = new Set(gitSafe(["diff", "HEAD", "--name-only", "--diff-filter=ACMR"], cwd).split("\n").filter(Boolean));
+  const untracked = gitSafe(["ls-files", "--others", "--exclude-standard"], cwd).split("\n").filter((f) => f && !tracked.has(f));
+  for (const file of untracked) {
+    try {
+      const text = readFileSync(join(cwd, file), "utf8");
+      if (text.includes("\0")) continue;
+      const lines = text.split("\n");
+      const add = lines.map((line) => `+${line}`).join("\n");
+      out += `${out ? "\n" : ""}diff --git a/${file} b/${file}\nnew file mode 100644\n--- /dev/null\n+++ b/${file}\n@@ -0,0 +1,${lines.length} @@\n${add}\n`;
+    } catch { /* unreadable / directory / binary: scope-only is still safe */ }
+  }
   return out.length > maxBytes ? out.slice(0, maxBytes) + "\n…(diff truncated)…" : out;
 }
 

@@ -130,6 +130,13 @@ export class HunchStore {
     return this.privateJson?.get(kind, id) ?? this.json.get(kind, id);
   }
 
+  /** Read a record only from the configured private overlay. Callers that must
+   *  preserve privacy boundaries (for example, an explicit `--private` repair)
+   *  should use this instead of overlay-first `getRec`. */
+  getPrivateRec<K extends EntityKind>(kind: K, id: string): EntityFor[K] | undefined {
+    return this.privateJson?.get(kind, id);
+  }
+
   /** Update an EXISTING record in the store that holds it — an overlay record must never
    *  fork a public copy on update (and vice versa). Falls back to captureHome routing for
    *  a record that exists nowhere yet. */
@@ -138,6 +145,14 @@ export class HunchStore {
     if (this.privateJson?.get(kind, id)) return this.putPrivate(kind, record);
     if (this.json.get(kind, id)) return this.json.put(kind, record);
     return this.putCapture(kind, record);
+  }
+
+  /** Delete an existing record from its actual home. The review/curation path
+   * uses this so rejecting a private draft cannot silently leave it behind or
+   * accidentally target a public record with the same id. */
+  deleteWhereItLives<K extends EntityKind>(kind: K, id: string): boolean {
+    if (this.privateJson?.get(kind, id)) return this.privateJson.delete(kind, id);
+    return this.json.delete(kind, id);
   }
 
   /** The private-overlay config from the gitignored `.hunch/local.json` (per-machine,
@@ -185,6 +200,13 @@ export class HunchStore {
     for (const r of pub) byId.set((r as { id: string }).id, r);
     for (const r of priv) byId.set((r as { id: string }).id, r);
     return [...byId.values()];
+  }
+
+  /** Records from exactly one storage home (no public/private union). Capture
+   * paths use this for identity/lineage checks so a private record can never
+   * inherit or disclose relationships from an identically-shaped public record. */
+  recsInHome<K extends EntityKind>(kind: K, home: "public" | "private"): EntityFor[K][] {
+    return home === "private" ? (this.privateJson?.loadAll(kind) ?? []) : this.json.loadAll(kind);
   }
 
   /** Whether a private overlay store is configured (HUNCH_PRIVATE_DIR is set). */
@@ -946,11 +968,13 @@ export class HunchStore {
    *  lineage.spawned_constraint, else the source decision's caused_by_bug). Read-only. */
   causalChain(constraintId: string): CausalWhy {
     const out: CausalWhy = { constraint_id: constraintId };
-    const c = this.json.get("constraints", constraintId);
+    const get = <K extends EntityKind>(kind: K, id: string): EntityFor[K] | undefined =>
+      this.suppressPrivate ? this.json.get(kind, id) : this.getRec(kind, id);
+    const c = get("constraints", constraintId);
     if (!c) return out;
-    const dec = c.source_decision ? this.json.get("decisions", c.source_decision) : null;
+    const dec = c.source_decision ? get("decisions", c.source_decision) : null;
     if (dec) out.decision = { id: dec.id, title: dec.title, decision: dec.decision };
-    const bugs = this.recs("bugs");
+    const bugs = this.suppressPrivate ? this.json.loadAll("bugs") : this.recs("bugs");
     // Deterministic when several bugs link one constraint (the verdict claims to be
     // deterministic): highest severity first, then lowest id — never filesystem order.
     const SEV: Record<string, number> = { critical: 3, high: 2, medium: 1, low: 0 };
@@ -1250,7 +1274,7 @@ export class HunchStore {
   /** Resolve a veto's causal citation: the bug whose root cause spawned the decision
    *  (decision → caused_by_bug). Distinct from causalChain, which is constraint-keyed. */
   private vetoWhy(bugId: string): VetoHit["why"] {
-    const bug = this.json.get("bugs", bugId);
+    const bug = this.suppressPrivate ? this.json.get("bugs", bugId) : this.getRec("bugs", bugId);
     return bug ? { bug: { id: bug.id, title: bug.title, root_cause: bug.root_cause } } : undefined;
   }
 
@@ -1331,7 +1355,7 @@ export class HunchStore {
   /** Convenience: load a single entity from JSON by id (any kind). */
   resolve(id: string): { kind: string; record: unknown } | undefined {
     for (const kind of ENTITY_KINDS) {
-      const rec = this.json.get(kind, id);
+      const rec = this.suppressPrivate ? this.json.get(kind, id) : this.getRec(kind, id);
       if (rec) return { kind, record: rec };
     }
     return undefined;

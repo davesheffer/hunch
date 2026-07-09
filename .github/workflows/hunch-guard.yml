@@ -33,9 +33,13 @@ jobs:
 
       - name: Run Constraint Guard
         id: guard
+        # PR comments are public. Exclude any overlay memory even on a self-hosted
+        # runner, where a local pointer or environment can otherwise be present.
+        env:
+          HUNCH_PRIVATE_DIR: ""
         run: |
           set +e
-          hunch check --base "origin/${{ github.base_ref }}" --strict --format markdown > hunch-report.md
+          hunch check --base "origin/${{ github.base_ref }}" --strict --format markdown --public-only > hunch-report.md
           echo "exit=$?" >> "$GITHUB_OUTPUT"
           set -e
 

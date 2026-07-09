@@ -9,17 +9,19 @@
  */
 import * as vscode from "vscode";
 import { runHunch, runHunchWithProgress } from "./cli.js";
-import { decisionFilePath, type Decision, type ReviewItem } from "./hunchData.js";
+import { decisionFilePath, type Decision, type Hunch, type ReviewItem } from "./hunchData.js";
+
+const withPrivate = (args: string[], includePrivate: boolean) => includePrivate ? [args[0]!, "--private", ...args.slice(1)] : args;
 
 /** Confirm a draft → accepted/human_confirmed (arms its tripwires). */
-export async function acceptDraft(root: string, id: string, title: string, onDone: () => void): Promise<void> {
+export async function acceptDraft(root: string, id: string, title: string, onDone: () => void, includePrivate = false): Promise<void> {
   const pick = await vscode.window.showInformationMessage(
     `Confirm this decision as accepted?\n\n${title}`,
     { modal: true, detail: "Promotes it to human-confirmed and arms any drafted tripwires (advisory → blocking). Delegates to `hunch review --accept`." },
     "Confirm",
   );
   if (pick !== "Confirm") return;
-  const res = await runHunchWithProgress(root, ["review", "--accept", id], "Hunch: confirming decision…");
+  const res = await runHunchWithProgress(root, withPrivate(["review", "--accept", id], includePrivate), "Hunch: confirming decision…");
   if (res.ok) {
     vscode.window.showInformationMessage(res.stdout.trim().split("\n").pop() || `Hunch: confirmed ${id}.`);
     onDone();
@@ -27,14 +29,14 @@ export async function acceptDraft(root: string, id: string, title: string, onDon
 }
 
 /** Reject a draft → deleted from the store. */
-export async function rejectDraft(root: string, id: string, title: string, onDone: () => void): Promise<void> {
+export async function rejectDraft(root: string, id: string, title: string, onDone: () => void, includePrivate = false): Promise<void> {
   const pick = await vscode.window.showWarningMessage(
     `Reject and remove this draft?\n\n${title}`,
     { modal: true, detail: "Deletes the draft decision. Delegates to `hunch review --reject`. This cannot be undone from here." },
     "Reject",
   );
   if (pick !== "Reject") return;
-  const res = await runHunchWithProgress(root, ["review", "--reject", id], "Hunch: rejecting draft…");
+  const res = await runHunchWithProgress(root, withPrivate(["review", "--reject", id], includePrivate), "Hunch: rejecting draft…");
   if (res.ok) {
     vscode.window.showInformationMessage(res.stdout.trim().split("\n").pop() || `Hunch: rejected ${id}.`);
     onDone();
@@ -42,7 +44,7 @@ export async function rejectDraft(root: string, id: string, title: string, onDon
 }
 
 /** Batch-accept every Critic-verified, well-grounded draft (the "ready" group). */
-export async function acceptVerified(root: string, readyCount: number, onDone: () => void): Promise<void> {
+export async function acceptVerified(root: string, readyCount: number, onDone: () => void, includePrivate = false): Promise<void> {
   if (readyCount === 0) return void vscode.window.showInformationMessage("Hunch: no Critic-verified drafts ready to confirm.");
   const pick = await vscode.window.showInformationMessage(
     `Confirm all ${readyCount} Critic-verified draft(s)?`,
@@ -50,23 +52,23 @@ export async function acceptVerified(root: string, readyCount: number, onDone: (
     "Confirm all",
   );
   if (pick !== "Confirm all") return;
-  const res = await runHunchWithProgress(root, ["review", "--accept-verified"], "Hunch: confirming verified drafts…");
+  const res = await runHunchWithProgress(root, withPrivate(["review", "--accept-verified"], includePrivate), "Hunch: confirming verified drafts…");
   if (res.ok) { vscode.window.showInformationMessage(res.stdout.trim().split("\n")[0] || "Hunch: verified drafts confirmed."); onDone(); }
 }
 
 /** Batch-reject drafts that near-duplicate an accepted record (deterministic hygiene). */
-export async function rejectDuplicates(root: string, onDone: () => void): Promise<void> {
-  const res = await runHunchWithProgress(root, ["review", "--reject-duplicates"], "Hunch: rejecting duplicate drafts…");
+export async function rejectDuplicates(root: string, onDone: () => void, includePrivate = false): Promise<void> {
+  const res = await runHunchWithProgress(root, withPrivate(["review", "--reject-duplicates"], includePrivate), "Hunch: rejecting duplicate drafts…");
   if (res.ok) { vscode.window.showInformationMessage(res.stdout.trim().split("\n").pop() || "Hunch: duplicates handled."); onDone(); }
 }
 
 /** Harness-driven auto-review. ALWAYS shows the dry-run plan first (delegates to
  *  `hunch auto-review`), then asks whether to apply it — a human sees exactly what
  *  would be confirmed/deleted before any mutation. `showOutput` renders the plan. */
-export async function autoReview(root: string, showOutput: (title: string, body: string) => void, onDone: () => void): Promise<void> {
+export async function autoReview(root: string, showOutput: (title: string, body: string) => void, onDone: () => void, includePrivate = false): Promise<void> {
   const plan = await vscode.window.withProgress(
     { location: vscode.ProgressLocation.Notification, title: "Hunch: auto-review — judging drafts via the harness…" },
-    () => runHunch(root, ["auto-review"], 600_000),
+    () => runHunch(root, includePrivate ? ["auto-review", "--private"] : ["auto-review"], 600_000),
   );
   const body = stripAnsiText([plan.stdout, plan.stderr].filter((s) => s.trim()).join("\n")) || `(no output — exit ${plan.code})`;
   showOutput("auto-review (dry run)", body);
@@ -85,7 +87,7 @@ export async function autoReview(root: string, showOutput: (title: string, body:
     "Apply plan",
   );
   if (pick !== "Apply plan") return;
-  const res = await runHunchWithProgress(root, ["auto-review", "--apply"], "Hunch: applying auto-review plan…");
+  const res = await runHunchWithProgress(root, includePrivate ? ["auto-review", "--private", "--apply"] : ["auto-review", "--apply"], "Hunch: applying auto-review plan…");
   if (res.ok) {
     vscode.window.showInformationMessage(stripAnsiText(res.stdout).trim().split("\n").pop() || "Hunch: auto-review applied.");
     onDone();
@@ -98,8 +100,8 @@ function stripAnsiText(s: string): string {
 }
 
 /** Open a draft's JSON file so the reviewer can edit it before confirming. */
-export async function openDraftFile(root: string, id: string): Promise<void> {
-  const uri = vscode.Uri.file(decisionFilePath(root, id));
+export async function openDraftFile(hunch: Hunch, id: string): Promise<void> {
+  const uri = vscode.Uri.file(decisionFilePath(hunch, id));
   try {
     await vscode.commands.executeCommand("vscode.open", uri);
   } catch {

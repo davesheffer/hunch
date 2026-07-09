@@ -1,10 +1,26 @@
-# Hunch — VS Code extension
+# Hunch for VS Code
 
-A visualizer and query surface over [Hunch](https://github.com/davesheffer/hunch) (`.hunch/`) for
-the open repo. Pairs with the Claude Code chat (which uses the `hunch_*` MCP tools); this gives
-you the **human** surface.
+## Give every code change a memory.
 
-> Requires a repo with a `.hunch/` directory — install the CLI with `npm i -g @davesheffer/hunch` and run `hunch init`.
+Hunch turns VS Code into the human review surface for your codebase’s decisions, constraints, and
+bug history. While any MCP assistant can query the same graph, this extension makes the evidence
+visible where you edit: in the explorer, editor, Problems panel, and deterministic Change Gate.
+
+It works with [Hunch](https://github.com/davesheffer/hunch) for **any** assistant workflow—not one
+model or chat surface. Your team sees the same engineering memory whether it works through Claude
+Code, Cursor, Copilot, Codex, Windsurf, or a human code review.
+
+> **Get started:** install the CLI with `npm i -g @davesheffer/hunch`, open your repo, then run `hunch init`.
+
+## The daily loop
+
+1. Edit normally.
+2. Run **Hunch: Change Gate** before a commit or PR.
+3. See the exact decision, bug, or invariant your change touches.
+4. Copy a provider-neutral receipt for a teammate or any coding agent—or record a new guard when the team learns something.
+
+Private overlay memory is visible only in your local editor. The Change Gate makes the distinction
+explicit and offers a public-only receipt before anything is shared.
 
 ## Features
 
@@ -17,6 +33,10 @@ you the **human** surface.
 - **Search** (`Hunch: Search`) — fuzzy-find any decision, invariant, bug, or component.
 
 ### In the editor
+- **Change Gate** — review working-tree, staged, or branch-vs-base changes as one deterministic
+  **PASS / WARN / BLOCK** verdict, with the cited invariant/decision/bug receipt and an impact map.
+  It copies a provider-neutral evidence bundle for any human or coding agent; when private memory
+  is enabled, it clearly offers a public-only bundle before anything is shared.
 - **CodeLens** — a per-file summary (⛔ invariants · ⚠ near · 🧭 decisions · 🐞 bugs) plus a mark on
   each function carrying bug/fragility signal.
 - **Hover** — bug history and fragility for the symbol under the cursor.
@@ -46,7 +66,9 @@ you the **human** surface.
   protocol (also wired as the scaffolded `/capture` slash command).
 
 ### Live
-- Refreshes automatically when `.hunch/` changes on disk (e.g. after a commit).
+- Refreshes automatically when `.hunch/` changes on disk (e.g. after a commit), including the
+  configured private/shared overlay. The local editor unions overlay records into its view and
+  makes an unavailable overlay pointer visible instead of silently falling back to public-only.
 
 The data layer is a pure reader of the committed JSON source of truth — **no native deps, no
 server** — and it works as soon as the repo has a `.hunch/` directory (`hunch init`).

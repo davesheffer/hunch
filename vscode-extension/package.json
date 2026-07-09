@@ -54,6 +54,7 @@
       { "command": "hunch.why", "title": "Why is this file the way it is?", "category": "Hunch", "icon": "$(question)" },
       { "command": "hunch.whySymbol", "title": "Why is this symbol the way it is?", "category": "Hunch" },
       { "command": "hunch.context", "title": "Assemble context for this file", "category": "Hunch", "icon": "$(list-tree)" },
+      { "command": "hunch.changeGate", "title": "Review changes against Hunch", "category": "Hunch", "icon": "$(shield)" },
       { "command": "hunch.search", "title": "Search memory", "category": "Hunch", "icon": "$(search)" },
       { "command": "hunch.graph", "title": "Component Graph", "category": "Hunch", "icon": "$(type-hierarchy)" },
       { "command": "hunch.recordConstraint", "title": "Record Invariant…", "category": "Hunch" },
@@ -79,6 +80,7 @@
         { "command": "hunch.whySymbol", "when": "editorIsOpen" }
       ],
       "view/title": [
+        { "command": "hunch.changeGate", "when": "view == hunch.tree", "group": "navigation@0" },
         { "command": "hunch.runCommand", "when": "view == hunch.tree", "group": "navigation@1" },
         { "command": "hunch.search", "when": "view == hunch.tree", "group": "navigation@2" },
         { "command": "hunch.graph", "when": "view == hunch.tree", "group": "navigation@3" },
@@ -94,6 +96,9 @@
       ],
       "editor/title": [
         { "command": "hunch.why", "when": "resourceLangId =~ /typescript|javascript|typescriptreact|javascriptreact|python|go|rust/", "group": "navigation" }
+      ],
+      "scm/title": [
+        { "command": "hunch.changeGate", "when": "scmProvider == git", "group": "navigation@20" }
       ],
       "editor/context": [
         { "command": "hunch.whySymbol", "when": "resourceLangId =~ /typescript|javascript|typescriptreact|javascriptreact|python|go|rust/", "group": "navigation" }

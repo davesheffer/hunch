@@ -27,6 +27,8 @@ import { showGraph, refreshGraph } from "./graph.js";
 import { runSearch } from "./search.js";
 import { acceptDraft, rejectDraft, acceptVerified, rejectDuplicates, openDraftFile, draftBrief, autoReview } from "./review.js";
 import { runCommandHub } from "./commands.js";
+import { openChangeGate } from "./changeGate.js";
+import { runHunchWithProgress } from "./cli.js";
 
 function workspaceRoot(): string | undefined {
   return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
@@ -118,6 +120,7 @@ class HunchTree implements vscode.TreeDataProvider<Node> {
       const rq = reviewQueue(b);
       const pending = rq.ready.length + rq.scrutiny.length;
       return [
+        ...(b.overlay ? [{ kind: "leaf" as const, label: b.overlay.mode === "shared" ? "Shared memory" : "Private memory", description: b.overlay.state === "active" ? "local overlay included" : "⚠ overlay unavailable", tooltip: b.overlay.state === "active" ? "This local editor view includes overlay memory. It is never posted by public CI." : "The configured private/shared overlay directory is unavailable. Run `hunch doctor` to repair the pointer.", icon: b.overlay.state === "active" ? "lock" : "warning" }] : []),
         ...(pending ? [{ kind: "group" as const, label: `Review queue (${pending})`, key: "review", contextValue: "hunch.reviewQueue" }] : []),
         { kind: "group", label: `Invariants (${b.constraints.length})`, key: "constraints" },
         { kind: "group", label: `Decisions (${b.decisions.length})`, key: "decisions" },
@@ -358,8 +361,17 @@ function updateStatusBar(item: vscode.StatusBarItem, cache: HunchCache): void {
 // ---------------------------------------------------------------------------
 // Write-path: delegate to the `hunch` CLI (never write .hunch/ JSON directly).
 // ---------------------------------------------------------------------------
-function cliCommand(): string {
-  return vscode.workspace.getConfiguration("hunch").get("cliPath", "hunch");
+/** Ask before a split-private workspace writes a record. Shared mode already homes
+ * every capture in its overlay, while a split-private workspace needs an explicit
+ * choice so a sensitive lesson is never silently committed to the code repo. */
+async function choosePrivateWrite(cache: HunchCache, kind: "bug" | "constraint"): Promise<boolean | undefined> {
+  const overlay = cache.get()?.overlay;
+  if (overlay?.state !== "active" || overlay.mode !== "private") return false;
+  const pick = await vscode.window.showQuickPick([
+    { label: "Private overlay", description: `Keep this ${kind} local; deterministic synthesis only`, private: true },
+    { label: "Public memory", description: `Commit this ${kind} with the repository`, private: false },
+  ], { title: `Store this ${kind} in…`, placeHolder: "Private is recommended for sensitive workflow details" });
+  return pick?.private;
 }
 
 async function recordConstraint(root: string, cache: HunchCache, onDone: () => void): Promise<void> {
@@ -371,27 +383,18 @@ async function recordConstraint(root: string, cache: HunchCache, onDone: () => v
   const severity = await vscode.window.showQuickPick(["warning", "blocking", "advisory"], { title: "Record invariant — severity" });
   if (!severity) return;
   const rationale = await vscode.window.showInputBox({ title: "Record invariant — rationale (optional)", prompt: "Why it must hold" }) ?? "";
-
-  const q = (s: string) => `"${s.replace(/"/g, '\\"')}"`;
-  const args = [`record-constraint`, q(statement), `--severity`, severity];
-  if (scope.trim()) args.push(`--scope`, q(scope.trim()));
-  if (rationale.trim()) args.push(`--rationale`, q(rationale.trim()));
-  const cmd = `${cliCommand()} ${args.join(" ")}`;
-
-  await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: "Hunch: recording invariant…" }, () =>
-    new Promise<void>((resolve) => {
-      cp.exec(cmd, { cwd: root }, (err, stdout, stderr) => {
-        if (err) {
-          vscode.window.showErrorMessage(`Hunch CLI failed (${cliCommand()}). ${stderr || err.message}. Set "hunch.cliPath" if the CLI is elsewhere.`);
-        } else {
-          vscode.window.showInformationMessage((stdout.trim().split("\n").pop()) || "Hunch: invariant recorded.");
-          cache.reload();
-          onDone();
-        }
-        resolve();
-      });
-    }),
-  );
+  const isPrivate = await choosePrivateWrite(cache, "constraint");
+  if (isPrivate === undefined) return;
+  const args = ["record-constraint", statement, "--severity", severity];
+  if (scope.trim()) args.push("--scope", scope.trim());
+  if (rationale.trim()) args.push("--rationale", rationale.trim());
+  if (isPrivate) args.push("--private");
+  const res = await runHunchWithProgress(root, args, "Hunch: recording invariant…");
+  if (res.ok) {
+    vscode.window.showInformationMessage((res.stdout.trim().split("\n").pop()) || "Hunch: invariant recorded.");
+    cache.reload();
+    onDone();
+  }
 }
 
 async function recordBug(root: string, cache: HunchCache, onDone: () => void): Promise<void> {
@@ -399,17 +402,12 @@ async function recordBug(root: string, cache: HunchCache, onDone: () => void): P
   if (!test) return;
   const message = await vscode.window.showInputBox({ title: "Record bug — failure", prompt: "Failure message / stack" });
   if (!message) return;
-  const q = (s: string) => `"${s.replace(/"/g, '\\"')}"`;
-  const cmd = `${cliCommand()} record-bug --test ${q(test)} --message ${q(message)}`;
-  await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: "Hunch: recording bug…" }, () =>
-    new Promise<void>((resolve) => {
-      cp.exec(cmd, { cwd: root }, (err, stdout, stderr) => {
-        if (err) vscode.window.showErrorMessage(`Hunch CLI failed (${cliCommand()}). ${stderr || err.message}.`);
-        else { vscode.window.showInformationMessage(stdout.trim().split("\n").pop() || "Hunch: bug recorded."); cache.reload(); onDone(); }
-        resolve();
-      });
-    }),
-  );
+  const isPrivate = await choosePrivateWrite(cache, "bug");
+  if (isPrivate === undefined) return;
+  const args = ["record-bug", "--test", test, "--message", message];
+  if (isPrivate) args.push("--private");
+  const res = await runHunchWithProgress(root, args, "Hunch: recording bug…");
+  if (res.ok) { vscode.window.showInformationMessage(res.stdout.trim().split("\n").pop() || "Hunch: bug recorded."); cache.reload(); onDone(); }
 }
 
 // ---------------------------------------------------------------------------
@@ -467,8 +465,25 @@ export function activate(context: vscode.ExtensionContext): void {
     diagnostics.update(ed);
     void decorations.update(ed);
   };
+  let overlayWatcher: vscode.FileSystemWatcher | undefined;
+  let watchedOverlay = "";
+  const syncOverlayWatcher = () => {
+    const overlay = cache.get()?.overlay;
+    const next = overlay?.state === "active" ? overlay.dir : "";
+    if (next === watchedOverlay) return;
+    overlayWatcher?.dispose();
+    overlayWatcher = undefined;
+    watchedOverlay = next;
+    if (!next) return;
+    overlayWatcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(next, "**/*.json"));
+    overlayWatcher.onDidChange(refreshAll);
+    overlayWatcher.onDidCreate(refreshAll);
+    overlayWatcher.onDidDelete(refreshAll);
+    context.subscriptions.push(overlayWatcher);
+  };
   const refreshAll = () => {
     cache.reload();
+    syncOverlayWatcher();
     tree.refresh();
     codeLens.refresh();
     refreshActive();
@@ -499,6 +514,10 @@ export function activate(context: vscode.ExtensionContext): void {
         ]);
       }),
     ),
+    vscode.commands.registerCommand("hunch.changeGate", () => {
+      if (!root) return void vscode.window.showWarningMessage("No workspace folder open.");
+      void openChangeGate(root, !!cache.get()?.overlay && cache.get()?.overlay?.state === "active", () => void vscode.commands.executeCommand("hunch.recordConstraint"), showOutput);
+    }),
     vscode.commands.registerCommand("hunch.whySymbol", (name?: string) =>
       withHunch((b, f) => {
         let sym = name;
@@ -539,23 +558,23 @@ export function activate(context: vscode.ExtensionContext): void {
       if (it) draftBrief(it, showBrief);
     }),
     vscode.commands.registerCommand("hunch.acceptDraft", (node?: Node) => {
-      const id = draftIdOf(node); if (root && id) void acceptDraft(root, id, titleOf(cache, id), refreshAll);
+      const id = draftIdOf(node); if (root && id) void acceptDraft(root, id, titleOf(cache, id), refreshAll, cache.get()?.overlay?.state === "active");
     }),
     vscode.commands.registerCommand("hunch.rejectDraft", (node?: Node) => {
-      const id = draftIdOf(node); if (root && id) void rejectDraft(root, id, titleOf(cache, id), refreshAll);
+      const id = draftIdOf(node); if (root && id) void rejectDraft(root, id, titleOf(cache, id), refreshAll, cache.get()?.overlay?.state === "active");
     }),
     vscode.commands.registerCommand("hunch.editDraft", (node?: Node) => {
-      const id = draftIdOf(node); if (root && id) void openDraftFile(root, id);
+      const id = draftIdOf(node); const h = cache.get(); if (h && id) void openDraftFile(h, id);
     }),
     vscode.commands.registerCommand("hunch.acceptVerified", () => {
       const h = cache.get();
-      if (root && h) void acceptVerified(root, reviewQueue(h).ready.length, refreshAll);
+      if (root && h) void acceptVerified(root, reviewQueue(h).ready.length, refreshAll, h.overlay?.state === "active");
     }),
     vscode.commands.registerCommand("hunch.rejectDuplicates", () => {
-      if (root) void rejectDuplicates(root, refreshAll);
+      if (root) void rejectDuplicates(root, refreshAll, cache.get()?.overlay?.state === "active");
     }),
     vscode.commands.registerCommand("hunch.autoReview", () => {
-      if (root) void autoReview(root, showOutput, refreshAll);
+      if (root) void autoReview(root, showOutput, refreshAll, cache.get()?.overlay?.state === "active");
     }),
     // --- command hub: drive the CLI from a GUI -----------------------------
     vscode.commands.registerCommand("hunch.runCommand", () => {
@@ -586,6 +605,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.workspace.onDidCloseTextDocument((doc) => diagnostics.clearClosed(doc.uri)),
   );
 
+  syncOverlayWatcher();
   refreshActive();
 }
 

@@ -4,6 +4,8 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tempStore, prov } from "./helpers.js";
 import { computeDrift } from "../src/core/drift.js";
+import { hunchPaths } from "../src/core/paths.js";
+import { HunchStore } from "../src/store/hunchStore.js";
 
 const DEC = (over: Record<string, unknown> = {}) => ({
   id: "dec_x", title: "t", status: "accepted", context: "", decision: "",
@@ -32,6 +34,29 @@ test("drift dead-ref: a SUPERSEDED decision's missing file is history, not drift
   t.after(cleanup);
   store.json.put("decisions", DEC({ id: "dec_old", status: "superseded", superseded_by: "dec_new", related_files: ["src/ghost.ts"] }) as never);
   assert.equal(computeDrift(store, root).findings.filter((f) => f.kind === "dead-ref").length, 0);
+});
+
+test("drift dead-ref: private overlay decisions can cite portable private:<path> docs", (t) => {
+  const { store: initial, root, cleanup } = tempStore();
+  t.after(cleanup);
+  initial.close();
+  const overlay = join(root, "private-memory");
+  mkdirSync(join(overlay, ".hunch"), { recursive: true });
+  mkdirSync(join(overlay, "docs"), { recursive: true });
+  writeFileSync(join(overlay, "docs", "runbooks.md"), "# Private runbooks\n");
+  mkdirSync(join(root, ".hunch"), { recursive: true });
+  writeFileSync(join(root, ".hunch", "local.json"), JSON.stringify({ privateDir: join(overlay, ".hunch") }));
+  const store = new HunchStore(hunchPaths(root));
+  t.after(() => store.close());
+  store.putPrivate("decisions", DEC({ id: "dec_private_doc", related_files: ["private:docs/runbooks.md"] }) as never);
+  assert.equal(computeDrift(store, root).findings.filter((f) => f.kind === "dead-ref").length, 0);
+});
+
+test("drift dead-ref: public decisions cannot cite private overlay paths", (t) => {
+  const { store, root, cleanup } = tempStore();
+  t.after(cleanup);
+  store.json.put("decisions", DEC({ id: "dec_public_private_ref", related_files: ["private:docs/runbooks.md"] }) as never);
+  assert.equal(computeDrift(store, root).findings.filter((f) => f.kind === "dead-ref").length, 1);
 });
 
 test("drift supersede: a dangling/incomplete supersede is flagged; a clean one is not", (t) => {

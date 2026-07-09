@@ -30,7 +30,7 @@ import { indexRepo } from "../extractors/indexer.js";
 import { syncCommit, recordFailure, captureTestRun } from "../synthesis/synthesize.js";
 import { parseTestReport } from "../extractors/testreport.js";
 import { selectProvider } from "../synthesis/provider.js";
-import { isGitRepo, headSha, logSince, lastChangeDate, stagedFiles, commitFiles, asOfDate, stagedDiff, commitDiff, rangeFiles, rangeDiff, rangeSubjects, revExists, commitAndPushHunch, pullHunch, gitUntrackCached, gitCommonDir, isLinkedWorktree, mainWorktreeRoot } from "../extractors/git.js";
+import { isGitRepo, headSha, logSince, lastChangeDate, stagedFiles, workingFiles, commitFiles, asOfDate, stagedDiff, workingDiff, commitDiff, rangeFiles, rangeDiff, rangeSubjects, revExists, commitAndPushHunch, pullHunch, gitUntrackCached, gitCommonDir, isLinkedWorktree, mainWorktreeRoot } from "../extractors/git.js";
 import { writeTeamConfig, ensureTeamOverlay, readTeamConfig } from "../integrations/team.js";
 import { runbookId, decisionId } from "../core/ids.js";
 import { deriveForbids, effectiveForbids } from "../core/constraintmatch.js";
@@ -84,6 +84,7 @@ import { mergeHunchJson } from "../store/merge.js";
 import { movePublicMemoryToPrivate } from "../store/privateMigrate.js";
 import { ENTITY_KINDS } from "../core/types.js";
 import { planCompaction } from "../store/compact.js";
+import { repairDecisionReference } from "../core/refrepair.js";
 import { resolveInvocation } from "./invocation.js";
 
 const program = new Command();
@@ -156,7 +157,7 @@ program
 
     if (isGitRepo(root)) {
       const syncToOverlay = !!(opts.privateSync || opts.sharedSync);
-      const h = installPostCommitHook(root, inv.shell, { private: syncToOverlay, commit: opts.autoCommit });
+      const h = installPostCommitHook(root, inv.shell, { private: syncToOverlay, commit: opts.autoCommit, localOnly: syncToOverlay });
       console.log(`  ✓ post-commit hook ${h.action} (learning loop)${syncToOverlay ? " — syncs to the shared overlay" : ""}${opts.autoCommit ? " — auto-commit on" : ""}`);
       const m = installMergeDriver(root, inv.shell);
       console.log(`  ✓ team merge driver ${m.action}`);
@@ -334,7 +335,16 @@ program
     const toOverlay = !!(opts.private || opts.overlay || store.unified);
     if (toOverlay && !store.hasPrivate) { store.close(); return opts.quiet ? undefined : fail("--private/--overlay needs HUNCH_PRIVATE_DIR set to an overlay store"); }
     store.json.ensureDirs();
-    const r = await syncCommit(store, root, sha ?? headSha(root), { force: opts.force, private: toOverlay, deep: opts.deep, verify: opts.verify, samples: parseSamples(opts.samples) });
+    const r = await syncCommit(store, root, sha ?? headSha(root), {
+      force: opts.force,
+      private: toOverlay,
+      // A split-private overlay is sensitive/local by definition. A shared store
+      // is an explicit team policy and may keep its configured synthesis provider.
+      localOnly: toOverlay && store.mode === "private",
+      deep: opts.deep,
+      verify: opts.verify,
+      samples: parseSamples(opts.samples),
+    });
     if (r.status === "written") {
       store.reindex();
       // Don't rewrite grounding from the hook — it would dirty the working tree on
@@ -470,7 +480,7 @@ function configureOverlay(dir: string | undefined, opts: OverlaySetupOpts, mode:
   // 4) route post-commit synthesis to the overlay (local hook, never committed)
   let hookNote = "";
   if (opts.hook && isGitRepo(root)) {
-    const h = installPostCommitHook(root, inv.shell, { private: true, commit: opts.autoCommit });
+    const h = installPostCommitHook(root, inv.shell, { private: true, commit: opts.autoCommit, localOnly: mode === "private" });
     hookNote = `  ✓ post-commit hook ${h.action} — captured decisions route here${opts.autoCommit ? " (auto-commit+push on)" : ""}\n`;
   }
 
@@ -1004,14 +1014,18 @@ program
   .description("Capture a Bug from a failing test (symptom + suspect ranking).")
   .requiredOption("--test <id>", "failing test id/name")
   .requiredOption("--message <msg>", "failure message / stack")
-  .action(async (opts: { test: string; message: string }) => {
+  .option("--private", "keep the bug and its failure text in the private overlay; uses deterministic local synthesis")
+  .action(async (opts: { test: string; message: string; private?: boolean }) => {
     const { store, root } = storeFor();
+    if (opts.private && !store.hasPrivate) { store.close(); return fail("--private needs HUNCH_PRIVATE_DIR set to a private store"); }
     store.json.ensureDirs();
-    const r = await recordFailure(store, root, { test: opts.test, message: opts.message });
+    const r = await recordFailure(store, root, { test: opts.test, message: opts.message }, { private: opts.private });
     store.reindex();
-    console.log(`✓ recorded bug ${r.bug.id} via ${r.provider}: "${r.bug.title}"`);
+    const flush = flushCapture(store, hunchPaths(root).hunch, !!opts.private, `hunch: capture ${r.bug.id}`);
+    console.log(`✓ recorded bug ${r.bug.id} via ${r.provider}: "${r.bug.title}"${opts.private ? " [private overlay; local-only synthesis]" : ""}`);
     if (r.bug.lineage.recurrence_of) console.log(`  ↳ recurrence of ${r.bug.lineage.recurrence_of}`);
     if (r.constraint) console.log(`  ↳ promoted constraint ${r.constraint.id} [${r.constraint.severity}]: ${r.constraint.statement}`);
+    if (flush === "pushed") console.log("  ↳ private memory committed + pushed");
     store.close();
   });
 
@@ -1029,10 +1043,12 @@ program
   .option("--forbid-dep <names>", "comma-sep imports that BREAK the rule (parsed-import precise; e.g. lodash) — blocks the real violation, immune to staleness")
   .option("--forbid-symbol <names>", "comma-sep identifier names that break the rule")
   .option("--match <regex>", "textual line regex (lint-grade last resort; prefer --forbid-dep/--forbid-symbol)")
-  .action((statement: string, opts: { scope: string; severity: string; type: string; rationale: string; sourceDecision?: string; enforcement: string; match?: string; forbidDep?: string; forbidSymbol?: string }) => {
+  .option("--private", "write the invariant into the private overlay (local enforcement only; never included in public CI output)")
+  .action((statement: string, opts: { scope: string; severity: string; type: string; rationale: string; sourceDecision?: string; enforcement: string; match?: string; forbidDep?: string; forbidSymbol?: string; private?: boolean }) => {
     const SEV = ["advisory", "warning", "blocking"];
     if (!SEV.includes(opts.severity)) return fail(`--severity must be one of: ${SEV.join(", ")}`);
     const { store, root } = storeFor();
+    if (opts.private && !store.hasPrivate) { store.close(); return fail("--private needs HUNCH_PRIVATE_DIR set to a private store"); }
     store.json.ensureDirs();
     const scope = opts.scope.split(",").map((s) => toPosixTarget(s.trim())).filter(Boolean);
     const csv = (s?: string) => (s ? s.split(",").map((x) => x.trim()).filter(Boolean) : []);
@@ -1062,10 +1078,13 @@ program
       valid_from: new Date().toISOString(),
       valid_to: null,
       provenance: { source: "human_confirmed", confidence: 1, evidence: [], last_verified: new Date().toISOString() },
-    } as Constraint);
+    } as Constraint, opts.private);
     store.reindex();
-    refreshExistingGrounding(root, store); // keep EVERY assistant's grounding current, not just CLAUDE.md
-    console.log(`✓ recorded ${c.severity} constraint ${c.id}: "${c.statement}" (scope: ${scope.join(", ") || "repo"})`);
+    // Public grounding is a publishable artifact. Private rules stay local and
+    // are surfaced by local checks/MCP, never copied into committed agent docs.
+    if (store.captureHome(!!opts.private) === "public") refreshExistingGrounding(root, store);
+    const flush = flushCapture(store, hunchPaths(root).hunch, !!opts.private, `hunch: capture ${c.id}`);
+    console.log(`✓ recorded ${c.severity} constraint ${c.id}: "${c.statement}" (scope: ${scope.join(", ") || "repo"})${opts.private ? " [private overlay]" : ""}`);
     if (derived && c.forbids?.deps.length) console.log(`  ↳ matcher: forbids import of ${c.forbids.deps.join(", ")} (precise, immune to staleness)`);
     if (c.severity === "blocking" && !effectiveForbids(c)) {
       // The default path's sharp edge: a scope-only blocking rule fails OPEN once any
@@ -1073,6 +1092,7 @@ program
       console.log(`  ⚠ scope-only — this will downgrade to advisory once a file in scope is changed after today.`);
       console.log(`    To block the actual violation across the file's life, add  --forbid-dep <pkg>  (or --forbid-symbol / --match).`);
     }
+    if (flush === "pushed") console.log("  ↳ private memory committed + pushed");
     store.close();
   });
 
@@ -1082,8 +1102,10 @@ program
   .description("Run the test suite; capture failures as Bugs (suspects + recurrence → Constraints), mark passing tests' bugs fixed.")
   .argument("[cmd...]", "test command to run (default: `npm test`)")
   .option("--dry-run", "show what would be captured without writing")
-  .action(async (cmd: string[], opts: { dryRun?: boolean }) => {
+  .option("--private", "keep captured test failures in the private overlay and use deterministic local synthesis")
+  .action(async (cmd: string[], opts: { dryRun?: boolean; private?: boolean }) => {
     const { store, root } = storeFor();
+    if (opts.private && !store.hasPrivate) { store.close(); return fail("--private needs HUNCH_PRIVATE_DIR set to a private store"); }
     store.json.ensureDirs();
     // Run as a shell string (not argv) so the npm/test-runner shim resolves on
     // Windows and avoids Node's DEP0190 args+shell warning — same lesson as the
@@ -1110,7 +1132,7 @@ program
       return;
     }
 
-    const cap = await captureTestRun(store, root, { report, status: run.status, cmd: cmdStr, output });
+    const cap = await captureTestRun(store, root, { report, status: run.status, cmd: cmdStr, output, private: opts.private });
     for (const { bug, constraint } of cap.results) {
       if (constraint) console.log(`  ⚠ ${bug.id} "${bug.title}" → promoted constraint ${constraint.id} [${constraint.severity}]`);
       else console.log(`  ✗ ${bug.id} "${bug.title}" [${bug.severity}]${bug.lineage.recurrence_of ? ` ↳ recurrence of ${bug.lineage.recurrence_of}` : ""}`);
@@ -1118,6 +1140,7 @@ program
     for (const b of cap.fixed) console.log(`  ✓ ${b.id} "${b.title}" → fixed (test passing)`);
 
     store.reindex();
+    if (cap.results.length || cap.fixed.length) flushCapture(store, hunchPaths(root).hunch, !!opts.private, `hunch: capture test results`);
     store.close();
     const recurrences = cap.results.filter((r) => r.bug.lineage.recurrence_of).length;
     const promoted = cap.results.filter((r) => r.constraint).length;
@@ -1171,15 +1194,16 @@ program
   .command("check")
   .description("Flag changes that touch a do-not-break invariant — the local guardrail AND the CI/PR Constraint Guard. Also flags (advisory) symbols you add that already exist elsewhere — possible re-implementation/sprawl.")
   .option("--staged", "check git staged files (default)")
+  .option("--working", "check all working-tree edits vs HEAD (staged, unstaged, and untracked files)")
   .option("--commit <sha>", "check a specific commit's files")
   .option("--base <ref>", "check a PR/branch: files changed vs <ref> (e.g. origin/main) — for CI")
   .option("--strict", "exit non-zero ONLY on a direct, high-confidence, non-stale blocking invariant (near/stale/low-confidence stay advisory)")
   .option("--format <fmt>", "output: text (default) | markdown (a PR comment)", "text")
   .option("--blast", "also print the dependency blast radius of the changed files")
   .option("--public-only", "exclude the private overlay (HUNCH_PRIVATE_DIR) from the report — use for any output that may be posted publicly (the CI PR comment passes this)")
-  .action((opts: { staged?: boolean; commit?: string; base?: string; strict?: boolean; format?: string; blast?: boolean; publicOnly?: boolean }) => {
-    const sources = [opts.commit && "--commit", opts.base && "--base", opts.staged && "--staged"].filter(Boolean);
-    if (sources.length > 1) return fail(`pick one of --staged / --commit / --base (got ${sources.join(", ")})`);
+  .action((opts: { staged?: boolean; working?: boolean; commit?: string; base?: string; strict?: boolean; format?: string; blast?: boolean; publicOnly?: boolean }) => {
+    const sources = [opts.commit && "--commit", opts.base && "--base", opts.staged && "--staged", opts.working && "--working"].filter(Boolean);
+    if (sources.length > 1) return fail(`pick one of --staged / --working / --commit / --base (got ${sources.join(", ")})`);
     const markdown = opts.format === "markdown";
     const emptyReport: CheckReport = { fileCount: 0, strict: !!opts.strict, direct: [], near: [], regressions: [], vetoes: [], redundant: [], strictBlockers: 0, regBlocking: 0, vetoBlocking: 0 };
 
@@ -1193,6 +1217,7 @@ program
     store.reindex(); // blast radius walks the edge graph — make the index current
     const files = opts.commit ? commitFiles(opts.commit, root)
       : opts.base ? rangeFiles(opts.base, root)
+      : opts.working ? workingFiles(root)
       : stagedFiles(root);
     if (!files.length) {
       console.log(markdown ? renderMarkdown(emptyReport) : "No changed files to check.");
@@ -1203,7 +1228,7 @@ program
     // code) + REDUNDANT (adds a symbol already defined elsewhere — advisory) + the
     // hardened strict gate + causal `why` citations — all assembled by the shared
     // store.buildCheckReport (also used by the hunch_merge_verdict tool).
-    const diff = opts.commit ? commitDiff(opts.commit, root) : opts.base ? rangeDiff(opts.base, root) : stagedDiff(root);
+    const diff = opts.commit ? commitDiff(opts.commit, root) : opts.base ? rangeDiff(opts.base, root) : opts.working ? workingDiff(root) : stagedDiff(root);
     const report: CheckReport = store.buildCheckReport(files, diff, {
       strict: !!opts.strict,
       lastChange: (f) => lastChangeDate(f, root),
@@ -1709,24 +1734,29 @@ program
   .option("--accept-verified", "batch-accept every Critic-verified, well-grounded draft (>= --min-grounded)")
   .option("--reject-duplicates", "batch-reject drafts that near-duplicate an accepted record (deterministic term+file similarity — hygiene, not judgment)")
   .option("--min-grounded <n>", "grounded-ness threshold for the ready group / --accept-verified", String(READY_MIN_GROUNDED))
-  .action((opts: { accept?: string; reject?: string; acceptVerified?: boolean; rejectDuplicates?: boolean; minGrounded?: string }) => {
+  .option("--private", "include local private/shared-overlay drafts; terminal output may contain private memory")
+  .action((opts: { accept?: string; reject?: string; acceptVerified?: boolean; rejectDuplicates?: boolean; minGrounded?: string; private?: boolean }) => {
     const { store, root } = storeFor();
     const minGrounded = Number.isFinite(Number(opts.minGrounded)) ? Number(opts.minGrounded) : READY_MIN_GROUNDED;
+    if (opts.private && !store.hasPrivate) { store.close(); return fail("--private needs HUNCH_PRIVATE_DIR set to a private store"); }
+    const decisions = () => opts.private ? store.recs("decisions") : store.json.loadAll("decisions");
+    let publicGroundingChanged = false;
     if (opts.accept) {
-      const d = store.json.get("decisions", opts.accept);
+      const d = opts.private ? store.getRec("decisions", opts.accept) : store.json.get("decisions", opts.accept);
       if (!d) { store.close(); return fail(`decision ${opts.accept} not found`); }
+      const inPrivate = !!store.getPrivateRec("decisions", d.id);
       const { source, armed } = acceptDecision(store, d);
       store.reindex();
-      refreshExistingGrounding(root, store); // confirming a rule must reach EVERY assistant's grounding
+      if (!inPrivate) { refreshExistingGrounding(root, store); publicGroundingChanged = true; }
       console.log(`✓ accepted ${opts.accept} (now ${source}, confidence 0.95${armed ? `, ${armed} tripwire(s) now blocking` : ""})`);
     } else if (opts.reject) {
-      const ok2 = store.json.delete("decisions", opts.reject);
+      const ok2 = opts.private ? store.deleteWhereItLives("decisions", opts.reject) : store.json.delete("decisions", opts.reject);
       store.reindex();
       console.log(ok2 ? `✓ rejected and removed ${opts.reject}` : `decision ${opts.reject} not found`);
     } else if (opts.rejectDuplicates) {
       // Deterministic hygiene, not a trust decision (dec_a466655539 stays intact):
       // only drafts, only against ACCEPTED records, conservative threshold.
-      const all = store.json.loadAll("decisions");
+      const all = decisions();
       const drafts = all.filter((d) => d.status === "proposed" && !d.provenance.source.includes("human_confirmed"));
       const dupes = drafts
         .map((d) => ({ d, m: draftDuplicateOf(d, all) }))
@@ -1736,7 +1766,7 @@ program
       } else {
         let removed = 0;
         for (const { d, m } of dupes) {
-          if (store.json.delete("decisions", d.id)) removed++;
+          if ((opts.private ? store.deleteWhereItLives("decisions", d.id) : store.json.delete("decisions", d.id))) removed++;
           console.log(`  ✗ ${d.id} — "${d.title}"\n      duplicate of ${m.of.id} — "${m.of.title}" (${Math.round(m.score * 100)}%)`);
         }
         store.reindex();
@@ -1745,20 +1775,23 @@ program
     } else if (opts.acceptVerified) {
       // Batch path: only Critic-verified, well-grounded drafts qualify — still the
       // human-driven accept gate (the operator runs this), just over a safe subset.
-      const proposed = store.json.loadAll("decisions").filter((d) => d.status === "proposed");
+      const proposed = decisions().filter((d) => d.status === "proposed");
       const { ready } = partitionReview(proposed, minGrounded);
       if (!ready.length) {
         console.log(`✓ No Critic-verified drafts at grounded ≥ ${minGrounded} to batch-accept.`);
       } else {
         let armedTotal = 0;
-        for (const it of ready) armedTotal += acceptDecision(store, it.d).armed;
+        for (const it of ready) {
+          if (!store.getPrivateRec("decisions", it.d.id)) publicGroundingChanged = true;
+          armedTotal += acceptDecision(store, it.d).armed;
+        }
         store.reindex();
-        refreshExistingGrounding(root, store); // batch-confirm must reach EVERY assistant's grounding
+        if (publicGroundingChanged) refreshExistingGrounding(root, store); // committed grounding stays public-only
         console.log(`✓ accepted ${ready.length} verified draft(s); ${armedTotal} tripwire(s) now blocking.`);
         for (const it of ready) console.log(`   ${it.d.id}  grounded=${it.synth.grounded ?? "?"}  ${it.d.title}`);
       }
     } else {
-      const drafts = store.json.loadAll("decisions").filter((d) => d.status === "proposed" || d.provenance.confidence < 0.6);
+      const drafts = decisions().filter((d) => d.status === "proposed" || d.provenance.confidence < 0.6);
       const { ready, scrutiny } = partitionReview(drafts, minGrounded);
       if (!ready.length && !scrutiny.length) {
         console.log("✓ No low-confidence drafts to review.");
@@ -1770,7 +1803,7 @@ program
         }
         if (scrutiny.length) {
           console.log(`⚠ ${scrutiny.length} need scrutiny — unverified / low-grounded (lowest confidence first):\n`);
-          const all = store.json.loadAll("decisions");
+          const all = decisions();
           let dupCount = 0;
           for (const it of scrutiny) {
             printReviewItem(it);
@@ -1798,12 +1831,14 @@ program
   .option("--min-grounded <n>", "grounded-ness threshold for the auto-accept gate", String(READY_MIN_GROUNDED))
   .option("--min-reject-confidence <n>", "minimum harness confidence to DELETE an irrelevant draft (else kept for a human)", "0.7")
   .option("--no-llm", "skip the harness judgment (dedup + grounding only — no relevance deletion)")
-  .action(async (opts: { apply?: boolean; minGrounded?: string; minRejectConfidence?: string; llm?: boolean }) => {
+  .option("--private", "include local private/shared-overlay drafts; private drafts are never sent to an LLM judge")
+  .action(async (opts: { apply?: boolean; minGrounded?: string; minRejectConfidence?: string; llm?: boolean; private?: boolean }) => {
     const { store, root } = storeFor();
     try {
+      if (opts.private && !store.hasPrivate) return fail("--private needs HUNCH_PRIVATE_DIR set to a private store");
       const minGrounded = Number.isFinite(Number(opts.minGrounded)) ? Number(opts.minGrounded) : READY_MIN_GROUNDED;
       const minRejectConfidence = Number.isFinite(Number(opts.minRejectConfidence)) ? Number(opts.minRejectConfidence) : 0.7;
-      const all = store.json.loadAll("decisions");
+      const all = opts.private ? store.recs("decisions") : store.json.loadAll("decisions");
       // Same draft set `hunch review` / `hunch status` triage.
       const drafts = all.filter((d) => d.status === "proposed" || d.provenance.confidence < 0.6);
       if (!drafts.length) { console.log("✓ No drafts to auto-review."); return; }
@@ -1811,7 +1846,7 @@ program
       // Delegate relevance to the harness (subscription CLI) — feature-detected,
       // and any per-draft failure degrades to "not judged" (kept for a human).
       const verdicts = new Map<string, RelevanceVerdict>();
-      if (opts.llm !== false) {
+      if (opts.llm !== false && !opts.private) {
         const provider = await selectProvider();
         if (provider.judgeDraft) {
           // The candidate pool for duplicate_of / restatement: the LIVE, vouched records.
@@ -1829,6 +1864,8 @@ program
         } else {
           console.log(dim("No subscription CLI available — relevance judgment skipped (dedup + grounding only)."));
         }
+      } else if (opts.private && opts.llm !== false) {
+        console.log(dim("Private review stays local — harness judgment skipped (dedup + grounding only)."));
       }
 
       const plan = planAutoReview(drafts, all, verdicts, { minGrounded, minRejectConfidence });
@@ -1841,12 +1878,18 @@ program
       }
 
       // Apply: accept the verified+relevant, delete duplicates + irrelevant.
-      let accepted = 0, deleted = 0, armedTotal = 0;
-      for (const e of plan.accept) { armedTotal += acceptDecision(store, e.d).armed; accepted++; }
-      for (const e of [...plan.rejectDuplicate, ...plan.rejectIrrelevant]) { if (store.json.delete("decisions", e.d.id)) deleted++; }
+      let accepted = 0, deleted = 0, armedTotal = 0, publicAccepted = false;
+      for (const e of plan.accept) {
+        if (!store.getPrivateRec("decisions", e.d.id)) publicAccepted = true;
+        armedTotal += acceptDecision(store, e.d).armed;
+        accepted++;
+      }
+      for (const e of [...plan.rejectDuplicate, ...plan.rejectIrrelevant]) {
+        if ((opts.private ? store.deleteWhereItLives("decisions", e.d.id) : store.json.delete("decisions", e.d.id))) deleted++;
+      }
       if (accepted || deleted) {
         store.reindex();
-        if (accepted) refreshExistingGrounding(root, store); // confirmations must reach every assistant's grounding
+        if (publicAccepted) refreshExistingGrounding(root, store); // committed grounding stays public-only
       }
       console.log(`\n✓ auto-review applied: ${accepted} accepted${armedTotal ? ` (${armedTotal} tripwire(s) now blocking)` : ""}, ${deleted} deleted, ${plan.keep.length} kept for review.`);
     } finally {
@@ -2004,20 +2047,21 @@ program
   .description("PR impact: the dependency + memory surface of a change — dependent files reached, invariants direct/near, and the decisions concerned. Read-only, advisory (gating is `hunch check`). Omit base and --commit to inspect staged changes.")
   .argument("[base]", "diff against this base ref (e.g. origin/main) for a branch/PR")
   .option("--commit <sha>", "impact of a single commit")
-  .action((base: string | undefined, opts: { commit?: string }) => {
+  .option("--working", "impact all working-tree edits vs HEAD (staged, unstaged, and untracked files)")
+  .action((base: string | undefined, opts: { commit?: string; working?: boolean }) => {
     const { store, root } = storeFor();
     try {
-      if (base && opts.commit) return fail("Pass at most one of [base] / --commit.");
+      if ((base && opts.commit) || (opts.working && (base || opts.commit))) return fail("Pass exactly one of [base] / --commit / --working (or omit all for staged changes).");
       if (base && !revExists(base, root)) return fail(`base ref "${base}" does not resolve.`);
       if (opts.commit && !revExists(opts.commit, root)) return fail(`commit "${opts.commit}" does not resolve.`);
       store.reindex(); // reflect out-of-band JSON edits before reading the graph
-      const files = opts.commit ? commitFiles(opts.commit, root) : base ? rangeFiles(base, root) : stagedFiles(root);
-      const scope = opts.commit ? `commit ${opts.commit}` : base ? `${base}..HEAD` : "staged changes";
+      const files = opts.commit ? commitFiles(opts.commit, root) : base ? rangeFiles(base, root) : opts.working ? workingFiles(root) : stagedFiles(root);
+      const scope = opts.commit ? `commit ${opts.commit}` : base ? `${base}..HEAD` : opts.working ? "working changes" : "staged changes";
       if (!files.length) {
         console.log(`No changed files in ${scope}.`);
         return;
       }
-      const diff = opts.commit ? commitDiff(opts.commit, root) : base ? rangeDiff(base, root) : stagedDiff(root);
+      const diff = opts.commit ? commitDiff(opts.commit, root) : base ? rangeDiff(base, root) : opts.working ? workingDiff(root) : stagedDiff(root);
       console.log(renderImpact(store.prImpact(files, diff), scope));
     } finally {
       store.close();
@@ -2203,6 +2247,34 @@ program
         console.log(`\nHeal: run \`hunch wiki --heal\` — regenerates only the stale pages (the wiki is a derived view; never edit it by hand).\n`);
       }
       console.log(`Hunch never rewrites prose for you; this is a read-only reconciliation report.`);
+    } finally {
+      store.close();
+    }
+  });
+
+// ---- repair-ref (atomic decision reference correction) --------------------
+program
+  .command("repair-ref")
+  .description("Atomically repair one exact file reference in a decision's scope and provenance evidence (never changes the decision itself).")
+  .argument("<decision>", "decision id containing the stale reference")
+  .requiredOption("--from <path>", "exact stale path to replace")
+  .requiredOption("--to <path>", "exact current path (use private:<path> for a private-overlay file)")
+  .option("--private", "require the decision to be in the configured private overlay")
+  .action((id: string, opts: { from: string; to: string; private?: boolean }) => {
+    const { store } = storeFor();
+    try {
+      if (opts.from === opts.to) return fail("--from and --to must be different paths");
+      if (opts.private && !store.hasPrivate) return fail("--private needs HUNCH_PRIVATE_DIR set to a private store");
+      // `getRec` is deliberately overlay-first. An explicit --private prevents a
+      // same-id public record from being silently amended instead of private memory.
+      const d = opts.private ? store.getPrivateRec("decisions", id) : store.getRec("decisions", id);
+      if (!d) return fail(`decision "${id}" not found${opts.private ? " in the private overlay" : ""}`);
+      const repaired = repairDecisionReference(d, opts.from, opts.to);
+      if (!repaired) return fail(`decision "${id}" does not contain the exact reference "${opts.from}"`);
+      store.putWhereItLives("decisions", repaired.decision);
+      store.reindex();
+      console.log(`✓ repaired ${id}: ${repaired.relatedFiles} related file reference(s) + ${repaired.evidence} provenance evidence reference(s).`);
+      console.log(`  ${opts.from} → ${opts.to}`);
     } finally {
       store.close();
     }

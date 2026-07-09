@@ -16,7 +16,7 @@ import { decisionId } from "../core/ids.js";
 import { buildCorrectionConstraint } from "../core/correction.js";
 import { knownRepoDeps } from "../synthesis/tripwires.js";
 import { refreshExistingGrounding } from "../integrations/providers.js";
-import { revParse, asOfDate, revExists, lastChangeDate, rangeFiles, rangeDiff, commitFiles, commitDiff, stagedFiles, stagedDiff, pullHunch } from "../extractors/git.js";
+import { revParse, asOfDate, revExists, lastChangeDate, rangeFiles, rangeDiff, commitFiles, commitDiff, stagedFiles, stagedDiff, workingFiles, workingDiff, pullHunch } from "../extractors/git.js";
 import { flushCapture } from "../integrations/sync.js";
 import { ensureTeamOverlay } from "../integrations/team.js";
 import { formatContext, formatStructure } from "../core/format.js";
@@ -515,11 +515,11 @@ export function buildServer(root: string): McpServer {
         const fullSha = resolved && /^[0-9a-f]{40}$/.test(resolved) ? resolved : null;
         const id = fullSha ? decisionId(fullSha) : decisionId(`manual:${decision.title}`);
 
-        // Preserve the ADR lineage: upgrading an auto-draft yields the composite
-        // provenance the design specifies.
-        // Public-only lookup; skip it for a private write so a private decision never
-        // inherits fields from a same-id PUBLIC record (and vice-versa).
-        const existing = decision.private ? undefined : store.json.get("decisions", id);
+        // Preserve the ADR lineage from the SAME home this write will use. A private
+        // re-record must retain its own optional fields, but must never inherit a
+        // same-id public record (and vice versa).
+        const home = store.captureHome(!!decision.private);
+        const existing = home === "private" ? store.getPrivateRec("decisions", id) : store.json.get("decisions", id);
         const source = existing && existing.provenance.source.includes("llm_draft")
           ? "llm_draft+human_confirmed"
           : "human_confirmed";
@@ -552,7 +552,6 @@ export function buildServer(root: string): McpServer {
         // private:false, so the guard must key its incumbent lookup on HOME, not on
         // the flag — keying on the flag let a shared-mode supersede of a public
         // incumbent pass the guard and then no-op the close (two live decisions).
-        const home = store.captureHome(!!decision.private);
         // Decision-grounding uniqueness guard (§4 Enforcement): never create a SECOND
         // live decision for one topic. Exclude ONLY the incumbent this write will
         // actually close — one resolvable in the SAME store the write lands in. A
@@ -645,7 +644,7 @@ export function buildServer(root: string): McpServer {
         // Private corrections go to the overlay (enforced locally via the merged read,
         // never rendered into the public CI comment, which is public-only by construction).
         const home = store.captureHome(!!input.private);
-        const existing = home === "private" ? undefined : store.json.get("constraints", rec.id);
+        const existing = home === "private" ? store.getPrivateRec("constraints", rec.id) : store.json.get("constraints", rec.id);
         if (home === "private") store.putPrivate("constraints", rec);
         else store.json.put("constraints", rec);
         store.reindex();
@@ -675,21 +674,22 @@ export function buildServer(root: string): McpServer {
     {
       title: "Causal merge verdict: is this change safe against the recorded WHY?",
       description:
-        "Before opening or merging a PR, replay a diff against engineering memory and return ONE verdict — BLOCK / WARN / PASS. For each invariant DIRECTLY in scope it cites WHY the guard exists (the decision that motivated it + the bug whose root cause spawned it); it also lists invariants reached via blast radius (near, advisory), any deliberately-retired code the diff re-introduces, and symbols the diff adds that are already defined elsewhere in the graph (possible re-implementation/sprawl, advisory). Deterministic, no LLM. Omit base AND commit to check STAGED changes; pass base (e.g. origin/main) for a PR range, or commit for a single commit. Call this before merging a widely-scoped change.",
+        "Before opening or merging a PR, replay a diff against engineering memory and return ONE verdict — BLOCK / WARN / PASS. For each invariant DIRECTLY in scope it cites WHY the guard exists (the decision that motivated it + the bug whose root cause spawned it); it also lists invariants reached via blast radius (near, advisory), any deliberately-retired code the diff re-introduces, and symbols the diff adds that are already defined elsewhere in the graph (possible re-implementation/sprawl, advisory). Deterministic, no LLM. Omit base, commit, and working to check STAGED changes; pass working:true for all local changes, base (e.g. origin/main) for a PR range, or commit for a single commit. Call this before merging a widely-scoped change.",
       inputSchema: {
         base: z.string().optional().describe("Diff against this base ref (e.g. origin/main) — for a PR/branch."),
         commit: z.string().optional().describe("Diff a single commit (sha/ref). Omit base AND commit to check staged changes."),
+        working: z.boolean().optional().describe("Include all working-tree changes vs HEAD (staged, unstaged, and untracked files)."),
       },
     },
-    async ({ base, commit }): Promise<ToolResult> => {
+    async ({ base, commit, working }): Promise<ToolResult> => {
       try {
-        if (base && commit) return err("Pass at most one of base/commit (omit both to check staged changes).");
+        if ([base, commit, working].filter(Boolean).length > 1) return err("Pass at most one of base/commit/working (omit all to check staged changes).");
         if (base && !revExists(base, root)) return err(`base ref "${base}" does not resolve (in CI, fetch the base branch first).`);
         if (commit && !revExists(commit, root)) return err(`commit "${commit}" does not resolve.`);
-        const files = commit ? commitFiles(commit, root) : base ? rangeFiles(base, root) : stagedFiles(root);
-        const scope = commit ? `commit ${commit}` : base ? `${base}..HEAD` : "staged changes";
+        const files = commit ? commitFiles(commit, root) : base ? rangeFiles(base, root) : working ? workingFiles(root) : stagedFiles(root);
+        const scope = commit ? `commit ${commit}` : base ? `${base}..HEAD` : working ? "working changes" : "staged changes";
         if (!files.length) return ok(`VERDICT: ✅ PASS — no changed files in ${scope}.`);
-        const diff = commit ? commitDiff(commit, root) : base ? rangeDiff(base, root) : stagedDiff(root);
+        const diff = commit ? commitDiff(commit, root) : base ? rangeDiff(base, root) : working ? workingDiff(root) : stagedDiff(root);
         const report = store.buildCheckReport(files, diff, { strict: true, lastChange: (f) => lastChangeDate(f, root) });
         const v = verdict(report);
         const head = v === "block"
@@ -724,21 +724,22 @@ export function buildServer(root: string): McpServer {
     {
       title: "PR impact: the dependency + memory surface of a change",
       description:
-        "Given a change (staged, a branch vs base, or a single commit), return its IMPACT SURFACE: the files whose code transitively depends on the changed files, the invariants directly in scope and those reached via blast radius, and the recorded decisions concerning the touched files. Read-only and advisory — use hunch_merge_verdict for the gate. Call before review to know what a PR can break and which recorded intent it touches. Omit base AND commit for staged changes.",
+        "Given a change (staged, working tree, a branch vs base, or a single commit), return its IMPACT SURFACE: the files whose code transitively depends on the changed files, the invariants directly in scope and those reached via blast radius, and the recorded decisions concerning the touched files. Read-only and advisory — use hunch_merge_verdict for the gate. Call before review to know what a PR can break and which recorded intent it touches. Omit base, commit, and working for staged changes.",
       inputSchema: {
         base: z.string().optional().describe("Diff against this base ref (e.g. origin/main) — for a PR/branch."),
         commit: z.string().optional().describe("Impact of a single commit (sha/ref). Omit base AND commit for staged changes."),
+        working: z.boolean().optional().describe("Include all working-tree changes vs HEAD (staged, unstaged, and untracked files)."),
       },
     },
-    async ({ base, commit }): Promise<ToolResult> => {
+    async ({ base, commit, working }): Promise<ToolResult> => {
       try {
-        if (base && commit) return err("Pass at most one of base/commit (omit both for staged changes).");
+        if ([base, commit, working].filter(Boolean).length > 1) return err("Pass at most one of base/commit/working (omit all for staged changes).");
         if (base && !revExists(base, root)) return err(`base ref "${base}" does not resolve (in CI, fetch the base branch first).`);
         if (commit && !revExists(commit, root)) return err(`commit "${commit}" does not resolve.`);
-        const files = commit ? commitFiles(commit, root) : base ? rangeFiles(base, root) : stagedFiles(root);
-        const scope = commit ? `commit ${commit}` : base ? `${base}..HEAD` : "staged changes";
+        const files = commit ? commitFiles(commit, root) : base ? rangeFiles(base, root) : working ? workingFiles(root) : stagedFiles(root);
+        const scope = commit ? `commit ${commit}` : base ? `${base}..HEAD` : working ? "working changes" : "staged changes";
         if (!files.length) return ok(`No changed files in ${scope}.`);
-        const diff = commit ? commitDiff(commit, root) : base ? rangeDiff(base, root) : stagedDiff(root);
+        const diff = commit ? commitDiff(commit, root) : base ? rangeDiff(base, root) : working ? workingDiff(root) : stagedDiff(root);
         return ok(renderImpact(store.prImpact(files, diff), scope));
       } catch (e) {
         return err(`Failed to compute impact: ${(e as Error).message}`);

@@ -66,6 +66,10 @@
   .feature .go{display:inline-flex;align-items:center;gap:9px;font-weight:500;color:var(--accent)}
   .feature .go svg{transition:transform .25s var(--ease)}.feature:hover .go svg{transform:translateX(4px)}
   .feature-art{position:relative;background:linear-gradient(150deg,#1b1f3a,#0e1020);color:#dfe2ff;display:flex;align-items:center;justify-content:center;padding:30px;font-family:var(--mono);font-size:13px;line-height:1.7;overflow:hidden}
+  .feature-art.has-cover{padding:0;background:#151515;isolation:isolate}
+  .feature-art.has-cover::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(12,13,12,.12),transparent 56%);pointer-events:none}
+  .feature-art.has-cover img{width:100%;height:100%;min-height:100%;object-fit:cover;display:block;transition:transform .6s var(--ease)}
+  .feature:hover .feature-art.has-cover img{transform:scale(1.035)}
   .feature-art .glow{position:absolute;inset:0;background:radial-gradient(420px 240px at 70% 30%, rgba(58,107,88,.35), transparent 60%)}
   .feature-art pre{position:relative;margin:0;white-space:pre;opacity:.96}
   .feature-art .v{color:var(--warn)} .feature-art .o{color:#8ea0ff} .feature-art .g{color:#7be0a3} .feature-art .d{color:#6f7196}
@@ -131,17 +135,9 @@
     const posts = (window.POSTS || []).slice().sort((a, b) => b.date.localeCompare(a.date));
     const pinned = posts.find((p) => p.pinned) || posts[0];
     const rest = posts.filter((p) => p !== pinned);
-
-    document.getElementById("featured").innerHTML = `
-      <a class="feature" href="/blog/post?slug=${pinned.slug}">
-        <div class="feature-copy">
-          <div class="row"><span class="pin">★ Pinned</span><span class="tag">${pinned.tag}</span><span class="meta">${fmt(pinned.date)} · ${pinned.read}</span></div>
-          <h2>${pinned.title}</h2>
-          <p>${pinned.dek}</p>
-          <span class="go">Read the benchmark ${ARROW}</span>
-        </div>
-        <div class="feature-art">
-          <div class="glow"></div>
+    const featuredArt = pinned.cover
+      ? `<img src="${pinned.cover.src}" alt="${pinned.cover.alt}" />`
+      : `<div class="glow"></div>
           <pre>$ hunch conform --strict
 
 <span class="v">⛔ listOrders now reaches dbQuery</span>
@@ -151,8 +147,17 @@
 
 <span class="d"># Semgrep: clean</span>
 <span class="d"># SonarQube: clean</span>
-<span class="g"># Hunch: blocked ✓</span></pre>
+<span class="g"># Hunch: blocked ✓</span></pre>`;
+
+    document.getElementById("featured").innerHTML = `
+      <a class="feature" href="/blog/post?slug=${pinned.slug}">
+        <div class="feature-copy">
+          <div class="row"><span class="pin">★ Pinned</span><span class="tag">${pinned.tag}</span><span class="meta">${fmt(pinned.date)} · ${pinned.read}</span></div>
+          <h2>${pinned.title}</h2>
+          <p>${pinned.dek}</p>
+          <span class="go">Read the release ${ARROW}</span>
         </div>
+        <div class="feature-art${pinned.cover ? " has-cover" : ""}">${featuredArt}</div>
       </a>`;
 
     document.getElementById("grid").innerHTML = rest.map((p) => `

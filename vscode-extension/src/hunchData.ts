@@ -5,6 +5,7 @@
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
+import * as cp from "node:child_process";
 
 export interface Provenance {
   source?: string;
@@ -22,6 +23,10 @@ export interface Constraint { id: string; statement: string; scope?: string[]; s
 
 export interface Hunch {
   root: string;
+  /** The extension's local read state. Private/shared records are merged only in
+   * this local process; this status makes an unavailable overlay visible rather
+   * than silently degrading editor grounding to public-only. */
+  overlay?: { mode: "private" | "shared"; state: "active" | "missing"; dir: string };
   components: Component[];
   edges: Edge[];
   symbols: Sym[];
@@ -85,17 +90,57 @@ function readDir<T>(dir: string): T[] {
   return out;
 }
 
+type LocalConfig = { privateDir?: string; mode?: "private" | "shared" };
+function readLocalConfig(file: string): LocalConfig {
+  try {
+    const value = JSON.parse(fs.readFileSync(file, "utf8")) as { privateDir?: unknown; mode?: unknown };
+    return {
+      privateDir: typeof value.privateDir === "string" && value.privateDir.trim() ? value.privateDir.trim() : undefined,
+      mode: value.mode === "shared" ? "shared" : value.mode === "private" ? "private" : undefined,
+    };
+  } catch { return {}; }
+}
+function commonOverlayConfig(root: string): LocalConfig {
+  try {
+    const common = cp.execFileSync("git", ["rev-parse", "--git-common-dir"], { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+    return readLocalConfig(path.join(path.resolve(root, common), "hunch", "local.json"));
+  } catch { return {}; }
+}
+function resolveOverlay(root: string, publicDir: string): { dir: string; mode: "private" | "shared"; state: "active" | "missing" } | undefined {
+  const local = readLocalConfig(path.join(publicDir, "local.json"));
+  const shared = local.privateDir ? undefined : commonOverlayConfig(root);
+  const config = local.privateDir ? local : shared;
+  const raw = process.env.HUNCH_PRIVATE_DIR?.trim() || config?.privateDir;
+  if (!raw) return undefined;
+  const dir = path.resolve(root, raw);
+  return { dir, mode: config?.mode ?? "private", state: fs.existsSync(dir) ? "active" : "missing" };
+}
+function mergeById<T extends { id: string }>(publicRecords: T[], overlayRecords: T[]): T[] {
+  const records = new Map<string, T>();
+  for (const record of publicRecords) records.set(record.id, record);
+  for (const record of overlayRecords) records.set(record.id, record);
+  return [...records.values()];
+}
+
 export function loadHunch(root: string): Hunch | null {
   const dir = path.join(root, ".hunch");
   if (!fs.existsSync(dir)) return null;
+  const overlay = resolveOverlay(root, dir);
+  const overlayDir = overlay?.state === "active" ? overlay.dir : undefined;
+  const fromOverlay = <T>(relative: string, indexed = false): T[] => {
+    if (!overlayDir) return [];
+    const file = path.join(overlayDir, relative);
+    return indexed ? readJson<T>(file) : readDir<T>(file);
+  };
   return {
     root,
-    components: readDir<Component>(path.join(dir, "components")),
-    edges: readJson<Edge>(path.join(dir, "edges", "index.json")),
-    symbols: readJson<Sym>(path.join(dir, "symbols", "index.json")),
-    decisions: readDir<Decision>(path.join(dir, "decisions")),
-    bugs: readDir<Bug>(path.join(dir, "bugs")),
-    constraints: readDir<Constraint>(path.join(dir, "constraints")),
+    overlay: overlay ? { mode: overlay.mode, state: overlay.state, dir: overlay.dir } : undefined,
+    components: mergeById(readDir<Component>(path.join(dir, "components")), fromOverlay<Component>("components")),
+    edges: mergeById(readJson<Edge>(path.join(dir, "edges", "index.json")), fromOverlay<Edge>("edges/index.json", true)),
+    symbols: mergeById(readJson<Sym>(path.join(dir, "symbols", "index.json")), fromOverlay<Sym>("symbols/index.json", true)),
+    decisions: mergeById(readDir<Decision>(path.join(dir, "decisions")), fromOverlay<Decision>("decisions")),
+    bugs: mergeById(readDir<Bug>(path.join(dir, "bugs")), fromOverlay<Bug>("bugs")),
+    constraints: mergeById(readDir<Constraint>(path.join(dir, "constraints")), fromOverlay<Constraint>("constraints")),
   };
 }
 
@@ -338,9 +383,16 @@ export function reviewQueue(hunch: Hunch, minGrounded: number = READY_MIN_GROUND
   return { ready, scrutiny };
 }
 
-/** Absolute path to a decision's JSON file (for opening the draft to edit). */
-export function decisionFilePath(root: string, id: string): string {
-  return path.join(root, ".hunch", "decisions", `${id}.json`);
+/** Absolute path to a decision's JSON file (for opening the draft to edit).
+ * Overlay-first mirrors HunchStore: a private draft must open from its real home,
+ * never as a non-existent public `.hunch` path. */
+export function decisionFilePath(hunch: Hunch, id: string): string {
+  const privateFile = hunch.overlay?.state === "active"
+    ? path.join(hunch.overlay.dir, "decisions", `${id}.json`)
+    : "";
+  return privateFile && fs.existsSync(privateFile)
+    ? privateFile
+    : path.join(hunch.root, ".hunch", "decisions", `${id}.json`);
 }
 
 // ---- bug lineage chains ----------------------------------------------------

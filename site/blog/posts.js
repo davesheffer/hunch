@@ -3,6 +3,50 @@
    global so it works on a static host with no build step. */
 window.POSTS = [
   {
+    slug: "change-gate-private-workflows",
+    title: "Hunch 1.5: give every code change a memory — before it ships",
+    dek: "The new Change Gate brings the same deterministic pre-flight to the CLI, MCP, and VS Code. Private overlays keep sensitive reasoning local. One workflow, whichever agent is writing the code.",
+    date: "2026-07-09", tag: "Release", read: "7 min", pinned: true,
+    cover: {
+      src: "/assets/change-gate-release.png",
+      alt: "A luminous green safe path crosses a dark dependency graph and passes through a precise red architectural gate."
+    },
+    body: `
+<p class="lead">AI is fast enough to make a locally sensible change before anyone has asked the one question that matters: <strong>what does this codebase already know about this part of the system?</strong> Hunch 1.5 puts that question directly in the working loop — before the edit, at review, and before a commit can leave the machine.</p>
+
+<h2>One pre-flight, wherever the change starts</h2>
+<p>The new <strong>Change Gate</strong> is a focused pre-flight: select a working diff or target, see the decisions, constraints, blast radius, and relevant bug history, then choose the next move with the receipt in view. It is available from the CLI, MCP, and VS Code instead of being a ritual tied to one assistant.</p>
+<p>That distinction matters. Your architecture is not a Claude rule, a Cursor setting, or a Copilot prompt. The decision graph lives with the repository; the gate asks the same question no matter which tool — or person — produced the change.</p>
+<pre><code># inspect the current work before a commit
+hunch check --working --strict --blast
+
+# use the same graph through your MCP client or the VS Code Change Gate</code></pre>
+
+<h2>A gate is not a prompt</h2>
+<p>Context helps. But a remembered rule is still advisory until the workflow can test it. Hunch turns the durable parts of engineering judgment into deterministic checks: a forbidden dependency stays forbidden, a controller cannot cross into the database layer, and a critical call path continues to reach the verification it needs.</p>
+<p>The point is not to make a model less creative. It is to let it move quickly inside boundaries that are explicit, reviewable, and explainable when they fire.</p>
+
+<h2>Private means a separate home, not a label</h2>
+<p>A lot of the most valuable engineering context is not ready for a public repository: a production incident, a customer-specific rule, a security investigation, or an unfinished migration plan. In private-overlay mode, those records live in a separate local store. The local workflow can read them and enforce them; the public graph and public CI do not receive them.</p>
+<figure class="inline-art">
+  <img src="/assets/private-overlay-release.png" alt="Nested translucent layers protect a private local vault while a separate code graph continues outside." loading="lazy" />
+  <figcaption>One repository workflow; a clear boundary between shared memory and local-only reasoning.</figcaption>
+</figure>
+<p>Explicit private capture uses deterministic local synthesis, and private review actions stay in the overlay. The CI workflow is configured public-only. That makes the privacy boundary operational, not a promise hidden in a settings panel.</p>
+
+<h2>Make the next correction durable</h2>
+<p>When a review catches a real mistake, record the why once: a decision, a bug, or a constraint. Hunch carries that evidence forward to the next relevant change and can enforce the parts that are precise enough to test. The goal is modest but consequential: do not pay for the same lesson twice.</p>
+<pre><code>npm i -g @davesheffer/hunch
+cd your-repo
+hunch init
+
+# begin advisory; make a constraint strict only when it has earned trust</code></pre>
+
+<h2>The workflow stays yours</h2>
+<p>Hunch remains git-native, MCP-native, and agent-agnostic. Use it with VS Code, a terminal, or any MCP-capable assistant. Keep shared truth in the repository. Keep private truth in the overlay you control. Let deterministic checks decide what must hold — not whichever model happens to be in the editor today.</p>
+`,
+  },
+  {
     slug: "skills-are-never-read",
     title: "We installed an agent skill in 20 sessions. It was read zero times.",
     dek: "A benchmark on real zod bugs found our carefully-written rigor skill had no effect — because no model ever opened it. Forcing delivery flipped hard bugs from FAIL to PASS. So we moved delivery into hooks the model can't ignore, and the gate promptly blocked its own author.",
@@ -100,7 +144,7 @@ hunch now                    # what happened + what's next, from the graph</code
     slug: "ai-ignores-your-architecture",
     title: "AI ignores your architecture rules — even at the frontier. We measured it.",
     dek: "An AI will rewrite your controller to query the database directly. It passes Semgrep, SonarQube and ESLint — all green. So we benchmarked the obvious fix: does telling the model the rule actually stop it?",
-    date: "2026-06-27", tag: "Benchmark", read: "8 min", pinned: true,
+    date: "2026-06-27", tag: "Benchmark", read: "8 min", pinned: false,
     body: `
 <p class="lead">An AI agent will happily rewrite your controller to query the database directly. It passes Semgrep. It passes SonarQube. It passes ESLint. All green — because there's no bad <em>pattern</em> to match. It's a <em>semantic</em> violation: a layer that wasn't supposed to reach another layer now does.</p>
 
@@ -187,7 +231,7 @@ hunch conform --strict   # also runs inside hunch check --strict and the CI gate
 <p>Only an explicit pin can fire — never a semantic guess about what your prose "probably" means. Unpinned markers ground but never gate. And <code>hunch heal</code> walks the reconciliation read-only: it shows you exactly which section drifted and which decision to rewrite it against. It never touches your prose.</p>
 
 <h2>Why this is the point, not a feature</h2>
-<p>We benchmarked context injection <a class="link" href="/blog/post.html?slug=ai-ignores-your-architecture">earlier this year</a>: telling the model the rule cut violations 58% → 16% — and the frontier model still ignored a rule it was shown 60% of the time. The lesson generalizes: <strong>anything advisory decays</strong> — model attention, prose docs, memory features. What holds is the thing that can say no.</p>
+<p>We benchmarked context injection <a class="link" href="/blog/post?slug=ai-ignores-your-architecture">earlier this year</a>: telling the model the rule cut violations 58% → 16% — and the frontier model still ignored a rule it was shown 60% of the time. The lesson generalizes: <strong>anything advisory decays</strong> — model attention, prose docs, memory features. What holds is the thing that can say no.</p>
 <p>That's the same spine Hunch runs on everywhere: the code is held to the graph (Architectural Conformance), and now the docs are too. <strong>Memory that gates, not just recalls.</strong></p>
 
 <h2>Also in v1.1</h2>

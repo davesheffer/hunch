@@ -32,6 +32,14 @@ test("post-commit hook: --private and --commit are emitted only when opted in", 
   } finally { rmSync(r, { recursive: true, force: true }); }
 });
 
+test("post-commit hook: local-only private sync forces deterministic synthesis", () => {
+  const r = repo();
+  try {
+    installPostCommitHook(r, "hunch", { private: true, commit: true, localOnly: true });
+    assert.match(hookText(r), /HUNCH_SYNTH_PROVIDER=deterministic/);
+  } finally { rmSync(r, { recursive: true, force: true }); }
+});
+
 test("post-commit hook: --commit without --private (regular auto-commit)", () => {
   const r = repo();
   try {

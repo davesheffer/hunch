@@ -11,7 +11,7 @@ import { hooksDir } from "../extractors/git.js";
 const MARK = "# >>> hunch post-commit >>>";
 const ENDMARK = "# <<< hunch post-commit <<<";
 
-function block(invocation: string, opts: { private?: boolean; commit?: boolean } = {}): string {
+function block(invocation: string, opts: { private?: boolean; commit?: boolean; localOnly?: boolean } = {}): string {
   // --private routes the auto-synthesized decision into the HUNCH_PRIVATE_DIR overlay
   // instead of the public repo. --commit (opt-in) also commits & pushes the repo the
   // decision landed in (the private store under --private, else this repo). The hook
@@ -22,6 +22,10 @@ function block(invocation: string, opts: { private?: boolean; commit?: boolean }
     MARK,
     'if [ -z "$HUNCH_SYNC" ]; then',
     "  export HUNCH_SYNC=1",
+    // A split-private capture must not make a storage-private promise and then
+    // ship the commit diff to a subscription CLI. Shared overlays are a separate
+    // team policy, so only the explicit local-only mode forces deterministic.
+    ...(opts.localOnly ? ["  export HUNCH_SYNTH_PROVIDER=deterministic"] : []),
     `  ( ${invocation} sync --from-hook --quiet${priv}${commit} >/dev/null 2>&1 || true ) &`,
     "fi",
     ENDMARK,
@@ -33,7 +37,7 @@ export interface HookInstall {
   action: "created" | "appended" | "updated" | "unchanged";
 }
 
-export function installPostCommitHook(root: string, invocation: string, opts: { private?: boolean; commit?: boolean } = {}): HookInstall {
+export function installPostCommitHook(root: string, invocation: string, opts: { private?: boolean; commit?: boolean; localOnly?: boolean } = {}): HookInstall {
   const dir = hooksDir(root);
   // `git rev-parse --git-path hooks` returns a path relative to the repo in a
   // normal checkout, but an ABSOLUTE one inside a linked worktree (the shared

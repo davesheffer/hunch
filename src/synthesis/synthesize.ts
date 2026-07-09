@@ -54,7 +54,7 @@ export async function syncCommit(
   store: HunchStore,
   root: string,
   sha?: string,
-  opts: { force?: boolean; private?: boolean; deep?: boolean; verify?: boolean; samples?: number } = {},
+  opts: { force?: boolean; private?: boolean; localOnly?: boolean; deep?: boolean; verify?: boolean; samples?: number } = {},
 ): Promise<SyncResult> {
   const target = sha || headSha(root);
   if (!target) return { status: "skipped", reason: "no HEAD commit" };
@@ -68,7 +68,11 @@ export async function syncCommit(
   // Seed the id from the COMMIT (stable across runs), not the LLM-generated title
   // (which varies) — so re-syncing a commit updates rather than dupes.
   const id = decisionId(meta.sha);
-  const existing = store.json.get("decisions", id);
+  // Check the store this capture WILL write to. Looking only in the public store
+  // made private/shared re-syncs re-draft the same commit and let `--force`
+  // overwrite a human-confirmed overlay decision.
+  const home = store.captureHome(!!opts.private);
+  const existing = home === "private" ? store.getPrivateRec("decisions", id) : store.json.get("decisions", id);
   // Never clobber a human-confirmed decision with a low-confidence auto-draft —
   // even under --force. Skip BEFORE synthesizing so we never pay for a draft we'd
   // throw away (the old order drafted first, then discarded it here).
@@ -110,8 +114,15 @@ export async function syncCommit(
   // back to the normal single-provider path when no CLI is available. Opt-in only.
   // --verify forces the LLM provider (auditing a deterministic draft is pointless) and,
   // like --deep, runs the Critic pass below. Subscription-only throughout (con_2ce3f2a547).
-  const wantVerify = !!(opts.verify || opts.deep);
-  const provider = opts.deep
+  // An explicit private capture is storage-private AND local-only by default:
+  // never send a sensitive diff to a subscription CLI just to create a draft.
+  // Shared mode remains an explicit team policy and keeps its existing provider
+  // behavior unless the caller asked for a private capture.
+  const localOnly = opts.localOnly ?? !!opts.private;
+  const wantVerify = !localOnly && !!(opts.verify || opts.deep);
+  const provider = localOnly
+    ? new DeterministicProvider()
+    : opts.deep
     ? (await selectEnsemble({ samples: opts.samples })) ?? await selectProvider()
     : opts.force || opts.verify || isSignificant(meta, analysis, codeFiles)
       ? await selectProvider()
@@ -212,6 +223,7 @@ export async function recordFailure(
   store: HunchStore,
   root: string,
   failure: { test: string; message: string; recentDiff?: string },
+  opts: { private?: boolean } = {},
 ): Promise<FailureResult> {
   const symbols = store.json.loadAll("symbols");
   const ranked = rankSuspects(symbols, failure.message);
@@ -221,7 +233,10 @@ export async function recordFailure(
   const mentioned = ranked.filter((s) => msg.includes(s.name.toLowerCase()));
   const suspects = (mentioned.length ? mentioned : ranked).slice(0, 6);
 
-  const provider: SynthProvider = await selectProvider();
+  // A private bug may contain a stack trace, customer data, or secrets. Keep the
+  // whole capture local unless the caller deliberately routes it through a shared
+  // (non-private) workflow.
+  const provider: SynthProvider = opts.private ? new DeterministicProvider() : await selectProvider();
   const input: FailureInput = {
     test: failure.test,
     message: failure.message,
@@ -235,7 +250,8 @@ export async function recordFailure(
   const id = bugId(failure.test);
   // recurrence = a DIFFERENT prior bug with a similar symptom (not this same one).
   // Query text mirrors the corpus side (title+symptom+root_cause) for symmetry.
-  const prior = findRecurrence(store, `${draft.title} ${draft.symptom} ${draft.root_cause}`, id);
+  const home = store.captureHome(!!opts.private);
+  const prior = findRecurrence(store, `${draft.title} ${draft.symptom} ${draft.root_cause}`, id, home);
 
   const affectedFiles = [...new Set(suspects.map((s) => s.file))];
   const bug: Bug = {
@@ -261,13 +277,13 @@ export async function recordFailure(
       evidence: [`test:${failure.test}`, ...affectedFiles.slice(0, 6)],
     },
   };
-  store.putCapture("bugs", bug);
+  store.putCapture("bugs", bug, opts.private);
 
   // Promotion (DESIGN §4): a recurrence or a SUBSTANTIATED high-severity bug raises
   // a regression Constraint to stop it coming back, and bumps fragility.
   let constraint: Constraint | undefined;
   if (shouldPromoteConstraint(draft.severity, bug.root_cause, !!prior)) {
-    constraint = promoteConstraint(store, bug);
+    constraint = promoteConstraint(store, bug, opts.private);
     bug.lineage.spawned_constraint = constraint.id;
     store.putWhereItLives("bugs", bug); // re-persist with the link, in the same home
   }
@@ -296,7 +312,7 @@ export interface TestRunCapture {
 export async function captureTestRun(
   store: HunchStore,
   root: string,
-  input: { report: TestReport; status: number | null; cmd: string; output: string },
+  input: { report: TestReport; status: number | null; cmd: string; output: string; private?: boolean },
 ): Promise<TestRunCapture> {
   const { report, status } = input;
   // Unrecognized output that still failed → one coarse bug from the tail, rather
@@ -311,7 +327,7 @@ export async function captureTestRun(
 
   const results: CapturedFailure[] = [];
   for (const f of failures) {
-    const r = await recordFailure(store, root, f);
+    const r = await recordFailure(store, root, f, { private: input.private });
     results.push({ bug: r.bug, constraint: r.constraint });
   }
 
@@ -342,7 +358,7 @@ export function shouldPromoteConstraint(severity: Bug["severity"], rootCause: st
 }
 
 /** Turn a bug into an advisory regression constraint scoped to its files. */
-function promoteConstraint(store: HunchStore, bug: Bug): Constraint {
+function promoteConstraint(store: HunchStore, bug: Bug, isPrivate = false): Constraint {
   const scope = bug.affected_files.length ? bug.affected_files : ["**"];
   const statement = `Regression guard: "${bug.title}" must not recur.`;
   const con: Constraint = {
@@ -362,7 +378,7 @@ function promoteConstraint(store: HunchStore, bug: Bug): Constraint {
     valid_to: null,
     provenance: { source: "derived", confidence: Math.min(0.9, bug.provenance.confidence + 0.2), evidence: [`bug:${bug.id}`] },
   };
-  return store.putCapture("constraints", con);
+  return store.putCapture("constraints", con, isPrivate);
 }
 
 /** Bump fragility on components owning the affected files. */
@@ -428,12 +444,12 @@ export function salientTerms(text: string): Set<string> {
 /** Recurrence = a DIFFERENT prior bug whose salient terms overlap strongly with
  *  this one (in-memory, no FTS/reindex dependency, threshold-gated to avoid the
  *  over-broad OR false positives). Returns the best match above threshold. */
-function findRecurrence(store: HunchStore, text: string, excludeId: string): Bug | undefined {
+function findRecurrence(store: HunchStore, text: string, excludeId: string, home: "public" | "private"): Bug | undefined {
   const want = salientTerms(text);
   if (want.size === 0) return undefined;
   let best: Bug | undefined;
   let bestScore = 0;
-  for (const b of store.json.loadAll("bugs")) {
+  for (const b of store.recsInHome("bugs", home)) {
     if (b.id === excludeId) continue;
     // symmetric with the query side (which now also includes root_cause)
     const have = salientTerms(`${b.title} ${b.symptom} ${b.root_cause}`);

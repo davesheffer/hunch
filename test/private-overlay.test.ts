@@ -66,6 +66,19 @@ test("private overlay: putPrivate writes nothing into the public .hunch/ tree (f
   } finally { cleanup(); }
 });
 
+test("private overlay: local causal receipts and search resolution keep private provenance", () => {
+  const { store, cleanup } = setup(true);
+  try {
+    const decision = DEC("dec_private_cause", "private architecture decision");
+    const constraint = CON("con_private_cause", "private constraint", ["src/**"]);
+    constraint.source_decision = decision.id;
+    store.putPrivate("decisions", decision);
+    store.putPrivate("constraints", constraint);
+    assert.equal(store.resolve(decision.id)?.record, store.getPrivateRec("decisions", decision.id));
+    assert.equal(store.causalChain(constraint.id).decision?.id, decision.id);
+  } finally { cleanup(); }
+});
+
 test("private overlay: hasPrivate reflects HUNCH_PRIVATE_DIR; putPrivate throws when unset", () => {
   const off = setup(false);
   try {

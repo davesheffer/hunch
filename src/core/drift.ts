@@ -13,7 +13,7 @@
  *                 `hunch wiki --heal`, never a gate.
  */
 import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import type { HunchStore } from "../store/hunchStore.js";
 import { toPosixTarget } from "./paths.js";
 import { currentForTopic, isLive } from "./topics.js";
@@ -50,7 +50,7 @@ export function computeDrift(store: HunchStore, root: string): DriftReport {
     if (inForce) {
       for (const f of d.related_files ?? []) {
         if (!f || f.includes("*")) continue; // skip globs / empties
-        if (!existsSync(join(root, f))) {
+        if (!referenceExists(store, root, d.id, f)) {
           findings.push({ kind: "dead-ref", id: d.id, detail: `references missing file "${f}"` });
         }
       }
@@ -80,7 +80,7 @@ export function computeDrift(store: HunchStore, root: string): DriftReport {
       if (current && current.id !== d.id) {
         for (const f of d.related_files ?? []) {
           if (!f || f.includes("*") || liveFiles.has(toPosixTarget(f))) continue;
-          if (!existsSync(join(root, f))) continue; // missing file is history → dead-ref's job
+          if (!referenceExists(store, root, d.id, f)) continue; // missing file is history → dead-ref's job
           findings.push({
             kind: "anchor-stale",
             id: d.id,
@@ -136,6 +136,27 @@ export function computeDrift(store: HunchStore, root: string): DriftReport {
   findings.push(...computeWikiDrift(store, root));
 
   return { findings };
+}
+
+/** Resolve a decision file reference without making private-memory paths depend on
+ * the current machine's overlay location. Normal references are code-repo-relative.
+ * A `private:<path>` reference is valid only when the decision itself is in the
+ * private overlay and resolves from that overlay repo's root. This lets a private
+ * decision cite private docs while preventing a public record from silently
+ * depending on unsharable local files. */
+function referenceExists(store: HunchStore, root: string, decisionId: string, ref: string): boolean {
+  const prefix = "private:";
+  if (!ref.startsWith(prefix)) return existsSync(join(root, ref));
+
+  const privatePath = ref.slice(prefix.length);
+  if (!privatePath || isAbsolute(privatePath) || !store.privateDir || !store.getPrivateRec("decisions", decisionId)) return false;
+  const privateRoot = dirname(store.privateDir);
+  const candidate = resolve(privateRoot, privatePath);
+  // A private-scoped reference is an overlay-repo-relative path, not an escape
+  // hatch into arbitrary local files.
+  const rel = relative(privateRoot, candidate);
+  if (rel === "" || rel === ".." || rel.startsWith(`..${process.platform === "win32" ? "\\\\" : "/"}`) || isAbsolute(rel)) return false;
+  return existsSync(candidate);
 }
 
 function safeRead(path: string): string {
