@@ -1,0 +1,42 @@
+{
+  "id": "dec_df357360d9",
+  "title": "Component graph webview is 'the brain': always-dark canvas, memory-density heat (not fragility)",
+  "topic": null,
+  "status": "accepted",
+  "context": "The VS Code extension's Component Graph is Hunch's adoption/demo hero (per dec_8dc263b43e 'hero graph alone suffices'). The prior SVG version rendered flat theme-colored circles with node color = fragility. But in real graphs the component fragility field is near-always 0.0, so a fragility color ramp renders every node identical — no visual signal, no 'wow'.",
+  "decision": "Rewrote graph.ts from theme-driven SVG to a self-contained <canvas> 'brain' matching the site hero's constellation aesthetic (moss/ember palette, IBM Plex Mono, glow, breathing embers, curved dendritic synapses, hover-neighborhood illumination, traveling glints). Two deliberate encoding choices: (1) node HEAT = memory density = decisions + constraints*2 + bugs*3 (how much Hunch KNOWS about a component — the product story, and it varies 2..35 unlike fragility); node SIZE = owned symbols; guarded (constraint-in-scope) nodes breathe as moss embers; link glow/width = cross-component call weight. (2) The canvas is ALWAYS dark ('void' #0e1512), deliberately ignoring VS Code's light/dark theme — glow is invisible on a light background, and the dark void is the intended brain aesthetic + gives consistent marketing screenshots. acquireVsCodeApi() is typeof-guarded so the HTML also renders in a plain browser (used for offline screenshot verification). Extension stays a pure JSON reader — no writes, no data-layer change; showGraph/refreshGraph signatures unchanged.",
+  "consequences": [
+    "The graph panel is dark even in a light VS Code theme (intentional).",
+    "Visual encoding now reflects Hunch's memory density, so a well-documented component literally glows brighter — reinforces the product story."
+  ],
+  "alternatives_rejected": [
+    "Keep node color = fragility (renders all-identical because fragility is ~0 everywhere)",
+    "Adapt canvas to VS Code theme (a light-theme variant kills the glow that makes it read as a brain)",
+    "Add glow via SVG feGaussianBlur instead of canvas (janky and slow for breathing/trails/hover)"
+  ],
+  "rejected_tripwires": [],
+  "related_components": [
+    "Vscode-extension"
+  ],
+  "related_files": [
+    "vscode-extension/src/graph.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-07-09T03:42:43.895Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 0.95,
+    "evidence": [
+      "vscode-extension/src/graph.ts"
+    ]
+  },
+  "date": "2026-07-09T03:42:43.895Z"
+}
