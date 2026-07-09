@@ -1,0 +1,56 @@
+{
+  "id": "dec_cd37bf2d9a",
+  "title": "Harness-driven auto-review: hunch auto-review delegates draft relevance to the subscription CLI, gated by the Critic (never reverses dec_a466655539)",
+  "topic": "auto-review",
+  "status": "accepted",
+  "context": "User wanted an auto-review that delegates to the harness, dedups, auto-approves only relevant drafts, and deletes duplicates + irrelevant ones. Existing machinery already had deterministic dedup (dupdetect.draftDuplicateOf), grounding/Critic segmentation (reviewqueue.partitionReview/isReady), and CLI batch verbs (--reject-duplicates, --accept-verified). Missing piece: a per-draft RELEVANCE judgment. Doctrinal constraint: dec_a466655539 makes the human vouch / Critic gate the floor for confirmation (--accept-verified is deliberately limited to Critic-verified drafts so a machine never confirms an un-audited draft). Blocking invariant con_2ce3f2a547: synthesis must run on the subscription, stripping ANTHROPIC_API_KEY/AUTH_TOKEN.",
+  "decision": "Add a `hunch auto-review` command that (1) delegates a per-draft RELEVANCE judgment to the coding-assistant CLI via a new feature-detected SynthProvider.judgeDraft (implemented on CliSynthProvider, reusing the same subscription-only run() path so API-key stripping is inherited, not re-implemented); (2) folds that RelevanceVerdict together with the two deterministic signals (draftDuplicateOf for dedup, reviewqueue.isReady for grounding/verification) in a PURE, unit-tested planner (src/core/autoreview.ts, planAutoReview) into four disjoint buckets: accept / rejectDuplicate / rejectIrrelevant / keep. The accept bucket is GATED: a draft is auto-confirmed ONLY when the Critic already verified+grounded it (isReady) AND the harness judged it relevant+non-dup — the harness verdict can VETO an accept but never CREATE one on an un-audited draft, so dec_a466655539 stays intact. Deletion happens for near-duplicates (deterministic OR harness-named restatement) and CONFIDENTLY-irrelevant drafts (harness confidence >= --min-reject-confidence, default 0.7); everything else is kept for a human. The command is DRY-RUN by default (prints the plan, changes nothing); --apply executes it, then reindex + refreshExistingGrounding. --no-llm falls back to dedup+grounding only. The VS Code extension (v0.4.0) delegates via an 'Auto-review Drafts (harness)…' action on the Review Queue group that always shows the dry-run plan in a webview and prompts before applying.",
+  "consequences": [
+    "New: src/core/autoreview.ts (pure planner, 7 unit tests in test/autoreview.test.ts), SynthProvider.judgeDraft + RelevanceVerdict/ExistingDecisionRef + RELEVANCE_TOOL/RELEVANCE_SYSTEM/relevancePrompt/relevanceFromText in src/synthesis/provider.ts, `hunch auto-review` in src/cli/index.ts, autoReview() delegation in the VS Code extension (v0.4.0).",
+    "auto-review makes one subscription CLI call per draft (feature-detected; any per-draft failure degrades to keep-for-human) — cost scales with draft count; --no-llm avoids it entirely.",
+    "Reuses partitionReview/isReady and dupdetect verbatim, so 'relevant' and 'duplicate' stay consistent with `hunch review`.",
+    "Deletion of drafts is real and irreversible from the store, mitigated by dry-run-default + confidence threshold + keep-on-uncertainty."
+  ],
+  "alternatives_rejected": [
+    "Let a confident harness verdict auto-confirm UNVERIFIED drafts into human_confirmed: reverses dec_a466655539 (a machine would create the human vouch); rejected — the harness can only veto, the Critic's grounding remains the accept floor.",
+    "Do it deterministically with no LLM (grounded>=threshold + not-a-dup = 'relevant'): cheaper and reproducible but that is not a real relevance judgment — it can't tell a mechanical diff-restatement from a genuine design decision, which is exactly the noise the user wants deleted. Kept as the --no-llm fallback, not the default.",
+    "Apply mutations immediately (no dry-run): deletion is destructive and irreversible from the store; rejected in favor of dry-run-by-default + explicit --apply so a human always sees the accept/delete/keep plan first.",
+    "Re-implement env-key stripping in the auto-review path: rejected — routing judgeDraft through CliSynthProvider.run() inherits con_2ce3f2a547 automatically; a second implementation is a second place to get the blocking invariant wrong.",
+    "Build a new provider/spawn seam for the judgment: rejected — the existing SynthProvider interface already has feature-detected optional methods (verifyDecision?, draftProse?); judgeDraft? follows the same pattern with zero new plumbing."
+  ],
+  "rejected_tripwires": [],
+  "related_components": [],
+  "related_files": [
+    "src/core/autoreview.ts",
+    "src/synthesis/provider.ts",
+    "src/cli/index.ts",
+    "test/autoreview.test.ts",
+    "vscode-extension/src/review.ts",
+    "vscode-extension/src/commands.ts",
+    "vscode-extension/src/extension.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-07-09T03:36:12.644Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 0.95,
+    "evidence": [
+      "src/core/autoreview.ts",
+      "src/synthesis/provider.ts",
+      "src/cli/index.ts",
+      "test/autoreview.test.ts",
+      "vscode-extension/src/review.ts",
+      "vscode-extension/src/commands.ts",
+      "vscode-extension/src/extension.ts"
+    ]
+  },
+  "date": "2026-07-09T03:36:12.644Z"
+}
