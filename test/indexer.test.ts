@@ -180,9 +180,9 @@ function pythonFixtureRepo(): string {
   writeFileSync(
     join(root, "src/auth/session.py"),
     // same-file (same-component) import used in a call — should yield a same-file
-    // call edge — PLUS a cross-component import (billing) that is never called,
-    // so Python cross-file import resolution (out of scope, issue #5) genuinely
-    // gets exercised rather than trivially having nothing to resolve.
+    // call edge — PLUS a cross-component relative import (`..billing.charge`) that
+    // is never called, so import resolution (issue #5) genuinely gets exercised
+    // as a depends_on edge rather than trivially having nothing to resolve.
     `from .jwt import decode_token\nfrom ..billing.charge import charge\n\ndef verify_session(t):\n    return decode_token(t)\n`,
   );
   writeFileSync(join(root, "src/auth/jwt.py"), `def decode_token(t):\n    return t\n`);
@@ -193,7 +193,7 @@ function pythonFixtureRepo(): string {
   return root;
 }
 
-test("indexRepo builds symbols and same-file call edges for a Python repo", () => {
+test("indexRepo resolves Python relative imports across component boundaries (issue #5)", () => {
   const root = pythonFixtureRepo();
   const store = new HunchStore(hunchPaths(root));
   store.json.ensureDirs();
@@ -216,18 +216,241 @@ test("indexRepo builds symbols and same-file call edges for a Python repo", () =
   assert.ok(deps.some((v) => v.includes("verify_session")), "verify_session is a dependent of decode_token");
 
   // components derived from src/<dir>, same as TS
-  const comps = store.json.loadAll("components").map((c) => c.name).sort();
-  assert.deepEqual(comps, ["Auth", "Billing"]);
+  const comps = store.json.loadAll("components");
+  assert.deepEqual(comps.map((c) => c.name).sort(), ["Auth", "Billing"]);
 
-  // NO depends_on edge from Python's `from ..billing.charge import charge` even
-  // though it genuinely crosses the Auth/Billing component boundary — cross-file
-  // Python import resolution is explicitly out of scope (issue #5), so this
-  // assertion actually probes that no fabricated edge is produced rather than
-  // passing vacuously because nothing ever referenced billing.
+  const auth = comps.find((c) => c.name === "Auth")!;
+  const billing = comps.find((c) => c.name === "Billing")!;
+
+  // `from ..billing.charge import charge` in src/auth/session.py now resolves to
+  // src/billing/charge.py: 2 leading dots -> up 1 directory from src/auth -> "src",
+  // plus the "billing/charge" tail -> src/billing/charge.py. A real, resolvable
+  // cross-component import must produce a depends_on edge (issue #5) — this
+  // replaces the old assertion that no edge was fabricated (that was true only
+  // because resolution didn't exist yet, not because this import is ambiguous).
   const edges = store.json.loadAll("edges");
   assert.ok(
-    !edges.some((e) => e.type === "depends_on" && (e.from.includes("billing") || e.to.includes("billing"))),
-    "no fabricated cross-component depends_on edge for Python imports",
+    edges.some((e) => e.type === "depends_on" && e.from === auth.id && e.to === billing.id),
+    "Auth depends_on Billing via the resolved cross-package relative import",
+  );
+
+  store.close();
+  rmSync(root, { recursive: true, force: true });
+});
+
+function pythonTooManyDotsFixtureRepo(): string {
+  const root = mkdtempSync(join(tmpdir(), "hunch-idx-py-toomanydots-"));
+  mkdirSync(join(root, "src/auth"), { recursive: true });
+  mkdirSync(join(root, "src/billing"), { recursive: true });
+  // src/auth/session.py sits 2 directory levels under the repo root (src, auth).
+  // 4 leading dots asks to go up 3 levels from src/auth — past the repo root
+  // entirely. This must be skipped, not guessed at or crashed on.
+  writeFileSync(
+    join(root, "src/auth/session.py"),
+    `from ....nonexistent import thing\n\ndef verify_session(t):\n    return t\n`,
+  );
+  writeFileSync(join(root, "src/billing/charge.py"), `def charge(t):\n    return t\n`);
+  return root;
+}
+
+test("Python relative import with too many leading dots (above repo root) is skipped, not guessed", () => {
+  const root = pythonTooManyDotsFixtureRepo();
+  const store = new HunchStore(hunchPaths(root));
+  store.json.ensureDirs();
+  const res = indexRepo(store, root, { churn: false }); // must not throw
+  store.reindex();
+
+  assert.equal(res.files, 2);
+  const edges = store.json.loadAll("edges");
+  assert.ok(
+    !edges.some((e) => e.type === "depends_on"),
+    "no depends_on edge is fabricated for an out-of-repo relative import",
+  );
+
+  store.close();
+  rmSync(root, { recursive: true, force: true });
+});
+
+function pythonRelativeAtRepoRootBoundaryFixtureRepo(): string {
+  const root = mkdtempSync(join(tmpdir(), "hunch-idx-py-relroot-"));
+  mkdirSync(join(root, "pkgs/auth"), { recursive: true });
+  mkdirSync(join(root, "otherpkg"), { recursive: true });
+  // 3 leading dots from pkgs/auth lands EXACTLY on the repo root (pop === segments.length,
+  // not pop > segments.length) — the boundary the "too many dots" guard sits right next to.
+  writeFileSync(
+    join(root, "pkgs/auth/session.py"),
+    `from ...otherpkg.mod import thing\n\ndef verify_session(t):\n    return t\n`,
+  );
+  writeFileSync(join(root, "otherpkg/mod.py"), `def thing(t):\n    return t\n`);
+  return root;
+}
+
+test("Python relative import landing exactly on the repo root (dot count == directory depth) resolves", () => {
+  const root = pythonRelativeAtRepoRootBoundaryFixtureRepo();
+  const store = new HunchStore(hunchPaths(root));
+  store.json.ensureDirs();
+  indexRepo(store, root, { churn: false });
+  store.reindex();
+
+  const comps = store.json.loadAll("components");
+  const pkgs = comps.find((c) => c.name === "Pkgs")!;
+  const otherpkg = comps.find((c) => c.name === "Otherpkg")!;
+
+  const edges = store.json.loadAll("edges");
+  assert.ok(
+    edges.some((e) => e.type === "depends_on" && e.from === pkgs.id && e.to === otherpkg.id),
+    "Pkgs depends_on Otherpkg when the leading-dot count exactly reaches the repo root",
+  );
+
+  store.close();
+  rmSync(root, { recursive: true, force: true });
+});
+
+function pythonBareDotFixtureRepo(withInit: boolean): string {
+  const root = mkdtempSync(join(tmpdir(), "hunch-idx-py-baredot-"));
+  mkdirSync(join(root, "src/billing"), { recursive: true });
+  writeFileSync(
+    join(root, "src/billing/api.py"),
+    `from . import charge\n\ndef process(t):\n    return t\n`,
+  );
+  if (withInit) {
+    writeFileSync(join(root, "src/billing/__init__.py"), `def charge(t):\n    return t\n`);
+  }
+  return root;
+}
+
+test("Python bare-dot relative import (`from . import x`) resolves within its own package without crashing", () => {
+  // `from . import x` always targets the importing file's OWN directory, which the
+  // component-derivation scheme (src/<dir>) always groups into the SAME component
+  // as the importer — so this can never surface as a depends_on edge (same-component
+  // targets are filtered at indexer.ts:162, same as a JS/TS `./sibling` import).
+  // This is a crash-safety / file-discovery check, not an edge assertion.
+  const withInitRoot = pythonBareDotFixtureRepo(true);
+  const storeWithInit = new HunchStore(hunchPaths(withInitRoot));
+  storeWithInit.json.ensureDirs();
+  const resWithInit = indexRepo(storeWithInit, withInitRoot, { churn: false });
+  storeWithInit.reindex();
+  assert.equal(resWithInit.files, 2);
+  assert.ok(
+    storeWithInit.json.loadAll("symbols").some((s) => s.name === "charge" && s.file === "src/billing/__init__.py"),
+    "the __init__.py the bare-dot import targets is indexed",
+  );
+  storeWithInit.close();
+  rmSync(withInitRoot, { recursive: true, force: true });
+
+  const noInitRoot = pythonBareDotFixtureRepo(false);
+  const storeNoInit = new HunchStore(hunchPaths(noInitRoot));
+  storeNoInit.json.ensureDirs();
+  // no __init__.py exists to resolve against — must not throw
+  const resNoInit = indexRepo(storeNoInit, noInitRoot, { churn: false });
+  storeNoInit.reindex();
+  assert.equal(resNoInit.files, 1);
+  storeNoInit.close();
+  rmSync(noInitRoot, { recursive: true, force: true });
+});
+
+function pythonAbsoluteRepoRootFixtureRepo(): string {
+  const root = mkdtempSync(join(tmpdir(), "hunch-idx-py-abs-root-"));
+  mkdirSync(join(root, "authpkg"), { recursive: true });
+  mkdirSync(join(root, "billingpkg"), { recursive: true });
+  // no "src/" anywhere in this repo — resolution must fall back to the repo root.
+  // `import os` alongside a real same-repo absolute import proves genuinely external
+  // names are skipped rather than accidentally matched.
+  writeFileSync(
+    join(root, "authpkg/session.py"),
+    `import billingpkg.charge\nimport os\n\ndef verify_session(t):\n    return t\n`,
+  );
+  writeFileSync(join(root, "billingpkg/charge.py"), `def charge(t):\n    return t\n`);
+  return root;
+}
+
+test("Python absolute import resolves off the repo root when there is no src/ layout (issue #5)", () => {
+  const root = pythonAbsoluteRepoRootFixtureRepo();
+  const store = new HunchStore(hunchPaths(root));
+  store.json.ensureDirs();
+  const res = indexRepo(store, root, { churn: false });
+  store.reindex();
+
+  assert.equal(res.files, 2);
+  const comps = store.json.loadAll("components");
+  const authpkg = comps.find((c) => c.name === "Authpkg")!;
+  const billingpkg = comps.find((c) => c.name === "Billingpkg")!;
+  assert.ok(authpkg && billingpkg, "both top-level packages become components");
+
+  const edges = store.json.loadAll("edges").filter((e) => e.type === "depends_on");
+  assert.equal(edges.length, 1, "only the resolvable absolute import produces an edge — `import os` does not");
+  assert.equal(edges[0]!.from, authpkg.id);
+  assert.equal(edges[0]!.to, billingpkg.id);
+
+  store.close();
+  rmSync(root, { recursive: true, force: true });
+});
+
+function pythonAbsoluteBarePackageFixtureRepo(): string {
+  const root = mkdtempSync(join(tmpdir(), "hunch-idx-py-abs-barepkg-"));
+  mkdirSync(join(root, "authpkg"), { recursive: true });
+  mkdirSync(join(root, "billingpkg"), { recursive: true });
+  // `import billingpkg` (no submodule) — only resolvable via the __init__.py
+  // candidate, a branch the existing `import billingpkg.charge` test doesn't reach.
+  writeFileSync(
+    join(root, "authpkg/session.py"),
+    `import billingpkg\n\ndef verify_session(t):\n    return t\n`,
+  );
+  writeFileSync(join(root, "billingpkg/__init__.py"), `def charge(t):\n    return t\n`);
+  return root;
+}
+
+test("Python absolute import of a bare package (no submodule) resolves via __init__.py", () => {
+  const root = pythonAbsoluteBarePackageFixtureRepo();
+  const store = new HunchStore(hunchPaths(root));
+  store.json.ensureDirs();
+  indexRepo(store, root, { churn: false });
+  store.reindex();
+
+  const comps = store.json.loadAll("components");
+  const authpkg = comps.find((c) => c.name === "Authpkg")!;
+  const billingpkg = comps.find((c) => c.name === "Billingpkg")!;
+
+  const edges = store.json.loadAll("edges");
+  assert.ok(
+    edges.some((e) => e.type === "depends_on" && e.from === authpkg.id && e.to === billingpkg.id),
+    "Authpkg depends_on Billingpkg via a bare-package absolute import resolved to __init__.py",
+  );
+
+  store.close();
+  rmSync(root, { recursive: true, force: true });
+});
+
+function pythonAbsoluteSrcLayoutFixtureRepo(): string {
+  const root = mkdtempSync(join(tmpdir(), "hunch-idx-py-abs-src-"));
+  mkdirSync(join(root, "src/auth"), { recursive: true });
+  mkdirSync(join(root, "src/billing"), { recursive: true });
+  // absolute import omits the `src.` prefix, matching a poetry/setuptools src-layout
+  // repo where `src/` is a build root, not part of the importable package path — only
+  // resolvable via the src/ layout root candidate, not the plain repo root.
+  writeFileSync(
+    join(root, "src/auth/session.py"),
+    `import billing.charge\n\ndef verify_session(t):\n    return t\n`,
+  );
+  writeFileSync(join(root, "src/billing/charge.py"), `def charge(t):\n    return t\n`);
+  return root;
+}
+
+test("Python absolute import resolves via a detected src/ layout root (issue #5)", () => {
+  const root = pythonAbsoluteSrcLayoutFixtureRepo();
+  const store = new HunchStore(hunchPaths(root));
+  store.json.ensureDirs();
+  indexRepo(store, root, { churn: false });
+  store.reindex();
+
+  const comps = store.json.loadAll("components");
+  const auth = comps.find((c) => c.name === "Auth")!;
+  const billing = comps.find((c) => c.name === "Billing")!;
+
+  const edges = store.json.loadAll("edges");
+  assert.ok(
+    edges.some((e) => e.type === "depends_on" && e.from === auth.id && e.to === billing.id),
+    "Auth depends_on Billing via the src/-layout-resolved absolute import",
   );
 
   store.close();
