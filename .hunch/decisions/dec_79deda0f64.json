@@ -2,7 +2,7 @@
   "id": "dec_79deda0f64",
   "title": "Office handoff: auto-review + extension GUI shipped & pushed; verify live harness dry-run, then decide apply",
   "topic": "office-handoff-auto-review",
-  "status": "proposed",
+  "status": "superseded",
   "context": "Session on the home machine built the VS Code extension GUI surface (v0.4.0) and the harness-driven `hunch auto-review`. All code is committed (95dcc2b) and PUSHED (origin/main == HEAD). Decisions dec_7a7f944536 (extension GUI), dec_cd37bf2d9a (auto-review) recorded. Moving to the office; this is the resume point.",
   "decision": "RESUME AT OFFICE. State on arrival: (1) `git pull` — everything is on origin/main already (0 ahead / 0 behind at handoff). (2) The VS Code extension is installed on the HOME machine at v0.4.0; at the office run `npm i` in vscode-extension/, `npm run build`, package with vsce and `code --install-extension` (or press F5) to get v0.4.0 there too. (3) `hunch auto-review` is DRY-RUN by default — the home-machine live harness dry-run (21 subscription calls, serial, slow) had not printed its plan before handoff; RE-RUN `npm run hunch -- auto-review` at the office to see the accept/delete/keep plan. (4) Only after eyeballing that plan, decide whether to `hunch auto-review --apply` (it DELETES duplicate + harness-irrelevant drafts and confirms verified+relevant ones — irreversible from the store). (5) The Critic gate is intentional (dec_a466655539): auto-accept requires the draft already be verified+grounded; the harness can only veto. If you want the harness to also approve UNVERIFIED drafts, that needs a new flag + a decision superseding dec_a466655539.",
   "consequences": [
@@ -21,11 +21,11 @@
     "vscode-extension/package.json"
   ],
   "supersedes": null,
-  "superseded_by": null,
+  "superseded_by": "dec_23d2a72908",
   "caused_by_bug": null,
   "commit": null,
   "valid_from": "2026-07-09T03:45:33.857Z",
-  "valid_to": null,
+  "valid_to": "2026-07-09T03:46:10.845Z",
   "retired": {
     "symbols": [],
     "deps": []
