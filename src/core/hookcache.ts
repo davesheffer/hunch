@@ -4,7 +4,7 @@
  * 20+ times per session buries the agent's working context under repeats — the
  * cost of being grounded starts competing with the work.
  *
- * Mechanism: per Claude-Code session (the hook event carries session_id), keep
+ * Mechanism: per agent session (the hook event carries a provider-normalized session_id), keep
  * a tiny {key → content-hash} map in the OS tmpdir. First injection for a key
  * (or any time the underlying records CHANGE) → "full". Identical repeat →
  * "delta" (the caller emits a one-liner, or nothing).

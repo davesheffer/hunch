@@ -1,12 +1,12 @@
 /** Hunch user config (`.hunch/config.json`) — runtime knobs that are NOT schema
  *  state (the on-disk schema version lives in manifest.json). Committed alongside
  *  the graph, so a whole team shares the same settings — e.g. how firmly the
- *  Claude Code agent hook enforces engineering memory before an edit. */
+ *  agent lifecycle hooks enforce engineering memory before an edit. */
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import type { HunchPaths } from "./paths.js";
 
-/** How firmly the Claude Code agent hook (`hunch hook`) enforces Hunch on edits:
+/** How firmly the agent lifecycle hook (`hunch hook`) enforces Hunch on edits:
  *   off      — emit nothing (hook is a no-op).
  *   advisory — inject the relevant Hunch slice (decisions/constraints/bugs) as
  *              context before the edit. The default: always informs, never blocks.

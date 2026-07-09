@@ -38,7 +38,7 @@ test("writeConfig round-trips a level; an unknown on-disk value falls back to de
   }
 });
 
-test("installClaudeHooks writes PreToolUse(Edit|Write|MultiEdit) + UserPromptSubmit", () => {
+test("installClaudeHooks writes the full lifecycle hook set", () => {
   const root = tmpRoot();
   try {
     const cmd = `"node" "/abs/dist/cli/index.js" hook`;
@@ -49,6 +49,9 @@ test("installClaudeHooks writes PreToolUse(Edit|Write|MultiEdit) + UserPromptSub
     assert.equal(j.hooks.PreToolUse[0].hooks[0].command, cmd);
     assert.equal(j.hooks.UserPromptSubmit[0].hooks[0].command, cmd);
     assert.ok(j.hooks.UserPromptSubmit[0].matcher === undefined, "UserPromptSubmit has no matcher");
+    assert.equal(j.hooks.SessionStart[0].hooks[0].command, cmd);
+    assert.match(j.hooks.PostToolUse[0].matcher, /Bash/);
+    assert.equal(j.hooks.Stop[0].hooks[0].command, cmd);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

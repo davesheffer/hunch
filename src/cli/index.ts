@@ -52,6 +52,7 @@ import { formatContext, formatStructure } from "../core/format.js";
 import { readConfig, writeConfig, FIRMNESS_LEVELS, isFirmness, type Firmness } from "../core/config.js";
 import { blockingInScope, vetoInScope, proposedEditLines } from "../core/hookpolicy.js";
 import { injectionMode } from "../core/hookcache.js";
+import { contextHookOutput, denyHookOutput, hookProvider, normalizeHookEvent, stopHookOutput, type HookProvider } from "../core/agenthook.js";
 import {
   PIPELINE_LOOP,
   UNVERIFIED_NAG,
@@ -101,12 +102,12 @@ function storeFor(): { store: HunchStore; root: string } {
 // ---- init -----------------------------------------------------------------
 program
   .command("init")
-  .description("Scaffold .hunch/, index the repo, install the git hook, and wire up your coding assistants (Claude Code, Cursor, VS Code, Windsurf, Codex).")
+  .description("Scaffold .hunch/, index the repo, install the git hook, and wire up your coding assistants (Claude Code, Cursor, VS Code, Windsurf, Antigravity, Codex).")
   .option("--no-index", "skip the initial repo index")
   .option("--no-enforce", "do not install the advisory pre-commit constraint guard")
   .option("--enforce-strict", "make the pre-commit guard FAIL the commit on a direct, high-confidence, non-stale blocking invariant")
-  .option("--no-providers", "skip scaffolding non-Claude assistant configs (Cursor / VS Code / Codex / AGENTS.md)")
-  .option("--no-agent-hooks", "skip installing the Claude Code agent hooks (.claude/settings.json)")
+  .option("--no-providers", "skip scaffolding non-Claude assistant configs (Cursor / VS Code / Windsurf / Antigravity / Codex / AGENTS.md)")
+  .option("--no-agent-hooks", "skip installing all assistant lifecycle hooks (MCP + grounding are still configured)")
   .option("--firmness <level>", "agent-hook firmness: off | advisory | firm | strict")
   .option("--private-sync", "post-commit synthesis writes captured decisions into the overlay repo (HUNCH_PRIVATE_DIR), never the public store")
   .option("--shared-sync", "alias of --private-sync (for teams using one shared overlay repo for any code repo)")
@@ -192,17 +193,17 @@ program
     // level even before the user runs `hunch firmness` (--firmness validated above).
     const firmness = writeConfig(paths, opts.firmness ? { firmness: opts.firmness as Firmness } : {}).firmness;
 
-    // Agent hooks: ground the assistant in Hunch automatically (PreToolUse injects
-    // context before edits; UserPromptSubmit reminds). Reads firmness at run time.
+    // Claude's native hooks run alongside provider-specific hooks below. Every
+    // adapter reads firmness at run time, so changing it needs no config rewrite.
     if (opts.agentHooks !== false) {
       const a = installClaudeHooks(root, `${inv.shell} hook`);
       console.log(`  ✓ Claude Code agent hooks ${a.action} (firmness: ${firmness} — change with \`hunch firmness <level>\`)`);
     }
 
-    // Multi-assistant compatibility: the MCP server is client-agnostic, so wire up
-    // Cursor / VS Code (Copilot) / Codex / AGENTS.md to the same .hunch/ graph.
+    // Multi-assistant compatibility: MCP + grounding + lifecycle adapters share
+    // the same .hunch/ graph across Cursor / VS Code / Windsurf / Antigravity.
     if (opts.providers !== false) {
-      const ps = scaffoldProviders(root, inv.mcp, store);
+      const ps = scaffoldProviders(root, inv.mcp, store, { agentHooks: opts.agentHooks !== false });
       const ok = ps.filter((p) => !p.error);
       const total = ok.reduce((a, p) => a + p.files.length, 0);
       console.log(`  ✓ wrote ${total} multi-assistant config file(s) → ${ok.map((p) => p.assistant).join(", ")}`);
@@ -1446,7 +1447,7 @@ program
 // ---- firmness (agent-hook enforcement level) ------------------------------
 program
   .command("firmness")
-  .description("Get or set how firmly the Claude Code agent hook enforces Hunch before edits.")
+  .description("Get or set how firmly agent lifecycle hooks enforce Hunch before edits.")
   .argument("[level]", "off | advisory | firm | strict (omit to print the current level)")
   .action((level: string | undefined) => {
     const paths = hunchPaths(findRoot());
@@ -1459,7 +1460,7 @@ program
       return fail(`firmness must be one of: ${FIRMNESS_LEVELS.join(", ")}`);
     }
     const next = writeConfig(paths, { firmness: level }).firmness;
-    console.log(`✓ firmness set to ${next} (takes effect on the next edit — no Claude Code restart needed).`);
+    console.log(`✓ firmness set to ${next} (takes effect on the next agent edit — no restart needed).`);
   });
 
 // ---- status (enforcement readiness at a glance) ---------------------------
@@ -1503,22 +1504,20 @@ program
     store.close();
   });
 
-// ---- hook (Claude Code agent-hook handler) --------------------------------
+// ---- hook (multi-agent lifecycle hook handler) ----------------------------
 program
   .command("hook")
-  .description("Claude Code hook handler: inject relevant Hunch context before edits (and, at strict firmness, deny edits that hit a blocking invariant). Reads the hook event JSON on stdin.")
-  .action(async () => {
+  .description("Agent-agnostic hook handler: normalizes Claude, VS Code, Cursor, Windsurf, and Antigravity events into Hunch context and strict policy checks. Reads hook JSON on stdin.")
+  .option("--provider <provider>", "hook event dialect: claude | vscode | cursor | windsurf | antigravity", "claude")
+  .action(async (opts: { provider?: string }) => {
     // A hook MUST NEVER break the agent: on ANY error or unrecognized input we
     // emit nothing and exit 0 (the action defers to Claude Code's normal flow).
     let store: HunchStore | null = null;
     try {
-      const evt = JSON.parse(await readStdin()) as {
-        hook_event_name?: string;
-        session_id?: string;
-        tool_name?: string;
-        tool_input?: { file_path?: string; new_string?: string; content?: string; edits?: Array<{ new_string?: string }>; command?: string; skill?: string };
-        prompt?: string;
-      };
+      const provider = hookProvider(opts.provider);
+      if (!provider) return;
+      const evt = normalizeHookEvent(JSON.parse(await readStdin()), provider);
+      if (!evt) return;
       const root = findRoot();
       const paths = hunchPaths(root);
       const firmness = readConfig(paths).firmness;
@@ -1545,7 +1544,7 @@ program
         const verdict = stopVerdict(st, firmness);
         if (verdict.block) {
           savePipelineState(evt.session_id, verdict.state);
-          process.stdout.write(JSON.stringify({ decision: "block", reason: verdict.reason }));
+          emitStop(provider, verdict.reason);
         }
         return;
       }
@@ -1566,7 +1565,7 @@ program
         // every prompt burns context for zero information. A correction nudge has
         // different content, so it always comes through (dec_244397d920).
         if (injectionMode(evt.session_id, "prompt-reminder", text) === "delta") return;
-        emitContext("UserPromptSubmit", text);
+        emitContext(provider, "UserPromptSubmit", text);
         return;
       }
       if (evt.hook_event_name === "SessionStart") {
@@ -1581,7 +1580,7 @@ program
           const { recent, roadmap, pendingReview } = nowData(decisions, 3);
           if (!decisions.length) {
             // Fresh graph: nothing to orient on, but the operating loop still ships.
-            if (pipelineEnabled()) emitContext("SessionStart", PIPELINE_LOOP);
+            if (pipelineEnabled()) emitContext(provider, "SessionStart", PIPELINE_LOOP);
             return;
           }
           const L: string[] = [];
@@ -1598,7 +1597,12 @@ program
           // The operating loop rides session start — guaranteed delivery, once
           // (the zod bench showed ambient skills are read in ~0% of sessions).
           if (pipelineEnabled()) L.push("", PIPELINE_LOOP);
-          emitContext("SessionStart", L.join("\n"));
+          const orientation = L.join("\n");
+          // Antigravity's nearest equivalent is PreInvocation, which can fire
+          // repeatedly in one conversation. Deduplicate it just like edit
+          // grounding so it remains an orientation, not a context flood.
+          if (provider === "antigravity" && injectionMode(evt.session_id, "orientation", orientation) === "delta") return;
+          emitContext(provider, "SessionStart", orientation);
         } finally {
           s.close();
         }
@@ -1629,7 +1633,7 @@ program
         const proposedLines = proposedEditLines(evt.tool_input);
         const deny = blockingInScope(store, target, proposedLines);
         if (deny) {
-          emitDeny(deny.reason);
+          emitDeny(provider, deny.reason);
           return;
         }
         // Veto Guard (live): the proposed edit text re-introduces an approach an
@@ -1637,7 +1641,7 @@ program
         // only human-confirmed tripwires deny.
         const vetoDeny = proposedLines.length ? vetoInScope(store, target, proposedLines) : null;
         if (vetoDeny) {
-          emitDeny(vetoDeny.reason);
+          emitDeny(provider, vetoDeny.reason);
           return;
         }
       }
@@ -1679,12 +1683,13 @@ program
       // strict-gate deny path above never routes through this (dec_244397d920).
       if (injectionMode(evt.session_id, `pre:${target}`, text) === "delta") {
         emitContext(
+          provider,
           "PreToolUse",
           `Hunch grounding for ${target}: unchanged this session (${ctx.decisions.length} decision(s), ${ctx.constraints.length} invariant(s) shown earlier — still current; hunch_why("${target}") to re-expand).`,
         );
         return;
       }
-      emitContext("PreToolUse", text);
+      emitContext(provider, "PreToolUse", text);
     } catch {
       // swallow — never block an edit on a hook failure
     } finally {
@@ -2505,15 +2510,18 @@ function toRepoRel(root: string, abs: string): string {
   return relative(realpathNorm(root), realpathNorm(abs)).split("\\").join("/");
 }
 
-function emitContext(event: "PreToolUse" | "UserPromptSubmit" | "SessionStart", text: string): void {
-  process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: event, additionalContext: text } }));
+function emitContext(provider: HookProvider, event: "PreToolUse" | "UserPromptSubmit" | "SessionStart", text: string): void {
+  const output = contextHookOutput(provider, event, text);
+  if (output) process.stdout.write(JSON.stringify(output));
 }
-function emitDeny(reason: string): void {
-  process.stdout.write(
-    JSON.stringify({
-      hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: reason },
-    }),
-  );
+function emitDeny(provider: HookProvider, reason: string): void {
+  const result = denyHookOutput(provider, reason);
+  if (result.output) process.stdout.write(JSON.stringify(result.output));
+  if (result.stderr) process.stderr.write(`${result.stderr}\n`);
+  if (result.exitCode !== undefined) process.exitCode = result.exitCode;
+}
+function emitStop(provider: HookProvider, reason: string): void {
+  process.stdout.write(JSON.stringify(stopHookOutput(provider, reason)));
 }
 
 program.parseAsync().catch((e) => {

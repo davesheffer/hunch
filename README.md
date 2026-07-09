@@ -31,7 +31,7 @@ That gap is where architectural drift starts:
 | Without Hunch | With Hunch |
 | --- | --- |
 | A refactor passes tests but bypasses a hard-won service boundary. | The change is checked against the decision, its constraint, and the incident behind it. |
-| A new coding session starts from scratch. | Claude Code, Cursor, Copilot, Windsurf, and Codex retrieve the same project memory over MCP. |
+| A new coding session starts from scratch. | Claude Code, Cursor, Copilot, Windsurf, Antigravity, and Codex retrieve the same project memory over MCP. |
 | A correction disappears into a chat transcript. | “Never do that again” becomes a scoped, auditable guard. |
 | Code review sees a diff, not the reason behind it. | Change Gate produces a PASS / WARN / BLOCK receipt with causal evidence. |
 
@@ -55,18 +55,20 @@ and an optional pull-request guard.
 
 ## One graph. Every assistant. No lock-in.
 
-Hunch is agent-agnostic by design. It scaffolds MCP and grounding for Claude Code, Cursor, VS Code
-/ Copilot, Windsurf, Codex, and any agent that can read `AGENTS.md`.
+Hunch is agent-agnostic by design. It scaffolds MCP and grounding for Claude Code, Cursor, VS Code / Copilot,
+Windsurf, Google Antigravity, Codex, and any agent that can read `AGENTS.md`; where a client exposes hooks,
+it adds a native lifecycle adapter too.
 
 Your memory is plain JSON that you own. Hunch adds a SQLite index only as a rebuildable derived
 layer—your decisions never disappear into a proprietary hosted memory system.
 
 ```text
-Claude Code ─┐
-Cursor      ├── MCP ──> .hunch/ reasoning graph ──> deterministic checks
-Copilot     ┤
-Codex       ┤
-Windsurf   ─┘
+Claude Code  ─┐
+Cursor       ├── MCP ──> .hunch/ reasoning graph ──> deterministic checks
+Copilot      ┤
+Codex        ┤
+Windsurf     ┤
+Antigravity  ┘
 ```
 
 ## The Change Gate: review intent, not just code

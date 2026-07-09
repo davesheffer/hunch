@@ -3,14 +3,14 @@ import assert from "node:assert/strict";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { tempStore } from "./helpers.js";
-import { scaffoldProviders, writeCursorMcp, writeVscodeMcp, writeCodexConfig, writeWindsurfMcp } from "../src/integrations/providers.js";
+import { scaffoldProviders, writeCursorMcp, writeVscodeMcp, writeCodexConfig, writeWindsurfMcp, writeAntigravityWorkspaceMcp } from "../src/integrations/providers.js";
 
 const inv = { command: "C:\\Program Files\\nodejs\\node.exe", args: ["C:\\repo\\dist\\cli\\index.js"] };
 
 test("scaffoldProviders writes MCP config + grounding for every assistant", () => {
   const { store, root, cleanup } = tempStore();
   try {
-    scaffoldProviders(root, inv, store);
+    scaffoldProviders(root, inv, store, { home: root });
 
     const cursor = JSON.parse(readFileSync(join(root, ".cursor/mcp.json"), "utf8"));
     assert.equal(cursor.mcpServers.hunch.command, inv.command);
@@ -34,6 +34,13 @@ test("scaffoldProviders writes MCP config + grounding for every assistant", () =
 
     const rule = readFileSync(join(root, ".cursor/rules/hunch.mdc"), "utf8");
     assert.match(rule, /alwaysApply: true/);
+    const cursorHooks = JSON.parse(readFileSync(join(root, ".cursor/hooks.json"), "utf8"));
+    assert.equal(cursorHooks.version, 1);
+    assert.match(cursorHooks.hooks.preToolUse[0].command, /hook.*--provider.*cursor/);
+
+    const vscodeHooks = JSON.parse(readFileSync(join(root, ".github/hooks/hunch.json"), "utf8"));
+    assert.match(vscodeHooks.hooks.PreToolUse[0].command, /hook.*--provider.*vscode/);
+    assert.ok(vscodeHooks.hooks.Stop, "VS Code gets the delivery stop gate");
 
     const windsurf = JSON.parse(readFileSync(join(root, ".windsurf/mcp_config.json"), "utf8"));
     assert.equal(windsurf.mcpServers.hunch.command, inv.command);
@@ -41,6 +48,33 @@ test("scaffoldProviders writes MCP config + grounding for every assistant", () =
     const wrule = readFileSync(join(root, ".windsurf/rules/hunch.md"), "utf8");
     assert.match(wrule, /trigger: always_on/);
     assert.match(wrule, /hunch_check_constraints/);
+    const windsurfHooks = JSON.parse(readFileSync(join(root, ".windsurf/hooks.json"), "utf8"));
+    assert.match(windsurfHooks.hooks.pre_write_code[0].command, /hook.*--provider.*windsurf/);
+
+    const antigravity = JSON.parse(readFileSync(join(root, ".agents/mcp_config.json"), "utf8"));
+    assert.equal(antigravity.mcpServers.hunch.command, inv.command);
+    const antigravityHooks = JSON.parse(readFileSync(join(root, ".agents/hooks.json"), "utf8"));
+    assert.match(antigravityHooks.hunch.PreInvocation[0].command, /hook.*--provider.*antigravity/);
+    assert.match(antigravityHooks.hunch.PreToolUse[0].matcher, /write_to_file/);
+  } finally { cleanup(); }
+});
+
+test("workspace Antigravity MCP config MERGES and lifecycle hooks preserve foreign entries", () => {
+  const { root, store, cleanup } = tempStore();
+  try {
+    mkdirSync(join(root, ".agents"), { recursive: true });
+    writeFileSync(join(root, ".agents/mcp_config.json"), JSON.stringify({ mcpServers: { other: { command: "x" } } }));
+    mkdirSync(join(root, ".cursor"), { recursive: true });
+    writeFileSync(join(root, ".cursor/hooks.json"), JSON.stringify({ version: 1, hooks: { stop: [{ command: "./keep-me" }] } }));
+    writeAntigravityWorkspaceMcp(root, inv);
+    scaffoldProviders(root, inv, store, { home: root });
+
+    const mcp = JSON.parse(readFileSync(join(root, ".agents/mcp_config.json"), "utf8"));
+    assert.ok(mcp.mcpServers.other, "foreign Antigravity server preserved");
+    assert.ok(mcp.mcpServers.hunch, "Hunch server added");
+    const cursor = JSON.parse(readFileSync(join(root, ".cursor/hooks.json"), "utf8"));
+    assert.ok(cursor.hooks.stop.some((entry: { command: string }) => entry.command === "./keep-me"), "foreign Cursor hook preserved");
+    assert.equal(cursor.hooks.stop.filter((entry: { command: string }) => /--provider.*cursor/.test(entry.command)).length, 1, "one managed Cursor hook");
   } finally { cleanup(); }
 });
 
@@ -131,9 +165,11 @@ test("scaffoldProviders isolates a failing assistant as a warning, not a crash",
   try {
     mkdirSync(join(root, ".vscode"), { recursive: true });
     writeFileSync(join(root, ".vscode/mcp.json"), "{ broken");
-    const ps = scaffoldProviders(root, inv, store);
+    const ps = scaffoldProviders(root, inv, store, { home: root });
     const vscode = ps.find((p) => p.assistant.startsWith("VS Code"))!;
     assert.ok(vscode.error, "VS Code reported an error");
+    const vscodeHooks = JSON.parse(readFileSync(join(root, ".github/hooks/hunch.json"), "utf8"));
+    assert.match(vscodeHooks.hooks.PreToolUse[0].command, /--provider.*vscode/, "a broken MCP file does not suppress VS Code lifecycle hooks");
     assert.ok(ps.find((p) => p.assistant === "Codex CLI")?.files.length, "other assistants still scaffolded");
   } finally { cleanup(); }
 });
@@ -141,8 +177,8 @@ test("scaffoldProviders isolates a failing assistant as a warning, not a crash",
 test("scaffolders are idempotent — re-running adds no duplicates", () => {
   const { store, root, cleanup } = tempStore();
   try {
-    scaffoldProviders(root, inv, store);
-    scaffoldProviders(root, inv, store);
+    scaffoldProviders(root, inv, store, { home: root });
+    scaffoldProviders(root, inv, store, { home: root });
 
     const vscode = JSON.parse(readFileSync(join(root, ".vscode/mcp.json"), "utf8"));
     assert.equal(Object.keys(vscode.servers).length, 1);
