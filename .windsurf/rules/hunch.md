@@ -6,7 +6,7 @@ description: Hunch engineering memory — consult the hunch_* MCP tools before e
 <!-- HUNCH:START — auto-generated, do not edit by hand -->
 ## 🧠 Hunch (Engineering Memory)
 
-This repo has **Hunch** — a curated graph of *why* the code is the way it is (decisions, bug history, invariants). It currently holds **81 decisions, 1 bugs, 8 constraints, 15 components, 2 policies**.
+This repo has **Hunch** — a curated graph of *why* the code is the way it is (decisions, bug history, invariants). It currently holds **81 decisions, 1 bugs, 8 constraints, 16 components, 2 policies**.
 
 **Consult Hunch via the `hunch_*` MCP tools — pick by MOMENT, not from memory:**
 
@@ -33,7 +33,7 @@ This repo has **Hunch** — a curated graph of *why* the code is the way it is (
 
 **Build the Constitution review queue:**
 - `hunch constitution bootstrap --since 90d --max-candidates 3` (CLI) — normalize recent structured human evidence into at most three non-active policy candidates; add `--history` for exact, human-identifier-grounded fix/revert deltas. Coincidence/ambiguity stays uncompilable; neither path grants authority.
-- `hunch constitution ingest --since 90d` (CLI) — normalize attributable corrections, incidents, and test failures into Git-native evidence; unsupported intent remains uncompilable and no policy is minted.
+- `hunch constitution ingest --since 90d [--instructions] [--from export.json]` (CLI) — normalize corrections/failures plus bounded committed instructions/ADRs and strict local review/conversation/PR exports into Git-native evidence; raw prose is hash-only, unsupported intent remains uncompilable, and no policy is minted.
 
 **After deciding / when corrected:**
 - `hunch_capture_decision(topic?)` → `hunch_record_decision(...)` — interview first, then write; status `proposed` = roadmap intent (shows in `hunch now`).

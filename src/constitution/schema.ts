@@ -80,6 +80,31 @@ export const EvidenceEventSchema = z.object({
 }).passthrough();
 export type EvidenceEvent = z.infer<typeof EvidenceEventSchema>;
 
+export const EvidenceImportItemSchema = z.object({
+  id: z.string().min(1).max(200),
+  kind: z.enum(["review", "instruction", "decision", "commit"]),
+  occurred_at: z.string().datetime({ offset: true }),
+  actor: z.string().min(1).max(200).optional(),
+  commit: z.string().regex(/^[0-9a-fA-F]{4,64}$/, "commit must be a hexadecimal object id").optional(),
+  files: z.array(z.string().min(1).max(1024)).max(64).default([]),
+  symbols: z.array(z.string().min(1).max(500)).max(64).default([]),
+  text: z.string().min(1).max(65_536).optional(),
+  text_ref: z.string().min(1).max(1024).optional(),
+  related_records: z.array(z.string().min(1).max(200)).max(64).default([]),
+  data_class: DataClassSchema.default("public"),
+  maintainer_confirmed: z.boolean().default(false),
+}).strict().refine((item) => !!item.text || !!item.text_ref, {
+  message: "imported evidence needs text or text_ref",
+});
+export type EvidenceImportItem = z.infer<typeof EvidenceImportItemSchema>;
+
+export const EvidenceImportSchema = z.object({
+  version: z.literal(1),
+  source: z.enum(["pr_export", "review_export", "conversation_export"]),
+  items: z.array(EvidenceImportItemSchema).min(1).max(100),
+}).strict();
+export type EvidenceImport = z.infer<typeof EvidenceImportSchema>;
+
 export const PolicyStateSchema = z.enum([
   "observed",
   "drafted",

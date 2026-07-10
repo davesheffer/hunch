@@ -60,7 +60,7 @@ export function renderHunchSection(store: HunchStore, root?: string): string {
   lines.push("");
   lines.push("**Build the Constitution review queue:**");
   lines.push("- `hunch constitution bootstrap --since 90d --max-candidates 3` (CLI) — normalize recent structured human evidence into at most three non-active policy candidates; add `--history` for exact, human-identifier-grounded fix/revert deltas. Coincidence/ambiguity stays uncompilable; neither path grants authority.");
-  lines.push("- `hunch constitution ingest --since 90d` (CLI) — normalize attributable corrections, incidents, and test failures into Git-native evidence; unsupported intent remains uncompilable and no policy is minted.");
+  lines.push("- `hunch constitution ingest --since 90d [--instructions] [--from export.json]` (CLI) — normalize corrections/failures plus bounded committed instructions/ADRs and strict local review/conversation/PR exports into Git-native evidence; raw prose is hash-only, unsupported intent remains uncompilable, and no policy is minted.");
   lines.push("");
   lines.push("**After deciding / when corrected:**");
   lines.push("- `hunch_capture_decision(topic?)` → `hunch_record_decision(...)` — interview first, then write; status `proposed` = roadmap intent (shows in `hunch now`).");

@@ -1,0 +1,32 @@
+{
+  "id": "ev_b7f9ff9c1e",
+  "kind": "instruction",
+  "occurred_at": "2026-07-02T09:58:28+03:00",
+  "actor": "davids",
+  "repository": "hunch",
+  "commit": "792dbb6de06c05de6c514fa88acf17e9fde02ac3",
+  "files": [
+    "CLAUDE.md"
+  ],
+  "symbols": [],
+  "text_ref": "CLAUDE.md",
+  "diff_ref": "git:792dbb6de06c05de6c514fa88acf17e9fde02ac3:CLAUDE.md",
+  "related_records": [],
+  "data_class": "public",
+  "content_hash": "sha1:642c828d410e66e352b18ea07108c6be49efbfff",
+  "compiler": {
+    "status": "uncompilable",
+    "policy": null,
+    "reason": "Committed instruction/ADR content was hash-normalized, but it declares no exact supported structural assertion tied to an existing guard."
+  },
+  "provenance": {
+    "source": "extracted",
+    "confidence": 0.7,
+    "evidence": [
+      "CLAUDE.md",
+      "792dbb6de06c05de6c514fa88acf17e9fde02ac3",
+      "sha1:bf5ad2be9ab9192705d74612b598c080f54d6426"
+    ],
+    "last_verified": "2026-07-02T09:58:28+03:00"
+  }
+}

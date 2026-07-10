@@ -1169,12 +1169,14 @@ const constitutionCmd = program
 
 constitutionCmd
   .command("ingest")
-  .description("Normalize attributable local corrections, incidents, and test failures into Git-native EvidenceEvents; creates no policy authority.")
+  .description("Normalize local corrections/failures, committed instructions/ADRs, and local review/PR exports into Git-native EvidenceEvents; creates no policy authority.")
   .option("--since <duration>", "evidence window, e.g. 90d or 12w", "90d")
   .option("--max-events <n>", "maximum events normalized in one run (hard-capped at 200)", "100")
+  .option("--instructions", "hash-normalize bounded committed instruction and ADR markdown")
+  .option("--from <files...>", "strict local review/conversation/PR export JSON file(s)")
   .option("--public-only", "read/write only public records")
   .option("--private", "read/write only the configured private overlay")
-  .action((opts: { since: string; maxEvents: string; publicOnly?: boolean; private?: boolean }) => {
+  .action((opts: { since: string; maxEvents: string; instructions?: boolean; from?: string[]; publicOnly?: boolean; private?: boolean }) => {
     const { store, root } = storeFor();
     try {
       const maxEvents = Number(opts.maxEvents);
@@ -1182,6 +1184,8 @@ constitutionCmd
       const report = new ConstitutionService(store, root).ingest({
         since: opts.since,
         maxEvents,
+        instructions: opts.instructions,
+        importFiles: opts.from,
         publicOnly: opts.publicOnly,
         privateOnly: opts.private,
       });

@@ -1131,6 +1131,206 @@ test("Phase 2C correction ingestion inherits private home and public reads revea
   }
 });
 
+test("Phase 2D hashes committed instruction/ADR evidence, ignores working prose, and links existing policy coverage", () => {
+  const { root, store, cleanup } = layeredRepo();
+  try {
+    const adr = "<!-- hunch:topic orders.controller-db-boundary dec_instructionadapter -->\n# Service boundary\nCOMMITTED_ADR_RAW_TEXT must not be copied into evidence.\n";
+    mkdirSync(join(root, "docs/adr"), { recursive: true });
+    const generatedV1 = "<!-- HUNCH:START — auto-generated -->\nGENERATED_GROUNDING_SECRET is derived, not evidence.\n<!-- HUNCH:END -->\n";
+    const generatedV2 = "<!-- HUNCH:START — auto-generated -->\nGENERATED_GROUNDING_SECRET_V2 is still derived, not evidence.\n<!-- HUNCH:END -->\n";
+    writeFileSync(join(root, "docs/adr/001-service-boundary.md"), `${adr}${generatedV1}`);
+    writeFileSync(join(root, "AGENTS.md"), `# AGENTS.md\n\n${generatedV1}`);
+    const authoredCommit = commitFiles(root, ["docs/adr/001-service-boundary.md", "AGENTS.md"], "docs: record service boundary ADR");
+    writeFileSync(join(root, "docs/adr/001-service-boundary.md"), `${adr}${generatedV2}`);
+    commitFiles(root, ["docs/adr/001-service-boundary.md"], "docs: refresh generated grounding only");
+    writeFileSync(join(root, "docs/adr/001-service-boundary.md"), `${adr}${generatedV2}WORKING_ONLY_SECRET must be ignored.\n`);
+    writeFileSync(join(root, "docs/adr/untracked.md"), "UNTRACKED_SECRET must be ignored.\n");
+    store.json.put("decisions", { ...decision("dec_instructionadapter"), topic: "orders.controller-db-boundary" });
+    store.reindex();
+    const service = new ConstitutionService(store, root);
+    const policy = service.compile("dec_instructionadapter", { through: "fetchOrders", now: NOW });
+    const first = service.ingest({ publicOnly: true, instructions: true, since: "90d", now: "2026-07-11T12:00:00.000Z" });
+    assert.equal(first.scanned, 2);
+    assert.equal(first.excluded, 1, "fully generated Hunch grounding is not recycled as independent evidence");
+    assert.equal(first.normalized, 1);
+    assert.equal(first.covered, 1);
+    const event = first.events[0]!;
+    assert.equal(event.kind, "instruction");
+    assert.equal(event.compiler?.policy, policy.id);
+    assert.equal(event.text_ref, "docs/adr/001-service-boundary.md");
+    assert.deepEqual(event.related_records, ["dec_instructionadapter"]);
+    assert.equal(event.commit, authoredCommit, "generated-only refreshes do not take authorship of stable instruction prose");
+    assert.ok(event.provenance.evidence.includes(canonicalHash(adr.trim())));
+    const stored = canonicalJson(event);
+    assert.doesNotMatch(stored, /COMMITTED_ADR_RAW_TEXT|WORKING_ONLY_SECRET|UNTRACKED_SECRET|GENERATED_GROUNDING_SECRET/);
+    assert.equal(service.list({ publicOnly: true }).length, 1, "instruction ingestion enriches evidence only and mints no extra policy");
+    const second = service.ingest({ publicOnly: true, instructions: true, since: "90d", now: "2026-07-11T12:00:00.000Z" });
+    assert.equal(second.normalized, 0);
+    assert.equal(second.existing, 1);
+    assert.equal(second.events[0]?.id, event.id);
+  } finally {
+    cleanup();
+  }
+});
+
+test("Phase 2D public instruction coverage never resolves through a private-only policy", () => {
+  const { root, store: initial, cleanup } = layeredRepo();
+  try {
+    mkdirSync(join(root, "docs/adr"), { recursive: true });
+    writeFileSync(join(root, "docs/adr/002-private-collision.md"), "<!-- hunch:topic private.boundary dec_privatepin -->\n# Public doc with a stale/private-only pin\n");
+    commitFiles(root, ["docs/adr/002-private-collision.md"], "docs: add public collision fixture");
+    initial.close();
+    const privateRoot = join(root, "private-instruction/.hunch");
+    mkdirSync(privateRoot, { recursive: true });
+    writeFileSync(join(root, ".hunch/local.json"), JSON.stringify({ privateDir: privateRoot, autoCommit: false, mode: "private" }));
+    const store = new HunchStore(hunchPaths(root));
+    try {
+      indexRepo(store, root, { churn: false });
+      store.putPrivate("decisions", {
+        ...decision("dec_privatepin", { private: true }),
+        title: "PRIVATE_POLICY_SENTINEL",
+        topic: "private.boundary",
+      });
+      store.reindex();
+      const service = new ConstitutionService(store, root);
+      const privatePolicy = service.compile("dec_privatepin", { through: "fetchOrders", now: NOW });
+      const report = service.ingest({ instructions: true, since: "90d", now: "2026-07-11T12:00:00.000Z" });
+      assert.equal(report.events[0]?.data_class, "public");
+      assert.equal(report.events[0]?.compiler?.policy, null);
+      const publicBytes = canonicalJson(service.repository.listEvidence({ publicOnly: true }));
+      assert.doesNotMatch(publicBytes, new RegExp(privatePolicy.id));
+      assert.doesNotMatch(publicBytes, /PRIVATE_POLICY_SENTINEL/);
+    } finally {
+      store.close();
+    }
+  } finally {
+    cleanup();
+  }
+});
+
+test("Phase 2D review/conversation exports validate as one batch and preserve exact public/private homes without raw text", () => {
+  const { root, store: initial, cleanup } = layeredRepo();
+  initial.close();
+  const privateRoot = join(root, "private-import/.hunch");
+  mkdirSync(privateRoot, { recursive: true });
+  writeFileSync(join(root, ".hunch/local.json"), JSON.stringify({ privateDir: privateRoot, autoCommit: false, mode: "private" }));
+  const store = new HunchStore(hunchPaths(root));
+  try {
+    store.putPrivate("decisions", decision("dec_privateexport", { private: true }));
+    const head = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
+    const exported = {
+      version: 1,
+      source: "pr_export",
+      items: [
+        {
+          id: "pr-431-review-1",
+          kind: "review",
+          occurred_at: "2026-07-10T10:10:00.000Z",
+          actor: "maintainer:alice",
+          commit: head.slice(0, 12),
+          files: ["src/api/orders.ts"],
+          symbols: ["listOrders"],
+          text: "PUBLIC_REVIEW_RAW_TEXT must hash but never persist.",
+          related_records: [],
+          data_class: "public",
+          maintainer_confirmed: true,
+        },
+        {
+          id: "conversation-private-1",
+          kind: "review",
+          occurred_at: "2026-07-10T10:11:00.000Z",
+          actor: "maintainer:bob",
+          files: ["src/services/orders.ts"],
+          text: "PRIVATE_EXPORT_SENTINEL must never cross the public boundary.",
+          related_records: [],
+          data_class: "private",
+          maintainer_confirmed: false,
+        },
+      ],
+    };
+    writeFileSync(join(root, "review-export.json"), JSON.stringify(exported));
+    const service = new ConstitutionService(store, root);
+    const report = service.ingest({ importFiles: ["review-export.json"], since: "90d", now: "2026-07-11T12:00:00.000Z" });
+    assert.equal(report.scanned, 2);
+    assert.equal(report.normalized, 2);
+    assert.equal(report.uncompilable, 2);
+    const pub = service.repository.listEvidence({ publicOnly: true });
+    const priv = service.repository.listEvidence({ privateOnly: true });
+    assert.equal(pub.length, 1);
+    assert.equal(priv.length, 1);
+    assert.equal(pub[0]?.commit, head);
+    assert.equal(pub[0]?.data_class, "public");
+    assert.equal(priv[0]?.data_class, "private");
+    assert.equal(pub[0]?.provenance.source, "human_confirmed+imported");
+    assert.equal(priv[0]?.provenance.source, "imported");
+    assert.doesNotMatch(canonicalJson(pub), /PUBLIC_REVIEW_RAW_TEXT|PRIVATE_EXPORT_SENTINEL/);
+    assert.doesNotMatch(canonicalJson(priv), /PUBLIC_REVIEW_RAW_TEXT|PRIVATE_EXPORT_SENTINEL/);
+    assert.doesNotMatch(canonicalJson(pub), new RegExp(priv[0]!.id));
+    assert.ok(existsSync(join(root, ".hunch/evidence", `${pub[0]!.id}.json`)));
+    assert.ok(existsSync(join(privateRoot, "evidence", `${priv[0]!.id}.json`)));
+
+    const before = canonicalJson(service.repository.listEvidence());
+    writeFileSync(join(root, "mixed-refused.json"), JSON.stringify({
+      ...exported,
+      items: exported.items.map((item, index) => ({ ...item, id: `refused-${index}` })),
+    }));
+    assert.throws(
+      () => service.ingest({ publicOnly: true, importFiles: ["mixed-refused.json"], since: "90d", now: "2026-07-11T12:00:00.000Z" }),
+      /refusing public-only ingestion/,
+    );
+    assert.equal(canonicalJson(service.repository.listEvidence()), before, "batch validation completes before the first write");
+    writeFileSync(join(root, "private-ref-refused.json"), JSON.stringify({
+      version: 1,
+      source: "review_export",
+      items: [{
+        ...exported.items[0],
+        id: "public-item-private-ref",
+        related_records: ["dec_privateexport"],
+      }],
+    }));
+    assert.throws(
+      () => service.ingest({ importFiles: ["private-ref-refused.json"], since: "90d", now: "2026-07-11T12:00:00.000Z" }),
+      /references private-only record dec_privateexport/,
+    );
+    assert.equal(canonicalJson(service.repository.listEvidence()), before);
+    writeFileSync(join(root, "symbolic-ref-refused.json"), JSON.stringify({
+      version: 1,
+      source: "review_export",
+      items: [{
+        ...exported.items[0],
+        id: "symbolic-ref-refused",
+        commit: "--help",
+      }],
+    }));
+    assert.throws(
+      () => service.ingest({ importFiles: ["symbolic-ref-refused.json"], since: "90d", now: "2026-07-11T12:00:00.000Z" }),
+      /commit must be a hexadecimal object id/,
+    );
+    assert.equal(canonicalJson(service.repository.listEvidence()), before, "invalid refs are rejected before any write");
+    writeFileSync(join(root, "cli-review-export.json"), JSON.stringify({
+      version: 1,
+      source: "review_export",
+      items: [{
+        ...exported.items[0],
+        id: "cli-review-roundtrip",
+        text: "CLI_RAW_TEXT must hash but never persist.",
+      }],
+    }));
+    const cliRun = spawnSync(process.execPath, [
+      join(process.cwd(), "node_modules/tsx/dist/cli.mjs"),
+      join(process.cwd(), "src/cli/index.ts"),
+      "constitution", "ingest", "--public-only", "--since", "90d", "--from", "cli-review-export.json",
+    ], { cwd: root, encoding: "utf8" });
+    assert.equal(cliRun.status, 0, cliRun.stderr);
+    assert.match(cliRun.stdout, /1 normalized/);
+    assert.match(cliRun.stdout, /authority: none/);
+    assert.doesNotMatch(canonicalJson(service.repository.listEvidence({ publicOnly: true })), /CLI_RAW_TEXT/);
+  } finally {
+    store.close();
+    cleanup();
+  }
+});
+
 test("Gate G1 adapter contract: CLI, MCP, and strict CI expose the identical receipt", async () => {
   const fixture = layeredRepo();
   const projectRoot = process.cwd();

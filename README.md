@@ -108,6 +108,7 @@ before it becomes enforceable:
 ```bash
 hunch constitution bootstrap --public-only --since 90d --max-candidates 3
 hunch constitution ingest --public-only --since 90d
+hunch constitution ingest --public-only --instructions --from pr-export.json
 hunch constitution delta dec_fix_or_revert --public-only
 hunch constitution bootstrap --history --public-only --since 90d --max-candidates 3
 hunch policy compile dec_service_boundary --through OrderService
@@ -134,6 +135,31 @@ delta` previews that evidence and candidate set without writing policy state.
 
 Local correction, incident, and test-failure records can be normalized with `constitution ingest`.
 The adapter stores references and hashes, inherits private storage, and creates no policy authority.
+Add `--instructions` to hash committed AGENTS/CLAUDE/Copilot/Cursor/Windsurf instructions and ADRs
+from immutable Git blobs. Add `--from` for one or more strict local review, conversation, or PR
+export JSON files. Raw prose is never copied into EvidenceEvents; only bounded metadata, references,
+and content hashes persist. Mixed batches validate before the first write, public-only mode refuses
+private/secret items, and unsupported meaning stays explicitly `uncompilable` instead of being
+approximated into a policy.
+
+```json
+{
+  "version": 1,
+  "source": "pr_export",
+  "items": [{
+    "id": "pr-431-review-7",
+    "kind": "review",
+    "occurred_at": "2026-07-10T10:10:00Z",
+    "actor": "maintainer:alice",
+    "commit": "abc1234",
+    "files": ["src/orders.ts"],
+    "text": "Use OrderService; do not call persistence here.",
+    "data_class": "private",
+    "maintainer_confirmed": true
+  }]
+}
+```
+
 `policy plan` then writes a content-addressed ProofPlan before execution: exact source/current commits,
 known-good/known-bad corpus, deterministic mutation operators, expectations, and resource budgets.
 `policy corpus --import` accepts bounded labeled `known_bad`/`known_good` Git refs, resolves them
