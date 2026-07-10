@@ -1127,6 +1127,26 @@ policyCmd
   });
 
 policyCmd
+  .command("exception")
+  .description("Human-link a strictly narrower opposite policy to its parent; invalidates child proof/authority and never enables blocking.")
+  .argument("<id>", "narrow exception policy id")
+  .requiredOption("--parent <id>", "broader parent policy id")
+  .requiredOption("--actor <identity>", "explicit human identity: human:, github:, or git:")
+  .requiredOption("--reason <reason>", "audited reason this narrow opposite is intentional")
+  .action((id: string, opts: { parent: string; actor: string; reason: string }) => {
+    const { store, root } = storeFor();
+    try {
+      const policy = new ConstitutionService(store, root).linkException(id, opts.parent, opts.actor, opts.reason);
+      console.log(`✓ ${policy.id} linked as a non-blocking exception of ${policy.exception_of} (revision ${policy.revision})`);
+      console.log("  proof and authority cleared; composition remains advisory until separately proved.");
+    } catch (e) {
+      fail((e as Error).message);
+    } finally {
+      store.close();
+    }
+  });
+
+policyCmd
   .command("evaluate")
   .description("Evaluate one or all policies with the neutral deterministic result algebra.")
   .argument("[id]", "optional policy id")

@@ -16,6 +16,7 @@ export interface ProofCard {
     scope: PolicySpec["scope"];
     evidence: string[];
     candidate: PolicySpec["candidate"];
+    exception_of: string | null;
   };
   proof: { id: string; proof_class: ProofClass; plan_hash: string; generated_at: string };
   evidence_vector: {
@@ -74,6 +75,7 @@ export function buildProofCard(policy: PolicySpec, proof: PolicyProof): ProofCar
       scope: policy.scope,
       evidence: [...policy.evidence],
       candidate: policy.candidate,
+      exception_of: policy.exception_of,
     },
     proof: { id: proof.id, proof_class: proof.proof_class, plan_hash: proof.plan_hash, generated_at: proof.generated_at },
     evidence_vector: {
@@ -118,6 +120,7 @@ export function renderProofCard(card: ProofCard): string {
     `  evidence: ${card.policy.evidence.join(", ") || "none"}`,
     `  candidate alternatives: ${card.policy.candidate.alternatives.length} · conflicts: ${card.policy.candidate.conflicts.length} · incumbent: ${card.policy.candidate.incumbent ?? "none"}`,
     `  scope suggestion: ${card.policy.candidate.scope_suggestion ? JSON.stringify(card.policy.candidate.scope_suggestion) : "none — narrow compiled scope retained"}`,
+    `  exception parent: ${card.policy.exception_of ?? "none"}`,
     `  ${line("current", card.evidence_vector.current)}`,
     `  ${line("known bad", card.evidence_vector.known_bad)}`,
     `  ${line("known good", card.evidence_vector.known_good)}`,

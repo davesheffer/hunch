@@ -11,7 +11,7 @@ import type { Bug, Constraint, Decision } from "../src/core/types.js";
 import { buildCorrectionConstraint } from "../src/core/correction.js";
 import { ConstitutionService } from "../src/constitution/service.js";
 import { canonicalHash, canonicalJson, policySemanticHash } from "../src/constitution/canonical.js";
-import { approvePolicy } from "../src/constitution/lifecycle.js";
+import { approvePolicy, linkPolicyException } from "../src/constitution/lifecycle.js";
 import { movePolicyArtifactsToPrivate } from "../src/constitution/repository.js";
 import { evaluatePolicyOnSnapshot, graphSnapshot, mutateSnapshotForPolicy } from "../src/constitution/evaluator.js";
 import { clampCandidateLimit } from "../src/constitution/bootstrap.js";
@@ -313,6 +313,47 @@ test("neutral result algebra keeps not_applicable, unknown, and error distinct",
     const mutation = mutateSnapshotForPolicy(policy, snapshot);
     assert.ok(mutation);
     assert.equal(evaluatePolicyOnSnapshot(policy, mutation.snapshot).result, "violated");
+  } finally {
+    cleanup();
+  }
+});
+
+test("Phase 2H human-linked exceptions are exact, narrower, proof-invalidating, and non-authoritative", () => {
+  const { root, store, cleanup } = layeredRepo();
+  try {
+    store.json.put("decisions", decision("dec_exception_base"));
+    store.reindex();
+    const base = new ConstitutionService(store, root).compile("dec_exception_base", { now: NOW });
+    assert.notEqual(base.assertion.kind, "exists");
+    const parent = PolicySpecSchema.parse({
+      ...base,
+      id: "pol_cccccccccc",
+      scope: { repos: [], paths: ["src/api/**"], components: [] },
+      assertion: base.assertion.kind === "exists" ? base.assertion : { ...base.assertion, kind: "not-reaches" },
+    });
+    const child = PolicySpecSchema.parse({
+      ...parent,
+      id: "pol_dddddddddd",
+      revision: 4,
+      state: "proposed",
+      scope: { repos: [], paths: ["src/api/legacy.ts"], components: [] },
+      assertion: parent.assertion.kind === "exists" ? parent.assertion : { ...parent.assertion, kind: "reaches" },
+      proof: "proof_old",
+      authority: null,
+      exception_of: null,
+    });
+    const beforeHash = policySemanticHash(child);
+    const linked = linkPolicyException(child, parent, "human:architect", "Legacy migration endpoint is an intentional narrow exception.", "2026-07-10T11:00:00.000Z");
+    assert.equal(linked.exception_of, parent.id);
+    assert.equal(linked.revision, 5);
+    assert.equal(linked.state, "compiled");
+    assert.equal(linked.proof, null);
+    assert.equal(linked.authority, null);
+    assert.equal(linked.audit.at(-1)?.action, "linked_exception");
+    assert.notEqual(policySemanticHash(linked), beforeHash, "exception composition invalidates the previous proof hash");
+    assert.equal(linkPolicyException(linked, parent, "human:architect", "same", "2026-07-10T11:01:00.000Z"), linked, "same link is idempotent");
+    assert.throws(() => linkPolicyException(child, parent, "model:auto", "not human", NOW), /explicit human actor/);
+    assert.throws(() => linkPolicyException(PolicySpecSchema.parse({ ...child, scope: parent.scope }), parent, "human:architect", "too broad", NOW), /strictly narrower/);
   } finally {
     cleanup();
   }

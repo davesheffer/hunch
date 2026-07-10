@@ -1,7 +1,7 @@
 import type { HunchStore } from "../store/hunchStore.js";
 import { compileDecisionPolicy, type CompilePolicyOptions } from "./compiler.js";
 import { evaluatePolicy, policyBlocks, policyIsActive } from "./evaluator.js";
-import { approvePolicy, blockingProofError, demotePolicy, proposeProvedPolicy } from "./lifecycle.js";
+import { approvePolicy, blockingProofError, demotePolicy, linkPolicyException, proposeProvedPolicy } from "./lifecycle.js";
 import { provePolicy } from "./proof.js";
 import { PolicyRepository } from "./repository.js";
 import type { PolicyEvaluation, PolicyProof, PolicySpec, ProofCorpus } from "./schema.js";
@@ -121,6 +121,16 @@ export class ConstitutionService {
     const policy = this.get(id);
     const demoted = demotePolicy(policy, actor, reason, opts.now ?? new Date().toISOString());
     return this.repository.putPolicy(demoted);
+  }
+
+  linkException(id: string, parentId: string, actor: string, reason: string, opts: { now?: string } = {}): PolicySpec {
+    const child = this.get(id);
+    const parent = this.get(parentId);
+    const childHome = this.repository.homeOfPolicy(child.id);
+    const parentHome = this.repository.homeOfPolicy(parent.id);
+    if (childHome !== parentHome) throw new Error("exception and parent must live in the same public/private policy home");
+    const linked = linkPolicyException(child, parent, actor, reason, opts.now ?? new Date().toISOString());
+    return this.repository.putPolicy(linked, { private: childHome === "private" });
   }
 
   evaluate(opts: { id?: string; activeOnly?: boolean; publicOnly?: boolean } = {}): PolicyEvaluationSet[] {

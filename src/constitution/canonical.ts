@@ -33,6 +33,7 @@ export function policySemanticHash(policy: PolicySpec): string {
     statement: policy.statement,
     scope: policy.scope,
     assertion: policy.assertion,
+    exception_of: policy.exception_of,
     data_class: policy.data_class,
   });
 }

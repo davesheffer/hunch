@@ -1,4 +1,5 @@
 import { policySemanticHash } from "./canonical.js";
+import { pathMatchesGlob } from "../core/glob.js";
 import type { PolicyProof, PolicySpec, ProofClass } from "./schema.js";
 
 function isHumanActor(actor: string): boolean {
@@ -74,6 +75,7 @@ export function approvePolicy(
   at: string,
 ): PolicySpec {
   requireHuman(actor);
+  if (policy.exception_of && mode === "blocking") throw new Error(`exception policy ${policy.id} cannot block until exception composition has its own proved evaluator semantics`);
   if (policy.state !== "proposed") throw new Error(`policy ${policy.id} is ${policy.state}; only a proposed policy can be activated`);
   requireCurrentProof(policy, proof);
   if (mode === "blocking" && proofRank[proof.proof_class] < proofRank.P3) {
@@ -101,6 +103,55 @@ export function approvePolicy(
       at,
       reason: `Human activated policy as ${mode}.`,
       proof: proof.id,
+    }],
+  };
+}
+
+function oppositeAssertions(child: PolicySpec, parent: PolicySpec): boolean {
+  const left = child.assertion;
+  const right = parent.assertion;
+  if (!((left.kind === "reaches" && right.kind === "not-reaches") || (left.kind === "not-reaches" && right.kind === "reaches"))) return false;
+  return left.subject.selector === right.subject.selector
+    && left.object.selector === right.object.selector
+    && JSON.stringify(left.relation) === JSON.stringify(right.relation);
+}
+
+function narrowerScope(child: PolicySpec, parent: PolicySpec): boolean {
+  const reposInside = !parent.scope.repos.length || child.scope.repos.every((repo) => parent.scope.repos.includes(repo));
+  const componentsInside = !parent.scope.components.length || child.scope.components.every((component) => parent.scope.components.includes(component));
+  const pathsInside = !parent.scope.paths.length || child.scope.paths.every((path) => parent.scope.paths.some((glob) => path === glob || pathMatchesGlob(path, glob)));
+  const strict = JSON.stringify(child.scope) !== JSON.stringify(parent.scope);
+  return reposInside && componentsInside && pathsInside && strict;
+}
+
+/** Human-authored exception relationship only. It invalidates the child's old
+ * proof/authority and stays non-blocking until a future composition evaluator
+ * can prove parent+exception behavior together. */
+export function linkPolicyException(child: PolicySpec, parent: PolicySpec, actor: string, reason: string, at: string): PolicySpec {
+  requireHuman(actor);
+  if (child.id === parent.id) throw new Error("a policy cannot be its own exception parent");
+  if (child.data_class !== parent.data_class) throw new Error("exception and parent must have the same data class");
+  if (child.exception_of && child.exception_of !== parent.id) throw new Error(`policy ${child.id} is already linked to exception parent ${child.exception_of}`);
+  if (!oppositeAssertions(child, parent)) throw new Error("exception must be the exact opposite reaches/not-reaches assertion over the same bindings and relation");
+  if (!narrowerScope(child, parent)) throw new Error("exception scope must be strictly narrower than and contained by its parent scope");
+  if (!reason.trim()) throw new Error("exception link requires an audited human reason");
+  if (child.exception_of === parent.id) return child;
+  return {
+    ...child,
+    revision: child.revision + 1,
+    state: "compiled",
+    severity: "warning",
+    authority: null,
+    proof: null,
+    exception_of: parent.id,
+    updated_at: at,
+    audit: [...child.audit, {
+      action: "linked_exception",
+      actor_kind: "human",
+      actor,
+      at,
+      reason,
+      proof: null,
     }],
   };
 }

@@ -198,6 +198,12 @@ Three independently grounded component-policy sources may add an advisory common
 suggestion, while same-named behavior outside a narrow symbol scope is surfaced as a counterexample.
 Suggestions and counterexamples are review evidence only: the compiled scope is never widened
 automatically.
+An intentional narrow opposite can be linked explicitly with `hunch policy exception <child>
+--parent <parent> --actor human:<identity> --reason "…"`. The relationship requires identical
+bindings/relation, opposite `reaches` semantics, matching data class/home, and a strictly contained
+scope. Linking invalidates the child's prior proof and authority and returns it to non-blocking
+`compiled` state. Exception composition cannot block until its combined evaluator semantics are
+separately proved.
 Models do not participate in evaluation or activation. Plan-bound proofs cover the committed current
 baseline, known-good/known-bad fixtures, bounded accepted history, and a canonical mutation
 manifest. The primary mutation is applied to an immutable disposable source checkout, must remain

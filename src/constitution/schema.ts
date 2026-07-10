@@ -193,7 +193,7 @@ export const PolicyAssertionSchema = z.discriminatedUnion("kind", [
 export type PolicyAssertion = z.infer<typeof PolicyAssertionSchema>;
 
 export const PolicyAuditEventSchema = z.object({
-  action: z.enum(["compiled", "enriched", "proved", "approved_advisory", "approved_blocking", "demoted", "retired", "rejected"]),
+  action: z.enum(["compiled", "enriched", "linked_exception", "proved", "approved_advisory", "approved_blocking", "demoted", "retired", "rejected"]),
   actor_kind: z.enum(["system", "human"]),
   actor: z.string().min(1),
   at: z.string().datetime({ offset: true }),
@@ -228,6 +228,7 @@ export const PolicySpecSchema = z.object({
   reversal_conditions: z.array(z.string()).default([]),
   supersedes: z.string().nullable().default(null),
   superseded_by: z.string().nullable().default(null),
+  exception_of: z.string().regex(/^pol_[a-f0-9]{10}$/).nullable().default(null),
   valid_from: z.string().nullable().default(null),
   valid_to: z.string().nullable().default(null),
   data_class: DataClassSchema.default("public"),

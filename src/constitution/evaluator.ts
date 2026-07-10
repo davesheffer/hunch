@@ -255,6 +255,7 @@ export function policyIsActive(policy: PolicySpec): boolean {
 
 export function policyBlocks(policy: PolicySpec, evaluation: PolicyEvaluation): boolean {
   return policy.state === "active_blocking"
+    && !policy.exception_of
     && policy.severity === "blocking"
     && policy.authority?.kind === "human"
     && evaluation.result === "violated";
