@@ -1,12 +1,13 @@
 import { policySemanticHash } from "./canonical.js";
 import { pathMatchesGlob } from "../core/glob.js";
-import type { PolicyProof, PolicySpec, ProofClass } from "./schema.js";
+import { assessHistoryDispositions } from "./disposition.js";
+import type { HistoryDisposition, PolicyProof, PolicySpec, ProofClass } from "./schema.js";
 
 function isHumanActor(actor: string): boolean {
   return /^(human|github|git):[^\s]+$/i.test(actor);
 }
 
-export function blockingEvidenceError(proof: PolicyProof): string | null {
+export function blockingEvidenceError(proof: PolicyProof, dispositions: HistoryDisposition[] = []): string | null {
   if (proof.mutation_receipts.some((receipt) => receipt.required && !receipt.passed)) {
     return "blocking proof has a failed required mutation receipt";
   }
@@ -22,24 +23,21 @@ export function blockingEvidenceError(proof: PolicyProof): string | null {
   if (proof.accepted_history.error || proof.accepted_history.unknown) {
     return "blocking proof has unresolved accepted-history unknown/error results";
   }
-  if (proof.accepted_history.classified_hits.length < proof.accepted_history.violated) {
-    return "blocking proof has unclassified accepted-history violation hits";
-  }
-  return null;
+  return assessHistoryDispositions(proof, dispositions).blocking_error;
 }
 
 const proofRank: Record<ProofClass, number> = { P0: 0, P1: 1, P2: 2, P3: 3, P4: 4, P5: 5 };
 
 /** Rechecked on every blocking evaluation; a hand-edited lifecycle flag without
  * a current P3 proof is a configuration error, never authority. */
-export function blockingProofError(policy: PolicySpec, proof: PolicyProof | undefined): string | null {
+export function blockingProofError(policy: PolicySpec, proof: PolicyProof | undefined, dispositions: HistoryDisposition[] = []): string | null {
   if (policy.state !== "active_blocking") return null;
   if (policy.authority?.kind !== "human") return "active blocking policy has no human authority event";
   if (!policy.proof || !proof) return "active blocking policy has no readable proof artifact";
   if (proofRank[proof.proof_class] < proofRank.P3) return `blocking proof is ${proof.proof_class}; P3+ is required`;
   if (proof.policy_hash !== policySemanticHash(policy)) return "blocking proof does not match current policy semantics";
   if (proof.current.satisfied !== 1 || proof.current.error || proof.current.unknown) return "blocking proof has no clean satisfied baseline";
-  const replayError = blockingEvidenceError(proof);
+  const replayError = blockingEvidenceError(proof, dispositions);
   if (replayError) return replayError;
   return null;
 }
@@ -73,6 +71,7 @@ export function approvePolicy(
   mode: "advisory" | "blocking",
   actor: string,
   at: string,
+  dispositions: HistoryDisposition[] = [],
 ): PolicySpec {
   requireHuman(actor);
   if (policy.exception_of && mode === "blocking") throw new Error(`exception policy ${policy.id} cannot block until exception composition has its own proved evaluator semantics`);
@@ -82,7 +81,7 @@ export function approvePolicy(
     throw new Error(`blocking activation requires P3+ proof; ${proof.id} is ${proof.proof_class}`);
   }
   if (mode === "blocking") {
-    const replayError = blockingEvidenceError(proof);
+    const replayError = blockingEvidenceError(proof, dispositions);
     if (replayError) throw new Error(replayError);
   }
   const event = `${mode === "blocking" ? "approval-blocking" : "approval-advisory"}:${at}`;

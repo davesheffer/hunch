@@ -88,6 +88,7 @@ import { checkConformance } from "../core/conformance.js";
 import { ConstitutionService, type PolicyEvaluationSet } from "../constitution/service.js";
 import { renderProofCard } from "../constitution/card.js";
 import { movePolicyArtifactsToPrivate } from "../constitution/repository.js";
+import { HistoryDispositionClassificationSchema } from "../constitution/schema.js";
 import { draftTripwires, knownRepoDeps } from "../synthesis/tripwires.js";
 import { constraintId } from "../core/ids.js";
 import type { Constraint, Decision } from "../core/types.js";
@@ -529,6 +530,7 @@ function configureOverlay(dir: string | undefined, opts: OverlaySetupOpts, mode:
     if (constitutionMoved.plans) breakdownParts.push(`${constitutionMoved.plans} proof plans`);
     if (constitutionMoved.evidence) breakdownParts.push(`${constitutionMoved.evidence} evidence events`);
     if (constitutionMoved.corpora) breakdownParts.push(`${constitutionMoved.corpora} proof corpora`);
+    if (constitutionMoved.dispositions) breakdownParts.push(`${constitutionMoved.dispositions} history dispositions`);
     const breakdown = breakdownParts.join(", ") || "0 records";
     migrateNote =
       `  ✓ migrated public memory → overlay (${breakdown}); public store emptied\n` +
@@ -1081,6 +1083,41 @@ policyCmd
       console.log(`  mutations: ${proof.mutations.violated}/${proof.mutations.total} caught · ${Object.keys(proof.mutations.operator_coverage).join(", ") || "none"}`);
       for (const limitation of proof.limitations) console.log(`  limitation: ${limitation}`);
       console.log("  next: hunch policy accept " + policy.id + " --advisory|--blocking --actor human:<identity>");
+    } catch (e) {
+      fail((e as Error).message);
+    } finally {
+      store.close();
+    }
+  });
+
+policyCmd
+  .command("history")
+  .description("Inspect or human-classify exact violated accepted-history receipts. Classifications are append-only and grant no activation authority.")
+  .argument("<id>", "policy id")
+  .option("--commit <sha>", "full 40-character accepted-history commit SHA")
+  .option("--classify <kind>", "true_positive_actionable | true_positive_accepted_exception | false_positive_selector | false_positive_semantics | false_positive_stale | unknown_insufficient_parser")
+  .option("--actor <identity>", "explicit human identity: human:, github:, or git:")
+  .option("--reason <reason>", "bounded audited reason for the classification")
+  .option("--supersedes <id>", "current disposition id when appending a corrected classification")
+  .option("--public-only", "exclude private-overlay policy/disposition records when inspecting")
+  .action((id: string, opts: { commit?: string; classify?: string; actor?: string; reason?: string; supersedes?: string; publicOnly?: boolean }) => {
+    const { store, root } = storeFor();
+    try {
+      const service = new ConstitutionService(store, root);
+      const writing = !!opts.commit || !!opts.classify || !!opts.actor || !!opts.reason || !!opts.supersedes;
+      if (writing) {
+        if (opts.publicOnly) throw new Error("--public-only cannot be combined with history classification");
+        if (!opts.commit || !opts.classify || !opts.actor || !opts.reason) {
+          throw new Error("history classification requires --commit, --classify, --actor, and --reason");
+        }
+        const classification = HistoryDispositionClassificationSchema.parse(opts.classify);
+        const disposition = service.classifyHistory(id, opts.commit, classification, opts.actor, opts.reason, { supersedes: opts.supersedes });
+        console.log(`✓ recorded ${disposition.id}: ${disposition.classification} for ${disposition.commit}`);
+        console.log(`  proof: ${disposition.proof_id} · actor: ${disposition.actor} · home follows policy data class (${disposition.data_class})`);
+        console.log("  classification grants no activation authority; blocking still requires an explicit human policy acceptance.");
+      } else {
+        console.log(JSON.stringify(service.historyDispositions(id, { publicOnly: opts.publicOnly }), null, 2));
+      }
     } catch (e) {
       fail((e as Error).message);
     } finally {

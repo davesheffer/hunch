@@ -1,6 +1,7 @@
 import { canonicalHash, policySemanticHash } from "./canonical.js";
 import { blockingEvidenceError } from "./lifecycle.js";
-import type { EvaluationSummary, PolicyProof, PolicySpec, ProofClass } from "./schema.js";
+import { assessHistoryDispositions } from "./disposition.js";
+import type { EvaluationSummary, HistoryDisposition, HistoryDispositionClassification, PolicyProof, PolicySpec, ProofClass } from "./schema.js";
 
 const proofRank: Record<ProofClass, number> = { P0: 0, P1: 1, P2: 2, P3: 3, P4: 4, P5: 5 };
 
@@ -28,6 +29,12 @@ export interface ProofCard {
     mutation_controls: PolicyProof["mutation_controls"];
   };
   project_checks: PolicyProof["project_checks"];
+  history_dispositions: {
+    current: HistoryDisposition[];
+    counts: Record<HistoryDispositionClassification, number>;
+    missing_commits: string[];
+    unresolved_count: number;
+  };
   uncertainty: {
     unclassified_history_hits: number;
     unknown_results: number;
@@ -45,10 +52,11 @@ export interface ProofCard {
   actions: string[];
 }
 
-export function buildProofCard(policy: PolicySpec, proof: PolicyProof): ProofCard {
+export function buildProofCard(policy: PolicySpec, proof: PolicyProof, dispositions: HistoryDisposition[] = []): ProofCard {
   const semanticMatch = proof.policy_hash === policySemanticHash(policy);
   const baselineClean = proof.current.total === 1 && proof.current.satisfied === 1 && proof.current.unknown === 0 && proof.current.error === 0;
-  const evidenceError = blockingEvidenceError(proof);
+  const dispositionAssessment = assessHistoryDispositions(proof, dispositions);
+  const evidenceError = blockingEvidenceError(proof, dispositions);
   const proofStrongEnough = proofRank[proof.proof_class] >= proofRank.P3;
   const eligible = semanticMatch && baselineClean && proofStrongEnough && !evidenceError;
   const canBlock = eligible && policy.state === "active_blocking" && policy.severity === "blocking" && policy.authority?.kind === "human";
@@ -56,7 +64,10 @@ export function buildProofCard(policy: PolicySpec, proof: PolicyProof): ProofCar
   const errorResults = proof.current.error + proof.known_bad.error + proof.known_good.error + proof.accepted_history.error + proof.mutations.error;
   const actions: string[] = [];
   if (!semanticMatch) actions.push("Regenerate the plan and proof for the current policy semantics.");
-  if (proof.accepted_history.violated > proof.accepted_history.classified_hits.length) actions.push("Classify every accepted-history violation before considering blocking approval.");
+  if (dispositionAssessment.unresolved_count) actions.push("Classify every accepted-history violation with an exact human disposition before considering blocking approval.");
+  if (dispositionAssessment.counts.false_positive_selector + dispositionAssessment.counts.false_positive_semantics + dispositionAssessment.counts.false_positive_stale > 0) actions.push("Repair and re-prove the policy before blocking because a human classified a historical hit as a false positive.");
+  if (dispositionAssessment.counts.true_positive_accepted_exception > 0) actions.push("Prove combined parent/exception semantics before treating an accepted exception as resolved.");
+  if (dispositionAssessment.counts.unknown_insufficient_parser > 0) actions.push("Improve parser support and re-prove before resolving an unknown historical hit.");
   if (unknownResults || errorResults) actions.push("Repair or explicitly resolve every unknown/error proof result.");
   if (proof.mutation_controls.failed) actions.push("Repair every failed required mutation control before considering blocking approval.");
   if (policy.candidate.conflicts.length) actions.push("Resolve every direct candidate conflict with a human disposition before lifecycle promotion.");
@@ -87,8 +98,14 @@ export function buildProofCard(policy: PolicySpec, proof: PolicyProof): ProofCar
       mutation_controls: proof.mutation_controls,
     },
     project_checks: proof.project_checks,
+    history_dispositions: {
+      current: dispositionAssessment.current,
+      counts: dispositionAssessment.counts,
+      missing_commits: dispositionAssessment.missing_commits,
+      unresolved_count: dispositionAssessment.unresolved_count,
+    },
     uncertainty: {
-      unclassified_history_hits: Math.max(0, proof.accepted_history.violated - proof.accepted_history.classified_hits.length),
+      unclassified_history_hits: dispositionAssessment.unresolved_count,
       unknown_results: unknownResults,
       error_results: errorResults,
       limitations: [...proof.limitations],
@@ -125,6 +142,7 @@ export function renderProofCard(card: ProofCard): string {
     `  ${line("known bad", card.evidence_vector.known_bad)}`,
     `  ${line("known good", card.evidence_vector.known_good)}`,
     `  ${line("accepted history", card.evidence_vector.accepted_history)}`,
+    `  history dispositions: ${card.history_dispositions.current.length} current · ${card.history_dispositions.counts.true_positive_actionable} actionable true positive · ${card.history_dispositions.unresolved_count} unresolved`,
     `  ${line("mutations", card.evidence_vector.mutations)}`,
     `  mutation controls: ${card.evidence_vector.mutation_controls.passed}/${card.evidence_vector.mutation_controls.total} passed · ${card.evidence_vector.mutation_controls.failed} failed`,
     `  project checks: build ${card.project_checks.build} · test ${card.project_checks.test} · never required for evaluator sensitivity`,
@@ -134,6 +152,7 @@ export function renderProofCard(card: ProofCard): string {
     ...card.uncertainty.limitations.map((limitation) => `  limitation: ${limitation}`),
     ...card.uncertainty.compiler_uncertainty.map((uncertainty) => `  compiler uncertainty: ${uncertainty}`),
     ...card.uncertainty.candidate_conflicts.map((conflict) => `  candidate conflict: ${conflict}`),
+    ...card.history_dispositions.current.map((disposition) => `  history disposition: ${disposition.commit} · ${disposition.classification} · ${disposition.actor} · ${disposition.id}`),
     ...card.policy.candidate.counterexamples.map((counterexample) => `  counterexample: ${counterexample}`),
     ...card.actions.map((action) => `  action: ${action}`),
     `  card: ${card.card_hash}`,

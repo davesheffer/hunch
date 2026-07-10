@@ -13,6 +13,8 @@ import { createProofPlan, type ProofPlanOptions } from "./plan.js";
 import { ingestLocalEvidence, type LocalEvidenceOptions, type LocalEvidenceReport } from "./adapters.js";
 import { buildProofCard, type ProofCard } from "./card.js";
 import { compileProofCorpus } from "./corpus.js";
+import { compileHistoryDisposition, currentHistoryDispositions } from "./disposition.js";
+import type { HistoryDisposition, HistoryDispositionClassification, ReplayReceipt } from "./schema.js";
 
 export interface PolicyEvaluationSet {
   policy: PolicySpec;
@@ -49,6 +51,18 @@ export interface PolicyConsolidationCandidate {
   conflicts: string[];
   exception_linked_members: string[];
   reasons: string[];
+}
+
+export interface PolicyHistoryDispositionView {
+  policy_id: string;
+  proof_id: string;
+  violations: Array<{
+    commit: string;
+    receipt_hash: string;
+    disposition: HistoryDisposition | null;
+  }>;
+  current: HistoryDisposition[];
+  audit: HistoryDisposition[];
 }
 
 function relationSummary(policy: PolicySpec): PolicyRelationSummary {
@@ -106,16 +120,18 @@ export class ConstitutionService {
     return policy;
   }
 
-  proof(id: string, opts: { publicOnly?: boolean } = {}): PolicyProof {
+  proof(id: string, opts: { publicOnly?: boolean; privateOnly?: boolean } = {}): PolicyProof {
     const proof = this.repository.getProof(id, opts);
     if (!proof) throw new Error(`proof ${id} not found`);
     return proof;
   }
 
-  card(id: string, opts: { publicOnly?: boolean } = {}): ProofCard {
+  card(id: string, opts: { publicOnly?: boolean; privateOnly?: boolean } = {}): ProofCard {
     const policy = this.get(id, opts);
     if (!policy.proof) throw new Error(`policy ${id} has no proof`);
-    return buildProofCard(policy, this.proof(policy.proof, opts));
+    const proof = this.proof(policy.proof, opts);
+    const dispositions = this.repository.listDispositions(opts).filter((record) => record.policy_id === policy.id && record.proof_id === proof.id);
+    return buildProofCard(policy, proof, dispositions);
   }
 
   corpus(id: string, opts: { publicOnly?: boolean; privateOnly?: boolean } = {}): ProofCorpus {
@@ -179,9 +195,48 @@ export class ConstitutionService {
   approve(id: string, mode: "advisory" | "blocking", actor: string, opts: { now?: string } = {}): PolicySpec {
     const policy = this.get(id);
     if (!policy.proof) throw new Error(`policy ${id} has no proof`);
-    const proof = this.proof(policy.proof);
-    const approved = approvePolicy(policy, proof, mode, actor, opts.now ?? new Date().toISOString());
+    const home = this.repository.homeOfPolicy(id);
+    const homeOpts = home === "public" ? { publicOnly: true } : { privateOnly: true };
+    const proof = this.proof(policy.proof, homeOpts);
+    const dispositions = this.repository.listDispositions(homeOpts).filter((record) => record.policy_id === id && record.proof_id === proof.id);
+    const approved = approvePolicy(policy, proof, mode, actor, opts.now ?? new Date().toISOString(), dispositions);
     return this.repository.putPolicy(approved);
+  }
+
+  historyDispositions(id: string, opts: { publicOnly?: boolean; privateOnly?: boolean } = {}): PolicyHistoryDispositionView {
+    const policy = this.get(id, opts);
+    if (!policy.proof) throw new Error(`policy ${id} has no proof`);
+    const proof = this.proof(policy.proof, opts);
+    const audit = this.repository.listDispositions(opts).filter((record) => record.policy_id === id && record.proof_id === proof.id);
+    const current = currentHistoryDispositions(audit);
+    const violations = proof.replay_receipts
+      .filter((receipt) => receipt.leg === "accepted_history" && receipt.result === "violated")
+      .map((receipt) => ({
+        commit: receipt.commit,
+        receipt_hash: receipt.deterministic_hash,
+        disposition: current.find((record) => record.commit === receipt.commit && record.receipt_hash === receipt.deterministic_hash) ?? null,
+      }));
+    return { policy_id: id, proof_id: proof.id, violations, current, audit };
+  }
+
+  classifyHistory(
+    id: string,
+    commit: string,
+    classification: HistoryDispositionClassification,
+    actor: string,
+    reason: string,
+    opts: { now?: string; supersedes?: string | null } = {},
+  ): HistoryDisposition {
+    if (!/^[a-f0-9]{40}$/.test(commit)) throw new Error("history disposition commit must be a full lowercase 40-character SHA");
+    const policy = this.get(id);
+    if (!policy.proof) throw new Error(`policy ${id} has no proof`);
+    const home = this.repository.homeOfPolicy(id);
+    const homeOpts = home === "public" ? { publicOnly: true } : { privateOnly: true };
+    const proof = this.proof(policy.proof, homeOpts);
+    const receipt = proof.replay_receipts.find((candidate): candidate is ReplayReceipt => candidate.leg === "accepted_history" && candidate.result === "violated" && candidate.commit === commit);
+    if (!receipt) throw new Error(`proof ${proof.id} has no violated accepted-history receipt for commit ${commit}`);
+    const disposition = compileHistoryDisposition(policy, proof, receipt, classification, actor, reason, opts);
+    return this.repository.putDisposition(disposition, policy.id);
   }
 
   demote(id: string, actor: string, reason: string, opts: { now?: string } = {}): PolicySpec {
@@ -293,8 +348,14 @@ export class ConstitutionService {
     return policies.map((policy) => {
       const evaluation = evaluatePolicy(this.store, this.root, policy, { publicOnly: opts.publicOnly });
       let proof: PolicyProof | undefined;
-      if (policy.state === "active_blocking" && policy.proof) proof = this.repository.getProof(policy.proof, opts);
-      const gateError = blockingProofError(policy, proof);
+      let dispositions: HistoryDisposition[] = [];
+      if (policy.state === "active_blocking" && policy.proof) {
+        const home = opts.publicOnly ? "public" : this.repository.homeOfPolicy(policy.id);
+        const homeOpts = home === "public" ? { publicOnly: true } : { privateOnly: true };
+        proof = this.repository.getProof(policy.proof, homeOpts);
+        dispositions = this.repository.listDispositions(homeOpts).filter((record) => record.policy_id === policy.id && record.proof_id === policy.proof);
+      }
+      const gateError = blockingProofError(policy, proof, dispositions);
       return {
         policy,
         evaluation,

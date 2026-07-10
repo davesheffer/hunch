@@ -115,6 +115,8 @@ hunch policy compile dec_service_boundary --through OrderService
 hunch policy corpus pol_… --import corpus.json
 hunch policy plan pol_… --history 20 --mutations 3
 hunch policy prove pol_…
+hunch policy history pol_…
+hunch policy history pol_… --commit <full-sha> --classify true_positive_actionable --actor github:your-name --reason "Confirmed historical violation"
 hunch policy card pol_…
 hunch policy relations pol_…
 hunch policy accept pol_… --blocking --actor github:your-name
@@ -191,6 +193,14 @@ it groups only matching narrow policies with the same assertion/data class and s
 scopes, then requires three independent decision references with no exception, active-policy,
 conflict, or counterexample signal before marking the packet reviewable. It never merges or widens a
 policy.
+`policy history` inspects every violated accepted-history receipt and its current human disposition.
+Disposition records are strict, content-addressed, stored in the policy's public/private home, and
+bound to the exact policy hash, proof, plan, commit, and replay receipt. Corrections append a new
+record with `--supersedes`; prior judgments remain auditable. Only `true_positive_actionable` clears
+the history-evidence gate. False positives, insufficient-parser unknowns, and accepted exceptions
+remain blockers until the policy/evaluator or combined exception semantics are repaired and
+re-proved. A disposition never activates policy: blocking still requires a separate explicit human
+`policy accept`, and a later corrected disposition is rechecked on every gate evaluation.
 Planning runs no replay, test, model, or activation; `policy prove` binds its receipt to that plan.
 Proof execution checks out each unique immutable commit into a disposable worktree with hooks,
 user-global Git configuration, private-overlay discovery, and provider selection disabled. It

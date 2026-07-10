@@ -5,13 +5,16 @@ import { writeFileAtomic } from "../core/io.js";
 import { shortHash } from "../core/ids.js";
 import { policySemanticHash, proofPlanContentHash } from "./canonical.js";
 import { proofCorpusContentHash } from "./corpus.js";
+import { currentHistoryDispositions, historyDispositionContentHash, historyDispositionJudgmentHash } from "./disposition.js";
 import {
+  HistoryDispositionSchema,
   ProofCorpusSchema,
   PolicyProofSchema,
   ProofPlanSchema,
   PolicySpecSchema,
   EvidenceEventSchema,
   type EvidenceEvent,
+  type HistoryDisposition,
   type ProofCorpus,
   type PolicyProof,
   type ProofPlan,
@@ -47,7 +50,7 @@ export class PolicyRepository {
     this.privateHome = store.privateDir;
   }
 
-  private dir(home: "public" | "private", kind: "policies" | "proofs" | "plans" | "evidence" | "corpora"): string {
+  private dir(home: "public" | "private", kind: "policies" | "proofs" | "plans" | "evidence" | "corpora" | "dispositions"): string {
     const base = home === "private" ? this.privateHome : this.publicHome;
     if (!base) throw new Error("No private Hunch overlay is configured; refusing to write a private policy.");
     return join(base, kind);
@@ -78,6 +81,11 @@ export class PolicyRepository {
     return loadRecords(this.dir(home, "corpora"), validateCorpus, "corpora");
   }
 
+  private dispositionsIn(home: "public" | "private"): HistoryDisposition[] {
+    if (home === "private" && !this.privateHome) return [];
+    return loadRecords(this.dir(home, "dispositions"), validateDisposition, "dispositions");
+  }
+
   listPolicies(opts: { publicOnly?: boolean; privateOnly?: boolean } = {}): PolicySpec[] {
     if (opts.publicOnly && opts.privateOnly) throw new Error("choose only one of publicOnly or privateOnly");
     if (opts.privateOnly) return this.policiesIn("private").sort((a, b) => a.id.localeCompare(b.id));
@@ -90,7 +98,9 @@ export class PolicyRepository {
     return this.listPolicies(opts).find((p) => p.id === id);
   }
 
-  getProof(id: string, opts: { publicOnly?: boolean } = {}): PolicyProof | undefined {
+  getProof(id: string, opts: { publicOnly?: boolean; privateOnly?: boolean } = {}): PolicyProof | undefined {
+    if (opts.publicOnly && opts.privateOnly) throw new Error("choose only one of publicOnly or privateOnly");
+    if (opts.privateOnly) return this.proofsIn("private").find((proof) => proof.id === id);
     const byId = new Map(this.proofsIn("public").map((p) => [p.id, p]));
     if (!opts.publicOnly) for (const p of this.proofsIn("private")) byId.set(p.id, p);
     return byId.get(id);
@@ -126,6 +136,20 @@ export class PolicyRepository {
 
   getEvidence(id: string, opts: { publicOnly?: boolean; privateOnly?: boolean } = {}): EvidenceEvent | undefined {
     return this.listEvidence(opts).find((e) => e.id === id);
+  }
+
+  listDispositions(opts: { publicOnly?: boolean; privateOnly?: boolean } = {}): HistoryDisposition[] {
+    if (opts.publicOnly && opts.privateOnly) throw new Error("choose only one of publicOnly or privateOnly");
+    if (opts.privateOnly) {
+      const records = this.dispositionsIn("private");
+      currentHistoryDispositions(records);
+      return records.sort((left, right) => left.id.localeCompare(right.id));
+    }
+    const byId = new Map(this.dispositionsIn("public").map((record) => [record.id, record]));
+    if (!opts.publicOnly) for (const record of this.dispositionsIn("private")) byId.set(record.id, record);
+    const records = [...byId.values()];
+    currentHistoryDispositions(records);
+    return records.sort((left, right) => left.id.localeCompare(right.id));
   }
 
   homeOfPolicy(id: string): "public" | "private" | undefined {
@@ -193,6 +217,39 @@ export class PolicyRepository {
     writeFileAtomic(join(dir, `${parsed.id}.json`), encode(parsed));
     return parsed;
   }
+
+  putDisposition(disposition: HistoryDisposition, policyId: string): HistoryDisposition {
+    const parsed = validateDisposition(disposition);
+    if (parsed.policy_id !== policyId) throw new Error(`history disposition ${parsed.id} does not belong to policy ${policyId}`);
+    const home = this.homeOfPolicy(policyId);
+    if (!home) throw new Error(`cannot write history disposition ${parsed.id}: policy ${policyId} has no exact storage home`);
+    const homeOpts = home === "public" ? { publicOnly: true } : { privateOnly: true };
+    const policy = this.getPolicy(policyId, homeOpts);
+    if (!policy || policy.data_class !== parsed.data_class || policy.proof !== parsed.proof_id || policySemanticHash(policy) !== parsed.policy_hash) {
+      throw new Error(`history disposition ${parsed.id} does not match policy ${policyId} semantics/proof/data class`);
+    }
+    const proof = this.getProof(parsed.proof_id, homeOpts);
+    const receipt = proof?.replay_receipts.find((candidate) => candidate.leg === "accepted_history" && candidate.result === "violated" && candidate.commit === parsed.commit && candidate.deterministic_hash === parsed.receipt_hash);
+    if (!proof || proof.policy_hash !== parsed.policy_hash || proof.plan_hash !== parsed.plan_hash || proof.data_class !== parsed.data_class || !receipt) {
+      throw new Error(`history disposition ${parsed.id} does not match an exact violated accepted-history receipt in proof ${parsed.proof_id}`);
+    }
+    const records = this.listDispositions(homeOpts);
+    const existing = records.find((record) => record.id === parsed.id);
+    if (existing) return existing;
+    const sameJudgment = records.find((record) => historyDispositionJudgmentHash(record) === historyDispositionJudgmentHash(parsed));
+    if (sameJudgment) return sameJudgment;
+    const hitRecords = records.filter((record) => record.policy_id === policyId && record.proof_id === parsed.proof_id && record.commit === parsed.commit);
+    const current = currentHistoryDispositions(hitRecords)[0];
+    if (current && parsed.supersedes !== current.id) {
+      throw new Error(`history hit ${parsed.commit} already has current disposition ${current.id}; pass --supersedes ${current.id} to append a correction`);
+    }
+    if (!current && parsed.supersedes) throw new Error(`history disposition ${parsed.id} supersedes no current disposition for this proof hit`);
+    currentHistoryDispositions([...records, parsed]);
+    const dir = this.dir(home, "dispositions");
+    mkdirSync(dir, { recursive: true });
+    writeFileAtomic(join(dir, `${parsed.id}.json`), encode(parsed));
+    return parsed;
+  }
 }
 
 function validatePlan(raw: unknown): ProofPlan {
@@ -211,11 +268,19 @@ function validateCorpus(raw: unknown): ProofCorpus {
   return corpus;
 }
 
+function validateDisposition(raw: unknown): HistoryDisposition {
+  const disposition = HistoryDispositionSchema.parse(raw);
+  const hash = historyDispositionContentHash(disposition);
+  if (disposition.content_hash !== hash) throw new Error(`history disposition ${disposition.id} content hash mismatch`);
+  if (disposition.id !== `disp_${shortHash(hash)}`) throw new Error(`history disposition ${disposition.id} id does not match its canonical content`);
+  return disposition;
+}
+
 /** One-time private migration for the Constitution's standalone Git-native
  * records. Copy/validate everything before deleting the public directories;
  * private records win on an id collision. */
-export function movePolicyArtifactsToPrivate(publicHunchDir: string, privateHunchDir: string): { policies: number; proofs: number; plans: number; evidence: number; corpora: number } {
-  const counts = { policies: 0, proofs: 0, plans: 0, evidence: 0, corpora: 0 };
+export function movePolicyArtifactsToPrivate(publicHunchDir: string, privateHunchDir: string): { policies: number; proofs: number; plans: number; evidence: number; corpora: number; dispositions: number } {
+  const counts = { policies: 0, proofs: 0, plans: 0, evidence: 0, corpora: 0, dispositions: 0 };
   type Kind = keyof typeof counts;
   type Artifact = { id: string; policy_id?: string };
   const specs: Array<{ kind: Kind; parse: (raw: unknown) => Artifact }> = [
@@ -224,6 +289,7 @@ export function movePolicyArtifactsToPrivate(publicHunchDir: string, privateHunc
     { kind: "plans", parse: validatePlan },
     { kind: "evidence", parse: (value) => EvidenceEventSchema.parse(value) },
     { kind: "corpora", parse: validateCorpus },
+    { kind: "dispositions", parse: validateDisposition },
   ];
   const staged = specs.map(({ kind, parse }) => {
     const from = join(publicHunchDir, kind);
@@ -235,6 +301,11 @@ export function movePolicyArtifactsToPrivate(publicHunchDir: string, privateHunc
   });
   // All public and private records are parsed before the first write or delete.
   // A corrupt late category therefore cannot partially migrate earlier ones.
+  const dispositions = staged.find((entry) => entry.kind === "dispositions");
+  if (dispositions) {
+    const union = new Map([...dispositions.pub, ...dispositions.priv.values()].map((record) => [record.id, record as HistoryDisposition]));
+    currentHistoryDispositions([...union.values()]);
+  }
   for (const { kind, from, to, pub, priv, keyFor } of staged) {
     if (!pub.length && !existsSync(from)) continue;
     mkdirSync(to, { recursive: true });

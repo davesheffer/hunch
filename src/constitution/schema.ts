@@ -411,6 +411,34 @@ export const ReplayReceiptSchema = z.object({
 }).strict();
 export type ReplayReceipt = z.infer<typeof ReplayReceiptSchema>;
 
+export const HistoryDispositionClassificationSchema = z.enum([
+  "true_positive_actionable",
+  "true_positive_accepted_exception",
+  "false_positive_selector",
+  "false_positive_semantics",
+  "false_positive_stale",
+  "unknown_insufficient_parser",
+]);
+export type HistoryDispositionClassification = z.infer<typeof HistoryDispositionClassificationSchema>;
+
+export const HistoryDispositionSchema = z.object({
+  id: z.string().regex(/^disp_[a-f0-9]{10}$/),
+  content_hash: z.string().regex(/^sha1:[a-f0-9]{40}$/),
+  policy_id: z.string().regex(/^pol_[a-f0-9]{10}$/),
+  proof_id: z.string().regex(/^proof_[a-f0-9]{10}$/),
+  policy_hash: z.string().regex(/^sha1:[a-f0-9]{40}$/),
+  plan_hash: z.string().regex(/^sha1:[a-f0-9]{40}$/),
+  commit: z.string().regex(/^[a-f0-9]{40}$/),
+  receipt_hash: z.string().regex(/^sha1:[a-f0-9]{40}$/),
+  classification: HistoryDispositionClassificationSchema,
+  actor: z.string().regex(/^(human|github|git):[^\s]+$/i, "history disposition requires an explicit human actor (human:, github:, or git:)"),
+  reason: z.string().trim().min(1).max(2000),
+  supersedes: z.string().regex(/^disp_[a-f0-9]{10}$/).nullable().default(null),
+  data_class: DataClassSchema,
+  created_at: z.string().datetime({ offset: true }),
+}).strict();
+export type HistoryDisposition = z.infer<typeof HistoryDispositionSchema>;
+
 export const MutationReceiptSchema = z.object({
   id: z.string().regex(/^mut_[a-f0-9]{10}$/),
   kind: z.enum(["primary", "control"]),

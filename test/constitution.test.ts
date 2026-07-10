@@ -11,14 +11,14 @@ import type { Bug, Constraint, Decision } from "../src/core/types.js";
 import { buildCorrectionConstraint } from "../src/core/correction.js";
 import { ConstitutionService } from "../src/constitution/service.js";
 import { canonicalHash, canonicalJson, policySemanticHash } from "../src/constitution/canonical.js";
-import { approvePolicy, linkPolicyException } from "../src/constitution/lifecycle.js";
+import { approvePolicy, blockingEvidenceError, linkPolicyException } from "../src/constitution/lifecycle.js";
 import { movePolicyArtifactsToPrivate } from "../src/constitution/repository.js";
 import { evaluatePolicyOnSnapshot, graphSnapshot, mutateSnapshotForPolicy } from "../src/constitution/evaluator.js";
 import { clampCandidateLimit } from "../src/constitution/bootstrap.js";
 import { provePolicy } from "../src/constitution/proof.js";
 import { replayProofPlan } from "../src/constitution/replay.js";
 import { loadReplaySnapshot, replayCacheFile } from "../src/constitution/replayCache.js";
-import { PolicySpecSchema, ProofPlanSchema } from "../src/constitution/schema.js";
+import { PolicyProofSchema, PolicySpecSchema, ProofPlanSchema } from "../src/constitution/schema.js";
 import { scoreCompilerCaseBank } from "../src/constitution/scorecard.js";
 import { shortHash } from "../src/core/ids.js";
 import { externalImportNodeId, externalPackage } from "../src/core/externalImports.js";
@@ -192,7 +192,7 @@ test("Gate G1: decision -> must-pass-through policy -> P3 proof -> human block -
     };
     assert.throws(
       () => approvePolicy(proved.policy, unclassified, "blocking", "human:test-owner", "2026-07-10T10:01:30.000Z"),
-      /unclassified accepted-history/,
+      /accepted-history/,
       "a historical hit cannot be silently treated as a false positive or approved for blocking",
     );
     const failedControl = {
@@ -586,6 +586,24 @@ test("private evidence produces private policy/proof and public-only evaluation 
     assert.equal(service.repository.getCorpus(policy.id, { publicOnly: true }), undefined);
     const proved = service.prove(policy.id, { now: "2026-07-10T10:01:00.000Z" });
     assert.ok(existsSync(join(privateRoot, "proofs", `${proved.proof.id}.json`)));
+    const baselineReceipt = proved.proof.replay_receipts.find((receipt) => receipt.leg === "current_baseline")!;
+    const privateHit = {
+      ...baselineReceipt,
+      leg: "accepted_history" as const,
+      result: "violated" as const,
+      deterministic_hash: canonicalHash({ private_history_hit: baselineReceipt.commit }),
+    };
+    const privateProof = PolicyProofSchema.parse({
+      ...proved.proof,
+      accepted_history: { total: 1, satisfied: 0, violated: 1, not_applicable: 0, unknown: 0, error: 0, receipt_hashes: [privateHit.deterministic_hash], classified_hits: [] },
+      replay_receipts: [...proved.proof.replay_receipts.filter((receipt) => receipt.leg !== "accepted_history"), privateHit],
+    });
+    service.repository.putProof(privateProof, policy.id);
+    const privateDisposition = service.classifyHistory(policy.id, privateHit.commit, "true_positive_actionable", "human:private-owner", "PRIVATE_DISPOSITION_SENTINEL", { now: "2026-07-10T10:01:30.000Z" });
+    assert.ok(existsSync(join(privateRoot, "dispositions", `${privateDisposition.id}.json`)));
+    assert.equal(existsSync(join(root, ".hunch/dispositions", `${privateDisposition.id}.json`)), false);
+    assert.deepEqual(service.repository.listDispositions({ publicOnly: true }), []);
+    assert.doesNotMatch(canonicalJson(service.repository.listDispositions({ publicOnly: true })), /PRIVATE_DISPOSITION_SENTINEL/);
     const plan = service.repository.listPlans({ privateOnly: true })[0]!;
     assert.ok(plan);
     assert.ok(existsSync(join(privateRoot, "plans", `${plan.id}.json`)));
@@ -632,7 +650,7 @@ test("private migration moves policy/proof artifacts only after validation", () 
       fixture.cleanup();
     }
     const moved = movePolicyArtifactsToPrivate(publicHome, privateHome);
-    assert.deepEqual(moved, { policies: 1, proofs: 1, plans: 1, evidence: 0, corpora: 1 });
+    assert.deepEqual(moved, { policies: 1, proofs: 1, plans: 1, evidence: 0, corpora: 1, dispositions: 0 });
     assert.equal(existsSync(join(publicHome, "policies")), false);
     assert.ok(existsSync(join(privateHome, "policies")));
     assert.ok(existsSync(join(privateHome, "proofs")));
@@ -961,6 +979,96 @@ test("Phase 3 replays current, known-bad, known-good, and bounded accepted histo
     assert.equal(existsSync(sentinel), false, "repository post-checkout hook is disabled for replay worktrees");
     assert.deepEqual(readdirSync(join(root, ".hunch-cache/worktrees")), [], "every disposable checkout and graph is removed");
     assert.deepEqual(readdirSync(join(root, ".hunch-cache/mutations")), [], "every disposable source-mutation checkout and graph is removed");
+  } finally {
+    cleanup();
+  }
+});
+
+test("Phase 2L human history dispositions are append-only, receipt-bound, fail-closed, and separately activated", () => {
+  const { root, store, cleanup } = layeredRepo();
+  try {
+    mkdirSync(join(root, "src/auth"), { recursive: true });
+    mkdirSync(join(root, "src/payments"), { recursive: true });
+    writeFileSync(join(root, "src/auth/session.ts"), "export function verifySession(){ return true; }\n");
+    writeFileSync(join(root, "src/payments/charge.ts"), "export function charge(){ return true; }\n");
+    commitFiles(root, ["src/auth/session.ts", "src/payments/charge.ts"], "fixture: disposition known-bad baseline");
+    writeFileSync(join(root, "src/payments/charge.ts"), 'import { verifySession } from "../auth/session.js";\nexport function charge(){ return verifySession(); }\n');
+    const fix = commitFiles(root, ["src/payments/charge.ts"], "fix: restore disposition session validation");
+    writeFileSync(join(root, "src/payments/charge.ts"), "export function charge(){ return true; }\n");
+    const historicalViolation = commitFiles(root, ["src/payments/charge.ts"], "fixture: accepted regression requiring disposition");
+    writeFileSync(join(root, "src/payments/charge.ts"), 'import { verifySession } from "../auth/session.js";\nexport function charge(){ return verifySession(); }\n');
+    commitFiles(root, ["src/payments/charge.ts"], "fixture: restore current disposition baseline");
+    indexRepo(store, root, { churn: false });
+    store.json.put("decisions", historyDecision("dec_history_disposition", fix));
+    store.reindex();
+    const service = new ConstitutionService(store, root);
+    const report = service.bootstrap({ history: true, publicOnly: true, since: "90d", now: "2026-07-11T12:00:00.000Z" });
+    const policy = report.compiled[0]!.policy;
+    const proved = service.prove(policy.id, { now: "2026-07-11T12:01:00.000Z" });
+    assert.equal(proved.proof.proof_class, "P3");
+    assert.equal(proved.proof.accepted_history.violated, 1);
+    const hit = proved.proof.replay_receipts.find((receipt) => receipt.leg === "accepted_history" && receipt.result === "violated")!;
+    assert.equal(hit.commit, historicalViolation);
+    assert.equal(service.historyDispositions(policy.id, { publicOnly: true }).violations[0]?.disposition, null);
+    assert.throws(() => service.classifyHistory(policy.id, historicalViolation, "true_positive_actionable", "model:auto", "machine guess"), /explicit human actor/);
+    assert.throws(() => service.classifyHistory(policy.id, fix, "true_positive_actionable", "human:owner", "not a violated history receipt"), /no violated accepted-history receipt/);
+
+    const falsePositive = service.classifyHistory(
+      policy.id,
+      historicalViolation,
+      "false_positive_selector",
+      "github:reviewer",
+      "Selector overmatched a historical alias.",
+      { now: "2026-07-11T12:02:00.000Z" },
+    );
+    assert.ok(existsSync(join(root, ".hunch/dispositions", `${falsePositive.id}.json`)));
+    assert.throws(() => service.repository.putDisposition({ ...falsePositive, created_at: "2026-07-11T12:02:01.000Z" }, policy.id), /content hash mismatch/, "audit timestamps are hash-bound");
+    assert.equal(service.classifyHistory(policy.id, historicalViolation, "false_positive_selector", "github:reviewer", "Selector overmatched a historical alias.", { now: "2026-07-11T12:02:30.000Z" }).id, falsePositive.id, "same canonical judgment is idempotent");
+    assert.throws(() => service.approve(policy.id, "blocking", "human:owner", { now: "2026-07-11T12:03:00.000Z" }), /human-classified accepted-history false positive/);
+    assert.match(service.card(policy.id).authority.blocking_evidence_error ?? "", /false positive/);
+
+    const acceptedException = service.classifyHistory(
+      policy.id,
+      historicalViolation,
+      "true_positive_accepted_exception",
+      "human:owner",
+      "The legacy migration was intentionally accepted.",
+      { now: "2026-07-11T12:04:00.000Z", supersedes: falsePositive.id },
+    );
+    assert.throws(() => service.approve(policy.id, "blocking", "human:owner", { now: "2026-07-11T12:04:30.000Z" }), /requires separately proved parent\/exception composition/);
+
+    const actionable = service.classifyHistory(
+      policy.id,
+      historicalViolation,
+      "true_positive_actionable",
+      "human:owner",
+      "Confirmed real historical violation; future recurrence should be blocked.",
+      { now: "2026-07-11T12:05:00.000Z", supersedes: acceptedException.id },
+    );
+    assert.throws(() => service.classifyHistory(policy.id, historicalViolation, "unknown_insufficient_parser", "human:owner", "branch attempt", { supersedes: falsePositive.id }), /pass --supersedes/);
+    const view = service.historyDispositions(policy.id, { publicOnly: true });
+    assert.deepEqual(view.current.map((record) => record.id), [actionable.id]);
+    assert.equal(view.audit.length, 3);
+    assert.equal(view.violations[0]?.disposition?.classification, "true_positive_actionable");
+    const spoofed = { ...proved.proof, accepted_history: { ...proved.proof.accepted_history, classified_hits: ["spoof"] } };
+    assert.match(blockingEvidenceError(spoofed, []) ?? "", /unclassified/, "hand-edited classified_hits cannot replace disposition records");
+
+    const activated = service.approve(policy.id, "blocking", "human:owner", { now: "2026-07-11T12:06:00.000Z" });
+    assert.equal(activated.state, "active_blocking");
+    assert.equal(activated.authority?.actor, "human:owner", "actionable disposition clears evidence review but never substitutes for activation authority");
+    assert.equal(service.evaluate({ id: policy.id })[0]!.strict_error, false);
+    service.classifyHistory(
+      policy.id,
+      historicalViolation,
+      "false_positive_semantics",
+      "human:owner",
+      "Later review found evaluator semantics were wrong; retract the gate immediately.",
+      { now: "2026-07-11T12:07:00.000Z", supersedes: actionable.id },
+    );
+    const retracted = service.evaluate({ id: policy.id })[0]!;
+    assert.equal(retracted.blocks, false);
+    assert.equal(retracted.strict_error, true);
+    assert.match(retracted.gate_error ?? "", /human-classified accepted-history false positive/);
   } finally {
     cleanup();
   }
