@@ -6,6 +6,7 @@ import { provePolicy } from "./proof.js";
 import { PolicyRepository } from "./repository.js";
 import type { PolicyEvaluation, PolicyProof, PolicySpec } from "./schema.js";
 import { bootstrapPolicies, type BootstrapOptions, type BootstrapReport } from "./bootstrap.js";
+import { bootstrapStructuralPolicies, inspectStructuralDecision, type StructuralInspection } from "./structural.js";
 
 export interface PolicyEvaluationSet {
   policy: PolicySpec;
@@ -50,7 +51,13 @@ export class ConstitutionService {
   }
 
   bootstrap(opts: BootstrapOptions = {}): BootstrapReport {
-    return bootstrapPolicies(this.store, this.root, this.repository, opts);
+    return opts.history
+      ? bootstrapStructuralPolicies(this.store, this.root, this.repository, opts)
+      : bootstrapPolicies(this.store, this.root, this.repository, opts);
+  }
+
+  inspectStructural(decisionId: string, opts: { publicOnly?: boolean; privateOnly?: boolean } = {}): StructuralInspection {
+    return inspectStructuralDecision(this.store, this.root, decisionId, opts);
   }
 
   prove(id: string, opts: { now?: string } = {}): { policy: PolicySpec; proof: PolicyProof } {

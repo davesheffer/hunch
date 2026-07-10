@@ -1090,24 +1090,51 @@ const constitutionCmd = program
   .description("Bootstrap Hunch Constitution candidates from attributable structured evidence.");
 
 constitutionCmd
+  .command("delta")
+  .description("Inspect the exact first-parent structural delta and supported candidates for one human-confirmed fix/revert decision; writes nothing.")
+  .argument("<decision-id>", "git-anchored decision id")
+  .option("--public-only", "read only the public decision and graph")
+  .option("--private", "read only the configured private overlay decision and union graph")
+  .action((decisionId: string, opts: { publicOnly?: boolean; private?: boolean }) => {
+    const { store, root } = storeFor();
+    try {
+      const inspection = new ConstitutionService(store, root).inspectStructural(decisionId, {
+        publicOnly: opts.publicOnly,
+        privateOnly: opts.private,
+      });
+      console.log(JSON.stringify(inspection, null, 2));
+    } catch (e) {
+      fail((e as Error).message);
+    } finally {
+      store.close();
+    }
+  });
+
+constitutionCmd
   .command("bootstrap")
   .description("Normalize eligible decisions into evidence events and compile at most three non-active Policy IR candidates.")
   .option("--since <duration>", "evidence window, e.g. 90d or 12w", "90d")
   .option("--max-candidates <n>", "maximum surfaced candidates (hard-capped at 3)", "3")
   .option("--public-only", "read/write only public evidence and policies")
   .option("--private", "read/write only the configured private overlay")
-  .action((opts: { since: string; maxCandidates: string; publicOnly?: boolean; private?: boolean }) => {
+  .option("--history", "use exact first-parent deltas from human-confirmed fix/revert decisions; ambiguous deltas remain uncompilable")
+  .action((opts: { since: string; maxCandidates: string; publicOnly?: boolean; private?: boolean; history?: boolean }) => {
     const { store, root } = storeFor();
     try {
       const requested = Number(opts.maxCandidates);
       if (!Number.isFinite(requested) || requested <= 0) throw new Error("--max-candidates must be a positive number");
+      if (opts.history) {
+        indexRepo(store, root, { churn: false });
+        store.reindex();
+      }
       const report = new ConstitutionService(store, root).bootstrap({
         since: opts.since,
         maxCandidates: requested,
         publicOnly: opts.publicOnly,
         privateOnly: opts.private,
+        history: opts.history,
       });
-      console.log(`Constitution bootstrap: scanned ${report.scanned} decision(s), ${report.eligible} eligible`);
+      console.log(`Constitution ${opts.history ? "history " : ""}bootstrap: scanned ${report.scanned} decision(s), ${report.eligible} eligible`);
       for (const candidate of report.compiled) {
         console.log(`  + ${candidate.policy.id} [${candidate.policy.state}] ${candidate.policy.statement}`);
         console.log(`    evidence: ${candidate.evidence.id} · ${candidate.policy.assertion.kind} · authority: none`);

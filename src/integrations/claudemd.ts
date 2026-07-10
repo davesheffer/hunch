@@ -59,7 +59,7 @@ export function renderHunchSection(store: HunchStore, root?: string): string {
   lines.push("- `hunch_pr_impact(base?)` / `hunch_merge_verdict(...)` — a change's memory surface; would it re-open a closed bug?");
   lines.push("");
   lines.push("**Build the Constitution review queue:**");
-  lines.push("- `hunch constitution bootstrap --since 90d --max-candidates 3` (CLI) — normalize recent structured human evidence into at most three non-active policy candidates; it never grants authority.");
+  lines.push("- `hunch constitution bootstrap --since 90d --max-candidates 3` (CLI) — normalize recent structured human evidence into at most three non-active policy candidates; add `--history` for exact, human-identifier-grounded fix/revert deltas. Coincidence/ambiguity stays uncompilable; neither path grants authority.");
   lines.push("");
   lines.push("**After deciding / when corrected:**");
   lines.push("- `hunch_capture_decision(topic?)` → `hunch_record_decision(...)` — interview first, then write; status `proposed` = roadmap intent (shows in `hunch now`).");

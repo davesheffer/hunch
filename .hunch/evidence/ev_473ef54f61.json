@@ -1,0 +1,79 @@
+{
+  "id": "ev_473ef54f61",
+  "kind": "bug_fix",
+  "occurred_at": "2026-07-04T07:05:07+03:00",
+  "actor": "David",
+  "repository": "hunch",
+  "commit": "54d88bbeb741d5a6f6f67567acb744499fdef77b",
+  "files": [
+    "src/extractors/git.ts",
+    "src/integrations/sync.ts",
+    "src/mcp/server.ts",
+    "test/autocommit.test.ts",
+    "test/overlay-commit-guard.test.ts"
+  ],
+  "symbols": [
+    "buildServer",
+    "flushNote"
+  ],
+  "text_ref": "dec_fbd7791c04",
+  "diff_ref": "git:c18032769fb6b69088cf5905077dbaf6b2e3cb10..54d88bbeb741d5a6f6f67567acb744499fdef77b",
+  "related_records": [
+    "dec_fbd7791c04"
+  ],
+  "data_class": "public",
+  "content_hash": "sha1:ce5a1456e505a8101bf21db5a0cc7c7458903845",
+  "structural_delta": {
+    "id": "delta_e0fce9c3cb",
+    "before_commit": "c18032769fb6b69088cf5905077dbaf6b2e3cb10",
+    "after_commit": "54d88bbeb741d5a6f6f67567acb744499fdef77b",
+    "files": [
+      "src/extractors/git.ts",
+      "src/integrations/sync.ts",
+      "src/mcp/server.ts",
+      "test/autocommit.test.ts",
+      "test/overlay-commit-guard.test.ts"
+    ],
+    "symbols": {
+      "added": [
+        {
+          "file": "src/mcp/server.ts",
+          "name": "flushNote",
+          "kind": "function"
+        }
+      ],
+      "removed": [],
+      "moved": []
+    },
+    "calls": {
+      "added": [
+        {
+          "file": "src/mcp/server.ts",
+          "caller": "buildServer",
+          "callee": "flushNote",
+          "member": false
+        }
+      ],
+      "removed": []
+    },
+    "imports": {
+      "added": [],
+      "removed": []
+    },
+    "content_hash": "sha1:b17641e5af87a6211938699c409af6b1992885e9"
+  },
+  "compiler": {
+    "status": "uncompilable",
+    "policy": null,
+    "reason": "Ambiguous structural delta enumerated 2 exact supported candidates; Hunch refused to choose semantics."
+  },
+  "provenance": {
+    "source": "derived",
+    "confidence": 1,
+    "evidence": [
+      "dec_fbd7791c04",
+      "commit:54d88bbeb741d5a6f6f67567acb744499fdef77b"
+    ],
+    "last_verified": "2026-07-05T06:29:11.352Z"
+  }
+}

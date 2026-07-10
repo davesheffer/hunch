@@ -66,6 +66,26 @@ function layeredRepo(apiBody = 'import { fetchOrders } from "../services/orders.
   return { root, store, cleanup: () => { store.close(); rmSync(root, { recursive: true, force: true }); } };
 }
 
+function commitFiles(root: string, files: string[], message: string): string {
+  execFileSync("git", ["add", "--", ...files], { cwd: root, stdio: "ignore" });
+  execFileSync("git", ["commit", "-qm", message], { cwd: root, stdio: "ignore" });
+  return execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
+}
+
+function historyDecision(id: string, commit: string, overrides: Partial<Decision> = {}): Decision {
+  const { conformance: _conformance, ...base } = decision(id);
+  return {
+    ...base,
+    title: "charge must call verifySession",
+    context: "The charge path skipped verifySession and reopened the session-bypass bug.",
+    decision: "Keep the exact charge -> verifySession call in the static graph.",
+    commit,
+    caused_by_bug: "bug_session_bypass",
+    related_files: ["src/payments/charge.ts"],
+    ...overrides,
+  };
+}
+
 test("Gate G1: decision -> must-pass-through policy -> P3 proof -> human block -> demotion", () => {
   const { root, store, cleanup } = layeredRepo();
   try {
@@ -407,9 +427,216 @@ test("Phase 2A bootstrap rejects invalid windows and has no synthesis dependency
     store.json.put("decisions", decision("dec_window"));
     const service = new ConstitutionService(store, root);
     assert.throws(() => service.bootstrap({ since: "forever", now: "2026-07-10T12:00:00.000Z" }), /--since/);
-    const source = readFileSync(join(process.cwd(), "src/constitution/bootstrap.ts"), "utf8");
-    assert.doesNotMatch(source, /synthesis\/|selectProvider|SynthesisProvider/);
+    for (const file of ["bootstrap.ts", "structural.ts", "delta.ts"]) {
+      const source = readFileSync(join(process.cwd(), "src/constitution", file), "utf8");
+      assert.doesNotMatch(source, /synthesis\/|selectProvider|SynthesisProvider/, `${file} has no model/provider dependency`);
+    }
   } finally {
+    cleanup();
+  }
+});
+
+test("Phase 2B history bootstrap compiles one exact added call, deduplicates semantics, and is idempotent", () => {
+  const { root, store, cleanup } = layeredRepo();
+  try {
+    mkdirSync(join(root, "src/auth"), { recursive: true });
+    mkdirSync(join(root, "src/payments"), { recursive: true });
+    writeFileSync(join(root, "src/auth/session.ts"), "export function verifySession(){ return true; }\n");
+    writeFileSync(join(root, "src/payments/charge.ts"), "export function charge(){ return true; }\n");
+    commitFiles(root, ["src/auth/session.ts", "src/payments/charge.ts"], "fixture: add payment baseline");
+    writeFileSync(join(root, "src/payments/charge.ts"), 'import { verifySession } from "../auth/session.js";\nexport function charge(){ return verifySession(); }\n');
+    const fix = commitFiles(root, ["src/payments/charge.ts"], "fix: restore required session validation");
+    indexRepo(store, root, { churn: false });
+    store.json.put("decisions", historyDecision("dec_history_a", fix));
+    store.json.put("decisions", historyDecision("dec_history_b", fix, { title: "Equivalent wording must not duplicate policy semantics" }));
+    store.reindex();
+    const service = new ConstitutionService(store, root);
+
+    const inspection = service.inspectStructural("dec_history_a", { publicOnly: true });
+    assert.equal(inspection.kind, "bug_fix");
+    assert.equal(inspection.delta.calls.added.length, 1);
+    assert.equal(inspection.delta.calls.removed.length, 0);
+    assert.equal(inspection.candidates.length, 1);
+    assert.equal(inspection.candidates[0]!.assertion.kind, "reaches");
+    assert.ok(inspection.unsupported.some((r) => r.includes("awaits an import assertion evaluator")), "unsupported import fact stays visible");
+
+    const sourceBefore = readFileSync(join(root, "src/payments/charge.ts"), "utf8");
+    const first = service.bootstrap({ history: true, publicOnly: true, since: "90d", maxCandidates: 3, now: "2026-07-11T12:00:00.000Z" });
+    assert.equal(first.eligible, 2);
+    assert.equal(first.compiled.length, 1);
+    assert.equal(first.covered, 1, "equivalent assertion+scope from a second judgment enriches evidence, not the queue");
+    const policy = first.compiled[0]!.policy;
+    assert.equal(policy.assertion.kind, "reaches");
+    assert.deepEqual(policy.scope.paths, ["src/payments/charge.ts"]);
+    assert.equal(policy.state, "compiled");
+    assert.equal(policy.authority, null);
+    assert.equal(first.compiled[0]!.evidence.structural_delta?.after_commit, fix);
+    assert.equal(readFileSync(join(root, "src/payments/charge.ts"), "utf8"), sourceBefore, "blob inspection never mutates the active worktree");
+
+    const events = canonicalJson(service.repository.listEvidence({ publicOnly: true }));
+    const second = service.bootstrap({ history: true, publicOnly: true, since: "90d", maxCandidates: 3, now: "2026-07-11T12:00:00.000Z" });
+    assert.equal(second.compiled.length, 0);
+    assert.equal(second.covered, 2);
+    assert.equal(canonicalJson(service.repository.listEvidence({ publicOnly: true })), events, "history rerun preserves evidence byte-semantics");
+  } finally {
+    cleanup();
+  }
+});
+
+test("Phase 2B refuses structurally exact but human-unnamed coincidence", () => {
+  const { root, store, cleanup } = layeredRepo();
+  try {
+    mkdirSync(join(root, "src/auth"), { recursive: true });
+    mkdirSync(join(root, "src/payments"), { recursive: true });
+    writeFileSync(join(root, "src/auth/session.ts"), "export function verifySession(){ return true; }\n");
+    writeFileSync(join(root, "src/payments/charge.ts"), "export function charge(){ return true; }\n");
+    commitFiles(root, ["src/auth/session.ts", "src/payments/charge.ts"], "fixture: unnamed baseline");
+    writeFileSync(join(root, "src/payments/charge.ts"), 'import { verifySession } from "../auth/session.js";\nexport function charge(){ return verifySession(); }\n');
+    const fix = commitFiles(root, ["src/payments/charge.ts"], "fix: restore required validation");
+    indexRepo(store, root, { churn: false });
+    store.json.put("decisions", historyDecision("dec_history_unnamed", fix, {
+      title: "Restore required validation",
+      context: "The prior behavior reopened a security regression.",
+      decision: "Keep the corrected behavior.",
+      consequences: [],
+      alternatives_rejected: [],
+    }));
+    store.reindex();
+    const service = new ConstitutionService(store, root);
+    const inspection = service.inspectStructural("dec_history_unnamed", { publicOnly: true });
+    assert.equal(inspection.candidates.length, 0);
+    assert.ok(inspection.unsupported.some((r) => /structural coincidence not explicitly named/.test(r)));
+    const report = service.bootstrap({ history: true, publicOnly: true, since: "90d", now: "2026-07-11T12:00:00.000Z" });
+    assert.equal(report.compiled.length, 0, "exact graph delta without human identifier grounding cannot become policy");
+    assert.equal(report.uncompilable, 1);
+  } finally {
+    cleanup();
+  }
+});
+
+test("Phase 2B revert removal compiles an exact not-reaches candidate", () => {
+  const { root, store, cleanup } = layeredRepo();
+  try {
+    mkdirSync(join(root, "src/runtime"), { recursive: true });
+    writeFileSync(join(root, "src/runtime/worker.ts"), "export function dangerous(){ return true; }\nexport function run(){ return dangerous(); }\n");
+    commitFiles(root, ["src/runtime/worker.ts"], "fixture: dangerous shortcut");
+    writeFileSync(join(root, "src/runtime/worker.ts"), "export function dangerous(){ return true; }\nexport function run(){ return true; }\n");
+    const revert = commitFiles(root, ["src/runtime/worker.ts"], 'Revert "dangerous shortcut"');
+    indexRepo(store, root, { churn: false });
+    store.json.put("decisions", historyDecision("dec_history_revert", revert, {
+      title: "Keep the dangerous shortcut out of the worker",
+      caused_by_bug: null,
+      related_files: ["src/runtime/worker.ts"],
+    }));
+    store.reindex();
+    const service = new ConstitutionService(store, root);
+    const report = service.bootstrap({ history: true, publicOnly: true, since: "90d", now: "2026-07-11T12:00:00.000Z" });
+    assert.equal(report.compiled.length, 1);
+    assert.equal(report.compiled[0]!.evidence.kind, "revert");
+    assert.equal(report.compiled[0]!.policy.assertion.kind, "not-reaches");
+    assert.equal(report.compiled[0]!.policy.authority, null);
+
+    mkdirSync(join(root, "src/other"), { recursive: true });
+    writeFileSync(join(root, "src/other/danger.ts"), "export function dangerous(){ return false; }\n");
+    commitFiles(root, ["src/other/danger.ts"], "fixture: duplicate historical target name");
+    indexRepo(store, root, { churn: false });
+    store.reindex();
+    const ambiguous = service.inspectStructural("dec_history_revert", { publicOnly: true });
+    assert.equal(ambiguous.candidates.length, 0, "a removed call cannot guess among duplicate current targets");
+    assert.ok(ambiguous.unsupported.some((r) => /removed-call target is ambiguous/.test(r)));
+  } finally {
+    cleanup();
+  }
+});
+
+test("Phase 2B ambiguous before/after stays honestly uncompilable", () => {
+  const { root, store, cleanup } = layeredRepo();
+  try {
+    mkdirSync(join(root, "src/route"), { recursive: true });
+    writeFileSync(join(root, "src/route/handler.ts"), "export function oldRoute(){ return true; }\nexport function newRoute(){ return true; }\nexport function handler(){ return oldRoute(); }\n");
+    commitFiles(root, ["src/route/handler.ts"], "fixture: old route");
+    writeFileSync(join(root, "src/route/handler.ts"), "export function oldRoute(){ return true; }\nexport function newRoute(){ return true; }\nexport function handler(){ return newRoute(); }\n");
+    const fix = commitFiles(root, ["src/route/handler.ts"], "fix: route through the replacement");
+    indexRepo(store, root, { churn: false });
+    store.json.put("decisions", historyDecision("dec_history_ambiguous", fix, {
+      title: "handler must replace oldRoute with newRoute",
+      related_files: ["src/route/handler.ts"],
+    }));
+    store.reindex();
+    const service = new ConstitutionService(store, root);
+    const inspection = service.inspectStructural("dec_history_ambiguous", { publicOnly: true });
+    assert.equal(inspection.candidates.length, 2, "removed and added calls are both exact facts; neither is silently selected");
+    const report = service.bootstrap({ history: true, publicOnly: true, since: "90d", now: "2026-07-11T12:00:00.000Z" });
+    assert.equal(report.compiled.length, 0);
+    assert.equal(report.uncompilable, 1);
+    const event = service.repository.listEvidence({ publicOnly: true })[0]!;
+    assert.equal(event.compiler?.status, "uncompilable");
+    assert.match(event.compiler?.reason ?? "", /enumerated 2 exact supported candidates; Hunch refused to choose/);
+    assert.equal(service.list({ publicOnly: true }).length, 0);
+  } finally {
+    cleanup();
+  }
+});
+
+test("Phase 2B unsupported import-only judgment is never substituted into another rule", () => {
+  const { root, store, cleanup } = layeredRepo();
+  try {
+    mkdirSync(join(root, "src/domain"), { recursive: true });
+    writeFileSync(join(root, "src/domain/model.ts"), "export function model(){ return true; }\n");
+    commitFiles(root, ["src/domain/model.ts"], "fixture: domain baseline");
+    writeFileSync(join(root, "src/domain/model.ts"), 'import framework from "framework";\nexport function model(){ return true; }\n');
+    const fix = commitFiles(root, ["src/domain/model.ts"], "fix: restore framework integration");
+    indexRepo(store, root, { churn: false });
+    store.json.put("decisions", historyDecision("dec_history_import_only", fix, {
+      title: "Use the framework integration",
+      related_files: ["src/domain/model.ts"],
+    }));
+    store.reindex();
+    const service = new ConstitutionService(store, root);
+    const inspection = service.inspectStructural("dec_history_import_only", { publicOnly: true });
+    assert.equal(inspection.candidates.length, 0);
+    assert.ok(inspection.unsupported.some((r) => /awaits an import assertion evaluator/.test(r)));
+    const report = service.bootstrap({ history: true, publicOnly: true, since: "90d", now: "2026-07-11T12:00:00.000Z" });
+    assert.equal(report.uncompilable, 1);
+    assert.equal(report.compiled.length, 0);
+    assert.match(service.repository.listEvidence({ publicOnly: true })[0]?.compiler?.reason ?? "", /No exact supported structural assertion/);
+  } finally {
+    cleanup();
+  }
+});
+
+test("Phase 2B exact-home history compilation cannot leak a same-id private judgment", () => {
+  const { root, store: initial, cleanup } = layeredRepo();
+  mkdirSync(join(root, "src/auth"), { recursive: true });
+  mkdirSync(join(root, "src/payments"), { recursive: true });
+  writeFileSync(join(root, "src/auth/session.ts"), "export function verifySession(){ return true; }\n");
+  writeFileSync(join(root, "src/payments/charge.ts"), "export function charge(){ return true; }\n");
+  commitFiles(root, ["src/auth/session.ts", "src/payments/charge.ts"], "fixture: private history baseline");
+  writeFileSync(join(root, "src/payments/charge.ts"), 'import { verifySession } from "../auth/session.js";\nexport function charge(){ return verifySession(); }\n');
+  const fix = commitFiles(root, ["src/payments/charge.ts"], "fix: private history session validation");
+  initial.close();
+  const privateRoot = join(root, "private-history/.hunch");
+  mkdirSync(privateRoot, { recursive: true });
+  writeFileSync(join(root, ".hunch/local.json"), JSON.stringify({ privateDir: privateRoot, autoCommit: false, mode: "private" }));
+  const store = new HunchStore(hunchPaths(root));
+  try {
+    indexRepo(store, root, { churn: false });
+    store.json.put("decisions", historyDecision("dec_history_collision", fix, { title: "PUBLIC session judgment" }));
+    store.putPrivate("decisions", historyDecision("dec_history_collision", fix, { title: "PRIVATE SECRET session judgment" }));
+    store.reindex();
+    const service = new ConstitutionService(store, root);
+    const pub = service.bootstrap({ history: true, publicOnly: true, since: "90d", now: "2026-07-11T12:00:00.000Z" });
+    assert.equal(pub.compiled.length, 1);
+    assert.equal(pub.compiled[0]!.policy.statement, "PUBLIC session judgment");
+    assert.equal(pub.compiled[0]!.policy.data_class, "public");
+    const priv = service.bootstrap({ history: true, privateOnly: true, since: "90d", now: "2026-07-11T12:00:00.000Z" });
+    assert.equal(priv.compiled.length, 1);
+    assert.equal(priv.compiled[0]!.policy.statement, "PRIVATE SECRET session judgment");
+    assert.equal(priv.compiled[0]!.policy.data_class, "private");
+    assert.doesNotMatch(canonicalJson(service.repository.listEvidence({ publicOnly: true })), /PRIVATE SECRET/);
+    assert.doesNotMatch(canonicalJson(service.list({ publicOnly: true })), /PRIVATE SECRET/);
+  } finally {
+    store.close();
     cleanup();
   }
 });

@@ -1,0 +1,44 @@
+{
+  "id": "ev_cfa9e0dc29",
+  "kind": "bug_fix",
+  "occurred_at": "2026-06-15T11:18:37+03:00",
+  "actor": "davids",
+  "repository": "hunch",
+  "commit": "8ec6d7d2cc32ccc0a36cf11c94ee481938beeeff",
+  "files": [
+    ".gitignore",
+    "src/cli/index.ts",
+    "src/core/io.ts",
+    "src/core/migrate.ts",
+    "src/core/paths.ts",
+    "src/integrations/mergeDriver.ts",
+    "src/store/compact.ts",
+    "src/store/jsonStore.ts",
+    "src/store/merge.ts",
+    "test/compact.test.ts",
+    "test/merge.test.ts",
+    "test/migrate.test.ts"
+  ],
+  "symbols": [],
+  "text_ref": "dec_093de2b0bd",
+  "diff_ref": "git:8ec6d7d2cc32ccc0a36cf11c94ee481938beeeff",
+  "related_records": [
+    "dec_093de2b0bd"
+  ],
+  "data_class": "public",
+  "content_hash": "sha1:147aee5aa128951d03f6ed13f68bc7324b460a38",
+  "compiler": {
+    "status": "uncompilable",
+    "policy": null,
+    "reason": "structural delta exceeds 128 extracted facts; narrow or split the evidence commit"
+  },
+  "provenance": {
+    "source": "derived",
+    "confidence": 1,
+    "evidence": [
+      "dec_093de2b0bd",
+      "commit:8ec6d7d2cc32ccc0a36cf11c94ee481938beeeff"
+    ],
+    "last_verified": "2026-06-15T13:04:59.832Z"
+  }
+}

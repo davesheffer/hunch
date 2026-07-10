@@ -30,6 +30,17 @@ function gitSafe(args: string[], cwd: string, maxBuffer?: number): string {
   }
 }
 
+function gitRawSafe(args: string[], cwd: string, maxBuffer = 64 * 1024 * 1024): string | null {
+  try {
+    return execFileSync("git", args, {
+      cwd, encoding: "utf8", maxBuffer,
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+  } catch {
+    return null;
+  }
+}
+
 export function isGitRepo(cwd: string): boolean {
   return gitSafe(["rev-parse", "--is-inside-work-tree"], cwd) === "true";
 }
@@ -250,6 +261,49 @@ export function commitMeta(sha: string, cwd: string): CommitMeta | null {
   if (!raw) return null;
   const [full = "", short = "", subject = "", body = "", author = "", date = ""] = raw.split("\x1f");
   return { sha: full, shortSha: short, subject, body, author, date, files: commitFiles(sha, cwd) };
+}
+
+export interface CommitFileChange {
+  status: "added" | "modified" | "deleted" | "renamed" | "copied";
+  before: string | null;
+  after: string | null;
+}
+
+/** First-parent and exact blob seams for deterministic before/after analysis.
+ * They never check out a ref or mutate the active worktree. */
+export function firstParent(sha: string, cwd: string): string | null {
+  const row = gitSafe(["rev-list", "--parents", "-n", "1", sha], cwd);
+  const parts = row.split(/\s+/).filter(Boolean);
+  return parts.length > 1 ? parts[1]! : null;
+}
+
+export function fileAtRef(ref: string, file: string, cwd: string): string | null {
+  return gitRawSafe(["show", `${ref}:${file}`], cwd);
+}
+
+/** Name-status records for one commit, rename-aware and NUL-delimited so paths
+ * with whitespace cannot corrupt the parser. */
+export function commitChanges(sha: string, cwd: string): CommitFileChange[] {
+  const raw = gitRawSafe(["diff-tree", "--root", "--no-commit-id", "--name-status", "-r", "-M", "-z", sha], cwd);
+  if (raw == null) return [];
+  const fields = raw.split("\0").filter((v) => v !== "");
+  const out: CommitFileChange[] = [];
+  for (let i = 0; i < fields.length;) {
+    const code = fields[i++]!;
+    const kind = code[0];
+    if (kind === "R" || kind === "C") {
+      const before = fields[i++] ?? null;
+      const after = fields[i++] ?? null;
+      if (before && after) out.push({ status: kind === "R" ? "renamed" : "copied", before, after });
+      continue;
+    }
+    const file = fields[i++] ?? null;
+    if (!file) continue;
+    if (kind === "A") out.push({ status: "added", before: null, after: file });
+    else if (kind === "D") out.push({ status: "deleted", before: file, after: null });
+    else out.push({ status: "modified", before: file, after: file });
+  }
+  return out;
 }
 
 /** Machine-generated paths that carry no design "why" — lockfiles, build output,

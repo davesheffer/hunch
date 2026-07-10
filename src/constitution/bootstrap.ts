@@ -26,6 +26,7 @@ export interface BootstrapOptions {
   maxCandidates?: number;
   publicOnly?: boolean;
   privateOnly?: boolean;
+  history?: boolean;
   now?: string;
 }
 
@@ -34,7 +35,7 @@ export function clampCandidateLimit(value: number | undefined): number {
   return Math.max(1, Math.min(3, Math.trunc(value)));
 }
 
-function cutoff(since: string, now: string): number {
+export function durationCutoff(since: string, now: string): number {
   const match = /^(\d+)([dw])$/.exec(since.trim());
   if (!match) throw new Error(`--since must be a positive duration such as 30d or 12w (got "${since}")`);
   const amount = Number(match[1]);
@@ -104,7 +105,7 @@ export function bootstrapPolicies(
   if (opts.publicOnly && opts.privateOnly) throw new Error("choose only one of publicOnly or privateOnly");
   if (opts.privateOnly && !store.hasPrivate) throw new Error("private bootstrap needs a configured Hunch private overlay");
   const now = opts.now ?? new Date().toISOString();
-  const minDate = cutoff(opts.since ?? "90d", now);
+  const minDate = durationCutoff(opts.since ?? "90d", now);
   const decisions = opts.privateOnly
     ? store.recsInHome("decisions", "private")
     : opts.publicOnly

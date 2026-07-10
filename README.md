@@ -107,6 +107,8 @@ before it becomes enforceable:
 
 ```bash
 hunch constitution bootstrap --public-only --since 90d --max-candidates 3
+hunch constitution delta dec_fix_or_revert --public-only
+hunch constitution bootstrap --history --public-only --since 90d --max-candidates 3
 hunch policy compile dec_service_boundary --through OrderService
 hunch policy prove pol_…
 hunch policy accept pol_… --blocking --actor github:your-name
@@ -118,6 +120,13 @@ exactly one structured `conformance` predicate. It normalizes auditable evidence
 queue of at most three unreviewed candidates. Re-running is idempotent, private evidence inherits
 private storage, and every candidate starts with `authority: null`—bootstrap can never activate or
 block on its own.
+
+The opt-in history path reads the exact blobs for a human-confirmed fix/revert commit and its first
+parent—without checking out code or running hooks. It enumerates only assertions the current graph
+can bind exactly and whose symbol/call identifiers the human judgment explicitly names. One
+supported meaning may become a compiled candidate; zero, multiple, missing,
+or ambiguous meanings are stored as `uncompilable`, never silently approximated. `constitution
+delta` previews that evidence and candidate set without writing policy state.
 
 The first Level-1 evaluator is `must-pass-through`: every statically discovered path from A to C
 must contain B. CLI, MCP (`hunch_policy_evaluate`), and strict CI share the exact canonical receipt.

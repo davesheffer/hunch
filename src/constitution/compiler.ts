@@ -1,7 +1,7 @@
 import type { Decision, ConformancePredicate } from "../core/types.js";
 import type { HunchStore } from "../store/hunchStore.js";
 import { policyId } from "./canonical.js";
-import { POLICY_IR_VERSION, PolicySpecSchema, type PolicyAssertion, type PolicySelector, type PolicySpec } from "./schema.js";
+import { POLICY_IR_VERSION, PolicySpecSchema, type DataClass, type PolicyAssertion, type PolicySelector, type PolicySpec } from "./schema.js";
 
 function selector(ref: string): PolicySelector {
   if (ref.startsWith("symbol-id:") || ref.startsWith("symbol:")) return { selector: ref };
@@ -115,4 +115,68 @@ export function compileDecisionPolicy(
   // repository.
   const isPrivate = !!opts.private || !!store.getPrivateRec("decisions", decisionId);
   return compileDecisionRecord(store, source, isPrivate, { through: opts.through, now: opts.now });
+}
+
+export interface StructuralPolicyInput {
+  source: Decision;
+  evidenceId: string;
+  commit: string;
+  assertion: PolicyAssertion;
+  scope: PolicySpec["scope"];
+  dataClass: DataClass;
+  now?: string;
+}
+
+/** Compile one already-enumerated structural assertion. This function does not
+ * infer or rank semantics; callers must pass an exact supported candidate. */
+export function compileStructuralPolicy(store: HunchStore, input: StructuralPolicyInput): { policy: PolicySpec; private: boolean } {
+  const isPrivate = input.dataClass !== "public";
+  if (isPrivate && !store.hasPrivate) throw new Error("private structural compilation needs a configured Hunch private overlay");
+  const now = input.now ?? new Date().toISOString();
+  const id = policyId({ assertion: input.assertion, scope: input.scope, data_class: input.dataClass });
+  const policy = PolicySpecSchema.parse({
+    id,
+    topic: input.source.topic ?? `decision.${input.source.id}`,
+    ir_version: POLICY_IR_VERSION,
+    revision: 1,
+    state: "compiled",
+    statement: input.source.title,
+    rationale: input.source.context || input.source.decision,
+    scope: input.scope,
+    assertion: input.assertion,
+    severity: "warning",
+    surfaces: ["cli", "mcp", "ci"],
+    authority: null,
+    evidence: [input.source.id, input.evidenceId, `commit:${input.commit}`],
+    proof: null,
+    reversal_conditions: [`Source decision ${input.source.id} is superseded or the structural interpretation is rejected.`],
+    supersedes: null,
+    superseded_by: null,
+    valid_from: null,
+    valid_to: null,
+    data_class: input.dataClass,
+    limitations: [
+      "Inferred from one exact first-parent Git structural delta; historical replay is not included yet.",
+      "Scope is intentionally limited to the changed caller or introduced-symbol file.",
+      "TypeScript/JavaScript static calls only; dynamic calls and runtime dependency injection are not covered.",
+    ],
+    legacy_refs: [input.source.id],
+    audit: [{
+      action: "compiled",
+      actor_kind: "system",
+      actor: "hunch:structural-delta-compiler",
+      at: now,
+      reason: `Compiled from one unambiguous assertion enumerated by evidence ${input.evidenceId}.`,
+      proof: null,
+    }],
+    created_at: now,
+    updated_at: now,
+    provenance: {
+      source: "derived",
+      confidence: 0.8,
+      evidence: [input.source.id, input.evidenceId, `commit:${input.commit}`],
+      last_verified: now,
+    },
+  });
+  return { policy, private: isPrivate };
 }

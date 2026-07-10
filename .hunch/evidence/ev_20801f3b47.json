@@ -1,0 +1,62 @@
+{
+  "id": "ev_20801f3b47",
+  "kind": "bug_fix",
+  "occurred_at": "2026-07-04T07:13:18+03:00",
+  "actor": "David",
+  "repository": "hunch",
+  "commit": "24f8831d3ca7c8fe98bed8a9b3438cecb4551b69",
+  "files": [
+    "src/cli/index.ts",
+    "src/cli/preflight.ts"
+  ],
+  "symbols": [],
+  "text_ref": "dec_91938b815a",
+  "diff_ref": "git:c9efecd1a65a9dad0663ec9b981d0fa302e187ce..24f8831d3ca7c8fe98bed8a9b3438cecb4551b69",
+  "related_records": [
+    "dec_91938b815a"
+  ],
+  "data_class": "public",
+  "content_hash": "sha1:e1865055352dd69e31142ef95ca3370e33d647fb",
+  "structural_delta": {
+    "id": "delta_b0d7841607",
+    "before_commit": "c9efecd1a65a9dad0663ec9b981d0fa302e187ce",
+    "after_commit": "24f8831d3ca7c8fe98bed8a9b3438cecb4551b69",
+    "files": [
+      "src/cli/index.ts",
+      "src/cli/preflight.ts"
+    ],
+    "symbols": {
+      "added": [],
+      "removed": [],
+      "moved": []
+    },
+    "calls": {
+      "added": [],
+      "removed": []
+    },
+    "imports": {
+      "added": [
+        {
+          "file": "src/cli/index.ts",
+          "specifier": "./preflight.js"
+        }
+      ],
+      "removed": []
+    },
+    "content_hash": "sha1:c100dd58cb6e68d186611bf171c13151aefa9a17"
+  },
+  "compiler": {
+    "status": "uncompilable",
+    "policy": null,
+    "reason": "No exact supported structural assertion. added import src/cli/index.ts:./preflight.js awaits an import assertion evaluator"
+  },
+  "provenance": {
+    "source": "derived",
+    "confidence": 1,
+    "evidence": [
+      "dec_91938b815a",
+      "commit:24f8831d3ca7c8fe98bed8a9b3438cecb4551b69"
+    ],
+    "last_verified": "2026-07-05T06:29:07.831Z"
+  }
+}

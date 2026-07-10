@@ -1,0 +1,78 @@
+{
+  "id": "ev_58e9830619",
+  "kind": "bug_fix",
+  "occurred_at": "2026-07-05T01:08:53+03:00",
+  "actor": "David",
+  "repository": "hunch",
+  "commit": "25dd388cd04db70394b432ba544c5ae818889813",
+  "files": [
+    "src/extractors/indexer.ts",
+    "test/indexer.test.ts"
+  ],
+  "symbols": [
+    "execFileSync",
+    "g"
+  ],
+  "text_ref": "dec_ccadee6264",
+  "diff_ref": "git:4323f60c9a622f3d10ac54afb3114b25ecab6b12..25dd388cd04db70394b432ba544c5ae818889813",
+  "related_records": [
+    "dec_ccadee6264"
+  ],
+  "data_class": "public",
+  "content_hash": "sha1:e0a76b354fd17bb858be8eb981666ec4a12108fd",
+  "structural_delta": {
+    "id": "delta_60b2a7016c",
+    "before_commit": "4323f60c9a622f3d10ac54afb3114b25ecab6b12",
+    "after_commit": "25dd388cd04db70394b432ba544c5ae818889813",
+    "files": [
+      "src/extractors/indexer.ts",
+      "test/indexer.test.ts"
+    ],
+    "symbols": {
+      "added": [
+        {
+          "file": "test/indexer.test.ts",
+          "name": "g",
+          "kind": "function"
+        }
+      ],
+      "removed": [],
+      "moved": []
+    },
+    "calls": {
+      "added": [
+        {
+          "file": "test/indexer.test.ts",
+          "caller": "g",
+          "callee": "execFileSync",
+          "member": false
+        }
+      ],
+      "removed": []
+    },
+    "imports": {
+      "added": [
+        {
+          "file": "test/indexer.test.ts",
+          "specifier": "node:child_process"
+        }
+      ],
+      "removed": []
+    },
+    "content_hash": "sha1:66e1ae7ed1377b582a078d151c4f9ac088c5148e"
+  },
+  "compiler": {
+    "status": "uncompilable",
+    "policy": null,
+    "reason": "No exact supported structural assertion. added import test/indexer.test.ts:node:child_process awaits an import assertion evaluator; added symbol test/indexer.test.ts:g is not explicitly named by the human judgment; test/indexer.test.ts:g -> execFileSync is structural coincidence not explicitly named by the human judgment"
+  },
+  "provenance": {
+    "source": "derived",
+    "confidence": 1,
+    "evidence": [
+      "dec_ccadee6264",
+      "commit:25dd388cd04db70394b432ba544c5ae818889813"
+    ],
+    "last_verified": "2026-07-05T06:29:09.229Z"
+  }
+}

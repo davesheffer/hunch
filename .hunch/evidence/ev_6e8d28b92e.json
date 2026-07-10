@@ -1,0 +1,84 @@
+{
+  "id": "ev_6e8d28b92e",
+  "kind": "bug_fix",
+  "occurred_at": "2026-07-05T00:34:33+03:00",
+  "actor": "David",
+  "repository": "hunch",
+  "commit": "d8442f6dfdd87e87bad0af075f4443384c3e6b7e",
+  "files": [
+    "src/cli/index.ts",
+    "src/integrations/scaffold.ts",
+    "test/mcpjson.test.ts"
+  ],
+  "symbols": [],
+  "text_ref": "dec_20f0bbaae5",
+  "diff_ref": "git:e9232f0de836b76ea4410c6de4cbfd71e774f5e4..d8442f6dfdd87e87bad0af075f4443384c3e6b7e",
+  "related_records": [
+    "dec_20f0bbaae5"
+  ],
+  "data_class": "public",
+  "content_hash": "sha1:0b75eb04d13c0a8bbc52aed6b2eb03440d224c1b",
+  "structural_delta": {
+    "id": "delta_6a41ee3ba8",
+    "before_commit": "e9232f0de836b76ea4410c6de4cbfd71e774f5e4",
+    "after_commit": "d8442f6dfdd87e87bad0af075f4443384c3e6b7e",
+    "files": [
+      "src/cli/index.ts",
+      "src/integrations/scaffold.ts",
+      "test/mcpjson.test.ts"
+    ],
+    "symbols": {
+      "added": [],
+      "removed": [],
+      "moved": []
+    },
+    "calls": {
+      "added": [],
+      "removed": []
+    },
+    "imports": {
+      "added": [
+        {
+          "file": "test/mcpjson.test.ts",
+          "specifier": "../src/integrations/scaffold.js"
+        },
+        {
+          "file": "test/mcpjson.test.ts",
+          "specifier": "node:assert/strict"
+        },
+        {
+          "file": "test/mcpjson.test.ts",
+          "specifier": "node:fs"
+        },
+        {
+          "file": "test/mcpjson.test.ts",
+          "specifier": "node:os"
+        },
+        {
+          "file": "test/mcpjson.test.ts",
+          "specifier": "node:path"
+        },
+        {
+          "file": "test/mcpjson.test.ts",
+          "specifier": "node:test"
+        }
+      ],
+      "removed": []
+    },
+    "content_hash": "sha1:1b44532debb9e3be35ea33c30c3d5663c8e31cff"
+  },
+  "compiler": {
+    "status": "uncompilable",
+    "policy": null,
+    "reason": "No exact supported structural assertion. added import test/mcpjson.test.ts:../src/integrations/scaffold.js awaits an import assertion evaluator; added import test/mcpjson.test.ts:node:assert/strict awaits an import assertion evaluator; added import test/mcpjson.test.ts:node:fs awaits an import assertion evaluator; added import test/mcpjson.test.ts:node:os awaits an import assertion evaluator"
+  },
+  "provenance": {
+    "source": "derived",
+    "confidence": 1,
+    "evidence": [
+      "dec_20f0bbaae5",
+      "commit:d8442f6dfdd87e87bad0af075f4443384c3e6b7e"
+    ],
+    "last_verified": "2026-07-05T06:29:05.313Z"
+  }
+}

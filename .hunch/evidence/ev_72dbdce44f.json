@@ -1,0 +1,55 @@
+{
+  "id": "ev_72dbdce44f",
+  "kind": "bug_fix",
+  "occurred_at": "2026-07-02T10:07:25+03:00",
+  "actor": "davids",
+  "repository": "hunch",
+  "commit": "32a34e8eb93bce71598251f4fd887fb7e8c2a050",
+  "files": [
+    "src/cli/index.ts"
+  ],
+  "symbols": [],
+  "text_ref": "dec_e8fa4bded6",
+  "diff_ref": "git:b033011de7e86db34cd9ee580f23f65e348f3c21..32a34e8eb93bce71598251f4fd887fb7e8c2a050",
+  "related_records": [
+    "dec_e8fa4bded6"
+  ],
+  "data_class": "public",
+  "content_hash": "sha1:2bd921dc5dfb886b594845fef90124d79186bee0",
+  "structural_delta": {
+    "id": "delta_e2c88de29e",
+    "before_commit": "b033011de7e86db34cd9ee580f23f65e348f3c21",
+    "after_commit": "32a34e8eb93bce71598251f4fd887fb7e8c2a050",
+    "files": [
+      "src/cli/index.ts"
+    ],
+    "symbols": {
+      "added": [],
+      "removed": [],
+      "moved": []
+    },
+    "calls": {
+      "added": [],
+      "removed": []
+    },
+    "imports": {
+      "added": [],
+      "removed": []
+    },
+    "content_hash": "sha1:0a30f01040953d08684d31c58902f65976a08932"
+  },
+  "compiler": {
+    "status": "uncompilable",
+    "policy": null,
+    "reason": "No exact supported structural assertion. The delta contains no supported call/symbol fact."
+  },
+  "provenance": {
+    "source": "derived",
+    "confidence": 1,
+    "evidence": [
+      "dec_e8fa4bded6",
+      "commit:32a34e8eb93bce71598251f4fd887fb7e8c2a050"
+    ],
+    "last_verified": "2026-07-05T06:29:10.229Z"
+  }
+}

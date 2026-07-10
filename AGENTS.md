@@ -29,7 +29,7 @@ This repo has **Hunch** — a curated graph of *why* the code is the way it is (
 - `hunch_pr_impact(base?)` / `hunch_merge_verdict(...)` — a change's memory surface; would it re-open a closed bug?
 
 **Build the Constitution review queue:**
-- `hunch constitution bootstrap --since 90d --max-candidates 3` (CLI) — normalize recent structured human evidence into at most three non-active policy candidates; it never grants authority.
+- `hunch constitution bootstrap --since 90d --max-candidates 3` (CLI) — normalize recent structured human evidence into at most three non-active policy candidates; add `--history` for exact, human-identifier-grounded fix/revert deltas. Coincidence/ambiguity stays uncompilable; neither path grants authority.
 
 **After deciding / when corrected:**
 - `hunch_capture_decision(topic?)` → `hunch_record_decision(...)` — interview first, then write; status `proposed` = roadmap intent (shows in `hunch now`).

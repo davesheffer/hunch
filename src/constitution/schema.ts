@@ -7,6 +7,54 @@ export const POLICY_EVALUATOR = { name: "hunch-graph-policy", version: "1.0.0" }
 export const DataClassSchema = z.enum(["public", "private", "secret"]);
 export type DataClass = z.infer<typeof DataClassSchema>;
 
+export const StructuralSymbolRefSchema = z.object({
+  file: z.string().min(1),
+  name: z.string().min(1),
+  kind: z.enum(["function", "method", "class", "interface", "type"]),
+});
+export type StructuralSymbolRef = z.infer<typeof StructuralSymbolRefSchema>;
+
+export const StructuralCallRefSchema = z.object({
+  file: z.string().min(1),
+  caller: z.string().min(1),
+  callee: z.string().min(1),
+  member: z.boolean().default(false),
+});
+export type StructuralCallRef = z.infer<typeof StructuralCallRefSchema>;
+
+export const StructuralImportRefSchema = z.object({
+  file: z.string().min(1),
+  specifier: z.string().min(1),
+});
+export type StructuralImportRef = z.infer<typeof StructuralImportRefSchema>;
+
+export const StructuralDeltaSchema = z.object({
+  id: z.string().regex(/^delta_[a-f0-9]{10}$/),
+  before_commit: z.string(),
+  after_commit: z.string().min(1),
+  files: z.array(z.string()).default([]),
+  symbols: z.object({
+    added: z.array(StructuralSymbolRefSchema).default([]),
+    removed: z.array(StructuralSymbolRefSchema).default([]),
+    moved: z.array(z.object({
+      from: z.string().min(1),
+      to: z.string().min(1),
+      name: z.string().min(1),
+      kind: StructuralSymbolRefSchema.shape.kind,
+    })).default([]),
+  }),
+  calls: z.object({
+    added: z.array(StructuralCallRefSchema).default([]),
+    removed: z.array(StructuralCallRefSchema).default([]),
+  }),
+  imports: z.object({
+    added: z.array(StructuralImportRefSchema).default([]),
+    removed: z.array(StructuralImportRefSchema).default([]),
+  }),
+  content_hash: z.string().min(1),
+}).strict();
+export type StructuralDelta = z.infer<typeof StructuralDeltaSchema>;
+
 export const EvidenceEventSchema = z.object({
   id: z.string().regex(/^ev_[a-f0-9]{10}$/),
   kind: z.enum(["correction", "review", "incident", "decision", "revert", "bug_fix", "test_failure", "instruction", "commit"]),
@@ -21,6 +69,7 @@ export const EvidenceEventSchema = z.object({
   related_records: z.array(z.string()).default([]),
   data_class: DataClassSchema,
   content_hash: z.string(),
+  structural_delta: StructuralDeltaSchema.optional(),
   compiler: z.object({
     status: z.enum(["eligible", "compiled", "covered", "uncompilable"]),
     policy: z.string().nullable().default(null),
