@@ -1,0 +1,21 @@
+{
+  "id": "cmp_587d48fb03",
+  "kind": "module",
+  "name": "Constitution",
+  "responsibility": "",
+  "paths": [
+    "src/constitution/**"
+  ],
+  "status": "active",
+  "owners": [],
+  "fragility": 0,
+  "provenance": {
+    "source": "inferred",
+    "confidence": 0.5,
+    "evidence": [
+      "src/constitution"
+    ]
+  },
+  "created_at": "2026-07-10T06:14:44.985Z",
+  "updated_at": "2026-07-10T06:14:44.985Z"
+}

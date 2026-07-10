@@ -1,0 +1,79 @@
+{
+  "id": "proof_eb6ae29151",
+  "plan_hash": "sha1:897d869d88498842caf3e3599a03f4f337366109",
+  "policy_hash": "sha1:750d4584820f5fc0ac7bd92a41a467cc9354ac3b",
+  "evaluator": {
+    "name": "hunch-graph-policy",
+    "version": "1.0.0"
+  },
+  "generated_at": "2026-07-10T06:13:12.042Z",
+  "current": {
+    "total": 1,
+    "satisfied": 1,
+    "violated": 0,
+    "not_applicable": 0,
+    "unknown": 0,
+    "error": 0,
+    "receipt_hashes": [
+      "sha1:77e05dd7ddcf2e2bb26a8fea931af5c15c67059d"
+    ]
+  },
+  "known_bad": {
+    "total": 0,
+    "satisfied": 0,
+    "violated": 0,
+    "not_applicable": 0,
+    "unknown": 0,
+    "error": 0,
+    "receipt_hashes": []
+  },
+  "known_good": {
+    "total": 1,
+    "satisfied": 1,
+    "violated": 0,
+    "not_applicable": 0,
+    "unknown": 0,
+    "error": 0,
+    "receipt_hashes": [
+      "sha1:77e05dd7ddcf2e2bb26a8fea931af5c15c67059d"
+    ]
+  },
+  "accepted_history": {
+    "total": 0,
+    "satisfied": 0,
+    "violated": 0,
+    "not_applicable": 0,
+    "unknown": 0,
+    "error": 0,
+    "receipt_hashes": [],
+    "classified_hits": []
+  },
+  "mutations": {
+    "total": 1,
+    "satisfied": 0,
+    "violated": 1,
+    "not_applicable": 0,
+    "unknown": 0,
+    "error": 0,
+    "receipt_hashes": [
+      "sha1:95e2b6c902f24e24c7a5bd00198371a66d088c7a"
+    ],
+    "operator_coverage": {
+      "add-forbidden-edge": 1
+    }
+  },
+  "limitations": [
+    "TypeScript/JavaScript static graph only in Gate G1.",
+    "Dynamic calls and runtime dependency injection are not covered.",
+    "Legacy bridge preserves unified calls/imports/depends_on/contains reachability semantics.",
+    "Gate G1 proof covers current baseline and one deterministic mutation; accepted-history replay and shadow outcomes are not yet implemented."
+  ],
+  "proof_class": "P3",
+  "artifact_hashes": {
+    "policy": "sha1:750d4584820f5fc0ac7bd92a41a467cc9354ac3b",
+    "graph": "sha1:467d8ba8806796385e2a4d8600d8c70ed4dcb608",
+    "current_receipt": "sha1:77e05dd7ddcf2e2bb26a8fea931af5c15c67059d",
+    "mutation_receipt": "sha1:95e2b6c902f24e24c7a5bd00198371a66d088c7a"
+  },
+  "data_class": "public"
+}

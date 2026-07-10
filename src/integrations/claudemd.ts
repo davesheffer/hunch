@@ -7,6 +7,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import type { HunchStore } from "../store/hunchStore.js";
 import { wikiSummary } from "../wiki/wiki.js";
+import { PolicyRepository } from "../constitution/repository.js";
 
 const START = "<!-- HUNCH:START — auto-generated, do not edit by hand -->";
 const END = "<!-- HUNCH:END -->";
@@ -21,6 +22,7 @@ export function renderHunchSection(store: HunchStore, root?: string): string {
     bugs: store.json.loadAll("bugs").length,
     constraints: store.json.loadAll("constraints").length,
     components: store.json.loadAll("components").length,
+    policies: root ? new PolicyRepository(root, store).listPolicies({ publicOnly: true }).length : 0,
   };
 
   const lines: string[] = [];
@@ -30,7 +32,7 @@ export function renderHunchSection(store: HunchStore, root?: string): string {
   lines.push(
     "This repo has **Hunch** — a curated graph of *why* the code is the way it is " +
       "(decisions, bug history, invariants). It currently holds " +
-      `**${counts.decisions} decisions, ${counts.bugs} bugs, ${counts.constraints} constraints, ${counts.components} components**.`,
+      `**${counts.decisions} decisions, ${counts.bugs} bugs, ${counts.constraints} constraints, ${counts.components} components, ${counts.policies} policies**.`,
   );
   lines.push("");
   lines.push("**Consult Hunch via the `hunch_*` MCP tools — pick by MOMENT, not from memory:**");
@@ -53,6 +55,7 @@ export function renderHunchSection(store: HunchStore, root?: string): string {
   lines.push("");
   lines.push("**Before committing / merging:**");
   lines.push("- `hunch_conformance()` — does the code still SATISFY recorded intent? Run before and after a refactor.");
+  lines.push("- `hunch_policy_evaluate(policy_id?, active_only?)` / `hunch_policy_proof(policy_id)` — evaluate the canonical Constitution policy and inspect the evidence that authorized it.");
   lines.push("- `hunch_pr_impact(base?)` / `hunch_merge_verdict(...)` — a change's memory surface; would it re-open a closed bug?");
   lines.push("");
   lines.push("**After deciding / when corrected:**");

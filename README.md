@@ -99,6 +99,25 @@ hunch check --staged --strict
 hunch conform --strict
 ```
 
+### Hunch Constitution — experimental Gate G1
+
+Hunch can now lift one structured architectural decision into versioned Policy IR, prove its
+deterministic behavior with a clean baseline plus a mutation, and require an explicit human event
+before it becomes enforceable:
+
+```bash
+hunch policy compile dec_service_boundary --through OrderService
+hunch policy prove pol_…
+hunch policy accept pol_… --blocking --actor github:your-name
+hunch policy evaluate pol_… --json
+```
+
+The first Level-1 evaluator is `must-pass-through`: every statically discovered path from A to C
+must contain B. CLI, MCP (`hunch_policy_evaluate`), and strict CI share the exact canonical receipt.
+Models do not participate in evaluation or activation. This first proof class covers the current
+baseline and one deterministic mutation; historical replay, shadow evidence, and broader compiler
+inference remain experimental follow-on work and are reported as limitations in the proof artifact.
+
 ## Private when the reasoning is sensitive
 
 Open-source the code without open-sourcing the reasoning.

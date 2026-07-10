@@ -84,6 +84,8 @@ import { topicCollisions, renderGrounding } from "../core/topics.js";
 import { parseDocAnchors, renderDocGrounding } from "../core/docanchors.js";
 import { compareCandidates } from "../core/compare.js";
 import { checkConformance } from "../core/conformance.js";
+import { ConstitutionService, type PolicyEvaluationSet } from "../constitution/service.js";
+import { movePolicyArtifactsToPrivate } from "../constitution/repository.js";
 import { draftTripwires, knownRepoDeps } from "../synthesis/tripwires.js";
 import { constraintId } from "../core/ids.js";
 import type { Constraint, Decision } from "../core/types.js";
@@ -511,6 +513,7 @@ function configureOverlay(dir: string | undefined, opts: OverlaySetupOpts, mode:
     const pub = new JsonStore(paths);
     const priv = new JsonStore(hunchPathsForDir(hunchDir));
     const res = movePublicMemoryToPrivate(pub, priv);
+    const constitutionMoved = movePolicyArtifactsToPrivate(paths.hunch, hunchDir);
     for (const kind of ENTITY_KINDS) pub.dropAll(kind); // public store now empty on disk
     if (isGitRepo(root)) gitUntrackCached(root, HUNCH_MEMORY_DIRS); // stop publishing it
     ignoreHunchMemory(root);
@@ -518,7 +521,10 @@ function configureOverlay(dir: string | undefined, opts: OverlaySetupOpts, mode:
     const grounding = regenerateGrounding(root, gstore);
     gstore.close();
     commitAndPushHunch(hunchDir, "hunch: absorb public memory into private overlay"); // durable
-    const breakdown = Object.entries(res.moved).map(([k, n]) => `${n} ${k}`).join(", ") || "0 records";
+    const breakdownParts = Object.entries(res.moved).map(([k, n]) => `${n} ${k}`);
+    if (constitutionMoved.policies) breakdownParts.push(`${constitutionMoved.policies} policies`);
+    if (constitutionMoved.proofs) breakdownParts.push(`${constitutionMoved.proofs} proofs`);
+    const breakdown = breakdownParts.join(", ") || "0 records";
     migrateNote =
       `  ✓ migrated public memory → overlay (${breakdown}); public store emptied\n` +
       `  ✓ untracked + gitignored the .hunch memory tree — this repo is now CODE-ONLY\n` +
@@ -909,6 +915,174 @@ program
     store.close();
   });
 
+// ---- policy (Hunch Constitution — versioned policy/proof lifecycle) -------
+const policyCmd = program
+  .command("policy")
+  .description("Hunch Constitution: compile, prove, inspect, activate, and evaluate deterministic engineering policy.");
+
+policyCmd
+  .command("list")
+  .description("List Policy IR records from the public store plus the local private overlay.")
+  .option("--state <state>", "filter by lifecycle state")
+  .option("--public-only", "exclude private-overlay policy records")
+  .action((opts: { state?: string; publicOnly?: boolean }) => {
+    const { store, root } = storeFor();
+    try {
+      const policies = new ConstitutionService(store, root).list({ state: opts.state, publicOnly: opts.publicOnly });
+      if (!policies.length) {
+        console.log("No Constitution policies found.");
+        return;
+      }
+      for (const p of policies) {
+        console.log(`${p.id}  [${p.state}] [${p.severity}] ${p.statement}${p.data_class === "public" ? "" : ` [${p.data_class}]`}`);
+      }
+    } catch (e) {
+      fail((e as Error).message);
+    } finally {
+      store.close();
+    }
+  });
+
+policyCmd
+  .command("show")
+  .description("Show canonical Policy IR and, optionally, its proof artifact.")
+  .argument("<id>", "policy id")
+  .option("--proof", "include the linked proof artifact")
+  .option("--public-only", "exclude private-overlay policy records")
+  .action((id: string, opts: { proof?: boolean; publicOnly?: boolean }) => {
+    const { store, root } = storeFor();
+    try {
+      const service = new ConstitutionService(store, root);
+      const policy = service.get(id, { publicOnly: opts.publicOnly });
+      const output: { policy: typeof policy; proof?: unknown } = { policy };
+      if (opts.proof && policy.proof) output.proof = service.proof(policy.proof, { publicOnly: opts.publicOnly });
+      console.log(JSON.stringify(output, null, 2));
+    } catch (e) {
+      fail((e as Error).message);
+    } finally {
+      store.close();
+    }
+  });
+
+policyCmd
+  .command("compile")
+  .description("Compile one structured Decision.conformance predicate into a non-active Policy IR candidate.")
+  .argument("<decision-id>", "source decision id")
+  .option("--through <selector>", "compile a negative boundary as must-pass-through via this symbol selector")
+  .option("--private", "write the policy/proof only to the configured private overlay")
+  .action((decisionId: string, opts: { through?: string; private?: boolean }) => {
+    const { store, root } = storeFor();
+    try {
+      const policy = new ConstitutionService(store, root).compile(decisionId, opts);
+      console.log(`✓ compiled ${policy.id} [${policy.state}] — ${policy.statement}`);
+      console.log(`  ${policy.assertion.kind}: ${JSON.stringify(policy.assertion)}`);
+      console.log("  authority: none; this candidate cannot block until proved and explicitly accepted by a human.");
+    } catch (e) {
+      fail((e as Error).message);
+    } finally {
+      store.close();
+    }
+  });
+
+policyCmd
+  .command("prove")
+  .description("Run the Gate-G1 inward proof: current baseline plus one deterministic mutation.")
+  .argument("<id>", "policy id")
+  .action((id: string) => {
+    const { store, root } = storeFor();
+    try {
+      indexRepo(store, root, { churn: false });
+      store.reindex();
+      const { policy, proof } = new ConstitutionService(store, root).prove(id);
+      console.log(`POLICY PROOF  ${policy.id}`);
+      console.log(`  state: ${policy.state} · class: ${proof.proof_class} · proof: ${proof.id}`);
+      console.log(`  current: ${proof.current.satisfied} satisfied · ${proof.current.violated} violated · ${proof.current.unknown} unknown · ${proof.current.error} error`);
+      console.log(`  mutations: ${proof.mutations.violated}/${proof.mutations.total} caught · ${Object.keys(proof.mutations.operator_coverage).join(", ") || "none"}`);
+      for (const limitation of proof.limitations) console.log(`  limitation: ${limitation}`);
+      console.log("  next: hunch policy accept " + policy.id + " --advisory|--blocking --actor human:<identity>");
+    } catch (e) {
+      fail((e as Error).message);
+    } finally {
+      store.close();
+    }
+  });
+
+policyCmd
+  .command("accept")
+  .description("Human-only activation of a proved policy. Blocking requires P3+ proof.")
+  .argument("<id>", "policy id")
+  .option("--advisory", "activate as advisory")
+  .option("--blocking", "activate as blocking")
+  .requiredOption("--actor <identity>", "explicit human identity: human:, github:, or git:")
+  .action((id: string, opts: { advisory?: boolean; blocking?: boolean; actor: string }) => {
+    const { store, root } = storeFor();
+    try {
+      if (!!opts.advisory === !!opts.blocking) throw new Error("choose exactly one of --advisory or --blocking");
+      const mode = opts.blocking ? "blocking" : "advisory";
+      const policy = new ConstitutionService(store, root).approve(id, mode, opts.actor);
+      console.log(`✓ ${policy.id} is ${policy.state} by ${policy.authority?.actor} (revision ${policy.revision})`);
+    } catch (e) {
+      fail((e as Error).message);
+    } finally {
+      store.close();
+    }
+  });
+
+policyCmd
+  .command("demote")
+  .description("Immediately demote an active blocking policy to advisory without erasing history.")
+  .argument("<id>", "policy id")
+  .requiredOption("--actor <identity>", "explicit human identity: human:, github:, or git:")
+  .requiredOption("--reason <reason>", "audited demotion reason")
+  .action((id: string, opts: { actor: string; reason: string }) => {
+    const { store, root } = storeFor();
+    try {
+      const policy = new ConstitutionService(store, root).demote(id, opts.actor, opts.reason);
+      console.log(`✓ ${policy.id} demoted to ${policy.state}; history retained (revision ${policy.revision})`);
+    } catch (e) {
+      fail((e as Error).message);
+    } finally {
+      store.close();
+    }
+  });
+
+policyCmd
+  .command("evaluate")
+  .description("Evaluate one or all policies with the neutral deterministic result algebra.")
+  .argument("[id]", "optional policy id")
+  .option("--active", "evaluate active policies only")
+  .option("--public-only", "exclude private-overlay policies and graph records")
+  .option("--strict", "exit non-zero on an authorized blocking violation or evaluator error")
+  .option("--json", "emit canonical receipt objects as JSON")
+  .action((id: string | undefined, opts: { active?: boolean; publicOnly?: boolean; strict?: boolean; json?: boolean }) => {
+    const { store, root } = storeFor();
+    try {
+      indexRepo(store, root, { churn: false });
+      store.reindex();
+      const results = new ConstitutionService(store, root).evaluate({ id, activeOnly: opts.active, publicOnly: opts.publicOnly });
+      if (opts.json) console.log(JSON.stringify(results.map((r) => r.evaluation), null, 2));
+      else renderPolicyEvaluations(results).forEach((line) => console.log(line));
+      if (opts.strict && results.some((r) => r.blocks || r.strict_error)) process.exitCode = 1;
+    } catch (e) {
+      fail((e as Error).message);
+    } finally {
+      store.close();
+    }
+  });
+
+function renderPolicyEvaluations(results: PolicyEvaluationSet[]): string[] {
+  if (!results.length) return ["No Constitution policies matched."];
+  const icon: Record<string, string> = { satisfied: "✅", violated: "⛔", not_applicable: "·", unknown: "?", error: "‼" };
+  const out = [`Constitution policy evaluation: ${results.length} canonical receipt(s)`];
+  for (const r of results) {
+    out.push(`  ${icon[r.evaluation.result] ?? "·"} ${r.policy.id} [${r.policy.state}] ${r.evaluation.result}${r.blocks ? " — BLOCK" : ""}`);
+    out.push(`     ${r.evaluation.explanation}`);
+    if (r.gate_error) out.push(`     gate error: ${r.gate_error}`);
+    out.push(`     receipt: ${r.evaluation.deterministic_hash}`);
+  }
+  return out;
+}
+
 // ---- compare (rank N candidate solutions by architectural fit) ------------
 program
   .command("compare")
@@ -1274,7 +1448,9 @@ program
     // gate cases (--staged / --base / --commit HEAD) all have the working tree AT the change.
     // Surfaced always; gates the commit/PR under --strict, with the receipt of the why.
     const hasConformance = store.recs("decisions").some((d) => (d.conformance?.length ?? 0) > 0);
-    if (hasConformance) {
+    const constitution = new ConstitutionService(store, root);
+    const hasActivePolicies = constitution.list({ publicOnly: !!opts.publicOnly }).some((p) => p.state === "active_advisory" || p.state === "active_blocking");
+    if (hasConformance || hasActivePolicies) {
       indexRepo(store, root, { churn: false }); // refresh the symbol/dep graph from the working tree
       store.reindex();
     }
@@ -1300,7 +1476,29 @@ program
       }
     }
 
-    if (reportFailsStrict(report) || (!!opts.strict && confViolations.length > 0)) process.exitCode = 1;
+    // CONSTITUTION POLICY: the same neutral receipt used by `hunch policy evaluate`
+    // and hunch_policy_evaluate. Only an active_blocking policy with explicit human
+    // authority can block. An evaluator error also fails strict CI; unknown remains
+    // visible/advisory and can never masquerade as satisfied.
+    const policyResults = hasActivePolicies
+      ? constitution.evaluate({ activeOnly: true, publicOnly: !!opts.publicOnly })
+      : [];
+    if (policyResults.length) {
+      if (markdown) {
+        console.log(`\n### 📜 Hunch Constitution — ${policyResults.length} policy receipt(s)\n`);
+        for (const r of policyResults) {
+          console.log(`- ${r.blocks ? "⛔" : r.evaluation.result === "satisfied" ? "✅" : r.evaluation.result === "error" ? "‼" : "⚠"} \`${r.policy.id}\` **${r.evaluation.result}** — ${r.evaluation.explanation}`);
+          console.log(`  - receipt: \`${r.evaluation.deterministic_hash}\`${r.blocks ? " **(authorized block)**" : ""}`);
+          if (r.gate_error) console.log(`  - ‼ gate error: ${r.gate_error}`);
+        }
+      } else {
+        console.log("");
+        renderPolicyEvaluations(policyResults).forEach((line) => console.log(line));
+      }
+    }
+
+    const constitutionFails = policyResults.some((r) => r.blocks || r.strict_error);
+    if (reportFailsStrict(report) || (!!opts.strict && (confViolations.length > 0 || constitutionFails))) process.exitCode = 1;
     store.close();
   });
 
@@ -2436,6 +2634,15 @@ program
     }
     const c = store.reindex().counts;
     console.log(`hunch:      ${c.symbols} symbols, ${c.edges} edges, ${c.components} components, ${c.decisions} decisions, ${c.bugs} bugs, ${c.constraints} constraints`);
+    try {
+      const policies = new ConstitutionService(store, root).list();
+      const active = policies.filter((p) => p.state === "active_advisory" || p.state === "active_blocking").length;
+      const proposed = policies.filter((p) => p.state === "proposed").length;
+      console.log(`constitution: ${policies.length} policies (${active} active, ${proposed} proposed)`);
+    } catch (e) {
+      console.log(`constitution: ⛔ ${(e as Error).message}`);
+      process.exitCode = 1;
+    }
     // Overlay status speaks the TRUE mode, and a dead pointer is a loud finding, not a
     // silent empty store: the JSON reader degrades to [] when the target dir is missing,
     // so this is the one place the loss is visible.

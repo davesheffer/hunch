@@ -3,7 +3,7 @@
 <!-- HUNCH:START — auto-generated, do not edit by hand -->
 ## 🧠 Hunch (Engineering Memory)
 
-This repo has **Hunch** — a curated graph of *why* the code is the way it is (decisions, bug history, invariants). It currently holds **81 decisions, 1 bugs, 8 constraints, 14 components**.
+This repo has **Hunch** — a curated graph of *why* the code is the way it is (decisions, bug history, invariants). It currently holds **81 decisions, 1 bugs, 8 constraints, 15 components, 1 policies**.
 
 **Consult Hunch via the `hunch_*` MCP tools — pick by MOMENT, not from memory:**
 
@@ -25,6 +25,7 @@ This repo has **Hunch** — a curated graph of *why* the code is the way it is (
 
 **Before committing / merging:**
 - `hunch_conformance()` — does the code still SATISFY recorded intent? Run before and after a refactor.
+- `hunch_policy_evaluate(policy_id?, active_only?)` / `hunch_policy_proof(policy_id)` — evaluate the canonical Constitution policy and inspect the evidence that authorized it.
 - `hunch_pr_impact(base?)` / `hunch_merge_verdict(...)` — a change's memory surface; would it re-open a closed bug?
 
 **After deciding / when corrected:**

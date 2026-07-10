@@ -36,6 +36,8 @@ dist/
 !.hunch/decisions/
 !.hunch/constraints/
 !.hunch/components/
+!.hunch/policies/
+!.hunch/proofs/
 !.hunch/runbooks/
 !.hunch/bugs/
 # THIS repo's generated wiki stays out of the public repo (we use the PRIVATE

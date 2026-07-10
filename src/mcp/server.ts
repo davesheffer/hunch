@@ -23,9 +23,11 @@ import { formatContext, formatStructure } from "../core/format.js";
 import type { Runbook } from "../core/types.js";
 import { compareCandidates } from "../core/compare.js";
 import { checkConformance } from "../core/conformance.js";
+import { ConstitutionService } from "../constitution/service.js";
 import { renderMarkdown, renderImpact, verdict } from "../core/checkreport.js";
 import { nowData, wikiStatus, publicHome, readWikiManifestAt } from "../wiki/wiki.js";
 import { HUNCH_VERSION } from "../core/version.js";
+import { indexRepo } from "../extractors/indexer.js";
 import type { Decision, Symbol } from "../core/types.js";
 import { liveForTopic, historyForTopic, rejectedForTopic, captureConflicts } from "../core/topics.js";
 import { issueCaptureToken as issueToken, consumeCaptureToken as consumeToken } from "../core/capturetoken.js";
@@ -806,6 +808,78 @@ export function buildServer(root: string): McpServer {
         return ok(`Candidates vs ${b}, best architectural fit first:\n\n${lines.join("\n")}${best ? `\n\nBest fit: ${best.ref}` : ""}`);
       } catch (e) {
         return err(`Failed to compare candidates: ${(e as Error).message}`);
+      }
+    },
+  );
+
+  // -- Hunch Constitution (read-first, agent-neutral Policy IR) ------------
+  server.registerTool(
+    "hunch_policy_candidates",
+    {
+      title: "List Constitution policy candidates",
+      description:
+        "List compiled/proposed deterministic Policy IR candidates. Read-only; candidates carry no authority and cannot block. Uses the same Git-native policy store for every MCP client.",
+      inputSchema: {
+        public_only: z.boolean().optional().describe("Exclude the private overlay from this response."),
+      },
+    },
+    async ({ public_only }): Promise<ToolResult> => {
+      try {
+        const service = new ConstitutionService(store, root);
+        const candidates = service.list({ publicOnly: public_only }).filter((p) => p.state === "compiled" || p.state === "validating" || p.state === "proposed");
+        if (!candidates.length) return ok("No Constitution policy candidates.");
+        return ok(JSON.stringify(candidates.map((p) => ({ id: p.id, state: p.state, statement: p.statement, proof: p.proof, data_class: p.data_class })), null, 2));
+      } catch (e) {
+        return err(`Failed to list policy candidates: ${(e as Error).message}`);
+      }
+    },
+  );
+
+  server.registerTool(
+    "hunch_policy_proof",
+    {
+      title: "Inspect a Constitution policy proof",
+      description:
+        "Return the full content-addressed proof artifact for a policy. Read-only; exposes baseline, mutations, proof class, artifact hashes, and limitations without changing authority.",
+      inputSchema: {
+        policy_id: z.string().describe("Policy id (pol_*)."),
+        public_only: z.boolean().optional().describe("Exclude the private overlay from this response."),
+      },
+    },
+    async ({ policy_id, public_only }): Promise<ToolResult> => {
+      try {
+        const service = new ConstitutionService(store, root);
+        const policy = service.get(policy_id, { publicOnly: public_only });
+        if (!policy.proof) return ok(`Policy ${policy_id} has no proof yet.`);
+        return ok(JSON.stringify(service.proof(policy.proof, { publicOnly: public_only }), null, 2));
+      } catch (e) {
+        return err(`Failed to read policy proof: ${(e as Error).message}`);
+      }
+    },
+  );
+
+  server.registerTool(
+    "hunch_policy_evaluate",
+    {
+      title: "Evaluate Constitution policy",
+      description:
+        "Evaluate one or all deterministic Policy IR records and return canonical neutral receipts (satisfied, violated, not_applicable, unknown, error). This is the same evaluator used by CLI and strict CI; models never decide the verdict.",
+      inputSchema: {
+        policy_id: z.string().optional().describe("Optional policy id; omit for all policies."),
+        active_only: z.boolean().optional().describe("Evaluate only active advisory/blocking policies."),
+        public_only: z.boolean().optional().describe("Exclude private-overlay policies and graph records."),
+      },
+    },
+    async ({ policy_id, active_only, public_only }): Promise<ToolResult> => {
+      try {
+        indexRepo(store, root, { churn: false });
+        store.reindex();
+        const receipts = new ConstitutionService(store, root)
+          .evaluate({ id: policy_id, activeOnly: active_only, publicOnly: public_only })
+          .map((r) => r.evaluation);
+        return ok(JSON.stringify(receipts, null, 2));
+      } catch (e) {
+        return err(`Failed to evaluate policy: ${(e as Error).message}`);
       }
     },
   );
