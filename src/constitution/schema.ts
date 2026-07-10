@@ -64,12 +64,21 @@ export const CandidateAlternativeSchema = z.object({
 }).strict();
 export type CandidateAlternative = z.infer<typeof CandidateAlternativeSchema>;
 
+export const PolicyScopeSchema = z.object({
+  repos: z.array(z.string()).default([]),
+  paths: z.array(z.string()).default([]),
+  components: z.array(z.string()).default([]),
+}).default({ repos: [], paths: [], components: [] });
+export type PolicyScope = z.infer<typeof PolicyScopeSchema>;
+
 export const CandidateContextSchema = z.object({
   alternatives: z.array(CandidateAlternativeSchema).default([]),
   uncertainty: z.array(z.string().min(1)).default([]),
   conflicts: z.array(z.string().regex(/^pol_[a-f0-9]{10}$/)).default([]),
   incumbent: z.string().regex(/^pol_[a-f0-9]{10}$/).nullable().default(null),
-}).default({ alternatives: [], uncertainty: [], conflicts: [], incumbent: null });
+  scope_suggestion: PolicyScopeSchema.nullable().default(null),
+  counterexamples: z.array(z.string().min(1)).default([]),
+}).default({ alternatives: [], uncertainty: [], conflicts: [], incumbent: null, scope_suggestion: null, counterexamples: [] });
 export type CandidateContext = z.infer<typeof CandidateContextSchema>;
 
 export const EvidenceEventSchema = z.object({
@@ -95,6 +104,8 @@ export const EvidenceEventSchema = z.object({
     uncertainty: z.array(z.string().min(1)).optional(),
     conflicts: z.array(z.string().regex(/^pol_[a-f0-9]{10}$/)).optional(),
     incumbent: z.string().regex(/^pol_[a-f0-9]{10}$/).nullable().optional(),
+    scope_suggestion: PolicyScopeSchema.nullable().optional(),
+    counterexamples: z.array(z.string().min(1)).optional(),
   }).optional(),
   provenance: ProvenanceSchema,
 }).passthrough();
@@ -182,7 +193,7 @@ export const PolicyAssertionSchema = z.discriminatedUnion("kind", [
 export type PolicyAssertion = z.infer<typeof PolicyAssertionSchema>;
 
 export const PolicyAuditEventSchema = z.object({
-  action: z.enum(["compiled", "proved", "approved_advisory", "approved_blocking", "demoted", "retired", "rejected"]),
+  action: z.enum(["compiled", "enriched", "proved", "approved_advisory", "approved_blocking", "demoted", "retired", "rejected"]),
   actor_kind: z.enum(["system", "human"]),
   actor: z.string().min(1),
   at: z.string().datetime({ offset: true }),
@@ -207,11 +218,7 @@ export const PolicySpecSchema = z.object({
   state: PolicyStateSchema,
   statement: z.string().min(1),
   rationale: z.string().default(""),
-  scope: z.object({
-    repos: z.array(z.string()).default([]),
-    paths: z.array(z.string()).default([]),
-    components: z.array(z.string()).default([]),
-  }).default({ repos: [], paths: [], components: [] }),
+  scope: PolicyScopeSchema,
   assertion: PolicyAssertionSchema,
   severity: z.enum(["advisory", "warning", "blocking"]).default("warning"),
   surfaces: z.array(z.enum(["pre_edit", "pre_commit", "ci", "mcp", "cli"])).default(["cli", "mcp"]),

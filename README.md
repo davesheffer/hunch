@@ -192,7 +192,12 @@ contain B), exact external-package boundaries, and component/component-id select
 `depends_on` edges. CLI, MCP (`hunch_policy_evaluate`), and strict CI share the exact canonical
 receipt. Direct `reaches`/`not-reaches` contradictions are stored as conflict evidence without
 minting a second policy or changing authority. Candidate records retain the exact alternatives,
-unsupported facts, incumbent, and conflict IDs for proof-card review.
+unsupported facts, incumbent, and conflict IDs for proof-card review. Equivalent evidence enriches
+the incumbent idempotently without changing its assertion, scope, proof, lifecycle, or authority.
+Three independently grounded component-policy sources may add an advisory common-path scope
+suggestion, while same-named behavior outside a narrow symbol scope is surfaced as a counterexample.
+Suggestions and counterexamples are review evidence only: the compiled scope is never widened
+automatically.
 Models do not participate in evaluation or activation. Plan-bound proofs cover the committed current
 baseline, known-good/known-bad fixtures, bounded accepted history, and a canonical mutation
 manifest. The primary mutation is applied to an immutable disposable source checkout, must remain

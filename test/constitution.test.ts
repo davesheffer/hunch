@@ -735,6 +735,11 @@ test("Phase 2B history bootstrap compiles one exact added call, deduplicates sem
     assert.equal(policy.state, "compiled");
     assert.equal(policy.authority, null);
     assert.equal(first.compiled[0]!.evidence.structural_delta?.after_commit, fix);
+    const enriched = service.list({ publicOnly: true }).find((candidate) => candidate.id === policy.id)!;
+    assert.equal(enriched.revision, 2, "equivalent evidence enriches the incumbent exactly once");
+    assert.ok(enriched.evidence.includes("dec_history_a") && enriched.evidence.includes("dec_history_b"));
+    assert.equal(enriched.audit.at(-1)?.action, "enriched");
+    assert.equal(enriched.authority, null, "enrichment cannot grant authority");
     const plan = service.plan(policy.id, { publicOnly: true, now: "2026-07-11T12:00:00.000Z" });
     const parent = execFileSync("git", ["rev-parse", `${fix}^`], { cwd: root, encoding: "utf8" }).trim();
     assert.equal(plan.source_commit, fix);
@@ -748,6 +753,7 @@ test("Phase 2B history bootstrap compiles one exact added call, deduplicates sem
     assert.equal(second.compiled.length, 0);
     assert.equal(second.covered, 2);
     assert.equal(canonicalJson(service.repository.listEvidence({ publicOnly: true })), events, "history rerun preserves evidence byte-semantics");
+    assert.equal(service.list({ publicOnly: true }).find((candidate) => candidate.id === policy.id)?.revision, 2, "idempotent rerun does not churn the incumbent revision");
   } finally {
     cleanup();
   }
@@ -1207,6 +1213,80 @@ test("EXP-03 scorecard validates 20 reviewed cases, raw denominators, uncertaint
   assert.equal(failed.silent_semantic_substitutions, 1);
   assert.equal(failed.passed, false, "one unsupported-to-assertion substitution fails the scorecard even above the aggregate threshold");
   assert.notEqual(failed.deterministic_hash, report.deterministic_hash);
+});
+
+test("Phase 2G repeated component evidence suggests a broader scope without silently widening any policy", () => {
+  const direct = 'import { dbQuery } from "../db/client.js";\nexport function listOrders(u){ return dbQuery(u); }\n';
+  const { root, store, cleanup } = layeredRepo(direct);
+  try {
+    const files = ["src/api/orders.ts", "src/api/invoices.ts", "src/api/reports.ts"];
+    writeFileSync(join(root, files[1]!), 'import { dbQuery } from "../db/client.js";\nexport function listInvoices(u){ return dbQuery(u); }\n');
+    writeFileSync(join(root, files[2]!), 'import { dbQuery } from "../db/client.js";\nexport function listReports(u){ return dbQuery(u); }\n');
+    commitFiles(root, files.slice(1), "fixture: repeated Api to Db boundaries");
+    const functions = ["listOrders", "listInvoices", "listReports"];
+    const commits: string[] = [];
+    for (let index = 0; index < files.length; index++) {
+      writeFileSync(join(root, files[index]!), `import { fetchOrders } from "../services/orders.js";\nexport function ${functions[index]}(u){ return fetchOrders(u); }\n`);
+      commits.push(commitFiles(root, [files[index]!], `fix: remove Api to Db dependency ${index + 1}`));
+    }
+    indexRepo(store, root, { churn: false });
+    for (let index = 0; index < files.length; index++) {
+      store.json.put("decisions", historyDecision(`dec_scope_${String.fromCharCode(97 + index)}`, commits[index]!, {
+        title: "Api must not depend directly on Db",
+        context: "Repeated Api to Db corrections indicate a component boundary.",
+        decision: "Keep Api decoupled from Db.",
+        related_files: [files[index]!],
+      }));
+    }
+    store.reindex();
+    const service = new ConstitutionService(store, root);
+    const report = service.bootstrap({ history: true, publicOnly: true, since: "90d", maxCandidates: 3, now: "2026-07-11T12:00:00.000Z" });
+    assert.equal(report.compiled.length, 3);
+    const suggested = service.list({ publicOnly: true }).find((policy) => policy.candidate.scope_suggestion);
+    assert.ok(suggested);
+    assert.deepEqual(suggested.candidate.scope_suggestion?.paths, ["src/api/**"]);
+    assert.equal(suggested.scope.paths.length, 1);
+    assert.ok(files.includes(suggested.scope.paths[0]!), "the compiled scope stays on one evidenced file until human review");
+    assert.notDeepEqual(suggested.scope, suggested.candidate.scope_suggestion);
+    assert.equal(suggested.authority, null);
+  } finally {
+    cleanup();
+  }
+});
+
+test("Phase 2G discovers an out-of-scope counterexample and keeps it advisory", () => {
+  const { root, store, cleanup } = layeredRepo();
+  try {
+    mkdirSync(join(root, "src/runtime"), { recursive: true });
+    mkdirSync(join(root, "src/security"), { recursive: true });
+    writeFileSync(join(root, "src/security/danger.ts"), "export function dangerous(){ return true; }\n");
+    const importing = 'import { dangerous } from "../security/danger.js";\n';
+    writeFileSync(join(root, "src/runtime/a.ts"), `${importing}export function run(){ return dangerous(); }\n`);
+    writeFileSync(join(root, "src/runtime/b.ts"), `${importing}export function run(){ return dangerous(); }\n`);
+    commitFiles(root, ["src/security/danger.ts", "src/runtime/a.ts", "src/runtime/b.ts"], "fixture: repeated dangerous callers");
+    writeFileSync(join(root, "src/runtime/a.ts"), `${importing}export function run(){ return true; }\n`);
+    const fix = commitFiles(root, ["src/runtime/a.ts"], "fix: remove run dangerous call");
+    indexRepo(store, root, { churn: false });
+    store.json.put("decisions", historyDecision("dec_counterexample", fix, {
+      title: "run must not call dangerous in runtime a",
+      context: "The direct run to dangerous call caused the regression.",
+      decision: "Keep run in runtime a away from dangerous.",
+      related_files: ["src/runtime/a.ts"],
+    }));
+    store.reindex();
+    const service = new ConstitutionService(store, root);
+    const report = service.bootstrap({ history: true, publicOnly: true, since: "90d", now: "2026-07-11T12:00:00.000Z" });
+    assert.equal(report.compiled.length, 1);
+    const policy = service.list({ publicOnly: true })[0]!;
+    assert.equal(policy.assertion.kind, "not-reaches");
+    assert.equal(policy.candidate.counterexamples.length, 1);
+    assert.match(policy.candidate.counterexamples[0]!, /src\/runtime\/b\.ts:run is a counterexample outside the narrow scope/);
+    assert.deepEqual(policy.scope.paths, ["src/runtime/a.ts"]);
+    assert.equal(policy.candidate.scope_suggestion, null, "one counterexample never triggers automatic broadening");
+    assert.equal(policy.authority, null);
+  } finally {
+    cleanup();
+  }
 });
 
 test("Phase 2B exact-home history compilation cannot leak a same-id private judgment", () => {

@@ -117,6 +117,7 @@ export function renderProofCard(card: ProofCard): string {
     `  scope: ${JSON.stringify(card.policy.scope)}`,
     `  evidence: ${card.policy.evidence.join(", ") || "none"}`,
     `  candidate alternatives: ${card.policy.candidate.alternatives.length} · conflicts: ${card.policy.candidate.conflicts.length} · incumbent: ${card.policy.candidate.incumbent ?? "none"}`,
+    `  scope suggestion: ${card.policy.candidate.scope_suggestion ? JSON.stringify(card.policy.candidate.scope_suggestion) : "none — narrow compiled scope retained"}`,
     `  ${line("current", card.evidence_vector.current)}`,
     `  ${line("known bad", card.evidence_vector.known_bad)}`,
     `  ${line("known good", card.evidence_vector.known_good)}`,
@@ -130,6 +131,7 @@ export function renderProofCard(card: ProofCard): string {
     ...card.uncertainty.limitations.map((limitation) => `  limitation: ${limitation}`),
     ...card.uncertainty.compiler_uncertainty.map((uncertainty) => `  compiler uncertainty: ${uncertainty}`),
     ...card.uncertainty.candidate_conflicts.map((conflict) => `  candidate conflict: ${conflict}`),
+    ...card.policy.candidate.counterexamples.map((counterexample) => `  counterexample: ${counterexample}`),
     ...card.actions.map((action) => `  action: ${action}`),
     `  card: ${card.card_hash}`,
   ].join("\n");

@@ -13,6 +13,7 @@ import { extractStructuralDelta } from "./delta.js";
 import type { PolicyRepository } from "./repository.js";
 import {
   EvidenceEventSchema,
+  PolicySpecSchema,
   type DataClass,
   type CandidateContext,
   type CandidateAlternative,
@@ -70,7 +71,14 @@ function alternativeFor(candidate: StructuralCandidate): CandidateAlternative {
   };
 }
 
-function candidateContext(enumerated: Enumerated, selected?: StructuralCandidate, conflicts: string[] = [], incumbent: string | null = null): CandidateContext {
+function candidateContext(
+  enumerated: Enumerated,
+  selected?: StructuralCandidate,
+  conflicts: string[] = [],
+  incumbent: string | null = null,
+  scopeSuggestion: PolicySpec["scope"] | null = null,
+  counterexamples: string[] = [],
+): CandidateContext {
   const alternatives = enumerated.candidates.map(alternativeFor).sort((left, right) => {
     if (selected && left.id === selected.id) return -1;
     if (selected && right.id === selected.id) return 1;
@@ -81,6 +89,8 @@ function candidateContext(enumerated: Enumerated, selected?: StructuralCandidate
     uncertainty: [...new Set(enumerated.unsupported)].sort(),
     conflicts: [...new Set(conflicts)].sort(),
     incumbent,
+    scope_suggestion: scopeSuggestion,
+    counterexamples: [...new Set(counterexamples)].sort(),
   };
 }
 
@@ -103,6 +113,107 @@ function directConflict(candidate: PolicySpec, incumbent: PolicySpec): boolean {
     && left.object.selector === right.object.selector
     && canonicalHash(left.relation) === canonicalHash(right.relation)
     && scopesOverlap(candidate.scope, incumbent.scope);
+}
+
+function counterexampleSignals(store: HunchStore, candidate: StructuralCandidate, publicOnly: boolean): string[] {
+  const assertion = candidate.assertion;
+  if (assertion.kind === "exists" || assertion.relation.transitive) return [];
+  const parseSymbol = (raw: string): { file: string; name: string } | null => {
+    if (!raw.startsWith("symbol:")) return null;
+    const target = raw.slice("symbol:".length);
+    const split = target.lastIndexOf(":");
+    return split > 0 ? { file: target.slice(0, split), name: target.slice(split + 1) } : null;
+  };
+  const subject = parseSymbol(assertion.subject.selector);
+  const object = parseSymbol(assertion.object.selector);
+  if (!subject || !object) return [];
+  const symbols = publicOnly ? store.json.loadAll("symbols") : store.recs("symbols");
+  const edges = publicOnly ? store.json.loadAll("edges") : store.recs("edges");
+  const objectMatches = symbols.filter((symbol) => symbol.file === object.file && symbol.name === object.name);
+  if (objectMatches.length !== 1) return [];
+  const objectId = objectMatches[0]!.id;
+  const allowed = new Set(assertion.relation.edges);
+  return symbols
+    .filter((symbol) => symbol.name === subject.name && symbol.file !== subject.file && !candidate.scope.paths.includes(symbol.file))
+    .flatMap((symbol) => {
+      const reaches = edges.some((edge) => edge.from === symbol.id && edge.to === objectId && allowed.has(edge.type as "calls" | "imports" | "depends_on" | "contains"));
+      const contradictsBroadening = assertion.kind === "reaches" ? !reaches : reaches;
+      if (!contradictsBroadening) return [];
+      return [`${symbol.file}:${symbol.name} is a counterexample outside the narrow scope: it ${reaches ? "does" : "does not"} satisfy ${assertion.kind} ${assertion.object.selector}`];
+    })
+    .sort()
+    .slice(0, 10);
+}
+
+function commonPathGlob(paths: string[]): string | null {
+  const unique = [...new Set(paths)].sort();
+  if (unique.length < 3) return null;
+  const directories = unique.map((path) => path.split("/").slice(0, -1));
+  const common: string[] = [];
+  for (let index = 0; ; index++) {
+    const segment = directories[0]?.[index];
+    if (!segment || directories.some((parts) => parts[index] !== segment)) break;
+    common.push(segment);
+  }
+  return common.length ? `${common.join("/")}/**` : null;
+}
+
+/** Repetition may suggest a broader review scope but never mutates the compiled
+ * scope. Three independently grounded component-policy sources are required. */
+function repeatedScopeSuggestion(candidate: PolicySpec, policies: PolicySpec[]): PolicySpec["scope"] | null {
+  if (candidate.assertion.kind === "exists" || !candidate.assertion.subject.selector.startsWith("component")) return null;
+  const assertionHash = canonicalHash(candidate.assertion);
+  const related = [...policies, candidate].filter((policy) => policy.data_class === candidate.data_class && canonicalHash(policy.assertion) === assertionHash);
+  const sources = new Set(related.flatMap((policy) => policy.legacy_refs.filter((ref) => ref.startsWith("dec_"))));
+  const paths = related.flatMap((policy) => policy.scope.paths);
+  const path = commonPathGlob(paths);
+  if (sources.size < 3 || !path) return null;
+  const repoShapes = new Set(related.map((policy) => canonicalHash([...policy.scope.repos].sort())));
+  if (repoShapes.size !== 1) return null;
+  return {
+    repos: [...candidate.scope.repos].sort(),
+    paths: [path],
+    components: [...new Set(related.flatMap((policy) => policy.scope.components))].sort(),
+  };
+}
+
+function enrichIncumbent(
+  repository: PolicyRepository,
+  incumbent: PolicySpec,
+  incoming: PolicySpec,
+  context: CandidateContext,
+  now: string,
+  isPrivate: boolean,
+): PolicySpec {
+  const evidence = [...new Set([...incumbent.evidence, ...incoming.evidence])].sort();
+  const legacyRefs = [...new Set([...incumbent.legacy_refs, ...incoming.legacy_refs])].sort();
+  const alternatives = [...new Map([...incumbent.candidate.alternatives, ...context.alternatives].map((alternative) => [alternative.id, alternative])).values()].sort((a, b) => a.id.localeCompare(b.id));
+  const candidate: CandidateContext = {
+    alternatives,
+    uncertainty: [...new Set([...incumbent.candidate.uncertainty, ...context.uncertainty])].sort(),
+    conflicts: [...new Set([...incumbent.candidate.conflicts, ...context.conflicts])].sort(),
+    incumbent: incumbent.id,
+    scope_suggestion: context.scope_suggestion ?? incumbent.candidate.scope_suggestion,
+    counterexamples: [...new Set([...incumbent.candidate.counterexamples, ...context.counterexamples])].sort(),
+  };
+  if (canonicalHash({ evidence, legacyRefs, candidate }) === canonicalHash({ evidence: incumbent.evidence, legacyRefs: incumbent.legacy_refs, candidate: incumbent.candidate })) return incumbent;
+  const enriched = PolicySpecSchema.parse({
+    ...incumbent,
+    revision: incumbent.revision + 1,
+    evidence,
+    legacy_refs: legacyRefs,
+    candidate,
+    updated_at: now,
+    audit: [...incumbent.audit, {
+      action: "enriched",
+      actor_kind: "system",
+      actor: "hunch:structural-delta-compiler",
+      at: now,
+      reason: `Linked equivalent evidence without changing assertion, scope, proof, lifecycle, or authority.`,
+      proof: incumbent.proof,
+    }],
+  });
+  return repository.putPolicy(enriched, { private: isPrivate });
 }
 
 function judgmentNames(source: Decision | undefined, identifier: string): boolean {
@@ -485,33 +596,42 @@ export function bootstrapStructuralPolicies(
       }
 
       const candidate = enumerated.candidates[0]!;
-      const compiled = compileStructuralPolicy(store, {
+      const policies = repository.listPolicies(homeView);
+      const counterexamples = counterexampleSignals(store, candidate, !!opts.publicOnly);
+      let context = candidateContext(enumerated, candidate, [], null, null, counterexamples);
+      let compiled = compileStructuralPolicy(store, {
         source,
         evidenceId: baseEvent.id,
         commit: meta.sha,
         assertion: candidate.assertion,
         scope: candidate.scope,
         dataClass: (isPrivate ? "private" : "public") as DataClass,
-        candidate: candidateContext(enumerated, candidate),
+        candidate: context,
         now,
       });
+      const scopeSuggestion = repeatedScopeSuggestion(compiled.policy, policies);
+      if (scopeSuggestion) {
+        context = candidateContext(enumerated, candidate, [], null, scopeSuggestion, counterexamples);
+        compiled = { ...compiled, policy: PolicySpecSchema.parse({ ...compiled.policy, candidate: context }) };
+      }
       const key = structuralKey(compiled.policy);
-      const policies = repository.listPolicies(homeView);
       const incumbent = policies.find((p) => structuralKey(p) === key);
       if (incumbent) {
         report.covered++;
-        const context = candidateContext(enumerated, candidate, [], incumbent.id);
+        const incumbentSuggestion = repeatedScopeSuggestion(compiled.policy, policies);
+        context = candidateContext(enumerated, candidate, [], incumbent.id, incumbentSuggestion, counterexamples);
+        const enriched = enrichIncumbent(repository, incumbent, compiled.policy, context, now, isPrivate);
         if (canReclassify(prior)) repository.putEvidence({
           ...baseEvent,
-          related_records: [...baseEvent.related_records, incumbent.id],
-          compiler: { status: "covered", policy: incumbent.id, reason: "Equivalent assertion and scope already exist; incumbent lifecycle preserved and the new evidence is linked.", ...context },
+          related_records: [...baseEvent.related_records, enriched.id],
+          compiler: { status: "covered", policy: enriched.id, reason: "Equivalent assertion and scope already exist; incumbent lifecycle and authority were preserved while evidence was enriched idempotently.", ...context },
         }, { private: isPrivate });
         continue;
       }
       const conflicts = policies.filter((policy) => directConflict(compiled.policy, policy)).map((policy) => policy.id).sort();
       if (conflicts.length) {
         report.conflicted++;
-        const context = candidateContext(enumerated, candidate, conflicts);
+        context = candidateContext(enumerated, candidate, conflicts, null, scopeSuggestion, counterexamples);
         repository.putEvidence({
           ...baseEvent,
           related_records: [...baseEvent.related_records, ...conflicts],
@@ -533,7 +653,7 @@ export function bootstrapStructuralPolicies(
       const event = repository.putEvidence({
         ...baseEvent,
         related_records: [...baseEvent.related_records, policy.id],
-        compiler: { status: "compiled", policy: policy.id, reason: `Exactly one supported candidate: ${candidate.reason}.`, ...candidateContext(enumerated, candidate) },
+        compiler: { status: "compiled", policy: policy.id, reason: `Exactly one supported candidate: ${candidate.reason}.`, ...context },
       }, { private: isPrivate });
       report.compiled.push({ evidence: event, policy });
     } catch (e) {
