@@ -1,0 +1,156 @@
+{
+  "id": "proof_2e77be02e8",
+  "plan_hash": "sha1:4f7f4b380c332c031c7b52baaf29020fe364d3f8",
+  "policy_hash": "sha1:d96eb2e7daff04ec7d536bd76e7ef6381196085d",
+  "evaluator": {
+    "name": "hunch-graph-policy",
+    "version": "1.0.0"
+  },
+  "generated_at": "2026-07-10T08:52:10.326Z",
+  "current": {
+    "total": 1,
+    "satisfied": 1,
+    "violated": 0,
+    "not_applicable": 0,
+    "unknown": 0,
+    "error": 0,
+    "receipt_hashes": [
+      "sha1:b57209929b663812b9bc61eed35d5ecdf9c36622"
+    ]
+  },
+  "known_bad": {
+    "total": 0,
+    "satisfied": 0,
+    "violated": 0,
+    "not_applicable": 0,
+    "unknown": 0,
+    "error": 0,
+    "receipt_hashes": []
+  },
+  "known_good": {
+    "total": 1,
+    "satisfied": 1,
+    "violated": 0,
+    "not_applicable": 0,
+    "unknown": 0,
+    "error": 0,
+    "receipt_hashes": [
+      "sha1:61c894d13f5f46b35a6898b70501b42ff26c25c4"
+    ]
+  },
+  "accepted_history": {
+    "total": 3,
+    "satisfied": 3,
+    "violated": 0,
+    "not_applicable": 0,
+    "unknown": 0,
+    "error": 0,
+    "receipt_hashes": [
+      "sha1:eaf370efe0263b86cb07139d8009f7b11761482d",
+      "sha1:12962060746d981c9690f73cbbd4107a13d27914",
+      "sha1:90ef78ac343b0b1ede0f880b57106f5fc980e688"
+    ],
+    "classified_hits": []
+  },
+  "mutations": {
+    "total": 1,
+    "satisfied": 0,
+    "violated": 1,
+    "not_applicable": 0,
+    "unknown": 0,
+    "error": 0,
+    "receipt_hashes": [
+      "sha1:49b6f1d998280b7b1970c5efcba45886d184f04c"
+    ],
+    "operator_coverage": {
+      "add-forbidden-edge": 1
+    }
+  },
+  "replay_receipts": [
+    {
+      "leg": "current_baseline",
+      "commit": "f28609617b354446d27ee48670a21a6f22bd0d71",
+      "expected": "satisfied",
+      "policy_hash": "sha1:d96eb2e7daff04ec7d536bd76e7ef6381196085d",
+      "evaluator": {
+        "name": "hunch-graph-policy",
+        "version": "1.0.0"
+      },
+      "result": "satisfied",
+      "graph_hash": "sha1:1e4abc3e3d2ee99183aa7996a0011044f877c7c8",
+      "evaluation_hash": "sha1:a69c1aa70f933e31647e12778556183d3ee0854b",
+      "deterministic_hash": "sha1:b57209929b663812b9bc61eed35d5ecdf9c36622"
+    },
+    {
+      "leg": "known_good",
+      "commit": "f28609617b354446d27ee48670a21a6f22bd0d71",
+      "expected": "satisfied",
+      "policy_hash": "sha1:d96eb2e7daff04ec7d536bd76e7ef6381196085d",
+      "evaluator": {
+        "name": "hunch-graph-policy",
+        "version": "1.0.0"
+      },
+      "result": "satisfied",
+      "graph_hash": "sha1:1e4abc3e3d2ee99183aa7996a0011044f877c7c8",
+      "evaluation_hash": "sha1:a69c1aa70f933e31647e12778556183d3ee0854b",
+      "deterministic_hash": "sha1:61c894d13f5f46b35a6898b70501b42ff26c25c4"
+    },
+    {
+      "leg": "accepted_history",
+      "commit": "1199f33297241ec4163dc627408dce8a9d1c1011",
+      "policy_hash": "sha1:d96eb2e7daff04ec7d536bd76e7ef6381196085d",
+      "evaluator": {
+        "name": "hunch-graph-policy",
+        "version": "1.0.0"
+      },
+      "result": "satisfied",
+      "graph_hash": "sha1:62353a90b5f0429a68db1442c1d7bf3975605abb",
+      "evaluation_hash": "sha1:f4a19dfe02efa9ca24c715cd400ee7482b95bb68",
+      "deterministic_hash": "sha1:eaf370efe0263b86cb07139d8009f7b11761482d"
+    },
+    {
+      "leg": "accepted_history",
+      "commit": "0ccdd2967b1fecff3a6d7de9778415a0b4c0aa73",
+      "policy_hash": "sha1:d96eb2e7daff04ec7d536bd76e7ef6381196085d",
+      "evaluator": {
+        "name": "hunch-graph-policy",
+        "version": "1.0.0"
+      },
+      "result": "satisfied",
+      "graph_hash": "sha1:31262ebd4b87aa71584b26eff77a657d4859c063",
+      "evaluation_hash": "sha1:940daf148eda827a498f1e93abedc4c00fdfddd3",
+      "deterministic_hash": "sha1:12962060746d981c9690f73cbbd4107a13d27914"
+    },
+    {
+      "leg": "accepted_history",
+      "commit": "c63814b4bf81d95361216be67a457650ef30eaee",
+      "policy_hash": "sha1:d96eb2e7daff04ec7d536bd76e7ef6381196085d",
+      "evaluator": {
+        "name": "hunch-graph-policy",
+        "version": "1.0.0"
+      },
+      "result": "satisfied",
+      "graph_hash": "sha1:3b7ee1ced623455e960875a1566839f9dbf96698",
+      "evaluation_hash": "sha1:2fe89378ea4d88fb668d44e74b886a7fb3beeb51",
+      "deterministic_hash": "sha1:90ef78ac343b0b1ede0f880b57106f5fc980e688"
+    }
+  ],
+  "limitations": [
+    "TypeScript/JavaScript static graph only in Gate G1.",
+    "Dynamic calls and runtime dependency injection are not covered.",
+    "Legacy bridge preserves unified calls/imports/depends_on/contains reachability semantics.",
+    "Replay uses the pinned static evaluator in disposable Git worktrees; project build/tests and repository code are never executed.",
+    "Accepted-history replay evaluated 3 bounded first-parent commit(s).",
+    "Shadow outcomes remain pending."
+  ],
+  "proof_class": "P3",
+  "artifact_hashes": {
+    "policy": "sha1:d96eb2e7daff04ec7d536bd76e7ef6381196085d",
+    "plan": "sha1:4f7f4b380c332c031c7b52baaf29020fe364d3f8",
+    "graph": "sha1:1e4abc3e3d2ee99183aa7996a0011044f877c7c8",
+    "current_receipt": "sha1:b57209929b663812b9bc61eed35d5ecdf9c36622",
+    "replay_manifest": "sha1:8b012834bee57d4bd6cb7b209c2150c38b737643",
+    "mutation_receipt": "sha1:49b6f1d998280b7b1970c5efcba45886d184f04c"
+  },
+  "data_class": "public"
+}

@@ -1,12 +1,10 @@
-import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync, spawn, type ChildProcess } from "node:child_process";
+import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { hunchPathsForDir } from "../core/paths.js";
-import { indexRepo } from "../extractors/indexer.js";
+import { fileURLToPath } from "node:url";
 import { revExists } from "../extractors/git.js";
-import { HunchStore } from "../store/hunchStore.js";
 import { canonicalHash, proofEvaluationHash, policySemanticHash, proofPlanContentHash } from "./canonical.js";
-import { evaluatePolicyOnSnapshot, graphSnapshot, type GraphSnapshot } from "./evaluator.js";
+import { evaluatePolicyOnSnapshot, type GraphSnapshot } from "./evaluator.js";
 import { loadReplaySnapshot, putReplaySnapshot } from "./replayCache.js";
 import {
   POLICY_EVALUATOR,
@@ -30,7 +28,13 @@ export interface ProofReplayResult {
   selected_history_commits: string[];
   history_complete: boolean;
   cache_stats: { hits: number; misses: number; rebuilds: number; memory_hits: number };
+  worker_stats: { limit: number; peak: number; scheduled: number };
   current_snapshot?: GraphSnapshot;
+}
+
+export interface ReplayExecutionOptions {
+  /** Operational scheduling only; never enters canonical proof semantics. */
+  maxWorkers?: number;
 }
 
 interface SnapshotOutcome {
@@ -40,7 +44,25 @@ interface SnapshotOutcome {
   error_code?: string;
 }
 
+interface ReplayWorkerMessage {
+  commit: string;
+  snapshot?: GraphSnapshot;
+  error_code?: string;
+}
+
+interface ActiveReplayWorker {
+  commit: string;
+  run: string;
+  checkout: string;
+  resultFile: string;
+  errorFile: string;
+  child: ChildProcess;
+}
+
 const ZERO_SHA = "0".repeat(40);
+export const DEFAULT_REPLAY_WORKERS = 4;
+export const MAX_REPLAY_WORKERS = 8;
+const POLL_STATE = new Int32Array(new SharedArrayBuffer(4));
 
 function stableCommit(ref: string): string {
   return /^[a-f0-9]{40}$/.test(ref) ? ref : ZERO_SHA;
@@ -92,6 +114,51 @@ function gitArgs(root: string, hooks: string, args: string[]): string[] {
 function errorCode(error: unknown, fallback: string): string {
   const e = error as NodeJS.ErrnoException & { killed?: boolean; signal?: string };
   return e.code === "ETIMEDOUT" || e.killed || e.signal === "SIGTERM" ? "timeout" : fallback;
+}
+
+function workerLimit(value: number | undefined): number {
+  if (value == null || !Number.isFinite(value)) return DEFAULT_REPLAY_WORKERS;
+  return Math.max(1, Math.min(MAX_REPLAY_WORKERS, Math.trunc(value)));
+}
+
+function replayWorkerUrl(): URL {
+  const source = new URL("./replayWorker.ts", import.meta.url);
+  return existsSync(fileURLToPath(source)) ? source : new URL("./replayWorker.js", import.meta.url);
+}
+
+function replayWorkerArgs(taskFile: string, resultFile: string): string[] {
+  const worker = replayWorkerUrl();
+  return worker.pathname.endsWith(".ts")
+    ? ["--import", import.meta.resolve("tsx"), fileURLToPath(worker), taskFile, resultFile]
+    : [fileURLToPath(worker), taskFile, resultFile];
+}
+
+function cleanupWorktree(
+  root: string,
+  hooks: string,
+  env: NodeJS.ProcessEnv,
+  run: string,
+  checkout: string,
+): boolean {
+  let failed = false;
+  try {
+    execFileSync("git", gitArgs(root, hooks, ["worktree", "remove", "--force", checkout]), {
+      env,
+      timeout: 10_000,
+      stdio: "ignore",
+    });
+  } catch {
+    rmSync(checkout, { recursive: true, force: true });
+    try {
+      execFileSync("git", gitArgs(root, hooks, ["worktree", "remove", "--force", checkout]), {
+        env,
+        timeout: 10_000,
+        stdio: "ignore",
+      });
+    } catch { failed = true; }
+  }
+  rmSync(run, { recursive: true, force: true });
+  return failed;
 }
 
 function makeReceipt(
@@ -150,6 +217,7 @@ export function replayProofPlan(
   root: string,
   policy: PolicySpec,
   inputPlan: ProofPlan,
+  opts: ReplayExecutionOptions = {},
 ): ProofReplayResult {
   const plan = ProofPlanSchema.parse(inputPlan);
   const policyHash = policySemanticHash(policy);
@@ -171,107 +239,165 @@ export function replayProofPlan(
   const env = safeEnvironment(session, gitConfig);
   const unsafeFilter = unsafeLocalFilter(root, env);
   const deadline = Date.now() + plan.budgets.max_minutes * 60_000;
-  const cache = new Map<string, SnapshotOutcome>();
+  const outcomes = new Map<string, SnapshotOutcome>();
   const cacheStats = { hits: 0, misses: 0, rebuilds: 0, memory_hits: 0 };
-
-  const evaluateCommit = (ref: string): SnapshotOutcome => {
-    const commit = stableCommit(ref);
-    const hit = cache.get(commit);
-    if (hit) {
-      cacheStats.memory_hits++;
-      return hit;
-    }
-    if (unsafeFilter) {
-      const outcome = { commit, error_code: "unsafe-local-filter-config" };
-      cache.set(commit, outcome);
-      return outcome;
-    }
-    if (commit === ZERO_SHA || !revExists(commit, root)) {
-      const outcome = { commit, error_code: "commit-ref-unresolved" };
-      cache.set(commit, outcome);
-      return outcome;
-    }
-    if (Date.now() >= deadline) {
-      const outcome = { commit, error_code: "timeout" };
-      cache.set(commit, outcome);
-      return outcome;
-    }
-    const cached = loadReplaySnapshot(root, commit, plan.data_class);
-    if (cached.status === "hit" && cached.snapshot) {
-      cacheStats.hits++;
-      const outcome = { commit, snapshot: cached.snapshot, evaluation: evaluatePolicyOnSnapshot(policy, cached.snapshot) };
-      cache.set(commit, outcome);
-      return outcome;
-    }
-    if (cached.status === "invalid") cacheStats.rebuilds++;
-    else cacheStats.misses++;
-
-    const run = mkdtempSync(join(session, "commit-"));
-    const checkout = join(run, "checkout");
-    const graph = join(run, "graph");
-    let added = false;
-    let cleanupFailed = false;
-    let store: HunchStore | undefined;
-    let outcome: SnapshotOutcome;
-    try {
-      execFileSync("git", gitArgs(root, hooks, ["worktree", "add", "--detach", "--force", checkout, commit]), {
-        env,
-        timeout: Math.max(1, deadline - Date.now()),
-        stdio: "ignore",
-      });
-      added = true;
-      store = new HunchStore(hunchPathsForDir(graph));
-      store.json.ensureDirs();
-      indexRepo(store, checkout, { churn: false });
-      const snapshot = graphSnapshot(store, root, { publicOnly: true, head: commit });
-      if (Date.now() >= deadline) outcome = { commit, error_code: "timeout" };
-      else {
-        try { putReplaySnapshot(root, snapshot, plan.data_class); } catch { /* derived cache failure never changes proof semantics */ }
-        outcome = { commit, snapshot, evaluation: evaluatePolicyOnSnapshot(policy, snapshot) };
-      }
-    } catch (e) {
-      outcome = { commit, error_code: errorCode(e, added ? "snapshot-index-failed" : "worktree-create-failed") };
-    } finally {
-      try { store?.close(); } catch { /* derived cache cleanup continues */ }
-      if (added) {
-        try {
-          execFileSync("git", gitArgs(root, hooks, ["worktree", "remove", "--force", checkout]), {
-            env,
-            timeout: 10_000,
-            stdio: "ignore",
-          });
-        } catch {
-          rmSync(checkout, { recursive: true, force: true });
-          try {
-            execFileSync("git", gitArgs(root, hooks, ["worktree", "remove", "--force", checkout]), {
-              env,
-              timeout: 10_000,
-              stdio: "ignore",
-            });
-          } catch { cleanupFailed = true; }
-        }
-      }
-      rmSync(run, { recursive: true, force: true });
-    }
-    if (cleanupFailed) outcome = { commit, error_code: "worktree-cleanup-failed" };
-    cache.set(commit, outcome!);
-    return outcome!;
-  };
+  const workerStats = { limit: workerLimit(opts.maxWorkers), peak: 0, scheduled: 0 };
+  const active: ActiveReplayWorker[] = [];
 
   try {
-    const currentOutcome = evaluateCommit(plan.corpus.current_baseline.ref);
+    const history = acceptedHistory(root, plan, env, hooks, Math.max(1, deadline - Date.now()));
+    const requestedRefs = [
+      plan.corpus.current_baseline.ref,
+      ...plan.corpus.known_bad.map((fixture) => fixture.ref),
+      ...plan.corpus.known_good.map((fixture) => fixture.ref),
+      ...history.commits,
+    ];
+    const uniqueCommits: string[] = [];
+    const seen = new Set<string>();
+    for (const ref of requestedRefs) {
+      const commit = stableCommit(ref);
+      if (seen.has(commit)) cacheStats.memory_hits++;
+      else {
+        seen.add(commit);
+        uniqueCommits.push(commit);
+      }
+    }
+
+    const pending: string[] = [];
+    for (const commit of uniqueCommits) {
+      if (unsafeFilter) {
+        outcomes.set(commit, { commit, error_code: "unsafe-local-filter-config" });
+        continue;
+      }
+      if (commit === ZERO_SHA || !revExists(commit, root)) {
+        outcomes.set(commit, { commit, error_code: "commit-ref-unresolved" });
+        continue;
+      }
+      if (Date.now() >= deadline) {
+        outcomes.set(commit, { commit, error_code: "timeout" });
+        continue;
+      }
+      const cached = loadReplaySnapshot(root, commit, plan.data_class);
+      if (cached.status === "hit" && cached.snapshot) {
+        cacheStats.hits++;
+        outcomes.set(commit, {
+          commit,
+          snapshot: cached.snapshot,
+          evaluation: evaluatePolicyOnSnapshot(policy, cached.snapshot),
+        });
+        continue;
+      }
+      if (cached.status === "invalid") cacheStats.rebuilds++;
+      else cacheStats.misses++;
+      pending.push(commit);
+    }
+
+    while (pending.length || active.length) {
+      while (pending.length && active.length < workerStats.limit && Date.now() < deadline) {
+        const commit = pending.shift()!;
+        const run = mkdtempSync(join(session, "commit-"));
+        const checkout = join(run, "checkout");
+        const graph = join(run, "graph");
+        let added = false;
+        try {
+          execFileSync("git", gitArgs(root, hooks, ["worktree", "add", "--detach", "--force", checkout, commit]), {
+            env,
+            timeout: Math.max(1, deadline - Date.now()),
+            stdio: "ignore",
+          });
+          added = true;
+          const taskFile = join(run, "task.json");
+          const resultFile = join(run, "result.json");
+          const errorFile = join(run, "worker.stderr");
+          writeFileSync(taskFile, JSON.stringify({ checkout, graph, root, commit }));
+          const errorLog = openSync(errorFile, "w");
+          let child: ChildProcess;
+          try {
+            child = spawn(process.execPath, replayWorkerArgs(taskFile, resultFile), {
+              cwd: root,
+              env,
+              stdio: ["ignore", "ignore", errorLog],
+            });
+          } finally {
+            closeSync(errorLog);
+          }
+          child.unref();
+          active.push({ commit, run, checkout, resultFile, errorFile, child });
+          workerStats.scheduled++;
+          workerStats.peak = Math.max(workerStats.peak, active.length);
+        } catch (e) {
+          const cleanupFailed = added ? cleanupWorktree(root, hooks, env, run, checkout) : false;
+          if (!added) rmSync(run, { recursive: true, force: true });
+          outcomes.set(commit, {
+            commit,
+            error_code: cleanupFailed
+              ? "worktree-cleanup-failed"
+              : errorCode(e, added ? "snapshot-index-failed" : "worktree-create-failed"),
+          });
+        }
+      }
+
+      let progressed = false;
+      for (let index = active.length - 1; index >= 0; index--) {
+        const task = active[index]!;
+        const hasResult = existsSync(task.resultFile);
+        const failedToStart = !hasResult && existsSync(task.errorFile) && statSync(task.errorFile).size > 0;
+        if (!hasResult && !failedToStart) continue;
+        active.splice(index, 1);
+        let message: ReplayWorkerMessage;
+        try {
+          if (failedToStart) {
+            task.child.kill("SIGTERM");
+            throw new Error("worker process failed before producing a result");
+          }
+          message = JSON.parse(readFileSync(task.resultFile, "utf8")) as ReplayWorkerMessage;
+        } catch {
+          message = { commit: task.commit, error_code: "snapshot-index-failed" };
+        }
+        const cleanupFailed = cleanupWorktree(root, hooks, env, task.run, task.checkout);
+        let outcome: SnapshotOutcome;
+        if (cleanupFailed) outcome = { commit: task.commit, error_code: "worktree-cleanup-failed" };
+        else if (Date.now() >= deadline) outcome = { commit: task.commit, error_code: "timeout" };
+        else if (message.commit !== task.commit || !message.snapshot) {
+          outcome = { commit: task.commit, error_code: message.error_code ?? "snapshot-index-failed" };
+        } else {
+          try { putReplaySnapshot(root, message.snapshot, plan.data_class); } catch { /* derived cache failure never changes proof semantics */ }
+          outcome = {
+            commit: task.commit,
+            snapshot: message.snapshot,
+            evaluation: evaluatePolicyOnSnapshot(policy, message.snapshot),
+          };
+        }
+        outcomes.set(task.commit, outcome);
+        progressed = true;
+      }
+
+      if (Date.now() >= deadline) {
+        for (const task of active.splice(0)) {
+          task.child.kill("SIGTERM");
+          const cleanupFailed = cleanupWorktree(root, hooks, env, task.run, task.checkout);
+          outcomes.set(task.commit, { commit: task.commit, error_code: cleanupFailed ? "worktree-cleanup-failed" : "timeout" });
+        }
+        for (const commit of pending.splice(0)) outcomes.set(commit, { commit, error_code: "timeout" });
+        break;
+      }
+      if (!progressed && active.length) Atomics.wait(POLL_STATE, 0, 0, 10);
+    }
+
+    const outcomeFor = (ref: string): SnapshotOutcome =>
+      outcomes.get(stableCommit(ref)) ?? { commit: stableCommit(ref), error_code: "snapshot-index-failed" };
+    const currentOutcome = outcomeFor(plan.corpus.current_baseline.ref);
     const current = makeReceipt("current_baseline", plan.corpus.current_baseline.ref, policyHash, plan.corpus.current_baseline.expected, currentOutcome);
     const knownBad = plan.corpus.known_bad.map((fixture) =>
-      makeReceipt("known_bad", fixture.ref, policyHash, fixture.expected, evaluateCommit(fixture.ref)));
+      makeReceipt("known_bad", fixture.ref, policyHash, fixture.expected, outcomeFor(fixture.ref)));
     const knownGood = plan.corpus.known_good.map((fixture) =>
-      makeReceipt("known_good", fixture.ref, policyHash, fixture.expected, evaluateCommit(fixture.ref)));
-    const history = acceptedHistory(root, plan, env, hooks, Math.max(1, deadline - Date.now()));
+      makeReceipt("known_good", fixture.ref, policyHash, fixture.expected, outcomeFor(fixture.ref)));
     const accepted = history.error
       ? [makeReceipt("accepted_history", plan.corpus.accepted_history.to, policyHash, undefined, {
           commit: stableCommit(plan.corpus.accepted_history.to),
           error_code: history.error,
         })]
-      : history.commits.map((commit) => makeReceipt("accepted_history", commit, policyHash, undefined, evaluateCommit(commit)));
+      : history.commits.map((commit) => makeReceipt("accepted_history", commit, policyHash, undefined, outcomeFor(commit)));
     const receipts = [current, ...knownBad, ...knownGood, ...accepted];
     return {
       current,
@@ -282,9 +408,14 @@ export function replayProofPlan(
       selected_history_commits: history.commits,
       history_complete: !history.error && accepted.every((receipt) => receipt.error_code !== "timeout"),
       cache_stats: cacheStats,
+      worker_stats: workerStats,
       ...(currentOutcome.snapshot ? { current_snapshot: currentOutcome.snapshot } : {}),
     };
   } finally {
+    for (const task of active.splice(0)) {
+      task.child.kill("SIGTERM");
+      try { cleanupWorktree(root, hooks, env, task.run, task.checkout); } catch { /* primary replay error remains visible */ }
+    }
     rmSync(session, { recursive: true, force: true });
   }
 }

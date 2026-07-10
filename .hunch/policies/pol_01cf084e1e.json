@@ -2,7 +2,7 @@
   "id": "pol_01cf084e1e",
   "topic": "wiki.specs-ledger",
   "ir_version": 1,
-  "revision": 4,
+  "revision": 5,
   "state": "proposed",
   "statement": "Doc adoption: the wiki takes over stale docs — healed, wiki-managed copies; originals preserved and auto-released",
   "rationale": "Owner directive: once a doc grades do-not-trust, the wiki must take it in — copy it, heal it, and manage it from there — so the wiki alone is a sufficient reading surface. The prior ledger only graded and routed; its rejection of 'copying doc prose' targeted a second EDITABLE truth, which adoption avoids by making the copy a generated artifact.",
@@ -46,7 +46,7 @@
   "evidence": [
     "dec_a2899939d9"
   ],
-  "proof": "proof_9b044dea0e",
+  "proof": "proof_2e77be02e8",
   "reversal_conditions": [
     "Source decision dec_a2899939d9 is superseded or explicitly retired."
   ],
@@ -95,10 +95,18 @@
       "at": "2026-07-10T08:26:02.547Z",
       "reason": "Proof proof_9b044dea0e reached P3.",
       "proof": "proof_9b044dea0e"
+    },
+    {
+      "action": "proved",
+      "actor_kind": "system",
+      "actor": "hunch:evidence-harness",
+      "at": "2026-07-10T08:52:10.326Z",
+      "reason": "Proof proof_2e77be02e8 reached P3.",
+      "proof": "proof_2e77be02e8"
     }
   ],
   "created_at": "2026-07-10T06:31:06.322Z",
-  "updated_at": "2026-07-10T08:26:02.547Z",
+  "updated_at": "2026-07-10T08:52:10.326Z",
   "provenance": {
     "source": "derived",
     "confidence": 1,

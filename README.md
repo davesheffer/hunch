@@ -138,9 +138,11 @@ known-good/known-bad corpus, deterministic mutation operators, expectations, and
 Planning runs no replay, test, model, or activation; `policy prove` binds its receipt to that plan.
 Proof execution checks out each unique immutable commit into a disposable worktree with hooks,
 user-global Git configuration, private-overlay discovery, and provider selection disabled. It
-indexes code with Hunch's pinned static evaluator, records canonical current/known-good/known-bad/
-accepted-history receipts, then removes every checkout and derived graph. Project code, builds, and
-tests are never executed. Timeouts, unresolved refs, unknowns, and errors remain explicit.
+indexes cold snapshots through a bounded four-worker pool (hard maximum eight), reuses
+content-validated data-class-separated graph caches, records canonical current/known-good/
+known-bad/accepted-history receipts, then removes every checkout and transient graph. Scheduling
+and cache statistics never enter proof hashes. Project code, builds, and tests are never executed.
+Timeouts, worker failures, unresolved refs, unknowns, and errors remain explicit.
 
 The first Level-1 evaluator is `must-pass-through`: every statically discovered path from A to C
 must contain B. CLI, MCP (`hunch_policy_evaluate`), and strict CI share the exact canonical receipt.

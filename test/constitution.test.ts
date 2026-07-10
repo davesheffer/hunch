@@ -520,7 +520,7 @@ test("Phase 2A bootstrap rejects invalid windows and has no synthesis dependency
     store.json.put("decisions", decision("dec_window"));
     const service = new ConstitutionService(store, root);
     assert.throws(() => service.bootstrap({ since: "forever", now: "2026-07-10T12:00:00.000Z" }), /--since/);
-    for (const file of ["bootstrap.ts", "structural.ts", "delta.ts", "adapters.ts", "plan.ts", "replay.ts", "replayCache.ts", "card.ts"]) {
+    for (const file of ["bootstrap.ts", "structural.ts", "delta.ts", "adapters.ts", "plan.ts", "replay.ts", "replayWorker.ts", "replayCache.ts", "card.ts"]) {
       const source = readFileSync(join(process.cwd(), "src/constitution", file), "utf8");
       assert.doesNotMatch(source, /synthesis\/|selectProvider|SynthesisProvider/, `${file} has no model/provider dependency`);
     }
@@ -625,9 +625,16 @@ test("Phase 3 replays current, known-bad, known-good, and bounded accepted histo
     assert.equal(first.policy.authority, null);
 
     const replayPlan = service.repository.listPlans({ publicOnly: true }).find((candidate) => candidate.content_hash === first.proof.plan_hash)!;
+    rmSync(join(root, ".hunch-cache", "replay"), { recursive: true, force: true });
+    const parallel = replayProofPlan(root, first.policy, replayPlan, { maxWorkers: 2 });
+    assert.deepEqual(parallel.replay_receipts, first.proof.replay_receipts, "parallel scheduling cannot perturb canonical receipts");
+    assert.deepEqual(parallel.cache_stats, { hits: 0, misses: 3, rebuilds: 0, memory_hits: 1 });
+    assert.deepEqual(parallel.worker_stats, { limit: 2, peak: 2, scheduled: 3 }, "cold unique snapshots use the bounded worker pool");
     const cached = replayProofPlan(root, first.policy, replayPlan);
     assert.deepEqual(cached.replay_receipts, first.proof.replay_receipts);
     assert.deepEqual(cached.cache_stats, { hits: 3, misses: 0, rebuilds: 0, memory_hits: 1 }, "second replay reuses every unique immutable graph");
+    assert.deepEqual(cached.worker_stats, { limit: 4, peak: 0, scheduled: 0 }, "warm replay launches no worker process");
+    assert.equal(replayProofPlan(root, first.policy, replayPlan, { maxWorkers: 99 }).worker_stats.limit, 8, "worker concurrency has a hard upper bound");
     const currentCache = replayCacheFile(root, replayPlan.corpus.current_baseline.ref, "public");
     assert.ok(existsSync(currentCache));
     writeFileSync(currentCache, "{ corrupt");
