@@ -85,6 +85,7 @@ import { parseDocAnchors, renderDocGrounding } from "../core/docanchors.js";
 import { compareCandidates } from "../core/compare.js";
 import { checkConformance } from "../core/conformance.js";
 import { ConstitutionService, type PolicyEvaluationSet } from "../constitution/service.js";
+import { renderProofCard } from "../constitution/card.js";
 import { movePolicyArtifactsToPrivate } from "../constitution/repository.js";
 import { draftTripwires, knownRepoDeps } from "../synthesis/tripwires.js";
 import { constraintId } from "../core/ids.js";
@@ -959,6 +960,24 @@ policyCmd
       const output: { policy: typeof policy; proof?: unknown } = { policy };
       if (opts.proof && policy.proof) output.proof = service.proof(policy.proof, { publicOnly: opts.publicOnly });
       console.log(JSON.stringify(output, null, 2));
+    } catch (e) {
+      fail((e as Error).message);
+    } finally {
+      store.close();
+    }
+  });
+
+policyCmd
+  .command("card")
+  .description("Render the deterministic proof card: exact policy, evidence vector, uncertainty, authority, and next actions.")
+  .argument("<id>", "policy id")
+  .option("--json", "emit the canonical proof-card object")
+  .option("--public-only", "exclude private-overlay policy/proof records")
+  .action((id: string, opts: { json?: boolean; publicOnly?: boolean }) => {
+    const { store, root } = storeFor();
+    try {
+      const card = new ConstitutionService(store, root).card(id, { publicOnly: opts.publicOnly });
+      console.log(opts.json ? JSON.stringify(card, null, 2) : renderProofCard(card));
     } catch (e) {
       fail((e as Error).message);
     } finally {

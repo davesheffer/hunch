@@ -856,6 +856,26 @@ export function buildServer(root: string): McpServer {
   );
 
   server.registerTool(
+    "hunch_policy_card",
+    {
+      title: "Inspect a Constitution proof card",
+      description:
+        "Return the deterministic proof-card view for a policy: exact assertion/scope, raw evidence vector, uncertainty, blocking readiness, authority, limitations, and next actions. Read-only and grants no authority.",
+      inputSchema: {
+        policy_id: z.string().describe("Policy id (pol_*)."),
+        public_only: z.boolean().optional().describe("Exclude private-overlay policy and proof records."),
+      },
+    },
+    async ({ policy_id, public_only }): Promise<ToolResult> => {
+      try {
+        return ok(JSON.stringify(new ConstitutionService(store, root).card(policy_id, { publicOnly: public_only }), null, 2));
+      } catch (e) {
+        return err(`Failed to build policy proof card: ${(e as Error).message}`);
+      }
+    },
+  );
+
+  server.registerTool(
     "hunch_policy_proof",
     {
       title: "Inspect a Constitution policy proof",

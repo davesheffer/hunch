@@ -7,6 +7,7 @@ import { revExists } from "../extractors/git.js";
 import { HunchStore } from "../store/hunchStore.js";
 import { canonicalHash, proofEvaluationHash, policySemanticHash, proofPlanContentHash } from "./canonical.js";
 import { evaluatePolicyOnSnapshot, graphSnapshot, type GraphSnapshot } from "./evaluator.js";
+import { loadReplaySnapshot, putReplaySnapshot } from "./replayCache.js";
 import {
   POLICY_EVALUATOR,
   ProofPlanSchema,
@@ -28,6 +29,7 @@ export interface ProofReplayResult {
   replay_receipts: ReplayReceipt[];
   selected_history_commits: string[];
   history_complete: boolean;
+  cache_stats: { hits: number; misses: number; rebuilds: number; memory_hits: number };
   current_snapshot?: GraphSnapshot;
 }
 
@@ -170,11 +172,15 @@ export function replayProofPlan(
   const unsafeFilter = unsafeLocalFilter(root, env);
   const deadline = Date.now() + plan.budgets.max_minutes * 60_000;
   const cache = new Map<string, SnapshotOutcome>();
+  const cacheStats = { hits: 0, misses: 0, rebuilds: 0, memory_hits: 0 };
 
   const evaluateCommit = (ref: string): SnapshotOutcome => {
     const commit = stableCommit(ref);
     const hit = cache.get(commit);
-    if (hit) return hit;
+    if (hit) {
+      cacheStats.memory_hits++;
+      return hit;
+    }
     if (unsafeFilter) {
       const outcome = { commit, error_code: "unsafe-local-filter-config" };
       cache.set(commit, outcome);
@@ -190,6 +196,15 @@ export function replayProofPlan(
       cache.set(commit, outcome);
       return outcome;
     }
+    const cached = loadReplaySnapshot(root, commit, plan.data_class);
+    if (cached.status === "hit" && cached.snapshot) {
+      cacheStats.hits++;
+      const outcome = { commit, snapshot: cached.snapshot, evaluation: evaluatePolicyOnSnapshot(policy, cached.snapshot) };
+      cache.set(commit, outcome);
+      return outcome;
+    }
+    if (cached.status === "invalid") cacheStats.rebuilds++;
+    else cacheStats.misses++;
 
     const run = mkdtempSync(join(session, "commit-"));
     const checkout = join(run, "checkout");
@@ -210,7 +225,10 @@ export function replayProofPlan(
       indexRepo(store, checkout, { churn: false });
       const snapshot = graphSnapshot(store, root, { publicOnly: true, head: commit });
       if (Date.now() >= deadline) outcome = { commit, error_code: "timeout" };
-      else outcome = { commit, snapshot, evaluation: evaluatePolicyOnSnapshot(policy, snapshot) };
+      else {
+        try { putReplaySnapshot(root, snapshot, plan.data_class); } catch { /* derived cache failure never changes proof semantics */ }
+        outcome = { commit, snapshot, evaluation: evaluatePolicyOnSnapshot(policy, snapshot) };
+      }
     } catch (e) {
       outcome = { commit, error_code: errorCode(e, added ? "snapshot-index-failed" : "worktree-create-failed") };
     } finally {
@@ -263,6 +281,7 @@ export function replayProofPlan(
       replay_receipts: receipts,
       selected_history_commits: history.commits,
       history_complete: !history.error && accepted.every((receipt) => receipt.error_code !== "timeout"),
+      cache_stats: cacheStats,
       ...(currentOutcome.snapshot ? { current_snapshot: currentOutcome.snapshot } : {}),
     };
   } finally {

@@ -10,6 +10,7 @@ import { bootstrapPolicies, type BootstrapOptions, type BootstrapReport } from "
 import { bootstrapStructuralPolicies, inspectStructuralDecision, type StructuralInspection } from "./structural.js";
 import { createProofPlan, type ProofPlanOptions } from "./plan.js";
 import { ingestLocalEvidence, type LocalEvidenceOptions, type LocalEvidenceReport } from "./adapters.js";
+import { buildProofCard, type ProofCard } from "./card.js";
 
 export interface PolicyEvaluationSet {
   policy: PolicySpec;
@@ -41,6 +42,12 @@ export class ConstitutionService {
     const proof = this.repository.getProof(id, opts);
     if (!proof) throw new Error(`proof ${id} not found`);
     return proof;
+  }
+
+  card(id: string, opts: { publicOnly?: boolean } = {}): ProofCard {
+    const policy = this.get(id, opts);
+    if (!policy.proof) throw new Error(`policy ${id} has no proof`);
+    return buildProofCard(policy, this.proof(policy.proof, opts));
   }
 
   compile(decisionId: string, opts: CompilePolicyOptions = {}): PolicySpec {

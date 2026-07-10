@@ -18,7 +18,8 @@ test("grounding tool signatures match the real MCP param names (no agent-mislead
   assert.match(md, /hunch_compare\(candidates\)/, "hunch_compare is advertised");
   assert.match(md, /hunch_conformance\(\)/, "hunch_conformance is advertised");
   assert.match(md, /hunch_policy_plan\(policy_id\)/, "the canonical ProofPlan is discoverable before proof review");
-  assert.match(md, /plan-bound replay\/mutation receipts/, "grounding explains that proof executes neutral evidence rather than granting authority");
+  assert.match(md, /hunch_policy_card\(policy_id\)/, "the deterministic proof-card review surface is discoverable across clients");
+  assert.match(md, /raw replay receipts; only an explicit human activation grants authority/, "grounding separates proof evidence from authority");
   assert.match(md, /hunch_why\(target\)/);
   assert.match(md, /hunch_check_constraints\(scope\)/);
   assert.match(md, /hunch_get_dependents\(symbol\)/);

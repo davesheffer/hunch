@@ -55,7 +55,7 @@ export function renderHunchSection(store: HunchStore, root?: string): string {
   lines.push("");
   lines.push("**Before committing / merging:**");
   lines.push("- `hunch_conformance()` — does the code still SATISFY recorded intent? Run before and after a refactor.");
-  lines.push("- `hunch_policy_evaluate(policy_id?, active_only?)` / `hunch_policy_plan(policy_id)` / `hunch_policy_proof(policy_id)` — evaluate canonical policy, inspect the planned corpus, and inspect plan-bound replay/mutation receipts; only an explicit human activation grants authority.");
+  lines.push("- `hunch_policy_evaluate(policy_id?, active_only?)` / `hunch_policy_plan(policy_id)` / `hunch_policy_card(policy_id)` / `hunch_policy_proof(policy_id)` — evaluate canonical policy, inspect the planned corpus, review the evidence/uncertainty card, and inspect raw replay receipts; only an explicit human activation grants authority.");
   lines.push("- `hunch_pr_impact(base?)` / `hunch_merge_verdict(...)` — a change's memory surface; would it re-open a closed bug?");
   lines.push("");
   lines.push("**Build the Constitution review queue:**");

@@ -1,0 +1,84 @@
+{
+  "id": "plan_7e12ee4b08",
+  "content_hash": "sha1:dacc7b9204f8b07498b075cf9f4dead66f204415",
+  "policy_id": "pol_01cf084e1e",
+  "policy_candidate_hash": "sha1:d96eb2e7daff04ec7d536bd76e7ef6381196085d",
+  "repository": "hunch",
+  "data_class": "public",
+  "source_commit": "a877af85de0c11710a1ae6dee070a0d5e612dfe9",
+  "valid_from_commit": "a877af85de0c11710a1ae6dee070a0d5e612dfe9",
+  "evaluator": {
+    "name": "hunch-graph-policy",
+    "version": "1.0.0"
+  },
+  "corpus": {
+    "current_baseline": {
+      "kind": "commit",
+      "ref": "c63814b4bf81d95361216be67a457650ef30eaee",
+      "label": "current repository baseline",
+      "expected": "satisfied"
+    },
+    "accepted_history": {
+      "from": "a877af85de0c11710a1ae6dee070a0d5e612dfe9",
+      "to": "c63814b4bf81d95361216be67a457650ef30eaee",
+      "first_parent": true,
+      "max_commits": 20,
+      "exclude": []
+    },
+    "known_bad": [],
+    "known_good": [
+      {
+        "kind": "commit",
+        "ref": "c63814b4bf81d95361216be67a457650ef30eaee",
+        "label": "current accepted baseline",
+        "expected": "satisfied"
+      }
+    ]
+  },
+  "mutations": [
+    {
+      "operator": "add-forbidden-edge",
+      "base": "c63814b4bf81d95361216be67a457650ef30eaee",
+      "expected": "violated",
+      "required": true
+    }
+  ],
+  "budgets": {
+    "max_commits": 20,
+    "max_mutations": 3,
+    "max_minutes": 5
+  },
+  "expected": [
+    {
+      "leg": "current_baseline",
+      "result": "satisfied",
+      "classification_required": false
+    },
+    {
+      "leg": "known_good",
+      "result": "satisfied",
+      "classification_required": false
+    },
+    {
+      "leg": "accepted_history",
+      "classification_required": true
+    },
+    {
+      "leg": "mutations",
+      "result": "violated",
+      "classification_required": false
+    }
+  ],
+  "evidence_refs": [
+    "dec_a2899939d9",
+    "ev_9837e175a0"
+  ],
+  "limitations": [
+    "ProofPlan generation does not execute accepted-history replay or project tests.",
+    "Known-bad commits are included only when an attributable fix/revert delta identifies the first parent.",
+    "TypeScript/JavaScript static graph only in Gate G1.",
+    "Dynamic calls and runtime dependency injection are not covered.",
+    "Legacy bridge preserves unified calls/imports/depends_on/contains reachability semantics."
+  ],
+  "created_at": "2026-07-10T08:26:00.745Z"
+}

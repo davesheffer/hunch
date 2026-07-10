@@ -113,6 +113,7 @@ hunch constitution bootstrap --history --public-only --since 90d --max-candidate
 hunch policy compile dec_service_boundary --through OrderService
 hunch policy plan pol_… --history 20 --mutations 3
 hunch policy prove pol_…
+hunch policy card pol_…
 hunch policy accept pol_… --blocking --actor github:your-name
 hunch policy evaluate pol_… --json
 ```
@@ -148,6 +149,11 @@ baseline, known-good/known-bad fixtures, bounded accepted history, and one deter
 Historical hits are not called false positives until classified, and unclassified hits or replay
 errors prevent blocking approval. Shadow evidence and broader compiler inference remain follow-on
 work and are reported as limitations in the proof artifact.
+
+`policy card` (also `hunch_policy_card` over MCP) renders the same deterministic review surface for
+every client: exact assertion and scope, raw evidence vector, unclassified hits, unknown/errors,
+blocking readiness, current authority, limitations, and next actions. It never averages evidence
+into a confidence score and never grants authority.
 
 ## Private when the reasoning is sensitive
 

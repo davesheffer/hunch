@@ -34,16 +34,14 @@ function snapshotHash(symbols: Symbol[], edges: Edge[]): string {
   });
 }
 
+export function graphSnapshotFromRecords(root: string, head: string, symbols: Symbol[], edges: Edge[]): GraphSnapshot {
+  return { root, head, symbols, edges, graph_hash: snapshotHash(symbols, edges) };
+}
+
 export function graphSnapshot(store: HunchStore, root: string, opts: { publicOnly?: boolean; head?: string } = {}): GraphSnapshot {
   const symbols = opts.publicOnly ? store.json.loadAll("symbols") : store.recs("symbols");
   const edges = opts.publicOnly ? store.json.loadAll("edges") : store.recs("edges");
-  return {
-    root,
-    head: opts.head ?? (headSha(root) || "working-tree"),
-    symbols,
-    edges,
-    graph_hash: snapshotHash(symbols, edges),
-  };
+  return graphSnapshotFromRecords(root, opts.head ?? (headSha(root) || "working-tree"), symbols, edges);
 }
 
 function resolveSelector(snapshot: GraphSnapshot, selector: PolicySelector): Binding {

@@ -5,7 +5,7 @@ function isHumanActor(actor: string): boolean {
   return /^(human|github|git):[^\s]+$/i.test(actor);
 }
 
-function blockingReplayError(proof: PolicyProof): string | null {
+export function blockingEvidenceError(proof: PolicyProof): string | null {
   if (proof.known_bad.total > 0 && proof.known_bad.violated !== proof.known_bad.total) {
     return "blocking proof did not catch every declared known-bad fixture";
   }
@@ -32,7 +32,7 @@ export function blockingProofError(policy: PolicySpec, proof: PolicyProof | unde
   if (proofRank[proof.proof_class] < proofRank.P3) return `blocking proof is ${proof.proof_class}; P3+ is required`;
   if (proof.policy_hash !== policySemanticHash(policy)) return "blocking proof does not match current policy semantics";
   if (proof.current.satisfied !== 1 || proof.current.error || proof.current.unknown) return "blocking proof has no clean satisfied baseline";
-  const replayError = blockingReplayError(proof);
+  const replayError = blockingEvidenceError(proof);
   if (replayError) return replayError;
   return null;
 }
@@ -74,7 +74,7 @@ export function approvePolicy(
     throw new Error(`blocking activation requires P3+ proof; ${proof.id} is ${proof.proof_class}`);
   }
   if (mode === "blocking") {
-    const replayError = blockingReplayError(proof);
+    const replayError = blockingEvidenceError(proof);
     if (replayError) throw new Error(replayError);
   }
   const event = `${mode === "blocking" ? "approval-blocking" : "approval-advisory"}:${at}`;

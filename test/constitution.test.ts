@@ -16,8 +16,11 @@ import { movePolicyArtifactsToPrivate } from "../src/constitution/repository.js"
 import { evaluatePolicyOnSnapshot, graphSnapshot, mutateSnapshotForPolicy } from "../src/constitution/evaluator.js";
 import { clampCandidateLimit } from "../src/constitution/bootstrap.js";
 import { provePolicy } from "../src/constitution/proof.js";
+import { replayProofPlan } from "../src/constitution/replay.js";
+import { loadReplaySnapshot, replayCacheFile } from "../src/constitution/replayCache.js";
 import { ProofPlanSchema } from "../src/constitution/schema.js";
 import { shortHash } from "../src/core/ids.js";
+import { buildProofCard, renderProofCard } from "../src/constitution/card.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
@@ -113,6 +116,13 @@ test("Gate G1: decision -> must-pass-through policy -> P3 proof -> human block -
     assert.equal(proved.proof.current.satisfied, 1);
     assert.equal(proved.proof.mutations.violated, 1);
     assert.equal(proved.proof.replay_receipts.some((receipt) => receipt.leg === "current_baseline"), true);
+    const card = service.card(compiled.id);
+    assert.equal(card.policy.id, compiled.id);
+    assert.equal(card.authority.eligible_for_human_blocking_approval, true);
+    assert.equal(card.authority.can_block_now, false, "proof readiness never substitutes for explicit authority");
+    assert.equal(buildProofCard(proved.policy, proved.proof).card_hash, card.card_hash);
+    assert.match(renderProofCard(card), /proof cannot activate policy/);
+    assert.doesNotMatch(renderProofCard(card), /confidence/i, "proof card reports a vector, never an opaque confidence score");
     const plan = service.repository.listPlans({ publicOnly: true })[0]!;
     assert.ok(plan);
     assert.equal(proved.proof.plan_hash, plan.content_hash, "proof binds the persisted canonical plan");
@@ -146,6 +156,10 @@ test("Gate G1: decision -> must-pass-through policy -> P3 proof -> human block -
       /unclassified accepted-history/,
       "a historical hit cannot be silently treated as a false positive or approved for blocking",
     );
+    const unsafeCard = buildProofCard(proved.policy, unclassified);
+    assert.equal(unsafeCard.authority.eligible_for_human_blocking_approval, false);
+    assert.equal(unsafeCard.uncertainty.unclassified_history_hits, 1);
+    assert.ok(unsafeCard.actions.some((action) => action.startsWith("Classify every")));
     const active = service.approve(compiled.id, "blocking", "human:test-owner", { now: "2026-07-10T10:02:00.000Z" });
     assert.equal(active.state, "active_blocking");
     assert.equal(active.authority?.kind, "human");
@@ -318,6 +332,10 @@ test("private evidence produces private policy/proof and public-only evaluation 
     assert.ok(plan);
     assert.ok(existsSync(join(privateRoot, "plans", `${plan.id}.json`)));
     assert.equal(service.repository.listPlans({ publicOnly: true }).length, 0);
+    const privateCache = replayCacheFile(root, plan.corpus.current_baseline.ref, "private");
+    assert.ok(existsSync(privateCache));
+    assert.doesNotMatch(readFileSync(privateCache, "utf8"), new RegExp(policy.id), "graph cache is policy-neutral and carries no private rationale");
+    assert.equal(existsSync(replayCacheFile(root, plan.corpus.current_baseline.ref, "public")), false, "private replay cache never shares a public cache home");
     assert.equal(service.list({ publicOnly: true }).some((p) => p.id === policy.id), false);
     assert.deepEqual(service.evaluate({ activeOnly: false, publicOnly: true }), []);
     assert.doesNotMatch(canonicalJson(service.list({ publicOnly: true })), new RegExp(policy.id));
@@ -502,7 +520,7 @@ test("Phase 2A bootstrap rejects invalid windows and has no synthesis dependency
     store.json.put("decisions", decision("dec_window"));
     const service = new ConstitutionService(store, root);
     assert.throws(() => service.bootstrap({ since: "forever", now: "2026-07-10T12:00:00.000Z" }), /--since/);
-    for (const file of ["bootstrap.ts", "structural.ts", "delta.ts", "adapters.ts", "plan.ts", "replay.ts"]) {
+    for (const file of ["bootstrap.ts", "structural.ts", "delta.ts", "adapters.ts", "plan.ts", "replay.ts", "replayCache.ts", "card.ts"]) {
       const source = readFileSync(join(process.cwd(), "src/constitution", file), "utf8");
       assert.doesNotMatch(source, /synthesis\/|selectProvider|SynthesisProvider/, `${file} has no model/provider dependency`);
     }
@@ -605,6 +623,20 @@ test("Phase 3 replays current, known-bad, known-good, and bounded accepted histo
     assert.equal(first.proof.replay_receipts.find((receipt) => receipt.leg === "accepted_history")?.commit, accepted);
     assert.ok(first.proof.artifact_hashes.replay_manifest);
     assert.equal(first.policy.authority, null);
+
+    const replayPlan = service.repository.listPlans({ publicOnly: true }).find((candidate) => candidate.content_hash === first.proof.plan_hash)!;
+    const cached = replayProofPlan(root, first.policy, replayPlan);
+    assert.deepEqual(cached.replay_receipts, first.proof.replay_receipts);
+    assert.deepEqual(cached.cache_stats, { hits: 3, misses: 0, rebuilds: 0, memory_hits: 1 }, "second replay reuses every unique immutable graph");
+    const currentCache = replayCacheFile(root, replayPlan.corpus.current_baseline.ref, "public");
+    assert.ok(existsSync(currentCache));
+    writeFileSync(currentCache, "{ corrupt");
+    const rebuilt = replayProofPlan(root, first.policy, replayPlan);
+    assert.equal(rebuilt.cache_stats.rebuilds, 1);
+    assert.deepEqual(rebuilt.replay_receipts, first.proof.replay_receipts, "corrupt derived cache rebuild cannot perturb proof semantics");
+    assert.doesNotThrow(() => JSON.parse(readFileSync(currentCache, "utf8")));
+    assert.notEqual(currentCache, replayCacheFile(root, replayPlan.corpus.current_baseline.ref, "public", "2"), "engine version changes invalidate by key");
+    assert.equal(loadReplaySnapshot(root, replayPlan.corpus.current_baseline.ref, "public", "2").status, "miss");
 
     const second = service.prove(policy.id, { now: "2026-07-11T12:01:00.000Z" });
     assert.equal(canonicalJson(second.proof), canonicalJson(first.proof), "same plan and evaluator produce byte-equivalent replay proof");
@@ -922,6 +954,7 @@ test("Gate G1 adapter contract: CLI, MCP, and strict CI expose the identical rec
     const compiled = service.compile("dec_adapter", { through: "fetchOrders", now: NOW });
     const proved = service.prove(compiled.id, { now: "2026-07-10T10:01:00.000Z" });
     service.approve(compiled.id, "blocking", "human:adapter-owner", { now: "2026-07-10T10:02:00.000Z" });
+    const expectedCardHash = service.card(compiled.id, { publicOnly: true }).card_hash;
     fixture.store.close();
 
     writeFileSync(join(fixture.root, "src/api/orders.ts"), 'import { dbQuery } from "../db/client.js";\nexport function listOrders(u){ return dbQuery(u); }\n');
@@ -936,6 +969,13 @@ test("Gate G1 adapter contract: CLI, MCP, and strict CI expose the identical rec
     const cliReceipts = JSON.parse(cliRun.stdout) as Array<{ deterministic_hash: string; result: string }>;
     assert.equal(cliReceipts[0]?.result, "violated");
     const receipt = cliReceipts[0]!.deterministic_hash;
+    const cliCardRun = spawnSync(process.execPath, [tsx, cli, "policy", "card", compiled.id, "--public-only", "--json"], {
+      cwd: fixture.root,
+      env,
+      encoding: "utf8",
+    });
+    assert.equal(cliCardRun.status, 0, cliCardRun.stderr);
+    assert.equal((JSON.parse(cliCardRun.stdout) as { card_hash: string }).card_hash, expectedCardHash);
 
     const ciRun = spawnSync(process.execPath, [tsx, cli, "check", "--working", "--strict", "--public-only"], {
       cwd: fixture.root,
@@ -951,6 +991,9 @@ test("Gate G1 adapter contract: CLI, MCP, and strict CI expose the identical rec
     const planCall = await client.callTool({ name: "hunch_policy_plan", arguments: { policy_id: compiled.id, public_only: true } });
     const plan = JSON.parse((planCall.content[0] as { type: "text"; text: string }).text) as { content_hash: string };
     assert.equal(plan.content_hash, proved.proof.plan_hash, "MCP returns the same canonical plan that the proof binds");
+    const cardCall = await client.callTool({ name: "hunch_policy_card", arguments: { policy_id: compiled.id, public_only: true } });
+    const card = JSON.parse((cardCall.content[0] as { type: "text"; text: string }).text) as { card_hash: string };
+    assert.equal(card.card_hash, expectedCardHash, "CLI and MCP expose the same deterministic proof card");
     const mcp = await client.callTool({ name: "hunch_policy_evaluate", arguments: { policy_id: compiled.id, public_only: true } });
     const text = (mcp.content[0] as { type: "text"; text: string }).text;
     const mcpReceipts = JSON.parse(text) as Array<{ deterministic_hash: string; result: string }>;
