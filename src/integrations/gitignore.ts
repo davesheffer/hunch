@@ -43,6 +43,7 @@ const MEM_ENTRIES = [
   ".hunch/constraints/",
   ".hunch/components/",
   ".hunch/evidence/",
+  ".hunch/corpora/",
   ".hunch/policies/",
   ".hunch/proofs/",
   ".hunch/plans/",

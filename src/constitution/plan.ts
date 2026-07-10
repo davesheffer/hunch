@@ -12,6 +12,7 @@ import {
   type EvidenceEvent,
   type PolicySpec,
   type ProofPlan,
+  type ProofFixtureRef,
 } from "./schema.js";
 
 export interface ProofPlanOptions {
@@ -41,6 +42,18 @@ function relevantEvents(repository: PolicyRepository, policy: PolicySpec, opts: 
     .sort((a, b) => a.id.localeCompare(b.id));
 }
 
+function mergeFixtures(groups: ProofFixtureRef[][]): ProofFixtureRef[] {
+  const byCommit = new Map<string, ProofFixtureRef>();
+  for (const fixture of groups.flat()) {
+    const existing = byCommit.get(fixture.ref);
+    if (existing && existing.expected !== fixture.expected) {
+      throw new Error(`fixture commit ${fixture.ref} has conflicting ${existing.expected}/${fixture.expected} expectations`);
+    }
+    if (!existing) byCommit.set(fixture.ref, fixture);
+  }
+  return [...byCommit.values()].sort((a, b) => a.ref.localeCompare(b.ref) || a.label.localeCompare(b.label));
+}
+
 /** Deterministic compiler-to-harness contract. It plans replay and mutations but
  * executes neither, grants no authority, and performs no provider/model call. */
 export function createProofPlan(
@@ -53,6 +66,16 @@ export function createProofPlan(
   if (opts.publicOnly && opts.privateOnly) throw new Error("choose only one of publicOnly or privateOnly");
   const head = headSha(root);
   if (!head) throw new Error("proof planning needs a Git repository with a current HEAD");
+  const policyHash = policySemanticHash(policy);
+  const corpus = repository.getCorpus(policy.id, opts);
+  if (corpus) {
+    if (corpus.policy_hash !== policyHash) {
+      throw new Error(`proof corpus ${corpus.id} is stale for policy ${policy.id}; re-import it after the policy semantic change`);
+    }
+    if (corpus.repository !== basename(root) || corpus.data_class !== policy.data_class) {
+      throw new Error(`proof corpus ${corpus.id} does not match repository/data class for policy ${policy.id}`);
+    }
+  }
   const events = relevantEvents(repository, policy, opts);
   const sourceEvent = events.find((event) => !!event.commit);
   const readDecision = (id: string) => opts.publicOnly
@@ -69,7 +92,7 @@ export function createProofPlan(
   if (!revExists(sourceRef, root)) throw new Error(`proof-plan source commit ${sourceRef} does not resolve in this repository`);
   const sourceCommit = revParse(sourceRef, root);
   const structural = events.find((event) => event.structural_delta && (event.kind === "bug_fix" || event.kind === "revert"));
-  const knownBad = structural?.structural_delta
+  const structuralKnownBad = structural?.structural_delta
     ? [{
         kind: "commit" as const,
         ref: structural.structural_delta.before_commit,
@@ -77,6 +100,11 @@ export function createProofPlan(
         expected: "violated" as const,
       }]
     : [];
+  const knownBad = mergeFixtures([corpus?.known_bad ?? [], structuralKnownBad]);
+  const knownGood = mergeFixtures([
+    corpus?.known_good ?? [],
+    [{ kind: "commit", ref: head, label: "current accepted baseline", expected: "satisfied" }],
+  ]);
   const maxCommits = clamp(opts.maxCommits, 20, 0, 500);
   const maxMutations = clamp(opts.maxMutations, 3, 0, 100);
   const operator = mutationOperatorForPolicy(policy);
@@ -92,13 +120,14 @@ export function createProofPlan(
   ].slice(0, maxMutations);
   const body = {
     policy_id: policy.id,
-    policy_candidate_hash: policySemanticHash(policy),
+    policy_candidate_hash: policyHash,
     repository: basename(root),
     data_class: policy.data_class,
     source_commit: sourceCommit,
     valid_from_commit: sourceCommit,
     evaluator: { ...POLICY_EVALUATOR },
     mutation_engine: { ...MUTATION_ENGINE },
+    ...(corpus ? { corpus_manifest: { id: corpus.id, content_hash: corpus.content_hash } } : {}),
     corpus: {
       current_baseline: { kind: "commit" as const, ref: head, label: "current repository baseline", expected: "satisfied" as const },
       accepted_history: {
@@ -109,7 +138,7 @@ export function createProofPlan(
         exclude: knownBad.map((fixture) => fixture.ref),
       },
       known_bad: knownBad,
-      known_good: [{ kind: "commit" as const, ref: head, label: "current accepted baseline", expected: "satisfied" as const }],
+      known_good: knownGood,
     },
     mutations: plannedMutations,
     budgets: {

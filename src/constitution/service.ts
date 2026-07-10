@@ -4,13 +4,14 @@ import { evaluatePolicy, policyBlocks, policyIsActive } from "./evaluator.js";
 import { approvePolicy, blockingProofError, demotePolicy, proposeProvedPolicy } from "./lifecycle.js";
 import { provePolicy } from "./proof.js";
 import { PolicyRepository } from "./repository.js";
-import type { PolicyEvaluation, PolicyProof, PolicySpec } from "./schema.js";
+import type { PolicyEvaluation, PolicyProof, PolicySpec, ProofCorpus } from "./schema.js";
 import type { ProofPlan } from "./schema.js";
 import { bootstrapPolicies, type BootstrapOptions, type BootstrapReport } from "./bootstrap.js";
 import { bootstrapStructuralPolicies, inspectStructuralDecision, type StructuralInspection } from "./structural.js";
 import { createProofPlan, type ProofPlanOptions } from "./plan.js";
 import { ingestLocalEvidence, type LocalEvidenceOptions, type LocalEvidenceReport } from "./adapters.js";
 import { buildProofCard, type ProofCard } from "./card.js";
+import { compileProofCorpus } from "./corpus.js";
 
 export interface PolicyEvaluationSet {
   policy: PolicySpec;
@@ -48,6 +49,21 @@ export class ConstitutionService {
     const policy = this.get(id, opts);
     if (!policy.proof) throw new Error(`policy ${id} has no proof`);
     return buildProofCard(policy, this.proof(policy.proof, opts));
+  }
+
+  corpus(id: string, opts: { publicOnly?: boolean; privateOnly?: boolean } = {}): ProofCorpus {
+    this.get(id, opts);
+    const corpus = this.repository.getCorpus(id, opts);
+    if (!corpus) throw new Error(`policy ${id} has no imported proof corpus`);
+    return corpus;
+  }
+
+  importCorpus(id: string, raw: unknown, opts: { now?: string } = {}): ProofCorpus {
+    const policy = this.get(id);
+    const compiled = compileProofCorpus(this.root, policy, raw, opts);
+    const home = this.repository.homeOfPolicy(policy.id);
+    const existing = this.repository.getCorpus(policy.id, home === "public" ? { publicOnly: true } : { privateOnly: true });
+    return existing?.id === compiled.id ? existing : this.repository.putCorpus(compiled, policy.id);
   }
 
   compile(decisionId: string, opts: CompilePolicyOptions = {}): PolicySpec {

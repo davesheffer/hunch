@@ -48,6 +48,7 @@
     "hunch": "tsx src/cli/index.ts",
     "test": "tsx --test test/*.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "rehearse:constitution": "npm run build && node tooling/constitution-clean-rehearsal.mjs",
     "prepublishOnly": "npm run build"
   },
   "dependencies": {

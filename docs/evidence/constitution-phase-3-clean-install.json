@@ -1,0 +1,80 @@
+{
+  "schema": "hunch.constitution.clean-rehearsal.v1",
+  "generated_at": "2026-07-10T09:51:28.210Z",
+  "package": {
+    "name": "@davesheffer/hunch",
+    "version": "1.7.0",
+    "shasum": "515187d26235cdf459a452db22119d114c870c25",
+    "integrity": "sha512-hKHWTd/T8QBi6I11F78atVbkDsqIBRUYd0kkA+7U7IYQEC5DkVmJ+bCQxm/5gZeTWHCo4ppt6J/6c/O5lwc87A==",
+    "clean_install": true
+  },
+  "environment": {
+    "node": "v22.23.1",
+    "platform": "darwin",
+    "arch": "arm64"
+  },
+  "corpus": {
+    "policies": 5,
+    "public_policies": 4,
+    "private_policies": 1,
+    "imported_known_bad": 5,
+    "imported_known_good": 5,
+    "assertion_kinds": [
+      "exists",
+      "must-pass-through",
+      "not-reaches",
+      "reaches"
+    ]
+  },
+  "proofs": {
+    "p3": 5,
+    "known_bad_caught": 5,
+    "known_good_satisfied": 5,
+    "source_mutations_caught": 5,
+    "controls_passed": 10,
+    "authority_grants": 0
+  },
+  "isolation": {
+    "clean_home": true,
+    "network_proxies_unreachable_during_proof": true,
+    "repository_hooks_executed": false,
+    "active_worktrees_after_run": 1,
+    "transient_sessions_after_run": 0,
+    "clean_installed_cli_corpus_roundtrip": true
+  },
+  "privacy": {
+    "private_fixture_count": 2,
+    "private_sentinel_in_public_home": false,
+    "private_sentinel_preserved_in_private_home": true
+  },
+  "public_receipts": [
+    {
+      "assertion": "exists",
+      "policy_id": "pol_42d649780a",
+      "corpus_id": "corpus_5c8cc91436",
+      "proof_id": "proof_c8ce603d08",
+      "source_diff_hash": "sha1:5f01645145a3c7fe5dca9847f752aea969430bf4"
+    },
+    {
+      "assertion": "must-pass-through",
+      "policy_id": "pol_b35769cacf",
+      "corpus_id": "corpus_13075be60a",
+      "proof_id": "proof_f30218147c",
+      "source_diff_hash": "sha1:e785c432da3a497b9a876291d4d144b09ae52983"
+    },
+    {
+      "assertion": "not-reaches",
+      "policy_id": "pol_db4f013aa0",
+      "corpus_id": "corpus_b1e8911b55",
+      "proof_id": "proof_2ebca1c497",
+      "source_diff_hash": "sha1:a9028715270b0c19aff074afe802666a9b624b6b"
+    },
+    {
+      "assertion": "reaches",
+      "policy_id": "pol_26672d3efb",
+      "corpus_id": "corpus_1c2dbfacb3",
+      "proof_id": "proof_355b7ad219",
+      "source_diff_hash": "sha1:585873d7e5507ed7840642831cedfbb98094b4f0"
+    }
+  ]
+}

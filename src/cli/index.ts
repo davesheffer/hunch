@@ -527,6 +527,7 @@ function configureOverlay(dir: string | undefined, opts: OverlaySetupOpts, mode:
     if (constitutionMoved.proofs) breakdownParts.push(`${constitutionMoved.proofs} proofs`);
     if (constitutionMoved.plans) breakdownParts.push(`${constitutionMoved.plans} proof plans`);
     if (constitutionMoved.evidence) breakdownParts.push(`${constitutionMoved.evidence} evidence events`);
+    if (constitutionMoved.corpora) breakdownParts.push(`${constitutionMoved.corpora} proof corpora`);
     const breakdown = breakdownParts.join(", ") || "0 records";
     migrateNote =
       `  ✓ migrated public memory → overlay (${breakdown}); public store emptied\n` +
@@ -960,6 +961,32 @@ policyCmd
       const output: { policy: typeof policy; proof?: unknown } = { policy };
       if (opts.proof && policy.proof) output.proof = service.proof(policy.proof, { publicOnly: opts.publicOnly });
       console.log(JSON.stringify(output, null, 2));
+    } catch (e) {
+      fail((e as Error).message);
+    } finally {
+      store.close();
+    }
+  });
+
+policyCmd
+  .command("corpus")
+  .description("Import or inspect a policy-bound known-good/known-bad commit corpus. Imported refs are resolved to immutable SHAs.")
+  .argument("<id>", "policy id")
+  .option("--import <file>", "JSON file with known_bad/known_good ref and label arrays")
+  .option("--public-only", "exclude private-overlay policy/corpus records when inspecting")
+  .action((id: string, opts: { import?: string; publicOnly?: boolean }) => {
+    const { store, root } = storeFor();
+    try {
+      const service = new ConstitutionService(store, root);
+      if (opts.import) {
+        if (opts.publicOnly) throw new Error("--public-only cannot be combined with --import");
+        const file = resolve(root, opts.import);
+        const corpus = service.importCorpus(id, JSON.parse(readFileSync(file, "utf8")));
+        console.log(`✓ imported ${corpus.id} for ${corpus.policy_id}: ${corpus.known_bad.length} known bad, ${corpus.known_good.length} known good`);
+        console.log(`  hash: ${corpus.content_hash} · home follows policy data class (${corpus.data_class})`);
+      } else {
+        console.log(JSON.stringify(service.corpus(id, { publicOnly: opts.publicOnly }), null, 2));
+      }
     } catch (e) {
       fail((e as Error).message);
     } finally {

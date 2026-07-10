@@ -35,6 +35,9 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Clean-install Constitution rehearsal
+        run: node tooling/constitution-clean-rehearsal.mjs
+
       # Supply-chain gate: fail ONLY on a high/critical advisory in the deps we
       # actually ship (--omit=dev drops dev-only noise). A new CVE on a shipped
       # transitive turns the build red instead of silently riding along.

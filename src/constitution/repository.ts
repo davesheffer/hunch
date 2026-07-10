@@ -3,13 +3,16 @@ import { join } from "node:path";
 import type { HunchStore } from "../store/hunchStore.js";
 import { writeFileAtomic } from "../core/io.js";
 import { shortHash } from "../core/ids.js";
-import { proofPlanContentHash } from "./canonical.js";
+import { policySemanticHash, proofPlanContentHash } from "./canonical.js";
+import { proofCorpusContentHash } from "./corpus.js";
 import {
+  ProofCorpusSchema,
   PolicyProofSchema,
   ProofPlanSchema,
   PolicySpecSchema,
   EvidenceEventSchema,
   type EvidenceEvent,
+  type ProofCorpus,
   type PolicyProof,
   type ProofPlan,
   type PolicySpec,
@@ -44,7 +47,7 @@ export class PolicyRepository {
     this.privateHome = store.privateDir;
   }
 
-  private dir(home: "public" | "private", kind: "policies" | "proofs" | "plans" | "evidence"): string {
+  private dir(home: "public" | "private", kind: "policies" | "proofs" | "plans" | "evidence" | "corpora"): string {
     const base = home === "private" ? this.privateHome : this.publicHome;
     if (!base) throw new Error("No private Hunch overlay is configured; refusing to write a private policy.");
     return join(base, kind);
@@ -68,6 +71,11 @@ export class PolicyRepository {
   private plansIn(home: "public" | "private"): ProofPlan[] {
     if (home === "private" && !this.privateHome) return [];
     return loadRecords(this.dir(home, "plans"), validatePlan, "plans");
+  }
+
+  private corporaIn(home: "public" | "private"): ProofCorpus[] {
+    if (home === "private" && !this.privateHome) return [];
+    return loadRecords(this.dir(home, "corpora"), validateCorpus, "corpora");
   }
 
   listPolicies(opts: { publicOnly?: boolean; privateOnly?: boolean } = {}): PolicySpec[] {
@@ -98,6 +106,14 @@ export class PolicyRepository {
 
   getPlan(id: string, opts: { publicOnly?: boolean; privateOnly?: boolean } = {}): ProofPlan | undefined {
     return this.listPlans(opts).find((p) => p.id === id);
+  }
+
+  getCorpus(policyId: string, opts: { publicOnly?: boolean; privateOnly?: boolean } = {}): ProofCorpus | undefined {
+    if (opts.publicOnly && opts.privateOnly) throw new Error("choose only one of publicOnly or privateOnly");
+    if (opts.privateOnly) return this.corporaIn("private").find((corpus) => corpus.policy_id === policyId);
+    const publicCorpus = this.corporaIn("public").find((corpus) => corpus.policy_id === policyId);
+    if (opts.publicOnly) return publicCorpus;
+    return this.corporaIn("private").find((corpus) => corpus.policy_id === policyId) ?? publicCorpus;
   }
 
   listEvidence(opts: { publicOnly?: boolean; privateOnly?: boolean } = {}): EvidenceEvent[] {
@@ -154,6 +170,21 @@ export class PolicyRepository {
     return parsed;
   }
 
+  putCorpus(corpus: ProofCorpus, policyId: string): ProofCorpus {
+    const parsed = validateCorpus(corpus);
+    if (parsed.policy_id !== policyId) throw new Error(`corpus ${parsed.id} does not belong to policy ${policyId}`);
+    const home = this.homeOfPolicy(policyId);
+    if (!home) throw new Error(`cannot write corpus ${parsed.id}: policy ${policyId} has no exact storage home`);
+    const policy = this.getPolicy(policyId, home === "public" ? { publicOnly: true } : { privateOnly: true });
+    if (!policy || parsed.data_class !== policy.data_class || parsed.policy_hash !== policySemanticHash(policy)) {
+      throw new Error(`corpus ${parsed.id} does not match policy ${policyId} semantics/data class`);
+    }
+    const dir = this.dir(home, "corpora");
+    mkdirSync(dir, { recursive: true });
+    writeFileAtomic(join(dir, `${policyId}.json`), encode(parsed));
+    return parsed;
+  }
+
   putEvidence(event: EvidenceEvent, opts: { private?: boolean } = {}): EvidenceEvent {
     const parsed = EvidenceEventSchema.parse(event);
     const home = opts.private || parsed.data_class !== "public" || this.store.unified ? "private" : "public";
@@ -172,30 +203,47 @@ function validatePlan(raw: unknown): ProofPlan {
   return plan;
 }
 
+function validateCorpus(raw: unknown): ProofCorpus {
+  const corpus = ProofCorpusSchema.parse(raw);
+  const hash = proofCorpusContentHash(corpus);
+  if (corpus.content_hash !== hash) throw new Error(`proof corpus ${corpus.id} content hash mismatch`);
+  if (corpus.id !== `corpus_${shortHash(hash)}`) throw new Error(`proof corpus ${corpus.id} id does not match its canonical content`);
+  return corpus;
+}
+
 /** One-time private migration for the Constitution's standalone Git-native
  * records. Copy/validate everything before deleting the public directories;
  * private records win on an id collision. */
-export function movePolicyArtifactsToPrivate(publicHunchDir: string, privateHunchDir: string): { policies: number; proofs: number; plans: number; evidence: number } {
-  const counts = { policies: 0, proofs: 0, plans: 0, evidence: 0 };
-  const move = <T extends { id: string }>(
-    kind: "policies" | "proofs" | "plans" | "evidence",
-    parse: (raw: unknown) => T,
-  ): number => {
+export function movePolicyArtifactsToPrivate(publicHunchDir: string, privateHunchDir: string): { policies: number; proofs: number; plans: number; evidence: number; corpora: number } {
+  const counts = { policies: 0, proofs: 0, plans: 0, evidence: 0, corpora: 0 };
+  type Kind = keyof typeof counts;
+  type Artifact = { id: string; policy_id?: string };
+  const specs: Array<{ kind: Kind; parse: (raw: unknown) => Artifact }> = [
+    { kind: "policies", parse: (value) => PolicySpecSchema.parse(value) },
+    { kind: "proofs", parse: (value) => PolicyProofSchema.parse(value) },
+    { kind: "plans", parse: validatePlan },
+    { kind: "evidence", parse: (value) => EvidenceEventSchema.parse(value) },
+    { kind: "corpora", parse: validateCorpus },
+  ];
+  const staged = specs.map(({ kind, parse }) => {
     const from = join(publicHunchDir, kind);
-    if (!existsSync(from)) return 0;
-    const pub = loadRecords(from, parse, kind);
     const to = join(privateHunchDir, kind);
-    const priv = new Map(loadRecords(to, parse, kind).map((r) => [r.id, r]));
+    const pub = existsSync(from) ? loadRecords(from, parse, kind) : [];
+    const keyFor = (record: Artifact): string => kind === "corpora" ? record.policy_id! : record.id;
+    const priv = new Map(loadRecords(to, parse, kind).map((r) => [keyFor(r), r]));
+    return { kind, from, to, pub, priv, keyFor };
+  });
+  // All public and private records are parsed before the first write or delete.
+  // A corrupt late category therefore cannot partially migrate earlier ones.
+  for (const { kind, from, to, pub, priv, keyFor } of staged) {
+    if (!pub.length && !existsSync(from)) continue;
     mkdirSync(to, { recursive: true });
     for (const rec of pub) {
-      if (!priv.has(rec.id)) writeFileAtomic(join(to, `${rec.id}.json`), encode(rec));
+      const key = keyFor(rec);
+      if (!priv.has(key)) writeFileAtomic(join(to, `${key}.json`), encode(rec));
     }
     rmSync(from, { recursive: true, force: true });
-    return pub.length;
-  };
-  counts.policies = move("policies", (v) => PolicySpecSchema.parse(v));
-  counts.proofs = move("proofs", (v) => PolicyProofSchema.parse(v));
-  counts.plans = move("plans", validatePlan);
-  counts.evidence = move("evidence", (v) => EvidenceEventSchema.parse(v));
+    counts[kind] = pub.length;
+  }
   return counts;
 }

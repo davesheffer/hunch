@@ -203,6 +203,40 @@ export const ProofFixtureRefSchema = z.object({
   label: z.string().min(1),
   expected: PolicyEvaluationResultSchema,
 });
+export type ProofFixtureRef = z.infer<typeof ProofFixtureRefSchema>;
+
+const CorpusInputFixtureSchema = z.object({
+  ref: z.string().min(1).max(1024),
+  label: z.string().min(1).max(500),
+}).strict();
+
+export const ProofCorpusInputSchema = z.object({
+  known_bad: z.array(CorpusInputFixtureSchema).max(50).default([]),
+  known_good: z.array(CorpusInputFixtureSchema).max(50).default([]),
+}).strict().refine((value) => value.known_bad.length + value.known_good.length > 0, {
+  message: "corpus import must declare at least one known-good or known-bad fixture",
+});
+export type ProofCorpusInput = z.infer<typeof ProofCorpusInputSchema>;
+
+const CorpusCommitFixtureSchema = z.object({
+  kind: z.literal("commit"),
+  ref: z.string().regex(/^[a-f0-9]{40}$/),
+  label: z.string().min(1).max(500),
+  expected: PolicyEvaluationResultSchema,
+}).strict();
+
+export const ProofCorpusSchema = z.object({
+  id: z.string().regex(/^corpus_[a-f0-9]{10}$/),
+  content_hash: z.string().min(1),
+  policy_id: z.string().regex(/^pol_[a-f0-9]{10}$/),
+  policy_hash: z.string().min(1),
+  repository: z.string().min(1),
+  data_class: DataClassSchema,
+  known_bad: z.array(CorpusCommitFixtureSchema.extend({ expected: z.literal("violated") })).max(50).default([]),
+  known_good: z.array(CorpusCommitFixtureSchema.extend({ expected: z.literal("satisfied") })).max(50).default([]),
+  created_at: z.string().datetime({ offset: true }),
+}).strict();
+export type ProofCorpus = z.infer<typeof ProofCorpusSchema>;
 
 export const ProofPlanSchema = z.object({
   id: z.string().regex(/^plan_[a-f0-9]{10}$/),
@@ -215,6 +249,10 @@ export const ProofPlanSchema = z.object({
   valid_from_commit: z.string().min(1),
   evaluator: z.object({ name: z.string().min(1), version: z.string().min(1) }),
   mutation_engine: z.object({ name: z.string().min(1), version: z.string().min(1) }).optional(),
+  corpus_manifest: z.object({
+    id: z.string().regex(/^corpus_[a-f0-9]{10}$/),
+    content_hash: z.string().min(1),
+  }).strict().optional(),
   corpus: z.object({
     current_baseline: ProofFixtureRefSchema,
     accepted_history: z.object({

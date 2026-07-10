@@ -111,6 +111,7 @@ hunch constitution ingest --public-only --since 90d
 hunch constitution delta dec_fix_or_revert --public-only
 hunch constitution bootstrap --history --public-only --since 90d --max-candidates 3
 hunch policy compile dec_service_boundary --through OrderService
+hunch policy corpus pol_… --import corpus.json
 hunch policy plan pol_… --history 20 --mutations 3
 hunch policy prove pol_…
 hunch policy card pol_…
@@ -135,6 +136,10 @@ Local correction, incident, and test-failure records can be normalized with `con
 The adapter stores references and hashes, inherits private storage, and creates no policy authority.
 `policy plan` then writes a content-addressed ProofPlan before execution: exact source/current commits,
 known-good/known-bad corpus, deterministic mutation operators, expectations, and resource budgets.
+`policy corpus --import` accepts bounded labeled `known_bad`/`known_good` Git refs, resolves them
+once to full immutable commit SHAs, stores the manifest in the policy's public/private home, and
+hash-binds it into every resulting plan. A commit cannot be labeled both good and bad, and stale
+policy-bound corpora must be re-imported after semantic policy changes.
 Planning runs no replay, test, model, or activation; `policy prove` binds its receipt to that plan.
 Proof execution checks out each unique immutable commit into a disposable worktree with hooks,
 user-global Git configuration, private-overlay discovery, and provider selection disabled. It

@@ -345,6 +345,51 @@ test("Phase 3E applies an exists mutation to isolated source and persists a pars
   }
 });
 
+test("Phase 3F imports immutable known-good/bad fixtures and hash-binds them into replay", () => {
+  const { root, store, cleanup } = layeredRepo();
+  try {
+    const initialGood = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
+    writeFileSync(join(root, "src/api/orders.ts"), 'import { dbQuery } from "../db/client.js";\nexport function listOrders(u){ return dbQuery(u); }\n');
+    const knownBad = commitFiles(root, ["src/api/orders.ts"], "fixture: controller bypasses service");
+    writeFileSync(join(root, "src/api/orders.ts"), 'import { fetchOrders } from "../services/orders.js";\nexport function listOrders(u){ return fetchOrders(u); }\n');
+    const currentGood = commitFiles(root, ["src/api/orders.ts"], "fixture: restore service boundary");
+    store.json.put("decisions", decision("dec_imported_corpus"));
+    store.reindex();
+    const service = new ConstitutionService(store, root);
+    const policy = service.compile("dec_imported_corpus", { through: "fetchOrders", now: NOW });
+    const imported = service.importCorpus(policy.id, {
+      known_bad: [{ ref: knownBad.slice(0, 12), label: "confirmed controller bypass" }],
+      known_good: [{ ref: initialGood, label: "earlier accepted service path" }],
+    }, { now: "2026-07-10T10:00:30.000Z" });
+    assert.deepEqual(imported.known_bad.map((fixture) => fixture.ref), [knownBad]);
+    assert.deepEqual(imported.known_good.map((fixture) => fixture.ref), [initialGood]);
+    assert.ok(existsSync(join(root, ".hunch/corpora", `${policy.id}.json`)));
+    const importedAgain = service.importCorpus(policy.id, {
+      known_bad: [{ ref: knownBad, label: "confirmed controller bypass" }],
+      known_good: [{ ref: initialGood, label: "earlier accepted service path" }],
+    }, { now: "2026-07-10T10:00:59.000Z" });
+    assert.deepEqual(importedAgain, imported, "same canonical corpus import is byte-stable and keeps its original timestamp");
+    assert.throws(() => service.importCorpus(policy.id, {
+      known_bad: [{ ref: currentGood, label: "bad" }],
+      known_good: [{ ref: currentGood, label: "good" }],
+    }), /duplicated in known_bad and known_good/);
+    assert.equal(service.corpus(policy.id).id, imported.id, "refused import preserves the previous canonical corpus");
+
+    const plan = service.plan(policy.id, { now: "2026-07-10T10:01:00.000Z" });
+    assert.deepEqual(plan.corpus_manifest, { id: imported.id, content_hash: imported.content_hash });
+    assert.deepEqual(plan.corpus.known_bad.map((fixture) => fixture.ref), [knownBad]);
+    assert.deepEqual(plan.corpus.known_good.map((fixture) => fixture.ref).sort(), [currentGood, initialGood].sort());
+    const { proof } = service.prove(policy.id, { now: "2026-07-10T10:02:00.000Z" });
+    assert.equal(proof.proof_class, "P3");
+    assert.equal(proof.known_bad.violated, 1);
+    assert.equal(proof.known_good.satisfied, 2);
+    assert.equal(proof.known_bad.unknown + proof.known_bad.error + proof.known_good.unknown + proof.known_good.error, 0);
+    assert.deepEqual(proof.replay_receipts.filter((receipt) => receipt.leg === "known_bad").map((receipt) => receipt.commit), [knownBad]);
+  } finally {
+    cleanup();
+  }
+});
+
 test("proof is bound to policy semantics and cannot authorize a changed assertion", () => {
   const { root, store, cleanup } = layeredRepo();
   try {
@@ -391,6 +436,9 @@ test("corrupt policy JSON is a visible error, never a skipped false pass", () =>
     mkdirSync(join(root, ".hunch/plans"), { recursive: true });
     writeFileSync(join(root, ".hunch/plans/plan_bad.json"), "{ not json");
     assert.throws(() => service.repository.listPlans(), /invalid plans\/plan_bad\.json/);
+    mkdirSync(join(root, ".hunch/corpora"), { recursive: true });
+    writeFileSync(join(root, ".hunch/corpora/pol_bad.json"), "{ not json");
+    assert.throws(() => service.repository.getCorpus("pol_bad"), /invalid corpora\/pol_bad\.json/);
   } finally {
     cleanup();
   }
@@ -410,6 +458,12 @@ test("private evidence produces private policy/proof and public-only evaluation 
     const policy = service.compile("dec_private", { through: "fetchOrders", now: NOW });
     assert.equal(policy.data_class, "private");
     assert.ok(existsSync(join(privateRoot, "policies", `${policy.id}.json`)));
+    const corpus = service.importCorpus(policy.id, {
+      known_good: [{ ref: "HEAD", label: "PRIVATE_CORPUS_SENTINEL" }],
+    }, { now: "2026-07-10T10:00:30.000Z" });
+    assert.ok(existsSync(join(privateRoot, "corpora", `${policy.id}.json`)));
+    assert.equal(existsSync(join(root, ".hunch/corpora", `${policy.id}.json`)), false);
+    assert.equal(service.repository.getCorpus(policy.id, { publicOnly: true }), undefined);
     const proved = service.prove(policy.id, { now: "2026-07-10T10:01:00.000Z" });
     assert.ok(existsSync(join(privateRoot, "proofs", `${proved.proof.id}.json`)));
     const plan = service.repository.listPlans({ privateOnly: true })[0]!;
@@ -423,6 +477,8 @@ test("private evidence produces private policy/proof and public-only evaluation 
     assert.equal(service.list({ publicOnly: true }).some((p) => p.id === policy.id), false);
     assert.deepEqual(service.evaluate({ activeOnly: false, publicOnly: true }), []);
     assert.doesNotMatch(canonicalJson(service.list({ publicOnly: true })), new RegExp(policy.id));
+    assert.doesNotMatch(canonicalJson(service.repository.getCorpus(policy.id, { publicOnly: true }) ?? null), /PRIVATE_CORPUS_SENTINEL/);
+    assert.match(corpus.known_good[0]!.label, /PRIVATE_CORPUS_SENTINEL/);
   } finally {
     store.close();
     cleanup();
@@ -440,23 +496,29 @@ test("private migration moves policy/proof artifacts only after validation", () 
       fixture.store.reindex();
       const service = new ConstitutionService(fixture.store, fixture.root);
       const compiled = service.compile("dec_migrate", { through: "fetchOrders", now: NOW });
+      const corpus = service.importCorpus(compiled.id, { known_good: [{ ref: "HEAD", label: "migration fixture" }] }, { now: NOW });
       const proved = service.prove(compiled.id, { now: "2026-07-10T10:01:00.000Z" });
       mkdirSync(join(publicHome, "policies"), { recursive: true });
       mkdirSync(join(publicHome, "proofs"), { recursive: true });
       mkdirSync(join(publicHome, "plans"), { recursive: true });
+      mkdirSync(join(publicHome, "corpora"), { recursive: true });
       writeFileSync(join(publicHome, "policies", `${compiled.id}.json`), readFileSync(join(fixture.root, ".hunch/policies", `${compiled.id}.json`)));
       writeFileSync(join(publicHome, "proofs", `${proved.proof.id}.json`), readFileSync(join(fixture.root, ".hunch/proofs", `${proved.proof.id}.json`)));
       const plan = service.repository.listPlans({ publicOnly: true })[0]!;
       writeFileSync(join(publicHome, "plans", `${plan.id}.json`), readFileSync(join(fixture.root, ".hunch/plans", `${plan.id}.json`)));
+      writeFileSync(join(publicHome, "corpora", `${compiled.id}.json`), readFileSync(join(fixture.root, ".hunch/corpora", `${compiled.id}.json`)));
+      assert.equal(corpus.policy_id, compiled.id);
     } finally {
       fixture.cleanup();
     }
     const moved = movePolicyArtifactsToPrivate(publicHome, privateHome);
-    assert.deepEqual(moved, { policies: 1, proofs: 1, plans: 1, evidence: 0 });
+    assert.deepEqual(moved, { policies: 1, proofs: 1, plans: 1, evidence: 0, corpora: 1 });
     assert.equal(existsSync(join(publicHome, "policies")), false);
     assert.ok(existsSync(join(privateHome, "policies")));
     assert.ok(existsSync(join(privateHome, "proofs")));
     assert.ok(existsSync(join(privateHome, "plans")));
+    assert.ok(existsSync(join(privateHome, "corpora")));
+    assert.deepEqual(readdirSync(join(privateHome, "corpora")), readdirSync(join(privateHome, "policies")), "migrated corpus keeps its policy-keyed filename");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -473,6 +535,29 @@ test("private migration preserves the public source when any policy artifact is 
     assert.throws(() => movePolicyArtifactsToPrivate(publicHome, privateHome), /invalid policies/);
     assert.equal(readFileSync(corrupt, "utf8"), "{ corrupt", "source survives a refused migration");
   } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("private migration validates late corpus artifacts before moving an earlier valid policy", () => {
+  const root = execFileSync("mktemp", ["-d", join(tmpdir(), "hunch-corpus-migrate-invalid-XXXXXX")], { encoding: "utf8" }).trim();
+  const privateHome = join(root, "private/.hunch");
+  const publicHome = join(root, ".hunch");
+  const fixture = layeredRepo();
+  try {
+    fixture.store.json.put("decisions", decision("dec_migrate_late_failure"));
+    fixture.store.reindex();
+    const policy = new ConstitutionService(fixture.store, fixture.root).compile("dec_migrate_late_failure", { through: "fetchOrders", now: NOW });
+    mkdirSync(join(publicHome, "policies"), { recursive: true });
+    mkdirSync(join(publicHome, "corpora"), { recursive: true });
+    const policyFile = join(publicHome, "policies", `${policy.id}.json`);
+    writeFileSync(policyFile, readFileSync(join(fixture.root, ".hunch/policies", `${policy.id}.json`)));
+    writeFileSync(join(publicHome, "corpora", `${policy.id}.json`), "{ corrupt");
+    assert.throws(() => movePolicyArtifactsToPrivate(publicHome, privateHome), /invalid corpora/);
+    assert.ok(existsSync(policyFile), "two-phase validation preserves earlier valid categories on a late failure");
+    assert.equal(existsSync(join(privateHome, "policies", `${policy.id}.json`)), false);
+  } finally {
+    fixture.cleanup();
     rmSync(root, { recursive: true, force: true });
   }
 });
@@ -604,7 +689,7 @@ test("Phase 2A bootstrap rejects invalid windows and has no synthesis dependency
     store.json.put("decisions", decision("dec_window"));
     const service = new ConstitutionService(store, root);
     assert.throws(() => service.bootstrap({ since: "forever", now: "2026-07-10T12:00:00.000Z" }), /--since/);
-    for (const file of ["bootstrap.ts", "structural.ts", "delta.ts", "adapters.ts", "plan.ts", "replay.ts", "replayWorker.ts", "replayCache.ts", "mutation.ts", "sourceMutation.ts", "card.ts"]) {
+    for (const file of ["bootstrap.ts", "structural.ts", "delta.ts", "adapters.ts", "corpus.ts", "plan.ts", "replay.ts", "replayWorker.ts", "replayCache.ts", "mutation.ts", "sourceMutation.ts", "card.ts"]) {
       const source = readFileSync(join(process.cwd(), "src/constitution", file), "utf8");
       assert.doesNotMatch(source, /synthesis\/|selectProvider|SynthesisProvider/, `${file} has no model/provider dependency`);
     }
