@@ -34,7 +34,7 @@ test("ensureGitignore adds NO redundant block when the user already lists every 
   inTmp((root) => {
     writeFileSync(
       join(root, ".gitignore"),
-      ["node_modules/", "# Hunch derived index", ".hunch/*.sqlite", ".hunch/*.sqlite-shm", ".hunch/*.sqlite-wal", ".hunch/*.sqlite-journal", ".hunch/**/*.tmp*", ".hunch/local.json", ".hunch-private/", ""].join("\n"),
+      ["node_modules/", "# Hunch derived index", ".hunch/*.sqlite", ".hunch/*.sqlite-shm", ".hunch/*.sqlite-wal", ".hunch/*.sqlite-journal", ".hunch/**/*.tmp*", ".hunch-cache/", ".hunch/local.json", ".hunch-private/", ""].join("\n"),
     );
     assert.equal(ensureGitignore(root).action, "unchanged", "all entries present → no-op");
     assert.doesNotMatch(read(root), /# >>> hunch/, "no duplicate managed block");

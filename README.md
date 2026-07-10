@@ -135,12 +135,19 @@ The adapter stores references and hashes, inherits private storage, and creates 
 `policy plan` then writes a content-addressed ProofPlan before execution: exact source/current commits,
 known-good/known-bad corpus, deterministic mutation operators, expectations, and resource budgets.
 Planning runs no replay, test, model, or activation; `policy prove` binds its receipt to that plan.
+Proof execution checks out each unique immutable commit into a disposable worktree with hooks,
+user-global Git configuration, private-overlay discovery, and provider selection disabled. It
+indexes code with Hunch's pinned static evaluator, records canonical current/known-good/known-bad/
+accepted-history receipts, then removes every checkout and derived graph. Project code, builds, and
+tests are never executed. Timeouts, unresolved refs, unknowns, and errors remain explicit.
 
 The first Level-1 evaluator is `must-pass-through`: every statically discovered path from A to C
 must contain B. CLI, MCP (`hunch_policy_evaluate`), and strict CI share the exact canonical receipt.
-Models do not participate in evaluation or activation. This first proof class covers the current
-baseline and one deterministic mutation; historical replay, shadow evidence, and broader compiler
-inference remain experimental follow-on work and are reported as limitations in the proof artifact.
+Models do not participate in evaluation or activation. Plan-bound proofs cover the committed current
+baseline, known-good/known-bad fixtures, bounded accepted history, and one deterministic mutation.
+Historical hits are not called false positives until classified, and unclassified hits or replay
+errors prevent blocking approval. Shadow evidence and broader compiler inference remain follow-on
+work and are reported as limitations in the proof artifact.
 
 ## Private when the reasoning is sensitive
 

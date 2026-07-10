@@ -1,6 +1,6 @@
 import { basename } from "node:path";
 import { shortHash } from "../core/ids.js";
-import { headSha, lastCommitForFile, revExists, revParse } from "../extractors/git.js";
+import { firstCommitForFile, headSha, revExists, revParse } from "../extractors/git.js";
 import type { HunchStore } from "../store/hunchStore.js";
 import { canonicalHash, policySemanticHash } from "./canonical.js";
 import type { PolicyRepository } from "./repository.js";
@@ -63,7 +63,7 @@ export function createProofPlan(
     .filter((ref) => ref.startsWith("dec_"))
     .map(readDecision)
     .find((record) => !!record);
-  const policyCommit = lastCommitForFile(`.hunch/policies/${policy.id}.json`, root).replace(/^commit:/, "");
+  const policyCommit = firstCommitForFile(`.hunch/policies/${policy.id}.json`, root);
   const sourceRef = sourceEvent?.commit ?? decision?.commit ?? (policyCommit || head);
   if (!revExists(sourceRef, root)) throw new Error(`proof-plan source commit ${sourceRef} does not resolve in this repository`);
   const sourceCommit = revParse(sourceRef, root);

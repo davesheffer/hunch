@@ -283,6 +283,20 @@ export const EvaluationSummarySchema = z.object({
 });
 export type EvaluationSummary = z.infer<typeof EvaluationSummarySchema>;
 
+export const ReplayReceiptSchema = z.object({
+  leg: z.enum(["current_baseline", "known_bad", "known_good", "accepted_history"]),
+  commit: z.string().regex(/^[a-f0-9]{40}$/),
+  expected: PolicyEvaluationResultSchema.optional(),
+  policy_hash: z.string().min(1),
+  evaluator: z.object({ name: z.string().min(1), version: z.string().min(1) }),
+  result: PolicyEvaluationResultSchema,
+  graph_hash: z.string().min(1).optional(),
+  evaluation_hash: z.string().min(1).optional(),
+  error_code: z.string().min(1).optional(),
+  deterministic_hash: z.string().min(1),
+}).strict();
+export type ReplayReceipt = z.infer<typeof ReplayReceiptSchema>;
+
 export const PolicyProofSchema = z.object({
   id: z.string().regex(/^proof_[a-f0-9]{10}$/),
   plan_hash: z.string(),
@@ -294,6 +308,7 @@ export const PolicyProofSchema = z.object({
   known_good: EvaluationSummarySchema,
   accepted_history: EvaluationSummarySchema.extend({ classified_hits: z.array(z.string()).default([]) }),
   mutations: EvaluationSummarySchema.extend({ operator_coverage: z.record(z.string(), z.number().int().min(0)).default({}) }),
+  replay_receipts: z.array(ReplayReceiptSchema).default([]),
   limitations: z.array(z.string()).default([]),
   proof_class: ProofClassSchema,
   artifact_hashes: z.record(z.string(), z.string()).default({}),

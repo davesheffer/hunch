@@ -1,5 +1,5 @@
 import { sha1, shortHash } from "../core/ids.js";
-import type { PolicySpec, ProofPlan } from "./schema.js";
+import type { PolicyEvaluation, PolicySpec, ProofPlan } from "./schema.js";
 
 function canonicalValue(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonicalValue);
@@ -40,6 +40,14 @@ export function policySemanticHash(policy: PolicySpec): string {
 export function proofPlanContentHash(plan: ProofPlan): string {
   const { id: _id, content_hash: _contentHash, created_at: _createdAt, ...body } = plan;
   return canonicalHash(body);
+}
+
+/** A proof rerun is bound to policy semantics, not a mutable lifecycle revision.
+ * Live gate receipts keep policy_revision in their own deterministic hash; this
+ * projection is only for immutable proof/replay evidence. */
+export function proofEvaluationHash(evaluation: PolicyEvaluation): string {
+  const { policy_revision: _revision, deterministic_hash: _hash, ...semantic } = evaluation;
+  return canonicalHash(semantic);
 }
 
 export function policyId(seed: unknown): string {

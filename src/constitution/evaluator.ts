@@ -34,12 +34,12 @@ function snapshotHash(symbols: Symbol[], edges: Edge[]): string {
   });
 }
 
-export function graphSnapshot(store: HunchStore, root: string, opts: { publicOnly?: boolean } = {}): GraphSnapshot {
+export function graphSnapshot(store: HunchStore, root: string, opts: { publicOnly?: boolean; head?: string } = {}): GraphSnapshot {
   const symbols = opts.publicOnly ? store.json.loadAll("symbols") : store.recs("symbols");
   const edges = opts.publicOnly ? store.json.loadAll("edges") : store.recs("edges");
   return {
     root,
-    head: headSha(root) || "working-tree",
+    head: opts.head ?? (headSha(root) || "working-tree"),
     symbols,
     edges,
     graph_hash: snapshotHash(symbols, edges),

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { HunchStore } from "../src/store/hunchStore.js";
@@ -10,11 +10,14 @@ import { indexRepo } from "../src/extractors/indexer.js";
 import type { Bug, Constraint, Decision } from "../src/core/types.js";
 import { buildCorrectionConstraint } from "../src/core/correction.js";
 import { ConstitutionService } from "../src/constitution/service.js";
-import { canonicalJson, policySemanticHash } from "../src/constitution/canonical.js";
+import { canonicalHash, canonicalJson, policySemanticHash } from "../src/constitution/canonical.js";
 import { approvePolicy } from "../src/constitution/lifecycle.js";
 import { movePolicyArtifactsToPrivate } from "../src/constitution/repository.js";
 import { evaluatePolicyOnSnapshot, graphSnapshot, mutateSnapshotForPolicy } from "../src/constitution/evaluator.js";
 import { clampCandidateLimit } from "../src/constitution/bootstrap.js";
+import { provePolicy } from "../src/constitution/proof.js";
+import { ProofPlanSchema } from "../src/constitution/schema.js";
+import { shortHash } from "../src/core/ids.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
@@ -109,6 +112,7 @@ test("Gate G1: decision -> must-pass-through policy -> P3 proof -> human block -
     assert.equal(proved.proof.proof_class, "P3", "clean baseline + caught bypass mutation earns P3");
     assert.equal(proved.proof.current.satisfied, 1);
     assert.equal(proved.proof.mutations.violated, 1);
+    assert.equal(proved.proof.replay_receipts.some((receipt) => receipt.leg === "current_baseline"), true);
     const plan = service.repository.listPlans({ publicOnly: true })[0]!;
     assert.ok(plan);
     assert.equal(proved.proof.plan_hash, plan.content_hash, "proof binds the persisted canonical plan");
@@ -117,6 +121,11 @@ test("Gate G1: decision -> must-pass-through policy -> P3 proof -> human block -
     assert.ok(existsSync(join(root, ".hunch/plans", `${plan.id}.json`)), "ProofPlan is Git-native JSON");
     const planJson = canonicalJson(plan);
     assert.equal(canonicalJson(service.plan(compiled.id, { publicOnly: true, now: "2026-07-10T10:05:00.000Z" })), planJson, "same immutable inputs reuse the byte-stable plan");
+    const boundedPlan = service.plan(compiled.id, { publicOnly: true, maxCommits: 0, maxMutations: 0, now: "2026-07-10T10:05:00.000Z" });
+    const boundedProof = provePolicy(store, root, compiled, { publicOnly: true, now: "2026-07-10T10:05:00.000Z", plan: boundedPlan });
+    assert.equal(boundedProof.accepted_history.total, 0);
+    assert.equal(boundedProof.mutations.total, 0, "a zero-mutation ProofPlan executes no implicit mutation outside its budget");
+    assert.equal(boundedProof.proof_class, "P2", "clean baseline plus completed zero-commit history earns P2 without inventing P3 sensitivity");
     assert.equal(proved.policy.state, "proposed");
     assert.equal(service.compile("dec_layer", { through: "fetchOrders", now: NOW }).state, "proposed", "recompile preserves incumbent lifecycle state");
 
@@ -124,6 +133,18 @@ test("Gate G1: decision -> must-pass-through policy -> P3 proof -> human block -
       () => service.approve(compiled.id, "blocking", "machine:agent", { now: "2026-07-10T10:02:00.000Z" }),
       /human actor/,
       "machine/model identity cannot activate policy",
+    );
+    const unclassified = {
+      ...proved.proof,
+      accepted_history: {
+        total: 1, satisfied: 0, violated: 1, not_applicable: 0, unknown: 0, error: 0,
+        receipt_hashes: ["sha1:unclassified"], classified_hits: [],
+      },
+    };
+    assert.throws(
+      () => approvePolicy(proved.policy, unclassified, "blocking", "human:test-owner", "2026-07-10T10:01:30.000Z"),
+      /unclassified accepted-history/,
+      "a historical hit cannot be silently treated as a false positive or approved for blocking",
     );
     const active = service.approve(compiled.id, "blocking", "human:test-owner", { now: "2026-07-10T10:02:00.000Z" });
     assert.equal(active.state, "active_blocking");
@@ -164,6 +185,33 @@ test("ambiguous selector is unknown and never blocks", () => {
     assert.equal(evaluation.evaluation.result, "unknown");
     assert.equal(evaluation.blocks, false);
     assert.match(evaluation.evaluation.explanation, /ambiguous/);
+  } finally {
+    cleanup();
+  }
+});
+
+test("ProofPlan fallback stays anchored to the policy introduction commit across lifecycle updates", () => {
+  const { root, store, cleanup } = layeredRepo();
+  try {
+    store.json.put("decisions", decision("dec_plan_origin"));
+    store.reindex();
+    const service = new ConstitutionService(store, root);
+    const compiled = service.compile("dec_plan_origin", { through: "fetchOrders", now: NOW });
+    const file = `.hunch/policies/${compiled.id}.json`;
+    const introduced = commitFiles(root, [file], "fixture: introduce policy semantics");
+    const first = service.plan(compiled.id, { publicOnly: true, now: NOW });
+    assert.equal(first.source_commit, introduced);
+
+    service.repository.putPolicy({
+      ...compiled,
+      revision: compiled.revision + 1,
+      state: "validating",
+      updated_at: "2026-07-10T10:05:00.000Z",
+    });
+    commitFiles(root, [file], "fixture: update policy lifecycle only");
+    const later = service.plan(compiled.id, { publicOnly: true, now: "2026-07-10T10:06:00.000Z" });
+    assert.equal(later.source_commit, introduced, "proof attachment and lifecycle commits cannot erase earlier accepted history");
+    assert.notEqual(later.corpus.current_baseline.ref, introduced);
   } finally {
     cleanup();
   }
@@ -454,7 +502,7 @@ test("Phase 2A bootstrap rejects invalid windows and has no synthesis dependency
     store.json.put("decisions", decision("dec_window"));
     const service = new ConstitutionService(store, root);
     assert.throws(() => service.bootstrap({ since: "forever", now: "2026-07-10T12:00:00.000Z" }), /--since/);
-    for (const file of ["bootstrap.ts", "structural.ts", "delta.ts", "adapters.ts", "plan.ts"]) {
+    for (const file of ["bootstrap.ts", "structural.ts", "delta.ts", "adapters.ts", "plan.ts", "replay.ts"]) {
       const source = readFileSync(join(process.cwd(), "src/constitution", file), "utf8");
       assert.doesNotMatch(source, /synthesis\/|selectProvider|SynthesisProvider/, `${file} has no model/provider dependency`);
     }
@@ -511,6 +559,106 @@ test("Phase 2B history bootstrap compiles one exact added call, deduplicates sem
     assert.equal(second.compiled.length, 0);
     assert.equal(second.covered, 2);
     assert.equal(canonicalJson(service.repository.listEvidence({ publicOnly: true })), events, "history rerun preserves evidence byte-semantics");
+  } finally {
+    cleanup();
+  }
+});
+
+test("Phase 3 replays current, known-bad, known-good, and bounded accepted history without hooks or active-worktree mutation", () => {
+  const { root, store, cleanup } = layeredRepo();
+  try {
+    mkdirSync(join(root, "src/auth"), { recursive: true });
+    mkdirSync(join(root, "src/payments"), { recursive: true });
+    writeFileSync(join(root, "src/auth/session.ts"), "export function verifySession(){ return true; }\n");
+    writeFileSync(join(root, "src/payments/charge.ts"), "export function charge(){ return true; }\n");
+    commitFiles(root, ["src/auth/session.ts", "src/payments/charge.ts"], "fixture: replay known-bad baseline");
+    writeFileSync(join(root, "src/payments/charge.ts"), 'import { verifySession } from "../auth/session.js";\nexport function charge(){ return verifySession(); }\n');
+    const fix = commitFiles(root, ["src/payments/charge.ts"], "fix: restore replayed session validation");
+    writeFileSync(join(root, "src/payments/accepted.ts"), "export const accepted = true;\n");
+    const accepted = commitFiles(root, ["src/payments/accepted.ts"], "fixture: accepted history after fix");
+    writeFileSync(join(root, "src/payments/head.ts"), "export const head = true;\n");
+    commitFiles(root, ["src/payments/head.ts"], "fixture: current replay baseline");
+    indexRepo(store, root, { churn: false });
+    store.json.put("decisions", historyDecision("dec_phase3_replay", fix));
+    store.reindex();
+    const service = new ConstitutionService(store, root);
+    const report = service.bootstrap({ history: true, publicOnly: true, since: "90d", now: "2026-07-11T12:00:00.000Z" });
+    const policy = report.compiled[0]!.policy;
+
+    const sentinel = join(root, "hook-ran");
+    const hook = join(root, ".git/hooks/post-checkout");
+    writeFileSync(hook, `#!/bin/sh\nprintf ran > ${JSON.stringify(sentinel)}\n`);
+    chmodSync(hook, 0o755);
+    const sourceBefore = readFileSync(join(root, "src/payments/charge.ts"), "utf8");
+    const diffBefore = execFileSync("git", ["diff", "--", "src"], { cwd: root, encoding: "utf8" });
+    const worktreesBefore = execFileSync("git", ["worktree", "list", "--porcelain"], { cwd: root, encoding: "utf8" });
+
+    const first = service.prove(policy.id, { now: "2026-07-11T12:01:00.000Z" });
+    assert.equal(first.proof.proof_class, "P3");
+    assert.equal(first.proof.current.satisfied, 1);
+    assert.equal(first.proof.known_bad.total, 1);
+    assert.equal(first.proof.known_bad.violated, 1, "the confirmed first-parent regression is caught");
+    assert.equal(first.proof.known_good.satisfied, 1);
+    assert.equal(first.proof.accepted_history.total, 1, "HEAD is not duplicated inside accepted history");
+    assert.equal(first.proof.accepted_history.satisfied, 1);
+    assert.equal(first.proof.accepted_history.error, 0);
+    assert.equal(first.proof.replay_receipts.find((receipt) => receipt.leg === "accepted_history")?.commit, accepted);
+    assert.ok(first.proof.artifact_hashes.replay_manifest);
+    assert.equal(first.policy.authority, null);
+
+    const second = service.prove(policy.id, { now: "2026-07-11T12:01:00.000Z" });
+    assert.equal(canonicalJson(second.proof), canonicalJson(first.proof), "same plan and evaluator produce byte-equivalent replay proof");
+    assert.equal(readFileSync(join(root, "src/payments/charge.ts"), "utf8"), sourceBefore);
+    assert.equal(execFileSync("git", ["diff", "--", "src"], { cwd: root, encoding: "utf8" }), diffBefore);
+    assert.equal(execFileSync("git", ["worktree", "list", "--porcelain"], { cwd: root, encoding: "utf8" }), worktreesBefore);
+    assert.equal(existsSync(sentinel), false, "repository post-checkout hook is disabled for replay worktrees");
+    assert.deepEqual(readdirSync(join(root, ".hunch-cache/worktrees")), [], "every disposable checkout and graph is removed");
+  } finally {
+    cleanup();
+  }
+});
+
+test("Phase 3 unresolved refs and history-enumeration failures stay visible as deterministic proof errors", () => {
+  const { root, store, cleanup } = layeredRepo();
+  try {
+    store.json.put("decisions", decision("dec_phase3_error"));
+    store.reindex();
+    const service = new ConstitutionService(store, root);
+    const policy = service.compile("dec_phase3_error", { through: "fetchOrders", now: NOW });
+    const base = service.plan(policy.id, { publicOnly: true, now: NOW });
+    const { id: _id, content_hash: _hash, created_at, ...rest } = base;
+    const missing = "f".repeat(40);
+    const body = {
+      ...rest,
+      corpus: {
+        current_baseline: { kind: "commit" as const, ref: missing, label: "missing current", expected: "satisfied" as const },
+        accepted_history: { ...base.corpus.accepted_history, from: missing, to: missing, max_commits: 1 },
+        known_bad: [],
+        known_good: [],
+      },
+    };
+    const contentHash = canonicalHash(body);
+    const broken = ProofPlanSchema.parse({
+      id: `plan_${shortHash(contentHash)}`,
+      content_hash: contentHash,
+      ...body,
+      created_at,
+    });
+    const proof = provePolicy(store, root, policy, { publicOnly: true, now: NOW, plan: broken });
+    assert.equal(proof.proof_class, "P0");
+    assert.equal(proof.current.error, 1);
+    assert.equal(proof.accepted_history.error, 1);
+    assert.deepEqual(proof.replay_receipts.map((receipt) => receipt.error_code), ["commit-ref-unresolved", "history-ref-unresolved"]);
+    assert.equal(proof.replay_receipts.every((receipt) => receipt.deterministic_hash.startsWith("sha1:")), true);
+    assert.match(proof.limitations.join("\n"), /prevent blocking approval/);
+    assert.deepEqual(readdirSync(join(root, ".hunch-cache/worktrees")), []);
+
+    const filterSentinel = join(root, "unsafe-filter-ran");
+    execFileSync("git", ["config", "filter.evil.smudge", `touch ${filterSentinel}`], { cwd: root, stdio: "ignore" });
+    const refused = provePolicy(store, root, policy, { publicOnly: true, now: NOW, plan: base });
+    assert.equal(refused.current.error, 1);
+    assert.equal(refused.replay_receipts[0]?.error_code, "unsafe-local-filter-config");
+    assert.equal(existsSync(filterSentinel), false, "replay refuses arbitrary local checkout filters instead of executing them");
   } finally {
     cleanup();
   }

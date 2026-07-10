@@ -1,0 +1,128 @@
+{
+  "id": "proof_e7c55448e0",
+  "plan_hash": "sha1:205a385d631e4f63cebd2fae169511fbd6b10854",
+  "policy_hash": "sha1:d96eb2e7daff04ec7d536bd76e7ef6381196085d",
+  "evaluator": {
+    "name": "hunch-graph-policy",
+    "version": "1.0.0"
+  },
+  "generated_at": "2026-07-10T08:06:45.749Z",
+  "current": {
+    "total": 1,
+    "satisfied": 1,
+    "violated": 0,
+    "not_applicable": 0,
+    "unknown": 0,
+    "error": 0,
+    "receipt_hashes": [
+      "sha1:1861549e5933278b5e49ee8bf8e3e31aa222a3d3"
+    ]
+  },
+  "known_bad": {
+    "total": 0,
+    "satisfied": 0,
+    "violated": 0,
+    "not_applicable": 0,
+    "unknown": 0,
+    "error": 0,
+    "receipt_hashes": []
+  },
+  "known_good": {
+    "total": 1,
+    "satisfied": 1,
+    "violated": 0,
+    "not_applicable": 0,
+    "unknown": 0,
+    "error": 0,
+    "receipt_hashes": [
+      "sha1:11a6f850ccc44a38f119bd2c70a4adf572e5297c"
+    ]
+  },
+  "accepted_history": {
+    "total": 1,
+    "satisfied": 1,
+    "violated": 0,
+    "not_applicable": 0,
+    "unknown": 0,
+    "error": 0,
+    "receipt_hashes": [
+      "sha1:eaf370efe0263b86cb07139d8009f7b11761482d"
+    ],
+    "classified_hits": []
+  },
+  "mutations": {
+    "total": 1,
+    "satisfied": 0,
+    "violated": 1,
+    "not_applicable": 0,
+    "unknown": 0,
+    "error": 0,
+    "receipt_hashes": [
+      "sha1:dbde2e49cf14ef16366fad44e154748a03b82b6c"
+    ],
+    "operator_coverage": {
+      "add-forbidden-edge": 1
+    }
+  },
+  "replay_receipts": [
+    {
+      "leg": "current_baseline",
+      "commit": "0ccdd2967b1fecff3a6d7de9778415a0b4c0aa73",
+      "expected": "satisfied",
+      "policy_hash": "sha1:d96eb2e7daff04ec7d536bd76e7ef6381196085d",
+      "evaluator": {
+        "name": "hunch-graph-policy",
+        "version": "1.0.0"
+      },
+      "result": "satisfied",
+      "graph_hash": "sha1:31262ebd4b87aa71584b26eff77a657d4859c063",
+      "evaluation_hash": "sha1:940daf148eda827a498f1e93abedc4c00fdfddd3",
+      "deterministic_hash": "sha1:1861549e5933278b5e49ee8bf8e3e31aa222a3d3"
+    },
+    {
+      "leg": "known_good",
+      "commit": "0ccdd2967b1fecff3a6d7de9778415a0b4c0aa73",
+      "expected": "satisfied",
+      "policy_hash": "sha1:d96eb2e7daff04ec7d536bd76e7ef6381196085d",
+      "evaluator": {
+        "name": "hunch-graph-policy",
+        "version": "1.0.0"
+      },
+      "result": "satisfied",
+      "graph_hash": "sha1:31262ebd4b87aa71584b26eff77a657d4859c063",
+      "evaluation_hash": "sha1:940daf148eda827a498f1e93abedc4c00fdfddd3",
+      "deterministic_hash": "sha1:11a6f850ccc44a38f119bd2c70a4adf572e5297c"
+    },
+    {
+      "leg": "accepted_history",
+      "commit": "1199f33297241ec4163dc627408dce8a9d1c1011",
+      "policy_hash": "sha1:d96eb2e7daff04ec7d536bd76e7ef6381196085d",
+      "evaluator": {
+        "name": "hunch-graph-policy",
+        "version": "1.0.0"
+      },
+      "result": "satisfied",
+      "graph_hash": "sha1:62353a90b5f0429a68db1442c1d7bf3975605abb",
+      "evaluation_hash": "sha1:f4a19dfe02efa9ca24c715cd400ee7482b95bb68",
+      "deterministic_hash": "sha1:eaf370efe0263b86cb07139d8009f7b11761482d"
+    }
+  ],
+  "limitations": [
+    "TypeScript/JavaScript static graph only in Gate G1.",
+    "Dynamic calls and runtime dependency injection are not covered.",
+    "Legacy bridge preserves unified calls/imports/depends_on/contains reachability semantics.",
+    "Replay uses the pinned static evaluator in disposable Git worktrees; project build/tests and repository code are never executed.",
+    "Accepted-history replay evaluated 1 bounded first-parent commit(s).",
+    "Shadow outcomes remain pending."
+  ],
+  "proof_class": "P3",
+  "artifact_hashes": {
+    "policy": "sha1:d96eb2e7daff04ec7d536bd76e7ef6381196085d",
+    "plan": "sha1:205a385d631e4f63cebd2fae169511fbd6b10854",
+    "graph": "sha1:31262ebd4b87aa71584b26eff77a657d4859c063",
+    "current_receipt": "sha1:1861549e5933278b5e49ee8bf8e3e31aa222a3d3",
+    "replay_manifest": "sha1:990a554a88699cdbff04d2434c45d5a9f7181c88",
+    "mutation_receipt": "sha1:dbde2e49cf14ef16366fad44e154748a03b82b6c"
+  },
+  "data_class": "public"
+}

@@ -1017,7 +1017,7 @@ policyCmd
 
 policyCmd
   .command("prove")
-  .description("Run the Gate-G1 inward proof: current baseline plus one deterministic mutation.")
+  .description("Execute the canonical ProofPlan: isolated current/history/control replay plus deterministic mutation; grants no authority.")
   .argument("<id>", "policy id")
   .action((id: string) => {
     const { store, root } = storeFor();
@@ -1028,6 +1028,8 @@ policyCmd
       console.log(`POLICY PROOF  ${policy.id}`);
       console.log(`  state: ${policy.state} · class: ${proof.proof_class} · proof: ${proof.id}`);
       console.log(`  current: ${proof.current.satisfied} satisfied · ${proof.current.violated} violated · ${proof.current.unknown} unknown · ${proof.current.error} error`);
+      console.log(`  known bad: ${proof.known_bad.violated}/${proof.known_bad.total} caught · known good: ${proof.known_good.satisfied}/${proof.known_good.total} satisfied`);
+      console.log(`  accepted history: ${proof.accepted_history.total} evaluated · ${proof.accepted_history.violated} unclassified hit · ${proof.accepted_history.unknown} unknown · ${proof.accepted_history.error} error`);
       console.log(`  mutations: ${proof.mutations.violated}/${proof.mutations.total} caught · ${Object.keys(proof.mutations.operator_coverage).join(", ") || "none"}`);
       for (const limitation of proof.limitations) console.log(`  limitation: ${limitation}`);
       console.log("  next: hunch policy accept " + policy.id + " --advisory|--blocking --actor human:<identity>");

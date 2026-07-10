@@ -20,6 +20,7 @@ const ENTRIES = [
   ".hunch/*.sqlite-wal",
   ".hunch/*.sqlite-journal",
   ".hunch/**/*.tmp*",
+  ".hunch-cache/",
   // Per-machine private-overlay pointer written by `hunch private` (holds the local
   // path to the private store) — never committed.
   ".hunch/local.json",

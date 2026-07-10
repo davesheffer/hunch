@@ -5,6 +5,22 @@ function isHumanActor(actor: string): boolean {
   return /^(human|github|git):[^\s]+$/i.test(actor);
 }
 
+function blockingReplayError(proof: PolicyProof): string | null {
+  if (proof.known_bad.total > 0 && proof.known_bad.violated !== proof.known_bad.total) {
+    return "blocking proof did not catch every declared known-bad fixture";
+  }
+  if (proof.known_good.total > 0 && proof.known_good.satisfied !== proof.known_good.total) {
+    return "blocking proof did not satisfy every declared known-good fixture";
+  }
+  if (proof.accepted_history.error || proof.accepted_history.unknown) {
+    return "blocking proof has unresolved accepted-history unknown/error results";
+  }
+  if (proof.accepted_history.classified_hits.length < proof.accepted_history.violated) {
+    return "blocking proof has unclassified accepted-history violation hits";
+  }
+  return null;
+}
+
 const proofRank: Record<ProofClass, number> = { P0: 0, P1: 1, P2: 2, P3: 3, P4: 4, P5: 5 };
 
 /** Rechecked on every blocking evaluation; a hand-edited lifecycle flag without
@@ -16,6 +32,8 @@ export function blockingProofError(policy: PolicySpec, proof: PolicyProof | unde
   if (proofRank[proof.proof_class] < proofRank.P3) return `blocking proof is ${proof.proof_class}; P3+ is required`;
   if (proof.policy_hash !== policySemanticHash(policy)) return "blocking proof does not match current policy semantics";
   if (proof.current.satisfied !== 1 || proof.current.error || proof.current.unknown) return "blocking proof has no clean satisfied baseline";
+  const replayError = blockingReplayError(proof);
+  if (replayError) return replayError;
   return null;
 }
 
@@ -29,7 +47,7 @@ function requireCurrentProof(policy: PolicySpec, proof: PolicyProof): void {
 }
 
 export function proposeProvedPolicy(policy: PolicySpec, proof: PolicyProof, at: string): PolicySpec {
-  if (policy.state !== "compiled" && policy.state !== "validating") throw new Error(`cannot attach proof while policy is ${policy.state}`);
+  if (policy.state !== "compiled" && policy.state !== "validating" && policy.state !== "proposed") throw new Error(`cannot attach proof while policy is ${policy.state}`);
   if (proofRank[proof.proof_class] < proofRank.P1) throw new Error(`proof ${proof.id} is ${proof.proof_class}; a clean current baseline is required`);
   requireCurrentProof(policy, proof);
   return {
@@ -54,6 +72,10 @@ export function approvePolicy(
   requireCurrentProof(policy, proof);
   if (mode === "blocking" && proofRank[proof.proof_class] < proofRank.P3) {
     throw new Error(`blocking activation requires P3+ proof; ${proof.id} is ${proof.proof_class}`);
+  }
+  if (mode === "blocking") {
+    const replayError = blockingReplayError(proof);
+    if (replayError) throw new Error(replayError);
   }
   const event = `${mode === "blocking" ? "approval-blocking" : "approval-advisory"}:${at}`;
   return {

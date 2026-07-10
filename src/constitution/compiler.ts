@@ -156,7 +156,7 @@ export function compileStructuralPolicy(store: HunchStore, input: StructuralPoli
     valid_to: null,
     data_class: input.dataClass,
     limitations: [
-      "Inferred from one exact first-parent Git structural delta; historical replay is not included yet.",
+      "Inferred from one exact first-parent Git structural delta; replay coverage is established only by a later plan-bound proof.",
       "Scope is intentionally limited to the changed caller or introduced-symbol file.",
       "TypeScript/JavaScript static calls only; dynamic calls and runtime dependency injection are not covered.",
     ],

@@ -356,6 +356,18 @@ export function lastCommitForFile(file: string, cwd: string): string {
   return sha ? `commit:${sha}` : "";
 }
 
+/** Full SHA of the commit that introduced a path. Unlike lastCommitForFile this
+ * remains stable when lifecycle/proof updates later touch the same policy file. */
+export function firstCommitForFile(file: string, cwd: string): string {
+  // Deliberately do NOT use --follow: content-similar, immutable-ID JSON policy
+  // files can be misclassified as renames of one another, moving valid_from to a
+  // different policy's introduction commit.
+  const added = gitSafe(["log", "--diff-filter=A", "--format=%H", "--", file], cwd)
+    .split("\n").find(Boolean);
+  if (added) return added;
+  return gitSafe(["log", "--reverse", "--format=%H", "--", file], cwd).split("\n").find(Boolean) ?? "";
+}
+
 /** ISO author-date of the most recent commit touching a file ("" if none). */
 export function lastChangeDate(file: string, cwd: string): string {
   return gitSafe(["log", "-1", "--format=%aI", "--", file], cwd);

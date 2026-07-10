@@ -67,3 +67,6 @@ blog/*.private.md
 api/.env
 
 bench/results/
+
+# Constitution replay: disposable worktrees and derived snapshot graphs.
+.hunch-cache/
