@@ -64,7 +64,7 @@
   "compiler": {
     "status": "uncompilable",
     "policy": null,
-    "reason": "No exact supported structural assertion. added import test/indexer.test.ts:node:child_process awaits an import assertion evaluator; added symbol test/indexer.test.ts:g is not explicitly named by the human judgment; test/indexer.test.ts:g -> execFileSync is structural coincidence not explicitly named by the human judgment"
+    "reason": "No exact supported structural assertion. added import test/indexer.test.ts:node:child_process awaits an import assertion evaluator for positive requirements; added symbol test/indexer.test.ts:g is not explicitly named by the human judgment; test/indexer.test.ts:g -> execFileSync is structural coincidence not explicitly named by the human judgment"
   },
   "provenance": {
     "source": "derived",

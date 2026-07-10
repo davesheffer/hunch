@@ -48,7 +48,7 @@
   "compiler": {
     "status": "uncompilable",
     "policy": null,
-    "reason": "No exact supported structural assertion. added import src/cli/index.ts:./preflight.js awaits an import assertion evaluator"
+    "reason": "No exact supported structural assertion. added import src/cli/index.ts:./preflight.js awaits an import assertion evaluator for positive requirements"
   },
   "provenance": {
     "source": "derived",

@@ -1,0 +1,115 @@
+{
+  "id": "plan_cfcd4d31a4",
+  "content_hash": "sha1:348b42a4ecc33e7a5232dcdb6d7c782fb2a2c0ad",
+  "policy_id": "pol_3f3aee11ad",
+  "policy_candidate_hash": "sha1:85f390618cad210e9c8b5ac19685b3e513f00433",
+  "repository": "hunch",
+  "data_class": "public",
+  "source_commit": "341145d7936ff49e08cffb2608cec9b756506a95",
+  "valid_from_commit": "341145d7936ff49e08cffb2608cec9b756506a95",
+  "evaluator": {
+    "name": "hunch-graph-policy",
+    "version": "1.1.0"
+  },
+  "mutation_engine": {
+    "name": "hunch-static-graph-controls",
+    "version": "3"
+  },
+  "corpus": {
+    "current_baseline": {
+      "kind": "commit",
+      "ref": "b6a3cd7488c0282f25320849135374db761e0924",
+      "label": "current repository baseline",
+      "expected": "satisfied"
+    },
+    "accepted_history": {
+      "from": "341145d7936ff49e08cffb2608cec9b756506a95",
+      "to": "b6a3cd7488c0282f25320849135374db761e0924",
+      "first_parent": true,
+      "max_commits": 20,
+      "exclude": [
+        "a3fccf0b9005fd69aae6b936ccb513c8f35e6c6c"
+      ]
+    },
+    "known_bad": [
+      {
+        "kind": "commit",
+        "ref": "a3fccf0b9005fd69aae6b936ccb513c8f35e6c6c",
+        "label": "first parent before linked decision",
+        "expected": "violated"
+      }
+    ],
+    "known_good": [
+      {
+        "kind": "commit",
+        "ref": "b6a3cd7488c0282f25320849135374db761e0924",
+        "label": "current accepted baseline",
+        "expected": "satisfied"
+      }
+    ]
+  },
+  "mutations": [
+    {
+      "operator": "add-forbidden-import",
+      "base": "b6a3cd7488c0282f25320849135374db761e0924",
+      "expected": "violated",
+      "required": true
+    },
+    {
+      "operator": "comment-string-control",
+      "base": "b6a3cd7488c0282f25320849135374db761e0924",
+      "expected": "satisfied",
+      "required": true
+    },
+    {
+      "operator": "same-name-ambiguity-control",
+      "base": "b6a3cd7488c0282f25320849135374db761e0924",
+      "expected": "satisfied",
+      "required": true
+    }
+  ],
+  "budgets": {
+    "max_commits": 20,
+    "max_mutations": 3,
+    "max_minutes": 5
+  },
+  "expected": [
+    {
+      "leg": "current_baseline",
+      "result": "satisfied",
+      "classification_required": false
+    },
+    {
+      "leg": "known_bad",
+      "result": "violated",
+      "classification_required": false
+    },
+    {
+      "leg": "known_good",
+      "result": "satisfied",
+      "classification_required": false
+    },
+    {
+      "leg": "accepted_history",
+      "classification_required": true
+    },
+    {
+      "leg": "mutations",
+      "result": "violated",
+      "classification_required": false
+    }
+  ],
+  "evidence_refs": [
+    "commit:341145d7936ff49e08cffb2608cec9b756506a95",
+    "dec_b3cafd3855",
+    "ev_dc06b6fdf3"
+  ],
+  "limitations": [
+    "ProofPlan generation does not execute accepted-history replay or project tests.",
+    "Known-bad commits are included only when an attributable fix/revert delta identifies the first parent.",
+    "Inferred from one exact first-parent Git structural delta; replay coverage is established only by a later plan-bound proof.",
+    "Scope is intentionally limited to the changed file and anchored to one stable symbol in that file.",
+    "TypeScript/JavaScript static ESM import/export specifiers only; require(), dynamic import(), package aliases, and runtime loading are not covered."
+  ],
+  "created_at": "2026-07-10T19:35:02.579Z"
+}

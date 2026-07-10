@@ -1,0 +1,101 @@
+{
+  "id": "pol_3f3aee11ad",
+  "topic": "store.sqlite-driver",
+  "ir_version": 1,
+  "revision": 3,
+  "state": "proposed",
+  "statement": "Replace better-sqlite3 with Node's built-in node:sqlite (v1.0.0)",
+  "rationale": "better-sqlite3 was Hunch's only remaining native SQLite dependency: prebuild-install (its installer) is deprecated upstream with no fix coming, node-gyp fallback builds fail on machines without toolchains, and Windows global upgrades hit EPERM when a running node process holds better_sqlite3.node locked. The derived index uses only FTS5, WAL, recursive CTEs, and plain BLOBs — all covered by node:sqlite (unflagged since Node 22.13, verified live). Vectors were already brute-force JS, no loadable extension needed.",
+  "scope": {
+    "repos": [],
+    "paths": [
+      "src/store/db.ts"
+    ],
+    "components": [
+      "cmp_cdfb395bb7"
+    ]
+  },
+  "assertion": {
+    "kind": "not-reaches",
+    "subject": {
+      "selector": "symbol:src/store/db.ts:openDb"
+    },
+    "relation": {
+      "edges": [
+        "imports"
+      ],
+      "transitive": false,
+      "max_depth": 1
+    },
+    "object": {
+      "selector": "external:better-sqlite3"
+    }
+  },
+  "severity": "warning",
+  "surfaces": [
+    "cli",
+    "mcp",
+    "ci"
+  ],
+  "authority": null,
+  "evidence": [
+    "dec_b3cafd3855",
+    "ev_dc06b6fdf3",
+    "commit:341145d7936ff49e08cffb2608cec9b756506a95"
+  ],
+  "proof": "proof_2bbea073a5",
+  "reversal_conditions": [
+    "Source decision dec_b3cafd3855 is superseded or the structural interpretation is rejected."
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "valid_from": null,
+  "valid_to": null,
+  "data_class": "public",
+  "limitations": [
+    "Inferred from one exact first-parent Git structural delta; replay coverage is established only by a later plan-bound proof.",
+    "Scope is intentionally limited to the changed file and anchored to one stable symbol in that file.",
+    "TypeScript/JavaScript static ESM import/export specifiers only; require(), dynamic import(), package aliases, and runtime loading are not covered."
+  ],
+  "legacy_refs": [
+    "dec_b3cafd3855"
+  ],
+  "audit": [
+    {
+      "action": "compiled",
+      "actor_kind": "system",
+      "actor": "hunch:structural-delta-compiler",
+      "at": "2026-07-10T19:34:54.964Z",
+      "reason": "Compiled from one unambiguous assertion enumerated by evidence ev_dc06b6fdf3.",
+      "proof": null
+    },
+    {
+      "action": "proved",
+      "actor_kind": "system",
+      "actor": "hunch:evidence-harness",
+      "at": "2026-07-10T19:35:06.043Z",
+      "reason": "Proof proof_2bbea073a5 reached P3.",
+      "proof": "proof_2bbea073a5"
+    },
+    {
+      "action": "proved",
+      "actor_kind": "system",
+      "actor": "hunch:evidence-harness",
+      "at": "2026-07-10T19:35:14.571Z",
+      "reason": "Proof proof_2bbea073a5 reached P3.",
+      "proof": "proof_2bbea073a5"
+    }
+  ],
+  "created_at": "2026-07-10T19:34:54.964Z",
+  "updated_at": "2026-07-10T19:35:14.571Z",
+  "provenance": {
+    "source": "derived",
+    "confidence": 0.8,
+    "evidence": [
+      "dec_b3cafd3855",
+      "ev_dc06b6fdf3",
+      "commit:341145d7936ff49e08cffb2608cec9b756506a95"
+    ],
+    "last_verified": "2026-07-10T19:34:54.964Z"
+  }
+}

@@ -1,0 +1,190 @@
+{
+  "id": "ev_dc06b6fdf3",
+  "kind": "decision",
+  "occurred_at": "2026-07-02T08:19:22+03:00",
+  "actor": "davids",
+  "repository": "hunch",
+  "commit": "341145d7936ff49e08cffb2608cec9b756506a95",
+  "files": [
+    "CLAUDE.md",
+    "CONTRIBUTING.md",
+    "README.md",
+    "SECURITY.md",
+    "package-lock.json",
+    "package.json",
+    "src/store/db.ts",
+    "src/store/hunchStore.ts"
+  ],
+  "symbols": [
+    "String",
+    "createRequire",
+    "embedAll",
+    "fn",
+    "loadSqlite",
+    "openDb",
+    "pragma",
+    "pruneStaleEmbeddings",
+    "reindex",
+    "require",
+    "transaction",
+    "tx",
+    "withTx"
+  ],
+  "text_ref": "dec_b3cafd3855",
+  "diff_ref": "git:a3fccf0b9005fd69aae6b936ccb513c8f35e6c6c..341145d7936ff49e08cffb2608cec9b756506a95",
+  "related_records": [
+    "dec_b3cafd3855",
+    "pol_3f3aee11ad"
+  ],
+  "data_class": "public",
+  "content_hash": "sha1:7b493317c64b603e4c2eddf64a0c3480f4f6a13a",
+  "structural_delta": {
+    "id": "delta_8e58eef38d",
+    "before_commit": "a3fccf0b9005fd69aae6b936ccb513c8f35e6c6c",
+    "after_commit": "341145d7936ff49e08cffb2608cec9b756506a95",
+    "files": [
+      "CLAUDE.md",
+      "CONTRIBUTING.md",
+      "README.md",
+      "SECURITY.md",
+      "package-lock.json",
+      "package.json",
+      "src/store/db.ts",
+      "src/store/hunchStore.ts"
+    ],
+    "symbols": {
+      "added": [
+        {
+          "file": "src/store/db.ts",
+          "name": "loadSqlite",
+          "kind": "function"
+        },
+        {
+          "file": "src/store/db.ts",
+          "name": "withTx",
+          "kind": "function"
+        }
+      ],
+      "removed": [],
+      "moved": []
+    },
+    "calls": {
+      "added": [
+        {
+          "file": "src/store/db.ts",
+          "caller": "loadSqlite",
+          "callee": "createRequire",
+          "member": false
+        },
+        {
+          "file": "src/store/db.ts",
+          "caller": "loadSqlite",
+          "callee": "require",
+          "member": false
+        },
+        {
+          "file": "src/store/db.ts",
+          "caller": "loadSqlite",
+          "callee": "String",
+          "member": false
+        },
+        {
+          "file": "src/store/db.ts",
+          "caller": "withTx",
+          "callee": "fn",
+          "member": false
+        },
+        {
+          "file": "src/store/hunchStore.ts",
+          "caller": "embedAll",
+          "callee": "withTx",
+          "member": false
+        },
+        {
+          "file": "src/store/hunchStore.ts",
+          "caller": "pruneStaleEmbeddings",
+          "callee": "withTx",
+          "member": false
+        },
+        {
+          "file": "src/store/hunchStore.ts",
+          "caller": "reindex",
+          "callee": "withTx",
+          "member": false
+        }
+      ],
+      "removed": [
+        {
+          "file": "src/store/db.ts",
+          "caller": "openDb",
+          "callee": "pragma",
+          "member": true
+        },
+        {
+          "file": "src/store/hunchStore.ts",
+          "caller": "embedAll",
+          "callee": "transaction",
+          "member": true
+        },
+        {
+          "file": "src/store/hunchStore.ts",
+          "caller": "embedAll",
+          "callee": "tx",
+          "member": false
+        },
+        {
+          "file": "src/store/hunchStore.ts",
+          "caller": "pruneStaleEmbeddings",
+          "callee": "transaction",
+          "member": true
+        },
+        {
+          "file": "src/store/hunchStore.ts",
+          "caller": "pruneStaleEmbeddings",
+          "callee": "tx",
+          "member": false
+        },
+        {
+          "file": "src/store/hunchStore.ts",
+          "caller": "reindex",
+          "callee": "transaction",
+          "member": true
+        },
+        {
+          "file": "src/store/hunchStore.ts",
+          "caller": "reindex",
+          "callee": "tx",
+          "member": false
+        }
+      ]
+    },
+    "imports": {
+      "added": [
+        {
+          "file": "src/store/db.ts",
+          "specifier": "node:module"
+        }
+      ],
+      "removed": [
+        {
+          "file": "src/store/db.ts",
+          "specifier": "better-sqlite3"
+        }
+      ]
+    },
+    "content_hash": "sha1:3acb328c7a00c9ae0a7a1394918842cfdda0b8c0"
+  },
+  "compiler": {
+    "status": "compiled",
+    "policy": "pol_3f3aee11ad",
+    "reason": "Exactly one supported candidate: fix/revert removed human-named external package better-sqlite3 from src/store/db.ts."
+  },
+  "provenance": {
+    "source": "derived",
+    "confidence": 1,
+    "evidence": [
+      "dec_b3cafd3855",
+      "commit:341145d7936ff49e08cffb2608cec9b756506a95"
+    ]
+  }
+}

@@ -41,7 +41,7 @@
   "compiler": {
     "status": "uncompilable",
     "policy": null,
-    "reason": "No exact supported structural assertion. The delta contains no supported call/symbol fact."
+    "reason": "No exact supported structural assertion. The delta contains no supported call/symbol/import fact."
   },
   "provenance": {
     "source": "derived",
