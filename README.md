@@ -187,7 +187,10 @@ named corpus evidence and excluded from accepted-history sampling; the attestati
 policy result or create authority.
 `policy relations` is a read-only view of those explicit exception-parent links. It shows the
 selected policy, its parent if any, linked narrower exceptions, and a visible missing-parent marker
-for a manually damaged record; it never evaluates or composes exception semantics.
+for a manually damaged record. When the broad parent is planned, proved, or evaluated, every linked
+exception descendant is instead hash-bound into one canonical composition. The deepest applicable
+explicit scope selects the result; equal-scope ambiguity, missing bindings, or unsupported component
+path precision stays unknown/error rather than falling through to the broad rule.
 `policy consolidation` is also read-only. When a compiler-produced advisory scope suggestion exists,
 it groups only matching narrow policies with the same assertion/data class and syntactically contained
 scopes, then requires three independent decision references with no exception, active-policy,
@@ -225,8 +228,10 @@ An intentional narrow opposite can be linked explicitly with `hunch policy excep
 --parent <parent> --actor human:<identity> --reason "…"`. The relationship requires identical
 bindings/relation, opposite `reaches` semantics, matching data class/home, and a strictly contained
 scope. Linking invalidates the child's prior proof and authority and returns it to non-blocking
-`compiled` state. Exception composition cannot block until its combined evaluator semantics are
-separately proved.
+`compiled` state. The broad parent remains the enforcement unit: its plan, proof, replay and mutation
+receipts bind the full exception tree, and any later exception change retracts blocking eligibility
+until a fresh composite proof is generated. Proof never activates the parent; a separate human
+`policy accept` remains mandatory.
 Models do not participate in evaluation or activation. Plan-bound proofs cover the committed current
 baseline, known-good/known-bad fixtures, bounded accepted history, and a canonical mutation
 manifest. The primary mutation is applied to an immutable disposable source checkout, must remain

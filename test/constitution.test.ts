@@ -11,9 +11,10 @@ import type { Bug, Constraint, Decision } from "../src/core/types.js";
 import { buildCorrectionConstraint } from "../src/core/correction.js";
 import { ConstitutionService } from "../src/constitution/service.js";
 import { canonicalHash, canonicalJson, policySemanticHash } from "../src/constitution/canonical.js";
+import { policyProofHash } from "../src/constitution/composition.js";
 import { approvePolicy, blockingEvidenceError, linkPolicyException } from "../src/constitution/lifecycle.js";
 import { movePolicyArtifactsToPrivate } from "../src/constitution/repository.js";
-import { evaluatePolicyOnSnapshot, graphSnapshot, mutateSnapshotForPolicy } from "../src/constitution/evaluator.js";
+import { evaluateCompositePolicyOnSnapshot, evaluatePolicyOnSnapshot, graphSnapshot, mutateSnapshotForPolicy } from "../src/constitution/evaluator.js";
 import { clampCandidateLimit } from "../src/constitution/bootstrap.js";
 import { provePolicy } from "../src/constitution/proof.js";
 import { replayProofPlan } from "../src/constitution/replay.js";
@@ -157,7 +158,7 @@ test("Gate G1: decision -> must-pass-through policy -> P3 proof -> human block -
     assert.ok(plan);
     assert.equal(proved.proof.plan_hash, plan.content_hash, "proof binds the persisted canonical plan");
     assert.equal(plan.corpus.current_baseline.expected, "satisfied");
-    assert.deepEqual(plan.mutation_engine, { name: "hunch-static-graph-controls", version: "4" });
+    assert.deepEqual(plan.mutation_engine, { name: "hunch-static-graph-controls", version: "5" });
     assert.equal(plan.mutations[0]?.operator, "add-bypass-edge");
     assert.deepEqual(plan.mutations.map((mutation) => mutation.operator), ["add-bypass-edge", "comment-string-control", "same-name-ambiguity-control"]);
     assert.ok(existsSync(join(root, ".hunch/plans", `${plan.id}.json`)), "ProofPlan is Git-native JSON");
@@ -623,6 +624,43 @@ test("private evidence produces private policy/proof and public-only evaluation 
   }
 });
 
+test("private composite receipts and member hashes never cross into the public policy home", () => {
+  const { root, store: initial, cleanup } = layeredRepo('import { dbQuery } from "../db/client.js";\nexport function listOrders(u){ return dbQuery(u); }\n');
+  initial.close();
+  const privateRoot = join(root, "private-overlay/.hunch");
+  mkdirSync(privateRoot, { recursive: true });
+  writeFileSync(join(root, ".hunch/local.json"), JSON.stringify({ privateDir: privateRoot, autoCommit: false, mode: "private" }));
+  const store = new HunchStore(hunchPaths(root));
+  try {
+    store.putPrivate("decisions", decision("dec_private_composite", { private: true }));
+    store.reindex();
+    const service = new ConstitutionService(store, root);
+    const base = service.compile("dec_private_composite", { now: NOW });
+    assert.equal(base.assertion.kind, "not-reaches");
+    const parent = PolicySpecSchema.parse({ ...base, id: "pol_d1d1d1d1d1", scope: { repos: [], paths: ["src/api/**"], components: [] } });
+    const child = PolicySpecSchema.parse({
+      ...parent,
+      id: "pol_e1e1e1e1e1",
+      scope: { repos: [], paths: ["src/api/orders.ts"], components: [] },
+      assertion: { ...parent.assertion, kind: "reaches" },
+      exception_of: null,
+    });
+    service.repository.putPolicy(parent, { private: true });
+    service.repository.putPolicy(child, { private: true });
+    const linked = service.linkException(child.id, parent.id, "human:private-owner", "PRIVATE_COMPOSITION_SENTINEL", { now: "2026-07-11T13:10:00.000Z" });
+    const proved = service.prove(parent.id, { now: "2026-07-11T13:11:00.000Z" });
+    assert.equal(proved.proof.composition?.members[0]?.policy_id, linked.id);
+    assert.ok(existsSync(join(privateRoot, "proofs", `${proved.proof.id}.json`)));
+    assert.ok(service.repository.listPlans({ privateOnly: true }).some((plan) => plan.composition?.members[0]?.policy_id === linked.id));
+    assert.deepEqual(service.repository.listPlans({ publicOnly: true }), []);
+    assert.equal(service.repository.getProof(proved.proof.id, { publicOnly: true }), undefined);
+    assert.doesNotMatch(canonicalJson(service.list({ publicOnly: true })), /pol_[de]1[de]1/);
+  } finally {
+    store.close();
+    cleanup();
+  }
+});
+
 test("private migration moves policy/proof artifacts only after validation", () => {
   const root = execFileSync("mktemp", ["-d", join(tmpdir(), "hunch-policy-migrate-XXXXXX")], { encoding: "utf8" }).trim();
   const privateHome = join(root, "private/.hunch");
@@ -1069,6 +1107,88 @@ test("Phase 2L human history dispositions are append-only, receipt-bound, fail-c
     assert.equal(retracted.blocks, false);
     assert.equal(retracted.strict_error, true);
     assert.match(retracted.gate_error ?? "", /human-classified accepted-history false positive/);
+  } finally {
+    cleanup();
+  }
+});
+
+test("Phase 2M parent and scoped exceptions produce one exact composite proof receipt", () => {
+  const { root, store, cleanup } = layeredRepo();
+  try {
+    const introduced = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
+    writeFileSync(join(root, "src/api/orders.ts"), 'import { dbQuery } from "../db/client.js";\nexport function listOrders(u){ return dbQuery(u); }\n');
+    const acceptedException = commitFiles(root, ["src/api/orders.ts"], "fixture: accepted legacy direct persistence");
+    writeFileSync(join(root, "src/api/orders.ts"), 'import { dbQuery } from "../db/client.js";\n// legacy endpoint\nexport function listOrders(u){ return dbQuery(u); }\n');
+    commitFiles(root, ["src/api/orders.ts"], "fixture: retain legacy exception at current baseline");
+    store.json.put("decisions", { ...decision("dec_composite_exception"), commit: introduced });
+    indexRepo(store, root, { churn: false });
+    store.reindex();
+    const service = new ConstitutionService(store, root);
+    const base = service.compile("dec_composite_exception", { now: NOW });
+    assert.equal(base.assertion.kind, "not-reaches");
+    const parent = PolicySpecSchema.parse({
+      ...base,
+      id: "pol_a1a1a1a1a1",
+      scope: { repos: [], paths: ["src/api/**"], components: [] },
+    });
+    const child = PolicySpecSchema.parse({
+      ...parent,
+      id: "pol_b1b1b1b1b1",
+      scope: { repos: [], paths: ["src/api/orders.ts"], components: [] },
+      assertion: { ...parent.assertion, kind: "reaches" },
+      exception_of: null,
+    });
+    service.repository.putPolicy(parent);
+    service.repository.putPolicy(child);
+    const linked = service.linkException(child.id, parent.id, "human:architect", "The legacy orders endpoint intentionally reaches persistence directly.", { now: "2026-07-11T13:00:00.000Z" });
+
+    const standalone = evaluatePolicyOnSnapshot(parent, graphSnapshot(store, root));
+    assert.equal(standalone.result, "violated", "the broad parent alone still sees the accepted exception as a violation");
+    const composite = evaluateCompositePolicyOnSnapshot(parent, [linked], graphSnapshot(store, root));
+    assert.equal(composite.result, "satisfied");
+    assert.equal(composite.composition?.selected_policy_id, linked.id);
+    assert.deepEqual(composite.composition?.applicable_policy_ids, [parent.id, linked.id]);
+
+    const proved = service.prove(parent.id, { now: "2026-07-11T13:01:00.000Z" });
+    const plan = service.repository.listPlans({ publicOnly: true }).find((candidate) => candidate.content_hash === proved.proof.plan_hash)!;
+    const compositeHash = policyProofHash(parent, [linked]);
+    assert.equal(plan.policy_candidate_hash, compositeHash);
+    assert.equal(plan.composition?.composite_hash, compositeHash);
+    assert.deepEqual(proved.proof.composition, plan.composition);
+    assert.equal(proved.proof.policy_hash, compositeHash);
+    assert.equal(proved.proof.current.satisfied, 1);
+    assert.equal(proved.proof.proof_class, "P3");
+    assert.equal(proved.proof.mutation_receipts.find((receipt) => receipt.kind === "primary")?.operator, "remove-required-path");
+    assert.equal(proved.proof.mutation_receipts.find((receipt) => receipt.kind === "primary")?.passed, true);
+    const historical = proved.proof.replay_receipts.find((receipt) => receipt.leg === "accepted_history" && receipt.commit === acceptedException)!;
+    assert.equal(historical.result, "satisfied", "the exact narrow exception resolves the parent's historical hit through composition");
+    assert.equal(historical.policy_hash, compositeHash);
+    assert.equal(proved.proof.replay_receipts.every((receipt) => receipt.policy_hash === compositeHash), true);
+    assert.throws(
+      () => service.repository.putProof(PolicyProofSchema.parse({
+        ...proved.proof,
+        composition: { ...proved.proof.composition!, root_policy_hash: canonicalHash("tampered parent") },
+      }), parent.id),
+      /current parent\/exception composition/,
+      "repository writes independently reject a tampered composite binding",
+    );
+
+    const activated = service.approve(parent.id, "blocking", "human:architect", { now: "2026-07-11T13:02:00.000Z" });
+    assert.equal(activated.state, "active_blocking", "proof readiness still requires a separate human activation event");
+    assert.equal(service.evaluate({ id: parent.id })[0]?.blocks, false);
+
+    const second = PolicySpecSchema.parse({
+      ...child,
+      id: "pol_c1c1c1c1c1",
+      scope: { repos: [], paths: ["src/api/other.ts"], components: [] },
+      exception_of: null,
+    });
+    service.repository.putPolicy(second);
+    service.linkException(second.id, parent.id, "human:architect", "A second explicit exception changes the composite semantics.", { now: "2026-07-11T13:03:00.000Z" });
+    const stale = service.evaluate({ id: parent.id })[0]!;
+    assert.equal(stale.blocks, false);
+    assert.equal(stale.strict_error, true);
+    assert.match(stale.gate_error ?? "", /current parent\/exception composition/);
   } finally {
     cleanup();
   }

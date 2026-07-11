@@ -14,6 +14,7 @@ import { ingestLocalEvidence, type LocalEvidenceOptions, type LocalEvidenceRepor
 import { buildProofCard, type ProofCard } from "./card.js";
 import { compileProofCorpus } from "./corpus.js";
 import { compileHistoryDisposition, currentHistoryDispositions } from "./disposition.js";
+import { compositionDescendants } from "./composition.js";
 import type { HistoryDisposition, HistoryDispositionClassification, ReplayReceipt } from "./schema.js";
 
 export interface PolicyEvaluationSet {
@@ -120,6 +121,10 @@ export class ConstitutionService {
     return policy;
   }
 
+  private composition(policy: PolicySpec, opts: { publicOnly?: boolean; privateOnly?: boolean } = {}): PolicySpec[] {
+    return compositionDescendants(policy, this.list(opts));
+  }
+
   proof(id: string, opts: { publicOnly?: boolean; privateOnly?: boolean } = {}): PolicyProof {
     const proof = this.repository.getProof(id, opts);
     if (!proof) throw new Error(`proof ${id} not found`);
@@ -131,7 +136,7 @@ export class ConstitutionService {
     if (!policy.proof) throw new Error(`policy ${id} has no proof`);
     const proof = this.proof(policy.proof, opts);
     const dispositions = this.repository.listDispositions(opts).filter((record) => record.policy_id === policy.id && record.proof_id === proof.id);
-    return buildProofCard(policy, proof, dispositions);
+    return buildProofCard(policy, proof, dispositions, this.composition(policy, opts));
   }
 
   corpus(id: string, opts: { publicOnly?: boolean; privateOnly?: boolean } = {}): ProofCorpus {
@@ -177,7 +182,8 @@ export class ConstitutionService {
     const policy = this.get(id, opts);
     const home = opts.publicOnly ? "public" : opts.privateOnly ? "private" : this.repository.homeOfPolicy(id);
     const homeOpts = home === "public" ? { publicOnly: true } : { privateOnly: true };
-    const generated = createProofPlan(this.store, this.root, this.repository, policy, { ...opts, ...homeOpts });
+    const composition = this.composition(policy, homeOpts);
+    const generated = createProofPlan(this.store, this.root, this.repository, policy, { ...opts, ...homeOpts, composition });
     return this.repository.getPlan(generated.id, homeOpts)
       ?? this.repository.putPlan(generated, policy.id, { private: home === "private", public: home === "public" });
   }
@@ -185,10 +191,12 @@ export class ConstitutionService {
   prove(id: string, opts: { now?: string } = {}): { policy: PolicySpec; proof: PolicyProof } {
     const policy = this.get(id);
     const publicOnly = policy.data_class === "public" && this.repository.homeOfPolicy(id) === "public";
+    const homeOpts = publicOnly ? { publicOnly: true } : { privateOnly: true };
+    const composition = this.composition(policy, homeOpts);
     const plan = this.plan(id, { publicOnly, now: opts.now });
-    const proof = provePolicy(this.store, this.root, policy, { publicOnly, now: opts.now, plan });
+    const proof = provePolicy(this.store, this.root, policy, { publicOnly, now: opts.now, plan, composition });
     this.repository.putProof(proof, policy.id);
-    const proposed = proposeProvedPolicy(policy, proof, opts.now ?? proof.generated_at);
+    const proposed = proposeProvedPolicy(policy, proof, opts.now ?? proof.generated_at, composition);
     return { policy: this.repository.putPolicy(proposed), proof };
   }
 
@@ -199,7 +207,8 @@ export class ConstitutionService {
     const homeOpts = home === "public" ? { publicOnly: true } : { privateOnly: true };
     const proof = this.proof(policy.proof, homeOpts);
     const dispositions = this.repository.listDispositions(homeOpts).filter((record) => record.policy_id === id && record.proof_id === proof.id);
-    const approved = approvePolicy(policy, proof, mode, actor, opts.now ?? new Date().toISOString(), dispositions);
+    const composition = this.composition(policy, homeOpts);
+    const approved = approvePolicy(policy, proof, mode, actor, opts.now ?? new Date().toISOString(), dispositions, composition);
     return this.repository.putPolicy(approved);
   }
 
@@ -235,7 +244,10 @@ export class ConstitutionService {
     const proof = this.proof(policy.proof, homeOpts);
     const receipt = proof.replay_receipts.find((candidate): candidate is ReplayReceipt => candidate.leg === "accepted_history" && candidate.result === "violated" && candidate.commit === commit);
     if (!receipt) throw new Error(`proof ${proof.id} has no violated accepted-history receipt for commit ${commit}`);
-    const disposition = compileHistoryDisposition(policy, proof, receipt, classification, actor, reason, opts);
+    const disposition = compileHistoryDisposition(policy, proof, receipt, classification, actor, reason, {
+      ...opts,
+      composition: this.composition(policy, homeOpts),
+    });
     return this.repository.putDisposition(disposition, policy.id);
   }
 
@@ -346,7 +358,8 @@ export class ConstitutionService {
     let policies = opts.id ? [this.get(opts.id, opts)] : this.list(opts);
     if (opts.activeOnly) policies = policies.filter(policyIsActive);
     return policies.map((policy) => {
-      const evaluation = evaluatePolicy(this.store, this.root, policy, { publicOnly: opts.publicOnly });
+      const composition = this.composition(policy, opts);
+      const evaluation = evaluatePolicy(this.store, this.root, policy, { publicOnly: opts.publicOnly, composition });
       let proof: PolicyProof | undefined;
       let dispositions: HistoryDisposition[] = [];
       if (policy.state === "active_blocking" && policy.proof) {
@@ -355,7 +368,7 @@ export class ConstitutionService {
         proof = this.repository.getProof(policy.proof, homeOpts);
         dispositions = this.repository.listDispositions(homeOpts).filter((record) => record.policy_id === policy.id && record.proof_id === policy.proof);
       }
-      const gateError = blockingProofError(policy, proof, dispositions);
+      const gateError = blockingProofError(policy, proof, dispositions, composition);
       return {
         policy,
         evaluation,

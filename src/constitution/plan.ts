@@ -3,7 +3,8 @@ import { shortHash } from "../core/ids.js";
 import { firstCommitForFile, headSha, revExists, revParse } from "../extractors/git.js";
 import type { HunchStore } from "../store/hunchStore.js";
 import { canonicalHash, policySemanticHash } from "./canonical.js";
-import { mutationOperatorForPolicy } from "./evaluator.js";
+import { policyCompositionBinding, policyProofHash } from "./composition.js";
+import { graphSnapshot, mutationOperatorForPolicy, selectedPolicyForComposition } from "./evaluator.js";
 import type { PolicyRepository } from "./repository.js";
 import {
   POLICY_EVALUATOR,
@@ -22,6 +23,7 @@ export interface ProofPlanOptions {
   now?: string;
   publicOnly?: boolean;
   privateOnly?: boolean;
+  composition?: PolicySpec[];
 }
 
 function clamp(value: number | undefined, fallback: number, min: number, max: number): number {
@@ -66,10 +68,13 @@ export function createProofPlan(
   if (opts.publicOnly && opts.privateOnly) throw new Error("choose only one of publicOnly or privateOnly");
   const head = headSha(root);
   if (!head) throw new Error("proof planning needs a Git repository with a current HEAD");
-  const policyHash = policySemanticHash(policy);
+  const composition = opts.composition ?? [];
+  const parentHash = policySemanticHash(policy);
+  const policyHash = policyProofHash(policy, composition);
+  const compositionBinding = policyCompositionBinding(policy, composition);
   const corpus = repository.getCorpus(policy.id, opts);
   if (corpus) {
-    if (corpus.policy_hash !== policyHash) {
+    if (corpus.policy_hash !== parentHash) {
       throw new Error(`proof corpus ${corpus.id} is stale for policy ${policy.id}; re-import it after the policy semantic change`);
     }
     if (corpus.repository !== basename(root) || corpus.data_class !== policy.data_class) {
@@ -108,7 +113,10 @@ export function createProofPlan(
   const attestedKnownGood = knownGood.filter((fixture) => !!fixture.attestation);
   const maxCommits = clamp(opts.maxCommits, 20, 0, 500);
   const maxMutations = clamp(opts.maxMutations, 3, 0, 100);
-  const operator = mutationOperatorForPolicy(policy);
+  const mutationPolicy = composition.length
+    ? selectedPolicyForComposition(policy, composition, graphSnapshot(store, root, { publicOnly: opts.publicOnly }))
+    : policy;
+  const operator = mutationOperatorForPolicy(mutationPolicy);
   const plannedMutations = [
     { operator, base: head, expected: "violated" as const, required: true },
     { operator: "comment-string-control", base: head, expected: "satisfied" as const, required: true },
@@ -128,6 +136,7 @@ export function createProofPlan(
     valid_from_commit: sourceCommit,
     evaluator: { ...POLICY_EVALUATOR },
     mutation_engine: { ...MUTATION_ENGINE },
+    ...(compositionBinding ? { composition: compositionBinding } : {}),
     ...(corpus ? { corpus_manifest: { id: corpus.id, content_hash: corpus.content_hash } } : {}),
     corpus: {
       current_baseline: { kind: "commit" as const, ref: head, label: "current repository baseline", expected: "satisfied" as const },
@@ -163,6 +172,9 @@ export function createProofPlan(
       "Known-bad commits are included only when an attributable fix/revert delta identifies the first parent.",
       ...(attestedKnownGood.length
         ? ["Human-attested known-good fixtures are replayed as explicit corpus evidence and excluded from accepted-history sampling; attestation cannot waive a policy or grant authority."]
+        : []),
+      ...(compositionBinding
+        ? [`Plan binds the broad parent and ${compositionBinding.members.length} explicit scoped exception policy record(s) into one evaluator receipt.`]
         : []),
       ...policy.limitations,
     ],

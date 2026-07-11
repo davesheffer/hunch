@@ -1,4 +1,5 @@
-import { canonicalHash, policySemanticHash } from "./canonical.js";
+import { canonicalHash } from "./canonical.js";
+import { assertCompositionBinding, policyProofHash } from "./composition.js";
 import { blockingEvidenceError } from "./lifecycle.js";
 import { assessHistoryDispositions } from "./disposition.js";
 import type { EvaluationSummary, HistoryDisposition, HistoryDispositionClassification, PolicyProof, PolicySpec, ProofClass } from "./schema.js";
@@ -29,6 +30,7 @@ export interface ProofCard {
     mutation_controls: PolicyProof["mutation_controls"];
   };
   project_checks: PolicyProof["project_checks"];
+  composition: PolicyProof["composition"] | null;
   history_dispositions: {
     current: HistoryDisposition[];
     counts: Record<HistoryDispositionClassification, number>;
@@ -52,8 +54,18 @@ export interface ProofCard {
   actions: string[];
 }
 
-export function buildProofCard(policy: PolicySpec, proof: PolicyProof, dispositions: HistoryDisposition[] = []): ProofCard {
-  const semanticMatch = proof.policy_hash === policySemanticHash(policy);
+export function buildProofCard(
+  policy: PolicySpec,
+  proof: PolicyProof,
+  dispositions: HistoryDisposition[] = [],
+  composition: PolicySpec[] = [],
+): ProofCard {
+  let semanticMatch = proof.policy_hash === policyProofHash(policy, composition);
+  try {
+    assertCompositionBinding(policy, composition, proof.composition);
+  } catch {
+    semanticMatch = false;
+  }
   const baselineClean = proof.current.total === 1 && proof.current.satisfied === 1 && proof.current.unknown === 0 && proof.current.error === 0;
   const dispositionAssessment = assessHistoryDispositions(proof, dispositions);
   const evidenceError = blockingEvidenceError(proof, dispositions);
@@ -98,6 +110,7 @@ export function buildProofCard(policy: PolicySpec, proof: PolicyProof, dispositi
       mutation_controls: proof.mutation_controls,
     },
     project_checks: proof.project_checks,
+    composition: proof.composition ?? null,
     history_dispositions: {
       current: dispositionAssessment.current,
       counts: dispositionAssessment.counts,
@@ -146,6 +159,7 @@ export function renderProofCard(card: ProofCard): string {
     `  ${line("mutations", card.evidence_vector.mutations)}`,
     `  mutation controls: ${card.evidence_vector.mutation_controls.passed}/${card.evidence_vector.mutation_controls.total} passed · ${card.evidence_vector.mutation_controls.failed} failed`,
     `  project checks: build ${card.project_checks.build} · test ${card.project_checks.test} · never required for evaluator sensitivity`,
+    ...(card.composition ? [`  composition: ${card.composition.root_policy_id} + ${card.composition.members.length} exception(s) · ${card.composition.composite_hash}`] : []),
     `  uncertainty: ${card.uncertainty.unclassified_history_hits} unclassified history hit · ${card.uncertainty.unknown_results} unknown · ${card.uncertainty.error_results} error`,
     `  blocking readiness: ${card.authority.eligible_for_human_blocking_approval ? "eligible for explicit human review" : `not eligible${card.authority.blocking_evidence_error ? ` — ${card.authority.blocking_evidence_error}` : ""}`}`,
     `  authority: ${card.authority.current?.kind === "human" ? card.authority.current.actor : "none — proof cannot activate policy"}`,

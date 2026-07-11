@@ -2,8 +2,8 @@ import { z } from "zod";
 import { ProvenanceSchema } from "../core/types.js";
 
 export const POLICY_IR_VERSION = 1;
-export const POLICY_EVALUATOR = { name: "hunch-graph-policy", version: "1.2.0" } as const;
-export const MUTATION_ENGINE = { name: "hunch-static-graph-controls", version: "4" } as const;
+export const POLICY_EVALUATOR = { name: "hunch-graph-policy", version: "1.3.0" } as const;
+export const MUTATION_ENGINE = { name: "hunch-static-graph-controls", version: "5" } as const;
 
 export const DataClassSchema = z.enum(["public", "private", "secret"]);
 export type DataClass = z.infer<typeof DataClassSchema>;
@@ -242,6 +242,22 @@ export const PolicySpecSchema = z.object({
 }).passthrough();
 export type PolicySpec = z.infer<typeof PolicySpecSchema>;
 
+export const PolicyCompositionMemberSchema = z.object({
+  policy_id: z.string().regex(/^pol_[a-f0-9]{10}$/),
+  policy_hash: z.string().regex(/^sha1:[a-f0-9]{40}$/),
+  exception_of: z.string().regex(/^pol_[a-f0-9]{10}$/),
+  scope: PolicyScopeSchema,
+}).strict();
+
+export const PolicyCompositionBindingSchema = z.object({
+  kind: z.literal("parent_with_exceptions"),
+  root_policy_id: z.string().regex(/^pol_[a-f0-9]{10}$/),
+  root_policy_hash: z.string().regex(/^sha1:[a-f0-9]{40}$/),
+  members: z.array(PolicyCompositionMemberSchema).min(1),
+  composite_hash: z.string().regex(/^sha1:[a-f0-9]{40}$/),
+}).strict();
+export type PolicyCompositionBinding = z.infer<typeof PolicyCompositionBindingSchema>;
+
 export const PolicyEvaluationResultSchema = z.enum([
   "satisfied",
   "violated",
@@ -323,6 +339,7 @@ export const ProofPlanSchema = z.object({
   valid_from_commit: z.string().min(1),
   evaluator: z.object({ name: z.string().min(1), version: z.string().min(1) }),
   mutation_engine: z.object({ name: z.string().min(1), version: z.string().min(1) }).optional(),
+  composition: PolicyCompositionBindingSchema.optional(),
   corpus_manifest: z.object({
     id: z.string().regex(/^corpus_[a-f0-9]{10}$/),
     content_hash: z.string().min(1),
@@ -379,6 +396,11 @@ export const PolicyEvaluationSchema = z.object({
   })),
   explanation: z.string(),
   evidence_refs: z.array(z.string()),
+  composition: PolicyCompositionBindingSchema.extend({
+    selected_policy_id: z.string().regex(/^pol_[a-f0-9]{10}$/),
+    applicable_policy_ids: z.array(z.string().regex(/^pol_[a-f0-9]{10}$/)).min(1),
+    member_evaluation_hashes: z.record(z.string().regex(/^pol_[a-f0-9]{10}$/), z.string().regex(/^sha1:[a-f0-9]{40}$/)),
+  }).strict().optional(),
   deterministic_hash: z.string(),
 });
 export type PolicyEvaluation = z.infer<typeof PolicyEvaluationSchema>;
@@ -494,6 +516,7 @@ export const PolicyProofSchema = z.object({
   policy_hash: z.string(),
   evaluator: z.object({ name: z.string(), version: z.string() }),
   mutation_engine: z.object({ name: z.string(), version: z.string() }).optional(),
+  composition: PolicyCompositionBindingSchema.optional(),
   generated_at: z.string().datetime({ offset: true }),
   current: EvaluationSummarySchema,
   known_bad: EvaluationSummarySchema,

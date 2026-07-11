@@ -1,5 +1,6 @@
-import { canonicalHash, proofEvaluationHash, policySemanticHash, proofId } from "./canonical.js";
-import { evaluatePolicyOnSnapshot, graphSnapshot, mutationOperatorForPolicy } from "./evaluator.js";
+import { canonicalHash, proofEvaluationHash, proofId } from "./canonical.js";
+import { assertCompositionBinding, policyCompositionBinding, policyProofHash } from "./composition.js";
+import { evaluateCompositePolicyOnSnapshot, evaluatePolicyOnSnapshot, graphSnapshot, mutationOperatorForPolicy, selectedPolicyForComposition, type GraphSnapshot } from "./evaluator.js";
 import { runMutationHarness } from "./mutation.js";
 import { replayProofPlan } from "./replay.js";
 import {
@@ -59,7 +60,7 @@ export function provePolicy(
   store: HunchStore,
   root: string,
   policy: PolicySpec,
-  opts: { publicOnly?: boolean; now?: string; plan?: ProofPlan } = {},
+  opts: { publicOnly?: boolean; now?: string; plan?: ProofPlan; composition?: PolicySpec[] } = {},
 ): PolicyProof {
   if (opts.plan && (
     opts.plan.mutation_engine?.name !== MUTATION_ENGINE.name
@@ -67,17 +68,29 @@ export function provePolicy(
   )) {
     throw new Error(`proof plan ${opts.plan.id} requires regeneration for mutation engine ${MUTATION_ENGINE.name}@${MUTATION_ENGINE.version}`);
   }
-  const replay = opts.plan ? replayProofPlan(root, policy, opts.plan) : undefined;
+  const composition = opts.composition ?? [];
+  const compositionBinding = policyCompositionBinding(policy, composition);
+  if (opts.plan) assertCompositionBinding(policy, composition, opts.plan.composition);
+  const evaluate = (snapshot: GraphSnapshot): PolicyEvaluation => composition.length
+    ? evaluateCompositePolicyOnSnapshot(policy, composition, snapshot)
+    : evaluatePolicyOnSnapshot(policy, snapshot);
+  const replay = opts.plan ? replayProofPlan(root, policy, opts.plan, { composition }) : undefined;
   const snapshot = replay?.current_snapshot ?? graphSnapshot(store, root, opts);
-  const fallbackCurrent = replay ? undefined : evaluatePolicyOnSnapshot(policy, snapshot);
+  const fallbackCurrent = replay ? undefined : evaluate(snapshot);
   const mutationBase = replay?.current_snapshot ?? snapshot;
+  const mutationPolicy = composition.length ? selectedPolicyForComposition(policy, composition, mutationBase) : policy;
   const plannedMutations = opts.plan?.mutations ?? [{
-    operator: mutationOperatorForPolicy(policy),
+    operator: mutationOperatorForPolicy(mutationPolicy),
     base: mutationBase.head,
     expected: "violated" as const,
     required: true,
   }];
-  const mutationHarness = runMutationHarness(root, policy, mutationBase, plannedMutations);
+  const policyHash = policyProofHash(policy, composition);
+  const mutationHarness = runMutationHarness(root, policy, mutationBase, plannedMutations, {
+    policyHash,
+    mutationPolicy,
+    evaluate,
+  });
   const mutationSummary = summary(mutationHarness.primary_evaluations);
   if (replay) mutationSummary.receipt_hashes = mutationHarness.primary_evaluations.map(proofEvaluationHash);
   const primaryMutationReceipts = mutationHarness.receipts.filter((receipt) => receipt.kind === "primary");
@@ -93,11 +106,11 @@ export function provePolicy(
   const caughtKnownBad = replay?.known_bad.some((receipt) => receipt.expected === "violated" && receipt.result === "violated") ?? false;
   const caughtMutation = primaryMutationReceipts.some((receipt) => receipt.passed && receipt.result === "violated");
   if (baselineSatisfied && (caughtKnownBad || caughtMutation)) proofClass = "P3";
-  const policyHash = policySemanticHash(policy);
   const fallbackPlan = {
     policy_hash: policyHash,
     evaluator: POLICY_EVALUATOR,
     mutation_engine: MUTATION_ENGINE,
+    ...(compositionBinding ? { composition: compositionBinding } : {}),
     current_graph: snapshot.graph_hash,
     mutations: plannedMutations.map((mutation) => mutation.operator),
     budgets: { max_commits: 1, max_mutations: 1, max_minutes: 1 },
@@ -113,6 +126,7 @@ export function provePolicy(
     policy_hash: policyHash,
     evaluator: { ...POLICY_EVALUATOR },
     mutation_engine: { ...MUTATION_ENGINE },
+    ...(compositionBinding ? { composition: compositionBinding } : {}),
     generated_at: now,
     current: currentSummary,
     known_bad: knownBadSummary,
@@ -142,12 +156,14 @@ export function provePolicy(
         ...(replayProblems ? [`Accepted-history contains ${replayProblems} unknown/error result(s); they remain visible and prevent blocking approval.`] : []),
         "Primary mutation applies to an immutable disposable source checkout and must remain parseable; comment/string and same-name controls are separate, while project build/test outcomes remain non-authoritative follow-on evidence.",
         "Shadow outcomes remain pending.",
+        ...(compositionBinding ? [`Composite receipts bind ${compositionBinding.members.length} explicit scoped exception policy record(s) to their broad parent.`] : []),
       ] : ["Gate G1 proof covers the current graph and one deterministic mutation; historical replay and shadow outcomes are not available without a ProofPlan."]),
     ],
     proof_class: proofClass,
     artifact_hashes: {
       policy: policyHash,
       ...(opts.plan ? { plan: opts.plan.content_hash } : {}),
+      ...(compositionBinding ? { composition: compositionBinding.composite_hash } : {}),
       ...(replay?.current.graph_hash ? { graph: replay.current.graph_hash } : { graph: snapshot.graph_hash }),
       ...(currentSummary.receipt_hashes[0] ? { current_receipt: currentSummary.receipt_hashes[0] } : {}),
       ...(replay ? { replay_manifest: canonicalHash(replay.replay_receipts) } : {}),

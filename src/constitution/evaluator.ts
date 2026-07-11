@@ -1,9 +1,11 @@
 import type { Component, Edge, Symbol } from "../core/types.js";
 import { basename } from "node:path";
 import { externalImportNodeId, externalPackage } from "../core/externalImports.js";
+import { pathMatchesGlob } from "../core/glob.js";
 import type { HunchStore } from "../store/hunchStore.js";
 import { headSha } from "../extractors/git.js";
-import { canonicalHash } from "./canonical.js";
+import { canonicalHash, proofEvaluationHash } from "./canonical.js";
+import { policyCompositionBinding } from "./composition.js";
 import {
   POLICY_EVALUATOR,
   PolicyEvaluationSchema,
@@ -245,8 +247,157 @@ export function evaluatePolicyOnSnapshot(policy: PolicySpec, snapshot: GraphSnap
   }
 }
 
-export function evaluatePolicy(store: HunchStore, root: string, policy: PolicySpec, opts: { publicOnly?: boolean } = {}): PolicyEvaluation {
-  return evaluatePolicyOnSnapshot(policy, graphSnapshot(store, root, opts));
+type ScopeApplicability = { kind: "applicable" | "not_applicable" | "unknown"; explanation: string };
+
+function scopeApplicability(policy: PolicySpec, snapshot: GraphSnapshot): ScopeApplicability {
+  if (policy.scope.repos.length) {
+    const repo = basename(snapshot.root);
+    const applies = policy.scope.repos.some((candidate) => candidate === snapshot.root || candidate === repo || candidate.endsWith(`/${repo}`));
+    if (!applies) return { kind: "not_applicable", explanation: `repository ${repo} is outside ${policy.id} scope` };
+  }
+  const subject = resolveSelector(snapshot, policy.assertion.subject);
+  if (subject.resolution !== "exact") {
+    return { kind: "unknown", explanation: `cannot choose scoped policy ${policy.id}: subject binding is ${subject.resolution}` };
+  }
+  const id = subject.ids[0]!;
+  const symbol = snapshot.symbols.find((candidate) => candidate.id === id);
+  const component = snapshot.components.find((candidate) => candidate.id === id);
+  if (policy.scope.paths.length) {
+    if (symbol) {
+      if (!policy.scope.paths.some((glob) => pathMatchesGlob(symbol.file, glob))) {
+        return { kind: "not_applicable", explanation: `${symbol.file} is outside ${policy.id} path scope` };
+      }
+    } else if (component) {
+      const concrete = component.paths.filter((path) => !/[*?]/.test(path));
+      if (!concrete.length) {
+        return { kind: "unknown", explanation: `component ${component.id} has no concrete path binding for ${policy.id} scope precedence` };
+      }
+      if (!concrete.some((path) => policy.scope.paths.some((glob) => pathMatchesGlob(path, glob)))) {
+        return { kind: "not_applicable", explanation: `component ${component.id} is outside ${policy.id} path scope` };
+      }
+    } else {
+      return { kind: "unknown", explanation: `subject ${id} has no concrete file binding for ${policy.id} path scope` };
+    }
+  }
+  if (policy.scope.components.length) {
+    const subjectComponents = component
+      ? [component.id]
+      : symbol
+        ? snapshot.components.filter((candidate) => candidate.paths.some((glob) => pathMatchesGlob(symbol.file, glob))).map((candidate) => candidate.id)
+        : [];
+    if (!subjectComponents.length) {
+      return { kind: "unknown", explanation: `subject ${id} has no exact component binding for ${policy.id} scope precedence` };
+    }
+    if (!subjectComponents.some((candidate) => policy.scope.components.includes(candidate))) {
+      return { kind: "not_applicable", explanation: `subject ${id} is outside ${policy.id} component scope` };
+    }
+  }
+  return { kind: "applicable", explanation: `${policy.id} scope applies to the exact subject binding` };
+}
+
+interface CompositionSelection {
+  binding: NonNullable<ReturnType<typeof policyCompositionBinding>>;
+  evaluations: Map<string, PolicyEvaluation>;
+  applicable: PolicySpec[];
+  selected: PolicySpec;
+}
+
+class CompositionOutcome extends Error {
+  constructor(readonly result: "not_applicable" | "unknown", message: string) {
+    super(message);
+  }
+}
+
+function compositionSelection(root: PolicySpec, members: PolicySpec[], snapshot: GraphSnapshot): CompositionSelection {
+  const binding = policyCompositionBinding(root, members);
+  if (!binding) throw new Error(`policy ${root.id} has no exception members to compose`);
+  const policies = [root, ...members];
+  const byId = new Map(policies.map((policy) => [policy.id, policy]));
+  const evaluations = new Map(policies.map((policy) => [policy.id, evaluatePolicyOnSnapshot(policy, snapshot)]));
+  const rootScope = scopeApplicability(root, snapshot);
+  if (rootScope.kind !== "applicable") throw new CompositionOutcome(rootScope.kind, rootScope.explanation);
+  const depth = (policy: PolicySpec): number => {
+    let current = policy;
+    let value = 0;
+    const visited = new Set<string>();
+    while (current.exception_of) {
+      if (visited.has(current.id)) throw new Error(`exception composition contains a cycle at ${current.id}`);
+      visited.add(current.id);
+      const parent = byId.get(current.exception_of);
+      if (!parent) throw new Error(`exception policy ${current.id} has missing composition parent ${current.exception_of}`);
+      current = parent;
+      value++;
+    }
+    if (current.id !== root.id) throw new Error(`exception policy ${policy.id} is not rooted at ${root.id}`);
+    return value;
+  };
+  const applicable = [root];
+  const applicableIds = new Set([root.id]);
+  for (const member of [...members].sort((left, right) => depth(left) - depth(right) || left.id.localeCompare(right.id))) {
+    if (!member.exception_of || !applicableIds.has(member.exception_of)) continue;
+    const scope = scopeApplicability(member, snapshot);
+    if (scope.kind === "unknown") throw new CompositionOutcome("unknown", scope.explanation);
+    if (scope.kind === "applicable") {
+      applicable.push(member);
+      applicableIds.add(member.id);
+    }
+  }
+  const maxDepth = Math.max(...applicable.map(depth));
+  const deepest = applicable.filter((policy) => depth(policy) === maxDepth).sort((a, b) => a.id.localeCompare(b.id));
+  const results = new Set(deepest.map((policy) => evaluations.get(policy.id)!.result));
+  if (results.size !== 1) throw new Error(`equally specific exception policies disagree: ${deepest.map((policy) => policy.id).join(", ")}`);
+  return { binding, evaluations, applicable, selected: deepest[0]! };
+}
+
+export function selectedPolicyForComposition(root: PolicySpec, members: PolicySpec[], snapshot: GraphSnapshot): PolicySpec {
+  return compositionSelection(root, members, snapshot).selected;
+}
+
+/** Evaluate explicit scope precedence as one receipt. The deepest applicable
+ * linked exception wins; severity and adapter order never participate. */
+export function evaluateCompositePolicyOnSnapshot(root: PolicySpec, members: PolicySpec[], snapshot: GraphSnapshot): PolicyEvaluation {
+  try {
+    const selection = compositionSelection(root, members, snapshot);
+    const selectedEvaluation = selection.evaluations.get(selection.selected.id)!;
+    const memberHashes = Object.fromEntries(
+      [root, ...members]
+        .sort((a, b) => a.id.localeCompare(b.id))
+        .map((policy) => [policy.id, proofEvaluationHash(selection.evaluations.get(policy.id)!)]),
+    );
+    const composition = {
+      ...selection.binding,
+      selected_policy_id: selection.selected.id,
+      applicable_policy_ids: selection.applicable.map((policy) => policy.id),
+      member_evaluation_hashes: memberHashes,
+    };
+    const body = {
+      policy_id: root.id,
+      policy_revision: root.revision,
+      result: selectedEvaluation.result,
+      evaluator: { ...POLICY_EVALUATOR },
+      repository: { head: snapshot.head, graph_hash: snapshot.graph_hash },
+      matches: selectedEvaluation.matches,
+      explanation: `composite scope selected ${selection.selected.id}: ${selectedEvaluation.explanation}`,
+      evidence_refs: [...new Set([root, ...members].flatMap((policy) => policy.evidence))].sort(),
+      composition,
+    };
+    return PolicyEvaluationSchema.parse({ ...body, deterministic_hash: canonicalHash(body) });
+  } catch (error) {
+    const result = error instanceof CompositionOutcome ? error.result : "error";
+    return finish(root, snapshot, result, [], `parent/exception composition failed: ${(error as Error).message}`);
+  }
+}
+
+export function evaluatePolicy(
+  store: HunchStore,
+  root: string,
+  policy: PolicySpec,
+  opts: { publicOnly?: boolean; composition?: PolicySpec[] } = {},
+): PolicyEvaluation {
+  const snapshot = graphSnapshot(store, root, opts);
+  return opts.composition?.length
+    ? evaluateCompositePolicyOnSnapshot(policy, opts.composition, snapshot)
+    : evaluatePolicyOnSnapshot(policy, snapshot);
 }
 
 export function policyIsActive(policy: PolicySpec): boolean {

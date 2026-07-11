@@ -1,7 +1,6 @@
-import { policySemanticHash } from "./canonical.js";
-import { pathMatchesGlob } from "../core/glob.js";
+import { assertCompositionBinding, exceptionScopeIsNarrower, oppositeExceptionAssertions, policyProofHash } from "./composition.js";
 import { assessHistoryDispositions } from "./disposition.js";
-import type { HistoryDisposition, PolicyProof, PolicySpec, ProofClass } from "./schema.js";
+import { MUTATION_ENGINE, POLICY_EVALUATOR, type HistoryDisposition, type PolicyProof, type PolicySpec, type ProofClass } from "./schema.js";
 
 function isHumanActor(actor: string): boolean {
   return /^(human|github|git):[^\s]+$/i.test(actor);
@@ -30,12 +29,24 @@ const proofRank: Record<ProofClass, number> = { P0: 0, P1: 1, P2: 2, P3: 3, P4: 
 
 /** Rechecked on every blocking evaluation; a hand-edited lifecycle flag without
  * a current P3 proof is a configuration error, never authority. */
-export function blockingProofError(policy: PolicySpec, proof: PolicyProof | undefined, dispositions: HistoryDisposition[] = []): string | null {
+export function blockingProofError(
+  policy: PolicySpec,
+  proof: PolicyProof | undefined,
+  dispositions: HistoryDisposition[] = [],
+  composition: PolicySpec[] = [],
+): string | null {
   if (policy.state !== "active_blocking") return null;
   if (policy.authority?.kind !== "human") return "active blocking policy has no human authority event";
   if (!policy.proof || !proof) return "active blocking policy has no readable proof artifact";
   if (proofRank[proof.proof_class] < proofRank.P3) return `blocking proof is ${proof.proof_class}; P3+ is required`;
-  if (proof.policy_hash !== policySemanticHash(policy)) return "blocking proof does not match current policy semantics";
+  if (proof.evaluator.name !== POLICY_EVALUATOR.name || proof.evaluator.version !== POLICY_EVALUATOR.version) return "blocking proof evaluator version is stale";
+  if (proof.mutation_engine?.name !== MUTATION_ENGINE.name || proof.mutation_engine.version !== MUTATION_ENGINE.version) return "blocking proof mutation engine version is stale";
+  try {
+    assertCompositionBinding(policy, composition, proof.composition);
+  } catch {
+    return "blocking proof does not match the current parent/exception composition";
+  }
+  if (proof.policy_hash !== policyProofHash(policy, composition)) return "blocking proof does not match current policy semantics";
   if (proof.current.satisfied !== 1 || proof.current.error || proof.current.unknown) return "blocking proof has no clean satisfied baseline";
   const replayError = blockingEvidenceError(proof, dispositions);
   if (replayError) return replayError;
@@ -46,15 +57,18 @@ function requireHuman(actor: string): void {
   if (!isHumanActor(actor)) throw new Error("policy authority requires an explicit human actor (human:, github:, or git:); machine/model identities cannot activate policy");
 }
 
-function requireCurrentProof(policy: PolicySpec, proof: PolicyProof): void {
-  if (proof.policy_hash !== policySemanticHash(policy)) throw new Error(`proof ${proof.id} does not match the current policy semantics`);
+function requireCurrentProof(policy: PolicySpec, proof: PolicyProof, composition: PolicySpec[] = []): void {
+  if (proof.evaluator.name !== POLICY_EVALUATOR.name || proof.evaluator.version !== POLICY_EVALUATOR.version) throw new Error(`proof ${proof.id} evaluator version is stale`);
+  if (proof.mutation_engine?.name !== MUTATION_ENGINE.name || proof.mutation_engine.version !== MUTATION_ENGINE.version) throw new Error(`proof ${proof.id} mutation engine version is stale`);
+  assertCompositionBinding(policy, composition, proof.composition);
+  if (proof.policy_hash !== policyProofHash(policy, composition)) throw new Error(`proof ${proof.id} does not match the current policy semantics`);
   if (proof.current.satisfied !== 1 || proof.current.error || proof.current.unknown) throw new Error(`proof ${proof.id} has no clean satisfied baseline`);
 }
 
-export function proposeProvedPolicy(policy: PolicySpec, proof: PolicyProof, at: string): PolicySpec {
+export function proposeProvedPolicy(policy: PolicySpec, proof: PolicyProof, at: string, composition: PolicySpec[] = []): PolicySpec {
   if (policy.state !== "compiled" && policy.state !== "validating" && policy.state !== "proposed") throw new Error(`cannot attach proof while policy is ${policy.state}`);
   if (proofRank[proof.proof_class] < proofRank.P1) throw new Error(`proof ${proof.id} is ${proof.proof_class}; a clean current baseline is required`);
-  requireCurrentProof(policy, proof);
+  requireCurrentProof(policy, proof, composition);
   return {
     ...policy,
     revision: policy.revision + 1,
@@ -72,11 +86,12 @@ export function approvePolicy(
   actor: string,
   at: string,
   dispositions: HistoryDisposition[] = [],
+  composition: PolicySpec[] = [],
 ): PolicySpec {
   requireHuman(actor);
-  if (policy.exception_of && mode === "blocking") throw new Error(`exception policy ${policy.id} cannot block until exception composition has its own proved evaluator semantics`);
+  if (policy.exception_of && mode === "blocking") throw new Error(`exception policy ${policy.id} cannot block independently; activate its broad parent only after parent/exception composition is proved`);
   if (policy.state !== "proposed") throw new Error(`policy ${policy.id} is ${policy.state}; only a proposed policy can be activated`);
-  requireCurrentProof(policy, proof);
+  requireCurrentProof(policy, proof, composition);
   if (mode === "blocking" && proofRank[proof.proof_class] < proofRank.P3) {
     throw new Error(`blocking activation requires P3+ proof; ${proof.id} is ${proof.proof_class}`);
   }
@@ -106,33 +121,15 @@ export function approvePolicy(
   };
 }
 
-function oppositeAssertions(child: PolicySpec, parent: PolicySpec): boolean {
-  const left = child.assertion;
-  const right = parent.assertion;
-  if (!((left.kind === "reaches" && right.kind === "not-reaches") || (left.kind === "not-reaches" && right.kind === "reaches"))) return false;
-  return left.subject.selector === right.subject.selector
-    && left.object.selector === right.object.selector
-    && JSON.stringify(left.relation) === JSON.stringify(right.relation);
-}
-
-function narrowerScope(child: PolicySpec, parent: PolicySpec): boolean {
-  const reposInside = !parent.scope.repos.length || child.scope.repos.every((repo) => parent.scope.repos.includes(repo));
-  const componentsInside = !parent.scope.components.length || child.scope.components.every((component) => parent.scope.components.includes(component));
-  const pathsInside = !parent.scope.paths.length || child.scope.paths.every((path) => parent.scope.paths.some((glob) => path === glob || pathMatchesGlob(path, glob)));
-  const strict = JSON.stringify(child.scope) !== JSON.stringify(parent.scope);
-  return reposInside && componentsInside && pathsInside && strict;
-}
-
 /** Human-authored exception relationship only. It invalidates the child's old
- * proof/authority and stays non-blocking until a future composition evaluator
- * can prove parent+exception behavior together. */
+ * proof/authority; the broad parent remains the separately activated unit. */
 export function linkPolicyException(child: PolicySpec, parent: PolicySpec, actor: string, reason: string, at: string): PolicySpec {
   requireHuman(actor);
   if (child.id === parent.id) throw new Error("a policy cannot be its own exception parent");
   if (child.data_class !== parent.data_class) throw new Error("exception and parent must have the same data class");
   if (child.exception_of && child.exception_of !== parent.id) throw new Error(`policy ${child.id} is already linked to exception parent ${child.exception_of}`);
-  if (!oppositeAssertions(child, parent)) throw new Error("exception must be the exact opposite reaches/not-reaches assertion over the same bindings and relation");
-  if (!narrowerScope(child, parent)) throw new Error("exception scope must be strictly narrower than and contained by its parent scope");
+  if (!oppositeExceptionAssertions(child, parent)) throw new Error("exception must be the exact opposite reaches/not-reaches assertion over the same bindings and relation");
+  if (!exceptionScopeIsNarrower(child, parent)) throw new Error("exception scope must be strictly narrower than and contained by its parent scope");
   if (!reason.trim()) throw new Error("exception link requires an audited human reason");
   if (child.exception_of === parent.id) return child;
   return {

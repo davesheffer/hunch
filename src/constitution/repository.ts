@@ -6,6 +6,7 @@ import { shortHash } from "../core/ids.js";
 import { policySemanticHash, proofPlanContentHash } from "./canonical.js";
 import { proofCorpusContentHash } from "./corpus.js";
 import { currentHistoryDispositions, historyDispositionContentHash, historyDispositionJudgmentHash } from "./disposition.js";
+import { assertCompositionBinding, compositionDescendants, policyProofHash } from "./composition.js";
 import {
   HistoryDispositionSchema,
   ProofCorpusSchema,
@@ -174,6 +175,18 @@ export class PolicyRepository {
   putProof(proof: PolicyProof, policyId: string): PolicyProof {
     const parsed = PolicyProofSchema.parse(proof);
     const home = this.homeOfPolicy(policyId) ?? (parsed.data_class === "public" && !this.store.unified ? "public" : "private");
+    const homeOpts = home === "public" ? { publicOnly: true } : { privateOnly: true };
+    const policy = this.getPolicy(policyId, homeOpts);
+    if (policy) {
+      const composition = compositionDescendants(policy, this.listPolicies(homeOpts));
+      assertCompositionBinding(policy, composition, parsed.composition);
+      if (parsed.policy_hash !== policyProofHash(policy, composition)) throw new Error(`composite proof ${parsed.id} policy hash mismatch`);
+      if (composition.length) {
+        const plan = this.listPlans(homeOpts).find((candidate) => candidate.content_hash === parsed.plan_hash);
+        if (!plan || plan.policy_candidate_hash !== parsed.policy_hash) throw new Error(`composite proof ${parsed.id} has no exact bound proof plan`);
+        assertCompositionBinding(policy, composition, plan.composition);
+      }
+    }
     const dir = this.dir(home, "proofs");
     mkdirSync(dir, { recursive: true });
     writeFileAtomic(join(dir, `${parsed.id}.json`), encode(parsed));
@@ -188,6 +201,13 @@ export class PolicyRepository {
       : opts.public
         ? "public"
         : this.homeOfPolicy(policyId) ?? (parsed.data_class === "public" && !this.store.unified ? "public" : "private");
+    const homeOpts = home === "public" ? { publicOnly: true } : { privateOnly: true };
+    const policy = this.getPolicy(policyId, homeOpts);
+    if (policy) {
+      const composition = compositionDescendants(policy, this.listPolicies(homeOpts));
+      assertCompositionBinding(policy, composition, parsed.composition);
+      if (parsed.policy_candidate_hash !== policyProofHash(policy, composition)) throw new Error(`composite plan ${parsed.id} policy hash mismatch`);
+    }
     const dir = this.dir(home, "plans");
     mkdirSync(dir, { recursive: true });
     writeFileAtomic(join(dir, `${parsed.id}.json`), encode(parsed));
@@ -225,7 +245,8 @@ export class PolicyRepository {
     if (!home) throw new Error(`cannot write history disposition ${parsed.id}: policy ${policyId} has no exact storage home`);
     const homeOpts = home === "public" ? { publicOnly: true } : { privateOnly: true };
     const policy = this.getPolicy(policyId, homeOpts);
-    if (!policy || policy.data_class !== parsed.data_class || policy.proof !== parsed.proof_id || policySemanticHash(policy) !== parsed.policy_hash) {
+    const composition = policy ? compositionDescendants(policy, this.listPolicies(homeOpts)) : [];
+    if (!policy || policy.data_class !== parsed.data_class || policy.proof !== parsed.proof_id || policyProofHash(policy, composition) !== parsed.policy_hash) {
       throw new Error(`history disposition ${parsed.id} does not match policy ${policyId} semantics/proof/data class`);
     }
     const proof = this.getProof(parsed.proof_id, homeOpts);

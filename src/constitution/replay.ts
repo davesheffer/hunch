@@ -3,8 +3,9 @@ import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, 
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { revExists } from "../extractors/git.js";
-import { canonicalHash, proofEvaluationHash, policySemanticHash, proofPlanContentHash } from "./canonical.js";
-import { evaluatePolicyOnSnapshot, type GraphSnapshot } from "./evaluator.js";
+import { canonicalHash, proofEvaluationHash, proofPlanContentHash } from "./canonical.js";
+import { assertCompositionBinding, policyProofHash } from "./composition.js";
+import { evaluateCompositePolicyOnSnapshot, evaluatePolicyOnSnapshot, type GraphSnapshot } from "./evaluator.js";
 import { loadReplaySnapshot, putReplaySnapshot } from "./replayCache.js";
 import {
   POLICY_EVALUATOR,
@@ -35,6 +36,7 @@ export interface ProofReplayResult {
 export interface ReplayExecutionOptions {
   /** Operational scheduling only; never enters canonical proof semantics. */
   maxWorkers?: number;
+  composition?: PolicySpec[];
 }
 
 interface SnapshotOutcome {
@@ -220,7 +222,12 @@ export function replayProofPlan(
   opts: ReplayExecutionOptions = {},
 ): ProofReplayResult {
   const plan = ProofPlanSchema.parse(inputPlan);
-  const policyHash = policySemanticHash(policy);
+  const composition = opts.composition ?? [];
+  const policyHash = policyProofHash(policy, composition);
+  assertCompositionBinding(policy, composition, plan.composition);
+  const evaluate = (snapshot: GraphSnapshot): PolicyEvaluation => composition.length
+    ? evaluateCompositePolicyOnSnapshot(policy, composition, snapshot)
+    : evaluatePolicyOnSnapshot(policy, snapshot);
   if (plan.content_hash !== proofPlanContentHash(plan)) throw new Error(`proof plan ${plan.id} content hash mismatch`);
   if (plan.policy_id !== policy.id || plan.policy_candidate_hash !== policyHash) {
     throw new Error(`proof plan ${plan.id} does not match policy ${policy.id} semantics`);
@@ -283,7 +290,7 @@ export function replayProofPlan(
         outcomes.set(commit, {
           commit,
           snapshot: cached.snapshot,
-          evaluation: evaluatePolicyOnSnapshot(policy, cached.snapshot),
+          evaluation: evaluate(cached.snapshot),
         });
         continue;
       }
@@ -365,7 +372,7 @@ export function replayProofPlan(
           outcome = {
             commit: task.commit,
             snapshot: message.snapshot,
-            evaluation: evaluatePolicyOnSnapshot(policy, message.snapshot),
+            evaluation: evaluate(message.snapshot),
           };
         }
         outcomes.set(task.commit, outcome);

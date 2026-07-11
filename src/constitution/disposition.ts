@@ -1,5 +1,6 @@
 import { shortHash } from "../core/ids.js";
-import { canonicalHash, policySemanticHash } from "./canonical.js";
+import { canonicalHash } from "./canonical.js";
+import { policyProofHash } from "./composition.js";
 import {
   HistoryDispositionClassificationSchema,
   HistoryDispositionSchema,
@@ -27,10 +28,10 @@ export function compileHistoryDisposition(
   classification: HistoryDispositionClassification,
   actor: string,
   reason: string,
-  opts: { now?: string; supersedes?: string | null } = {},
+  opts: { now?: string; supersedes?: string | null; composition?: PolicySpec[] } = {},
 ): HistoryDisposition {
   const parsedClassification = HistoryDispositionClassificationSchema.parse(classification);
-  const policyHash = policySemanticHash(policy);
+  const policyHash = policyProofHash(policy, opts.composition ?? []);
   if (policy.proof !== proof.id) throw new Error(`policy ${policy.id} does not link proof ${proof.id}`);
   if (proof.policy_hash !== policyHash) throw new Error(`proof ${proof.id} does not match current policy semantics`);
   if (proof.data_class !== policy.data_class) throw new Error(`proof ${proof.id} does not match policy ${policy.id} data class`);
