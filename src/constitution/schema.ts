@@ -461,6 +461,43 @@ export const HistoryDispositionSchema = z.object({
 }).strict();
 export type HistoryDisposition = z.infer<typeof HistoryDispositionSchema>;
 
+export const ShadowEvaluationRecordSchema = z.object({
+  record_type: z.literal("evaluation"),
+  id: z.string().regex(/^shadow_[a-f0-9]{10}$/),
+  content_hash: z.string().regex(/^sha1:[a-f0-9]{40}$/),
+  policy_id: z.string().regex(/^pol_[a-f0-9]{10}$/),
+  proof_id: z.string().regex(/^proof_[a-f0-9]{10}$/),
+  policy_hash: z.string().regex(/^sha1:[a-f0-9]{40}$/),
+  plan_hash: z.string().regex(/^sha1:[a-f0-9]{40}$/),
+  evaluation: PolicyEvaluationSchema,
+  also_detected_by: z.array(z.string().regex(/^pol_[a-f0-9]{10}$/)).default([]),
+  latency_ms: z.number().nonnegative(),
+  data_class: DataClassSchema,
+  observed_at: z.string().datetime({ offset: true }),
+}).strict();
+export type ShadowEvaluationRecord = z.infer<typeof ShadowEvaluationRecordSchema>;
+
+export const ShadowDispositionSchema = z.object({
+  record_type: z.literal("disposition"),
+  id: z.string().regex(/^sdisp_[a-f0-9]{10}$/),
+  content_hash: z.string().regex(/^sha1:[a-f0-9]{40}$/),
+  shadow_id: z.string().regex(/^shadow_[a-f0-9]{10}$/),
+  policy_id: z.string().regex(/^pol_[a-f0-9]{10}$/),
+  proof_id: z.string().regex(/^proof_[a-f0-9]{10}$/),
+  policy_hash: z.string().regex(/^sha1:[a-f0-9]{40}$/),
+  evaluation_hash: z.string().regex(/^sha1:[a-f0-9]{40}$/),
+  classification: HistoryDispositionClassificationSchema,
+  actor: z.string().regex(/^(human|github|git):[^\s]+$/i, "shadow disposition requires an explicit human actor (human:, github:, or git:)"),
+  reason: z.string().trim().min(1).max(2000),
+  supersedes: z.string().regex(/^sdisp_[a-f0-9]{10}$/).nullable().default(null),
+  data_class: DataClassSchema,
+  created_at: z.string().datetime({ offset: true }),
+}).strict();
+export type ShadowDisposition = z.infer<typeof ShadowDispositionSchema>;
+
+export const ShadowRecordSchema = z.discriminatedUnion("record_type", [ShadowEvaluationRecordSchema, ShadowDispositionSchema]);
+export type ShadowRecord = z.infer<typeof ShadowRecordSchema>;
+
 export const MutationReceiptSchema = z.object({
   id: z.string().regex(/^mut_[a-f0-9]{10}$/),
   kind: z.enum(["primary", "control"]),

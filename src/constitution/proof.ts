@@ -155,7 +155,7 @@ export function provePolicy(
         ...(historyHits ? [`Accepted-history contains ${historyHits} unclassified violation hit(s); no false-positive claim or blocking approval is allowed until classification.`] : []),
         ...(replayProblems ? [`Accepted-history contains ${replayProblems} unknown/error result(s); they remain visible and prevent blocking approval.`] : []),
         "Primary mutation applies to an immutable disposable source checkout and must remain parseable; comment/string and same-name controls are separate, while project build/test outcomes remain non-authoritative follow-on evidence.",
-        "Shadow outcomes remain pending.",
+        "Shadow outcomes are tracked as separate append-only measurements and never mutate this immutable proof.",
         ...(compositionBinding ? [`Composite receipts bind ${compositionBinding.members.length} explicit scoped exception policy record(s) to their broad parent.`] : []),
       ] : ["Gate G1 proof covers the current graph and one deterministic mutation; historical replay and shadow outcomes are not available without a ProofPlan."]),
     ],

@@ -42,6 +42,7 @@ dist/
 !.hunch/proofs/
 !.hunch/plans/
 !.hunch/dispositions/
+!.hunch/shadow/
 !.hunch/runbooks/
 !.hunch/bugs/
 # THIS repo's generated wiki stays out of the public repo (we use the PRIVATE

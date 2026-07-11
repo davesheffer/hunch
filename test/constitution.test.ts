@@ -655,6 +655,21 @@ test("private composite receipts and member hashes never cross into the public p
     assert.deepEqual(service.repository.listPlans({ publicOnly: true }), []);
     assert.equal(service.repository.getProof(proved.proof.id, { publicOnly: true }), undefined);
     assert.doesNotMatch(canonicalJson(service.list({ publicOnly: true })), /pol_[de]1[de]1/);
+    writeFileSync(join(root, "src/api/orders.ts"), 'import { fetchOrders } from "../services/orders.js";\nexport function listOrders(u){ return fetchOrders(u); }\n');
+    commitFiles(root, ["src/api/orders.ts"], "fixture: private shadow exception violation");
+    indexRepo(store, root, { churn: false });
+    store.reindex();
+    const shadow = service.recordShadow(parent.id, { now: "2026-07-11T13:12:00.000Z", latencyMs: 5 });
+    assert.equal(shadow.evaluation.result, "violated");
+    const shadowDisposition = service.classifyShadow(parent.id, shadow.id, "true_positive_actionable", "human:private-owner", "PRIVATE_SHADOW_SENTINEL", { now: "2026-07-11T13:13:00.000Z" });
+    assert.ok(existsSync(join(privateRoot, "shadow", `${shadow.id}.json`)));
+    assert.ok(existsSync(join(privateRoot, "shadow", `${shadowDisposition.id}.json`)));
+    assert.deepEqual(service.repository.listShadowEvaluations({ publicOnly: true }), []);
+    assert.deepEqual(service.repository.listShadowDispositions({ publicOnly: true }), []);
+    assert.doesNotMatch(canonicalJson({
+      evaluations: service.repository.listShadowEvaluations({ publicOnly: true }),
+      dispositions: service.repository.listShadowDispositions({ publicOnly: true }),
+    }), /PRIVATE_SHADOW_SENTINEL/);
   } finally {
     store.close();
     cleanup();
@@ -674,26 +689,30 @@ test("private migration moves policy/proof artifacts only after validation", () 
       const compiled = service.compile("dec_migrate", { through: "fetchOrders", now: NOW });
       const corpus = service.importCorpus(compiled.id, { known_good: [{ ref: "HEAD", label: "migration fixture" }] }, { now: NOW });
       const proved = service.prove(compiled.id, { now: "2026-07-10T10:01:00.000Z" });
+      const shadow = service.recordShadow(compiled.id, { now: "2026-07-10T10:02:00.000Z", latencyMs: 3 });
       mkdirSync(join(publicHome, "policies"), { recursive: true });
       mkdirSync(join(publicHome, "proofs"), { recursive: true });
       mkdirSync(join(publicHome, "plans"), { recursive: true });
       mkdirSync(join(publicHome, "corpora"), { recursive: true });
+      mkdirSync(join(publicHome, "shadow"), { recursive: true });
       writeFileSync(join(publicHome, "policies", `${compiled.id}.json`), readFileSync(join(fixture.root, ".hunch/policies", `${compiled.id}.json`)));
       writeFileSync(join(publicHome, "proofs", `${proved.proof.id}.json`), readFileSync(join(fixture.root, ".hunch/proofs", `${proved.proof.id}.json`)));
       const plan = service.repository.listPlans({ publicOnly: true })[0]!;
       writeFileSync(join(publicHome, "plans", `${plan.id}.json`), readFileSync(join(fixture.root, ".hunch/plans", `${plan.id}.json`)));
       writeFileSync(join(publicHome, "corpora", `${compiled.id}.json`), readFileSync(join(fixture.root, ".hunch/corpora", `${compiled.id}.json`)));
+      writeFileSync(join(publicHome, "shadow", `${shadow.id}.json`), readFileSync(join(fixture.root, ".hunch/shadow", `${shadow.id}.json`)));
       assert.equal(corpus.policy_id, compiled.id);
     } finally {
       fixture.cleanup();
     }
     const moved = movePolicyArtifactsToPrivate(publicHome, privateHome);
-    assert.deepEqual(moved, { policies: 1, proofs: 1, plans: 1, evidence: 0, corpora: 1, dispositions: 0 });
+    assert.deepEqual(moved, { policies: 1, proofs: 1, plans: 1, evidence: 0, corpora: 1, dispositions: 0, shadow: 1 });
     assert.equal(existsSync(join(publicHome, "policies")), false);
     assert.ok(existsSync(join(privateHome, "policies")));
     assert.ok(existsSync(join(privateHome, "proofs")));
     assert.ok(existsSync(join(privateHome, "plans")));
     assert.ok(existsSync(join(privateHome, "corpora")));
+    assert.ok(existsSync(join(privateHome, "shadow")));
     assert.deepEqual(readdirSync(join(privateHome, "corpora")), readdirSync(join(privateHome, "policies")), "migrated corpus keeps its policy-keyed filename");
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -1189,6 +1208,93 @@ test("Phase 2M parent and scoped exceptions produce one exact composite proof re
     assert.equal(stale.blocks, false);
     assert.equal(stale.strict_error, true);
     assert.match(stale.gate_error ?? "", /current parent\/exception composition/);
+  } finally {
+    cleanup();
+  }
+});
+
+test("Phase 2N shadow outcomes are append-only, disposition-bound, and precision-only", () => {
+  const { root, store, cleanup } = layeredRepo();
+  try {
+    store.json.put("decisions", decision("dec_shadow_precision"));
+    store.reindex();
+    const service = new ConstitutionService(store, root);
+    const compiled = service.compile("dec_shadow_precision", { now: NOW });
+    const proved = service.prove(compiled.id, { now: "2026-07-11T14:00:00.000Z" });
+    assert.equal(proved.proof.proof_class, "P3");
+
+    const baseline = service.recordShadow(compiled.id, { now: "2026-07-11T14:01:00.000Z", latencyMs: 7 });
+    assert.equal(baseline.evaluation.result, "satisfied");
+    assert.ok(existsSync(join(root, ".hunch/shadow", `${baseline.id}.json`)));
+    assert.throws(() => service.classifyShadow(compiled.id, baseline.id, "true_positive_actionable", "human:owner", "not a violation"), /only to violated/);
+
+    writeFileSync(join(root, "src/api/orders.ts"), 'import { dbQuery } from "../db/client.js";\nexport function listOrders(u){ return dbQuery(u); }\n');
+    commitFiles(root, ["src/api/orders.ts"], "fixture: shadow direct persistence violation");
+    indexRepo(store, root, { churn: false });
+    store.reindex();
+    const violation = service.recordShadow(compiled.id, { now: "2026-07-11T14:02:00.000Z", latencyMs: 9 });
+    assert.equal(violation.evaluation.result, "violated");
+    assert.equal(service.recordShadow(compiled.id, { now: "2026-07-11T14:03:00.000Z", latencyMs: 99 }).id, violation.id, "same exact evaluation cannot inflate the denominator");
+
+    const falsePositive = service.classifyShadow(
+      compiled.id,
+      violation.id,
+      "false_positive_semantics",
+      "human:owner",
+      "The first judgment was intentionally pessimistic for the fixture.",
+      { now: "2026-07-11T14:04:00.000Z" },
+    );
+    assert.throws(
+      () => service.repository.putShadowEvaluation({ ...violation, observed_at: "2026-07-11T14:04:01.000Z" }, compiled.id),
+      /content hash mismatch/,
+    );
+    const blocked = service.shadowReport(compiled.id, { minApplicable: 2 });
+    assert.deepEqual(blocked.counts, {
+      total: 2,
+      applicable: 2,
+      satisfied: 1,
+      violated: 1,
+      not_applicable: 0,
+      unknown: 0,
+      error: 0,
+      stale_excluded: 0,
+    });
+    assert.equal(blocked.precision.confirmed, 0);
+    assert.equal(blocked.precision.lower_bound, 0);
+    assert.equal(blocked.recommendation, "not_ready");
+    assert.match(blocked.reasons.join("\n"), /confirmed false positive/);
+    const shadowCard = service.card(compiled.id);
+    assert.equal(shadowCard.shadow_precision?.counts.total, 2);
+    assert.match(renderProofCard(shadowCard), /shadow: 2 recent applicable/);
+
+    const actionable = service.classifyShadow(
+      compiled.id,
+      violation.id,
+      "true_positive_actionable",
+      "human:owner",
+      "Confirmed after reviewing the exact graph receipt.",
+      { now: "2026-07-11T14:05:00.000Z", supersedes: falsePositive.id },
+    );
+    const ready = service.shadowReport(compiled.id, { minApplicable: 2 });
+    assert.equal(ready.precision.confirmed, 1);
+    assert.equal(ready.precision.lower_bound, 1);
+    assert.equal(ready.recommendation, "eligible_for_p4_review");
+    assert.equal(service.get(compiled.id).state, "proposed");
+    assert.equal(service.get(compiled.id).authority, null, "shadow readiness never activates policy authority");
+    assert.throws(
+      () => service.classifyShadow(compiled.id, violation.id, "false_positive_selector", "human:owner", "branched correction", { now: "2026-07-11T14:06:00.000Z", supersedes: falsePositive.id }),
+      new RegExp(`current disposition ${actionable.id}`),
+    );
+
+    rmSync(join(root, "src/db/client.ts"));
+    commitFiles(root, ["src/db/client.ts"], "fixture: shadow unknown binding");
+    indexRepo(store, root, { churn: false });
+    store.reindex();
+    const unknown = service.recordShadow(compiled.id, { now: "2026-07-11T14:07:00.000Z", latencyMs: 11 });
+    assert.equal(unknown.evaluation.result, "unknown");
+    const uncertain = service.shadowReport(compiled.id, { minApplicable: 2 });
+    assert.equal(uncertain.recommendation, "not_ready");
+    assert.match(uncertain.reasons.join("\n"), /unknown\/error rate/);
   } finally {
     cleanup();
   }
@@ -2011,6 +2117,29 @@ test("Gate G1 adapter contract: CLI, MCP, and strict CI expose the identical rec
     assert.equal(ciRun.status, 1, "strict CI blocks the authorized violation");
     assert.match(ciRun.stdout, new RegExp(receipt.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 
+    const shadowRecordRun = spawnSync(process.execPath, [tsx, cli, "policy", "shadow", compiled.id, "--record"], {
+      cwd: fixture.root,
+      env,
+      encoding: "utf8",
+    });
+    assert.equal(shadowRecordRun.status, 0, shadowRecordRun.stderr);
+    assert.match(shadowRecordRun.stdout, /shadow recording never warns, blocks/);
+    const shadowInspectRun = spawnSync(process.execPath, [tsx, cli, "policy", "shadow", compiled.id, "--public-only"], {
+      cwd: fixture.root,
+      env,
+      encoding: "utf8",
+    });
+    assert.equal(shadowInspectRun.status, 0, shadowInspectRun.stderr);
+    assert.equal((JSON.parse(shadowInspectRun.stdout) as { counts: { total: number } }).counts.total, 1);
+    const shadowCardRun = spawnSync(process.execPath, [tsx, cli, "policy", "card", compiled.id, "--public-only", "--json"], {
+      cwd: fixture.root,
+      env,
+      encoding: "utf8",
+    });
+    assert.equal(shadowCardRun.status, 0, shadowCardRun.stderr);
+    const shadowCardHash = (JSON.parse(shadowCardRun.stdout) as { card_hash: string }).card_hash;
+    assert.notEqual(shadowCardHash, expectedCardHash, "the content-addressed card changes when shadow evidence is attached");
+
     const transport = new StdioClientTransport({ command: process.execPath, args: [tsx, cli, "mcp"], cwd: fixture.root, env });
     client = new Client({ name: "constitution-contract-test", version: "1.0.0" });
     await client.connect(transport);
@@ -2019,12 +2148,16 @@ test("Gate G1 adapter contract: CLI, MCP, and strict CI expose the identical rec
     assert.equal(plan.content_hash, proved.proof.plan_hash, "MCP returns the same canonical plan that the proof binds");
     const cardCall = await client.callTool({ name: "hunch_policy_card", arguments: { policy_id: compiled.id, public_only: true } });
     const card = JSON.parse((cardCall.content[0] as { type: "text"; text: string }).text) as { card_hash: string };
-    assert.equal(card.card_hash, expectedCardHash, "CLI and MCP expose the same deterministic proof card");
+    assert.equal(card.card_hash, shadowCardHash, "CLI and MCP expose the same deterministic proof card for the same ledger state");
     const mcp = await client.callTool({ name: "hunch_policy_evaluate", arguments: { policy_id: compiled.id, public_only: true } });
     const text = (mcp.content[0] as { type: "text"; text: string }).text;
     const mcpReceipts = JSON.parse(text) as Array<{ deterministic_hash: string; result: string }>;
     assert.equal(mcpReceipts[0]?.result, "violated");
     assert.equal(mcpReceipts[0]?.deterministic_hash, receipt, "all three surfaces share one canonical evaluator receipt");
+    const shadowCall = await client.callTool({ name: "hunch_policy_shadow", arguments: { policy_id: compiled.id, public_only: true } });
+    const shadowReport = JSON.parse((shadowCall.content[0] as { type: "text"; text: string }).text) as { counts: { total: number }; recommendation: string };
+    assert.equal(shadowReport.counts.total, 1);
+    assert.equal(shadowReport.recommendation, "not_ready");
   } finally {
     if (client) await client.close();
     fixture.cleanup();

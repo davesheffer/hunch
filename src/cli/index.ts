@@ -531,6 +531,7 @@ function configureOverlay(dir: string | undefined, opts: OverlaySetupOpts, mode:
     if (constitutionMoved.evidence) breakdownParts.push(`${constitutionMoved.evidence} evidence events`);
     if (constitutionMoved.corpora) breakdownParts.push(`${constitutionMoved.corpora} proof corpora`);
     if (constitutionMoved.dispositions) breakdownParts.push(`${constitutionMoved.dispositions} history dispositions`);
+    if (constitutionMoved.shadow) breakdownParts.push(`${constitutionMoved.shadow} shadow records`);
     const breakdown = breakdownParts.join(", ") || "0 records";
     migrateNote =
       `  ✓ migrated public memory → overlay (${breakdown}); public store emptied\n` +
@@ -1118,6 +1119,67 @@ policyCmd
       } else {
         console.log(JSON.stringify(service.historyDispositions(id, { publicOnly: opts.publicOnly }), null, 2));
       }
+    } catch (e) {
+      fail((e as Error).message);
+    } finally {
+      store.close();
+    }
+  });
+
+policyCmd
+  .command("shadow")
+  .description("Record or inspect non-blocking shadow evaluations, append human dispositions, and derive raw precision/P4-readiness measurements. Never activates policy.")
+  .argument("<id>", "policy id")
+  .option("--record", "record the current deterministic evaluation once for this exact graph receipt")
+  .option("--event <id>", "shadow evaluation id to classify")
+  .option("--classify <kind>", "true_positive_actionable | true_positive_accepted_exception | false_positive_selector | false_positive_semantics | false_positive_stale | unknown_insufficient_parser")
+  .option("--actor <identity>", "explicit human identity: human:, github:, or git:")
+  .option("--reason <reason>", "bounded audited reason for the classification")
+  .option("--supersedes <id>", "current shadow disposition id when appending a correction")
+  .option("--min-applicable <n>", "minimum recent applicable changes for P4 review eligibility", "20")
+  .option("--recent <n>", "maximum recent applicable changes in the precision window", "100")
+  .option("--max-unknown-error-rate <rate>", "exclusive unknown/error-rate ceiling", "0.01")
+  .option("--public-only", "exclude private-overlay shadow records when inspecting")
+  .action((id: string, opts: {
+    record?: boolean;
+    event?: string;
+    classify?: string;
+    actor?: string;
+    reason?: string;
+    supersedes?: string;
+    minApplicable: string;
+    recent: string;
+    maxUnknownErrorRate: string;
+    publicOnly?: boolean;
+  }) => {
+    const { store, root } = storeFor();
+    try {
+      const service = new ConstitutionService(store, root);
+      const classifying = !!opts.event || !!opts.classify || !!opts.actor || !!opts.reason || !!opts.supersedes;
+      if (opts.record && classifying) throw new Error("choose either --record or a shadow classification, not both");
+      if ((opts.record || classifying) && opts.publicOnly) throw new Error("--public-only cannot be combined with shadow writes");
+      if (opts.record) {
+        indexRepo(store, root, { churn: false });
+        store.reindex();
+        const record = service.recordShadow(id);
+        console.log(`✓ recorded ${record.id}: ${record.evaluation.result} on ${record.evaluation.repository.graph_hash}`);
+        console.log("  shadow recording never warns, blocks, changes lifecycle, or grants authority.");
+        return;
+      }
+      if (classifying) {
+        if (!opts.event || !opts.classify || !opts.actor || !opts.reason) {
+          throw new Error("shadow classification requires --event, --classify, --actor, and --reason");
+        }
+        const classification = HistoryDispositionClassificationSchema.parse(opts.classify);
+        const disposition = service.classifyShadow(id, opts.event, classification, opts.actor, opts.reason, { supersedes: opts.supersedes });
+        console.log(`✓ recorded ${disposition.id}: ${disposition.classification} for ${disposition.shadow_id}`);
+        console.log("  disposition changes measurement only; it cannot activate or block.");
+        return;
+      }
+      const minApplicable = Number(opts.minApplicable);
+      const recentApplicable = Number(opts.recent);
+      const maxUnknownErrorRate = Number(opts.maxUnknownErrorRate);
+      console.log(JSON.stringify(service.shadowReport(id, { minApplicable, recentApplicable, maxUnknownErrorRate }, { publicOnly: opts.publicOnly }), null, 2));
     } catch (e) {
       fail((e as Error).message);
     } finally {

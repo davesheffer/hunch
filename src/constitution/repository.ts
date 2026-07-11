@@ -8,11 +8,20 @@ import { proofCorpusContentHash } from "./corpus.js";
 import { currentHistoryDispositions, historyDispositionContentHash, historyDispositionJudgmentHash } from "./disposition.js";
 import { assertCompositionBinding, compositionDescendants, policyProofHash } from "./composition.js";
 import {
+  currentShadowDispositions,
+  policyEvaluationContentHash,
+  shadowDispositionContentHash,
+  shadowDispositionJudgmentHash,
+  shadowEvaluationContentHash,
+  shadowEvaluationIdentityHash,
+} from "./shadow.js";
+import {
   HistoryDispositionSchema,
   ProofCorpusSchema,
   PolicyProofSchema,
   ProofPlanSchema,
   PolicySpecSchema,
+  ShadowRecordSchema,
   EvidenceEventSchema,
   type EvidenceEvent,
   type HistoryDisposition,
@@ -20,6 +29,9 @@ import {
   type PolicyProof,
   type ProofPlan,
   type PolicySpec,
+  type ShadowDisposition,
+  type ShadowEvaluationRecord,
+  type ShadowRecord,
 } from "./schema.js";
 
 const encode = (value: unknown): string => JSON.stringify(value, null, 2) + "\n";
@@ -51,7 +63,7 @@ export class PolicyRepository {
     this.privateHome = store.privateDir;
   }
 
-  private dir(home: "public" | "private", kind: "policies" | "proofs" | "plans" | "evidence" | "corpora" | "dispositions"): string {
+  private dir(home: "public" | "private", kind: "policies" | "proofs" | "plans" | "evidence" | "corpora" | "dispositions" | "shadow"): string {
     const base = home === "private" ? this.privateHome : this.publicHome;
     if (!base) throw new Error("No private Hunch overlay is configured; refusing to write a private policy.");
     return join(base, kind);
@@ -85,6 +97,11 @@ export class PolicyRepository {
   private dispositionsIn(home: "public" | "private"): HistoryDisposition[] {
     if (home === "private" && !this.privateHome) return [];
     return loadRecords(this.dir(home, "dispositions"), validateDisposition, "dispositions");
+  }
+
+  private shadowIn(home: "public" | "private"): ShadowRecord[] {
+    if (home === "private" && !this.privateHome) return [];
+    return loadRecords(this.dir(home, "shadow"), validateShadowRecord, "shadow");
   }
 
   listPolicies(opts: { publicOnly?: boolean; privateOnly?: boolean } = {}): PolicySpec[] {
@@ -151,6 +168,26 @@ export class PolicyRepository {
     const records = [...byId.values()];
     currentHistoryDispositions(records);
     return records.sort((left, right) => left.id.localeCompare(right.id));
+  }
+
+  listShadowEvaluations(opts: { publicOnly?: boolean; privateOnly?: boolean } = {}): ShadowEvaluationRecord[] {
+    if (opts.publicOnly && opts.privateOnly) throw new Error("choose only one of publicOnly or privateOnly");
+    const records = opts.privateOnly
+      ? this.shadowIn("private")
+      : [...this.shadowIn("public"), ...(opts.publicOnly ? [] : this.shadowIn("private"))];
+    const byId = new Map(records.filter((record): record is ShadowEvaluationRecord => record.record_type === "evaluation").map((record) => [record.id, record]));
+    return [...byId.values()].sort((left, right) => left.observed_at.localeCompare(right.observed_at) || left.id.localeCompare(right.id));
+  }
+
+  listShadowDispositions(opts: { publicOnly?: boolean; privateOnly?: boolean } = {}): ShadowDisposition[] {
+    if (opts.publicOnly && opts.privateOnly) throw new Error("choose only one of publicOnly or privateOnly");
+    const records = opts.privateOnly
+      ? this.shadowIn("private")
+      : [...this.shadowIn("public"), ...(opts.publicOnly ? [] : this.shadowIn("private"))];
+    const byId = new Map(records.filter((record): record is ShadowDisposition => record.record_type === "disposition").map((record) => [record.id, record]));
+    const dispositions = [...byId.values()];
+    currentShadowDispositions(dispositions);
+    return dispositions.sort((left, right) => left.id.localeCompare(right.id));
   }
 
   homeOfPolicy(id: string): "public" | "private" | undefined {
@@ -271,6 +308,70 @@ export class PolicyRepository {
     writeFileAtomic(join(dir, `${parsed.id}.json`), encode(parsed));
     return parsed;
   }
+
+  putShadowEvaluation(evaluation: ShadowEvaluationRecord, policyId: string): ShadowEvaluationRecord {
+    const parsed = validateShadowEvaluation(evaluation);
+    if (parsed.policy_id !== policyId) throw new Error(`shadow evaluation ${parsed.id} does not belong to policy ${policyId}`);
+    const home = this.homeOfPolicy(policyId);
+    if (!home) throw new Error(`cannot write shadow evaluation ${parsed.id}: policy ${policyId} has no exact storage home`);
+    const homeOpts = home === "public" ? { publicOnly: true } : { privateOnly: true };
+    const policy = this.getPolicy(policyId, homeOpts);
+    const proof = policy?.proof ? this.getProof(policy.proof, homeOpts) : undefined;
+    const composition = policy ? compositionDescendants(policy, this.listPolicies(homeOpts)) : [];
+    if (!policy || !proof
+      || policy.proof !== parsed.proof_id
+      || proof.id !== parsed.proof_id
+      || proof.plan_hash !== parsed.plan_hash
+      || policyProofHash(policy, composition) !== parsed.policy_hash
+      || proof.policy_hash !== parsed.policy_hash
+      || policy.data_class !== parsed.data_class
+      || parsed.evaluation.policy_id !== policyId
+      || parsed.evaluation.evaluator.name !== proof.evaluator.name
+      || parsed.evaluation.evaluator.version !== proof.evaluator.version
+      || parsed.evaluation.deterministic_hash !== policyEvaluationContentHash(parsed.evaluation)) {
+      throw new Error(`shadow evaluation ${parsed.id} does not match the current policy/proof/evaluation binding`);
+    }
+    const existing = this.listShadowEvaluations(homeOpts).find((record) => shadowEvaluationIdentityHash(record) === shadowEvaluationIdentityHash(parsed));
+    if (existing) return existing;
+    const dir = this.dir(home, "shadow");
+    mkdirSync(dir, { recursive: true });
+    writeFileAtomic(join(dir, `${parsed.id}.json`), encode(parsed));
+    return parsed;
+  }
+
+  putShadowDisposition(disposition: ShadowDisposition, policyId: string): ShadowDisposition {
+    const parsed = validateShadowDisposition(disposition);
+    if (parsed.policy_id !== policyId) throw new Error(`shadow disposition ${parsed.id} does not belong to policy ${policyId}`);
+    const home = this.homeOfPolicy(policyId);
+    if (!home) throw new Error(`cannot write shadow disposition ${parsed.id}: policy ${policyId} has no exact storage home`);
+    const homeOpts = home === "public" ? { publicOnly: true } : { privateOnly: true };
+    const evaluation = this.listShadowEvaluations(homeOpts).find((record) => record.id === parsed.shadow_id);
+    if (!evaluation
+      || evaluation.evaluation.result !== "violated"
+      || evaluation.policy_id !== parsed.policy_id
+      || evaluation.proof_id !== parsed.proof_id
+      || evaluation.policy_hash !== parsed.policy_hash
+      || evaluation.evaluation.deterministic_hash !== parsed.evaluation_hash
+      || evaluation.data_class !== parsed.data_class) {
+      throw new Error(`shadow disposition ${parsed.id} does not match an exact violated shadow evaluation`);
+    }
+    const records = this.listShadowDispositions(homeOpts);
+    const existing = records.find((record) => record.id === parsed.id);
+    if (existing) return existing;
+    const sameJudgment = records.find((record) => shadowDispositionJudgmentHash(record) === shadowDispositionJudgmentHash(parsed));
+    if (sameJudgment) return sameJudgment;
+    const evaluationRecords = records.filter((record) => record.shadow_id === parsed.shadow_id);
+    const current = currentShadowDispositions(evaluationRecords)[0];
+    if (current && parsed.supersedes !== current.id) {
+      throw new Error(`shadow evaluation ${parsed.shadow_id} already has current disposition ${current.id}; pass --supersedes ${current.id} to append a correction`);
+    }
+    if (!current && parsed.supersedes) throw new Error(`shadow disposition ${parsed.id} supersedes no current disposition for this evaluation`);
+    currentShadowDispositions([...records, parsed]);
+    const dir = this.dir(home, "shadow");
+    mkdirSync(dir, { recursive: true });
+    writeFileAtomic(join(dir, `${parsed.id}.json`), encode(parsed));
+    return parsed;
+  }
 }
 
 function validatePlan(raw: unknown): ProofPlan {
@@ -297,11 +398,35 @@ function validateDisposition(raw: unknown): HistoryDisposition {
   return disposition;
 }
 
+function validateShadowRecord(raw: unknown): ShadowRecord {
+  const record = ShadowRecordSchema.parse(raw);
+  return record.record_type === "evaluation" ? validateShadowEvaluation(record) : validateShadowDisposition(record);
+}
+
+function validateShadowEvaluation(raw: unknown): ShadowEvaluationRecord {
+  const record = ShadowRecordSchema.parse(raw);
+  if (record.record_type !== "evaluation") throw new Error("expected a shadow evaluation record");
+  const hash = shadowEvaluationContentHash(record);
+  if (record.content_hash !== hash) throw new Error(`shadow evaluation ${record.id} content hash mismatch`);
+  if (record.id !== `shadow_${shortHash(hash)}`) throw new Error(`shadow evaluation ${record.id} id does not match its canonical content`);
+  if (record.evaluation.deterministic_hash !== policyEvaluationContentHash(record.evaluation)) throw new Error(`shadow evaluation ${record.id} receipt hash mismatch`);
+  return record;
+}
+
+function validateShadowDisposition(raw: unknown): ShadowDisposition {
+  const record = ShadowRecordSchema.parse(raw);
+  if (record.record_type !== "disposition") throw new Error("expected a shadow disposition record");
+  const hash = shadowDispositionContentHash(record);
+  if (record.content_hash !== hash) throw new Error(`shadow disposition ${record.id} content hash mismatch`);
+  if (record.id !== `sdisp_${shortHash(hash)}`) throw new Error(`shadow disposition ${record.id} id does not match its canonical content`);
+  return record;
+}
+
 /** One-time private migration for the Constitution's standalone Git-native
  * records. Copy/validate everything before deleting the public directories;
  * private records win on an id collision. */
-export function movePolicyArtifactsToPrivate(publicHunchDir: string, privateHunchDir: string): { policies: number; proofs: number; plans: number; evidence: number; corpora: number; dispositions: number } {
-  const counts = { policies: 0, proofs: 0, plans: 0, evidence: 0, corpora: 0, dispositions: 0 };
+export function movePolicyArtifactsToPrivate(publicHunchDir: string, privateHunchDir: string): { policies: number; proofs: number; plans: number; evidence: number; corpora: number; dispositions: number; shadow: number } {
+  const counts = { policies: 0, proofs: 0, plans: 0, evidence: 0, corpora: 0, dispositions: 0, shadow: 0 };
   type Kind = keyof typeof counts;
   type Artifact = { id: string; policy_id?: string };
   const specs: Array<{ kind: Kind; parse: (raw: unknown) => Artifact }> = [
@@ -311,6 +436,7 @@ export function movePolicyArtifactsToPrivate(publicHunchDir: string, privateHunc
     { kind: "evidence", parse: (value) => EvidenceEventSchema.parse(value) },
     { kind: "corpora", parse: validateCorpus },
     { kind: "dispositions", parse: validateDisposition },
+    { kind: "shadow", parse: validateShadowRecord },
   ];
   const staged = specs.map(({ kind, parse }) => {
     const from = join(publicHunchDir, kind);
@@ -326,6 +452,43 @@ export function movePolicyArtifactsToPrivate(publicHunchDir: string, privateHunc
   if (dispositions) {
     const union = new Map([...dispositions.pub, ...dispositions.priv.values()].map((record) => [record.id, record as HistoryDisposition]));
     currentHistoryDispositions([...union.values()]);
+  }
+  const shadow = staged.find((entry) => entry.kind === "shadow");
+  if (shadow) {
+    const union = new Map([...shadow.pub, ...shadow.priv.values()].map((record) => [record.id, record as ShadowRecord]));
+    const shadowRecords = [...union.values()];
+    const shadowEvaluations = shadowRecords.filter((record): record is ShadowEvaluationRecord => record.record_type === "evaluation");
+    const shadowDispositions = shadowRecords.filter((record): record is ShadowDisposition => record.record_type === "disposition");
+    currentShadowDispositions(shadowDispositions);
+    const policyStage = staged.find((entry) => entry.kind === "policies")!;
+    const proofStage = staged.find((entry) => entry.kind === "proofs")!;
+    const policies = [...new Map([...policyStage.pub, ...policyStage.priv.values()].map((record) => [record.id, record as PolicySpec])).values()];
+    const proofs = new Map([...proofStage.pub, ...proofStage.priv.values()].map((record) => [record.id, record as PolicyProof]));
+    for (const evaluation of shadowEvaluations) {
+      const policy = policies.find((record) => record.id === evaluation.policy_id);
+      const proof = proofs.get(evaluation.proof_id);
+      const composition = policy ? compositionDescendants(policy, policies) : [];
+      if (!policy || !proof
+        || policy.proof !== proof.id
+        || proof.policy_hash !== evaluation.policy_hash
+        || proof.plan_hash !== evaluation.plan_hash
+        || policyProofHash(policy, composition) !== evaluation.policy_hash
+        || evaluation.evaluation.policy_id !== policy.id
+        || evaluation.evaluation.deterministic_hash !== policyEvaluationContentHash(evaluation.evaluation)) {
+        throw new Error(`shadow evaluation ${evaluation.id} does not match migrated policy/proof semantics`);
+      }
+    }
+    for (const disposition of shadowDispositions) {
+      const evaluation = shadowEvaluations.find((record) => record.id === disposition.shadow_id);
+      if (!evaluation
+        || evaluation.evaluation.result !== "violated"
+        || evaluation.policy_id !== disposition.policy_id
+        || evaluation.proof_id !== disposition.proof_id
+        || evaluation.policy_hash !== disposition.policy_hash
+        || evaluation.evaluation.deterministic_hash !== disposition.evaluation_hash) {
+        throw new Error(`shadow disposition ${disposition.id} does not match migrated evaluation`);
+      }
+    }
   }
   for (const { kind, from, to, pub, priv, keyFor } of staged) {
     if (!pub.length && !existsSync(from)) continue;

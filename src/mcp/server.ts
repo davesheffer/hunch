@@ -876,6 +876,26 @@ export function buildServer(root: string): McpServer {
   );
 
   server.registerTool(
+    "hunch_policy_shadow",
+    {
+      title: "Inspect Constitution shadow precision",
+      description:
+        "Return the append-only shadow evaluation ledger, current human dispositions, raw precision counts, unknown/error rate, thresholds, and P4-review recommendation for one policy. Read-only: it never records a sample, changes lifecycle, activates, warns, or blocks.",
+      inputSchema: {
+        policy_id: z.string().describe("Policy id (pol_*)."),
+        public_only: z.boolean().optional().describe("Exclude private-overlay shadow records."),
+      },
+    },
+    async ({ policy_id, public_only }): Promise<ToolResult> => {
+      try {
+        return ok(JSON.stringify(new ConstitutionService(store, root).shadowReport(policy_id, {}, { publicOnly: public_only }), null, 2));
+      } catch (e) {
+        return err(`Failed to inspect policy shadow precision: ${(e as Error).message}`);
+      }
+    },
+  );
+
+  server.registerTool(
     "hunch_policy_proof",
     {
       title: "Inspect a Constitution policy proof",

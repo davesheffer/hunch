@@ -117,6 +117,8 @@ hunch policy plan pol_… --history 20 --mutations 3
 hunch policy prove pol_…
 hunch policy history pol_…
 hunch policy history pol_… --commit <full-sha> --classify true_positive_actionable --actor github:your-name --reason "Confirmed historical violation"
+hunch policy shadow pol_… --record
+hunch policy shadow pol_…
 hunch policy card pol_…
 hunch policy relations pol_…
 hunch policy accept pol_… --blocking --actor github:your-name
@@ -204,6 +206,11 @@ the history-evidence gate. False positives, insufficient-parser unknowns, and ac
 remain blockers until the policy/evaluator or combined exception semantics are repaired and
 re-proved. A disposition never activates policy: blocking still requires a separate explicit human
 `policy accept`, and a later corrected disposition is rechecked on every gate evaluation.
+`policy shadow --record` appends one content-addressed evaluation for the exact current graph and
+deduplicates retries of the same receipt. Violations use a separate append-only human disposition
+chain, while `policy shadow` reports raw recent-window counts, confirmed and lower-bound precision,
+unknown/error rate, mutation sensitivity, thresholds, and P4-review eligibility. Shadow records
+never warn, block, change proof class, or activate policy; the MCP shadow tool is read-only.
 Planning runs no replay, test, model, or activation; `policy prove` binds its receipt to that plan.
 Proof execution checks out each unique immutable commit into a disposable worktree with hooks,
 user-global Git configuration, private-overlay discovery, and provider selection disabled. It

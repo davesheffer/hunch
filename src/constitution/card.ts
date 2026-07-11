@@ -3,6 +3,7 @@ import { assertCompositionBinding, policyProofHash } from "./composition.js";
 import { blockingEvidenceError } from "./lifecycle.js";
 import { assessHistoryDispositions } from "./disposition.js";
 import type { EvaluationSummary, HistoryDisposition, HistoryDispositionClassification, PolicyProof, PolicySpec, ProofClass } from "./schema.js";
+import type { ShadowPrecisionReport } from "./shadow.js";
 
 const proofRank: Record<ProofClass, number> = { P0: 0, P1: 1, P2: 2, P3: 3, P4: 4, P5: 5 };
 
@@ -31,6 +32,7 @@ export interface ProofCard {
   };
   project_checks: PolicyProof["project_checks"];
   composition: PolicyProof["composition"] | null;
+  shadow_precision: ShadowPrecisionReport | null;
   history_dispositions: {
     current: HistoryDisposition[];
     counts: Record<HistoryDispositionClassification, number>;
@@ -59,6 +61,7 @@ export function buildProofCard(
   proof: PolicyProof,
   dispositions: HistoryDisposition[] = [],
   composition: PolicySpec[] = [],
+  shadowPrecision: ShadowPrecisionReport | null = null,
 ): ProofCard {
   let semanticMatch = proof.policy_hash === policyProofHash(policy, composition);
   try {
@@ -83,6 +86,8 @@ export function buildProofCard(
   if (unknownResults || errorResults) actions.push("Repair or explicitly resolve every unknown/error proof result.");
   if (proof.mutation_controls.failed) actions.push("Repair every failed required mutation control before considering blocking approval.");
   if (policy.candidate.conflicts.length) actions.push("Resolve every direct candidate conflict with a human disposition before lifecycle promotion.");
+  if (shadowPrecision?.recommendation === "eligible_for_p4_review") actions.push("Shadow thresholds are met; a human may review P4 evidence, but measurement grants no authority.");
+  else if (shadowPrecision) actions.push("Continue bounded shadow review until every reported precision threshold is met.");
   if (eligible && !canBlock) actions.push("A human may review and explicitly activate blocking mode; the proof and any earlier advisory approval grant no blocking authority by themselves.");
   if (!eligible && actions.length === 0) actions.push("Strengthen the evidence vector before requesting blocking approval.");
   actions.push("Review the exact assertion, scope, evidence, and limitations before any lifecycle action.");
@@ -111,6 +116,7 @@ export function buildProofCard(
     },
     project_checks: proof.project_checks,
     composition: proof.composition ?? null,
+    shadow_precision: shadowPrecision,
     history_dispositions: {
       current: dispositionAssessment.current,
       counts: dispositionAssessment.counts,
@@ -160,6 +166,7 @@ export function renderProofCard(card: ProofCard): string {
     `  mutation controls: ${card.evidence_vector.mutation_controls.passed}/${card.evidence_vector.mutation_controls.total} passed · ${card.evidence_vector.mutation_controls.failed} failed`,
     `  project checks: build ${card.project_checks.build} · test ${card.project_checks.test} · never required for evaluator sensitivity`,
     ...(card.composition ? [`  composition: ${card.composition.root_policy_id} + ${card.composition.members.length} exception(s) · ${card.composition.composite_hash}`] : []),
+    ...(card.shadow_precision ? [`  shadow: ${card.shadow_precision.window.applicable} recent applicable · ${card.shadow_precision.window.violated} violated · precision ${card.shadow_precision.precision.confirmed == null ? "n/a" : (card.shadow_precision.precision.confirmed * 100).toFixed(1) + "%"} · ${card.shadow_precision.recommendation}`] : []),
     `  uncertainty: ${card.uncertainty.unclassified_history_hits} unclassified history hit · ${card.uncertainty.unknown_results} unknown · ${card.uncertainty.error_results} error`,
     `  blocking readiness: ${card.authority.eligible_for_human_blocking_approval ? "eligible for explicit human review" : `not eligible${card.authority.blocking_evidence_error ? ` — ${card.authority.blocking_evidence_error}` : ""}`}`,
     `  authority: ${card.authority.current?.kind === "human" ? card.authority.current.actor : "none — proof cannot activate policy"}`,

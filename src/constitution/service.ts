@@ -14,8 +14,16 @@ import { ingestLocalEvidence, type LocalEvidenceOptions, type LocalEvidenceRepor
 import { buildProofCard, type ProofCard } from "./card.js";
 import { compileProofCorpus } from "./corpus.js";
 import { compileHistoryDisposition, currentHistoryDispositions } from "./disposition.js";
-import { compositionDescendants } from "./composition.js";
-import type { HistoryDisposition, HistoryDispositionClassification, ReplayReceipt } from "./schema.js";
+import { compositionDescendants, policyProofHash } from "./composition.js";
+import {
+  compileShadowDisposition,
+  compileShadowEvaluation,
+  currentShadowDispositions,
+  scoreShadowPrecision,
+  type ShadowPrecisionReport,
+  type ShadowPrecisionThresholds,
+} from "./shadow.js";
+import type { HistoryDisposition, HistoryDispositionClassification, ReplayReceipt, ShadowDisposition, ShadowEvaluationRecord } from "./schema.js";
 
 export interface PolicyEvaluationSet {
   policy: PolicySpec;
@@ -64,6 +72,11 @@ export interface PolicyHistoryDispositionView {
   }>;
   current: HistoryDisposition[];
   audit: HistoryDisposition[];
+}
+
+export interface PolicyShadowView extends ShadowPrecisionReport {
+  evaluations: Array<{ record: ShadowEvaluationRecord; disposition: ShadowDisposition | null }>;
+  disposition_audit: ShadowDisposition[];
 }
 
 function relationSummary(policy: PolicySpec): PolicyRelationSummary {
@@ -136,7 +149,8 @@ export class ConstitutionService {
     if (!policy.proof) throw new Error(`policy ${id} has no proof`);
     const proof = this.proof(policy.proof, opts);
     const dispositions = this.repository.listDispositions(opts).filter((record) => record.policy_id === policy.id && record.proof_id === proof.id);
-    return buildProofCard(policy, proof, dispositions, this.composition(policy, opts));
+    const shadow = this.shadowReport(id, {}, opts);
+    return buildProofCard(policy, proof, dispositions, this.composition(policy, opts), shadow.counts.total || shadow.counts.stale_excluded ? shadow : null);
   }
 
   corpus(id: string, opts: { publicOnly?: boolean; privateOnly?: boolean } = {}): ProofCorpus {
@@ -249,6 +263,69 @@ export class ConstitutionService {
       composition: this.composition(policy, homeOpts),
     });
     return this.repository.putDisposition(disposition, policy.id);
+  }
+
+  recordShadow(id: string, opts: { now?: string; latencyMs?: number } = {}): ShadowEvaluationRecord {
+    const policy = this.get(id);
+    if (!policy.proof) throw new Error(`policy ${id} has no proof`);
+    const home = this.repository.homeOfPolicy(id);
+    const homeOpts = home === "public" ? { publicOnly: true } : { privateOnly: true };
+    const proof = this.proof(policy.proof, homeOpts);
+    const composition = this.composition(policy, homeOpts);
+    const expectedHash = policyProofHash(policy, composition);
+    if (proof.policy_hash !== expectedHash) throw new Error(`proof ${proof.id} does not match current policy semantics`);
+    const started = performance.now();
+    const evaluation = evaluatePolicy(this.store, this.root, policy, { publicOnly: home === "public", composition });
+    const latencyMs = opts.latencyMs ?? performance.now() - started;
+    const sameMatches = canonicalJson(evaluation.matches);
+    const alsoDetectedBy = evaluation.result === "violated"
+      ? this.evaluate({ activeOnly: true, publicOnly: home === "public" })
+        .filter((candidate) => candidate.policy.id !== id
+          && candidate.evaluation.result === "violated"
+          && canonicalJson(candidate.evaluation.matches) === sameMatches)
+        .map((candidate) => candidate.policy.id)
+      : [];
+    const record = compileShadowEvaluation(policy, proof, expectedHash, evaluation, alsoDetectedBy, latencyMs, opts.now);
+    return this.repository.putShadowEvaluation(record, policy.id);
+  }
+
+  classifyShadow(
+    id: string,
+    shadowId: string,
+    classification: HistoryDispositionClassification,
+    actor: string,
+    reason: string,
+    opts: { now?: string; supersedes?: string | null } = {},
+  ): ShadowDisposition {
+    const policy = this.get(id);
+    const home = this.repository.homeOfPolicy(id);
+    const homeOpts = home === "public" ? { publicOnly: true } : { privateOnly: true };
+    const evaluation = this.repository.listShadowEvaluations(homeOpts).find((record) => record.id === shadowId && record.policy_id === id);
+    if (!evaluation) throw new Error(`shadow evaluation ${shadowId} not found for policy ${id}`);
+    return this.repository.putShadowDisposition(compileShadowDisposition(evaluation, classification, actor, reason, opts), policy.id);
+  }
+
+  shadowReport(
+    id: string,
+    thresholds: Partial<ShadowPrecisionThresholds> = {},
+    opts: { publicOnly?: boolean; privateOnly?: boolean } = {},
+  ): PolicyShadowView {
+    const policy = this.get(id, opts);
+    if (!policy.proof) throw new Error(`policy ${id} has no proof`);
+    const proof = this.proof(policy.proof, opts);
+    const records = this.repository.listShadowEvaluations(opts).filter((record) => record.policy_id === id);
+    const audit = this.repository.listShadowDispositions(opts).filter((record) => record.policy_id === id);
+    const current = currentShadowDispositions(audit);
+    const history = this.repository.listDispositions(opts).filter((record) => record.policy_id === id && record.proof_id === proof.id);
+    const report = scoreShadowPrecision(policy, proof, records, audit, history, thresholds);
+    return {
+      ...report,
+      evaluations: records.map((record) => ({
+        record,
+        disposition: current.find((candidate) => candidate.shadow_id === record.id) ?? null,
+      })),
+      disposition_audit: audit,
+    };
   }
 
   demote(id: string, actor: string, reason: string, opts: { now?: string } = {}): PolicySpec {
