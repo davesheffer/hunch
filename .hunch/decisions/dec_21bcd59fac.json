@@ -1,0 +1,49 @@
+{
+  "id": "dec_21bcd59fac",
+  "title": "Only accepted decisions may anchor automatic duplicate deletion",
+  "topic": "auto-review-dedup-anchor",
+  "status": "accepted",
+  "context": "A real deterministic auto-review dry-run scheduled two human-confirmed benchmark proposals for deletion, each at 62% similarity to the other. Because proposed records are unresolved review candidates, reciprocal similarity supplied no evidence about which record should survive; applying the plan would delete both.",
+  "decision": "Use one shared accepted-duplicate-anchor predicate across deterministic matching, harness candidate construction, and harness verdict validation. An anchor must be accepted, human-confirmed, and still live. Proposed decisions remain in the review queue even when they resemble or reciprocally name one another.",
+  "consequences": [
+    "Automatic duplicate deletion cannot erase both sides of an unresolved proposal pair.",
+    "Harness output cannot promote an arbitrary proposal id into a deletion anchor.",
+    "Drafts that duplicate a finalized accepted decision continue to be eligible for deterministic deletion."
+  ],
+  "alternatives_rejected": [
+    "Break ties between mutually similar proposals and keep one — similarity provides no authority to choose the survivor, so this would automate review judgment.",
+    "Fix only deterministic matching — a harness duplicate_of verdict could still name a proposal and recreate the same destructive behavior.",
+    "Disable duplicate deletion entirely — unnecessary; accepted decisions remain a stable and human-authorized comparison baseline."
+  ],
+  "rejected_tripwires": [],
+  "related_components": [
+    "cmp_b256a6aed0"
+  ],
+  "related_files": [
+    "src/core/dupdetect.ts",
+    "src/core/autoreview.ts",
+    "src/cli/index.ts",
+    "test/autoreview-cli.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "1c1ff250096652c2e86a1bbf26f804b9f182d090",
+  "valid_from": "2026-07-11T15:54:49.724Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 0.95,
+    "evidence": [
+      "src/core/dupdetect.ts",
+      "src/core/autoreview.ts",
+      "src/cli/index.ts",
+      "test/autoreview-cli.test.ts"
+    ]
+  },
+  "date": "2026-07-11T15:54:49.724Z"
+}
