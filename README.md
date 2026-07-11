@@ -125,6 +125,26 @@ hunch policy accept pol_… --blocking --actor github:your-name
 hunch policy evaluate pol_… --json
 ```
 
+Private G2 dogfood stays evidence-only until a separate human signoff. An exact private plan selects
+at least ten P3+ policies and seven category-specific runbooks; drills write no evidence by
+themselves, rehearsals bind the resulting hashes, and historical shadow backfill commits only after
+the complete policy/commit matrix has produced no unknown or error result:
+
+```bash
+hunch constitution g2 --plan private-g2-plan.json
+hunch constitution g2 --drill all
+hunch constitution g2 --rehearse rb_g2_evaluator_error_01 --result passed \
+  --actor human:owner --evidence sha1:… --notes "Exact recovery drill passed."
+hunch constitution g2 --backfill 20
+hunch constitution g2 --queue 20
+hunch constitution g2 --strict
+```
+
+Backfill uses distinct real first-parent commits, excludes commits predating an executable policy's
+fixing commit, and deduplicates by exact policy/proof/repository/graph identity. A failed preflight
+writes nothing. Neither a ready packet nor a passed drill activates, warns, blocks, or claims G2;
+the strongest machine result is `eligible_for_human_g2_signoff`.
+
 The model-free bootstrap considers only current, accepted, human-confirmed decisions carrying
 exactly one structured `conformance` predicate. It normalizes auditable evidence and keeps a bounded
 queue of at most three unreviewed candidates. Re-running is idempotent, private evidence inherits
