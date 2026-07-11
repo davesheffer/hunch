@@ -1,0 +1,56 @@
+{
+  "id": "dec_ed1a05fb08",
+  "title": "Complete G2 operations with exact drills and atomic real-history shadow backfill",
+  "topic": null,
+  "status": "accepted",
+  "context": "The ten-policy threshold alone left G2 operationally incomplete: no executable category drills, no exact rehearsal evidence source, and only same-HEAD shadow collection. Full implementation must accumulate distinct real states without inflating retries or treating pre-policy commits as violations.",
+  "decision": "Add seven plan-bound hash-only operational drills across core, CLI, and client-neutral MCP; add CLI-only atomic first-parent shadow backfill that preflights the complete policy/commit matrix, writes nothing on unknown/error, deduplicates exact identities, and excludes executable-policy commits predating the fixing commit from precision scoring while retaining raw audit records. Drills never self-attest, readiness never signs off, and all blocking remains disabled.",
+  "consequences": [
+    "Operators can produce exact evidence hashes for every required runbook rehearsal without granting authority.",
+    "Real historical commits can establish bounded shadow baselines without synthetic commits or partial batches.",
+    "Pre-policy failures remain auditable but cannot pollute operational precision denominators."
+  ],
+  "alternatives_rejected": [
+    "Lower the 20-observation threshold or repeat one HEAD — rejected because it manufactures readiness; revisit if a future human-approved G2 protocol preregisters a different statistically justified bound.",
+    "Persist successful cells before the full matrix finishes — rejected because one late evaluator error would leave a biased partial baseline; revisit if the repository gains an explicit transactional batch ledger with recovery semantics.",
+    "Auto-record passed rehearsals or G2 signoff from drill success — rejected because machine diagnostics cannot impersonate human evidence or authority; revisit only if the human-actor Constitution contract is explicitly superseded."
+  ],
+  "rejected_tripwires": [],
+  "related_components": [
+    "Constitution",
+    "MCP Server"
+  ],
+  "related_files": [
+    "src/constitution/g2.ts",
+    "src/constitution/g2Drills.ts",
+    "src/constitution/service.ts",
+    "src/cli/index.ts",
+    "src/mcp/server.ts",
+    "test/g2.test.ts",
+    "test/constitution.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "57bff1d",
+  "valid_from": "2026-07-11T13:49:52.825Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 0.95,
+    "evidence": [
+      "src/constitution/g2.ts",
+      "src/constitution/g2Drills.ts",
+      "src/constitution/service.ts",
+      "src/cli/index.ts",
+      "src/mcp/server.ts",
+      "test/g2.test.ts",
+      "test/constitution.test.ts"
+    ]
+  },
+  "date": "2026-07-11T13:49:52.825Z"
+}
