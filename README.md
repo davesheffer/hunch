@@ -301,6 +301,21 @@ Hunch can answer with the actual context: this boundary exists because of the N+
 service layer was the chosen repair, and the direct import violates a confirmed constraint. That is
 the missing layer between fast code generation and durable engineering judgment.
 
+## Certify a release candidate
+
+```bash
+npm run gate:release
+```
+
+The same fail-closed runner gates pull requests, main, and npm publication. It binds the package
+version and optional release tag to HEAD; runs typecheck, the full suite, core and VS Code builds,
+public architectural conformance, a clean-installed tarball replay/privacy rehearsal, and the
+production dependency audit; then writes a content-addressed receipt under
+`.hunch-cache/release/`. A failed prerequisite stops later commands, a tag/version/commit mismatch
+refuses before execution, and publication remains unreachable unless the exact tagged checkout is
+clean and every gate passes. The receipt includes the prior-version rollback command; it never
+activates, promotes, warns, or blocks a Constitution policy.
+
 ## Learn more
 
 - [Full documentation](https://hunch-pi.vercel.app/docs)

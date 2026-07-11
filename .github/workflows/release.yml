@@ -22,11 +22,19 @@ permissions:
   contents: read
   id-token: write # OIDC — required for npm provenance attestation
 
+# A tag push and a later GitHub Release can target the same version. Serialize
+# them so the second run observes the first publication and becomes a green no-op.
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
 jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # release receipt binds HEAD and derives an exact rollback version from tags
 
       - uses: actions/setup-node@v5
         with:
@@ -37,10 +45,16 @@ jobs:
       - name: Install (locked)
         run: npm ci
 
-      # Gate the publish on a green build: tests must pass before anything ships.
-      # `prepublishOnly` (npm run build) runs automatically inside npm publish.
-      - name: Test
-        run: npm test
+      - name: Constitution release gate
+        run: npm run gate:release -- --tag "${GITHUB_REF_NAME}" --output release-gate.json
+
+      - name: Upload release-gate receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: constitution-release-gate-${{ github.ref_name }}-${{ github.run_id }}
+          path: release-gate.json
+          if-no-files-found: error
 
       # Tag push AND a later GitHub Release for the same version both trigger this
       # workflow — make the second run a green no-op instead of a red "version

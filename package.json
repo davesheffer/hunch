@@ -50,6 +50,7 @@
     "test": "tsx --test test/*.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "rehearse:constitution": "npm run build && node tooling/constitution-clean-rehearsal.mjs",
+    "gate:release": "node tooling/release-gate.mjs",
     "prepublishOnly": "npm run build"
   },
   "dependencies": {

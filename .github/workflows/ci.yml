@@ -26,21 +26,17 @@ jobs:
       - name: Install (locked)
         run: npm ci
 
-      - name: Typecheck
-        run: npm run typecheck
+      # One cross-platform gate is shared by normal CI and the publish workflow:
+      # typecheck, full tests, core + VS Code builds, conformance, clean tarball
+      # rehearsal/privacy sentinel, and production dependency audit. It emits a
+      # content-addressed receipt even when a prerequisite fails.
+      - name: Constitution release gate
+        run: npm run gate:release -- --output release-gate.json
 
-      - name: Test
-        run: npm test
-
-      - name: Build
-        run: npm run build
-
-      - name: Clean-install Constitution rehearsal
-        run: node tooling/constitution-clean-rehearsal.mjs
-
-      # Supply-chain gate: fail ONLY on a high/critical advisory in the deps we
-      # actually ship (--omit=dev drops dev-only noise). A new CVE on a shipped
-      # transitive turns the build red instead of silently riding along.
-      # Tighten to `--audit-level=moderate` if you want a stricter bar.
-      - name: Audit production dependencies
-        run: npm audit --omit=dev --audit-level=high
+      - name: Upload release-gate receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: constitution-release-gate-${{ github.sha }}
+          path: release-gate.json
+          if-no-files-found: error
