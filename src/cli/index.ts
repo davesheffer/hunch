@@ -91,6 +91,8 @@ import { movePolicyArtifactsToPrivate } from "../constitution/repository.js";
 import { HistoryDispositionClassificationSchema } from "../constitution/schema.js";
 import { G2_RUNBOOK_CATEGORIES, type CompileG2PlanInput } from "../constitution/g2.js";
 import type { CompileExperimentPreregistrationInput, CompileG3PlanInput } from "../constitution/g3.js";
+import { subscriptionCliVersion } from "../constitution/experimentRunner.js";
+import type { CompileExperimentCaseBankInput } from "../constitution/experiment.js";
 import { draftTripwires, knownRepoDeps } from "../synthesis/tripwires.js";
 import { constraintId } from "../core/ids.js";
 import type { Constraint, Decision } from "../core/types.js";
@@ -1685,6 +1687,175 @@ constitutionCmd
       store.close();
     }
   });
+
+// ---- experiment (fresh preregistration-bound execution) -----------------
+const experimentCmd = program
+  .command("experiment")
+  .description("Lock, execute, review, and report fresh private preregistered experiments. No result grants policy authority.");
+
+experimentCmd
+  .command("prepare")
+  .description("Lock a fresh private case bank to the exact current preregistration before assignment.")
+  .argument("<file>", "case bank JSON input")
+  .action((file: string) => {
+    const { store, root } = storeFor();
+    try {
+      const input = JSON.parse(readFileSync(resolve(file), "utf8")) as CompileExperimentCaseBankInput;
+      console.log(JSON.stringify(new ConstitutionService(store, root).lockExperimentCaseBank(input), null, 2));
+    } catch (e) {
+      fail((e as Error).message);
+    } finally {
+      store.close();
+    }
+  });
+
+experimentCmd
+  .command("create")
+  .description("Create one immutable balanced assignment manifest; one run is allowed per preregistration.")
+  .argument("<case-bank-id>", "locked private case bank id")
+  .requiredOption("--sample-per-arm <n>", "full preregistered target per arm; the minimum is only a checkpoint")
+  .requiredOption("--actor <actor>", "explicit owner (human:, git:, or github:)")
+  .requiredOption("--reason <text>", "why this exact run manifest is being created")
+  .option("--provider <provider>", "EXP-01 subscription CLI: claude-cli | codex-cli")
+  .option("--model <model>", "exact EXP-01 model version or alias")
+  .option("--max-turns <n>", "maximum agent turns for every EXP-01 assignment", "40")
+  .action((caseBankId: string, opts: { samplePerArm: string; actor: string; reason: string; provider?: string; model?: string; maxTurns: string }) => {
+    const { store, root } = storeFor();
+    try {
+      const service = new ConstitutionService(store, root);
+      const bank = service.experimentRepository.listCaseBanks().find((item) => item.id === caseBankId);
+      if (!bank) throw new Error(`unknown private experiment case bank: ${caseBankId}`);
+      if (bank.experiment === "EXP-01" && opts.provider !== "claude-cli" && opts.provider !== "codex-cli") {
+        throw new Error("EXP-01 run creation requires explicit --provider claude-cli|codex-cli; Hunch never chooses which subscription to spend");
+      }
+      if (bank.experiment === "EXP-01" && !opts.model) throw new Error("EXP-01 run creation requires an exact --model stratum");
+      if (bank.experiment === "EXP-03" && (opts.provider || opts.model)) throw new Error("EXP-03 is a human-review experiment and accepts no model provider");
+      const provider = opts.provider as "claude-cli" | "codex-cli" | undefined;
+      const appended = service.createExperimentRun(caseBankId, {
+        sample_per_arm: Number(opts.samplePerArm),
+        ...(provider ? { provider, provider_version: subscriptionCliVersion(provider), model_version: opts.model, max_turns: Number(opts.maxTurns) } : {}),
+        actor: opts.actor,
+        reason: opts.reason,
+      });
+      console.log(JSON.stringify({ appended, report: service.experimentReport(appended.id) }, null, 2));
+    } catch (e) {
+      fail((e as Error).message);
+    } finally {
+      store.close();
+    }
+  });
+
+experimentCmd
+  .command("run")
+  .description("Execute the next pending EXP-01 assignments with the manifest-selected subscription CLI.")
+  .argument("<run-id>", "immutable experiment run id")
+  .option("--limit <n>", "maximum assignments to execute in this invocation", "1")
+  .option("--timeout-ms <n>", "per-assignment subscription CLI timeout", "1800000")
+  .action((runId: string, opts: { limit: string; timeoutMs: string }) => {
+    const { store, root } = storeFor();
+    try {
+      console.log(JSON.stringify(new ConstitutionService(store, root).executeExperimentRun(runId, {
+        limit: Number(opts.limit),
+        timeoutMs: Number(opts.timeoutMs),
+      }), null, 2));
+    } catch (e) {
+      fail((e as Error).message);
+    } finally {
+      store.close();
+    }
+  });
+
+experimentCmd
+  .command("next")
+  .description("Start or resume the next randomized EXP-03 human review and return only its assigned treatment.")
+  .argument("<run-id>", "immutable experiment run id")
+  .requiredOption("--reviewer <actor>", "explicit human reviewer")
+  .action((runId: string, opts: { reviewer: string }) => {
+    const { store, root } = storeFor();
+    try {
+      console.log(JSON.stringify(new ConstitutionService(store, root).nextExperimentReview(runId, opts.reviewer), null, 2));
+    } catch (e) {
+      fail((e as Error).message);
+    } finally {
+      store.close();
+    }
+  });
+
+experimentCmd
+  .command("submit")
+  .description("Complete a machine-timed EXP-03 review; duration is derived from the append-only start record.")
+  .argument("<run-id>", "immutable experiment run id")
+  .argument("<assignment-id>", "assignment returned by experiment next")
+  .argument("<file>", "review outcome JSON without a duration field")
+  .action((runId: string, assignmentId: string, file: string) => {
+    const { store, root } = storeFor();
+    try {
+      const input = JSON.parse(readFileSync(resolve(file), "utf8")) as Parameters<ConstitutionService["submitExperimentReview"]>[2];
+      const service = new ConstitutionService(store, root);
+      const appended = service.submitExperimentReview(runId, assignmentId, input);
+      console.log(JSON.stringify({ appended, report: service.experimentReport(runId) }, null, 2));
+    } catch (e) {
+      fail((e as Error).message);
+    } finally {
+      store.close();
+    }
+  });
+
+experimentCmd
+  .command("followup")
+  .description("Append the preregistered seven-day EXP-03 reversal measurement.")
+  .argument("<run-id>", "immutable experiment run id")
+  .argument("<assignment-id>", "completed review assignment")
+  .argument("<file>", "follow-up JSON")
+  .action((runId: string, assignmentId: string, file: string) => {
+    const { store, root } = storeFor();
+    try {
+      const input = JSON.parse(readFileSync(resolve(file), "utf8")) as Parameters<ConstitutionService["recordExperimentFollowup"]>[2];
+      const service = new ConstitutionService(store, root);
+      const appended = service.recordExperimentFollowup(runId, assignmentId, input);
+      console.log(JSON.stringify({ appended, report: service.experimentReport(runId) }, null, 2));
+    } catch (e) {
+      fail((e as Error).message);
+    } finally {
+      store.close();
+    }
+  });
+
+experimentCmd
+  .command("stop")
+  .description("Irreversibly stop a run for a preregistered safety/privacy or provider-wide inability condition.")
+  .argument("<run-id>", "immutable experiment run id")
+  .argument("<file>", "stop receipt JSON with category, actor, reason, and evidence_hashes")
+  .action((runId: string, file: string) => {
+    const { store, root } = storeFor();
+    try {
+      const input = JSON.parse(readFileSync(resolve(file), "utf8")) as Parameters<ConstitutionService["stopExperiment"]>[1];
+      const service = new ConstitutionService(store, root);
+      const appended = service.stopExperiment(runId, input);
+      console.log(JSON.stringify({ appended, report: service.experimentReport(runId) }, null, 2));
+    } catch (e) {
+      fail((e as Error).message);
+    } finally {
+      store.close();
+    }
+  });
+
+for (const command of ["status", "report"] as const) {
+  experimentCmd
+    .command(command)
+    .description(command === "status" ? "Show raw denominators and remaining assignments." : "Emit the deterministic preregistration-bound analysis receipt.")
+    .argument("<run-id>", "immutable experiment run id")
+    .action((runId: string) => {
+      const { store, root } = storeFor();
+      try {
+        console.log(JSON.stringify(new ConstitutionService(store, root).experimentReport(runId), null, 2));
+      } catch (e) {
+        fail((e as Error).message);
+      } finally {
+        store.close();
+      }
+    });
+}
 
 // ---- compare (rank N candidate solutions by architectural fit) ------------
 program

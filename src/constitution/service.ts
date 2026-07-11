@@ -96,6 +96,29 @@ import {
   type AdapterConformanceReceipt,
 } from "./g3.js";
 import { executeG3AdapterConformance, g3ConformanceSourceHash } from "./g3Conformance.js";
+import {
+  ExperimentRepository,
+  assignmentTreatment,
+  buildExperimentReport,
+  compileExperimentCaseBank,
+  compileExperimentFollowup,
+  compileExperimentOutcome,
+  compileExperimentReviewStart,
+  compileExperimentRun,
+  compileExperimentStop,
+  currentExperimentOutcomes,
+  normalizedEditDistance,
+  type CompileExperimentCaseBankInput,
+  type CompileExperimentRunInput,
+  type ExperimentCaseBank,
+  type ExperimentFollowup,
+  type ExperimentOutcome,
+  type ExperimentReport,
+  type ExperimentReviewStart,
+  type ExperimentRun,
+  type ExperimentStop,
+} from "./experiment.js";
+import { executeExp01Assignment } from "./experimentRunner.js";
 
 export interface PolicyEvaluationSet {
   policy: PolicySpec;
@@ -204,6 +227,7 @@ export class ConstitutionService {
   readonly repository: PolicyRepository;
   readonly g2Repository: G2EvidenceRepository;
   readonly g3Repository: G3EvidenceRepository;
+  readonly experimentRepository: ExperimentRepository;
   readonly g2CandidateRepository: G2CandidateAttestationRepository;
   readonly g2BehaviorAttestationRepository: G2BehaviorAttestationRepository;
 
@@ -211,6 +235,7 @@ export class ConstitutionService {
     this.repository = new PolicyRepository(root, store);
     this.g2Repository = new G2EvidenceRepository(store);
     this.g3Repository = new G3EvidenceRepository(store);
+    this.experimentRepository = new ExperimentRepository(store);
     this.g2CandidateRepository = new G2CandidateAttestationRepository(store);
     this.g2BehaviorAttestationRepository = new G2BehaviorAttestationRepository(store);
   }
@@ -530,6 +555,160 @@ export class ConstitutionService {
       : null;
     const activeBlocking = this.repository.listPolicies().filter((policy) => policy.state === "active_blocking").map((policy) => policy.id);
     return scoreG3Readiness({ manifest, g2_readiness: g2, policy_evidence: policyEvidence, experiments, conformance, active_blocking_policy_ids: activeBlocking });
+  }
+
+  lockExperimentCaseBank(input: CompileExperimentCaseBankInput, opts: { now?: string } = {}): ExperimentCaseBank {
+    const preregistration = this.g3Repository.currentExperiments().find((item) => item.id === input.preregistration_id);
+    if (!preregistration) throw new Error(`case bank must bind a current G3 preregistration: ${input.preregistration_id}`);
+    return this.experimentRepository.putCaseBank(compileExperimentCaseBank(input, preregistration, opts));
+  }
+
+  createExperimentRun(caseBankId: string, input: CompileExperimentRunInput, opts: { now?: string } = {}): ExperimentRun {
+    const bank = this.experimentRepository.listCaseBanks().find((item) => item.id === caseBankId);
+    if (!bank) throw new Error(`unknown private experiment case bank: ${caseBankId}`);
+    const preregistration = this.g3Repository.currentExperiments().find((item) => item.id === bank.preregistration_id);
+    if (!preregistration) throw new Error(`case bank ${caseBankId} is not bound to a current preregistration`);
+    return this.experimentRepository.putRun(compileExperimentRun(input, preregistration, bank, opts));
+  }
+
+  experimentRun(runId: string): ExperimentRun {
+    const run = this.experimentRepository.listRuns().find((item) => item.id === runId);
+    if (!run) throw new Error(`unknown private experiment run: ${runId}`);
+    return run;
+  }
+
+  executeExperimentRun(runId: string, opts: { limit?: number; timeoutMs?: number; now?: string } = {}): { outcomes: ExperimentOutcome[]; report: ExperimentReport } {
+    const run = this.experimentRun(runId);
+    if (run.experiment !== "EXP-01") throw new Error("automated run execution is available only for EXP-01; use the timed review queue for EXP-03");
+    const bank = this.experimentRepository.listCaseBanks().find((item) => item.id === run.case_bank_id);
+    if (!bank) throw new Error(`run ${run.id} is missing exact case bank ${run.case_bank_id}`);
+    const current = new Set(currentExperimentOutcomes(this.experimentRepository.listOutcomes()).filter((item) => item.run_id === run.id).map((item) => item.assignment_id));
+    if (this.experimentReport(run.id).status === "guardrail_stopped") throw new Error("experiment is stopped by an independently recorded safety/privacy guardrail");
+    const limit = opts.limit ?? 1;
+    if (!Number.isInteger(limit) || limit < 1 || limit > run.assignments.length) throw new Error("experiment execution limit must be a positive integer within the assignment count");
+    const outcomes: ExperimentOutcome[] = [];
+    for (const assignment of [...run.assignments].sort((a, b) => a.order - b.order)) {
+      if (outcomes.length >= limit) break;
+      if (current.has(assignment.id)) continue;
+      outcomes.push(executeExp01Assignment(this.experimentRepository, run, bank, assignment, { timeoutMs: opts.timeoutMs, now: opts.now }));
+      if (this.experimentReport(run.id).status === "guardrail_stopped") break;
+    }
+    return { outcomes, report: this.experimentReport(run.id) };
+  }
+
+  nextExperimentReview(runId: string, reviewer: string, opts: { now?: string } = {}): { start: ExperimentReviewStart; assignment: ExperimentRun["assignments"][number]; treatment: unknown } {
+    const run = this.experimentRun(runId);
+    if (run.experiment !== "EXP-03") throw new Error("timed review queue is available only for EXP-03");
+    if (this.experimentReport(run.id).status === "guardrail_stopped") throw new Error("experiment is stopped by an independently recorded safety/privacy guardrail");
+    const bank = this.experimentRepository.listCaseBanks().find((item) => item.id === run.case_bank_id);
+    if (!bank) throw new Error(`run ${run.id} is missing exact case bank ${run.case_bank_id}`);
+    const current = new Set(currentExperimentOutcomes(this.experimentRepository.listOutcomes()).filter((item) => item.run_id === run.id).map((item) => item.assignment_id));
+    const starts = this.experimentRepository.listReviewStarts().filter((item) => item.run_id === run.id);
+    const existing = starts.find((item) => item.reviewer === reviewer && !current.has(item.assignment_id));
+    const assignment = existing
+      ? run.assignments.find((item) => item.id === existing.assignment_id)
+      : [...run.assignments].sort((a, b) => a.order - b.order).find((item) => {
+          if (current.has(item.id) || starts.some((start) => start.assignment_id === item.id)) return false;
+          const c = bank.cases.find((candidate) => candidate.id === item.case_id);
+          const assignedReviewer = c?.strata.reviewer;
+          return !assignedReviewer || assignedReviewer === reviewer || assignedReviewer === reviewer.replace(/^human:/i, "");
+        });
+    if (!assignment) throw new Error(`no unreviewed EXP-03 assignment is available for ${reviewer}`);
+    const start = existing ?? this.experimentRepository.putReviewStart(compileExperimentReviewStart(run, assignment, reviewer, opts));
+    return { start, assignment, treatment: assignmentTreatment(bank, run, assignment) };
+  }
+
+  submitExperimentReview(
+    runId: string,
+    assignmentId: string,
+    input: {
+      reviewer: string;
+      decision: "accepted_precise" | "accepted_edited" | "rejected" | "uncompilable" | "abandoned" | "timeout";
+      precise: boolean;
+      proof_inspected: boolean;
+      result: string | null;
+      silent_semantic_substitution: boolean;
+      rejection_reason: string | null;
+      confirmed_private_leak: boolean;
+      data_loss_or_corruption: boolean;
+      unsafe_evaluator_behavior: boolean;
+      reason: string;
+    },
+    opts: { now?: string } = {},
+  ): ExperimentOutcome {
+    const run = this.experimentRun(runId);
+    if (run.experiment !== "EXP-03") throw new Error("human review submission is available only for EXP-03");
+    const start = this.experimentRepository.listReviewStarts().find((item) => item.run_id === run.id && item.assignment_id === assignmentId);
+    if (!start || start.reviewer !== input.reviewer) throw new Error("review submission must bind the machine-recorded start and exact reviewer");
+    const recordedAt = opts.now ?? new Date().toISOString();
+    const duration = Date.parse(recordedAt) - Date.parse(start.started_at);
+    if (!Number.isFinite(duration) || duration < 1) throw new Error("review completion must occur after the machine-recorded start");
+    const current = currentExperimentOutcomes(this.experimentRepository.listOutcomes()).find((item) => item.run_id === run.id && item.assignment_id === assignmentId);
+    if (current) throw new Error(`assignment ${assignmentId} already has current outcome ${current.id}; use an explicit append-only correction workflow`);
+    const assignment = run.assignments.find((item) => item.id === assignmentId);
+    const bank = this.experimentRepository.listCaseBanks().find((item) => item.id === run.case_bank_id);
+    const item = bank?.cases.find((candidate) => candidate.id === assignment?.case_id);
+    if (!assignment || !bank || !item || !("compiler_candidate" in item)) throw new Error("review submission cannot resolve the exact assigned case and treatment");
+    const accepted = input.decision.startsWith("accepted");
+    const result = input.result?.trim() || null;
+    if (accepted !== (result !== null)) throw new Error("accepted reviews require a result; non-accepted reviews must not claim one");
+    const editDistance = accepted && assignment.arm !== "A" ? normalizedEditDistance(item.compiler_candidate, result!) : null;
+    return this.experimentRepository.putOutcome(compileExperimentOutcome({
+      run_id: run.id,
+      assignment_id: assignmentId,
+      status: "completed",
+      invocation_started: true,
+      metrics: {
+        decision: input.decision,
+        precise: input.precise,
+        proof_inspected: input.proof_inspected,
+        result_hash: result ? canonicalHash(result) : null,
+        semantic_edit_distance: editDistance,
+        silent_semantic_substitution: input.silent_semantic_substitution,
+        rejection_reason: input.rejection_reason,
+        duration_ms: duration,
+      },
+      output_hash: canonicalHash({ decision: input.decision, precise: input.precise, rejection_reason: input.rejection_reason, result_hash: result ? canonicalHash(result) : null }),
+      diff_hash: null,
+      evaluator_hash: start.treatment_hash,
+      error_code: null,
+      incidents: {
+        confirmed_private_leak: input.confirmed_private_leak,
+        data_loss_or_corruption: input.data_loss_or_corruption,
+        unsafe_evaluator_behavior: input.unsafe_evaluator_behavior,
+      },
+      recorder: input.reviewer,
+      reason: input.reason,
+      supersedes: null,
+    }, run, { now: recordedAt }));
+  }
+
+  recordExperimentFollowup(
+    runId: string,
+    assignmentId: string,
+    input: { reviewer: string; reversed: boolean | null; missing_reason: string | null; notes: string; supersedes?: string | null },
+    opts: { now?: string } = {},
+  ): ExperimentFollowup {
+    const run = this.experimentRun(runId);
+    const outcome = currentExperimentOutcomes(this.experimentRepository.listOutcomes()).find((item) => item.run_id === run.id && item.assignment_id === assignmentId);
+    if (!outcome) throw new Error(`assignment ${assignmentId} has no current outcome to follow up`);
+    return this.experimentRepository.putFollowup(compileExperimentFollowup({ ...input, supersedes: input.supersedes ?? null }, run, outcome, opts));
+  }
+
+  stopExperiment(
+    runId: string,
+    input: { category: ExperimentStop["category"]; actor: string; reason: string; evidence_hashes: string[] },
+    opts: { now?: string } = {},
+  ): ExperimentStop {
+    const run = this.experimentRun(runId);
+    return this.experimentRepository.putStop(compileExperimentStop(input, run, opts));
+  }
+
+  experimentReport(runId: string): ExperimentReport {
+    const run = this.experimentRun(runId);
+    const bank = this.experimentRepository.listCaseBanks().find((item) => item.id === run.case_bank_id);
+    if (!bank) throw new Error(`run ${run.id} is missing exact case bank ${run.case_bank_id}`);
+    return buildExperimentReport(run, bank, this.experimentRepository.listOutcomes(), this.experimentRepository.listFollowups(), this.experimentRepository.listStops());
   }
 
   g2ShadowSweep(opts: { now?: string } = {}): G2ShadowSweepReport {
