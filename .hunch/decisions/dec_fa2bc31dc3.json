@@ -1,0 +1,45 @@
+{
+  "id": "dec_fa2bc31dc3",
+  "title": "Review rejection only removes proposed decisions",
+  "topic": "review-reject-lifecycle",
+  "status": "accepted",
+  "context": "The CLI described review --reject as deleting a draft, but it looked up no record state before deletion. An executable temporary-store replay showed that rejecting an accepted human-confirmed decision exited 0, printed success, and erased the accepted JSON record.",
+  "decision": "Resolve the target before mutation and allow review --reject only when status is proposed. Missing, accepted, rejected, or superseded targets return nonzero without reindexing or changing storage. Retirement of accepted history remains a supersession/lifecycle operation, never draft deletion.",
+  "consequences": [
+    "Accepted human history cannot be erased through the review queue CLI or its VS Code delegate.",
+    "Normal proposed-draft rejection remains destructive and succeeds exactly as before.",
+    "Invalid lifecycle targets fail before any store mutation."
+  ],
+  "alternatives_rejected": [
+    "Add a force flag for accepted deletion — accepted history should be retired or superseded, and a force switch would preserve the footgun.",
+    "Protect only human_confirmed provenance — accepted status is the authoritative lifecycle boundary even for malformed or legacy provenance.",
+    "Silently keep accepted records while returning success — false success would leave callers believing the requested mutation occurred."
+  ],
+  "rejected_tripwires": [],
+  "related_components": [
+    "cmp_50037f41a9"
+  ],
+  "related_files": [
+    "src/cli/index.ts",
+    "test/review-cli.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "65efd5301a7c1a58f47adcaba8cf5adb7e439e86",
+  "valid_from": "2026-07-11T16:05:13.329Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 0.95,
+    "evidence": [
+      "src/cli/index.ts",
+      "test/review-cli.test.ts"
+    ]
+  },
+  "date": "2026-07-11T16:05:13.329Z"
+}
