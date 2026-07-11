@@ -40,3 +40,21 @@ jobs:
           name: constitution-release-gate-${{ github.sha }}
           path: release-gate.json
           if-no-files-found: error
+
+  windows-native-lock:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install (locked)
+        run: npm ci
+
+      # Reproduce the original EBUSY class: a live parser process must not hold
+      # either installed tree-sitter addon, so both package files remain movable.
+      - name: Native bindings remain replaceable during a live parser session
+        run: npx --no-install tsx --test test/parse.test.ts

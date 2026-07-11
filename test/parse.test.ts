@@ -1,9 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
-import { realpathSync } from "node:fs";
-import { join } from "node:path";
+import { realpathSync, renameSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
 import { parseSource, attributeCalls } from "../src/extractors/parse.js";
@@ -65,6 +65,66 @@ test("native tree-sitter isolation fails closed when an installed addon was prel
   assert.equal(child.status, 0, child.stderr || child.stdout);
   assert.match(child.stdout, /tree-sitter native addon was loaded before Hunch could isolate it/);
 });
+
+if (process.platform === "win32") {
+  test("Windows installed tree-sitter binaries remain replaceable while parser process is active", async () => {
+    const parseUrl = pathToFileURL(join(process.cwd(), "src/extractors/parse.ts")).href;
+    const script = `
+      const { parseSource } = await import(${JSON.stringify(parseUrl)});
+      if (!parseSource("fixture.ts", "export const answer: number = 42")) process.exit(2);
+      console.log("ready");
+      process.stdin.resume();
+    `;
+    const child = spawn(process.execPath, ["--import", "tsx", "--input-type=module", "--eval", script], {
+      cwd: process.cwd(),
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    const childExit = new Promise<void>((resolve) => child.once("exit", () => resolve()));
+    let stdout = "";
+    let stderr = "";
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk: string) => { stdout += chunk; });
+    child.stderr.on("data", (chunk: string) => { stderr += chunk; });
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error(`parser child did not become ready: ${stderr || stdout}`)), 15_000);
+        const ready = (chunk: string) => {
+          if (!chunk.includes("ready")) return;
+          clearTimeout(timeout);
+          child.stdout.off("data", ready);
+          resolve();
+        };
+        child.stdout.on("data", ready);
+        child.once("exit", (code) => {
+          clearTimeout(timeout);
+          reject(new Error(`parser child exited before replacement check (${code}): ${stderr || stdout}`));
+        });
+      });
+
+      const require = createRequire(import.meta.url);
+      const nodeGypBuild = require("node-gyp-build") as { path(root: string): string };
+      for (const packageName of ["tree-sitter", "tree-sitter-typescript"]) {
+        const packageRoot = dirname(require.resolve(`${packageName}/package.json`));
+        const installed = nodeGypBuild.path(packageRoot);
+        const moved = `${installed}.hunch-replace-test`;
+        let needsRestore = false;
+        try {
+          renameSync(installed, moved);
+          needsRestore = true;
+          renameSync(moved, installed);
+          needsRestore = false;
+        } finally {
+          if (needsRestore) renameSync(moved, installed);
+        }
+      }
+    } finally {
+      child.stdin.end();
+      if (child.exitCode === null) child.kill();
+      await childExit;
+    }
+  });
+}
 
 test("parseSource reports syntax-error trees without inventing a clean parse", () => {
   const parsed = parseSource("broken.ts", "export function broken( {")!;
