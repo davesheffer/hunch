@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { HunchStore } from "../src/store/hunchStore.js";
 import { hunchPaths } from "../src/core/paths.js";
 import type { Runbook } from "../src/core/types.js";
@@ -256,8 +258,9 @@ test("G2 service stores only exact private evidence and reports real blockers", 
   }
 });
 
-test("G2 operational drills bind exact runbooks and historical backfill aborts atomically on preflight errors", () => {
+test("G2 operational drills bind exact runbooks and historical backfill aborts atomically on preflight errors", async () => {
   const { root, privateRoot, store, cleanup } = privateFixture();
+  let client: Client | null = null;
   try {
     const service = new ConstitutionService(store, process.cwd());
     for (const id of POLICY_IDS) service.repository.putPolicy(privatePolicy(id), { private: true });
@@ -278,6 +281,26 @@ test("G2 operational drills bind exact runbooks and historical backfill aborts a
     assert.equal(drill.writes, "none");
     assert.equal(existsSync(join(privateRoot, "rehearsals")), false, "diagnostic drill never self-attests a rehearsal");
 
+    const tsx = join(process.cwd(), "node_modules/tsx/dist/cli.mjs");
+    const cli = join(process.cwd(), "src/cli/index.ts");
+    const transport = new StdioClientTransport({
+      command: process.execPath,
+      args: [tsx, cli, "mcp"],
+      cwd: process.cwd(),
+      env: { ...process.env, HUNCH_PRIVATE_DIR: privateRoot },
+    });
+    client = new Client({ name: "g2-operational-drill-test", version: "1.0.0" });
+    await client.connect(transport);
+    const mcpCall = await client.callTool({ name: "hunch_constitution_g2_operational_drill", arguments: { category: "provider_outage" } });
+    const mcpDrill = JSON.parse((mcpCall.content[0] as { type: "text"; text: string }).text) as typeof drill;
+    assert.equal(mcpDrill.category, drill.category);
+    assert.equal(mcpDrill.plan_id, drill.plan_id);
+    assert.equal(mcpDrill.runbook_hash, drill.runbook_hash);
+    assert.equal(mcpDrill.result, "passed");
+    assert.equal(mcpDrill.writes, "none");
+    await client.close();
+    client = null;
+
     const backfill = service.g2ShadowBackfill(2, { now: NOW });
     assert.equal(backfill.plan_id, plan.id);
     assert.equal(backfill.commits.length, 2);
@@ -289,6 +312,7 @@ test("G2 operational drills bind exact runbooks and historical backfill aborts a
     assert.equal(existsSync(join(privateRoot, "shadow")), false, "failed backfill is atomic across the whole policy/commit matrix");
     assert.throws(() => service.g2ShadowBackfill(0), /positive integer/i);
   } finally {
+    if (client) await client.close();
     cleanup();
     rmSync(root, { recursive: true, force: true });
   }

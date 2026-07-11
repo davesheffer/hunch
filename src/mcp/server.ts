@@ -24,6 +24,7 @@ import type { Runbook } from "../core/types.js";
 import { compareCandidates } from "../core/compare.js";
 import { checkConformance } from "../core/conformance.js";
 import { ConstitutionService } from "../constitution/service.js";
+import { G2_RUNBOOK_CATEGORIES } from "../constitution/g2.js";
 import { renderMarkdown, renderImpact, verdict } from "../core/checkreport.js";
 import { nowData, wikiStatus, publicHome, readWikiManifestAt } from "../wiki/wiki.js";
 import { HUNCH_VERSION } from "../core/version.js";
@@ -976,6 +977,25 @@ export function buildServer(root: string): McpServer {
         return ok(JSON.stringify(new ConstitutionService(store, root).g2ShadowQueue(limit ?? 20), null, 2));
       } catch (e) {
         return err(`Failed to inspect the G2 shadow queue: ${(e as Error).message}`);
+      }
+    },
+  );
+
+  server.registerTool(
+    "hunch_constitution_g2_operational_drill",
+    {
+      title: "Execute one exact G2 operational drill",
+      description:
+        "Execute the selected private G2 runbook's exact safety regression and return a content-addressed hash-only receipt. Diagnostic only: it writes no rehearsal or shadow evidence, grants no authority, and never signs off G2.",
+      inputSchema: {
+        category: z.enum(G2_RUNBOOK_CATEGORIES).describe("Exact operational category selected by the current private G2 plan."),
+      },
+    },
+    async ({ category }): Promise<ToolResult> => {
+      try {
+        return ok(JSON.stringify(new ConstitutionService(store, root).g2OperationalDrill(category), null, 2));
+      } catch (e) {
+        return err(`Failed to execute the G2 operational drill: ${(e as Error).message}`);
       }
     },
   );
