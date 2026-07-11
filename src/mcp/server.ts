@@ -1024,6 +1024,60 @@ export function buildServer(root: string): McpServer {
     },
   );
 
+  server.registerTool(
+    "hunch_constitution_g2_behavior_candidates",
+    {
+      title: "Review executable G2 behavior candidates",
+      description:
+        "Derive a bounded private review packet from human-grounded rejected structural proxies and newly added literal node:test cases in their exact fixing commits. Read-only: candidates remain unselected and create no policy, corpus, proof, authority, warning, or block.",
+      inputSchema: {
+        since: z.string().min(1).max(100).optional().describe("Git history window (default 180d)."),
+        max_commits: z.number().int().min(1).max(200).optional().describe("Maximum fix-labeled commits to inspect (default 100)."),
+        limit: z.number().int().min(1).max(100).optional().describe("Maximum behavior candidates to return (default 30)."),
+      },
+    },
+    async ({ since, max_commits, limit }): Promise<ToolResult> => {
+      try {
+        return ok(JSON.stringify(new ConstitutionService(store, root).g2BehaviorCandidateReview({
+          since: since ?? "180d",
+          maxCommits: max_commits ?? 100,
+          limit: limit ?? 30,
+        }), null, 2));
+      } catch (e) {
+        return err(`Failed to inspect G2 behavior candidates: ${(e as Error).message}`);
+      }
+    },
+  );
+
+  server.registerTool(
+    "hunch_constitution_g2_behavior_replay",
+    {
+      title: "Replay one G2 behavior candidate",
+      description:
+        "Execute one exact behavior candidate without a shell in disposable known-bad and known-good worktrees, transplanting the hash-bound known-good test file into both. Diagnostic only: writes no Constitution artifact and grants no policy or G2 authority.",
+      inputSchema: {
+        candidate_id: z.string().regex(/^g2behavior_[a-f0-9]{10}$/),
+        review_hash: z.string().regex(/^sha1:[a-f0-9]{40}$/),
+        since: z.string().min(1).max(100).optional().describe("Git history window used by the exact review packet (default 180d)."),
+        max_commits: z.number().int().min(1).max(200).optional().describe("Fix-commit bound used by the exact review packet (default 100)."),
+        limit: z.number().int().min(1).max(100).optional().describe("Item limit used by the exact review packet (default 30)."),
+        timeout_ms: z.number().int().min(1).max(120000).optional().describe("Per-leg execution timeout (default 30000ms)."),
+      },
+    },
+    async ({ candidate_id, review_hash, since, max_commits, limit, timeout_ms }): Promise<ToolResult> => {
+      try {
+        return ok(JSON.stringify(new ConstitutionService(store, root).g2BehaviorCandidateReplay(candidate_id, review_hash, {
+          since: since ?? "180d",
+          maxCommits: max_commits ?? 100,
+          limit: limit ?? 30,
+          timeoutMs: timeout_ms ?? 30_000,
+        }), null, 2));
+      } catch (e) {
+        return err(`Failed to replay G2 behavior candidate: ${(e as Error).message}`);
+      }
+    },
+  );
+
   return server;
 }
 

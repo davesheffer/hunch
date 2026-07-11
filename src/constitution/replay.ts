@@ -70,7 +70,7 @@ function stableCommit(ref: string): string {
   return /^[a-f0-9]{40}$/.test(ref) ? ref : ZERO_SHA;
 }
 
-function safeEnvironment(home: string, gitConfig: string): NodeJS.ProcessEnv {
+export function replaySafeEnvironment(home: string, gitConfig: string): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {};
   for (const key of ["PATH", "SystemRoot", "WINDIR", "TMPDIR", "TMP", "TEMP"]) {
     if (process.env[key]) env[key] = process.env[key];
@@ -87,7 +87,7 @@ function safeEnvironment(home: string, gitConfig: string): NodeJS.ProcessEnv {
   };
 }
 
-function unsafeLocalFilter(root: string, env: NodeJS.ProcessEnv): boolean {
+export function hasUnsafeReplayFilter(root: string, env: NodeJS.ProcessEnv): boolean {
   try {
     const raw = execFileSync("git", ["-C", root, "config", "--local", "--name-only", "--get-regexp", "^filter\\."], {
       env,
@@ -100,7 +100,7 @@ function unsafeLocalFilter(root: string, env: NodeJS.ProcessEnv): boolean {
   }
 }
 
-function gitArgs(root: string, hooks: string, args: string[]): string[] {
+export function replayGitArgs(root: string, hooks: string, args: string[]): string[] {
   return [
     "-C", root,
     "-c", `core.hooksPath=${hooks}`,
@@ -135,7 +135,7 @@ function replayWorkerArgs(taskFile: string, resultFile: string): string[] {
     : [fileURLToPath(worker), taskFile, resultFile];
 }
 
-function cleanupWorktree(
+export function cleanupReplayWorktree(
   root: string,
   hooks: string,
   env: NodeJS.ProcessEnv,
@@ -144,7 +144,7 @@ function cleanupWorktree(
 ): boolean {
   let failed = false;
   try {
-    execFileSync("git", gitArgs(root, hooks, ["worktree", "remove", "--force", checkout]), {
+    execFileSync("git", replayGitArgs(root, hooks, ["worktree", "remove", "--force", checkout]), {
       env,
       timeout: 10_000,
       stdio: "ignore",
@@ -152,7 +152,7 @@ function cleanupWorktree(
   } catch {
     rmSync(checkout, { recursive: true, force: true });
     try {
-      execFileSync("git", gitArgs(root, hooks, ["worktree", "remove", "--force", checkout]), {
+      execFileSync("git", replayGitArgs(root, hooks, ["worktree", "remove", "--force", checkout]), {
         env,
         timeout: 10_000,
         stdio: "ignore",
@@ -197,7 +197,7 @@ function acceptedHistory(
     return { commits: [], error: "history-ref-unresolved" };
   }
   try {
-    const raw = execFileSync("git", gitArgs(root, hooks, [
+    const raw = execFileSync("git", replayGitArgs(root, hooks, [
       "rev-list",
       ...(selector.first_parent ? ["--first-parent"] : []),
       "--reverse",
@@ -243,8 +243,8 @@ export function replayProofPlan(
   const gitConfig = join(session, "global.gitconfig");
   mkdirSync(hooks, { recursive: true });
   writeFileSync(gitConfig, "");
-  const env = safeEnvironment(session, gitConfig);
-  const unsafeFilter = unsafeLocalFilter(root, env);
+  const env = replaySafeEnvironment(session, gitConfig);
+  const unsafeFilter = hasUnsafeReplayFilter(root, env);
   const deadline = Date.now() + plan.budgets.max_minutes * 60_000;
   const outcomes = new Map<string, SnapshotOutcome>();
   const cacheStats = { hits: 0, misses: 0, rebuilds: 0, memory_hits: 0 };
@@ -307,7 +307,7 @@ export function replayProofPlan(
         const graph = join(run, "graph");
         let added = false;
         try {
-          execFileSync("git", gitArgs(root, hooks, ["worktree", "add", "--detach", "--force", checkout, commit]), {
+          execFileSync("git", replayGitArgs(root, hooks, ["worktree", "add", "--detach", "--force", checkout, commit]), {
             env,
             timeout: Math.max(1, deadline - Date.now()),
             stdio: "ignore",
@@ -333,7 +333,7 @@ export function replayProofPlan(
           workerStats.scheduled++;
           workerStats.peak = Math.max(workerStats.peak, active.length);
         } catch (e) {
-          const cleanupFailed = added ? cleanupWorktree(root, hooks, env, run, checkout) : false;
+          const cleanupFailed = added ? cleanupReplayWorktree(root, hooks, env, run, checkout) : false;
           if (!added) rmSync(run, { recursive: true, force: true });
           outcomes.set(commit, {
             commit,
@@ -361,7 +361,7 @@ export function replayProofPlan(
         } catch {
           message = { commit: task.commit, error_code: "snapshot-index-failed" };
         }
-        const cleanupFailed = cleanupWorktree(root, hooks, env, task.run, task.checkout);
+        const cleanupFailed = cleanupReplayWorktree(root, hooks, env, task.run, task.checkout);
         let outcome: SnapshotOutcome;
         if (cleanupFailed) outcome = { commit: task.commit, error_code: "worktree-cleanup-failed" };
         else if (Date.now() >= deadline) outcome = { commit: task.commit, error_code: "timeout" };
@@ -382,7 +382,7 @@ export function replayProofPlan(
       if (Date.now() >= deadline) {
         for (const task of active.splice(0)) {
           task.child.kill("SIGTERM");
-          const cleanupFailed = cleanupWorktree(root, hooks, env, task.run, task.checkout);
+          const cleanupFailed = cleanupReplayWorktree(root, hooks, env, task.run, task.checkout);
           outcomes.set(task.commit, { commit: task.commit, error_code: cleanupFailed ? "worktree-cleanup-failed" : "timeout" });
         }
         for (const commit of pending.splice(0)) outcomes.set(commit, { commit, error_code: "timeout" });
@@ -421,7 +421,7 @@ export function replayProofPlan(
   } finally {
     for (const task of active.splice(0)) {
       task.child.kill("SIGTERM");
-      try { cleanupWorktree(root, hooks, env, task.run, task.checkout); } catch { /* primary replay error remains visible */ }
+      try { cleanupReplayWorktree(root, hooks, env, task.run, task.checkout); } catch { /* primary replay error remains visible */ }
     }
     rmSync(session, { recursive: true, force: true });
   }

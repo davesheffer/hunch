@@ -50,6 +50,12 @@ import {
   compileG2CandidateAttestation,
   type G2CandidateAttestation,
 } from "./g2CandidateAttestation.js";
+import {
+  buildG2BehaviorCandidateReview,
+  replayG2BehaviorCandidate,
+  type G2BehaviorCandidateReview,
+  type G2BehaviorReplayReceipt,
+} from "./g2BehaviorCandidates.js";
 
 export interface PolicyEvaluationSet {
   policy: PolicySpec;
@@ -388,6 +394,19 @@ export class ConstitutionService {
     const report = this.g2CandidateReview(opts);
     const attestation = compileG2CandidateAttestation(report, candidateId, reviewHash, disposition, actor, reason, opts);
     return this.g2CandidateRepository.put(attestation);
+  }
+
+  g2BehaviorCandidateReview(opts: G2CandidateReviewOptions = {}): G2BehaviorCandidateReview {
+    return buildG2BehaviorCandidateReview(this.store, this.root, opts, this.g2CandidateRepository.resolutions());
+  }
+
+  g2BehaviorCandidateReplay(
+    candidateId: string,
+    reviewHash: string,
+    opts: G2CandidateReviewOptions & { timeoutMs?: number } = {},
+  ): G2BehaviorReplayReceipt {
+    const report = this.g2BehaviorCandidateReview(opts);
+    return replayG2BehaviorCandidate(this.root, report, candidateId, reviewHash, { timeoutMs: opts.timeoutMs });
   }
 
   g2ShadowQueue(limit = 20): G2ShadowQueue {

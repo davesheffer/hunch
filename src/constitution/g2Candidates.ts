@@ -115,7 +115,7 @@ const basisRank: Record<G2CandidateReviewItem["basis"], number> = {
   "added-symbol": 2,
 };
 
-function positiveBound(value: number, label: string, max: number): number {
+export function positiveBound(value: number, label: string, max: number): number {
   if (!Number.isInteger(value) || value < 1) throw new Error(`${label} must be a positive integer`);
   if (value > max) throw new Error(`${label} cannot exceed ${max}`);
   return value;

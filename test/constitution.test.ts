@@ -26,6 +26,7 @@ import { externalImportNodeId, externalPackage } from "../src/core/externalImpor
 import { buildProofCard, renderProofCard } from "../src/constitution/card.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { nodeTestInfrastructureError } from "../src/constitution/g2BehaviorCandidates.js";
 
 const NOW = "2026-07-10T10:00:00.000Z";
 
@@ -1644,6 +1645,142 @@ test("Phase 2S G2 candidate attestations are exact, append-only, private, and no
     tampered.reason = "tampered in place";
     writeFileSync(file, JSON.stringify(tampered));
     assert.throws(() => service.g2CandidateReview(bounds), /content hash mismatch/i);
+  } finally {
+    if (client) await client.close();
+    store.close();
+    cleanup();
+  }
+});
+
+test("Phase 2T derives behavior candidates from rejected structural proxies and replays fail-to-pass tests", async () => {
+  const { root, store: initial, cleanup } = layeredRepo();
+  initial.close();
+  const privateRoot = join(root, "private-g2-behavior/.hunch");
+  mkdirSync(privateRoot, { recursive: true });
+  writeFileSync(join(root, ".hunch/local.json"), JSON.stringify({ privateDir: privateRoot, autoCommit: false, mode: "private" }));
+
+  mkdirSync(join(root, "test"), { recursive: true });
+  writeFileSync(join(root, "src/guard.mjs"), "export function guarded(){ return false; }\n");
+  commitFiles(root, ["src/guard.mjs"], "fixture: behavior baseline");
+  writeFileSync(join(root, "src/guard.mjs"), "export function verify(){ return true; }\nexport function guarded(){ return verify(); }\n");
+  writeFileSync(join(root, "test/guard.test.mjs"), [
+    'import test from "node:test";',
+    'import assert from "node:assert/strict";',
+    'import { guarded } from "../src/guard.mjs";',
+    'test("guarded path validates behavior", () => assert.equal(guarded(), true));',
+    "",
+  ].join("\n"));
+  const fix = commitFiles(root, ["src/guard.mjs", "test/guard.test.mjs"], "fix: guarded path validates behavior");
+
+  const store = new HunchStore(hunchPaths(root));
+  let client: Client | null = null;
+  try {
+    store.putPrivate("decisions", {
+      ...decision("dec_g2_behavior", { private: true }),
+      title: "Guarded path validates behavior",
+      context: "A regression test reproduces the unguarded result and passes after the fix.",
+      decision: "The guarded path must validate before returning success.",
+      related_files: ["src/guard.mjs", "test/guard.test.mjs"],
+      commit: fix,
+    });
+    const service = new ConstitutionService(store, root);
+    const bounds = { since: "30d", maxCommits: 20, limit: 20 };
+    const structural = service.g2CandidateReview(bounds);
+    const proxy = structural.items.find((item) => item.commit === fix && item.attestation.decision_ids.includes("dec_g2_behavior"))!;
+    assert.ok(proxy, "the human-grounded structural proxy is available for explicit rejection");
+    service.attestG2Candidate(
+      proxy.id,
+      structural.content_hash,
+      "rejected",
+      "human:reviewer",
+      "The executable regression is durable; this structural proxy is not.",
+      { ...bounds, now: "2026-07-11T18:00:00.000Z" },
+    );
+
+    const review = service.g2BehaviorCandidateReview(bounds);
+    assert.match(review.id, /^g2behaviorcandidates_[a-f0-9]{10}$/);
+    assert.equal(review.authority, "none");
+    assert.equal(review.writes, "none");
+    assert.equal(review.proof_status, "not_run");
+    assert.equal(review.items.length, 1);
+    const candidate = review.items[0]!;
+    assert.equal(candidate.test.file, "test/guard.test.mjs");
+    assert.equal(candidate.test.name, "guarded path validates behavior");
+    assert.deepEqual(candidate.source_attestation_ids.length, 1);
+    assert.deepEqual(candidate.decision_ids, ["dec_g2_behavior"]);
+    assert.equal(candidate.proposed_corpus.known_bad.expected, "failed");
+    assert.equal(candidate.proposed_corpus.known_good.expected, "passed");
+    assert.deepEqual(service.g2BehaviorCandidateReview(bounds), review, "behavior review is byte-stable");
+    assert.equal(nodeTestInfrastructureError("Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'legacy-db'"), "dependency-snapshot-unavailable");
+    assert.equal(nodeTestInfrastructureError("AssertionError: expected true"), null, "real assertion failures remain behavioral failures");
+
+    assert.throws(
+      () => service.g2BehaviorCandidateReplay(candidate.id, "sha1:" + "0".repeat(40), bounds),
+      /review hash/i,
+    );
+    const replay = service.g2BehaviorCandidateReplay(candidate.id, review.content_hash, bounds);
+    assert.match(replay.id, /^g2behaviorreplay_[a-f0-9]{10}$/);
+    assert.equal(replay.candidate_id, candidate.id);
+    assert.equal(replay.review_hash, review.content_hash);
+    assert.equal(replay.known_bad.result, "failed");
+    assert.equal(replay.known_good.result, "passed");
+    assert.equal(replay.verdict, "behavior_confirmed");
+    assert.equal(replay.authority, "none");
+    assert.equal(replay.effects, "diagnostic_only");
+    assert.equal(replay.writes, "disposable_only");
+    assert.equal(existsSync(join(privateRoot, "policies")), false);
+    assert.equal(existsSync(join(privateRoot, "evidence")), false);
+    assert.deepEqual(readdirSync(join(root, ".hunch-cache/worktrees")), []);
+
+    const tsx = join(process.cwd(), "node_modules/tsx/dist/cli.mjs");
+    const cli = join(process.cwd(), "src/cli/index.ts");
+    const cliReviewRun = spawnSync(process.execPath, [
+      tsx, cli, "constitution", "g2",
+      "--behavior-candidates", "20",
+      "--candidate-since", bounds.since,
+      "--candidate-commits", String(bounds.maxCommits),
+    ], { cwd: root, encoding: "utf8" });
+    assert.equal(cliReviewRun.status, 0, cliReviewRun.stderr);
+    const cliReview = JSON.parse(cliReviewRun.stdout) as { content_hash: string };
+    assert.equal(cliReview.content_hash, review.content_hash, "CLI exposes the exact core behavior review receipt");
+
+    const cliReplayRun = spawnSync(process.execPath, [
+      tsx, cli, "constitution", "g2",
+      "--behavior-replay", candidate.id,
+      "--behavior-review-hash", review.content_hash,
+      "--candidate-since", bounds.since,
+      "--candidate-commits", String(bounds.maxCommits),
+      "--candidate-limit", String(bounds.limit),
+    ], { cwd: root, encoding: "utf8" });
+    assert.equal(cliReplayRun.status, 0, cliReplayRun.stderr);
+    const cliReplay = JSON.parse(cliReplayRun.stdout) as { content_hash: string; verdict: string };
+    assert.equal(cliReplay.content_hash, replay.content_hash);
+    assert.equal(cliReplay.verdict, "behavior_confirmed");
+
+    const transport = new StdioClientTransport({ command: process.execPath, args: [tsx, cli, "mcp"], cwd: root });
+    client = new Client({ name: "g2-behavior-candidate-test", version: "1.0.0" });
+    await client.connect(transport);
+    const mcpReviewCall = await client.callTool({
+      name: "hunch_constitution_g2_behavior_candidates",
+      arguments: { since: bounds.since, max_commits: bounds.maxCommits, limit: bounds.limit },
+    });
+    const mcpReview = JSON.parse((mcpReviewCall.content[0] as { type: "text"; text: string }).text) as { content_hash: string };
+    assert.equal(mcpReview.content_hash, review.content_hash, "MCP exposes the exact core behavior review receipt");
+    const mcpReplayCall = await client.callTool({
+      name: "hunch_constitution_g2_behavior_replay",
+      arguments: {
+        candidate_id: candidate.id,
+        review_hash: review.content_hash,
+        since: bounds.since,
+        max_commits: bounds.maxCommits,
+        limit: bounds.limit,
+      },
+    });
+    const mcpReplay = JSON.parse((mcpReplayCall.content[0] as { type: "text"; text: string }).text) as { content_hash: string; verdict: string };
+    assert.equal(mcpReplay.content_hash, replay.content_hash, "MCP replay is byte-identical to core and CLI");
+    assert.equal(mcpReplay.verdict, "behavior_confirmed");
+    await client.close();
+    client = null;
   } finally {
     if (client) await client.close();
     store.close();
