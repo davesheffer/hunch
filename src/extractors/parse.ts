@@ -7,11 +7,11 @@
  * Uses NATIVE tree-sitter (synchronous, prebuilt for Node 20 — see decision in
  * the commit history; web-tree-sitter's WASM grammars had an incompatible ABI).
  */
-import Parser from "tree-sitter";
-import TS from "tree-sitter-typescript";
+import type TreeSitterParser from "tree-sitter";
 import type { SyntaxNode } from "tree-sitter";
+import { loadNativeTreeSitter } from "./nativeTreeSitter.js";
 
-const { typescript, tsx } = TS as unknown as { typescript: unknown; tsx: unknown };
+const { Parser, typescript, tsx } = loadNativeTreeSitter();
 
 export type ParsedSymbolKind = "function" | "method" | "class" | "interface" | "type";
 
@@ -70,8 +70,8 @@ const QUERY_SRC = `
 `;
 
 interface LangBundle {
-  parser: Parser;
-  query: Parser.Query;
+  parser: TreeSitterParser;
+  query: TreeSitterParser.Query;
 }
 const cache = new Map<string, LangBundle>();
 

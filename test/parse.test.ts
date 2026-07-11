@@ -1,5 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { createRequire } from "node:module";
+import { realpathSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { pathToFileURL } from "node:url";
 import { parseSource, attributeCalls } from "../src/extractors/parse.js";
 
 const SRC = `
@@ -22,6 +28,42 @@ test("parseSource extracts symbols, imports, calls", () => {
   assert.deepEqual(names, ["Alias", "Service", "Shape", "helper", "run", "verifySession"].sort());
   assert.deepEqual(p.imports.sort(), ["./jwt.js", "external"].sort());
   assert.ok(p.calls.some((c) => c.callee === "jwtDecode"));
+});
+
+test("native tree-sitter addons load only from per-process temp copies", () => {
+  const require = createRequire(import.meta.url);
+  const bindings = Object.keys(require.cache)
+    .filter((path) => /tree-sitter(?:-typescript)?\.node$/.test(path))
+    .sort();
+  assert.equal(bindings.length, 2, `expected core and TypeScript native bindings, got: ${bindings.join(", ")}`);
+  const processCopyPrefix = join(realpathSync(tmpdir()), `hunch-tree-sitter-${process.pid}-`);
+  for (const binding of bindings) {
+    assert.ok(realpathSync(binding).startsWith(processCopyPrefix), `installed native binding remains loaded: ${binding}`);
+  }
+});
+
+test("native tree-sitter isolation fails closed when an installed addon was preloaded", () => {
+  const packageUrl = pathToFileURL(join(process.cwd(), "package.json")).href;
+  const parseUrl = pathToFileURL(join(process.cwd(), "src/extractors/parse.ts")).href;
+  const script = `
+    import { createRequire } from "node:module";
+    const require = createRequire(${JSON.stringify(packageUrl)});
+    require("tree-sitter");
+    try {
+      await import(${JSON.stringify(parseUrl)});
+      process.exitCode = 2;
+    } catch (error) {
+      console.log(error.message);
+      if (!/loaded before Hunch/.test(error.message)) process.exitCode = 3;
+    }
+  `;
+  const child = spawnSync(process.execPath, ["--import", "tsx", "--input-type=module", "--eval", script], {
+    cwd: process.cwd(),
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  assert.equal(child.status, 0, child.stderr || child.stdout);
+  assert.match(child.stdout, /tree-sitter native addon was loaded before Hunch could isolate it/);
 });
 
 test("parseSource reports syntax-error trees without inventing a clean parse", () => {

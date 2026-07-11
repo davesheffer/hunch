@@ -3,11 +3,10 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync 
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join } from "node:path";
 import { pathToFileURL } from "node:url";
-import Parser from "tree-sitter";
-import TS from "tree-sitter-typescript";
 import type { SyntaxNode } from "tree-sitter";
 import { shortHash } from "../core/ids.js";
 import type { Decision } from "../core/types.js";
+import { loadNativeTreeSitter } from "../extractors/nativeTreeSitter.js";
 import type { HunchStore } from "../store/hunchStore.js";
 import { commitMeta, revExists } from "../extractors/git.js";
 import { canonicalHash } from "./canonical.js";
@@ -174,7 +173,7 @@ const DIRECT_TEST_DELTA_LIMITATIONS = [
   ...LIMITATIONS.slice(1),
 ];
 
-const { typescript: tsLanguage, tsx: tsxLanguage } = TS as unknown as { typescript: unknown; tsx: unknown };
+const { Parser, typescript: tsLanguage, tsx: tsxLanguage } = loadNativeTreeSitter();
 
 function safeTestFile(file: string): boolean {
   return !!file
