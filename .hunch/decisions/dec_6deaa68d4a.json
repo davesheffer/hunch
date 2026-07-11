@@ -2,7 +2,7 @@
   "id": "dec_6deaa68d4a",
   "title": "Direct behavior review includes assertion deltas in existing named tests",
   "topic": null,
-  "status": "accepted",
+  "status": "superseded",
   "context": "The automated G2 loop stalled at 9/10 exact P3 policies because direct review only recognized newly named tests. Human-confirmed fixes often strengthen an existing named regression, leaving their strongest executable evidence invisible.",
   "decision": "For an exact current human-confirmed fixing decision, direct behavior review also emits a candidate when a literal node:test test()/it() name exists on both sides and the fixing diff adds a line inside that exact parsed test call. Candidate identity binds the decision, fixing commit, file, test name, full known-good source hash, and modified-test grounding. Replay and human disposition rules remain unchanged.",
   "consequences": [
@@ -24,11 +24,11 @@
     "test/constitution.test.ts"
   ],
   "supersedes": null,
-  "superseded_by": null,
+  "superseded_by": "dec_1901d98877",
   "caused_by_bug": null,
   "commit": "4f39390",
   "valid_from": "2026-07-11T12:55:59.497Z",
-  "valid_to": null,
+  "valid_to": "2026-07-11T12:57:29.951Z",
   "retired": {
     "symbols": [],
     "deps": []

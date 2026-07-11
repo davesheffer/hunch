@@ -1,0 +1,45 @@
+{
+  "id": "dec_1901d98877",
+  "title": "Direct behavior review parses real test calls and includes existing-test assertion deltas",
+  "topic": null,
+  "status": "accepted",
+  "context": "The first modified-test extractor correctly found assertion deltas but its legacy added-name scan also interpreted test-like text inside string literals as registered tests. Exact review must never mint a candidate from quoted documentation or fixture source.",
+  "decision": "For an exact current human-confirmed fixing decision, direct behavior review derives both newly named and modified test candidates only from parsed literal node:test test()/it() call expressions. A modified case additionally requires a fixing-diff added line within that exact call range. Candidate identity remains bound to the decision, fixing commit, file, literal name, full known-good source hash, and grounding mode.",
+  "consequences": [
+    "Assertions added to existing named tests enter the exact replay loop.",
+    "Quoted or commented test-like text never becomes a candidate.",
+    "Legacy direct candidates representing real test calls retain their identities; replay and activation rules are unchanged."
+  ],
+  "alternatives_rejected": [
+    "Keep regex discovery for newly named direct tests: rejected because test-like fixture strings create fabricated candidates.",
+    "Treat every changed line in a test file as a candidate: rejected because it cannot bind a particular executable behavior.",
+    "Require helper-symbol existence: rejected because implementation structure is not a durable behavioral proof."
+  ],
+  "rejected_tripwires": [],
+  "related_components": [
+    "Constitution"
+  ],
+  "related_files": [
+    "src/constitution/g2BehaviorCandidates.ts",
+    "test/constitution.test.ts"
+  ],
+  "supersedes": "dec_6deaa68d4a",
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "83bcd3b",
+  "valid_from": "2026-07-11T12:57:29.951Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 0.95,
+    "evidence": [
+      "src/constitution/g2BehaviorCandidates.ts",
+      "test/constitution.test.ts"
+    ]
+  },
+  "date": "2026-07-11T12:57:29.951Z"
+}
