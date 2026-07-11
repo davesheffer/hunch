@@ -30,10 +30,13 @@ const CommandSchema = z.object({
   timeout_ms: z.number().int().min(1).max(1_800_000),
 }).strict();
 
-const HiddenEvaluatorSchema = CommandSchema.extend({
-  visibility: z.literal("hidden_external"),
+const LockedExternalCommandSchema = CommandSchema.extend({
   artifact: z.string().trim().min(1).max(4096),
   artifact_hash: z.string().regex(HASH),
+}).strict();
+
+const HiddenEvaluatorSchema = LockedExternalCommandSchema.extend({
+  visibility: z.literal("hidden_external"),
 }).strict();
 
 const StrataSchema = z.record(z.string().min(1).max(128), z.string().min(1).max(512));
@@ -55,7 +58,7 @@ export const Exp01CaseSchema = CommonCaseSchema.extend({
     executable_policy: z.string().trim().min(1).max(10_000),
     causal_incident: z.string().trim().min(1).max(10_000),
   }).strict(),
-  setup: CommandSchema.nullable(),
+  setup: LockedExternalCommandSchema.nullable(),
   evaluator: HiddenEvaluatorSchema,
 }).strict();
 

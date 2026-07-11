@@ -48,7 +48,8 @@ The durable runner is exposed through `hunch experiment`, not this legacy
 script:
 
 ```text
-hunch experiment prepare <case-bank.json>
+hunch experiment validate <case-bank.json>                # read-only preflight
+hunch experiment prepare <case-bank.json>                 # immutable lock
 hunch experiment create <case-bank-id> --sample-per-arm <target> --actor human:<id> --reason <text> [--provider claude-cli|codex-cli --model <exact-model>]
 hunch experiment run <run-id> [--limit 1]                 # EXP-01 only
 hunch experiment next <run-id> --reviewer human:<id>      # EXP-03 only

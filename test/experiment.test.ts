@@ -339,9 +339,13 @@ test("EXP-03 service derives duration and proposal edit distance instead of trus
   const { root, store, repository, cleanup } = fixture();
   try {
     const registration = new G3EvidenceRepository(store).putExperiment(prereg("EXP-03"));
-    const bank = repository.putCaseBank(compileExperimentCaseBank(exp03Input(registration), registration, { now: LOCKED }));
-    const run = repository.putRun(compileExperimentRun({ sample_per_arm: 2, actor: "human:owner", reason: "Timed review." }, registration, bank, { now: LOCKED }));
     const service = new ConstitutionService(store, root);
+    const input = exp03Input(registration);
+    const validated = service.validateExperimentCaseBank(input, { now: LOCKED });
+    assert.equal(repository.listCaseBanks().length, 0, "read-only validation writes no case-bank record");
+    const bank = service.lockExperimentCaseBank(input, { now: LOCKED });
+    assert.equal(bank.id, validated.id);
+    const run = repository.putRun(compileExperimentRun({ sample_per_arm: 2, actor: "human:owner", reason: "Timed review." }, registration, bank, { now: LOCKED }));
     const next = service.nextExperimentReview(run.id, "human:reviewer", { now: "2026-07-12T13:00:00.000Z" });
     const assignedCase = bank.cases.find((item) => item.id === next.assignment.case_id)!;
     assert.equal("compiler_candidate" in assignedCase, true);
@@ -445,6 +449,7 @@ test("EXP-01 runner uses a fresh worktree, strips ambient instructions, and scor
   const session = mkdtempSync(join(tmpdir(), "hunch-exp01-runner-test-"));
   const source = join(session, "source");
   const bin = join(session, "bin");
+  const setup = join(session, "setup.mjs");
   const evaluator = join(session, "hidden-evaluator.mjs");
   mkdirSync(source, { recursive: true });
   mkdirSync(bin, { recursive: true });
@@ -467,6 +472,8 @@ writeFileSync("solution.txt", "done\\n");
 console.log(JSON.stringify({type:"turn.completed", usage:{input_tokens:10,output_tokens:5}}));
 `);
   chmodSync(fake, 0o755);
+  const setupSource = "// deterministic external setup\n";
+  writeFileSync(setup, setupSource);
   writeFileSync(evaluator, `import { existsSync } from "node:fs";
 console.log(JSON.stringify({valid_completion:existsSync("solution.txt"),policy_violation:false,task_success:true,build_success:true,unknown_or_error:false,refusal:false,confirmed_private_leak:false,data_loss_or_corruption:false,unsafe_evaluator_behavior:false}));
 `);
@@ -480,6 +487,13 @@ console.log(JSON.stringify({valid_completion:existsSync("solution.txt"),policy_v
     input.base_commit = base;
     for (const item of input.cases) {
       if (!("evaluator" in item)) continue;
+      item.setup = {
+        command: process.execPath,
+        args: [setup],
+        timeout_ms: 30_000,
+        artifact: setup,
+        artifact_hash: `sha1:${createHash("sha1").update(readFileSync(setup)).digest("hex")}`,
+      };
       item.evaluator = {
         command: process.execPath,
         args: [evaluator],
@@ -505,8 +519,14 @@ console.log(JSON.stringify({valid_completion:existsSync("solution.txt"),policy_v
     assert.equal(outcome.incidents.confirmed_private_leak, false);
     assert.equal(outcome.metrics && "valid_completion" in outcome.metrics && outcome.metrics.valid_completion, true);
     assert.equal(existsSync(join(source, "solution.txt")), false, "source repository remains untouched");
+    writeFileSync(setup, `${setupSource}// drift after lock\n`);
+    const setupDrifted = executeExp01Assignment(repository, run, bank, run.assignments[1]!, { now: "2026-07-12T13:01:00.000Z" });
+    assert.equal(setupDrifted.status, "infrastructure_failure");
+    assert.equal(setupDrifted.invocation_started, false);
+    assert.equal(setupDrifted.error_code, "setup-artifact-drift");
+    writeFileSync(setup, setupSource);
     writeFileSync(evaluator, `${readFileSync(evaluator, "utf8")}\n// drift after lock\n`);
-    const drifted = executeExp01Assignment(repository, run, bank, run.assignments[1]!, { now: "2026-07-12T13:01:00.000Z" });
+    const drifted = executeExp01Assignment(repository, run, bank, run.assignments[2]!, { now: "2026-07-12T13:02:00.000Z" });
     assert.equal(drifted.status, "infrastructure_failure");
     assert.equal(drifted.invocation_started, false);
     assert.equal(drifted.error_code, "evaluator-artifact-drift");

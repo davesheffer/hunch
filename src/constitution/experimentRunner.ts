@@ -225,7 +225,7 @@ function evaluatorIsHidden(cwd: string, spec: { command: string; args: string[] 
   return true;
 }
 
-function evaluatorArtifactHash(artifact: string): string {
+function externalArtifactHash(artifact: string): string {
   return `sha1:${createHash("sha1").update(readFileSync(artifact)).digest("hex")}`;
 }
 
@@ -286,6 +286,9 @@ export function executeExp01Assignment(
     linkDependencies(bank.repository_root, cwd);
     removeAmbientInstructions(cwd);
     if (item.setup) {
+      if (!isAbsolute(item.setup.artifact) || !existsSync(item.setup.artifact) || externalArtifactHash(item.setup.artifact) !== item.setup.artifact_hash) {
+        return failureOutcome(repository, run, assignment, "infrastructure_failure", false, "Case setup artifact is missing, non-external, or changed after case-bank lock.", "setup-artifact-drift", { evaluator: canonicalHash(item.setup) }, opts.now);
+      }
       const setup = runCommand(item.setup, cwd);
       if (setup.errorCode) {
         return failureOutcome(repository, run, assignment, "infrastructure_failure", false, "Case setup failed before model invocation; retained as an excluded assignment.", setup.errorCode, { evaluator: canonicalHash(setup) }, opts.now);
@@ -295,7 +298,7 @@ export function executeExp01Assignment(
     if (!evaluatorIsHidden(cwd, item.evaluator)) {
       return failureOutcome(repository, run, assignment, "infrastructure_failure", false, "Evaluator is visible inside the task workspace; assignment was excluded before model invocation.", "evaluator-not-hidden", { evaluator: canonicalHash(item.evaluator) }, opts.now);
     }
-    if (!isAbsolute(item.evaluator.artifact) || !existsSync(item.evaluator.artifact) || evaluatorArtifactHash(item.evaluator.artifact) !== item.evaluator.artifact_hash) {
+    if (!isAbsolute(item.evaluator.artifact) || !existsSync(item.evaluator.artifact) || externalArtifactHash(item.evaluator.artifact) !== item.evaluator.artifact_hash) {
       return failureOutcome(repository, run, assignment, "infrastructure_failure", false, "Hidden evaluator artifact is missing, non-external, or changed after case-bank lock.", "evaluator-artifact-drift", { evaluator: canonicalHash(item.evaluator) }, opts.now);
     }
     const treatment = assignmentTreatment(bank, run, assignment);

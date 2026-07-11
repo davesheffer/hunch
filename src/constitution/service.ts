@@ -557,10 +557,14 @@ export class ConstitutionService {
     return scoreG3Readiness({ manifest, g2_readiness: g2, policy_evidence: policyEvidence, experiments, conformance, active_blocking_policy_ids: activeBlocking });
   }
 
-  lockExperimentCaseBank(input: CompileExperimentCaseBankInput, opts: { now?: string } = {}): ExperimentCaseBank {
+  validateExperimentCaseBank(input: CompileExperimentCaseBankInput, opts: { now?: string } = {}): ExperimentCaseBank {
     const preregistration = this.g3Repository.currentExperiments().find((item) => item.id === input.preregistration_id);
     if (!preregistration) throw new Error(`case bank must bind a current G3 preregistration: ${input.preregistration_id}`);
-    return this.experimentRepository.putCaseBank(compileExperimentCaseBank(input, preregistration, opts));
+    return compileExperimentCaseBank(input, preregistration, opts);
+  }
+
+  lockExperimentCaseBank(input: CompileExperimentCaseBankInput, opts: { now?: string } = {}): ExperimentCaseBank {
+    return this.experimentRepository.putCaseBank(this.validateExperimentCaseBank(input, opts));
   }
 
   createExperimentRun(caseBankId: string, input: CompileExperimentRunInput, opts: { now?: string } = {}): ExperimentRun {

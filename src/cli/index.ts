@@ -1694,6 +1694,22 @@ const experimentCmd = program
   .description("Lock, execute, review, and report fresh private preregistered experiments. No result grants policy authority.");
 
 experimentCmd
+  .command("validate")
+  .description("Validate and content-address a draft case bank against the current preregistration without writing it.")
+  .argument("<file>", "case bank JSON input")
+  .action((file: string) => {
+    const { store, root } = storeFor();
+    try {
+      const input = JSON.parse(readFileSync(resolve(file), "utf8")) as CompileExperimentCaseBankInput;
+      console.log(JSON.stringify(new ConstitutionService(store, root).validateExperimentCaseBank(input), null, 2));
+    } catch (e) {
+      fail((e as Error).message);
+    } finally {
+      store.close();
+    }
+  });
+
+experimentCmd
   .command("prepare")
   .description("Lock a fresh private case bank to the exact current preregistration before assignment.")
   .argument("<file>", "case bank JSON input")
