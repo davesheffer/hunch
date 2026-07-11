@@ -2638,8 +2638,8 @@ function printAutoEntry(e: AutoReviewEntry): void {
 
 program
   .command("auto-review")
-  .description("Harness-driven draft triage: delegate relevance to the coding-assistant CLI, then dedup, auto-confirm the verified+relevant, and delete duplicates/irrelevant. Dry-run unless --apply.")
-  .option("--apply", "execute the plan (accept/delete). Without it, print the plan and change nothing.")
+  .description("Harness-driven draft triage: delegate relevance to the coding-assistant CLI, then dedup, auto-confirm the verified+relevant, and delete duplicates/irrelevant. Dry-run unless --apply; apply refuses an incomplete requested harness batch.")
+  .option("--apply", "execute the plan (accept/delete) only after a complete requested harness batch. Without it, print the plan and change nothing.")
   .option("--min-grounded <n>", "grounded-ness threshold for the auto-accept gate", String(READY_MIN_GROUNDED))
   .option("--min-reject-confidence <n>", "minimum harness confidence to DELETE an irrelevant draft (else kept for a human)", "0.7")
   .option("--no-llm", "skip the harness judgment (dedup + grounding only — no relevance deletion)")
@@ -2655,10 +2655,14 @@ program
       const drafts = all.filter((d) => d.status === "proposed" || d.provenance.confidence < 0.6);
       if (!drafts.length) { console.log("✓ No drafts to auto-review."); return; }
 
-      // Delegate relevance to the harness (subscription CLI) — feature-detected,
-      // and any per-draft failure degrades to "not judged" (kept for a human).
+      // Delegate relevance to the harness (subscription CLI) — feature-detected.
+      // A dry-run may remain partial (missing verdicts are kept), but --apply is
+      // all-or-nothing when judgment was requested: a provider outage must never
+      // turn an incomplete batch into an apparently safe mutation plan.
       const verdicts = new Map<string, RelevanceVerdict>();
-      if (opts.llm !== false && !opts.private) {
+      const judgmentRequested = opts.llm !== false && !opts.private;
+      const judgmentFailures: Array<{ id: string; error: string }> = [];
+      if (judgmentRequested) {
         const provider = await selectProvider({ root });
         if (provider.judgeDraft) {
           // The candidate pool for duplicate_of / restatement: the LIVE, vouched records.
@@ -2669,12 +2673,17 @@ program
           for (const d of drafts) {
             try {
               verdicts.set(d.id, await provider.judgeDraft(d, existing.filter((e) => e.id !== d.id)));
-            } catch {
-              /* transient / unparseable — leave unjudged, planner keeps it for a human */
+            } catch (e) {
+              // Preserve the safe keep-for-human plan while making the missing
+              // evidence observable. The apply gate below binds to this exact
+              // draft set, so partial provider success cannot mutate the store.
+              const error = (e instanceof Error ? e.message : String(e)).replace(/\s+/g, " ").trim();
+              judgmentFailures.push({ id: d.id, error: error.slice(0, 240) || "unknown provider failure" });
             }
           }
         } else {
           console.log(dim("No subscription CLI available — relevance judgment skipped (dedup + grounding only)."));
+          judgmentFailures.push(...drafts.map((d) => ({ id: d.id, error: "no subscription relevance judge available" })));
         }
       } else if (opts.private && opts.llm !== false) {
         console.log(dim("Private review stays local — harness judgment skipped (dedup + grounding only)."));
@@ -2683,9 +2692,25 @@ program
       const plan = planAutoReview(drafts, all, verdicts, { minGrounded, minRejectConfidence });
       printAutoReviewPlan(plan);
 
+      if (judgmentRequested) {
+        const coverage = `${verdicts.size}/${drafts.length} judged`;
+        if (judgmentFailures.length) {
+          console.error(`\n⚠ Incomplete harness batch: ${coverage}; ${judgmentFailures.length} failure(s).`);
+          for (const failure of judgmentFailures.slice(0, 5)) console.error(`   ${failure.id}: ${failure.error}`);
+          if (judgmentFailures.length > 5) console.error(`   … ${judgmentFailures.length - 5} more failure(s)`);
+        } else {
+          console.log(`\n✓ Harness batch complete: ${coverage}.`);
+        }
+      }
+
       if (!opts.apply) {
         const n = planMutations(plan);
         console.log(`\n${dim(`Dry run — nothing changed. Re-run with --apply to ${n ? `apply ${n} change(s)` : "confirm (no changes)"}.`)}`);
+        return;
+      }
+
+      if (judgmentRequested && judgmentFailures.length) {
+        fail(`incomplete harness batch (${verdicts.size}/${drafts.length} judged); no changes applied. Re-run when the provider is healthy, or explicitly choose deterministic-only triage with --no-llm --apply.`);
         return;
       }
 

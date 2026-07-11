@@ -55,7 +55,9 @@ export interface AutoReviewConfig {
 const DEFAULT_MIN_REJECT_CONFIDENCE = 0.7;
 
 /** Build the plan. `verdicts` maps draft id → harness verdict (absent → the draft
- *  was not judged, e.g. no CLI available; it can still be dup-rejected or kept). */
+ *  was not judged, e.g. no CLI available; the pure plan can still flag a
+ *  deterministic duplicate or keep it). The CLI refuses `--apply` on an incomplete
+ *  requested harness batch; explicit `--no-llm` triage intentionally has no batch. */
 export function planAutoReview(
   drafts: Decision[],
   allDecisions: Decision[],
