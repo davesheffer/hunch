@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -35,6 +36,19 @@ function privateFixture() {
   store.json.ensureDirs();
   const service = new ConstitutionService(store, root);
   return { root, privateRoot, store, service, cleanup: () => { store.close(); rmSync(root, { recursive: true, force: true }); } };
+}
+
+function createTwoCommitHistory(root: string): void {
+  execFileSync("git", ["init", "-q"], { cwd: root });
+  execFileSync("git", ["config", "user.email", "g2-test@example.invalid"], { cwd: root });
+  execFileSync("git", ["config", "user.name", "G2 Test"], { cwd: root });
+  const fixture = join(root, "fixture.txt");
+  writeFileSync(fixture, "first\n");
+  execFileSync("git", ["add", "fixture.txt"], { cwd: root });
+  execFileSync("git", ["commit", "-q", "-m", "first fixture state"], { cwd: root });
+  writeFileSync(fixture, "second\n");
+  execFileSync("git", ["add", "fixture.txt"], { cwd: root });
+  execFileSync("git", ["commit", "-q", "-m", "second fixture state"], { cwd: root });
 }
 
 function privatePolicy(id: string): PolicySpec {
@@ -301,7 +315,9 @@ test("G2 operational drills bind exact runbooks and historical backfill aborts a
     await client.close();
     client = null;
 
-    const backfill = service.g2ShadowBackfill(2, { now: NOW });
+    createTwoCommitHistory(root);
+    const backfillService = new ConstitutionService(store, root);
+    const backfill = backfillService.g2ShadowBackfill(2, { now: NOW });
     assert.equal(backfill.plan_id, plan.id);
     assert.equal(backfill.commits.length, 2);
     assert.equal(backfill.attempted, 20);
@@ -310,7 +326,7 @@ test("G2 operational drills bind exact runbooks and historical backfill aborts a
     assert.equal(backfill.writes, "none");
     assert.match(backfill.skipped_reason ?? "", /preflight.*wrote nothing/i);
     assert.equal(existsSync(join(privateRoot, "shadow")), false, "failed backfill is atomic across the whole policy/commit matrix");
-    assert.throws(() => service.g2ShadowBackfill(0), /positive integer/i);
+    assert.throws(() => backfillService.g2ShadowBackfill(0), /positive integer/i);
   } finally {
     if (client) await client.close();
     cleanup();
