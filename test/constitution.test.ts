@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { HunchStore } from "../src/store/hunchStore.js";
 import { hunchPaths } from "../src/core/paths.js";
 import { indexRepo } from "../src/extractors/indexer.js";
-import type { Bug, Constraint, Decision } from "../src/core/types.js";
+import type { Bug, Constraint, Decision, Runbook } from "../src/core/types.js";
 import { buildCorrectionConstraint } from "../src/core/correction.js";
 import { ConstitutionService } from "../src/constitution/service.js";
 import { canonicalHash, canonicalJson, policySemanticHash } from "../src/constitution/canonical.js";
@@ -1300,6 +1300,118 @@ test("Phase 2N shadow outcomes are append-only, disposition-bound, and precision
   }
 });
 
+test("Phase 2Q G2 shadow sweep is real-state deduplicated, retry-safe, private, and review-bounded", () => {
+  const { root, store: initial, cleanup } = layeredRepo();
+  initial.close();
+  const privateRoot = join(root, "private-g2-shadow/.hunch");
+  mkdirSync(privateRoot, { recursive: true });
+  writeFileSync(join(root, ".hunch/local.json"), JSON.stringify({ privateDir: privateRoot, autoCommit: false, mode: "private" }));
+  const store = new HunchStore(hunchPaths(root));
+  try {
+    store.putPrivate("decisions", decision("dec_g2_shadow", { private: true }));
+    store.reindex();
+    const service = new ConstitutionService(store, root);
+    const compiled = service.compile("dec_g2_shadow", { through: "fetchOrders", now: NOW });
+    const proved = service.prove(compiled.id, { now: "2026-07-11T11:00:00.000Z" });
+    const policyIds = [proved.policy.id];
+    for (let index = 1; index < 10; index += 1) {
+      const id = `pol_${index.toString(16).padStart(10, "0")}`;
+      policyIds.push(id);
+      service.repository.putPolicy(PolicySpecSchema.parse({
+        ...proved.policy,
+        id,
+        topic: `g2-shadow-${index}`,
+        statement: `G2 unproved fixture ${index}`,
+        state: "compiled",
+        proof: null,
+        authority: null,
+        audit: [],
+      }), { private: true });
+    }
+    const runbooks = Object.fromEntries([
+      "evaluator_error",
+      "false_positive",
+      "private_leak",
+      "stale_policy",
+      "provider_outage",
+      "corrupt_graph",
+      "adapter_break",
+    ].map((category) => {
+      const id = `rb_g2_${category}`;
+      store.putPrivate("runbooks", {
+        id,
+        task: `Recover from ${category}`,
+        trigger: [category],
+        steps: ["Detect.", "Recover."],
+        files: [],
+        gotchas: [],
+        outcome: "Recovery demonstrated.",
+        source_range: null,
+        valid_from: NOW,
+        valid_to: null,
+        provenance: { source: "human_confirmed", confidence: 1, evidence: ["test"] },
+        date: NOW,
+      } as Runbook);
+      return [category, id];
+    })) as Record<"evaluator_error" | "false_positive" | "private_leak" | "stale_policy" | "provider_outage" | "corrupt_graph" | "adapter_break", string>;
+    const g2Plan = service.createG2Plan({ policy_ids: policyIds, runbooks, actor: "human:g2-owner", reason: "Test exact shadow operation." }, { now: "2026-07-11T11:01:00.000Z" });
+
+    const first = service.g2ShadowSweep({ now: "2026-07-11T11:02:00.000Z" });
+    assert.equal(first.selected, 10);
+    assert.equal(first.recorded.length, 1);
+    assert.equal(first.existing.length, 0);
+    assert.equal(first.failures.length, 9, "one unproved policy cannot suppress another policy's real observation");
+    assert.equal(first.authority, "none");
+    assert.equal(existsSync(join(root, ".hunch/shadow")), false);
+    assert.ok(existsSync(join(privateRoot, "shadow", `${first.recorded[0]}.json`)));
+
+    const retry = service.g2ShadowSweep({ now: "2026-07-11T11:03:00.000Z" });
+    assert.equal(retry.recorded.length, 0);
+    assert.deepEqual(retry.existing, first.recorded, "same HEAD and graph are idempotent even when observed_at changes");
+    assert.equal(retry.failures.length, 9);
+    assert.equal(service.g2ShadowQueue(5).total_unclassified, 0);
+
+    writeFileSync(join(root, "src/api/orders.ts"), 'import { dbQuery } from "../db/client.js";\nexport function listOrders(u){ return dbQuery(u); }\n');
+    commitFiles(root, ["src/api/orders.ts"], "fixture: real G2 shadow change");
+    const projectRoot = process.cwd();
+    const syncRun = spawnSync(process.execPath, [join(projectRoot, "node_modules/tsx/dist/cli.mjs"), join(projectRoot, "src/cli/index.ts"), "sync", "HEAD", "--quiet", "--no-commit"], {
+      cwd: root,
+      env: { ...process.env, HUNCH_SYNTH_PROVIDER: "deterministic" },
+      encoding: "utf8",
+    });
+    assert.equal(syncRun.status, 0, syncRun.stderr);
+    const exactObservations = service.repository.listShadowEvaluations({ privateOnly: true }).filter((record) => record.policy_id === proved.policy.id);
+    assert.equal(exactObservations.length, 2, "post-commit sync adds one observation for the changed real HEAD/graph");
+    const queue = service.g2ShadowQueue(1);
+    assert.equal(queue.total_unclassified, 1);
+    assert.equal(queue.items.length, 1);
+    assert.equal(queue.has_more, false);
+    assert.equal(queue.items[0]?.policy_id, proved.policy.id);
+    assert.equal(queue.items[0]?.result, "violated");
+    assert.equal(queue.authority, "none");
+    assert.throws(() => service.g2ShadowQueue(0), /positive integer/i);
+
+    service.classifyShadow(proved.policy.id, queue.items[0]!.shadow_id, "true_positive_actionable", "human:reviewer", "Real bypass in the changed graph.", { now: "2026-07-11T11:05:00.000Z" });
+    assert.equal(service.g2ShadowQueue(5).total_unclassified, 0, "a current human disposition removes the item immediately");
+
+    const planFile = join(privateRoot, "gates", `${g2Plan.id}.json`);
+    const tampered = JSON.parse(readFileSync(planFile, "utf8"));
+    tampered.reason = "tampered plan";
+    writeFileSync(planFile, JSON.stringify(tampered));
+    writeFileSync(join(root, "src/api/orders.ts"), `${readFileSync(join(root, "src/api/orders.ts"), "utf8")}\n// another real commit\n`);
+    commitFiles(root, ["src/api/orders.ts"], "fixture: corrupt G2 plan must not block sync");
+    const corruptPlanSync = spawnSync(process.execPath, [join(projectRoot, "node_modules/tsx/dist/cli.mjs"), join(projectRoot, "src/cli/index.ts"), "sync", "HEAD", "--quiet", "--no-commit"], {
+      cwd: root,
+      env: { ...process.env, HUNCH_SYNTH_PROVIDER: "deterministic" },
+      encoding: "utf8",
+    });
+    assert.equal(corruptPlanSync.status, 0, "corrupt private G2 evidence never blocks the post-commit learning path");
+  } finally {
+    store.close();
+    cleanup();
+  }
+});
+
 test("Phase 3 unresolved refs and history-enumeration failures stay visible as deterministic proof errors", () => {
   const { root, store, cleanup } = layeredRepo();
   try {
@@ -2149,6 +2261,15 @@ test("Gate G1 adapter contract: CLI, MCP, and strict CI expose the identical rec
     assert.equal(g2CliReport.recommendation, "not_ready");
     assert.equal(g2CliReport.authority, "none");
     assert.equal(g2CliReport.g2_passed, false);
+    const g2QueueCliRun = spawnSync(process.execPath, [tsx, cli, "constitution", "g2", "--queue", "5"], {
+      cwd: fixture.root,
+      env,
+      encoding: "utf8",
+    });
+    assert.equal(g2QueueCliRun.status, 0, g2QueueCliRun.stderr);
+    const g2QueueCli = JSON.parse(g2QueueCliRun.stdout) as { content_hash: string; total_unclassified: number; authority: string };
+    assert.equal(g2QueueCli.total_unclassified, 0);
+    assert.equal(g2QueueCli.authority, "none");
 
     const transport = new StdioClientTransport({ command: process.execPath, args: [tsx, cli, "mcp"], cwd: fixture.root, env });
     client = new Client({ name: "constitution-contract-test", version: "1.0.0" });
@@ -2174,6 +2295,11 @@ test("Gate G1 adapter contract: CLI, MCP, and strict CI expose the identical rec
     assert.equal(g2McpReport.recommendation, "not_ready");
     assert.equal(g2McpReport.authority, "none");
     assert.equal(g2McpReport.g2_passed, false);
+    const g2QueueCall = await client.callTool({ name: "hunch_constitution_g2_shadow_queue", arguments: { limit: 5 } });
+    const g2QueueMcp = JSON.parse((g2QueueCall.content[0] as { type: "text"; text: string }).text) as { content_hash: string; total_unclassified: number; authority: string };
+    assert.equal(g2QueueMcp.content_hash, g2QueueCli.content_hash, "CLI and read-only MCP expose the identical bounded G2 shadow queue");
+    assert.equal(g2QueueMcp.total_unclassified, 0);
+    assert.equal(g2QueueMcp.authority, "none");
   } finally {
     if (client) await client.close();
     fixture.cleanup();

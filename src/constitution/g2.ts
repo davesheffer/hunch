@@ -229,6 +229,48 @@ export interface G2ReadinessReport {
   g2_passed: false;
 }
 
+export interface G2ShadowSweepReport {
+  id: string;
+  content_hash: string;
+  plan_id: string | null;
+  selected: number;
+  recorded: string[];
+  existing: string[];
+  failures: Array<{ policy_id: string; error: string }>;
+  skipped_reason: string | null;
+  authority: "none";
+  effects: "shadow_only";
+}
+
+export interface G2ShadowQueueItem {
+  policy_id: string;
+  shadow_id: string;
+  proof_id: string;
+  policy_hash: string;
+  evaluation_hash: string;
+  observed_at: string;
+  result: "violated";
+  explanation: string;
+  matches: Array<{
+    file: string;
+    line?: number;
+    symbol?: string;
+    relation_path?: string[];
+  }>;
+}
+
+export interface G2ShadowQueue {
+  id: string;
+  content_hash: string;
+  plan_id: string | null;
+  total_unclassified: number;
+  unresolved_unknown_error: number;
+  limit: number;
+  items: G2ShadowQueueItem[];
+  has_more: boolean;
+  authority: "none";
+}
+
 export interface ScoreG2ReadinessInput {
   manifest: G2Plan | null;
   policy_evidence: G2PolicyEvidence[];

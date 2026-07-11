@@ -961,6 +961,25 @@ export function buildServer(root: string): McpServer {
     },
   );
 
+  server.registerTool(
+    "hunch_constitution_g2_shadow_queue",
+    {
+      title: "Review unclassified G2 shadow violations",
+      description:
+        "Return a bounded private queue of exact-current-proof G2 shadow violations that still require human classification. Read-only; it never records an observation or disposition, changes lifecycle, grants authority, warns, or blocks.",
+      inputSchema: {
+        limit: z.number().int().min(1).max(100).optional().describe("Maximum queue items to return (default 20)."),
+      },
+    },
+    async ({ limit }): Promise<ToolResult> => {
+      try {
+        return ok(JSON.stringify(new ConstitutionService(store, root).g2ShadowQueue(limit ?? 20), null, 2));
+      } catch (e) {
+        return err(`Failed to inspect the G2 shadow queue: ${(e as Error).message}`);
+      }
+    },
+  );
+
   // -- hunch_conformance ----------------------------------------------------
   server.registerTool(
     "hunch_conformance",

@@ -1,5 +1,6 @@
 import type { HunchStore } from "../store/hunchStore.js";
-import { canonicalJson } from "./canonical.js";
+import { canonicalHash, canonicalJson } from "./canonical.js";
+import { shortHash } from "../core/ids.js";
 import { compileDecisionPolicy, type CompilePolicyOptions } from "./compiler.js";
 import { evaluatePolicy, policyBlocks, policyIsActive } from "./evaluator.js";
 import { approvePolicy, blockingProofError, demotePolicy, linkPolicyException, proposeProvedPolicy } from "./lifecycle.js";
@@ -38,6 +39,9 @@ import {
   type G2PolicyEvidence,
   type G2ReadinessReport,
   type G2RunbookEvidence,
+  type G2ShadowQueue,
+  type G2ShadowQueueItem,
+  type G2ShadowSweepReport,
   type RunbookRehearsal,
 } from "./g2.js";
 
@@ -311,6 +315,93 @@ export class ConstitutionService {
         private_rehearsals: rehearsals.length,
       },
     });
+  }
+
+  g2ShadowSweep(opts: { now?: string } = {}): G2ShadowSweepReport {
+    const manifest = this.g2Repository.currentPlan();
+    const recorded: string[] = [];
+    const existing: string[] = [];
+    const failures: Array<{ policy_id: string; error: string }> = [];
+    if (manifest) {
+      const before = new Set(this.repository.listShadowEvaluations({ privateOnly: true }).map((record) => record.id));
+      for (const policyId of manifest.policy_ids) {
+        try {
+          const policy = this.repository.getPolicy(policyId, { privateOnly: true });
+          const publicDuplicate = this.repository.getPolicy(policyId, { publicOnly: true });
+          if (!policy || publicDuplicate || this.repository.homeOfPolicy(policyId) !== "private" || policy.data_class === "public") {
+            throw new Error("selected policy is not in one exact private-only home");
+          }
+          const record = this.recordShadow(policyId, { now: opts.now });
+          if (before.has(record.id)) existing.push(record.id);
+          else {
+            recorded.push(record.id);
+            before.add(record.id);
+          }
+        } catch (error) {
+          failures.push({ policy_id: policyId, error: (error as Error).message });
+        }
+      }
+    }
+    const body = {
+      plan_id: manifest?.id ?? null,
+      selected: manifest?.policy_ids.length ?? 0,
+      recorded: recorded.sort(),
+      existing: existing.sort(),
+      failures: failures.sort((left, right) => left.policy_id.localeCompare(right.policy_id)),
+      skipped_reason: manifest ? null : "No current private G2 plan; shadow sweep wrote nothing.",
+      authority: "none" as const,
+      effects: "shadow_only" as const,
+    };
+    const contentHash = canonicalHash(body);
+    return { id: `g2sweep_${shortHash(contentHash)}`, content_hash: contentHash, ...body };
+  }
+
+  g2ShadowQueue(limit = 20): G2ShadowQueue {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error("G2 shadow queue limit must be a positive integer no greater than 100");
+    const manifest = this.g2Repository.currentPlan();
+    const policies = this.repository.listPolicies({ privateOnly: true });
+    const proofs = this.repository.listProofs({ privateOnly: true });
+    const currentDispositions = currentShadowDispositions(this.repository.listShadowDispositions({ privateOnly: true }));
+    const exactRecords = this.repository.listShadowEvaluations({ privateOnly: true }).filter((record) => {
+      if (!manifest?.policy_ids.includes(record.policy_id)) return false;
+      const policy = policies.find((candidate) => candidate.id === record.policy_id);
+      const publicDuplicate = this.repository.getPolicy(record.policy_id, { publicOnly: true });
+      if (!policy || publicDuplicate || policy.proof !== record.proof_id) return false;
+      const proof = proofs.find((candidate) => candidate.id === record.proof_id);
+      if (!proof || proof.policy_hash !== record.policy_hash) return false;
+      const composition = compositionDescendants(policy, policies);
+      return proof.policy_hash === policyProofHash(policy, composition);
+    });
+    const unclassified = exactRecords
+      .filter((record) => record.evaluation.result === "violated")
+      .filter((record) => !currentDispositions.some((disposition) => disposition.shadow_id === record.id
+        && disposition.policy_id === record.policy_id
+        && disposition.proof_id === record.proof_id
+        && disposition.policy_hash === record.policy_hash
+        && disposition.evaluation_hash === record.evaluation.deterministic_hash))
+      .sort((left, right) => left.observed_at.localeCompare(right.observed_at) || left.id.localeCompare(right.id));
+    const items: G2ShadowQueueItem[] = unclassified.slice(0, limit).map((record) => ({
+      policy_id: record.policy_id,
+      shadow_id: record.id,
+      proof_id: record.proof_id,
+      policy_hash: record.policy_hash,
+      evaluation_hash: record.evaluation.deterministic_hash,
+      observed_at: record.observed_at,
+      result: "violated",
+      explanation: record.evaluation.explanation,
+      matches: record.evaluation.matches,
+    }));
+    const body = {
+      plan_id: manifest?.id ?? null,
+      total_unclassified: unclassified.length,
+      unresolved_unknown_error: exactRecords.filter((record) => record.evaluation.result === "unknown" || record.evaluation.result === "error").length,
+      limit,
+      items,
+      has_more: unclassified.length > items.length,
+      authority: "none" as const,
+    };
+    const contentHash = canonicalHash(body);
+    return { id: `g2queue_${shortHash(contentHash)}`, content_hash: contentHash, ...body };
   }
 
   list(opts: { publicOnly?: boolean; privateOnly?: boolean; state?: string } = {}): PolicySpec[] {

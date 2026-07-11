@@ -359,6 +359,7 @@ program
       verify: opts.verify,
       samples: parseSamples(opts.samples),
     });
+    const doCommit = opts.commit ?? store.autoCommit;
     if (r.status === "written") {
       store.reindex();
       // Don't rewrite grounding from the hook — it would dirty the working tree on
@@ -376,7 +377,6 @@ program
       // hook (no recursion). The overlay is pushed; the public .hunch/ is committed
       // WITHOUT pushing — auto-pushing the user's code branch would publish their
       // unpushed commits (bug_overlay_clobber lineage).
-      const doCommit = opts.commit ?? store.autoCommit;
       const commitTarget = doCommit ? (toOverlay ? store.privateDir : hunchPaths(root).hunch) : undefined;
       if (commitTarget) {
         commitAndPushHunch(commitTarget, `hunch: capture ${r.decision?.id ?? "decision"}`, { push: toOverlay });
@@ -385,6 +385,24 @@ program
       if (!opts.quiet) console.log(`✓ captured decision ${r.decision?.id} via ${r.provider}: "${r.decision?.title}"`);
     } else if (!opts.quiet) {
       console.log(`· skipped: ${r.reason}`);
+    }
+    try {
+      const constitution = new ConstitutionService(store, root);
+      if (constitution.g2Repository.currentPlan()) {
+        indexRepo(store, root, { churn: false });
+        store.reindex();
+        const sweep = constitution.g2ShadowSweep();
+        if (sweep.recorded.length && doCommit && store.privateDir) {
+          commitAndPushHunch(store.privateDir, `hunch: record ${sweep.recorded.length} G2 shadow observation(s)`);
+        }
+        if (!opts.quiet) {
+          console.log(`  ↳ G2 shadow: ${sweep.recorded.length} recorded · ${sweep.existing.length} existing · ${sweep.failures.length} failed; authority none`);
+        }
+      }
+    } catch (e) {
+      // Post-commit learning is background/best-effort. Shadow operation must
+      // never make a source commit, decision capture, warning, or block fail.
+      if (!opts.quiet) console.log(`  ↳ G2 shadow skipped safely: ${(e as Error).message}`);
     }
     store.close();
   });
@@ -1437,31 +1455,45 @@ constitutionCmd
   .description("Inspect the exact private G2 dogfood evidence packet; optionally append a human-selected plan or exact runbook rehearsal receipt. Never grants policy authority.")
   .option("--plan <file>", "append a private human-selected G2 plan from JSON")
   .option("--rehearse <runbook-id>", "append a rehearsal receipt for the exact current private runbook content")
+  .option("--observe", "record at most one private shadow observation per selected policy for the current real HEAD/graph")
+  .option("--queue <limit>", "return the bounded current-proof queue of unclassified G2 shadow violations")
   .option("--result <result>", "rehearsal result: passed | failed")
   .option("--actor <actor>", "explicit human actor (human:, github:, or git:)")
   .option("--evidence <hashes...>", "one or more sha1 evidence hashes for a rehearsal")
   .option("--notes <text>", "rehearsal evidence notes")
   .option("--supersedes <id>", "current rehearsal id corrected by this append-only receipt")
   .option("--strict", "exit nonzero while the packet is not eligible for explicit human G2 signoff")
-  .action((opts: { plan?: string; rehearse?: string; result?: string; actor?: string; evidence?: string[]; notes?: string; supersedes?: string; strict?: boolean }) => {
+  .action((opts: { plan?: string; rehearse?: string; observe?: boolean; queue?: string; result?: string; actor?: string; evidence?: string[]; notes?: string; supersedes?: string; strict?: boolean }) => {
     const { store, root } = storeFor();
     try {
-      if (opts.plan && opts.rehearse) throw new Error("choose only one of --plan or --rehearse");
+      const queueRequested = opts.queue !== undefined;
+      const actions = [!!opts.plan, !!opts.rehearse, !!opts.observe, queueRequested].filter(Boolean).length;
+      if (actions > 1) throw new Error("choose only one of --plan, --rehearse, --observe, or --queue");
       const service = new ConstitutionService(store, root);
-      let appended: unknown;
+      let output: unknown;
       if (opts.plan) {
-        appended = service.createG2Plan(JSON.parse(readFileSync(resolve(opts.plan), "utf8")) as CompileG2PlanInput);
+        const appended = service.createG2Plan(JSON.parse(readFileSync(resolve(opts.plan), "utf8")) as CompileG2PlanInput);
+        output = { appended, readiness: service.g2Readiness() };
       } else if (opts.rehearse) {
         if (opts.result !== "passed" && opts.result !== "failed") throw new Error("--rehearse requires --result passed|failed");
         if (!opts.actor) throw new Error("--rehearse requires --actor");
         if (!opts.evidence?.length) throw new Error("--rehearse requires at least one --evidence sha1 hash");
         if (!opts.notes) throw new Error("--rehearse requires --notes");
-        appended = service.recordRunbookRehearsal(opts.rehearse, opts.result, opts.actor, opts.evidence, opts.notes, { supersedes: opts.supersedes });
+        const appended = service.recordRunbookRehearsal(opts.rehearse, opts.result, opts.actor, opts.evidence, opts.notes, { supersedes: opts.supersedes });
+        output = { appended, readiness: service.g2Readiness() };
+      } else if (opts.observe) {
+        indexRepo(store, root, { churn: false });
+        store.reindex();
+        output = { sweep: service.g2ShadowSweep(), readiness: service.g2Readiness() };
+      } else if (queueRequested) {
+        output = service.g2ShadowQueue(Number(opts.queue));
       } else if (opts.result || opts.actor || opts.evidence || opts.notes || opts.supersedes) {
         throw new Error("rehearsal options require --rehearse <runbook-id>");
+      } else {
+        output = service.g2Readiness();
       }
       const readiness = service.g2Readiness();
-      console.log(JSON.stringify(appended ? { appended, readiness } : readiness, null, 2));
+      console.log(JSON.stringify(output, null, 2));
       if (opts.strict && readiness.recommendation !== "eligible_for_human_g2_signoff") process.exitCode = 1;
     } catch (e) {
       fail((e as Error).message);
