@@ -309,7 +309,7 @@ npm run gate:release
 
 The same fail-closed runner gates pull requests, main, and npm publication. It binds the package
 version and optional release tag to HEAD; runs typecheck, the full suite, core and VS Code builds,
-public architectural conformance, a clean-installed tarball replay/privacy rehearsal, and the
+a fresh public repository index plus strict architectural conformance, a clean-installed tarball replay/privacy rehearsal, and the
 production dependency audit; then writes a content-addressed receipt under
 `.hunch-cache/release/`. A failed prerequisite stops later commands, a tag/version/commit mismatch
 refuses before execution, and publication remains unreachable unless the exact tagged checkout is

@@ -23,6 +23,7 @@ export const RELEASE_GATES = Object.freeze([
   { id: "core-build", command: ["npm", "run", "build"] },
   { id: "vscode-install", command: ["npm", "ci", "--prefix", "vscode-extension"] },
   { id: "vscode-build", command: ["npm", "run", "build", "--prefix", "vscode-extension"] },
+  { id: "repository-index", command: ["node", "dist/cli/index.js", "index"] },
   { id: "architectural-conformance", command: ["node", "dist/cli/index.js", "conform", "--strict"] },
   { id: "clean-install-rehearsal", command: ["node", "tooling/constitution-clean-rehearsal.mjs", "--output", "$REHEARSAL_OUTPUT"] },
   { id: "production-dependency-audit", command: ["npm", "audit", "--omit=dev", "--audit-level=high"] },
@@ -81,7 +82,7 @@ export function executeReleasePlan(plan, runner) {
 }
 
 export function gateEnvironment(gateId, baseEnvironment, emptyPrivateHome) {
-  if (gateId !== "architectural-conformance") return { ...baseEnvironment };
+  if (gateId !== "repository-index" && gateId !== "architectural-conformance") return { ...baseEnvironment };
   return {
     ...baseEnvironment,
     HUNCH_PRIVATE_DIR: emptyPrivateHome,

@@ -27,7 +27,7 @@ jobs:
         run: npm ci
 
       # One cross-platform gate is shared by normal CI and the publish workflow:
-      # typecheck, full tests, core + VS Code builds, conformance, clean tarball
+      # typecheck, full tests, core + VS Code builds, fresh index + conformance, clean tarball
       # rehearsal/privacy sentinel, and production dependency audit. It emits a
       # content-addressed receipt even when a prerequisite fails.
       - name: Constitution release gate

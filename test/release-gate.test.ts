@@ -19,6 +19,7 @@ test("Phase 2O release gate is fail-closed, content-addressed, and publish-neutr
     "core-build",
     "vscode-install",
     "vscode-build",
+    "repository-index",
     "architectural-conformance",
     "clean-install-rehearsal",
     "production-dependency-audit",
@@ -55,6 +56,7 @@ test("Phase 2O release gate is fail-closed, content-addressed, and publish-neutr
   assert.deepEqual(calls, ["typecheck", "test", "core-build"], "a failed prerequisite prevents every later gate and publish");
   assert.deepEqual(results.map((result) => result.status), ["passed", "passed", "failed"]);
   assert.equal(gateEnvironment("test", { HUNCH_PRIVATE_DIR: "fixture-overlay" }, "empty-overlay").HUNCH_PRIVATE_DIR, "fixture-overlay");
+  assert.equal(gateEnvironment("repository-index", { HUNCH_PRIVATE_DIR: "fixture-overlay" }, "empty-overlay").HUNCH_PRIVATE_DIR, "empty-overlay");
   assert.equal(gateEnvironment("architectural-conformance", { HUNCH_PRIVATE_DIR: "fixture-overlay" }, "empty-overlay").HUNCH_PRIVATE_DIR, "empty-overlay");
 
   const input = {
