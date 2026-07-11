@@ -1747,6 +1747,46 @@ test("Phase 2Z direct decision review captures assertions added to an existing n
   }
 });
 
+test("Phase 2Z direct decision review decodes escaped literal test names exactly", () => {
+  const { root, store, cleanup } = layeredRepo();
+  try {
+    writeFileSync(join(root, "src/direct.mjs"), "export function guarded(){ return false; }\n");
+    commitFiles(root, ["src/direct.mjs"], "fixture: escaped-name baseline");
+    writeFileSync(join(root, "src/direct.mjs"), "export function guarded(){ return true; }\n");
+    mkdirSync(join(root, "test"), { recursive: true });
+    writeFileSync(join(root, "test/direct.test.mjs"), [
+      'import test from "node:test";',
+      'import assert from "node:assert/strict";',
+      'import { guarded } from "../src/direct.mjs";',
+      'test("escaped \\u0028exact\\u0029", () => assert.equal(guarded(), true));',
+      "",
+    ].join("\n"));
+    const fix = commitFiles(root, ["src/direct.mjs", "test/direct.test.mjs"], "fix: escaped exact behavior");
+    store.json.put("decisions", {
+      ...decision("dec_g2_escaped_name"),
+      title: "Execute an escaped literal test name exactly",
+      context: "The source spelling and registered node:test name differ when the literal contains JavaScript escapes.",
+      decision: "Direct review decodes the literal to the runtime test name before exact replay.",
+      related_files: ["src/direct.mjs", "test/direct.test.mjs"],
+      commit: fix,
+    });
+    const service = new ConstitutionService(store, root);
+    const opts = { decisionId: "dec_g2_escaped_name", since: "30d", maxCommits: 10, limit: 10 };
+    const review = service.g2BehaviorCandidateReview(opts);
+    assert.equal(review.items.length, 1);
+    const candidate = review.items[0]!;
+    assert.equal(candidate.test.name, "escaped (exact)");
+    assert.equal(candidate.runner.argv[2], "--test-name-pattern=^escaped \\(exact\\)$");
+    const replay = service.g2BehaviorCandidateReplay(candidate.id, review.content_hash, opts);
+    assert.equal(replay.known_bad.result, "failed");
+    assert.equal(replay.known_good.result, "passed");
+    assert.equal(replay.verdict, "behavior_confirmed");
+  } finally {
+    store.close();
+    cleanup();
+  }
+});
+
 test("Phase 2U/2V/2W/2X/2Y replays, attests, and proves exact executable behavior", async () => {
   const { root, store: initial, cleanup } = layeredRepo();
   initial.close();

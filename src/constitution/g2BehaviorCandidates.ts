@@ -257,12 +257,65 @@ interface LiteralNodeTestCase {
   endLine: number;
 }
 
+function decodeJsStringBody(raw: string): string | null {
+  let out = "";
+  for (let index = 0; index < raw.length; index++) {
+    const char = raw[index]!;
+    if (char !== "\\") {
+      out += char;
+      continue;
+    }
+    const next = raw[++index];
+    if (next == null) return null;
+    const simple: Record<string, string> = {
+      b: "\b", f: "\f", n: "\n", r: "\r", t: "\t", v: "\v", "0": "\0",
+    };
+    if (next in simple) {
+      if (next === "0" && /[0-9]/.test(raw[index + 1] ?? "")) return null;
+      out += simple[next]!;
+      continue;
+    }
+    if (next === "x") {
+      const hex = raw.slice(index + 1, index + 3);
+      if (!/^[a-fA-F0-9]{2}$/.test(hex)) return null;
+      out += String.fromCharCode(Number.parseInt(hex, 16));
+      index += 2;
+      continue;
+    }
+    if (next === "u") {
+      if (raw[index + 1] === "{") {
+        const end = raw.indexOf("}", index + 2);
+        if (end < 0) return null;
+        const hex = raw.slice(index + 2, end);
+        const codePoint = /^[a-fA-F0-9]{1,6}$/.test(hex) ? Number.parseInt(hex, 16) : -1;
+        if (codePoint < 0 || codePoint > 0x10ffff) return null;
+        out += String.fromCodePoint(codePoint);
+        index = end;
+      } else {
+        const hex = raw.slice(index + 1, index + 5);
+        if (!/^[a-fA-F0-9]{4}$/.test(hex)) return null;
+        out += String.fromCharCode(Number.parseInt(hex, 16));
+        index += 4;
+      }
+      continue;
+    }
+    if (next === "\n") continue;
+    if (next === "\r") {
+      if (raw[index + 1] === "\n") index++;
+      continue;
+    }
+    out += next;
+  }
+  return out;
+}
+
 function literalTestName(raw: string): string | null {
   const quote = raw[0];
   if ((quote !== '"' && quote !== "'" && quote !== "`") || raw.at(-1) !== quote) return null;
   const body = raw.slice(1, -1);
   if (quote === "`" && body.includes("${")) return null;
-  const name = decodeEscaped(body);
+  const name = decodeJsStringBody(body);
+  if (name == null) return null;
   return name.trim() ? name : null;
 }
 
