@@ -33,6 +33,7 @@ test("Phase 2O release gate is fail-closed, content-addressed, and publish-neutr
     "replay_isolation",
     "proof_version_invalidation",
     "g2_readiness",
+    "g3_readiness",
   ]);
 
   assert.throws(

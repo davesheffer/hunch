@@ -38,6 +38,7 @@ export const RELEASE_TEST_COVERAGE = Object.freeze({
   replay_isolation: ["test/constitution.test.ts", "tooling/constitution-clean-rehearsal.mjs"],
   proof_version_invalidation: ["test/constitution.test.ts"],
   g2_readiness: ["test/g2.test.ts", "test/constitution.test.ts"],
+  g3_readiness: ["test/g3.test.ts", "test/behavior-workspace.test.ts"],
 });
 
 function stable(value) {

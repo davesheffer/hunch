@@ -80,6 +80,22 @@ import {
 import { executableBehaviorAttestationError } from "./behaviorAttestationBinding.js";
 import { evaluateExecutableBehaviorPolicy, type BehaviorEvaluationOptions } from "./behaviorEvaluator.js";
 import { executeG2OperationalDrill, type G2OperationalDrillReceipt } from "./g2Drills.js";
+import {
+  G3_REQUIRED_EXPERIMENTS,
+  G3EvidenceRepository,
+  compileExperimentPreregistration,
+  compileG3Plan,
+  compileProofReviewMeasurement,
+  scoreG3Readiness,
+  type CompileExperimentPreregistrationInput,
+  type CompileG3PlanInput,
+  type G3PolicyEvidence,
+  type G3ReadinessReport,
+  type ProofReviewMeasurement,
+  type ExperimentPreregistration,
+  type AdapterConformanceReceipt,
+} from "./g3.js";
+import { executeG3AdapterConformance, g3ConformanceSourceHash } from "./g3Conformance.js";
 
 export interface PolicyEvaluationSet {
   policy: PolicySpec;
@@ -187,12 +203,14 @@ export function shadowCommitEligible(root: string, policy: PolicySpec, commit: s
 export class ConstitutionService {
   readonly repository: PolicyRepository;
   readonly g2Repository: G2EvidenceRepository;
+  readonly g3Repository: G3EvidenceRepository;
   readonly g2CandidateRepository: G2CandidateAttestationRepository;
   readonly g2BehaviorAttestationRepository: G2BehaviorAttestationRepository;
 
   constructor(private readonly store: HunchStore, private readonly root: string) {
     this.repository = new PolicyRepository(root, store);
     this.g2Repository = new G2EvidenceRepository(store);
+    this.g3Repository = new G3EvidenceRepository(store);
     this.g2CandidateRepository = new G2CandidateAttestationRepository(store);
     this.g2BehaviorAttestationRepository = new G2BehaviorAttestationRepository(store);
   }
@@ -371,6 +389,147 @@ export class ConstitutionService {
         private_rehearsals: rehearsals.length,
       },
     });
+  }
+
+  registerG3Experiment(input: CompileExperimentPreregistrationInput, opts: { now?: string } = {}): ExperimentPreregistration {
+    return this.g3Repository.putExperiment(compileExperimentPreregistration(input, opts));
+  }
+
+  createG3Plan(input: CompileG3PlanInput, opts: { now?: string } = {}) {
+    const g2 = this.g2Readiness();
+    if (g2.recommendation !== "eligible_for_human_g2_signoff" || !g2.manifest) {
+      throw new Error("G3 plan requires an exact currently eligible private G2 packet");
+    }
+    const plan = compileG3Plan(input, opts);
+    if (plan.g2_readiness_hash !== g2.content_hash) throw new Error(`G3 plan must bind current G2 readiness hash ${g2.content_hash}`);
+    if (canonicalJson(plan.policy_ids) !== canonicalJson([...g2.manifest.policy_ids].sort())) {
+      throw new Error("G3 plan must carry the complete exact G2 policy set; cherry-picked subsets cannot clear the advisory gate");
+    }
+    const currentExperiments = this.g3Repository.currentExperiments();
+    const retrieval = currentExperiments.find((record) => record.experiment === "EXP-01");
+    const compiler = currentExperiments.find((record) => record.experiment === "EXP-03");
+    if (!retrieval || plan.experiments.retrieval !== retrieval.id) throw new Error("G3 plan must bind the exact current EXP-01 retrieval preregistration");
+    if (!compiler || plan.experiments.compiler !== compiler.id) throw new Error("G3 plan must bind the exact current EXP-03 compiler preregistration");
+    for (const policyId of plan.policy_ids) {
+      const policy = this.repository.getPolicy(policyId, { privateOnly: true });
+      const publicDuplicate = this.repository.getPolicy(policyId, { publicOnly: true });
+      if (!policy || publicDuplicate || this.repository.homeOfPolicy(policyId) !== "private" || policy.data_class !== "private") {
+        throw new Error(`G3 selected policy ${policyId} must exist only in the configured private overlay`);
+      }
+    }
+    return this.g3Repository.putPlan(plan);
+  }
+
+  recordG3ProofReview(
+    input: {
+      policy_id: string;
+      reviewer: string;
+      duration_ms: number;
+      comprehension: { requirement: "correct" | "incorrect"; limitations: "correct" | "incorrect"; authority: "correct" | "incorrect" };
+      notes: string;
+      supersedes?: string | null;
+    },
+    opts: { now?: string } = {},
+  ): ProofReviewMeasurement {
+    const plan = this.g3Repository.currentPlan();
+    if (!plan) throw new Error("No current private G3 plan; proof review cannot bind an exact policy packet");
+    if (!plan.policy_ids.includes(input.policy_id)) throw new Error(`policy ${input.policy_id} is not selected by current G3 plan ${plan.id}`);
+    const policy = this.get(input.policy_id, { privateOnly: true });
+    if (this.repository.getPolicy(input.policy_id, { publicOnly: true }) || this.repository.homeOfPolicy(input.policy_id) !== "private" || policy.data_class !== "private") {
+      throw new Error(`G3 proof review policy ${input.policy_id} must exist only in the configured private overlay`);
+    }
+    if (!policy.proof) throw new Error(`policy ${input.policy_id} has no proof to review`);
+    const proof = this.proof(policy.proof, { privateOnly: true });
+    const card = this.card(policy.id, { privateOnly: true });
+    return this.g3Repository.putReview(compileProofReviewMeasurement({
+      plan_id: plan.id,
+      policy_id: policy.id,
+      policy_hash: policyProofHash(policy, this.composition(policy, { privateOnly: true })),
+      proof_id: proof.id,
+      proof_hash: canonicalHash(proof),
+      card_hash: card.card_hash,
+      reviewer: input.reviewer,
+      duration_ms: input.duration_ms,
+      comprehension: input.comprehension,
+      notes: input.notes,
+      supersedes: input.supersedes,
+    }, opts));
+  }
+
+  g3AdapterConformance(opts: { timeoutMs?: number; now?: string } = {}): AdapterConformanceReceipt {
+    const plan = this.g3Repository.currentPlan();
+    if (!plan) throw new Error("No current private G3 plan; adapter conformance cannot bind an exact client set");
+    const current = this.g3Repository.currentConformance().find((record) => record.plan_id === plan.id);
+    const receipt = executeG3AdapterConformance(this.root, plan, { ...opts, supersedes: current?.id ?? null });
+    return this.g3Repository.putConformance(receipt);
+  }
+
+  g3Readiness(): G3ReadinessReport {
+    const manifest = this.g3Repository.currentPlan();
+    const g2 = this.g2Readiness();
+    const g2Evidence = new Map(g2.policy_evidence.map((evidence) => [evidence.policy_id, evidence]));
+    const currentReviews = this.g3Repository.currentReviews();
+    const policyEvidence: G3PolicyEvidence[] = [];
+    for (const policyId of manifest?.policy_ids ?? []) {
+      const reasons: string[] = [];
+      const policy = this.repository.getPolicy(policyId, { privateOnly: true });
+      const publicDuplicate = this.repository.getPolicy(policyId, { publicOnly: true });
+      const g2Policy = g2Evidence.get(policyId);
+      let cardHash: string | null = null;
+      let proofCurrent = false;
+      let review: ProofReviewMeasurement | null = null;
+      if (!policy || publicDuplicate || this.repository.homeOfPolicy(policyId) !== "private" || policy.data_class !== "private") {
+        reasons.push("selected policy is missing from its exact private-only home");
+      } else {
+        if (policy.state !== "active_advisory") reasons.push(`policy state is ${policy.state}, not active_advisory under explicit human authority`);
+        if (policy.authority?.kind !== "human") reasons.push("policy has no explicit human advisory authority");
+        if (!g2Policy?.complete) reasons.push("current G2 proof/corpus/shadow evidence is incomplete");
+        try {
+          const card = this.card(policyId, { privateOnly: true });
+          cardHash = card.card_hash;
+          proofCurrent = !!policy.proof && g2Policy?.proof_id === policy.proof;
+          const matching = currentReviews.filter((candidate) => candidate.plan_id === manifest!.id && candidate.policy_id === policyId && candidate.card_hash === card.card_hash);
+          if (matching.length !== 1) reasons.push(matching.length ? "multiple current proof reviews make the measurement target ambiguous" : "current proof card has no exact human review measurement");
+          else {
+            review = matching[0]!;
+            if (review.policy_hash !== policyProofHash(policy, this.composition(policy, { privateOnly: true }))) reasons.push("proof review does not bind current policy/composite semantics");
+            const proof = policy.proof ? this.proof(policy.proof, { privateOnly: true }) : null;
+            if (!proof || review.proof_id !== proof.id || review.proof_hash !== canonicalHash(proof)) reasons.push("proof review does not bind the exact current proof artifact");
+            if (Object.values(review.comprehension).some((answer) => answer !== "correct")) reasons.push("proof-card comprehension measurement contains an incorrect answer");
+          }
+        } catch (error) {
+          reasons.push(`proof card is unavailable: ${(error as Error).message}`);
+        }
+      }
+      policyEvidence.push({
+        policy_id: policyId,
+        state: policy?.state ?? null,
+        authority_kind: policy?.authority?.kind ?? null,
+        proof_current: proofCurrent,
+        card_hash: cardHash,
+        review_id: review?.id ?? null,
+        review_duration_ms: review?.duration_ms ?? null,
+        comprehension_correct: review ? Object.values(review.comprehension).every((answer) => answer === "correct") : null,
+        reasons,
+      });
+    }
+    const currentExperiments = this.g3Repository.currentExperiments();
+    const experiments = G3_REQUIRED_EXPERIMENTS.map((experiment) => {
+      const record = currentExperiments.find((candidate) => candidate.experiment === experiment);
+      const expectedId = experiment === "EXP-01" ? manifest?.experiments.retrieval : manifest?.experiments.compiler;
+      const reasons: string[] = [];
+      if (!record) reasons.push("no current immutable preregistration exists");
+      else if (expectedId && record.id !== expectedId) reasons.push(`current preregistration ${record.id} differs from plan-bound ${expectedId}`);
+      if (!manifest) reasons.push("no G3 plan binds this preregistration");
+      return { experiment, id: record?.id ?? null, content_hash: record?.content_hash ?? null, current: !!record && !!manifest && record.id === expectedId, reasons };
+    });
+    const conformance = manifest
+      ? this.g3Repository.currentConformance().find((record) => record.plan_id === manifest.id
+        && record.test.source_hash === g3ConformanceSourceHash(this.root)
+        && record.test.file === "test/behavior-workspace.test.ts") ?? null
+      : null;
+    const activeBlocking = this.repository.listPolicies().filter((policy) => policy.state === "active_blocking").map((policy) => policy.id);
+    return scoreG3Readiness({ manifest, g2_readiness: g2, policy_evidence: policyEvidence, experiments, conformance, active_blocking_policy_ids: activeBlocking });
   }
 
   g2ShadowSweep(opts: { now?: string } = {}): G2ShadowSweepReport {

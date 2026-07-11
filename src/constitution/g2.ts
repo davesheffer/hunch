@@ -133,7 +133,7 @@ export function compileRunbookRehearsal(input: CompileRunbookRehearsalInput, opt
   return RunbookRehearsalSchema.parse({ id: `rehearsal_${shortHash(contentHash)}`, content_hash: contentHash, ...body });
 }
 
-function currentAppendOnly<T extends { id: string; supersedes: string | null }>(
+export function currentAppendOnly<T extends { id: string; supersedes: string | null }>(
   records: T[],
   label: string,
   identity: (record: T) => string,
@@ -341,7 +341,7 @@ export function scoreG2Readiness(input: ScoreG2ReadinessInput): G2ReadinessRepor
   return { id: `g2readiness_${shortHash(contentHash)}`, content_hash: contentHash, ...body };
 }
 
-function loadPrivateRecords<T>(dir: string | undefined, prefix: string, parse: (value: unknown) => T, label: string): T[] {
+export function loadPrivateRecords<T>(dir: string | undefined, prefix: string, parse: (value: unknown) => T, label: string): T[] {
   if (!dir || !existsSync(dir)) return [];
   const records: T[] = [];
   for (const name of readdirSync(dir).filter((entry) => entry.startsWith(prefix) && entry.endsWith(".json")).sort()) {

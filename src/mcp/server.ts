@@ -970,6 +970,23 @@ export function buildServer(root: string): McpServer {
   );
 
   server.registerTool(
+    "hunch_constitution_g3_readiness",
+    {
+      title: "Inspect Constitution G3 readiness",
+      description:
+        "Return the exact private G3 advisory packet: human-selected policies and clients, immutable experiment preregistrations, proof-card comprehension/review measurements, executable adapter conformance, scorecard, and blockers. Read-only; it never records evidence, activates policy, or signs off G3.",
+      inputSchema: {},
+    },
+    async (): Promise<ToolResult> => {
+      try {
+        return ok(JSON.stringify(new ConstitutionService(store, root).g3Readiness(), null, 2));
+      } catch (e) {
+        return err(`Failed to inspect G3 readiness: ${(e as Error).message}`);
+      }
+    },
+  );
+
+  server.registerTool(
     "hunch_constitution_g2_shadow_queue",
     {
       title: "Review unclassified G2 shadow violations",

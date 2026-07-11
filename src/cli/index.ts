@@ -90,6 +90,7 @@ import { renderProofCard } from "../constitution/card.js";
 import { movePolicyArtifactsToPrivate } from "../constitution/repository.js";
 import { HistoryDispositionClassificationSchema } from "../constitution/schema.js";
 import { G2_RUNBOOK_CATEGORIES, type CompileG2PlanInput } from "../constitution/g2.js";
+import type { CompileExperimentPreregistrationInput, CompileG3PlanInput } from "../constitution/g3.js";
 import { draftTripwires, knownRepoDeps } from "../synthesis/tripwires.js";
 import { constraintId } from "../core/ids.js";
 import type { Constraint, Decision } from "../core/types.js";
@@ -1636,6 +1637,48 @@ constitutionCmd
       const readiness = service.g2Readiness();
       console.log(JSON.stringify(output, null, 2));
       if (opts.strict && readiness.recommendation !== "eligible_for_human_g2_signoff") process.exitCode = 1;
+    } catch (e) {
+      fail((e as Error).message);
+    } finally {
+      store.close();
+    }
+  });
+
+constitutionCmd
+  .command("g3")
+  .description("Inspect exact private G3 advisory evidence; optionally append a preregistration, human plan, proof review, or executable adapter receipt. Never signs off G3.")
+  .option("--experiment <file>", "append an immutable private EXP-01 or EXP-03 preregistration from JSON")
+  .option("--plan <file>", "append a private human-selected G3 plan bound to exact G2 readiness and experiment records")
+  .option("--review <file>", "append a measured human proof-card review for one plan-selected policy")
+  .option("--conformance", "execute and append the exact current plan's supported three-client adapter fixture")
+  .option("--timeout-ms <n>", "timeout for the executable adapter conformance fixture", "180000")
+  .option("--strict", "exit nonzero while the packet is not eligible for explicit human G3 signoff")
+  .action((opts: { experiment?: string; plan?: string; review?: string; conformance?: boolean; timeoutMs: string; strict?: boolean }) => {
+    const { store, root } = storeFor();
+    try {
+      const actions = [!!opts.experiment, !!opts.plan, !!opts.review, !!opts.conformance].filter(Boolean).length;
+      if (actions > 1) throw new Error("choose only one G3 preregistration, plan, proof review, or adapter-conformance action");
+      const service = new ConstitutionService(store, root);
+      let output: unknown;
+      if (opts.experiment) {
+        const appended = service.registerG3Experiment(JSON.parse(readFileSync(resolve(opts.experiment), "utf8")) as CompileExperimentPreregistrationInput);
+        output = { appended, readiness: service.g3Readiness() };
+      } else if (opts.plan) {
+        const appended = service.createG3Plan(JSON.parse(readFileSync(resolve(opts.plan), "utf8")) as CompileG3PlanInput);
+        output = { appended, readiness: service.g3Readiness() };
+      } else if (opts.review) {
+        const input = JSON.parse(readFileSync(resolve(opts.review), "utf8")) as Parameters<ConstitutionService["recordG3ProofReview"]>[0];
+        const appended = service.recordG3ProofReview(input);
+        output = { appended, readiness: service.g3Readiness() };
+      } else if (opts.conformance) {
+        const appended = service.g3AdapterConformance({ timeoutMs: Number(opts.timeoutMs) });
+        output = { appended, readiness: service.g3Readiness() };
+      } else {
+        output = service.g3Readiness();
+      }
+      const readiness = service.g3Readiness();
+      console.log(JSON.stringify(output, null, 2));
+      if (opts.strict && readiness.recommendation !== "eligible_for_human_g3_signoff") process.exitCode = 1;
     } catch (e) {
       fail((e as Error).message);
     } finally {
