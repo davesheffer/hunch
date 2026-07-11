@@ -1,5 +1,6 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join } from "node:path";
 import { shortHash } from "../core/ids.js";
 import type { HunchStore } from "../store/hunchStore.js";
@@ -17,6 +18,7 @@ import {
   replayGitArgs,
   replaySafeEnvironment,
 } from "./replay.js";
+import { dependencySnapshotForCommit } from "./g2BehaviorDependencies.js";
 
 export type G2BehaviorRunnerKind = "node-test" | "node-test-tsx";
 
@@ -77,6 +79,7 @@ export interface G2BehaviorReplayLeg {
   result: "failed" | "passed" | "error";
   exit_code: number | null;
   error_code?: string;
+  dependency_snapshot_id?: string;
 }
 
 export interface G2BehaviorReplayReceipt {
@@ -315,12 +318,25 @@ export function buildG2BehaviorCandidateReview(
   return { id: `g2behaviorcandidates_${shortHash(contentHash)}`, content_hash: contentHash, ...body };
 }
 
-function errorLeg(commit: string, expected: "failed" | "passed", errorCode: string): G2BehaviorReplayLeg {
-  return { commit, expected, result: "error", exit_code: null, error_code: errorCode };
+function errorLeg(
+  commit: string,
+  expected: "failed" | "passed",
+  errorCode: string,
+  dependencySnapshotId?: string,
+): G2BehaviorReplayLeg {
+  return {
+    commit,
+    expected,
+    result: "error",
+    exit_code: null,
+    error_code: errorCode,
+    ...(dependencySnapshotId ? { dependency_snapshot_id: dependencySnapshotId } : {}),
+  };
 }
 
 export function nodeTestInfrastructureError(output: string): string | null {
   if (/ERR_MODULE_NOT_FOUND|Cannot find package|Cannot find module/.test(output)) return "dependency-snapshot-unavailable";
+  if (/Could not locate the bindings file|NODE_MODULE_VERSION|Module did not self-register|dlopen\(/.test(output)) return "dependency-snapshot-unavailable";
   if (/does not provide an export named|Unknown file extension|ERR_UNKNOWN_FILE_EXTENSION/.test(output)) return "test-load-failed";
   return null;
 }
@@ -339,6 +355,8 @@ function runLeg(
   if (!FULL_SHA.test(commit) || !revExists(commit, root)) return errorLeg(commit, expected, "commit-ref-unresolved");
   const run = mkdtempSync(join(session, `${expected}-`));
   const checkout = join(run, "checkout");
+  const dependencySnapshot = dependencySnapshotForCommit(root, commit);
+  const dependencySnapshotId = dependencySnapshot?.snapshot.id;
   let added = false;
   let leg: G2BehaviorReplayLeg;
   try {
@@ -348,6 +366,9 @@ function runLeg(
       stdio: "ignore",
     });
     added = true;
+    if (dependencySnapshot) {
+      symlinkSync(dependencySnapshot.nodeModules, join(checkout, "node_modules"), process.platform === "win32" ? "junction" : "dir");
+    }
     const testFile = join(checkout, candidate.test.file);
     mkdirSync(dirname(testFile), { recursive: true });
     writeFileSync(testFile, source);
@@ -355,11 +376,11 @@ function runLeg(
     if (candidate.runner.kind === "node-test") {
       args = ["--test", `--test-name-pattern=${candidate.test.name}`, candidate.test.file];
     } else {
-      const tsx = join(root, "node_modules", "tsx", "dist", "cli.mjs");
+      const tsx = dependencySnapshot ? join(dependencySnapshot.nodeModules, "tsx", "dist", "cli.mjs") : "";
       args = existsSync(tsx) ? [tsx, "--test", `--test-name-pattern=${candidate.test.name}`, candidate.test.file] : null;
     }
     if (!args) {
-      leg = errorLeg(commit, expected, "runner-unavailable");
+      leg = errorLeg(commit, expected, "dependency-snapshot-unavailable", dependencySnapshotId);
     } else {
       const result = spawnSync(process.execPath, args, {
         cwd: checkout,
@@ -372,24 +393,30 @@ function runLeg(
       });
       if (result.error) {
         const code = (result.error as NodeJS.ErrnoException).code === "ETIMEDOUT" ? "timeout" : "runner-failed";
-        leg = errorLeg(commit, expected, code);
+        leg = errorLeg(commit, expected, code, dependencySnapshotId);
       } else if (result.signal) {
-        leg = errorLeg(commit, expected, result.signal === "SIGTERM" ? "timeout" : "runner-signaled");
+        leg = errorLeg(commit, expected, result.signal === "SIGTERM" ? "timeout" : "runner-signaled", dependencySnapshotId);
       } else {
         const exitCode = result.status ?? null;
         const infrastructureError = exitCode === 0 ? null : nodeTestInfrastructureError(`${result.stdout ?? ""}\n${result.stderr ?? ""}`);
         leg = infrastructureError
-          ? errorLeg(commit, expected, infrastructureError)
-          : { commit, expected, result: exitCode === 0 ? "passed" : "failed", exit_code: exitCode };
+          ? errorLeg(commit, expected, infrastructureError, dependencySnapshotId)
+          : {
+              commit,
+              expected,
+              result: exitCode === 0 ? "passed" : "failed",
+              exit_code: exitCode,
+              ...(dependencySnapshotId ? { dependency_snapshot_id: dependencySnapshotId } : {}),
+            };
       }
     }
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code === "ETIMEDOUT" ? "timeout" : added ? "runner-setup-failed" : "worktree-create-failed";
-    leg = errorLeg(commit, expected, code);
+    leg = errorLeg(commit, expected, code, dependencySnapshotId);
   } finally {
     if (added) {
       const cleanupFailed = cleanupReplayWorktree(root, hooks, env, run, checkout);
-      if (cleanupFailed) leg = errorLeg(commit, expected, "worktree-cleanup-failed");
+      if (cleanupFailed) leg = errorLeg(commit, expected, "worktree-cleanup-failed", dependencySnapshotId);
     } else {
       rmSync(run, { recursive: true, force: true });
     }
@@ -417,9 +444,8 @@ export function replayG2BehaviorCandidate(
     throw new Error(`behavior candidate ${candidate.id} known-good test source hash mismatch`);
   }
 
-  const cacheBase = join(root, ".hunch-cache", "worktrees");
-  mkdirSync(cacheBase, { recursive: true });
-  const session = mkdtempSync(join(cacheBase, "behavior-"));
+  mkdirSync(join(root, ".hunch-cache", "worktrees"), { recursive: true });
+  const session = mkdtempSync(join(tmpdir(), "hunch-behavior-"));
   const hooks = join(session, "hooks-disabled");
   const gitConfig = join(session, "global.gitconfig");
   mkdirSync(hooks, { recursive: true });

@@ -56,6 +56,10 @@ import {
   type G2BehaviorCandidateReview,
   type G2BehaviorReplayReceipt,
 } from "./g2BehaviorCandidates.js";
+import {
+  provisionG2BehaviorDependencySnapshots,
+  type G2BehaviorDependencySnapshotReceipt,
+} from "./g2BehaviorDependencies.js";
 
 export interface PolicyEvaluationSet {
   policy: PolicySpec;
@@ -407,6 +411,24 @@ export class ConstitutionService {
   ): G2BehaviorReplayReceipt {
     const report = this.g2BehaviorCandidateReview(opts);
     return replayG2BehaviorCandidate(this.root, report, candidateId, reviewHash, { timeoutMs: opts.timeoutMs });
+  }
+
+  g2BehaviorDependencySnapshots(
+    candidateId: string,
+    reviewHash: string,
+    opts: G2CandidateReviewOptions & { allowInstallScripts?: string[]; timeoutMs?: number } = {},
+  ): G2BehaviorDependencySnapshotReceipt {
+    const report = this.g2BehaviorCandidateReview(opts);
+    if (reviewHash !== report.content_hash) throw new Error("behavior candidate review hash does not match the exact current review packet");
+    const candidate = report.items.find((item) => item.id === candidateId);
+    if (!candidate) throw new Error(`behavior candidate ${candidateId} is not present in review ${report.id}`);
+    return provisionG2BehaviorDependencySnapshots(
+      this.root,
+      report,
+      candidate,
+      opts.allowInstallScripts ?? [],
+      opts.timeoutMs ?? 300_000,
+    );
   }
 
   g2ShadowQueue(limit = 20): G2ShadowQueue {

@@ -1652,7 +1652,7 @@ test("Phase 2S G2 candidate attestations are exact, append-only, private, and no
   }
 });
 
-test("Phase 2T derives behavior candidates from rejected structural proxies and replays fail-to-pass tests", async () => {
+test("Phase 2U provisions exact historical dependencies and replays behavior candidates fail-to-pass", async () => {
   const { root, store: initial, cleanup } = layeredRepo();
   initial.close();
   const privateRoot = join(root, "private-g2-behavior/.hunch");
@@ -1660,8 +1660,21 @@ test("Phase 2T derives behavior candidates from rejected structural proxies and 
   writeFileSync(join(root, ".hunch/local.json"), JSON.stringify({ privateDir: privateRoot, autoCommit: false, mode: "private" }));
 
   mkdirSync(join(root, "test"), { recursive: true });
+  writeFileSync(join(root, "package.json"), JSON.stringify({
+    name: "behavior-fixture",
+    version: "1.0.0",
+    type: "module",
+    scripts: { preinstall: "node -e \"throw new Error('repository lifecycle script ran')\"" },
+  }));
+  writeFileSync(join(root, "package-lock.json"), JSON.stringify({
+    name: "behavior-fixture",
+    version: "1.0.0",
+    lockfileVersion: 3,
+    requires: true,
+    packages: { "": { name: "behavior-fixture", version: "1.0.0" } },
+  }));
   writeFileSync(join(root, "src/guard.mjs"), "export function guarded(){ return false; }\n");
-  commitFiles(root, ["src/guard.mjs"], "fixture: behavior baseline");
+  commitFiles(root, ["package.json", "package-lock.json", "src/guard.mjs"], "fixture: behavior baseline");
   writeFileSync(join(root, "src/guard.mjs"), "export function verify(){ return true; }\nexport function guarded(){ return verify(); }\n");
   writeFileSync(join(root, "test/guard.test.mjs"), [
     'import test from "node:test";',
@@ -1712,6 +1725,7 @@ test("Phase 2T derives behavior candidates from rejected structural proxies and 
     assert.equal(candidate.proposed_corpus.known_good.expected, "passed");
     assert.deepEqual(service.g2BehaviorCandidateReview(bounds), review, "behavior review is byte-stable");
     assert.equal(nodeTestInfrastructureError("Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'legacy-db'"), "dependency-snapshot-unavailable");
+    assert.equal(nodeTestInfrastructureError("Error: Could not locate the bindings file"), "dependency-snapshot-unavailable");
     assert.equal(nodeTestInfrastructureError("AssertionError: expected true"), null, "real assertion failures remain behavioral failures");
 
     assert.throws(
@@ -1728,12 +1742,60 @@ test("Phase 2T derives behavior candidates from rejected structural proxies and 
     assert.equal(replay.authority, "none");
     assert.equal(replay.effects, "diagnostic_only");
     assert.equal(replay.writes, "disposable_only");
+    assert.equal(replay.known_bad.dependency_snapshot_id, undefined, "replay does not install dependencies implicitly");
     assert.equal(existsSync(join(privateRoot, "policies")), false);
     assert.equal(existsSync(join(privateRoot, "evidence")), false);
     assert.deepEqual(readdirSync(join(root, ".hunch-cache/worktrees")), []);
 
+    const snapshots = service.g2BehaviorDependencySnapshots(candidate.id, review.content_hash, {
+      ...bounds,
+      allowInstallScripts: [],
+    });
+    assert.equal(snapshots.authority, "none");
+    assert.equal(snapshots.effects, "cache_only");
+    assert.equal(snapshots.snapshots.length, 1, "identical bad/good lock inputs reuse one content-addressed snapshot");
+    const cachedPackage = JSON.parse(readFileSync(join(root, ".hunch-cache/behavior-deps", snapshots.snapshots[0]!.id, "package.json"), "utf8")) as { scripts: Record<string, string> };
+    assert.deepEqual(cachedPackage.scripts, {}, "repository lifecycle scripts are stripped from the synthetic install root");
+    assert.throws(
+      () => service.g2BehaviorDependencySnapshots(candidate.id, review.content_hash, {
+        ...bounds,
+        allowInstallScripts: ["legacy-db; touch escaped"],
+      }),
+      /invalid dependency install-script package/,
+    );
+    assert.throws(
+      () => service.g2BehaviorDependencySnapshots(candidate.id, "sha1:" + "0".repeat(40), bounds),
+      /review hash/i,
+    );
+    assert.deepEqual(service.g2BehaviorDependencySnapshots(candidate.id, review.content_hash, {
+      ...bounds,
+      allowInstallScripts: [],
+    }), snapshots, "an exact retry validates and reuses the immutable snapshot");
+
+    const replayWithSnapshot = service.g2BehaviorCandidateReplay(candidate.id, review.content_hash, bounds);
+    assert.equal(replayWithSnapshot.known_bad.dependency_snapshot_id, snapshots.snapshots[0]!.id);
+    assert.equal(replayWithSnapshot.known_good.dependency_snapshot_id, snapshots.snapshots[0]!.id);
+    assert.equal(replayWithSnapshot.verdict, "behavior_confirmed");
+    assert.deepEqual(
+      readdirSync(join(root, ".hunch-cache/behavior-deps")).filter((entry) => entry.startsWith(".")),
+      [],
+      "snapshot builds and replay leave no mutable temp or identity directories",
+    );
+
     const tsx = join(process.cwd(), "node_modules/tsx/dist/cli.mjs");
     const cli = join(process.cwd(), "src/cli/index.ts");
+    const cliDepsRun = spawnSync(process.execPath, [
+      tsx, cli, "constitution", "g2",
+      "--behavior-deps", candidate.id,
+      "--behavior-review-hash", review.content_hash,
+      "--candidate-since", bounds.since,
+      "--candidate-commits", String(bounds.maxCommits),
+      "--candidate-limit", String(bounds.limit),
+    ], { cwd: root, encoding: "utf8" });
+    assert.equal(cliDepsRun.status, 0, cliDepsRun.stderr);
+    const cliDeps = JSON.parse(cliDepsRun.stdout) as { content_hash: string };
+    assert.equal(cliDeps.content_hash, snapshots.content_hash, "CLI provisions the exact same cache-only receipt as the core service");
+
     const cliReviewRun = spawnSync(process.execPath, [
       tsx, cli, "constitution", "g2",
       "--behavior-candidates", "20",
@@ -1754,7 +1816,7 @@ test("Phase 2T derives behavior candidates from rejected structural proxies and 
     ], { cwd: root, encoding: "utf8" });
     assert.equal(cliReplayRun.status, 0, cliReplayRun.stderr);
     const cliReplay = JSON.parse(cliReplayRun.stdout) as { content_hash: string; verdict: string };
-    assert.equal(cliReplay.content_hash, replay.content_hash);
+    assert.equal(cliReplay.content_hash, replayWithSnapshot.content_hash);
     assert.equal(cliReplay.verdict, "behavior_confirmed");
 
     const transport = new StdioClientTransport({ command: process.execPath, args: [tsx, cli, "mcp"], cwd: root });
@@ -1777,10 +1839,20 @@ test("Phase 2T derives behavior candidates from rejected structural proxies and 
       },
     });
     const mcpReplay = JSON.parse((mcpReplayCall.content[0] as { type: "text"; text: string }).text) as { content_hash: string; verdict: string };
-    assert.equal(mcpReplay.content_hash, replay.content_hash, "MCP replay is byte-identical to core and CLI");
+    assert.equal(mcpReplay.content_hash, replayWithSnapshot.content_hash, "MCP replay is byte-identical to core and CLI");
     assert.equal(mcpReplay.verdict, "behavior_confirmed");
     await client.close();
     client = null;
+
+    const manifestFile = join(root, ".hunch-cache/behavior-deps", snapshots.snapshots[0]!.id, "manifest.json");
+    const manifest = readFileSync(manifestFile, "utf8");
+    const tamperedManifest = JSON.parse(manifest) as Record<string, unknown>;
+    tamperedManifest.installed_lock_hash = "sha256:" + "0".repeat(64);
+    writeFileSync(manifestFile, JSON.stringify(tamperedManifest));
+    const replayAfterTamper = service.g2BehaviorCandidateReplay(candidate.id, review.content_hash, bounds);
+    assert.equal(replayAfterTamper.known_bad.dependency_snapshot_id, undefined, "a tampered snapshot is never attached to replay");
+    assert.equal(replayAfterTamper.known_good.dependency_snapshot_id, undefined, "tampering invalidates every leg sharing the snapshot");
+    writeFileSync(manifestFile, manifest);
   } finally {
     if (client) await client.close();
     store.close();
