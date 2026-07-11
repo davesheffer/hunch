@@ -1,0 +1,54 @@
+{
+  "id": "dec_7522ca809d",
+  "title": "Evaluate executable behavior policies against content-addressed pending snapshots",
+  "topic": "constitution-behavior-workspace-evaluation",
+  "status": "accepted",
+  "context": "An isolated active-advisory replay placed the known-bad JSONC implementation in the working tree while committed HEAD remained good. CLI, MCP, and check all returned satisfied because executable behavior evaluation ignored pending code. The same policy correctly returned violated after commit. Pending snapshot materialization closes that false-satisfied window without granting authority or mutating real Git state.",
+  "decision": "For advisory and pre-commit delivery, materialize the selected staged index or complete working tree as a bounded content-addressed binary Git snapshot inside the existing disposable, hook-disabled evaluator worktree. Restore the hash-pinned selected test and use the exact allowed dependency snapshot. CLI, client-neutral MCP, and check must return one canonical receipt; advisory violations remain non-blocking. Committed proof and historical replay semantics remain unchanged.",
+  "consequences": [
+    "Workspace receipts bind the base commit, snapshot kind/hash, and changed paths; committed receipts remain byte-compatible.",
+    "Regular untracked files are included in working snapshots, while unsafe paths, unsupported file types, oversize inputs, patch failures, and changed dependency manifests return explicit errors.",
+    "Executable policies activated after this change advertise pre_commit, CLI, MCP, and CI surfaces; pre_edit remains unsupported.",
+    "Public-only evaluation continues to exclude private policies and their identifiers, wording, paths, and receipts."
+  ],
+  "alternatives_rejected": [
+    "Create a temporary Git commit for the pending state — rejected because it writes repository objects, complicates staged-versus-working and untracked semantics, and expands the mutation/cleanup surface.",
+    "Copy the entire working directory into the evaluator checkout — rejected because it can copy ignored caches, secrets, and unrelated private files, has no bounded canonical identity, and performs poorly on large repositories.",
+    "Keep executable behavior committed-only and rely on CI — rejected because the demonstrated pre-commit advisory path falsely reports satisfied for a known regression until after commit."
+  ],
+  "rejected_tripwires": [],
+  "related_components": [
+    "Constitution"
+  ],
+  "related_files": [
+    "src/constitution/behaviorWorkspace.ts",
+    "src/constitution/behaviorEvaluator.ts",
+    "src/constitution/service.ts",
+    "src/cli/index.ts",
+    "src/mcp/server.ts",
+    "test/behavior-workspace.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "4ce6cc0ded85df4cd46a4d30f95251a31878ba1b",
+  "valid_from": "2026-07-11T18:46:48.580Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 0.95,
+    "evidence": [
+      "src/constitution/behaviorWorkspace.ts",
+      "src/constitution/behaviorEvaluator.ts",
+      "src/constitution/service.ts",
+      "src/cli/index.ts",
+      "src/mcp/server.ts",
+      "test/behavior-workspace.test.ts"
+    ]
+  },
+  "date": "2026-07-11T18:46:48.580Z"
+}
