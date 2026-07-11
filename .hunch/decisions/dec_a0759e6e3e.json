@@ -2,40 +2,44 @@
   "id": "dec_a0759e6e3e",
   "title": "Roadmap: load the native tree-sitter binding from a per-process temp copy — kill the EBUSY-upgrade class, no process killing ever",
   "topic": "roadmap.native-tmp-copy",
-  "status": "proposed",
+  "status": "accepted",
   "context": "v1.3.1 rollout required manually killing 4 hunch MCP server processes that held tree-sitter.node (bug_ebusy_treesitter). Owner asked: can the install do this itself? An npm preinstall script COULD kill lockers, but a package that kills user processes on install is hostile, risks in-flight sessions, and reads as supply-chain malware — off-brand for a trust-centered tool. The lock itself is the bug, not the killing.",
   "decision": "Load the tree-sitter native from a per-process TEMP COPY (copy tree-sitter.node to tmpdir at load, require from there — the esbuild pattern for exactly this Windows problem). The installed file is then never memory-locked, so npm i -g always succeeds with sessions open; running servers keep serving the old code until their natural restart. Supersedes the lazy-load idea on bug_ebusy_treesitter (lazy only delays the lock until first reindex; tmp-copy removes it). Interim UX: a hunch upgrade command that finds hunch-owned MCP processes by exact package path, says what it found, and only kills with an explicit --kill — the dance behind a consented command with a receipt, never a hidden install script.",
+  "consequences": [
+    "Upgrades stop caring about open sessions on Windows",
+    "tmpdir gets one small .node copy per server process (sweep like hookcache)"
+  ],
   "alternatives_rejected": [
     "npm preinstall that kills locking processes: hidden process-killing on install is hostile + supply-chain-scary; also races the file copy",
     "Lazy-loading tree-sitter (the earlier candidate): the MCP server reindexes on queries, so the lock returns after first use — delays, not solves",
     "Documenting close-first forever: works (the cheat sheet says it) but every Windows user pays it on every upgrade"
   ],
+  "rejected_tripwires": [],
+  "related_components": [],
   "related_files": [
-    "src/extractors/parse.ts"
+    "src/constitution/g2BehaviorCandidates.ts",
+    "src/extractors/nativeTreeSitter.ts",
+    "src/extractors/parse.ts",
+    "test/parse.test.ts"
   ],
   "supersedes": null,
   "superseded_by": null,
   "caused_by_bug": "bug_ebusy_treesitter",
-  "commit": null,
-  "consequences": [
-    "Upgrades stop caring about open sessions on Windows",
-    "tmpdir gets one small .node copy per server process (sweep like hookcache)"
-  ],
-  "rejected_tripwires": [],
-  "related_components": [],
+  "commit": "ad94ca88b3647a46ddb9540693adaaf52b618f1e",
+  "valid_from": "2026-07-05T07:32:17.342Z",
+  "valid_to": null,
   "retired": {
     "symbols": [],
     "deps": []
   },
-  "valid_from": "2026-07-05T07:32:17.342Z",
-  "valid_to": null,
-  "date": "2026-07-05T07:32:17.342Z",
   "provenance": {
     "source": "human_confirmed",
     "confidence": 0.95,
     "evidence": [
       "bug_ebusy_treesitter",
       "v1.3.1 rollout report"
-    ]
-  }
+    ],
+    "last_verified": "2026-07-11T14:24:12.420Z"
+  },
+  "date": "2026-07-05T07:32:17.342Z"
 }

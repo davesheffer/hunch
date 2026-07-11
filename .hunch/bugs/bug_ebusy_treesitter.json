@@ -4,8 +4,9 @@
   "symptom": "npm i -g @davesheffer/hunch during an active MCP session -> EBUSY copyfile on tree-sitter/prebuilds/win32-x64/tree-sitter.node; global stays on the old version and hooks keep running stale code",
   "root_cause": "The MCP server keeps the native tree-sitter binding loaded for its whole lifetime (reindex path), so Windows locks the .node file. Same failure class as the v1.0.0 better-sqlite3 EPERM, surviving via the one remaining native dep. Candidate fix: lazy-load tree-sitter only when parsing runs, so idle servers hold no native handles.",
   "severity": "low",
-  "status": "open",
+  "status": "fixed",
   "affected_files": [
+    "src/extractors/nativeTreeSitter.ts",
     "src/extractors/parse.ts",
     "src/mcp/server.ts"
   ],
@@ -13,7 +14,7 @@
   "lineage": {
     "introduced_commit": null,
     "detected": "manual: v1.3.0 rollout on the office machine",
-    "fixed_commit": null,
+    "fixed_commit": "ad94ca88b3647a46ddb9540693adaaf52b618f1e",
     "recurrence_of": null,
     "spawned_decision": null,
     "spawned_constraint": null
