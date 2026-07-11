@@ -1,0 +1,45 @@
+{
+  "id": "dec_6deaa68d4a",
+  "title": "Direct behavior review includes assertion deltas in existing named tests",
+  "topic": null,
+  "status": "accepted",
+  "context": "The automated G2 loop stalled at 9/10 exact P3 policies because direct review only recognized newly named tests. Human-confirmed fixes often strengthen an existing named regression, leaving their strongest executable evidence invisible.",
+  "decision": "For an exact current human-confirmed fixing decision, direct behavior review also emits a candidate when a literal node:test test()/it() name exists on both sides and the fixing diff adds a line inside that exact parsed test call. Candidate identity binds the decision, fixing commit, file, test name, full known-good source hash, and modified-test grounding. Replay and human disposition rules remain unchanged.",
+  "consequences": [
+    "Strengthened existing regressions can participate in the same exact fail-to-pass replay and P3 materialization loop as newly named tests.",
+    "Comment-only or non-regressing changes can become review candidates but remain non-authoritative and will be rejected by pass/pass replay.",
+    "Legacy added-test candidate identities and receipts remain byte-stable."
+  ],
+  "alternatives_rejected": [
+    "Require a new test name for every fix: rejected because it blocks valid regression-test strengthening and incentivizes test churn.",
+    "Treat any modified test file as one candidate: rejected because it is too broad to bind a selected test behavior.",
+    "Select helper symbols or assertion text structurally: rejected because implementation details are neither necessary nor sufficient to prove behavior."
+  ],
+  "rejected_tripwires": [],
+  "related_components": [
+    "Constitution"
+  ],
+  "related_files": [
+    "src/constitution/g2BehaviorCandidates.ts",
+    "test/constitution.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "4f39390",
+  "valid_from": "2026-07-11T12:55:59.497Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 0.95,
+    "evidence": [
+      "src/constitution/g2BehaviorCandidates.ts",
+      "test/constitution.test.ts"
+    ]
+  },
+  "date": "2026-07-11T12:55:59.497Z"
+}
