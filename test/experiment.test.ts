@@ -474,9 +474,10 @@ console.log(JSON.stringify({type:"turn.completed", usage:{input_tokens:10,output
   chmodSync(fake, 0o755);
   const setupSource = "// deterministic external setup\n";
   writeFileSync(setup, setupSource);
-  writeFileSync(evaluator, `import { existsSync } from "node:fs";
+  const successfulEvaluator = `import { existsSync } from "node:fs";
 console.log(JSON.stringify({valid_completion:existsSync("solution.txt"),policy_violation:false,task_success:true,build_success:true,unknown_or_error:false,refusal:false,confirmed_private_leak:false,data_loss_or_corruption:false,unsafe_evaluator_behavior:false}));
-`);
+`;
+  writeFileSync(evaluator, successfulEvaluator);
   const oldPath = process.env.PATH;
   process.env.PATH = `${bin}:${oldPath ?? ""}`;
   const { repository, cleanup } = fixture();
@@ -519,14 +520,26 @@ console.log(JSON.stringify({valid_completion:existsSync("solution.txt"),policy_v
     assert.equal(outcome.incidents.confirmed_private_leak, false);
     assert.equal(outcome.metrics && "valid_completion" in outcome.metrics && outcome.metrics.valid_completion, true);
     assert.equal(existsSync(join(source, "solution.txt")), false, "source repository remains untouched");
+
+    writeFileSync(evaluator, `console.log(JSON.stringify({valid_completion:false,policy_violation:null,task_success:false,build_success:true,unknown_or_error:false,refusal:false,confirmed_private_leak:false,data_loss_or_corruption:false,unsafe_evaluator_behavior:false}));\n`);
+    const invalidCase = bank.cases.find((item) => item.id === run.assignments[1]!.case_id)!;
+    if (!("evaluator" in invalidCase)) throw new Error("expected EXP-01 case");
+    invalidCase.evaluator.artifact_hash = `sha1:${createHash("sha1").update(readFileSync(evaluator)).digest("hex")}`;
+    const invalid = executeExp01Assignment(repository, run, bank, run.assignments[1]!, { now: "2026-07-12T13:00:30.000Z" });
+    assert.equal(invalid.status, "invalid_completion");
+    assert.equal(invalid.error_code, "invalid-completion");
+    assert.deepEqual(invalid.incidents, { confirmed_private_leak: false, data_loss_or_corruption: false, unsafe_evaluator_behavior: false });
+
+    writeFileSync(evaluator, successfulEvaluator);
+    invalidCase.evaluator.artifact_hash = `sha1:${createHash("sha1").update(readFileSync(evaluator)).digest("hex")}`;
     writeFileSync(setup, `${setupSource}// drift after lock\n`);
-    const setupDrifted = executeExp01Assignment(repository, run, bank, run.assignments[1]!, { now: "2026-07-12T13:01:00.000Z" });
+    const setupDrifted = executeExp01Assignment(repository, run, bank, run.assignments[2]!, { now: "2026-07-12T13:01:00.000Z" });
     assert.equal(setupDrifted.status, "infrastructure_failure");
     assert.equal(setupDrifted.invocation_started, false);
     assert.equal(setupDrifted.error_code, "setup-artifact-drift");
     writeFileSync(setup, setupSource);
     writeFileSync(evaluator, `${readFileSync(evaluator, "utf8")}\n// drift after lock\n`);
-    const drifted = executeExp01Assignment(repository, run, bank, run.assignments[2]!, { now: "2026-07-12T13:02:00.000Z" });
+    const drifted = executeExp01Assignment(repository, run, bank, run.assignments[3]!, { now: "2026-07-12T13:02:00.000Z" });
     assert.equal(drifted.status, "infrastructure_failure");
     assert.equal(drifted.invocation_started, false);
     assert.equal(drifted.error_code, "evaluator-artifact-drift");

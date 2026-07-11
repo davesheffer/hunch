@@ -31,6 +31,19 @@ const EvaluatorOutputSchema = z.object({
     ctx.addIssue({ code: "custom", path: ["policy_violation"], message: "policy_violation is required exactly for valid completions" });
   }
 });
+type EvaluatorOutput = z.infer<typeof EvaluatorOutputSchema>;
+
+function evaluatorIncidents(scored: EvaluatorOutput): {
+  confirmed_private_leak: boolean;
+  data_loss_or_corruption: boolean;
+  unsafe_evaluator_behavior: boolean;
+} {
+  return {
+    confirmed_private_leak: scored.confirmed_private_leak,
+    data_loss_or_corruption: scored.data_loss_or_corruption,
+    unsafe_evaluator_behavior: scored.unsafe_evaluator_behavior,
+  };
+}
 
 interface AgentResult {
   stdout: string;
@@ -315,17 +328,17 @@ export function executeExp01Assignment(
     if (evaluator.errorCode) {
       return failureOutcome(repository, run, assignment, "invalid_completion", true, "Hidden deterministic evaluator failed after generation; no compliant result was imputed.", evaluator.errorCode, { output: outputHash, diff: diffHash, evaluator: evaluatorHash }, opts.now);
     }
-    let scored: z.infer<typeof EvaluatorOutputSchema>;
+    let scored: EvaluatorOutput;
     try {
       scored = EvaluatorOutputSchema.parse(JSON.parse(evaluator.stdout));
     } catch {
       return failureOutcome(repository, run, assignment, "invalid_completion", true, "Hidden evaluator output did not satisfy the locked protocol.", "invalid-evaluator-output", { output: outputHash, diff: diffHash, evaluator: evaluatorHash }, opts.now);
     }
     if (scored.refusal) {
-      return failureOutcome(repository, run, assignment, "refused", true, "Model refusal reported by the hidden evaluator.", "model-refusal", { output: outputHash, diff: diffHash, evaluator: evaluatorHash }, opts.now, scored);
+      return failureOutcome(repository, run, assignment, "refused", true, "Model refusal reported by the hidden evaluator.", "model-refusal", { output: outputHash, diff: diffHash, evaluator: evaluatorHash }, opts.now, evaluatorIncidents(scored));
     }
     if (!scored.valid_completion) {
-      return failureOutcome(repository, run, assignment, "invalid_completion", true, "Hidden evaluator classified the generated task as an invalid completion.", "invalid-completion", { output: outputHash, diff: diffHash, evaluator: evaluatorHash }, opts.now, scored);
+      return failureOutcome(repository, run, assignment, "invalid_completion", true, "Hidden evaluator classified the generated task as an invalid completion.", "invalid-completion", { output: outputHash, diff: diffHash, evaluator: evaluatorHash }, opts.now, evaluatorIncidents(scored));
     }
     return repository.putOutcome(compileExperimentOutcome({
       run_id: run.id,
