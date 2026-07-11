@@ -113,7 +113,7 @@ function compileBehaviorPolicy(
     scope: { repos: [basename(root)], paths: [], components: [] },
     assertion,
     severity: "warning",
-    surfaces: ["ci", "mcp", "cli"],
+    surfaces: ["pre_commit", "ci", "mcp", "cli"],
     authority: null,
     evidence,
     proof: null,
@@ -126,7 +126,7 @@ function compileBehaviorPolicy(
     data_class: "private",
     limitations: [
       "The assertion executes one exact hash-pinned node:test case from a human-selected fixing commit; it does not encode a helper symbol or call-edge proxy.",
-      "Evaluation covers committed Git states with exact dependency snapshots; uncommitted working-tree changes are outside this IR version.",
+      "Proof and history replay use committed Git states; advisory delivery may evaluate a content-addressed staged or working snapshot in a disposable checkout.",
       "Executable evidence creates no authority. Advisory or blocking activation requires a separate explicit human lifecycle action.",
     ],
     candidate: {

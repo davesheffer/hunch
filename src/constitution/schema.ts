@@ -301,6 +301,12 @@ export type PolicyEvaluationResult = z.infer<typeof PolicyEvaluationResultSchema
 
 export const BehaviorExecutionSchema = z.object({
   commit: z.string().regex(/^[a-f0-9]{40}$/),
+  workspace: z.object({
+    kind: z.enum(["staged", "working"]),
+    base_commit: z.string().regex(/^[a-f0-9]{40}$/),
+    snapshot_hash: z.string().regex(/^sha1:[a-f0-9]{40}$/),
+    files: z.array(z.string().min(1)).max(10_000),
+  }).strict().optional(),
   test: z.object({
     file: z.string().min(1),
     name: z.string().min(1),

@@ -37,7 +37,7 @@ import {
   writeSynthesisPreference,
   type SynthPreference,
 } from "../synthesis/provider.js";
-import { isGitRepo, headSha, logSince, lastChangeDate, stagedFiles, workingFiles, commitFiles, asOfDate, stagedDiff, workingDiff, commitDiff, rangeFiles, rangeDiff, rangeSubjects, revExists, commitAndPushHunch, pullHunch, gitUntrackCached, gitCommonDir, isLinkedWorktree, mainWorktreeRoot } from "../extractors/git.js";
+import { isGitRepo, headSha, logSince, lastChangeDate, stagedFiles, workingFiles, commitFiles, asOfDate, stagedDiff, workingDiff, commitDiff, rangeFiles, rangeDiff, rangeSubjects, revExists, revParse, commitAndPushHunch, pullHunch, gitUntrackCached, gitCommonDir, isLinkedWorktree, mainWorktreeRoot } from "../extractors/git.js";
 import { writeTeamConfig, ensureTeamOverlay, readTeamConfig } from "../integrations/team.js";
 import { runbookId, decisionId } from "../core/ids.js";
 import { deriveForbids, effectiveForbids } from "../core/constraintmatch.js";
@@ -1305,14 +1305,24 @@ policyCmd
   .argument("[id]", "optional policy id")
   .option("--active", "evaluate active policies only")
   .option("--public-only", "exclude private-overlay policies and graph records")
+  .option("--staged", "evaluate executable-behavior policies against the staged index snapshot")
+  .option("--working", "evaluate executable-behavior policies against all staged, unstaged, and untracked changes")
+  .option("--commit <sha>", "evaluate executable-behavior policies at an exact commit")
   .option("--strict", "exit non-zero on an authorized blocking violation or evaluator error")
   .option("--json", "emit canonical receipt objects as JSON")
-  .action((id: string | undefined, opts: { active?: boolean; publicOnly?: boolean; strict?: boolean; json?: boolean }) => {
+  .action((id: string | undefined, opts: { active?: boolean; publicOnly?: boolean; staged?: boolean; working?: boolean; commit?: string; strict?: boolean; json?: boolean }) => {
     const { store, root } = storeFor();
     try {
+      const sources = [opts.staged && "--staged", opts.working && "--working", opts.commit && "--commit"].filter(Boolean);
+      if (sources.length > 1) throw new Error(`pick one executable-behavior snapshot source (got ${sources.join(", ")})`);
+      if (opts.commit && !revExists(opts.commit, root)) throw new Error(`--commit ref "${opts.commit}" does not resolve`);
+      const behavior = opts.staged ? { workspace: "staged" as const }
+        : opts.working ? { workspace: "working" as const }
+          : opts.commit ? { commit: revParse(opts.commit, root) }
+            : undefined;
       indexRepo(store, root, { churn: false });
       store.reindex();
-      const results = new ConstitutionService(store, root).evaluate({ id, activeOnly: opts.active, publicOnly: opts.publicOnly });
+      const results = new ConstitutionService(store, root).evaluate({ id, activeOnly: opts.active, publicOnly: opts.publicOnly, behavior });
       if (opts.json) console.log(JSON.stringify(results.map((r) => r.evaluation), null, 2));
       else renderPolicyEvaluations(results).forEach((line) => console.log(line));
       if (opts.strict && results.some((r) => r.blocks || r.strict_error)) process.exitCode = 1;
@@ -1957,6 +1967,10 @@ program
       store.close();
       return fail(`--base ref "${opts.base}" does not resolve. In CI, fetch the base branch first (git fetch origin <branch>).`);
     }
+    if (opts.commit && !revExists(opts.commit, root)) {
+      store.close();
+      return fail(`--commit ref "${opts.commit}" does not resolve.`);
+    }
     store.reindex(); // blast radius walks the edge graph — make the index current
     const files = opts.commit ? commitFiles(opts.commit, root)
       : opts.base ? rangeFiles(opts.base, root)
@@ -2030,8 +2044,12 @@ program
     // and hunch_policy_evaluate. Only an active_blocking policy with explicit human
     // authority can block. An evaluator error also fails strict CI; unknown remains
     // visible/advisory and can never masquerade as satisfied.
+    const behavior = opts.working ? { workspace: "working" as const }
+      : opts.commit ? { commit: revParse(opts.commit, root) }
+        : opts.base ? undefined
+          : { workspace: "staged" as const };
     const policyResults = hasActivePolicies
-      ? constitution.evaluate({ activeOnly: true, publicOnly: !!opts.publicOnly })
+      ? constitution.evaluate({ activeOnly: true, publicOnly: !!opts.publicOnly, behavior })
       : [];
     if (policyResults.length) {
       if (markdown) {

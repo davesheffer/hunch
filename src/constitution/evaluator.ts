@@ -5,7 +5,7 @@ import { pathMatchesGlob } from "../core/glob.js";
 import type { HunchStore } from "../store/hunchStore.js";
 import { headSha } from "../extractors/git.js";
 import { canonicalHash, proofEvaluationHash } from "./canonical.js";
-import { evaluateExecutableBehaviorPolicy } from "./behaviorEvaluator.js";
+import { evaluateExecutableBehaviorPolicy, type BehaviorEvaluationOptions } from "./behaviorEvaluator.js";
 import { policyCompositionBinding } from "./composition.js";
 import {
   POLICY_EVALUATOR,
@@ -397,11 +397,11 @@ export function evaluatePolicy(
   store: HunchStore,
   root: string,
   policy: PolicySpec,
-  opts: { publicOnly?: boolean; composition?: PolicySpec[] } = {},
+  opts: { publicOnly?: boolean; composition?: PolicySpec[]; behavior?: BehaviorEvaluationOptions } = {},
 ): PolicyEvaluation {
   if (policy.assertion.kind === "executable-behavior") {
     if (opts.composition?.length) throw new Error("executable-behavior policies cannot participate in parent/exception composition");
-    return evaluateExecutableBehaviorPolicy(root, policy);
+    return evaluateExecutableBehaviorPolicy(root, policy, opts.behavior);
   }
   const snapshot = graphSnapshot(store, root, opts);
   return opts.composition?.length

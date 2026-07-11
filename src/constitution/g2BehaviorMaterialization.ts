@@ -171,7 +171,7 @@ export function assessG2BehaviorMaterialization(
     limitations: [
       "Assessment alone creates no PolicySpec, corpus, proof plan, proof, authority, warning, or block.",
       "Executable materialization must independently prove current, known-bad, known-good, and mutation-control behavior before proposal.",
-      "Committed HEAD is the executable evaluator baseline; uncommitted working-tree state is outside this assertion version.",
+      "Committed HEAD remains the proof baseline; advisory delivery may separately evaluate a content-addressed staged or working snapshot.",
     ],
     data_class: "private" as const,
     authority: "none" as const,

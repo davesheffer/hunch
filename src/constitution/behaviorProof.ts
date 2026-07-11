@@ -139,7 +139,7 @@ export function createExecutableBehaviorProofPlan(
     evidence_refs: [...policy.evidence].sort(),
     limitations: [
       "Executable behavior proof runs only a hash-pinned node:test case through an allowlisted runner in disposable committed worktrees.",
-      "The current baseline is committed HEAD; uncommitted working-tree changes are intentionally outside this evaluator.",
+      "The proof baseline is committed HEAD; advisory delivery may separately evaluate a content-addressed staged or working snapshot.",
       "Known-bad replay is the primary historical regression mutation; a missing-name control proves that zero executed tests cannot satisfy the evaluator.",
       "Repository test code executes as evidence but grants no authority; policy activation remains a separate explicit human action.",
     ],

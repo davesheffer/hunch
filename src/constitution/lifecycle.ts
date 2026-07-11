@@ -121,7 +121,7 @@ export function approvePolicy(
     state: mode === "blocking" ? "active_blocking" : "active_advisory",
     severity: mode === "blocking" ? "blocking" : "warning",
     surfaces: policy.assertion.kind === "executable-behavior"
-      ? ["ci", "mcp", "cli"]
+      ? ["pre_commit", "ci", "mcp", "cli"]
       : mode === "blocking" ? ["pre_commit", "ci", "mcp", "cli"] : ["pre_edit", "pre_commit", "ci", "mcp", "cli"],
     authority: { kind: "human", actor, event, at },
     valid_from: at,

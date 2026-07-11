@@ -123,6 +123,8 @@ hunch policy card pol_…
 hunch policy relations pol_…
 hunch policy accept pol_… --blocking --actor github:your-name
 hunch policy evaluate pol_… --json
+hunch policy evaluate pol_… --working --json
+hunch policy evaluate pol_… --staged --json
 ```
 
 Private G2 dogfood stays evidence-only until a separate human signoff. An exact private plan selects
@@ -251,6 +253,15 @@ Three independently grounded component-policy sources may add an advisory common
 suggestion, while same-named behavior outside a narrow symbol scope is surfaced as a counterexample.
 Suggestions and counterexamples are review evidence only: the compiled scope is never widened
 automatically.
+
+Executable-behavior policies keep their proof and history replay bound to immutable commits and
+exact dependency snapshots. For advisory delivery, `policy evaluate --staged`, `--working`, the MCP
+workspace option, and the pre-commit `check` path materialize the selected pending snapshot in a
+disposable checkout before running the same hash-pinned test. The receipt binds the base commit,
+snapshot hash, and changed paths; untracked regular files are included, repository hooks and global
+Git configuration remain disabled, and dependency-manifest changes return an explicit error rather
+than using stale dependencies. Advisory violations warn but never block, and `--public-only` never
+loads private policies.
 An intentional narrow opposite can be linked explicitly with `hunch policy exception <child>
 --parent <parent> --actor human:<identity> --reason "…"`. The relationship requires identical
 bindings/relation, opposite `reaches` semantics, matching data class/home, and a strictly contained

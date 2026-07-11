@@ -21,10 +21,18 @@ import {
   nodeTestIsolationFlag,
   nodeTestReporterEvents,
 } from "./nodeTestEvidence.js";
+import {
+  applyBehaviorWorkspace,
+  BehaviorWorkspaceError,
+  captureBehaviorWorkspace,
+  type BehaviorWorkspaceKind,
+  type BehaviorWorkspaceSnapshot,
+} from "./behaviorWorkspace.js";
 
 export interface BehaviorEvaluationOptions {
   commit?: string;
   selectedName?: string;
+  workspace?: BehaviorWorkspaceKind;
 }
 
 function behaviorEnvironment(home: string, gitConfig: string): NodeJS.ProcessEnv {
@@ -68,12 +76,15 @@ function evaluation(
 ): PolicyEvaluation {
   const executionHash = canonicalHash(execution);
   const behavior: BehaviorExecution = { ...execution, execution_hash: executionHash };
+  const repository = behavior.workspace
+    ? { base: commit, head: `${behavior.workspace.kind}:${behavior.workspace.snapshot_hash}`, graph_hash: executionHash }
+    : { head: commit, graph_hash: executionHash };
   const body = {
     policy_id: policy.id,
     policy_revision: policy.revision,
     result,
     evaluator: { ...BEHAVIOR_POLICY_EVALUATOR },
-    repository: { head: commit, graph_hash: executionHash },
+    repository,
     matches: [{ file: behavior.test.file, symbol: behavior.test.name }],
     explanation,
     evidence_refs: [...policy.evidence],
@@ -91,10 +102,34 @@ export function evaluateExecutableBehaviorPolicy(
     throw new Error(`policy ${policy.id} is not an executable-behavior policy`);
   }
   const assertion = policy.assertion;
+  if (opts.commit && opts.workspace) throw new Error("executable behavior evaluation accepts either a commit or a workspace snapshot, not both");
   const commit = opts.commit ?? headSha(root);
   const selectedName = opts.selectedName ?? assertion.test.name;
+  let workspace: BehaviorWorkspaceSnapshot | undefined;
+  if (opts.workspace && /^[a-f0-9]{40}$/.test(commit)) {
+    const probe = mkdtempSync(join(tmpdir(), "hunch-behavior-workspace-probe-"));
+    const env = behaviorEnvironment(probe, join(probe, "global.gitconfig"));
+    try {
+      writeFileSync(join(probe, "global.gitconfig"), "");
+      workspace = captureBehaviorWorkspace(root, commit, opts.workspace, env);
+    } catch (error) {
+      const code = error instanceof BehaviorWorkspaceError ? error.code : "workspace-snapshot-failed";
+      const failed = {
+        commit,
+        test: { file: assertion.test.file, name: selectedName, source_hash: assertion.test.source_hash },
+        runner: assertion.runner,
+        exit_code: null,
+        selected_event: null,
+        error_code: code,
+      } as const;
+      return evaluation(policy, commit, failed, "error", `executable behavior ${opts.workspace} workspace snapshot failed (${code})`);
+    } finally {
+      rmSync(probe, { recursive: true, force: true });
+    }
+  }
   const baseExecution = {
     commit: /^[a-f0-9]{40}$/.test(commit) ? commit : "0".repeat(40),
+    ...(workspace ? { workspace: workspace.metadata } : {}),
     test: { file: assertion.test.file, name: selectedName, source_hash: assertion.test.source_hash },
     runner: assertion.runner,
     exit_code: null,
@@ -106,6 +141,9 @@ export function evaluateExecutableBehaviorPolicy(
   const source = sourceAt(root, assertion.test.source_commit, assertion.test.file);
   if (source == null || canonicalHash(source) !== assertion.test.source_hash) {
     return evaluation(policy, commit, { ...baseExecution, commit, error_code: "test-source-hash-mismatch" }, "error", "pinned behavior test source does not match its exact commit/hash binding");
+  }
+  if (workspace?.metadata.files.some((file) => file === "package.json" || file === "package-lock.json")) {
+    return evaluation(policy, commit, { ...baseExecution, commit, error_code: "workspace-dependency-input-changed" }, "error", "workspace dependency inputs changed; provision an exact dependency snapshot after commit");
   }
   const dependency = dependencySnapshotForCommit(root, commit, assertion.dependency_snapshot_ids);
   if (!dependency) {
@@ -133,6 +171,7 @@ export function evaluateExecutableBehaviorPolicy(
         stdio: "ignore",
       });
       added = true;
+      if (workspace) applyBehaviorWorkspace(root, checkout, workspace, env);
       symlinkSync(dependency.nodeModules, join(checkout, "node_modules"), process.platform === "win32" ? "junction" : "dir");
       const testFile = join(checkout, assertion.test.file);
       mkdirSync(dirname(testFile), { recursive: true });
@@ -179,15 +218,17 @@ export function evaluateExecutableBehaviorPolicy(
       } else if (matches.length > 1) {
         result = evaluation(policy, commit, { ...execution, error_code: "selected-test-ambiguous" }, "error", "exact selected test name produced multiple executed events");
       } else if (matches[0]!.type === "test:pass" && exitCode === 0) {
-        result = evaluation(policy, commit, execution, "satisfied", "exact selected executable behavior test passed");
+        result = evaluation(policy, commit, execution, "satisfied", `exact selected executable behavior test passed${opts.workspace ? ` in ${opts.workspace} workspace snapshot` : ""}`);
       } else if (matches[0]!.type === "test:fail" && exitCode !== 0) {
-        result = evaluation(policy, commit, execution, "violated", "exact selected executable behavior test failed");
+        result = evaluation(policy, commit, execution, "violated", `exact selected executable behavior test failed${opts.workspace ? ` in ${opts.workspace} workspace snapshot` : ""}`);
       } else {
         result = evaluation(policy, commit, { ...execution, error_code: "runner-outcome-inconsistent" }, "error", "selected test event and runner exit code disagree");
       }
     }
   } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code === "ETIMEDOUT" ? "timeout" : added ? "runner-setup-failed" : "worktree-create-failed";
+    const code = error instanceof BehaviorWorkspaceError
+      ? error.code
+      : (error as NodeJS.ErrnoException).code === "ETIMEDOUT" ? "timeout" : added ? "runner-setup-failed" : "worktree-create-failed";
     result = evaluation(policy, commit, { ...baseExecution, commit, dependency_snapshot_id: dependency.snapshot.id, error_code: code }, "error", `executable behavior evaluation failed during isolated setup (${code})`);
   } finally {
     if (added && cleanupReplayWorktree(root, hooks, env, session, checkout)) {

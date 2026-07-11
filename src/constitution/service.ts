@@ -78,7 +78,7 @@ import {
   type G2BehaviorPolicyMaterialization,
 } from "./g2BehaviorPolicyMaterializer.js";
 import { executableBehaviorAttestationError } from "./behaviorAttestationBinding.js";
-import { evaluateExecutableBehaviorPolicy } from "./behaviorEvaluator.js";
+import { evaluateExecutableBehaviorPolicy, type BehaviorEvaluationOptions } from "./behaviorEvaluator.js";
 import { executeG2OperationalDrill, type G2OperationalDrillReceipt } from "./g2Drills.js";
 
 export interface PolicyEvaluationSet {
@@ -978,12 +978,12 @@ export class ConstitutionService {
     };
   }
 
-  evaluate(opts: { id?: string; activeOnly?: boolean; publicOnly?: boolean } = {}): PolicyEvaluationSet[] {
+  evaluate(opts: { id?: string; activeOnly?: boolean; publicOnly?: boolean; behavior?: BehaviorEvaluationOptions } = {}): PolicyEvaluationSet[] {
     let policies = opts.id ? [this.get(opts.id, opts)] : this.list(opts);
     if (opts.activeOnly) policies = policies.filter(policyIsActive);
     return policies.map((policy) => {
       const composition = this.composition(policy, opts);
-      const evaluation = evaluatePolicy(this.store, this.root, policy, { publicOnly: opts.publicOnly, composition });
+      const evaluation = evaluatePolicy(this.store, this.root, policy, { publicOnly: opts.publicOnly, composition, behavior: opts.behavior });
       let proof: PolicyProof | undefined;
       let dispositions: HistoryDisposition[] = [];
       if (policy.state === "active_blocking" && policy.proof) {

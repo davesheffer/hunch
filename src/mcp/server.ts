@@ -929,14 +929,21 @@ export function buildServer(root: string): McpServer {
         policy_id: z.string().optional().describe("Optional policy id; omit for all policies."),
         active_only: z.boolean().optional().describe("Evaluate only active advisory/blocking policies."),
         public_only: z.boolean().optional().describe("Exclude private-overlay policies and graph records."),
+        workspace: z.enum(["staged", "working"]).optional().describe("For executable-behavior policies, evaluate the staged index or complete working snapshot in a disposable checkout."),
+        commit: z.string().optional().describe("For executable-behavior policies, evaluate an exact commit ref instead of the current committed HEAD."),
       },
     },
-    async ({ policy_id, active_only, public_only }): Promise<ToolResult> => {
+    async ({ policy_id, active_only, public_only, workspace, commit }): Promise<ToolResult> => {
       try {
+        if (workspace && commit) throw new Error("choose either workspace or commit for executable-behavior evaluation");
+        if (commit && !revExists(commit, root)) throw new Error(`commit ref ${JSON.stringify(commit)} does not resolve`);
         indexRepo(store, root, { churn: false });
         store.reindex();
+        const behavior = workspace ? { workspace }
+          : commit ? { commit: revParse(commit, root) }
+            : undefined;
         const receipts = new ConstitutionService(store, root)
-          .evaluate({ id: policy_id, activeOnly: active_only, publicOnly: public_only })
+          .evaluate({ id: policy_id, activeOnly: active_only, publicOnly: public_only, behavior })
           .map((r) => r.evaluation);
         return ok(JSON.stringify(receipts, null, 2));
       } catch (e) {
