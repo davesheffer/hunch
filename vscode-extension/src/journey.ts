@@ -160,6 +160,17 @@ export async function showJourney(root: string, hunch: Hunch): Promise<void> {
       ${d.adopted ? `<button data-open-wiki="${esc(d.adopted)}">Read healed copy</button>` : ""}
       <button class="ghost" data-open-repo="${esc(d.rel)}">Original</button></div>`).join("");
 
+  // The three-second read: what's going on, in words, before any chart.
+  const plural = (n: number, w: string): string => `${n} ${w}${n === 1 ? "" : "s"}`;
+  const trouble = staleDocs.length
+    ? `⚠ ${plural(staleDocs.length, "doc")} contradict${staleDocs.length === 1 ? "s" : ""} the recorded decisions — read the healed copies below.`
+    : pending
+      ? `${plural(pending, "draft decision")} wait${pending === 1 ? "s" : ""} for your judgment.`
+      : "Nothing needs you right now.";
+  const earned = caught + reprevented > 0
+    ? `It has earned ${plural(caught + reprevented, "real catch")}.`
+    : "No catches yet — the return starts when a rule blocks a real mistake.";
+
   panel.webview.html = `<!DOCTYPE html><html><head><meta charset="utf-8">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';">
   <style>
@@ -206,32 +217,40 @@ export async function showJourney(root: string, hunch: Hunch): Promise<void> {
     .badc{color:var(--vscode-charts-red,#b5544d)}.warnc{color:var(--vscode-charts-orange,#c9822e)}
     .empty{opacity:.7;padding:14px 0}
     .honest{font-size:12px;opacity:.65;margin-top:16px}
+    .lead{font-size:14px;line-height:1.5;margin:6px 0 2px}
+    details.fold{border:1px solid var(--vscode-panel-border);border-radius:8px;padding:6px 12px;margin:12px 0}
+    details.fold summary{cursor:pointer;font-weight:600;font-size:13px;outline:none;user-select:none}
+    details.fold .inner{padding-top:8px}
   </style></head><body>
-  <h2>🧠 Your repo is remembering</h2>
-  <p class="sub">Memory rises with every decision. Return has to be earned.</p>
-  ${curveSvg(pts)}
-  <div class="legend"><span><b style="color:var(--vscode-charts-green,#3a6b58)">▬</b> accumulated memory</span><span><b style="color:var(--vscode-charts-red,#b5544d)">▬</b> catches</span></div>
-  <div class="row">
-    <div class="stat"><b>${hunch.decisions.length}</b><span>decisions</span></div>
-    <div class="stat"><b>${hunch.constraints.length}</b><span>invariants${blocking ? ` · ${blocking} blocking` : ""}</span></div>
-    <div class="stat"><b>${caught}</b><span>violations caught</span></div>
-    <div class="stat"><b>${reprevented}</b><span>bugs re-prevented</span></div>
-    ${coverage != null ? `<div class="stat"><b>${Math.round(coverage * 100)}%</b><span>architecture covered</span></div>` : ""}
-  </div>
-
-  <h3>🕸 The map${graph ? "" : " — not generated yet"}</h3>
-  ${graph
-    ? `<div id="map"><svg id="s"><g id="view"><g id="glinks"></g><g id="gnodes"></g></g></svg>
-       <div id="mapbar"><button id="play">▶ replay</button><input id="t" type="range" min="0" max="1000" value="1000"><span id="when"></span></div>
-       <div id="tip"></div></div>
-       <p class="sub" style="margin-top:4px">Circles = components (halo = memory, green ring = learned this week). Squares = docs by trust: green grounded, pulsing amber stale, gray unverified. Click anything to open it here in the editor.</p>`
-    : `<div class="act"><span class="grow">The interactive knowledge map comes from the wiki generator.</span><button data-genwiki>Generate the map</button></div>`}
+  <h2>🧠 ${hunch.decisions.length} decisions remembered</h2>
+  <p class="lead">${esc(trouble)}<br><span style="opacity:.75">${esc(earned)}</span></p>
 
   <h3>⚡ Act now</h3>
   ${pending ? `<div class="act"><span>🗂</span><span class="grow"><b>${pending}</b> draft decision${pending === 1 ? "" : "s"} awaiting review${readyDrafts ? ` — ${readyDrafts} look verified` : ""}</span><button data-review>Review now</button></div>` : ""}
   ${staleRows}
   ${unverified.length ? `<div class="act"><span class="warnc">◻</span><span class="grow"><b>${unverified.length}</b> docs unverified — open one and anchor it with a <code>hunch:topic</code> marker</span><button class="ghost" data-locate>Show on map</button></div>` : ""}
   ${!pending && !staleDocs.length && !unverified.length ? `<div class="act"><span>🎉</span><span class="grow">Nothing needs you — the knowledge base is clean.</span><button data-cmd="capture">Capture a decision</button></div>` : ""}
+
+  <details class="fold" open><summary>📈 The story — memory vs. return</summary><div class="inner">
+    ${curveSvg(pts)}
+    <div class="legend"><span><b style="color:var(--vscode-charts-green,#3a6b58)">▬</b> accumulated memory</span><span><b style="color:var(--vscode-charts-red,#b5544d)">▬</b> catches</span></div>
+    <div class="row">
+      <div class="stat"><b>${hunch.decisions.length}</b><span>decisions</span></div>
+      <div class="stat"><b>${hunch.constraints.length}</b><span>invariants${blocking ? ` · ${blocking} blocking` : ""}</span></div>
+      <div class="stat"><b>${caught}</b><span>violations caught</span></div>
+      <div class="stat"><b>${reprevented}</b><span>bugs re-prevented</span></div>
+      ${coverage != null ? `<div class="stat"><b>${Math.round(coverage * 100)}%</b><span>architecture covered</span></div>` : ""}
+    </div>
+  </div></details>
+
+  <details class="fold" id="mapwrap"><summary>🕸 Explore the map — components & docs, click anything to open it</summary><div class="inner">
+  ${graph
+    ? `<div id="map"><svg id="s"><g id="view"><g id="glinks"></g><g id="gnodes"></g></g></svg>
+       <div id="mapbar"><button id="play">▶ replay</button><input id="t" type="range" min="0" max="1000" value="1000"><span id="when"></span></div>
+       <div id="tip"></div></div>
+       <p class="sub" style="margin-top:4px">Circles = components (halo = memory, green ring = learned this week). Squares = docs by trust: green grounded, pulsing amber stale, gray unverified.</p>`
+    : `<div class="act"><span class="grow">The interactive knowledge map comes from the wiki generator.</span><button data-genwiki>Generate the map</button></div>`}
+  </div></details>
 
   <h3>Learned this week</h3>
   ${learned.length
@@ -258,7 +277,15 @@ export async function showJourney(root: string, hunch: Hunch): Promise<void> {
   document.querySelectorAll("[data-open-wiki]").forEach((b) => b.addEventListener("click", () => vsc.postMessage({ t: "open", path: joinp(G.wikiRoot, b.dataset.openWiki) })));
   document.querySelectorAll("[data-open-repo]").forEach((b) => b.addEventListener("click", () => vsc.postMessage({ t: "open", path: joinp(G.repoRoot, b.dataset.openRepo) })));
 
-  if (G) {
+  // The map initializes lazily on first expand — it must never be in your face,
+  // and clientWidth is only real once the fold is open.
+  let mapReady = false, wantLocate = false;
+  const wrap = document.getElementById("mapwrap");
+  if (wrap && G) wrap.addEventListener("toggle", () => { if (wrap.open && !mapReady) { mapReady = true; initMap(); } });
+  document.querySelectorAll("[data-locate]").forEach((b) => b.addEventListener("click", () => {
+    if (wrap && !wrap.open) { wantLocate = true; wrap.open = true; }
+  }));
+  function initMap() {
     const svg = document.getElementById("s"), view = document.getElementById("view"), map = document.getElementById("map");
     const W = map.clientWidth, H = map.clientHeight;
     const N = G.nodes.map((n, i) => ({ ...n, kind: "cmp",
@@ -322,9 +349,9 @@ export async function showJourney(root: string, hunch: Hunch): Promise<void> {
       document.getElementById("gnodes").appendChild(g);
       return { g };
     });
-    document.querySelectorAll("[data-locate]").forEach((b) => b.addEventListener("click", () => {
-      D.forEach((d, i) => docEls[i].g.classList.toggle("hi", d.status === "unverified" && !docEls[i].g.classList.contains("hi")));
-    }));
+    const locate = () => D.forEach((d, i) => docEls[i].g.classList.toggle("hi", d.status === "unverified" && !docEls[i].g.classList.contains("hi")));
+    document.querySelectorAll("[data-locate]").forEach((b) => b.addEventListener("click", () => { if (wrap.open) locate(); }));
+    if (wantLocate) { wantLocate = false; locate(); }
     let alpha = 1, held = null, dragged = false;
     function tick(){
       for (let i=0;i<ALL.length;i++) for (let j=i+1;j<ALL.length;j++){
