@@ -1,0 +1,47 @@
+{
+  "id": "dec_b71ec7fe92",
+  "title": "Journey's fifth door: Memory graph (wiki) — opens the generated wiki graph.html in the browser, private overlay wiki first",
+  "topic": "vscode-extension-surface",
+  "status": "accepted",
+  "context": "The wiki gained an interactive memory-graph page (wiki/graph.html — components, dependencies, compounding-replay time scrubber). The owner asked for it in Journey's calls to action so the story screen links to the map.",
+  "decision": "Journey's CTA-door contract stands, with a fifth allowlisted door: hunch.memoryGraph. The command is a pure opener — it resolves the generated wiki's graph.html (the private overlay wiki wins when it exists since it renders the full union and never leaves the machine; else the public wiki; wiki dir read from wiki-manifest.json, defaulting to 'wiki') and opens it externally in the browser. When no graph exists it says exactly how to generate one (hunch wiki [--private]) instead of generating anything itself — generation stays a deliberate CLI act. The full allowlist is now hunch.capture, hunch.why, hunch.search, hunch.reviewInTerminal, hunch.memoryGraph; everything else in the door contract is unchanged. v0.12.0.",
+  "consequences": [
+    "The Journey story links to the interactive map; both compounding surfaces (curve + graph) are one click apart.",
+    "hunch.memoryGraph is visible in the palette as 'Memory graph (wiki)'.",
+    "The extension still never generates or writes wiki pages — it only opens what the CLI produced."
+  ],
+  "alternatives_rejected": [
+    "Render the memory graph inside a webview panel — rejected: graph.html is a self-contained page owned by the wiki generator; embedding would fork its lifecycle away from the manifest/tamper/heal machinery.",
+    "Auto-run `hunch wiki` when the page is missing — rejected: generation can invoke the subscription CLI and takes time; a door that silently spawns work stops being a door.",
+    "Public wiki preferred over private — rejected: the private overlay wiki is the fuller, safer view on the owner's machine; the public copy is the fallback."
+  ],
+  "rejected_tripwires": [],
+  "related_components": [
+    "vscode-extension"
+  ],
+  "related_files": [
+    "vscode-extension/src/journey.ts",
+    "vscode-extension/src/extension.ts",
+    "vscode-extension/package.json"
+  ],
+  "supersedes": "dec_79c3650454",
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-07-12T08:34:13.070Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 0.95,
+    "evidence": [
+      "vscode-extension/src/journey.ts",
+      "vscode-extension/src/extension.ts",
+      "vscode-extension/package.json"
+    ]
+  },
+  "date": "2026-07-12T08:34:13.070Z"
+}

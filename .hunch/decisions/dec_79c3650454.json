@@ -2,7 +2,7 @@
   "id": "dec_79c3650454",
   "title": "Journey carries CTA doors: buttons that only open existing surfaces — the page still computes and mutates nothing",
   "topic": "vscode-extension-surface",
-  "status": "accepted",
+  "status": "superseded",
   "context": "The owner used the read-only Journey (v0.10.0), liked it, and asked for calls to action — the screen told the story but ended in a dead end. The prior decision forbade buttons outright to keep Journey honest.",
   "decision": "Journey keeps its honesty contract — the page computes nothing, mutates nothing, and every number stays copied from the graph or hunch stats --json — but may carry CTA DOORS: command: links restricted by an enableCommandUris allowlist to existing commands only (hunch.capture, hunch.why, hunch.search, hunch.reviewInTerminal). The one-next-action card becomes its own button (Review N drafts → opens `hunch review` in a terminal; else Capture a decision). Draft triage still happens in the CLI — the button just opens the terminal there. Any CTA that computes, edits records in-page, or targets a command outside the allowlist requires superseding this decision. v0.11.0.",
   "consequences": [
@@ -25,11 +25,11 @@
     "vscode-extension/package.json"
   ],
   "supersedes": "dec_805103a234",
-  "superseded_by": null,
+  "superseded_by": "dec_b71ec7fe92",
   "caused_by_bug": null,
   "commit": null,
   "valid_from": "2026-07-12T08:04:53.311Z",
-  "valid_to": null,
+  "valid_to": "2026-07-12T08:34:13.070Z",
   "retired": {
     "symbols": [],
     "deps": []
