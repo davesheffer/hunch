@@ -24,7 +24,7 @@ import {
 import { HunchHoverProvider } from "./providers.js";
 import { runSearch } from "./search.js";
 import { showJourney } from "./journey.js";
-import { runHunchWithProgress } from "./cli.js";
+import { cliCommand, runHunchWithProgress } from "./cli.js";
 import { registerLmTools } from "./lmTools.js";
 import { HunchMcp } from "./mcpClient.js";
 
@@ -294,6 +294,13 @@ export function activate(context: vscode.ExtensionContext): void {
       const h = cache.get();
       if (!h || !root) return void vscode.window.showWarningMessage("No Hunch graph (.hunch/) found — run `hunch init`.");
       void showJourney(root, h);
+    }),
+    // Journey door: draft triage stays in the CLI — this just opens it there.
+    vscode.commands.registerCommand("hunch.reviewInTerminal", () => {
+      if (!root) return;
+      const term = vscode.window.createTerminal({ name: "hunch review", cwd: root });
+      term.show();
+      term.sendText(`${cliCommand()} review`, true);
     }),
   );
 

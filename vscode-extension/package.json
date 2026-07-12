@@ -2,7 +2,7 @@
   "name": "hunch-vscode",
   "displayName": "Hunch",
   "description": "Your repo's engineering memory, in the editor: see WHY code is the way it is (decisions, invariants, bug history), and capture what you decide — one command each.",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "publisher": "davesheffer",
   "license": "MIT",
   "author": "Dave Sheffer <dave.sheffer1@gmail.com>",
@@ -71,12 +71,21 @@
         "command": "hunch.whySymbol",
         "title": "Why is this symbol the way it is?",
         "category": "Hunch"
+      },
+      {
+        "command": "hunch.reviewInTerminal",
+        "title": "Review drafts in terminal",
+        "category": "Hunch"
       }
     ],
     "menus": {
       "commandPalette": [
         {
           "command": "hunch.whySymbol",
+          "when": "false"
+        },
+        {
+          "command": "hunch.reviewInTerminal",
           "when": "false"
         }
       ],

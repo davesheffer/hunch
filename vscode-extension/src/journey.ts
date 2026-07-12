@@ -61,10 +61,10 @@ function learnedThisWeek(hunch: Hunch, now: number): Array<{ title: string; stat
     .map((d) => ({ title: d.title, status: d.status ?? "proposed" }));
 }
 
-function nextAction(hunch: Hunch): { line: string; hint: string } {
+function nextAction(hunch: Hunch): { line: string; cta: string; command: string } {
   const ready = reviewQueue(hunch).ready.length;
-  if (ready) return { line: `${ready} draft${ready === 1 ? " looks" : "s look"} verified and ready to confirm.`, hint: "Run `hunch review` in a terminal." };
-  return { line: "Memory grows when you record what you decide.", hint: "Run “Hunch: Capture…” after your next non-trivial choice." };
+  if (ready) return { line: `${ready} draft${ready === 1 ? " looks" : "s look"} verified and ready to confirm.`, cta: `Review ${ready} draft${ready === 1 ? "" : "s"}`, command: "command:hunch.reviewInTerminal" };
+  return { line: "Memory grows when you record what you decide.", cta: "Capture a decision", command: "command:hunch.capture" };
 }
 
 export async function showJourney(root: string, hunch: Hunch): Promise<void> {
@@ -81,7 +81,11 @@ export async function showJourney(root: string, hunch: Hunch): Promise<void> {
   const act = nextAction(hunch);
   const blocking = hunch.constraints.filter((c) => c.severity === "blocking").length;
 
-  const panel = vscode.window.createWebviewPanel("hunchJourney", "Hunch: Journey", vscode.ViewColumn.Beside, {});
+  // CTAs are DOORS, not features: command: links restricted to an allowlist of
+  // existing commands. The page still computes and mutates nothing itself.
+  const panel = vscode.window.createWebviewPanel("hunchJourney", "Hunch: Journey", vscode.ViewColumn.Beside, {
+    enableCommandUris: ["hunch.capture", "hunch.why", "hunch.search", "hunch.reviewInTerminal"],
+  });
   panel.webview.html = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
     body{font-family:var(--vscode-font-family);color:var(--vscode-foreground);padding:8px 20px;max-width:720px}
     h2{border-bottom:1px solid var(--vscode-panel-border);padding-bottom:6px}
@@ -98,9 +102,13 @@ export async function showJourney(root: string, hunch: Hunch): Promise<void> {
     ul{padding-left:18px}li{margin:.3em 0;line-height:1.4}
     .badge{font-size:11px;border:1px solid var(--vscode-panel-border);border-radius:8px;padding:0 6px;margin-left:6px;opacity:.8}
     .next{border:1px solid var(--vscode-panel-border);border-radius:6px;padding:10px 14px;margin-top:14px}
-    .next .hint{opacity:.75;font-size:12px;margin-top:4px}
     .empty{opacity:.7;padding:24px 0}
     .honest{font-size:12px;opacity:.65;margin-top:16px}
+    a.btn{display:inline-block;background:var(--vscode-button-background);color:var(--vscode-button-foreground);
+      padding:5px 14px;border-radius:4px;text-decoration:none;font-size:13px;margin-top:8px}
+    a.btn:hover{background:var(--vscode-button-hoverBackground)}
+    a.btn.ghost{background:transparent;color:var(--vscode-textLink-foreground);border:1px solid var(--vscode-panel-border)}
+    .doors{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
   </style></head><body>
     <h2>🧠 Your repo is remembering</h2>
     <p class="sub">Memory rises with every decision. Return has to be earned.</p>
@@ -116,8 +124,13 @@ export async function showJourney(root: string, hunch: Hunch): Promise<void> {
     <h3>Learned this week</h3>
     ${learned.length
       ? `<ul>${learned.map((l) => `<li>${esc(l.title)}<span class="badge">${esc(l.status)}</span></li>`).join("")}</ul>`
-      : `<div class="empty">Nothing yet this week — the next decision you capture lands here.</div>`}
-    <div class="next"><b>One next action.</b> ${esc(act.line)}<div class="hint">${esc(act.hint)}</div></div>
-    <p class="honest">Honest by construction: this page computes nothing — the curve is your decisions' real timestamps, and every number is copied from the graph or <code>hunch stats --json</code>. Zeros stay zeros until the repository earns otherwise.</p>
+      : `<div class="empty">Nothing yet this week — <a href="command:hunch.capture">the next decision you capture</a> lands here.</div>`}
+    <div class="next"><b>One next action.</b> ${esc(act.line)}<br><a class="btn" href="${act.command}">${esc(act.cta)}</a></div>
+    <div class="doors">
+      <a class="btn ghost" href="command:hunch.capture">🧠 Capture a decision</a>
+      <a class="btn ghost" href="command:hunch.why">❓ Why is this file?</a>
+      <a class="btn ghost" href="command:hunch.search">🔍 Search memory</a>
+    </div>
+    <p class="honest">Honest by construction: this page computes nothing — the curve is your decisions' real timestamps, and every number is copied from the graph or <code>hunch stats --json</code>. Zeros stay zeros until the repository earns otherwise. Buttons only open existing surfaces.</p>
   </body></html>`;
 }
