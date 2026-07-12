@@ -2,9 +2,10 @@
 
 ## Give every code change a memory.
 
-Hunch turns VS Code into the human review surface for your codebase’s decisions, constraints, and
-bug history. While any MCP assistant can query the same graph, this extension makes the evidence
-visible where you edit: in the explorer, editor, Problems panel, and deterministic Change Gate.
+Hunch turns VS Code into the human review surface for your codebase’s decisions, constraints, bug
+history, and compounding return. While any MCP assistant can query the same graph, this extension
+makes the evidence visible where you edit: in Home, the explorer, editor, Problems panel, and the
+deterministic Change Gate.
 
 It works with [Hunch](https://github.com/davesheffer/hunch) for **any** assistant workflow—not one
 model or chat surface. Your team sees the same engineering memory whether it works through Claude
@@ -25,6 +26,10 @@ explicit and offers a public-only receipt before anything is shared.
 ## Features
 
 ### Browse
+- **Home — what needs you** — one daily screen for verified drafts, stale memory, recurrent bugs,
+  and the next safe action. It reads the same local graph as every other surface.
+- **Compounding value** — an ambient status item and detailed receipt over `hunch stats --json`:
+  accumulated decisions/invariants, architecture coverage, real catches, and honest payback.
 - **Activity-bar tree** — Invariants, Decisions, Bugs, **Bug lineage** (recurrence chains),
   Fragile symbols, Components, and **Stale records**, each with provenance and a `⚠stale` flag
   when a file in scope changed after the record was verified.
@@ -47,6 +52,8 @@ explicit and offers a public-only receipt before anything is shared.
   and blast radius. Plus a **status bar** invariant counter for the active file.
 
 ### Grounding
+- **Language Model tools** — `hunchWhy`, `hunchContext`, and `hunchQuery` expose the graph to VS
+  Code chat agents without a second data model or separate extension-side memory.
 - **Topic-anchored decisions** — a decision can carry an optional `topic` (the drift-detection
   anchor); the pre-edit brief surfaces a file's *current* decision for its topic with
   doc-precedence framing (follow the graph, not a stale doc) plus what that decision **rejected**.
@@ -58,6 +65,9 @@ explicit and offers a public-only receipt before anything is shared.
   **complements** Architectural Conformance (graph≠code), it doesn't replace it.
 
 ### Write back
+- **Hunch Console** — a conversational command surface over curated CLI operations. It streams
+  progress and receipts but delegates every mutation to the CLI, preserving atomic writes and
+  private-overlay routing.
 - **Record Invariant…** / **Record Bug…** delegate to the `hunch` CLI (atomic, validated writes —
   the extension never edits `.hunch/` JSON itself). Set `hunch.cliPath` if the CLI isn't on `PATH`.
   Decisions are recorded from Claude Code chat — either `hunch_record_decision` (now **gated**: a

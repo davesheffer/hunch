@@ -1,0 +1,59 @@
+name: VS Code Marketplace
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["vscode-v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vscode-marketplace-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: vscode-extension
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: vscode-extension/package-lock.json
+
+      - name: Install (locked)
+        run: npm ci
+
+      - name: Verify tag matches extension version
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: |
+          EXPECTED="vscode-v$(node -p "require('./package.json').version")"
+          test "$GITHUB_REF_NAME" = "$EXPECTED" || {
+            echo "Tag $GITHUB_REF_NAME does not match $EXPECTED" >&2
+            exit 1
+          }
+
+      - name: Build
+        run: npm run build
+
+      - name: Package artifact
+        run: npx --yes @vscode/vsce package --out hunch-vscode.vsix
+
+      - name: Upload VSIX
+        uses: actions/upload-artifact@v4
+        with:
+          name: hunch-vscode-${{ github.ref_name }}-${{ github.run_id }}
+          path: vscode-extension/hunch-vscode.vsix
+          if-no-files-found: error
+
+      - name: Publish to Marketplace
+        run: npx --yes @vscode/vsce publish --packagePath hunch-vscode.vsix --pat "$VSCE_PAT"
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
