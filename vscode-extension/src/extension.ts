@@ -24,7 +24,7 @@ import {
 } from "./hunchData.js";
 import { HunchHoverProvider } from "./providers.js";
 import { runSearch } from "./search.js";
-import { showJourney } from "./journey.js";
+import { showJourney, resolveWikiGraph } from "./journey.js";
 import { cliCommand, runHunchWithProgress } from "./cli.js";
 import { registerLmTools } from "./lmTools.js";
 import { HunchMcp } from "./mcpClient.js";
@@ -303,25 +303,19 @@ export function activate(context: vscode.ExtensionContext): void {
       term.show();
       term.sendText(`${cliCommand()} review`, true);
     }),
-    // Journey door: the wiki's interactive memory graph, in the browser. The
-    // private overlay wiki wins when it has one (fuller view, never committed);
-    // otherwise the public wiki; otherwise say how to generate it.
+    // Journey door: the wiki's interactive memory graph, in the browser (the
+    // full-window edition; Journey embeds the same data inline). The private
+    // overlay wiki wins when it has one; otherwise the public wiki; otherwise
+    // say how to generate it.
     vscode.commands.registerCommand("hunch.memoryGraph", () => {
       if (!root) return void vscode.window.showWarningMessage("No workspace folder open.");
-      const wikiDir = (hunchDir: string): string => {
-        try { return (JSON.parse(fs.readFileSync(nodePath.join(hunchDir, "wiki-manifest.json"), "utf8")) as { dir?: string }).dir ?? "wiki"; }
-        catch { return "wiki"; }
-      };
       const overlay = cache.get()?.overlay;
-      const candidates: string[] = [];
-      if (overlay?.state === "active") candidates.push(nodePath.join(nodePath.dirname(overlay.dir), wikiDir(overlay.dir), "graph.html"));
-      candidates.push(nodePath.join(root, wikiDir(nodePath.join(root, ".hunch")), "graph.html"));
-      const hit = candidates.find((p) => fs.existsSync(p));
-      if (!hit) {
+      const wiki = resolveWikiGraph(root, overlay);
+      if (!wiki) {
         return void vscode.window.showInformationMessage(
           `No memory graph generated yet — run \`${cliCommand()} wiki${overlay?.state === "active" ? " --private" : ""}\` first.`);
       }
-      void vscode.env.openExternal(vscode.Uri.file(hit));
+      void vscode.env.openExternal(vscode.Uri.file(wiki.graphHtmlPath));
     }),
   );
 

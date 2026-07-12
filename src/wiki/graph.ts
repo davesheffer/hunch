@@ -185,9 +185,10 @@ ${priv}
 <div id="act"><h2>⚡ Act now</h2><div id="actrows"></div></div>
 <div id="bar"><button id="play">▶ replay</button><input id="t" type="range" min="0" max="1000" value="1000"><span id="when"></span></div>
 <div id="legend"><span class="sw" style="background:#7fae9a"></span>calm <span class="sw" style="background:#c9a24a"></span>warm <span class="sw" style="background:#c96a4a"></span>fragile · <span class="sq" style="background:#7fae9a"></span>grounded <span class="sq" style="background:var(--stale)"></span>stale <span class="sq" style="background:#9b968b"></span>unverified</div>
+<script id="hunch-graph-data" type="application/json">${json}</script>
 <script>
 "use strict";
-const DATA = ${json};
+const DATA = JSON.parse(document.getElementById("hunch-graph-data").textContent);
 const svg = document.getElementById("s"), view = document.getElementById("view");
 const W = innerWidth, H = innerHeight;
 const N = DATA.nodes.map((n, i) => ({ ...n, kind: "cmp",
