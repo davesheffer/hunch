@@ -1,0 +1,142 @@
+{
+  "id": "dec_a7f5ac92cb",
+  "title": "Cut VS Code extension to two surfaces: read-only Why + write-only Capture",
+  "topic": null,
+  "status": "proposed",
+  "context": "Extension ballooned to 20 commands, 4 webviews, tree view, codelens, diagnostics, decorations—unmaintainable scope the author could no longer explain. Core value (decision memory) drowned in noise.",
+  "decision": "Delete 9 files and 2,176 lines. Keep only: (1) 'Hunch: Why is this?' surface (file brief, symbol context, invariants, bug history), (2) 'Hunch: Capture…' picker for writing decisions. All mutations delegated to hunch CLI or MCP write path; extension never edits .hunch/ JSON directly. Remove: Change Gate, all command hub, diagnostics, decorations, webviews.",
+  "consequences": [
+    "Single, defensible value proposition: see why + capture what you decided",
+    "~58% LOC reduction (3776 → 1600); 56% fewer files (16 → 7)",
+    "All memory mutations auditable (goes through MCP/CLI, not direct edits)",
+    "Maintenance surface shrinks enough to stay coherent"
+  ],
+  "alternatives_rejected": [
+    "Hide unused features instead of deleting (rejected: false flag burden; deletion is cleaner)",
+    "Keep Change Gate + other capture UIs (rejected: duplicate picker surfaces)",
+    "Maintain backward compatibility (rejected: breaking API acceptable for clarity)"
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Hide unused features instead of deleting (rejected: false flag burden; deletion is cleaner)",
+      "scope": [
+        "vscode-extension/src/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Keep Change Gate + other capture UIs (rejected: duplicate picker surfaces)",
+      "scope": [
+        "vscode-extension/src/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Maintain backward compatibility (rejected: breaking API acceptable for clarity)",
+      "scope": [
+        "vscode-extension/src/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_555e43ab1a"
+  ],
+  "related_files": [
+    "vscode-extension/src/changeGate.ts",
+    "vscode-extension/src/commands.ts",
+    "vscode-extension/src/console.ts",
+    "vscode-extension/src/decorations.ts",
+    "vscode-extension/src/diagnostics.ts",
+    "vscode-extension/src/extension.ts",
+    "vscode-extension/src/graph.ts",
+    "vscode-extension/src/home.ts",
+    "vscode-extension/src/providers.ts",
+    "vscode-extension/src/review.ts",
+    "vscode-extension/src/stats.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "4730cc5",
+  "valid_from": "2026-07-12T10:28:16+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [
+      "Scope",
+      "esc",
+      "classifyGateResult",
+      "chooseScope",
+      "openChangeGate",
+      "HunchCommandDef",
+      "runCommandHub",
+      "stripAnsi",
+      "CaptureState",
+      "openConsole",
+      "post",
+      "handle",
+      "init",
+      "sendBrief",
+      "route",
+      "Intent",
+      "interpret",
+      "extractTarget",
+      "lmRoute",
+      "ask",
+      "startCapture",
+      "captureAnswer"
+    ],
+    "deps": [
+      "vscode",
+      "node:fs",
+      "node:path",
+      "node:crypto"
+    ]
+  },
+  "provenance": {
+    "source": "llm_draft+summary",
+    "confidence": 0.5,
+    "evidence": [
+      "commit:4730cc5",
+      "synth:provider=claude-cli",
+      "branch:main",
+      "vscode-extension/src/changeGate.ts",
+      "vscode-extension/src/commands.ts",
+      "vscode-extension/src/console.ts",
+      "vscode-extension/src/decorations.ts",
+      "vscode-extension/src/diagnostics.ts",
+      "vscode-extension/src/extension.ts",
+      "vscode-extension/src/graph.ts",
+      "vscode-extension/src/home.ts"
+    ],
+    "last_verified": "2026-07-12T07:28:44.632Z"
+  },
+  "date": "2026-07-12T10:28:16+03:00"
+}
