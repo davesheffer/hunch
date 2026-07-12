@@ -31,10 +31,11 @@ const LOCKED = "2026-07-12T12:00:00.000Z";
 const H = (c: string): string => `sha1:${c.repeat(40)}`;
 const BASE = "a".repeat(40);
 
-function prereg(experiment: "EXP-01" | "EXP-03"): ReturnType<typeof compileExperimentPreregistration> {
+function prereg(experiment: "EXP-01" | "EXP-03", revision = 1): ReturnType<typeof compileExperimentPreregistration> {
   const unit = experiment === "EXP-01" ? "task" as const : "policy_candidate" as const;
   const input: CompileExperimentPreregistrationInput = {
     experiment,
+    revision,
     hypothesis: "Fresh assigned treatment changes the locked primary outcome.",
     primary_metric: experiment === "EXP-01" ? "policy violation rate" : "accepted precise policies per reviewer hour",
     secondary_metrics: ["raw missing denominator"],
@@ -97,7 +98,7 @@ function exp01Input(registration = prereg("EXP-01")): CompileExperimentCaseBankI
   };
 }
 
-function exp03Input(registration = prereg("EXP-03")): CompileExperimentCaseBankInput {
+function exp03Input(registration = prereg("EXP-03"), requiredRelationship?: string): CompileExperimentCaseBankInput {
   return {
     experiment: "EXP-03",
     preregistration_id: registration.id,
@@ -114,6 +115,7 @@ function exp03Input(registration = prereg("EXP-03")): CompileExperimentCaseBankI
       used_for_tuning: false as const,
       strata: { reviewer: "reviewer", evidence_family: index % 2 ? "failure" : "correction" },
       evidence: `evidence ${index}`,
+      ...(requiredRelationship ? { required_relationship: `${requiredRelationship} ${index}` } : {}),
       manual_brief: `manual ${index}`,
       compiler_candidate: `candidate ${index}`,
       proof_card: `proof ${index}`,
@@ -207,6 +209,31 @@ test("EXP-03 assignment is exclusive, exactly balanced, and reveals only the ass
       assert.match(visible, /candidate/);
       assert.match(visible, /proof/);
     }
+  }
+});
+
+test("EXP-03 revision 2 requires a plain relationship and gives every arm one jargon-free review contract", () => {
+  const registration = prereg("EXP-03", 2);
+  assert.throws(
+    () => compileExperimentCaseBank(exp03Input(registration), registration, { now: LOCKED }),
+    /durable required relationship in plain language/i,
+  );
+
+  const bank = compileExperimentCaseBank(exp03Input(registration, "The payment action must verify the session before charging"), registration, { now: LOCKED });
+  const run = compileExperimentRun({ sample_per_arm: 2, actor: "human:owner", reason: "Fresh plain-language review." }, registration, bank, { now: LOCKED });
+  for (const assignment of run.assignments) {
+    const treatment = assignmentTreatment(bank, run, assignment) as Record<string, unknown>;
+    const review = treatment.review as { required_relationship: string; question: string; choices: Array<{ label: string }>; response_template: unknown };
+    assert.match(review.required_relationship, /payment action must verify the session/i);
+    assert.equal(review.question, "Does the proposed rule accurately preserve the required relationship described above?");
+    assert.deepEqual(review.choices.map((choice) => choice.label), [
+      "Yes — use it as written",
+      "Yes — after I correct the rule",
+      "No — the rule is wrong or unsupported",
+      "Cannot decide from this evidence",
+    ]);
+    assert.ok(review.response_template);
+    assert.doesNotMatch(JSON.stringify(review), /\b(?:policy|predicate|selector|binding|IR)\b/i);
   }
 });
 

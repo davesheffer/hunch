@@ -64,6 +64,7 @@ export const Exp01CaseSchema = CommonCaseSchema.extend({
 
 export const Exp03CaseSchema = CommonCaseSchema.extend({
   evidence: z.string().trim().min(1).max(100_000),
+  required_relationship: z.string().trim().min(1).max(20_000).optional(),
   manual_brief: z.string().trim().min(1).max(20_000),
   compiler_candidate: z.string().trim().min(1).max(100_000),
   proof_card: z.string().trim().min(1).max(100_000),
@@ -127,6 +128,10 @@ export function compileExperimentCaseBank(
     }
     const missing = preregistration.strata.filter((stratum) => !item.strata[stratum]);
     if (missing.length) throw new Error(`case ${item.id} is missing preregistered strata: ${missing.join(", ")}`);
+    if (input.experiment === "EXP-03" && preregistration.revision >= 2
+      && (!("required_relationship" in item) || !item.required_relationship)) {
+      throw new Error(`case ${item.id} must state the durable required relationship in plain language for EXP-03 revision 2 or later`);
+    }
   }
   const body = {
     experiment: input.experiment,
@@ -231,6 +236,28 @@ function treatmentFor(experiment: G3RequiredExperiment, arm: string, item: Exp01
     return { prompt: c.prompt, context: c.context };
   }
   const c = Exp03CaseSchema.parse(item);
+  // Revision-1 cases have no required_relationship. Preserve their exact treatment
+  // bytes so the append-only pilot remains replayable under its original hash.
+  if (c.required_relationship) {
+    const review = {
+      required_relationship: c.required_relationship,
+      question: "Does the proposed rule accurately preserve the required relationship described above?",
+      choices: [
+        { value: "accept", label: "Yes — use it as written" },
+        { value: "edit", label: "Yes — after I correct the rule" },
+        { value: "reject", label: "No — the rule is wrong or unsupported" },
+        { value: "cannot_decide", label: "Cannot decide from this evidence" },
+      ],
+      response_template: {
+        choice: "accept | edit | reject | cannot_decide",
+        rule_text: "Required for accept or edit; otherwise leave blank.",
+        reason: "One plain-language sentence.",
+      },
+    };
+    if (arm === "A") return { evidence: c.evidence, review, manual_brief: c.manual_brief };
+    if (arm === "B") return { evidence: c.evidence, review, proposed_rule: c.compiler_candidate };
+    return { evidence: c.evidence, review, proposed_rule: c.compiler_candidate, supporting_checks: c.proof_card, editable_parts: c.editable_bindings };
+  }
   if (arm === "A") return { evidence: c.evidence, manual_brief: c.manual_brief };
   if (arm === "B") return { evidence: c.evidence, compiler_candidate: c.compiler_candidate };
   return { evidence: c.evidence, compiler_candidate: c.compiler_candidate, proof_card: c.proof_card, editable_bindings: c.editable_bindings };

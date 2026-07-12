@@ -70,3 +70,18 @@ from its recorded start. Reports retain every assignment and raw denominator,
 include Wilson intervals, deterministic bootstrap intervals, Fisher exact
 contrasts, and stop immediately on a recorded safety/privacy guardrail. They
 carry `authority:none` and cannot activate policy or authorize a public claim.
+
+### EXP-03 revision 2 reviewer contract
+
+Revision 1 is an onboarding/UX pilot only and must not be resumed. Every fresh
+revision-2 case must state the durable required relationship in plain language.
+All three arms then show the same question: “Does the proposed rule accurately
+preserve the required relationship described above?” The reviewer chooses one
+of four plain outcomes: use as written, correct then use, reject, or cannot
+decide from the evidence. The returned `response_template` is the manual
+fill-in format; no knowledge of Hunch policy internals is expected.
+
+Training examples and comprehension checks are excluded from timed assignments.
+The timed reviewer must not have labeled the target cases. A revision-2
+preregistration, fresh held-out case bank, and fresh assignment manifest are
+required; revision-1 starts and outcomes remain append-only pilot evidence.
