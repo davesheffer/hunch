@@ -2,7 +2,7 @@
   "id": "dec_b68e624916",
   "title": "G3 handoff: EXP-01 is positive internal evidence; proceed to independent EXP-03",
   "topic": "g3-experiment-handoff",
-  "status": "proposed",
+  "status": "superseded",
   "context": "The completed revision-3 EXP-01 receipt was adjudicated against its locked preregistration. The primary result supports the hypothesis in the bound synthetic setting: violations were A 40/96 (41.67%), B 20/99 (20.20%), and C 0/100, with zero safety guardrails. The result survives a worst-case missingness check that counts all five invalid A/B outcomes as compliant. C was clean across both languages and all policy families; the incremental C-over-B effect was concentrated in the exists family. The deterministic report identity and hash were independently rechecked before the private result artifact was committed.",
   "decision": "Treat EXP-01 as positive internal G3 evidence and proceed to EXP-03 only through an independent human review path. Do not activate blocking, sign G3, or publish a prevention marketing claim from EXP-01 alone. The private result artifact is committed at 23b3d80; public/external marketing still requires an open-fixture replication and model/version disclosure.",
   "consequences": [
@@ -23,11 +23,11 @@
   ],
   "related_files": [],
   "supersedes": "dec_55323dac09",
-  "superseded_by": null,
+  "superseded_by": "dec_0e7bbf9287",
   "caused_by_bug": null,
   "commit": null,
   "valid_from": "2026-07-12T04:02:21.744Z",
-  "valid_to": null,
+  "valid_to": "2026-07-12T04:14:19.852Z",
   "retired": {
     "symbols": [],
     "deps": []

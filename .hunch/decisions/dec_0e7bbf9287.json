@@ -1,0 +1,41 @@
+{
+  "id": "dec_0e7bbf9287",
+  "title": "G3 handoff: pause EXP-03 revision 1; redesign the review in plain language before a fresh independent run",
+  "topic": "g3-experiment-handoff",
+  "status": "proposed",
+  "context": "EXP-01 remains positive internal evidence. EXP-03 revision 1 exposed a review UX/protocol defect: the evidence and instructions use policy-IR jargon and sometimes describe symbols or current calls without plainly stating the durable required relationship. Seven terminal pilot reviews produced five assistance/clarification abandonments, one uncompilable judgment, and one accepted compiler candidate. Continuing after training would mix incompatible reviewer conditions. The owner was also the target labeler, so the pilot is not independent-reviewer evidence.",
+  "decision": "Pause the current EXP-03 run and retain it only as onboarding/UX pilot evidence. Before any new timed review, create a fresh preregistered revision with plain normative evidence, one plain review question, jargon-free choices, a manual fill-in template, excluded training/comprehension cases, and a reviewer who did not label targets. Do not continue revision 1 or use it for compiler-quality, blocking, marketing, or G3 sign-off.",
+  "consequences": [
+    "No EXP-03 timer is active and the remaining revision-1 assignments must not be continued.",
+    "All existing outcomes remain append-only and visible.",
+    "A fresh preregistration, bank, assignment manifest, and run are required after the UX correction.",
+    "Final G3 sign-off remains blocked on valid EXP-03 evidence and separate human approval."
+  ],
+  "alternatives_rejected": [
+    "Continue explaining cases during the current timer; assistant help contaminates the human-work measurement.",
+    "Train the same reviewer and resume revision 1; that mixes pre-training and post-training conditions in one run.",
+    "Treat repeated confusion as reviewer error; the evidence and instructions themselves omit or obscure required semantics.",
+    "Drop abandoned outcomes; that would hide the observed onboarding failure and violate append-only evidence."
+  ],
+  "rejected_tripwires": [],
+  "related_components": [
+    "constitution"
+  ],
+  "related_files": [],
+  "supersedes": "dec_b68e624916",
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-07-12T04:14:19.852Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 0.95,
+    "evidence": []
+  },
+  "date": "2026-07-12T04:14:19.852Z"
+}
