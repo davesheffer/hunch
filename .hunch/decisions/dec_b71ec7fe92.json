@@ -2,7 +2,7 @@
   "id": "dec_b71ec7fe92",
   "title": "Journey's fifth door: Memory graph (wiki) — opens the generated wiki graph.html in the browser, private overlay wiki first",
   "topic": "vscode-extension-surface",
-  "status": "accepted",
+  "status": "superseded",
   "context": "The wiki gained an interactive memory-graph page (wiki/graph.html — components, dependencies, compounding-replay time scrubber). The owner asked for it in Journey's calls to action so the story screen links to the map.",
   "decision": "Journey's CTA-door contract stands, with a fifth allowlisted door: hunch.memoryGraph. The command is a pure opener — it resolves the generated wiki's graph.html (the private overlay wiki wins when it exists since it renders the full union and never leaves the machine; else the public wiki; wiki dir read from wiki-manifest.json, defaulting to 'wiki') and opens it externally in the browser. When no graph exists it says exactly how to generate one (hunch wiki [--private]) instead of generating anything itself — generation stays a deliberate CLI act. The full allowlist is now hunch.capture, hunch.why, hunch.search, hunch.reviewInTerminal, hunch.memoryGraph; everything else in the door contract is unchanged. v0.12.0.",
   "consequences": [
@@ -25,11 +25,11 @@
     "vscode-extension/package.json"
   ],
   "supersedes": "dec_79c3650454",
-  "superseded_by": null,
+  "superseded_by": "dec_dcd6f8aed4",
   "caused_by_bug": null,
   "commit": null,
   "valid_from": "2026-07-12T08:34:13.070Z",
-  "valid_to": null,
+  "valid_to": "2026-07-12T09:07:37.684Z",
   "retired": {
     "symbols": [],
     "deps": []

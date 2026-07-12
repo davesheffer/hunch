@@ -1,0 +1,48 @@
+{
+  "id": "dec_dcd6f8aed4",
+  "title": "Journey embeds the interactive memory graph and an actionable act-now flow over a postMessage bridge — the wiki's embedded JSON is the one data source",
+  "topic": "vscode-extension-surface",
+  "status": "accepted",
+  "context": "The browser edition of the memory graph left the act-now panel dead-ended: rows could only highlight, doc links opened raw markdown, and hunch review was a text hint. The owner asked for the graph INSIDE Journey with a true actionable flow. The prior decision had rejected in-panel embedding for fear of forking the artifact's lifecycle.",
+  "decision": "Journey (v0.13.0) embeds the interactive map — force layout, doc trust states, this-week pulse, compounding replay — WITHOUT forking the data: the wiki generator now embeds its exact deterministic data as a script tag (id hunch-graph-data, type application/json) in graph.html, and Journey parses that tag back. One source, still hashed/tamper-tripwired/healed by the wiki machinery; only the rendering is duplicated, and rendering is presentation. Actions ride a postMessage bridge with a tight allowlist: cmd(capture|why|search), review opens the hunch review terminal, genwiki opens a hunch wiki terminal (visible, deliberate), open(path) opens markdown preview/editor with the path CONFINED to the workspace or wiki root. Act-now rows now DO things: stale doc opens its healed copy or original; unverified locates on the map with an anchor hint; drafts open the review terminal; a missing map gets a generate button. hunch.memoryGraph stays as the full-window browser door through the same shared resolver. The webview runs with enableScripts under a nonce CSP; the page still computes no numbers and mutates nothing itself.",
+  "consequences": [
+    "Journey is the actionable home: see, understand, act without leaving the panel.",
+    "The postMessage allowlist replaces command-URI links as the enforcement seam; new actions require touching it explicitly.",
+    "graph.html's JSON script tag is a consumer contract — renaming it breaks the Journey embed.",
+    "Path confinement (workspace or wiki root) bounds what the webview can ask the editor to open."
+  ],
+  "alternatives_rejected": [
+    "Iframe/load graph.html directly in the webview — rejected: webview CSP and file access make it brittle, and the artifact's own click handlers can't reach editor actions.",
+    "Re-derive doc freshness inside the extension — rejected: duplicating the grading logic forks the deterministic source; the wiki generator stays the single authority.",
+    "Keep the browser-only graph — rejected by the owner after use: highlight-only act-now rows are a dead end, not a flow."
+  ],
+  "rejected_tripwires": [],
+  "related_components": [
+    "vscode-extension"
+  ],
+  "related_files": [
+    "vscode-extension/src/journey.ts",
+    "vscode-extension/src/extension.ts",
+    "src/wiki/graph.ts"
+  ],
+  "supersedes": "dec_b71ec7fe92",
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-07-12T09:07:37.684Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 0.95,
+    "evidence": [
+      "vscode-extension/src/journey.ts",
+      "vscode-extension/src/extension.ts",
+      "src/wiki/graph.ts"
+    ]
+  },
+  "date": "2026-07-12T09:07:37.684Z"
+}
