@@ -1,0 +1,40 @@
+{
+  "id": "dec_55323dac09",
+  "title": "G3 handoff: EXP-01 revision 3 completed 300/300; next evaluate the preregistered result",
+  "topic": "g3-experiment-handoff",
+  "status": "proposed",
+  "context": "EXP-01 revision 3 reached exactly 300 terminal outcomes, 100 per arm, and the append-only private evidence is committed and pushed. Valid outcomes were A=96, B=99, C=100; invalid outcomes were A=4, B=1, C=0. Violations among valid completions were A=40/96 (41.67%), B=20/99 (20.20%), and C=0/100 (0%). All preregistered safety guardrails remained zero. Three late invalid outcomes were preserved after the evaluator correctly rejected execution when the public checkout drifted from its pinned commit; the evaluator was red/green reproduced, the checkout was pinned, and the remaining 40 assignments completed without further evaluator error.",
+  "decision": "Next, evaluate the completed EXP-01 report strictly under its preregistered estimand, exclusions, missingness handling, and claim criteria. Do not convert the strong arm contrasts into policy activation or final G3 sign-off: the report still returns claim_allowed=false, EXP-03 remains independently gated, and blocking/final sign-off require separate human decisions.",
+  "consequences": [
+    "The roadmap no longer tells future sessions to run assignments that are already complete.",
+    "All five invalid outcomes remain visible and are not retried, replaced, or imputed.",
+    "Private prompts, outputs, and receipts remain outside the public repository.",
+    "Policy activation, EXP-03 completion, and final G3 sign-off remain separate."
+  ],
+  "alternatives_rejected": [
+    "Delete or replay the three commit-drift outcomes, because that would violate the append-only locked assignment protocol.",
+    "Declare EXP-01 sufficient for G3, because claim_allowed is false and EXP-03 plus human sign-off remain outstanding.",
+    "Leave the 257/300 handoff active, because it would direct future work to repeat completed assignments."
+  ],
+  "rejected_tripwires": [],
+  "related_components": [
+    "constitution"
+  ],
+  "related_files": [],
+  "supersedes": "dec_11aea289fb",
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "919dfaf",
+  "valid_from": "2026-07-12T03:59:24.168Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 0.95,
+    "evidence": []
+  },
+  "date": "2026-07-12T03:59:24.168Z"
+}

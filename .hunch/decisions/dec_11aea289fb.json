@@ -2,7 +2,7 @@
   "id": "dec_11aea289fb",
   "title": "G3 handoff: EXP-01 revision 3 is checkpointed at 257/300; resume the final 43 assignments",
   "topic": "g3-experiment-handoff",
-  "status": "proposed",
+  "status": "superseded",
   "context": "G3 evidence collection is in progress under the accepted private append-only evidence-gate design. EXP-01 revision 3 has 257 terminal outcomes durably committed in the private dossier. The observed checkpoint has 255 valid completions, two invalid completions, and zero recorded safety incidents. This public handoff intentionally omits private prompts, outputs, receipts, and target details.",
   "decision": "Resume by running the remaining 43 locked EXP-01 assignments, validate the terminal 300-outcome report, and commit the append-only private evidence. Do not infer claim authority, blocking activation, or final G3 sign-off from the partial checkpoint. EXP-03 remains paused until an independent human reviewer can complete timed reviews without assistant recommendation.",
   "consequences": [
@@ -21,11 +21,11 @@
   ],
   "related_files": [],
   "supersedes": null,
-  "superseded_by": null,
+  "superseded_by": "dec_55323dac09",
   "caused_by_bug": null,
   "commit": null,
   "valid_from": "2026-07-11T23:46:23.803Z",
-  "valid_to": null,
+  "valid_to": "2026-07-12T03:59:24.168Z",
   "retired": {
     "symbols": [],
     "deps": []
