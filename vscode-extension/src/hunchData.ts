@@ -16,7 +16,7 @@ export interface Provenance {
 export interface Component { id: string; name: string; responsibility?: string; paths?: string[]; fragility?: number; provenance?: Provenance; }
 export interface Edge { id: string; from: string; to: string; type: string; }
 export interface Sym { id: string; file: string; name: string; kind: string; metrics?: { churn_90d?: number; bug_count?: number; fan_in?: number }; }
-export interface Decision { id: string; title: string; status?: string; decision?: string; topic?: string | null; alternatives_rejected?: string[]; related_files?: string[]; related_components?: string[]; provenance?: Provenance; }
+export interface Decision { id: string; title: string; status?: string; decision?: string; topic?: string | null; alternatives_rejected?: string[]; related_files?: string[]; related_components?: string[]; provenance?: Provenance; date?: string; valid_from?: string; }
 export interface BugLineage { introduced_commit?: string | null; detected?: string | null; fixed_commit?: string | null; recurrence_of?: string | null; spawned_decision?: string | null; spawned_constraint?: string | null; }
 export interface Bug { id: string; title: string; symptom?: string; root_cause?: string; severity?: string; status?: string; affected_files?: string[]; affected_symbols?: string[]; lineage?: BugLineage; provenance?: Provenance; }
 export interface Constraint { id: string; statement: string; scope?: string[]; severity?: string; rationale?: string; provenance?: Provenance; }

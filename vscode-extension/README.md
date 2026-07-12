@@ -12,10 +12,16 @@ One read surface, one write surface, nothing else:
   input boxes. Decisions go through the same `hunch mcp` write path Claude Code uses; every
   mutation is delegated — the extension never edits `.hunch/` JSON itself.
 
+- **Hunch: Journey** — one read-only screen that connects you to the process: your memory curve
+  rising over real decision timestamps, the return line that moves only when a real gate blocks a
+  real mistake, what the repo learned this week, and one suggested next action. The 🧠 status-bar
+  count is its front door.
+
 Plus two ambient signals, both quiet until they have something to say:
 
 - **Hover** — bug history and fragility for the symbol under the cursor.
-- **Status bar** — how many invariants guard the active file. Click it for the full brief.
+- **Status bar** — how many invariants guard the active file (shield), and the repo's memory
+  count (🧠, opens the Journey).
 
 And **Hunch: Search memory** when you need to ask "was this decided before?".
 

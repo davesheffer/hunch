@@ -2,7 +2,7 @@
   "name": "hunch-vscode",
   "displayName": "Hunch",
   "description": "Your repo's engineering memory, in the editor: see WHY code is the way it is (decisions, invariants, bug history), and capture what you decide — one command each.",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "publisher": "davesheffer",
   "license": "MIT",
   "author": "Dave Sheffer <dave.sheffer1@gmail.com>",
@@ -54,6 +54,12 @@
         "title": "Capture…",
         "category": "Hunch",
         "icon": "$(lightbulb)"
+      },
+      {
+        "command": "hunch.journey",
+        "title": "Journey — watch your memory compound",
+        "category": "Hunch",
+        "icon": "$(graph-line)"
       },
       {
         "command": "hunch.search",

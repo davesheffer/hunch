@@ -7,6 +7,9 @@
  *   • WRITE — one Capture… command (decision / invariant / bug). Decisions go
  *     through the same `hunch mcp` write path Claude Code uses; invariants and
  *     bugs delegate to the CLI. The extension never writes .hunch/ JSON itself.
+ *   • FEEL — "Hunch: Journey", one read-only screen: the memory curve rising,
+ *     catches earned, what the repo learned this week, one next action. The
+ *     🧠 status item is its front door.
  *   • AGENTS — language-model tools (why / context / query) feed Copilot and
  *     friends invisibly.
  * Deliberately nothing else: no dashboards, no consoles, no review GUI —
@@ -20,6 +23,7 @@ import {
 } from "./hunchData.js";
 import { HunchHoverProvider } from "./providers.js";
 import { runSearch } from "./search.js";
+import { showJourney } from "./journey.js";
 import { runHunchWithProgress } from "./cli.js";
 import { registerLmTools } from "./lmTools.js";
 import { HunchMcp } from "./mcpClient.js";
@@ -228,6 +232,18 @@ export function activate(context: vscode.ExtensionContext): void {
 
   const status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
   context.subscriptions.push(status);
+  // The Journey front door: the repo's memory count, always visible, one click
+  // from the story. Shares hunch.statusBar.enabled with the invariant counter.
+  const journeyStatus = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 99);
+  context.subscriptions.push(journeyStatus);
+  const updateJourneyStatus = (): void => {
+    const h = cache.get();
+    if (!h || !vscode.workspace.getConfiguration("hunch").get("statusBar.enabled", true)) return void journeyStatus.hide();
+    journeyStatus.text = `🧠 ${h.decisions.length}`;
+    journeyStatus.tooltip = `Engineering memory: ${h.decisions.length} decisions · ${h.constraints.length} invariants — open the Journey`;
+    journeyStatus.command = "hunch.journey";
+    journeyStatus.show();
+  };
 
   const mcp = root ? new HunchMcp(root) : null;
   if (mcp) context.subscriptions.push({ dispose: () => mcp.dispose() });
@@ -243,6 +259,7 @@ export function activate(context: vscode.ExtensionContext): void {
   const refreshAll = () => {
     cache.reload();
     updateStatusBar(status, cache);
+    updateJourneyStatus();
   };
 
   const cursorSymbol = (): string | undefined => {
@@ -273,6 +290,11 @@ export function activate(context: vscode.ExtensionContext): void {
       if (!root || !mcp) return void vscode.window.showWarningMessage("No workspace folder open.");
       void capture(root, mcp, cache, refreshAll);
     }),
+    vscode.commands.registerCommand("hunch.journey", () => {
+      const h = cache.get();
+      if (!h || !root) return void vscode.window.showWarningMessage("No Hunch graph (.hunch/) found — run `hunch init`.");
+      void showJourney(root, h);
+    }),
   );
 
   // live refresh when the Hunch changes on disk (incl. the private overlay)
@@ -297,6 +319,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.workspace.onDidSaveTextDocument(() => updateStatusBar(status, cache)),
   );
   updateStatusBar(status, cache);
+  updateJourneyStatus();
 }
 
 export function deactivate(): void {
