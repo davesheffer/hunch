@@ -41,7 +41,8 @@ export function renderHunchSection(store: HunchStore, root?: string): string {
   lines.push("- `hunch_context(target_or_task)` — the minimal relevant slice for what you're about to do; a task phrase falls back to the closest graph matches. **Call FIRST.**");
   lines.push("- `hunch_structure(target?)` — the indexed shape of the repo/dir/file/symbol — orient from the graph, not grep rounds.");
   lines.push("- `hunch_runbook(task)` — the proven steps for a recurring task, before re-deriving them.");
-  lines.push("- `hunch now` (CLI) — recent decisions + the live roadmap.");
+  lines.push("- `hunch_escalations()` — the decisions only the HUMAN can make (topic conflicts, candidate/proposed rules, repaired rules needing a re-prove). Normally empty; when it isn't, ASK the user inline — an entry is a question, never an approval.");
+  lines.push("- `hunch now` (CLI) — recent decisions + the live roadmap; `hunch log` — the memory-move timeline (every capture/adopt/supersede/prune/repair, each revertable).");
   lines.push("");
   lines.push("**Before designing / choosing an approach:**");
   lines.push("- `hunch_why(target)` — why a file/symbol is shaped this way (decisions, bugs, constraints) — including what was already REJECTED.");
