@@ -102,7 +102,9 @@ export class PolicyNode extends vscode.TreeItem {
     super(policy.statement.length > 80 ? policy.statement.slice(0, 79) + "…" : policy.statement, vscode.TreeItemCollapsibleState.None);
     this.description = `${policy.state} · ${policy.severity}${policy.authority?.actor ? ` · ${policy.authority.actor}` : ""}${policy.data_class !== "public" ? " · private" : ""}`;
     this.iconPath = new vscode.ThemeIcon(POLICY_ICON[policy.state] ?? "circle-outline");
-    this.contextValue = policy.state === "proposed" ? "hunchPolicyProposed" : policy.state === "active_blocking" ? "hunchPolicyBlocking" : "hunchPolicy";
+    this.contextValue = policy.state === "proposed" ? "hunchPolicyProposed"
+      : policy.state === "active_blocking" ? "hunchPolicyBlocking"
+      : policy.state === "active_advisory" ? "hunchPolicyAdvisory" : "hunchPolicy";
     this.tooltip = new vscode.MarkdownString([
       `**${policy.id}** · ${policy.state} · ${policy.severity}`,
       "", policy.statement, "",
@@ -261,6 +263,31 @@ export async function activatePolicy(root: string, node: PolicyNode, onDone: () 
   const mode = pick === "Activate BLOCKING" ? "--blocking" : "--advisory";
   const res = await runHunchWithProgress(root, ["policy", "accept", p.id, mode, "--actor", panelActor()], "Hunch: activating policy…");
   if (res.ok) { vscode.window.showInformationMessage(res.stdout.trim().split("\n").pop() || `Activated ${p.id}.`); onDone(); }
+}
+
+/** Withdraw an active advisory policy to proposed — authority returns to the human
+ *  pool and the rule re-enters the ⚖ escalation loop (the reversible retirement). */
+export async function withdrawPolicy(root: string, node: PolicyNode, onDone: () => void): Promise<void> {
+  const p = node.policy;
+  const reason = await vscode.window.showInputBox({
+    title: "Withdraw to proposed", prompt: "One sentence: why is this rule losing its advisory authority?",
+    placeHolder: "e.g. scope changed after the store refactor",
+  });
+  if (!reason?.trim()) return;
+  const res = await runHunchWithProgress(root, ["policy", "withdraw", p.id, "--actor", panelActor(), "--reason", reason.trim()], "Hunch: withdrawing policy…");
+  if (res.ok) { vscode.window.showInformationMessage(`Withdrawn — ${p.id} is proposed again (it will re-ask in escalations).`); onDone(); }
+}
+
+/** Permanently retire a policy — it stops surfacing anywhere; history stays. */
+export async function retirePolicy(root: string, node: PolicyNode, onDone: () => void): Promise<void> {
+  const p = node.policy;
+  const reason = await vscode.window.showInputBox({
+    title: "Retire rule permanently", prompt: "One sentence: why is this rule done for good? (History is kept; it stops surfacing everywhere.)",
+    placeHolder: "e.g. the module it guarded was deleted",
+  });
+  if (!reason?.trim()) return;
+  const res = await runHunchWithProgress(root, ["policy", "retire", p.id, "--actor", panelActor(), "--reason", reason.trim()], "Hunch: retiring policy…");
+  if (res.ok) { vscode.window.showInformationMessage(`Retired ${p.id}; window closed, history retained.`); onDone(); }
 }
 
 /** Demote an active blocking policy to advisory (never erases history). */

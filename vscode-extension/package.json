@@ -2,7 +2,7 @@
   "name": "hunch-vscode",
   "displayName": "Hunch",
   "description": "Your repo's engineering memory, in the editor: see WHY code is the way it is (decisions, invariants, bug history), and capture what you decide — one command each.",
-  "version": "0.16.0",
+  "version": "0.17.0",
   "publisher": "davesheffer",
   "license": "MIT",
   "author": "Dave Sheffer <dave.sheffer1@gmail.com>",
@@ -145,6 +145,18 @@
         "title": "Demote to advisory…",
         "category": "Hunch",
         "icon": "$(arrow-down)"
+      },
+      {
+        "command": "hunch.withdrawPolicy",
+        "title": "Withdraw to proposed…",
+        "category": "Hunch",
+        "icon": "$(debug-step-back)"
+      },
+      {
+        "command": "hunch.retirePolicy",
+        "title": "Retire rule permanently…",
+        "category": "Hunch",
+        "icon": "$(archive)"
       }
     ],
     "viewsContainers": {
@@ -199,6 +211,14 @@
         {
           "command": "hunch.demotePolicy",
           "when": "false"
+        },
+        {
+          "command": "hunch.withdrawPolicy",
+          "when": "false"
+        },
+        {
+          "command": "hunch.retirePolicy",
+          "when": "false"
         }
       ],
       "view/title": [
@@ -243,6 +263,26 @@
           "command": "hunch.demotePolicy",
           "when": "view == hunch.memory && viewItem == hunchPolicyBlocking",
           "group": "inline"
+        },
+        {
+          "command": "hunch.withdrawPolicy",
+          "when": "view == hunch.memory && viewItem == hunchPolicyAdvisory",
+          "group": "inline"
+        },
+        {
+          "command": "hunch.retirePolicy",
+          "when": "view == hunch.memory && viewItem == hunchPolicyAdvisory",
+          "group": "context"
+        },
+        {
+          "command": "hunch.retirePolicy",
+          "when": "view == hunch.memory && viewItem == hunchPolicyProposed",
+          "group": "context"
+        },
+        {
+          "command": "hunch.retirePolicy",
+          "when": "view == hunch.memory && viewItem == hunchPolicyBlocking",
+          "group": "context"
         }
       ],
       "editor/title": [

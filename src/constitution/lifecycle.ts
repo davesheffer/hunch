@@ -182,3 +182,39 @@ export function demotePolicy(policy: PolicySpec, actor: string, reason: string, 
     audit: [...policy.audit, { action: "demoted", actor_kind: "human", actor, at, reason, proof: policy.proof }],
   };
 }
+
+/** Targeted advisory withdrawal (the §57 gap): pull the human authority back and
+ *  return the policy to `proposed`. It stops surfacing as an active rule and
+ *  RE-ENTERS the inline escalation loop ("activate or reject?") — the reversible
+ *  half of retirement. History is append-only; nothing is erased. */
+export function withdrawPolicy(policy: PolicySpec, actor: string, reason: string, at: string): PolicySpec {
+  requireHuman(actor);
+  if (policy.state !== "active_advisory") throw new Error(`policy ${policy.id} is ${policy.state}; only active advisory policy can be withdrawn to proposed`);
+  return {
+    ...policy,
+    revision: policy.revision + 1,
+    state: "proposed",
+    authority: null,
+    updated_at: at,
+    audit: [...policy.audit, { action: "withdrawn", actor_kind: "human", actor, at, reason, proof: policy.proof }],
+  };
+}
+
+/** Permanent retirement: the rule is deliberately DONE — it stops surfacing
+ *  anywhere (active rules, escalations) but its full history and audit trail stay
+ *  (supersede-never-erase, HC-08). Closes the valid-time window. */
+export function retirePolicy(policy: PolicySpec, actor: string, reason: string, at: string): PolicySpec {
+  requireHuman(actor);
+  if (policy.state !== "active_advisory" && policy.state !== "active_blocking" && policy.state !== "proposed") {
+    throw new Error(`policy ${policy.id} is ${policy.state}; only an active or proposed policy can be retired`);
+  }
+  return {
+    ...policy,
+    revision: policy.revision + 1,
+    state: "retired",
+    authority: null,
+    valid_to: at,
+    updated_at: at,
+    audit: [...policy.audit, { action: "retired", actor_kind: "human", actor, at, reason, proof: policy.proof }],
+  };
+}

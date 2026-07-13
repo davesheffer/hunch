@@ -31,7 +31,7 @@ import { showJourney, resolveWikiGraph } from "./journey.js";
 import { cliCommand, runHunchWithProgress } from "./cli.js";
 import { registerLmTools } from "./lmTools.js";
 import { HunchMcp } from "./mcpClient.js";
-import { MemoryTreeProvider, openMove, revertMove, syncNow, adoptDrafts, approveAndPush, setFirmness, openPolicyCard, openEscalation, activatePolicy, demotePolicy, type MoveNode, type PolicyNode, type EscalationNode } from "./memoryView.js";
+import { MemoryTreeProvider, openMove, revertMove, syncNow, adoptDrafts, approveAndPush, setFirmness, openPolicyCard, openEscalation, activatePolicy, demotePolicy, withdrawPolicy, retirePolicy, type MoveNode, type PolicyNode, type EscalationNode } from "./memoryView.js";
 
 function workspaceRoot(): string | undefined {
   return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
@@ -340,6 +340,8 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("hunch.openEscalation", (node?: EscalationNode) => { if (node) void openEscalation(node); }),
     vscode.commands.registerCommand("hunch.activatePolicy", (node?: PolicyNode) => { if (root && node) void activatePolicy(root, node, refreshAll); }),
     vscode.commands.registerCommand("hunch.demotePolicy", (node?: PolicyNode) => { if (root && node) void demotePolicy(root, node, refreshAll); }),
+    vscode.commands.registerCommand("hunch.withdrawPolicy", (node?: PolicyNode) => { if (root && node) void withdrawPolicy(root, node, refreshAll); }),
+    vscode.commands.registerCommand("hunch.retirePolicy", (node?: PolicyNode) => { if (root && node) void retirePolicy(root, node, refreshAll); }),
   );
 
   // live refresh when the Hunch changes on disk (incl. the private overlay)

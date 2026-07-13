@@ -237,6 +237,24 @@ test("Gate G1: decision -> must-pass-through policy -> P3 proof -> human block -
     assert.equal(demoted.state, "active_advisory");
     assert.equal(service.evaluate({ id: active.id })[0]!.blocks, false, "demotion restores advisory behavior without deleting history");
     assert.deepEqual(demoted.audit.map((e) => e.action), ["compiled", "proved", "approved_blocking", "demoted"]);
+
+    // Targeted advisory withdrawal (§57): authority returns to the human pool and
+    // the policy is proposed again — it re-enters the escalation loop.
+    const withdrawn = service.withdraw(active.id, "human:test-owner", "Scope changed; re-decide.", { now: "2026-07-10T10:04:00.000Z" });
+    assert.equal(withdrawn.state, "proposed");
+    assert.equal(withdrawn.authority, null, "withdrawal removes the human authority");
+    assert.equal(withdrawn.audit.at(-1)!.action, "withdrawn");
+    assert.throws(() => service.withdraw(active.id, "human:test-owner", "again", { now: "2026-07-10T10:05:00.000Z" }),
+      /only active advisory policy can be withdrawn/, "withdraw is advisory-only");
+
+    // Permanent retirement: window closed, history kept, authority gone.
+    const retired = service.retire(active.id, "human:test-owner", "Guarded module deleted.", { now: "2026-07-10T10:06:00.000Z" });
+    assert.equal(retired.state, "retired");
+    assert.equal(retired.valid_to, "2026-07-10T10:06:00.000Z");
+    assert.equal(retired.authority, null);
+    assert.equal(retired.audit.at(-1)!.action, "retired");
+    assert.throws(() => service.retire(active.id, "human:test-owner", "again", { now: "2026-07-10T10:07:00.000Z" }),
+      /only an active or proposed policy can be retired/, "retired is terminal");
     writeFileSync(join(root, ".hunch/plans", `${plan.id}.json`), JSON.stringify({ ...plan, budgets: { ...plan.budgets, max_commits: 99 } }, null, 2));
     assert.throws(() => service.repository.listPlans({ publicOnly: true }), /content hash mismatch/, "hand-edited plan cannot retain trusted identity");
   } finally {

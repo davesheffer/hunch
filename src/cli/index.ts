@@ -1247,6 +1247,42 @@ policyCmd
   });
 
 policyCmd
+  .command("withdraw")
+  .description("Targeted advisory withdrawal: pull the human authority back (active_advisory → proposed). The policy stops surfacing as an active rule and re-enters the inline escalation loop. History retained.")
+  .argument("<id>", "policy id")
+  .requiredOption("--actor <identity>", "explicit human identity: human:, github:, or git:")
+  .requiredOption("--reason <reason>", "audited withdrawal reason")
+  .action((id: string, opts: { actor: string; reason: string }) => {
+    const { store, root } = storeFor();
+    try {
+      const policy = new ConstitutionService(store, root).withdraw(id, opts.actor, opts.reason);
+      console.log(`✓ ${policy.id} withdrawn to ${policy.state}; authority returned to the human pool (revision ${policy.revision})`);
+    } catch (e) {
+      fail((e as Error).message);
+    } finally {
+      store.close();
+    }
+  });
+
+policyCmd
+  .command("retire")
+  .description("Permanently retire a policy (active or proposed → retired): it stops surfacing anywhere, its valid-time window closes, and its full history stays (supersede, never erase).")
+  .argument("<id>", "policy id")
+  .requiredOption("--actor <identity>", "explicit human identity: human:, github:, or git:")
+  .requiredOption("--reason <reason>", "audited retirement reason")
+  .action((id: string, opts: { actor: string; reason: string }) => {
+    const { store, root } = storeFor();
+    try {
+      const policy = new ConstitutionService(store, root).retire(id, opts.actor, opts.reason);
+      console.log(`✓ ${policy.id} retired; window closed, history retained (revision ${policy.revision})`);
+    } catch (e) {
+      fail((e as Error).message);
+    } finally {
+      store.close();
+    }
+  });
+
+policyCmd
   .command("demote")
   .description("Immediately demote an active blocking policy to advisory without erasing history.")
   .argument("<id>", "policy id")

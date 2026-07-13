@@ -5,7 +5,7 @@ import { canonicalHash, canonicalJson } from "./canonical.js";
 import { shortHash } from "../core/ids.js";
 import { compileDecisionPolicy, type CompilePolicyOptions } from "./compiler.js";
 import { evaluatePolicy, policyBlocks, policyIsActive } from "./evaluator.js";
-import { approvePolicy, blockingProofError, demotePolicy, linkPolicyException, proposeProvedPolicy } from "./lifecycle.js";
+import { approvePolicy, blockingProofError, demotePolicy, linkPolicyException, proposeProvedPolicy, retirePolicy, withdrawPolicy } from "./lifecycle.js";
 import { provePolicy } from "./proof.js";
 import { PolicyRepository } from "./repository.js";
 import type { PolicyEvaluation, PolicyProof, PolicySpec, ProofCorpus } from "./schema.js";
@@ -1304,6 +1304,21 @@ export class ConstitutionService {
     const policy = this.get(id);
     const demoted = demotePolicy(policy, actor, reason, opts.now ?? new Date().toISOString());
     return this.repository.putPolicy(demoted);
+  }
+
+  /** Targeted advisory withdrawal (§57): active_advisory → proposed; authority
+   *  returns to the human pool and the policy re-enters the escalation loop. */
+  withdraw(id: string, actor: string, reason: string, opts: { now?: string } = {}): PolicySpec {
+    const policy = this.get(id);
+    const withdrawn = withdrawPolicy(policy, actor, reason, opts.now ?? new Date().toISOString());
+    return this.repository.putPolicy(withdrawn);
+  }
+
+  /** Permanent retirement: active/proposed → retired; window closed, history kept. */
+  retire(id: string, actor: string, reason: string, opts: { now?: string } = {}): PolicySpec {
+    const policy = this.get(id);
+    const retired = retirePolicy(policy, actor, reason, opts.now ?? new Date().toISOString());
+    return this.repository.putPolicy(retired);
   }
 
   linkException(id: string, parentId: string, actor: string, reason: string, opts: { now?: string } = {}): PolicySpec {
