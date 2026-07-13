@@ -272,4 +272,19 @@ test("G3 adapter conformance executes the real CLI/MCP/CI fixture and rejects un
   assert.equal(unsupportedReceipt.error_code, "unsupported-client-profile");
   assert.equal(unsupportedReceipt.verdict_agreement, null);
   assert.equal(unsupportedReceipt.confirmed_private_leaks, null);
+
+  // The four-client profile IS certified: its fixture executes the extension's
+  // real spawn seam and asserts receipt equality across all four surfaces.
+  const vscodeProfile = compileG3Plan({
+    ...plan,
+    clients: ["ci", "cli", "mcp", "vscode"],
+    actor: "human:release-owner",
+    reason: "Execute the four-client conformance profile including the VS Code seam.",
+  }, { now: NOW });
+  const vscodeReceipt = executeG3AdapterConformance(process.cwd(), vscodeProfile, { now: NOW });
+  assert.equal(vscodeReceipt.result, "passed", vscodeReceipt.error_code ?? "");
+  assert.equal(vscodeReceipt.verdict_agreement, 1);
+  assert.equal(vscodeReceipt.confirmed_private_leaks, 0);
+  assert.match(vscodeReceipt.test.name, /VS Code seam/);
+  assert.equal(vscodeReceipt.authority, "none");
 });

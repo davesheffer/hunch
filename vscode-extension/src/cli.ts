@@ -9,8 +9,9 @@ import * as vscode from "vscode";
 import * as cp from "node:child_process";
 import * as fs from "node:fs";
 import * as nodePath from "node:path";
+import { runHunchWith, winQuote, type CliResult } from "./spawnCore.js";
 
-export interface CliResult { ok: boolean; stdout: string; stderr: string; code: number | null; }
+export { winQuote, type CliResult } from "./spawnCore.js";
 
 let resolved: string | undefined; // probe once per session
 
@@ -32,33 +33,12 @@ export function cliCommand(): string {
   return resolved;
 }
 
-/** Quote one arg for cmd.exe. Bare when safe; else wrap in double quotes and escape
- *  embedded quotes (\"), matching the existing record-* command quoting. */
-export function winQuote(a: string): string {
-  return /[\s"&|<>^()%!,;]/.test(a) ? `"${a.replace(/"/g, '\\"')}"` : a;
-}
-
 /** Run `hunch <args...>` in `root`. Resolves (never rejects) so callers branch on `.ok`.
- *
- *  Windows: npm installs `hunch` as a `.cmd`/`.ps1` shim, NOT a native exe. Node ≥18.20
- *  refuses to spawn such a shim via execFile WITHOUT a shell (CVE-2024-27980 hardening) —
- *  it fails ENOENT with empty stdout, which surfaced as "every extension command exits 1
- *  with no output". So on Windows we run through cmd.exe with each arg quoted ourselves
- *  (shell:true would concatenate them unescaped — DEP0190). Elsewhere the argv form is
- *  safe and shell-free. */
+ *  The spawn strategy (Windows npm-shim handling, quoting, result shape) lives in
+ *  spawnCore.runHunchWith — the exact seam the G3 vscode-client conformance fixture
+ *  executes headlessly, so what gets certified IS what the panel runs. */
 export function runHunch(root: string, args: string[], timeoutMs = 120_000): Promise<CliResult> {
-  const opts = { cwd: root, timeout: timeoutMs, maxBuffer: 8 * 1024 * 1024 };
-  const settle = (resolve: (r: CliResult) => void) => (err: cp.ExecException | cp.ExecFileException | null, stdout: string, stderr: string) => {
-    const code = err && typeof (err as { code?: unknown }).code === "number" ? (err as { code: number }).code : err ? 1 : 0;
-    resolve({ ok: !err, stdout: stdout ?? "", stderr: stderr ?? "", code });
-  };
-  return new Promise((resolve) => {
-    if (process.platform === "win32") {
-      cp.exec([cliCommand(), ...args].map(winQuote).join(" "), opts, settle(resolve));
-    } else {
-      cp.execFile(cliCommand(), args, opts, settle(resolve));
-    }
-  });
+  return runHunchWith(cliCommand(), root, args, timeoutMs);
 }
 
 /** A running CLI process: the buffered result plus a kill switch (the console's
