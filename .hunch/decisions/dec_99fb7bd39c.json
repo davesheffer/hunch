@@ -2,7 +2,7 @@
   "id": "dec_99fb7bd39c",
   "title": "Scan .claude/skills and .claude/commands for doc-anchor drift",
   "topic": null,
-  "status": "proposed",
+  "status": "accepted",
   "context": "Agent-facing documentation (skills, commands) reference decisions but fell outside the main doc-scan walk. If a skill preaches a superseded decision, it silently misleads every future session without explicit warning. These files need drift-checking like any other prose tied to the decision graph. Touches invariant(s): con_e04226bd05 (The MCP server must stay client-agnostic: all assistants point to the same .hunch/ graph; no Claude-only behavior in the server).",
   "decision": "Extended markdownDocs() to explicitly scan .claude/skills and .claude/commands directories after the main walk, subjecting agent-facing prose to the same doc-anchor-stale detection as technical specifications.",
   "consequences": [
@@ -105,7 +105,7 @@
       "test/captureguard.test.ts",
       "test/docanchors.test.ts"
     ],
-    "last_verified": "2026-07-08T07:16:27.381Z"
+    "last_verified": "2026-07-13T06:10:56.432Z"
   },
   "date": "2026-07-08T10:16:02+03:00"
 }

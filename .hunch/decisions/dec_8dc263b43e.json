@@ -2,7 +2,7 @@
   "id": "dec_8dc263b43e",
   "title": "Hero graph alone suffices; drop terminal demo",
   "topic": null,
-  "status": "proposed",
+  "status": "accepted",
   "context": "Hero section contained both graph visualization and animated terminal demo, both demonstrating identical functionality. Parallel presentations created redundancy and visual clutter above the fold.",
   "decision": "Removed animated terminal demo from hero section. Kept graph as sole interactive focal point. Terminal interface remains discoverable by scrolling.",
   "consequences": [
@@ -91,7 +91,7 @@
       "branch:main",
       ".claude/pipeline/track.mjs"
     ],
-    "last_verified": "2026-07-08T12:07:11.122Z"
+    "last_verified": "2026-07-13T06:10:56.426Z"
   },
   "date": "2026-07-08T15:05:59+03:00"
 }

@@ -2,7 +2,7 @@
   "id": "dec_4d0beef918",
   "title": "Unified stats/events layer as single source of truth for observability",
   "topic": null,
-  "status": "proposed",
+  "status": "accepted",
   "context": "Engineering memory system (Hunch) expanding beyond autoreview into telemetry; multiple surfaces (CLI, extension UI, LM tools, MCP) need consistent access to metrics. Touches invariant(s): con_03a0b94b2e (The agent hook must never block an edit on failure: any error or unrecognized input emits nothing and exits 0).",
   "decision": "Create core/events.ts and core/stats.ts modules implementing STOCK→RETURN→COMPOUNDING model: collect events into a log, compute aggregates (stats), and expose via standardized duration-query API (7d, 24h, etc.) shared across CLI command, home/console/stats extension views, and LM tools.",
   "consequences": [
@@ -109,7 +109,7 @@
       "test/stats.test.ts",
       "vscode-extension/src/cli.ts"
     ],
-    "last_verified": "2026-07-09T13:55:27.975Z"
+    "last_verified": "2026-07-13T06:10:56.411Z"
   },
   "date": "2026-07-09T16:55:04+03:00"
 }

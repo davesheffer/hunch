@@ -2,7 +2,7 @@
   "id": "dec_205ebd6a22",
   "title": "Audit agent tool usage as primary product metric, not just recall benchmarks",
   "topic": null,
-  "status": "proposed",
+  "status": "accepted",
   "context": "Memory products measure recall benchmarks, but the real question is whether an agent reaches for the right tool at the right moment during actual work, or falls back to grep and manual search.",
   "decision": "Conduct agent self-audits of tool usage during real feature work, treat each finding as a concrete product bug (traced to a decision ID), institute golden-set evaluation gating all retrieval changes in CI, and publish the audit results as the canonical measure of product success.",
   "consequences": [
@@ -91,7 +91,7 @@
       "branch:main",
       "site/blog/posts.js"
     ],
-    "last_verified": "2026-07-05T06:57:07.463Z"
+    "last_verified": "2026-07-13T06:10:56.406Z"
   },
   "date": "2026-07-05T09:56:48+03:00"
 }

@@ -2,7 +2,7 @@
   "id": "dec_d1de6818be",
   "title": "Add 'P' (pipeline) arm to benchmark suite for shipped verification mode",
   "topic": null,
-  "status": "proposed",
+  "status": "accepted",
   "context": "hunch v1.4.1+ introduced a production verification pipeline that runs headless with hooks from settings.json, without skills or the hunch graph. Need to benchmark this new operational mode alongside existing test configurations.",
   "decision": "Extended ARMS and makeWorktree to support arm='P', which initializes worktrees via 'hunch init --firmness firm --no-index --no-enforce --no-providers', enabling tests of the shipped pipeline verification mode in isolation from graph and skill systems.",
   "consequences": [
@@ -90,7 +90,7 @@
       "branch:main",
       "bench/external/run-zod.ts"
     ],
-    "last_verified": "2026-07-08T12:50:52.107Z"
+    "last_verified": "2026-07-13T06:10:56.442Z"
   },
   "date": "2026-07-08T15:50:28+03:00"
 }

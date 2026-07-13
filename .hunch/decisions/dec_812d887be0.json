@@ -2,7 +2,7 @@
   "id": "dec_812d887be0",
   "title": "Route npm through cmd.exe on Windows due to Node CVE-2024-27980 hardening",
   "topic": null,
-  "status": "proposed",
+  "status": "accepted",
   "context": "Node's CVE-2024-27980 hardening breaks spawnSync of npm.cmd shim with shell:false, causing EINVAL on Windows and failing four constitution tests plus degrading ten advisory policies to evaluation errors on each commit.",
   "decision": "Create platform-specific spawnNpm() wrapper that routes npm through cmd.exe (shell:true) on Windows while keeping POSIX behavior (shell:false). Argv is constrained to fixed flags and lockfile-validated package names, making this trust model safe. Mirrors existing pattern in src/synthesis/provider.ts.",
   "consequences": [
@@ -115,7 +115,7 @@
       "src/constitution/g2BehaviorDependencies.ts",
       "test/autoreview-cli.test.ts"
     ],
-    "last_verified": "2026-07-12T06:33:54.818Z"
+    "last_verified": "2026-07-13T06:10:56.416Z"
   },
   "date": "2026-07-12T09:33:27+03:00"
 }

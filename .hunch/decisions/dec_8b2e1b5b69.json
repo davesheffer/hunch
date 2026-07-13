@@ -2,7 +2,7 @@
   "id": "dec_8b2e1b5b69",
   "title": "Three-arm benchmark with deterministic scoring to empirically measure skill/MCP value",
   "topic": null,
-  "status": "proposed",
+  "status": "accepted",
   "context": "fable-mode skill and Hunch MCP were built but lacked empirical measurement on this repo. Earlier findings showed uncertainty about the skill's marginal effect. Needed a scientific approach to validate whether these investments actually improve model performance on real tasks.",
   "decision": "Created A/B/C benchmark isolating three configurations (bare model, +fable-mode skill, +hunch MCP) with fresh detached worktrees per run, exact-string-revert bug re-introduction for fix tasks, and deterministic scoring: regex checklist for question tasks, hidden test-pass + no modification for fix tasks. Operator-level plugins/hooks excluded via --setting-sources project and --strict-mcp-config.",
   "consequences": [
@@ -109,7 +109,7 @@
       "branch:main",
       "bench/run.ts"
     ],
-    "last_verified": "2026-07-08T07:30:38.017Z"
+    "last_verified": "2026-07-13T06:10:56.421Z"
   },
   "date": "2026-07-08T10:30:10+03:00"
 }
