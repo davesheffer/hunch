@@ -1,0 +1,145 @@
+{
+  "id": "dec_3ed2878e53",
+  "title": "Unify policy and memory decisions in single inline escalation surface",
+  "topic": null,
+  "status": "accepted",
+  "context": "Constitution policy decisions (candidate review, activation) and Memory decisions (topic conflicts) required separate handling. Users faced fragmented decision points; no unified surface to see all human call-outs. Touches invariant(s): con_e04226bd05 (The MCP server must stay client-agnostic: all assistants point to the same .hunch/ graph; no Claude-only behavior in the server).",
+  "decision": "Policy escalations now route through policyEscalations() function (§59.5.3), integrating with pendingEscalations() into one inline escalation mechanism. PolicyLite interface (minimal shape) keeps core dependency-free from Constitution schemas. All human moments surface as QUESTIONS, never approvals.",
+  "consequences": [
+    "Single unified escalation surface reduces cognitive load; users see all decision points (memory + policy) in one place",
+    "Policy decisions framed as questions (prove/decide, activate/reject) with explicit human actor recorded on vouch",
+    "Fail-open semantics: broken policy store doesn't break memory escalations (try/catch at session-start)",
+    "Constitution moments appear inline in session-start orientation and VS Code Hunch view, not as separate queue",
+    "Requires PolicyLite abstraction layer to maintain core's architectural independence"
+  ],
+  "alternatives_rejected": [
+    "Keep policy decisions in separate panel/queue with different UX",
+    "Move Constitution service into core (violates layering; creates circular dep)",
+    "Machine-approve policies, surface them to human for review after-the-fact",
+    "Surface only when explicitly requested (loses inline decision context)"
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Keep policy decisions in separate panel/queue with different UX",
+      "scope": [
+        "src/cli/**",
+        "src/core/**",
+        "src/mcp/**",
+        "test/**",
+        "vscode-extension/src/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Move Constitution service into core (violates layering; creates circular dep)",
+      "scope": [
+        "src/cli/**",
+        "src/core/**",
+        "src/mcp/**",
+        "test/**",
+        "vscode-extension/src/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Machine-approve policies, surface them to human for review after-the-fact",
+      "scope": [
+        "src/cli/**",
+        "src/core/**",
+        "src/mcp/**",
+        "test/**",
+        "vscode-extension/src/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Surface only when explicitly requested (loses inline decision context)",
+      "scope": [
+        "src/cli/**",
+        "src/core/**",
+        "src/mcp/**",
+        "test/**",
+        "vscode-extension/src/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_50037f41a9",
+    "cmp_555e43ab1a",
+    "cmp_a94a8fe5cc",
+    "cmp_b256a6aed0",
+    "cmp_dfa5b5acde"
+  ],
+  "related_files": [
+    "src/cli/index.ts",
+    "src/core/escalations.ts",
+    "src/mcp/server.ts",
+    "test/escalations.test.ts",
+    "vscode-extension/src/extension.ts",
+    "vscode-extension/src/memoryView.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "285b7bd",
+  "valid_from": "2026-07-13T12:03:04+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft+summary",
+    "confidence": 0.5,
+    "evidence": [
+      "commit:285b7bd",
+      "synth:provider=claude-cli",
+      "branch:main",
+      "src/cli/index.ts",
+      "src/core/escalations.ts",
+      "src/mcp/server.ts",
+      "test/escalations.test.ts",
+      "vscode-extension/src/extension.ts",
+      "vscode-extension/src/memoryView.ts"
+    ],
+    "last_verified": "2026-07-13T09:03:29.815Z"
+  },
+  "date": "2026-07-13T12:03:04+03:00"
+}
