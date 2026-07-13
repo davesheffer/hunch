@@ -17,8 +17,8 @@ import { pathMatchesGlob } from "../core/glob.js";
 import { draftTripwires, knownRepoDeps } from "./tripwires.js";
 import type { Decision, Bug, Constraint, Component, Symbol } from "../core/types.js";
 import type { TestReport } from "../extractors/testreport.js";
+import { languageFor } from "../extractors/languages.js";
 
-const CODE_RE = /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/;
 // "chore(deps):" is anchored separately (not via \b) because \b requires a
 // word/non-word transition, and the character after the closing ")" is ":" or a
 // space — both non-word — so no boundary ever fires there.
@@ -74,7 +74,7 @@ export async function syncCommit(
   if (!meta) return { status: "skipped", reason: "commit not found" };
 
   if (isTrivialSubject(meta)) return { status: "skipped", reason: `trivial subject: ${meta.subject}` };
-  const codeFiles = meta.files.filter((f) => CODE_RE.test(f));
+  const codeFiles = meta.files.filter((f) => languageFor(f) !== null);
   if (codeFiles.length === 0) return { status: "skipped", reason: "no code files changed" };
 
   // Seed the id from the COMMIT (stable across runs), not the LLM-generated title

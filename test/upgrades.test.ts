@@ -25,6 +25,55 @@ test("analyzeDiff extracts added/removed/changed symbols and deps", () => {
   assert.ok(sum.includes("verifySession") && sum.includes("redis"));
 });
 
+test("analyzeDiff recognizes Python def/class declarations and import/from-import deps", () => {
+  const diff = [
+    "diff --git a/src/auth.py b/src/auth.py",
+    "--- a/src/auth.py",
+    "+++ b/src/auth.py",
+    "@@ -1,3 +1,5 @@",
+    "+import redis",
+    "+from .jwt import decode_token",
+    "-def login():",
+    "+def verify_session(t):",
+    "+    return decode_token(t)",
+    "+class SessionError(Exception):",
+    "-from legacy import old_helper",
+  ].join("\n");
+  const a = analyzeDiff(diff);
+  assert.deepEqual(a.addedSymbols.map((s) => s.name).sort(), ["SessionError", "verify_session"]);
+  assert.deepEqual(a.removedSymbols.map((s) => s.name), ["login"]);
+  assert.deepEqual(a.addedDeps, ["redis"]);
+  assert.deepEqual(a.removedDeps, ["legacy"]);
+  // relative import (leading '.') is NOT counted as an external dep, same convention as JS
+  assert.ok(!a.addedDeps.includes(".jwt") && !a.addedDeps.includes("jwt"));
+  const sum = summarizeDiff(a);
+  assert.ok(sum.includes("verify_session") && sum.includes("redis"));
+});
+
+test("analyzeDiff does not treat TS import-equals syntax as a Python import (PY_IMPORT_RE false-positive fix)", () => {
+  const diff = [
+    "diff --git a/src/ns.ts b/src/ns.ts",
+    "--- a/src/ns.ts",
+    "+++ b/src/ns.ts",
+    "@@ -1 +1 @@",
+    "+import Foo = Bar.Baz;",
+  ].join("\n");
+  const a = analyzeDiff(diff);
+  assert.deepEqual(a.addedDeps, [], "import-equals is not a Python import and not a JS module-string import");
+});
+
+test("analyzeDiff ignores .py files just like other code files pre-registry (sanity: extension gate wired)", () => {
+  const diff = [
+    "diff --git a/notes.txt b/notes.txt",
+    "--- a/notes.txt",
+    "+++ b/notes.txt",
+    "@@ -1 +1 @@",
+    "+def not_code():",
+  ].join("\n");
+  const a = analyzeDiff(diff);
+  assert.deepEqual(a.addedSymbols, [], "non-code extension is still ignored");
+});
+
 test("analyzeDiff detects a changed (both-sides) symbol as 'changed', and ignores non-code files", () => {
   const diff = [
     "diff --git a/README.md b/README.md",

@@ -1,0 +1,45 @@
+{
+  "id": "bug_b6f1abb9a6",
+  "title": "Flaky test failure under parallelism: native tree-sitter module resolution race on Windows",
+  "symptom": "g3.test.ts fails intermittently when run with other tests in parallel; error is 'No native build was found for platform=win32 runtime=electron abi=137' in nativeTreeSitter.ts:58 (copyNativeBinding). Test passes in isolation and passes on rerun.",
+  "root_cause": "Race condition during parallel test execution on Windows: removeStaleCopies() in one test process deletes temporary native module copies while peer processes are still resolving/loading them. Amplified by multiple native packages (tree-sitter, tree-sitter-python) increasing copy traffic, and ELECTRON_RUN_AS_NODE=1 in VS Code terminals. [Uncertainty: exact race sequence and whether recent synthesize.ts diff contributed to changed test parallelism pattern unknown.]",
+  "severity": "high",
+  "status": "open",
+  "affected_files": [
+    "src/constitution/experiment.ts",
+    "test/experiment.test.ts",
+    "vscode-extension/src/memoryView.ts",
+    "test/singlesource.test.ts",
+    "test/sync.test.ts",
+    "test/autocommit.test.ts"
+  ],
+  "affected_symbols": [
+    "sym_63c89bd4c2",
+    "sym_9833d660ef",
+    "sym_85c9f8f319",
+    "sym_910a60e1e3",
+    "sym_9bb64eeaf0",
+    "sym_a429acd6f8"
+  ],
+  "lineage": {
+    "introduced_commit": null,
+    "detected": "g3.test.ts: CLI and read-only client-neutral MCP expose the identical fail-closed G3 receipt",
+    "fixed_commit": null,
+    "recurrence_of": null,
+    "spawned_decision": null,
+    "spawned_constraint": "con_7217ab24ab"
+  },
+  "provenance": {
+    "source": "test_failure+llm",
+    "confidence": 0.55,
+    "evidence": [
+      "test:g3.test.ts: CLI and read-only client-neutral MCP expose the identical fail-closed G3 receipt",
+      "src/constitution/experiment.ts",
+      "test/experiment.test.ts",
+      "vscode-extension/src/memoryView.ts",
+      "test/singlesource.test.ts",
+      "test/sync.test.ts",
+      "test/autocommit.test.ts"
+    ]
+  }
+}
