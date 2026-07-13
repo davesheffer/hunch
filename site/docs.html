@@ -225,6 +225,7 @@ if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElem
       <a href="#mcp-tools">MCP tools</a>
       <a href="#slash">Slash commands</a>
       <a href="#firmness">Firmness levels</a>
+      <a href="#memory-loop">The memory loop <span class="pill">v1.8</span></a>
     </div>
     <div class="nav-group">
       <h4>Guards</h4>
@@ -476,6 +477,28 @@ if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElem
         </tbody>
       </table>
       <div class="note"><span class="ic">ℹ</span>The hook never breaks your flow: any error or unrecognized input emits nothing and exits 0, and it stays silent on files Hunch hasn’t learned. <code>strict</code> only bites once you have <strong>blocking</strong> constraints recorded.</div>
+    </section>
+
+    <section id="memory-loop">
+      <h2>The memory loop — it runs itself<a class="anchor" href="#memory-loop">#</a></h2>
+      <p>Since v1.8 there is no review queue. Every capture enters the graph as live <em>advisory</em> memory the moment it lands — grounding every assistant immediately — and nothing gains <em>blocking</em> power until you explicitly vouch for it. The whole loop is automated, local-first, and reversible:</p>
+      <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">terminal</span><button class="copy">Copy</button></div><pre><span class="k">hunch</span> log              <span class="c"># the memory timeline: capture · adopt · supersede · prune · repair</span>
+<span class="k">hunch</span> log --diff &lt;sha&gt;  <span class="c"># what one move changed</span>
+<span class="k">hunch</span> revert-move &lt;sha&gt; <span class="c"># undo one move (local git revert, never pushed)</span>
+<span class="k">hunch</span> escalations       <span class="c"># the decisions only YOU can make — normally empty</span>
+<span class="k">hunch</span> repair --apply    <span class="c"># heal bindings after a rename (sync does this automatically)</span>
+<span class="k">hunch</span> push              <span class="c"># the one deliberate outward step</span></pre></div>
+      <table class="tbl">
+        <thead><tr><th>Piece</th><th>What it does on its own</th></tr></thead>
+        <tbody>
+          <tr><td><b>Auto-trust</b></td><td>a capture is live advisory memory instantly; migrate an old draft backlog once with <code>hunch adopt-drafts</code></td></tr>
+          <tr><td><b>Self-repair</b></td><td>renames heal every exact file binding — decision files, tripwire &amp; constraint scopes, policy selectors — from git’s own rename detection; each repair is a revertable timeline move</td></tr>
+          <tr><td><b>Inline escalations</b></td><td>only what the graph can’t settle itself asks you: a topic conflict, a candidate rule, a proposed rule with its proof, a repaired rule needing a fresh proof — each a question with its resolution verb</td></tr>
+          <tr><td><b>Local-first</b></td><td>memory auto-commits locally and rides your next push; <code>hunch push</code> (or the panel’s Approve-to-push) is the explicit outward step</td></tr>
+        </tbody>
+      </table>
+      <p>In VS Code, the <b>Hunch Memory</b> panel is the same spine as a source-control view: the timeline with click-to-diff and one-click local revert, a <b>⚖ Needs your decision</b> group that exists only while something real needs you, and a <b>🏛 Constitution</b> group where activate / demote / withdraw / retire are each one audited click.</p>
+      <div class="note"><span class="ic">ℹ</span>The rule of the loop: <em>advisory is automatic; blocking is always one explicit human act</em> — and a rule whose bindings were auto-repaired asks once for a fresh proof before it can block again.</div>
     </section>
 
     <section id="never-twice">
