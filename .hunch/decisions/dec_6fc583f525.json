@@ -1,0 +1,105 @@
+{
+  "id": "dec_6fc583f525",
+  "title": "Honor preregistration as source-of-truth; raw categories stay distinct",
+  "topic": null,
+  "status": "accepted",
+  "context": "Audit of EXP-03 revision-2 against immutable preregistration (expreg_ba6aef4ecd) found three violations: cannot_decide folded into uncompilable, abandoned/timeout pathways blocked, raw decision counts hidden.",
+  "decision": "System must track and report exactly what preregistration specifies. Raw review outcomes (cannot_decide) are distinct enum tokens, never reinterpreted or folded. Non-answer terminal states (abandoned/timeout) flow through raw submission path. All preregistered decision tokens appear in reports with zero-filling for visibility.",
+  "consequences": [
+    "Enum vocabulary is now immutable—cannot_decide is its own category, preserving what reviewer actually chose vs. code compilation outcome",
+    "Terminal non-answers (abandoned/timeout) bypass template-only restriction, staying bookkeepable as preregistration requires",
+    "Arm reports expose preregistered raw count per decision token; aggregation hidden from downstream",
+    "Changes are additive—revision-1 records and enum values untouched, no breaking schema migration"
+  ],
+  "alternatives_rejected": [
+    "Continue mapping cannot_decide→uncompilable (loses fidelity to preregistration; obscures what reviewer recorded)",
+    "Block abandoned/timeout entirely (violates preregistration's terminal-state bookkeeping requirement)",
+    "Omit or aggregate raw counts from reports (defeats preregistration transparency—no visibility into outcome distribution)"
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Continue mapping cannot_decide→uncompilable (loses fidelity to preregistration; obscures what reviewer recorded)",
+      "scope": [
+        "src/constitution/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Block abandoned/timeout entirely (violates preregistration's terminal-state bookkeeping requirement)",
+      "scope": [
+        "src/constitution/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Omit or aggregate raw counts from reports (defeats preregistration transparency—no visibility into outcome distribution)",
+      "scope": [
+        "src/constitution/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_587d48fb03",
+    "cmp_a94a8fe5cc"
+  ],
+  "related_files": [
+    "src/constitution/experiment.ts",
+    "src/constitution/service.ts",
+    "test/experiment.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "54fe224",
+  "valid_from": "2026-07-13T10:28:23+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft",
+    "confidence": 0.65,
+    "evidence": [
+      "commit:54fe224",
+      "synth:provider=claude-cli",
+      "branch:main",
+      "src/constitution/experiment.ts",
+      "src/constitution/service.ts",
+      "test/experiment.test.ts"
+    ],
+    "last_verified": "2026-07-13T07:28:48.607Z"
+  },
+  "date": "2026-07-13T10:28:23+03:00"
+}
