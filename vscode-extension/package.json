@@ -2,7 +2,7 @@
   "name": "hunch-vscode",
   "displayName": "Hunch",
   "description": "Your repo's engineering memory, in the editor: see WHY code is the way it is (decisions, invariants, bug history), and capture what you decide — one command each.",
-  "version": "0.14.0",
+  "version": "0.15.0",
   "publisher": "davesheffer",
   "license": "MIT",
   "author": "Dave Sheffer <dave.sheffer1@gmail.com>",
@@ -82,8 +82,62 @@
         "title": "Memory graph (wiki)",
         "category": "Hunch",
         "icon": "$(type-hierarchy)"
+      },
+      {
+        "command": "hunch.memory.refresh",
+        "title": "Refresh memory timeline",
+        "category": "Hunch",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "hunch.memory.sync",
+        "title": "Sync memory now",
+        "category": "Hunch",
+        "icon": "$(sync)"
+      },
+      {
+        "command": "hunch.memory.adopt",
+        "title": "Adopt drafts as advisory memory",
+        "category": "Hunch",
+        "icon": "$(check-all)"
+      },
+      {
+        "command": "hunch.memory.push",
+        "title": "Push memory to remote (approve)",
+        "category": "Hunch",
+        "icon": "$(cloud-upload)"
+      },
+      {
+        "command": "hunch.revertMove",
+        "title": "Revert this memory move",
+        "category": "Hunch",
+        "icon": "$(discard)"
+      },
+      {
+        "command": "hunch.openMove",
+        "title": "Open memory move diff",
+        "category": "Hunch"
       }
     ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "hunch",
+          "title": "Hunch Memory",
+          "icon": "$(book)"
+        }
+      ]
+    },
+    "views": {
+      "hunch": [
+        {
+          "id": "hunch.memory",
+          "name": "Memory Timeline",
+          "icon": "$(book)",
+          "contextualTitle": "Hunch Memory"
+        }
+      ]
+    },
     "menus": {
       "commandPalette": [
         {
@@ -93,6 +147,43 @@
         {
           "command": "hunch.reviewInTerminal",
           "when": "false"
+        },
+        {
+          "command": "hunch.openMove",
+          "when": "false"
+        },
+        {
+          "command": "hunch.revertMove",
+          "when": "false"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "hunch.memory.sync",
+          "when": "view == hunch.memory",
+          "group": "navigation@1"
+        },
+        {
+          "command": "hunch.memory.adopt",
+          "when": "view == hunch.memory",
+          "group": "navigation@2"
+        },
+        {
+          "command": "hunch.memory.push",
+          "when": "view == hunch.memory",
+          "group": "navigation@3"
+        },
+        {
+          "command": "hunch.memory.refresh",
+          "when": "view == hunch.memory",
+          "group": "navigation@4"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "hunch.revertMove",
+          "when": "view == hunch.memory && viewItem == hunchMove",
+          "group": "inline"
         }
       ],
       "editor/title": [

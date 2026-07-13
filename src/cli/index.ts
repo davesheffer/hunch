@@ -37,7 +37,8 @@ import {
   writeSynthesisPreference,
   type SynthPreference,
 } from "../synthesis/provider.js";
-import { isGitRepo, headSha, logSince, lastChangeDate, stagedFiles, workingFiles, commitFiles, asOfDate, stagedDiff, workingDiff, commitDiff, rangeFiles, rangeDiff, rangeSubjects, revExists, revParse, commitAndPushHunch, pullHunch, gitUntrackCached, gitCommonDir, isLinkedWorktree, mainWorktreeRoot } from "../extractors/git.js";
+import { isGitRepo, headSha, logSince, lastChangeDate, stagedFiles, workingFiles, commitFiles, asOfDate, stagedDiff, workingDiff, commitDiff, rangeFiles, rangeDiff, rangeSubjects, revExists, revParse, commitAndPushHunch, pullHunch, gitUntrackCached, gitCommonDir, isLinkedWorktree, mainWorktreeRoot, gitMemoryLog, memoryMoveDiff, revertMemoryMove, pushCurrentBranch } from "../extractors/git.js";
+import { parseMemoryLog, type MemoryMove } from "../core/memorylog.js";
 import { writeTeamConfig, ensureTeamOverlay, readTeamConfig } from "../integrations/team.js";
 import { runbookId, decisionId } from "../core/ids.js";
 import { deriveForbids, effectiveForbids } from "../core/constraintmatch.js";
@@ -3171,6 +3172,48 @@ program
     } finally {
       store.close();
     }
+  });
+
+// ---- log / revert-move (the memory-move timeline — VS Code Source Control) -
+program
+  .command("log")
+  .description("The memory-move timeline: every commit that changed .hunch/ (capture/adopt/supersede/prune), newest first. --json powers the VS Code Hunch Source Control view.")
+  .option("--json", "emit the moves as JSON for tooling")
+  .option("-n, --limit <n>", "max moves to show", "100")
+  .option("--diff <sha>", "print one move's .hunch/ diff (the click-through), instead of the list")
+  .action((opts: { json?: boolean; limit?: string; diff?: string }) => {
+    const root = findRoot();
+    if (!isGitRepo(root)) return fail("not a git repo — the memory timeline needs git history.");
+    if (opts.diff) { process.stdout.write(memoryMoveDiff(opts.diff, root)); return; }
+    const limit = Number.isFinite(Number(opts.limit)) ? Number(opts.limit) : 100;
+    const moves = parseMemoryLog(gitMemoryLog(root, limit));
+    if (opts.json) { console.log(JSON.stringify(moves)); return; }
+    if (!moves.length) { console.log("No memory moves yet — nothing has changed .hunch/."); return; }
+    const icon: Record<MemoryMove["kind"], string> = { capture: "✚", adopt: "✓", supersede: "↻", prune: "✗", edit: "•" };
+    for (const m of moves) {
+      const ids = [...m.decisionIds, ...m.otherIds].slice(0, 4).join(",");
+      console.log(`${m.date.slice(0, 10)}  ${icon[m.kind]} ${m.kind.padEnd(9)} ${m.shortSha}  ${m.subject.slice(0, 60)}${ids ? "  " + dim(ids) : ""}`);
+    }
+  });
+
+program
+  .command("revert-move <sha>")
+  .description("Undo one memory move: git-revert the commit that made it (LOCAL only, never pushed). Powers the Hunch view's 'reject move'.")
+  .action((sha: string) => {
+    const root = findRoot();
+    if (!isGitRepo(root)) return fail("not a git repo.");
+    if (!revertMemoryMove(sha, root)) return fail(`could not revert ${sha} (conflict or unknown commit) — aborted; working tree unchanged.`);
+    console.log(`✓ reverted memory move ${sha} (local; not pushed).`);
+  });
+
+program
+  .command("push")
+  .description("The approve-to-push step: push the current branch to its remote. Auto-commit keeps memory LOCAL by design; this is the one explicit outward move (public .hunch/ rides the repo, so this is a plain branch push).")
+  .action(() => {
+    const root = findRoot();
+    if (!isGitRepo(root)) return fail("not a git repo.");
+    if (!pushCurrentBranch(root)) return fail("push failed — no upstream, offline, or nothing to push.");
+    console.log("✓ pushed the current branch to its remote.");
   });
 
 // ---- drift (doc≠graph detector; advisory + CI-gateable) -------------------
