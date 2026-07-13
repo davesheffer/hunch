@@ -136,3 +136,70 @@ test("post-commit code change captures a decision linked to the changed file", a
   store.close();
   rmSync(root, { recursive: true, force: true });
 });
+
+test("syncCommit does not skip a SKIP_SUBJECT commit whose body is substantive (regression #4)", async () => {
+  const root = gitRepo();
+  const store = new HunchStore(hunchPaths(root));
+  store.json.ensureDirs();
+
+  appendFileSync(join(root, "src/a.ts"), "export function b(){ return 2; }\n");
+  execFileSync("git", ["add", "-A"], { cwd: root, stdio: "ignore" });
+  execFileSync(
+    "git",
+    [
+      "commit",
+      "-m",
+      "Merge branch 'feature' into main",
+      "-m",
+      "Adds OAuth2 login support with JWT tokens, replacing the old session-cookie flow.",
+    ],
+    { cwd: root, stdio: "ignore" },
+  );
+
+  const r = await syncCommit(store, root);
+  assert.equal(r.status, "written", `expected written, got skipped: ${r.reason}`);
+  assert.ok(r.decision, "decision was recorded despite the merge-prefixed subject");
+
+  store.close();
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("syncCommit still skips a SKIP_SUBJECT commit with an empty body (no regression #4)", async () => {
+  const root = gitRepo();
+  const store = new HunchStore(hunchPaths(root));
+  store.json.ensureDirs();
+
+  appendFileSync(join(root, "src/a.ts"), "export function b(){ return 2; }\n");
+  execFileSync("git", ["add", "-A"], { cwd: root, stdio: "ignore" });
+  execFileSync("git", ["commit", "-m", "Merge branch 'main' into feature"], { cwd: root, stdio: "ignore" });
+
+  const r = await syncCommit(store, root);
+  assert.equal(r.status, "skipped");
+  assert.match(r.reason!, /trivial subject/);
+  assert.equal(store.json.loadAll("decisions").length, 0, "no decision recorded for a trivial merge commit");
+
+  store.close();
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("syncCommit skips a chore(deps) commit with an empty body (regex fix, regression #4)", async () => {
+  const root = gitRepo();
+  const store = new HunchStore(hunchPaths(root));
+  store.json.ensureDirs();
+
+  appendFileSync(join(root, "src/a.ts"), "export function b(){ return 2; }\n");
+  execFileSync("git", ["add", "-A"], { cwd: root, stdio: "ignore" });
+  execFileSync(
+    "git",
+    ["commit", "-m", "chore(deps): bump lodash from 4.1.0 to 4.2.0"],
+    { cwd: root, stdio: "ignore" },
+  );
+
+  const r = await syncCommit(store, root);
+  assert.equal(r.status, "skipped", `expected skipped, got written: ${JSON.stringify(r.decision?.title)}`);
+  assert.match(r.reason!, /trivial subject/);
+  assert.equal(store.json.loadAll("decisions").length, 0, "no decision recorded for a trivial chore(deps) commit");
+
+  store.close();
+  rmSync(root, { recursive: true, force: true });
+});

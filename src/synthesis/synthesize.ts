@@ -19,7 +19,10 @@ import type { Decision, Bug, Constraint, Component, Symbol } from "../core/types
 import type { TestReport } from "../extractors/testreport.js";
 
 const CODE_RE = /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/;
-const SKIP_SUBJECT = /^(merge|revert|bump|chore\(deps\)|format|lint|wip)\b/i;
+// "chore(deps):" is anchored separately (not via \b) because \b requires a
+// word/non-word transition, and the character after the closing ")" is ":" or a
+// space — both non-word — so no boundary ever fires there.
+const SKIP_SUBJECT = /^(merge|revert|bump|format|lint|wip)\b|^chore\(deps\):/i;
 
 export interface SyncResult {
   status: "written" | "skipped";
@@ -32,6 +35,15 @@ export interface SyncResult {
 // explanatory body isn't worth a paid LLM call. Tunable via HUNCH_SIG_MIN_LINES.
 const SIG_MIN_LINES = Number(process.env.HUNCH_SIG_MIN_LINES) || 12;
 const SIG_MIN_BODY = 40;
+
+/** Trivial-subject commits (merge/revert/bump/format/...) are noise UNLESS the body
+ *  carries real content — a squash/PR description often lands there, not on the
+ *  subject. Gated on body length ALONE (not the full isSignificant() heuristic): a
+ *  large auto-generated reformat or dependency-bump diff with no narrative must stay
+ *  skipped even though it would trip isSignificant()'s line/file/structural checks. */
+export function isTrivialSubject(meta: { subject: string; body: string }): boolean {
+  return SKIP_SUBJECT.test(meta.subject) && meta.body.trim().length < SIG_MIN_BODY;
+}
 
 /** Is a commit substantive enough to spend a paid LLM synthesis call on? Pure and
  *  deterministic. Any structural change (symbol/dependency delta), non-trivial
@@ -61,7 +73,7 @@ export async function syncCommit(
   const meta = commitMeta(target, root);
   if (!meta) return { status: "skipped", reason: "commit not found" };
 
-  if (SKIP_SUBJECT.test(meta.subject)) return { status: "skipped", reason: `trivial subject: ${meta.subject}` };
+  if (isTrivialSubject(meta)) return { status: "skipped", reason: `trivial subject: ${meta.subject}` };
   const codeFiles = meta.files.filter((f) => CODE_RE.test(f));
   if (codeFiles.length === 0) return { status: "skipped", reason: "no code files changed" };
 
