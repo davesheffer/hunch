@@ -1,0 +1,97 @@
+{
+  "id": "dec_a592a5d344",
+  "title": "Route npm through cmd.exe on Windows to comply with Node 18.20+ CVE-2024-27980",
+  "topic": null,
+  "status": "accepted",
+  "context": "Node >=18.20 refuses to spawn .cmd shim files (like npm) directly without a shell, enforcing CVE-2024-27980 mitigation. This blocks clean-install rehearsal on Windows.",
+  "decision": "Detect npm commands on Windows and route them through cmd.exe with custom argument quoting (winQuote), replicating the existing pattern from the gate runner.",
+  "consequences": [
+    "npm executions on Windows now route through cmd.exe with manual shell quoting",
+    "Cross-platform execution paths diverge (Windows via cmd.exe, Unix direct spawn)",
+    "Argument escaping must handle cmd.exe special characters (spaces, quotes, pipes, etc.)",
+    "Rehearsal script now mirrors gate runner's Windows shim strategy (referenced dec_812d887be0)"
+  ],
+  "alternatives_rejected": [
+    "Global shell: true option — too broad, doesn't target npm specifically",
+    "Requiring users to upgrade Node or work around it — leaves tooling broken",
+    "Using a different package manager — doesn't address the root constraint"
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Global shell: true option — too broad, doesn't target npm specifically",
+      "scope": [
+        "tooling/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Requiring users to upgrade Node or work around it — leaves tooling broken",
+      "scope": [
+        "tooling/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Using a different package manager — doesn't address the root constraint",
+      "scope": [
+        "tooling/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_04c6efb58b"
+  ],
+  "related_files": [
+    "tooling/constitution-clean-rehearsal.mjs"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "eae4951",
+  "valid_from": "2026-07-13T14:19:18+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft",
+    "confidence": 0.65,
+    "evidence": [
+      "commit:eae4951",
+      "synth:provider=claude-cli",
+      "branch:main",
+      "tooling/constitution-clean-rehearsal.mjs"
+    ],
+    "last_verified": "2026-07-13T11:19:50.860Z"
+  },
+  "date": "2026-07-13T14:19:18+03:00"
+}
