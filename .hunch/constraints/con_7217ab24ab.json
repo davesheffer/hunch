@@ -1,0 +1,30 @@
+{
+  "id": "con_7217ab24ab",
+  "type": "correctness",
+  "statement": "Regression guard: \"Flaky test failure under parallelism: native tree-sitter module resolution race on Windows\" must not recur.",
+  "scope": [
+    "src/constitution/experiment.ts",
+    "test/experiment.test.ts",
+    "vscode-extension/src/memoryView.ts",
+    "test/singlesource.test.ts",
+    "test/sync.test.ts",
+    "test/autocommit.test.ts"
+  ],
+  "severity": "warning",
+  "enforcement": "advisory_v1",
+  "match": null,
+  "forbids": null,
+  "rationale": "Derived from bug_b6f1abb9a6: Race condition during parallel test execution on Windows: removeStaleCopies() in one test process deletes temporary native module copies while peer processes are still resolving/loading them. Amplified by multiple native packages (tree-sitter, tree-sitter-python) increasing copy traffic, and ELECTRON_RUN_AS_NODE=1 in VS Code terminals. [Uncertainty: exact race sequence and whether recent synthesize.ts diff contributed to changed test parallelism pattern unknown.]",
+  "source_decision": null,
+  "violations": [],
+  "status": "active",
+  "valid_from": "2026-07-13T13:42:52.944Z",
+  "valid_to": null,
+  "provenance": {
+    "source": "derived",
+    "confidence": 0.75,
+    "evidence": [
+      "bug:bug_b6f1abb9a6"
+    ]
+  }
+}
