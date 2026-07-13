@@ -1,7 +1,82 @@
-/* Hunch blog — content as data. One pinned (the benchmark); 9 supporting angles.
+/* Hunch blog — content as data. One pinned post; the rest are supporting angles.
    Rendered by index.html (the list) and post.html (?slug=…). Plain ES module-free
    global so it works on a static host with no build step. */
 window.POSTS = [
+  {
+    slug: "python-joins-the-graph",
+    title: "Hunch 1.8.1: the graph learns Python",
+    dek: "AI made Python the most popular language on GitHub — and AI-written Python is where architectural drift hides best, because no compiler is watching. v1.8.1 lands Python symbols, call edges, imports and blast radius, built on a registry that makes the next language a single entry. Our first community-driven release.",
+    date: "2026-07-13", tag: "Release", read: "7 min", pinned: false,
+    body: `
+<p class="lead">In 2024, AI pushed Python past JavaScript to become <a class="link" href="https://github.blog/news-insights/octoverse/octoverse-2024/">the most popular language on GitHub</a>. It is the lingua franca of machine learning, the default output of every model demo, and — increasingly — the language AI agents write the most of. Until this week, Hunch's deep code-structure layer understood TypeScript and JavaScript. <strong>v1.8.1 adds Python</strong>: symbols, call edges, import resolution, blast radius — the full structural graph, on <code>.py</code> files.</p>
+
+<h2>What shipped</h2>
+<p>Point Hunch at a Python repo and the indexer now extracts functions, classes, and decorated methods; resolves <code>import</code> and <code>from … import</code> statements — including relative imports — into component dependency edges; and builds call edges the same way it does for TypeScript. That means <code>hunch backfill</code>, <code>hunch structure</code>, <code>hunch impact</code>, blast radius, and the conformance gate all work on Python code, not just around it.</p>
+<pre><code>cd your-python-repo && hunch init
+hunch structure app/services      # the shape, served from the graph
+hunch impact origin/main          # what this branch actually reaches</code></pre>
+<p>The "why" layer — decisions, bugs, constraints — was always language-agnostic, because it reads your commits and diffs. What was missing for Python was the <em>structure</em> underneath: the graph that turns "controllers must not reach the database" from a sentence into a reachability check. Now it's there.</p>
+<p>Credit where it's due: Python support was contributed by <strong>MrSampson</strong> — Hunch's first major community contribution. The same PR cycle also fixed a real synthesizer bug: a squash-merge whose subject line says "Merge …" but whose body carries the actual PR description is no longer discarded as noise.</p>
+
+<h2>Why Python is the language that needs the gate most</h2>
+<p>GitHub's <a class="link" href="https://octoverse.github.com/">Octoverse 2025</a> reported a telling shift: TypeScript surged 66% to become the #1 language, and the analysis attributed it to teams wanting <em>typed guardrails</em> for LLM-generated code. The industry's instinctive answer to "AI writes unreliable code" is <strong>types</strong>.</p>
+<p>Python can't take that road. It stayed #2 with roughly 850,000 new contributors in a year — the AI and data-science boom guarantees enormous volumes of AI-written Python — but its guardrails cannot come from a compiler. No type-checker fails the build when a FastAPI route starts talking to the database directly. There is no <code>tsc</code> standing between an agent's locally-sensible shortcut and your main branch.</p>
+<p>And the shortcut is the norm, not the exception. Veracode's 2025 GenAI code security report found <strong>45% of AI-generated code introduces known vulnerability classes</strong>; other 2025 research measured a <strong>153% increase in design-level flaws</strong> — authentication bypasses, improper session handling — exactly the class that lives in the call graph, not in any single line. Surface-level quality is what models are best at. Architecture is what they miss. In a dynamic language, nothing built-in notices.</p>
+
+<h2>The violation, in Python this time</h2>
+<p>The flagship example from <a class="link" href="/blog/post?slug=ai-ignores-your-architecture">our benchmark</a>, translated:</p>
+<pre><code># app/api/orders.py — the route goes through the service layer
+from app.services.orders import fetch_orders
+
+@router.get("/orders")
+def list_orders(user_id: str):
+    return fetch_orders(user_id)</code></pre>
+<p>Ask an agent to make it faster — mention the service hop shows up in profiles — and a very common result:</p>
+<pre><code># "optimized" — fewer hops
+from app.db.session import get_session
+
+@router.get("/orders")
+def list_orders(user_id: str):
+    db = get_session()
+    return db.execute(f"select * from orders where user_id = '{user_id}'")</code></pre>
+<p>Faster, and it skips authorization and batching — the things the service layer existed for. Ruff is green. Flake8 is green. Even mypy is green: every type here checks out. The violation is a property of what <code>list_orders</code> can now <em>reach</em>. As of v1.8.1, that's a recordable, enforceable invariant on Python code:</p>
+<pre><code>hunch conform --add "routes must not reach the DB session directly — go through the service layer" \\
+  --assert not-calls --subject list_orders --object get_session \\
+  --why "the Mar-2025 N+1 meltdown"
+
+hunch conform --strict   # blocks in pre-commit and the CI PR gate</code></pre>
+
+<h2>What Python already has — and where it stops</h2>
+<p>Python does have architecture tooling, and the good parts deserve naming. <a class="link" href="https://import-linter.readthedocs.io/">Import Linter</a> enforces contracts over the import graph — layers, forbidden imports, independence — and if your invariants are module-import-shaped, it's a solid, deterministic tool. Tach offered module boundaries with explicit public interfaces. Two structural gaps remain, though:</p>
+<ul>
+<li><strong>The import graph isn't the call graph.</strong> "The domain package must not import Django" is an import contract. "<code>charge()</code> must always reach <code>verify_session()</code>" is not — it's call-level reachability, and a must-<em>reach</em> at that. Import contracts can't express it in either direction.</li>
+<li><strong>A config rule has no memory.</strong> An <code>.importlinter</code> contract that fires tells you a rule id. It doesn't know the incident that motivated it, the decision that recorded it, or the bug it prevents reopening — the <a class="link" href="/blog/post?slug=the-receipt">receipt</a> that makes developers keep a gate instead of deleting it.</li>
+</ul>
+<p>There's also a durability lesson sitting in plain sight: Tach stopped being maintained in mid-2025. Rules that live in one tool's config format share that tool's fate. Hunch's invariants are committed JSON in your repo, enforced by reachability over a graph any indexer can rebuild — and the same records ground every MCP assistant working in the codebase. The rule outlives the tooling fashion around it.</p>
+
+<h2>Adding a language is now one entry</h2>
+<p>The engineering story of this release is smaller than the feature and better than the feature. Before v1.8.1, "which files are code?" and "how do we parse them?" were extension checks scattered across the parser, the indexer, the diff analyzer, and the synthesizer. Python support would have meant editing all four — and Go would have meant editing all four again.</p>
+<p>Instead, the release collapses those gates into a <strong>language registry</strong>. One <code>LanguageSpec</code> entry declares everything a language needs:</p>
+<ul>
+<li>a tree-sitter grammar and <strong>one query</strong> capturing definitions, imports, and calls;</li>
+<li>two small maps from capture names to symbol kinds;</li>
+<li>a list of builtin method names — so <code>df.append(...)</code> never creates a call edge to some unrelated <code>append()</code> in your repo. A polluted graph lies, and a graph that lies can't gate.</li>
+</ul>
+<p>Everything downstream — symbols, call edges, component dependencies, blast radius, conformance — is language-agnostic graph machinery. The next language is a registry entry plus a grammar dependency, not a refactor.</p>
+
+<h2>Honest limits, on the record</h2>
+<p>Two things we'd rather say ourselves. First, call-edge resolution in Python is name-based over the indexed symbol graph, same as TypeScript — heavily dynamic dispatch can create edges the runtime wouldn't take. The builtin filter keeps the common noise out; the graph is engineered to over-approximate rarely and lie never, and conformance predicates are evaluated on exactly what was indexed.</p>
+<p>Second, integrating a second native tree-sitter grammar surfaced a real flake: under full-suite parallelism on Windows, test processes can race on temporary copies of native modules. It's recorded in the committed graph as an open bug with a regression guard — <code>bug_b6f1abb9a6</code>, guarded by <code>con_7217ab24ab</code> — which means every assistant working in this repo gets warned before touching the loader. The full suite passed 638/638 on Windows before release. That's the product eating its own memory: our open bugs are part of the graph we ship.</p>
+
+<h2>Try it on a Python repo</h2>
+<pre><code>npm i -g @davesheffer/hunch
+cd your-python-repo
+hunch init          # advisory by default — nothing blocks until you say so
+hunch structure     # the repo map, from the graph
+hunch why app/services/orders.py</code></pre>
+<p>Record the first invariant the next time an agent takes a shortcut you have to correct. In Python, that will not take long.</p>
+`,
+  },
   {
     slug: "change-gate-private-workflows",
     title: "Hunch 1.5: give every code change a memory — before it ships",
