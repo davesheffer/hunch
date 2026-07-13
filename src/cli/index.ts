@@ -1826,6 +1826,44 @@ experimentCmd
   });
 
 experimentCmd
+  .command("respond")
+  .description("Complete a revision-2 EXP-03 review with the standardized plain-language response: one choice, the rule you keep (accept/edit), one sentence of reasoning. Duration derives from the append-only start record; metrics are mapped deterministically — never hand-crafted.")
+  .argument("<run-id>", "immutable experiment run id")
+  .argument("<assignment-id>", "assignment returned by experiment next")
+  .requiredOption("--reviewer <actor>", "explicit human reviewer (human:name)")
+  .requiredOption("--choice <choice>", "accept | edit | reject | cannot_decide")
+  .requiredOption("--reason <text>", "one plain-language sentence")
+  .option("--rule <text>", "the rule exactly as it should be recorded (required for accept/edit)")
+  .option("--rule-file <file>", "read the rule text from a file instead of --rule")
+  .option("--inspected", "arm C only: you looked at the supporting checks before answering")
+  .option("--confirmed-private-leak", "record an independently confirmed private leak incident")
+  .option("--data-loss", "record a data loss/corruption incident")
+  .option("--unsafe-evaluator", "record unsafe evaluator behavior")
+  .action((runId: string, assignmentId: string, opts: { reviewer: string; choice: string; reason: string; rule?: string; ruleFile?: string; inspected?: boolean; confirmedPrivateLeak?: boolean; dataLoss?: boolean; unsafeEvaluator?: boolean }) => {
+    const { store, root } = storeFor();
+    try {
+      if (opts.rule && opts.ruleFile) throw new Error("pass --rule or --rule-file, not both");
+      const rule = opts.ruleFile ? readFileSync(resolve(opts.ruleFile), "utf8") : opts.rule ?? null;
+      const service = new ConstitutionService(store, root);
+      const appended = service.respondExperimentReview(runId, assignmentId, {
+        reviewer: opts.reviewer,
+        choice: opts.choice as "accept" | "edit" | "reject" | "cannot_decide",
+        rule_text: rule,
+        reason: opts.reason,
+        inspected_supporting_checks: !!opts.inspected,
+        confirmed_private_leak: !!opts.confirmedPrivateLeak,
+        data_loss_or_corruption: !!opts.dataLoss,
+        unsafe_evaluator_behavior: !!opts.unsafeEvaluator,
+      });
+      console.log(JSON.stringify({ appended, report: service.experimentReport(runId) }, null, 2));
+    } catch (e) {
+      fail((e as Error).message);
+    } finally {
+      store.close();
+    }
+  });
+
+experimentCmd
   .command("followup")
   .description("Append the preregistered seven-day EXP-03 reversal measurement.")
   .argument("<run-id>", "immutable experiment run id")

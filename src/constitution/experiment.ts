@@ -475,6 +475,81 @@ export function compileExperimentOutcome(input: CompileExperimentOutcomeInput, r
   return parsed;
 }
 
+// ---- EXP-03 revision-2 standardized response (dec_0be4fd3717) --------------
+// Revision-2 reviews are SUBMITTED in the same plain-language vocabulary they are
+// PRESENTED in: one choice out of four, the rule text when one is kept, and one
+// plain sentence. The mapper below is the single deterministic translation from
+// that template into the canonical Exp03 metrics vocabulary — the reviewer never
+// hand-crafts metrics, so the presented contract and the recorded outcome cannot
+// drift apart. Revision-1 cases are refused here (their original raw submission
+// path stays byte-identical for the append-only pilot).
+
+export const EXP03_REVIEW_CHOICES = ["accept", "edit", "reject", "cannot_decide"] as const;
+export type Exp03ReviewChoice = (typeof EXP03_REVIEW_CHOICES)[number];
+
+export interface Exp03ReviewResponse {
+  choice: Exp03ReviewChoice;
+  /** the rule exactly as it should be recorded; required for accept/edit, blank otherwise. */
+  rule_text?: string | null;
+  /** one plain-language sentence. */
+  reason: string;
+  /** arm C only: the reviewer looked at the supporting checks before answering. */
+  inspected_supporting_checks?: boolean;
+}
+
+const CHOICE_TO_DECISION = {
+  accept: "accepted_precise",
+  edit: "accepted_edited",
+  reject: "rejected",
+  cannot_decide: "uncompilable",
+} as const;
+
+export function compileExp03ReviewResponse(
+  item: Exp03Case,
+  arm: string,
+  response: Exp03ReviewResponse,
+): {
+  decision: (typeof CHOICE_TO_DECISION)[Exp03ReviewChoice];
+  precise: boolean;
+  proof_inspected: boolean;
+  result: string | null;
+  silent_semantic_substitution: boolean;
+  rejection_reason: string | null;
+} {
+  if (!item.required_relationship) {
+    throw new Error(`case ${item.id} is a revision-1 pilot case and keeps its original submission contract; use the raw review submission, not the standardized template`);
+  }
+  if (!EXP03_REVIEW_CHOICES.includes(response.choice)) {
+    throw new Error(`choice must be one of: ${EXP03_REVIEW_CHOICES.join(" | ")}`);
+  }
+  const reason = response.reason?.trim();
+  if (!reason) throw new Error("the response requires one plain-language sentence of reasoning");
+  const accepted = response.choice === "accept" || response.choice === "edit";
+  const rule = response.rule_text?.trim() || null;
+  if (accepted && !rule) throw new Error(`choice "${response.choice}" requires the rule text it keeps`);
+  if (!accepted && rule) throw new Error(`choice "${response.choice}" must leave the rule text blank`);
+  // Arms B/C present a proposed rule: "use it as written" must be byte-faithful to
+  // what was shown, and "after I correct it" must actually change it — the choice
+  // and the submitted text can never contradict each other.
+  if (arm !== "A" && response.choice === "accept" && rule !== item.compiler_candidate) {
+    throw new Error('the submitted rule differs from the one presented; use choice "edit"');
+  }
+  if (arm !== "A" && response.choice === "edit" && rule === item.compiler_candidate) {
+    throw new Error('the submitted rule is unchanged from the one presented; use choice "accept"');
+  }
+  if (response.inspected_supporting_checks && arm !== "C") {
+    throw new Error("supporting checks are only shown in arm C; this review cannot claim to have inspected them");
+  }
+  return {
+    decision: CHOICE_TO_DECISION[response.choice],
+    precise: accepted, // schema invariant: accepted outcomes are precise; graded later against the target commitment
+    proof_inspected: arm === "C" && !!response.inspected_supporting_checks,
+    result: accepted ? rule : null,
+    silent_semantic_substitution: false, // graded post-hoc via the append-only correction workflow, never self-declared
+    rejection_reason: response.choice === "reject" ? reason : null,
+  };
+}
+
 export const ExperimentReviewStartSchema = z.object({
   id: z.string().regex(/^expreview_[a-f0-9]{10}$/),
   content_hash: z.string().regex(HASH),

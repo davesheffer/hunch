@@ -106,9 +106,12 @@ import {
   compileExperimentReviewStart,
   compileExperimentRun,
   compileExperimentStop,
+  compileExp03ReviewResponse,
   currentExperimentOutcomes,
   normalizedEditDistance,
   type CompileExperimentCaseBankInput,
+  type Exp03Case,
+  type Exp03ReviewResponse,
   type CompileExperimentRunInput,
   type ExperimentCaseBank,
   type ExperimentFollowup,
@@ -622,6 +625,22 @@ export class ConstitutionService {
     return { start, assignment, treatment: assignmentTreatment(bank, run, assignment) };
   }
 
+  /** Resolve an EXP-03 run/assignment/case triple (the shared lookup for both
+   *  review-submission dialects). */
+  private resolveExp03Assignment(runId: string, assignmentId: string): { run: ExperimentRun; assignment: ExperimentRun["assignments"][number]; item: Exp03Case } {
+    const run = this.experimentRun(runId);
+    if (run.experiment !== "EXP-03") throw new Error("human review submission is available only for EXP-03");
+    const assignment = run.assignments.find((entry) => entry.id === assignmentId);
+    const bank = this.experimentRepository.listCaseBanks().find((entry) => entry.id === run.case_bank_id);
+    const item = bank?.cases.find((candidate) => candidate.id === assignment?.case_id);
+    if (!assignment || !bank || !item || !("compiler_candidate" in item)) throw new Error("review submission cannot resolve the exact assigned case and treatment");
+    return { run, assignment, item };
+  }
+
+  /** Raw metrics-vocabulary submission — the ORIGINAL revision-1 contract, kept
+   *  byte-identical for the append-only pilot. Revision-2 cases are refused here:
+   *  they must go through the standardized plain-language template (dec_0be4fd3717)
+   *  so the presented question and the recorded outcome cannot drift apart. */
   submitExperimentReview(
     runId: string,
     assignmentId: string,
@@ -640,19 +659,69 @@ export class ConstitutionService {
     },
     opts: { now?: string } = {},
   ): ExperimentOutcome {
-    const run = this.experimentRun(runId);
-    if (run.experiment !== "EXP-03") throw new Error("human review submission is available only for EXP-03");
-    const start = this.experimentRepository.listReviewStarts().find((item) => item.run_id === run.id && item.assignment_id === assignmentId);
+    const { run, assignment, item } = this.resolveExp03Assignment(runId, assignmentId);
+    if (item.required_relationship) {
+      throw new Error(`assignment ${assignmentId} is a revision-2 plain-language case; submit it with the standardized response template (hunch experiment respond)`);
+    }
+    return this.completeExp03Review(run, assignment, item, input, opts);
+  }
+
+  /** Revision-2 standardized submission: the reviewer answers in the SAME
+   *  plain-language vocabulary the treatment presented (choice + rule + one
+   *  sentence); the deterministic mapper translates it into canonical metrics.
+   *  Revision-1 cases are refused (the mapper throws) — they keep the raw path. */
+  respondExperimentReview(
+    runId: string,
+    assignmentId: string,
+    input: Exp03ReviewResponse & {
+      reviewer: string;
+      confirmed_private_leak?: boolean;
+      data_loss_or_corruption?: boolean;
+      unsafe_evaluator_behavior?: boolean;
+    },
+    opts: { now?: string } = {},
+  ): ExperimentOutcome {
+    const { run, assignment, item } = this.resolveExp03Assignment(runId, assignmentId);
+    const mapped = compileExp03ReviewResponse(item, assignment.arm, input);
+    return this.completeExp03Review(run, assignment, item, {
+      reviewer: input.reviewer,
+      ...mapped,
+      confirmed_private_leak: !!input.confirmed_private_leak,
+      data_loss_or_corruption: !!input.data_loss_or_corruption,
+      unsafe_evaluator_behavior: !!input.unsafe_evaluator_behavior,
+      reason: input.reason,
+    }, opts);
+  }
+
+  /** The shared review-completion core: machine-owned timing, append-only dedup,
+   *  derived edit distance, and the outcome write. Both dialects land here. */
+  private completeExp03Review(
+    run: ExperimentRun,
+    assignment: ExperimentRun["assignments"][number],
+    item: Exp03Case,
+    input: {
+      reviewer: string;
+      decision: "accepted_precise" | "accepted_edited" | "rejected" | "uncompilable" | "abandoned" | "timeout";
+      precise: boolean;
+      proof_inspected: boolean;
+      result: string | null;
+      silent_semantic_substitution: boolean;
+      rejection_reason: string | null;
+      confirmed_private_leak: boolean;
+      data_loss_or_corruption: boolean;
+      unsafe_evaluator_behavior: boolean;
+      reason: string;
+    },
+    opts: { now?: string } = {},
+  ): ExperimentOutcome {
+    const assignmentId = assignment.id;
+    const start = this.experimentRepository.listReviewStarts().find((entry) => entry.run_id === run.id && entry.assignment_id === assignmentId);
     if (!start || start.reviewer !== input.reviewer) throw new Error("review submission must bind the machine-recorded start and exact reviewer");
     const recordedAt = opts.now ?? new Date().toISOString();
     const duration = Date.parse(recordedAt) - Date.parse(start.started_at);
     if (!Number.isFinite(duration) || duration < 1) throw new Error("review completion must occur after the machine-recorded start");
-    const current = currentExperimentOutcomes(this.experimentRepository.listOutcomes()).find((item) => item.run_id === run.id && item.assignment_id === assignmentId);
+    const current = currentExperimentOutcomes(this.experimentRepository.listOutcomes()).find((entry) => entry.run_id === run.id && entry.assignment_id === assignmentId);
     if (current) throw new Error(`assignment ${assignmentId} already has current outcome ${current.id}; use an explicit append-only correction workflow`);
-    const assignment = run.assignments.find((item) => item.id === assignmentId);
-    const bank = this.experimentRepository.listCaseBanks().find((item) => item.id === run.case_bank_id);
-    const item = bank?.cases.find((candidate) => candidate.id === assignment?.case_id);
-    if (!assignment || !bank || !item || !("compiler_candidate" in item)) throw new Error("review submission cannot resolve the exact assigned case and treatment");
     const accepted = input.decision.startsWith("accepted");
     const result = input.result?.trim() || null;
     if (accepted !== (result !== null)) throw new Error("accepted reviews require a result; non-accepted reviews must not claim one");
