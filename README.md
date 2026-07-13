@@ -53,6 +53,34 @@ Hunch creates a local graph of:
 It then puts that context where work happens: MCP tools, the CLI, a VS Code Change Gate, git hooks,
 and an optional pull-request guard.
 
+## Memory that runs itself (v1.8)
+
+There is no review queue to manage. Hunch's memory loop is fully automated, and the rare decision
+that genuinely needs a human is asked **inline, at the moment** — never parked in a backlog:
+
+- **Auto-trust** — every captured decision enters the graph as live advisory memory the moment it
+  lands. It grounds and ranks immediately; it can never hard-block anything until a human
+  explicitly vouches for it. Migrate an old draft backlog once with `hunch adopt-drafts`.
+- **A source-control panel for memory** — the VS Code **Hunch Memory** view shows every move
+  Hunch makes (capture / adopt / supersede / prune / repair) as a timeline: click for the diff,
+  right-click to revert locally. `hunch log` is the same spine in the terminal.
+- **Inline escalations** — `hunch escalations` (and the `hunch_escalations` MCP tool) lists only
+  what the graph cannot resolve itself: a topic conflict, a candidate rule awaiting review, a
+  proposed rule ready to activate. Each entry is a question with its resolution verb. Normally
+  empty.
+- **Self-repair** — rename a file and the next sync automatically heals every decision binding,
+  tripwire scope, constraint scope, and policy selector that matched it exactly (git's own rename
+  detection, zero guessing). Repairs land as revertable timeline moves; a repaired *policy* asks
+  once, inline, for a fresh proof.
+- **Local-first by design** — memory auto-commits locally and rides your next push;
+  `hunch push` (or the panel's Approve-to-push) is the one deliberate outward step.
+
+```bash
+hunch log              # the memory timeline (what Hunch did, when, revertable)
+hunch escalations      # the decisions only you can make — normally empty
+hunch repair --apply   # heal bindings after a rename (sync does this automatically)
+```
+
 ## One graph. Every assistant. No lock-in.
 
 Hunch is agent-agnostic by design. It scaffolds MCP and grounding for Claude Code, Cursor, VS Code / Copilot,

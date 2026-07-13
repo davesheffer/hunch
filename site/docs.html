@@ -376,7 +376,7 @@ if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElem
 
     <section id="provenance">
       <h2>Provenance &amp; confidence<a class="anchor" href="#provenance">#</a></h2>
-      <p>Every record is tagged with where it came from and how sure Hunch is — so nothing is a blind assertion. A quick auto-guess is marked low-confidence and stays <em>advisory</em>; only what you've personally confirmed is trusted enough to <em>block</em> a change (see <a class="link" href="#firmness">firmness</a>). Triage drafts with <code>hunch review</code>.</p>
+      <p>Every record is tagged with where it came from and how sure Hunch is — so nothing is a blind assertion. Captured memory enters the graph as live <em>advisory</em> context automatically (auto-trust, v1.8); only what you've personally vouched for is trusted enough to <em>block</em> a change (see <a class="link" href="#firmness">firmness</a>). The rare decision only you can make surfaces inline via <code>hunch escalations</code> — there is no review queue to manage.</p>
     </section>
 
     <section id="time-travel">
@@ -506,7 +506,7 @@ Agent: hunch_record_correction({ rule: "never import lodash; use src/utils",
       <h2>Decision Guard (Veto) <span class="pill ok">v0.15</span><a class="anchor" href="#veto">#</a></h2>
       <p>Decisions record not just what you chose but the alternatives you <em>rejected</em>. The Decision Guard flags a change that <strong>reverses</strong> a decision — re-introducing an approach an in-force decision rejected — so the agent can’t quietly walk back a deliberate call.</p>
       <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">terminal</span><button class="copy">Copy</button></div><pre><span class="k">hunch</span> veto              <span class="c"># flag changes that reverse a rejected alternative</span></pre></div>
-      <p>Like the other gates: it warns by default and blocks under strict only on a rejected approach you’ve confirmed. Use <code>hunch review</code> to choose which reversals should block.</p>
+      <p>Like the other gates: it warns by default and blocks under strict only on a rejected approach you’ve explicitly vouched for — the one-click activation in the VS Code Hunch Memory panel, or <code>hunch review --accept &lt;id&gt;</code> in the terminal. Blocking power is never granted automatically.</p>
     </section>
 
     <section id="regression">
@@ -671,7 +671,7 @@ Agent: hunch_record_correction({ rule: "never import lodash; use src/utils",
       <p>Two housekeeping commands keep the graph healthy over time:</p>
       <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">terminal</span><button class="copy">Copy</button></div><pre><span class="k">hunch</span> compact   <span class="c"># prune rejected/superseded/stale low-value drafts</span>
 <span class="k">hunch</span> stale     <span class="c"># list records whose files changed after they were last verified</span></pre></div>
-      <p>Use <code>hunch review</code> to triage low-confidence drafts before they accumulate — accept the good ones (promoting them to higher confidence) and reject the noise.</p>
+      <p>Since v1.8 there is no draft backlog to triage: captured memory auto-trusts as advisory the moment it lands, and <code>hunch escalations</code> asks you inline about the few things the graph can't settle itself. Migrating an older repo? One <code>hunch adopt-drafts</code> clears a legacy queue, and <code>hunch log</code> shows every memory move — each one revertable.</p>
     </section>
 
     <section id="develop">
