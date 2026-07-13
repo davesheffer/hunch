@@ -1,0 +1,48 @@
+{
+  "id": "dec_36a4c9cff8",
+  "title": "Language breadth begins: Python lands via the LanguageSpec registry (charter exception, deliberately)",
+  "topic": "language-breadth",
+  "status": "accepted",
+  "context": "The charter (dec_0db7028076) rejected breadth-FIRST: shallow multi-language support before the core loop proved out. The core loop has now shipped end to end (v1.8.0: auto-trust, self-repair, inline escalations, certified VS Code client, released to npm + Open VSX). Contributor MrSampson's PR #9 adds Python through a LanguageSpec registry that collapses the three duplicated JS/TS extension gates into one entry point.",
+  "decision": "Accept Python support via PR #9's registry design. The charter's rejection was of breadth-first, not breadth-ever — with the core proven, each new language is one registry entry plus one tree-sitter grammar dependency, which is breadth done cheaply AFTER the core. Constraints that keep it honest: (1) every added grammar must ship prebuilds for win32/linux/darwin and ride the per-process temp-copy loader (the EBUSY class stays dead); (2) Constitution mutation controls and behavior evaluators remain TS-scoped until separately proven — indexing breadth is not evaluator breadth; (3) import resolution keeps the don't-guess-on-ambiguity rule.",
+  "consequences": [
+    "Python repos get symbols, call edges, imports, blast radius, and backfill.",
+    "The registry is the template: future languages are a PR-sized addition, not a rewrite.",
+    "One more native dependency enters the temp-copy loader's care."
+  ],
+  "alternatives_rejected": [
+    "Hold Python until after the G4 pilot (rejected: the registry work is done, external momentum is real, and indexing breadth doesn't touch the governance evidence chain the pilot gates)",
+    "Accept indexing AND extend Constitution evaluators to Python in one step (rejected: evaluator semantics need their own proofs; conflating them is exactly the shallow-breadth failure the charter feared)"
+  ],
+  "rejected_tripwires": [],
+  "related_components": [],
+  "related_files": [
+    "src/extractors/languages.ts",
+    "src/extractors/parse.ts",
+    "src/extractors/indexer.ts",
+    "src/extractors/nativeTreeSitter.ts",
+    "src/extractors/diff.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-07-13T13:25:53.266Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 0.95,
+    "evidence": [
+      "src/extractors/languages.ts",
+      "src/extractors/parse.ts",
+      "src/extractors/indexer.ts",
+      "src/extractors/nativeTreeSitter.ts",
+      "src/extractors/diff.ts"
+    ]
+  },
+  "date": "2026-07-13T13:25:53.266Z"
+}
