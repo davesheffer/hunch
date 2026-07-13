@@ -1,0 +1,81 @@
+{
+  "id": "dec_5ba715581f",
+  "title": "Route Windows .cmd shims through cmd.exe with manual quoting",
+  "topic": null,
+  "status": "accepted",
+  "context": "Node >=18.20's CVE-2024-27980 hardening refuses to spawn .cmd shims without shell. npm is a .cmd on Windows; spawnSync(executable, args) fails ENOENT, breaking every local gate run.",
+  "decision": "Detect Windows + non-node commands; spawn through cmd.exe with manually-quoted args (winQuote function). Keep shell-free argv for node. Avoids shell:true (DEP0190 deprecated, concatenates args unescaped).",
+  "consequences": [
+    "npm runs work on Windows (fixes gate ENOENT)",
+    "All non-node Windows commands routed through cmd.exe",
+    "Per-argument quoting prevents shell metachar injection",
+    "Platform-specific code branch added (win32 vs others)",
+    "Node preserves shell-free execution (retains CVE hardening)"
+  ],
+  "alternatives_rejected": [
+    "shell:true — simpler but DEP0190 deprecated; concatenates args unescaped (security risk)",
+    "Keep shell-free spawnSync everywhere — fails ENOENT on Windows .cmd shims"
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "shell:true — simpler but DEP0190 deprecated; concatenates args unescaped (security risk)",
+      "scope": [
+        "tooling/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Keep shell-free spawnSync everywhere — fails ENOENT on Windows .cmd shims",
+      "scope": [
+        "tooling/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_04c6efb58b"
+  ],
+  "related_files": [
+    "tooling/release-gate.mjs"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "20c7111",
+  "valid_from": "2026-07-13T14:12:36+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft",
+    "confidence": 0.65,
+    "evidence": [
+      "commit:20c7111",
+      "synth:provider=claude-cli",
+      "branch:main",
+      "tooling/release-gate.mjs"
+    ],
+    "last_verified": "2026-07-13T11:12:58.631Z"
+  },
+  "date": "2026-07-13T14:12:36+03:00"
+}
