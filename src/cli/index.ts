@@ -40,6 +40,7 @@ import {
 import { isGitRepo, headSha, logSince, lastChangeDate, stagedFiles, workingFiles, commitFiles, asOfDate, stagedDiff, workingDiff, commitDiff, rangeFiles, rangeDiff, rangeSubjects, revExists, revParse, commitAndPushHunch, pullHunch, gitUntrackCached, gitCommonDir, isLinkedWorktree, mainWorktreeRoot, gitMemoryLog, memoryMoveDiff, revertMemoryMove, pushCurrentBranch, commitChanges } from "../extractors/git.js";
 import { parseMemoryLog, type MemoryMove } from "../core/memorylog.js";
 import { renamesOf, planRepair, repairDecision, repairConstraint, type RepairPlan } from "../core/repair.js";
+import { planPolicyRepair, repairPolicySpec, type PolicyBindingRewrite } from "../constitution/repairPolicies.js";
 import { writeTeamConfig, ensureTeamOverlay, readTeamConfig } from "../integrations/team.js";
 import { runbookId, decisionId } from "../core/ids.js";
 import { deriveForbids, effectiveForbids } from "../core/constraintmatch.js";
@@ -362,7 +363,7 @@ program
     // Fail open — a repair error must never take the capture path down.
     try {
       const repaired = runRepair(store, root, sha ?? headSha(root), true);
-      if (repaired?.applied && !opts.quiet) console.log(`  ↳ repaired ${repaired.plan.rewrites.length} memory binding(s) after rename`);
+      if (repaired?.applied && !opts.quiet) console.log(`  ↳ repaired ${repaired.plan.rewrites.length + repaired.policyRewrites.length} memory binding(s) after rename`);
     } catch { /* repair is best-effort; drift still surfaces anything left behind */ }
     const r = await syncCommit(store, root, sha ?? headSha(root), {
       force: opts.force,
@@ -2798,7 +2799,7 @@ program
             // must never take session-start orientation down (fail open). Public
             // store only — session transcripts travel further than a terminal.
             const { ConstitutionService: CS } = await import("../constitution/service.js");
-            escalations.push(...policyEscalations(new CS(s, paths.root).list({ publicOnly: true })));
+            escalations.push(...policyEscalations(new CS(s, paths.root).list({ publicOnly: true }).map((p) => ({ ...p, last_action: p.audit.at(-1)?.action ?? null }))));
           } catch { /* constitution unavailable */ }
           if (escalations.length) {
             L.push(`⚖ ${escalations.length} decision(s) need YOUR call — ASK the user inline (don't queue): ${escalations.map((e) => e.question).join(" · ")}`);
@@ -3262,7 +3263,7 @@ program
       // Fail open: a broken policy store must not take the memory escalations down.
       try {
         const { ConstitutionService: CS } = await import("../constitution/service.js");
-        items.push(...policyEscalations(new CS(store, root).list()));
+        items.push(...policyEscalations(new CS(store, root).list().map((p) => ({ ...p, last_action: p.audit.at(-1)?.action ?? null }))));
       } catch { /* constitution unavailable — memory escalations still surface */ }
       if (opts.json) { console.log(JSON.stringify(items)); if (items.length) process.exitCode = 1; return; }
       if (!items.length) {
@@ -3307,12 +3308,20 @@ program
  *  Returns the plan (null when the commit renamed nothing that memory binds).
  *  Apply mode rewrites the records in their homes, reindexes, and auto-commits each
  *  touched home as a `repair` move on the timeline — background, revertable. */
-function runRepair(store: HunchStore, root: string, sha: string, apply: boolean): { plan: RepairPlan; applied: boolean } | null {
+function runRepair(store: HunchStore, root: string, sha: string, apply: boolean): { plan: RepairPlan; policyRewrites: PolicyBindingRewrite[]; applied: boolean } | null {
   const renames = renamesOf(commitChanges(sha, root));
   if (!renames.length) return null;
   const plan = planRepair(renames, store.recs("decisions"), store.recs("constraints"));
-  if (!plan.rewrites.length) return null;
-  if (!apply) return { plan, applied: false };
+  // Policy bindings heal under the same zero-guessing contract; a broken policy
+  // store must never take graph-record repair down (fail open).
+  let service: ConstitutionService | null = null;
+  let policyRewrites: PolicyBindingRewrite[] = [];
+  try {
+    service = new ConstitutionService(store, root);
+    policyRewrites = planPolicyRepair(renames, service.list());
+  } catch { service = null; }
+  if (!plan.rewrites.length && !policyRewrites.length) return null;
+  if (!apply) return { plan, policyRewrites, applied: false };
   let privateTouched = false, publicTouched = false;
   for (const d of store.recs("decisions")) {
     const healed = repairDecision(d, plan);
@@ -3326,13 +3335,23 @@ function runRepair(store: HunchStore, root: string, sha: string, apply: boolean)
     store.putWhereItLives("constraints", healed);
     if (store.getPrivateRec("constraints", c.id)) privateTouched = true; else publicTouched = true;
   }
+  if (service && policyRewrites.length) {
+    const at = new Date().toISOString();
+    for (const p of service.list()) {
+      const healed = repairPolicySpec(p, policyRewrites, at);
+      if (healed === p) continue;
+      service.repository.putPolicy(healed);
+      if (healed.data_class === "public") publicTouched = true; else privateTouched = true;
+    }
+  }
   store.reindex();
   if (store.autoCommit) {
-    const message = `hunch: repair ${plan.rewrites.length} binding(s) after rename (${sha.slice(0, 7)})`;
+    const total = plan.rewrites.length + policyRewrites.length;
+    const message = `hunch: repair ${total} binding(s) after rename (${sha.slice(0, 7)})`;
     if (publicTouched) commitAndPushHunch(hunchPaths(root).hunch, message, { push: false });
     if (privateTouched && store.privateDir) commitAndPushHunch(store.privateDir, message, { push: true });
   }
-  return { plan, applied: true };
+  return { plan, policyRewrites, applied: true };
 }
 
 program
@@ -3346,8 +3365,11 @@ program
       if (!isGitRepo(root)) return fail("repair needs a git repo.");
       const res = runRepair(store, root, sha ?? headSha(root), !!opts.apply);
       if (!res) { console.log("✓ Nothing to repair — the commit renamed nothing that memory binds exactly."); return; }
-      console.log(`${res.applied ? "✓ Repaired" : "Would repair"} ${res.plan.rewrites.length} binding(s) across ${res.plan.records.length} record(s):`);
+      const total = res.plan.rewrites.length + res.policyRewrites.length;
+      console.log(`${res.applied ? "✓ Repaired" : "Would repair"} ${total} binding(s):`);
       for (const r of res.plan.rewrites) console.log(`  ${r.id}  ${r.field}: ${r.from} → ${r.to}`);
+      for (const r of res.policyRewrites) console.log(`  ${r.id}  ${r.field}: ${r.from} → ${r.to}`);
+      if (res.policyRewrites.length && res.applied) console.log(dim("\nRepaired policies need a fresh proof — they ask via `hunch escalations`."));
       if (!res.applied) console.log(dim("\nDry run — nothing changed. Re-run with --apply."));
     } finally {
       store.close();

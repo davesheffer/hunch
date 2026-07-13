@@ -20,7 +20,7 @@
 import type { Decision } from "./types.js";
 import { topicCollisions } from "./topics.js";
 
-export type EscalationKind = "topic-conflict" | "policy-candidate" | "policy-proposal";
+export type EscalationKind = "topic-conflict" | "policy-candidate" | "policy-proposal" | "policy-repaired";
 
 export interface Escalation {
   kind: EscalationKind;
@@ -61,6 +61,9 @@ export interface PolicyLite {
   statement: string;
   proof: string | null;
   authority: unknown;
+  /** the policy's most recent audit action, when the caller has it — lets the
+   *  scan surface auto-repaired policies that need a fresh proof. */
+  last_action?: string | null;
 }
 
 /** The Constitution's genuine human moments (§59.5.3), framed as inline questions:
@@ -71,6 +74,19 @@ export function policyEscalations(policies: readonly PolicyLite[]): Escalation[]
   const out: Escalation[] = [];
   const clip = (s: string): string => (s.length > 90 ? s.slice(0, 89).trimEnd() + "…" : s);
   for (const p of policies) {
+    // An auto-repaired policy asks FIRST (and only once): its bindings moved, so
+    // its proof is stale by construction — the human moment is "re-prove it".
+    if (p.last_action === "repaired" && (p.state === "proposed" || p.state === "active_advisory" || p.state === "active_blocking")) {
+      out.push({
+        kind: "policy-repaired",
+        topic: p.id,
+        decisionIds: [p.id],
+        question: `Rule "${clip(p.statement)}" (${p.id}) was auto-repaired after a rename — its proof is stale; re-prove it?`,
+        detail: `state ${p.state} · last action repaired · ${p.proof ? `proof ${p.proof} (stale)` : "no proof"}`,
+        resolution: `hunch policy prove ${p.id} — blocking stays fail-safe until the fresh proof lands`,
+      });
+      continue;
+    }
     if (p.state === "compiled" || p.state === "validating") {
       out.push({
         kind: "policy-candidate",

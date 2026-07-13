@@ -411,7 +411,7 @@ export function buildServer(root: string): McpServer {
     async (): Promise<ToolResult> => {
       const items: Escalation[] = pendingEscalations(store.json.loadAll("decisions"));
       try {
-        items.push(...policyEscalations(new ConstitutionService(store, root).list({ publicOnly: true })));
+        items.push(...policyEscalations(new ConstitutionService(store, root).list({ publicOnly: true }).map((p) => ({ ...p, last_action: p.audit.at(-1)?.action ?? null }))));
       } catch { /* constitution unavailable — memory escalations still surface */ }
       if (!items.length) return ok("✓ Nothing needs a human decision — memory is auto-trusted and self-consistent.");
       const L = [`${items.length} decision(s) need the human's call — ask each inline, don't decide it for them:`, ""];

@@ -62,6 +62,19 @@ test("policyEscalations: an empty policy store asks nothing", () => {
   assert.deepEqual(policyEscalations([]), []);
 });
 
+test("policyEscalations: an auto-repaired policy asks for a re-prove, exactly once", () => {
+  const items = policyEscalations([
+    P({ id: "pol_r", state: "active_advisory", proof: "proof_x", authority: { actor: "human:x" }, last_action: "repaired" }),
+    P({ id: "pol_ok", state: "active_advisory", authority: { actor: "human:x" }, last_action: "approved_advisory" }), // healthy active → silent
+    P({ id: "pol_rp", state: "proposed", proof: "proof_y", last_action: "repaired" }), // repaired wins over the proposal ask
+  ]);
+  assert.equal(items.length, 2);
+  assert.equal(items[0]!.kind, "policy-repaired");
+  assert.match(items[0]!.question, /auto-repaired after a rename/);
+  assert.match(items[0]!.resolution, /policy prove pol_r/);
+  assert.equal(items[1]!.kind, "policy-repaired", "a repaired proposed policy asks once, not twice");
+});
+
 test("pendingEscalations: a superseded decision on the topic does not count (only live collide)", () => {
   const decs = [
     D({ id: "dec_old", topic: "store.writes", status: "superseded", superseded_by: "dec_new" }),
