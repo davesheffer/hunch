@@ -1,0 +1,45 @@
+{
+  "id": "dec_accd1dd23c",
+  "title": "VS Code surface (v0.17): Memory panel + Journey + Why/Capture — the README/marketplace contract",
+  "topic": "vscode-extension-surface",
+  "status": "accepted",
+  "context": "The extension grew from the Journey-embed era into the Hunch Memory panel era (timeline, inline escalations, constitution authority lifecycle, self-repair moves). The marketplace README was rewritten for v1.8/v0.17 and the topic chain needed its current link so the doc anchors to live intent.",
+  "decision": "The extension's public contract is three surfaces: (1) the Hunch Memory activity-bar panel — memory-move timeline with click-to-diff and local revert, ⚖ Needs-your-decision escalations, 🏛 Constitution group with one-click audited activate/demote/withdraw/retire, strictness switch, approve-to-push; (2) Journey — the read-only compounding view with the embedded memory graph; (3) Why/Capture — the per-file read and the delegated write. All writes delegate to the hunch CLI/MCP; the panel spawn seam is conformance-certified against CLI/MCP/CI receipts.",
+  "consequences": [
+    "vscode-extension/README.md reconciles to this decision — the anchor-stale drift closes.",
+    "Future surface changes supersede THIS record on the same topic."
+  ],
+  "alternatives_rejected": [
+    "Leaving the topic chain ending at the Journey-era decision (rejected: the README describes the panel era; a stale anchor makes grounding lie)",
+    "Renaming the topic to vscode-extension.scope to merge families (rejected: renames break the existing anchor history; one chain per family, superseded links preserved)"
+  ],
+  "rejected_tripwires": [],
+  "related_components": [],
+  "related_files": [
+    "vscode-extension/README.md",
+    "vscode-extension/src/extension.ts",
+    "vscode-extension/src/memoryView.ts",
+    "vscode-extension/package.json"
+  ],
+  "supersedes": "dec_dcd6f8aed4",
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-07-13T13:15:07.292Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 0.95,
+    "evidence": [
+      "vscode-extension/README.md",
+      "vscode-extension/src/extension.ts",
+      "vscode-extension/src/memoryView.ts",
+      "vscode-extension/package.json"
+    ]
+  },
+  "date": "2026-07-13T13:15:07.292Z"
+}
