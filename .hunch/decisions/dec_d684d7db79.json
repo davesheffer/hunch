@@ -1,0 +1,49 @@
+{
+  "id": "dec_d684d7db79",
+  "title": "VS Code becomes a certifiable G3 conformance client via its real spawn seam",
+  "topic": "constitution-g3-readiness",
+  "status": "accepted",
+  "context": "dec_ce86ca9cec certified only the cli/mcp/ci profile and required every other client set to fail closed as unsupported-client-profile, because labels are not executable conformance evidence. The VS Code Hunch Memory panel became the flagship human surface (activate/demote/withdraw/retire), so it needs real certification — not an argument that it 'just delegates to the CLI'.",
+  "decision": "G3 adapter conformance now supports a table of certifiable client profiles (G3_CONFORMANCE_PROFILES), each mapping a human-selected client set to ONE executable end-to-end fixture. Two profiles exist: ci/cli/mcp (unchanged) and ci/cli/mcp/vscode. The vscode profile is certified by executing the extension's REAL spawn seam — vscode-extension/src/spawnCore.ts (runHunchWith: the exact arg quoting, Windows npm-shim cmd.exe handling, and result shaping the panel uses), extracted vscode-free so a plain node:test can drive it against an npm-style shim. The fixture asserts byte-identical deterministic receipt hashes across CLI, MCP, check, and the seam, plus zero private leakage through the seam's public-only output. Every other client set still fails closed. All other dec_ce86ca9cec doctrine (append-only, tamper protection, authority:none, g3_passed:false, human-only activation) carries forward unchanged.",
+  "consequences": [
+    "A future G3-class plan may name the four-client profile and obtain a real passed receipt including vscode.",
+    "The extension's spawn behavior is now under executable certification — changing spawnCore semantics breaks the conformance fixture, not just the panel.",
+    "The fixture itself caught a receipt contamination during development (planting the shim inside the fixture repo changed the working-snapshot hash) — evidence the equality check has teeth."
+  ],
+  "alternatives_rejected": [
+    "Certify vscode by argument (it delegates to the CLI) — rejected: labels are not executable conformance evidence; that is the exact rejected alternative of the superseded decision",
+    "Replicate the extension's spawn logic inside the fixture — rejected: certifies a copy, not the client; the real seam was extracted vscode-free instead",
+    "A separate vscode-only fixture — rejected: certification is receipt EQUALITY, so all four surfaces must run in one fixture against one snapshot"
+  ],
+  "rejected_tripwires": [],
+  "related_components": [],
+  "related_files": [
+    "src/constitution/g3Conformance.ts",
+    "vscode-extension/src/spawnCore.ts",
+    "vscode-extension/src/cli.ts",
+    "test/behavior-workspace.test.ts",
+    "test/g3.test.ts"
+  ],
+  "supersedes": "dec_ce86ca9cec",
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-07-13T10:14:03.557Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 0.95,
+    "evidence": [
+      "src/constitution/g3Conformance.ts",
+      "vscode-extension/src/spawnCore.ts",
+      "vscode-extension/src/cli.ts",
+      "test/behavior-workspace.test.ts",
+      "test/g3.test.ts"
+    ]
+  },
+  "date": "2026-07-13T10:14:03.557Z"
+}
