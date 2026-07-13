@@ -44,7 +44,7 @@ import { deriveForbids, effectiveForbids } from "../core/constraintmatch.js";
 import type { Runbook } from "../core/types.js";
 import { extractInlineIntent } from "../extractors/comments.js";
 import { renderText, renderMarkdown, renderImpact, reportFailsStrict, type CheckReport } from "../core/checkreport.js";
-import { partitionReview, READY_MIN_GROUNDED, type ReviewItem } from "../core/reviewqueue.js";
+import { partitionReview, isReviewDraft, READY_MIN_GROUNDED, type ReviewItem } from "../core/reviewqueue.js";
 import { installPostCommitHook, installPreCommitHook } from "../integrations/hooks.js";
 import { ensureSharedOverlayPointer } from "../integrations/worktree.js";
 import { flushCapture } from "../integrations/sync.js";
@@ -84,6 +84,7 @@ import { renderCompilerScorecard, scoreCompilerCaseBank } from "../constitution/
 import { generateWiki, wikiStatus, wikiPrompt, publicHome, privateHome, readWikiManifestAt, nowData, type WikiPack } from "../wiki/wiki.js";
 import { adoptProsePrompt } from "../wiki/adopt.js";
 import { topicCollisions, renderGrounding } from "../core/topics.js";
+import { pendingEscalations } from "../core/escalations.js";
 import { parseDocAnchors, renderDocGrounding } from "../core/docanchors.js";
 import { compareCandidates } from "../core/compare.js";
 import { checkConformance } from "../core/conformance.js";
@@ -2535,7 +2536,7 @@ program
     const blocking = store.recs("constraints").filter((c) => c.status === "active" && c.severity === "blocking" && vouchedSrc(c.provenance?.source));
     const precise = blocking.filter((c) => !!effectiveForbids(c));
     const scopeOnly = blocking.filter((c) => !effectiveForbids(c));
-    const drafts = store.json.loadAll("decisions").filter((d) => d.status === "proposed" || d.provenance.confidence < 0.6);
+    const drafts = store.json.loadAll("decisions").filter(isReviewDraft);
     const { ready, scrutiny } = partitionReview(drafts, READY_MIN_GROUNDED);
     const stale = store.staleness((f) => lastChangeDate(f, root)).filter((s) => s.kind === "constraint");
 
@@ -2697,7 +2698,11 @@ program
           if (roadmap.length) {
             L.push(`Roadmap (${roadmap.length} live proposed): ${roadmap.slice(0, 3).map((r) => r.title).join(" · ")}${roadmap.length > 3 ? " · …" : ""}`);
           }
-          if (pendingReview > 0) L.push(`${pendingReview} auto-draft(s) awaiting \`hunch review\`.`);
+          if (pendingReview > 0) L.push(`${pendingReview} legacy un-vouched draft(s) — adopt as advisory memory with \`hunch adopt-drafts\` (new captures auto-trust).`);
+          const escalations = pendingEscalations(decisions);
+          if (escalations.length) {
+            L.push(`⚖ ${escalations.length} decision(s) need YOUR call — ASK the user inline (don't queue): ${escalations.map((e) => e.question).join(" · ")}`);
+          }
           L.push("Orient further: hunch_context(task) · hunch_structure() · `hunch now`.");
           // The operating loop rides session start — guaranteed delivery, once
           // (the zod bench showed ambient skills are read in ~0% of sessions).
@@ -2839,6 +2844,39 @@ function printReviewItem(it: ReviewItem): void {
 }
 
 program
+  .command("adopt-drafts")
+  .description("Auto-trust migration: adopt every legacy un-vouched proposed draft as trusted ADVISORY memory (status → accepted, source unchanged so it STILL never blocks). Clears the old review backlog in one shot — nothing is deleted, enforcement stays human-gated, and blocking authority is still granted inline. Idempotent.")
+  .option("--dry-run", "list what would be adopted; change nothing")
+  .option("--private", "include local private/shared-overlay drafts")
+  .action((opts: { dryRun?: boolean; private?: boolean }) => {
+    const { store, root } = storeFor();
+    try {
+      if (opts.private && !store.hasPrivate) return fail("--private needs HUNCH_PRIVATE_DIR set to a private store");
+      const all = opts.private ? store.recs("decisions") : store.json.loadAll("decisions");
+      const drafts = all.filter(isReviewDraft);
+      if (!drafts.length) { console.log("✓ No un-vouched drafts — the graph is already fully auto-trusted."); return; }
+      if (opts.dryRun) {
+        console.log(`Would adopt ${drafts.length} draft(s) as trusted advisory memory (still never block):`);
+        for (const d of drafts) console.log(`  ${d.id}  [${d.provenance.source} ${d.provenance.confidence}]  ${d.title}`);
+        console.log(`\n${dim("Dry run — nothing changed. Re-run without --dry-run to adopt. Roadmap intent? Re-declare it with hunch_record_decision(status:proposed).")}`);
+        return;
+      }
+      // Flip status proposed → accepted (in-force advisory). Source/confidence are
+      // UNCHANGED: it stays llm_draft-sourced, so the veto/strict gates (which key on
+      // human_confirmed, not status) keep treating it as advisory — never blocking.
+      let adopted = 0;
+      for (const d of drafts) {
+        store.putWhereItLives("decisions", { ...d, status: "accepted", provenance: { ...d.provenance, last_verified: new Date().toISOString() } });
+        adopted++;
+      }
+      store.reindex();
+      console.log(`✓ Adopted ${adopted} draft(s) as trusted advisory memory. The review backlog is clear; none of them can block an edit until a human grants blocking authority inline.`);
+    } finally {
+      store.close();
+    }
+  });
+
+program
   .command("review")
   .description("Triage drafts: segmented list, accept/reject one, or batch-accept Critic-verified drafts.")
   .option("--accept <id>", "promote a decision to accepted/human-confirmed (confirms its tripwires)")
@@ -2909,10 +2947,10 @@ program
         for (const it of ready) console.log(`   ${it.d.id}  grounded=${it.synth.grounded ?? "?"}  ${it.d.title}`);
       }
     } else {
-      const drafts = decisions().filter((d) => d.status === "proposed" || d.provenance.confidence < 0.6);
+      const drafts = decisions().filter(isReviewDraft);
       const { ready, scrutiny } = partitionReview(drafts, minGrounded);
       if (!ready.length && !scrutiny.length) {
-        console.log("✓ No low-confidence drafts to review.");
+        console.log("✓ No drafts awaiting review — captured memory auto-trusts (advisory) the moment it lands.");
       } else {
         if (ready.length) {
           console.log(`✓ ${ready.length} ready to confirm — Critic-verified, grounded ≥ ${minGrounded} (best first):\n`);
@@ -2958,7 +2996,7 @@ program
       const minRejectConfidence = Number.isFinite(Number(opts.minRejectConfidence)) ? Number(opts.minRejectConfidence) : 0.7;
       const all = opts.private ? store.recs("decisions") : store.json.loadAll("decisions");
       // Same draft set `hunch review` / `hunch status` triage.
-      const drafts = all.filter((d) => d.status === "proposed" || d.provenance.confidence < 0.6);
+      const drafts = all.filter(isReviewDraft);
       if (!drafts.length) { console.log("✓ No drafts to auto-review."); return; }
 
       // Delegate relevance to the harness (subscription CLI) — feature-detected.
@@ -3105,6 +3143,30 @@ program
         for (const d of decs) console.error(`    - ${d.id} — "${d.title}" (${d.status})`);
       }
       console.error(`\nResolve: re-record one with supersedes:<other-id> to link it over the other, or give one a distinct topic to split.`);
+      process.exitCode = 1;
+    } finally {
+      store.close();
+    }
+  });
+
+// ---- escalations (the inline "ask the human" surface) ---------------------
+program
+  .command("escalations")
+  .description("The decisions a human must make NOW — surfaced to be asked INLINE (in the prompt), never a background queue. Captured memory auto-trusts on landing; this lists only what the graph genuinely can't resolve itself (today: topic conflicts). Normally empty. Exits non-zero when any are open, so an assistant/CI knows to raise them.")
+  .action(() => {
+    const { store } = storeFor();
+    try {
+      const items = pendingEscalations(store.recs("decisions"));
+      if (!items.length) {
+        console.log("✓ Nothing needs your decision — memory is auto-trusted and self-consistent.");
+        return;
+      }
+      console.log(`${items.length} decision(s) need your call (ask inline; nothing is queued):\n`);
+      for (const e of items) {
+        console.log(`  ⚖ ${e.question}`);
+        console.log(`      ${dim(e.detail)}`);
+        console.log(`      ${dim("→ " + e.resolution)}\n`);
+      }
       process.exitCode = 1;
     } finally {
       store.close();
@@ -3331,7 +3393,7 @@ program
       console.log(`\n🗺 Roadmap — live proposed decisions (${roadmap.length}):`);
       if (!roadmap.length) console.log("  (empty — record what's next as a PROPOSED decision via /capture and it appears here)");
       for (const r of roadmap) console.log(`  • ${r.title}  (${r.id}${r.topic ? `, ${r.topic}` : ""}, since ${r.date})\n      ${r.note}`);
-      if (pendingReview > 0) console.log(`\n  (${pendingReview} auto-drafted proposal(s) awaiting review — \`hunch review\`)`);
+      if (pendingReview > 0) console.log(`\n  (${pendingReview} legacy un-vouched draft(s) — \`hunch adopt-drafts\` to auto-trust them as advisory)`);
     } finally {
       store.close();
     }

@@ -52,6 +52,18 @@ export function parseSynth(evidence: string[] | undefined): SynthInfo {
 /** Grounded-ness at/above which a Critic-verified draft is a "quick yes". */
 export const READY_MIN_GROUNDED = 0.7;
 
+/** Whether a decision is an un-vouched draft still awaiting a human — the ONLY thing
+ *  the review path surfaces under the auto-trust model.
+ *
+ *  Low confidence NO LONGER makes a draft: captured memory is trusted-advisory the
+ *  moment it lands (status `accepted`, source `llm_draft`), so it grounds and ranks
+ *  but never nags. Only a DELIBERATE, not-yet-human-vouched `proposed` record — an
+ *  explicit roadmap/intent entry a human hasn't confirmed — counts as a review draft.
+ *  (Enforcement authority is granted INLINE, not by draining a background queue.) */
+export function isReviewDraft(d: Decision): boolean {
+  return d.status === "proposed" && !d.provenance.source.includes("human_confirmed");
+}
+
 export interface ReviewItem {
   d: Decision;
   synth: SynthInfo;

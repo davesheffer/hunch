@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseSynth, partitionReview, isReady, READY_MIN_GROUNDED } from "../src/core/reviewqueue.js";
+import { parseSynth, partitionReview, isReady, isReviewDraft, READY_MIN_GROUNDED } from "../src/core/reviewqueue.js";
 import type { Decision } from "../src/core/types.js";
 
 const D = (over: { id?: string; source?: string; confidence?: number; evidence?: string[] }): Decision => ({
@@ -22,6 +22,16 @@ test("parseSynth: captures a verify=failed marker; absent/empty → {}", () => {
   assert.equal(parseSynth(["synth:provider=ensemble verify=failed"]).verify, "failed");
   assert.deepEqual(parseSynth(["commit:abc"]), {});
   assert.deepEqual(parseSynth(undefined), {});
+});
+
+test("isReviewDraft: only an un-vouched proposed record counts; low confidence alone does NOT", () => {
+  // The auto-trust core: captured memory lands `accepted` and is trusted advisory —
+  // even at low confidence it is NEVER a review draft. Only a deliberate, un-vouched
+  // `proposed` entry awaits a human.
+  assert.equal(isReviewDraft({ ...D({ confidence: 0.1 }), status: "accepted" } as Decision), false, "low-confidence accepted memory is not a draft");
+  assert.equal(isReviewDraft({ ...D({ confidence: 0.5, source: "llm_draft" }), status: "proposed" } as Decision), true, "un-vouched proposed → review draft");
+  assert.equal(isReviewDraft({ ...D({ source: "llm_draft+human_confirmed" }), status: "proposed" } as Decision), false, "a human-vouched proposed record is roadmap intent, not a draft");
+  assert.equal(isReviewDraft({ ...D({}), status: "superseded" } as Decision), false, "superseded is not a draft");
 });
 
 test("isReady: only a Critic-verified AND well-grounded draft is ready", () => {
