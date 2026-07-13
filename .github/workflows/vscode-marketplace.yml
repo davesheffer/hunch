@@ -53,7 +53,31 @@ jobs:
           path: vscode-extension/hunch-vscode.vsix
           if-no-files-found: error
 
-      - name: Publish to Marketplace
+      # Each registry publishes independently: an expired or missing token for one
+      # must never block the other (an existing-but-dead secret still runs its step,
+      # so failure isolation needs continue-on-error, not just a presence check).
+      # The final step demands that at least ONE registry actually succeeded.
+      - name: Publish to VS Code Marketplace
+        id: vsce
+        if: env.VSCE_PAT != ''
+        continue-on-error: true
         run: npx --yes @vscode/vsce publish --packagePath hunch-vscode.vsix --pat "$VSCE_PAT"
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
+
+      - name: Publish to Open VSX
+        id: ovsx
+        if: env.OVSX_PAT != ''
+        continue-on-error: true
+        run: |
+          # namespace creation is one-time; an already-existing namespace must not fail the publish
+          npx --yes ovsx create-namespace davesheffer --pat "$OVSX_PAT" || true
+          npx --yes ovsx publish hunch-vscode.vsix --pat "$OVSX_PAT"
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+
+      - name: Require at least one successful publish
+        if: steps.vsce.outcome != 'success' && steps.ovsx.outcome != 'success'
+        run: |
+          echo "No registry publish succeeded (vsce: ${{ steps.vsce.outcome }}, ovsx: ${{ steps.ovsx.outcome }})." >&2
+          exit 1

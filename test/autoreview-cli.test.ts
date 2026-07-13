@@ -150,9 +150,13 @@ fi
   chmodSync(fakeCodex, 0o755);
   const store = new HunchStore(hunchPaths(root));
   store.json.ensureDirs();
+  // Auto-trust world (v1.8): the review-draft set is UN-vouched llm_draft proposals —
+  // a human_confirmed proposed record is roadmap intent and is never triaged. The
+  // invariant under test is unchanged: two drafts that duplicate EACH OTHER (with no
+  // accepted incumbent) must both be kept, never deleted.
   const title = "Benchmark evidence establishes the architectural enforcement boundary";
-  store.json.put("decisions", draft("dec_benchmark_v1", title, "human_confirmed"));
-  store.json.put("decisions", draft("dec_benchmark_v2", title, "human_confirmed"));
+  store.json.put("decisions", draft("dec_benchmark_v1", title));
+  store.json.put("decisions", draft("dec_benchmark_v2", title));
   store.close();
   const firstPath = join(root, ".hunch/decisions/dec_benchmark_v1.json");
   const secondPath = join(root, ".hunch/decisions/dec_benchmark_v2.json");

@@ -2,7 +2,7 @@
   "id": "dec_ce86ca9cec",
   "title": "Make G3 a private append-only evidence gate that never self-signs",
   "topic": "constitution-g3-readiness",
-  "status": "accepted",
+  "status": "superseded",
   "context": "The user authorized continuing the full Constitution implementation after the first staged/working advisory slice. Gate G3 requires a green/yellow scorecard with no privacy red line, measured proof-card comprehension and review burden, executable conformance for at least three human-selected clients, and preregistered retrieval/compiler experiments, while separate human policy activation and gate sign-off remain mandatory.",
   "decision": "Represent G3 plans, EXP-01/EXP-03 preregistrations, proof-card review measurements, and adapter-conformance receipts as private, content-addressed, append-only artifacts with tamper and branched-supersession protection. Bind a G3 plan to the exact eligible G2 readiness receipt, the complete G2 policy set, exact current experiment revisions, and at least three human-selected client identifiers. Certify only the executable CLI/MCP/CI profile through the real end-to-end adapter fixture; unsupported client profiles fail closed. Derive a deterministic scorecard and emit only eligible_for_human_g3_signoff with authority:none and g3_passed:false. Advisory policy activation and final G3 sign-off remain separate explicit human actions.",
   "consequences": [
@@ -31,11 +31,11 @@
     "tooling/release-gate.mjs"
   ],
   "supersedes": null,
-  "superseded_by": null,
+  "superseded_by": "dec_d684d7db79",
   "caused_by_bug": null,
   "commit": "62a1997e060447d0aaf6e93a8714c4e10eb4dd40",
   "valid_from": "2026-07-11T19:15:25.692Z",
-  "valid_to": null,
+  "valid_to": "2026-07-13T10:14:03.557Z",
   "retired": {
     "symbols": [],
     "deps": []

@@ -1,0 +1,49 @@
+{
+  "id": "dec_ccffd3f39e",
+  "title": "Self-repair slice 1: renames heal exact-path memory bindings automatically on sync",
+  "topic": "constitution.self-repair",
+  "status": "accepted",
+  "context": "Renaming a file silently rotted every decision related_files entry, tripwire scope, and constraint scope that pointed at the old path — the top memory-goes-stale failure mode. Phase 5 (§59.3 D) requires a repair engine; §59.5's rule: safe repairs auto-apply as revertable moves, only unsafe ones ask.",
+  "decision": "src/core/repair.ts is a pure planner with ZERO guessing: git's own rename detection (commitChanges, -M) is the only old→new source, and only EXACT path matches are rewritten — globs, prefixes, and anything ambiguous are left alone (deleted paths remain the drift detector's job). Bindings covered: Decision.related_files, RejectedTripwire.scope, Constraint.scope; live records only (superseded/rejected/retired history stays as written). The sync path runs it automatically per synced commit (fail-open: a repair error never takes capture down), auto-committing each touched home as a `repair` move on the memory timeline (new memorylog kind, wrench icon in the panel) — background, one-click revertable. hunch repair [sha] is the manual surface, dry-run by default.",
+  "consequences": [
+    "Renames no longer rot memory bindings — the graph self-heals as part of the normal commit flow.",
+    "Repairs are ordinary memory moves: visible on the spine, revertable, never pushed on their own.",
+    "Policy-IR binding repair + re-prove is the deliberate NEXT slice — a repaired policy must not keep a stale proof."
+  ],
+  "alternatives_rejected": [
+    "Fuzzy/semantic rename matching (rejected: a wrong auto-rewrite corrupts the source of truth; the planner only trusts git's -M detection and exact matches — zero guessing is the whole safety argument)",
+    "Repair globs by prefix rewriting (rejected: a glob's intent is scope, not a file identity; prefix rewrites can silently widen or narrow enforcement)",
+    "A repair review queue (rejected: §59.5.3 — safe repairs must be invisible; only genuinely ambiguous cases may ever ask, and slice 1 simply excludes them from the plan)"
+  ],
+  "rejected_tripwires": [],
+  "related_components": [],
+  "related_files": [
+    "src/core/repair.ts",
+    "src/cli/index.ts",
+    "src/core/memorylog.ts",
+    "vscode-extension/src/memoryView.ts",
+    "test/repair.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-07-13T10:28:19.773Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 0.95,
+    "evidence": [
+      "src/core/repair.ts",
+      "src/cli/index.ts",
+      "src/core/memorylog.ts",
+      "vscode-extension/src/memoryView.ts",
+      "test/repair.test.ts"
+    ]
+  },
+  "date": "2026-07-13T10:28:19.773Z"
+}

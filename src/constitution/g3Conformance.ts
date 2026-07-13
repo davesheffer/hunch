@@ -14,6 +14,22 @@ export const G3_CONFORMANCE_TEST = {
   name: "CLI, MCP, and check share one non-blocking working-snapshot receipt without public leakage",
 } as const;
 
+/** The certifiable client profiles. Each maps a HUMAN-SELECTED client set to the
+ *  ONE executable fixture that exercises every named surface end-to-end and
+ *  asserts receipt equality + zero private leaks. The vscode profile executes the
+ *  extension's real spawn seam (vscode-extension/src/spawnCore.ts) against an
+ *  npm-style shim — naming a client never certifies it; only its fixture does. */
+export const G3_CONFORMANCE_PROFILES = [
+  { clients: G3_CONFORMANCE_CLIENTS, test: G3_CONFORMANCE_TEST },
+  {
+    clients: ["ci", "cli", "mcp", "vscode"] as const,
+    test: {
+      file: "test/behavior-workspace.test.ts",
+      name: "CLI, MCP, check, and the VS Code seam share one non-blocking working-snapshot receipt without public leakage",
+    } as const,
+  },
+] as const;
+
 export function g3ConformanceSourceHash(root: string): string {
   return canonicalHash(readFileSync(join(root, G3_CONFORMANCE_TEST.file), "utf8"));
 }
@@ -22,9 +38,9 @@ function sameClients(left: readonly string[], right: readonly string[]): boolean
   return canonicalHash([...left].sort()) === canonicalHash([...right].sort());
 }
 
-/** Execute the real CLI/MCP/CI fixture selected by the first G3 conformance profile.
- * Unsupported human-selected client sets return an error receipt rather than being
- * silently treated as equivalent to the built-in three-surface profile. */
+/** Execute the real end-to-end fixture matching the plan's human-selected client
+ * profile. Unsupported client sets return an error receipt rather than being
+ * silently treated as equivalent to a certified profile. */
 export function executeG3AdapterConformance(
   root: string,
   plan: G3Plan,
@@ -34,7 +50,8 @@ export function executeG3AdapterConformance(
   if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 300_000) throw new Error("G3 conformance timeout must be a positive integer no greater than 300000");
   const sourceHash = g3ConformanceSourceHash(root);
   const isolationFlag = nodeTestIsolationFlag();
-  if (!sameClients(plan.clients, G3_CONFORMANCE_CLIENTS)) {
+  const profile = G3_CONFORMANCE_PROFILES.find((candidate) => sameClients(plan.clients, candidate.clients));
+  if (!profile) {
     return compileAdapterConformanceReceipt({
       plan_id: plan.id,
       clients: plan.clients,
@@ -46,10 +63,11 @@ export function executeG3AdapterConformance(
       verdict_agreement: null,
       confirmed_private_leaks: null,
       error_code: "unsupported-client-profile",
-      log_hash: canonicalHash({ supported: G3_CONFORMANCE_CLIENTS, selected: plan.clients }),
+      log_hash: canonicalHash({ supported: G3_CONFORMANCE_PROFILES.map((candidate) => candidate.clients), selected: plan.clients }),
       supersedes: opts.supersedes ?? null,
     }, { now: opts.now });
   }
+  const selectedTest = profile.test;
 
   const session = mkdtempSync(join(tmpdir(), "hunch-g3-conformance-"));
   const reporter = join(session, "reporter.mjs");
@@ -71,10 +89,10 @@ export function executeG3AdapterConformance(
     tsx,
     "--test",
     isolationFlag,
-    `--test-name-pattern=${exactNodeTestPattern(G3_CONFORMANCE_TEST.name)}`,
+    `--test-name-pattern=${exactNodeTestPattern(selectedTest.name)}`,
     `--test-reporter=${pathToFileURL(reporter).href}`,
     "--test-reporter-destination=stdout",
-    G3_CONFORMANCE_TEST.file,
+    selectedTest.file,
   ], {
     cwd: root,
     env,
@@ -87,7 +105,7 @@ export function executeG3AdapterConformance(
   rmSync(session, { recursive: true, force: true });
   const stdout = run.stdout ?? "";
   const stderr = run.stderr ?? "";
-  const events = nodeTestReporterEvents(stdout).filter((event) => event.name === G3_CONFORMANCE_TEST.name && !event.skip && !event.todo);
+  const events = nodeTestReporterEvents(stdout).filter((event) => event.name === selectedTest.name && !event.skip && !event.todo);
   const selectedEvent = events.length === 1 ? (events[0]!.type === "test:pass" ? "passed" as const : "failed" as const) : null;
   let result: AdapterConformanceReceipt["result"] = "error";
   let errorCode: string | undefined;
@@ -101,7 +119,7 @@ export function executeG3AdapterConformance(
   return compileAdapterConformanceReceipt({
     plan_id: plan.id,
     clients: plan.clients,
-    test: { ...G3_CONFORMANCE_TEST, source_hash: sourceHash },
+    test: { ...selectedTest, source_hash: sourceHash },
     runner: { name: "node-test-tsx", isolation_flag: isolationFlag },
     result,
     exit_code: run.status ?? null,

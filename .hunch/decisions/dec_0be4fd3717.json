@@ -2,7 +2,7 @@
   "id": "dec_0be4fd3717",
   "title": "Standardize revision-2 review to plain-language contract, shield revision-1 append-only pilot",
   "topic": null,
-  "status": "proposed",
+  "status": "accepted",
   "context": "EXP-03 revision-1 was onboarding/UX pilot only. Revision-2 needs structured, accessible review that requires no domain policy knowledge and works consistently across all arms.",
   "decision": "Revision-2 cases must state required_relationship in plain language. All arms then present identical question ('Does rule preserve relationship?') with 4 standardized choices (use/correct/reject/cannot_decide) and simple response template. Revision-1 cases with no required_relationship keep byte-identical treatments to preserve append-only pilot auditability.",
   "consequences": [
@@ -97,7 +97,7 @@
       "src/constitution/experiment.ts",
       "test/experiment.test.ts"
     ],
-    "last_verified": "2026-07-12T06:20:21.480Z"
+    "last_verified": "2026-07-13T06:10:56.397Z"
   },
   "date": "2026-07-12T09:19:51+03:00"
 }

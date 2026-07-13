@@ -19,8 +19,10 @@ import {
   compileExperimentReviewStart,
   compileExperimentRun,
   compileExperimentStop,
+  compileExp03ReviewResponse,
   currentExperimentOutcomes,
   type CompileExperimentCaseBankInput,
+  type Exp03Case,
   type ExperimentCaseBank,
   type ExperimentOutcome,
 } from "../src/constitution/experiment.js";
@@ -234,6 +236,138 @@ test("EXP-03 revision 2 requires a plain relationship and gives every arm one ja
     ]);
     assert.ok(review.response_template);
     assert.doesNotMatch(JSON.stringify(review), /\b(?:policy|predicate|selector|binding|IR)\b/i);
+  }
+});
+
+test("revision-2 response mapper: the four plain choices map deterministically and cannot contradict the submitted rule", () => {
+  const registration = prereg("EXP-03", 2);
+  const bank = compileExperimentCaseBank(exp03Input(registration, "The payment action must verify the session"), registration, { now: LOCKED });
+  const item = bank.cases[0]! as Exp03Case;
+
+  // accept = the presented rule, byte-faithful (arms B/C)
+  const accept = compileExp03ReviewResponse(item, "C", { choice: "accept", rule_text: item.compiler_candidate, reason: "It preserves the relationship.", inspected_supporting_checks: true });
+  assert.equal(accept.decision, "accepted_precise");
+  assert.equal(accept.precise, true);
+  assert.equal(accept.proof_inspected, true);
+  assert.equal(accept.result, item.compiler_candidate);
+  assert.equal(accept.silent_semantic_substitution, false);
+
+  // edit = a genuinely changed rule
+  const edit = compileExp03ReviewResponse(item, "B", { choice: "edit", rule_text: `${item.compiler_candidate} narrowed`, reason: "Scope was too broad." });
+  assert.equal(edit.decision, "accepted_edited");
+  assert.equal(edit.result, `${item.compiler_candidate} narrowed`);
+
+  // reject carries its reason; cannot_decide maps to uncompilable with no rule
+  const reject = compileExp03ReviewResponse(item, "A", { choice: "reject", rule_text: null, reason: "The evidence does not support it." });
+  assert.equal(reject.decision, "rejected");
+  assert.equal(reject.rejection_reason, "The evidence does not support it.");
+  // cannot_decide is its OWN raw category (expreg_ba6aef4ecd) — never folded into uncompilable
+  const undecided = compileExp03ReviewResponse(item, "A", { choice: "cannot_decide", rule_text: null, reason: "Evidence is ambiguous." });
+  assert.equal(undecided.decision, "cannot_decide");
+  assert.equal(undecided.result, null);
+  assert.equal(undecided.precise, false);
+
+  // choice/text contradictions are refused, both directions
+  assert.throws(() => compileExp03ReviewResponse(item, "B", { choice: "accept", rule_text: "something else", reason: "r." }), /use choice "edit"/i);
+  assert.throws(() => compileExp03ReviewResponse(item, "C", { choice: "edit", rule_text: item.compiler_candidate, reason: "r." }), /use choice "accept"/i);
+  assert.throws(() => compileExp03ReviewResponse(item, "A", { choice: "accept", rule_text: null, reason: "r." }), /requires the rule text/i);
+  assert.throws(() => compileExp03ReviewResponse(item, "A", { choice: "reject", rule_text: "leftover", reason: "r." }), /leave the rule text blank/i);
+  assert.throws(() => compileExp03ReviewResponse(item, "B", { choice: "accept", rule_text: item.compiler_candidate, reason: "r.", inspected_supporting_checks: true }), /only shown in arm C/i);
+  assert.throws(() => compileExp03ReviewResponse(item, "A", { choice: "reject", rule_text: null, reason: "  " }), /plain-language sentence/i);
+
+  // a revision-1 case (no required_relationship) refuses the template outright
+  const rev1 = compileExperimentCaseBank(exp03Input(prereg("EXP-03")), prereg("EXP-03"), { now: LOCKED }).cases[0]! as Exp03Case;
+  assert.throws(() => compileExp03ReviewResponse(rev1, "A", { choice: "reject", rule_text: null, reason: "r." }), /revision-1 pilot case/i);
+});
+
+test("revision-2 service dialects: raw submission refuses template cases and respond derives timing + edit distance", () => {
+  const { root, store, repository, cleanup } = fixture();
+  try {
+    const registration = new G3EvidenceRepository(store).putExperiment(prereg("EXP-03", 2));
+    const service = new ConstitutionService(store, root);
+    const bank = service.lockExperimentCaseBank(exp03Input(registration, "The payment action must verify the session"), { now: LOCKED });
+    const run = repository.putRun(compileExperimentRun({ sample_per_arm: 2, actor: "human:owner", reason: "Plain-language review." }, registration, bank, { now: LOCKED }));
+    const next = service.nextExperimentReview(run.id, "human:reviewer", { now: "2026-07-13T13:00:00.000Z" });
+    const item = bank.cases.find((c) => c.id === next.assignment.case_id)! as Exp03Case;
+
+    // the OLD raw dialect is refused on a revision-2 case
+    assert.throws(() => service.submitExperimentReview(run.id, next.assignment.id, {
+      reviewer: "human:reviewer", decision: "accepted_precise", precise: true, proof_inspected: false,
+      result: item.compiler_candidate, silent_semantic_substitution: false, rejection_reason: null,
+      confirmed_private_leak: false, data_loss_or_corruption: false, unsafe_evaluator_behavior: false,
+      reason: "Raw metrics on a template case.",
+    }, { now: "2026-07-13T13:01:00.000Z" }), /standardized response template/i);
+
+    // the standardized response completes, with machine timing and derived distance
+    const outcome = service.respondExperimentReview(run.id, next.assignment.id, {
+      reviewer: "human:reviewer",
+      choice: "edit",
+      rule_text: `${item.compiler_candidate} narrowed to the checkout path`,
+      reason: "The rule needed a narrower scope.",
+      ...(next.assignment.arm === "C" ? { inspected_supporting_checks: true } : {}),
+    }, { now: "2026-07-13T13:02:00.000Z" });
+    assert.equal(outcome.status, "completed");
+    const metrics = outcome.metrics as { decision: string; duration_ms: number; semantic_edit_distance: number | null; result_hash: string | null };
+    assert.equal(metrics.decision, "accepted_edited");
+    assert.equal(metrics.duration_ms, 120_000);
+    if (next.assignment.arm === "A") assert.equal(metrics.semantic_edit_distance, null);
+    else assert.equal(!!(metrics.semantic_edit_distance && metrics.semantic_edit_distance > 0), true);
+    assert.ok(metrics.result_hash);
+
+    // the arm report exposes the preregistered RAW per-decision counts, zeros kept
+    const report = service.experimentReport(run.id);
+    const armReport = report.arms.find((a) => a.arm === next.assignment.arm)!;
+    assert.ok(armReport.decisions, "EXP-03 arms carry raw decision counts");
+    assert.equal(armReport.decisions!["accepted_edited"], 1);
+    assert.equal(armReport.decisions!["cannot_decide"], 0);
+    assert.equal(armReport.decisions!["timeout"], 0);
+
+    // non-answer terminal bookkeeping (abandoned/timeout) stays possible on a
+    // revision-2 case through the raw path — the preregistration retains them
+    const second = service.nextExperimentReview(run.id, "human:reviewer", { now: "2026-07-13T13:10:00.000Z" });
+    const abandoned = service.submitExperimentReview(run.id, second.assignment.id, {
+      reviewer: "human:reviewer", decision: "abandoned", precise: false, proof_inspected: false,
+      result: null, silent_semantic_substitution: false, rejection_reason: null,
+      confirmed_private_leak: false, data_loss_or_corruption: false, unsafe_evaluator_behavior: false,
+      reason: "Reviewer abandoned the case mid-session.",
+    }, { now: "2026-07-13T13:20:00.000Z" });
+    assert.equal((abandoned.metrics as { decision: string }).decision, "abandoned");
+
+    // a revision-1 run refuses the template dialect end-to-end (fixtures compiled
+    // directly — the ledger correctly allows only ONE current preregistration)
+    const rev1reg = prereg("EXP-03", 1);
+    const rev1bank = repository.putCaseBank(compileExperimentCaseBank(exp03Input(rev1reg), rev1reg, { now: LOCKED }));
+    const rev1run = repository.putRun(compileExperimentRun({ sample_per_arm: 2, actor: "human:owner", reason: "Pilot continuation." }, rev1reg, rev1bank, { now: LOCKED }));
+    const rev1next = service.nextExperimentReview(rev1run.id, "human:reviewer", { now: "2026-07-13T14:00:00.000Z" });
+    assert.throws(() => service.respondExperimentReview(rev1run.id, rev1next.assignment.id, {
+      reviewer: "human:reviewer", choice: "reject", rule_text: null, reason: "Template on a pilot case.",
+    }, { now: "2026-07-13T14:01:00.000Z" }), /revision-1 pilot case/i);
+  } finally {
+    cleanup();
+  }
+});
+
+test("revision-3 single-operator guard: 48 hours must separate the bank lock from the FIRST review start", () => {
+  const { root, store, repository, cleanup } = fixture();
+  try {
+    const registration = new G3EvidenceRepository(store).putExperiment(prereg("EXP-03", 3));
+    const service = new ConstitutionService(store, root);
+    const bank = service.lockExperimentCaseBank(exp03Input(registration, "The payment action must verify the session"), { now: LOCKED });
+    const run = repository.putRun(compileExperimentRun({ sample_per_arm: 2, actor: "human:owner", reason: "Single-operator run." }, registration, bank, { now: LOCKED }));
+
+    // 47h after the lock → refused, with the remaining time named
+    assert.throws(
+      () => service.nextExperimentReview(run.id, "human:reviewer", { now: "2026-07-14T11:00:00.000Z" }),
+      /at least 48 hours between the case-bank lock/i,
+    );
+    // 48h+ after the lock → the first start is allowed
+    const next = service.nextExperimentReview(run.id, "human:reviewer", { now: "2026-07-14T12:00:00.000Z" });
+    assert.ok(next.start.id);
+    // once a start exists, resuming is never blocked by the separation rule
+    const resumed = service.nextExperimentReview(run.id, "human:reviewer", { now: "2026-07-14T12:05:00.000Z" });
+    assert.equal(resumed.start.id, next.start.id);
+  } finally {
+    cleanup();
   }
 });
 

@@ -5,7 +5,7 @@ import { canonicalHash, canonicalJson } from "./canonical.js";
 import { shortHash } from "../core/ids.js";
 import { compileDecisionPolicy, type CompilePolicyOptions } from "./compiler.js";
 import { evaluatePolicy, policyBlocks, policyIsActive } from "./evaluator.js";
-import { approvePolicy, blockingProofError, demotePolicy, linkPolicyException, proposeProvedPolicy } from "./lifecycle.js";
+import { approvePolicy, blockingProofError, demotePolicy, linkPolicyException, proposeProvedPolicy, retirePolicy, withdrawPolicy } from "./lifecycle.js";
 import { provePolicy } from "./proof.js";
 import { PolicyRepository } from "./repository.js";
 import type { PolicyEvaluation, PolicyProof, PolicySpec, ProofCorpus } from "./schema.js";
@@ -106,9 +106,12 @@ import {
   compileExperimentReviewStart,
   compileExperimentRun,
   compileExperimentStop,
+  compileExp03ReviewResponse,
   currentExperimentOutcomes,
   normalizedEditDistance,
   type CompileExperimentCaseBankInput,
+  type Exp03Case,
+  type Exp03ReviewResponse,
   type CompileExperimentRunInput,
   type ExperimentCaseBank,
   type ExperimentFollowup,
@@ -606,6 +609,17 @@ export class ConstitutionService {
     if (this.experimentReport(run.id).status === "guardrail_stopped") throw new Error("experiment is stopped by an independently recorded safety/privacy guardrail");
     const bank = this.experimentRepository.listCaseBanks().find((item) => item.id === run.case_bank_id);
     if (!bank) throw new Error(`run ${run.id} is missing exact case bank ${run.case_bank_id}`);
+    // Single-operator mitigation (expreg_9c9617cd13, revision >= 3): at least 48 hours
+    // must separate the case-bank lock from the FIRST review start — enforced, not
+    // merely auditable, so a violation is impossible rather than post-hoc visible.
+    const prereg = this.g3Repository.listExperiments().find((item) => item.id === run.preregistration_id);
+    if (prereg && prereg.revision >= 3) {
+      const elapsed = Date.parse(opts.now ?? new Date().toISOString()) - Date.parse(bank.locked_at);
+      const hasStart = this.experimentRepository.listReviewStarts().some((item) => item.run_id === run.id);
+      if (!hasStart && elapsed < 48 * 3_600_000) {
+        throw new Error(`the preregistered single-operator protocol requires at least 48 hours between the case-bank lock (${bank.locked_at}) and the first review start; ${Math.ceil((48 * 3_600_000 - elapsed) / 3_600_000)}h remain`);
+      }
+    }
     const current = new Set(currentExperimentOutcomes(this.experimentRepository.listOutcomes()).filter((item) => item.run_id === run.id).map((item) => item.assignment_id));
     const starts = this.experimentRepository.listReviewStarts().filter((item) => item.run_id === run.id);
     const existing = starts.find((item) => item.reviewer === reviewer && !current.has(item.assignment_id));
@@ -622,6 +636,22 @@ export class ConstitutionService {
     return { start, assignment, treatment: assignmentTreatment(bank, run, assignment) };
   }
 
+  /** Resolve an EXP-03 run/assignment/case triple (the shared lookup for both
+   *  review-submission dialects). */
+  private resolveExp03Assignment(runId: string, assignmentId: string): { run: ExperimentRun; assignment: ExperimentRun["assignments"][number]; item: Exp03Case } {
+    const run = this.experimentRun(runId);
+    if (run.experiment !== "EXP-03") throw new Error("human review submission is available only for EXP-03");
+    const assignment = run.assignments.find((entry) => entry.id === assignmentId);
+    const bank = this.experimentRepository.listCaseBanks().find((entry) => entry.id === run.case_bank_id);
+    const item = bank?.cases.find((candidate) => candidate.id === assignment?.case_id);
+    if (!assignment || !bank || !item || !("compiler_candidate" in item)) throw new Error("review submission cannot resolve the exact assigned case and treatment");
+    return { run, assignment, item };
+  }
+
+  /** Raw metrics-vocabulary submission — the ORIGINAL revision-1 contract, kept
+   *  byte-identical for the append-only pilot. Revision-2 cases are refused here:
+   *  they must go through the standardized plain-language template (dec_0be4fd3717)
+   *  so the presented question and the recorded outcome cannot drift apart. */
   submitExperimentReview(
     runId: string,
     assignmentId: string,
@@ -640,19 +670,72 @@ export class ConstitutionService {
     },
     opts: { now?: string } = {},
   ): ExperimentOutcome {
-    const run = this.experimentRun(runId);
-    if (run.experiment !== "EXP-03") throw new Error("human review submission is available only for EXP-03");
-    const start = this.experimentRepository.listReviewStarts().find((item) => item.run_id === run.id && item.assignment_id === assignmentId);
+    const { run, assignment, item } = this.resolveExp03Assignment(runId, assignmentId);
+    // Revision-2 reviewer ANSWERS travel only through the template; the raw path
+    // stays open solely for the non-answer terminal states the preregistration
+    // requires retained (abandoned/timeout bookkeeping — expreg_ba6aef4ecd).
+    if (item.required_relationship && input.decision !== "abandoned" && input.decision !== "timeout") {
+      throw new Error(`assignment ${assignmentId} is a revision-2 plain-language case; submit it with the standardized response template (hunch experiment respond)`);
+    }
+    return this.completeExp03Review(run, assignment, item, input, opts);
+  }
+
+  /** Revision-2 standardized submission: the reviewer answers in the SAME
+   *  plain-language vocabulary the treatment presented (choice + rule + one
+   *  sentence); the deterministic mapper translates it into canonical metrics.
+   *  Revision-1 cases are refused (the mapper throws) — they keep the raw path. */
+  respondExperimentReview(
+    runId: string,
+    assignmentId: string,
+    input: Exp03ReviewResponse & {
+      reviewer: string;
+      confirmed_private_leak?: boolean;
+      data_loss_or_corruption?: boolean;
+      unsafe_evaluator_behavior?: boolean;
+    },
+    opts: { now?: string } = {},
+  ): ExperimentOutcome {
+    const { run, assignment, item } = this.resolveExp03Assignment(runId, assignmentId);
+    const mapped = compileExp03ReviewResponse(item, assignment.arm, input);
+    return this.completeExp03Review(run, assignment, item, {
+      reviewer: input.reviewer,
+      ...mapped,
+      confirmed_private_leak: !!input.confirmed_private_leak,
+      data_loss_or_corruption: !!input.data_loss_or_corruption,
+      unsafe_evaluator_behavior: !!input.unsafe_evaluator_behavior,
+      reason: input.reason,
+    }, opts);
+  }
+
+  /** The shared review-completion core: machine-owned timing, append-only dedup,
+   *  derived edit distance, and the outcome write. Both dialects land here. */
+  private completeExp03Review(
+    run: ExperimentRun,
+    assignment: ExperimentRun["assignments"][number],
+    item: Exp03Case,
+    input: {
+      reviewer: string;
+      decision: "accepted_precise" | "accepted_edited" | "rejected" | "uncompilable" | "cannot_decide" | "abandoned" | "timeout";
+      precise: boolean;
+      proof_inspected: boolean;
+      result: string | null;
+      silent_semantic_substitution: boolean;
+      rejection_reason: string | null;
+      confirmed_private_leak: boolean;
+      data_loss_or_corruption: boolean;
+      unsafe_evaluator_behavior: boolean;
+      reason: string;
+    },
+    opts: { now?: string } = {},
+  ): ExperimentOutcome {
+    const assignmentId = assignment.id;
+    const start = this.experimentRepository.listReviewStarts().find((entry) => entry.run_id === run.id && entry.assignment_id === assignmentId);
     if (!start || start.reviewer !== input.reviewer) throw new Error("review submission must bind the machine-recorded start and exact reviewer");
     const recordedAt = opts.now ?? new Date().toISOString();
     const duration = Date.parse(recordedAt) - Date.parse(start.started_at);
     if (!Number.isFinite(duration) || duration < 1) throw new Error("review completion must occur after the machine-recorded start");
-    const current = currentExperimentOutcomes(this.experimentRepository.listOutcomes()).find((item) => item.run_id === run.id && item.assignment_id === assignmentId);
+    const current = currentExperimentOutcomes(this.experimentRepository.listOutcomes()).find((entry) => entry.run_id === run.id && entry.assignment_id === assignmentId);
     if (current) throw new Error(`assignment ${assignmentId} already has current outcome ${current.id}; use an explicit append-only correction workflow`);
-    const assignment = run.assignments.find((item) => item.id === assignmentId);
-    const bank = this.experimentRepository.listCaseBanks().find((item) => item.id === run.case_bank_id);
-    const item = bank?.cases.find((candidate) => candidate.id === assignment?.case_id);
-    if (!assignment || !bank || !item || !("compiler_candidate" in item)) throw new Error("review submission cannot resolve the exact assigned case and treatment");
     const accepted = input.decision.startsWith("accepted");
     const result = input.result?.trim() || null;
     if (accepted !== (result !== null)) throw new Error("accepted reviews require a result; non-accepted reviews must not claim one");
@@ -1221,6 +1304,21 @@ export class ConstitutionService {
     const policy = this.get(id);
     const demoted = demotePolicy(policy, actor, reason, opts.now ?? new Date().toISOString());
     return this.repository.putPolicy(demoted);
+  }
+
+  /** Targeted advisory withdrawal (§57): active_advisory → proposed; authority
+   *  returns to the human pool and the policy re-enters the escalation loop. */
+  withdraw(id: string, actor: string, reason: string, opts: { now?: string } = {}): PolicySpec {
+    const policy = this.get(id);
+    const withdrawn = withdrawPolicy(policy, actor, reason, opts.now ?? new Date().toISOString());
+    return this.repository.putPolicy(withdrawn);
+  }
+
+  /** Permanent retirement: active/proposed → retired; window closed, history kept. */
+  retire(id: string, actor: string, reason: string, opts: { now?: string } = {}): PolicySpec {
+    const policy = this.get(id);
+    const retired = retirePolicy(policy, actor, reason, opts.now ?? new Date().toISOString());
+    return this.repository.putPolicy(retired);
   }
 
   linkException(id: string, parentId: string, actor: string, reason: string, opts: { now?: string } = {}): PolicySpec {

@@ -184,7 +184,14 @@ export async function syncCommit(
     // Auto-synthesized decisions are un-anchored (topic null) — a topic is a human
     // act, never a machine guess. Preserve one an earlier human capture attached.
     topic: existing?.topic ?? null,
-    status: existing?.status === "accepted" ? "accepted" : "proposed",
+    // Auto-trust model: captured memory enters the graph LIVE (accepted = in-force
+    // advisory), never a `proposed` draft rotting in a review queue. It grounds and
+    // ranks immediately but NEVER blocks — the source stays llm_draft, so the veto /
+    // strict gates (which key on human_confirmed, not status) treat it as advisory
+    // and its tripwires stay unarmed until a human vouches INLINE (dec_a466655539
+    // intact). An existing human status (a deliberate `proposed` roadmap entry, or a
+    // `superseded` record) is preserved — re-sync never clobbers a human's intent.
+    status: existing?.status ?? "accepted",
     context: draft.context + constraintNote,
     decision: draft.decision,
     consequences: draft.consequences,

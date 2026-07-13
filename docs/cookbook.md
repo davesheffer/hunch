@@ -145,3 +145,25 @@ hunch private               # point a clone at the overlay
 ```
 
 **Observe:** `hunch_*` tools see the union; the public repo carries only what you curate.
+
+## 11. The self-running memory loop (v1.8.0+)
+
+Nothing to manage. Capture happens on every commit, memory lands trusted-advisory
+immediately, and renames heal their own bindings:
+
+```bash
+hunch log                    # every memory move: capture · adopt · supersede · prune · repair
+hunch log --diff <sha>       # what one move changed
+hunch revert-move <sha>      # undo one move (local git revert, never pushed)
+hunch escalations            # the decisions only YOU can make — normally empty
+hunch adopt-drafts           # one-time: clear a legacy draft backlog into advisory memory
+hunch push                   # the one deliberate outward step (memory auto-commits locally)
+```
+
+**Observe:** after a commit that renames a file, `hunch log` shows a 🔧 repair move —
+the bindings healed themselves; nothing went stale. In VS Code, the **Hunch Memory**
+panel is the same spine with click-to-diff, one-click revert, and the inline
+activate / demote / withdraw / retire authority actions.
+
+**Rule of the loop:** advisory is automatic; *blocking* is always one explicit human
+click, and a repaired rule asks once for a fresh proof before it can block again.

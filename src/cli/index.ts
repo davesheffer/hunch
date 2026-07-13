@@ -37,14 +37,17 @@ import {
   writeSynthesisPreference,
   type SynthPreference,
 } from "../synthesis/provider.js";
-import { isGitRepo, headSha, logSince, lastChangeDate, stagedFiles, workingFiles, commitFiles, asOfDate, stagedDiff, workingDiff, commitDiff, rangeFiles, rangeDiff, rangeSubjects, revExists, revParse, commitAndPushHunch, pullHunch, gitUntrackCached, gitCommonDir, isLinkedWorktree, mainWorktreeRoot } from "../extractors/git.js";
+import { isGitRepo, headSha, logSince, lastChangeDate, stagedFiles, workingFiles, commitFiles, asOfDate, stagedDiff, workingDiff, commitDiff, rangeFiles, rangeDiff, rangeSubjects, revExists, revParse, commitAndPushHunch, pullHunch, gitUntrackCached, gitCommonDir, isLinkedWorktree, mainWorktreeRoot, gitMemoryLog, memoryMoveDiff, revertMemoryMove, pushCurrentBranch, commitChanges } from "../extractors/git.js";
+import { parseMemoryLog, type MemoryMove } from "../core/memorylog.js";
+import { renamesOf, planRepair, repairDecision, repairConstraint, type RepairPlan } from "../core/repair.js";
+import { planPolicyRepair, repairPolicySpec, type PolicyBindingRewrite } from "../constitution/repairPolicies.js";
 import { writeTeamConfig, ensureTeamOverlay, readTeamConfig } from "../integrations/team.js";
 import { runbookId, decisionId } from "../core/ids.js";
 import { deriveForbids, effectiveForbids } from "../core/constraintmatch.js";
 import type { Runbook } from "../core/types.js";
 import { extractInlineIntent } from "../extractors/comments.js";
 import { renderText, renderMarkdown, renderImpact, reportFailsStrict, type CheckReport } from "../core/checkreport.js";
-import { partitionReview, READY_MIN_GROUNDED, type ReviewItem } from "../core/reviewqueue.js";
+import { partitionReview, isReviewDraft, READY_MIN_GROUNDED, type ReviewItem } from "../core/reviewqueue.js";
 import { installPostCommitHook, installPreCommitHook } from "../integrations/hooks.js";
 import { ensureSharedOverlayPointer } from "../integrations/worktree.js";
 import { flushCapture } from "../integrations/sync.js";
@@ -84,6 +87,7 @@ import { renderCompilerScorecard, scoreCompilerCaseBank } from "../constitution/
 import { generateWiki, wikiStatus, wikiPrompt, publicHome, privateHome, readWikiManifestAt, nowData, type WikiPack } from "../wiki/wiki.js";
 import { adoptProsePrompt } from "../wiki/adopt.js";
 import { topicCollisions, renderGrounding } from "../core/topics.js";
+import { pendingEscalations, policyEscalations } from "../core/escalations.js";
 import { parseDocAnchors, renderDocGrounding } from "../core/docanchors.js";
 import { compareCandidates } from "../core/compare.js";
 import { checkConformance } from "../core/conformance.js";
@@ -354,6 +358,13 @@ program
     const toOverlay = !!(opts.private || opts.overlay || store.unified);
     if (toOverlay && !store.hasPrivate) { store.close(); return opts.quiet ? undefined : fail("--private/--overlay needs HUNCH_PRIVATE_DIR set to an overlay store"); }
     store.json.ensureDirs();
+    // Self-repair rides every sync (Phase 5, §59.5): a commit's renames heal the
+    // exact-path bindings they break, silently, as a revertable `repair` move.
+    // Fail open — a repair error must never take the capture path down.
+    try {
+      const repaired = runRepair(store, root, sha ?? headSha(root), true);
+      if (repaired?.applied && !opts.quiet) console.log(`  ↳ repaired ${repaired.plan.rewrites.length + repaired.policyRewrites.length} memory binding(s) after rename`);
+    } catch { /* repair is best-effort; drift still surfaces anything left behind */ }
     const r = await syncCommit(store, root, sha ?? headSha(root), {
       force: opts.force,
       private: toOverlay,
@@ -961,10 +972,18 @@ policyCmd
   .description("List Policy IR records from the public store plus the local private overlay.")
   .option("--state <state>", "filter by lifecycle state")
   .option("--public-only", "exclude private-overlay policy records")
-  .action((opts: { state?: string; publicOnly?: boolean }) => {
+  .option("--json", "emit id/state/severity/statement/authority/proof/data_class as JSON (the VS Code panel's data source)")
+  .action((opts: { state?: string; publicOnly?: boolean; json?: boolean }) => {
     const { store, root } = storeFor();
     try {
       const policies = new ConstitutionService(store, root).list({ state: opts.state, publicOnly: opts.publicOnly });
+      if (opts.json) {
+        console.log(JSON.stringify(policies.map((p) => ({
+          id: p.id, state: p.state, severity: p.severity, statement: p.statement,
+          authority: p.authority, proof: p.proof, data_class: p.data_class, topic: p.topic,
+        }))));
+        return;
+      }
       if (!policies.length) {
         console.log("No Constitution policies found.");
         return;
@@ -1229,6 +1248,42 @@ policyCmd
       const mode = opts.blocking ? "blocking" : "advisory";
       const policy = new ConstitutionService(store, root).approve(id, mode, opts.actor);
       console.log(`✓ ${policy.id} is ${policy.state} by ${policy.authority?.actor} (revision ${policy.revision})`);
+    } catch (e) {
+      fail((e as Error).message);
+    } finally {
+      store.close();
+    }
+  });
+
+policyCmd
+  .command("withdraw")
+  .description("Targeted advisory withdrawal: pull the human authority back (active_advisory → proposed). The policy stops surfacing as an active rule and re-enters the inline escalation loop. History retained.")
+  .argument("<id>", "policy id")
+  .requiredOption("--actor <identity>", "explicit human identity: human:, github:, or git:")
+  .requiredOption("--reason <reason>", "audited withdrawal reason")
+  .action((id: string, opts: { actor: string; reason: string }) => {
+    const { store, root } = storeFor();
+    try {
+      const policy = new ConstitutionService(store, root).withdraw(id, opts.actor, opts.reason);
+      console.log(`✓ ${policy.id} withdrawn to ${policy.state}; authority returned to the human pool (revision ${policy.revision})`);
+    } catch (e) {
+      fail((e as Error).message);
+    } finally {
+      store.close();
+    }
+  });
+
+policyCmd
+  .command("retire")
+  .description("Permanently retire a policy (active or proposed → retired): it stops surfacing anywhere, its valid-time window closes, and its full history stays (supersede, never erase).")
+  .argument("<id>", "policy id")
+  .requiredOption("--actor <identity>", "explicit human identity: human:, github:, or git:")
+  .requiredOption("--reason <reason>", "audited retirement reason")
+  .action((id: string, opts: { actor: string; reason: string }) => {
+    const { store, root } = storeFor();
+    try {
+      const policy = new ConstitutionService(store, root).retire(id, opts.actor, opts.reason);
+      console.log(`✓ ${policy.id} retired; window closed, history retained (revision ${policy.revision})`);
     } catch (e) {
       fail((e as Error).message);
     } finally {
@@ -1815,6 +1870,44 @@ experimentCmd
       const input = JSON.parse(readFileSync(resolve(file), "utf8")) as Parameters<ConstitutionService["submitExperimentReview"]>[2];
       const service = new ConstitutionService(store, root);
       const appended = service.submitExperimentReview(runId, assignmentId, input);
+      console.log(JSON.stringify({ appended, report: service.experimentReport(runId) }, null, 2));
+    } catch (e) {
+      fail((e as Error).message);
+    } finally {
+      store.close();
+    }
+  });
+
+experimentCmd
+  .command("respond")
+  .description("Complete a revision-2 EXP-03 review with the standardized plain-language response: one choice, the rule you keep (accept/edit), one sentence of reasoning. Duration derives from the append-only start record; metrics are mapped deterministically — never hand-crafted.")
+  .argument("<run-id>", "immutable experiment run id")
+  .argument("<assignment-id>", "assignment returned by experiment next")
+  .requiredOption("--reviewer <actor>", "explicit human reviewer (human:name)")
+  .requiredOption("--choice <choice>", "accept | edit | reject | cannot_decide")
+  .requiredOption("--reason <text>", "one plain-language sentence")
+  .option("--rule <text>", "the rule exactly as it should be recorded (required for accept/edit)")
+  .option("--rule-file <file>", "read the rule text from a file instead of --rule")
+  .option("--inspected", "arm C only: you looked at the supporting checks before answering")
+  .option("--confirmed-private-leak", "record an independently confirmed private leak incident")
+  .option("--data-loss", "record a data loss/corruption incident")
+  .option("--unsafe-evaluator", "record unsafe evaluator behavior")
+  .action((runId: string, assignmentId: string, opts: { reviewer: string; choice: string; reason: string; rule?: string; ruleFile?: string; inspected?: boolean; confirmedPrivateLeak?: boolean; dataLoss?: boolean; unsafeEvaluator?: boolean }) => {
+    const { store, root } = storeFor();
+    try {
+      if (opts.rule && opts.ruleFile) throw new Error("pass --rule or --rule-file, not both");
+      const rule = opts.ruleFile ? readFileSync(resolve(opts.ruleFile), "utf8") : opts.rule ?? null;
+      const service = new ConstitutionService(store, root);
+      const appended = service.respondExperimentReview(runId, assignmentId, {
+        reviewer: opts.reviewer,
+        choice: opts.choice as "accept" | "edit" | "reject" | "cannot_decide",
+        rule_text: rule,
+        reason: opts.reason,
+        inspected_supporting_checks: !!opts.inspected,
+        confirmed_private_leak: !!opts.confirmedPrivateLeak,
+        data_loss_or_corruption: !!opts.dataLoss,
+        unsafe_evaluator_behavior: !!opts.unsafeEvaluator,
+      });
       console.log(JSON.stringify({ appended, report: service.experimentReport(runId) }, null, 2));
     } catch (e) {
       fail((e as Error).message);
@@ -2469,9 +2562,11 @@ program
   .command("firmness")
   .description("Get or set how firmly agent lifecycle hooks enforce Hunch before edits.")
   .argument("[level]", "off | advisory | firm | strict (omit to print the current level)")
-  .action((level: string | undefined) => {
+  .option("--json", "print the current level + choices as JSON (for the VS Code switch)")
+  .action((level: string | undefined, opts: { json?: boolean }) => {
     const paths = hunchPaths(findRoot());
     if (!level) {
+      if (opts.json) { console.log(JSON.stringify({ firmness: readConfig(paths).firmness, levels: FIRMNESS_LEVELS })); return; }
       console.log(`firmness: ${readConfig(paths).firmness}`);
       console.log(`levels:   ${FIRMNESS_LEVELS.join(" | ")}  (set with: hunch firmness <level>)`);
       return;
@@ -2535,7 +2630,7 @@ program
     const blocking = store.recs("constraints").filter((c) => c.status === "active" && c.severity === "blocking" && vouchedSrc(c.provenance?.source));
     const precise = blocking.filter((c) => !!effectiveForbids(c));
     const scopeOnly = blocking.filter((c) => !effectiveForbids(c));
-    const drafts = store.json.loadAll("decisions").filter((d) => d.status === "proposed" || d.provenance.confidence < 0.6);
+    const drafts = store.json.loadAll("decisions").filter(isReviewDraft);
     const { ready, scrutiny } = partitionReview(drafts, READY_MIN_GROUNDED);
     const stale = store.staleness((f) => lastChangeDate(f, root)).filter((s) => s.kind === "constraint");
 
@@ -2697,7 +2792,18 @@ program
           if (roadmap.length) {
             L.push(`Roadmap (${roadmap.length} live proposed): ${roadmap.slice(0, 3).map((r) => r.title).join(" · ")}${roadmap.length > 3 ? " · …" : ""}`);
           }
-          if (pendingReview > 0) L.push(`${pendingReview} auto-draft(s) awaiting \`hunch review\`.`);
+          if (pendingReview > 0) L.push(`${pendingReview} legacy un-vouched draft(s) — adopt as advisory memory with \`hunch adopt-drafts\` (new captures auto-trust).`);
+          const escalations = pendingEscalations(decisions);
+          try {
+            // Constitution human moments ride the same line; a broken policy store
+            // must never take session-start orientation down (fail open). Public
+            // store only — session transcripts travel further than a terminal.
+            const { ConstitutionService: CS } = await import("../constitution/service.js");
+            escalations.push(...policyEscalations(new CS(s, paths.root).list({ publicOnly: true }).map((p) => ({ ...p, last_action: p.audit.at(-1)?.action ?? null }))));
+          } catch { /* constitution unavailable */ }
+          if (escalations.length) {
+            L.push(`⚖ ${escalations.length} decision(s) need YOUR call — ASK the user inline (don't queue): ${escalations.map((e) => e.question).join(" · ")}`);
+          }
           L.push("Orient further: hunch_context(task) · hunch_structure() · `hunch now`.");
           // The operating loop rides session start — guaranteed delivery, once
           // (the zod bench showed ambient skills are read in ~0% of sessions).
@@ -2839,6 +2945,39 @@ function printReviewItem(it: ReviewItem): void {
 }
 
 program
+  .command("adopt-drafts")
+  .description("Auto-trust migration: adopt every legacy un-vouched proposed draft as trusted ADVISORY memory (status → accepted, source unchanged so it STILL never blocks). Clears the old review backlog in one shot — nothing is deleted, enforcement stays human-gated, and blocking authority is still granted inline. Idempotent.")
+  .option("--dry-run", "list what would be adopted; change nothing")
+  .option("--private", "include local private/shared-overlay drafts")
+  .action((opts: { dryRun?: boolean; private?: boolean }) => {
+    const { store, root } = storeFor();
+    try {
+      if (opts.private && !store.hasPrivate) return fail("--private needs HUNCH_PRIVATE_DIR set to a private store");
+      const all = opts.private ? store.recs("decisions") : store.json.loadAll("decisions");
+      const drafts = all.filter(isReviewDraft);
+      if (!drafts.length) { console.log("✓ No un-vouched drafts — the graph is already fully auto-trusted."); return; }
+      if (opts.dryRun) {
+        console.log(`Would adopt ${drafts.length} draft(s) as trusted advisory memory (still never block):`);
+        for (const d of drafts) console.log(`  ${d.id}  [${d.provenance.source} ${d.provenance.confidence}]  ${d.title}`);
+        console.log(`\n${dim("Dry run — nothing changed. Re-run without --dry-run to adopt. Roadmap intent? Re-declare it with hunch_record_decision(status:proposed).")}`);
+        return;
+      }
+      // Flip status proposed → accepted (in-force advisory). Source/confidence are
+      // UNCHANGED: it stays llm_draft-sourced, so the veto/strict gates (which key on
+      // human_confirmed, not status) keep treating it as advisory — never blocking.
+      let adopted = 0;
+      for (const d of drafts) {
+        store.putWhereItLives("decisions", { ...d, status: "accepted", provenance: { ...d.provenance, last_verified: new Date().toISOString() } });
+        adopted++;
+      }
+      store.reindex();
+      console.log(`✓ Adopted ${adopted} draft(s) as trusted advisory memory. The review backlog is clear; none of them can block an edit until a human grants blocking authority inline.`);
+    } finally {
+      store.close();
+    }
+  });
+
+program
   .command("review")
   .description("Triage drafts: segmented list, accept/reject one, or batch-accept Critic-verified drafts.")
   .option("--accept <id>", "promote a decision to accepted/human-confirmed (confirms its tripwires)")
@@ -2909,10 +3048,10 @@ program
         for (const it of ready) console.log(`   ${it.d.id}  grounded=${it.synth.grounded ?? "?"}  ${it.d.title}`);
       }
     } else {
-      const drafts = decisions().filter((d) => d.status === "proposed" || d.provenance.confidence < 0.6);
+      const drafts = decisions().filter(isReviewDraft);
       const { ready, scrutiny } = partitionReview(drafts, minGrounded);
       if (!ready.length && !scrutiny.length) {
-        console.log("✓ No low-confidence drafts to review.");
+        console.log("✓ No drafts awaiting review — captured memory auto-trusts (advisory) the moment it lands.");
       } else {
         if (ready.length) {
           console.log(`✓ ${ready.length} ready to confirm — Critic-verified, grounded ≥ ${minGrounded} (best first):\n`);
@@ -2958,7 +3097,7 @@ program
       const minRejectConfidence = Number.isFinite(Number(opts.minRejectConfidence)) ? Number(opts.minRejectConfidence) : 0.7;
       const all = opts.private ? store.recs("decisions") : store.json.loadAll("decisions");
       // Same draft set `hunch review` / `hunch status` triage.
-      const drafts = all.filter((d) => d.status === "proposed" || d.provenance.confidence < 0.6);
+      const drafts = all.filter(isReviewDraft);
       if (!drafts.length) { console.log("✓ No drafts to auto-review."); return; }
 
       // Delegate relevance to the harness (subscription CLI) — feature-detected.
@@ -3109,6 +3248,152 @@ program
     } finally {
       store.close();
     }
+  });
+
+// ---- escalations (the inline "ask the human" surface) ---------------------
+program
+  .command("escalations")
+  .description("The decisions a human must make NOW — surfaced to be asked INLINE (in the prompt), never a background queue. Captured memory auto-trusts on landing; this lists only what the graph genuinely can't resolve itself: topic conflicts, Constitution candidates awaiting review, and proposed policies whose activation is a human call. Normally empty. Exits non-zero when any are open, so an assistant/CI knows to raise them.")
+  .option("--json", "emit the escalation entries as JSON (the VS Code panel's data source)")
+  .action(async (opts: { json?: boolean }) => {
+    const { store, root } = storeFor();
+    try {
+      const items = pendingEscalations(store.recs("decisions"));
+      // Constitution moments ride the same inline surface (§59.5.3) — never a queue.
+      // Fail open: a broken policy store must not take the memory escalations down.
+      try {
+        const { ConstitutionService: CS } = await import("../constitution/service.js");
+        items.push(...policyEscalations(new CS(store, root).list().map((p) => ({ ...p, last_action: p.audit.at(-1)?.action ?? null }))));
+      } catch { /* constitution unavailable — memory escalations still surface */ }
+      if (opts.json) { console.log(JSON.stringify(items)); if (items.length) process.exitCode = 1; return; }
+      if (!items.length) {
+        console.log("✓ Nothing needs your decision — memory is auto-trusted and self-consistent.");
+        return;
+      }
+      console.log(`${items.length} decision(s) need your call (ask inline; nothing is queued):\n`);
+      for (const e of items) {
+        console.log(`  ⚖ ${e.question}`);
+        console.log(`      ${dim(e.detail)}`);
+        console.log(`      ${dim("→ " + e.resolution)}\n`);
+      }
+      process.exitCode = 1;
+    } finally {
+      store.close();
+    }
+  });
+
+// ---- log / revert-move (the memory-move timeline — VS Code Source Control) -
+program
+  .command("log")
+  .description("The memory-move timeline: every commit that changed .hunch/ (capture/adopt/supersede/prune), newest first. --json powers the VS Code Hunch Source Control view.")
+  .option("--json", "emit the moves as JSON for tooling")
+  .option("-n, --limit <n>", "max moves to show", "100")
+  .option("--diff <sha>", "print one move's .hunch/ diff (the click-through), instead of the list")
+  .action((opts: { json?: boolean; limit?: string; diff?: string }) => {
+    const root = findRoot();
+    if (!isGitRepo(root)) return fail("not a git repo — the memory timeline needs git history.");
+    if (opts.diff) { process.stdout.write(memoryMoveDiff(opts.diff, root)); return; }
+    const limit = Number.isFinite(Number(opts.limit)) ? Number(opts.limit) : 100;
+    const moves = parseMemoryLog(gitMemoryLog(root, limit));
+    if (opts.json) { console.log(JSON.stringify(moves)); return; }
+    if (!moves.length) { console.log("No memory moves yet — nothing has changed .hunch/."); return; }
+    const icon: Record<MemoryMove["kind"], string> = { capture: "✚", adopt: "✓", supersede: "↻", prune: "✗", repair: "🔧", edit: "•" };
+    for (const m of moves) {
+      const ids = [...m.decisionIds, ...m.otherIds].slice(0, 4).join(",");
+      console.log(`${m.date.slice(0, 10)}  ${icon[m.kind]} ${m.kind.padEnd(9)} ${m.shortSha}  ${m.subject.slice(0, 60)}${ids ? "  " + dim(ids) : ""}`);
+    }
+  });
+
+/** Self-repair (Phase 5): heal exact-path memory bindings after a commit's renames.
+ *  Returns the plan (null when the commit renamed nothing that memory binds).
+ *  Apply mode rewrites the records in their homes, reindexes, and auto-commits each
+ *  touched home as a `repair` move on the timeline — background, revertable. */
+function runRepair(store: HunchStore, root: string, sha: string, apply: boolean): { plan: RepairPlan; policyRewrites: PolicyBindingRewrite[]; applied: boolean } | null {
+  const renames = renamesOf(commitChanges(sha, root));
+  if (!renames.length) return null;
+  const plan = planRepair(renames, store.recs("decisions"), store.recs("constraints"));
+  // Policy bindings heal under the same zero-guessing contract; a broken policy
+  // store must never take graph-record repair down (fail open).
+  let service: ConstitutionService | null = null;
+  let policyRewrites: PolicyBindingRewrite[] = [];
+  try {
+    service = new ConstitutionService(store, root);
+    policyRewrites = planPolicyRepair(renames, service.list());
+  } catch { service = null; }
+  if (!plan.rewrites.length && !policyRewrites.length) return null;
+  if (!apply) return { plan, policyRewrites, applied: false };
+  let privateTouched = false, publicTouched = false;
+  for (const d of store.recs("decisions")) {
+    const healed = repairDecision(d, plan);
+    if (healed === d) continue;
+    store.putWhereItLives("decisions", healed);
+    if (store.getPrivateRec("decisions", d.id)) privateTouched = true; else publicTouched = true;
+  }
+  for (const c of store.recs("constraints")) {
+    const healed = repairConstraint(c, plan);
+    if (healed === c) continue;
+    store.putWhereItLives("constraints", healed);
+    if (store.getPrivateRec("constraints", c.id)) privateTouched = true; else publicTouched = true;
+  }
+  if (service && policyRewrites.length) {
+    const at = new Date().toISOString();
+    for (const p of service.list()) {
+      const healed = repairPolicySpec(p, policyRewrites, at);
+      if (healed === p) continue;
+      service.repository.putPolicy(healed);
+      if (healed.data_class === "public") publicTouched = true; else privateTouched = true;
+    }
+  }
+  store.reindex();
+  if (store.autoCommit) {
+    const total = plan.rewrites.length + policyRewrites.length;
+    const message = `hunch: repair ${total} binding(s) after rename (${sha.slice(0, 7)})`;
+    if (publicTouched) commitAndPushHunch(hunchPaths(root).hunch, message, { push: false });
+    if (privateTouched && store.privateDir) commitAndPushHunch(store.privateDir, message, { push: true });
+  }
+  return { plan, policyRewrites, applied: true };
+}
+
+program
+  .command("repair")
+  .description("Self-repair: heal memory bindings (decision files, tripwire/constraint scopes) after a commit's renames — git's own rename detection, exact-path matches only, zero guessing. Dry-run unless --apply; the sync hook applies this automatically in the background.")
+  .argument("[sha]", "commit whose renames to heal (default: HEAD)")
+  .option("--apply", "rewrite the bindings (auto-commits each touched store as a `repair` move)")
+  .action((sha: string | undefined, opts: { apply?: boolean }) => {
+    const { store, root } = storeFor();
+    try {
+      if (!isGitRepo(root)) return fail("repair needs a git repo.");
+      const res = runRepair(store, root, sha ?? headSha(root), !!opts.apply);
+      if (!res) { console.log("✓ Nothing to repair — the commit renamed nothing that memory binds exactly."); return; }
+      const total = res.plan.rewrites.length + res.policyRewrites.length;
+      console.log(`${res.applied ? "✓ Repaired" : "Would repair"} ${total} binding(s):`);
+      for (const r of res.plan.rewrites) console.log(`  ${r.id}  ${r.field}: ${r.from} → ${r.to}`);
+      for (const r of res.policyRewrites) console.log(`  ${r.id}  ${r.field}: ${r.from} → ${r.to}`);
+      if (res.policyRewrites.length && res.applied) console.log(dim("\nRepaired policies need a fresh proof — they ask via `hunch escalations`."));
+      if (!res.applied) console.log(dim("\nDry run — nothing changed. Re-run with --apply."));
+    } finally {
+      store.close();
+    }
+  });
+
+program
+  .command("revert-move <sha>")
+  .description("Undo one memory move: git-revert the commit that made it (LOCAL only, never pushed). Powers the Hunch view's 'reject move'.")
+  .action((sha: string) => {
+    const root = findRoot();
+    if (!isGitRepo(root)) return fail("not a git repo.");
+    if (!revertMemoryMove(sha, root)) return fail(`could not revert ${sha} (conflict or unknown commit) — aborted; working tree unchanged.`);
+    console.log(`✓ reverted memory move ${sha} (local; not pushed).`);
+  });
+
+program
+  .command("push")
+  .description("The approve-to-push step: push the current branch to its remote. Auto-commit keeps memory LOCAL by design; this is the one explicit outward move (public .hunch/ rides the repo, so this is a plain branch push).")
+  .action(() => {
+    const root = findRoot();
+    if (!isGitRepo(root)) return fail("not a git repo.");
+    if (!pushCurrentBranch(root)) return fail("push failed — no upstream, offline, or nothing to push.");
+    console.log("✓ pushed the current branch to its remote.");
   });
 
 // ---- drift (doc≠graph detector; advisory + CI-gateable) -------------------
@@ -3331,7 +3616,7 @@ program
       console.log(`\n🗺 Roadmap — live proposed decisions (${roadmap.length}):`);
       if (!roadmap.length) console.log("  (empty — record what's next as a PROPOSED decision via /capture and it appears here)");
       for (const r of roadmap) console.log(`  • ${r.title}  (${r.id}${r.topic ? `, ${r.topic}` : ""}, since ${r.date})\n      ${r.note}`);
-      if (pendingReview > 0) console.log(`\n  (${pendingReview} auto-drafted proposal(s) awaiting review — \`hunch review\`)`);
+      if (pendingReview > 0) console.log(`\n  (${pendingReview} legacy un-vouched draft(s) — \`hunch adopt-drafts\` to auto-trust them as advisory)`);
     } finally {
       store.close();
     }

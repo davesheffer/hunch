@@ -128,9 +128,20 @@ export function verifyReleaseReceipt(receipt) {
   return contentHash === expected && id === `release_${expected.slice("sha256:".length, "sha256:".length + 12)}`;
 }
 
+/** Quote one arg for cmd.exe (same contract as the extension's winQuote). */
+function winQuote(a) {
+  return /[\s"&|<>^()%!,;]/.test(a) ? `"${a.replace(/"/g, '\\"')}"` : a;
+}
+
 function run(command, args, options = {}) {
   const executable = command === "node" ? process.execPath : command;
-  const child = spawnSync(executable, args, { cwd: projectRoot, stdio: "inherit", ...options });
+  // Windows: npm is a .cmd shim; Node >=18.20 refuses to spawn it shell-less
+  // (CVE-2024-27980 hardening) and fails ENOENT. Route through cmd.exe with each
+  // arg quoted ourselves (dec_812d887be0) — shell:true would concatenate them
+  // unescaped (DEP0190). `node` keeps the shell-free argv form everywhere.
+  const child = process.platform === "win32" && command !== "node"
+    ? spawnSync("cmd.exe", ["/d", "/s", "/c", [command, ...args].map(winQuote).join(" ")], { cwd: projectRoot, stdio: "inherit", windowsVerbatimArguments: true, ...options })
+    : spawnSync(executable, args, { cwd: projectRoot, stdio: "inherit", ...options });
   if (child.error) {
     process.stderr.write(`${child.error.message}\n`);
     return { exitCode: 1 };

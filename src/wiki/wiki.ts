@@ -497,7 +497,7 @@ export function renderNowPage(recent: readonly NowItem[], roadmap: readonly NowI
   if (!roadmap.length) L.push("_Empty. Record what's next as a PROPOSED decision (`/capture`, status: proposed) and it appears here._", "");
   for (const r of roadmap) L.push(`- **${r.title}** — ${r.note || "(no context)"} _(${r.id}${r.topic ? `, topic \`${r.topic}\`` : ""}, since ${r.date})_`);
   if (roadmap.length) L.push("");
-  if (pendingReview > 0) L.push(`_${pendingReview} auto-drafted proposed decision(s) awaiting review are not shown — triage with \`hunch review\`._`, "");
+  if (pendingReview > 0) L.push(`_${pendingReview} legacy un-vouched proposed decision(s) not shown — \`hunch adopt-drafts\` auto-trusts them as advisory memory._`, "");
   L.push("---", "", "_Derived from the decision graph — regen: `hunch wiki --heal`. Ship a roadmap item by accepting/superseding its decision; never edit this page._", "");
   return L.join("\n");
 }

@@ -1,0 +1,51 @@
+{
+  "id": "dec_2bced3fa8a",
+  "title": "Extension re-expands: a source-control-style Hunch Memory view (timeline of memory moves)",
+  "topic": "vscode-extension.scope",
+  "status": "accepted",
+  "context": "The auto-trust model makes memory land + auto-commit seamlessly in the background; the user needs a way to SEE and UNDO what Hunch does without managing a queue. The prior cut (dec_a7f5ac92cb) reduced the extension to Why + Capture and removed all panels — that is now superseded on purpose.",
+  "decision": "The VS Code extension gains a 'Hunch Memory' activity-bar view: a source-control-style timeline of every memory MOVE (capture/adopt/supersede/prune), read from `hunch log --json` (the CLI owns git; the extension stays a pure reader). Each move is click-to-diff (`hunch log --diff <sha>` rendered as a read-only diff popup) and right-click revert (`hunch revert-move <sha>` = local git revert, never pushed). Title actions: Sync now, Adopt drafts, Approve-to-push (the one explicit outward step — auto-commit stays LOCAL by design). New CLI surface: `hunch log`, `hunch revert-move`, `hunch push`; new module src/core/memorylog.ts (pure parser) + extractors/git helpers gitMemoryLog/memoryMoveDiff/revertMemoryMove/pushCurrentBranch. Extension v0.15.0.",
+  "consequences": [
+    "The extension is no longer strictly two surfaces — the one-sentence litmus becomes: memory you can see and undo.",
+    "Auto-commit is ON by default (local); pushing is a deliberate human click (approve-to-push).",
+    "Memory moves are individually revertable, so autonomous capture is safe to leave running."
+  ],
+  "alternatives_rejected": [
+    "Keep the 2-surface cut and put the timeline in the CLI/wiki only (rejected: the user explicitly wants a source-control panel on the side)",
+    "Auto-push memory to GitHub in the background (rejected: publishing is outward + hard to undo; approve-to-push keeps the human gate)",
+    "Let the extension run git directly (rejected: the extension stays a pure reader; all git/writes go through the hunch CLI)"
+  ],
+  "rejected_tripwires": [],
+  "related_components": [],
+  "related_files": [
+    "vscode-extension/src/memoryView.ts",
+    "vscode-extension/src/extension.ts",
+    "vscode-extension/package.json",
+    "src/core/memorylog.ts",
+    "src/extractors/git.ts",
+    "src/cli/index.ts"
+  ],
+  "supersedes": "dec_a7f5ac92cb",
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-07-13T06:35:44.908Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 0.95,
+    "evidence": [
+      "vscode-extension/src/memoryView.ts",
+      "vscode-extension/src/extension.ts",
+      "vscode-extension/package.json",
+      "src/core/memorylog.ts",
+      "src/extractors/git.ts",
+      "src/cli/index.ts"
+    ]
+  },
+  "date": "2026-07-13T06:35:44.908Z"
+}

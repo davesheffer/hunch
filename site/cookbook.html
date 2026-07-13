@@ -317,6 +317,19 @@ if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElem
 <span class="k">hunch</span> private               <span class="c"># point a clone at the overlay</span></pre></div>
       <p><b>Observe:</b> <code>hunch_*</code> tools see the union; the public repo carries only what you curate.</p>
     </section>
+
+    <section id="loop">
+      <h2>11 · The self-running memory loop (v1.8.0+)<a class="anchor" href="#loop">#</a></h2>
+      <p>Nothing to manage. Capture happens on every commit, memory lands trusted-advisory immediately, and renames heal their own bindings:</p>
+      <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">terminal</span><button class="copy">Copy</button></div><pre><span class="k">hunch</span> log                    <span class="c"># every memory move: capture · adopt · supersede · prune · repair</span>
+<span class="k">hunch</span> log --diff &lt;sha&gt;       <span class="c"># what one move changed</span>
+<span class="k">hunch</span> revert-move &lt;sha&gt;      <span class="c"># undo one move (local git revert, never pushed)</span>
+<span class="k">hunch</span> escalations            <span class="c"># the decisions only YOU can make — normally empty</span>
+<span class="k">hunch</span> adopt-drafts           <span class="c"># one-time: clear a legacy draft backlog into advisory memory</span>
+<span class="k">hunch</span> push                   <span class="c"># the one deliberate outward step (memory auto-commits locally)</span></pre></div>
+      <p><b>Observe:</b> after a commit that renames a file, <code>hunch log</code> shows a 🔧 repair move — the bindings healed themselves; nothing went stale. In VS Code, the <b>Hunch Memory</b> panel is the same spine with click-to-diff, one-click revert, and the inline activate / demote / withdraw / retire authority actions.</p>
+      <p><b>Rule of the loop:</b> advisory is automatic; <em>blocking</em> is always one explicit human click, and a repaired rule asks once for a fresh proof before it can block again.</p>
+    </section>
 </main>
 
   <!-- ──────────────── ON THIS PAGE ──────────────── -->

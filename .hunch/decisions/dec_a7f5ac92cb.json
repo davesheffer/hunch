@@ -2,7 +2,7 @@
   "id": "dec_a7f5ac92cb",
   "title": "Cut VS Code extension to two surfaces: read-only Why + write-only Capture",
   "topic": null,
-  "status": "proposed",
+  "status": "superseded",
   "context": "Extension ballooned to 20 commands, 4 webviews, tree view, codelens, diagnostics, decorations—unmaintainable scope the author could no longer explain. Core value (decision memory) drowned in noise.",
   "decision": "Delete 9 files and 2,176 lines. Keep only: (1) 'Hunch: Why is this?' surface (file brief, symbol context, invariants, bug history), (2) 'Hunch: Capture…' picker for writing decisions. All mutations delegated to hunch CLI or MCP write path; extension never edits .hunch/ JSON directly. Remove: Change Gate, all command hub, diagnostics, decorations, webviews.",
   "consequences": [
@@ -83,11 +83,11 @@
     "vscode-extension/src/stats.ts"
   ],
   "supersedes": null,
-  "superseded_by": null,
+  "superseded_by": "dec_2bced3fa8a",
   "caused_by_bug": null,
   "commit": "4730cc5",
   "valid_from": "2026-07-12T10:28:16+03:00",
-  "valid_to": null,
+  "valid_to": "2026-07-13T06:35:44.908Z",
   "retired": {
     "symbols": [
       "Scope",
@@ -136,7 +136,7 @@
       "vscode-extension/src/graph.ts",
       "vscode-extension/src/home.ts"
     ],
-    "last_verified": "2026-07-12T07:28:44.632Z"
+    "last_verified": "2026-07-13T06:10:56.437Z"
   },
   "date": "2026-07-12T10:28:16+03:00"
 }

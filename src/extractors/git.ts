@@ -3,6 +3,7 @@
 import { execFileSync } from "node:child_process";
 import { isAbsolute, resolve, join, basename, dirname } from "node:path";
 import { mkdirSync, rmSync, statSync, realpathSync, readFileSync } from "node:fs";
+import { MEMLOG_FORMAT } from "../core/memorylog.js";
 
 export interface CommitMeta {
   sha: string;
@@ -270,6 +271,46 @@ export function currentBranch(cwd: string): string {
 export function commitFiles(sha: string, cwd: string): string[] {
   const out = gitSafe(["diff-tree", "--no-commit-id", "--name-only", "-r", "--root", sha], cwd);
   return out ? out.split("\n").filter(Boolean) : [];
+}
+
+/** Raw `git log` over `.hunch/`, paired with parseMemoryLog — the memory-move
+ *  timeline (each commit that changed the graph). Newest first; empty on any error
+ *  (no repo / no history), so the caller degrades to an empty timeline. */
+export function gitMemoryLog(root: string, limit = 200): string {
+  return gitSafe(
+    ["log", `--max-count=${limit}`, "--no-color", `--format=${MEMLOG_FORMAT}`, "--name-status", "--", ".hunch/"],
+    root,
+  );
+}
+
+/** The diff of a single commit restricted to `.hunch/` — what one memory move
+ *  actually changed, for the click-through popup. Empty on error. */
+export function memoryMoveDiff(sha: string, root: string): string {
+  return gitSafe(["show", "--no-color", "--format=%H%n%an%n%cI%n%s%n", sha, "--", ".hunch/"], root);
+}
+
+/** Push the current branch to its remote (the "approve-to-push" step — public
+ *  memory rides the repo, so this is a plain branch push). Returns true on success;
+ *  false when there is no upstream / offline / not a repo. */
+export function pushCurrentBranch(root: string): boolean {
+  try {
+    execFileSync("git", ["-C", root, "push"], { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Revert a single memory move locally (no push). Returns true on success. A
+ *  conflicting revert is aborted so the working tree is never left half-reverted. */
+export function revertMemoryMove(sha: string, root: string): boolean {
+  try {
+    execFileSync("git", ["-C", root, "revert", "--no-edit", sha], { stdio: "ignore" });
+    return true;
+  } catch {
+    try { execFileSync("git", ["-C", root, "revert", "--abort"], { stdio: "ignore" }); } catch { /* nothing to abort */ }
+    return false;
+  }
 }
 
 /** Full metadata + changed files for a commit. */

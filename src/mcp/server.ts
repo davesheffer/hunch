@@ -31,6 +31,7 @@ import { HUNCH_VERSION } from "../core/version.js";
 import { indexRepo } from "../extractors/indexer.js";
 import type { Decision, Symbol } from "../core/types.js";
 import { liveForTopic, historyForTopic, rejectedForTopic, captureConflicts } from "../core/topics.js";
+import { pendingEscalations, policyEscalations, type Escalation } from "../core/escalations.js";
 import { issueCaptureToken as issueToken, consumeCaptureToken as consumeToken } from "../core/capturetoken.js";
 import { randomUUID } from "node:crypto";
 
@@ -383,7 +384,42 @@ export function buildServer(root: string): McpServer {
       L.push("", `🗺 Roadmap — live proposed decisions (${roadmap.length}):`);
       if (!roadmap.length) L.push("  (empty — record intent as a PROPOSED decision and it appears here)");
       for (const r of roadmap) L.push(`  • ${r.title} (${r.id}${r.topic ? `, ${r.topic}` : ""}, since ${r.date})\n      ${r.note}`);
-      if (pendingReview > 0) L.push("", `${pendingReview} auto-drafted proposal(s) awaiting review — \`hunch review\`.`);
+      if (pendingReview > 0) L.push("", `${pendingReview} legacy un-vouched draft(s) — \`hunch adopt-drafts\` auto-trusts them as advisory (new captures land trusted automatically).`);
+      const escalations = pendingEscalations(store.json.loadAll("decisions"));
+      if (escalations.length) {
+        L.push("", `⚖ ${escalations.length} decision(s) need the human's call — ASK inline (never queue): ${escalations.map((e) => e.question).join(" · ")}`);
+      }
+      return ok(L.join("\n"));
+    },
+  );
+
+  // -- hunch_escalations (the inline "ask the human" surface) -----------------
+  // Captured memory auto-trusts; this returns ONLY what the graph can't resolve
+  // itself, framed as questions to raise in conversation: topic conflicts, plus the
+  // Constitution's human moments (a candidate awaiting review, a proposed policy
+  // whose activation is a human call — §59.5.3). Public store only — same
+  // jurisdiction rule as hunch_now (an assistant may paste it). Client-agnostic
+  // (con_e04226bd05): no Claude-specific behavior.
+  server.registerTool(
+    "hunch_escalations",
+    {
+      title: "Decisions the human must make now (ask inline, not a queue)",
+      description:
+        "The rare decisions the graph cannot resolve on its own — surfaced so you ASK THE USER in the prompt at the moment, then act. Auto-captured memory is trusted automatically and never appears here; this returns topic conflicts (>1 live decision for one topic) and Constitution human moments (candidate policies awaiting review, proposed policies awaiting an activation decision). Normally empty. Raise each question with the user; do NOT decide it for them — an entry is a question, never an approval. Public store only.",
+      inputSchema: {},
+    },
+    async (): Promise<ToolResult> => {
+      const items: Escalation[] = pendingEscalations(store.json.loadAll("decisions"));
+      try {
+        items.push(...policyEscalations(new ConstitutionService(store, root).list({ publicOnly: true }).map((p) => ({ ...p, last_action: p.audit.at(-1)?.action ?? null }))));
+      } catch { /* constitution unavailable — memory escalations still surface */ }
+      if (!items.length) return ok("✓ Nothing needs a human decision — memory is auto-trusted and self-consistent.");
+      const L = [`${items.length} decision(s) need the human's call — ask each inline, don't decide it for them:`, ""];
+      for (const e of items) {
+        L.push(`⚖ ${e.question}`);
+        L.push(`   ${e.detail}`);
+        L.push(`   → ${e.resolution}`, "");
+      }
       return ok(L.join("\n"));
     },
   );

@@ -38,7 +38,7 @@ This repo's full engineering memory lives in a **private overlay**; a **curated 
 <!-- HUNCH:START — auto-generated, do not edit by hand -->
 ## 🧠 Hunch (Engineering Memory)
 
-This repo has **Hunch** — a curated graph of *why* the code is the way it is (decisions, bug history, invariants). It currently holds **101 decisions, 1 bugs, 8 constraints, 16 components, 3 policies**.
+This repo has **Hunch** — a curated graph of *why* the code is the way it is (decisions, bug history, invariants). It currently holds **111 decisions, 1 bugs, 8 constraints, 16 components, 3 policies**.
 
 **Consult Hunch via the `hunch_*` MCP tools — pick by MOMENT, not from memory:**
 

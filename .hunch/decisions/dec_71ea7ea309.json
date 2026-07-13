@@ -1,0 +1,147 @@
+{
+  "id": "dec_71ea7ea309",
+  "title": "Auto-repair exact bindings only; keep test pins immutable; surface repairs as escalations",
+  "topic": null,
+  "status": "accepted",
+  "context": "Policy bindings become stale when source files are renamed. The system must decide which bindings can safely auto-repair and which require human intervention. Touches invariant(s): con_e04226bd05 (The MCP server must stay client-agnostic: all assistants point to the same .hunch/ graph; no Claude-only behavior in the server).",
+  "decision": "Repair only exact-identity bindings (exact paths, symbol:file:name selectors) when renamed; skip globs and bare selectors (ambiguous identity); NEVER repair executable-behavior test pins (commit-hash-pinned; repairing would silently break the pin); surface repaired policies as inline escalations requiring re-proof, not silent changes.",
+  "consequences": [
+    "Policies heal automatically for straightforward renames, reducing manual overhead",
+    "Test pins stay commit-pinned; renamed tests require re-attestation (human act), preserving proof integrity",
+    "Repaired policies surface immediately as escalations; humans are aware of all auto-repairs, not discovering stale proofs later",
+    "Proofs become stale by construction (old proof invalid for renamed bindings); re-proof is mandatory before blocking policies can enforce again",
+    "Authority/blocking guarantees stay fail-safe: proof revalidation catches moved semantics"
+  ],
+  "alternatives_rejected": [
+    "Aggressive auto-repair: repair globs and test pins too (risk: silent breakage of hash-pinned tests, scope creep)",
+    "Silent repair: auto-heal without surfacing to humans (risk: stale proofs hidden from view, inconsistent mental model)",
+    "Inline proof revalidation: auto-update proofs after repair (risk: bypasses the evidence/re-attestation boundary)",
+    "Async repair queue: defer to later manual review (risk: inconsistent state, unclear when/if repairs occurred)"
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Aggressive auto-repair: repair globs and test pins too (risk: silent breakage of hash-pinned tests, scope creep)",
+      "scope": [
+        "src/cli/**",
+        "src/constitution/**",
+        "src/core/**",
+        "src/mcp/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Silent repair: auto-heal without surfacing to humans (risk: stale proofs hidden from view, inconsistent mental model)",
+      "scope": [
+        "src/cli/**",
+        "src/constitution/**",
+        "src/core/**",
+        "src/mcp/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Inline proof revalidation: auto-update proofs after repair (risk: bypasses the evidence/re-attestation boundary)",
+      "scope": [
+        "src/cli/**",
+        "src/constitution/**",
+        "src/core/**",
+        "src/mcp/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Async repair queue: defer to later manual review (risk: inconsistent state, unclear when/if repairs occurred)",
+      "scope": [
+        "src/cli/**",
+        "src/constitution/**",
+        "src/core/**",
+        "src/mcp/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_50037f41a9",
+    "cmp_587d48fb03",
+    "cmp_a94a8fe5cc",
+    "cmp_b256a6aed0",
+    "cmp_dfa5b5acde"
+  ],
+  "related_files": [
+    "src/cli/index.ts",
+    "src/constitution/repairPolicies.ts",
+    "src/constitution/schema.ts",
+    "src/core/escalations.ts",
+    "src/mcp/server.ts",
+    "test/escalations.test.ts",
+    "test/repair-policies.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "452ffd1",
+  "valid_from": "2026-07-13T13:44:29+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft",
+    "confidence": 0.65,
+    "evidence": [
+      "commit:452ffd1",
+      "synth:provider=claude-cli",
+      "branch:main",
+      "src/cli/index.ts",
+      "src/constitution/repairPolicies.ts",
+      "src/constitution/schema.ts",
+      "src/core/escalations.ts",
+      "src/mcp/server.ts",
+      "test/escalations.test.ts",
+      "test/repair-policies.test.ts"
+    ],
+    "last_verified": "2026-07-13T10:44:59.084Z"
+  },
+  "date": "2026-07-13T13:44:29+03:00"
+}

@@ -2,7 +2,7 @@
   "name": "hunch-vscode",
   "displayName": "Hunch",
   "description": "Your repo's engineering memory, in the editor: see WHY code is the way it is (decisions, invariants, bug history), and capture what you decide — one command each.",
-  "version": "0.14.0",
+  "version": "0.17.1",
   "publisher": "davesheffer",
   "license": "MIT",
   "author": "Dave Sheffer <dave.sheffer1@gmail.com>",
@@ -82,8 +82,102 @@
         "title": "Memory graph (wiki)",
         "category": "Hunch",
         "icon": "$(type-hierarchy)"
+      },
+      {
+        "command": "hunch.memory.refresh",
+        "title": "Refresh memory timeline",
+        "category": "Hunch",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "hunch.memory.sync",
+        "title": "Sync memory now",
+        "category": "Hunch",
+        "icon": "$(sync)"
+      },
+      {
+        "command": "hunch.memory.adopt",
+        "title": "Adopt drafts as advisory memory",
+        "category": "Hunch",
+        "icon": "$(check-all)"
+      },
+      {
+        "command": "hunch.memory.push",
+        "title": "Push memory to remote (approve)",
+        "category": "Hunch",
+        "icon": "$(cloud-upload)"
+      },
+      {
+        "command": "hunch.memory.strictness",
+        "title": "Strictness…",
+        "category": "Hunch",
+        "icon": "$(shield)"
+      },
+      {
+        "command": "hunch.revertMove",
+        "title": "Revert this memory move",
+        "category": "Hunch",
+        "icon": "$(discard)"
+      },
+      {
+        "command": "hunch.openMove",
+        "title": "Open memory move diff",
+        "category": "Hunch"
+      },
+      {
+        "command": "hunch.openPolicyCard",
+        "title": "Open proof card",
+        "category": "Hunch"
+      },
+      {
+        "command": "hunch.openEscalation",
+        "title": "Open escalation",
+        "category": "Hunch"
+      },
+      {
+        "command": "hunch.activatePolicy",
+        "title": "Activate rule (your vouch)…",
+        "category": "Hunch",
+        "icon": "$(verified)"
+      },
+      {
+        "command": "hunch.demotePolicy",
+        "title": "Demote to advisory…",
+        "category": "Hunch",
+        "icon": "$(arrow-down)"
+      },
+      {
+        "command": "hunch.withdrawPolicy",
+        "title": "Withdraw to proposed…",
+        "category": "Hunch",
+        "icon": "$(debug-step-back)"
+      },
+      {
+        "command": "hunch.retirePolicy",
+        "title": "Retire rule permanently…",
+        "category": "Hunch",
+        "icon": "$(archive)"
       }
     ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "hunch",
+          "title": "Hunch Memory",
+          "icon": "$(book)"
+        }
+      ]
+    },
+    "views": {
+      "hunch": [
+        {
+          "id": "hunch.memory",
+          "name": "Memory Timeline",
+          "icon": "$(book)",
+          "contextualTitle": "Hunch Memory"
+        }
+      ]
+    },
     "menus": {
       "commandPalette": [
         {
@@ -93,6 +187,102 @@
         {
           "command": "hunch.reviewInTerminal",
           "when": "false"
+        },
+        {
+          "command": "hunch.openMove",
+          "when": "false"
+        },
+        {
+          "command": "hunch.revertMove",
+          "when": "false"
+        },
+        {
+          "command": "hunch.openPolicyCard",
+          "when": "false"
+        },
+        {
+          "command": "hunch.openEscalation",
+          "when": "false"
+        },
+        {
+          "command": "hunch.activatePolicy",
+          "when": "false"
+        },
+        {
+          "command": "hunch.demotePolicy",
+          "when": "false"
+        },
+        {
+          "command": "hunch.withdrawPolicy",
+          "when": "false"
+        },
+        {
+          "command": "hunch.retirePolicy",
+          "when": "false"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "hunch.memory.strictness",
+          "when": "view == hunch.memory",
+          "group": "navigation@0"
+        },
+        {
+          "command": "hunch.memory.sync",
+          "when": "view == hunch.memory",
+          "group": "navigation@1"
+        },
+        {
+          "command": "hunch.memory.adopt",
+          "when": "view == hunch.memory",
+          "group": "navigation@2"
+        },
+        {
+          "command": "hunch.memory.push",
+          "when": "view == hunch.memory",
+          "group": "navigation@3"
+        },
+        {
+          "command": "hunch.memory.refresh",
+          "when": "view == hunch.memory",
+          "group": "navigation@4"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "hunch.revertMove",
+          "when": "view == hunch.memory && viewItem == hunchMove",
+          "group": "inline"
+        },
+        {
+          "command": "hunch.activatePolicy",
+          "when": "view == hunch.memory && viewItem == hunchPolicyProposed",
+          "group": "inline"
+        },
+        {
+          "command": "hunch.demotePolicy",
+          "when": "view == hunch.memory && viewItem == hunchPolicyBlocking",
+          "group": "inline"
+        },
+        {
+          "command": "hunch.withdrawPolicy",
+          "when": "view == hunch.memory && viewItem == hunchPolicyAdvisory",
+          "group": "inline"
+        },
+        {
+          "command": "hunch.retirePolicy",
+          "when": "view == hunch.memory && viewItem == hunchPolicyAdvisory",
+          "group": "context"
+        },
+        {
+          "command": "hunch.retirePolicy",
+          "when": "view == hunch.memory && viewItem == hunchPolicyProposed",
+          "group": "context"
+        },
+        {
+          "command": "hunch.retirePolicy",
+          "when": "view == hunch.memory && viewItem == hunchPolicyBlocking",
+          "group": "context"
         }
       ],
       "editor/title": [

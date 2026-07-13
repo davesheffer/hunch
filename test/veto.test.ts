@@ -74,6 +74,25 @@ test("vetoHits: an llm_draft tripwire WARNS but never blocks, even at high confi
   }
 });
 
+test("auto-trust model: an accepted decision with an llm_draft source (auto-captured memory) grounds but NEVER blocks", () => {
+  const { store, cleanup } = tempStore();
+  try {
+    // Exactly what synthesis now writes under the auto-trust model: status `accepted`
+    // (in-force advisory memory, so it grounds + ranks) but source `llm_draft` — it
+    // must NEVER arm a hard block. Enforcement keys on the human vouch, not status.
+    store.json.put("decisions", mkDecision({
+      id: "dec_auto", status: "accepted",
+      provenance: { source: "llm_draft", confidence: 0.78, evidence: [] },
+      rejected_tripwires: [tw({ provenance: { source: "llm_draft", confidence: 0.78, evidence: [] } })],
+    }));
+    const hits = store.vetoHits(analyzeDiff(diffAdding(EXT, 'import axios from "axios";')), [EXT]);
+    assert.equal(hits.length, 1, "still surfaces as advisory memory");
+    assert.equal(hits[0]!.blocks, false, "auto-trusted (llm_draft) memory never blocks — dec_a466655539 intact");
+  } finally {
+    cleanup();
+  }
+});
+
 test("vetoHits: out-of-scope edit does not match (glob scope gate)", () => {
   const { store, cleanup } = tempStore();
   try {

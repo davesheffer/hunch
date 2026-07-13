@@ -1,0 +1,134 @@
+{
+  "id": "dec_1fe6da51fe",
+  "title": "Auto-trust captured decisions; surface conflicts inline, retire review queue",
+  "topic": null,
+  "status": "accepted",
+  "context": "Review queue model for low-confidence (confidence<0.6) and proposed decisions created async backlog and friction — captured memory rots in draft state waiting for human triage. Touches invariant(s): con_2ce3f2a547 (Synthesis must use an explicitly selected coding-assistant subscription CLI or the deterministic local fallback; never call a pay-per-token API); con_e04226bd05 (The MCP server must stay client-agnostic: all assistants point to the same .hunch/ graph; no Claude-only behavior in the server).",
+  "decision": "Captured memory auto-enters graph as accepted advisory on landing (status→accepted). Safety preserved by keeping source=llm_draft (veto/strict gates key on source, not status, so it never blocks). Rare blocking conflicts surface as inline escalations asked within the session, not queued review items.",
+  "consequences": [
+    "Captured memory grounds and ranks immediately with no async queue delay",
+    "Low-confidence memory is now weighted advisory, not a triage backlog item",
+    "Blocking authority still requires explicit human grant (unchanged)",
+    "Topic conflicts needing human decision are surfaced inline as questions, not deferred to batch review",
+    "Reduces friction and prevents decisions from rotting in review state"
+  ],
+  "alternatives_rejected": [
+    "Keep review queue but make it synchronous/blocking (would prevent capture)",
+    "Require human vouching before memory enters graph (too strict, kills advisory grounding)",
+    "Auto-trust without escalation mechanism (would miss topic conflicts needing human judgment)"
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Keep review queue but make it synchronous/blocking (would prevent capture)",
+      "scope": [
+        "src/cli/**",
+        "src/core/**",
+        "src/mcp/**",
+        "src/synthesis/**",
+        "src/wiki/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Require human vouching before memory enters graph (too strict, kills advisory grounding)",
+      "scope": [
+        "src/cli/**",
+        "src/core/**",
+        "src/mcp/**",
+        "src/synthesis/**",
+        "src/wiki/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Auto-trust without escalation mechanism (would miss topic conflicts needing human judgment)",
+      "scope": [
+        "src/cli/**",
+        "src/core/**",
+        "src/mcp/**",
+        "src/synthesis/**",
+        "src/wiki/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_159b78999e",
+    "cmp_50037f41a9",
+    "cmp_a94a8fe5cc",
+    "cmp_b256a6aed0",
+    "cmp_ba75dfc94f",
+    "cmp_dfa5b5acde"
+  ],
+  "related_files": [
+    "src/cli/index.ts",
+    "src/core/escalations.ts",
+    "src/core/reviewqueue.ts",
+    "src/mcp/server.ts",
+    "src/synthesis/synthesize.ts",
+    "src/wiki/wiki.ts",
+    "test/escalations.test.ts",
+    "test/reviewqueue.test.ts",
+    "test/veto.test.ts",
+    "test/wiki.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "d7a3598",
+  "valid_from": "2026-07-13T09:12:11+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft+summary",
+    "confidence": 0.5,
+    "evidence": [
+      "commit:d7a3598",
+      "synth:provider=claude-cli",
+      "branch:auto-trust-memory",
+      "src/cli/index.ts",
+      "src/core/escalations.ts",
+      "src/core/reviewqueue.ts",
+      "src/mcp/server.ts",
+      "src/synthesis/synthesize.ts",
+      "src/wiki/wiki.ts",
+      "test/escalations.test.ts",
+      "test/reviewqueue.test.ts"
+    ],
+    "last_verified": "2026-07-13T06:14:21.002Z"
+  },
+  "date": "2026-07-13T09:12:11+03:00"
+}

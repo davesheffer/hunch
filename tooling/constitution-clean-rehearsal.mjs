@@ -21,7 +21,18 @@ const outputArg = process.argv.indexOf("--output");
 const outputFile = outputArg >= 0 ? process.argv[outputArg + 1] : undefined;
 if (outputArg >= 0 && !outputFile) throw new Error("--output requires a file path");
 
+/** Quote one arg for cmd.exe (same contract as the extension's winQuote). */
+function winQuote(a) {
+  return /[\s"&|<>^()%!,;]/.test(a) ? `"${a.replace(/"/g, '\\"')}"` : a;
+}
+
 function run(command, args, options = {}) {
+  // Windows: npm is a .cmd shim; Node >=18.20 refuses shell-less shim spawns
+  // (CVE-2024-27980) — route through cmd.exe with args quoted ourselves
+  // (dec_812d887be0). Everything else keeps the shell-free argv form.
+  if (process.platform === "win32" && command === "npm") {
+    return execFileSync("cmd.exe", ["/d", "/s", "/c", ["npm", ...args].map(winQuote).join(" ")], { encoding: "utf8", windowsVerbatimArguments: true, ...options }).trim();
+  }
   return execFileSync(command, args, { encoding: "utf8", ...options }).trim();
 }
 

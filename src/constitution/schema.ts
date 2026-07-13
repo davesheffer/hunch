@@ -218,7 +218,7 @@ export const PolicyAssertionSchema = z.discriminatedUnion("kind", [
 export type PolicyAssertion = z.infer<typeof PolicyAssertionSchema>;
 
 export const PolicyAuditEventSchema = z.object({
-  action: z.enum(["compiled", "enriched", "linked_exception", "proved", "approved_advisory", "approved_blocking", "demoted", "retired", "rejected"]),
+  action: z.enum(["compiled", "enriched", "linked_exception", "proved", "approved_advisory", "approved_blocking", "demoted", "withdrawn", "retired", "rejected", "repaired"]),
   actor_kind: z.enum(["system", "human"]),
   actor: z.string().min(1),
   at: z.string().datetime({ offset: true }),

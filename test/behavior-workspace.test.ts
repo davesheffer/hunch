@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { runHunchWith } from "../vscode-extension/src/spawnCore.js";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -231,6 +232,84 @@ test("CLI, MCP, and check share one non-blocking working-snapshot receipt withou
     assert.equal((JSON.parse(workingCli.stdout) as Array<{ result: string }>)[0]?.result, "satisfied", "working evaluation sees the unstaged repair over the staged regression");
   } finally {
     if (client) await client.close();
+    fixture.cleanup();
+  }
+});
+
+// The four-client conformance fixture (G3 profile ci/cli/mcp/vscode): the VS Code
+// surface is certified by executing the extension's REAL spawn seam
+// (vscode-extension/src/spawnCore.runHunchWith) against a real npm-style shim —
+// the exact quoting, Windows .cmd handling, and result shaping the panel uses.
+// Labels are not evidence (dec_ce86ca9cec); only this execution is.
+test("CLI, MCP, check, and the VS Code seam share one non-blocking working-snapshot receipt without public leakage", async () => {
+  const fixture = workspaceFixture();
+  const privateRoot = join(fixture.root, "private/.hunch");
+  const tsx = join(process.cwd(), "node_modules/tsx/dist/cli.mjs");
+  const cli = join(process.cwd(), "src/cli/index.ts");
+  const envPatch: Record<string, string> = { HUNCH_PRIVATE_DIR: privateRoot, HUNCH_SYNTH_PROVIDER: "deterministic", NO_COLOR: "1" };
+  const saved = new Map(Object.keys(envPatch).map((key) => [key, process.env[key]] as const));
+  let client: Client | null = null;
+  let binDir: string | null = null;
+  try {
+    mkdirSync(join(privateRoot, "policies"), { recursive: true });
+    mkdirSync(join(privateRoot, "behavior-attestations"), { recursive: true });
+    writeFileSync(join(privateRoot, "policies", `${fixture.policy.id}.json`), `${JSON.stringify(fixture.policy, null, 2)}\n`);
+    writeFileSync(join(privateRoot, "behavior-attestations", `${fixture.attestation.id}.json`), `${JSON.stringify(fixture.attestation, null, 2)}\n`);
+    writeFileSync(join(fixture.root, "src/guard.mjs"), "export function guarded(){ return false; }\n");
+    const env = { ...process.env, ...envPatch };
+
+    // Surface 1 — CLI (the canonical receipt)
+    const cliRun = spawnSync(process.execPath, [tsx, cli, "policy", "evaluate", fixture.policy.id, "--active", "--working", "--strict", "--json"], { cwd: fixture.root, env, encoding: "utf8" });
+    assert.equal(cliRun.status, 0, cliRun.stderr);
+    const cliReceipt = (JSON.parse(cliRun.stdout) as Array<{ result: string; deterministic_hash: string }>)[0]!;
+    assert.equal(cliReceipt.result, "violated");
+
+    // Surface 2 — client-neutral MCP
+    const transport = new StdioClientTransport({ command: process.execPath, args: [tsx, cli, "mcp"], cwd: fixture.root, env });
+    client = new Client({ name: "vscode-conformance-test", version: "1.0.0" });
+    await client.connect(transport);
+    const mcpCall = await client.callTool({ name: "hunch_policy_evaluate", arguments: { policy_id: fixture.policy.id, active_only: true, workspace: "working" } });
+    const mcpReceipt = (JSON.parse((mcpCall.content[0] as { type: "text"; text: string }).text) as Array<{ deterministic_hash: string }>)[0]!;
+    assert.equal(mcpReceipt.deterministic_hash, cliReceipt.deterministic_hash);
+
+    // Surface 3 — check (the CI/pre-commit surface)
+    const checkRun = spawnSync(process.execPath, [tsx, cli, "check", "--working", "--strict"], { cwd: fixture.root, env, encoding: "utf8" });
+    assert.equal(checkRun.status, 0, "an active advisory violation warns but never blocks");
+    assert.match(checkRun.stdout, new RegExp(`receipt: ${cliReceipt.deterministic_hash}`));
+
+    // Surface 4 — the VS Code seam: a real npm-style shim, spawned exactly as the
+    // panel spawns `hunch` (spawnCore), inheriting the host environment. The shim
+    // lives OUTSIDE the fixture repo — a working snapshot includes untracked
+    // files, so planting it inside would (correctly) change the receipt.
+    binDir = mkdtempSync(join(tmpdir(), "hunch-vscode-shim-"));
+    let shim: string;
+    if (process.platform === "win32") {
+      shim = join(binDir, "hunch.cmd");
+      writeFileSync(shim, `@"${process.execPath}" "${tsx}" "${cli}" %*\r\n`);
+    } else {
+      shim = join(binDir, "hunch");
+      writeFileSync(shim, `#!/bin/sh\nexec "${process.execPath}" "${tsx}" "${cli}" "$@"\n`);
+      chmodSync(shim, 0o755);
+    }
+    Object.assign(process.env, envPatch); // the extension seam inherits VS Code's env
+    const vs = await runHunchWith(shim, fixture.root, ["policy", "evaluate", fixture.policy.id, "--active", "--working", "--strict", "--json"]);
+    assert.equal(vs.ok, true, vs.stderr);
+    const vsReceipt = (JSON.parse(vs.stdout) as Array<{ result: string; deterministic_hash: string }>)[0]!;
+    assert.equal(vsReceipt.result, "violated");
+    assert.equal(vsReceipt.deterministic_hash, cliReceipt.deterministic_hash, "the VS Code seam returns the identical canonical receipt");
+
+    // Public-only leak resistance THROUGH the seam — nothing private can ever
+    // reach a render surface the panel would show from public-only output.
+    const pub = await runHunchWith(shim, fixture.root, ["check", "--working", "--strict", "--public-only"]);
+    assert.equal(pub.ok, true, pub.stderr);
+    assert.doesNotMatch(`${pub.stdout}\n${pub.stderr}`, new RegExp(`${fixture.policy.id}|guard remains enabled`));
+  } finally {
+    for (const [key, value] of saved) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    if (client) await client.close();
+    if (binDir) { try { rmSync(binDir, { recursive: true, force: true }); } catch { /* best effort */ } }
     fixture.cleanup();
   }
 });

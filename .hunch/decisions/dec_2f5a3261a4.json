@@ -1,0 +1,122 @@
+{
+  "id": "dec_2f5a3261a4",
+  "title": "Separate reversible withdrawal from terminal retirement in policy lifecycle",
+  "topic": null,
+  "status": "accepted",
+  "context": "Policy lifecycle had a documented gap (§57): no way to return advisory authority to humans mid-stream or definitively close a rule while preserving history. Demote existed (blocking→advisory) but withdrawal (advisory→proposed) was missing, breaking the authority loop.",
+  "decision": "Implement two distinct terminal operations: withdrawPolicy (active_advisory→proposed, reversible, re-enters escalation loop) and retirePolicy (active/proposed→retired, terminal, history immutable). Both require explicit human actor and audited reason; neither erases history.",
+  "consequences": [
+    "Withdrawal is reversible — policy re-enters escalation loop without losing audit trail, enabling re-evaluation",
+    "Retirement is terminal and irreversible — once retired, policy stops surfacing but full history/audit remain (HC-08 supersede-never-erase)",
+    "Audit trail distinguishes 'withdrawn' (scope/premise changed) from 'retired' (rule definitively done)",
+    "Authority explicitly returns to human pool on withdrawal, making escalation loop semantics clear",
+    "Proposed policies can now be directly retired without flowing through advisory first"
+  ],
+  "alternatives_rejected": [
+    "Single 'deactivate' operation — conflates re-evaluation with finality, loses reversibility semantics",
+    "Withdrawal as terminal — would prevent escalation loop from re-asking the question",
+    "Retirement erasing history — violates supersede-never-erase principle and audit accountability"
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Single 'deactivate' operation — conflates re-evaluation with finality, loses reversibility semantics",
+      "scope": [
+        "src/cli/**",
+        "src/constitution/**",
+        "test/**",
+        "vscode-extension/src/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Withdrawal as terminal — would prevent escalation loop from re-asking the question",
+      "scope": [
+        "src/cli/**",
+        "src/constitution/**",
+        "test/**",
+        "vscode-extension/src/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Retirement erasing history — violates supersede-never-erase principle and audit accountability",
+      "scope": [
+        "src/cli/**",
+        "src/constitution/**",
+        "test/**",
+        "vscode-extension/src/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_50037f41a9",
+    "cmp_555e43ab1a",
+    "cmp_587d48fb03",
+    "cmp_a94a8fe5cc"
+  ],
+  "related_files": [
+    "src/cli/index.ts",
+    "src/constitution/lifecycle.ts",
+    "src/constitution/schema.ts",
+    "src/constitution/service.ts",
+    "test/constitution.test.ts",
+    "vscode-extension/src/extension.ts",
+    "vscode-extension/src/memoryView.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "da28324",
+  "valid_from": "2026-07-13T12:55:41+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft",
+    "confidence": 0.65,
+    "evidence": [
+      "commit:da28324",
+      "synth:provider=claude-cli",
+      "branch:main",
+      "src/cli/index.ts",
+      "src/constitution/lifecycle.ts",
+      "src/constitution/schema.ts",
+      "src/constitution/service.ts",
+      "test/constitution.test.ts",
+      "vscode-extension/src/extension.ts",
+      "vscode-extension/src/memoryView.ts"
+    ],
+    "last_verified": "2026-07-13T09:56:08.401Z"
+  },
+  "date": "2026-07-13T12:55:41+03:00"
+}

@@ -1,0 +1,41 @@
+{
+  "id": "dec_2b9a38e697",
+  "title": "Blocking activation stays one-click-after-modal; no extra friction",
+  "topic": "constitution.activation-ux",
+  "status": "accepted",
+  "context": "The Memory view's inline vouch offers 'Activate advisory' and 'Activate BLOCKING' in one modal. Concern raised: a mis-click grants real enforcement power. Owner directive: minimum interventions.",
+  "decision": "Keep the single modal with both buttons. This is already the HC-02 floor (one explicit human act). Safety comes from layers, not friction: advisory is the default-focused button; the CLI refuses --blocking without a P3 proof, so a mis-click can only arm a policy that earned it; audited one-click demotion undoes it; a wrongly-armed proved policy only blocks what its own proof calls a violation. Do NOT add type-the-id confirmation or a second dialog.",
+  "consequences": [
+    "The inline vouch stays one deliberate click — matches the auto-trust philosophy (automate everything, keep exactly one human act where authority is granted).",
+    "Future UX passes must not add activation friction without superseding this decision."
+  ],
+  "alternatives_rejected": [
+    "Type-the-policy-id confirmation for blocking (rejected: friction on the rare human moment is the opposite of the product's minimum-intervention ethos; the P3 gate + instant demote already bound the risk)",
+    "Separate blocking flow in the CLI only, panel advisory-only (rejected: splits the vouch surface; the panel IS the flagship human surface)"
+  ],
+  "rejected_tripwires": [],
+  "related_components": [],
+  "related_files": [
+    "vscode-extension/src/memoryView.ts",
+    "src/cli/index.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-07-13T09:33:15.180Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 0.95,
+    "evidence": [
+      "vscode-extension/src/memoryView.ts",
+      "src/cli/index.ts"
+    ]
+  },
+  "date": "2026-07-13T09:33:15.180Z"
+}

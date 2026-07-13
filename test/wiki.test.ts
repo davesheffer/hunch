@@ -632,7 +632,7 @@ test("now page: recent ledger + roadmap from proposed decisions; recording/accep
   const mid = readFileSync(join(root, "wiki", "now.md"), "utf8");
   assert.match(mid, /## 🗺 Roadmap[\s\S]*Add cursor pagination[\s\S]*Deep pages time out/);
   assert.doesNotMatch(mid, /🗺[\s\S]*Auto-drafted from a commit/, "un-vouched drafts stay off the roadmap");
-  assert.match(mid, /1 auto-drafted proposed decision\(s\) awaiting review/);
+  assert.match(mid, /1 legacy un-vouched proposed decision\(s\) not shown/);
   assert.equal(computeWikiDrift(store, root).length, 0);
   store.json.delete("decisions", "dec_draft");
 

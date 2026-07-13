@@ -1,0 +1,131 @@
+{
+  "id": "dec_391e0c9dd3",
+  "title": "Standardize review submissions to match presentation layer via deterministic mapping",
+  "topic": null,
+  "status": "accepted",
+  "context": "EXP-03 revision-2 reviews had divergence: reviewers saw plain-language choices (accept/edit/reject/cannot_decide) but submitted raw metrics, allowing contracts to drift and metrics to be hand-crafted inconsistently.",
+  "decision": "Reviewers submit exactly what they see: choice + rule text (when applicable) + one sentence reason. A pure deterministic mapper (compileExp03ReviewResponse) is the single translation to canonical metrics (accepted_precise/accepted_edited/rejected/uncompilable). Two mutually exclusive service paths prevent raw metrics from touching revision-2 cases; revision-1 keeps original byte-identical contract.",
+  "consequences": [
+    "Presentation and submission contracts permanently synchronized—no drift possible",
+    "Metrics derived, never hand-crafted—choice/text contradictions caught at submission time",
+    "Pure mapper enables reproducibility, testability, and audit trail",
+    "Versioned handling: revision-1 pilot uses legacy path, revision-2 uses standardized template",
+    "CLI exposes only choice/rule/reason—metrics are opaque internal compilation"
+  ],
+  "alternatives_rejected": [
+    "Allow direct metric submission alongside template—contracts diverge, inconsistency wins",
+    "Use flags to conditionally allow raw metrics on revision-2—silent metric leakage possible",
+    "Mix raw and standardized paths without mutual exclusion—ambiguous which applies",
+    "Store hand-crafted metrics separate from template—dual sources of truth"
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Allow direct metric submission alongside template—contracts diverge, inconsistency wins",
+      "scope": [
+        "src/cli/**",
+        "src/constitution/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Use flags to conditionally allow raw metrics on revision-2—silent metric leakage possible",
+      "scope": [
+        "src/cli/**",
+        "src/constitution/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Mix raw and standardized paths without mutual exclusion—ambiguous which applies",
+      "scope": [
+        "src/cli/**",
+        "src/constitution/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Store hand-crafted metrics separate from template—dual sources of truth",
+      "scope": [
+        "src/cli/**",
+        "src/constitution/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_50037f41a9",
+    "cmp_587d48fb03",
+    "cmp_a94a8fe5cc"
+  ],
+  "related_files": [
+    "src/cli/index.ts",
+    "src/constitution/experiment.ts",
+    "src/constitution/service.ts",
+    "test/experiment.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "58ca9d8",
+  "valid_from": "2026-07-13T10:17:42+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft+summary",
+    "confidence": 0.5,
+    "evidence": [
+      "commit:58ca9d8",
+      "synth:provider=claude-cli",
+      "branch:main",
+      "src/cli/index.ts",
+      "src/constitution/experiment.ts",
+      "src/constitution/service.ts",
+      "test/experiment.test.ts"
+    ],
+    "last_verified": "2026-07-13T07:18:06.378Z"
+  },
+  "date": "2026-07-13T10:17:42+03:00"
+}

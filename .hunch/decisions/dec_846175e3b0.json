@@ -1,0 +1,103 @@
+{
+  "id": "dec_846175e3b0",
+  "title": "Enforce 48h separation for rev-3 single-operator reviews, prevent violations at runtime",
+  "topic": null,
+  "status": "accepted",
+  "context": "Single-operator experiment protocol (expreg_9c9617cd13, revision ≥3) requires 48 hours between case-bank lock and first review start. Previously this was auditable post-hoc; violations were visible but not prevented.",
+  "decision": "Move enforcement from auditable constraint to hard runtime check. nextExperimentReview() now throws on violation for rev-3+ runs instead of allowing the operation and logging later. Resumed sessions exempt. Older revisions unaffected.",
+  "consequences": [
+    "Violations impossible rather than post-hoc visible — fail fast during review request",
+    "Error message names exact remaining wait time, guiding operator to correct retry",
+    "Backwards compatible: revision 1/2 runs bypass check entirely",
+    "Single-operator protocol now has teeth: governance becomes technical enforcement"
+  ],
+  "alternatives_rejected": [
+    "Keep audit-only model (weak: lets bad state through, requires downstream cleanup)",
+    "Make enforcement configurable per run (weak: defeats purpose of single-operator guardrail)",
+    "Apply to all revisions uniformly (breaks backwards compat)"
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Keep audit-only model (weak: lets bad state through, requires downstream cleanup)",
+      "scope": [
+        "src/constitution/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Make enforcement configurable per run (weak: defeats purpose of single-operator guardrail)",
+      "scope": [
+        "src/constitution/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Apply to all revisions uniformly (breaks backwards compat)",
+      "scope": [
+        "src/constitution/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_587d48fb03",
+    "cmp_a94a8fe5cc"
+  ],
+  "related_files": [
+    "src/constitution/service.ts",
+    "test/experiment.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "536bce8",
+  "valid_from": "2026-07-13T10:43:55+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft",
+    "confidence": 0.65,
+    "evidence": [
+      "commit:536bce8",
+      "synth:provider=claude-cli",
+      "branch:main",
+      "src/constitution/service.ts",
+      "test/experiment.test.ts"
+    ],
+    "last_verified": "2026-07-13T07:44:14.242Z"
+  },
+  "date": "2026-07-13T10:43:55+03:00"
+}
