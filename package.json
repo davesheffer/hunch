@@ -1,6 +1,6 @@
 {
   "name": "@davesheffer/hunch",
-  "version": "1.7.1",
+  "version": "1.8.0",
   "license": "Apache-2.0",
   "author": "Dave Sheffer <dave.sheffer1@gmail.com>",
   "description": "Architectural Conformance for AI-generated code: a git-native graph that deterministically blocks AI changes which break your architecture — the semantic invariants (layering, must-reach, dependency direction) pattern-SAST can't express — grounded in the decisions and bugs behind each rule, across any MCP assistant (Claude Code, Cursor, Copilot, Windsurf, Antigravity, Codex).",
