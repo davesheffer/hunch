@@ -2,7 +2,7 @@
   "id": "dec_accd1dd23c",
   "title": "VS Code surface (v0.17): Memory panel + Journey + Why/Capture — the README/marketplace contract",
   "topic": "vscode-extension-surface",
-  "status": "accepted",
+  "status": "superseded",
   "context": "The extension grew from the Journey-embed era into the Hunch Memory panel era (timeline, inline escalations, constitution authority lifecycle, self-repair moves). The marketplace README was rewritten for v1.8/v0.17 and the topic chain needed its current link so the doc anchors to live intent.",
   "decision": "The extension's public contract is three surfaces: (1) the Hunch Memory activity-bar panel — memory-move timeline with click-to-diff and local revert, ⚖ Needs-your-decision escalations, 🏛 Constitution group with one-click audited activate/demote/withdraw/retire, strictness switch, approve-to-push; (2) Journey — the read-only compounding view with the embedded memory graph; (3) Why/Capture — the per-file read and the delegated write. All writes delegate to the hunch CLI/MCP; the panel spawn seam is conformance-certified against CLI/MCP/CI receipts.",
   "consequences": [
@@ -22,11 +22,11 @@
     "vscode-extension/package.json"
   ],
   "supersedes": "dec_dcd6f8aed4",
-  "superseded_by": null,
+  "superseded_by": "dec_847e825811",
   "caused_by_bug": null,
   "commit": null,
   "valid_from": "2026-07-13T13:15:07.292Z",
-  "valid_to": null,
+  "valid_to": "2026-07-13T13:19:05.919Z",
   "retired": {
     "symbols": [],
     "deps": []

@@ -1,0 +1,50 @@
+{
+  "id": "dec_847e825811",
+  "title": "VS Code surface (v0.17): Memory panel + Journey + Why/Capture — the full file claim",
+  "topic": "vscode-extension-surface",
+  "status": "accepted",
+  "context": "The v0.17 surface record needed to claim every file the surface owns: the Journey view (journey.ts) and its data source (src/wiki/graph.ts — the wiki's embedded memory-graph JSON is the one data source, carried forward from the superseded Journey-era chain) alongside the panel/README files, so no file remains anchored only through superseded links.",
+  "decision": "The extension's public contract is three surfaces: (1) the Hunch Memory activity-bar panel — memory-move timeline with click-to-diff and local revert, ⚖ Needs-your-decision escalations, 🏛 Constitution group with one-click audited activate/demote/withdraw/retire, strictness switch, approve-to-push; (2) Journey — the read-only compounding view embedding the interactive memory graph over a postMessage bridge, fed solely by the wiki's embedded JSON; (3) Why/Capture — the per-file read and the delegated write. All writes delegate to the hunch CLI/MCP; the panel spawn seam is conformance-certified against CLI/MCP/CI receipts.",
+  "consequences": [
+    "journey.ts and src/wiki/graph.ts anchor to the live decision — the remaining anchor-stale drift closes.",
+    "Future surface changes supersede THIS record on the same topic."
+  ],
+  "alternatives_rejected": [
+    "A second topic for the Journey files (rejected: one surface, one chain — splitting topics would hide that the panel and Journey ship as one contract and would re-create cross-chain staleness)",
+    "Leaving Journey files on the superseded chain links (rejected: grounding then cites dead intent for live files)",
+    "Renaming the topic to merge with vscode-extension.scope (rejected: renames break anchor history; superseded links must stay auditable)"
+  ],
+  "rejected_tripwires": [],
+  "related_components": [],
+  "related_files": [
+    "vscode-extension/README.md",
+    "vscode-extension/src/extension.ts",
+    "vscode-extension/src/memoryView.ts",
+    "vscode-extension/src/journey.ts",
+    "src/wiki/graph.ts",
+    "vscode-extension/package.json"
+  ],
+  "supersedes": "dec_accd1dd23c",
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-07-13T13:19:05.919Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 0.95,
+    "evidence": [
+      "vscode-extension/README.md",
+      "vscode-extension/src/extension.ts",
+      "vscode-extension/src/memoryView.ts",
+      "vscode-extension/src/journey.ts",
+      "src/wiki/graph.ts",
+      "vscode-extension/package.json"
+    ]
+  },
+  "date": "2026-07-13T13:19:05.919Z"
+}
