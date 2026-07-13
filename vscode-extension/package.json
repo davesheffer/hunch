@@ -2,7 +2,7 @@
   "name": "hunch-vscode",
   "displayName": "Hunch",
   "description": "Your repo's engineering memory, in the editor: see WHY code is the way it is (decisions, invariants, bug history), and capture what you decide — one command each.",
-  "version": "0.15.0",
+  "version": "0.16.0",
   "publisher": "davesheffer",
   "license": "MIT",
   "author": "Dave Sheffer <dave.sheffer1@gmail.com>",
@@ -123,6 +123,28 @@
         "command": "hunch.openMove",
         "title": "Open memory move diff",
         "category": "Hunch"
+      },
+      {
+        "command": "hunch.openPolicyCard",
+        "title": "Open proof card",
+        "category": "Hunch"
+      },
+      {
+        "command": "hunch.openEscalation",
+        "title": "Open escalation",
+        "category": "Hunch"
+      },
+      {
+        "command": "hunch.activatePolicy",
+        "title": "Activate rule (your vouch)…",
+        "category": "Hunch",
+        "icon": "$(verified)"
+      },
+      {
+        "command": "hunch.demotePolicy",
+        "title": "Demote to advisory…",
+        "category": "Hunch",
+        "icon": "$(arrow-down)"
       }
     ],
     "viewsContainers": {
@@ -161,6 +183,22 @@
         {
           "command": "hunch.revertMove",
           "when": "false"
+        },
+        {
+          "command": "hunch.openPolicyCard",
+          "when": "false"
+        },
+        {
+          "command": "hunch.openEscalation",
+          "when": "false"
+        },
+        {
+          "command": "hunch.activatePolicy",
+          "when": "false"
+        },
+        {
+          "command": "hunch.demotePolicy",
+          "when": "false"
         }
       ],
       "view/title": [
@@ -194,6 +232,16 @@
         {
           "command": "hunch.revertMove",
           "when": "view == hunch.memory && viewItem == hunchMove",
+          "group": "inline"
+        },
+        {
+          "command": "hunch.activatePolicy",
+          "when": "view == hunch.memory && viewItem == hunchPolicyProposed",
+          "group": "inline"
+        },
+        {
+          "command": "hunch.demotePolicy",
+          "when": "view == hunch.memory && viewItem == hunchPolicyBlocking",
           "group": "inline"
         }
       ],

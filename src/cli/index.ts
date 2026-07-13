@@ -85,7 +85,7 @@ import { renderCompilerScorecard, scoreCompilerCaseBank } from "../constitution/
 import { generateWiki, wikiStatus, wikiPrompt, publicHome, privateHome, readWikiManifestAt, nowData, type WikiPack } from "../wiki/wiki.js";
 import { adoptProsePrompt } from "../wiki/adopt.js";
 import { topicCollisions, renderGrounding } from "../core/topics.js";
-import { pendingEscalations } from "../core/escalations.js";
+import { pendingEscalations, policyEscalations } from "../core/escalations.js";
 import { parseDocAnchors, renderDocGrounding } from "../core/docanchors.js";
 import { compareCandidates } from "../core/compare.js";
 import { checkConformance } from "../core/conformance.js";
@@ -963,10 +963,18 @@ policyCmd
   .description("List Policy IR records from the public store plus the local private overlay.")
   .option("--state <state>", "filter by lifecycle state")
   .option("--public-only", "exclude private-overlay policy records")
-  .action((opts: { state?: string; publicOnly?: boolean }) => {
+  .option("--json", "emit id/state/severity/statement/authority/proof/data_class as JSON (the VS Code panel's data source)")
+  .action((opts: { state?: string; publicOnly?: boolean; json?: boolean }) => {
     const { store, root } = storeFor();
     try {
       const policies = new ConstitutionService(store, root).list({ state: opts.state, publicOnly: opts.publicOnly });
+      if (opts.json) {
+        console.log(JSON.stringify(policies.map((p) => ({
+          id: p.id, state: p.state, severity: p.severity, statement: p.statement,
+          authority: p.authority, proof: p.proof, data_class: p.data_class, topic: p.topic,
+        }))));
+        return;
+      }
       if (!policies.length) {
         console.log("No Constitution policies found.");
         return;
@@ -2741,6 +2749,13 @@ program
           }
           if (pendingReview > 0) L.push(`${pendingReview} legacy un-vouched draft(s) — adopt as advisory memory with \`hunch adopt-drafts\` (new captures auto-trust).`);
           const escalations = pendingEscalations(decisions);
+          try {
+            // Constitution human moments ride the same line; a broken policy store
+            // must never take session-start orientation down (fail open). Public
+            // store only — session transcripts travel further than a terminal.
+            const { ConstitutionService: CS } = await import("../constitution/service.js");
+            escalations.push(...policyEscalations(new CS(s, paths.root).list({ publicOnly: true })));
+          } catch { /* constitution unavailable */ }
           if (escalations.length) {
             L.push(`⚖ ${escalations.length} decision(s) need YOUR call — ASK the user inline (don't queue): ${escalations.map((e) => e.question).join(" · ")}`);
           }
@@ -3193,11 +3208,19 @@ program
 // ---- escalations (the inline "ask the human" surface) ---------------------
 program
   .command("escalations")
-  .description("The decisions a human must make NOW — surfaced to be asked INLINE (in the prompt), never a background queue. Captured memory auto-trusts on landing; this lists only what the graph genuinely can't resolve itself (today: topic conflicts). Normally empty. Exits non-zero when any are open, so an assistant/CI knows to raise them.")
-  .action(() => {
-    const { store } = storeFor();
+  .description("The decisions a human must make NOW — surfaced to be asked INLINE (in the prompt), never a background queue. Captured memory auto-trusts on landing; this lists only what the graph genuinely can't resolve itself: topic conflicts, Constitution candidates awaiting review, and proposed policies whose activation is a human call. Normally empty. Exits non-zero when any are open, so an assistant/CI knows to raise them.")
+  .option("--json", "emit the escalation entries as JSON (the VS Code panel's data source)")
+  .action(async (opts: { json?: boolean }) => {
+    const { store, root } = storeFor();
     try {
       const items = pendingEscalations(store.recs("decisions"));
+      // Constitution moments ride the same inline surface (§59.5.3) — never a queue.
+      // Fail open: a broken policy store must not take the memory escalations down.
+      try {
+        const { ConstitutionService: CS } = await import("../constitution/service.js");
+        items.push(...policyEscalations(new CS(store, root).list()));
+      } catch { /* constitution unavailable — memory escalations still surface */ }
+      if (opts.json) { console.log(JSON.stringify(items)); if (items.length) process.exitCode = 1; return; }
       if (!items.length) {
         console.log("✓ Nothing needs your decision — memory is auto-trusted and self-consistent.");
         return;

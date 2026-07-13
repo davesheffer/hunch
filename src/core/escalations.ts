@@ -20,7 +20,7 @@
 import type { Decision } from "./types.js";
 import { topicCollisions } from "./topics.js";
 
-export type EscalationKind = "topic-conflict";
+export type EscalationKind = "topic-conflict" | "policy-candidate" | "policy-proposal";
 
 export interface Escalation {
   kind: EscalationKind;
@@ -48,6 +48,52 @@ export function pendingEscalations(decisions: readonly Decision[]): Escalation[]
       detail: decs.map((d) => `${d.id} — "${d.title}"`).join("  ·  "),
       resolution: `supersede the others: re-record the chosen one with supersedes:<other-id>, or split the topic.`,
     });
+  }
+  return out;
+}
+
+/** The minimal policy shape the escalation scan needs — a structural subset of
+ *  constitution PolicySpec, so this module stays dependency-free of the
+ *  Constitution schemas (core must not import constitution). */
+export interface PolicyLite {
+  id: string;
+  state: string;
+  statement: string;
+  proof: string | null;
+  authority: unknown;
+}
+
+/** The Constitution's genuine human moments (§59.5.3), framed as inline questions:
+ *  a candidate awaiting review, and a proposed policy whose next step (prove, or
+ *  accept/reject) is a human call. Machine conclusions never appear here as
+ *  approvals — every entry is a QUESTION with its explicit resolution verb. */
+export function policyEscalations(policies: readonly PolicyLite[]): Escalation[] {
+  const out: Escalation[] = [];
+  const clip = (s: string): string => (s.length > 90 ? s.slice(0, 89).trimEnd() + "…" : s);
+  for (const p of policies) {
+    if (p.state === "compiled" || p.state === "validating") {
+      out.push({
+        kind: "policy-candidate",
+        topic: p.id,
+        decisionIds: [p.id],
+        question: `Candidate rule "${clip(p.statement)}" (${p.id}) awaits your review — keep it moving or reject it?`,
+        detail: `state ${p.state} · authority none · not yet proved`,
+        resolution: `hunch policy prove ${p.id} — then accept/reject; or hunch policy reject ${p.id} --reason "..."`,
+      });
+    } else if (p.state === "proposed") {
+      out.push({
+        kind: "policy-proposal",
+        topic: p.id,
+        decisionIds: [p.id],
+        question: p.proof
+          ? `Proposed rule "${clip(p.statement)}" (${p.id}) carries its proof — activate it (advisory/blocking) or reject it?`
+          : `Proposed rule "${clip(p.statement)}" (${p.id}) has no current proof — prove it, then decide.`,
+        detail: `state proposed · ${p.proof ? `proof ${p.proof}` : "no proof"} · authority none`,
+        resolution: p.proof
+          ? `inspect: hunch policy card ${p.id} — then hunch policy accept ${p.id} --advisory|--blocking --actor human:<you>, or reject`
+          : `hunch policy prove ${p.id}`,
+      });
+    }
   }
   return out;
 }

@@ -9,6 +9,7 @@
  * Adopt drafts, and Approve-to-push (the one outward step that needs a human).
  */
 import * as vscode from "vscode";
+import * as os from "node:os";
 import { runHunch, runHunchWithProgress } from "./cli.js";
 
 /** One memory move — mirrors src/core/memorylog.MemoryMove (JSON consumer). */
@@ -61,10 +62,75 @@ export class MoveNode extends vscode.TreeItem {
   }
 }
 
-export class MemoryTreeProvider implements vscode.TreeDataProvider<MoveNode> {
+/** One inline escalation — mirrors core/escalations.Escalation (JSON consumer). */
+export interface EscalationEntry {
+  kind: string;
+  topic: string;
+  question: string;
+  detail: string;
+  resolution: string;
+}
+
+/** One Constitution policy — mirrors `hunch policy list --json` (JSON consumer). */
+export interface PolicyEntry {
+  id: string;
+  state: string;
+  severity: string;
+  statement: string;
+  authority: { actor?: string } | null;
+  proof: string | null;
+  data_class: string;
+}
+
+export class EscalationNode extends vscode.TreeItem {
+  constructor(public readonly entry: EscalationEntry) {
+    super(entry.question, vscode.TreeItemCollapsibleState.None);
+    this.iconPath = new vscode.ThemeIcon("question", new vscode.ThemeColor("notificationsWarningIcon.foreground"));
+    this.contextValue = "hunchEscalation";
+    this.tooltip = new vscode.MarkdownString([`**${entry.kind}**`, "", entry.detail, "", `→ ${entry.resolution}`].join("\n"));
+    this.command = { command: "hunch.openEscalation", title: "Open escalation", arguments: [this] };
+  }
+}
+
+const POLICY_ICON: Record<string, string> = {
+  active_blocking: "shield", active_advisory: "verified", proposed: "law",
+  compiled: "beaker", validating: "beaker", demoted: "arrow-down", retired: "archive",
+};
+
+export class PolicyNode extends vscode.TreeItem {
+  constructor(public readonly policy: PolicyEntry) {
+    super(policy.statement.length > 80 ? policy.statement.slice(0, 79) + "…" : policy.statement, vscode.TreeItemCollapsibleState.None);
+    this.description = `${policy.state} · ${policy.severity}${policy.authority?.actor ? ` · ${policy.authority.actor}` : ""}${policy.data_class !== "public" ? " · private" : ""}`;
+    this.iconPath = new vscode.ThemeIcon(POLICY_ICON[policy.state] ?? "circle-outline");
+    this.contextValue = policy.state === "proposed" ? "hunchPolicyProposed" : policy.state === "active_blocking" ? "hunchPolicyBlocking" : "hunchPolicy";
+    this.tooltip = new vscode.MarkdownString([
+      `**${policy.id}** · ${policy.state} · ${policy.severity}`,
+      "", policy.statement, "",
+      policy.proof ? `Proof: \`${policy.proof}\`` : "_No proof yet._",
+      policy.authority?.actor ? `Authority: ${policy.authority.actor}` : "Authority: none — a human click here IS the vouch.",
+      "", "_Click for the proof card._",
+    ].join("\n"));
+    this.command = { command: "hunch.openPolicyCard", title: "Open proof card", arguments: [this] };
+  }
+}
+
+class GroupNode extends vscode.TreeItem {
+  constructor(label: string, icon: string, public readonly group: "escalations" | "policies") {
+    super(label, group === "escalations" ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.Collapsed);
+    this.iconPath = new vscode.ThemeIcon(icon);
+    this.contextValue = `hunchGroup.${group}`;
+  }
+}
+
+type Node = MoveNode | EscalationNode | PolicyNode | GroupNode;
+
+export class MemoryTreeProvider implements vscode.TreeDataProvider<Node> {
   private readonly _changed = new vscode.EventEmitter<void>();
   readonly onDidChangeTreeData = this._changed.event;
   private moves: MemoryMove[] = [];
+  private escalations: EscalationEntry[] = [];
+  private policies: PolicyEntry[] = [];
+  private loaded = false;
 
   constructor(private readonly root: string | undefined) {}
 
@@ -73,18 +139,37 @@ export class MemoryTreeProvider implements vscode.TreeDataProvider<MoveNode> {
   }
 
   private async load(): Promise<void> {
-    if (!this.root) { this.moves = []; return; }
-    const res = await runHunch(this.root, ["log", "--json", "-n", "150"]);
-    if (!res.ok) { this.moves = []; return; }
-    try { this.moves = JSON.parse(res.stdout) as MemoryMove[]; }
-    catch { this.moves = []; }
+    this.loaded = true;
+    if (!this.root) { this.moves = []; this.escalations = []; this.policies = []; return; }
+    // Three independent reads; each degrades to empty on failure (a broken policy
+    // store must not take the timeline down, and vice versa).
+    const [log, esc, pol] = await Promise.all([
+      runHunch(this.root, ["log", "--json", "-n", "150"]),
+      runHunch(this.root, ["escalations", "--json"]),
+      runHunch(this.root, ["policy", "list", "--json"]),
+    ]);
+    try { this.moves = log.ok ? JSON.parse(log.stdout) as MemoryMove[] : []; } catch { this.moves = []; }
+    // escalations exits non-zero when entries exist (by design) — parse regardless.
+    try { this.escalations = JSON.parse(esc.stdout) as EscalationEntry[]; } catch { this.escalations = []; }
+    try { this.policies = pol.ok ? JSON.parse(pol.stdout) as PolicyEntry[] : []; } catch { this.policies = []; }
   }
 
-  getTreeItem(node: MoveNode): vscode.TreeItem { return node; }
+  getTreeItem(node: Node): vscode.TreeItem { return node; }
 
-  async getChildren(): Promise<MoveNode[]> {
-    if (!this.moves.length) await this.load();
-    return this.moves.map((m) => new MoveNode(m));
+  async getChildren(element?: Node): Promise<Node[]> {
+    if (!element) {
+      if (!this.loaded) await this.load();
+      const roots: Node[] = [];
+      if (this.escalations.length) roots.push(new GroupNode(`⚖ Needs your decision (${this.escalations.length})`, "issues", "escalations"));
+      if (this.policies.length) roots.push(new GroupNode(`🏛 Constitution (${this.policies.length})`, "law", "policies"));
+      return [...roots, ...this.moves.map((m) => new MoveNode(m))];
+    }
+    if (element instanceof GroupNode) {
+      return element.group === "escalations"
+        ? this.escalations.map((e) => new EscalationNode(e))
+        : this.policies.map((p) => new PolicyNode(p));
+    }
+    return [];
   }
 }
 
@@ -138,6 +223,57 @@ export async function approveAndPush(root: string, onDone: () => void): Promise<
   if (pick !== "Push") return;
   const res = await runHunchWithProgress(root, ["push"], "Hunch: pushing memory…");
   if (res.ok) { vscode.window.showInformationMessage("Hunch: memory pushed to the remote."); onDone(); }
+}
+
+/** Open one policy's deterministic proof card as a read-only popup. */
+export async function openPolicyCard(root: string, node: PolicyNode): Promise<void> {
+  const res = await runHunch(root, ["policy", "card", node.policy.id]);
+  const body = (res.stdout || res.stderr || "(no card)").trim();
+  const doc = await vscode.workspace.openTextDocument({ content: body, language: "markdown" });
+  await vscode.window.showTextDocument(doc, { preview: true, viewColumn: vscode.ViewColumn.Active });
+}
+
+/** Open one escalation as a read-only popup: the question, its receipt, the verbs. */
+export async function openEscalation(node: EscalationNode): Promise<void> {
+  const e = node.entry;
+  const doc = await vscode.workspace.openTextDocument({
+    content: [`⚖ ${e.question}`, "", e.detail, "", `Resolution: ${e.resolution}`].join("\n"),
+    language: "markdown",
+  });
+  await vscode.window.showTextDocument(doc, { preview: true, viewColumn: vscode.ViewColumn.Active });
+}
+
+/** The explicit human actor for authority-bearing panel actions. */
+function panelActor(): string {
+  return `human:${os.userInfo().username || "vscode"}`;
+}
+
+/** Activate a proposed policy — THE inline vouch. A modal states exactly what the
+ *  click grants; blocking is called out in its own words. Delegates to the CLI. */
+export async function activatePolicy(root: string, node: PolicyNode, onDone: () => void): Promise<void> {
+  const p = node.policy;
+  const pick = await vscode.window.showWarningMessage(
+    `Activate this rule?\n\n${p.statement.slice(0, 160)}`,
+    { modal: true, detail: `Your click is the human authority (recorded as ${panelActor()}). Advisory = surfaces, never blocks. Blocking = can fail edits/commits/CI — requires the P3 proof this policy carries. Inspect the proof card first if you haven't.` },
+    "Activate advisory", "Activate BLOCKING",
+  );
+  if (!pick) return;
+  const mode = pick === "Activate BLOCKING" ? "--blocking" : "--advisory";
+  const res = await runHunchWithProgress(root, ["policy", "accept", p.id, mode, "--actor", panelActor()], "Hunch: activating policy…");
+  if (res.ok) { vscode.window.showInformationMessage(res.stdout.trim().split("\n").pop() || `Activated ${p.id}.`); onDone(); }
+}
+
+/** Demote an active blocking policy to advisory (never erases history). */
+export async function demotePolicy(root: string, node: PolicyNode, onDone: () => void): Promise<void> {
+  const p = node.policy;
+  const pick = await vscode.window.showWarningMessage(
+    `Demote this BLOCKING rule to advisory?\n\n${p.statement.slice(0, 160)}`,
+    { modal: true, detail: `It stops failing edits/commits immediately but keeps surfacing as advisory. History is preserved (audited demotion by ${panelActor()}).` },
+    "Demote to advisory",
+  );
+  if (pick !== "Demote to advisory") return;
+  const res = await runHunchWithProgress(root, ["policy", "demote", p.id, "--actor", panelActor()], "Hunch: demoting policy…");
+  if (res.ok) { vscode.window.showInformationMessage(res.stdout.trim().split("\n").pop() || `Demoted ${p.id}.`); onDone(); }
 }
 
 /** The strictness switch — how firmly the pre-edit gate enforces memory. Reads the

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { pendingEscalations } from "../src/core/escalations.js";
+import { pendingEscalations, policyEscalations, type PolicyLite } from "../src/core/escalations.js";
 import type { Decision } from "../src/core/types.js";
 
 const D = (over: Partial<Decision> & { id: string }): Decision => ({
@@ -35,6 +35,31 @@ test("pendingEscalations: auto-captured (topic null) memory never collides — n
   // piling up NEVER creates a human decision. Only human-anchored topics can.
   const decs = [D({ id: "dec_a" }), D({ id: "dec_b" }), D({ id: "dec_c" })];
   assert.deepEqual(pendingEscalations(decs), []);
+});
+
+const P = (over: Partial<PolicyLite> & { id: string }): PolicyLite => ({
+  state: "proposed", statement: `rule ${over.id}`, proof: null, authority: null, ...over,
+});
+
+test("policyEscalations: candidates and proposals surface as questions; active/retired stay silent", () => {
+  const items = policyEscalations([
+    P({ id: "pol_a", state: "compiled" }),
+    P({ id: "pol_b", state: "proposed", proof: "proof_x" }),
+    P({ id: "pol_c", state: "proposed" }),                       // no proof → "prove first"
+    P({ id: "pol_d", state: "active_advisory", authority: { actor: "human:x" } }),
+    P({ id: "pol_e", state: "retired" }),
+  ]);
+  assert.equal(items.length, 3, "only candidate + the two proposals ask; active/retired never do");
+  assert.equal(items[0]!.kind, "policy-candidate");
+  assert.match(items[0]!.resolution, /policy prove pol_a/);
+  assert.equal(items[1]!.kind, "policy-proposal");
+  assert.match(items[1]!.question, /activate it \(advisory\/blocking\) or reject/);
+  assert.match(items[1]!.resolution, /policy accept pol_b/);
+  assert.match(items[2]!.question, /no current proof — prove it/);
+});
+
+test("policyEscalations: an empty policy store asks nothing", () => {
+  assert.deepEqual(policyEscalations([]), []);
 });
 
 test("pendingEscalations: a superseded decision on the topic does not count (only live collide)", () => {
