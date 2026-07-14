@@ -1,0 +1,47 @@
+{
+  "id": "dec_ba205e7010",
+  "title": "Amend con_2ce3f2a547: metered synthesis hosts are gated behind an explicit flag, and the guard's host patterns are anchored so a defensive blocklist is not a violation",
+  "topic": null,
+  "status": "accepted",
+  "context": "PR #10 adds an opt-in openai-compat/Ollama synthesis provider (self-hosted HTTP, OpenAI chat-completions wire format). Its safety gate refuses known metered API hosts (api.openai.com, api.anthropic.com, generativelanguage.googleapis.com, api.mistral.ai, api.cohere.ai, openrouter.ai) unless HUNCH_SYNTH_ALLOW_METERED=1 is set — both in available() (not selected) and as a defense-in-depth throw in run(). Problem discovered on merge: those metered-host STRING LITERALS in the provider's METERED_HOSTS blocklist tripped con_2ce3f2a547's own forbids.patterns (api\\.openai\\.com / api\\.anthropic\\.com), so `hunch check --strict` reported the PR as breaking 1 blocking invariant (verified: strictBlockers=1). The defensive blocklist that ENFORCES the invariant read as a VIOLATION of it. This would have failed the repo's own CI Constraint Guard.",
+  "decision": "con_2ce3f2a547's spirit is 'never SILENTLY bill', not 'no metered host is ever reachable': a metered endpoint is allowed only as a deliberate, named act via HUNCH_SYNTH_ALLOW_METERED=1. To keep the guard precise, anchor its two host patterns from `api\\.openai\\.com` to `[/.]api\\.openai\\.com` (and the anthropic one likewise): a bare blocklist entry \"api.openai.com\" (preceded by a quote) now COMPLIES, while a real call `https://api.openai.com/...` (preceded by /) and a subdomain `eu.api.openai.com` (preceded by .) are still CAUGHT. The dep tier (@anthropic-ai/sdk, openai) and the `new OpenAI(` / `new Anthropic(` patterns are unchanged. Applied to BOTH the public .hunch and the private overlay copy (per dec_57e3dcca52: the overlay copy wins recs() id-dedupe, so a public-only edit would silently not take effect on maintainer machines).",
+  "consequences": [
+    "`hunch check --strict` and the CI Constraint Guard pass on PR #10 (verified exit 0, 9 changed files, no invariant hits).",
+    "A future raw fetch/baseURL to api.openai.com / api.anthropic.com in src/synthesis/** is still blocked by the lint tier; the SDK-import and constructor paths are unchanged.",
+    "Metered LLM synthesis is possible but only via an explicit, named opt-in (HUNCH_SYNTH_ALLOW_METERED=1); local/self-hosted/LAN endpoints are unaffected.",
+    "The overlay constraint copy must be kept in sync with the public copy for any future matcher change (dec_57e3dcca52)."
+  ],
+  "alternatives_rejected": [
+    "Remove the api.*.com patterns entirely and rely on the dep tier — rejected: it drops the only lint-tier catch for a RAW fetch to a metered host that imports no SDK, which is exactly the transport this PR introduces.",
+    "Anchor with `//` only (require a URL scheme) — rejected: it misses subdomain URLs like eu.api.openai.com that the original unanchored pattern caught and that the runtime gate's suffix-match still catches; [/.] preserves subdomain coverage.",
+    "Lower con_2ce3f2a547 severity or firmness so the touch is advisory — rejected (echoes dec_57e3dcca52): precision, not permissiveness; weakening the gate would let a genuine re-introduction through for humans and agents alike.",
+    "Obfuscate the blocklist strings so they dodge the matcher — rejected: hides intent and defeats the point of a readable safety list."
+  ],
+  "rejected_tripwires": [],
+  "related_components": [
+    "Synthesis"
+  ],
+  "related_files": [
+    "src/synthesis/provider.ts",
+    ".hunch/constraints/con_2ce3f2a547.json"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-07-14T14:40:30.937Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 0.95,
+    "evidence": [
+      "src/synthesis/provider.ts",
+      ".hunch/constraints/con_2ce3f2a547.json"
+    ]
+  },
+  "date": "2026-07-14T14:40:30.937Z"
+}

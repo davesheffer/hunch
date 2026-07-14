@@ -25,9 +25,9 @@
     ],
     "symbols": [],
     "patterns": [
-      "api\\.anthropic\\.com",
+      "[/.]api\\.anthropic\\.com",
       "new Anthropic\\(",
-      "api\\.openai\\.com",
+      "[/.]api\\.openai\\.com",
       "new OpenAI\\("
     ]
   }
