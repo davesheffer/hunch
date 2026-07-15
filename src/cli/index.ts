@@ -1782,6 +1782,22 @@ experimentCmd
   });
 
 experimentCmd
+  .command("qualify")
+  .description("Record a passing excluded comprehension check before an EXP-03 revision-2 timed review.")
+  .argument("<file>", "reviewer qualification JSON")
+  .action((file: string) => {
+    const { store, root } = storeFor();
+    try {
+      const input = JSON.parse(readFileSync(resolve(file), "utf8")) as Parameters<ConstitutionService["qualifyExperimentReviewer"]>[0];
+      console.log(JSON.stringify(new ConstitutionService(store, root).qualifyExperimentReviewer(input), null, 2));
+    } catch (e) {
+      fail((e as Error).message);
+    } finally {
+      store.close();
+    }
+  });
+
+experimentCmd
   .command("next")
   .description("Start or resume the next randomized EXP-03 human review and return only its assigned treatment.")
   .argument("<run-id>", "immutable experiment run id")

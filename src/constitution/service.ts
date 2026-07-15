@@ -104,9 +104,11 @@ import {
   compileExperimentFollowup,
   compileExperimentOutcome,
   compileExperimentReviewStart,
+  compileExperimentReviewerQualification,
   compileExperimentRun,
   compileExperimentStop,
   currentExperimentOutcomes,
+  experimentReviewGuide,
   normalizedEditDistance,
   type CompileExperimentCaseBankInput,
   type CompileExperimentRunInput,
@@ -115,6 +117,8 @@ import {
   type ExperimentOutcome,
   type ExperimentReport,
   type ExperimentReviewStart,
+  type CompileExperimentReviewerQualificationInput,
+  type ExperimentReviewerQualification,
   type ExperimentRun,
   type ExperimentStop,
 } from "./experiment.js";
@@ -600,12 +604,20 @@ export class ConstitutionService {
     return { outcomes, report: this.experimentReport(run.id) };
   }
 
-  nextExperimentReview(runId: string, reviewer: string, opts: { now?: string } = {}): { start: ExperimentReviewStart; assignment: ExperimentRun["assignments"][number]; treatment: unknown } {
+  nextExperimentReview(runId: string, reviewer: string, opts: { now?: string } = {}): { start: ExperimentReviewStart; assignment: ExperimentRun["assignments"][number]; treatment: unknown; review_guide: ReturnType<typeof experimentReviewGuide> } {
     const run = this.experimentRun(runId);
     if (run.experiment !== "EXP-03") throw new Error("timed review queue is available only for EXP-03");
     if (this.experimentReport(run.id).status === "guardrail_stopped") throw new Error("experiment is stopped by an independently recorded safety/privacy guardrail");
     const bank = this.experimentRepository.listCaseBanks().find((item) => item.id === run.case_bank_id);
     if (!bank) throw new Error(`run ${run.id} is missing exact case bank ${run.case_bank_id}`);
+    const preregistration = this.g3Repository.listExperiments().find((item) => item.id === run.preregistration_id && item.content_hash === run.preregistration_hash);
+    if (!preregistration) throw new Error(`run ${run.id} is missing exact preregistration ${run.preregistration_id}`);
+    if (preregistration.revision >= 2) {
+      const qualification = this.experimentRepository.listReviewerQualifications().find((item) => item.preregistration_id === preregistration.id && item.preregistration_hash === preregistration.content_hash && item.reviewer === reviewer);
+      if (!qualification) throw new Error(`${reviewer} must pass the excluded plain-language comprehension check before a revision-${preregistration.revision} timed review`);
+      const targetReviewers = new Set(bank.cases.map((item) => item.strata.target_reviewer).filter(Boolean));
+      if (targetReviewers.has(reviewer) || targetReviewers.has(reviewer.replace(/^human:/i, ""))) throw new Error(`${reviewer} cannot perform timed reviews because the same actor labeled revision-${preregistration.revision} targets`);
+    }
     const current = new Set(currentExperimentOutcomes(this.experimentRepository.listOutcomes()).filter((item) => item.run_id === run.id).map((item) => item.assignment_id));
     const starts = this.experimentRepository.listReviewStarts().filter((item) => item.run_id === run.id);
     const existing = starts.find((item) => item.reviewer === reviewer && !current.has(item.assignment_id));
@@ -619,7 +631,13 @@ export class ConstitutionService {
         });
     if (!assignment) throw new Error(`no unreviewed EXP-03 assignment is available for ${reviewer}`);
     const start = existing ?? this.experimentRepository.putReviewStart(compileExperimentReviewStart(run, assignment, reviewer, opts));
-    return { start, assignment, treatment: assignmentTreatment(bank, run, assignment) };
+    return { start, assignment, treatment: assignmentTreatment(bank, run, assignment), review_guide: experimentReviewGuide(assignment.arm) };
+  }
+
+  qualifyExperimentReviewer(input: CompileExperimentReviewerQualificationInput, opts: { now?: string } = {}): ExperimentReviewerQualification {
+    const preregistration = this.g3Repository.currentExperiments().find((item) => item.experiment === "EXP-03");
+    if (!preregistration) throw new Error("no current EXP-03 preregistration");
+    return this.experimentRepository.putReviewerQualification(compileExperimentReviewerQualification(input, preregistration, opts));
   }
 
   submitExperimentReview(

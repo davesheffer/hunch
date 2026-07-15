@@ -245,6 +245,60 @@ export function assignmentTreatment(bank: ExperimentCaseBank, run: ExperimentRun
   return treatment;
 }
 
+export interface ExperimentReviewGuide {
+  title: string;
+  question: string;
+  action: string;
+  answer_template: string;
+  warning: string;
+  choices: Array<{
+    value: "accepted_precise" | "accepted_edited" | "rejected" | "uncompilable";
+    label: string;
+    use_when: string;
+  }>;
+}
+
+/** Human-facing help is deliberately outside the hash-bound treatment. It may
+ * explain the review task, but must never interpret the assigned evidence. */
+export function experimentReviewGuide(arm: string): ExperimentReviewGuide {
+  const notEnough = {
+    value: "uncompilable" as const,
+    label: "Not enough information",
+    use_when: "The requirement does not clearly say which code relationship must always hold.",
+  };
+  if (arm === "A") {
+    return {
+      title: "Write one code rule from the requirement",
+      question: "Can one exact code rule be written from the requirement without guessing?",
+      action: "If yes, write one sentence naming the code elements, required or forbidden relationship, direct or transitive meaning, and file scope. If no, choose Not enough information.",
+      answer_template: "<subject> must <directly or transitively> <required or forbidden relationship> <target>; scope: <file or component>",
+      warning: "Use only the stated requirement. Current code may confirm names, but cannot add intent.",
+      choices: [
+        { value: "accepted_precise", label: "Rule written", use_when: "Your sentence expresses one exact rule fully supported by the requirement." },
+        notEnough,
+      ],
+    };
+  }
+  const choices: ExperimentReviewGuide["choices"] = [
+    { value: "accepted_precise", label: "Yes — exact match", use_when: "The proposed rule says exactly what the requirement says." },
+    { value: "accepted_edited", label: "Needs editing", use_when: "The requirement supports one rule, but the proposal needs a specific correction." },
+    { value: "rejected", label: "Unsupported", use_when: "The proposal adds or changes meaning that the requirement does not support." },
+    notEnough,
+  ];
+  return {
+    title: arm === "C" ? "Check the proposed rule and its proof card" : "Check the proposed rule",
+    question: "Does the proposed rule say exactly what the requirement says?",
+    action: arm === "C"
+      ? "Compare the requirement with the proposed rule, then use the proof card only to check that the named code targets are bound correctly."
+      : "Compare the requirement with the proposed rule. Check the relationship, direction, direct or transitive meaning, and scope.",
+    answer_template: "Choose one plain-language option; include corrected rule text only for Needs editing.",
+    warning: arm === "C"
+      ? "The proof card can verify code bindings, but it cannot add intent missing from the requirement."
+      : "Do not infer intent from the current implementation or from nearby code.",
+    choices,
+  };
+}
+
 export function experimentRunContentHash(run: ExperimentRun): string {
   const { id: _id, content_hash: _hash, ...body } = run;
   return canonicalHash(body);
@@ -479,6 +533,46 @@ export function compileExperimentReviewStart(run: ExperimentRun, assignment: Exp
   };
   const contentHash = canonicalHash(body);
   return ExperimentReviewStartSchema.parse({ id: `expreview_${shortHash(contentHash)}`, content_hash: contentHash, ...body });
+}
+
+export const ExperimentReviewerQualificationSchema = z.object({
+  id: z.string().regex(/^expreviewqual_[a-f0-9]{10}$/),
+  content_hash: z.string().regex(HASH),
+  preregistration_id: z.string().regex(/^expreg_[a-f0-9]{10}$/),
+  preregistration_hash: z.string().regex(HASH),
+  reviewer: z.string().regex(/^human:[^\s]+$/i),
+  protocol: z.literal("exp03-plain-language-comprehension-v2"),
+  cases_hash: z.string().regex(HASH),
+  passed: z.literal(true),
+  reason: z.string().trim().min(1).max(4000),
+  data_class: z.literal("private"),
+  authority: z.literal("none"),
+  recorded_at: z.string().datetime({ offset: true }),
+}).strict();
+export type ExperimentReviewerQualification = z.infer<typeof ExperimentReviewerQualificationSchema>;
+export type CompileExperimentReviewerQualificationInput = Pick<ExperimentReviewerQualification,
+  "preregistration_id" | "preregistration_hash" | "reviewer" | "protocol" | "cases_hash" | "passed" | "reason">;
+
+export function experimentReviewerQualificationContentHash(record: ExperimentReviewerQualification): string {
+  const { id: _id, content_hash: _hash, ...body } = record;
+  return canonicalHash(body);
+}
+
+export function compileExperimentReviewerQualification(
+  input: CompileExperimentReviewerQualificationInput,
+  preregistration: ExperimentPreregistration,
+  opts: { now?: string } = {},
+): ExperimentReviewerQualification {
+  if (preregistration.experiment !== "EXP-03" || preregistration.revision < 2) throw new Error("plain-language reviewer qualification requires EXP-03 revision 2 or later");
+  if (input.preregistration_id !== preregistration.id || input.preregistration_hash !== preregistration.content_hash) throw new Error("reviewer qualification must bind the exact current preregistration");
+  const body = {
+    ...input,
+    data_class: "private" as const,
+    authority: "none" as const,
+    recorded_at: opts.now ?? new Date().toISOString(),
+  };
+  const contentHash = canonicalHash(body);
+  return ExperimentReviewerQualificationSchema.parse({ id: `expreviewqual_${shortHash(contentHash)}`, content_hash: contentHash, ...body });
 }
 
 export const ExperimentFollowupSchema = z.object({
@@ -934,6 +1028,23 @@ export class ExperimentRepository {
     const openForReviewer = records.find((item) => item.run_id === parsed.run_id && item.reviewer === parsed.reviewer && !completed.has(`${item.run_id}:${item.assignment_id}`));
     if (openForReviewer) throw new Error(`${parsed.reviewer} already has open review ${openForReviewer.id}; complete it before starting another assignment`);
     this.put("experiment-review-starts", parsed.id, parsed);
+    return parsed;
+  }
+
+  listReviewerQualifications(): ExperimentReviewerQualification[] {
+    return this.load("experiment-review-qualifications", "expreviewqual_", (raw) => {
+      const parsed = ExperimentReviewerQualificationSchema.parse(raw);
+      if (experimentReviewerQualificationContentHash(parsed) !== parsed.content_hash || parsed.id !== `expreviewqual_${shortHash(parsed.content_hash)}`) throw new Error(`experiment reviewer qualification ${parsed.id} content hash mismatch`);
+      return parsed;
+    }).sort((a, b) => a.id.localeCompare(b.id));
+  }
+
+  putReviewerQualification(record: ExperimentReviewerQualification): ExperimentReviewerQualification {
+    const parsed = ExperimentReviewerQualificationSchema.parse(record);
+    if (experimentReviewerQualificationContentHash(parsed) !== parsed.content_hash || parsed.id !== `expreviewqual_${shortHash(parsed.content_hash)}`) throw new Error(`experiment reviewer qualification ${parsed.id} content hash mismatch`);
+    const incumbent = this.listReviewerQualifications().find((item) => item.preregistration_id === parsed.preregistration_id && item.reviewer === parsed.reviewer);
+    if (incumbent) return incumbent;
+    this.put("experiment-review-qualifications", parsed.id, parsed);
     return parsed;
   }
 

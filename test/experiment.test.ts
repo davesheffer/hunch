@@ -20,6 +20,7 @@ import {
   compileExperimentRun,
   compileExperimentStop,
   currentExperimentOutcomes,
+  experimentReviewGuide,
   type CompileExperimentCaseBankInput,
   type ExperimentCaseBank,
   type ExperimentOutcome,
@@ -30,6 +31,23 @@ const REGISTERED = "2026-07-11T12:00:00.000Z";
 const LOCKED = "2026-07-12T12:00:00.000Z";
 const H = (c: string): string => `sha1:${c.repeat(40)}`;
 const BASE = "a".repeat(40);
+
+test("EXP-03 review guide uses plain choices without changing experiment decisions", () => {
+  const manual = experimentReviewGuide("A");
+  assert.equal(manual.question, "Can one exact code rule be written from the requirement without guessing?");
+  assert.match(manual.action, /write one sentence/i);
+  assert.match(manual.answer_template, /must/);
+  assert.equal(manual.choices.find((choice) => choice.value === "uncompilable")?.label, "Not enough information");
+
+  const candidate = experimentReviewGuide("B");
+  assert.equal(candidate.question, "Does the proposed rule say exactly what the requirement says?");
+  assert.equal(candidate.choices.find((choice) => choice.value === "accepted_precise")?.label, "Yes — exact match");
+  assert.equal(candidate.choices.find((choice) => choice.value === "accepted_edited")?.label, "Needs editing");
+
+  const proved = experimentReviewGuide("C");
+  assert.match(proved.action, /proof card/i);
+  assert.match(proved.warning, /cannot add intent/i);
+});
 
 function prereg(experiment: "EXP-01" | "EXP-03"): ReturnType<typeof compileExperimentPreregistration> {
   const unit = experiment === "EXP-01" ? "task" as const : "policy_candidate" as const;
