@@ -171,3 +171,34 @@ activate / demote / withdraw / retire authority actions.
 
 **Rule of the loop:** advisory is automatic; *blocking* is always one explicit human
 click, and a repaired rule asks once for a fresh proof before it can block again.
+
+---
+
+## 12. Self-hosted / local models (Ollama, vLLM, LM Studio) via openai-compat
+
+```bash
+HUNCH_SYNTH_PROVIDER=ollama                          # alias for openai-compat
+HUNCH_SYNTH_BASE_URL=http://localhost:11434/v1
+HUNCH_SYNTH_MODEL=qwen2.5-coder:latest
+# optional:
+HUNCH_SYNTH_API_KEY=...          # only if your endpoint requires one
+HUNCH_SYNTH_TIMEOUT_MS=300000    # default 300000 (5 min)
+HUNCH_SYNTH_MAX_TOKENS=2048      # default 2048 — caps OUTPUT length
+```
+
+Ollama's effective context can come from the model, server configuration, or VRAM-based defaults. Long commit diffs can be silently truncated when that context is too small. `hunch doctor` and `hunch backfill` warn when the selected model does not pin `num_ctx`; for predictable synthesis, pin it once at the model level:
+
+```
+FROM qwen2.5-coder:latest
+PARAMETER num_ctx 16384
+```
+
+```bash
+ollama create hunch-synth -f Modelfile
+```
+
+Then point `HUNCH_SYNTH_MODEL` at `hunch-synth` instead of the base model.
+
+**Observe:** `hunch doctor` no longer prints the context warning once `num_ctx` is set; `hunch backfill`'s drafts stop hallucinating from truncated diffs.
+
+**Public remotes are refused by default.** A hostname denylist cannot keep pace with every paid OpenAI-compatible provider, so Hunch fails closed: localhost, private/link-local IPs, and conventional LAN names work directly; every public remote requires `HUNCH_SYNTH_ALLOW_METERED=1`. Set it only when the endpoint is deliberately trusted and any billing is understood. Publicly hosted self-managed endpoints use the same explicit flag because billing cannot be inferred safely from a hostname.

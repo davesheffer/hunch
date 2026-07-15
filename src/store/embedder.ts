@@ -3,7 +3,7 @@
  * "add embeddings once keyword search proves insufficient" upgrade).
  *
  * Embeddings are LOCAL and FREE. Anthropic has no embeddings endpoint and the
- * project is subscription-only (see synthesis/provider.ts), so we run a small
+ * project avoids implicit metered inference (see synthesis/provider.ts), so we run a small
  * sentence-transformer locally via transformers.js. That library is an OPTIONAL
  * dependency, dynamically imported — if it isn't installed, `selectEmbedder()`
  * returns null and the whole feature degrades to pure FTS (the lean-install

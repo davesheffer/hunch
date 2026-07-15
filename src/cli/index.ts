@@ -35,6 +35,7 @@ import {
   selectProvider,
   SYNTH_PREFERENCES,
   writeSynthesisPreference,
+  normalizeProviderName,
   type SynthPreference,
 } from "../synthesis/provider.js";
 import { isGitRepo, headSha, logSince, lastChangeDate, stagedFiles, workingFiles, commitFiles, asOfDate, stagedDiff, workingDiff, commitDiff, rangeFiles, rangeDiff, rangeSubjects, revExists, revParse, commitAndPushHunch, pullHunch, gitUntrackCached, gitCommonDir, isLinkedWorktree, mainWorktreeRoot, gitMemoryLog, memoryMoveDiff, revertMemoryMove, pushCurrentBranch, commitChanges } from "../extractors/git.js";
@@ -108,7 +109,7 @@ import { movePublicMemoryToPrivate } from "../store/privateMigrate.js";
 import { ENTITY_KINDS } from "../core/types.js";
 import { planCompaction } from "../store/compact.js";
 import { repairDecisionReference } from "../core/refrepair.js";
-import { resolveInvocation } from "./invocation.js";
+import { resolveInvocation, dim, synthesisStatusLines, maybeWarnOllamaContext } from "./invocation.js";
 
 const program = new Command();
 program.name("hunch").description("Hunch — an Engineering Memory OS: a git-native reasoning graph for your codebase.").version(HUNCH_VERSION);
@@ -302,8 +303,8 @@ program
   .option("--since <spec>", "how far back, e.g. 90d", "90d")
   .option("--max <n>", "max commits to process", "40")
   .option("--concurrency <n>", "commits to synthesize in parallel (the LLM call is the bottleneck)", "4")
-  .option("--deep", "Deep Synthesis: ensemble every available subscription CLI per commit and reconcile their drafts (slower, higher-quality; advisory)")
-  .option("--verify", "Critic pass: audit each draft against its commit, prune unsupported alternatives/consequences, down-weight weak grounding (extra subscription call; advisory)")
+  .option("--deep", "Deep Synthesis: ensemble every available LLM provider per commit and reconcile their drafts (slower, higher-quality; advisory)")
+  .option("--verify", "Critic pass: audit each draft against its commit, prune unsupported alternatives/consequences, down-weight weak grounding (extra provider call; advisory)")
   .option("--samples <n>", "self-consistency depth when only one CLI is installed: sample it n times per commit and reconcile (default 2 under --deep)")
   .action(async (opts: { since: string; max: string; concurrency: string; deep?: boolean; verify?: boolean; samples?: string }) => {
     const { store, root } = storeFor();
@@ -312,6 +313,14 @@ program
     const commits = logSince(opts.since, root, Number(opts.max));
     const conc = Math.max(1, Math.min(16, Number(opts.concurrency) || 4));
     console.log(`Backfilling from ${commits.length} commit(s) since ${opts.since} (concurrency ${conc})…`);
+    // Best-effort context-window advisory (issue #11): printed ONCE, before any
+    // commit is drafted — not per-commit, and not under --deep (an ensemble may
+    // fan out to several distinct workers, each with its own configuration).
+    if (!opts.deep && commits.length > 0) {
+      const ctxProvider = await selectProvider();
+      const ctxWarning = await maybeWarnOllamaContext(ctxProvider.name, process.env);
+      if (ctxWarning) console.log(ctxWarning);
+    }
     let written = 0, skipped = 0, llm = 0, heuristic = 0;
     // The per-commit cost is the Claude synthesis spawn; run several at once. Safe:
     // each commit drafts independently and writes its OWN decision file atomically,
@@ -347,8 +356,8 @@ program
   .option("--overlay", "alias of --private")
   .option("--commit", "after a capture, also git add+commit the repo the decision landed in (default: follows auto-commit, ON unless opted out) — the overlay is also pushed; the public .hunch/ rides your next push")
   .option("--no-commit", "skip the auto-commit for this capture even when auto-commit is on")
-  .option("--deep", "Deep Synthesis: ensemble every available subscription CLI and reconcile their drafts (agreement-weighted, advisory). Slower; subscription-only")
-  .option("--verify", "Critic pass: audit the draft against its commit, prune unsupported alternatives/consequences, down-weight weak grounding (extra subscription call; advisory)")
+  .option("--deep", "Deep Synthesis: ensemble every available LLM provider and reconcile their drafts (agreement-weighted, advisory). Slower; uses configured subscriptions/local endpoint")
+  .option("--verify", "Critic pass: audit the draft against its commit, prune unsupported alternatives/consequences, down-weight weak grounding (extra provider call; advisory)")
   .option("--samples <n>", "self-consistency depth when only one CLI is installed: sample it n times and reconcile (default 2 under --deep)")
   .action(async (sha: string | undefined, opts: { fromHook?: boolean; quiet?: boolean; force?: boolean; private?: boolean; overlay?: boolean; commit?: boolean; deep?: boolean; verify?: boolean; samples?: string }) => {
     const { store, root } = storeFor();
@@ -2578,15 +2587,15 @@ program
     console.log(`✓ firmness set to ${next} (takes effect on the next agent edit — no restart needed).`);
   });
 
-// ---- provider (per-user synthesis subscription choice) -------------------
+// ---- provider (per-user synthesis provider choice) -----------------------
 program
   .command("provider")
-  .description("Show or set the local coding-assistant subscription Hunch may use for synthesis. Never changes team config.")
+  .description("Show or set the local LLM provider Hunch may use for synthesis. Never changes team config.")
   .argument("[name]", `auto | ${SYNTH_PREFERENCES.filter((p) => p !== "auto").join(" | ")} (omit to inspect)`)
   .action(async (value: string | undefined) => {
     const root = findRoot();
     if (value != null) {
-      const preference = value.trim();
+      const preference = normalizeProviderName(value.trim()) ?? value.trim();
       if (!(SYNTH_PREFERENCES as readonly string[]).includes(preference)) {
         return fail(`provider must be one of: ${SYNTH_PREFERENCES.join(", ")}`);
       }
@@ -2599,7 +2608,7 @@ program
     }
 
     const resolution = await resolveSynthesisProvider({ root });
-    const envValue = process.env.HUNCH_SYNTH_PROVIDER?.trim();
+    const envValue = normalizeProviderName(process.env.HUNCH_SYNTH_PROVIDER?.trim());
     const local = readSynthesisPreference(root);
     const hasValidEnv = !!envValue && (SYNTH_PREFERENCES as readonly string[]).includes(envValue);
     console.log(`selected:    ${resolution.provider.name} (${resolution.source})`);
@@ -2612,7 +2621,7 @@ program
     }
     if (resolution.source === "ambiguous") {
       const choices = resolution.statuses.filter((s) => s.name !== "deterministic" && s.available).map((s) => `hunch provider ${s.name}`);
-      console.log(dim("Multiple subscription CLIs are available, so Hunch uses the free deterministic fallback rather than guessing which plan to spend."));
+      console.log(dim("Multiple LLM providers are available, so Hunch uses the free deterministic fallback rather than guessing which subscription or endpoint to use."));
       console.log(`choose one:  ${choices.join("  or  ")}`);
     } else if (resolution.source === "unavailable-preference") {
       console.log(dim(`Your ${resolution.preference} preference is not available; Hunch is using the local deterministic fallback.`));
@@ -3100,7 +3109,7 @@ program
       const drafts = all.filter(isReviewDraft);
       if (!drafts.length) { console.log("✓ No drafts to auto-review."); return; }
 
-      // Delegate relevance to the harness (subscription CLI) — feature-detected.
+      // Delegate relevance to the configured LLM provider — feature-detected.
       // A dry-run may remain partial (missing verdicts are kept), but --apply is
       // all-or-nothing when judgment was requested: a provider outage must never
       // turn an incomplete batch into an apparently safe mutation plan.
@@ -3127,7 +3136,7 @@ program
             }
           }
         } else {
-          console.log(dim("No subscription CLI available — relevance judgment skipped (dedup + grounding only)."));
+          console.log(dim("No LLM synthesis provider available — relevance judgment skipped (dedup + grounding only)."));
           judgmentFailures.push(...drafts.map((d) => ({ id: d.id, error: "no subscription relevance judge available" })));
         }
       } else if (opts.private && opts.llm !== false) {
@@ -3499,7 +3508,7 @@ program
 // ---- wiki (generated component wiki — a derived VIEW of the graph) ----------
 program
   .command("wiki")
-  .description("Generate a component wiki from the graph — pages are a derived VIEW (the graph stays the source of truth), pinned with hunch:topic anchors and freshness-hashed into a wiki-manifest. Stale pages surface as wiki-stale in `hunch drift`; --heal regenerates ONLY those. Prose via a subscription CLI when available; deterministic template otherwise. Default: PUBLIC-store records only, written to <repo>/wiki/. With --private: the FULL graph (overlay included), written into the private overlay repo — never committed here.")
+  .description("Generate a component wiki from the graph — pages are a derived VIEW (the graph stays the source of truth), pinned with hunch:topic anchors and freshness-hashed into a wiki-manifest. Stale pages surface as wiki-stale in `hunch drift`; --heal regenerates ONLY those. Prose via the configured LLM provider when available; deterministic template otherwise. Default: PUBLIC-store records only, written to <repo>/wiki/. With --private: the FULL graph (overlay included), written into the private overlay repo — never committed here.")
   .option("--dir <dir>", "output directory (default: wiki/, or the manifest's dir once adopted)")
   .option("--heal", "regenerate only new/stale pages (manifest hash mismatch) and remove orphans")
   .option("--check", "report stale pages and exit non-zero (CI gate); writes nothing")
@@ -3559,8 +3568,8 @@ program
       // otherwise: drift says "remove with --heal", --heal refuses to run).
       if (!status.entries.length && !opts.heal) return fail("no active components in the graph — run `hunch index` first.");
 
-      // Prose is optional garnish on the deterministic skeleton: subscription CLI
-      // only (same rule as synthesis), feature-detected, and any failure degrades
+      // Prose is optional garnish on the deterministic skeleton: configured LLM
+      // provider only (same guards as synthesis), feature-detected, and any failure degrades
       // to a template page — generation never depends on a model being present.
       if (opts.proseHeal && opts.llm === false) return fail("--prose-heal needs the LLM — drop --no-llm.");
       let prose: ((pack: WikiPack, excerpts: string) => Promise<string | null>) | undefined;
@@ -3568,11 +3577,11 @@ program
       if (opts.llm !== false) {
         const provider = await selectProvider({ root });
         if (provider.draftProse) {
-          console.log(`Prose via ${provider.name} (subscription); the drift-bearing skeleton stays deterministic.`);
+          console.log(`Prose via ${provider.name}; the drift-bearing skeleton stays deterministic.`);
           prose = (pack, excerpts) => provider.draftProse!(wikiPrompt(pack, excerpts));
           if (opts.proseHeal) adoptionProse = (doc, content) => provider.draftProse!(adoptProsePrompt(doc, content, status.decisions));
         } else {
-          console.log(`No subscription CLI available — deterministic template pages${opts.proseHeal ? " (prose-heal skipped)" : ""}.`);
+          console.log(`No LLM synthesis provider available — deterministic template pages${opts.proseHeal ? " (prose-heal skipped)" : ""}.`);
         }
       }
 
@@ -3785,19 +3794,14 @@ program
     const resolution = await resolveSynthesisProvider({ root });
     const provider = resolution.provider;
     console.log(`synthesis:  ${provider.name} (${resolution.source})`);
-    const selected = resolution.statuses.find((s) => s.name === provider.name);
-    if (selected?.subscription) {
-      console.log(`            ↳ LLM synthesis uses your ${selected.subscription}; provider API credentials are not used.`);
-    } else if (resolution.source === "ambiguous") {
-      const names = resolution.statuses.filter((s) => s.name !== "deterministic" && s.available).map((s) => s.name);
-      console.log(dim(`            ↳ ${names.join(", ")} are available; Hunch will not guess which subscription to spend.`));
-      console.log(dim(`              choose one locally: ${names.map((name) => `hunch provider ${name}`).join("  or  ")}`));
-    } else if (resolution.source === "unavailable-preference") {
-      console.log(dim(`            ↳ ${resolution.preference} was selected but is unavailable; using the offline heuristic.`));
-    } else {
-      console.log(dim(`            ↳ no assistant CLI found — synthesis uses the offline heuristic (advisory, low-confidence).`));
-      console.log(dim(`              install or log into Claude Code, Codex, or Cursor; then select one with \`hunch provider <name>\`.`));
-    }
+    // Synthesis uses the user's SUBSCRIPTION via a coding-assistant CLI or a
+    // configured local/self-hosted endpoint. Public remotes require the named
+    // metered opt-in. Surface which one — or what's missing (issue #9:
+    // openai-compat has no `subscription` and must not fall through to the
+    // "no assistant CLI found" branch).
+    for (const line of synthesisStatusLines(resolution, process.env)) console.log(line);
+    const ctxWarning = await maybeWarnOllamaContext(provider.name, process.env);
+    if (ctxWarning) console.log(ctxWarning);
     const c = store.reindex().counts;
     console.log(`hunch:      ${c.symbols} symbols, ${c.edges} edges, ${c.components} components, ${c.decisions} decisions, ${c.bugs} bugs, ${c.constraints} constraints`);
     try {
@@ -3886,9 +3890,6 @@ function reportClaudeConfigHeal(): void {
     console.log(`✓ healed Claude Code project case-split: mirrored [${g.servers.join(", ")}] across ${g.casings.join("  ·  ")}`);
   }
   console.log(dim(`  ↳ backup: ${res.backup}`));
-}
-function dim(s: string): string {
-  return `\x1b[2m${s}\x1b[0m`;
 }
 function fail(msg: string): void {
   console.error(`error: ${msg}`);
