@@ -121,13 +121,14 @@ export async function syncCommit(
   // Significance gate: reserve the paid LLM for substantive commits; trivial ones
   // get the FREE deterministic draft (honestly labeled "inferred"/low-confidence,
   // so the Hunch stays accurate-by-provenance). --force always uses the provider.
-  // Deep Synthesis (--deep): ensemble every available subscription CLI and reconcile
+  // Deep Synthesis (--deep): ensemble every available guarded LLM provider and reconcile
   // their drafts (agreement-weighted, confidence capped below the strict gate). Falls
   // back to the normal single-provider path when no CLI is available. Opt-in only.
   // --verify forces the LLM provider (auditing a deterministic draft is pointless) and,
-  // like --deep, runs the Critic pass below. Subscription-only throughout (con_2ce3f2a547).
+  // like --deep, runs the Critic pass below. Public remotes stay behind the explicit
+  // metered opt-in throughout (con_2ce3f2a547).
   // An explicit private capture is storage-private AND local-only by default:
-  // never send a sensitive diff to a subscription CLI just to create a draft.
+  // never send a sensitive diff to any LLM provider just to create a draft.
   // Shared mode remains an explicit team policy and keeps its existing provider
   // behavior unless the caller asked for a private capture.
   const localOnly = opts.localOnly ?? !!opts.private;

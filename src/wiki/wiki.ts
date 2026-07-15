@@ -20,8 +20,8 @@
  *               (`store.recs`, overlay included). Nothing lands in the public
  *               repo; the manifest lives inside the overlay's .hunch/.
  *
- * The prose "Overview" section is optional LLM output (subscription CLI via
- * SynthProvider.draftProse — never a pay-per-token API); everything drift-bearing
+ * The prose "Overview" section is optional LLM output (a guarded configured
+ * SynthProvider.draftProse); everything drift-bearing
  * (anchors, invariants, structure) is rendered deterministically around it, so a
  * missing/failed CLI degrades to a complete template page, and the input hash
  * covers graph inputs only — LLM nondeterminism can never fake staleness.
@@ -673,7 +673,7 @@ export interface GenerateOptions {
   now: string;
   /** "all" regenerates every page; "stale" only new/stale ones (--heal). */
   only: "all" | "stale";
-  /** Optional grounded-prose hook (subscription CLI). null/throw → template-only page. */
+  /** Optional grounded-prose hook (guarded LLM provider). null/throw → template-only page. */
   prose?: (pack: WikiPack, excerpts: string) => Promise<string | null>;
   /** Optional prose-heal for ADOPTED copies (--prose-heal): an LLM "reconciled
    *  overview" under the banner. null/throw → deterministic copy, exactly as

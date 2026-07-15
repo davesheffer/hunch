@@ -186,7 +186,7 @@ HUNCH_SYNTH_TIMEOUT_MS=300000    # default 300000 (5 min)
 HUNCH_SYNTH_MAX_TOKENS=2048      # default 2048 — caps OUTPUT length
 ```
 
-**Ollama's default context is 4096 tokens** — long commit diffs get silently truncated (no error, HTTP 200), and the model drafts from whatever fragment of the prompt survives. `hunch doctor` and `hunch backfill` warn about this automatically when they detect it. Fix it once, at the model level:
+Ollama's effective context can come from the model, server configuration, or VRAM-based defaults. Long commit diffs can be silently truncated when that context is too small. `hunch doctor` and `hunch backfill` warn when the selected model does not pin `num_ctx`; for predictable synthesis, pin it once at the model level:
 
 ```
 FROM qwen2.5-coder:latest
@@ -201,4 +201,4 @@ Then point `HUNCH_SYNTH_MODEL` at `hunch-synth` instead of the base model.
 
 **Observe:** `hunch doctor` no longer prints the context warning once `num_ctx` is set; `hunch backfill`'s drafts stop hallucinating from truncated diffs.
 
-**Metered hosts are refused by default.** `HUNCH_SYNTH_BASE_URL` is meant for a self-hosted/local endpoint, so Hunch refuses to treat a known metered API host (`api.openai.com`, `api.anthropic.com`, `generativelanguage.googleapis.com`, `api.mistral.ai`, `api.cohere.ai`, `openrouter.ai`) as available — this repo's synthesis invariant is "never silently bill." If you deliberately want to point this provider at one of those (e.g. a paid OpenAI-compatible relay), set `HUNCH_SYNTH_ALLOW_METERED=1` explicitly; anything else (localhost, LAN, self-hosted domains) works with no extra flag.
+**Public remotes are refused by default.** A hostname denylist cannot keep pace with every paid OpenAI-compatible provider, so Hunch fails closed: localhost, private/link-local IPs, and conventional LAN names work directly; every public remote requires `HUNCH_SYNTH_ALLOW_METERED=1`. Set it only when the endpoint is deliberately trusted and any billing is understood. Publicly hosted self-managed endpoints use the same explicit flag because billing cannot be inferred safely from a hostname.

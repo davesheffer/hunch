@@ -46,7 +46,7 @@ export function synthesisStatusLines(resolution: ProviderResolution, env: NodeJS
   if (resolution.source === "ambiguous") {
     const names = resolution.statuses.filter((s) => s.name !== "deterministic" && s.available).map((s) => s.name);
     return [
-      dim(`            ↳ ${names.join(", ")} are available; Hunch will not guess which subscription to spend.`),
+      dim(`            ↳ ${names.join(", ")} are available; Hunch will not guess which provider to use.`),
       dim(`              choose one locally: ${names.map((name) => `hunch provider ${name}`).join("  or  ")}`),
     ];
   }

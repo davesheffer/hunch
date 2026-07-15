@@ -9,7 +9,6 @@ import {
   selectWorkers,
   OpenAICompatProvider,
   probeOllamaNumCtx,
-  isMeteredHost,
   meteredHostsAllowed,
   __resetAvailabilityCacheForTests,
 } from "../src/synthesis/provider.js";
@@ -144,43 +143,25 @@ test("OpenAICompatProvider.available() is false unless BOTH HUNCH_SYNTH_BASE_URL
   delete process.env.HUNCH_SYNTH_MODEL;
 });
 
-test("isMeteredHost recognizes known metered API hosts and their subdomains", () => {
-  for (const url of [
-    "https://api.openai.com/v1",
-    "https://api.anthropic.com",
-    "https://generativelanguage.googleapis.com/v1beta",
-    "https://api.mistral.ai/v1",
-    "https://api.cohere.ai/v1",
-    "https://openrouter.ai/api/v1",
-    "https://eu.api.openai.com/v1", // subdomain of a metered host still matches
-  ]) {
-    assert.equal(isMeteredHost(url), true, url);
-  }
-});
-
-test("isMeteredHost does not flag self-hosted/local endpoints or unparseable URLs", () => {
-  for (const url of [
-    "http://localhost:11434/v1",
-    "http://127.0.0.1:11434/v1",
-    "https://my-llm.internal.example.com/v1",
-    "not a url",
-    "",
-  ]) {
-    assert.equal(isMeteredHost(url), false, url);
-  }
-});
-
 test("meteredHostsAllowed is true only when HUNCH_SYNTH_ALLOW_METERED=1", () => {
   assert.equal(meteredHostsAllowed({}), false);
   assert.equal(meteredHostsAllowed({ HUNCH_SYNTH_ALLOW_METERED: "true" }), false);
   assert.equal(meteredHostsAllowed({ HUNCH_SYNTH_ALLOW_METERED: "1" }), true);
 });
 
-test("OpenAICompatProvider.available() refuses a known metered host unless HUNCH_SYNTH_ALLOW_METERED=1", async () => {
-  process.env.HUNCH_SYNTH_BASE_URL = "https://api.openai.com/v1";
+test("OpenAICompatProvider refuses public remotes in both availability and execution unless explicitly allowed", async () => {
   process.env.HUNCH_SYNTH_MODEL = "gpt-4o-mini";
+  delete process.env.HUNCH_SYNTH_ALLOW_METERED;
   try {
-    assert.equal(await new OpenAICompatProvider().available(), false, "blocked by default");
+    for (const baseUrl of ["https://api.openai.com/v1", "https://api.groq.com/openai/v1"]) {
+      process.env.HUNCH_SYNTH_BASE_URL = baseUrl;
+      const provider = new OpenAICompatProvider();
+      assert.equal(await provider.available(), false, `${baseUrl} blocked by default`);
+      await assert.rejects(
+        provider.draftDecision({ subject: "s", body: "", files: [], diff: "" }),
+        /refusing to call public remote/,
+      );
+    }
 
     process.env.HUNCH_SYNTH_ALLOW_METERED = "1";
     assert.equal(await new OpenAICompatProvider().available(), true, "explicit opt-in allows it");
@@ -191,17 +172,64 @@ test("OpenAICompatProvider.available() refuses a known metered host unless HUNCH
   }
 });
 
-// api.openai.com is unreachable from the test sandbox, so a rejection alone
-// wouldn't distinguish "guard fired" from "fetch failed" — assert the specific
-// guard message instead, which only run()'s pre-fetch host check can produce.
-test("OpenAICompatProvider.draftDecision throws on a metered host without HUNCH_SYNTH_ALLOW_METERED=1", async () => {
-  process.env.HUNCH_SYNTH_BASE_URL = "https://api.openai.com/v1";
-  process.env.HUNCH_SYNTH_MODEL = "gpt-4o-mini";
+test("OpenAICompatProvider.available() requires explicit opt-in for any public remote endpoint", async () => {
+  process.env.HUNCH_SYNTH_MODEL = "llama-3.3-70b-versatile";
+  process.env.HUNCH_SYNTH_API_KEY = "paid-provider-key";
   delete process.env.HUNCH_SYNTH_ALLOW_METERED;
   try {
+    for (const baseUrl of [
+      "https://api.groq.com/openai/v1", // an unlisted paid provider
+      "https://api.openai.com./v1", // fully-qualified trailing dot is the same public host
+      "https://my-llm.example.com/v1", // public self-hosted still needs deliberate trust
+    ]) {
+      process.env.HUNCH_SYNTH_BASE_URL = baseUrl;
+      assert.equal(await new OpenAICompatProvider().available(), false, `${baseUrl} must fail closed`);
+    }
+
+    process.env.HUNCH_SYNTH_ALLOW_METERED = "1";
+    assert.equal(await new OpenAICompatProvider().available(), true, "the named opt-in authorizes a public remote");
+  } finally {
+    delete process.env.HUNCH_SYNTH_BASE_URL;
+    delete process.env.HUNCH_SYNTH_MODEL;
+    delete process.env.HUNCH_SYNTH_API_KEY;
+    delete process.env.HUNCH_SYNTH_ALLOW_METERED;
+  }
+});
+
+test("OpenAICompatProvider.available() accepts local/LAN endpoints without the metered opt-in", async () => {
+  process.env.HUNCH_SYNTH_MODEL = "m";
+  delete process.env.HUNCH_SYNTH_ALLOW_METERED;
+  try {
+    for (const baseUrl of [
+      "http://localhost:11434/v1",
+      "http://127.0.0.1:11434/v1",
+      "http://10.0.0.8:8000/v1",
+      "http://192.168.1.8:8000/v1",
+      "http://ollama:11434/v1",
+      "http://model.home.arpa:11434/v1",
+      "http://[::1]:11434/v1",
+      "http://[fd00::8]:8000/v1",
+    ]) {
+      process.env.HUNCH_SYNTH_BASE_URL = baseUrl;
+      assert.equal(await new OpenAICompatProvider().available(), true, baseUrl);
+    }
+  } finally {
+    delete process.env.HUNCH_SYNTH_BASE_URL;
+    delete process.env.HUNCH_SYNTH_MODEL;
+  }
+});
+
+test("OpenAICompatProvider.available() rejects malformed and non-HTTP base URLs", async () => {
+  process.env.HUNCH_SYNTH_MODEL = "m";
+  try {
+    for (const baseUrl of ["not a url", "file:///tmp/model", "ftp://localhost/model", "http://user:pass@localhost:11434/v1", "http://localhost:11434/v1?token=secret"]) {
+      process.env.HUNCH_SYNTH_BASE_URL = baseUrl;
+      assert.equal(await new OpenAICompatProvider().available(), false, baseUrl);
+    }
+    process.env.HUNCH_SYNTH_BASE_URL = "not a url";
     await assert.rejects(
       new OpenAICompatProvider().draftDecision({ subject: "s", body: "", files: [], diff: "" }),
-      /refusing to call api\.openai\.com/,
+      /must be an http\(s\) base URL/,
     );
   } finally {
     delete process.env.HUNCH_SYNTH_BASE_URL;
@@ -255,6 +283,26 @@ test("OpenAICompatProvider.draftDecision POSTs {baseUrl}/chat/completions with m
     assert.equal(received.body?.max_tokens, 2048, "default max_tokens sent");
     assert.ok(Array.isArray(received.body?.messages));
     assert.equal(received.auth, undefined, "no Authorization header when HUNCH_SYNTH_API_KEY is unset");
+  } finally {
+    delete process.env.HUNCH_SYNTH_BASE_URL;
+    delete process.env.HUNCH_SYNTH_MODEL;
+    await server.close();
+  }
+});
+
+test("OpenAICompatProvider.draftProse requests free-form text instead of JSON mode", async () => {
+  let responseFormat: unknown = "not observed";
+  const server = await startFakeServer((_req, res, body) => {
+    responseFormat = (JSON.parse(body) as Record<string, unknown>).response_format;
+    res.setHeader("content-type", "application/json");
+    res.end(JSON.stringify({ choices: [{ message: { content: "A grounded Markdown overview." } }] }));
+  });
+  process.env.HUNCH_SYNTH_BASE_URL = server.url;
+  process.env.HUNCH_SYNTH_MODEL = "m";
+  try {
+    const prose = await new OpenAICompatProvider().draftProse("Write one Markdown paragraph.");
+    assert.equal(responseFormat, undefined, "free-form prose must not be constrained to a JSON object");
+    assert.equal(prose, "A grounded Markdown overview.");
   } finally {
     delete process.env.HUNCH_SYNTH_BASE_URL;
     delete process.env.HUNCH_SYNTH_MODEL;
@@ -351,14 +399,15 @@ test("probeOllamaNumCtx returns null when the model's parameters already set num
   }
 });
 
-test("probeOllamaNumCtx warns when the model's parameters have no num_ctx set", async () => {
+test("probeOllamaNumCtx warns truthfully when the model does not pin num_ctx", async () => {
   const server = await startFakeServer((req, res) => {
     res.setHeader("content-type", "application/json");
     res.end(JSON.stringify({ parameters: "stop                           \"<|endoftext|>\"" }));
   });
   try {
     const warning = await probeOllamaNumCtx(server.url, "qwen2.5-coder:latest");
-    assert.ok(warning?.includes("4096"), `expected a 4096-token warning, got: ${warning}`);
+    assert.ok(warning?.includes("does not pin num_ctx"), `expected an unpinned-context warning, got: ${warning}`);
+    assert.ok(!warning?.includes("4096"), `must not guess the server's effective context: ${warning}`);
   } finally {
     await server.close();
   }

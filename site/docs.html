@@ -258,7 +258,7 @@ if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElem
       <div class="eyebrow">Documentation</div>
       <h1 class="page">Hunch — Engineering Memory OS</h1>
       <p class="lead">Git stores <em>what</em> the code is. Hunch stores <em>why</em> — a persistent, git-native reasoning graph of decisions, bugs, and invariants, surfaced to your coding assistant at reasoning time so it stops re-deriving understanding and stops undoing intentional design.</p>
-      <p>Hunch is a CLI plus a local MCP server. It captures the “why” as a byproduct of normal work — commits and test failures — stores it as git-tracked JSON in <code>.hunch/</code>, and feeds the minimal relevant slice back to <strong>any</strong> MCP assistant (Claude Code, Cursor, Copilot, Windsurf, Codex). Local-first, no SaaS, and synthesis is billed to your existing coding-assistant subscription — never a pay-per-token API key.</p>
+      <p>Hunch is a CLI plus a local MCP server. It captures the “why” as a byproduct of normal work — commits and test failures — stores it as git-tracked JSON in <code>.hunch/</code>, and feeds the minimal relevant slice back to <strong>any</strong> MCP assistant (Claude Code, Cursor, Copilot, Windsurf, Codex). Local-first, no SaaS: synthesis uses your coding-assistant subscription or an explicitly configured local endpoint; potentially metered public remotes are always a separate named opt-in.</p>
       <div class="note tip"><span class="ic">⚡</span><b>In a hurry?</b> <code>npm i -g @davesheffer/hunch</code> → <code>cd your-repo &amp;&amp; hunch init &amp;&amp; hunch backfill --since 90d</code> → reload your assistant and ask “why is X built this way?”. The rest of this page is the full tour.</div>
     </section>
 
@@ -298,7 +298,7 @@ if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElem
 
     <section id="synthesis">
       <h2>Synthesis &amp; billing<a class="anchor" href="#synthesis">#</a></h2>
-      <p>When Hunch turns a commit into a structured Decision, the LLM call is billed to <strong>your coding-assistant subscription</strong> through its CLI — <strong>never</strong> a pay-per-token API key. Hunch is provider-agnostic: it uses a subscription automatically only when exactly one supported CLI is available. If several are installed, it stays on the free deterministic fallback until <em>you</em> choose which subscription to use.</p>
+      <p>When Hunch turns a commit into a structured Decision, it normally uses <strong>your coding-assistant subscription</strong> through its CLI. Hunch is provider-agnostic: it uses a subscription automatically only when exactly one supported CLI is available. If several are installed, it stays on the free deterministic fallback until <em>you</em> choose which subscription to use. A configured local OpenAI-compatible endpoint is also supported; every public remote requires the deliberate <code>HUNCH_SYNTH_ALLOW_METERED=1</code> opt-in.</p>
       <table class="tbl">
         <thead><tr><th>CLI</th><th>Subscription</th><th>Detected by</th></tr></thead>
         <tbody>
@@ -311,13 +311,13 @@ if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElem
       <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">terminal</span><button class="copy">Copy</button></div><pre><span class="k">hunch</span> provider codex-cli               <span class="c"># local: Claude / Codex / Cursor / openai-compat / deterministic</span>
 <span class="k">hunch</span> provider                         <span class="c"># see availability + why this provider is selected</span>
 <span class="k">export</span> HUNCH_SYNTH_PROVIDER=claude-cli <span class="c"># one-shell override; `auto` disables the local choice</span></pre></div>
-      <p><strong>Local &amp; self-hosted models.</strong> No subscription CLI, no API key: point Hunch at any OpenAI-compatible endpoint — Ollama, vLLM, LM Studio, llama.cpp server, and anything else that speaks the chat-completions format. Select it like any other provider (<code>hunch provider openai-compat</code>, or the one-shell override):</p>
+      <p><strong>Local &amp; self-hosted models.</strong> No subscription CLI is required: point Hunch at an OpenAI-compatible endpoint — Ollama, vLLM, LM Studio, llama.cpp server, and anything else that speaks the chat-completions format. Select it like any other provider (<code>hunch provider openai-compat</code>, or the one-shell override):</p>
       <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">terminal</span><button class="copy">Copy</button></div><pre><span class="k">export</span> HUNCH_SYNTH_PROVIDER=openai-compat   <span class="c"># alias: ollama</span>
 <span class="k">export</span> HUNCH_SYNTH_BASE_URL=http://localhost:11434/v1
 <span class="k">export</span> HUNCH_SYNTH_MODEL=llama3.1
 <span class="k">export</span> HUNCH_SYNTH_API_KEY=...                  <span class="c"># optional — omit for keyless local servers</span>
 <span class="k">export</span> HUNCH_SYNTH_TIMEOUT_MS=300000             <span class="c"># optional, default 5 min — local models can be slow</span></pre></div>
-      <p>Opt-in only: leave these unset and Hunch behaves exactly as above, auto-detecting a subscription CLI first.</p>
+      <p>Opt-in only: leave these unset and Hunch behaves exactly as above. Localhost, private/link-local IPs, and conventional LAN names work directly. Every public remote requires <code>HUNCH_SYNTH_ALLOW_METERED=1</code> so a newly launched paid provider can never bypass a stale hostname list; set it only when the endpoint is deliberately trusted and any billing is understood.</p>
       <p><strong>Deep Synthesis <span class="pill ok">v0.19</span>.</strong> <code>--deep</code> gathers several independent takes on a change and reconciles them into one note — trusting it more when they agree. <code>--verify</code> then fact-checks the note against the actual commit and drops anything the change doesn't support. The result is a more trustworthy note, and it always stays <em>advisory</em> until you confirm it. Fans out across whichever assistants (subscription CLIs and/or a configured local model) are available; falls back to a single draft when only one is.</p>
       <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">terminal</span><button class="copy">Copy</button></div><pre><span class="k">hunch</span> backfill --deep        <span class="c"># higher-quality notes across history</span>
 <span class="k">hunch</span> sync &lt;sha&gt; --deep       <span class="c"># a single commit (fact-check on)</span>

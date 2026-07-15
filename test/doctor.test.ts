@@ -108,7 +108,8 @@ test("maybeWarnOllamaContext reaches probeOllamaNumCtx for the openai-compat pro
       HUNCH_SYNTH_BASE_URL: `http://127.0.0.1:${port}`,
       HUNCH_SYNTH_MODEL: "m",
     });
-    assert.ok(warning?.includes("4096"), `expected a 4096-token warning, got: ${warning}`);
+    assert.ok(warning?.includes("does not pin num_ctx"), `expected an unpinned-context warning, got: ${warning}`);
+    assert.ok(!warning?.includes("4096"), `must not guess the server's effective context: ${warning}`);
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
