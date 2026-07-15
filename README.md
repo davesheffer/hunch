@@ -13,6 +13,9 @@ assistant the same evidence before it changes anything.
 Not another chat history. Not a wiki your team must remember to update. A git-native reasoning
 graph that turns “we already learned this the hard way” into something your tools can actually use.
 
+**Memory is the input. The product boundary is the receipt:** relevant evidence before an edit,
+then a deterministic check of the change against the rules your team has explicitly trusted.
+
 ```bash
 npm i -g @davesheffer/hunch
 cd your-repo
@@ -353,6 +356,7 @@ activates, promotes, warns, or blocks a Constitution policy.
 - [Interactive product site](https://hunch-pi.vercel.app)
 - [VS Code extension](vscode-extension/README.md)
 - [Architecture benchmark](bench/architectural-conformance.md)
+- [Competitive landscape (dated; re-verify before quoting)](docs/competitive-landscape.md)
 - [15-second demo](demo/architectural-conformance.sh)
 
 Apache-2.0
