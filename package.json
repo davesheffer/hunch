@@ -3,7 +3,7 @@
   "version": "1.8.2",
   "license": "Apache-2.0",
   "author": "Dave Sheffer <dave.sheffer1@gmail.com>",
-  "description": "Architectural Conformance for AI-generated code: a git-native graph that deterministically blocks AI changes which break your architecture — the semantic invariants (layering, must-reach, dependency direction) pattern-SAST can't express — grounded in the decisions and bugs behind each rule, across any MCP assistant (Claude Code, Cursor, Copilot, Windsurf, Antigravity, Codex).",
+  "description": "Engineering memory and a deterministic Change Gate for AI-assisted codebases: decisions, rejected approaches, constraints, and bug lineage become portable context and opt-in enforcement for every MCP assistant.",
   "homepage": "https://hunch-pi.vercel.app",
   "repository": {
     "type": "git",
@@ -33,7 +33,12 @@
     "windsurf",
     "antigravity",
     "mcp",
+    "coding-agents",
+    "agent-memory",
     "engineering-memory",
+    "architectural-conformance",
+    "change-gate",
+    "code-governance",
     "knowledge-graph",
     "code-intelligence",
     "ai",
@@ -52,6 +57,7 @@
     "rehearse:constitution": "npm run build && node tooling/constitution-clean-rehearsal.mjs",
     "gate:release": "node tooling/release-gate.mjs",
     "site:proof": "npm run build && node tooling/generate-public-proof.mjs",
+    "research:competitors": "node tooling/competitive-watch.mjs",
     "prepublishOnly": "npm run build"
   },
   "dependencies": {

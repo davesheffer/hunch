@@ -13,6 +13,9 @@ relevant context before it makes a change.
 Memory starts **advisory**. Nothing blocks until you explicitly trust a precise rule and choose
 strict enforcement.
 
+**Memory is the input. The product boundary is the receipt:** relevant evidence before an edit,
+then a deterministic check of the change against the rules your team has explicitly trusted.
+
 ## Start in five minutes
 
 Requires Node 22.13+ and a git repository.
@@ -104,5 +107,6 @@ Local tools see the combined graph; public CI and committed documentation stay p
 - [VS Code extension](vscode-extension/README.md)
 - [Contributing](CONTRIBUTING.md)
 - [Architecture benchmark](bench/architectural-conformance.md)
+- [Competitive landscape (dated; re-verify before quoting)](docs/competitive-landscape.md)
 
 Apache-2.0
