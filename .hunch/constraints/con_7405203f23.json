@@ -1,0 +1,24 @@
+{
+  "id": "con_7405203f23",
+  "type": "correctness",
+  "statement": "The public blog must use the same navigation and language selector as the homepage, and each supported locale must stay localized when entering the blog and its articles.",
+  "scope": [
+    "site/blog/index.html"
+  ],
+  "severity": "warning",
+  "enforcement": "advisory_v1",
+  "match": null,
+  "forbids": null,
+  "rationale": "The user reported that entering the blog switched to a different navigation and dropped the selected language.",
+  "source_decision": null,
+  "violations": [],
+  "status": "active",
+  "valid_from": "2026-07-16T12:44:54.693Z",
+  "valid_to": null,
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 1,
+    "evidence": [],
+    "last_verified": "2026-07-16T12:44:54.693Z"
+  }
+}
