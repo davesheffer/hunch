@@ -1,0 +1,7 @@
+.brand-mark{
+  width:18px;height:18px;display:inline-block;flex:0 0 auto;
+  background:var(--moss,var(--accent,#3a6b58));
+  -webkit-mask:url("/hunch-mark.svg") center/contain no-repeat;
+  mask:url("/hunch-mark.svg") center/contain no-repeat;
+}
+@media(forced-colors:active){.brand-mark{background:CanvasText}}

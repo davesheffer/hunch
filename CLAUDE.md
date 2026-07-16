@@ -38,7 +38,7 @@ This repo's full engineering memory lives in a **private overlay**; a **curated 
 <!-- HUNCH:START — auto-generated, do not edit by hand -->
 ## 🧠 Hunch (Engineering Memory)
 
-This repo has **Hunch** — a curated graph of *why* the code is the way it is (decisions, bug history, invariants). It currently holds **116 decisions, 2 bugs, 9 constraints, 16 components, 3 policies**.
+This repo has **Hunch** — a curated graph of *why* the code is the way it is (decisions, bug history, invariants). It currently holds **116 decisions, 2 bugs, 14 constraints, 16 components, 3 policies**.
 
 **Consult Hunch via the `hunch_*` MCP tools — pick by MOMENT, not from memory:**
 
@@ -81,7 +81,7 @@ This repo has **Hunch** — a curated graph of *why* the code is the way it is (
 - **[blocking]** Forward-migrate raw JSON to the current schema BEFORE Zod validation; never silently drop unmigratable records _(scope: src/core/migrate.ts, src/store/jsonStore.ts; con_947c578b2c)_
 - **[blocking]** Semantic vectors are a derived layer in SQLite, never the source of truth; reconcile by content hash on reindex _(scope: src/store/**; con_a87360128b)_
 - **[warning]** The agent hook must never block an edit on failure: any error or unrecognized input emits nothing and exits 0 _(scope: src/core/hookpolicy.ts; con_03a0b94b2e)_
-- **[warning]** Regression guard: "Flaky test failure under parallelism: native tree-sitter module resolution race on Windows" must not recur. _(scope: src/constitution/experiment.ts, test/experiment.test.ts, vscode-extension/src/memoryView.ts, test/singlesource.test.ts, test/sync.test.ts, test/autocommit.test.ts; con_7217ab24ab)_
+- **[warning]** The language selector chevron must be optically centered on the same line as its language code in both LTR and RTL navigation. _(scope: site/navigation.css; con_28536155c6)_
 
 _Hunch updates itself from commits and test failures. Records carry provenance + confidence; treat low-confidence items as advisory._
 <!-- HUNCH:END -->

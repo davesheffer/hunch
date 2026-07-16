@@ -51,6 +51,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "rehearse:constitution": "npm run build && node tooling/constitution-clean-rehearsal.mjs",
     "gate:release": "node tooling/release-gate.mjs",
+    "site:locales": "node tooling/generate-site-locales.mjs",
     "site:proof": "npm run build && node tooling/generate-public-proof.mjs",
     "prepublishOnly": "npm run build"
   },

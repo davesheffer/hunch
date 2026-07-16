@@ -7,7 +7,10 @@
 <meta name="description" content="Every Hunch release — git-native engineering memory and Architectural Conformance for AI code." />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Noto+Sans+Arabic:wght@400;500;600&family=Noto+Sans+Hebrew:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="icon" href="/hunch-mark.svg" type="image/svg+xml" />
+<link rel="stylesheet" href="/brand.css" />
+<link rel="canonical" href="https://hunch-pi.vercel.app/changelog" />
 <style>
   :root{
     --bg:#f7f8f7; --bg-2:#eff1ef; --surface:#fcfdfc;
@@ -33,7 +36,6 @@
   .nav{position:sticky;top:0;z-index:50;background:color-mix(in srgb,var(--bg) 92%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--line-2)}
   .nav-row{display:flex;align-items:center;justify-content:space-between;height:60px}
   .brand{font-family:var(--mono);font-weight:500;font-size:15px;letter-spacing:-.01em;display:flex;align-items:center;gap:9px}
-  .brand .mark{width:8px;height:8px;border-radius:50%;background:var(--moss);display:inline-block;font-size:0}
   .nav-links{display:flex;gap:22px;font-size:14px;color:var(--mut);align-items:center}
   .nav-links a{transition:color .15s var(--ease)}
   .nav-links a:hover{color:var(--ink)}
@@ -62,21 +64,38 @@
   footer{border-top:1px solid var(--line-2);margin-top:30px;padding:36px 0;color:var(--mut);font-size:13.5px;background:var(--bg-2)}
   footer .wrap{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:14px}
   footer a{color:var(--moss-ink)}
+  html[lang="he"]{--mono-local:"Noto Sans Hebrew",var(--sans);--sans:"Noto Sans Hebrew",system-ui,sans-serif}
+  html[lang="ar"]{--mono-local:"Noto Sans Arabic",var(--sans);--sans:"Noto Sans Arabic",system-ui,sans-serif}
+  html[lang="he"] .masthead h1,html[lang="he"] .eyebrow,html[lang="he"] .clog-date,html[lang="ar"] .masthead h1,html[lang="ar"] .eyebrow,html[lang="ar"] .clog-date{font-family:var(--mono-local);letter-spacing:0}
+  html[dir="rtl"] .mono,html[dir="rtl"] .rel-tag{direction:ltr;unicode-bidi:isolate}
 </style>
+<link rel="stylesheet" href="/navigation.css" />
 </head>
 <body>
-  <header class="nav">
-    <div class="wrap nav-row">
-      <a class="brand" href="/"><span class="mark" aria-hidden="true"></span><span>hunch</span></a>
-      <nav class="nav-links">
-        <a href="/#how">How it works</a>
-        <a href="/docs">Docs</a>
-        <a href="/blog">Blog</a>
-        <a href="/changelog" class="active">Changelog</a>
-      </nav>
-      <a class="btn" href="/#start">Get started</a>
+  <nav class="nav" aria-label="Main">
+    <div class="wrap nav-in">
+      <a class="brand" href="/"><span class="brand-mark" aria-hidden="true"></span>hunch</a>
+      <div class="nav-links">
+        <a href="/#how" class="hide-s">How it works</a>
+        <a href="/#inside" class="hide-s">Under the hood</a>
+        <a href="/docs" class="hide-xs">Docs</a>
+        <a href="/blog" class="hide-xs">Blog</a>
+        <a href="/changelog" class="hide-s" aria-current="page">Changelog</a>
+        <a href="https://github.com/davesheffer/hunch" class="hide-s">GitHub</a>
+        <label class="lang-picker">
+          <span class="sr-only">Language</span>
+          <select class="lang-select" id="language-switch" aria-label="Language">
+            <option value="/changelog" selected>EN</option>
+            <option value="/he/changelog">HE</option>
+            <option value="/ru/changelog">RU</option>
+            <option value="/ar/changelog">AR</option>
+            <option value="/es/changelog">ES</option>
+          </select>
+        </label>
+        <a class="btn" href="/#start">Get started</a>
+      </div>
     </div>
-  </header>
+  </nav>
 
   <main class="wrap">
     <div class="masthead">
@@ -218,5 +237,8 @@
 
   <script defer src="/_vercel/insights/script.js"></script>
   <script defer src="/_vercel/speed-insights/script.js"></script>
+  <script>
+    document.getElementById("language-switch")?.addEventListener("change", event => { location.href = event.currentTarget.value; });
+  </script>
 </body>
 </html>

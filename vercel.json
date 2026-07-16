@@ -2,7 +2,7 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
   "installCommand": "",
-  "buildCommand": "",
+  "buildCommand": "npm run site:locales",
   "outputDirectory": "site",
   "cleanUrls": true,
   "trailingSlash": false

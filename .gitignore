@@ -82,3 +82,4 @@ bench/results/
 
 # Constitution replay: disposable worktrees and derived snapshot graphs.
 .hunch-cache/
+.vercel

@@ -1,0 +1,30 @@
+/* Shared public-site navigation. Homepage and blog templates intentionally use
+   this one header so spacing, interaction, and language switching cannot drift. */
+.nav{
+  position:sticky;top:0;z-index:50;
+  background:color-mix(in srgb,var(--bg,var(--paper,#f7f8f7)) 92%,transparent);
+  backdrop-filter:blur(8px);border-bottom:1px solid var(--line-2,var(--line));
+}
+.nav .wrap{max-width:1060px;margin:0 auto;padding:0 24px}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.nav-in{display:flex;align-items:center;gap:26px;height:60px}
+.nav .brand{font-family:var(--mono);font-weight:500;font-size:15px;letter-spacing:-.01em;display:flex;align-items:center;gap:9px}
+.nav-links{display:flex;gap:22px;margin-inline-start:auto;align-items:center}
+.nav-links a{font-size:14px;color:var(--mut,var(--muted,#66706b));opacity:1;transition:color .15s var(--ease)}
+.nav-links a:hover,.nav-links a[aria-current="page"]{color:var(--ink)}
+.lang-picker{position:relative;display:inline-flex;align-items:center;color:var(--mut,var(--muted,#66706b))}
+.lang-picker::after{content:"";position:absolute;inset-inline-end:10px;top:50%;width:5px;height:5px;border-right:1.25px solid currentColor;border-bottom:1.25px solid currentColor;transform:translateY(-68%) rotate(45deg);transform-origin:center;pointer-events:none;color:var(--mut-2,var(--muted-2,#8b948f))}
+.lang-select{appearance:none;-webkit-appearance:none;min-width:54px;padding-block:7px;padding-inline:10px 25px;border:1px solid var(--line);border-radius:8px;background:color-mix(in srgb,var(--bg,var(--paper,#f7f8f7)) 82%,transparent);color:var(--ink-2,var(--ink-soft,#3c4440));font:500 11.5px/1 var(--mono);letter-spacing:.04em;cursor:pointer;transition:border-color .25s ease,background-color .25s ease,color .25s ease}
+.lang-select:hover{border-color:rgba(58,107,88,.35);background:var(--surface);color:var(--ink)}
+.nav .btn{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:13.5px;font-weight:500;padding:9px 16px;border-radius:9px;border:1px solid var(--ink);background:var(--ink);color:var(--bg,var(--paper,#f7f8f7));transform:translateY(0);box-shadow:0 0 0 rgba(28,32,30,0);transition:transform .42s cubic-bezier(.16,1,.3,1),background-color .3s ease,border-color .3s ease,color .3s ease,box-shadow .42s cubic-bezier(.16,1,.3,1)}
+.nav .btn:hover{background:var(--moss-ink,var(--accent-deep,#2c523f));border-color:var(--moss-ink,var(--accent-deep,#2c523f));color:#fff}
+.nav .btn:active{transform:translateY(0);box-shadow:0 4px 12px -10px rgba(28,32,30,.3);transition-duration:.12s}
+@media (hover:hover){.nav .btn:hover{transform:translateY(-1px);box-shadow:0 10px 24px -16px rgba(28,32,30,.42)}}
+@media (max-width:720px){
+  .nav-links a.hide-s{display:none}
+  .nav-in{gap:14px}.nav-links{gap:14px}
+  .nav .btn{padding:8px 13px;font-size:13px}
+}
+@media (max-width:520px){.nav-links a.hide-xs{display:none}}
+@media (max-width:380px){.nav .wrap{padding-inline:16px}.nav-in{gap:10px}.nav-links{gap:10px}.nav .btn{padding-inline:10px}}
+@media (prefers-reduced-motion:reduce){.nav .btn{transition:none}.nav .btn:hover,.nav .btn:active{transform:none}}
