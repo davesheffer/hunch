@@ -1,0 +1,24 @@
+{
+  "id": "con_e1fcb1a3a0",
+  "type": "correctness",
+  "statement": "Localized call-to-action labels must use the locale's native sans face at a medium weight with neutral tracking; do not render them in the mono utility face or a heavy weight.",
+  "scope": [
+    "site/index.html"
+  ],
+  "severity": "warning",
+  "enforcement": "advisory_v1",
+  "match": null,
+  "forbids": null,
+  "rationale": "The user found the current button text visually ugly after it was enlarged, especially in Hebrew.",
+  "source_decision": null,
+  "violations": [],
+  "status": "active",
+  "valid_from": "2026-07-16T13:35:27.140Z",
+  "valid_to": null,
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 1,
+    "evidence": [],
+    "last_verified": "2026-07-16T13:35:27.140Z"
+  }
+}
