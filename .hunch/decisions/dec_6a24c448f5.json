@@ -1,0 +1,39 @@
+{
+  "id": "dec_6a24c448f5",
+  "title": "feat(changelog): add Russian localization for changelog page with detailed version history",
+  "topic": null,
+  "status": "accepted",
+  "context": "Touched 1 file(s) across tooling/generate-site-locales.mjs.",
+  "decision": "Introduced code in tooling/generate-site-locales.mjs (1 file(s)).",
+  "consequences": [],
+  "alternatives_rejected": [],
+  "rejected_tripwires": [],
+  "related_components": [
+    "cmp_04c6efb58b"
+  ],
+  "related_files": [
+    "tooling/generate-site-locales.mjs"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "63abb7d",
+  "valid_from": "2026-07-16T16:29:47+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "inferred",
+    "confidence": 0.3,
+    "evidence": [
+      "commit:63abb7d",
+      "synth:provider=deterministic",
+      "branch:release/v1.8.2",
+      "tooling/generate-site-locales.mjs"
+    ],
+    "last_verified": "2026-07-16T13:29:53.881Z"
+  },
+  "date": "2026-07-16T16:29:47+03:00"
+}
