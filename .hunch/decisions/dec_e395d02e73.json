@@ -1,0 +1,88 @@
+{
+  "id": "dec_e395d02e73",
+  "title": "Refactor localization; establish LTR/RTL visual correctness",
+  "topic": null,
+  "status": "accepted",
+  "context": "Blog/changelog localization infrastructure had maintainability issues and Windows test parallelism failures; visual correctness for LTR/RTL language selector needed formalization.",
+  "decision": "Restructured i18n.js and locale-generation modules; removed Windows flakiness regression guard; added LTR/RTL visual correctness constraint; integrated Vercel deployment.",
+  "consequences": [
+    "Improved code readability in localization pipeline",
+    "Resolved Windows test parallelism flakiness",
+    "Established invariant for language selector visual alignment"
+  ],
+  "alternatives_rejected": [
+    "Fix Windows flakiness with targeted patches without refactoring",
+    "Defer visual correctness improvements"
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Fix Windows flakiness with targeted patches without refactoring",
+      "scope": [
+        "site/blog/**",
+        "tooling/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Defer visual correctness improvements",
+      "scope": [
+        "site/blog/**",
+        "tooling/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_04c6efb58b",
+    "cmp_c099a42a55"
+  ],
+  "related_files": [
+    "site/blog/i18n.js",
+    "tooling/blog-locales.mjs",
+    "tooling/changelog-locales.mjs",
+    "tooling/generate-site-locales.mjs"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "9f6f303",
+  "valid_from": "2026-07-16T16:13:20+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft+summary",
+    "confidence": 0.5,
+    "evidence": [
+      "commit:9f6f303",
+      "synth:provider=claude-cli",
+      "branch:release/v1.8.2",
+      "site/blog/i18n.js",
+      "tooling/blog-locales.mjs",
+      "tooling/changelog-locales.mjs",
+      "tooling/generate-site-locales.mjs"
+    ],
+    "last_verified": "2026-07-16T13:14:08.409Z"
+  },
+  "date": "2026-07-16T16:13:20+03:00"
+}
