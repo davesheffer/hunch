@@ -1,0 +1,24 @@
+{
+  "id": "con_e26996afef",
+  "type": "correctness",
+  "statement": "The Hunch logo mark must be an original abstract symbol with clean forward motion; it must not read as a second letter h beside the hunch wordmark.",
+  "scope": [
+    "site/hunch-mark.svg"
+  ],
+  "severity": "warning",
+  "enforcement": "advisory_v1",
+  "match": null,
+  "forbids": null,
+  "rationale": "The current mark visually duplicates the initial h and makes the wordmark look awkward.",
+  "source_decision": null,
+  "violations": [],
+  "status": "active",
+  "valid_from": "2026-07-16T13:08:53.106Z",
+  "valid_to": null,
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 1,
+    "evidence": [],
+    "last_verified": "2026-07-16T13:08:53.106Z"
+  }
+}
