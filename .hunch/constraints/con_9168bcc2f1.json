@@ -1,0 +1,24 @@
+{
+  "id": "con_9168bcc2f1",
+  "type": "correctness",
+  "statement": "Use IBM Plex Sans Hebrew consistently for Hebrew prose and UI labels across the public homepage, blog, and changelog; reserve IBM Plex Mono for code, identifiers, language codes, and the Latin hunch wordmark.",
+  "scope": [
+    "site/**"
+  ],
+  "severity": "warning",
+  "enforcement": "advisory_v1",
+  "match": null,
+  "forbids": null,
+  "rationale": "The user reported inconsistent Hebrew typography, then explicitly chose to keep Plex. The mismatch came from Noto Sans Hebrew on blog/changelog templates and Latin-monospace fallbacks on localized UI labels.",
+  "source_decision": null,
+  "violations": [],
+  "status": "active",
+  "valid_from": "2026-07-16T13:50:47.633Z",
+  "valid_to": null,
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 1,
+    "evidence": [],
+    "last_verified": "2026-07-16T13:50:47.633Z"
+  }
+}
