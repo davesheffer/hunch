@@ -1,0 +1,24 @@
+{
+  "id": "con_28536155c6",
+  "type": "correctness",
+  "statement": "The language selector chevron must be optically centered on the same line as its language code in both LTR and RTL navigation.",
+  "scope": [
+    "site/navigation.css"
+  ],
+  "severity": "warning",
+  "enforcement": "advisory_v1",
+  "match": null,
+  "forbids": null,
+  "rationale": "A font glyph chevron inherits baseline metrics and appears visibly lower than the selected language text.",
+  "source_decision": null,
+  "violations": [],
+  "status": "active",
+  "valid_from": "2026-07-16T13:08:21.943Z",
+  "valid_to": null,
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 1,
+    "evidence": [],
+    "last_verified": "2026-07-16T13:08:21.943Z"
+  }
+}
