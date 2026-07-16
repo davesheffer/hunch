@@ -1,0 +1,24 @@
+{
+  "id": "con_3e5d645332",
+  "type": "architecture",
+  "statement": "Keep the homepage concise: lead with a non-technical human story, then progressively reveal technical detail; do not front-load the page with a feature catalog.",
+  "scope": [
+    "site/index.html"
+  ],
+  "severity": "warning",
+  "enforcement": "advisory_v1",
+  "match": null,
+  "forbids": null,
+  "rationale": "Dan's homepage feedback on 2026-07-16 was that the page had too much content and needed a less technical story before going deeper technically.",
+  "source_decision": null,
+  "violations": [],
+  "status": "active",
+  "valid_from": "2026-07-16T07:48:59.111Z",
+  "valid_to": null,
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 1,
+    "evidence": [],
+    "last_verified": "2026-07-16T07:48:59.111Z"
+  }
+}
