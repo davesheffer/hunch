@@ -1,0 +1,24 @@
+{
+  "id": "con_0f8e69e2ad",
+  "type": "correctness",
+  "statement": "Mobile hero call-to-action buttons must use a comfortable touch target and legible localized label size; do not shrink them below the desktop button treatment.",
+  "scope": [
+    "site/index.html"
+  ],
+  "severity": "warning",
+  "enforcement": "advisory_v1",
+  "match": null,
+  "forbids": null,
+  "rationale": "The user reported that the Hebrew mobile hero buttons and their text were visibly too small.",
+  "source_decision": null,
+  "violations": [],
+  "status": "active",
+  "valid_from": "2026-07-16T13:30:33.765Z",
+  "valid_to": null,
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 1,
+    "evidence": [],
+    "last_verified": "2026-07-16T13:30:33.765Z"
+  }
+}
