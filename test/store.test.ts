@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { tempStore, prov } from "./helpers.js";
+import { openMemoryDb, type DB } from "../src/store/db.js";
 
 function seed() {
   const ctx = tempStore();
@@ -94,5 +95,30 @@ test("punctuation-only query (no FTS tokens) uses the LIKE fallback (regression 
   store.reindex();
   const refs = store.search("::").map((h) => h.ref);
   assert.ok(refs.includes("con_ns"), "punctuation-only query matched via LIKE, not empty");
+  cleanup();
+});
+
+test("plain search fallback keeps reindex and scoped retrieval working without FTS5", async () => {
+  const { store, cleanup } = tempStore();
+  // Inject the same schema openDb selects when sqlite_compileoption_used reports
+  // no ENABLE_FTS5 (the official Linux Node build exercised this path in CI).
+  (store as unknown as { _db: DB | null })._db = openMemoryDb({ forcePlainSearch: true });
+  store.json.put("decisions", {
+    id: "dec_plain", title: "Redis session memory", status: "accepted", context: "", decision: "Keep sessions server-side",
+    consequences: [], alternatives_rejected: [], related_components: [], related_files: [], supersedes: null,
+    caused_by_bug: null, commit: null, provenance: prov(0.9), date: "2026-07-17T00:00:00Z",
+  } as never);
+  store.json.put("runbooks", {
+    id: "rb_plain", task: "release version", trigger: ["publish package"], steps: ["run tests"], gotchas: [],
+    outcome: "published", files: ["package.json"], source_range: null,
+    valid_from: "2026-07-17T00:00:00Z", valid_to: null,
+    provenance: prov(0.9), date: "2026-07-17T00:00:00Z",
+  } as never);
+  store.reindex();
+
+  assert.ok(store.search("redis sessions").some((hit) => hit.ref === "dec_plain"));
+  assert.ok((await store.searchRunbooks("release package")).some((hit) => hit.ref === "rb_plain"));
+  const schema = store.db.prepare(`SELECT sql FROM sqlite_master WHERE name = 'search'`).get() as { sql: string };
+  assert.doesNotMatch(schema.sql, /VIRTUAL\s+TABLE/i);
   cleanup();
 });

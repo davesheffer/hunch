@@ -8,6 +8,7 @@
  */
 import { mkdirSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
+import { HUNCH_VERSION } from "../core/version.js";
 
 // `\${{ … }}` keeps GitHub Actions expressions literal inside this template
 // literal (a bare `${` would be JS interpolation).
@@ -30,14 +31,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          # Check the actual PR head, not GitHub's synthetic merge commit. This
+          # lets repository readiness checks prove the branch contains its live
+          # base instead of passing merely because GitHub pre-merged it.
+          ref: \${{ github.event.pull_request.head.sha }}
           fetch-depth: 0 # full history: the guard diffs base...head and reads git log
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22.13.0
 
       - name: Install Hunch
-        run: npm install -g @davesheffer/hunch
+        # Pin the same release that generated this file so every assistant and CI
+        # evaluate the graph with identical semantics. Dependabot/Renovate (or a
+        # deliberate hunch-ci refresh) can advance this in a reviewed change.
+        run: npm install -g @davesheffer/hunch@${HUNCH_VERSION}
 
       - name: Fetch the PR base branch
         # checkout sets up no origin/<base> tracking ref; create it explicitly so

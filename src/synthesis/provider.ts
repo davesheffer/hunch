@@ -435,6 +435,14 @@ export function safeModel(v: string | undefined, fallback: string | undefined): 
   return v && MODEL_RE.test(v) ? v : fallback;
 }
 
+/** Build the non-interactive Codex invocation used from Hunch's neutral temp
+ * directory. Codex normally refuses to start outside a trusted Git repository;
+ * the explicit skip flag preserves that neutral-cwd isolation without loading a
+ * target repo's agent rules or MCP configuration. */
+export function codexExecArgs(model?: string): string[] {
+  return ["exec", "--json", "--skip-git-repo-check", ...(model ? ["-m", model] : []), "-"];
+}
+
 // A timeout comes from a HUNCH_*_TIMEOUT_MS env var and feeds AbortController's
 // delay directly (never a shell argv token, unlike safeModel's model id) — but a
 // non-numeric or nonsensical value (negative, zero, NaN, Infinity) would either
@@ -534,10 +542,12 @@ class CodexCliProvider extends PromptSynthProvider {
   }
 
   protected async run(prompt: string): Promise<string> {
-    // `codex exec --json -` reads the prompt from STDIN (the `-`), emits JSONL
-    // events. Strip OPENAI_API_KEY so it uses ChatGPT (subscription) auth, not the
-    // pay-per-token API — consistent with the subscription-only rule.
-    const args = ["exec", "--json", ...(this.model ? ["-m", this.model] : []), "-"];
+    // `codex exec --json --skip-git-repo-check -` reads the prompt from STDIN
+    // (the `-`) and emits JSONL events. The skip flag is required because the
+    // shared runner deliberately uses a neutral temp cwd. Strip OPENAI_API_KEY so
+    // it uses ChatGPT (subscription) auth, not the pay-per-token API — consistent
+    // with the subscription-only rule.
+    const args = codexExecArgs(this.model);
     const out = await this.runCli("codex", args, ["OPENAI_API_KEY"], prompt);
     return extractCodexText(out);
   }

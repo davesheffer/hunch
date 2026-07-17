@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  codexExecArgs,
   extractCodexText,
   safeModel,
   safeTimeout,
@@ -41,6 +42,18 @@ test("extractCodexText prefers the agent_message over reasoning and trailing eve
     '{"type":"item.completed","item":{"type":"token_count","text":"123 tokens"}}',
   ].join("\n");
   assert.equal(extractCodexText(jsonl), "THE ANSWER");
+});
+
+test("Codex execution explicitly permits Hunch's neutral non-repository cwd", () => {
+  assert.deepEqual(codexExecArgs(undefined), ["exec", "--json", "--skip-git-repo-check", "-"]);
+  assert.deepEqual(codexExecArgs("gpt-5"), [
+    "exec",
+    "--json",
+    "--skip-git-repo-check",
+    "-m",
+    "gpt-5",
+    "-",
+  ]);
 });
 
 // A HUNCH_*_MODEL env var is the only non-literal argv token reaching pexecIn's

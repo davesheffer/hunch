@@ -363,13 +363,24 @@ export class HunchStore {
     }
   }
 
-  /** Substring fallback over titles/bodies (handles non-ASCII / malformed FTS). */
-  private likeSearch(query: string, limit: number): SearchHit[] {
-    const like = `%${query.replace(/[%_]/g, "")}%`;
+  /** Portable bounded fallback over titles/bodies. Each natural-language token
+   * is an OR candidate, mirroring the high-recall FTS query closely enough for
+   * runtimes whose SQLite build omits the optional FTS5 module. */
+  private likeSearch(query: string, limit: number, kind?: string): SearchHit[] {
+    const terms = (query.toLowerCase().match(/[\p{L}\p{N}_]+/gu)
+      ?? [query.toLowerCase().replace(/[%_]/g, "").trim()].filter(Boolean)).slice(0, 32);
+    if (!terms.length) return [];
+    const predicates = terms.map(() => `(lower(title) LIKE ? OR lower(body) LIKE ?)`).join(" OR ");
+    const likes = terms.flatMap((term) => {
+      const like = `%${term.replace(/[%_]/g, "")}%`;
+      return [like, like];
+    });
+    const where = kind ? `kind = ? AND (${predicates})` : `(${predicates})`;
+    const params: Array<string | number> = kind ? [kind, ...likes, limit] : [...likes, limit];
     const rows = this.db.prepare(
       `SELECT ref, kind, title, substr(body,1,120) AS snip FROM search
-       WHERE title LIKE ? OR body LIKE ? LIMIT ?`,
-    ).all(like, like, limit) as Array<{ ref: string; kind: string; title: string; snip: string }>;
+       WHERE ${where} LIMIT ?`,
+    ).all(...params) as Array<{ ref: string; kind: string; title: string; snip: string }>;
     return rows.map((r) => ({ ref: r.ref, kind: r.kind, title: r.title, snippet: r.snip, score: 0 }));
   }
 
@@ -597,7 +608,7 @@ export class HunchStore {
    *  constraint composes with MATCH). Empty when the query has no FTS-able terms. */
   private scopedFts(query: string, kind: string, limit: number): SearchHit[] {
     const match = toFtsQuery(query);
-    if (!match) return [];
+    if (!match) return this.likeSearch(query, limit, kind);
     try {
       const rows = this.db.prepare(
         `SELECT ref, kind, title, snippet(search, 3, '[', ']', '…', 12) AS snip, bm25(search) AS score
@@ -605,7 +616,7 @@ export class HunchStore {
       ).all(match, kind, limit) as Array<{ ref: string; kind: string; title: string; snip: string; score: number }>;
       return rows.map((r) => ({ ref: r.ref, kind: r.kind, title: r.title, snippet: r.snip, score: r.score }));
     } catch {
-      return [];
+      return this.likeSearch(query, limit, kind);
     }
   }
 
