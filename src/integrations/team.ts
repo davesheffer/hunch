@@ -444,7 +444,11 @@ function checkoutIsolatedEnv(): NodeJS.ProcessEnv {
   };
 }
 
-function exactCommit(root: string, revision: string, env: NodeJS.ProcessEnv): string | null {
+function exactCommit(
+  root: string,
+  revision: string,
+  env: NodeJS.ProcessEnv,
+): { oid: string | null; process: TeamCloneProcessResult } {
   const result = spawnSync("git", ["-C", root, "rev-parse", "--verify", `${revision}^{commit}`], {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "ignore"],
@@ -452,7 +456,10 @@ function exactCommit(root: string, revision: string, env: NodeJS.ProcessEnv): st
     timeout: 2_000,
   });
   const oid = result.status === 0 ? result.stdout.trim() : "";
-  return /^[0-9a-f]{40,64}$/i.test(oid) ? oid : null;
+  return {
+    oid: /^[0-9a-f]{40,64}$/i.test(oid) ? oid : null,
+    process: result,
+  };
 }
 
 function exactTreeListing(root: string, oid: string, env: NodeJS.ProcessEnv): string | null {
@@ -496,9 +503,13 @@ type TeamCloneFailureStage =
   | "clone"
   | "materialize-route"
   | "materialize-branch"
-  | "materialize-object"
+  | "materialize-origin-object"
+  | "materialize-head-object"
+  | "materialize-empty-proof"
+  | "materialize-object-mismatch"
   | "materialize-tree"
   | "materialize-reset"
+  | "materialize-post-reset-head"
   | "materialize-post-reset"
   | "pre-publish-contract"
   | "pre-publish-race"
@@ -550,18 +561,24 @@ function materializeValidatedClone(
     return null;
   }
   const env = checkoutIsolatedEnv();
-  const oid = exactCommit(overlayRoot, `refs/remotes/origin/${branch}`, env);
-  const head = exactCommit(overlayRoot, "HEAD", env);
+  const originProbe = exactCommit(overlayRoot, `refs/remotes/origin/${branch}`, env);
+  const headProbe = exactCommit(overlayRoot, "HEAD", env);
+  const oid = originProbe.oid;
+  const head = headProbe.oid;
   // A genuinely empty remote has no object to validate or materialize. Retain
   // its metadata-only clone so a later sole canonical branch can be joined;
   // no remote-controlled working-tree path exists at this point.
   if (!oid || !head) {
     const empty = !oid && !head && repositoryHasNoRefs(overlayRoot, env) && safeOverlayTree(overlayRoot);
-    if (!empty) reportTeamCloneFailure("materialize-object");
+    if (!empty) {
+      if (!oid) reportTeamCloneFailure("materialize-origin-object", originProbe.process);
+      if (!head) reportTeamCloneFailure("materialize-head-object", headProbe.process);
+      if (!oid && !head) reportTeamCloneFailure("materialize-empty-proof");
+    }
     return empty ? { sharedRef, empty: true } : null;
   }
   if (head !== oid) {
-    reportTeamCloneFailure("materialize-object");
+    reportTeamCloneFailure("materialize-object-mismatch");
     return null;
   }
   const listing = exactTreeListing(overlayRoot, oid, env);
@@ -587,13 +604,17 @@ function materializeValidatedClone(
 
   // Re-prove the immutable object identity and the materialized filesystem.
   // No binding/pointer is written until all three views agree.
-  const afterHead = exactCommit(overlayRoot, "HEAD", env);
+  const afterHeadProbe = exactCommit(overlayRoot, "HEAD", env);
+  const afterHead = afterHeadProbe.oid;
   const afterListing = afterHead === oid ? exactTreeListing(overlayRoot, oid, env) : null;
   const safe = afterHead === oid
     && !!afterListing
     && treeAttributesAreSafe(overlayRoot, afterListing, env)
     && safeOverlayTree(overlayRoot);
-  if (!safe) reportTeamCloneFailure("materialize-post-reset");
+  if (!safe) {
+    if (!afterHead) reportTeamCloneFailure("materialize-post-reset-head", afterHeadProbe.process);
+    reportTeamCloneFailure("materialize-post-reset");
+  }
   return safe ? { sharedRef, empty: false } : null;
 }
 
