@@ -2,7 +2,7 @@
   "id": "ev_ff8adfcb94",
   "kind": "correction",
   "occurred_at": "2026-06-16T10:29:10.885Z",
-  "repository": "hunch",
+  "repository": "git-remote:sha256:801e97f9f304a28a5268713d3cb80e058933b84e243c849f687345cfb9eb842a",
   "files": [
     "src/core/hookpolicy.ts"
   ],
@@ -14,9 +14,14 @@
   "data_class": "public",
   "content_hash": "sha1:338c7856c7abae9f45f44edc0c6eed3dc83c95e1",
   "compiler": {
-    "status": "covered",
+    "status": "uncompilable",
     "policy": null,
-    "reason": "Active human-confirmed legacy Constraint already delivers deterministic correction enforcement; Policy IR bridge remains explicit follow-on work."
+    "reason": "Correction has no exact structured forbidden-package meaning. The legacy Constraint remains active.",
+    "scope_suggestion": {
+      "repos": [],
+      "paths": [],
+      "components": []
+    }
   },
   "provenance": {
     "source": "derived",

@@ -2,7 +2,7 @@
   "id": "ev_0316ad1ad0",
   "kind": "correction",
   "occurred_at": "2026-06-16T10:29:10.225Z",
-  "repository": "hunch",
+  "repository": "git-remote:sha256:801e97f9f304a28a5268713d3cb80e058933b84e243c849f687345cfb9eb842a",
   "files": [
     "src/store/**"
   ],
@@ -17,9 +17,14 @@
   "data_class": "public",
   "content_hash": "sha1:d1ddea00f6bf91ff80346c326d89bfd946ad4c6c",
   "compiler": {
-    "status": "covered",
+    "status": "uncompilable",
     "policy": null,
-    "reason": "Active human-confirmed legacy Constraint already delivers deterministic correction enforcement; Policy IR bridge remains explicit follow-on work."
+    "reason": "Correction scope is not one safe, concrete repository-relative file. The legacy Constraint remains active.",
+    "scope_suggestion": {
+      "repos": [],
+      "paths": [],
+      "components": []
+    }
   },
   "provenance": {
     "source": "derived",
