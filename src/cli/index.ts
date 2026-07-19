@@ -42,7 +42,7 @@ import { writeTeamConfig, ensureTeamOverlay, readTeamConfig } from "../integrati
 import { runbookId, decisionId } from "../core/ids.js";
 import { deriveForbids, effectiveForbids } from "../core/constraintmatch.js";
 import type { Runbook } from "../core/types.js";
-import { extractInlineIntent } from "../extractors/comments.js";
+import { scanInlineIntent } from "../extractors/comments.js";
 import { renderText, renderMarkdown, renderImpact, reportFailsStrict, type CheckReport } from "../core/checkreport.js";
 import { partitionReview, READY_MIN_GROUNDED, type ReviewItem } from "../core/reviewqueue.js";
 import { installPostCommitHook, installPreCommitHook } from "../integrations/hooks.js";
@@ -831,7 +831,11 @@ program
   .action((opts: { private?: boolean }) => {
     const { store, root } = storeFor();
     if (opts.private && !store.hasPrivate) { store.close(); return fail("--private needs HUNCH_PRIVATE_DIR set to a private store"); }
-    const intents = extractInlineIntent(root);
+    const scan = scanInlineIntent(root);
+    const intents = scan.intents;
+    for (const diagnostic of scan.discovery.diagnostics) {
+      console.log(`  ⚠ source scan ${diagnostic.operation} failed at ${diagnostic.path} (${diagnostic.code})`);
+    }
     const now = new Date().toISOString();
     let dec = 0, con = 0;
     for (const it of intents) {

@@ -7,7 +7,7 @@
  * Writes Symbol/Edge/Component records to the JSON source of truth. The caller
  * then runs HunchStore.reindex() to refresh the SQLite index.
  */
-import { readFileSync, statSync, readdirSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join, relative, posix } from "node:path";
 import type { HunchStore } from "../store/hunchStore.js";
 import { parseSource, attributeCalls } from "./parse.js";
@@ -15,7 +15,13 @@ import { symbolId, componentId, edgeId, sha1 } from "../core/ids.js";
 import { externalImportNodeId, externalPackage } from "../core/externalImports.js";
 import { resolveRelativeImport } from "../core/relativeImports.js";
 import { extracted, inferred, type Symbol, type Edge, type Component } from "../core/types.js";
-import { isGitRepo, trackedFiles, fileGitMetrics } from "./git.js";
+import { isGitRepo, fileGitMetrics } from "./git.js";
+import {
+  discoverSourceFiles,
+  IncompleteSourceDiscoveryError,
+  type SourceDiscoveryResult,
+  type SourceDiscoveryStrategy,
+} from "./sourceFiles.js";
 
 const CODE_EXTS = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"];
 const SKIP_DIRS = new Set(["node_modules", ".git", "dist", "build", ".hunch", "coverage", ".next", "out"]);
@@ -27,10 +33,14 @@ export interface IndexResult {
   components: number;
   /** Files that could not be parsed (read error / oversized / extraction error). */
   skipped: number;
+  /** Authoritative file-enumeration strategy used for this snapshot. */
+  strategy: SourceDiscoveryStrategy;
 }
 
 export function indexRepo(store: HunchStore, root: string, opts: { churn?: boolean } = {}): IndexResult {
-  const files = listCodeFiles(root);
+  const discovery = listCodeFiles(root);
+  if (!discovery.complete) throw new IncompleteSourceDiscoveryError(root, discovery);
+  const files = discovery.files.map((file) => join(root, file));
   const useGit = isGitRepo(root);
 
   // ---- pass 1: parse files -> symbols, remember per-file calls & imports ----
@@ -217,32 +227,20 @@ export function indexRepo(store: HunchStore, root: string, opts: { churn?: boole
   });
   store.json.replaceAll("components", compsOut);
 
-  return { files: files.length, symbols: symbols.length, edges: edges.length, components: compsOut.length, skipped };
+  return {
+    files: files.length,
+    symbols: symbols.length,
+    edges: edges.length,
+    components: compsOut.length,
+    skipped,
+    strategy: discovery.strategy,
+  };
 }
 
 // ---- helpers --------------------------------------------------------------
 
-function listCodeFiles(root: string): string[] {
-  if (isGitRepo(root)) {
-    // Apply SKIP_DIRS to the git-tracked list too: a repo that (accidentally)
-    // tracks node_modules/ or dist/ must not flood the graph with vendored symbols.
-    const tracked = trackedFiles(root, CODE_EXTS)
-      .filter((f) => !f.split(/[\\/]/).some((seg) => SKIP_DIRS.has(seg)))
-      .map((f) => join(root, f));
-    if (tracked.length > 0) return tracked; // else fall through (nothing committed yet)
-  }
-  const out: string[] = [];
-  const walk = (dir: string) => {
-    for (const name of readdirSync(dir)) {
-      if (SKIP_DIRS.has(name)) continue;
-      const abs = join(dir, name);
-      const st = statSync(abs);
-      if (st.isDirectory()) walk(abs);
-      else if (CODE_EXTS.some((e) => name.endsWith(e))) out.push(abs);
-    }
-  };
-  walk(root);
-  return out;
+function listCodeFiles(root: string): SourceDiscoveryResult {
+  return discoverSourceFiles(root, { extensions: CODE_EXTS, skipDirs: SKIP_DIRS });
 }
 
 /** Resolve a callee name to a symbol id: prefer same-file, otherwise require a

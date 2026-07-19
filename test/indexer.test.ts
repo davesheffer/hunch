@@ -185,3 +185,47 @@ test("indexing is deterministic — same ids on re-run", () => {
   store.close();
   rmSync(root, { recursive: true, force: true });
 });
+
+test("incomplete source discovery aborts without replacing the existing graph", () => {
+  const root = fixtureRepo();
+  const store = new HunchStore(hunchPaths(root));
+  store.json.ensureDirs();
+  indexRepo(store, root, { churn: false });
+  const before = {
+    symbols: store.json.loadAll("symbols"),
+    edges: store.json.loadAll("edges"),
+    components: store.json.loadAll("components"),
+  };
+
+  assert.throws(
+    () => indexRepo(store, join(root, "missing-source-root"), { churn: false }),
+    /source discovery.*incomplete/i,
+  );
+  assert.deepEqual(store.json.loadAll("symbols"), before.symbols, "symbols remain byte-for-byte equivalent");
+  assert.deepEqual(store.json.loadAll("edges"), before.edges, "edges remain byte-for-byte equivalent");
+  assert.deepEqual(store.json.loadAll("components"), before.components, "components remain byte-for-byte equivalent");
+
+  store.close();
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("a complete empty scan intentionally clears a previously populated graph", () => {
+  const root = fixtureRepo();
+  const store = new HunchStore(hunchPaths(root));
+  store.json.ensureDirs();
+  const populated = indexRepo(store, root, { churn: false });
+  assert.equal(populated.files, 3);
+  assert.ok(store.json.loadAll("symbols").length > 0);
+
+  rmSync(join(root, "src"), { recursive: true, force: true });
+  const empty = indexRepo(store, root, { churn: false });
+  assert.equal(empty.strategy, "filesystem");
+  assert.equal(empty.files, 0);
+  assert.equal(empty.symbols, 0);
+  assert.deepEqual(store.json.loadAll("symbols"), []);
+  assert.deepEqual(store.json.loadAll("edges"), []);
+  assert.deepEqual(store.json.loadAll("components"), []);
+
+  store.close();
+  rmSync(root, { recursive: true, force: true });
+});

@@ -1,5 +1,23 @@
 # bench — does the skill / the graph actually help?
 
+## Deterministic source-scanner benchmark
+
+`source-discovery.ts` measures the local, model-free scanner on generated Git and
+non-Git repositories. Every timed sample first proves the exact expected file count,
+stable ordered file-set digest, complete discovery status, and full-index symbol count.
+It reports distributions rather than enforcing a machine-dependent latency threshold.
+
+```bash
+npm run bench:scanner
+npm run bench:scanner -- --files 5000 --runs 7 --index-runs 3
+npm run bench:scanner -- --files 200 --runs 2 --index-runs 1 --json
+```
+
+The benchmark includes ignored `dist/` and `node_modules/` noise, compares Git versus
+filesystem discovery for equivalent results, and measures both cold and repeat full
+indexing. Fixtures are temporary and always removed; the benchmark never calls a model
+or network service.
+
 > **Historical harness only.** `bench/run.ts`, `bench/tasks.json`, and every
 > existing `bench/results` file predate the fresh G3 preregistrations and are
 > explicitly excluded from EXP-01 and EXP-03. They must never be relabeled as a

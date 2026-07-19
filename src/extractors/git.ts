@@ -532,3 +532,11 @@ export function trackedFiles(cwd: string, exts: string[]): string[] {
   const all = out ? out.split("\n").filter(Boolean) : [];
   return all.filter((f) => exts.some((e) => f.endsWith(e)));
 }
+
+/** Strict variant for authoritative scans: unlike trackedFiles(), a Git failure
+ *  must remain distinguishable from a valid repository with zero matching files. */
+export function trackedFilesStrict(cwd: string, exts: string[]): string[] {
+  const out = git(["ls-files"], cwd);
+  const all = out ? out.split("\n").filter(Boolean) : [];
+  return all.filter((f) => exts.some((e) => f.endsWith(e)));
+}

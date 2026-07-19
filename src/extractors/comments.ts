@@ -7,10 +7,10 @@
  * <!--, ;) so a matching STRING literal in code isn't mistaken for intent. (Line-based,
  * so a tagged line that is itself a string literal can still false-positive — advisory.)
  */
-import { readFileSync, readdirSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { trackedFiles } from "./git.js";
 import { toPosixTarget } from "../core/paths.js";
+import { discoverSourceFiles, type SourceDiscoveryResult } from "./sourceFiles.js";
 
 const EXTS = [
   ".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs",
@@ -28,35 +28,24 @@ export interface InlineIntent {
 }
 
 /** Tracked source files (git ls-files); falls back to a bounded walk outside git. */
-function sourceFiles(root: string): string[] {
-  const tracked = trackedFiles(root, EXTS);
-  if (tracked.length) return tracked;
-  const out: string[] = [];
-  const walk = (dir: string, rel: string, depth: number): void => {
-    if (depth > 8) return;
-    let entries;
-    try {
-      entries = readdirSync(dir, { withFileTypes: true });
-    } catch {
-      return;
-    }
-    for (const e of entries) {
-      if (e.name.startsWith(".")) continue;
-      const r = rel ? `${rel}/${e.name}` : e.name;
-      if (e.isDirectory()) {
-        if (!SKIP.has(e.name)) walk(join(dir, e.name), r, depth + 1);
-      } else if (EXTS.some((x) => e.name.endsWith(x))) {
-        out.push(r);
-      }
-    }
-  };
-  walk(root, "", 0);
-  return out;
+function sourceFiles(root: string): SourceDiscoveryResult {
+  return discoverSourceFiles(root, {
+    extensions: EXTS,
+    skipDirs: SKIP,
+    walkMaxDepth: 8,
+    skipHiddenDirs: true,
+  });
 }
 
-export function extractInlineIntent(root: string): InlineIntent[] {
+export interface InlineIntentScanResult {
+  intents: InlineIntent[];
+  discovery: SourceDiscoveryResult;
+}
+
+export function scanInlineIntent(root: string): InlineIntentScanResult {
+  const discovery = sourceFiles(root);
   const out: InlineIntent[] = [];
-  for (const rel of sourceFiles(root)) {
+  for (const rel of discovery.files) {
     let content: string;
     try {
       content = readFileSync(join(root, rel), "utf8");
@@ -71,5 +60,10 @@ export function extractInlineIntent(root: string): InlineIntent[] {
       if (m) out.push({ kind: m[1]!.toLowerCase() as "why" | "rule", text: m[2]!.trim(), file, line: i + 1 });
     }
   }
-  return out;
+  return { intents: out, discovery };
+}
+
+/** Backward-compatible convenience wrapper for callers that only need captures. */
+export function extractInlineIntent(root: string): InlineIntent[] {
+  return scanInlineIntent(root).intents;
 }
