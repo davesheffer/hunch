@@ -16,9 +16,12 @@ import {
   RELEASE_TEST_COVERAGE,
   buildVerifiedRollback,
   buildReleaseReceipt,
+  executeGuardedReleasePlan,
   executeReleasePlan,
   gateEnvironment,
+  guardedReceiptWrite,
   npmDistTagForVersion,
+  releaseSourceStateError,
   releaseTestManifest,
   selectPreviousVersion,
   validateReleaseContext,
@@ -184,6 +187,11 @@ test("Phase 2O release gate is fail-closed, content-addressed, and publish-neutr
   ]);
   assert.deepEqual(RELEASE_CLEAN_STATUS_ARGS, ["status", "--porcelain", "--untracked-files=all"],
     "candidate readiness must include untracked implementation and test files");
+  assert.deepEqual(
+    RELEASE_GATES.find((gate) => gate.id === "repository-index")?.command,
+    ["node", "dist/cli/index.js", "index", "--no-auto-commit"],
+    "release validation must never let a deterministic index refresh move the candidate HEAD",
+  );
   assert.ok(RELEASE_TEST_COVERAGE.md1_correction_bridge.includes("test/md1-e2e.test.ts"),
     "the release receipt binds the joined public/private MD-1a black-box journey");
   assert.ok(RELEASE_TEST_COVERAGE.private_leak_suite.includes("test/md1-e2e.test.ts"),
@@ -206,6 +214,8 @@ test("Phase 2O release gate is fail-closed, content-addressed, and publish-neutr
     "the receipt binds the workflow contract that guards trusted publication");
   assert.ok(RELEASE_TEST_COVERAGE.release_pipeline_contract.includes(".github/workflows/vscode-marketplace.yml"));
   assert.ok(RELEASE_TEST_COVERAGE.release_pipeline_contract.includes("test/vscode-marketplace-workflow.test.ts"));
+  assert.ok(RELEASE_TEST_COVERAGE.release_pipeline_contract.includes("test/grounding-capture-commit.test.ts"),
+    "the receipt binds the real CLI proof that release indexing cannot auto-commit");
   assert.ok(RELEASE_TEST_COVERAGE.release_pipeline_contract.includes("tooling/vscode-publish-tools/package-lock.json"),
     "the receipt binds the reviewed transitive publisher-tool closure");
   assert.deepEqual(RELEASE_TEST_COVERAGE.matrix_release_resilience,
@@ -261,6 +271,47 @@ test("Phase 2O release gate is fail-closed, content-addressed, and publish-neutr
   });
   assert.deepEqual(calls, ["typecheck", "test", "core-build"], "a failed prerequisite prevents every later gate and publish");
   assert.deepEqual(results.map((result) => result.status), ["passed", "passed", "failed"]);
+
+  const expectedSource = {
+    commit: "a".repeat(40),
+    status: "",
+    tag_commit_matches: true,
+  };
+  let observedSource = { ...expectedSource };
+  const guardedCalls: string[] = [];
+  const guardedErrors: string[] = [];
+  const guardedResults = executeGuardedReleasePlan(RELEASE_GATES, (gate) => {
+    guardedCalls.push(gate.id);
+    if (gate.id === "test") observedSource = { ...observedSource, commit: "b".repeat(40) };
+    return { exitCode: 0 };
+  }, expectedSource, () => observedSource, (gate, error) => guardedErrors.push(`${gate.id}: ${error}`));
+  assert.deepEqual(guardedCalls, ["typecheck", "test"], "HEAD movement stops the plan at the responsible gate");
+  assert.deepEqual(guardedResults.map((result) => result.status), ["passed", "failed"]);
+  assert.match(guardedErrors[0] ?? "", /^test: HEAD moved/);
+  assert.match(releaseSourceStateError(expectedSource, observedSource) ?? "", /HEAD moved/);
+  assert.match(releaseSourceStateError(expectedSource, { ...expectedSource, status: " M package.json" }) ?? "", /working tree changed/);
+  assert.match(releaseSourceStateError(expectedSource, { ...expectedSource, tag_commit_matches: false }) ?? "", /release tag stopped/);
+
+  let receiptWritten = false;
+  let staleReceiptRemoved = false;
+  const writeSnapshots = [expectedSource, { ...expectedSource, status: " M package.json" }];
+  assert.throws(() => guardedReceiptWrite({
+    expectedSource,
+    observeSource: () => writeSnapshots.shift()!,
+    writeReceipt: () => { receiptWritten = true; return "/tmp/stale-release-receipt.json"; },
+    removeReceipt: () => { staleReceiptRemoved = true; },
+  }), /source changed while the release receipt was being written: the working tree changed/);
+  assert.equal(receiptWritten, true);
+  assert.equal(staleReceiptRemoved, true, "a receipt invalidated during its atomic write is removed");
+
+  receiptWritten = false;
+  assert.throws(() => guardedReceiptWrite({
+    expectedSource,
+    observeSource: () => ({ ...expectedSource, commit: "c".repeat(40) }),
+    writeReceipt: () => { receiptWritten = true; return "/tmp/never-written.json"; },
+    removeReceipt: () => {},
+  }), /source changed before receipt write: HEAD moved/);
+  assert.equal(receiptWritten, false, "pre-write source drift cannot leave even a temporary passed receipt");
   assert.equal(gateEnvironment("test", { HUNCH_PRIVATE_DIR: "fixture-overlay" }, "empty-overlay").HUNCH_PRIVATE_DIR, "fixture-overlay");
   assert.equal(gateEnvironment("repository-index", { HUNCH_PRIVATE_DIR: "fixture-overlay" }, "empty-overlay").HUNCH_PRIVATE_DIR, "empty-overlay");
   assert.equal(gateEnvironment("architectural-conformance", { HUNCH_PRIVATE_DIR: "fixture-overlay" }, "empty-overlay").HUNCH_PRIVATE_DIR, "empty-overlay");
@@ -268,7 +319,8 @@ test("Phase 2O release gate is fail-closed, content-addressed, and publish-neutr
   const input = {
     package: { name: "@davesheffer/hunch", version: "1.9.0" },
     source: {
-      commit: "a".repeat(40), clean: true, tag: "v1.9.0",
+      commit: "a".repeat(40), commit_after: "a".repeat(40),
+      clean: true, clean_before: true, clean_after: true, tag: "v1.9.0",
       tag_matches_version: true, tag_commit_matches: true,
     },
     environment: { node: "v22.0.0", platform: "linux", arch: "x64" },
@@ -335,12 +387,48 @@ test("Phase 2O release gate is fail-closed, content-addressed, and publish-neutr
   });
   assert.equal(movedTag.publish_ready, false, "a matching tag name cannot publish when it points away from the receipt commit");
 
+  const untaggedCandidate = buildReleaseReceipt({
+    ...input,
+    source: {
+      ...input.source,
+      tag: null,
+      tag_matches_version: null,
+      tag_commit_matches: null,
+    },
+  });
+  assert.equal(untaggedCandidate.result, "passed");
+  assert.equal(untaggedCandidate.candidate_ready, true, "CI and extension tags may reuse the complete root candidate proof");
+  assert.equal(untaggedCandidate.publish_ready, false, "only an exact npm package tag can authorize npm publication");
+
+  const movedHead = buildReleaseReceipt({
+    ...input,
+    source: { ...input.source, commit_after: "d".repeat(40) },
+  });
+  assert.equal(movedHead.result, "failed", "a gate run cannot certify a different HEAD than the candidate it tested");
+  assert.equal(movedHead.candidate_ready, false, "a clean auto-commit after testing is still a source mutation");
+  assert.equal(verifyReleaseReceipt(movedHead), true,
+    "the failed content-addressed receipt preserves both sides of a detected HEAD move");
+
+  const forgedCleanState = buildReleaseReceipt({
+    ...input,
+    source: { ...input.source, clean: true, clean_after: false },
+  });
+  assert.equal(forgedCleanState.result, "failed", "summary cleanliness must equal the bound before/after evidence");
+
   const missingRehearsal = buildReleaseReceipt({ ...input, rehearsal: null });
   assert.equal(missingRehearsal.result, "failed", "clean-install proof is mandatory release evidence");
 
   const dirty = buildReleaseReceipt({
     ...input,
-    source: { ...input.source, clean: false, tag: null, tag_matches_version: null, tag_commit_matches: null },
+    source: {
+      ...input.source,
+      clean: false,
+      clean_before: false,
+      clean_after: false,
+      tag: null,
+      tag_matches_version: null,
+      tag_commit_matches: null,
+    },
     matrix: passingMatrixReceipt(false),
   });
   assert.equal(dirty.result, "passed");

@@ -344,18 +344,20 @@ program
 program
   .command("index")
   .description("Parse the repo into a symbol/dependency graph + components (deterministic, no LLM).")
-  .action(() => {
+  .option("--no-auto-commit", "refresh the graph without committing it (for validation and release gates)")
+  .action((opts: { autoCommit: boolean }) => {
     const { store, root } = storeFor();
     store.json.ensureDirs();
     ensureGitignore(root); // keep the derived SQLite index out of git (idempotent)
     const res = indexRepo(store, root, { requireClean: true });
     const { counts } = store.reindex();
     const correctionSweep = new ConstitutionService(store, root).upgradeCorrections();
+    const shouldAutoCommit = opts.autoCommit !== false && store.autoCommit;
     // With auto-commit on, the central public flush must perform the refresh
     // while the docs are still Git-clean so it can stage them atomically with
     // the graph. Pre-refreshing would make the safety filter treat generated
     // docs as user-dirty and leave them stranded outside the memory commit.
-    const healed = store.autoCommit ? [] : refreshExistingGrounding(root, store);
+    const healed = shouldAutoCommit ? [] : refreshExistingGrounding(root, store);
     console.log(`Indexed ${res.files} files:`);
     console.log(`  ${counts.symbols} symbols, ${counts.edges} edges, ${counts.components} components`);
     if (correctionSweep.scanned) {
@@ -363,8 +365,10 @@ program
     }
     if (healed.length) console.log(`  grounding refreshed: ${healed.join(", ")}`);
     if (res.skipped) console.log(`  ⚠ ${res.skipped} file(s) could not be parsed (skipped)`);
-    pumpMemoryHomes(store, root, store.privateDir ? ["public", "private"] : ["public"],
-      "hunch: refresh index and correction reviews");
+    if (shouldAutoCommit) {
+      pumpMemoryHomes(store, root, store.privateDir ? ["public", "private"] : ["public"],
+        "hunch: refresh index and correction reviews");
+    }
     store.close();
   });
 

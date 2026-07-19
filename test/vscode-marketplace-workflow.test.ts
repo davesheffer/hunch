@@ -58,8 +58,11 @@ function contractErrors(source: string): string[] {
   if (!new RegExp(`actions/setup-node@${pins.setupNode}`).test(validate)) errors.push("setup-node action is not immutably pinned");
   if (!/name: Install root \(locked; no registry credentials\)[\s\S]*?run: npm ci/.test(validate)) errors.push("root npm ci is missing");
   if (!/npm run gate:release -- --output vscode-release-gate\.json/.test(validate)) errors.push("full root release gate receipt is missing");
-  if (!/releaseGate\.result !== "passed" \|\| releaseGate\.publish_ready !== true/.test(validate)
-    || !/matrix\.result !== "passed" \|\| matrix\.release_ready !== true/.test(validate)) {
+  if (!/releaseGate\.result !== "passed"[\s\S]*releaseGate\.candidate_ready !== true[\s\S]*releaseGate\.publish_ready !== false/.test(validate)
+    || !/matrix\.result !== "passed" \|\| matrix\.release_ready !== true/.test(validate)
+    || !/releaseGate\.source\?\.commit_after !== process\.env\.GITHUB_SHA/.test(validate)
+    || !/releaseGate\.source\?\.tag !== null[\s\S]*releaseGate\.source\?\.tag_commit_matches !== null/.test(validate)
+    || !/rootGate\.candidate_ready !== true[\s\S]*rootGate\.publish_ready !== false/.test(publish)) {
     errors.push("release/Matrix receipt is not fail-closed");
   }
   if (!/EXPECTED_TAG="vscode-v\$\{EXTENSION_VERSION\}"/.test(validate)
@@ -140,6 +143,7 @@ function contractErrors(source: string): string[] {
     || !/actualVsixSha256 !== manifest\.artifact\.sha256/.test(publish)
     || !/vsixFiles\.length !== 1/.test(publish)
     || !/manifest\.source\.commit !== process\.env\.GITHUB_SHA/.test(publish)
+    || !/rootGate\.source\?\.commit_after !== manifest\.source\.commit/.test(publish)
     || !/actualEntryManifestSha256 !== manifest\.artifact\.entry_manifest_sha256/.test(publish)) {
     errors.push("publish job does not reject receipt, byte, path-manifest, multiplicity, or source mismatches");
   }
@@ -227,6 +231,10 @@ test("contract rejects manual branch dispatch and missing root/Matrix evidence",
     "",
   );
   assert.ok(contractErrors(withoutReceipt).includes("root gate and Matrix receipts are not carried into the immutable artifact"));
+
+  const npmPublishCoupled = workflow.replace("releaseGate.publish_ready !== false", "releaseGate.publish_ready !== true");
+  assert.ok(contractErrors(npmPublishCoupled).includes("release/Matrix receipt is not fail-closed"),
+    "an extension tag cannot impersonate an npm package publication tag");
 });
 
 test("contract rejects unlocked tools, floating publishers, and wrong extension tags", () => {

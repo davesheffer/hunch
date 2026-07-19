@@ -101,6 +101,8 @@ test("npm publication isolates OIDC from repository code and publishes only vali
     "the fixed package version must exactly match the pushed package tag");
   assert.match(validate, /matrix\.packages\?\.candidate\?\.sha256 !== tarballSha256/,
     "the tarball exercised by the Matrix must be byte-identical to the publication candidate");
+  assert.match(validate, /releaseGate\.source\?\.commit_after !== process\.env\.GITHUB_SHA/,
+    "publication requires the release gate to finish on the exact tagged commit it started with");
   assert.match(validate, /forbiddenPaths = packagePaths\.filter/);
   assert.match(validate, /\.hunch\(\?:-cache\)\?/,
     "private/team memory and runtime caches are explicitly denied from the npm tarball");
@@ -206,6 +208,8 @@ test("npm publication isolates OIDC from repository code and publishes only vali
   assert.match(publish, /signature_audit_sha256/);
   assert.match(publish, /dependency\.uri === expectedDependencyUri/,
     "provenance binds the exact repository, ref, and commit rather than any matching hash");
+  assert.match(publish, /releaseGate\.source\?\.commit_after !== manifest\.source\.commit/,
+    "the downloaded release receipt must preserve its final-HEAD binding");
   assert.match(publish, /provenance_predicate_type/);
   assert.match(publish, /release_gate_content_hash/);
   assert.match(publish, /matrix_content_hash/);

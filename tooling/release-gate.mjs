@@ -11,7 +11,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import process from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -26,7 +26,7 @@ export const RELEASE_GATES = Object.freeze([
   { id: "matrix-release-verification", command: ["node", "tooling/matrix-release-verification.mjs", "--output", "$MATRIX_OUTPUT"] },
   { id: "vscode-install", command: ["npm", "ci", "--prefix", "vscode-extension"] },
   { id: "vscode-build", command: ["npm", "run", "build", "--prefix", "vscode-extension"] },
-  { id: "repository-index", command: ["node", "dist/cli/index.js", "index"] },
+  { id: "repository-index", command: ["node", "dist/cli/index.js", "index", "--no-auto-commit"] },
   { id: "architectural-conformance", command: ["node", "dist/cli/index.js", "conform", "--strict"] },
   { id: "clean-install-rehearsal", command: ["node", "tooling/constitution-clean-rehearsal.mjs", "--output", "$REHEARSAL_OUTPUT"] },
   { id: "production-dependency-audit", command: ["npm", "audit", "--omit=dev", "--audit-level=high"] },
@@ -67,6 +67,7 @@ export const RELEASE_TEST_COVERAGE = Object.freeze({
     ".github/workflows/ci.yml",
     ".github/workflows/release.yml",
     ".github/workflows/vscode-marketplace.yml",
+    "test/grounding-capture-commit.test.ts",
     "test/release-gate.test.ts",
     "test/vscode-marketplace-workflow.test.ts",
     "test/workflow-release-contract.test.ts",
@@ -82,6 +83,19 @@ export const RELEASE_TEST_COVERAGE = Object.freeze({
 });
 
 export const RELEASE_CLEAN_STATUS_ARGS = Object.freeze(["status", "--porcelain", "--untracked-files=all"]);
+
+export function releaseSourceStateError(expected, observed) {
+  if (observed.commit !== expected.commit) {
+    return `HEAD moved from ${expected.commit} to ${observed.commit}`;
+  }
+  if (observed.status !== expected.status) {
+    return "the working tree changed during release verification";
+  }
+  if (expected.tag_commit_matches === true && observed.tag_commit_matches !== true) {
+    return "the release tag stopped pointing to the verified commit";
+  }
+  return null;
+}
 
 function stable(value) {
   if (Array.isArray(value)) return value.map(stable);
@@ -125,6 +139,28 @@ export function executeReleasePlan(plan, runner) {
   return results;
 }
 
+export function executeGuardedReleasePlan(plan, runner, expectedSource, observeSource, onSourceError = () => {}) {
+  return executeReleasePlan(plan, (gate) => {
+    const outcome = runner(gate);
+    const sourceError = releaseSourceStateError(expectedSource, observeSource());
+    if (!sourceError) return outcome;
+    onSourceError(gate, sourceError);
+    return { exitCode: 1 };
+  });
+}
+
+export function guardedReceiptWrite({ expectedSource, observeSource, writeReceipt, removeReceipt }) {
+  const beforeError = releaseSourceStateError(expectedSource, observeSource(null));
+  if (beforeError) throw new Error(`source changed before receipt write: ${beforeError}`);
+  const output = writeReceipt();
+  const afterError = releaseSourceStateError(expectedSource, observeSource(output));
+  if (afterError) {
+    removeReceipt(output);
+    throw new Error(`source changed while the release receipt was being written: ${afterError}`);
+  }
+  return output;
+}
+
 export function gateEnvironment(gateId, baseEnvironment, emptyPrivateHome) {
   if (gateId !== "repository-index" && gateId !== "architectural-conformance") return { ...baseEnvironment };
   return {
@@ -140,7 +176,12 @@ function sameJson(left, right) {
 
 function releaseSourcePasses(packageResult, source) {
   if (packageResult?.name !== "@davesheffer/hunch" || !parseVersion(packageResult?.version ?? "")) return false;
-  if (!/^[0-9a-f]{40}(?:[0-9a-f]{24})?$/.test(source?.commit ?? "") || typeof source?.clean !== "boolean") return false;
+  if (!/^[0-9a-f]{40}(?:[0-9a-f]{24})?$/.test(source?.commit ?? "")
+    || source.commit_after !== source.commit
+    || typeof source?.clean !== "boolean"
+    || typeof source.clean_before !== "boolean"
+    || typeof source.clean_after !== "boolean"
+    || source.clean !== (source.clean_before && source.clean_after)) return false;
   if (source.tag === null) {
     return source.tag_matches_version === null && source.tag_commit_matches === null;
   }
@@ -273,6 +314,22 @@ function git(args) {
   const child = spawnSync("git", args, { cwd: projectRoot, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
   if (child.status !== 0) throw new Error(child.stderr.trim() || `git ${args.join(" ")} failed`);
   return child.stdout.trim();
+}
+
+function tagPointsToCommit(tag, commit) {
+  if (!tag) return null;
+  try {
+    return git(["rev-list", "-n", "1", tag]) === commit;
+  } catch {
+    return false;
+  }
+}
+
+function sourceStatusIgnoringOutput(output) {
+  if (!output) return git(RELEASE_CLEAN_STATUS_ARGS);
+  const path = relative(projectRoot, resolve(output)).replaceAll("\\", "/");
+  if (!path || path === "." || path === ".." || path.startsWith("../")) return git(RELEASE_CLEAN_STATUS_ARGS);
+  return git([...RELEASE_CLEAN_STATUS_ARGS, "--", ".", `:(top,exclude,literal)${path}`]);
 }
 
 function parseArgs(argv) {
@@ -430,10 +487,12 @@ async function main() {
   const options = parseArgs(process.argv.slice(2));
   const packageJson = JSON.parse(readFileSync(join(projectRoot, "package.json"), "utf8"));
   const commit = git(["rev-parse", "HEAD"]);
-  const clean = git(RELEASE_CLEAN_STATUS_ARGS) === "";
+  const statusBefore = git(RELEASE_CLEAN_STATUS_ARGS);
+  const clean = statusBefore === "";
   const tagCommitMatches = options.tag && options.tag === `v${packageJson.version}`
-    ? git(["rev-list", "-n", "1", options.tag]) === commit
+    ? tagPointsToCommit(options.tag, commit)
     : options.tag ? false : null;
+  const sourceBefore = { commit, status: statusBefore, tag_commit_matches: tagCommitMatches };
   let context;
   try {
     context = validateReleaseContext({ packageVersion: packageJson.version, tag: options.tag, tagCommitMatches, clean, allowDirty: options.allowDirty });
@@ -451,7 +510,10 @@ async function main() {
       package: { name: packageJson.name, version: packageJson.version },
       source: {
         commit,
+        commit_after: commit,
         clean,
+        clean_before: clean,
+        clean_after: clean,
         tag: options.tag,
         tag_matches_version: options.tag ? options.tag === `v${packageJson.version}` : null,
         tag_commit_matches: tagCommitMatches,
@@ -487,7 +549,10 @@ async function main() {
       package: { name: packageJson.name, version: packageJson.version },
       source: {
         commit,
+        commit_after: commit,
         clean,
+        clean_before: clean,
+        clean_after: clean,
         tag: options.tag,
         tag_matches_version: context.tag_matches_version,
         tag_commit_matches: tagCommitMatches,
@@ -513,7 +578,8 @@ async function main() {
   mkdirSync(emptyPrivateHome, { recursive: true });
   let receipt;
   try {
-    const gates = executeReleasePlan(RELEASE_GATES, (gate) => {
+    const sourceMutationErrors = [];
+    const gates = executeGuardedReleasePlan(RELEASE_GATES, (gate) => {
       process.stdout.write(`\n== release gate: ${gate.id} ==\n`);
       const [command, ...baseArgs] = gate.command.map((part) => {
         if (part === "$REHEARSAL_OUTPUT") return rehearsalOutput;
@@ -524,33 +590,68 @@ async function main() {
         ? [...baseArgs, "--allow-dirty"]
         : baseArgs;
       return run(command, args, { env: gateEnvironment(gate.id, process.env, emptyPrivateHome) });
+    }, sourceBefore, () => ({
+        commit: git(["rev-parse", "HEAD"]),
+        status: git(RELEASE_CLEAN_STATUS_ARGS),
+        tag_commit_matches: tagPointsToCommit(options.tag, commit),
+      }), (gate, sourceError) => {
+      const detail = `${gate.id}: ${sourceError}`;
+      sourceMutationErrors.push(detail);
+      process.stderr.write(`Release gate source-integrity failure: ${detail}\n`);
     });
-    const cleanAfter = git(RELEASE_CLEAN_STATUS_ARGS) === "";
-    const contextErrors = clean && !cleanAfter ? ["release gate commands modified the working tree"] : [];
+    const contextErrors = [...sourceMutationErrors];
     const rawRehearsal = readGateEvidence(rehearsalOutput, "clean-install-rehearsal", gates, contextErrors);
     const rehearsal = compactRehearsal(rawRehearsal);
     const matrix = readGateEvidence(matrixOutput, "matrix-release-verification", gates, contextErrors);
+    const testManifest = releaseTestManifest();
+    const commitAfter = git(["rev-parse", "HEAD"]);
+    const statusAfter = git(RELEASE_CLEAN_STATUS_ARGS);
+    const cleanAfter = statusAfter === "";
+    const tagCommitMatchesAfter = tagPointsToCommit(options.tag, commitAfter);
+    const finalSourceError = releaseSourceStateError(sourceBefore, {
+      commit: commitAfter,
+      status: statusAfter,
+      tag_commit_matches: tagCommitMatchesAfter,
+    });
+    if (finalSourceError && !contextErrors.some((error) => error.endsWith(finalSourceError))) {
+      contextErrors.push(`final source check: ${finalSourceError}`);
+    }
     receipt = buildReleaseReceipt({
       package: { name: packageJson.name, version: packageJson.version },
       source: {
         commit,
-        clean: clean && cleanAfter,
+        commit_after: commitAfter,
+        clean: clean && cleanAfter && commitAfter === commit,
         clean_before: clean,
         clean_after: cleanAfter,
         tag: options.tag,
         tag_matches_version: context.tag_matches_version,
-        tag_commit_matches: tagCommitMatches,
+        tag_commit_matches: tagCommitMatchesAfter,
       },
       environment: { node: process.version, platform: process.platform, arch: process.arch },
       gates,
       context_errors: contextErrors,
-      test_manifest: releaseTestManifest(),
+      test_manifest: testManifest,
       rehearsal,
       matrix,
       rollback,
     });
     if (!verifyReleaseReceipt(receipt)) throw new Error("release receipt failed semantic self-verification");
-    const output = atomicWrite(options.output, receipt);
+    const receiptSource = {
+      commit: commitAfter,
+      status: statusAfter,
+      tag_commit_matches: tagCommitMatchesAfter,
+    };
+    const output = guardedReceiptWrite({
+      expectedSource: receiptSource,
+      observeSource: (outputToIgnore) => ({
+        commit: git(["rev-parse", "HEAD"]),
+        status: sourceStatusIgnoringOutput(outputToIgnore),
+        tag_commit_matches: tagPointsToCommit(options.tag, commitAfter),
+      }),
+      writeReceipt: () => atomicWrite(options.output, receipt),
+      removeReceipt: (staleOutput) => rmSync(staleOutput, { force: true }),
+    });
     process.stdout.write(`\nRelease gate ${receipt.result}: ${receipt.id}\nReceipt: ${output}\n`);
     process.stdout.write(`Candidate ready: ${receipt.candidate_ready ? "yes" : "no"}; publish ready: ${receipt.publish_ready ? "yes" : "no"}\n`);
     if (receipt.result !== "passed" || (options.tag && !receipt.publish_ready)) process.exitCode = 1;

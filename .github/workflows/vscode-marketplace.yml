@@ -285,10 +285,17 @@ jobs:
           verifyReleaseGate(releaseGate);
           verifyMatrix(releaseGate.matrix);
           const matrix = releaseGate.matrix;
-          if (releaseGate.result !== "passed" || releaseGate.publish_ready !== true) {
-            throw new Error("root release gate is not publish-ready");
+          if (releaseGate.result !== "passed"
+            || releaseGate.candidate_ready !== true
+            || releaseGate.publish_ready !== false) {
+            throw new Error("root release gate is not candidate-ready and npm-publish-neutral");
           }
-          if (releaseGate.source?.commit !== process.env.GITHUB_SHA || releaseGate.source?.clean !== true) {
+          if (releaseGate.source?.commit !== process.env.GITHUB_SHA
+            || releaseGate.source?.commit_after !== process.env.GITHUB_SHA
+            || releaseGate.source?.clean !== true
+            || releaseGate.source?.tag !== null
+            || releaseGate.source?.tag_matches_version !== null
+            || releaseGate.source?.tag_commit_matches !== null) {
             throw new Error("root release gate does not bind the extension release SHA");
           }
           if (matrix.result !== "passed" || matrix.release_ready !== true
@@ -599,7 +606,14 @@ jobs:
           const rootGate = JSON.parse(rootGateBytes);
           if (rootGate.content_hash !== manifest.root_release_gate.content_hash
             || rootGate.matrix?.content_hash !== manifest.root_release_gate.matrix_content_hash
-            || rootGate.result !== "passed" || rootGate.publish_ready !== true) {
+            || rootGate.result !== "passed"
+            || rootGate.candidate_ready !== true
+            || rootGate.publish_ready !== false
+            || rootGate.source?.commit !== manifest.source.commit
+            || rootGate.source?.commit_after !== manifest.source.commit
+            || rootGate.source?.tag !== null
+            || rootGate.source?.tag_matches_version !== null
+            || rootGate.source?.tag_commit_matches !== null) {
             throw new Error("root release-gate evidence diverged after validation");
           }
 
