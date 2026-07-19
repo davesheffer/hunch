@@ -1,83 +1,991 @@
+# One-time GitHub setup:
+# - Create the protected `vscode-publish` environment.
+# - Define only environment secrets `VSCODE_PUBLISH_VSCE_PAT` and
+#   `VSCODE_PUBLISH_OVSX_PAT` there.
+# - Delete repository/organization copies and the legacy `VSCE_PAT`/`OVSX_PAT`
+#   names. Historical workflow revisions lack both this environment and these
+#   names, so they receive no publisher credential.
 name: VS Code Marketplace
 
 on:
-  workflow_dispatch:
   push:
-    tags: ["vscode-v*"]
+    tags: ["vscode-v[0-9]*"]
 
 permissions:
   contents: read
 
+# Extension releases share one lane so an older tag cannot race a newer one at
+# either registry. A failed registry can be retried without rebuilding the VSIX.
 concurrency:
-  group: vscode-marketplace-${{ github.ref_name }}
+  group: hunch-vscode-marketplace
   cancel-in-progress: false
 
 jobs:
-  publish:
+  validate:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: vscode-extension
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          fetch-depth: 0
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: 22
+          registry-url: https://registry.npmjs.org
           cache: npm
-          cache-dependency-path: vscode-extension/package-lock.json
+          cache-dependency-path: |
+            package-lock.json
+            vscode-extension/package-lock.json
+            tooling/vscode-publish-tools/package-lock.json
 
-      - name: Install (locked)
-        run: npm ci
-
-      - name: Verify tag matches extension version
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Bind the exact extension-version tag to HEAD
         shell: bash
         run: |
-          EXPECTED="vscode-v$(node -p "require('./package.json').version")"
-          test "$GITHUB_REF_NAME" = "$EXPECTED" || {
-            echo "Tag $GITHUB_REF_NAME does not match $EXPECTED" >&2
+          set -euo pipefail
+          EXTENSION_VERSION="$(node -p "require('./vscode-extension/package.json').version")"
+          EXPECTED_TAG="vscode-v${EXTENSION_VERSION}"
+          if [[ "${GITHUB_REF_TYPE}" != "tag" || "${GITHUB_REF_NAME}" != "${EXPECTED_TAG}" || "${GITHUB_REF}" != "refs/tags/${EXPECTED_TAG}" ]]; then
+            echo "Release ref ${GITHUB_REF} does not exactly match extension version tag ${EXPECTED_TAG}." >&2
             exit 1
-          }
+          fi
+          TAG_COMMIT="$(git rev-list -n 1 "${EXPECTED_TAG}")"
+          HEAD_COMMIT="$(git rev-parse HEAD)"
+          if [[ "${TAG_COMMIT}" != "${HEAD_COMMIT}" || "${GITHUB_SHA}" != "${HEAD_COMMIT}" ]]; then
+            echo "Extension tag ${EXPECTED_TAG}, workflow SHA ${GITHUB_SHA}, and HEAD ${HEAD_COMMIT} do not resolve to one commit." >&2
+            exit 1
+          fi
 
-      - name: Build
+      - name: Install root (locked; no registry credentials)
+        run: npm ci
+
+      - name: Run the full root release gate (includes Matrix)
+        run: npm run gate:release -- --output vscode-release-gate.json
+
+      - name: Install extension (locked; no registry credentials)
+        working-directory: vscode-extension
+        run: npm ci
+
+      - name: Build extension
+        working-directory: vscode-extension
         run: npm run build
 
-      - name: Package artifact
-        run: npx --yes @vscode/vsce package --out hunch-vscode.vsix
+      - name: Install the reviewed locked publisher tools (no registry credentials)
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci --ignore-scripts \
+            --prefix tooling/vscode-publish-tools \
+            --registry=https://registry.npmjs.org/
+          test "$(node -p "require('./tooling/vscode-publish-tools/node_modules/@vscode/vsce/package.json').version")" = "3.9.2"
+          test "$(node -p "require('./tooling/vscode-publish-tools/node_modules/ovsx/package.json').version")" = "1.0.2"
 
-      - name: Upload VSIX
-        uses: actions/upload-artifact@v4
+      - name: Package one exact VSIX and write its receipt
+        shell: bash
+        run: |
+          set -euo pipefail
+          CANDIDATE_DIR="${GITHUB_WORKSPACE}/vscode-release-candidate"
+          EXTENSION_VERSION="$(node -p "require('./vscode-extension/package.json').version")"
+          VSIX_FILENAME="hunch-vscode-${EXTENSION_VERSION}.vsix"
+          mkdir -p "${CANDIDATE_DIR}"
+          test -z "$(find "${CANDIDATE_DIR}" -mindepth 1 -maxdepth 1 -print -quit)"
+          (
+            cd vscode-extension
+            "${GITHUB_WORKSPACE}/tooling/vscode-publish-tools/node_modules/.bin/vsce" package \
+              --out "${CANDIDATE_DIR}/${VSIX_FILENAME}"
+          )
+          node --input-type=module <<'NODE'
+          import { createHash } from "node:crypto";
+          import { spawnSync } from "node:child_process";
+          import {
+            copyFileSync,
+            mkdirSync,
+            readFileSync,
+            readdirSync,
+            statSync,
+            writeFileSync,
+          } from "node:fs";
+          import { basename, dirname, resolve } from "node:path";
+
+          const candidateDirectory = resolve("vscode-release-candidate");
+          const stable = (value) => {
+            if (Array.isArray(value)) return value.map(stable);
+            if (value && typeof value === "object") {
+              return Object.fromEntries(Object.keys(value).sort().map((key) => [key, stable(value[key])]));
+            }
+            return value;
+          };
+          const sha256 = (value) => `sha256:${createHash("sha256").update(value).digest("hex")}`;
+          const contentHash = (body) => sha256(JSON.stringify(stable(body)));
+          const inspectVsixEntries = (vsixPath) => {
+            const python = String.raw`
+          import json, sys, zipfile
+          with zipfile.ZipFile(sys.argv[1], "r") as archive:
+              entries = [
+                  {
+                      "path": item.filename,
+                      "size": item.file_size,
+                      "compressed_size": item.compress_size,
+                      "crc32": f"{item.CRC:08x}",
+                      "is_dir": item.is_dir(),
+                      "create_system": item.create_system,
+                      "unix_mode": (item.external_attr >> 16) & 0xffff,
+                  }
+                  for item in archive.infolist()
+              ]
+              print(json.dumps(entries, separators=(",", ":")))
+          `;
+            const listed = spawnSync("python3", ["-c", python, vsixPath], {
+              encoding: "utf8",
+              maxBuffer: 10 * 1024 * 1024,
+            });
+            if (listed.status !== 0) throw new Error(`could not inspect VSIX central directory: ${listed.stderr.trim()}`);
+            const rawEntries = JSON.parse(listed.stdout);
+            if (!Array.isArray(rawEntries) || rawEntries.length < 5 || rawEntries.length > 1_000) {
+              throw new Error(`refusing implausible VSIX entry count ${String(rawEntries?.length)}`);
+            }
+
+            const exactPaths = new Set();
+            const foldedPaths = new Set();
+            let totalUncompressed = 0;
+            const inventory = rawEntries.map((entry) => {
+              const path = String(entry.path ?? "");
+              const size = Number(entry.size);
+              const compressedSize = Number(entry.compressed_size);
+              const isDirectory = entry.is_dir === true;
+              const createSystem = Number(entry.create_system);
+              const unixMode = Number(entry.unix_mode);
+              if (!path || path !== path.normalize("NFC") || /[\0\r\n\\]/.test(path)
+                || path.startsWith("/") || /^[A-Za-z]:/.test(path)) {
+                throw new Error(`refusing unsafe or non-normalized VSIX path ${JSON.stringify(path)}`);
+              }
+              const segments = path.split("/");
+              if (isDirectory && segments.at(-1) === "") segments.pop();
+              if (segments.length === 0 || segments.some((segment) => !segment || segment === "." || segment === "..")) {
+                throw new Error(`refusing traversing VSIX path ${JSON.stringify(path)}`);
+              }
+              if (isDirectory !== path.endsWith("/")) throw new Error(`VSIX directory marker mismatch for ${path}`);
+              if (!Number.isSafeInteger(size) || size < 0 || !Number.isSafeInteger(compressedSize) || compressedSize < 0) {
+                throw new Error(`invalid VSIX entry size for ${path}`);
+              }
+              const fileType = unixMode & 0o170000;
+              const expectedFileType = isDirectory ? 0o040000 : 0o100000;
+              if (!Number.isSafeInteger(createSystem) || !Number.isSafeInteger(unixMode)
+                || (fileType !== 0 && fileType !== expectedFileType)) {
+                throw new Error(`symlink or special-mode ZIP entry is forbidden: ${path}`);
+              }
+              if (isDirectory && size !== 0) throw new Error(`VSIX directory carries data: ${path}`);
+              totalUncompressed += size;
+              if (totalUncompressed > 100 * 1024 * 1024) throw new Error("VSIX expands beyond the 100 MiB release limit");
+
+              const folded = path.toLowerCase();
+              if (exactPaths.has(path) || foldedPaths.has(folded)) throw new Error(`duplicate or case-colliding VSIX path ${path}`);
+              exactPaths.add(path);
+              foldedPaths.add(folded);
+
+              const foldedSegments = segments.map((segment) => segment.toLowerCase());
+              const denied = foldedSegments.some((segment) => segment === ".git"
+                || segment === ".github"
+                || segment === ".cache"
+                || segment.endsWith(".cache")
+                || segment === "__pycache__"
+                || segment === ".pytest_cache"
+                || segment === ".mypy_cache"
+                || segment === ".ruff_cache"
+                || segment === "node_modules"
+                || segment === "wiki"
+                || segment === "private"
+                || segment === ".private"
+                || segment === "secrets"
+                || segment === "credentials"
+                || segment === ".npmrc"
+                || segment === ".netrc"
+                || segment.startsWith(".hunch")
+                || segment === ".env"
+                || segment.startsWith(".env."));
+              const leaf = foldedSegments.at(-1) ?? "";
+              if (denied
+                || /^(?:secrets?|credentials?|passwords?|tokens?|api[-_]?keys?|private[-_]?keys?)(?:\..+)?$/.test(leaf)
+                || /^(?:id_rsa|id_dsa|id_ecdsa|id_ed25519)(?:\.pub)?$/.test(leaf)
+                || /\.(?:pem|key|p12|pfx|jks|keystore|map|ts|tsx)$/.test(leaf)) {
+                throw new Error(`sensitive/private/cache path is forbidden in VSIX: ${path}`);
+              }
+
+              const rootMetadata = path === "[Content_Types].xml" || path === "extension.vsixmanifest";
+              const extensionRootFile = /^extension\/(?:package\.json|license\.txt|readme\.md|changelog\.md|package\.nls(?:\.[a-z0-9-]+)?\.json)$/i.test(path);
+              const compiledFile = /^extension\/dist\/.+\.(?:js|json|wasm|node)$/i.test(path);
+              const mediaFile = /^extension\/media\/.+\.(?:png|jpe?g|gif|webp|svg|md)$/i.test(path);
+              const allowedDirectory = isDirectory && (path === "extension/"
+                || path.startsWith("extension/dist/")
+                || path.startsWith("extension/media/"));
+              if (!(rootMetadata || extensionRootFile || compiledFile || mediaFile || allowedDirectory)) {
+                throw new Error(`VSIX path is outside the reviewed allowlist: ${path}`);
+              }
+              return {
+                path,
+                size,
+                compressed_size: compressedSize,
+                crc32: String(entry.crc32),
+                is_dir: isDirectory,
+                create_system: createSystem,
+                unix_mode: unixMode,
+              };
+            });
+            for (const required of ["[Content_Types].xml", "extension.vsixmanifest", "extension/package.json"]) {
+              if (!exactPaths.has(required)) throw new Error(`VSIX is missing required entry ${required}`);
+            }
+            return inventory.sort((left, right) => left.path < right.path ? -1 : left.path > right.path ? 1 : 0);
+          };
+          const verifyReleaseGate = (releaseGate) => {
+            if (!releaseGate || typeof releaseGate !== "object") throw new Error("root release-gate receipt is not an object");
+            const { id, content_hash: observedContentHash, ...body } = releaseGate;
+            const expectedContentHash = contentHash(body);
+            if (observedContentHash !== expectedContentHash
+              || id !== `release_${expectedContentHash.slice("sha256:".length, "sha256:".length + 12)}`) {
+              throw new Error("root release-gate receipt content hash is invalid");
+            }
+          };
+          const verifyMatrix = (matrix) => {
+            if (!matrix || typeof matrix !== "object") throw new Error("root release gate has no Matrix receipt");
+            const { content_hash: observedContentHash, ...body } = matrix;
+            if (observedContentHash !== contentHash(body)) throw new Error("Matrix receipt content hash is invalid");
+          };
+
+          const extension = JSON.parse(readFileSync("vscode-extension/package.json", "utf8"));
+          if (extension.name !== "hunch-vscode" || extension.publisher !== "davesheffer") {
+            throw new Error("refusing unexpected VS Code extension identity");
+          }
+          const expectedTag = `vscode-v${extension.version}`;
+          if (process.env.GITHUB_REF_TYPE !== "tag"
+            || process.env.GITHUB_REF_NAME !== expectedTag
+            || process.env.GITHUB_REF !== `refs/tags/${expectedTag}`) {
+            throw new Error("extension version, release ref, and tag diverged before packaging");
+          }
+
+          const vsixFiles = readdirSync(candidateDirectory).filter((name) => name.endsWith(".vsix"));
+          if (vsixFiles.length !== 1) throw new Error(`expected exactly one VSIX, found ${vsixFiles.length}`);
+          const expectedFilename = `hunch-vscode-${extension.version}.vsix`;
+          if (vsixFiles[0] !== expectedFilename || basename(vsixFiles[0]) !== vsixFiles[0]) {
+            throw new Error("VSIX filename does not bind the extension version");
+          }
+          const vsixPath = resolve(candidateDirectory, vsixFiles[0]);
+          if (dirname(vsixPath) !== candidateDirectory) throw new Error("unsafe VSIX path");
+          const vsixBytes = readFileSync(vsixPath);
+          const vsixSha256 = sha256(vsixBytes);
+          const vsixEntryManifest = inspectVsixEntries(vsixPath);
+          const vsixEntryManifestSha256 = sha256(JSON.stringify(vsixEntryManifest));
+          const expectedMain = `extension/${String(extension.main ?? "").replace(/^\.\//, "")}`;
+          if (!vsixEntryManifest.some((entry) => entry.path === expectedMain && entry.is_dir === false)) {
+            throw new Error(`VSIX does not contain declared extension main ${expectedMain}`);
+          }
+
+          const releaseGateBytes = readFileSync("vscode-release-gate.json");
+          const releaseGate = JSON.parse(releaseGateBytes);
+          verifyReleaseGate(releaseGate);
+          verifyMatrix(releaseGate.matrix);
+          const matrix = releaseGate.matrix;
+          if (releaseGate.result !== "passed" || releaseGate.publish_ready !== true) {
+            throw new Error("root release gate is not publish-ready");
+          }
+          if (releaseGate.source?.commit !== process.env.GITHUB_SHA || releaseGate.source?.clean !== true) {
+            throw new Error("root release gate does not bind the extension release SHA");
+          }
+          if (matrix.result !== "passed" || matrix.release_ready !== true
+            || matrix.source?.candidate_commit !== process.env.GITHUB_SHA
+            || matrix.source?.candidate_clean !== true) {
+            throw new Error("Matrix receipt does not bind the extension release SHA");
+          }
+
+          const publisherToolsPackageBytes = readFileSync("tooling/vscode-publish-tools/package.json");
+          const publisherToolsLockBytes = readFileSync("tooling/vscode-publish-tools/package-lock.json");
+          const publisherToolsPackage = JSON.parse(publisherToolsPackageBytes);
+          const publisherToolsLock = JSON.parse(publisherToolsLockBytes);
+          const lockedPackages = publisherToolsLock.packages;
+          if (publisherToolsPackage.private !== true
+            || publisherToolsPackage.dependencies?.["@vscode/vsce"] !== "3.9.2"
+            || publisherToolsPackage.dependencies?.ovsx !== "1.0.2"
+            || publisherToolsLock.lockfileVersion !== 3
+            || publisherToolsLock.packages?.[""]?.dependencies?.["@vscode/vsce"] !== "3.9.2"
+            || publisherToolsLock.packages?.[""]?.dependencies?.ovsx !== "1.0.2") {
+            throw new Error("publisher tool manifest and lock do not contain the reviewed exact versions");
+          }
+          if (lockedPackages?.["node_modules/@vscode/vsce"]?.version !== "3.9.2"
+            || lockedPackages["node_modules/@vscode/vsce"].integrity !== "sha512-XSxMosEEDO6vLxELAHVkwmhC0qe0ijZni2jB9Rcs8kQsW4lhTDQ/wMzmwFs/buotAWSnpmUp/dRWD2ufG3UYKA=="
+            || lockedPackages?.["node_modules/ovsx"]?.version !== "1.0.2"
+            || lockedPackages["node_modules/ovsx"].integrity !== "sha512-N0gWlINGgoOA2Sn0AhrF9L3ap40a/QbsFUpMDKR+CKYyZGJeTFEoNGngplLHjAYtcjrrZv2jX2K7ktPzxWjPNg==") {
+            throw new Error("publisher CLI package integrity diverges from the reviewed lock");
+          }
+          for (const [path, entry] of Object.entries(lockedPackages)) {
+            if (!path) continue;
+            if (!entry.version || !entry.integrity || !String(entry.resolved ?? "").startsWith("https://registry.npmjs.org/")) {
+              throw new Error(`publisher dependency is not fully locked to the official npm registry: ${path}`);
+            }
+          }
+
+          copyFileSync("vscode-release-gate.json", resolve(candidateDirectory, "root-release-gate.json"));
+          const publisherToolsDirectory = resolve(candidateDirectory, "publish-tools");
+          mkdirSync(publisherToolsDirectory);
+          copyFileSync("tooling/vscode-publish-tools/package.json", resolve(publisherToolsDirectory, "package.json"));
+          copyFileSync("tooling/vscode-publish-tools/package-lock.json", resolve(publisherToolsDirectory, "package-lock.json"));
+          const body = {
+            schema: "hunch.vscode-release-candidate.v1",
+            extension: {
+              name: extension.name,
+              publisher: extension.publisher,
+              version: extension.version,
+            },
+            source: {
+              repository: "davesheffer/hunch",
+              commit: process.env.GITHUB_SHA,
+              ref: process.env.GITHUB_REF,
+              tag: process.env.GITHUB_REF_NAME,
+              workflow: ".github/workflows/vscode-marketplace.yml",
+            },
+            publisher_tools: {
+              package_json_sha256: sha256(publisherToolsPackageBytes),
+              package_lock_sha256: sha256(publisherToolsLockBytes),
+              locked_package_count: Object.keys(lockedPackages).length,
+              vsce: {
+                package: "@vscode/vsce",
+                version: "3.9.2",
+                integrity: "sha512-XSxMosEEDO6vLxELAHVkwmhC0qe0ijZni2jB9Rcs8kQsW4lhTDQ/wMzmwFs/buotAWSnpmUp/dRWD2ufG3UYKA==",
+              },
+              ovsx: {
+                package: "ovsx",
+                version: "1.0.2",
+                integrity: "sha512-N0gWlINGgoOA2Sn0AhrF9L3ap40a/QbsFUpMDKR+CKYyZGJeTFEoNGngplLHjAYtcjrrZv2jX2K7ktPzxWjPNg==",
+              },
+            },
+            root_release_gate: {
+              content_hash: releaseGate.content_hash,
+              matrix_content_hash: matrix.content_hash,
+              file_sha256: sha256(releaseGateBytes),
+            },
+            artifact: {
+              filename: vsixFiles[0],
+              size: statSync(vsixPath).size,
+              sha256: vsixSha256,
+              entry_count: vsixEntryManifest.length,
+              entry_manifest_sha256: vsixEntryManifestSha256,
+              entry_manifest: vsixEntryManifest,
+            },
+          };
+          writeFileSync(
+            resolve(candidateDirectory, "vscode-release-candidate-manifest.json"),
+            JSON.stringify({ ...body, content_hash: contentHash(body) }, null, 2) + "\n",
+          );
+          NODE
+
+      - name: Upload immutable VSIX candidate
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: hunch-vscode-${{ github.ref_name }}-${{ github.run_id }}
-          path: vscode-extension/hunch-vscode.vsix
+          name: vscode-release-candidate-${{ github.run_id }}
+          path: vscode-release-candidate
           if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+          overwrite: true
 
-      # Each registry publishes independently: an expired or missing token for one
-      # must never block the other (an existing-but-dead secret still runs its step,
-      # so failure isolation needs continue-on-error, not just a presence check).
-      # The final step demands that at least ONE registry actually succeeded.
+  publish:
+    needs: validate
+    runs-on: ubuntu-latest
+    environment: vscode-publish
+    permissions:
+      contents: read
+    steps:
+      - name: Download exact validated VSIX candidate
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: vscode-release-candidate-${{ github.run_id }}
+          path: vscode-release-candidate
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - name: Verify exact candidate before registry access
+        id: candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import { createHash } from "node:crypto";
+          import { spawnSync } from "node:child_process";
+          import { appendFileSync, readFileSync, readdirSync, statSync } from "node:fs";
+          import { basename, dirname, resolve } from "node:path";
+
+          const candidateDirectory = resolve("vscode-release-candidate");
+          const stable = (value) => {
+            if (Array.isArray(value)) return value.map(stable);
+            if (value && typeof value === "object") {
+              return Object.fromEntries(Object.keys(value).sort().map((key) => [key, stable(value[key])]));
+            }
+            return value;
+          };
+          const sha256 = (value) => `sha256:${createHash("sha256").update(value).digest("hex")}`;
+          const contentHash = (body) => sha256(JSON.stringify(stable(body)));
+          const inspectVsixEntries = (vsixPath) => {
+            const python = String.raw`
+          import json, sys, zipfile
+          with zipfile.ZipFile(sys.argv[1], "r") as archive:
+              entries = [
+                  {
+                      "path": item.filename,
+                      "size": item.file_size,
+                      "compressed_size": item.compress_size,
+                      "crc32": f"{item.CRC:08x}",
+                      "is_dir": item.is_dir(),
+                      "create_system": item.create_system,
+                      "unix_mode": (item.external_attr >> 16) & 0xffff,
+                  }
+                  for item in archive.infolist()
+              ]
+              print(json.dumps(entries, separators=(",", ":")))
+          `;
+            const listed = spawnSync("python3", ["-c", python, vsixPath], {
+              encoding: "utf8",
+              maxBuffer: 10 * 1024 * 1024,
+            });
+            if (listed.status !== 0) throw new Error(`could not inspect VSIX central directory: ${listed.stderr.trim()}`);
+            const rawEntries = JSON.parse(listed.stdout);
+            if (!Array.isArray(rawEntries) || rawEntries.length < 5 || rawEntries.length > 1_000) {
+              throw new Error(`refusing implausible VSIX entry count ${String(rawEntries?.length)}`);
+            }
+
+            const exactPaths = new Set();
+            const foldedPaths = new Set();
+            let totalUncompressed = 0;
+            const inventory = rawEntries.map((entry) => {
+              const path = String(entry.path ?? "");
+              const size = Number(entry.size);
+              const compressedSize = Number(entry.compressed_size);
+              const isDirectory = entry.is_dir === true;
+              const createSystem = Number(entry.create_system);
+              const unixMode = Number(entry.unix_mode);
+              if (!path || path !== path.normalize("NFC") || /[\0\r\n\\]/.test(path)
+                || path.startsWith("/") || /^[A-Za-z]:/.test(path)) {
+                throw new Error(`refusing unsafe or non-normalized VSIX path ${JSON.stringify(path)}`);
+              }
+              const segments = path.split("/");
+              if (isDirectory && segments.at(-1) === "") segments.pop();
+              if (segments.length === 0 || segments.some((segment) => !segment || segment === "." || segment === "..")) {
+                throw new Error(`refusing traversing VSIX path ${JSON.stringify(path)}`);
+              }
+              if (isDirectory !== path.endsWith("/")) throw new Error(`VSIX directory marker mismatch for ${path}`);
+              if (!Number.isSafeInteger(size) || size < 0 || !Number.isSafeInteger(compressedSize) || compressedSize < 0) {
+                throw new Error(`invalid VSIX entry size for ${path}`);
+              }
+              const fileType = unixMode & 0o170000;
+              const expectedFileType = isDirectory ? 0o040000 : 0o100000;
+              if (!Number.isSafeInteger(createSystem) || !Number.isSafeInteger(unixMode)
+                || (fileType !== 0 && fileType !== expectedFileType)) {
+                throw new Error(`symlink or special-mode ZIP entry is forbidden: ${path}`);
+              }
+              if (isDirectory && size !== 0) throw new Error(`VSIX directory carries data: ${path}`);
+              totalUncompressed += size;
+              if (totalUncompressed > 100 * 1024 * 1024) throw new Error("VSIX expands beyond the 100 MiB release limit");
+
+              const folded = path.toLowerCase();
+              if (exactPaths.has(path) || foldedPaths.has(folded)) throw new Error(`duplicate or case-colliding VSIX path ${path}`);
+              exactPaths.add(path);
+              foldedPaths.add(folded);
+
+              const foldedSegments = segments.map((segment) => segment.toLowerCase());
+              const denied = foldedSegments.some((segment) => segment === ".git"
+                || segment === ".github"
+                || segment === ".cache"
+                || segment.endsWith(".cache")
+                || segment === "__pycache__"
+                || segment === ".pytest_cache"
+                || segment === ".mypy_cache"
+                || segment === ".ruff_cache"
+                || segment === "node_modules"
+                || segment === "wiki"
+                || segment === "private"
+                || segment === ".private"
+                || segment === "secrets"
+                || segment === "credentials"
+                || segment === ".npmrc"
+                || segment === ".netrc"
+                || segment.startsWith(".hunch")
+                || segment === ".env"
+                || segment.startsWith(".env."));
+              const leaf = foldedSegments.at(-1) ?? "";
+              if (denied
+                || /^(?:secrets?|credentials?|passwords?|tokens?|api[-_]?keys?|private[-_]?keys?)(?:\..+)?$/.test(leaf)
+                || /^(?:id_rsa|id_dsa|id_ecdsa|id_ed25519)(?:\.pub)?$/.test(leaf)
+                || /\.(?:pem|key|p12|pfx|jks|keystore|map|ts|tsx)$/.test(leaf)) {
+                throw new Error(`sensitive/private/cache path is forbidden in VSIX: ${path}`);
+              }
+
+              const rootMetadata = path === "[Content_Types].xml" || path === "extension.vsixmanifest";
+              const extensionRootFile = /^extension\/(?:package\.json|license\.txt|readme\.md|changelog\.md|package\.nls(?:\.[a-z0-9-]+)?\.json)$/i.test(path);
+              const compiledFile = /^extension\/dist\/.+\.(?:js|json|wasm|node)$/i.test(path);
+              const mediaFile = /^extension\/media\/.+\.(?:png|jpe?g|gif|webp|svg|md)$/i.test(path);
+              const allowedDirectory = isDirectory && (path === "extension/"
+                || path.startsWith("extension/dist/")
+                || path.startsWith("extension/media/"));
+              if (!(rootMetadata || extensionRootFile || compiledFile || mediaFile || allowedDirectory)) {
+                throw new Error(`VSIX path is outside the reviewed allowlist: ${path}`);
+              }
+              return {
+                path,
+                size,
+                compressed_size: compressedSize,
+                crc32: String(entry.crc32),
+                is_dir: isDirectory,
+                create_system: createSystem,
+                unix_mode: unixMode,
+              };
+            });
+            for (const required of ["[Content_Types].xml", "extension.vsixmanifest", "extension/package.json"]) {
+              if (!exactPaths.has(required)) throw new Error(`VSIX is missing required entry ${required}`);
+            }
+            return inventory.sort((left, right) => left.path < right.path ? -1 : left.path > right.path ? 1 : 0);
+          };
+
+          const entries = readdirSync(candidateDirectory).sort();
+          const vsixFiles = entries.filter((name) => name.endsWith(".vsix"));
+          if (vsixFiles.length !== 1 || entries.length !== 4
+            || !entries.includes("publish-tools")
+            || !entries.includes("root-release-gate.json")
+            || !entries.includes("vscode-release-candidate-manifest.json")) {
+            throw new Error("downloaded candidate must contain one VSIX, two receipts, and the publisher-tool lock");
+          }
+          const manifest = JSON.parse(readFileSync(resolve(candidateDirectory, "vscode-release-candidate-manifest.json"), "utf8"));
+          const { content_hash: observedContentHash, ...body } = manifest;
+          if (manifest.schema !== "hunch.vscode-release-candidate.v1"
+            || observedContentHash !== contentHash(body)) {
+            throw new Error("VSIX candidate receipt content hash is invalid");
+          }
+          if (manifest.source?.repository !== "davesheffer/hunch"
+            || manifest.source.commit !== process.env.GITHUB_SHA
+            || manifest.source.ref !== process.env.GITHUB_REF
+            || manifest.source.tag !== process.env.GITHUB_REF_NAME
+            || process.env.GITHUB_REF_NAME !== `vscode-v${manifest.extension?.version}`) {
+            throw new Error("VSIX candidate receipt does not bind this exact tag and commit");
+          }
+          if (manifest.publisher_tools?.vsce?.package !== "@vscode/vsce"
+            || manifest.publisher_tools.vsce.version !== "3.9.2"
+            || manifest.publisher_tools?.ovsx?.package !== "ovsx"
+            || manifest.publisher_tools.ovsx.version !== "1.0.2") {
+            throw new Error("VSIX candidate does not bind both reviewed publisher CLI pins");
+          }
+
+          const filename = String(manifest.artifact?.filename ?? "");
+          if (filename !== vsixFiles[0] || basename(filename) !== filename) throw new Error("unsafe or mismatched VSIX filename");
+          const vsixPath = resolve(candidateDirectory, filename);
+          if (dirname(vsixPath) !== candidateDirectory) throw new Error("unsafe VSIX path");
+          const vsixBytes = readFileSync(vsixPath);
+          const actualVsixSha256 = sha256(vsixBytes);
+          if (actualVsixSha256 !== manifest.artifact.sha256
+            || statSync(vsixPath).size !== manifest.artifact.size) {
+            throw new Error("downloaded VSIX bytes do not match the validation receipt");
+          }
+          const actualEntryManifest = inspectVsixEntries(vsixPath);
+          const actualEntryManifestSha256 = sha256(JSON.stringify(actualEntryManifest));
+          if (actualEntryManifest.length !== manifest.artifact.entry_count
+            || actualEntryManifestSha256 !== manifest.artifact.entry_manifest_sha256
+            || JSON.stringify(actualEntryManifest) !== JSON.stringify(manifest.artifact.entry_manifest)) {
+            throw new Error("VSIX path inventory diverges from the reviewed allowlist receipt");
+          }
+
+          const rootGateBytes = readFileSync(resolve(candidateDirectory, "root-release-gate.json"));
+          if (sha256(rootGateBytes) !== manifest.root_release_gate?.file_sha256) {
+            throw new Error("downloaded root release-gate bytes do not match the VSIX receipt");
+          }
+          const rootGate = JSON.parse(rootGateBytes);
+          if (rootGate.content_hash !== manifest.root_release_gate.content_hash
+            || rootGate.matrix?.content_hash !== manifest.root_release_gate.matrix_content_hash
+            || rootGate.result !== "passed" || rootGate.publish_ready !== true) {
+            throw new Error("root release-gate evidence diverged after validation");
+          }
+
+          const extracted = spawnSync("unzip", ["-p", vsixPath, "extension/package.json"], { encoding: "utf8" });
+          if (extracted.status !== 0) throw new Error(`could not inspect packaged extension manifest: ${extracted.stderr.trim()}`);
+          const packagedExtension = JSON.parse(extracted.stdout);
+          if (packagedExtension.name !== manifest.extension.name
+            || packagedExtension.publisher !== manifest.extension.publisher
+            || packagedExtension.version !== manifest.extension.version) {
+            throw new Error("packaged extension identity diverges from the signed-off receipt");
+          }
+          const expectedMain = `extension/${String(packagedExtension.main ?? "").replace(/^\.\//, "")}`;
+          if (!actualEntryManifest.some((entry) => entry.path === expectedMain && entry.is_dir === false)) {
+            throw new Error(`VSIX does not contain declared extension main ${expectedMain}`);
+          }
+
+          const publisherToolsDirectory = resolve(candidateDirectory, "publish-tools");
+          const publisherToolFiles = readdirSync(publisherToolsDirectory).sort();
+          if (JSON.stringify(publisherToolFiles) !== JSON.stringify(["package-lock.json", "package.json"])) {
+            throw new Error("publisher-tool artifact contains files outside its reviewed manifest and lock");
+          }
+          const publisherToolsPackageBytes = readFileSync(resolve(publisherToolsDirectory, "package.json"));
+          const publisherToolsLockBytes = readFileSync(resolve(publisherToolsDirectory, "package-lock.json"));
+          if (sha256(publisherToolsPackageBytes) !== manifest.publisher_tools.package_json_sha256
+            || sha256(publisherToolsLockBytes) !== manifest.publisher_tools.package_lock_sha256) {
+            throw new Error("publisher-tool manifest or lock bytes changed after validation");
+          }
+          const publisherToolsPackage = JSON.parse(publisherToolsPackageBytes);
+          const publisherToolsLock = JSON.parse(publisherToolsLockBytes);
+          if (publisherToolsPackage.private !== true
+            || publisherToolsPackage.dependencies?.["@vscode/vsce"] !== "3.9.2"
+            || publisherToolsPackage.dependencies?.ovsx !== "1.0.2"
+            || publisherToolsLock.lockfileVersion !== 3
+            || publisherToolsLock.packages?.[""]?.dependencies?.["@vscode/vsce"] !== "3.9.2"
+            || publisherToolsLock.packages?.[""]?.dependencies?.ovsx !== "1.0.2"
+            || Object.keys(publisherToolsLock.packages ?? {}).length !== manifest.publisher_tools.locked_package_count) {
+            throw new Error("publisher-tool lock identity changed after validation");
+          }
+          for (const [path, entry] of Object.entries(publisherToolsLock.packages)) {
+            if (!path) continue;
+            if (!entry.version || !entry.integrity || !String(entry.resolved ?? "").startsWith("https://registry.npmjs.org/")) {
+              throw new Error(`publisher dependency is not fully locked to the official npm registry: ${path}`);
+            }
+          }
+
+          appendFileSync(process.env.GITHUB_OUTPUT, `vsix_path=${vsixPath}\n`);
+          appendFileSync(process.env.GITHUB_OUTPUT, `vsix_sha256=${actualVsixSha256}\n`);
+          appendFileSync(process.env.GITHUB_OUTPUT, `entry_manifest_sha256=${actualEntryManifestSha256}\n`);
+          appendFileSync(process.env.GITHUB_OUTPUT, `extension_identity=${manifest.extension.publisher}.${manifest.extension.name}\n`);
+          appendFileSync(process.env.GITHUB_OUTPUT, `extension_version=${manifest.extension.version}\n`);
+          NODE
+
+      - name: Query exact public registry state (idempotency preflight)
+        id: registry-preflight
+        shell: bash
+        env:
+          EXTENSION_IDENTITY: ${{ steps.candidate.outputs.extension_identity }}
+          EXTENSION_VERSION: ${{ steps.candidate.outputs.extension_version }}
+          VSIX_SHA256: ${{ steps.candidate.outputs.vsix_sha256 }}
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import { createHash } from "node:crypto";
+          import { appendFileSync } from "node:fs";
+
+          const IDENTITY = "davesheffer.hunch-vscode";
+          const PUBLISHER = "davesheffer";
+          const NAME = "hunch-vscode";
+          const version = process.env.EXTENSION_VERSION;
+          const expectedVsixSha256 = process.env.VSIX_SHA256;
+          if (process.env.EXTENSION_IDENTITY !== IDENTITY || !/^\d+\.\d+\.\d+$/.test(version ?? "")
+            || !/^sha256:[0-9a-f]{64}$/.test(expectedVsixSha256 ?? "")) {
+            throw new Error("refusing invalid extension identity, Marketplace version, or VSIX digest");
+          }
+          const verifyRegistryAsset = async (label, assetUrl) => {
+            let parsed;
+            try {
+              parsed = new URL(assetUrl);
+            } catch {
+              throw new Error(`${label} returned an invalid VSIX asset URL`);
+            }
+            if (parsed.protocol !== "https:") throw new Error(`${label} returned a non-HTTPS VSIX asset URL`);
+            const response = await fetch(parsed, { signal: AbortSignal.timeout(30_000) });
+            if (!response.ok) throw new Error(`${label} VSIX download failed closed: HTTP ${response.status}`);
+            const bytes = Buffer.from(await response.arrayBuffer());
+            if (bytes.length === 0 || bytes.length > 100 * 1024 * 1024) throw new Error(`${label} returned an invalid VSIX size`);
+            const assetSha256 = `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
+            if (assetSha256 !== expectedVsixSha256) {
+              throw new Error(`${label} exact version exists with different VSIX bytes (${assetSha256})`);
+            }
+            return { asset_url: parsed.href, resolved_asset_url: response.url, asset_sha256: assetSha256, asset_size: bytes.length };
+          };
+
+          const checkMarketplace = async () => {
+            const endpoint = "https://marketplace.visualstudio.com/_apis/public/gallery/extensionquery";
+            const response = await fetch(endpoint, {
+              method: "POST",
+              headers: {
+                Accept: "application/json;api-version=3.0-preview.1",
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                filters: [{ pageNumber: 1, pageSize: 1, criteria: [{ filterType: 7, value: IDENTITY }] }],
+                assetTypes: [],
+                flags: 19,
+              }),
+              signal: AbortSignal.timeout(15_000),
+            });
+            if (!response.ok) throw new Error(`VS Code Marketplace query failed closed: HTTP ${response.status}`);
+            const payload = await response.json();
+            const extensions = payload.results?.[0]?.extensions ?? [];
+            if (!Array.isArray(extensions) || extensions.length > 1) throw new Error("VS Code Marketplace returned an ambiguous identity");
+            if (extensions.length === 0) return { present: false };
+            const extension = extensions[0];
+            if (`${extension.publisher?.publisherName}.${extension.extensionName}`.toLowerCase() !== IDENTITY) {
+              throw new Error("VS Code Marketplace returned a mismatched extension identity");
+            }
+            const exactVersions = (extension.versions ?? []).filter((candidate) => candidate.version === version);
+            if (exactVersions.length === 0) return { present: false };
+            const universalVersions = exactVersions.filter((candidate) => !candidate.targetPlatform || candidate.targetPlatform === "universal");
+            if (universalVersions.length !== 1) throw new Error("VS Code Marketplace exact version has no unambiguous universal VSIX");
+            const asset = universalVersions[0].files?.find((file) => file.assetType === "Microsoft.VisualStudio.Services.VSIXPackage");
+            if (!asset?.source) throw new Error("VS Code Marketplace exact version has no VSIX package asset");
+            return { present: true, ...await verifyRegistryAsset("VS Code Marketplace", asset.source) };
+          };
+
+          const checkOpenVsx = async () => {
+            const endpoint = `https://open-vsx.org/api/${PUBLISHER}/${NAME}/${version}`;
+            const response = await fetch(endpoint, { signal: AbortSignal.timeout(15_000) });
+            if (response.status === 404) return { present: false };
+            if (!response.ok) throw new Error(`Open VSX query failed closed: HTTP ${response.status}`);
+            const extension = await response.json();
+            if (`${extension.namespace}.${extension.name}`.toLowerCase() !== IDENTITY || extension.version !== version) {
+              throw new Error("Open VSX returned a mismatched extension identity or version");
+            }
+            if (!extension.files?.download) throw new Error("Open VSX exact version has no VSIX download asset");
+            return { present: true, ...await verifyRegistryAsset("Open VSX", extension.files.download) };
+          };
+
+          const [marketplace, openVsx] = await Promise.all([checkMarketplace(), checkOpenVsx()]);
+          appendFileSync(process.env.GITHUB_OUTPUT, `marketplace_present=${marketplace.present}\n`);
+          appendFileSync(process.env.GITHUB_OUTPUT, `open_vsx_present=${openVsx.present}\n`);
+          NODE
+
+      - name: Install locked publisher clients (no registry credentials)
+        if: steps.registry-preflight.outputs.marketplace_present != 'true' || steps.registry-preflight.outputs.open_vsx_present != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci --ignore-scripts \
+            --prefix vscode-release-candidate/publish-tools \
+            --registry=https://registry.npmjs.org/
+          test "$(node -p "require('./vscode-release-candidate/publish-tools/node_modules/@vscode/vsce/package.json').version")" = "3.9.2"
+          test "$(node -p "require('./vscode-release-candidate/publish-tools/node_modules/ovsx/package.json').version")" = "1.0.2"
+
+      # Credentials exist only in their exact registry step. Each publication
+      # remains independent; final public queries require BOTH registries to
+      # converge on the exact identity and version.
       - name: Publish to VS Code Marketplace
         id: vsce
-        if: env.VSCE_PAT != ''
+        if: steps.registry-preflight.outputs.marketplace_present != 'true'
         continue-on-error: true
-        run: npx --yes @vscode/vsce publish --packagePath hunch-vscode.vsix --pat "$VSCE_PAT"
+        shell: bash
         env:
-          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+          VSCE_PAT: ${{ secrets.VSCODE_PUBLISH_VSCE_PAT }}
+          VSIX_PATH: ${{ steps.candidate.outputs.vsix_path }}
+        run: |
+          set -euo pipefail
+          test -n "${VSCE_PAT}" || { echo "VSCODE_PUBLISH_VSCE_PAT is not configured in the vscode-publish environment." >&2; exit 1; }
+          "${GITHUB_WORKSPACE}/vscode-release-candidate/publish-tools/node_modules/.bin/vsce" publish \
+            --packagePath "${VSIX_PATH}" \
+            --pat "${VSCE_PAT}"
 
       - name: Publish to Open VSX
         id: ovsx
-        if: env.OVSX_PAT != ''
+        if: steps.registry-preflight.outputs.open_vsx_present != 'true'
         continue-on-error: true
-        run: |
-          # namespace creation is one-time; an already-existing namespace must not fail the publish
-          npx --yes ovsx create-namespace davesheffer --pat "$OVSX_PAT" || true
-          npx --yes ovsx publish hunch-vscode.vsix --pat "$OVSX_PAT"
+        shell: bash
         env:
-          OVSX_PAT: ${{ secrets.OVSX_PAT }}
-
-      - name: Require at least one successful publish
-        if: steps.vsce.outcome != 'success' && steps.ovsx.outcome != 'success'
+          OVSX_PAT: ${{ secrets.VSCODE_PUBLISH_OVSX_PAT }}
+          VSIX_PATH: ${{ steps.candidate.outputs.vsix_path }}
         run: |
-          echo "No registry publish succeeded (vsce: ${{ steps.vsce.outcome }}, ovsx: ${{ steps.ovsx.outcome }})." >&2
-          exit 1
+          set -euo pipefail
+          test -n "${OVSX_PAT}" || { echo "VSCODE_PUBLISH_OVSX_PAT is not configured in the vscode-publish environment." >&2; exit 1; }
+          "${GITHUB_WORKSPACE}/vscode-release-candidate/publish-tools/node_modules/.bin/ovsx" create-namespace davesheffer --pat "${OVSX_PAT}" || true
+          "${GITHUB_WORKSPACE}/vscode-release-candidate/publish-tools/node_modules/.bin/ovsx" publish "${VSIX_PATH}" --pat "${OVSX_PAT}"
+
+      - name: Verify both registries converge and write publication receipt
+        if: always()
+        shell: bash
+        env:
+          EXTENSION_IDENTITY: ${{ steps.candidate.outputs.extension_identity }}
+          EXTENSION_VERSION: ${{ steps.candidate.outputs.extension_version }}
+          VSIX_SHA256: ${{ steps.candidate.outputs.vsix_sha256 }}
+          ENTRY_MANIFEST_SHA256: ${{ steps.candidate.outputs.entry_manifest_sha256 }}
+          MARKETPLACE_PREFLIGHT: ${{ steps.registry-preflight.outputs.marketplace_present }}
+          OPEN_VSX_PREFLIGHT: ${{ steps.registry-preflight.outputs.open_vsx_present }}
+          MARKETPLACE_PUBLISH_OUTCOME: ${{ steps.vsce.outcome }}
+          OPEN_VSX_PUBLISH_OUTCOME: ${{ steps.ovsx.outcome }}
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import { createHash } from "node:crypto";
+          import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+          import { resolve } from "node:path";
+
+          const IDENTITY = "davesheffer.hunch-vscode";
+          const PUBLISHER = "davesheffer";
+          const NAME = "hunch-vscode";
+          const version = process.env.EXTENSION_VERSION;
+          const expectedVsixSha256 = process.env.VSIX_SHA256;
+          if (process.env.EXTENSION_IDENTITY !== IDENTITY || !/^\d+\.\d+\.\d+$/.test(version ?? "")
+            || !/^sha256:[0-9a-f]{64}$/.test(expectedVsixSha256 ?? "")) {
+            throw new Error("cannot verify registries without the validated extension identity, version, and VSIX digest");
+          }
+          const stable = (value) => {
+            if (Array.isArray(value)) return value.map(stable);
+            if (value && typeof value === "object") {
+              return Object.fromEntries(Object.keys(value).sort().map((key) => [key, stable(value[key])]));
+            }
+            return value;
+          };
+          const sha256 = (value) => `sha256:${createHash("sha256").update(value).digest("hex")}`;
+          const contentHash = (body) => sha256(JSON.stringify(stable(body)));
+          const pause = (milliseconds) => new Promise((resolvePause) => setTimeout(resolvePause, milliseconds));
+          const verifyRegistryAsset = async (label, assetUrl) => {
+            let parsed;
+            try {
+              parsed = new URL(assetUrl);
+            } catch {
+              throw new Error(`${label} returned an invalid VSIX asset URL`);
+            }
+            if (parsed.protocol !== "https:") throw new Error(`${label} returned a non-HTTPS VSIX asset URL`);
+            const response = await fetch(parsed, { signal: AbortSignal.timeout(30_000) });
+            if (!response.ok) throw new Error(`${label} VSIX download failed closed: HTTP ${response.status}`);
+            const bytes = Buffer.from(await response.arrayBuffer());
+            if (bytes.length === 0 || bytes.length > 100 * 1024 * 1024) throw new Error(`${label} returned an invalid VSIX size`);
+            const assetSha256 = sha256(bytes);
+            if (assetSha256 !== expectedVsixSha256) {
+              throw new Error(`${label} exact version exists with different VSIX bytes (${assetSha256})`);
+            }
+            return { asset_url: parsed.href, resolved_asset_url: response.url, asset_sha256: assetSha256, asset_size: bytes.length };
+          };
+
+          const checkMarketplace = async () => {
+            const endpoint = "https://marketplace.visualstudio.com/_apis/public/gallery/extensionquery";
+            const response = await fetch(endpoint, {
+              method: "POST",
+              headers: {
+                Accept: "application/json;api-version=3.0-preview.1",
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                filters: [{ pageNumber: 1, pageSize: 1, criteria: [{ filterType: 7, value: IDENTITY }] }],
+                assetTypes: [],
+                flags: 19,
+              }),
+              signal: AbortSignal.timeout(15_000),
+            });
+            if (!response.ok) throw new Error(`VS Code Marketplace query failed closed: HTTP ${response.status}`);
+            const payload = await response.json();
+            const extensions = payload.results?.[0]?.extensions ?? [];
+            if (!Array.isArray(extensions) || extensions.length > 1) throw new Error("VS Code Marketplace returned an ambiguous identity");
+            if (extensions.length === 0) return { verified: false, endpoint };
+            const extension = extensions[0];
+            const observedIdentity = `${extension.publisher?.publisherName}.${extension.extensionName}`.toLowerCase();
+            if (observedIdentity !== IDENTITY) throw new Error(`VS Code Marketplace identity mismatch: ${observedIdentity}`);
+            const exactVersions = (extension.versions ?? []).filter((candidate) => candidate.version === version);
+            if (exactVersions.length === 0) return { verified: false, endpoint, identity: observedIdentity, version: null };
+            const universalVersions = exactVersions.filter((candidate) => !candidate.targetPlatform || candidate.targetPlatform === "universal");
+            if (universalVersions.length !== 1) throw new Error("VS Code Marketplace exact version has no unambiguous universal VSIX");
+            const asset = universalVersions[0].files?.find((file) => file.assetType === "Microsoft.VisualStudio.Services.VSIXPackage");
+            if (!asset?.source) throw new Error("VS Code Marketplace exact version has no VSIX package asset");
+            return {
+              verified: true,
+              endpoint,
+              identity: observedIdentity,
+              version,
+              ...await verifyRegistryAsset("VS Code Marketplace", asset.source),
+            };
+          };
+
+          const checkOpenVsx = async () => {
+            const endpoint = `https://open-vsx.org/api/${PUBLISHER}/${NAME}/${version}`;
+            const response = await fetch(endpoint, { signal: AbortSignal.timeout(15_000) });
+            if (response.status === 404) return { verified: false, endpoint };
+            if (!response.ok) throw new Error(`Open VSX query failed closed: HTTP ${response.status}`);
+            const extension = await response.json();
+            const observedIdentity = `${extension.namespace}.${extension.name}`.toLowerCase();
+            if (observedIdentity !== IDENTITY || extension.version !== version) {
+              throw new Error(`Open VSX identity/version mismatch: ${observedIdentity}@${String(extension.version)}`);
+            }
+            if (!extension.files?.download) throw new Error("Open VSX exact version has no VSIX download asset");
+            return {
+              verified: true,
+              endpoint,
+              identity: observedIdentity,
+              version: extension.version,
+              ...await verifyRegistryAsset("Open VSX", extension.files.download),
+            };
+          };
+
+          const poll = async (label, check) => {
+            let lastError = "exact version not visible";
+            for (let attempt = 1; attempt <= 12; attempt += 1) {
+              try {
+                const state = await check();
+                if (state.verified) return { ...state, attempts: attempt };
+                lastError = "exact version not visible";
+              } catch (error) {
+                lastError = error instanceof Error ? error.message : String(error);
+              }
+              if (attempt < 12) await pause(5_000);
+            }
+            throw new Error(`${label} did not converge on ${IDENTITY}@${version}: ${lastError}`);
+          };
+
+          const [marketplace, openVsx] = await Promise.all([
+            poll("VS Code Marketplace", checkMarketplace),
+            poll("Open VSX", checkOpenVsx),
+          ]);
+          if (!marketplace.verified || !openVsx.verified
+            || marketplace.identity !== IDENTITY || openVsx.identity !== IDENTITY
+            || marketplace.version !== version || openVsx.version !== version
+            || marketplace.asset_sha256 !== expectedVsixSha256 || openVsx.asset_sha256 !== expectedVsixSha256) {
+            throw new Error("both registries must converge on the exact extension identity, version, and VSIX bytes");
+          }
+
+          const candidateManifestBytes = readFileSync(resolve("vscode-release-candidate", "vscode-release-candidate-manifest.json"));
+          const candidateManifest = JSON.parse(candidateManifestBytes);
+          if (candidateManifest.extension?.publisher + "." + candidateManifest.extension?.name !== IDENTITY
+            || candidateManifest.extension?.version !== version
+            || candidateManifest.artifact?.sha256 !== process.env.VSIX_SHA256
+            || candidateManifest.artifact?.entry_manifest_sha256 !== process.env.ENTRY_MANIFEST_SHA256) {
+            throw new Error("publication evidence does not match the validated VSIX candidate");
+          }
+          const mode = (preflight, outcome) => preflight === "true"
+            ? "already_present"
+            : outcome === "success" ? "published" : "converged_after_publish_error";
+          const body = {
+            schema: "hunch.vscode-publication.v1",
+            result: "converged",
+            extension: { identity: IDENTITY, version },
+            source: {
+              repository: "davesheffer/hunch",
+              commit: process.env.GITHUB_SHA,
+              ref: process.env.GITHUB_REF,
+              tag: process.env.GITHUB_REF_NAME,
+              workflow: ".github/workflows/vscode-marketplace.yml",
+              run_id: process.env.GITHUB_RUN_ID,
+              run_attempt: process.env.GITHUB_RUN_ATTEMPT,
+            },
+            candidate: {
+              receipt_sha256: sha256(candidateManifestBytes),
+              receipt_content_hash: candidateManifest.content_hash,
+              vsix_sha256: process.env.VSIX_SHA256,
+              entry_manifest_sha256: process.env.ENTRY_MANIFEST_SHA256,
+            },
+            registries: {
+              vscode_marketplace: {
+                ...marketplace,
+                preflight_present: process.env.MARKETPLACE_PREFLIGHT === "true",
+                publish_step_outcome: process.env.MARKETPLACE_PUBLISH_OUTCOME,
+                mode: mode(process.env.MARKETPLACE_PREFLIGHT, process.env.MARKETPLACE_PUBLISH_OUTCOME),
+              },
+              open_vsx: {
+                ...openVsx,
+                preflight_present: process.env.OPEN_VSX_PREFLIGHT === "true",
+                publish_step_outcome: process.env.OPEN_VSX_PUBLISH_OUTCOME,
+                mode: mode(process.env.OPEN_VSX_PREFLIGHT, process.env.OPEN_VSX_PUBLISH_OUTCOME),
+              },
+            },
+            verified_at: new Date().toISOString(),
+          };
+          const receiptDirectory = resolve("vscode-publication-receipt");
+          mkdirSync(receiptDirectory);
+          writeFileSync(
+            resolve(receiptDirectory, "vscode-publication-receipt.json"),
+            JSON.stringify({ ...body, content_hash: contentHash(body) }, null, 2) + "\n",
+          );
+          NODE
+
+      - name: Upload dual-registry publication receipt
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: vscode-publication-receipt-${{ github.run_id }}-${{ github.run_attempt }}
+          path: vscode-publication-receipt/vscode-publication-receipt.json
+          if-no-files-found: error
+          retention-days: 30
