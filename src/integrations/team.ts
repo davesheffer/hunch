@@ -439,9 +439,15 @@ function checkoutIsolatedEnv(): NodeJS.ProcessEnv {
     ...boundedTeamGitEnv(),
     // The fetch has already completed. Materialization needs no credentials or
     // user customizations, so suppress every ambient filter/attributes source.
-    GIT_CONFIG_GLOBAL: devNull,
+    // Git for Windows does not accept Node's native `\\.\nul` spelling as a
+    // config pathname; its DOS device name is stable from every working dir.
+    GIT_CONFIG_GLOBAL: gitNullDevice(),
     GIT_ATTR_NOSYSTEM: "1",
   };
+}
+
+function gitNullDevice(): string {
+  return process.platform === "win32" ? "NUL" : devNull;
 }
 
 function exactCommit(
@@ -590,7 +596,7 @@ function materializeValidatedClone(
   const reset = spawnSync("git", [
     "-C", overlayRoot,
     "-c", `core.hooksPath=${emptyHooks}`,
-    "-c", `core.attributesFile=${devNull}`,
+    "-c", `core.attributesFile=${gitNullDevice()}`,
     "reset", "--hard", oid,
   ], {
     stdio: "ignore",
