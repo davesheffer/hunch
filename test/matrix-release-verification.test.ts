@@ -10,6 +10,8 @@ import {
   assertDependencyLockProjection,
   assertLegacyMatrixTarball,
   buildMatrixReceipt,
+  expectedInstalledDependencyPackages,
+  installedDependencyProjection,
   parseMatrixReleaseArgs,
   verifyMatrixReceipt,
 } from "../tooling/matrix-release-verification.mjs";
@@ -290,6 +292,35 @@ test("legacy package bytes and dependency semantics fail closed before installat
     /dependency lock projection drift/,
     "dependency drift between the legacy and candidate sources must fail closed",
   );
+});
+
+test("installed dependency proof excludes only incompatible optional platform packages", () => {
+  const required = { version: "1.0.0" };
+  const compatibleOptional = {
+    version: "1.0.0",
+    optional: true,
+    os: [process.platform],
+    cpu: [process.arch],
+  };
+  const projected = expectedInstalledDependencyPackages({
+    "": { name: "candidate" },
+    "node_modules/required": required,
+    "node_modules/compatible": compatibleOptional,
+    "node_modules/other-os": { version: "1.0.0", optional: true, os: ["hunch-other-os"] },
+    "node_modules/excluded-os": { version: "1.0.0", optional: true, os: [`!${process.platform}`] },
+    "node_modules/other-cpu": { version: "1.0.0", optional: true, cpu: ["hunch-other-cpu"] },
+    "node_modules/required-other-os": { version: "1.0.0", os: ["hunch-other-os"] },
+  });
+
+  assert.deepEqual(projected, {
+    "node_modules/required": required,
+    "node_modules/compatible": compatibleOptional,
+    "node_modules/required-other-os": { version: "1.0.0", os: ["hunch-other-os"] },
+  });
+
+  const installed = installedDependencyProjection(process.cwd());
+  assert.deepEqual(installed.installed, installed.expected,
+    "a fresh npm ci tree must match the platform-normalized candidate lock exactly");
 });
 
 test("Matrix verifier bounds its scale inputs and keeps dirty runs publish-neutral", () => {

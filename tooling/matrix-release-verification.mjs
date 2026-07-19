@@ -647,11 +647,34 @@ function withoutPeerPlacementMarkers(value) {
   return value;
 }
 
-function installedDependencyProjection(sourceRoot) {
+function platformSelectorAllows(value, current) {
+  const selectors = Array.isArray(value) ? value : (typeof value === "string" ? [value] : []);
+  if (!selectors.length) return true;
+  if (selectors.includes(`!${current}`)) return false;
+  const positive = selectors.filter((selector) => typeof selector === "string" && !selector.startsWith("!"));
+  return positive.length === 0 || positive.includes(current);
+}
+
+/** npm keeps every platform variant in package-lock.json, but its installed
+ * lock contains only the optional packages compatible with this OS/CPU. Drop
+ * exactly those explicitly incompatible optional entries; a missing required
+ * or compatible optional package must still fail the release gate. */
+export function expectedInstalledDependencyPackages(
+  packages,
+  platform = process.platform,
+  arch = process.arch,
+) {
+  return Object.fromEntries(Object.entries(packages ?? {}).filter(([path, entry]) => {
+    if (path === "") return false;
+    if (!entry || typeof entry !== "object" || entry.optional !== true) return true;
+    return platformSelectorAllows(entry.os, platform) && platformSelectorAllows(entry.cpu, arch);
+  }));
+}
+
+export function installedDependencyProjection(sourceRoot) {
   const rootLock = JSON.parse(readFileSync(join(sourceRoot, "package-lock.json"), "utf8"));
   const installedLock = JSON.parse(readFileSync(join(projectRoot, "node_modules", ".package-lock.json"), "utf8"));
-  const expected = { ...rootLock.packages };
-  delete expected[""];
+  const expected = expectedInstalledDependencyPackages(rootLock.packages);
   return {
     expected: stable(withoutPeerPlacementMarkers(expected)),
     installed: stable(withoutPeerPlacementMarkers(installedLock.packages ?? {})),
