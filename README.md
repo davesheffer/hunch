@@ -69,6 +69,81 @@ hunch firmness strict
 hunch check --staged --strict
 ```
 
+## Share one living team memory
+
+Matrix mode keeps the team's decisions, corrections, constraints, and proofs in one dedicated Git
+repository, separate from the code repository. Hunch does not host that repository: create a private
+Git repo that every teammate can access, install the Matrix release on team machines and CI, then
+have one maintainer run:
+
+```bash
+npm i -g @davesheffer/hunch@1.9.0
+hunch shared --repo git@github.com:acme/project-hunch-memory.git
+git add .gitignore .hunch/team.json
+git commit -m "chore: connect shared Hunch memory"
+git push
+```
+
+Use a credential-free URL in the command; keep tokens in your Git credential helper or use SSH.
+If this project already publishes memory in `.hunch/` and you want to move it into the dedicated
+repo, add `--migrate`, review the reported untrack/ignore changes, and follow the commit instructions
+printed by Hunch. Omit `--migrate` for a new setup.
+
+After the pointer commit lands, teammates need Hunch installed and Git access to the memory repo:
+
+```bash
+npm i -g @davesheffer/hunch@1.9.0
+git pull
+hunch init
+hunch doctor
+```
+
+`hunch init` validates and connects an ignored local clone of the memory repo. Memory-reading and
+writing CLI operations attempt a bounded refresh at startup; connected MCP sessions check for new
+team memory at each tool-request boundary and rebuild their local index only when the JSON changed.
+New captures route to that repo and are committed and synchronized automatically by default. If a
+push cannot complete, a later capture or `hunch shared --sync` retries it.
+
+The committed `.hunch/team.json` contains only the credential-free memory-repo locator and canonical
+branch. The ignored `.hunch/local.json` contains local paths and preferences, not credentials;
+authentication stays in SSH or the normal Git credential helper. Shared memory records,
+`.hunch/local.json`, and `.hunch-private/` stay out of code history. Use
+`hunch check --base origin/main --strict --public-only --format markdown` for output that may be
+posted publicly; omit `--public-only` for an internal check that should enforce team memory.
+
+For a correction that Hunch can express as a deterministic policy, create and inspect its
+proof-backed proposal:
+
+```bash
+hunch policy upgrade-correction con_...
+hunch policy card pol_...
+```
+
+The upgrade creates evidence, a plan, and a proof but leaves the policy proposed with
+`authority: none`. In v1.9 its source-currentness activation gate is deliberately blocked, so even a
+human cannot activate an upgraded correction yet. Other proved policy types still require an
+explicit audited human acceptance before they can become advisory or blocking; Hunch never grants
+that authority automatically.
+
+Need to pause or roll back without deleting memory?
+
+```bash
+hunch firmness off
+hunch shared --repo git@github.com:acme/project-hunch-memory.git --no-auto-commit
+# Later, publish any pending local memory explicitly:
+hunch shared --sync
+```
+
+The first command turns off agent-hook enforcement; the second keeps shared reads and local captures
+but stops automatic memory commits and pushes. As a team-coordinated rollback, revert the setup
+commit to stop discovery after teammates pull the revert. Existing machines retain their ignored
+local overlay until they are deliberately disconnected; do not delete the memory repo as part of a
+rollback. For this rollout, reinstall the previous published package with
+`npm i -g @davesheffer/hunch@1.8.3`; the release receipt resolves and records that exact rollback
+target from the npm registry instead of trusting Git tags. Version 1.8.3 fails closed when it sees a
+v1.9 source-gated correction policy, so pause enforcement first as shown above and upgrade every
+team client to v1.9 before resuming Matrix policy workflows.
+
 ## Synthesis without surprise billing
 
 Hunch can draft structured memory through:

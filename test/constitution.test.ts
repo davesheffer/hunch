@@ -3118,6 +3118,13 @@ test("MD-1a upgrades one exact top-level package correction into an idempotent n
     });
     assert.equal(first.status, "proved");
     assert.equal(first.policy?.state, "proposed");
+    assert.equal(first.policy?.ir_version, 3,
+      "source-gated correction policies use a new IR version so older clients reject them instead of bypassing the activation gate");
+    assert.throws(
+      () => PolicySpecSchema.parse({ ...first.policy!, ir_version: 1 }),
+      /source-gated correction policies require Policy IR v3/i,
+      "a correction artifact cannot be downgraded to the legacy graph-policy IR",
+    );
     assert.equal(first.policy?.authority, null, "correction upgrade never grants authority");
     assert.equal(first.policy?.activation_gate?.status, "blocked");
     assert.deepEqual(first.policy?.assertion, {

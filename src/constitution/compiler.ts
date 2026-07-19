@@ -1,7 +1,7 @@
 import type { Constraint, Decision, ConformancePredicate } from "../core/types.js";
 import type { HunchStore } from "../store/hunchStore.js";
 import { policyId } from "./canonical.js";
-import { POLICY_IR_VERSION, PolicySpecSchema, type CandidateContext, type DataClass, type PolicyAssertion, type PolicySelector, type PolicySpec } from "./schema.js";
+import { CORRECTION_POLICY_IR_VERSION, POLICY_IR_VERSION, PolicySpecSchema, type CandidateContext, type DataClass, type PolicyAssertion, type PolicySelector, type PolicySpec } from "./schema.js";
 
 function selector(ref: string): PolicySelector {
   if (ref.startsWith("symbol-id:") || ref.startsWith("symbol:")) return { selector: ref };
@@ -226,7 +226,7 @@ export function compileCorrectionPolicy(store: HunchStore, input: CorrectionPoli
     id,
     topic: `correction.${input.source.id}`,
     origin: "correction_md1a",
-    ir_version: POLICY_IR_VERSION,
+    ir_version: CORRECTION_POLICY_IR_VERSION,
     revision: 1,
     state: "compiled",
     statement: input.source.statement,

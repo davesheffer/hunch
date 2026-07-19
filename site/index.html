@@ -299,7 +299,7 @@
     <a class="btn ghost" href="blog/">Read the benchmark</a>
   </div>
   <div class="hero-facts rise d3">
-    <span>plain files in your repo</span><span>advisory by default</span><span>no SaaS, $0</span><span>works offline</span><span>Apache-2.0</span>
+    <span>plain files in Git</span><span>advisory by default</span><span>no SaaS, $0</span><span>works offline</span><span>Apache-2.0</span>
   </div>
 
 </header>
@@ -458,8 +458,8 @@
           <div class="fbody"><code>hunch escalations</code> lists only what the graph can't settle itself — a topic conflict, a candidate rule, a proposed rule carrying its proof — each a question with its resolution verb. Normally empty. No backlog to manage, no queue to rot.</div></details>
         <details class="f"><summary><span class="fname">Provenance on everything</span><span class="fhint">source, confidence, evidence — on every record</span><span class="fplus">+</span></summary>
           <div class="fbody">Every record shows where it came from and how much to trust it. Auto-captured guesses stay advisory; only what you've confirmed is trusted enough to block.</div></details>
-        <details class="f"><summary><span class="fname">Git is the sync</span><span class="fhint">plain files beside your code, merge-clean</span><span class="fplus">+</span></summary>
-          <div class="fbody">The graph lives in your repo and travels with it — reviewable in PRs, synced by push/pull. Teammates' edits merge cleanly, no conflict markers.</div></details>
+        <details class="f"><summary><span class="fname">Git is the sync</span><span class="fhint">plain files, one reviewable source of truth</span><span class="fplus">+</span></summary>
+          <div class="fbody">Keep memory beside the code, or put the team's shared graph in a dedicated private Git repo you control. Structured records merge by identity; the derived local index is never the source of truth.</div></details>
         <details class="f"><summary><span class="fname">Atomic &amp; durable</span><span class="fhint">interrupted writes can't truncate the index</span><span class="fplus">+</span></summary>
           <div class="fbody">An interrupted write can never corrupt the graph, and damaged state refuses to overwrite good data. Boring on purpose.</div></details>
         <details class="f"><summary><span class="fname">Time-travel memory</span><span class="fhint">query the graph as of any commit</span><span class="fplus">+</span></summary>
@@ -516,7 +516,7 @@
         <details class="f"><summary><span class="fname">Works offline, $0 SaaS</span><span class="fhint">subscription-billed synthesis, heuristic fallback</span><span class="fplus">+</span></summary>
           <div class="fbody">No SaaS, no API key. Learning bills to the coding subscription you already pay for — and without one, a deterministic fallback keeps the loop alive.</div></details>
         <details class="f"><summary><span class="fname">Shared team memory</span><span class="fhint">one store; fresh clones auto-connect</span><span class="fplus">+</span></summary>
-          <div class="fbody">One memory across branches, worktrees, teammates, and agents — and a fresh clone connects itself to the team's store on init.</div></details>
+          <div class="fbody">Commit one credential-free team pointer and <code>hunch init</code> connects each fresh clone to the dedicated memory repo. CLI and MCP requests refresh it live; captures synchronize automatically, while blocking authority remains an explicit human act.</div></details>
         <details class="f"><summary><span class="fname">Multi-candidate verdict</span><span class="fhint">rank 5 agent solutions in 10 minutes</span><span class="fplus">+</span></summary>
           <div class="fbody">Five agent-generated solutions to one task? Ranked by architectural fit in one command — the best-behaved candidate wins.</div></details>
       </div>

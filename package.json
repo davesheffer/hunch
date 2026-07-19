@@ -1,6 +1,6 @@
 {
   "name": "@davesheffer/hunch",
-  "version": "1.8.5",
+  "version": "1.9.0",
   "license": "Apache-2.0",
   "author": "Dave Sheffer <dave.sheffer1@gmail.com>",
   "description": "Engineering memory and a deterministic Change Gate for AI-assisted codebases: decisions, rejected approaches, constraints, and bug lineage become portable context and opt-in enforcement for every MCP assistant.",
@@ -57,6 +57,7 @@
     "test": "tsx --test --test-concurrency=2 test/*.test.ts",
     "test:e2e:md1": "tsx --test test/md1-e2e.test.ts",
     "test:e2e:team-matrix": "tsx --test test/team-matrix-e2e.test.ts",
+    "verify:matrix": "node tooling/matrix-release-verification.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "rehearse:constitution": "npm run build && node tooling/constitution-clean-rehearsal.mjs",
     "gate:release": "node tooling/release-gate.mjs",

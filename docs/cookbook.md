@@ -75,7 +75,7 @@ Or mid-flow: `hunch_capture_decision(topic)` → answer the questions → `hunch
 
 ---
 
-## 5. Turn a human correction into a permanent rule
+## 5. Turn a human correction into a proof-backed proposal
 
 When you catch the assistant doing something it must never do again:
 
@@ -83,7 +83,19 @@ When you catch the assistant doing something it must never do again:
 hunch_record_correction({ rule, scope_hint_file, severity: "blocking" })
 ```
 
-**Observe:** at `strict`, an edit that violates the rule is denied with the rule quoted back. Never Twice.
+For a supported deterministic correction, use the returned constraint id to produce a reviewable
+policy packet:
+
+```bash
+hunch policy upgrade-correction <constraint-id>
+hunch policy card <policy-id>
+```
+
+**Observe:** the upgrade writes evidence, a proof plan, a proof, and a **proposed** policy. It reports
+`authority: none` and does not activate anything. In v1.9 the proposal's source-currentness gate is
+mechanically blocked, so even a human cannot activate this correction policy yet. The original
+correction guard remains available throughout. Other proved policy types still require explicit,
+audited human acceptance before they can become advisory or blocking.
 
 ---
 
@@ -141,7 +153,52 @@ Rules learned the hard way: use `--no-repro` (diagnosis mode) or everything ceil
 
 ---
 
-## 10. Private overlay (public repo, private memory)
+## 10. Connect the team-memory Matrix
+
+Create a dedicated private Git repository for memory. It must be different from every code-repo
+remote, and the URL committed into the code repository must not contain credentials.
+
+On one maintainer machine:
+
+```bash
+npm i -g @davesheffer/hunch@1.9.0
+hunch shared --repo git@github.com:acme/project-hunch-memory.git
+git add .gitignore .hunch/team.json
+git commit -m "chore: connect shared Hunch memory"
+git push
+```
+
+Add `--migrate` to the `hunch shared` command only when moving existing public `.hunch/` memory
+into the dedicated store. Review the reported untrack/ignore changes and follow the commit command
+Hunch prints. On every teammate machine:
+
+```bash
+npm i -g @davesheffer/hunch@1.9.0
+git pull
+hunch init
+hunch doctor
+```
+
+**Observe:** the code repo commits `.hunch/team.json`; credentials remain in SSH or the Git
+credential helper. Each machine gets an ignored `.hunch-private/` clone and `.hunch/local.json`
+pointer. CLI memory operations refresh at startup, MCP tools refresh at request boundaries, and new
+captures commit and synchronize through the memory repo automatically.
+
+For a coordinated pause or rollback that preserves every memory record:
+
+```bash
+hunch firmness off
+hunch shared --repo git@github.com:acme/project-hunch-memory.git --no-auto-commit
+npm i -g @davesheffer/hunch@1.8.3
+```
+
+Revert the `.hunch/team.json` setup commit only if new clones must stop discovering the Matrix. Do
+not delete the memory repo or local overlay; after upgrading again, `hunch shared --sync` publishes
+pending local memory. Version 1.8.3 rejects v1.9's source-gated correction-policy IR instead of
+silently bypassing it, so pause enforcement first and upgrade every client to v1.9 before resuming
+Matrix policy workflows.
+
+## 11. Private overlay (public repo, private memory)
 
 ```bash
 hunch init --private-sync   # captures go to HUNCH_PRIVATE_DIR overlay, never the public store
@@ -150,7 +207,7 @@ hunch private               # point a clone at the overlay
 
 **Observe:** `hunch_*` tools see the union; the public repo carries only what you curate.
 
-## 11. The self-running memory loop (v1.8.0+)
+## 12. The self-running memory loop (v1.8.0+)
 
 Nothing to manage. Capture happens on every commit, memory lands trusted-advisory
 immediately, and renames heal their own bindings:
@@ -174,7 +231,7 @@ click, and a repaired rule asks once for a fresh proof before it can block again
 
 ---
 
-## 12. Self-hosted / local models (Ollama, vLLM, LM Studio) via openai-compat
+## 13. Self-hosted / local models (Ollama, vLLM, LM Studio) via openai-compat
 
 ```bash
 HUNCH_SYNTH_PROVIDER=ollama                          # alias for openai-compat
