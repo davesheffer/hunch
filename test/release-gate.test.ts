@@ -204,6 +204,10 @@ test("Phase 2O release gate is fail-closed, content-addressed, and publish-neutr
   assert.ok(RELEASE_TEST_COVERAGE.release_pipeline_contract.includes(".github/workflows/release.yml"));
   assert.ok(RELEASE_TEST_COVERAGE.release_pipeline_contract.includes("test/workflow-release-contract.test.ts"),
     "the receipt binds the workflow contract that guards trusted publication");
+  assert.ok(RELEASE_TEST_COVERAGE.release_pipeline_contract.includes(".github/workflows/vscode-marketplace.yml"));
+  assert.ok(RELEASE_TEST_COVERAGE.release_pipeline_contract.includes("test/vscode-marketplace-workflow.test.ts"));
+  assert.ok(RELEASE_TEST_COVERAGE.release_pipeline_contract.includes("tooling/vscode-publish-tools/package-lock.json"),
+    "the receipt binds the reviewed transitive publisher-tool closure");
   assert.deepEqual(RELEASE_TEST_COVERAGE.matrix_release_resilience,
     ["test/matrix-release-verification.test.ts", "test/team-matrix-e2e.test.ts", "tooling/matrix-release-verification.mjs"],
     "the release receipt binds pinned-version compatibility, crash recovery, and concurrent convergence");
