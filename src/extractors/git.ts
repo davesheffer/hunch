@@ -156,27 +156,41 @@ export function gitWorktreeRoot(cwd: string): string | null {
  * `.hunch-private/.hunch` can never stage or commit into the code repository. */
 export function isGitRepoRoot(cwd: string): boolean {
   const raw = gitSafeIsolated(["rev-parse", "--show-toplevel"], cwd);
-  const top = raw ? canonicalPath(raw) : null;
-  if (!top) return false;
-  return top === canonicalPath(cwd);
+  return !!raw && sameFilesystemEntry(raw, cwd);
 }
 
 function canonicalPath(path: string): string {
   try { return realpathSync(path); } catch { return resolve(path); }
 }
 
+/** Compare physical directory identity before path text. Git for Windows can
+ * return an 8.3/short or differently-cased spelling for the same top-level
+ * directory that Node reached through its long path. A nonzero file ID keeps
+ * this exact even on case-sensitive Windows directories; canonical text is a
+ * conservative fallback for filesystems that do not expose stable IDs. */
+function sameFilesystemEntry(left: string, right: string): boolean {
+  try {
+    const leftStat = statSync(left, { bigint: true });
+    const rightStat = statSync(right, { bigint: true });
+    if (leftStat.ino !== 0n && rightStat.ino !== 0n) {
+      return leftStat.dev === rightStat.dev && leftStat.ino === rightStat.ino;
+    }
+  } catch { /* fall back to canonical path text */ }
+  return canonicalPath(left) === canonicalPath(right);
+}
+
 /** Whether two paths resolve to the same repository identity. Comparing only
  * worktree roots is insufficient: linked worktrees have different roots but
  * share one Git common directory and therefore one publishable history. */
 export function sameGitRepository(left: string, right: string): boolean {
-  if (canonicalPath(left) === canonicalPath(right)) return true;
+  if (sameFilesystemEntry(left, right)) return true;
   const common = (cwd: string): string => {
     const value = gitSafeIsolated(["rev-parse", "--git-common-dir"], cwd);
     return value ? (isAbsolute(value) ? value : resolve(cwd, value)) : "";
   };
   const leftCommon = common(left);
   const rightCommon = common(right);
-  return !!leftCommon && !!rightCommon && canonicalPath(leftCommon) === canonicalPath(rightCommon);
+  return !!leftCommon && !!rightCommon && sameFilesystemEntry(leftCommon, rightCommon);
 }
 
 function remoteIdentity(raw: string, cwd: string, purpose: "route" | "publication" = "route"): string {
