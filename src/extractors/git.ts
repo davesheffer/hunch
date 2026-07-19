@@ -460,7 +460,15 @@ const CAPTURE_LOCK_HANDOFF_MS = 120_000;
 function unsafeOverlayPublication(hunchDir: string, protectedRepoRoot: string): boolean {
   let currentOverlayRoot = dirname(resolve(hunchDir));
   try { currentOverlayRoot = dirname(realpathSync(hunchDir)); } catch { return true; }
-  return !isGitRepoRoot(currentOverlayRoot) || sameGitPublication(currentOverlayRoot, protectedRepoRoot);
+  const standalone = isGitRepoRoot(currentOverlayRoot);
+  const overlapsCode = standalone ? sameGitPublication(currentOverlayRoot, protectedRepoRoot) : null;
+  const unsafe = !standalone || overlapsCode === true;
+  if (unsafe && process.env.HUNCH_TEAM_CLONE_DEBUG === "1") {
+    process.stderr.write(
+      `[hunch-team-boundary] standalone=${standalone} overlaps_code=${overlapsCode ?? "unchecked"}\n`,
+    );
+  }
+  return unsafe;
 }
 
 export function commitAndPushHunch(hunchDir: string, message: string, opts: HunchCommitOptions): "pushed" | "committed" | null {
