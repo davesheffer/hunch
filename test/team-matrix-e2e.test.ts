@@ -95,6 +95,7 @@ function actorEnv(home: string, name: string): NodeJS.ProcessEnv {
     HUNCH_PRIVATE_DIR: "",
     HUNCH_SYNTH_PROVIDER: "deterministic",
     HUNCH_EMBEDDINGS: "off",
+    HUNCH_TEAM_CLONE_DEBUG: "1",
     GIT_TERMINAL_PROMPT: "0",
     NO_COLOR: "1",
     CI: "1",

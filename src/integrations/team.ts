@@ -489,6 +489,46 @@ function treeAttributesAreSafe(root: string, listing: string, env: NodeJS.Proces
   });
 }
 
+type TeamCloneFailureStage =
+  | "preflight"
+  | "quarantine"
+  | "route-rewrite"
+  | "clone"
+  | "materialize-route"
+  | "materialize-branch"
+  | "materialize-object"
+  | "materialize-tree"
+  | "materialize-reset"
+  | "materialize-post-reset"
+  | "pre-publish-contract"
+  | "pre-publish-race"
+  | "publish-rename"
+  | "post-publish-contract"
+  | "unexpected";
+
+type TeamCloneProcessResult = {
+  status?: number | null;
+  error?: Error;
+};
+
+/** Opt-in, secret-free diagnostics for a transaction that otherwise fails
+ * closed as `null`. Never print the remote, path, stderr, or exception text: a
+ * committed team URL may still identify private infrastructure. */
+function reportTeamCloneFailure(
+  stage: TeamCloneFailureStage,
+  result?: TeamCloneProcessResult,
+  thrown?: unknown,
+): void {
+  if (process.env.HUNCH_TEAM_CLONE_DEBUG !== "1") return;
+  const rawCode = (result?.error as NodeJS.ErrnoException | undefined)?.code
+    ?? (thrown as NodeJS.ErrnoException | undefined)?.code;
+  const code = typeof rawCode === "string" && /^[A-Z0-9_]+$/.test(rawCode)
+    ? ` code=${rawCode}`
+    : "";
+  const status = typeof result?.status === "number" ? ` status=${result.status}` : "";
+  process.stderr.write(`[hunch-team-clone] stage=${stage}${status}${code}\n`);
+}
+
 /** Materialize only one already-fetched, immutable commit. The clone has no
  * worktree yet, so unsafe tree modes or attributes are rejected before any
  * remote-controlled path can invoke a hook/filter or reach disk. */
@@ -499,10 +539,16 @@ function materializeValidatedClone(
   emptyHooks: string,
 ): ValidatedTeamClone | null {
   const route = provenRouteAgainst(team, teamRoot, overlayRoot);
-  if (!route) return null;
+  if (!route) {
+    reportTeamCloneFailure("materialize-route");
+    return null;
+  }
   const sharedRef = route.sharedRef;
   const branch = sharedRef.slice("refs/heads/".length);
-  if (!branch || overlayBranch(overlayRoot) !== branch) return null;
+  if (!branch || overlayBranch(overlayRoot) !== branch) {
+    reportTeamCloneFailure("materialize-branch");
+    return null;
+  }
   const env = checkoutIsolatedEnv();
   const oid = exactCommit(overlayRoot, `refs/remotes/origin/${branch}`, env);
   const head = exactCommit(overlayRoot, "HEAD", env);
@@ -510,13 +556,19 @@ function materializeValidatedClone(
   // its metadata-only clone so a later sole canonical branch can be joined;
   // no remote-controlled working-tree path exists at this point.
   if (!oid || !head) {
-    return !oid && !head && repositoryHasNoRefs(overlayRoot, env) && safeOverlayTree(overlayRoot)
-      ? { sharedRef, empty: true }
-      : null;
+    const empty = !oid && !head && repositoryHasNoRefs(overlayRoot, env) && safeOverlayTree(overlayRoot);
+    if (!empty) reportTeamCloneFailure("materialize-object");
+    return empty ? { sharedRef, empty: true } : null;
   }
-  if (head !== oid) return null;
+  if (head !== oid) {
+    reportTeamCloneFailure("materialize-object");
+    return null;
+  }
   const listing = exactTreeListing(overlayRoot, oid, env);
-  if (!listing || !treeAttributesAreSafe(overlayRoot, listing, env)) return null;
+  if (!listing || !treeAttributesAreSafe(overlayRoot, listing, env)) {
+    reportTeamCloneFailure("materialize-tree");
+    return null;
+  }
 
   const reset = spawnSync("git", [
     "-C", overlayRoot,
@@ -528,18 +580,21 @@ function materializeValidatedClone(
     env,
     timeout: 5_000,
   });
-  if (reset.status !== 0) return null;
+  if (reset.status !== 0) {
+    reportTeamCloneFailure("materialize-reset", reset);
+    return null;
+  }
 
   // Re-prove the immutable object identity and the materialized filesystem.
   // No binding/pointer is written until all three views agree.
   const afterHead = exactCommit(overlayRoot, "HEAD", env);
   const afterListing = afterHead === oid ? exactTreeListing(overlayRoot, oid, env) : null;
-  return afterHead === oid
+  const safe = afterHead === oid
     && !!afterListing
     && treeAttributesAreSafe(overlayRoot, afterListing, env)
-    && safeOverlayTree(overlayRoot)
-    ? { sharedRef, empty: false }
-    : null;
+    && safeOverlayTree(overlayRoot);
+  if (!safe) reportTeamCloneFailure("materialize-post-reset");
+  return safe ? { sharedRef, empty: false } : null;
 }
 
 export type ValidatedTeamClone = {
@@ -559,7 +614,10 @@ export function cloneValidatedTeamOverlay(
 ): ValidatedTeamClone | null {
   const repo = safeGitUrl(sharedRepo);
   const sharedRef = opts.sharedRef === undefined ? undefined : safeTeamRef(opts.sharedRef);
-  if (!repo || (opts.sharedRef !== undefined && !sharedRef) || existsSync(destination)) return null;
+  if (!repo || (opts.sharedRef !== undefined && !sharedRef) || existsSync(destination)) {
+    reportTeamCloneFailure("preflight");
+    return null;
+  }
   const requestedTimeout = opts.timeoutMs ?? 5_000;
   const timeoutMs = Number.isFinite(requestedTimeout)
     ? Math.min(30_000, Math.max(1, Math.trunc(requestedTimeout)))
@@ -570,6 +628,7 @@ export function cloneValidatedTeamOverlay(
   let guardRoot = "";
   let installed = false;
   let accepted = false;
+  let stage: TeamCloneFailureStage = "quarantine";
   try {
     stagedDest = mkdtempSync(join(parent, `${prefix}.tmp-`));
     guardRoot = mkdtempSync(join(parent, `${prefix}.guard-`));
@@ -577,9 +636,14 @@ export function cloneValidatedTeamOverlay(
     const emptyTemplate = join(guardRoot, "template");
     mkdirSync(emptyHooks);
     mkdirSync(emptyTemplate);
-    if (!effectiveRouteUnrewritten(stagedDest, repo, repo)) return null;
+    stage = "route-rewrite";
+    if (!effectiveRouteUnrewritten(stagedDest, repo, repo)) {
+      reportTeamCloneFailure(stage);
+      return null;
+    }
 
     const cloneEnv = boundedTeamGitEnv();
+    stage = "clone";
     const cloned = spawnSync("git", [
       "-c", "protocol.ext.allow=never",
       "-c", `core.hooksPath=${emptyHooks}`,
@@ -590,25 +654,41 @@ export function cloneValidatedTeamOverlay(
       env: cloneEnv,
       timeout: timeoutMs,
     });
-    const validated = cloned.status === 0
-      ? materializeValidatedClone(
-          { shared_repo: repo, ...(sharedRef ? { shared_ref: sharedRef } : {}) },
-          sharedRepoCwd,
-          stagedDest,
-          emptyHooks,
-        )
-      : null;
-    if (!validated
-      || !explicitTeamRemoteContract(stagedDest, repo, sharedRepoCwd, validated.sharedRef)
-      || existsSync(destination)) return null;
+    if (cloned.status !== 0) {
+      reportTeamCloneFailure(stage, cloned);
+      return null;
+    }
+    const validated = materializeValidatedClone(
+      { shared_repo: repo, ...(sharedRef ? { shared_ref: sharedRef } : {}) },
+      sharedRepoCwd,
+      stagedDest,
+      emptyHooks,
+    );
+    if (!validated) return null;
+    stage = "pre-publish-contract";
+    if (!explicitTeamRemoteContract(stagedDest, repo, sharedRepoCwd, validated.sharedRef)) {
+      reportTeamCloneFailure(stage);
+      return null;
+    }
+    stage = "pre-publish-race";
+    if (existsSync(destination)) {
+      reportTeamCloneFailure(stage);
+      return null;
+    }
 
+    stage = "publish-rename";
     renameSync(stagedDest, destination);
     stagedDest = "";
     installed = true;
-    if (!explicitTeamRemoteContract(destination, repo, sharedRepoCwd, validated.sharedRef)) return null;
+    stage = "post-publish-contract";
+    if (!explicitTeamRemoteContract(destination, repo, sharedRepoCwd, validated.sharedRef)) {
+      reportTeamCloneFailure(stage);
+      return null;
+    }
     accepted = true;
     return validated;
-  } catch {
+  } catch (error) {
+    reportTeamCloneFailure(stage ?? "unexpected", undefined, error);
     return null;
   } finally {
     if (guardRoot) rmSync(guardRoot, { recursive: true, force: true });

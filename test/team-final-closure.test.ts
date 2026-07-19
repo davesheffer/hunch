@@ -212,6 +212,10 @@ function makeSharedFixture(base: string, name: string): SharedFixture {
   const code = makeCodeFixture(base, `${name}-code`);
   expectCli(code, ["shared", "--repo", memoryRemote, "--no-hook"]);
   expectCli(code, ["shared", "--sync"]);
+  // The overlay is a distinct clone and therefore does not inherit the code
+  // checkout's local identity. Keep direct fixture commits independent of a
+  // developer machine's (or CI runner's) global Git configuration.
+  configureRepo(join(code.root, ".hunch-private"), "Shared Memory");
   git(code.root, "add", ".gitignore", ".hunch/team.json");
   git(code.root, "commit", "-qm", "chore: advertise shared memory");
   git(code.root, "push", "-q", "origin", "main");
