@@ -163,6 +163,10 @@ function canonicalPath(path: string): string {
   try { return realpathSync(path); } catch { return resolve(path); }
 }
 
+export function gitNullDevice(): string {
+  return process.platform === "win32" ? "NUL" : devNull;
+}
+
 /** Compare physical directory identity before path text. Git for Windows can
  * return an 8.3/short or differently-cased spelling for the same top-level
  * directory that Node reached through its long path. A nonzero file ID keeps
@@ -540,7 +544,7 @@ export function commitAndPushHunch(hunchDir: string, message: string, opts: Hunc
       // remote .gitignore, local info/exclude, or ambient excludesFile must not
       // be able to silently stop the shared graph's heartbeat.
       for (let index = 0; index < paths.length; index += 128) {
-        if (!run(["-c", `core.attributesFile=${devNull}`, "add", "-f", "--", ...paths.slice(index, index + 128)])) {
+        if (!run(["-c", `core.attributesFile=${gitNullDevice()}`, "add", "-f", "--", ...paths.slice(index, index + 128)])) {
           run(["reset", "-q", "--", "."]);
           return null;
         }
@@ -575,7 +579,7 @@ export function commitAndPushHunch(hunchDir: string, message: string, opts: Hunc
     for (const file of opts.alsoStage ?? []) {
       run(opts.push === false
         ? ["add", "--", file]
-        : ["-c", `core.attributesFile=${devNull}`, "add", "--", file]);
+        : ["-c", `core.attributesFile=${gitNullDevice()}`, "add", "--", file]);
     }
     // Only sync+push when a memory commit was actually created — never run pull/push against the
     // enclosing repo on an empty stage. Two-way sync: MERGE the remote BEFORE pushing so a push
@@ -598,7 +602,7 @@ export function commitAndPushHunch(hunchDir: string, message: string, opts: Hunc
       execFileSync("git", [
         "-C", hunchDir,
         "-c", `core.hooksPath=${hooksDir}`,
-        ...(opts.push === false ? [] : ["-c", `core.attributesFile=${devNull}`]),
+        ...(opts.push === false ? [] : ["-c", `core.attributesFile=${gitNullDevice()}`]),
         "-c", "commit.gpgsign=false",
         "commit", "--no-gpg-sign", "--only", "-m", message, "--", ...commitPaths,
       ], { stdio: "ignore", env, timeout: 15_000 });
@@ -772,7 +776,7 @@ function boundedAttributesFileIsSafe(file: string, expectedCanonicalPath: string
   try {
     const stat = lstatSync(file);
     if (stat.isSymbolicLink() || !stat.isFile() || stat.nlink !== 1 || stat.size > MAX_ATTRIBUTES_BYTES) return false;
-    if (realpathSync(file) !== expectedCanonicalPath) return false;
+    if (!sameFilesystemEntry(file, expectedCanonicalPath)) return false;
     return hunchAttributesAreSafe(readFileSync(file, "utf8"));
   } catch (error) {
     return (error as NodeJS.ErrnoException).code === "ENOENT";
@@ -801,7 +805,7 @@ function overlayGitMetadataDir(hunchDir: string, env: NodeJS.ProcessEnv): string
     const overlayRoot = dirname(realpathSync(hunchDir));
     const expected = realpathSync(join(overlayRoot, ".git"));
     const actual = absoluteGitMetadataDir(hunchDir, env);
-    return actual === expected ? expected : null;
+    return actual && sameFilesystemEntry(actual, expected) ? expected : null;
   } catch {
     return null;
   }
@@ -1018,7 +1022,7 @@ function adoptContractHead(
     execFileSync("git", [
       "-C", hunchDir,
       "-c", `core.hooksPath=${hooksDir}`,
-      "-c", `core.attributesFile=${devNull}`,
+      "-c", `core.attributesFile=${gitNullDevice()}`,
       "reset", "--hard", fetchedHead,
     ], {
       stdio: "ignore", env, timeout: 5_000,
@@ -1067,7 +1071,7 @@ function mergeRemote(
       execFileSync("git", [
         "-C", hunchDir,
         "-c", `core.hooksPath=${hooksDir}`,
-        "-c", `core.attributesFile=${devNull}`,
+        "-c", `core.attributesFile=${gitNullDevice()}`,
         "-c", "commit.gpgsign=false",
         ...args,
       ], {

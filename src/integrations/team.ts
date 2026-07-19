@@ -6,13 +6,12 @@
  * Written ONLY by `hunch shared --repo <url>` — `hunch private` never publishes its URL.
  */
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync } from "node:fs";
-import { devNull } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { writeFileAtomic } from "../core/io.js";
 import { hunchTreeAttributesAreSafe, safeOverlayGitTreeListing, safeOverlayTree } from "../core/overlaySafety.js";
 import { hunchPaths, hunchPathsForDir } from "../core/paths.js";
-import { canonicalRemoteUrl, mainWorktreeRoot, sameRemoteUrl, type HunchRemoteContract } from "../extractors/git.js";
+import { canonicalRemoteUrl, gitNullDevice, mainWorktreeRoot, sameRemoteUrl, type HunchRemoteContract } from "../extractors/git.js";
 import { HunchStore } from "../store/hunchStore.js";
 import { JsonStore } from "../store/jsonStore.js";
 import { ensureSharedOverlayPointer } from "./worktree.js";
@@ -444,10 +443,6 @@ function checkoutIsolatedEnv(): NodeJS.ProcessEnv {
     GIT_CONFIG_GLOBAL: gitNullDevice(),
     GIT_ATTR_NOSYSTEM: "1",
   };
-}
-
-function gitNullDevice(): string {
-  return process.platform === "win32" ? "NUL" : devNull;
 }
 
 function exactCommit(
