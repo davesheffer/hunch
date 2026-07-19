@@ -1,4 +1,4 @@
-import type { Decision, ConformancePredicate } from "../core/types.js";
+import type { Constraint, Decision, ConformancePredicate } from "../core/types.js";
 import type { HunchStore } from "../store/hunchStore.js";
 import { policyId } from "./canonical.js";
 import { POLICY_IR_VERSION, PolicySpecSchema, type CandidateContext, type DataClass, type PolicyAssertion, type PolicySelector, type PolicySpec } from "./schema.js";
@@ -194,6 +194,86 @@ export function compileStructuralPolicy(store: HunchStore, input: StructuralPoli
       source: "derived",
       confidence: 0.8,
       evidence: [input.source.id, input.evidenceId, `commit:${input.commit}`],
+      last_verified: now,
+    },
+  });
+  return { policy, private: isPrivate };
+}
+
+export interface CorrectionPolicyInput {
+  source: Constraint;
+  evidenceId: string;
+  assertion: PolicyAssertion;
+  scope: PolicySpec["scope"];
+  dataClass: DataClass;
+  candidate?: CandidateContext;
+  now?: string;
+}
+
+/** Compile one already-bound correction projection. The caller must first prove
+ * that the projection has exactly one supported structural interpretation. */
+export function compileCorrectionPolicy(store: HunchStore, input: CorrectionPolicyInput): { policy: PolicySpec; private: boolean } {
+  const isPrivate = input.dataClass !== "public";
+  if (isPrivate && !store.hasPrivate) throw new Error("private correction compilation needs a configured Hunch private overlay");
+  const now = input.now ?? new Date().toISOString();
+  const id = policyId({ assertion: input.assertion, scope: input.scope, data_class: input.dataClass });
+  const refs = [...new Set([
+    input.source.id,
+    input.evidenceId,
+    ...(input.source.source_decision ? [input.source.source_decision] : []),
+  ])].sort();
+  const policy = PolicySpecSchema.parse({
+    id,
+    topic: `correction.${input.source.id}`,
+    origin: "correction_md1a",
+    ir_version: POLICY_IR_VERSION,
+    revision: 1,
+    state: "compiled",
+    statement: input.source.statement,
+    rationale: input.source.rationale,
+    scope: input.scope,
+    assertion: input.assertion,
+    severity: "warning",
+    surfaces: ["cli", "mcp", "ci"],
+    authority: null,
+    activation_gate: {
+      kind: "source_currentness",
+      status: "blocked",
+      reason: "MD-1a correction projections cannot activate until MD-2 proves that every source correction and decision is still current.",
+    },
+    evidence: refs,
+    proof: null,
+    reversal_conditions: [
+      `Source correction ${input.source.id} is retired or its exact structural interpretation is rejected.`,
+      ...(input.source.source_decision ? [`Source decision ${input.source.source_decision} is superseded or explicitly closed.`] : []),
+    ],
+    supersedes: null,
+    superseded_by: null,
+    exception_of: null,
+    valid_from: null,
+    valid_to: null,
+    data_class: input.dataClass,
+    limitations: [
+      "Scope is intentionally limited to one exact file and anchored to one stable symbol in that file.",
+      "TypeScript/JavaScript static ESM import declarations only; re-exports, require(), dynamic import(), package aliases, and runtime loading are not covered.",
+      "The immediate legacy Constraint remains the fast guard; this MD-1a policy cannot activate until the source-currentness gate is implemented and cleared.",
+    ],
+    candidate: input.candidate,
+    legacy_refs: [input.source.id, ...(input.source.source_decision ? [input.source.source_decision] : [])],
+    audit: [{
+      action: "compiled",
+      actor_kind: "system",
+      actor: "hunch:correction-policy-materializer",
+      at: now,
+      reason: `Compiled from one deterministic supported projection bound to correction ${input.source.id}.`,
+      proof: null,
+    }],
+    created_at: now,
+    updated_at: now,
+    provenance: {
+      source: "derived",
+      confidence: 1,
+      evidence: refs,
       last_verified: now,
     },
   });

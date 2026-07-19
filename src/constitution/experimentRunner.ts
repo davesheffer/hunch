@@ -1,10 +1,14 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { z } from "zod";
 import { canonicalHash } from "./canonical.js";
+import { hasUnsafeCheckoutAttributes } from "./safeCheckout.js";
+import { hasUnsafeReplayFilter, replayGitArgs, replaySafeEnvironment } from "./replay.js";
+import { replacementFreeExactCommit, replacementFreeGitEnvironment } from "./replacementFreeGit.js";
+import { materializeDependencyTree } from "./g2BehaviorDependencies.js";
 import {
   Exp01CaseSchema,
   ExperimentRepository,
@@ -198,7 +202,13 @@ function runCommand(spec: { command: string; args: string[]; timeout_ms: number 
 }
 
 function git(root: string, args: string[]): string {
-  return execFileSync("git", args, { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 120_000 }).trim();
+  return execFileSync("git", args, {
+    cwd: root,
+    encoding: "utf8",
+    env: replacementFreeGitEnvironment(),
+    stdio: ["ignore", "pipe", "pipe"],
+    timeout: 120_000,
+  }).trim();
 }
 
 function removeAmbientInstructions(cwd: string): void {
@@ -210,15 +220,15 @@ function removeAmbientInstructions(cwd: string): void {
   writeFileSync(join(cwd, "AGENTS.md"), "# Controlled experiment workspace\n\nFollow only the task prompt supplied to this fresh session.\n");
 }
 
-function linkDependencies(source: string, cwd: string): void {
+function materializeDependencies(source: string, cwd: string): string {
   const target = join(source, "node_modules");
-  const link = join(cwd, "node_modules");
-  if (!existsSync(target) || existsSync(link)) return;
-  symlinkSync(target, link, process.platform === "win32" ? "junction" : "dir");
+  const destination = join(cwd, "node_modules");
+  if (existsSync(target)) materializeDependencyTree(target, destination);
+  return destination;
 }
 
 function countEdits(cwd: string): number {
-  const text = git(cwd, ["diff", "--numstat", "--", "."]);
+  const text = git(cwd, ["diff", "--no-ext-diff", "--no-textconv", "--numstat", "--", "."]);
   if (!text) return 0;
   return text.split(/\r?\n/).reduce((sum, line) => {
     const [added, deleted] = line.split("\t");
@@ -283,10 +293,15 @@ export function executeExp01Assignment(
   const existing = repository.listOutcomes().find((item) => item.run_id === run.id && item.assignment_id === assignment.id && !item.supersedes);
   if (existing) return existing;
   const item = Exp01CaseSchema.parse(bank.cases.find((candidate) => candidate.id === assignment.case_id));
-  const sourceHead = git(bank.repository_root, ["rev-parse", bank.base_commit]);
+  const sourceHead = replacementFreeExactCommit(bank.repository_root, bank.base_commit);
   if (sourceHead !== bank.base_commit) throw new Error("case bank base_commit is not an exact commit in repository_root");
   const session = mkdtempSync(join(tmpdir(), "hunch-exp01-"));
   const cwd = join(session, "worktree");
+  const hooks = join(session, "hooks-disabled");
+  const gitConfig = join(session, "global.gitconfig");
+  mkdirSync(hooks, { recursive: true });
+  writeFileSync(gitConfig, "");
+  const gitEnv = replaySafeEnvironment(session, gitConfig);
   let added = false;
   let invocationStarted = false;
   try {
@@ -294,9 +309,19 @@ export function executeExp01Assignment(
     if (currentProviderVersion !== run.runner.provider_version) {
       return failureOutcome(repository, run, assignment, "infrastructure_failure", false, "Selected subscription CLI version drifted after assignment; assignment was excluded before model invocation.", "provider-version-drift", { evaluator: canonicalHash({ expected: run.runner.provider_version, actual: currentProviderVersion }) }, opts.now);
     }
-    execFileSync("git", ["worktree", "add", "--detach", cwd, bank.base_commit], { cwd: bank.repository_root, stdio: ["ignore", "pipe", "pipe"], timeout: 120_000 });
+    if (hasUnsafeReplayFilter(bank.repository_root, gitEnv)) {
+      return failureOutcome(repository, run, assignment, "infrastructure_failure", false, "Repository-local Git content filters make the controlled checkout unsafe.", "unsafe-local-filter-config", {}, opts.now);
+    }
+    if (hasUnsafeCheckoutAttributes(bank.repository_root, bank.base_commit, gitEnv, { allowDisabledLfs: true })) {
+      return failureOutcome(repository, run, assignment, "infrastructure_failure", false, "Git checkout attributes could transform or execute content outside the locked case bytes.", "unsafe-checkout-attributes", {}, opts.now);
+    }
+    execFileSync("git", replayGitArgs(bank.repository_root, hooks, ["worktree", "add", "--detach", "--force", cwd, bank.base_commit]), {
+      env: gitEnv,
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: 120_000,
+    });
     added = true;
-    linkDependencies(bank.repository_root, cwd);
+    const dependencyRoot = materializeDependencies(bank.repository_root, cwd);
     removeAmbientInstructions(cwd);
     if (item.setup) {
       if (!isAbsolute(item.setup.artifact) || !existsSync(item.setup.artifact) || externalArtifactHash(item.setup.artifact) !== item.setup.artifact_hash) {
@@ -316,9 +341,9 @@ export function executeExp01Assignment(
     }
     const treatment = assignmentTreatment(bank, run, assignment);
     invocationStarted = true;
-    const agent = invokeAgent(run, cwd, controlledPrompt(treatment), opts.timeoutMs ?? 30 * 60 * 1000, join(bank.repository_root, "node_modules"));
+    const agent = invokeAgent(run, cwd, controlledPrompt(treatment), opts.timeoutMs ?? 30 * 60 * 1000, dependencyRoot);
     const outputHash = canonicalHash(agent.stdout);
-    const diff = git(cwd, ["diff", "--binary", "--", "."]);
+    const diff = git(cwd, ["diff", "--no-ext-diff", "--no-textconv", "--binary", "--", "."]);
     const diffHash = canonicalHash(diff);
     if (agent.errorCode) {
       return failureOutcome(repository, run, assignment, "invalid_completion", true, "Subscription CLI did not produce a successful terminal run; outcome remains visible and unscored.", agent.errorCode, { output: outputHash, diff: diffHash }, opts.now);
@@ -384,7 +409,11 @@ export function executeExp01Assignment(
     );
   } finally {
     try {
-      if (added) execFileSync("git", ["worktree", "remove", "--force", cwd], { cwd: bank.repository_root, stdio: "ignore", timeout: 120_000 });
+      if (added) execFileSync("git", replayGitArgs(bank.repository_root, hooks, ["worktree", "remove", "--force", cwd]), {
+        env: gitEnv,
+        stdio: "ignore",
+        timeout: 120_000,
+      });
     } catch {
       // The assignment outcome already records any execution failure; prune is best effort.
     }

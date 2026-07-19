@@ -235,9 +235,17 @@ export const PolicyAuthoritySchema = z.object({
 });
 export type PolicyAuthority = z.infer<typeof PolicyAuthoritySchema>;
 
+export const PolicyActivationGateSchema = z.object({
+  kind: z.literal("source_currentness"),
+  status: z.literal("blocked"),
+  reason: z.string().min(1),
+}).strict();
+export type PolicyActivationGate = z.infer<typeof PolicyActivationGateSchema>;
+
 export const PolicySpecSchema = z.object({
   id: z.string().regex(/^pol_[a-f0-9]{10}$/),
   topic: z.string().min(1),
+  origin: z.enum(["generic", "correction_md1a"]).default("generic"),
   ir_version: z.union([z.literal(POLICY_IR_VERSION), z.literal(EXECUTABLE_BEHAVIOR_IR_VERSION)]),
   revision: z.number().int().min(1),
   state: PolicyStateSchema,
@@ -248,6 +256,7 @@ export const PolicySpecSchema = z.object({
   severity: z.enum(["advisory", "warning", "blocking"]).default("warning"),
   surfaces: z.array(z.enum(["pre_edit", "pre_commit", "ci", "mcp", "cli"])).default(["cli", "mcp"]),
   authority: PolicyAuthoritySchema.nullable().default(null),
+  activation_gate: PolicyActivationGateSchema.nullable().default(null),
   evidence: z.array(z.string()).default([]),
   proof: z.string().nullable().default(null),
   reversal_conditions: z.array(z.string()).default([]),

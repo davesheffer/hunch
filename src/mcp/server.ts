@@ -16,24 +16,27 @@ import { decisionId } from "../core/ids.js";
 import { buildCorrectionConstraint } from "../core/correction.js";
 import { knownRepoDeps } from "../synthesis/tripwires.js";
 import { refreshExistingGrounding } from "../integrations/providers.js";
-import { revParse, asOfDate, revExists, lastChangeDate, rangeFiles, rangeDiff, commitFiles, commitDiff, stagedFiles, stagedDiff, workingFiles, workingDiff, pullHunch } from "../extractors/git.js";
-import { flushCapture } from "../integrations/sync.js";
-import { ensureTeamOverlay } from "../integrations/team.js";
+import { revParse, asOfDate, revExists, lastChangeDate, rangeFiles, rangeDiff, commitFiles, commitDiff, stagedFiles, stagedDiff, workingFiles, workingDiff, pullHunchStatus, sameRemoteUrl, type HunchPullStatus } from "../extractors/git.js";
+import { flushCapture, flushMemoryHome, pinSharedRemote } from "../integrations/sync.js";
+import { advertisedTeamRemoteContract, ensureTeamOverlay, overlayMatchesTeamRemote, readTeamConfig, teamRemoteContract, teamSharedRef } from "../integrations/team.js";
 import { formatContext, formatStructure } from "../core/format.js";
 import type { Runbook } from "../core/types.js";
 import { compareCandidates } from "../core/compare.js";
 import { checkConformance } from "../core/conformance.js";
-import { ConstitutionService } from "../constitution/service.js";
+import { ConstitutionService, policyEvaluationEnvelope } from "../constitution/service.js";
+import { sourceGraphSnapshot } from "../constitution/evaluator.js";
 import { G2_RUNBOOK_CATEGORIES } from "../constitution/g2.js";
 import { renderMarkdown, renderImpact, verdict } from "../core/checkreport.js";
 import { nowData, wikiStatus, publicHome, readWikiManifestAt } from "../wiki/wiki.js";
 import { HUNCH_VERSION } from "../core/version.js";
-import { indexRepo } from "../extractors/indexer.js";
+import { assertCompleteRepoScan, indexRepo, scanRepo } from "../extractors/indexer.js";
 import type { Decision, Symbol } from "../core/types.js";
 import { liveForTopic, historyForTopic, rejectedForTopic, captureConflicts } from "../core/topics.js";
 import { pendingEscalations, policyEscalations, type Escalation } from "../core/escalations.js";
 import { issueCaptureToken as issueToken, consumeCaptureToken as consumeToken } from "../core/capturetoken.js";
 import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 
 type ToolResult = { content: Array<{ type: "text"; text: string }>; isError?: boolean };
 const ok = (text: string): ToolResult => ({ content: [{ type: "text", text }] });
@@ -133,18 +136,91 @@ export function buildServer(root: string): McpServer {
   // Team auto-discovery: a committed .hunch/team.json advertises the shared store — a
   // fresh clone (a new teammate, a headless agent, a CI workflow) wires itself BEFORE the
   // store is constructed, so every consumer resolves the same single source of truth.
-  // Best-effort: offline / no team.json → proceed exactly as before.
-  try { ensureTeamOverlay(root); } catch { /* never block server start */ }
+  // Once that declaration is present it is fail-closed: starting against the public
+  // graph after an invalid config, failed first clone, or dead pointer would let both
+  // reads and writes silently escape the team's memory spine.
+  const explicitOverlay = !!process.env.HUNCH_PRIVATE_DIR?.trim();
+  const teamFile = join(hunchPaths(root).hunch, "team.json");
+  const teamAdvertised = !explicitOverlay && existsSync(teamFile);
+  const startupTeamConfig = teamAdvertised ? readTeamConfig(root) : null;
+  if (teamAdvertised && !startupTeamConfig) {
+    throw new Error(".hunch/team.json is invalid or unsafe; refusing to start MCP on public memory");
+  }
+  ensureTeamOverlay(root);
   const store = new HunchStore(hunchPaths(root));
+  if (teamAdvertised && (store.mode !== "shared"
+    || !store.privateDir
+    || !existsSync(store.privateDir)
+    || !overlayMatchesTeamRemote(root, join(store.privateDir, "..")))) {
+    store.close();
+    throw new Error("the advertised team memory store is unavailable or tracks a different remote; refusing to start MCP on another graph");
+  }
+  const startupTeamRoute = teamAdvertised && store.privateDir
+    ? teamRemoteContract(root, join(store.privateDir, ".."))
+    : null;
+  if (startupTeamRoute) pinSharedRemote(store, startupTeamRoute);
+  const matchesStartupTeamRoute = (): boolean => {
+    if (!teamAdvertised || !store.privateDir || !startupTeamConfig || !startupTeamRoute) return !teamAdvertised;
+    const currentTeamConfig = readTeamConfig(root);
+    const currentTeamRoute = teamRemoteContract(root, join(store.privateDir, ".."));
+    return !!currentTeamConfig && !!currentTeamRoute
+      && sameRemoteUrl(startupTeamConfig.shared_repo, root, currentTeamConfig.shared_repo, root)
+      && teamSharedRef(startupTeamConfig) === teamSharedRef(currentTeamConfig)
+      && startupTeamRoute.ref === currentTeamRoute.ref
+      && sameRemoteUrl(startupTeamRoute.fetchUrl, startupTeamRoute.urlCwd, currentTeamRoute.fetchUrl, currentTeamRoute.urlCwd)
+      && sameRemoteUrl(startupTeamRoute.pushUrl, startupTeamRoute.urlCwd, currentTeamRoute.pushUrl, currentTeamRoute.urlCwd);
+  };
   // Two-way sync (read side): pull the private overlay's remote on startup, so THIS machine's
   // session sees memory captured on other machines/worktrees before we index — making the
-  // overlay genuinely one source of truth. Best-effort, leaves a clean tree, never blocks start.
+  // overlay genuinely one source of truth. Remote calls are bounded; request-time failures
+  // back off exponentially instead of freezing every tool on the same unavailable remote.
+  let nextRemotePullAt = 0;
+  let consecutivePullFailures = 0;
+  const notePull = (status: HunchPullStatus, finishedAt: number): void => {
+    if (status === "updated" || status === "current") {
+      consecutivePullFailures = 0;
+      nextRemotePullAt = finishedAt + 1_000;
+    } else if (status === "busy") {
+      nextRemotePullAt = finishedAt + 100;
+    } else if (status === "unconfigured") {
+      consecutivePullFailures = 0;
+      nextRemotePullAt = finishedAt + 30_000;
+    } else {
+      consecutivePullFailures = Math.min(consecutivePullFailures + 1, 6);
+      nextRemotePullAt = finishedAt + Math.min(30_000, 1_000 * (2 ** (consecutivePullFailures - 1)));
+    }
+  };
+  const pullTeamMemory = (force = false): void => {
+    if (!store.privateDir) return;
+    const now = Date.now();
+    if (!force && now < nextRemotePullAt) return;
+    notePull(pullHunchStatus(store.privateDir, {
+      timeoutMs: 5_000,
+      remote: startupTeamRoute ?? advertisedTeamRemoteContract(root, join(store.privateDir, "..")),
+    }), Date.now());
+  };
   if (store.privateDir) {
-    try { pullHunch(store.privateDir); } catch { /* offline / no remote — proceed with local */ }
+    try { pullTeamMemory(true); } catch { /* offline / no remote — proceed with local */ }
   }
+  // A source stamp is acknowledged ONLY after a stable, successful rebuild. If
+  // another process changes the atomic JSON tree during the rebuild, retry once;
+  // continued churn leaves the marker unset so the next request tries again.
+  let indexedSourceStamp: string | undefined;
+  const refreshIndex = (): void => {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const before = store.sourceStamp();
+      store.reindexFresh();
+      const after = store.sourceStamp();
+      if (before === after) {
+        indexedSourceStamp = after;
+        return;
+      }
+    }
+    indexedSourceStamp = undefined;
+  };
   // Ensure the SQLite index reflects the JSON source of truth on startup.
   try {
-    store.reindex();
+    refreshIndex();
   } catch (e) {
     console.error("[hunch-mcp] reindex on startup failed:", (e as Error).message);
   }
@@ -154,6 +230,67 @@ export function buildServer(root: string): McpServer {
   const embedderReady = selectEmbedder();
 
   const server = new McpServer({ name: "hunch", version: HUNCH_VERSION });
+
+  // A long-lived MCP process is the team's ambient memory connection. Another clone may
+  // capture and push a decision minutes after this process starts, so startup-only sync
+  // leaves the assistant with a silently frozen graph until restart. Refresh at the tool
+  // request boundary instead: Git serializes with capture flushes, and SQLite is rebuilt
+  // only when the shared JSON source stamp changed. Unlike tracking only the HEAD returned
+  // by this request's pull, the stamp also catches a sibling worktree that advanced the
+  // overlay first and uncommitted atomic writes from another local Hunch process. This is
+  // deterministic (unlike a timer/polling loop), client-agnostic, and remains best-effort
+  // when the remote is offline. A one-second success cooldown coalesces bursty tool traffic;
+  // failures back off to 30 seconds, while the local source stamp is still checked EVERY time.
+  // Patch registration once so every present and future MCP tool gets the same boundary;
+  // individual handlers cannot accidentally opt out and create split-brain behavior.
+  type UntypedToolHandler = (...args: unknown[]) => unknown;
+  const registerTool = server.registerTool.bind(server) as unknown as (
+    name: string,
+    config: unknown,
+    callback: UntypedToolHandler,
+  ) => unknown;
+  server.registerTool = ((name: string, config: unknown, callback: UntypedToolHandler) =>
+    registerTool(name, config, async (...args: unknown[]) => {
+      // Routing is live state, not a startup constant. A branch switch or
+      // `hunch shared` can add/remove team.json while this stdio process remains
+      // alive; serving the old store after that boundary would write the wrong
+      // graph. Refuse and require a reconnect instead of attempting an in-place
+      // HunchStore swap while requests may be active.
+      // The explicit process overlay intentionally outranks committed team
+      // discovery for this process, both at startup and at every later request.
+      const teamFileNow = !explicitOverlay && existsSync(teamFile);
+      if (teamFileNow !== teamAdvertised) {
+        return err("The committed team-memory routing changed after this MCP process started. Reconnect Hunch before reading or writing memory.");
+      }
+      const currentTeamConfig = teamFileNow ? readTeamConfig(root) : null;
+      if (teamAdvertised && !matchesStartupTeamRoute()) {
+        return err("The team-memory URL or branch changed after this MCP process started. Refusing the old graph; reconnect Hunch first.");
+      }
+      if (teamFileNow && (!currentTeamConfig
+        || store.mode !== "shared"
+        || !store.privateDir
+        || !overlayMatchesTeamRemote(root, join(store.privateDir, "..")))) {
+        return err("The committed team memory destination is invalid or no longer matches this process. Refusing the stale graph; reconnect Hunch first.");
+      }
+      if (store.mode === "shared" && store.privateDir) {
+        try { pullTeamMemory(); } catch { /* offline / lock held / invalid remote — use local */ }
+        // Recompute the full semantic + physical snapshot after the synchronous
+        // network seam. A paired team.json/origin change can occur while fetch is
+        // blocked; serving after that race would attach the old checkout to a new
+        // destination even though the pull itself correctly refused.
+        if (teamAdvertised && !matchesStartupTeamRoute()) {
+          return err("The team-memory route changed during refresh. Refusing to serve a stale or redirected graph; reconnect Hunch first.");
+        }
+        try {
+          if (store.sourceStamp() !== indexedSourceStamp) refreshIndex();
+        } catch { /* corrupt/churning local source — serve the last durable indexed view */ }
+      }
+      const result = await callback(...args);
+      if (teamAdvertised && !matchesStartupTeamRoute()) {
+        return err("The team-memory route changed while the tool was running. Its startup destination was not published; reconnect Hunch before retrying.");
+      }
+      return result;
+    })) as typeof server.registerTool;
 
   // -- hunch_query ----------------------------------------------------------
   server.registerTool(
@@ -631,7 +768,7 @@ export function buildServer(root: string): McpServer {
         // Auto-flush the store the record landed in (on by default in every mode): a private
         // record commits+pushes its overlay repo; a public one commits .hunch/ in THIS repo
         // (commit only — it rides the user's next push, never auto-pushing their code branch).
-        const flush = flushCapture(store, hunchPaths(root).hunch, !!decision.private, `hunch: capture ${id}`);
+        const flush = flushCapture(store, hunchPaths(root).hunch, !!decision.private, `hunch: capture ${id}`, startupTeamRoute ?? undefined);
         const flushed = flushNote(flush, home, store.mode);
         // Capture-session gate (staged deprecation, §9.3): a token proves an interview
         // preceded the write. No token still writes (non-breaking), but returns a nudge
@@ -683,6 +820,10 @@ export function buildServer(root: string): McpServer {
         // Private corrections go to the overlay (enforced locally via the merged read,
         // never rendered into the public CI comment, which is public-only by construction).
         const home = store.captureHome(!!input.private);
+        if (home === "public" && rec.source_decision && !store.json.get("decisions", rec.source_decision)) {
+          const location = store.getPrivateRec("decisions", rec.source_decision) ? "exists only in the private overlay" : "does not exist in the public home";
+          return err(`Refusing to record public correction ${rec.id}: source decision ${rec.source_decision} ${location}.`);
+        }
         const existing = home === "private" ? store.getPrivateRec("constraints", rec.id) : store.json.get("constraints", rec.id);
         if (home === "private") store.putPrivate("constraints", rec);
         else store.json.put("constraints", rec);
@@ -691,8 +832,12 @@ export function buildServer(root: string): McpServer {
         // Windsurf/AGENTS.md/CLAUDE.md), so a correction captured in one assistant is held
         // by all of them. Public only — a private rule must never render into committed
         // grounding. Refresh-only: it never scaffolds a doc the project opted out of.
-        if (home === "public") refreshExistingGrounding(root, store); // overlay rules never render into committed grounding
-        const flush = flushCapture(store, hunchPaths(root).hunch, !!input.private, `hunch: capture ${rec.id}`);
+        // Auto-commit refreshes and stages git-clean grounding inside flushCapture.
+        // Pre-refreshing would make those paths dirty first, causing the clean-path
+        // selector to skip them and leave successful captures with stale HEAD plus
+        // dirty AGENTS/assistant docs. Manual mode still refreshes in place.
+        if (home === "public" && !store.autoCommit) refreshExistingGrounding(root, store); // overlay rules never render into committed grounding
+        const flush = flushCapture(store, hunchPaths(root).hunch, !!input.private, `hunch: capture ${rec.id}`, startupTeamRoute ?? undefined);
         const flushed = flushNote(flush, home, store.mode);
         const enforce = rec.severity === "blocking"
           ? "blocks a DIRECT edit to its scope at strict firmness, and fails a PR whose diff touches that scope (CI guard); blast-radius hits and lower firmness stay advisory"
@@ -700,9 +845,92 @@ export function buildServer(root: string): McpServer {
         const where = input.private
           ? ` [PRIVATE overlay — not committed to this repo]${flushed}`
           : home === "private" ? ` [SHARED store — one source of truth for the whole team]${flushed}` : flushed;
-        return ok(`${existing ? "Updated" : "Recorded"} ${rec.severity} constraint ${rec.id}: "${rec.statement}" (scope: ${rec.scope.join(", ")}).${where} It now ${enforce}.`);
+        // The Constraint itself is the durable retry queue. Normal `hunch index`
+        // and post-commit sync rescan it; no in-process timer can be lost on exit.
+        const reviewNote = "\n\nREVIEW PENDING: After the fix is committed, run hunch index; an installed post-commit hook retries this automatically on the fixing commit. Only the supported static ESM import-declaration package projection is eligible, and it remains activation-blocked; the immediate guard is already durable.";
+        return ok(`${existing ? "Updated" : "Recorded"} ${rec.severity} constraint ${rec.id}: "${rec.statement}" (scope: ${rec.scope.join(", ")}).${where} It now ${enforce}.${reviewNote}`);
       } catch (e) {
         return err(`Failed to record correction: ${(e as Error).message}`);
+      }
+    },
+  );
+
+  server.registerTool(
+    "hunch_policy_upgrade_correction",
+    {
+      title: "Build a proved review proposal from one exact correction",
+      description:
+        "Upgrade the exact supported static ESM import-declaration package projection of one captured correction into a deterministic review packet when the baseline is clean. Writes proposal, plan, proof, and evidence artifacts only; never activates, warns, blocks, or grants authority. Unsupported corrections keep their immediate legacy guard and create no policy.",
+      inputSchema: {
+        constraint_id: z.string().describe("Captured correction constraint id (con_*)."),
+        public_only: z.boolean().optional().describe("Read and write only the public correction home."),
+        private_only: z.boolean().optional().describe("Keep correction-derived evidence/policy/proof artifacts in the configured private overlay; the public source-code graph is refreshed before proof."),
+        include_artifacts: z.boolean().optional().describe("Include the complete Policy IR, proof plan, proof receipts, and evidence object. Default output is a concise review envelope."),
+      },
+    },
+    async ({ constraint_id, public_only, private_only, include_artifacts }): Promise<ToolResult> => {
+      try {
+        if (public_only && private_only) return err("Choose only one of public_only or private_only.");
+        // Resolve the correction's exact home before any writes. Overlay-first is
+        // the same selection contract as ConstitutionService.upgradeCorrection;
+        // deriving this later from a policy id is unsafe when legacy public and
+        // private homes contain the same id, and `store.unified` routes captures,
+        // not pre-existing public records.
+        const artifactHome = public_only ? "public"
+          : private_only ? "private"
+            : store.getPrivateRec("constraints", constraint_id) ? "private" : "public";
+        // Keep parity with the CLI: publish only immutable HEAD-derived graph
+        // data, while allowing upgradeCorrection to classify its exact dirty
+        // correction scope as pending evidence.
+        indexRepo(store, root, { churn: false, source: { kind: "commit", ref: "HEAD" } });
+        store.reindex();
+        const service = new ConstitutionService(store, root);
+        const upgrade = service.upgradeCorrection(constraint_id, {
+          publicOnly: public_only,
+          privateOnly: private_only,
+        });
+        // Build commit-bound artifacts against the common source HEAD, then pump
+        // both actual homes before replying. Publishing the public index first
+        // would make a shared plan reference an architect-only memory commit that
+        // teammates cannot resolve. A public artifact naturally deduplicates to
+        // one completion commit containing both index and policy JSON.
+        // Public Git history is itself a public output surface. A private/team
+        // correction id must not leak through the message of the public derived-
+        // graph commit, even though its policy packet is correctly stored only in
+        // the overlay. Pump public first with a content-neutral message, then pump
+        // the exact private artifact home with its internal identifier.
+        flushMemoryHome(
+          store,
+          hunchPaths(root).hunch,
+          "public",
+          "hunch: refresh derived graph and correction reviews",
+          startupTeamRoute ?? undefined,
+        );
+        if (artifactHome === "private") {
+          flushMemoryHome(
+            store,
+            hunchPaths(root).hunch,
+            "private",
+            `hunch: prove correction ${constraint_id}`,
+            startupTeamRoute ?? undefined,
+          );
+        }
+        if (include_artifacts) return ok(JSON.stringify(upgrade, null, 2));
+        return ok(JSON.stringify({
+          status: upgrade.status,
+          correction_id: upgrade.correction_id,
+          reason: upgrade.reason,
+          evidence_id: upgrade.evidence.id,
+          policy_id: upgrade.policy?.id ?? null,
+          plan_id: upgrade.plan?.id ?? null,
+          proof_id: upgrade.proof?.id ?? null,
+          review: upgrade.review,
+          authority: upgrade.authority,
+          effects: upgrade.effects,
+          activation: upgrade.activation,
+        }, null, 2));
+      } catch (e) {
+        return err(`Failed to upgrade correction: ${(e as Error).message}`);
       }
     },
   );
@@ -885,7 +1113,12 @@ export function buildServer(root: string): McpServer {
     },
     async ({ policy_id, public_only }): Promise<ToolResult> => {
       try {
-        return ok(JSON.stringify(new ConstitutionService(store, root).plan(policy_id, { publicOnly: public_only }), null, 2));
+        const service = new ConstitutionService(store, root);
+        const plan = service.plan(policy_id, { publicOnly: public_only });
+        const home = public_only ? "public" : service.repository.homeOfPolicy(policy_id);
+        if (!home) throw new Error(`policy ${policy_id} has no exact storage home`);
+        flushMemoryHome(store, hunchPaths(root).hunch, home, `hunch: plan policy ${policy_id}`, startupTeamRoute ?? undefined);
+        return ok(JSON.stringify(plan, null, 2));
       } catch (e) {
         return err(`Failed to generate policy proof plan: ${(e as Error).message}`);
       }
@@ -965,22 +1198,31 @@ export function buildServer(root: string): McpServer {
         policy_id: z.string().optional().describe("Optional policy id; omit for all policies."),
         active_only: z.boolean().optional().describe("Evaluate only active advisory/blocking policies."),
         public_only: z.boolean().optional().describe("Exclude private-overlay policies and graph records."),
-        workspace: z.enum(["staged", "working"]).optional().describe("For executable-behavior policies, evaluate the staged index or complete working snapshot in a disposable checkout."),
-        commit: z.string().optional().describe("For executable-behavior policies, evaluate an exact commit ref instead of the current committed HEAD."),
+        workspace: z.enum(["staged", "working"]).optional().describe("Evaluate static and executable policies against the staged index or complete working source snapshot; omit for working."),
+        commit: z.string().optional().describe("Evaluate static and executable policies at an exact commit ref."),
       },
     },
     async ({ policy_id, active_only, public_only, workspace, commit }): Promise<ToolResult> => {
       try {
         if (workspace && commit) throw new Error("choose either workspace or commit for executable-behavior evaluation");
         if (commit && !revExists(commit, root)) throw new Error(`commit ref ${JSON.stringify(commit)} does not resolve`);
-        indexRepo(store, root, { churn: false });
-        store.reindex();
+        const exactCommit = commit ? revParse(`${commit}^{commit}`, root) : undefined;
         const behavior = workspace ? { workspace }
-          : commit ? { commit: revParse(commit, root) }
-            : undefined;
+          : exactCommit ? { commit: exactCommit }
+            : { workspace: "working" as const };
+        // A neutral evaluation is read-only. Static and executable policy legs
+        // select the same source surface, and the receipt binds raw bytes as
+        // well as topology. Default to the complete working view so a long-lived
+        // MCP sees new safe untracked code without persisting derived JSON.
+        const semanticSource = exactCommit ? { kind: "commit" as const, ref: exactCommit }
+          : workspace === "staged" ? { kind: "staged" as const }
+            : { kind: "working" as const };
+        const graphScan = scanRepo(store, root, { churn: false, source: semanticSource });
+        assertCompleteRepoScan(graphScan);
+        const snapshot = sourceGraphSnapshot(root, graphScan.source, graphScan.symbols, graphScan.edges, graphScan.components);
         const receipts = new ConstitutionService(store, root)
-          .evaluate({ id: policy_id, activeOnly: active_only, publicOnly: public_only, behavior })
-          .map((r) => r.evaluation);
+          .evaluate({ id: policy_id, activeOnly: active_only, publicOnly: public_only, behavior, snapshot })
+          .map(policyEvaluationEnvelope);
         return ok(JSON.stringify(receipts, null, 2));
       } catch (e) {
         return err(`Failed to evaluate policy: ${(e as Error).message}`);
@@ -1095,12 +1337,18 @@ export function buildServer(root: string): McpServer {
       inputSchema: {},
     },
     async (): Promise<ToolResult> => {
-      const results = checkConformance(store);
-      if (!results.length) return ok("No conformance predicates recorded. Add a `conformance` predicate to a decision (e.g. {assert:'calls', subject:'pay', object:'verifySession'}) to prove the code honors its intent.");
-      const violations = results.filter((r) => !r.satisfied);
-      const lines = results.map((r) => `${r.satisfied ? "✅" : "⛔"} ${r.decision} "${r.title}" — ${r.assert} ${r.subject}${r.object ? ` → ${r.object}` : ""}: ${r.detail}`);
-      const head = violations.length ? `⛔ ${violations.length} intent(s) the code no longer satisfies` : "✅ the code satisfies every recorded intent";
-      return ok(`Intent-conformance (${results.length - violations.length}/${results.length} satisfied):\n\n${lines.join("\n")}\n\n${head}`);
+      try {
+        const scan = scanRepo(store, root, { churn: false, source: { kind: "working" } });
+        assertCompleteRepoScan(scan);
+        const results = checkConformance(store, { graph: scan });
+        if (!results.length) return ok("No conformance predicates recorded. Add a `conformance` predicate to a decision (e.g. {assert:'calls', subject:'pay', object:'verifySession'}) to prove the code honors its intent.");
+        const violations = results.filter((r) => !r.satisfied);
+        const lines = results.map((r) => `${r.satisfied ? "✅" : "⛔"} ${r.decision} "${r.title}" — ${r.assert} ${r.subject}${r.object ? ` → ${r.object}` : ""}: ${r.detail}`);
+        const head = violations.length ? `⛔ ${violations.length} intent(s) the code no longer satisfies` : "✅ the code satisfies every recorded intent";
+        return ok(`Intent-conformance (${results.length - violations.length}/${results.length} satisfied):\n\n${lines.join("\n")}\n\n${head}`);
+      } catch (error) {
+        return err(`Conformance refused an incomplete working graph: ${(error as Error).message}`);
+      }
     },
   );
 
@@ -1206,14 +1454,16 @@ export function buildServer(root: string): McpServer {
     },
     async ({ decision_id, since, max_commits, limit, allow_install_scripts, dependency_timeout_ms }): Promise<ToolResult> => {
       try {
-        return ok(JSON.stringify(new ConstitutionService(store, root).g2BehaviorPolicyMaterialize({
+        const materialized = new ConstitutionService(store, root).g2BehaviorPolicyMaterialize({
           since: since ?? "180d",
           maxCommits: max_commits ?? 100,
           limit: limit ?? 30,
           decisionId: decision_id,
           allowInstallScripts: allow_install_scripts ?? [],
           dependencyTimeoutMs: dependency_timeout_ms ?? 300_000,
-        }), null, 2));
+        });
+        flushMemoryHome(store, hunchPaths(root).hunch, "private", "hunch: materialize G2 behavior policies", startupTeamRoute ?? undefined);
+        return ok(JSON.stringify(materialized, null, 2));
       } catch (e) {
         return err(`Failed to materialize G2 behavior policies: ${(e as Error).message}`);
       }

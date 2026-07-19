@@ -6,17 +6,31 @@
  */
 import { execFileSync } from "node:child_process";
 import { readFileSync, existsSync } from "node:fs";
-import { join } from "node:path";
 import { writeFileAtomic } from "../core/io.js";
+import { assertSafeTopLevelConfigFile } from "./gitignore.js";
 
 // Route the .hunch JSON records through the structured driver — but NOT the
 // manifest (an id-less `{schema_version}` object the driver can't merge by id; a
 // normal text merge with conflict markers is the right behavior for it).
 const ATTR_LINES = [".hunch/**/*.json merge=hunch", ".hunch/manifest.json merge=text"];
 
+function targetRepositoryEnv(): NodeJS.ProcessEnv {
+  const env = { ...process.env };
+  for (const key of [
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_CONFIG", "GIT_CONFIG_PARAMETERS", "GIT_CONFIG_COUNT",
+    "GIT_OBJECT_DIRECTORY", "GIT_DIR", "GIT_WORK_TREE", "GIT_IMPLICIT_WORK_TREE", "GIT_GRAFT_FILE",
+    "GIT_INDEX_FILE", "GIT_NO_REPLACE_OBJECTS", "GIT_REPLACE_REF_BASE", "GIT_PREFIX",
+    "GIT_INTERNAL_SUPER_PREFIX", "GIT_SHALLOW_FILE", "GIT_COMMON_DIR",
+  ]) delete env[key];
+  for (const key of Object.keys(env)) {
+    if (/^GIT_CONFIG_(?:KEY|VALUE)_\d+$/.test(key)) delete env[key];
+  }
+  return env;
+}
+
 export function installMergeDriver(root: string, invShell: string): { action: string } {
   // 1. .gitattributes — committed, shared with the team so the routing travels.
-  const attrPath = join(root, ".gitattributes");
+  const attrPath = assertSafeTopLevelConfigFile(root, ".gitattributes");
   let text = existsSync(attrPath) ? readFileSync(attrPath, "utf8") : "";
   let attrAction = "present";
   for (const line of ATTR_LINES) {
@@ -26,14 +40,18 @@ export function installMergeDriver(root: string, invShell: string): { action: st
       attrAction = "written";
     }
   }
-  if (attrAction === "written") writeFileAtomic(attrPath, text);
+  if (attrAction === "written") {
+    assertSafeTopLevelConfigFile(root, ".gitattributes");
+    writeFileAtomic(attrPath, text);
+  }
 
   // 2. Local git config — the driver definition is per-clone (it references this
   //    machine's node + cli path), so it is NOT committed; teammates re-run init.
   const driver = `${invShell} merge-driver "%O" "%A" "%B" "%P"`;
+  const env = targetRepositoryEnv();
   try {
-    execFileSync("git", ["config", "merge.hunch.name", "hunch structured JSON merge"], { cwd: root });
-    execFileSync("git", ["config", "merge.hunch.driver", driver], { cwd: root });
+    execFileSync("git", ["config", "merge.hunch.name", "hunch structured JSON merge"], { cwd: root, env });
+    execFileSync("git", ["config", "merge.hunch.driver", driver], { cwd: root, env });
   } catch {
     return { action: `${attrAction} .gitattributes — but \`git config\` failed (not a git repo?)` };
   }

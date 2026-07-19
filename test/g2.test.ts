@@ -30,6 +30,8 @@ const RUNBOOKS = Object.fromEntries(
 function privateFixture() {
   const root = mkdtempSync(join(tmpdir(), "hunch-g2-"));
   const privateRoot = join(root, "private-memory", ".hunch");
+  mkdirSync(privateRoot, { recursive: true });
+  execFileSync("git", ["init", "-q", join(root, "private-memory")]);
   mkdirSync(join(root, ".hunch"), { recursive: true });
   writeFileSync(join(root, ".hunch/local.json"), JSON.stringify({ privateDir: privateRoot, autoCommit: false, mode: "private" }));
   const store = new HunchStore(hunchPaths(root));

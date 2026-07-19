@@ -7,10 +7,11 @@
  * <!--, ;) so a matching STRING literal in code isn't mistaken for intent. (Line-based,
  * so a tagged line that is itself a string literal can still false-positive — advisory.)
  */
-import { readFileSync, readdirSync } from "node:fs";
+import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import { trackedFiles } from "./git.js";
 import { toPosixTarget } from "../core/paths.js";
+import { createRepoFileReader } from "../core/safeRepoFile.js";
 
 const EXTS = [
   ".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs",
@@ -45,7 +46,7 @@ function sourceFiles(root: string): string[] {
       const r = rel ? `${rel}/${e.name}` : e.name;
       if (e.isDirectory()) {
         if (!SKIP.has(e.name)) walk(join(dir, e.name), r, depth + 1);
-      } else if (EXTS.some((x) => e.name.endsWith(x))) {
+      } else if (e.isFile() && EXTS.some((x) => e.name.endsWith(x))) {
         out.push(r);
       }
     }
@@ -56,13 +57,10 @@ function sourceFiles(root: string): string[] {
 
 export function extractInlineIntent(root: string): InlineIntent[] {
   const out: InlineIntent[] = [];
+  const readSourceFile = createRepoFileReader(root);
   for (const rel of sourceFiles(root)) {
-    let content: string;
-    try {
-      content = readFileSync(join(root, rel), "utf8");
-    } catch {
-      continue;
-    }
+    const content = readSourceFile(rel);
+    if (content === null) continue;
     if (!content.includes("hunch-")) continue; // cheap skip before the per-line scan
     const file = toPosixTarget(rel);
     const lines = content.split("\n");

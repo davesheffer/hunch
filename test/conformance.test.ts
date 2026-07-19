@@ -103,3 +103,40 @@ test("conformance catches DRIFT: code that stopped honoring the intent flips to 
     assert.match(r[0]!.detail, /VIOLATED/);
   } finally { cleanup(); }
 });
+
+test("duplicate symbol names cannot hide a forbidden edge or prove an ambiguous required edge", () => {
+  const root = mkdtempSync(join(tmpdir(), "hunch-conf-ambiguous-"));
+  mkdirSync(join(root, "src/api"), { recursive: true });
+  mkdirSync(join(root, "src/db"), { recursive: true });
+  writeFileSync(join(root, "src/db/first.ts"), "export function dbQuery(sql){ return sql; }\n");
+  writeFileSync(join(root, "src/db/second.ts"), "export function dbQuery(sql){ return sql; }\n");
+  writeFileSync(join(root, "src/api/orders.ts"), 'import { dbQuery } from "../db/second.js";\nexport function listOrders(sql){ return dbQuery(sql); }\n');
+  const store = new HunchStore(hunchPaths(root));
+  try {
+    store.json.ensureDirs();
+    indexRepo(store, root, { churn: false });
+    store.json.put("decisions", DEC("dec_forbidden_ambiguous", [
+      { assert: "not-calls", subject: "listOrders", object: "dbQuery", transitive: false },
+    ]));
+    store.json.put("decisions", DEC("dec_required_ambiguous", [
+      { assert: "calls", subject: "listOrders", object: "dbQuery", transitive: false },
+    ]));
+    store.json.put("decisions", DEC("dec_required_qualified", [
+      { assert: "calls", subject: "listOrders", object: "src/db/second.ts:dbQuery", transitive: false },
+    ]));
+
+    const results = checkConformance(store);
+    const result = (id: string) => results.find((candidate) => candidate.decision === id)!;
+    assert.equal(result("dec_forbidden_ambiguous").satisfied, false,
+      "any same-name forbidden target reached by the subject is a violation");
+    assert.match(result("dec_forbidden_ambiguous").detail, /VIOLATED/);
+    assert.equal(result("dec_required_ambiguous").satisfied, false,
+      "a required relation cannot guess which duplicate symbol was intended");
+    assert.match(result("dec_required_ambiguous").detail, /ambiguous required binding/i);
+    assert.equal(result("dec_required_qualified").satisfied, true,
+      "file-qualified required relations remain exact and provable");
+  } finally {
+    store.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});

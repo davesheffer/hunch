@@ -1,4 +1,3 @@
-import { basename } from "node:path";
 import { shortHash } from "../core/ids.js";
 import { headSha } from "../extractors/git.js";
 import { evaluateExecutableBehaviorPolicy } from "./behaviorEvaluator.js";
@@ -112,7 +111,9 @@ export function createExecutableBehaviorProofPlan(
   const body = {
     policy_id: policy.id,
     policy_candidate_hash: policyHash,
-    repository: basename(root),
+    // Bind to the immutable corpus label so a teammate in a differently named
+    // clone reuses the same executable-behavior plan instead of minting a fork.
+    repository: corpus.repository,
     data_class: policy.data_class,
     source_commit: policy.assertion.test.source_commit,
     valid_from_commit: policy.assertion.test.source_commit,

@@ -27,7 +27,7 @@ let message: ReplayWorkerMessage;
 try {
   store = new HunchStore(hunchPathsForDir(input.graph));
   store.json.ensureDirs();
-  indexRepo(store, input.checkout, { churn: false });
+  indexRepo(store, input.checkout, { churn: false, requireComplete: true });
   message = {
     commit: input.commit,
     snapshot: graphSnapshot(store, input.root, { publicOnly: true, head: input.commit }),

@@ -1,25 +1,43 @@
 import { execFileSync, spawnSync, type SpawnSyncReturns } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, type Hash } from "node:crypto";
 import {
+  chmodSync,
+  closeSync,
+  constants as fsConstants,
+  copyFileSync,
   existsSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
+  openSync,
   readFileSync,
+  readlinkSync,
+  readSync,
   readdirSync,
+  realpathSync,
   renameSync,
   rmSync,
+  statSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { basename, join } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
+import { TextDecoder } from "node:util";
 import { shortHash } from "../core/ids.js";
+import { compareCodeUnits } from "../core/canonicalOrder.js";
 import { canonicalHash, canonicalJson } from "./canonical.js";
 import { replaySafeEnvironment } from "./replay.js";
+import { replacementFreeExactCommit, replacementFreeGitEnvironment } from "./replacementFreeGit.js";
 import type { G2BehaviorCandidate, G2BehaviorCandidateReview } from "./g2BehaviorCandidates.js";
 
 const FULL_SHA = /^[a-f0-9]{40}$/;
 const PACKAGE_NAME = /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/i;
-const SNAPSHOT_VERSION = 1;
+// v1 bound only the installed lock and native binaries. Including the version
+// in SnapshotInput makes those caches ineligible and provisions a fresh v2 tree.
+const SNAPSHOT_VERSION = 2;
+const TREE_HASH_VERSION = "hunch-node-modules-tree-v1";
+const HASH_BUFFER_BYTES = 64 * 1024;
+const UTF8_DECODER = new TextDecoder("utf-8", { fatal: true });
 
 export interface G2BehaviorDependencySnapshot {
   id: string;
@@ -38,7 +56,8 @@ export interface G2BehaviorDependencySnapshot {
   allow_install_scripts: string[];
   installed_lock_hash: string;
   native_binaries: Array<{ file: string; sha256: string }>;
-  format_version: 1;
+  node_modules_hash: string;
+  format_version: 2;
   data_class: "private";
   authority: "none";
   effects: "cache_only";
@@ -85,11 +104,203 @@ function sha256(value: string | Buffer): string {
   return `sha256:${createHash("sha256").update(value).digest("hex")}`;
 }
 
-function gitFile(root: string, commit: string, file: "package.json" | "package-lock.json"): string {
-  if (!FULL_SHA.test(commit)) throw new Error(`dependency snapshot commit ${commit} is not a full SHA`);
+function fileSha256(file: string): string {
+  const hash = createHash("sha256");
+  const buffer = Buffer.allocUnsafe(HASH_BUFFER_BYTES);
+  const fd = openSync(file, "r");
+  try {
+    for (let bytes = readSync(fd, buffer, 0, buffer.length, null); bytes > 0; bytes = readSync(fd, buffer, 0, buffer.length, null)) {
+      hash.update(buffer.subarray(0, bytes));
+    }
+  } finally {
+    closeSync(fd);
+  }
+  return `sha256:${hash.digest("hex")}`;
+}
+
+function hashField(hash: Hash, value: string | Buffer): void {
+  const bytes = typeof value === "string" ? Buffer.from(value, "utf8") : value;
+  const length = Buffer.allocUnsafe(8);
+  length.writeBigUInt64BE(BigInt(bytes.length));
+  hash.update(length);
+  hash.update(bytes);
+}
+
+function safeEntryName(name: string): string {
+  if (!name || name === "." || name === ".." || name.includes("\0") || name.includes("/") || (sep === "\\" && name.includes("\\"))) {
+    throw new Error("dependency snapshot contains an unsafe filesystem entry name");
+  }
+  return name;
+}
+
+function symlinkTarget(link: string): string {
+  const raw = readlinkSync(link, { encoding: "buffer" });
+  try {
+    return UTF8_DECODER.decode(raw);
+  } catch {
+    throw new Error("dependency snapshot contains a non-UTF-8 symlink target");
+  }
+}
+
+function inside(root: string, target: string): boolean {
+  return target === root || target.startsWith(`${root}${sep}`);
+}
+
+function safeInternalSymlink(root: string, link: string, target: string): "file" | "dir" {
+  if (!target || target.includes("\0") || isAbsolute(target)) {
+    throw new Error("dependency snapshot contains an absolute or empty symlink target");
+  }
+  const lexicalRoot = resolve(root);
+  const lexicalTarget = resolve(dirname(link), target);
+  if (!inside(lexicalRoot, lexicalTarget)) {
+    throw new Error("dependency snapshot contains an escaping symlink target");
+  }
+  const realRoot = realpathSync(root);
+  const realTarget = realpathSync(lexicalTarget);
+  if (!inside(realRoot, realTarget)) {
+    throw new Error("dependency snapshot contains a symlink target outside node_modules");
+  }
+  const targetStat = statSync(link);
+  if (targetStat.isFile()) return "file";
+  if (targetStat.isDirectory()) return "dir";
+  throw new Error("dependency snapshot symlink resolves to a special filesystem entry");
+}
+
+function treeEntries(dir: string): string[] {
+  return readdirSync(dir, { encoding: "buffer" })
+    .sort((left, right) => Buffer.compare(left, right))
+    .map((raw) => {
+      let name: string;
+      try {
+        name = UTF8_DECODER.decode(raw);
+      } catch {
+        throw new Error("dependency snapshot contains a non-UTF-8 filesystem entry name");
+      }
+      return safeEntryName(name);
+    });
+}
+
+function treeRecord(hash: Hash, relative: string, kind: string, mode: number, payload = ""): void {
+  hashField(hash, relative);
+  hashField(hash, kind);
+  hashField(hash, (mode & 0o7777).toString(8).padStart(4, "0"));
+  hashField(hash, payload);
+}
+
+/** Hash every directory, regular file, executable bit, and internal symlink in
+ * a dependency tree. Traversal uses raw UTF-8 byte ordering rather than the
+ * host locale, and rejects filesystem shapes that cannot be copied safely. */
+export function dependencySnapshotTreeHash(nodeModules: string): string {
+  const rootStat = lstatSync(nodeModules);
+  if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) {
+    throw new Error("dependency snapshot node_modules root is not a real directory");
+  }
+  const hash = createHash("sha256");
+  hashField(hash, TREE_HASH_VERSION);
+  treeRecord(hash, "", "directory", rootStat.mode);
+  const walk = (dir: string, relative: string): void => {
+    for (const name of treeEntries(dir)) {
+      const absolute = join(dir, name);
+      const next = relative ? `${relative}/${name}` : name;
+      const stat = lstatSync(absolute);
+      if (stat.isSymbolicLink()) {
+        const target = symlinkTarget(absolute);
+        safeInternalSymlink(nodeModules, absolute, target);
+        treeRecord(hash, next, "symlink", stat.mode, target);
+      } else if (stat.isDirectory()) {
+        treeRecord(hash, next, "directory", stat.mode);
+        walk(absolute, next);
+      } else if (stat.isFile()) {
+        treeRecord(hash, next, "file", stat.mode, fileSha256(absolute));
+      } else {
+        throw new Error(`dependency snapshot contains special filesystem entry ${next}`);
+      }
+    }
+  };
+  walk(nodeModules, "");
+  return `sha256:${hash.digest("hex")}`;
+}
+
+function copyDependencyTree(source: string, destination: string): void {
+  const copyDirectory = (sourceDir: string, destinationDir: string): void => {
+    const sourceStat = lstatSync(sourceDir);
+    if (!sourceStat.isDirectory() || sourceStat.isSymbolicLink()) {
+      throw new Error("dependency snapshot copy source is not a real directory");
+    }
+    mkdirSync(destinationDir, { mode: sourceStat.mode & 0o7777 });
+    for (const name of treeEntries(sourceDir)) {
+      const sourceEntry = join(sourceDir, name);
+      const destinationEntry = join(destinationDir, name);
+      const stat = lstatSync(sourceEntry);
+      if (stat.isSymbolicLink()) {
+        const target = symlinkTarget(sourceEntry);
+        const targetType = safeInternalSymlink(source, sourceEntry, target);
+        symlinkSync(target, destinationEntry, process.platform === "win32" ? targetType : undefined);
+      } else if (stat.isDirectory()) {
+        copyDirectory(sourceEntry, destinationEntry);
+      } else if (stat.isFile()) {
+        copyFileSync(sourceEntry, destinationEntry, fsConstants.COPYFILE_FICLONE);
+        chmodSync(destinationEntry, stat.mode & 0o7777);
+      } else {
+        throw new Error("dependency snapshot contains a special filesystem entry");
+      }
+    }
+    chmodSync(destinationDir, sourceStat.mode & 0o7777);
+  };
+  copyDirectory(source, destination);
+}
+
+/** Create one independently writable dependency tree. COPYFILE_FICLONE is a
+ * copy-on-write optimization where supported, never a shared hardlink; the
+ * byte-copy fallback has the same isolation. Pre/post hashes bind the copy. */
+export function materializeDependencyTree(
+  source: string,
+  destination: string,
+  opts: { expectedHash?: string } = {},
+): string {
+  if (existsSync(destination)) throw new Error("dependency snapshot destination already exists");
+  const sourceHash = dependencySnapshotTreeHash(source);
+  if (opts.expectedHash && sourceHash !== opts.expectedHash) {
+    throw new Error("dependency tree hash mismatch before materialization");
+  }
+  try {
+    copyDependencyTree(source, destination);
+    if (dependencySnapshotTreeHash(destination) !== sourceHash) {
+      throw new Error("dependency tree hash mismatch after materialization");
+    }
+    return sourceHash;
+  } catch (error) {
+    rmSync(destination, { recursive: true, force: true });
+    throw error;
+  }
+}
+
+/** Materialize a private writable dependency tree for one disposable run. */
+export function materializeDependencySnapshot(
+  dependency: {
+    snapshot: Pick<G2BehaviorDependencySnapshot, "id" | "node_modules_hash">;
+    nodeModules: string;
+  },
+  destination: string,
+): void {
+  materializeDependencyTree(dependency.nodeModules, destination, {
+    expectedHash: dependency.snapshot.node_modules_hash,
+  });
+}
+
+function gitFile(
+  root: string,
+  commit: string,
+  file: "package.json" | "package-lock.json",
+  env: NodeJS.ProcessEnv,
+): string {
+  if (!FULL_SHA.test(commit) || replacementFreeExactCommit(root, commit) !== commit) {
+    throw new Error(`dependency snapshot commit ${commit} is not one exact commit`);
+  }
   try {
     return execFileSync("git", ["-C", root, "show", `${commit}:${file}`], {
       encoding: "utf8",
+      env: replacementFreeGitEnvironment(env),
       maxBuffer: 20 * 1024 * 1024,
       stdio: ["ignore", "pipe", "ignore"],
     });
@@ -129,7 +340,7 @@ function lockedPackageNames(lock: Record<string, unknown>): Set<string> {
 }
 
 function normalizeAllowlist(values: string[], lock: Record<string, unknown>): string[] {
-  const result = [...new Set(values.map((value) => value.trim()).filter(Boolean))].sort();
+  const result = [...new Set(values.map((value) => value.trim()).filter(Boolean))].sort(compareCodeUnits);
   const locked = lockedPackageNames(lock);
   for (const name of result) {
     if (!PACKAGE_NAME.test(name)) throw new Error(`invalid dependency install-script package ${JSON.stringify(name)}`);
@@ -175,8 +386,8 @@ function runtimeIdentity(env: NodeJS.ProcessEnv): G2BehaviorDependencySnapshot["
 }
 
 function snapshotInput(root: string, commit: string, allowInstallScripts: string[], env: NodeJS.ProcessEnv): SnapshotInput {
-  const packageJson = gitFile(root, commit, "package.json");
-  const packageLock = gitFile(root, commit, "package-lock.json");
+  const packageJson = gitFile(root, commit, "package.json", env);
+  const packageLock = gitFile(root, commit, "package-lock.json", env);
   const pkg = parseObject(packageJson, "package.json");
   const lock = parseObject(packageLock, "package-lock.json");
   if (lock.lockfileVersion !== 2 && lock.lockfileVersion !== 3) {
@@ -211,7 +422,7 @@ function snapshotInput(root: string, commit: string, allowInstallScripts: string
 function nativeInventory(nodeModules: string): G2BehaviorDependencySnapshot["native_binaries"] {
   const files: Array<{ file: string; sha256: string }> = [];
   const walk = (dir: string, relative: string): void => {
-    for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+    for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) => compareCodeUnits(a.name, b.name))) {
       const absolute = join(dir, entry.name);
       const next = relative ? `${relative}/${entry.name}` : entry.name;
       if (entry.isSymbolicLink()) continue;
@@ -238,6 +449,7 @@ function readSnapshot(dir: string): G2BehaviorDependencySnapshot | null {
     const nodeModules = join(dir, "node_modules");
     const installedLock = join(nodeModules, ".package-lock.json");
     if (!existsSync(nodeModules) || !lstatSync(nodeModules).isDirectory()) return null;
+    if (dependencySnapshotTreeHash(nodeModules) !== value.node_modules_hash) return null;
     const installedLockHash = existsSync(installedLock) ? sha256(readFileSync(installedLock)) : sha256("");
     if (installedLockHash !== value.installed_lock_hash) return null;
     if (canonicalJson(nativeInventory(nodeModules)) !== canonicalJson(value.native_binaries)) return null;
@@ -297,6 +509,7 @@ function buildSnapshot(base: string, input: SnapshotInput, env: NodeJS.ProcessEn
     const nodeModules = join(work, "node_modules");
     const installedLock = join(nodeModules, ".package-lock.json");
     mkdirSync(nodeModules, { recursive: true });
+    const nodeModulesHash = dependencySnapshotTreeHash(nodeModules);
     const body = {
       input_hash: input.inputHash,
       package_json_hash: input.packageJsonHash,
@@ -307,7 +520,8 @@ function buildSnapshot(base: string, input: SnapshotInput, env: NodeJS.ProcessEn
       allow_install_scripts: input.allowInstallScripts,
       installed_lock_hash: existsSync(installedLock) ? sha256(readFileSync(installedLock)) : sha256(""),
       native_binaries: nativeInventory(nodeModules),
-      format_version: SNAPSHOT_VERSION as 1,
+      node_modules_hash: nodeModulesHash,
+      format_version: SNAPSHOT_VERSION as 2,
       data_class: "private" as const,
       authority: "none" as const,
       effects: "cache_only" as const,
@@ -362,8 +576,8 @@ export function dependencySnapshotForCommit(
   let packageJson: string;
   let packageLock: string;
   try {
-    packageJson = gitFile(root, commit, "package.json");
-    packageLock = gitFile(root, commit, "package-lock.json");
+    packageJson = gitFile(root, commit, "package.json", env);
+    packageLock = gitFile(root, commit, "package-lock.json", env);
   } catch { return null; }
   const runtime = runtimeIdentity(env);
   const packageJsonHash = sha256(packageJson);
@@ -410,7 +624,7 @@ export function provisionG2BehaviorDependencySnapshotsForCommits(
     });
     return {
       snapshots: [...new Map([...byInput.values()].map((snapshot) => [snapshot.id, snapshot])).values()]
-        .sort((left, right) => left.id.localeCompare(right.id)),
+        .sort((left, right) => compareCodeUnits(left.id, right.id)),
       commits: mapped,
     };
   } finally {
@@ -440,7 +654,7 @@ export function provisionG2BehaviorDependencySnapshots(
         known_bad: { commit: candidate.proposed_corpus.known_bad.ref, dependency_snapshot_id: bad.dependency_snapshot_id },
         known_good: { commit: candidate.proposed_corpus.known_good.ref, dependency_snapshot_id: good.dependency_snapshot_id },
       },
-      allow_install_scripts: [...new Set(allowInstallScripts.map((value) => value.trim()).filter(Boolean))].sort(),
+      allow_install_scripts: [...new Set(allowInstallScripts.map((value) => value.trim()).filter(Boolean))].sort(compareCodeUnits),
       data_class: "private" as const,
       authority: "none" as const,
       effects: "cache_only" as const,

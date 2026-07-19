@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
@@ -11,6 +11,10 @@ import { HunchStore } from "../src/store/hunchStore.js";
 const projectRoot = process.cwd();
 const tsx = join(projectRoot, "node_modules/tsx/dist/cli.mjs");
 const cli = join(projectRoot, "src/cli/index.ts");
+
+function git(root: string, ...args: string[]): string {
+  return execFileSync("git", args, { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+}
 
 function draft(id: string, title: string, source = "llm_draft"): Decision {
   return {
@@ -176,8 +180,92 @@ fi
     const output = `${run.stdout}${run.stderr}`;
     assert.equal(run.status, 0, output);
     assert.match(output, /Harness batch complete: 2\/2 judged/);
-    assert.match(output, /0 accepted, 0 deleted, 2 kept/);
+    assert.match(output, /0 accepted, 0 rejected, 2 kept/);
     assert.ok(existsSync(firstPath) && existsSync(secondPath), "both unresolved proposals remain for human review");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("auto-review applies accept and append-only reject, then pumps both lifecycle updates", { skip: process.platform === "win32" ? "fixture fakes the provider with a #!/bin/sh stub" : false }, () => {
+  const root = mkdtempSync(join(tmpdir(), "hunch-autoreview-pump-"));
+  const bin = join(root, "bin");
+  mkdirSync(bin);
+  const fakeCodex = join(bin, "codex");
+  writeFileSync(fakeCodex, `#!/bin/sh
+if [ "$1" = "--version" ]; then
+  echo "codex-cli fixture"
+  exit 0
+fi
+printf '%s\\n' '{"type":"item.completed","item":{"type":"agent_message","text":"{\\"relevant\\":true,\\"confidence\\":0.99,\\"duplicate_of\\":null,\\"reason\\":\\"fixture says this memory matters\\"}"}}'
+`);
+  chmodSync(fakeCodex, 0o755);
+
+  try {
+    git(root, "init", "-q", "-b", "main");
+    git(root, "config", "user.name", "Auto Review Fixture");
+    git(root, "config", "user.email", "auto-review@pump.test");
+    writeFileSync(join(root, "app.ts"), "export const pump = true;\n");
+    writeFileSync(join(root, ".gitignore"), ".hunch/*.sqlite*\n.hunch/events.log\n.hunch/local.json\n.hunch/.hunch-commit.lock\n");
+
+    const acceptedAnchor: Decision = {
+      ...draft("dec_anchor", "Shared transport retries stay bounded"),
+      status: "accepted",
+      decision: "Shared transport retries stay bounded at three attempts.",
+      related_files: ["app.ts"],
+      provenance: { source: "human_confirmed", confidence: 0.95, evidence: [] },
+    };
+    const duplicate: Decision = {
+      ...draft("dec_duplicate", acceptedAnchor.title),
+      decision: acceptedAnchor.decision,
+      related_files: ["app.ts"],
+    };
+    const ready: Decision = {
+      ...draft("dec_ready", "Lifecycle pumps publish every successful review update"),
+      decision: "Every successful review update is committed through its exact memory home.",
+      related_files: ["src/review.ts"],
+      provenance: {
+        source: "llm_draft+verified",
+        confidence: 0.8,
+        evidence: ["synth: provider=fixture grounded=0.95 samples=3 agreement=1 pruned=0"],
+      },
+    };
+    const store = new HunchStore(hunchPaths(root));
+    store.json.ensureDirs();
+    store.json.put("decisions", acceptedAnchor);
+    store.json.put("decisions", duplicate);
+    store.json.put("decisions", ready);
+    store.close();
+    git(root, "add", "-A");
+    git(root, "commit", "-qm", "seed review lifecycle");
+
+    const run = spawnSync(process.execPath, [tsx, cli, "auto-review", "--apply"], {
+      cwd: root,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        PATH: `${bin}${delimiter}${process.env.PATH ?? ""}`,
+        HUNCH_PRIVATE_DIR: "",
+        HUNCH_SYNTH_PROVIDER: "codex-cli",
+        GIT_AUTHOR_NAME: "Auto Review Fixture",
+        GIT_AUTHOR_EMAIL: "auto-review@pump.test",
+        GIT_COMMITTER_NAME: "Auto Review Fixture",
+        GIT_COMMITTER_EMAIL: "auto-review@pump.test",
+      },
+    });
+    const output = `${run.stdout}${run.stderr}`;
+    assert.equal(run.status, 0, output);
+    assert.match(output, /Harness batch complete: 2\/2 judged/);
+    assert.match(output, /1 accepted, 1 rejected, 0 kept/);
+
+    const accepted = JSON.parse(readFileSync(join(root, ".hunch/decisions/dec_ready.json"), "utf8")) as Decision;
+    const rejected = JSON.parse(readFileSync(join(root, ".hunch/decisions/dec_duplicate.json"), "utf8")) as Decision;
+    assert.equal(accepted.status, "accepted");
+    assert.match(accepted.provenance.source, /human_confirmed/);
+    assert.equal(rejected.status, "rejected");
+    assert.ok(rejected.valid_to, "auto rejection is retained as a closed lifecycle record");
+    assert.match(git(root, "log", "-1", "--format=%s"), /auto-review decision lifecycle/);
+    assert.equal(git(root, "status", "--porcelain", "--", ".hunch"), "", "the pump leaves no pending memory mutation");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tempStore, prov } from "./helpers.js";
@@ -42,6 +43,7 @@ test("drift dead-ref: private overlay decisions can cite portable private:<path>
   initial.close();
   const overlay = join(root, "private-memory");
   mkdirSync(join(overlay, ".hunch"), { recursive: true });
+  execFileSync("git", ["init", "-q", overlay]);
   mkdirSync(join(overlay, "docs"), { recursive: true });
   writeFileSync(join(overlay, "docs", "runbooks.md"), "# Private runbooks\n");
   mkdirSync(join(root, ".hunch"), { recursive: true });

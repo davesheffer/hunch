@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   RELEASE_GATES,
+  RELEASE_CLEAN_STATUS_ARGS,
   RELEASE_TEST_COVERAGE,
   buildReleaseReceipt,
   executeReleasePlan,
@@ -34,7 +35,32 @@ test("Phase 2O release gate is fail-closed, content-addressed, and publish-neutr
     "proof_version_invalidation",
     "g2_readiness",
     "g3_readiness",
+    "md1_correction_bridge",
+    "correction_retry_durability",
+    "overlay_publication_safety",
+    "safe_recursive_scanning",
+    "destructive_action_safety",
+    "cross_locale_determinism",
   ]);
+  assert.deepEqual(RELEASE_CLEAN_STATUS_ARGS, ["status", "--porcelain", "--untracked-files=all"],
+    "candidate readiness must include untracked implementation and test files");
+  assert.ok(RELEASE_TEST_COVERAGE.md1_correction_bridge.includes("test/md1-e2e.test.ts"),
+    "the release receipt binds the joined public/private MD-1a black-box journey");
+  assert.ok(RELEASE_TEST_COVERAGE.private_leak_suite.includes("test/md1-e2e.test.ts"),
+    "the release receipt binds cross-adapter exact-zero private isolation");
+  assert.ok(RELEASE_TEST_COVERAGE.overlay_publication_safety.includes("test/team-matrix-e2e.test.ts"),
+    "the release receipt binds the joined three-clone team Matrix journey");
+  assert.ok(RELEASE_TEST_COVERAGE.replay_isolation.includes("test/dependency-snapshot-isolation.test.ts"),
+    "the release receipt binds immutable dependency materialization and cache-tamper refusal");
+  assert.deepEqual(RELEASE_TEST_COVERAGE.destructive_action_safety,
+    ["test/compact.test.ts", "test/revert-move-safety.test.ts"],
+    "the release receipt binds both additive compaction and commit-revert safety");
+  assert.deepEqual(RELEASE_TEST_COVERAGE.cross_locale_determinism,
+    ["test/canonical-locale.test.ts"],
+    "the release receipt binds locale-free canonical and raw-source hashes");
+  assert.deepEqual(RELEASE_TEST_COVERAGE.md1_correction_bridge.slice(-2),
+    ["test/md1-benchmark.test.ts", "tooling/md1-benchmark.mjs"],
+    "the release receipt binds both the executable MD-1a benchmark and its real-CLI smoke test");
 
   assert.throws(
     () => validateReleaseContext({ packageVersion: "1.8.0", tag: "v1.7.0", clean: true, allowDirty: false }),
@@ -42,7 +68,7 @@ test("Phase 2O release gate is fail-closed, content-addressed, and publish-neutr
   );
   assert.throws(
     () => validateReleaseContext({ packageVersion: "1.8.0", tag: "v1.8.0", clean: false, allowDirty: false }),
-    /tracked source is dirty/,
+    /working tree is dirty.*untracked files/,
   );
   assert.throws(
     () => validateReleaseContext({ packageVersion: "1.8.0", tag: "v1.8.0", tagCommitMatches: false, clean: true, allowDirty: false }),

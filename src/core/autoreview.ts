@@ -11,9 +11,9 @@
  *                     This is the dec_a466655539 line — a machine never confirms an
  *                     UN-audited draft; the harness verdict can only ADD a veto, not
  *                     substitute for the Critic's grounding.
- *   rejectDuplicate — delete: a near-duplicate of an accepted record (deterministic
+ *   rejectDuplicate — reject: a near-duplicate of an accepted record (deterministic
  *                     dupdetect, OR the harness named an existing decision it restates).
- *   rejectIrrelevant— delete: the harness judged it not worth keeping, confidently.
+ *   rejectIrrelevant— reject: the harness judged it not worth keeping, confidently.
  *   keep            — everything else stays for a human (the safe default).
  *
  * No I/O, no LLM calls here — verdicts are passed in — so it's fully unit-testable
@@ -47,8 +47,8 @@ export interface AutoReviewPlan {
 export interface AutoReviewConfig {
   /** grounded-ness threshold for the accept gate. */
   minGrounded?: number;
-  /** minimum harness confidence to act on an "irrelevant" verdict (delete). Below
-   *  this the draft is kept for a human — we never delete on a shaky judgment. */
+  /** minimum harness confidence to act on an "irrelevant" verdict (lifecycle rejection).
+   *  Below this the draft is kept for a human — we never reject on a shaky judgment. */
   minRejectConfidence?: number;
 }
 
@@ -112,7 +112,7 @@ export function planAutoReview(
   return plan;
 }
 
-/** Total drafts the plan would mutate (accept + both delete buckets). */
+/** Total drafts the plan would mutate (accept + both rejection buckets). */
 export function planMutations(plan: AutoReviewPlan): number {
   return plan.accept.length + plan.rejectDuplicate.length + plan.rejectIrrelevant.length;
 }

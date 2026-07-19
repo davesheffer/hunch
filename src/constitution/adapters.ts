@@ -4,11 +4,17 @@ import { basename, resolve } from "node:path";
 import { shortHash } from "../core/ids.js";
 import { parseDocAnchors } from "../core/docanchors.js";
 import { toPosixTarget } from "../core/paths.js";
+import { isHumanConfirmed } from "../core/strictgate.js";
 import type { Bug, Constraint } from "../core/types.js";
-import { commitMeta, revExists, revParse } from "../extractors/git.js";
+import { stableRepositoryName } from "../extractors/git.js";
 import type { HunchStore } from "../store/hunchStore.js";
 import { durationCutoff } from "./bootstrap.js";
 import { canonicalHash } from "./canonical.js";
+import {
+  replacementFreeCommitMeta,
+  replacementFreeExactCommit,
+  replacementFreeGitEnvironment,
+} from "./replacementFreeGit.js";
 import type { PolicyRepository } from "./repository.js";
 import {
   EvidenceEventSchema,
@@ -101,6 +107,7 @@ function committedInstructionFiles(root: string): string[] {
   try {
     const raw = execFileSync("git", ["-C", root, "ls-tree", "-r", "-z", "--name-only", "HEAD"], {
       encoding: "buffer",
+      env: replacementFreeGitEnvironment(),
       maxBuffer: 16 * 1024 * 1024,
       stdio: ["ignore", "pipe", "ignore"],
     });
@@ -115,11 +122,13 @@ function committedFileAt(root: string, revision: string, file: string, maxBytes:
     const object = `${revision}:${file}`;
     const size = Number(execFileSync("git", ["-C", root, "cat-file", "-s", object], {
       encoding: "utf8",
+      env: replacementFreeGitEnvironment(),
       stdio: ["ignore", "pipe", "ignore"],
     }).trim());
     if (!Number.isFinite(size) || size < 0 || size > maxBytes) return null;
     return execFileSync("git", ["-C", root, "cat-file", "blob", object], {
       encoding: "utf8",
+      env: replacementFreeGitEnvironment(),
       maxBuffer: maxBytes + 1,
       stdio: ["ignore", "pipe", "ignore"],
     });
@@ -148,6 +157,7 @@ function authoredInstructionCommit(root: string, file: string, sourceHash: strin
       file,
     ], {
       encoding: "utf8",
+      env: replacementFreeGitEnvironment(),
       maxBuffer: 1024 * 1024,
       stdio: ["ignore", "pipe", "ignore"],
     }).split(/\r?\n/).filter(Boolean);
@@ -185,12 +195,12 @@ function instructionEvents(
     totalBytes += Buffer.byteLength(source, "utf8");
     const sourceHash = canonicalHash(source);
     const introducedAt = authoredInstructionCommit(root, file, sourceHash);
-    if (!introducedAt || !revExists(introducedAt, root)) {
+    const commit = introducedAt ? replacementFreeExactCommit(root, introducedAt) : null;
+    if (!commit) {
       excluded++;
       continue;
     }
-    const commit = revParse(`${introducedAt}^{commit}`, root);
-    const meta = commitMeta(commit, root);
+    const meta = replacementFreeCommitMeta(root, commit);
     if (!meta || !Number.isFinite(Date.parse(meta.date))) {
       excluded++;
       continue;
@@ -275,8 +285,9 @@ function importEvents(
     }
     let commit: string | undefined;
     if (item.commit) {
-      if (!revExists(item.commit, root)) throw new Error(`evidence import item ${item.id} commit ${item.commit} does not resolve`);
-      commit = revParse(`${item.commit}^{commit}`, root);
+      const exactCommit = replacementFreeExactCommit(root, item.commit);
+      if (!exactCommit) throw new Error(`evidence import item ${item.id} commit ${item.commit} does not resolve`);
+      commit = exactCommit;
     }
     const files = [...new Set(item.files.map(normalizeRepoFile))].sort();
     const symbols = [...new Set(item.symbols)].sort();
@@ -357,7 +368,9 @@ function isPrivateRecord(store: HunchStore, kind: "constraints" | "bugs", id: st
   return !!store.getPrivateRec(kind, id);
 }
 
-function correctionEvent(root: string, constraint: Constraint, isPrivate: boolean): PendingEvent | null {
+/** Canonical evidence projection for one captured correction. Materializers may
+ * reuse this projection, but ingestion itself remains evidence-only. */
+export function correctionEvidenceEvent(root: string, constraint: Constraint, dataClass: DataClass): EvidenceEvent | null {
   const occurredAt = constraint.valid_from ?? constraint.provenance.last_verified;
   if (!occurredAt || !Number.isFinite(Date.parse(occurredAt))) return null;
   const contentHash = canonicalHash({
@@ -368,16 +381,16 @@ function correctionEvent(root: string, constraint: Constraint, isPrivate: boolea
     match: constraint.match,
     source_decision: constraint.source_decision,
   });
-  const event = EvidenceEventSchema.parse({
+  return EvidenceEventSchema.parse({
     id: `ev_${shortHash(`correction:${contentHash}`)}`,
     kind: "correction",
     occurred_at: occurredAt,
-    repository: basename(root),
+    repository: stableRepositoryName(root),
     files: constraint.scope.filter((scope) => scope !== "**"),
     symbols: constraint.forbids?.symbols ?? [],
     text_ref: constraint.id,
     related_records: [constraint.id, ...(constraint.source_decision ? [constraint.source_decision] : [])],
-    data_class: isPrivate ? "private" : "public",
+    data_class: dataClass,
     content_hash: contentHash,
     compiler: {
       status: "covered",
@@ -391,7 +404,15 @@ function correctionEvent(root: string, constraint: Constraint, isPrivate: boolea
       last_verified: constraint.provenance.last_verified,
     },
   });
-  return { occurredAt, event, private: isPrivate };
+}
+
+function correctionEvent(store: HunchStore, root: string, constraint: Constraint, isPrivate: boolean): PendingEvent | null {
+  // A public evidence event may only name a source decision that is itself
+  // public. Missing/private-only ids are excluded before serialization so a
+  // machine without the overlay cannot accidentally declassify the reference.
+  if (!isPrivate && constraint.source_decision && !store.json.get("decisions", constraint.source_decision)) return null;
+  const event = correctionEvidenceEvent(root, constraint, isPrivate ? "private" : "public");
+  return event ? { occurredAt: event.occurred_at, event, private: isPrivate } : null;
 }
 
 function bugEvent(
@@ -403,7 +424,7 @@ function bugEvent(
   opts: LocalEvidenceOptions,
 ): PendingEvent | null {
   const commit = bug.lineage.fixed_commit ?? bug.lineage.introduced_commit;
-  const meta = commit ? commitMeta(commit, root) : null;
+  const meta = commit ? replacementFreeCommitMeta(root, commit) : null;
   const occurredAt = meta?.date ?? bug.provenance.last_verified;
   if (!occurredAt || !Number.isFinite(Date.parse(occurredAt))) return null;
   const kind = bug.lineage.detected ? "test_failure" : "incident";
@@ -486,11 +507,11 @@ export function ingestLocalEvidence(
   let scanned = records.constraints.length + records.bugs.length;
   let excluded = 0;
   for (const constraint of records.constraints) {
-    if (constraint.status !== "active" || !constraint.provenance.source.includes("human_confirmed")) {
+    if (constraint.status !== "active" || !isHumanConfirmed(constraint.provenance.source)) {
       excluded++;
       continue;
     }
-    const item = correctionEvent(root, constraint, isPrivateRecord(store, "constraints", constraint.id, opts));
+    const item = correctionEvent(store, root, constraint, isPrivateRecord(store, "constraints", constraint.id, opts));
     if (!item || Date.parse(item.occurredAt) < minDate) excluded++;
     else pending.push(item);
   }

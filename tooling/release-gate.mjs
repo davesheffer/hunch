@@ -34,12 +34,34 @@ export const RELEASE_TEST_COVERAGE = Object.freeze({
   compiler_golden_set: ["test/constitution.test.ts"],
   evaluator_fixture_matrix: ["test/constitution.test.ts"],
   adapter_certification: ["test/constitution.test.ts", "test/agenthook.test.ts"],
-  private_leak_suite: ["test/private-overlay.test.ts", "test/constitution.test.ts", "test/wiki.test.ts"],
-  replay_isolation: ["test/constitution.test.ts", "tooling/constitution-clean-rehearsal.mjs"],
+  private_leak_suite: ["test/private-overlay.test.ts", "test/private-correction-interfaces.test.ts", "test/md1-e2e.test.ts", "test/team-matrix-e2e.test.ts", "test/constitution.test.ts", "test/wiki.test.ts"],
+  replay_isolation: ["test/constitution.test.ts", "test/dependency-snapshot-isolation.test.ts", "tooling/constitution-clean-rehearsal.mjs"],
   proof_version_invalidation: ["test/constitution.test.ts"],
   g2_readiness: ["test/g2.test.ts", "test/constitution.test.ts"],
   g3_readiness: ["test/g3.test.ts", "test/behavior-workspace.test.ts"],
+  md1_correction_bridge: [
+    "test/constitution.test.ts",
+    "test/private-correction-interfaces.test.ts",
+    "test/record-constraint-cli.test.ts",
+    "test/md1-e2e.test.ts",
+    "test/md1-benchmark.test.ts",
+    "tooling/md1-benchmark.mjs",
+  ],
+  correction_retry_durability: ["test/sync-repair-commit.test.ts", "test/sync.test.ts"],
+  overlay_publication_safety: ["test/overlay-commit-guard.test.ts", "test/singlesource.test.ts", "test/worktree.test.ts", "test/team-matrix-e2e.test.ts"],
+  safe_recursive_scanning: [
+    "test/indexer.test.ts",
+    "test/comments.test.ts",
+    "test/workingdiff.test.ts",
+    "test/safe-repo-file.test.ts",
+    "test/check-nonmutating.test.ts",
+    "test/index-source-publication.test.ts",
+  ],
+  destructive_action_safety: ["test/compact.test.ts", "test/revert-move-safety.test.ts"],
+  cross_locale_determinism: ["test/canonical-locale.test.ts"],
 });
+
+export const RELEASE_CLEAN_STATUS_ARGS = Object.freeze(["status", "--porcelain", "--untracked-files=all"]);
 
 function stable(value) {
   if (Array.isArray(value)) return value.map(stable);
@@ -62,7 +84,7 @@ export function validateReleaseContext({ packageVersion, tag, tagCommitMatches, 
     throw new Error(`release tag ${tag} does not match package version ${packageVersion}`);
   }
   if (tag && tagCommitMatches === false) throw new Error(`release tag ${tag} does not point to HEAD`);
-  if (!clean && !allowDirty) throw new Error("tracked source is dirty; commit or restore it before running the release gate");
+  if (!clean && !allowDirty) throw new Error("working tree is dirty (including untracked files); commit or restore it before running the release gate");
   return { tag_matches_version: tag ? true : null };
 }
 
@@ -229,7 +251,7 @@ async function main() {
   const options = parseArgs(process.argv.slice(2));
   const packageJson = JSON.parse(readFileSync(join(projectRoot, "package.json"), "utf8"));
   const commit = git(["rev-parse", "HEAD"]);
-  const clean = git(["status", "--porcelain", "--untracked-files=no"]) === "";
+  const clean = git(RELEASE_CLEAN_STATUS_ARGS) === "";
   const tagCommitMatches = options.tag && options.tag === `v${packageJson.version}`
     ? git(["rev-list", "-n", "1", options.tag]) === commit
     : options.tag ? false : null;
@@ -278,8 +300,8 @@ async function main() {
     const rehearsal = existsSync(rehearsalOutput)
       ? compactRehearsal(JSON.parse(readFileSync(rehearsalOutput, "utf8")))
       : null;
-    const cleanAfter = git(["status", "--porcelain", "--untracked-files=no"]) === "";
-    const contextErrors = clean && !cleanAfter ? ["release gate commands modified tracked source"] : [];
+    const cleanAfter = git(RELEASE_CLEAN_STATUS_ARGS) === "";
+    const contextErrors = clean && !cleanAfter ? ["release gate commands modified the working tree"] : [];
     receipt = buildReleaseReceipt({
       package: { name: packageJson.name, version: packageJson.version },
       source: {

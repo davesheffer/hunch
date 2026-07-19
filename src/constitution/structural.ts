@@ -1,4 +1,5 @@
-import { basename } from "node:path";
+import { builtinModules } from "node:module";
+import { basename, extname } from "node:path";
 import { externalImportNodeId, externalPackage } from "../core/externalImports.js";
 import { pathMatchesGlob } from "../core/glob.js";
 import { shortHash } from "../core/ids.js";
@@ -24,6 +25,8 @@ import {
   type StructuralDelta,
   type StructuralSymbolRef,
 } from "./schema.js";
+
+const builtinModuleSpecifiers = new Set(builtinModules);
 
 export interface StructuralCandidate {
   id: string;
@@ -62,6 +65,75 @@ function candidateId(assertion: PolicyAssertion, scope: PolicySpec["scope"]): st
   return `cand_${shortHash(canonicalHash({ assertion, scope }))}`;
 }
 
+export interface ExternalImportBoundaryCandidate {
+  id: string;
+  assertion: PolicyAssertion;
+  scope: PolicySpec["scope"];
+  basis: "correction-forbidden-import";
+  reason: string;
+}
+
+export type ExternalImportBoundaryInspection =
+  | { candidate: ExternalImportBoundaryCandidate; reason: null }
+  | { candidate: null; reason: string; code: "unsupported_dependency" | "unsupported_file" | "missing_anchor" | "baseline_violated" };
+
+/** Bind one exact file/package boundary to the existing static import graph.
+ * The file-level fact is anchored to the first stable symbol because the
+ * indexer attaches every external import in a file to every symbol in it. */
+export function inspectExternalImportBoundary(
+  store: HunchStore,
+  file: string,
+  specifier: string,
+  opts: { publicOnly?: boolean } = {},
+): ExternalImportBoundaryInspection {
+  const supportedExtensions = new Set([".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"]);
+  if (!supportedExtensions.has(extname(file).toLowerCase())) {
+    return {
+      candidate: null,
+      reason: `${file} is outside MD-1a's TypeScript/JavaScript static ESM import-declaration projection`,
+      code: "unsupported_file",
+    };
+  }
+  const exactSpecifier = specifier.trim();
+  const dependency = externalPackage(exactSpecifier);
+  const external = externalImportNodeId(exactSpecifier);
+  const exactNpmPackage = /^(?:@[A-Za-z0-9][A-Za-z0-9._~-]*\/)?[A-Za-z0-9][A-Za-z0-9._~-]*$/;
+  if (!dependency || !external || dependency !== exactSpecifier || builtinModuleSpecifiers.has(exactSpecifier)
+    || !exactNpmPackage.test(exactSpecifier)) {
+    return {
+      candidate: null,
+      reason: `${specifier} is not one exact top-level npm package identity; package subpaths, built-ins, and scheme specifiers are unsupported`,
+      code: "unsupported_dependency",
+    };
+  }
+  const symbols = (opts.publicOnly ? store.json.loadAll("symbols") : store.recs("symbols"))
+    .filter((symbol) => symbol.file === file)
+    .sort((left, right) => left.id.localeCompare(right.id));
+  if (!symbols.length) return { candidate: null, reason: `${file} has no exact current symbol to anchor a file-scoped import policy`, code: "missing_anchor" };
+  const edges = opts.publicOnly ? store.json.loadAll("edges") : store.recs("edges");
+  const symbolIds = new Set(symbols.map((symbol) => symbol.id));
+  if (edges.some((edge) => edge.type === "imports" && symbolIds.has(edge.from) && edge.to === external)) {
+    return { candidate: null, reason: `${file} currently imports ${dependency}; fix the baseline before Hunch builds a proof packet`, code: "baseline_violated" };
+  }
+  const assertion: PolicyAssertion = {
+    kind: "not-reaches",
+    subject: exactSelector(symbols[0]!),
+    relation: { edges: ["imports"], transitive: false, max_depth: 1 },
+    object: { selector: `external:${dependency}` },
+  };
+  const scope = scopeFor(store, file, !!opts.publicOnly);
+  return {
+    candidate: {
+      id: candidateId(assertion, scope),
+      assertion,
+      scope,
+      basis: "correction-forbidden-import",
+      reason: `human correction forbids direct external package ${dependency} in ${file}`,
+    },
+    reason: null,
+  };
+}
+
 function alternativeFor(candidate: StructuralCandidate): CandidateAlternative {
   return {
     id: candidate.id,
@@ -94,18 +166,21 @@ function candidateContext(
   };
 }
 
-function structuralKey(policy: Pick<PolicySpec, "assertion" | "scope" | "data_class">): string {
+export function structuralKey(policy: Pick<PolicySpec, "assertion" | "scope" | "data_class">): string {
   return canonicalHash({ assertion: policy.assertion, scope: policy.scope, data_class: policy.data_class });
 }
 
 function scopesOverlap(left: PolicySpec["scope"], right: PolicySpec["scope"]): boolean {
   const repoOverlap = !left.repos.length || !right.repos.length || left.repos.some((repo) => right.repos.includes(repo));
-  const pathOverlap = !left.paths.length || !right.paths.length || left.paths.some((path) => right.paths.includes(path));
+  const pathOverlap = !left.paths.length || !right.paths.length || left.paths.some((leftPath) =>
+    right.paths.some((rightPath) => leftPath === rightPath
+      || pathMatchesGlob(leftPath, rightPath)
+      || pathMatchesGlob(rightPath, leftPath)));
   const componentOverlap = !left.components.length || !right.components.length || left.components.some((component) => right.components.includes(component));
   return repoOverlap && pathOverlap && componentOverlap;
 }
 
-function directConflict(candidate: PolicySpec, incumbent: PolicySpec): boolean {
+export function directConflict(candidate: PolicySpec, incumbent: PolicySpec): boolean {
   const left = candidate.assertion;
   const right = incumbent.assertion;
   if (!((left.kind === "reaches" && right.kind === "not-reaches") || (left.kind === "not-reaches" && right.kind === "reaches"))) return false;

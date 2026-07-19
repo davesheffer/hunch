@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, symlinkSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -80,6 +80,34 @@ test("reindex preserves component enrichment and does not churn timestamps", () 
   rmSync(root, { recursive: true, force: true });
 });
 
+test("fast reindex preserves measured churn instead of rewriting it to zero", () => {
+  const root = fixtureRepo();
+  const g = (...args: string[]) => execFileSync("git", ["-C", root, ...args], { stdio: "ignore" });
+  g("init", "-q");
+  g("-c", "user.email=t@t", "-c", "user.name=t", "add", "-A");
+  g("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "initial source");
+  writeFileSync(join(root, "src/auth/session.ts"), `import { jwtDecode } from "./jwt.js";\nexport function verifySession(t){ return jwtDecode(t); }\n// measured change\n`);
+  g("-c", "user.email=t@t", "-c", "user.name=t", "add", "src/auth/session.ts");
+  g("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "change session source");
+
+  const store = new HunchStore(hunchPaths(root));
+  try {
+    store.json.ensureDirs();
+    indexRepo(store, root);
+    const symbolsFile = join(root, ".hunch/symbols/index.json");
+    const measured = readFileSync(symbolsFile, "utf8");
+    const session = store.json.loadAll("symbols").find((symbol) => symbol.file === "src/auth/session.ts")!;
+    assert.ok(session.metrics.churn_90d >= 2, `expected measured churn, got ${session.metrics.churn_90d}`);
+
+    indexRepo(store, root, { churn: false });
+    assert.equal(readFileSync(symbolsFile, "utf8"), measured,
+      "an unchanged fast scan is byte-identical to the last fully measured graph");
+  } finally {
+    store.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("GIT-TRACKED vendored dirs (node_modules, dist) are excluded from indexing", () => {
   const root = fixtureRepo();
   // a repo that TRACKS vendored code: `git ls-files` returns it, the walk never runs
@@ -99,6 +127,35 @@ test("GIT-TRACKED vendored dirs (node_modules, dist) are excluded from indexing"
   assert.ok(![...files].some((f) => f.includes("node_modules") || f.startsWith("dist/")), `vendored files indexed: ${[...files].join(", ")}`);
   store.close();
   rmSync(root, { recursive: true, force: true });
+});
+
+test("a Git-tracked source symlink is skipped without reading its external target", () => {
+  const root = mkdtempSync(join(tmpdir(), "hunch-idx-symlink-root-"));
+  const outside = mkdtempSync(join(tmpdir(), "hunch-idx-symlink-outside-"));
+  const outsideFile = join(outside, "outside.ts");
+  const outsideBytes = "export function externalSecretDoNotIndex(){ return 42; }\n";
+  writeFileSync(outsideFile, outsideBytes);
+  mkdirSync(join(root, "src"), { recursive: true });
+  symlinkSync(outsideFile, join(root, "src/external.ts"));
+  const g = (...args: string[]) => execFileSync("git", ["-C", root, ...args], { stdio: "ignore" });
+  g("init", "-q");
+  g("-c", "user.email=t@t", "-c", "user.name=t", "add", "src/external.ts");
+  g("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "track source symlink");
+
+  const store = new HunchStore(hunchPaths(root));
+  try {
+    store.json.ensureDirs();
+    const result = indexRepo(store, root, { churn: false });
+    assert.equal(result.files, 1, "the tracked entry is discovered without being trusted");
+    assert.equal(result.skipped, 1, "the symlink is reported as a skipped scanner input");
+    assert.equal(store.json.loadAll("symbols").length, 0);
+    assert.equal(store.json.loadAll("edges").length, 0);
+    assert.equal(readFileSync(outsideFile, "utf8"), outsideBytes);
+  } finally {
+    store.close();
+    rmSync(root, { recursive: true, force: true });
+    rmSync(outside, { recursive: true, force: true });
+  }
 });
 
 test("same-named symbols in one file get unique, stable ids (no PK collision)", () => {
@@ -517,3 +574,39 @@ test("indexing is deterministic — same ids on re-run", () => {
   store.close();
   rmSync(root, { recursive: true, force: true });
 });
+
+for (const dirtyKind of ["staged", "unstaged", "untracked"] as const) {
+  test(`requireClean rejects ${dirtyKind} indexed-code changes before graph JSON writes`, () => {
+    const root = fixtureRepo();
+    const git = (...args: string[]) => execFileSync("git", ["-C", root, ...args], { encoding: "utf8" }).trim();
+    git("init", "-q", "-b", "main");
+    git("config", "user.email", "index-clean@test.invalid");
+    git("config", "user.name", "Index Clean Test");
+    git("add", "src");
+    git("commit", "-qm", "fixture: clean source");
+
+    const store = new HunchStore(hunchPaths(root));
+    try {
+      store.json.ensureDirs();
+      indexRepo(store, root, { churn: false });
+      const symbolsFile = join(root, ".hunch/symbols/index.json");
+      const before = readFileSync(symbolsFile);
+
+      if (dirtyKind === "untracked") {
+        writeFileSync(join(root, "src/auth/pending.ts"), "export function pending(){ return true; }\n");
+      } else {
+        writeFileSync(join(root, "src/auth/session.ts"), "export function dirty(){ return false; }\n");
+        if (dirtyKind === "staged") git("add", "src/auth/session.ts");
+      }
+
+      assert.throws(
+        () => indexRepo(store, root, { churn: false, requireClean: true }),
+        /dirty indexed code.*commit or stash/i,
+      );
+      assert.deepEqual(readFileSync(symbolsFile), before, "the failed preflight writes no graph bytes");
+    } finally {
+      store.close();
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+}

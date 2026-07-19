@@ -1,5 +1,5 @@
 /** Durable file writes for the Hunch. */
-import { writeFileSync, renameSync, rmSync } from "node:fs";
+import { linkSync, writeFileSync, renameSync, rmSync } from "node:fs";
 
 let counter = 0;
 
@@ -31,6 +31,23 @@ export function writeFileAtomic(file: string, data: string): void {
       return;
     }
     throw e;
+  }
+}
+
+/** Atomically create a complete file only when no target exists. A same-dir
+ * hard link publishes the fully written temp inode with create-if-absent
+ * semantics, so concurrent lifecycle writers can never be overwritten. */
+export function writeFileAtomicIfAbsent(file: string, data: string): boolean {
+  const tmp = `${file}.tmp${process.pid}.${counter++}`;
+  try {
+    writeFileSync(tmp, data);
+    linkSync(tmp, file);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "EEXIST") return false;
+    throw error;
+  } finally {
+    safeRm(tmp);
   }
 }
 

@@ -9,8 +9,9 @@
  * Idempotent + merge-safe (con_8460b6770f): appends a single marked block and
  * never rewrites the user's existing entries; re-running is a no-op.
  */
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import { readFileSync, existsSync, lstatSync, realpathSync } from "node:fs";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { writeFileAtomic } from "../core/io.js";
 
 const MARK = "# >>> hunch (derived runtime index — regenerable from .hunch/*.json) >>>";
 const END = "# <<< hunch <<<";
@@ -58,14 +59,51 @@ export interface GitignoreResult {
   action: "created" | "appended" | "unchanged";
 }
 
+function pathIsWithin(path: string, parent: string): boolean {
+  const rel = relative(parent, path);
+  return rel === "" || (rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
+}
+
+/** Defense in depth for integration files written automatically after a clone.
+ * Refuse symlinks, directories/devices, and hard links; require the canonical
+ * target to be the expected top-level file inside the canonical repository root. */
+export function assertSafeTopLevelConfigFile(root: string, name: string): string {
+  const lexicalRoot = resolve(root);
+  const rootStat = lstatSync(lexicalRoot);
+  if (rootStat.isSymbolicLink() || !rootStat.isDirectory()) {
+    throw new Error(`refusing to write integration config through unsafe repository root: ${root}`);
+  }
+  if (name !== ".gitignore" && name !== ".gitattributes") {
+    throw new Error(`refusing unexpected integration config path: ${name}`);
+  }
+  const canonicalRoot = realpathSync(lexicalRoot);
+  const path = join(lexicalRoot, name);
+  let stat: ReturnType<typeof lstatSync>;
+  try {
+    stat = lstatSync(path);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return path;
+    throw error;
+  }
+  if (stat.isSymbolicLink() || !stat.isFile() || stat.nlink !== 1) {
+    throw new Error(`refusing to write unsafe integration config: ${path}`);
+  }
+  const canonicalPath = realpathSync(path);
+  if (!pathIsWithin(canonicalPath, canonicalRoot) || canonicalPath !== join(canonicalRoot, name)) {
+    throw new Error(`refusing integration config outside repository root: ${path}`);
+  }
+  return path;
+}
+
 /** Idempotent + merge-safe append of one marked block (con_8460b6770f): never
  *  rewrites the user's existing entries, and re-running is a no-op once the block
  *  (or an equivalent hand-written set of the same patterns) is present. */
 function appendBlock(root: string, mark: string, entries: string[], end: string): GitignoreResult {
-  const path = join(root, ".gitignore");
+  const path = assertSafeTopLevelConfigFile(root, ".gitignore");
   const block = [mark, ...entries, end].join("\n");
   if (!existsSync(path)) {
-    writeFileSync(path, block + "\n");
+    assertSafeTopLevelConfigFile(root, ".gitignore");
+    writeFileAtomic(path, block + "\n");
     return { path, action: "created" };
   }
   const cur = readFileSync(path, "utf8");
@@ -76,7 +114,8 @@ function appendBlock(root: string, mark: string, entries: string[], end: string)
   const lines = new Set(cur.split("\n").map((l) => l.trim()));
   if (entries.every((e) => lines.has(e))) return { path, action: "unchanged" };
   const sep = cur.endsWith("\n") || cur.length === 0 ? "" : "\n";
-  writeFileSync(path, `${cur}${sep}${block}\n`);
+  assertSafeTopLevelConfigFile(root, ".gitignore");
+  writeFileAtomic(path, `${cur}${sep}${block}\n`);
   return { path, action: "appended" };
 }
 

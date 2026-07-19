@@ -1,4 +1,5 @@
 import { shortHash } from "../core/ids.js";
+import { compareCodeUnits } from "../core/canonicalOrder.js";
 import { commitChanges, fileAtRef, firstParent, revParse } from "../extractors/git.js";
 import { attributeCalls, parseSource, type ParsedFile, type ParsedSymbol } from "../extractors/parse.js";
 import { canonicalHash } from "./canonical.js";
@@ -67,7 +68,7 @@ function importRef(file: string, specifier: string): StructuralImportRef {
 }
 
 function sortByKey<T>(items: T[], key: (item: T) => string): T[] {
-  return items.sort((a, b) => key(a).localeCompare(key(b)));
+  return items.sort((a, b) => compareCodeUnits(key(a), key(b)));
 }
 
 /** Compare exact git blobs at a commit and its first parent. No checkout,
@@ -141,7 +142,7 @@ export function extractStructuralDelta(root: string, commit: string): Structural
   const body = {
     before_commit: before,
     after_commit: after,
-    files: [...files].sort(),
+    files: [...files].sort(compareCodeUnits),
     symbols: {
       added: sortByKey(addedSymbols, (s) => `${s.file}\0${s.kind}\0${s.name}`),
       removed: sortByKey(removedSymbols, (s) => `${s.file}\0${s.kind}\0${s.name}`),

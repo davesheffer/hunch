@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
-import { realpathSync, renameSync } from "node:fs";
+import { readFileSync, realpathSync, renameSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
@@ -129,6 +129,14 @@ if (process.platform === "win32") {
 test("parseSource reports syntax-error trees without inventing a clean parse", () => {
   const parsed = parseSource("broken.ts", "export function broken( {")!;
   assert.equal(parsed.parseable, false);
+});
+
+test("Hunch can completely parse its VS Code graph adapter", () => {
+  const source = readFileSync(new URL("../vscode-extension/src/hunchData.ts", import.meta.url), "utf8");
+  assert.equal(source.includes("\0"), false, "raw NUL bytes are accepted by TypeScript but rejected by tree-sitter");
+  const parsed = parseSource("vscode-extension/src/hunchData.ts", source);
+  assert.ok(parsed, "the adapter must have a supported parser");
+  assert.equal(parsed.parseable, true, "the adapter must remain usable by strict semantic scans");
 });
 
 test("attributeCalls maps callee to enclosing symbol (keyed by stable byte offset)", () => {

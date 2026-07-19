@@ -513,11 +513,11 @@ export function componentGraph(hunch: Hunch): ComponentGraph {
     if (e.type !== "calls") continue;
     const a = symOwner.get(e.from), b = symOwner.get(e.to);
     if (!a || !b || a === b) continue;
-    const k = `${a} ${b}`;
+    const k = `${a}\u0000${b}`;
     linkW.set(k, (linkW.get(k) ?? 0) + 1);
   }
   const links: GraphLink[] = [...linkW].map(([k, weight]) => {
-    const [source, target] = k.split(" ") as [string, string];
+    const [source, target] = k.split("\u0000") as [string, string];
     return { source, target, weight };
   });
   return { nodes, links };

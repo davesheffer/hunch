@@ -1,6 +1,20 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join, posix, relative } from "node:path";
+import {
+  closeSync,
+  constants,
+  fstatSync,
+  ftruncateSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  openSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+  writeSync,
+} from "node:fs";
+import { dirname, isAbsolute, join, posix, relative, resolve, sep } from "node:path";
 import { hunchPathsForDir } from "../core/paths.js";
 import { symbolId } from "../core/ids.js";
 import { externalPackage } from "../core/externalImports.js";
@@ -12,6 +26,7 @@ import { parseSource, type ParsedFile, type ParsedSymbol } from "../extractors/p
 import { HunchStore } from "../store/hunchStore.js";
 import { canonicalHash } from "./canonical.js";
 import { evaluatePolicyOnSnapshot, graphSnapshot, type GraphSnapshot } from "./evaluator.js";
+import { hasUnsafeCheckoutAttributes } from "./safeCheckout.js";
 import type { PolicyEvaluation, PolicySelector, PolicySpec } from "./schema.js";
 
 export interface SourceMutationOutcome {
@@ -31,6 +46,7 @@ function safeEnvironment(home: string, gitConfig: string): NodeJS.ProcessEnv {
     HOME: home,
     GIT_CONFIG_GLOBAL: gitConfig,
     GIT_CONFIG_NOSYSTEM: "1",
+    GIT_NO_REPLACE_OBJECTS: "1",
     GIT_TERMINAL_PROMPT: "0",
     GIT_LFS_SKIP_SMUDGE: "1",
     HUNCH_PRIVATE_DIR: "",
@@ -232,6 +248,35 @@ function removeWorktree(root: string, hooks: string, env: NodeJS.ProcessEnv, che
   }
 }
 
+function openRegularSourceNoFollow(checkout: string, sourceFile: string): number {
+  const file = join(checkout, sourceFile);
+  const before = lstatSync(file);
+  if (before.isSymbolicLink()) throw new Error("mutation-source-symlink-unsupported");
+  if (!before.isFile()) throw new Error("mutation-source-not-regular");
+
+  const canonicalCheckout = realpathSync(checkout);
+  const canonicalFile = realpathSync(file);
+  const fromCheckout = relative(canonicalCheckout, canonicalFile);
+  if (!fromCheckout || fromCheckout === ".." || fromCheckout.startsWith(`..${sep}`) || isAbsolute(fromCheckout)
+    || canonicalFile !== resolve(canonicalCheckout, sourceFile)) {
+    throw new Error("mutation-source-outside-checkout");
+  }
+
+  let descriptor: number | undefined;
+  try {
+    descriptor = openSync(file, constants.O_RDWR | constants.O_NOFOLLOW);
+    const opened = fstatSync(descriptor);
+    if (!opened.isFile() || opened.dev !== before.dev || opened.ino !== before.ino) {
+      throw new Error("mutation-source-changed-before-open");
+    }
+    return descriptor;
+  } catch (error) {
+    if (descriptor !== undefined) closeSync(descriptor);
+    if ((error as NodeJS.ErrnoException).code === "ELOOP") throw new Error("mutation-source-symlink-unsupported");
+    throw error;
+  }
+}
+
 /** Apply one primary mutation to an immutable disposable source checkout. No
  * project script, build, test, provider, model, or repository hook executes. */
 export function runSourceMutation(root: string, policy: PolicySpec, base: GraphSnapshot): SourceMutationOutcome {
@@ -252,6 +297,9 @@ export function runSourceMutation(root: string, policy: PolicySpec, base: GraphS
   let outcome: SourceMutationOutcome = { error_code: "source-mutation-failed" };
   try {
     if (unsafeLocalFilter(root, env)) throw new Error("unsafe-local-filter-config");
+    if (hasUnsafeCheckoutAttributes(root, base.head, env, { allowDisabledLfs: true })) {
+      throw new Error("unsafe-checkout-attributes");
+    }
     execFileSync("git", gitArgs(root, hooks, ["worktree", "add", "--detach", "--force", checkout, base.head]), {
       env,
       timeout: 30_000,
@@ -262,13 +310,27 @@ export function runSourceMutation(root: string, policy: PolicySpec, base: GraphS
     const subjectComponent = componentForSelector(base, policy.assertion.subject);
     const sourceFile = subject?.file ?? (subjectComponent ? componentFiles(base, subjectComponent)[0] : undefined);
     if (!sourceFile) throw new Error("mutation-subject-unresolved");
-    const file = join(checkout, sourceFile);
-    const mutation = mutateSource(policy, base, sourceFile, readFileSync(file, "utf8"));
-    if ("error" in mutation) throw new Error(mutation.error);
-    const parsed = parseSource(mutation.file, mutation.source);
-    if (!parsed?.parseable) throw new Error("mutation-source-unparseable");
-    writeFileSync(file, mutation.source);
-    const diff = execFileSync("git", gitArgs(checkout, hooks, ["diff", "--no-ext-diff", "--", mutation.file]), {
+    const descriptor = openRegularSourceNoFollow(checkout, sourceFile);
+    let mutation: { file: string; source: string };
+    try {
+      const attempted = mutateSource(policy, base, sourceFile, readFileSync(descriptor, "utf8"));
+      if ("error" in attempted) throw new Error(attempted.error);
+      mutation = attempted;
+      if (mutation.file !== sourceFile) throw new Error("mutation-source-target-changed");
+      const parsed = parseSource(mutation.file, mutation.source);
+      if (!parsed?.parseable) throw new Error("mutation-source-unparseable");
+      ftruncateSync(descriptor, 0);
+      const bytes = Buffer.from(mutation.source, "utf8");
+      let written = 0;
+      while (written < bytes.length) {
+        const count = writeSync(descriptor, bytes, written, bytes.length - written, written);
+        if (!count) throw new Error("mutation-source-write-incomplete");
+        written += count;
+      }
+    } finally {
+      closeSync(descriptor);
+    }
+    const diff = execFileSync("git", gitArgs(checkout, hooks, ["diff", "--no-ext-diff", "--no-textconv", "--", mutation.file]), {
       env,
       encoding: "utf8",
       timeout: 10_000,
@@ -278,7 +340,7 @@ export function runSourceMutation(root: string, policy: PolicySpec, base: GraphS
     if (Buffer.byteLength(diff, "utf8") > 65_536) throw new Error("mutation-source-diff-too-large");
     store = new HunchStore(hunchPathsForDir(graph));
     store.json.ensureDirs();
-    indexRepo(store, checkout, { churn: false });
+    indexRepo(store, checkout, { churn: false, requireComplete: true });
     const snapshot = graphSnapshot(store, root, { publicOnly: true, head: base.head });
     outcome = {
       snapshot,

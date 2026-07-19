@@ -11,7 +11,7 @@
  * a later refinement. The point this proves: code can be checked AGAINST intent.
  */
 import type { HunchStore } from "../store/hunchStore.js";
-import type { Decision, ConformancePredicate } from "./types.js";
+import type { Decision, ConformancePredicate, Edge, Symbol as HunchSymbol } from "./types.js";
 
 export interface ConformanceResult {
   decision: string;
@@ -23,59 +23,104 @@ export interface ConformanceResult {
   detail: string;
 }
 
-function resolveSymbol(store: HunchStore, ref: string): { id: string; name: string; file: string } | null {
-  const syms = store.recs("symbols");
-  if (ref.startsWith("sym_")) return syms.find((s) => s.id === ref) ?? null;
+export type ConformanceGraph = { symbols: HunchSymbol[]; edges: Edge[] };
+
+function resolveSymbols(graph: ConformanceGraph, ref: string): Array<{ id: string; name: string; file: string }> {
+  const syms = graph.symbols;
+  if (ref.startsWith("sym_")) return syms.filter((s) => s.id === ref);
   if (ref.includes(":")) {
-    const [f, n] = ref.split(":");
-    return syms.find((s) => s.name === n && (s.file === f || s.file.endsWith("/" + (f ?? "")))) ?? null;
+    const split = ref.lastIndexOf(":");
+    const file = ref.slice(0, split);
+    const name = ref.slice(split + 1);
+    return syms.filter((s) => s.name === name && (s.file === file || s.file.endsWith("/" + file)));
   }
-  return syms.find((s) => s.name === ref) ?? null;
+  return syms.filter((s) => s.name === ref);
 }
 
-function reaches(store: HunchStore, id: string, transitive: boolean): Set<string> {
-  const set = new Set<string>();
-  for (const d of store.getDependencies(id, transitive ? 6 : 1)) {
-    if (transitive || d.depth === 1) set.add(d.id);
+function reaches(graph: ConformanceGraph, id: string, transitive: boolean): Set<string> {
+  const reached = new Set<string>();
+  const seen = new Set([id]);
+  const queue: Array<{ id: string; depth: number }> = [{ id, depth: 0 }];
+  const maxDepth = transitive ? 6 : 1;
+  const traversable = new Set(["calls", "depends_on", "imports", "contains"]);
+  const outgoing = new Map<string, string[]>();
+  for (const edge of graph.edges) {
+    if (!traversable.has(edge.type)) continue;
+    const targets = outgoing.get(edge.from) ?? [];
+    targets.push(edge.to);
+    outgoing.set(edge.from, targets);
   }
-  return set;
+  while (queue.length) {
+    const current = queue.shift()!;
+    if (current.depth >= maxDepth) continue;
+    for (const next of outgoing.get(current.id) ?? []) {
+      reached.add(next);
+      if (seen.has(next)) continue;
+      seen.add(next);
+      queue.push({ id: next, depth: current.depth + 1 });
+    }
+  }
+  return reached;
 }
 
-function evalPredicate(store: HunchStore, d: Decision, p: ConformancePredicate): ConformanceResult {
+function evalPredicate(graph: ConformanceGraph, d: Decision, p: ConformancePredicate): ConformanceResult {
   const base = { decision: d.id, title: d.title, assert: p.assert, subject: p.subject, object: p.object };
-  const subj = resolveSymbol(store, p.subject);
+  const subjects = resolveSymbols(graph, p.subject);
 
   if (p.assert === "exists") {
-    return { ...base, satisfied: !!subj, detail: subj ? `${p.subject} exists (${subj.file})` : `${p.subject} no longer exists in the graph` };
+    return { ...base, satisfied: subjects.length > 0, detail: subjects.length ? `${p.subject} exists (${subjects.map((subject) => subject.file).join(", ")})` : `${p.subject} no longer exists in the graph` };
   }
-  if (!subj) return { ...base, satisfied: false, detail: `subject "${p.subject}" not found in the graph — intent's subject is gone` };
+  if (!subjects.length) return { ...base, satisfied: false, detail: `subject "${p.subject}" not found in the graph — intent's subject is gone` };
 
   const wantReach = p.assert === "calls" || p.assert === "imports";
-  const obj = p.object ? resolveSymbol(store, p.object) : null;
-  if (!obj) {
+  const objects = p.object ? resolveSymbols(graph, p.object) : [];
+  if (!objects.length) {
     // a required target gone ⇒ the link can't hold (violated); a forbidden one trivially holds.
     return { ...base, satisfied: !wantReach, detail: `target "${p.object ?? ""}" not found in the graph` };
   }
-  const linked = reaches(store, subj.id, p.transitive).has(obj.id);
+  // A required relation cannot guess which same-name symbol carries the intent.
+  // Force qualification instead of accidentally proving a different binding.
+  if (wantReach && (subjects.length !== 1 || objects.length !== 1)) {
+    return {
+      ...base,
+      satisfied: false,
+      detail: `ambiguous required binding (${subjects.length} subject, ${objects.length} target matches) — qualify as file:symbol; intent VIOLATED`,
+    };
+  }
+  // A forbidden relation is conservative in the other direction: ANY matching
+  // subject reaching ANY same-name target is a real counterexample. Looking at
+  // only the first target lets a duplicate symbol hide a violation.
+  const linked = subjects.some((subject) => {
+    const reached = reaches(graph, subject.id, p.transitive);
+    return objects.some((object) => reached.has(object.id));
+  });
   const satisfied = wantReach ? linked : !linked;
   const via = p.transitive ? " (transitively)" : "";
   const detail = satisfied
     ? wantReach
-      ? `${subj.name} →${via} ${obj.name} ✓`
-      : `${subj.name} does not reach ${obj.name} ✓`
+      ? `${p.subject} →${via} ${p.object} ✓`
+      : `${p.subject} does not reach ${p.object} ✓`
     : wantReach
-      ? `${subj.name} no longer reaches${via} ${obj.name} — intent VIOLATED`
-      : `${subj.name} now reaches${via} ${obj.name} — intent VIOLATED`;
+      ? `${p.subject} no longer reaches${via} ${p.object} — intent VIOLATED`
+      : `${p.subject} now reaches${via} ${p.object} — intent VIOLATED`;
   return { ...base, satisfied, detail };
 }
 
 /** Check every in-force decision's conformance predicates against the CURRENT graph.
- *  `.satisfied === false` means the code drifted from the recorded intent. Deterministic. */
-export function checkConformance(store: HunchStore): ConformanceResult[] {
+ *  `.satisfied === false` means the code drifted from the recorded intent. Deterministic.
+ *  `publicOnly` selects every input at the JSON read boundary so a private decision,
+ *  symbol, or edge can never influence (or be rendered into) a public CI receipt. */
+export function checkConformance(
+  store: HunchStore,
+  opts: { publicOnly?: boolean; graph?: ConformanceGraph } = {},
+): ConformanceResult[] {
+  const load = <K extends "decisions" | "symbols" | "edges">(kind: K) =>
+    opts.publicOnly ? store.json.loadAll(kind) : store.recs(kind);
+  const graph: ConformanceGraph = opts.graph ?? { symbols: load("symbols"), edges: load("edges") };
   const out: ConformanceResult[] = [];
-  for (const d of store.recs("decisions")) {
+  for (const d of load("decisions")) {
     if (d.status === "superseded" || d.superseded_by) continue; // in-force decisions only
-    for (const p of d.conformance ?? []) out.push(evalPredicate(store, d, p));
+    for (const p of d.conformance ?? []) out.push(evalPredicate(graph, d, p));
   }
   return out;
 }

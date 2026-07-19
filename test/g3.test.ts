@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -80,6 +80,8 @@ function eligibleG2(): G2ReadinessReport {
 function fixture() {
   const root = mkdtempSync(join(tmpdir(), "hunch-g3-"));
   const privateRoot = join(root, "private", ".hunch");
+  mkdirSync(privateRoot, { recursive: true });
+  execFileSync("git", ["init", "-q", join(root, "private")]);
   mkdirSync(join(root, ".hunch"), { recursive: true });
   writeFileSync(join(root, ".hunch/local.json"), JSON.stringify({ privateDir: privateRoot, autoCommit: false, mode: "private" }));
   const store = new HunchStore(hunchPaths(root));

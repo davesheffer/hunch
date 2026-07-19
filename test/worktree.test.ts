@@ -1,10 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, mkdirSync, writeFileSync, existsSync } from "node:fs";
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync, existsSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
-import { gitCommonDir, isLinkedWorktree, currentBranch, commitAndPushHunch } from "../src/extractors/git.js";
+import { pathToFileURL } from "node:url";
+import { gitCommonDir, isLinkedWorktree, currentBranch, commitAndPushHunch, pullHunchStatus, stableRepositoryName } from "../src/extractors/git.js";
 import { HunchStore } from "../src/store/hunchStore.js";
 import { hunchPaths } from "../src/core/paths.js";
 import { ensureSharedOverlayPointer } from "../src/integrations/worktree.js";
@@ -41,6 +42,58 @@ test("git helpers: currentBranch / gitCommonDir / isLinkedWorktree on the main c
     assert.equal(isLinkedWorktree(root), false, "the main checkout is not a linked worktree");
   } finally {
     cleanup();
+  }
+});
+
+test("stableRepositoryName is remote-name, checkout-name, worktree, and shallow-history agnostic", () => {
+  const base = mkdtempSync(join(tmpdir(), "hunch-stable-repo-"));
+  const remote = join(base, "canonical-source.git");
+  const alternateRemote = join(base, "secondary-source.git");
+  const seed = join(base, "seed");
+  const full = join(base, "arbitrarily-named-full-clone");
+  const shallow = join(base, "unrelated-shallow-directory-name");
+  const linked = join(base, "linked-worktree-with-another-name");
+  try {
+    mkdirSync(seed, { recursive: true });
+    g(base, "init", "--bare", "-q", "-b", "main", remote);
+    g(base, "init", "--bare", "-q", "-b", "main", alternateRemote);
+    g(seed, "init", "-q", "-b", "main");
+    g(seed, "config", "user.email", "t@example.com");
+    g(seed, "config", "user.name", "T");
+    writeFileSync(join(seed, "f.txt"), "one\n");
+    g(seed, "add", "f.txt");
+    g(seed, "commit", "-qm", "first");
+    writeFileSync(join(seed, "f.txt"), "two\n");
+    g(seed, "commit", "-qam", "second");
+    g(seed, "remote", "add", "publish", remote);
+    g(seed, "push", "-q", "-u", "publish", "main");
+
+    g(base, "clone", "-q", remote, full);
+    // Git ignores --depth for a plain local path, so use file:// to exercise a
+    // real shallow clone while still keeping this test completely offline.
+    g(base, "clone", "-q", "--depth=1", pathToFileURL(remote).href, shallow);
+    g(full, "remote", "rename", "origin", "upstream-renamed");
+    g(shallow, "remote", "rename", "origin", "mirror-renamed");
+    g(full, "remote", "add", "last-alias", alternateRemote);
+    g(shallow, "remote", "add", "first-alias", pathToFileURL(alternateRemote).href);
+    g(full, "worktree", "add", "-q", "-b", "linked-test", linked);
+
+    assert.equal(execFileSync("git", ["-C", full, "rev-parse", "HEAD"], { encoding: "utf8" }).trim(),
+      execFileSync("git", ["-C", shallow, "rev-parse", "HEAD"], { encoding: "utf8" }).trim(),
+      "the fixtures point at the same HEAD");
+    assert.equal(execFileSync("git", ["-C", full, "rev-list", "--count", "HEAD"], { encoding: "utf8" }).trim(), "2");
+    assert.equal(execFileSync("git", ["-C", shallow, "rev-list", "--count", "HEAD"], { encoding: "utf8" }).trim(), "1",
+      "the shallow fixture really lacks the root commit");
+
+    const identity = stableRepositoryName(full);
+    assert.match(identity, /^git-remote:sha256:[a-f0-9]{64}$/);
+    assert.equal(stableRepositoryName(shallow), identity, "history depth and clone directory do not change the label");
+    assert.equal(stableRepositoryName(linked), identity, "a linked worktree reuses the same label");
+    assert.doesNotMatch(identity, /canonical-source|secondary-source|hunch-stable-repo|upstream|mirror|alias/,
+      "the artifact label never exposes a remote path or remote alias");
+  } finally {
+    try { g(full, "worktree", "remove", "--force", linked); } catch { /* best-effort */ }
+    rmSync(base, { recursive: true, force: true });
   }
 });
 
@@ -93,12 +146,40 @@ test("P1: a per-worktree local.json still wins over the shared pointer (explicit
 test("P3: commitAndPushHunch never throws, and a held lock makes it a no-op (skip, not crash)", () => {
   const { root, cleanup } = tempRepo();
   try {
+    const hunchDir = join(root, ".hunch");
+    mkdirSync(hunchDir, { recursive: true });
     // normal path: never throws
-    assert.doesNotThrow(() => commitAndPushHunch(root, "hunch: test"));
+    assert.doesNotThrow(() => commitAndPushHunch(hunchDir, "hunch: test", { push: false }));
     // held lock: pre-create the lock dir → the call must skip cleanly, not throw
-    mkdirSync(join(root, ".hunch-commit.lock"), { recursive: true });
-    assert.doesNotThrow(() => commitAndPushHunch(root, "hunch: test 2"));
-    assert.ok(existsSync(join(root, ".hunch-commit.lock")), "a live held lock is left intact (owner releases it)");
+    mkdirSync(join(hunchDir, ".hunch-commit.lock"), { recursive: true });
+    assert.doesNotThrow(() => commitAndPushHunch(hunchDir, "hunch: test 2", { push: false }));
+    assert.ok(existsSync(join(hunchDir, ".hunch-commit.lock")), "a live held lock is left intact (owner releases it)");
+  } finally {
+    cleanup();
+  }
+});
+
+test("commit lock ownership preserves a live old owner and immediately recovers a dead owner", () => {
+  const { root, cleanup } = tempRepo();
+  try {
+    const hunchDir = join(root, ".hunch");
+    const lock = join(hunchDir, ".hunch-commit.lock");
+    mkdirSync(join(hunchDir, "decisions"), { recursive: true });
+    mkdirSync(join(lock, `owner-${process.pid}`), { recursive: true });
+    const old = new Date(Date.now() - 30 * 60_000);
+    utimesSync(lock, old, old);
+
+    assert.equal(pullHunchStatus(hunchDir), "busy");
+    assert.ok(existsSync(lock), "mtime alone never reclaims a demonstrably live owner");
+
+    rmSync(lock, { recursive: true, force: true });
+    mkdirSync(join(lock, "owner-2147483647"), { recursive: true });
+    writeFileSync(join(hunchDir, "decisions", "dec_dead_owner.json"),
+      `${JSON.stringify({ id: "dec_dead_owner", title: "dead owner recovery" })}\n`);
+    assert.equal(commitAndPushHunch(hunchDir, "hunch: recover dead lock owner", { push: false }), "committed");
+    assert.equal(existsSync(lock), false, "the successor owns and releases the recovered lock");
+    assert.match(execFileSync("git", ["-C", root, "ls-tree", "-r", "--name-only", "HEAD"], { encoding: "utf8" }),
+      /\.hunch\/decisions\/dec_dead_owner\.json/);
   } finally {
     cleanup();
   }

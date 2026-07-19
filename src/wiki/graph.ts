@@ -19,6 +19,8 @@
  * (con_547fff76bd).
  */
 
+import { compareCodeUnits } from "../core/canonicalOrder.js";
+
 export interface WikiGraphNode {
   id: string;
   name: string;
@@ -91,7 +93,7 @@ export function assembleGraphData(
       .map((d) => (decisionDates.get(d.id) ?? "").slice(0, 10))
       .filter(Boolean)
       .sort(),
-  })).sort((a, b) => a.id.localeCompare(b.id));
+  })).sort((a, b) => compareCodeUnits(a.id, b.id));
 
   const links: WikiGraphLink[] = [];
   for (const e of entries) {
@@ -99,7 +101,7 @@ export function assembleGraphData(
       if (ids.has(dep.id)) links.push({ source: e.pack.component.id, target: dep.id });
     }
   }
-  links.sort((a, b) => a.source.localeCompare(b.source) || a.target.localeCompare(b.target));
+  links.sort((a, b) => compareCodeUnits(a.source, b.source) || compareCodeUnits(a.target, b.target));
 
   const componentsByDoc = new Map<string, string[]>();
   for (const e of entries) {
@@ -116,9 +118,9 @@ export function assembleGraphData(
       title: d.title.slice(0, 80),
       status: d.status as WikiGraphDoc["status"],
       adopted: adoptedPageByRel.get(d.rel) ?? null,
-      components: [...new Set(componentsByDoc.get(d.rel) ?? [])].sort(),
+      components: [...new Set(componentsByDoc.get(d.rel) ?? [])].sort(compareCodeUnits),
     }))
-    .sort((a, b) => a.rel.localeCompare(b.rel));
+    .sort((a, b) => compareCodeUnits(a.rel, b.rel));
 
   return { kind, nodes, links, docs, pendingReview };
 }

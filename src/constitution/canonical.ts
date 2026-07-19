@@ -1,4 +1,5 @@
 import { sha1, shortHash } from "../core/ids.js";
+import { compareCodeUnits } from "../core/canonicalOrder.js";
 import type { PolicyEvaluation, PolicySpec, ProofPlan } from "./schema.js";
 
 function canonicalValue(value: unknown): unknown {
@@ -7,7 +8,7 @@ function canonicalValue(value: unknown): unknown {
     return Object.fromEntries(
       Object.entries(value as Record<string, unknown>)
         .filter(([, v]) => v !== undefined)
-        .sort(([a], [b]) => a.localeCompare(b))
+        .sort(([a], [b]) => compareCodeUnits(a, b))
         .map(([k, v]) => [k, canonicalValue(v)]),
     );
   }
@@ -29,6 +30,11 @@ export function canonicalHash(value: unknown): string {
 export function policySemanticHash(policy: PolicySpec): string {
   return canonicalHash({
     id: policy.id,
+    // Preserve existing generic-policy hashes while binding the correction
+    // compiler's provenance and permanent MD-1a activation gate into every
+    // correction proof. Removing either makes that proof stale.
+    ...(policy.origin !== "generic" ? { origin: policy.origin } : {}),
+    ...(policy.activation_gate ? { activation_gate: policy.activation_gate } : {}),
     ir_version: policy.ir_version,
     statement: policy.statement,
     scope: policy.scope,

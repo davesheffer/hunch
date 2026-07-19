@@ -7,6 +7,7 @@ import { canonicalHash, proofEvaluationHash, proofPlanContentHash } from "./cano
 import { assertCompositionBinding, policyProofHash } from "./composition.js";
 import { evaluateCompositePolicyOnSnapshot, evaluatePolicyOnSnapshot, type GraphSnapshot } from "./evaluator.js";
 import { loadReplaySnapshot, putReplaySnapshot } from "./replayCache.js";
+import { hasUnsafeCheckoutAttributes } from "./safeCheckout.js";
 import {
   POLICY_EVALUATOR,
   ProofPlanSchema,
@@ -80,6 +81,7 @@ export function replaySafeEnvironment(home: string, gitConfig: string): NodeJS.P
     HOME: home,
     GIT_CONFIG_GLOBAL: gitConfig,
     GIT_CONFIG_NOSYSTEM: "1",
+    GIT_NO_REPLACE_OBJECTS: "1",
     GIT_TERMINAL_PROMPT: "0",
     GIT_LFS_SKIP_SMUDGE: "1",
     HUNCH_PRIVATE_DIR: "",
@@ -282,6 +284,10 @@ export function replayProofPlan(
       }
       if (Date.now() >= deadline) {
         outcomes.set(commit, { commit, error_code: "timeout" });
+        continue;
+      }
+      if (hasUnsafeCheckoutAttributes(root, commit, env, { allowDisabledLfs: true })) {
+        outcomes.set(commit, { commit, error_code: "unsafe-checkout-attributes" });
         continue;
       }
       const cached = loadReplaySnapshot(root, commit, plan.data_class);
