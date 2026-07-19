@@ -3,7 +3,7 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { devNull } from "node:os";
-import { isAbsolute, resolve, join, basename, dirname } from "node:path";
+import { isAbsolute, resolve, join, basename, dirname, relative, sep } from "node:path";
 import { mkdirSync, rmSync, statSync, lstatSync, realpathSync, readFileSync, renameSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { MEMLOG_FORMAT } from "../core/memorylog.js";
@@ -694,21 +694,22 @@ function committableOverlayJsonPaths(hunchDir: string): string[] | null {
       for (const entry of readdirSync(dir, { withFileTypes: true })) {
         if (!prefix && entry.name === ".hunch-commit.lock") continue;
         const absolute = join(dir, entry.name);
-        const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
+        const relativeName = prefix ? `${prefix}/${entry.name}` : entry.name;
         const stat = lstatSync(absolute);
         if (stat.isSymbolicLink()) return false;
         if (stat.isDirectory()) {
-          if (!walk(absolute, relative)) return false;
+          if (!walk(absolute, relativeName)) return false;
         } else if (!stat.isFile()) {
           return false;
-        } else if (relative.endsWith(".json") && relative !== "local.json") {
-          if (!realpathSync(absolute).startsWith(`${root}/`)) return false;
-          paths.push(relative);
-        } else if (relative === "local.json") {
+        } else if (relativeName.endsWith(".json") && relativeName !== "local.json") {
+          const fromRoot = relative(root, realpathSync(absolute));
+          if (fromRoot === ".." || fromRoot.startsWith(`..${sep}`) || isAbsolute(fromRoot)) return false;
+          paths.push(relativeName);
+        } else if (relativeName === "local.json") {
           return false;
-        } else if (/^[^/]+\.sqlite[^/]*$/i.test(relative)
-          || relative.split("/").some((segment) => segment.includes(".tmp"))
-          || relative === "events.log") {
+        } else if (/^[^/]+\.sqlite[^/]*$/i.test(relativeName)
+          || relativeName.split("/").some((segment) => segment.includes(".tmp"))
+          || relativeName === "events.log") {
           // Known clone-local/derived artifacts are never staged. Everything
           // else is a topology violation: a shared graph repository cannot
           // quietly carry arbitrary source alongside its JSON memory.
@@ -885,7 +886,8 @@ function disabledHooksDir(hunchDir: string): string | null {
     const hooksDir = join(gitDir, "hunch-disabled-hooks");
     mkdirSync(hooksDir, { recursive: true });
     const stat = lstatSync(hooksDir);
-    if (stat.isSymbolicLink() || !stat.isDirectory() || realpathSync(hooksDir) !== hooksDir
+    if (stat.isSymbolicLink() || !stat.isDirectory()
+      || relative(gitDir, realpathSync(hooksDir)) !== "hunch-disabled-hooks"
       || readdirSync(hooksDir).length !== 0) return null;
     return hooksDir;
   } catch {
