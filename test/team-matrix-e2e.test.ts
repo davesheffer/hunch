@@ -14,6 +14,7 @@ import { join, resolve } from "node:path";
 import { test } from "node:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { repoSourceInventory } from "../src/extractors/repoSource.js";
 
 const PROJECT_ROOT = process.cwd();
 const TSX = join(PROJECT_ROOT, "node_modules/tsx/dist/cli.mjs");
@@ -229,6 +230,26 @@ function seedRemotes(sandbox: string): { codeRemote: string; memoryRemote: strin
   git(sandbox, "clone", "-q", "--bare", codeSeed, codeRemote);
   return { codeRemote, memoryRemote };
 }
+
+test("commit semantic source isolates Git config with a platform-compatible null device", () => {
+  const sandbox = mkdtempSync(join(tmpdir(), "hunch-commit-source-platform-"));
+  const root = join(sandbox, "repo");
+  try {
+    mkdirSync(join(root, "src"), { recursive: true });
+    git(root, "init", "-q", "-b", "main");
+    configureRepo(root, "CommitSource", sandbox);
+    writeFileSync(join(root, "src", "orders.ts"), INITIAL_SOURCE);
+    git(root, "add", "src/orders.ts");
+    git(root, "commit", "-qm", "fixture: commit semantic source");
+
+    const inventory = repoSourceInventory(root, { kind: "commit", ref: "HEAD" });
+    assert.equal(inventory.identity.kind, "commit");
+    assert.match(inventory.identity.revision ?? "", /^[0-9a-f]{40,64}$/);
+    assert.deepEqual(inventory.entries.map((entry) => entry.path), ["src/orders.ts"]);
+  } finally {
+    rmSync(sandbox, { recursive: true, force: true });
+  }
+});
 
 test("team Matrix: three isolated clones share live memory, catch a bad branch, repair it, and never leak it publicly", { timeout: 300_000 }, async () => {
   const sandbox = mkdtempSync(join(tmpdir(), "hunch-team-matrix-"));

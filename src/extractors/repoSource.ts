@@ -1,12 +1,11 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { lstatSync, readdirSync } from "node:fs";
-import { devNull } from "node:os";
 import { join } from "node:path";
 import { TextDecoder } from "node:util";
 import { MAX_REPO_SOURCE_FILE_BYTES, createRepoFileBufferReader } from "../core/safeRepoFile.js";
 import { compareCodeUnits } from "../core/canonicalOrder.js";
-import { foreignRepoEnv } from "./git.js";
+import { foreignRepoEnv, gitNullDevice } from "./git.js";
 import { languageFor } from "./languages.js";
 
 const SKIP_DIRS = new Set(["node_modules", ".git", "dist", "build", ".hunch", "coverage", ".next", "out"]);
@@ -88,7 +87,7 @@ function gitEnv(preserveInvocationIndex = false): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {
     ...foreignRepoEnv(process.env),
     GIT_CONFIG_NOSYSTEM: "1",
-    GIT_CONFIG_GLOBAL: devNull,
+    GIT_CONFIG_GLOBAL: gitNullDevice(),
     GIT_NO_REPLACE_OBJECTS: "1",
   };
   // A partial/pre-commit workflow can intentionally select an alternate index.
