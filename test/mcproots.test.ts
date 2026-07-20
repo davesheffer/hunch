@@ -6,10 +6,11 @@ import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import { resolveActiveRoot } from "../src/mcp/roots.js";
-import { buildServerWithRootControl } from "../src/mcp/server.js";
+import { buildServerWithRootControl, wireClientRoots } from "../src/mcp/server.js";
 import { hunchPaths } from "../src/core/paths.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { ListRootsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 
 const g = (cwd: string, ...a: string[]): void => {
   execFileSync("git", a, { cwd, stdio: ["ignore", "ignore", "ignore"] });
@@ -200,4 +201,97 @@ test("resolveActiveRoot: a root outside any repo is accepted only when nothing b
     rmSync(bare, { recursive: true, force: true });
     cleanup();
   }
+});
+
+// ---- real roots handshake ---------------------------------------------------
+// Drives the actual protocol: a real Client advertising the `roots` capability, a real
+// `roots/list` round trip, and a real `notifications/roots/list_changed`.
+
+/** Poll until `fn()` is true, or throw after `ms`. Keeps the async handshake deterministic
+ *  without sleeping a fixed amount. */
+async function until(fn: () => boolean, ms = 3000): Promise<void> {
+  const deadline = Date.now() + ms;
+  while (!fn()) {
+    if (Date.now() > deadline) throw new Error("timed out waiting for condition");
+    await new Promise((r) => setTimeout(r, 10));
+  }
+}
+
+/** A client that advertises roots, with control over what it returns and when. */
+function rootsClient(initial: string[]) {
+  const client = new Client(
+    { name: "test", version: "0.0.0" },
+    { capabilities: { roots: { listChanged: true } } },
+  );
+  const state = { roots: initial, gate: null as null | Promise<void>, release: () => {} };
+  client.setRequestHandler(ListRootsRequestSchema, async () => {
+    const snapshot = state.roots;
+    if (state.gate) await state.gate; // hold this response open
+    return { roots: snapshot.map((p) => ({ uri: pathToFileURL(p).href, name: "w" })) };
+  });
+  return { client, state };
+}
+
+test("handshake: the server adopts the client's advertised root on initialize", async (t) => {
+  const { root, wt, cleanup } = repoWithWorktree();
+  const { client } = rootsClient([wt]);
+  t.after(() => { void client.close().catch(() => {}); cleanup(); });
+
+  const ctl = buildServerWithRootControl(root); // spawned in the primary checkout
+  wireClientRoots(ctl, root);
+  const [ct, st] = InMemoryTransport.createLinkedPair();
+  await Promise.all([ctl.server.connect(st), client.connect(ct)]);
+
+  await until(() => ctl.getRoot() === wt);
+  assert.equal(ctl.getRoot(), wt, "oninitialized must trigger a roots/list and re-home");
+});
+
+test("handshake: roots/list_changed re-homes the server", async (t) => {
+  const { root, wt, cleanup } = repoWithWorktree();
+  const wt2 = `${root}-wt2`;
+  g(root, "worktree", "add", "-q", "-b", "feature-y", wt2);
+  const { client, state } = rootsClient([wt]);
+  t.after(() => { void client.close().catch(() => {}); rmSync(wt2, { recursive: true, force: true }); cleanup(); });
+
+  const ctl = buildServerWithRootControl(root);
+  wireClientRoots(ctl, root);
+  const [ct, st] = InMemoryTransport.createLinkedPair();
+  await Promise.all([ctl.server.connect(st), client.connect(ct)]);
+  await until(() => ctl.getRoot() === wt);
+
+  state.roots = [wt2];
+  await client.sendRootsListChanged();
+  await until(() => ctl.getRoot() === wt2);
+  assert.equal(ctl.getRoot(), wt2, "a list_changed notification must re-home the server");
+});
+
+test("handshake: a slow reply for an older workspace never overwrites a newer one", async (t) => {
+  const { root, wt, cleanup } = repoWithWorktree();
+  const wt2 = `${root}-wt2`;
+  g(root, "worktree", "add", "-q", "-b", "feature-y", wt2);
+  const { client, state } = rootsClient([wt]);
+  t.after(() => { void client.close().catch(() => {}); rmSync(wt2, { recursive: true, force: true }); cleanup(); });
+
+  const ctl = buildServerWithRootControl(root);
+  wireClientRoots(ctl, root);
+  const [ct, st] = InMemoryTransport.createLinkedPair();
+  await Promise.all([ctl.server.connect(st), client.connect(ct)]);
+  await until(() => ctl.getRoot() === wt);
+
+  // Hold the NEXT response open, then advertise wt2 and fire a change: the stale
+  // in-flight reply (wt) must lose to the newer resolved one (wt2).
+  let release = () => {};
+  state.gate = new Promise<void>((r) => { release = r; });
+  state.roots = [wt];
+  await client.sendRootsListChanged();          // request #1 — hangs, will answer "wt"
+  await new Promise((r) => setTimeout(r, 50));  // let it reach the gate
+
+  state.gate = null;
+  state.roots = [wt2];
+  await client.sendRootsListChanged();          // request #2 — answers "wt2" immediately
+  await until(() => ctl.getRoot() === wt2);
+
+  release();                                     // now let the stale reply land
+  await new Promise((r) => setTimeout(r, 100));
+  assert.equal(ctl.getRoot(), wt2, "a superseded roots/list reply must not overwrite the newer root");
 });

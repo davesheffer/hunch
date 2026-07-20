@@ -1282,15 +1282,17 @@ function provLine(record: unknown): string {
  *  branch the work is on. So we ask the client where it is actually working via the
  *  `roots` capability, and re-home when it tells us that changed. A client that does not
  *  support `roots` simply keeps today's cwd behaviour. */
-export async function startServer(cwd: string = process.cwd()): Promise<void> {
-  const fallback = findRoot(cwd);
-  const ctl = buildServerWithRootControl(fallback);
-  const transport = new StdioServerTransport();
-
-  // `roots/list_changed` can fire faster than the round-trips resolve (A→B→C in quick
-  // succession), and responses are not guaranteed to come back in order. Stamp each attempt
-  // and drop any whose result lands after a newer one started, so a slow reply for an older
-  // workspace can never overwrite a newer one.
+/** Ask the client where it is working, and keep following it.
+ *
+ *  Roots can only be read once the client has initialized, and can change afterwards, so
+ *  this hooks both `oninitialized` and `notifications/roots/list_changed`. Call BEFORE
+ *  `connect()` — `oninitialized` fires during the handshake.
+ *
+ *  `roots/list_changed` can fire faster than the round-trips resolve (A→B→C in quick
+ *  succession), and responses are not guaranteed to come back in order. Each attempt is
+ *  stamped and drops its result if a newer one started meanwhile, so a slow reply for an
+ *  older workspace can never overwrite a newer one. */
+export function wireClientRoots(ctl: RootControlledServer, fallback: string): void {
   let generation = 0;
   const syncRoots = async (): Promise<void> => {
     const mine = ++generation;
@@ -1305,10 +1307,16 @@ export async function startServer(cwd: string = process.cwd()): Promise<void> {
       /* client doesn't advertise roots (or the request failed) → keep the spawn cwd */
     }
   };
-
-  // Roots can only be read once the client has initialized, and can change afterwards.
   ctl.server.server.oninitialized = () => { void syncRoots(); };
   ctl.server.server.setNotificationHandler(RootsListChangedNotificationSchema, async () => { await syncRoots(); });
+}
+
+export async function startServer(cwd: string = process.cwd()): Promise<void> {
+  const fallback = findRoot(cwd);
+  const ctl = buildServerWithRootControl(fallback);
+  const transport = new StdioServerTransport();
+
+  wireClientRoots(ctl, fallback);
 
   await ctl.server.connect(transport);
   // `connect()` resolves before the client's initialize handshake completes, so the root can
