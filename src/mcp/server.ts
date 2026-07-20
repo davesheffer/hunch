@@ -8,6 +8,8 @@
  */
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { RootsListChangedNotificationSchema } from "@modelcontextprotocol/sdk/types.js";
+import { resolveActiveRoot } from "./roots.js";
 import { z } from "zod";
 import { hunchPaths, findRoot, toPosixTarget } from "../core/paths.js";
 import { HunchStore } from "../store/hunchStore.js";
@@ -129,13 +131,25 @@ function resolveFiles(store: HunchStore, target: string): string[] {
   return files.size ? [...files] : [toPosixTarget(target)];
 }
 
-export function buildServer(root: string): McpServer {
+/** A server plus control over which repo it serves. The MCP `roots` capability lets a
+ *  client tell us where it is actually working, which can differ from the cwd we were
+ *  spawned in (notably: a git worktree opened mid-session). `root` and `store` are
+ *  reassignable so every handler closure below follows a re-home with no further wiring. */
+export type RootControlledServer = {
+  server: McpServer;
+  getRoot: () => string;
+  /** Re-home memory on the given repo. Same root → no-op (no store churn). */
+  setRoot: (next: string) => void;
+};
+
+export function buildServerWithRootControl(initialRoot: string): RootControlledServer {
+  let root = initialRoot;
   // Team auto-discovery: a committed .hunch/team.json advertises the shared store — a
   // fresh clone (a new teammate, a headless agent, a CI workflow) wires itself BEFORE the
   // store is constructed, so every consumer resolves the same single source of truth.
   // Best-effort: offline / no team.json → proceed exactly as before.
   try { ensureTeamOverlay(root); } catch { /* never block server start */ }
-  const store = new HunchStore(hunchPaths(root));
+  let store = new HunchStore(hunchPaths(root));
   // Two-way sync (read side): pull the private overlay's remote on startup, so THIS machine's
   // session sees memory captured on other machines/worktrees before we index — making the
   // overlay genuinely one source of truth. Best-effort, leaves a clean tree, never blocks start.
@@ -165,10 +179,13 @@ export function buildServer(root: string): McpServer {
       inputSchema: { query: z.string().describe("A natural-language question or keywords.") },
     },
     async ({ query }): Promise<ToolResult> => {
-      const hits = await store.hybridSearch(query, QUERY_HITS, { embedder: await embedderReady });
+      // Pin the store for this whole request: a re-home during the await would otherwise
+      // resolve hits from repo A against repo B's store.
+      const s = store;
+      const hits = await s.hybridSearch(query, QUERY_HITS, { embedder: await embedderReady });
       if (!hits.length) return ok(`No matches for "${query}".`);
       const lines = hits.map((h) => {
-        const r = store.resolve(h.ref);
+        const r = s.resolve(h.ref);
         return `• [${h.kind}] ${h.ref} — ${h.title}\n    ${h.snippet}${provLine(r?.record)}`;
       });
       return ok(`Top matches for "${query}":\n\n${lines.join("\n")}`);
@@ -185,10 +202,11 @@ export function buildServer(root: string): McpServer {
       inputSchema: { task: z.string().describe("The task/intent, e.g. 'add an MCP tool' or 'cut a release'.") },
     },
     async ({ task }): Promise<ToolResult> => {
-      const hits = await store.searchRunbooks(task, 5, { embedder: await embedderReady });
+      const s = store; // pinned for the request — see hunch_query above
+      const hits = await s.searchRunbooks(task, 5, { embedder: await embedderReady });
       if (!hits.length) return ok(`No runbook for "${task}" yet. Capture one with: hunch runbook <base>..<head> --task "${task}"`);
       const lines = hits.map((h) => {
-        const r = store.resolve(h.ref)?.record as Runbook | undefined;
+        const r = s.resolve(h.ref)?.record as Runbook | undefined;
         if (!r) return `• ${h.ref} — ${h.title}`;
         const steps = r.steps.length ? `\n    steps: ${r.steps.map((s, i) => `${i + 1}. ${s}`).join("  ")}` : "";
         const files = r.files.length ? `\n    files: ${r.files.slice(0, 8).join(", ")}` : "";
@@ -1220,7 +1238,33 @@ export function buildServer(root: string): McpServer {
     },
   );
 
-  return server;
+  return {
+    server,
+    getRoot: () => root,
+    setRoot: (next: string) => {
+      if (!next || next === root) return; // same repo → keep the warm store
+      root = next;
+      try { ensureTeamOverlay(root); } catch { /* never block a re-home */ }
+      store = new HunchStore(hunchPaths(root));
+      // Mirror the startup path below: pull the overlay, then index. `.hunch/*.sqlite` is
+      // gitignored, so a freshly created worktree has NO index — without this, the FTS-backed
+      // reads (hunch_query and friends) return nothing for the repo we just moved to, which
+      // is precisely the case this re-home exists to serve.
+      if (store.privateDir) {
+        try { pullHunch(store.privateDir); } catch { /* offline / no remote — proceed with local */ }
+      }
+      try {
+        store.reindex();
+      } catch (e) {
+        console.error("[hunch-mcp] reindex after re-home failed:", (e as Error).message);
+      }
+    },
+  };
+}
+
+/** Back-compat: the plain server, with no root control. */
+export function buildServer(root: string): McpServer {
+  return buildServerWithRootControl(root).server;
 }
 
 function provLine(record: unknown): string {
@@ -1230,11 +1274,53 @@ function provLine(record: unknown): string {
   return `\n      ⟨${p.source ?? "?"}, confidence ${p.confidence ?? "?"}${v}⟩`;
 }
 
-/** Start the stdio server (called by `hunch mcp`). */
+/** Start the stdio server (called by `hunch mcp`).
+ *
+ *  Our cwd is fixed when the client spawns us, so on its own it cannot follow the user
+ *  into a git worktree opened mid-session — captures would keep landing in the spawn
+ *  directory (usually the primary checkout, on the default branch) instead of on the
+ *  branch the work is on. So we ask the client where it is actually working via the
+ *  `roots` capability, and re-home when it tells us that changed. A client that does not
+ *  support `roots` simply keeps today's cwd behaviour. */
+/** Ask the client where it is working, and keep following it.
+ *
+ *  Roots can only be read once the client has initialized, and can change afterwards, so
+ *  this hooks both `oninitialized` and `notifications/roots/list_changed`. Call BEFORE
+ *  `connect()` — `oninitialized` fires during the handshake.
+ *
+ *  `roots/list_changed` can fire faster than the round-trips resolve (A→B→C in quick
+ *  succession), and responses are not guaranteed to come back in order. Each attempt is
+ *  stamped and drops its result if a newer one started meanwhile, so a slow reply for an
+ *  older workspace can never overwrite a newer one. */
+export function wireClientRoots(ctl: RootControlledServer, fallback: string): void {
+  let generation = 0;
+  const syncRoots = async (): Promise<void> => {
+    const mine = ++generation;
+    try {
+      const res = await ctl.server.server.listRoots();
+      if (mine !== generation) return; // superseded while we were waiting
+      const next = resolveActiveRoot((res?.roots ?? []).map((r) => r.uri), fallback);
+      if (next === ctl.getRoot()) return;
+      ctl.setRoot(next);
+      console.error(`[hunch-mcp] serving Hunch at ${next} (client root)`);
+    } catch {
+      /* client doesn't advertise roots (or the request failed) → keep the spawn cwd */
+    }
+  };
+  ctl.server.server.oninitialized = () => { void syncRoots(); };
+  ctl.server.server.setNotificationHandler(RootsListChangedNotificationSchema, async () => { await syncRoots(); });
+}
+
 export async function startServer(cwd: string = process.cwd()): Promise<void> {
-  const root = findRoot(cwd);
-  const server = buildServer(root);
+  const fallback = findRoot(cwd);
+  const ctl = buildServerWithRootControl(fallback);
   const transport = new StdioServerTransport();
-  await server.connect(transport);
-  console.error(`[hunch-mcp] serving Hunch at ${root} over stdio`);
+
+  wireClientRoots(ctl, fallback);
+
+  await ctl.server.connect(transport);
+  // `connect()` resolves before the client's initialize handshake completes, so the root can
+  // still change a moment later — don't claim a final answer here; syncRoots logs the
+  // resolved root if the client advertises one.
+  console.error(`[hunch-mcp] serving Hunch over stdio (spawn root ${ctl.getRoot()}; resolving client roots…)`);
 }

@@ -59,15 +59,18 @@ export function hunchPathsForDir(hunchDir: string): HunchPaths {
  *  WITHOUT `.hunch` stops the walk: an ancestor `.hunch` above the repo
  *  boundary belongs to some other scope (e.g. a stray ~/.hunch) and must never
  *  hijack a fresh repo — init would scaffold, index, and scan OUTSIDE the repo. */
+/** True when `p` exists and is a directory. Shared so root-resolution callers
+ *  (findRoot here, the MCP roots policy) agree on what counts as a directory. */
+export function isDir(p: string): boolean {
+  try {
+    return statSync(p).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
 export function findRoot(start: string = process.cwd()): string {
   let cur = resolve(start);
-  const isDir = (p: string) => {
-    try {
-      return statSync(p).isDirectory();
-    } catch {
-      return false;
-    }
-  };
   for (;;) {
     if (isDir(join(cur, HUNCH_DIR))) return cur; // a `.hunch` regular file is not a root
     if (existsSync(join(cur, ".git"))) return cur; // repo boundary — .git file (worktree) counts
