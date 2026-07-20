@@ -8,6 +8,8 @@ import { pathToFileURL } from "node:url";
 import { resolveActiveRoot } from "../src/mcp/roots.js";
 import { buildServerWithRootControl } from "../src/mcp/server.js";
 import { hunchPaths } from "../src/core/paths.js";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 
 const g = (cwd: string, ...a: string[]): void => {
   execFileSync("git", a, { cwd, stdio: ["ignore", "ignore", "ignore"] });
@@ -124,6 +126,78 @@ test("buildServerWithRootControl: setting the same root again is a no-op", () =>
     ctl.setRoot(root);
     assert.equal(ctl.getRoot(), before);
   } finally {
+    cleanup();
+  }
+});
+
+/** A decision fixture shaped like the store expects. */
+const DEC = (id: string, topic: string, title: string) => ({
+  id, title, topic, status: "accepted", context: "", decision: `body of ${title}`,
+  consequences: [], alternatives_rejected: [], rejected_tripwires: [],
+  related_components: [], related_files: [], supersedes: null, superseded_by: null,
+  caused_by_bug: null, commit: null, valid_from: "2026-01-01T00:00:00.000Z", valid_to: null,
+  retired: { symbols: [], deps: [] },
+  provenance: { source: "human_confirmed", confidence: 0.95, evidence: [] },
+  date: "2026-01-01T00:00:00.000Z",
+});
+
+test("re-homing indexes the new repo: a read tool finds memory that only exists in the worktree", async (t) => {
+  const { root, wt, cleanup } = repoWithWorktree();
+  let client: Client | undefined;
+  t.after(() => { void client?.close().catch(() => {}); cleanup(); });
+
+  // Memory that exists ONLY in the worktree — never indexed by the spawn root's store.
+  // A fresh worktree also has no .hunch/*.sqlite (gitignored), so re-homing must build it.
+  mkdirSync(join(wt, ".hunch", "decisions"), { recursive: true });
+  writeFileSync(
+    join(wt, ".hunch", "decisions", "dec_wtaaaaaaaa.json"),
+    JSON.stringify(DEC("dec_wtaaaaaaaa", "worktree.only", "worktree-only decision")),
+  );
+
+  const ctl = buildServerWithRootControl(root); // spawned in the primary checkout
+  const [ct, st] = InMemoryTransport.createLinkedPair();
+  client = new Client({ name: "test", version: "0.0.0" });
+  await Promise.all([ctl.server.connect(st), client.connect(ct)]);
+
+  ctl.setRoot(wt); // client advertised the worktree
+
+  // hunch_query goes through the sqlite FTS index (store.search → `SELECT … FROM search
+  // MATCH`), unlike recs()-backed reads which load JSON directly. A fresh worktree has no
+  // .hunch/*.sqlite (gitignored), so without a reindex on re-home this returns nothing.
+  const res = (await client.callTool({
+    name: "hunch_query",
+    arguments: { query: "worktree-only decision" },
+  })) as { content: Array<{ type: string; text?: string }> };
+  const text = res.content.map((c) => c.text ?? "").join("\n");
+
+  // Assert on the record ID, not the title: the "No matches for \"…\"" response echoes the
+  // query verbatim, so matching on title text passes even when nothing was found.
+  assert.doesNotMatch(text, /No matches/, `re-homed store returned nothing: ${text}`);
+  assert.match(text, /dec_wtaaaaaaaa/, `re-homed store must index the worktree's memory, got: ${text}`);
+});
+
+test("resolveActiveRoot: a root that exists but is a FILE is ignored", () => {
+  const { root, cleanup } = repoWithWorktree();
+  try {
+    const f = join(root, "not-a-dir.txt");
+    writeFileSync(f, "x");
+    assert.equal(resolveActiveRoot([pathToFileURL(f).href], root), root);
+  } finally {
+    cleanup();
+  }
+});
+
+test("resolveActiveRoot: a root outside any repo is accepted only when nothing better is advertised", () => {
+  const { root, wt, cleanup } = repoWithWorktree();
+  const bare = mkdtempSync(join(tmpdir(), "hunch-roots-bare-")); // real dir, no .git, no .hunch
+  try {
+    // Alone, it is taken at face value (findRoot falls back to the path itself) — the client
+    // is asserting this is its workspace, and we have nothing better.
+    assert.equal(resolveActiveRoot([pathToFileURL(bare).href], root), bare);
+    // But a real store always wins over it.
+    assert.equal(resolveActiveRoot([pathToFileURL(bare).href, pathToFileURL(wt).href], root), wt);
+  } finally {
+    rmSync(bare, { recursive: true, force: true });
     cleanup();
   }
 });

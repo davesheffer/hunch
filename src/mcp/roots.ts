@@ -8,18 +8,9 @@
  * learn where the client is working, so prefer an advertised root and fall back to
  * the spawn cwd when the client advertises none (unsupporting clients are unaffected).
  */
-import { statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
-import { findRoot, HUNCH_DIR } from "../core/paths.js";
-
-function isDir(p: string): boolean {
-  try {
-    return statSync(p).isDirectory();
-  } catch {
-    return false;
-  }
-}
+import { findRoot, isDir, HUNCH_DIR } from "../core/paths.js";
 
 /** `file://` URI or plain path → path, or "" when it is neither. */
 function toPath(uriOrPath: string): string {
@@ -39,6 +30,13 @@ function toPath(uriOrPath: string): string {
  * its repo. Roots that do not exist are ignored rather than trusted. When several
  * usable roots are advertised, one that already carries a `.hunch` store wins — that is
  * the repo whose memory is being written; otherwise the first usable root is used.
+ *
+ * Trust note: this widens where memory can be homed. Previously the root came only from
+ * our own spawn cwd; now a client asserts it. `findRoot` falls back to the literal path
+ * when it finds no `.git`/`.hunch` walking up, so a client advertising a directory outside
+ * any repo will home memory there. That is deliberate — the client is the authority on its
+ * own workspace, and a repo that already has a store is preferred over a bare directory —
+ * but it does mean a buggy client can point memory somewhere unexpected.
  */
 export function resolveActiveRoot(rootUris: readonly string[], fallbackCwd: string): string {
   const candidates: string[] = [];

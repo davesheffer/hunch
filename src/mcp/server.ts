@@ -179,10 +179,13 @@ export function buildServerWithRootControl(initialRoot: string): RootControlledS
       inputSchema: { query: z.string().describe("A natural-language question or keywords.") },
     },
     async ({ query }): Promise<ToolResult> => {
-      const hits = await store.hybridSearch(query, QUERY_HITS, { embedder: await embedderReady });
+      // Pin the store for this whole request: a re-home during the await would otherwise
+      // resolve hits from repo A against repo B's store.
+      const s = store;
+      const hits = await s.hybridSearch(query, QUERY_HITS, { embedder: await embedderReady });
       if (!hits.length) return ok(`No matches for "${query}".`);
       const lines = hits.map((h) => {
-        const r = store.resolve(h.ref);
+        const r = s.resolve(h.ref);
         return `• [${h.kind}] ${h.ref} — ${h.title}\n    ${h.snippet}${provLine(r?.record)}`;
       });
       return ok(`Top matches for "${query}":\n\n${lines.join("\n")}`);
@@ -199,10 +202,11 @@ export function buildServerWithRootControl(initialRoot: string): RootControlledS
       inputSchema: { task: z.string().describe("The task/intent, e.g. 'add an MCP tool' or 'cut a release'.") },
     },
     async ({ task }): Promise<ToolResult> => {
-      const hits = await store.searchRunbooks(task, 5, { embedder: await embedderReady });
+      const s = store; // pinned for the request — see hunch_query above
+      const hits = await s.searchRunbooks(task, 5, { embedder: await embedderReady });
       if (!hits.length) return ok(`No runbook for "${task}" yet. Capture one with: hunch runbook <base>..<head> --task "${task}"`);
       const lines = hits.map((h) => {
-        const r = store.resolve(h.ref)?.record as Runbook | undefined;
+        const r = s.resolve(h.ref)?.record as Runbook | undefined;
         if (!r) return `• ${h.ref} — ${h.title}`;
         const steps = r.steps.length ? `\n    steps: ${r.steps.map((s, i) => `${i + 1}. ${s}`).join("  ")}` : "";
         const files = r.files.length ? `\n    files: ${r.files.slice(0, 8).join(", ")}` : "";
@@ -1242,6 +1246,18 @@ export function buildServerWithRootControl(initialRoot: string): RootControlledS
       root = next;
       try { ensureTeamOverlay(root); } catch { /* never block a re-home */ }
       store = new HunchStore(hunchPaths(root));
+      // Mirror the startup path below: pull the overlay, then index. `.hunch/*.sqlite` is
+      // gitignored, so a freshly created worktree has NO index — without this, the FTS-backed
+      // reads (hunch_query and friends) return nothing for the repo we just moved to, which
+      // is precisely the case this re-home exists to serve.
+      if (store.privateDir) {
+        try { pullHunch(store.privateDir); } catch { /* offline / no remote — proceed with local */ }
+      }
+      try {
+        store.reindex();
+      } catch (e) {
+        console.error("[hunch-mcp] reindex after re-home failed:", (e as Error).message);
+      }
     },
   };
 }
@@ -1271,13 +1287,20 @@ export async function startServer(cwd: string = process.cwd()): Promise<void> {
   const ctl = buildServerWithRootControl(fallback);
   const transport = new StdioServerTransport();
 
+  // `roots/list_changed` can fire faster than the round-trips resolve (A→B→C in quick
+  // succession), and responses are not guaranteed to come back in order. Stamp each attempt
+  // and drop any whose result lands after a newer one started, so a slow reply for an older
+  // workspace can never overwrite a newer one.
+  let generation = 0;
   const syncRoots = async (): Promise<void> => {
+    const mine = ++generation;
     try {
       const res = await ctl.server.server.listRoots();
+      if (mine !== generation) return; // superseded while we were waiting
       const next = resolveActiveRoot((res?.roots ?? []).map((r) => r.uri), fallback);
       if (next === ctl.getRoot()) return;
       ctl.setRoot(next);
-      console.error(`[hunch-mcp] re-homed on client root ${next}`);
+      console.error(`[hunch-mcp] serving Hunch at ${next} (client root)`);
     } catch {
       /* client doesn't advertise roots (or the request failed) → keep the spawn cwd */
     }
@@ -1288,5 +1311,8 @@ export async function startServer(cwd: string = process.cwd()): Promise<void> {
   ctl.server.server.setNotificationHandler(RootsListChangedNotificationSchema, async () => { await syncRoots(); });
 
   await ctl.server.connect(transport);
-  console.error(`[hunch-mcp] serving Hunch at ${ctl.getRoot()} over stdio`);
+  // `connect()` resolves before the client's initialize handshake completes, so the root can
+  // still change a moment later — don't claim a final answer here; syncRoots logs the
+  // resolved root if the client advertises one.
+  console.error(`[hunch-mcp] serving Hunch over stdio (spawn root ${ctl.getRoot()}; resolving client roots…)`);
 }
