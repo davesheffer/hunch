@@ -1,0 +1,530 @@
+{
+  "id": "proof_987cac3ea2",
+  "plan_hash": "sha1:ae6be6d00537b1574c567b5d9a84bafc5ec3778f",
+  "policy_hash": "sha1:cfaba5d0f682d97a9ea310d65d425ab9c2c47f9d",
+  "evaluator": {
+    "name": "hunch-graph-policy",
+    "version": "1.3.0"
+  },
+  "mutation_engine": {
+    "name": "hunch-static-graph-controls",
+    "version": "5"
+  },
+  "generated_at": "2026-07-22T10:25:21.774Z",
+  "current": {
+    "total": 1,
+    "satisfied": 1,
+    "violated": 0,
+    "not_applicable": 0,
+    "unknown": 0,
+    "error": 0,
+    "receipt_hashes": [
+      "sha1:41976265d394baee51caae0c5c770450a0d9baee"
+    ]
+  },
+  "known_bad": {
+    "total": 1,
+    "satisfied": 0,
+    "violated": 1,
+    "not_applicable": 0,
+    "unknown": 0,
+    "error": 0,
+    "receipt_hashes": [
+      "sha1:7785b865f665087cc768a3cbf2ec6d587d0e55b9"
+    ]
+  },
+  "known_good": {
+    "total": 1,
+    "satisfied": 1,
+    "violated": 0,
+    "not_applicable": 0,
+    "unknown": 0,
+    "error": 0,
+    "receipt_hashes": [
+      "sha1:65e88a1212e5552f4d8723b9887a4f148cd54fce"
+    ]
+  },
+  "accepted_history": {
+    "total": 20,
+    "satisfied": 20,
+    "violated": 0,
+    "not_applicable": 0,
+    "unknown": 0,
+    "error": 0,
+    "receipt_hashes": [
+      "sha1:1bbda3110725dc0c754e03939ea8c0775c6aec66",
+      "sha1:edba019f89eaeeae394ec082751df44fee9a02a8",
+      "sha1:f981fa9c9a10d1b2d82d5934d26a3e51e15241c0",
+      "sha1:f34fe389335e9f31474a955fa2ef45ab31e9f388",
+      "sha1:bbc6632d8be2315d4d009526502a23a64fa901fe",
+      "sha1:7399f5093e9e7e13eeee124121a3ee2f6b1dc4d9",
+      "sha1:141e584979fdacbbb4b6c8321db81cd0e9e058c2",
+      "sha1:304d30805b5c2d197a1159d764197c8a77468a8b",
+      "sha1:aaf46e3884fdcd1b8392cb27f750a6ca65ee99d7",
+      "sha1:ff406771ce9b70717eb9ebb6193486def23648e2",
+      "sha1:cac0683a8454568cde1704d5e45ea3cc5905ba47",
+      "sha1:01d60825b10307c57cfc477e35cbe0db7dfb1f24",
+      "sha1:3489b1c2e1537b4575a01dca6e8bee0e693fbf54",
+      "sha1:a2ed2216faf81174ac7715ac0e099e4620d313cc",
+      "sha1:ff7973a817ee5d0e9ba0dc154a5a8cac33fc26f5",
+      "sha1:5a2f816ac990086396e47d294f11a1f7da848d7b",
+      "sha1:886bf3e30e101b662e1c9777cb41a3cd60ea13f9",
+      "sha1:c028f4d5bee588507332e2c76d4034987942f3e3",
+      "sha1:83ca0e77120761115b02e1f02fd2000fd373d388",
+      "sha1:102d9e8fa9da9d509980d59ebd88b88b7dfa2155"
+    ],
+    "classified_hits": []
+  },
+  "mutations": {
+    "total": 1,
+    "satisfied": 0,
+    "violated": 1,
+    "not_applicable": 0,
+    "unknown": 0,
+    "error": 0,
+    "receipt_hashes": [
+      "sha1:9eb44b5f70a03248ebc891826451296d0b8be943"
+    ],
+    "operator_coverage": {
+      "add-forbidden-import": 1
+    }
+  },
+  "replay_receipts": [
+    {
+      "leg": "current_baseline",
+      "commit": "e00108b095cbb94f64cda567a8a65686aba5d8e1",
+      "expected": "satisfied",
+      "policy_hash": "sha1:cfaba5d0f682d97a9ea310d65d425ab9c2c47f9d",
+      "evaluator": {
+        "name": "hunch-graph-policy",
+        "version": "1.3.0"
+      },
+      "result": "satisfied",
+      "graph_hash": "sha1:48440cc244476688a63cd974e2c06c444053724a",
+      "evaluation_hash": "sha1:437e1f1cb8e2107ad3ce69004844b39724e96d73",
+      "deterministic_hash": "sha1:41976265d394baee51caae0c5c770450a0d9baee"
+    },
+    {
+      "leg": "known_bad",
+      "commit": "a3fccf0b9005fd69aae6b936ccb513c8f35e6c6c",
+      "expected": "violated",
+      "policy_hash": "sha1:cfaba5d0f682d97a9ea310d65d425ab9c2c47f9d",
+      "evaluator": {
+        "name": "hunch-graph-policy",
+        "version": "1.3.0"
+      },
+      "result": "violated",
+      "graph_hash": "sha1:ecdcd279758dd08789064d677adaa881b5721697",
+      "evaluation_hash": "sha1:c1e6061d27ac273ff86d0b5bc60e20e6c6d12f59",
+      "deterministic_hash": "sha1:7785b865f665087cc768a3cbf2ec6d587d0e55b9"
+    },
+    {
+      "leg": "known_good",
+      "commit": "e00108b095cbb94f64cda567a8a65686aba5d8e1",
+      "expected": "satisfied",
+      "policy_hash": "sha1:cfaba5d0f682d97a9ea310d65d425ab9c2c47f9d",
+      "evaluator": {
+        "name": "hunch-graph-policy",
+        "version": "1.3.0"
+      },
+      "result": "satisfied",
+      "graph_hash": "sha1:48440cc244476688a63cd974e2c06c444053724a",
+      "evaluation_hash": "sha1:437e1f1cb8e2107ad3ce69004844b39724e96d73",
+      "deterministic_hash": "sha1:65e88a1212e5552f4d8723b9887a4f148cd54fce"
+    },
+    {
+      "leg": "accepted_history",
+      "commit": "285c368f7e409a0e4af6207f752d8c7540718e2e",
+      "policy_hash": "sha1:cfaba5d0f682d97a9ea310d65d425ab9c2c47f9d",
+      "evaluator": {
+        "name": "hunch-graph-policy",
+        "version": "1.3.0"
+      },
+      "result": "satisfied",
+      "graph_hash": "sha1:2fa64b505d8f90d2c93c61a5ef4b917e8f2134a3",
+      "evaluation_hash": "sha1:eb5256f26244f94cc798161723a94a1fd02615b3",
+      "deterministic_hash": "sha1:1bbda3110725dc0c754e03939ea8c0775c6aec66"
+    },
+    {
+      "leg": "accepted_history",
+      "commit": "e2bcbc741f2b33c941e05eb856e244a4c295749b",
+      "policy_hash": "sha1:cfaba5d0f682d97a9ea310d65d425ab9c2c47f9d",
+      "evaluator": {
+        "name": "hunch-graph-policy",
+        "version": "1.3.0"
+      },
+      "result": "satisfied",
+      "graph_hash": "sha1:2fa64b505d8f90d2c93c61a5ef4b917e8f2134a3",
+      "evaluation_hash": "sha1:d95e617f5918c0408fb5139386e20522026ca919",
+      "deterministic_hash": "sha1:edba019f89eaeeae394ec082751df44fee9a02a8"
+    },
+    {
+      "leg": "accepted_history",
+      "commit": "3ebc2a688e31ceaa2c97970097fb4ea0335d1387",
+      "policy_hash": "sha1:cfaba5d0f682d97a9ea310d65d425ab9c2c47f9d",
+      "evaluator": {
+        "name": "hunch-graph-policy",
+        "version": "1.3.0"
+      },
+      "result": "satisfied",
+      "graph_hash": "sha1:2fa64b505d8f90d2c93c61a5ef4b917e8f2134a3",
+      "evaluation_hash": "sha1:bab0d8cb7707e03fe3829c03b400f6997e0a619d",
+      "deterministic_hash": "sha1:f981fa9c9a10d1b2d82d5934d26a3e51e15241c0"
+    },
+    {
+      "leg": "accepted_history",
+      "commit": "7802c5adc47c2c8643bae089ff79a0b694232ae2",
+      "policy_hash": "sha1:cfaba5d0f682d97a9ea310d65d425ab9c2c47f9d",
+      "evaluator": {
+        "name": "hunch-graph-policy",
+        "version": "1.3.0"
+      },
+      "result": "satisfied",
+      "graph_hash": "sha1:2fa64b505d8f90d2c93c61a5ef4b917e8f2134a3",
+      "evaluation_hash": "sha1:f7f04e56d0fcff7a27f1bdbdf6ec18b1f0d575ca",
+      "deterministic_hash": "sha1:f34fe389335e9f31474a955fa2ef45ab31e9f388"
+    },
+    {
+      "leg": "accepted_history",
+      "commit": "2a5c22f90159c79284be05592d8dbf4d970f3cff",
+      "policy_hash": "sha1:cfaba5d0f682d97a9ea310d65d425ab9c2c47f9d",
+      "evaluator": {
+        "name": "hunch-graph-policy",
+        "version": "1.3.0"
+      },
+      "result": "satisfied",
+      "graph_hash": "sha1:a7a1b8e075715a7d50f13acbd12bc107fce2248d",
+      "evaluation_hash": "sha1:8e6cecd7d204981759e5acfd50a151208ea493c0",
+      "deterministic_hash": "sha1:bbc6632d8be2315d4d009526502a23a64fa901fe"
+    },
+    {
+      "leg": "accepted_history",
+      "commit": "6cabe0f06be68355f9dd13058502af42a030cf47",
+      "policy_hash": "sha1:cfaba5d0f682d97a9ea310d65d425ab9c2c47f9d",
+      "evaluator": {
+        "name": "hunch-graph-policy",
+        "version": "1.3.0"
+      },
+      "result": "satisfied",
+      "graph_hash": "sha1:a7a1b8e075715a7d50f13acbd12bc107fce2248d",
+      "evaluation_hash": "sha1:70ba04b4d5eaeb521b494d7875ddc805c58cd701",
+      "deterministic_hash": "sha1:7399f5093e9e7e13eeee124121a3ee2f6b1dc4d9"
+    },
+    {
+      "leg": "accepted_history",
+      "commit": "686d559966a31a51ff92b9c9b8a60d22e88bd21b",
+      "policy_hash": "sha1:cfaba5d0f682d97a9ea310d65d425ab9c2c47f9d",
+      "evaluator": {
+        "name": "hunch-graph-policy",
+        "version": "1.3.0"
+      },
+      "result": "satisfied",
+      "graph_hash": "sha1:a7a1b8e075715a7d50f13acbd12bc107fce2248d",
+      "evaluation_hash": "sha1:acf1ab6ee3bd7cf49e2cfb0da75eb2d892db563d",
+      "deterministic_hash": "sha1:141e584979fdacbbb4b6c8321db81cd0e9e058c2"
+    },
+    {
+      "leg": "accepted_history",
+      "commit": "b367a17eec784ea9ec38ca3cece99d71c7b34f73",
+      "policy_hash": "sha1:cfaba5d0f682d97a9ea310d65d425ab9c2c47f9d",
+      "evaluator": {
+        "name": "hunch-graph-policy",
+        "version": "1.3.0"
+      },
+      "result": "satisfied",
+      "graph_hash": "sha1:a7a1b8e075715a7d50f13acbd12bc107fce2248d",
+      "evaluation_hash": "sha1:1d3a53d97fa2742fb755960d533ec99edb942a54",
+      "deterministic_hash": "sha1:304d30805b5c2d197a1159d764197c8a77468a8b"
+    },
+    {
+      "leg": "accepted_history",
+      "commit": "494c14ddf9c962802717c9a2cc19c1ad7eceb6e7",
+      "policy_hash": "sha1:cfaba5d0f682d97a9ea310d65d425ab9c2c47f9d",
+      "evaluator": {
+        "name": "hunch-graph-policy",
+        "version": "1.3.0"
+      },
+      "result": "satisfied",
+      "graph_hash": "sha1:a7a1b8e075715a7d50f13acbd12bc107fce2248d",
+      "evaluation_hash": "sha1:18611a0971eb349f1f537e7a3a7c560ef83ae1be",
+      "deterministic_hash": "sha1:aaf46e3884fdcd1b8392cb27f750a6ca65ee99d7"
+    },
+    {
+      "leg": "accepted_history",
+      "commit": "5687ec541b981c2586f38aeaf85aaff4b6c947f0",
+      "policy_hash": "sha1:cfaba5d0f682d97a9ea310d65d425ab9c2c47f9d",
+      "evaluator": {
+        "name": "hunch-graph-policy",
+        "version": "1.3.0"
+      },
+      "result": "satisfied",
+      "graph_hash": "sha1:a7a1b8e075715a7d50f13acbd12bc107fce2248d",
+      "evaluation_hash": "sha1:990e7203cc29597b8a3622e0bf963562c439b113",
+      "deterministic_hash": "sha1:ff406771ce9b70717eb9ebb6193486def23648e2"
+    },
+    {
+      "leg": "accepted_history",
+      "commit": "3a02507df148afaf0fba4be158a4fc88d3fa9148",
+      "policy_hash": "sha1:cfaba5d0f682d97a9ea310d65d425ab9c2c47f9d",
+      "evaluator": {
+        "name": "hunch-graph-policy",
+        "version": "1.3.0"
+      },
+      "result": "satisfied",
+      "graph_hash": "sha1:a7a1b8e075715a7d50f13acbd12bc107fce2248d",
+      "evaluation_hash": "sha1:7195fd932eb4b57fb09b4a9b9ac4217e423c6d34",
+      "deterministic_hash": "sha1:cac0683a8454568cde1704d5e45ea3cc5905ba47"
+    },
+    {
+      "leg": "accepted_history",
+      "commit": "2ab98baa41295693ee1087ec0b182698a76be336",
+      "policy_hash": "sha1:cfaba5d0f682d97a9ea310d65d425ab9c2c47f9d",
+      "evaluator": {
+        "name": "hunch-graph-policy",
+        "version": "1.3.0"
+      },
+      "result": "satisfied",
+      "graph_hash": "sha1:a7a1b8e075715a7d50f13acbd12bc107fce2248d",
+      "evaluation_hash": "sha1:a02447605700c403fef6fa44706ea3fc21cef7aa",
+      "deterministic_hash": "sha1:01d60825b10307c57cfc477e35cbe0db7dfb1f24"
+    },
+    {
+      "leg": "accepted_history",
+      "commit": "9f6f303220d6a9c70927ad1454b0d40ba7ee2409",
+      "policy_hash": "sha1:cfaba5d0f682d97a9ea310d65d425ab9c2c47f9d",
+      "evaluator": {
+        "name": "hunch-graph-policy",
+        "version": "1.3.0"
+      },
+      "result": "satisfied",
+      "graph_hash": "sha1:6d5a3b74df12f68fd35b6bedd7fe7f4a352cd7e1",
+      "evaluation_hash": "sha1:5d7aed1c554141ddf42e50f3f0ad0c53cd765888",
+      "deterministic_hash": "sha1:3489b1c2e1537b4575a01dca6e8bee0e693fbf54"
+    },
+    {
+      "leg": "accepted_history",
+      "commit": "49bbac68dbc221fec916031ba370696c87b24bb1",
+      "policy_hash": "sha1:cfaba5d0f682d97a9ea310d65d425ab9c2c47f9d",
+      "evaluator": {
+        "name": "hunch-graph-policy",
+        "version": "1.3.0"
+      },
+      "result": "satisfied",
+      "graph_hash": "sha1:6d5a3b74df12f68fd35b6bedd7fe7f4a352cd7e1",
+      "evaluation_hash": "sha1:c5c449b12597571732193c56500fe7ebb61cc5ff",
+      "deterministic_hash": "sha1:a2ed2216faf81174ac7715ac0e099e4620d313cc"
+    },
+    {
+      "leg": "accepted_history",
+      "commit": "1966c5faa8e6916ab49cd3275b1865e54bbc522d",
+      "policy_hash": "sha1:cfaba5d0f682d97a9ea310d65d425ab9c2c47f9d",
+      "evaluator": {
+        "name": "hunch-graph-policy",
+        "version": "1.3.0"
+      },
+      "result": "satisfied",
+      "graph_hash": "sha1:6d5a3b74df12f68fd35b6bedd7fe7f4a352cd7e1",
+      "evaluation_hash": "sha1:b0d386342ff58102ede1e9bcb861bbb705e8c894",
+      "deterministic_hash": "sha1:ff7973a817ee5d0e9ba0dc154a5a8cac33fc26f5"
+    },
+    {
+      "leg": "accepted_history",
+      "commit": "63abb7d4058f87063c0b6eb9a56db927051b5218",
+      "policy_hash": "sha1:cfaba5d0f682d97a9ea310d65d425ab9c2c47f9d",
+      "evaluator": {
+        "name": "hunch-graph-policy",
+        "version": "1.3.0"
+      },
+      "result": "satisfied",
+      "graph_hash": "sha1:48440cc244476688a63cd974e2c06c444053724a",
+      "evaluation_hash": "sha1:24ed28d642e1228c158d21f2cf85ec1608ef025e",
+      "deterministic_hash": "sha1:5a2f816ac990086396e47d294f11a1f7da848d7b"
+    },
+    {
+      "leg": "accepted_history",
+      "commit": "01349c2a5508fe27f192030baa858f4d0295c867",
+      "policy_hash": "sha1:cfaba5d0f682d97a9ea310d65d425ab9c2c47f9d",
+      "evaluator": {
+        "name": "hunch-graph-policy",
+        "version": "1.3.0"
+      },
+      "result": "satisfied",
+      "graph_hash": "sha1:48440cc244476688a63cd974e2c06c444053724a",
+      "evaluation_hash": "sha1:6cd9cf284312f233576b91e76c5fb22350c1baf8",
+      "deterministic_hash": "sha1:886bf3e30e101b662e1c9777cb41a3cd60ea13f9"
+    },
+    {
+      "leg": "accepted_history",
+      "commit": "7ccf968ec5a711b1888aa97c9453f6a017ed9888",
+      "policy_hash": "sha1:cfaba5d0f682d97a9ea310d65d425ab9c2c47f9d",
+      "evaluator": {
+        "name": "hunch-graph-policy",
+        "version": "1.3.0"
+      },
+      "result": "satisfied",
+      "graph_hash": "sha1:48440cc244476688a63cd974e2c06c444053724a",
+      "evaluation_hash": "sha1:ea19a1af0b55399cc46089bdc3dcf250f32ec349",
+      "deterministic_hash": "sha1:c028f4d5bee588507332e2c76d4034987942f3e3"
+    },
+    {
+      "leg": "accepted_history",
+      "commit": "d13ca5fec2464db8fd436de421053eb08b644d46",
+      "policy_hash": "sha1:cfaba5d0f682d97a9ea310d65d425ab9c2c47f9d",
+      "evaluator": {
+        "name": "hunch-graph-policy",
+        "version": "1.3.0"
+      },
+      "result": "satisfied",
+      "graph_hash": "sha1:48440cc244476688a63cd974e2c06c444053724a",
+      "evaluation_hash": "sha1:5d2c01ee2aba675855374ffa8aa927b0455f926b",
+      "deterministic_hash": "sha1:83ca0e77120761115b02e1f02fd2000fd373d388"
+    },
+    {
+      "leg": "accepted_history",
+      "commit": "192d1ae3b6709d4c9751f378cb720591855cf257",
+      "policy_hash": "sha1:cfaba5d0f682d97a9ea310d65d425ab9c2c47f9d",
+      "evaluator": {
+        "name": "hunch-graph-policy",
+        "version": "1.3.0"
+      },
+      "result": "satisfied",
+      "graph_hash": "sha1:48440cc244476688a63cd974e2c06c444053724a",
+      "evaluation_hash": "sha1:c42a7bb542f5b1345227bf1dd9a94f00068481f7",
+      "deterministic_hash": "sha1:102d9e8fa9da9d509980d59ebd88b88b7dfa2155"
+    }
+  ],
+  "mutation_receipts": [
+    {
+      "id": "mut_59326424e1",
+      "kind": "primary",
+      "operator": "add-forbidden-import",
+      "required": true,
+      "engine": {
+        "name": "hunch-static-graph-controls",
+        "version": "5"
+      },
+      "policy_hash": "sha1:cfaba5d0f682d97a9ea310d65d425ab9c2c47f9d",
+      "base_commit": "e00108b095cbb94f64cda567a8a65686aba5d8e1",
+      "base_graph_hash": "sha1:48440cc244476688a63cd974e2c06c444053724a",
+      "mutated_graph_hash": "sha1:5eacce2cce7d2e18577839f835b5f94958ec0356",
+      "expected": "violated",
+      "result": "violated",
+      "passed": true,
+      "parseability": "parseable",
+      "graph_diff": {
+        "added_symbols": [],
+        "removed_symbols": [],
+        "added_edges": [
+          "edge_01edbfcb36",
+          "edge_193e44a8db",
+          "edge_540c32b926",
+          "edge_7fbc024c24",
+          "edge_ef55992b13"
+        ],
+        "removed_edges": []
+      },
+      "source_patch": {
+        "files": [
+          "src/store/db.ts"
+        ],
+        "diff": "diff --git a/src/store/db.ts b/src/store/db.ts\nindex 893839c..7eb951a 100644\n--- a/src/store/db.ts\n+++ b/src/store/db.ts\n@@ -1,3 +1,4 @@\n+import \"better-sqlite3\"; // hunch deterministic source mutation\n /** Thin wrapper around node:sqlite for the derived index. */\n import { createRequire } from \"node:module\";\n import { mkdirSync } from \"node:fs\";\n",
+        "diff_hash": "sha1:770719f19f5fc2972f682366e07cc933896997ed"
+      },
+      "evaluation_hash": "sha1:9eb44b5f70a03248ebc891826451296d0b8be943",
+      "deterministic_hash": "sha1:1e7d5950d6a5f4ca040171000f90bfbd1ac6ea4d"
+    },
+    {
+      "id": "mut_9b9a332ab3",
+      "kind": "control",
+      "operator": "comment-string-control",
+      "required": true,
+      "engine": {
+        "name": "hunch-static-graph-controls",
+        "version": "5"
+      },
+      "policy_hash": "sha1:cfaba5d0f682d97a9ea310d65d425ab9c2c47f9d",
+      "base_commit": "e00108b095cbb94f64cda567a8a65686aba5d8e1",
+      "base_graph_hash": "sha1:48440cc244476688a63cd974e2c06c444053724a",
+      "mutated_graph_hash": "sha1:48440cc244476688a63cd974e2c06c444053724a",
+      "expected": "satisfied",
+      "result": "satisfied",
+      "passed": true,
+      "parseability": "parseable",
+      "graph_diff": {
+        "added_symbols": [],
+        "removed_symbols": [],
+        "added_edges": [],
+        "removed_edges": []
+      },
+      "parser_control": {
+        "source_hash": "sha1:0aa31802d914d709ffc77a0de8182302e2aa1d70",
+        "observed_target_calls": [],
+        "observed_target_imports": []
+      },
+      "evaluation_hash": "sha1:437e1f1cb8e2107ad3ce69004844b39724e96d73",
+      "deterministic_hash": "sha1:82446a7679371b5f78225a39079b7a0df48f93d6"
+    },
+    {
+      "id": "mut_0f2b326aec",
+      "kind": "control",
+      "operator": "same-name-ambiguity-control",
+      "required": true,
+      "engine": {
+        "name": "hunch-static-graph-controls",
+        "version": "5"
+      },
+      "policy_hash": "sha1:cfaba5d0f682d97a9ea310d65d425ab9c2c47f9d",
+      "base_commit": "e00108b095cbb94f64cda567a8a65686aba5d8e1",
+      "base_graph_hash": "sha1:48440cc244476688a63cd974e2c06c444053724a",
+      "mutated_graph_hash": "sha1:1a981090f2908640c70c689866c7467762585b5e",
+      "expected": "satisfied",
+      "result": "satisfied",
+      "passed": true,
+      "parseability": "not_applicable",
+      "graph_diff": {
+        "added_symbols": [
+          "sym_d9b3eb8f1c_mutation_control_1"
+        ],
+        "removed_symbols": [],
+        "added_edges": [],
+        "removed_edges": []
+      },
+      "evaluation_hash": "sha1:e9115b8f512e37819810389b9fc02a08229e92c4",
+      "deterministic_hash": "sha1:4bf4dc42161610cb0d26f875537fd810ce1fbb3f"
+    }
+  ],
+  "mutation_controls": {
+    "total": 2,
+    "passed": 2,
+    "failed": 0,
+    "receipt_hashes": [
+      "sha1:82446a7679371b5f78225a39079b7a0df48f93d6",
+      "sha1:4bf4dc42161610cb0d26f875537fd810ce1fbb3f"
+    ]
+  },
+  "project_checks": {
+    "build": "not_run",
+    "test": "not_run",
+    "required_for_evaluator_sensitivity": false
+  },
+  "limitations": [
+    "Inferred from one exact first-parent Git structural delta; replay coverage is established only by a later plan-bound proof.",
+    "Scope is intentionally limited to the changed file and anchored to one stable symbol in that file.",
+    "TypeScript/JavaScript static ESM import/export specifiers only; require(), dynamic import(), package aliases, and runtime loading are not covered.",
+    "Replay uses the pinned static evaluator in disposable Git worktrees; project build/tests and repository code are never executed.",
+    "Accepted-history replay evaluated 20 bounded first-parent commit(s).",
+    "Primary mutation applies to an immutable disposable source checkout and must remain parseable; comment/string and same-name controls are separate, while project build/test outcomes remain non-authoritative follow-on evidence.",
+    "Shadow outcomes are tracked as separate append-only measurements and never mutate this immutable proof."
+  ],
+  "proof_class": "P3",
+  "artifact_hashes": {
+    "policy": "sha1:cfaba5d0f682d97a9ea310d65d425ab9c2c47f9d",
+    "plan": "sha1:ae6be6d00537b1574c567b5d9a84bafc5ec3778f",
+    "graph": "sha1:48440cc244476688a63cd974e2c06c444053724a",
+    "current_receipt": "sha1:41976265d394baee51caae0c5c770450a0d9baee",
+    "replay_manifest": "sha1:3f60b79059d2ae56c1cf0faa6784e81fdaaa770c",
+    "mutation_receipt": "sha1:1e7d5950d6a5f4ca040171000f90bfbd1ac6ea4d",
+    "mutation_manifest": "sha1:acecac240cdd484ef862fea884ac8a21957acf41"
+  },
+  "data_class": "public"
+}

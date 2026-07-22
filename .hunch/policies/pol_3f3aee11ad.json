@@ -2,8 +2,8 @@
   "id": "pol_3f3aee11ad",
   "topic": "store.sqlite-driver",
   "ir_version": 1,
-  "revision": 3,
-  "state": "proposed",
+  "revision": 5,
+  "state": "active_advisory",
   "statement": "Replace better-sqlite3 with Node's built-in node:sqlite (v1.0.0)",
   "rationale": "better-sqlite3 was Hunch's only remaining native SQLite dependency: prebuild-install (its installer) is deprecated upstream with no fix coming, node-gyp fallback builds fail on machines without toolchains, and Windows global upgrades hit EPERM when a running node process holds better_sqlite3.node locked. The derived index uses only FTS5, WAL, recursive CTEs, and plain BLOBs — all covered by node:sqlite (unflagged since Node 22.13, verified live). Vectors were already brute-force JS, no loadable extension needed.",
   "scope": {
@@ -33,23 +33,31 @@
   },
   "severity": "warning",
   "surfaces": [
-    "cli",
+    "pre_edit",
+    "pre_commit",
+    "ci",
     "mcp",
-    "ci"
+    "cli"
   ],
-  "authority": null,
+  "authority": {
+    "kind": "human",
+    "actor": "github:davesheffer",
+    "event": "approval-advisory:2026-07-22T10:25:29.373Z",
+    "at": "2026-07-22T10:25:29.373Z"
+  },
   "evidence": [
     "dec_b3cafd3855",
     "ev_dc06b6fdf3",
     "commit:341145d7936ff49e08cffb2608cec9b756506a95"
   ],
-  "proof": "proof_2bbea073a5",
+  "proof": "proof_987cac3ea2",
   "reversal_conditions": [
     "Source decision dec_b3cafd3855 is superseded or the structural interpretation is rejected."
   ],
   "supersedes": null,
   "superseded_by": null,
-  "valid_from": null,
+  "exception_of": null,
+  "valid_from": "2026-07-22T10:25:29.373Z",
   "valid_to": null,
   "data_class": "public",
   "limitations": [
@@ -57,6 +65,14 @@
     "Scope is intentionally limited to the changed file and anchored to one stable symbol in that file.",
     "TypeScript/JavaScript static ESM import/export specifiers only; require(), dynamic import(), package aliases, and runtime loading are not covered."
   ],
+  "candidate": {
+    "alternatives": [],
+    "uncertainty": [],
+    "conflicts": [],
+    "incumbent": null,
+    "scope_suggestion": null,
+    "counterexamples": []
+  },
   "legacy_refs": [
     "dec_b3cafd3855"
   ],
@@ -84,10 +100,26 @@
       "at": "2026-07-10T19:35:14.571Z",
       "reason": "Proof proof_2bbea073a5 reached P3.",
       "proof": "proof_2bbea073a5"
+    },
+    {
+      "action": "proved",
+      "actor_kind": "system",
+      "actor": "hunch:evidence-harness",
+      "at": "2026-07-22T10:25:21.774Z",
+      "reason": "Proof proof_987cac3ea2 reached P3.",
+      "proof": "proof_987cac3ea2"
+    },
+    {
+      "action": "approved_advisory",
+      "actor_kind": "human",
+      "actor": "github:davesheffer",
+      "at": "2026-07-22T10:25:29.373Z",
+      "reason": "Human activated policy as advisory.",
+      "proof": "proof_987cac3ea2"
     }
   ],
   "created_at": "2026-07-10T19:34:54.964Z",
-  "updated_at": "2026-07-10T19:35:14.571Z",
+  "updated_at": "2026-07-22T10:25:29.373Z",
   "provenance": {
     "source": "derived",
     "confidence": 0.8,
