@@ -121,9 +121,10 @@ function passingMatrixReceipt(candidateClean = true) {
       git_protocols_limited_to_file: true,
       npm_offline: true,
       credentials_inherited: false,
-      dependency_lock_equivalent: true,
-      dependency_lock_hash: `sha256:${"3".repeat(64)}`,
-      dependency_tree_source: "candidate-npm-ci-with-identical-lock",
+      dependency_lock_changed: false,
+      dependency_lock_legacy_hash: `sha256:${"3".repeat(64)}`,
+      dependency_lock_candidate_hash: `sha256:${"3".repeat(64)}`,
+      dependency_tree_source: "candidate-npm-ci-lock-applied-to-both",
       legacy_source: "pinned_local_tag",
       candidate_source: "packed_exact_commit",
     },
@@ -192,6 +193,11 @@ test("Phase 2O release gate is fail-closed, content-addressed, and publish-neutr
     ["node", "dist/cli/index.js", "index", "--no-auto-commit"],
     "release validation must never let a deterministic index refresh move the candidate HEAD",
   );
+  assert.deepEqual(
+    RELEASE_GATES.find((gate) => gate.id === "production-dependency-audit")?.command,
+    ["node", "tooling/production-dependency-audit.mjs"],
+    "the release audit must fail closed through the hash-bound reviewed-advisory evaluator",
+  );
   assert.ok(RELEASE_TEST_COVERAGE.md1_correction_bridge.includes("test/md1-e2e.test.ts"),
     "the release receipt binds the joined public/private MD-1a black-box journey");
   assert.ok(RELEASE_TEST_COVERAGE.private_leak_suite.includes("test/md1-e2e.test.ts"),
@@ -216,6 +222,10 @@ test("Phase 2O release gate is fail-closed, content-addressed, and publish-neutr
   assert.ok(RELEASE_TEST_COVERAGE.release_pipeline_contract.includes("test/vscode-marketplace-workflow.test.ts"));
   assert.ok(RELEASE_TEST_COVERAGE.release_pipeline_contract.includes("test/grounding-capture-commit.test.ts"),
     "the receipt binds the real CLI proof that release indexing cannot auto-commit");
+  assert.ok(RELEASE_TEST_COVERAGE.release_pipeline_contract.includes("tooling/production-dependency-audit.mjs"),
+    "the receipt binds the exact reviewed-advisory evaluator");
+  assert.ok(RELEASE_TEST_COVERAGE.release_pipeline_contract.includes("test/production-dependency-audit.test.ts"),
+    "the receipt binds fail-closed tests for advisory drift and transport reachability");
   assert.ok(RELEASE_TEST_COVERAGE.release_pipeline_contract.includes("tooling/vscode-publish-tools/package-lock.json"),
     "the receipt binds the reviewed transitive publisher-tool closure");
   assert.deepEqual(RELEASE_TEST_COVERAGE.matrix_release_resilience,

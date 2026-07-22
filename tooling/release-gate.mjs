@@ -29,7 +29,7 @@ export const RELEASE_GATES = Object.freeze([
   { id: "repository-index", command: ["node", "dist/cli/index.js", "index", "--no-auto-commit"] },
   { id: "architectural-conformance", command: ["node", "dist/cli/index.js", "conform", "--strict"] },
   { id: "clean-install-rehearsal", command: ["node", "tooling/constitution-clean-rehearsal.mjs", "--output", "$REHEARSAL_OUTPUT"] },
-  { id: "production-dependency-audit", command: ["npm", "audit", "--omit=dev", "--audit-level=high"] },
+  { id: "production-dependency-audit", command: ["node", "tooling/production-dependency-audit.mjs"] },
 ]);
 
 export const RELEASE_TEST_COVERAGE = Object.freeze({
@@ -72,6 +72,8 @@ export const RELEASE_TEST_COVERAGE = Object.freeze({
     "test/vscode-marketplace-workflow.test.ts",
     "test/workflow-release-contract.test.ts",
     "tooling/release-gate.mjs",
+    "tooling/production-dependency-audit.mjs",
+    "test/production-dependency-audit.test.ts",
     "tooling/vscode-publish-tools/package.json",
     "tooling/vscode-publish-tools/package-lock.json",
   ],

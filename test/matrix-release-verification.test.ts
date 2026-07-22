@@ -7,7 +7,7 @@ import {
   LEGACY_MATRIX_TARBALL,
   MATRIX_PERFORMANCE_LIMITS,
   MATRIX_RELEASE_SCHEMA,
-  assertDependencyLockProjection,
+  bindDependencyLockTransition,
   assertLegacyMatrixTarball,
   buildMatrixReceipt,
   expectedInstalledDependencyPackages,
@@ -94,9 +94,10 @@ function passingEvidence() {
       git_protocols_limited_to_file: true,
       npm_offline: true,
       credentials_inherited: false,
-      dependency_lock_equivalent: true,
-      dependency_lock_hash: `sha256:${"3".repeat(64)}`,
-      dependency_tree_source: "candidate-npm-ci-with-identical-lock",
+      dependency_lock_changed: false,
+      dependency_lock_legacy_hash: `sha256:${"3".repeat(64)}`,
+      dependency_lock_candidate_hash: `sha256:${"3".repeat(64)}`,
+      dependency_tree_source: "candidate-npm-ci-lock-applied-to-both",
       legacy_source: "pinned_local_tag",
       candidate_source: "packed_exact_commit",
     },
@@ -113,7 +114,7 @@ function passingEvidence() {
 }
 
 test("Matrix release receipt is fail-closed, content-addressed, and binds the pinned npm-latest baseline", () => {
-  assert.equal(MATRIX_RELEASE_SCHEMA, "hunch.matrix.release.v1");
+  assert.equal(MATRIX_RELEASE_SCHEMA, "hunch.matrix.release.v2");
   assert.equal(LEGACY_MATRIX_TAG, "v1.8.3");
   assert.equal(LEGACY_MATRIX_COMMIT, "abf2b40f1d67076e2526000f9336b792add06983");
   assert.deepEqual(LEGACY_MATRIX_TARBALL, {
@@ -137,6 +138,16 @@ test("Matrix release receipt is fail-closed, content-addressed, and binds the pi
   assert.match(receipt.content_hash, /^sha256:[0-9a-f]{64}$/);
   assert.deepEqual(buildMatrixReceipt(passingEvidence()), receipt,
     "identical deterministic evidence must produce an identical receipt");
+
+  const refreshedDependencies: any = structuredClone(passingEvidence());
+  refreshedDependencies.isolation.dependency_lock_changed = true;
+  refreshedDependencies.isolation.dependency_lock_candidate_hash = `sha256:${"4".repeat(64)}`;
+  const refreshedReceipt = buildMatrixReceipt(refreshedDependencies);
+  assert.equal(refreshedReceipt.result, "passed",
+    "a hash-bound candidate lock refresh remains releasable after the shared-tree compatibility proof");
+  refreshedDependencies.isolation.dependency_lock_changed = false;
+  assert.equal(buildMatrixReceipt(refreshedDependencies).result, "failed",
+    "the receipt cannot conceal a changed candidate dependency projection");
 
   assert.equal(verifyMatrixReceipt({
     ...receipt,
@@ -214,7 +225,6 @@ test("every safety claim is required independently and authentic failed receipts
       "node_network_guard_verified",
       "git_protocols_limited_to_file",
       "npm_offline",
-      "dependency_lock_equivalent",
     ],
   } as const;
 
@@ -273,25 +283,25 @@ test("legacy package bytes and dependency semantics fail closed before installat
     lockfileVersion: 3,
     packages: { "node_modules/example": { version: "1.0.0" } },
   };
-  const matchingProjection = assertDependencyLockProjection(legacyProjection, {
+  const matchingProjection = bindDependencyLockTransition(legacyProjection, {
     packages: { "node_modules/example": { version: "1.0.0" } },
     lockfileVersion: 3,
   });
-  assert.equal(matchingProjection.equivalent, true);
-  assert.match(matchingProjection.hash, /^sha256:[0-9a-f]{64}$/);
+  assert.equal(matchingProjection.changed, false);
+  assert.match(matchingProjection.legacy_hash, /^sha256:[0-9a-f]{64}$/);
+  assert.equal(matchingProjection.candidate_hash, matchingProjection.legacy_hash);
   assert.deepEqual(
     matchingProjection,
-    assertDependencyLockProjection(legacyProjection, structuredClone(legacyProjection)),
+    bindDependencyLockTransition(legacyProjection, structuredClone(legacyProjection)),
     "object key order must not create false lock drift",
   );
-  assert.throws(
-    () => assertDependencyLockProjection(legacyProjection, {
-      ...legacyProjection,
-      packages: { "node_modules/example": { version: "2.0.0" } },
-    }),
-    /dependency lock projection drift/,
-    "dependency drift between the legacy and candidate sources must fail closed",
-  );
+  const changedProjection = bindDependencyLockTransition(legacyProjection, {
+    ...legacyProjection,
+    packages: { "node_modules/example": { version: "2.0.0" } },
+  });
+  assert.equal(changedProjection.changed, true);
+  assert.notEqual(changedProjection.candidate_hash, changedProjection.legacy_hash,
+    "a transitive refresh must remain explicit and hash-bound in the receipt");
 });
 
 test("installed dependency proof excludes only incompatible optional platform packages", () => {

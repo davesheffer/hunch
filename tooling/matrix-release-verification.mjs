@@ -22,7 +22,7 @@ import { performance } from "node:perf_hooks";
 import process from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-export const MATRIX_RELEASE_SCHEMA = "hunch.matrix.release.v1";
+export const MATRIX_RELEASE_SCHEMA = "hunch.matrix.release.v2";
 export const LEGACY_MATRIX_TAG = "v1.8.3";
 export const LEGACY_MATRIX_COMMIT = "abf2b40f1d67076e2526000f9336b792add06983";
 // Exact public npm bytes observed at the official registry for 1.8.3. The
@@ -124,15 +124,14 @@ export function assertLegacyMatrixTarball(pack, expected = LEGACY_MATRIX_TARBALL
   return true;
 }
 
-export function assertDependencyLockProjection(legacyProjection, candidateProjection) {
+export function bindDependencyLockTransition(legacyProjection, candidateProjection) {
   const legacyHash = stableProjectionHash(legacyProjection);
   const candidateHash = stableProjectionHash(candidateProjection);
-  if (!jsonEqual(legacyProjection, candidateProjection)) {
-    throw new Error(
-      `dependency lock projection drift: legacy ${legacyHash}, candidate ${candidateHash}`,
-    );
-  }
-  return { equivalent: true, hash: legacyHash };
+  return {
+    changed: !jsonEqual(legacyProjection, candidateProjection),
+    legacy_hash: legacyHash,
+    candidate_hash: candidateHash,
+  };
 }
 
 function parseSemver(value) {
@@ -253,9 +252,12 @@ function evidencePasses(evidence, options = {}) {
     && evidence.isolation?.git_protocols_limited_to_file === true
     && evidence.isolation?.npm_offline === true
     && evidence.isolation?.credentials_inherited === false
-    && evidence.isolation?.dependency_lock_equivalent === true
-    && /^sha256:[0-9a-f]{64}$/.test(evidence.isolation?.dependency_lock_hash ?? "")
-    && evidence.isolation?.dependency_tree_source === "candidate-npm-ci-with-identical-lock"
+    && typeof evidence.isolation?.dependency_lock_changed === "boolean"
+    && /^sha256:[0-9a-f]{64}$/.test(evidence.isolation?.dependency_lock_legacy_hash ?? "")
+    && /^sha256:[0-9a-f]{64}$/.test(evidence.isolation?.dependency_lock_candidate_hash ?? "")
+    && evidence.isolation.dependency_lock_changed
+      === (evidence.isolation.dependency_lock_legacy_hash !== evidence.isolation.dependency_lock_candidate_hash)
+    && evidence.isolation?.dependency_tree_source === "candidate-npm-ci-lock-applied-to-both"
     && evidence.isolation?.legacy_source === "pinned_local_tag"
     && evidence.isolation?.candidate_source === "packed_exact_commit"
     && finiteNonnegativeInteger(evidence.performance?.compatibility_ms)
@@ -1373,7 +1375,11 @@ async function executeMatrixVerification(options) {
     const candidateSource = cloneExactSource(temp, "candidate-source", candidateCommit, candidateCommit, env);
     const legacyDependencyLock = dependencyLockProjection(legacySource);
     const candidateDependencyLock = dependencyLockProjection(candidateSource);
-    const dependencyLock = assertDependencyLockProjection(legacyDependencyLock, candidateDependencyLock);
+    // Published packages do not carry a consumer lockfile, so a compatibility
+    // release must tolerate reviewed transitive refreshes. Bind both source-lock
+    // projections, prove the workspace exactly matches the candidate lock, then
+    // run both the pinned legacy tarball and candidate tarball on that same tree.
+    const dependencyLock = bindDependencyLockTransition(legacyDependencyLock, candidateDependencyLock);
     const installedDependencies = installedDependencyProjection(candidateSource);
     if (!jsonEqual(installedDependencies.expected, installedDependencies.installed)) {
       throw new Error("node_modules does not match the candidate package-lock; run npm ci before Matrix verification");
@@ -1449,9 +1455,10 @@ async function executeMatrixVerification(options) {
         git_protocols_limited_to_file: true,
         npm_offline: true,
         credentials_inherited: false,
-        dependency_lock_equivalent: dependencyLock.equivalent,
-        dependency_lock_hash: dependencyLock.hash,
-        dependency_tree_source: "candidate-npm-ci-with-identical-lock",
+        dependency_lock_changed: dependencyLock.changed,
+        dependency_lock_legacy_hash: dependencyLock.legacy_hash,
+        dependency_lock_candidate_hash: dependencyLock.candidate_hash,
+        dependency_tree_source: "candidate-npm-ci-lock-applied-to-both",
         legacy_source: "pinned_local_tag",
         candidate_source: "packed_exact_commit",
       },
