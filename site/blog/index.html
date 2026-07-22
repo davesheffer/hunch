@@ -7,7 +7,7 @@
 <meta name="description" content="Notes, benchmarks and arguments on keeping AI-generated code inside your architecture — the semantic invariants pattern-SAST can't express." />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Noto+Sans+Arabic:wght@400;500;600&family=Noto+Sans+Hebrew:wght@400;500;600&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Arabic:wght@400;500;600&family=IBM+Plex+Sans+Hebrew:wght@400;500;600&display=swap" rel="stylesheet" />
 <link rel="icon" href="/hunch-mark.svg" type="image/svg+xml" />
 <link rel="stylesheet" href="/brand.css" />
 <link rel="canonical" href="https://hunch-pi.vercel.app/blog" />
@@ -90,8 +90,10 @@
   footer{border-top:1px solid var(--line);margin-top:60px;padding:40px 0;color:var(--muted-2);font-size:14px}
   footer .wrap{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:14px}
   footer a{color:var(--accent)}
-  html[lang="he"]{--serif:"Noto Sans Hebrew",var(--sans);--sans:"Noto Sans Hebrew",system-ui,sans-serif}
-  html[lang="ar"]{--serif:"Noto Sans Arabic",var(--sans);--sans:"Noto Sans Arabic",system-ui,sans-serif}
+  html[lang="he"]{--sans-local:"IBM Plex Sans Hebrew",system-ui,sans-serif;--serif:var(--sans-local);--sans:var(--sans-local)}
+  html[lang="ar"]{--sans-local:"IBM Plex Sans Arabic",system-ui,sans-serif;--serif:var(--sans-local);--sans:var(--sans-local)}
+  html[lang="he"] .eyebrow,html[lang="he"] .kicker,html[lang="he"] .tag,html[lang="he"] .meta,html[lang="he"] .pin,
+  html[lang="ar"] .eyebrow,html[lang="ar"] .kicker,html[lang="ar"] .tag,html[lang="ar"] .meta,html[lang="ar"] .pin{font-family:var(--sans-local);letter-spacing:0;text-transform:none}
   html[dir="rtl"] .feature-art,html[dir="rtl"] code,html[dir="rtl"] pre{direction:ltr;unicode-bidi:isolate}
   html[dir="rtl"] .feature-art.has-cover{direction:rtl}
   html[dir="rtl"] .feature .go svg,html[dir="rtl"] .card .go svg{transform:scaleX(-1)}

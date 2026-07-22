@@ -8,7 +8,7 @@
 <meta name="description" content="Notas, benchmarks y argumentos para mantener el código generado por IA dentro de tu arquitectura." />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Noto+Sans+Arabic:wght@400;500;600&family=Noto+Sans+Hebrew:wght@400;500;600&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Arabic:wght@400;500;600&family=IBM+Plex+Sans+Hebrew:wght@400;500;600&display=swap" rel="stylesheet" />
 <link rel="icon" href="/hunch-mark.svg" type="image/svg+xml" />
 <link rel="stylesheet" href="/brand.css" />
 <link rel="canonical" id="canonical-url" href="https://hunch-pi.vercel.app/es/blog/post" />
@@ -91,8 +91,11 @@
   footer .wrap{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px}
   footer a{color:var(--accent)}
   .notfound{max-width:720px;margin:90px auto;text-align:center;padding:0 28px}
-  html[lang="he"]{--serif:"Noto Sans Hebrew",var(--sans);--sans:"Noto Sans Hebrew",system-ui,sans-serif}
-  html[lang="ar"]{--serif:"Noto Sans Arabic",var(--sans);--sans:"Noto Sans Arabic",system-ui,sans-serif}
+  html[lang="he"]{--sans-local:"IBM Plex Sans Hebrew",system-ui,sans-serif;--serif:var(--sans-local);--sans:var(--sans-local)}
+  html[lang="ar"]{--sans-local:"IBM Plex Sans Arabic",system-ui,sans-serif;--serif:var(--sans-local);--sans:var(--sans-local)}
+  html[lang="he"] .back,html[lang="he"] .tag,html[lang="he"] .meta,html[lang="he"] .prose th,html[lang="he"] .prose .inline-art figcaption,html[lang="he"] .np .lbl,
+  html[lang="ar"] .back,html[lang="ar"] .tag,html[lang="ar"] .meta,html[lang="ar"] .prose th,html[lang="ar"] .prose .inline-art figcaption,html[lang="ar"] .np .lbl{font-family:var(--sans-local);letter-spacing:0;text-transform:none}
+  html[dir="rtl"] .dek,html[dir="rtl"] .prose blockquote{font-style:normal}
   html[dir="rtl"] .prose ul{padding-inline-start:22px;padding-left:0}
   html[dir="rtl"] .prose blockquote{border-left:0;border-right:3px solid var(--accent);padding-left:0;padding-right:22px}
   html[dir="rtl"] .prose code,html[dir="rtl"] .prose pre{direction:ltr;unicode-bidi:isolate;text-align:left}
