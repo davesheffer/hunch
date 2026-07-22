@@ -1,0 +1,55 @@
+{
+  "id": "dec_011b99148b",
+  "title": "fix(release): bind dependency refresh audit policy",
+  "topic": null,
+  "status": "accepted",
+  "context": "What changed: added reviewedReport, bindDependencyLockTransition, sameArray, normalizedVia, stable, sameJson, sameVia, normalize; removed assertDependencyLockProjection; new dep(s): node:assert/strict, node:child_process, node:test, node:fs, node:path, node:process; 2 new file(s).",
+  "decision": "Changed test/matrix-release-verification.test.ts, test/production-dependency-audit.test.ts, test/release-gate.test.ts, tooling/matrix-release-verification.mjs, tooling/production-dependency-audit.mjs, tooling/release-gate.mjs: added reviewedReport, bindDependencyLockTransition, sameArray, normalizedVia, stable, sameJson, sameVia, normalize; removed assertDependencyLockProjection; new dep(s): node:assert/strict, node:child_process, node:test, node:fs, node:path, node:process; 2 new file(s).",
+  "consequences": [
+    "Adds dependency: node:assert/strict, node:child_process, node:test, node:fs, node:path, node:process, node:url.",
+    "Removes assertDependencyLockProjection — potential breaking change for callers."
+  ],
+  "alternatives_rejected": [],
+  "rejected_tripwires": [],
+  "related_components": [
+    "cmp_04c6efb58b",
+    "cmp_a94a8fe5cc"
+  ],
+  "related_files": [
+    "test/matrix-release-verification.test.ts",
+    "test/production-dependency-audit.test.ts",
+    "test/release-gate.test.ts",
+    "tooling/matrix-release-verification.mjs",
+    "tooling/production-dependency-audit.mjs",
+    "tooling/release-gate.mjs"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "aa30115",
+  "valid_from": "2026-07-22T15:22:25+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [
+      "assertDependencyLockProjection"
+    ],
+    "deps": []
+  },
+  "provenance": {
+    "source": "inferred",
+    "confidence": 0.45,
+    "evidence": [
+      "commit:aa30115",
+      "synth:provider=deterministic",
+      "branch:codex/matrix-v1.9.0",
+      "test/matrix-release-verification.test.ts",
+      "test/production-dependency-audit.test.ts",
+      "test/release-gate.test.ts",
+      "tooling/matrix-release-verification.mjs",
+      "tooling/production-dependency-audit.mjs",
+      "tooling/release-gate.mjs"
+    ],
+    "last_verified": "2026-07-22T12:22:31.014Z"
+  },
+  "date": "2026-07-22T15:22:25+03:00"
+}
