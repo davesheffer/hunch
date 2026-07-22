@@ -251,7 +251,11 @@ test("commit semantic source isolates Git config with a platform-compatible null
   }
 });
 
-test("team Matrix: three isolated clones share live memory, catch a bad branch, repair it, and never leak it publicly", { timeout: 300_000 }, async () => {
+// Each CLI subprocess is capped at 45 seconds and each MCP request at the SDK's
+// 60-second default. The outer budget covers the complete stateful sequence; it
+// must also accommodate Windows runner variance (observed healthy runs span
+// roughly 4.6–7.6 minutes) without masking a stalled individual operation.
+test("team Matrix: three isolated clones share live memory, catch a bad branch, repair it, and never leak it publicly", { timeout: 720_000 }, async () => {
   const sandbox = mkdtempSync(join(tmpdir(), "hunch-team-matrix-"));
   const clients: Client[] = [];
   try {
