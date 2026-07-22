@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.9.0 — 2026-07-19
+## 1.9.0 — 2026-07-22
 
 ### One living engineering memory for the whole team
 
@@ -14,6 +14,12 @@ merge deterministically, public-only checks exclude the shared graph, and strict
 pass on a stale or unverified team route. Corrections can be upgraded into proof-backed proposals,
 but those correction proposals remain mechanically non-activatable until source-currentness safety
 lands. Other policy types still gain no authority unless a human explicitly accepts them.
+
+Release artifacts now hold the same line. The package and VS Code extension are tested before any
+publisher receives credentials, the exact tested bytes are carried forward unchanged, and the
+registries are checked after publication. npm releases prove the tagged source across supported
+runtimes and Windows/macOS Matrix safety; VS Code v0.17.2 publishes the same VSIX to the Visual
+Studio Marketplace and Open VSX.
 
 To move an existing code repository's public Hunch records into the shared store, use
 `hunch shared --repo <separate-private-memory-repo> --migrate`. Omit `--migrate` for a new setup.

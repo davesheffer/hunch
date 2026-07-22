@@ -189,12 +189,12 @@ For a coordinated pause or rollback that preserves every memory record:
 ```bash
 hunch firmness off
 hunch shared --repo git@github.com:acme/project-hunch-memory.git --no-auto-commit
-npm i -g @davesheffer/hunch@1.8.3
+npm i -g @davesheffer/hunch@1.8.5
 ```
 
 Revert the `.hunch/team.json` setup commit only if new clones must stop discovering the Matrix. Do
 not delete the memory repo or local overlay; after upgrading again, `hunch shared --sync` publishes
-pending local memory. Version 1.8.3 rejects v1.9's source-gated correction-policy IR instead of
+pending local memory. Version 1.8.5 rejects v1.9's source-gated correction-policy IR instead of
 silently bypassing it, so pause enforcement first and upgrade every client to v1.9 before resuming
 Matrix policy workflows.
 
@@ -259,3 +259,23 @@ Then point `HUNCH_SYNTH_MODEL` at `hunch-synth` instead of the base model.
 **Observe:** `hunch doctor` no longer prints the context warning once `num_ctx` is set; `hunch backfill`'s drafts stop hallucinating from truncated diffs.
 
 **Public remotes are refused by default.** A hostname denylist cannot keep pace with every paid OpenAI-compatible provider, so Hunch fails closed: localhost, private/link-local IPs, and conventional LAN names work directly; every public remote requires `HUNCH_SYNTH_ALLOW_METERED=1`. Set it only when the endpoint is deliberately trusted and any billing is understood. Publicly hosted self-managed endpoints use the same explicit flag because billing cannot be inferred safely from a hostname.
+
+---
+
+## 14. Install the editor companion and verify a release
+
+Install Hunch from the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=davesheffer.hunch-vscode)
+or [Open VSX](https://open-vsx.org/extension/davesheffer/hunch-vscode), then open a repository that
+already has the Hunch CLI and run `hunch init`. The extension reads the same public, private, or
+Matrix memory home as the CLI; it never writes Hunch JSON directly.
+
+For a release audit, start with the exact tags and public registry metadata:
+
+```bash
+npm view @davesheffer/hunch@1.9.0 version dist.integrity dist.attestations --json
+git tag --list v1.9.0 vscode-v0.17.2
+```
+
+**Observe:** npm reports `1.9.0`, an integrity digest, and provenance metadata. Both extension
+registries report `0.17.2`. The GitHub Actions run for each tag shows a credential-free validation
+job followed by publication of the same content-addressed artifact.

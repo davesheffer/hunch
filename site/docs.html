@@ -8,6 +8,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="icon" href="/hunch-mark.svg" type="image/svg+xml" />
+<link rel="stylesheet" href="/brand.css" />
 <link rel="stylesheet" href="docs-upgrade.css" />
 <style>
   :root{
@@ -53,7 +55,6 @@
   }
   .top-row{width:100%;max-width:1400px;margin:0 auto;padding:0 24px;display:flex;align-items:center;justify-content:space-between;gap:20px}
   .brand{display:flex;align-items:center;gap:10px;font-weight:600;font-size:16px;letter-spacing:-.01em}
-  .brand .dot{width:8px;height:8px;border-radius:50%;background:var(--accent);display:inline-block}
   .brand .tag{font-family:var(--mono);font-size:11px;font-weight:500;color:var(--muted);border:1px solid var(--line);border-radius:6px;padding:2px 7px;margin-left:4px}
   .top-links{display:flex;align-items:center;gap:26px;font-size:14px;color:var(--ink-soft)}
   .top-links a{font-weight:450;transition:color .2s}
@@ -195,7 +196,7 @@ if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElem
     <div style="display:flex;align-items:center;gap:14px">
       <button class="menu-btn" id="menuBtn" aria-label="Toggle navigation"><span></span></button>
       <a class="brand" href="/">
-        <span class="dot" aria-hidden="true"></span> hunch <span class="tag">docs</span>
+        <span class="brand-mark" aria-hidden="true"></span> hunch <span class="tag">docs</span>
       </a>
     </div>
     <nav class="top-links">
@@ -264,6 +265,7 @@ if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElem
       <h4>Operations</h4>
       <a href="#doctor">Doctor &amp; troubleshooting</a>
       <a href="#maintenance">Maintenance</a>
+      <a href="#release-integrity">Release integrity</a>
       <a href="#develop">Develop &amp; contribute</a>
     </div>
   </aside>
@@ -292,6 +294,7 @@ if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElem
 <span class="k">npm</span> install
 <span class="k">npm</span> run build        <span class="c"># compile to dist/</span>
 <span class="k">npm</span> link             <span class="c"># optional: global `hunch` from source</span></pre></div>
+      <p>For the editor companion, install <strong>Hunch 0.17.2</strong> from the <a class="link" href="https://marketplace.visualstudio.com/items?itemName=davesheffer.hunch-vscode" target="_blank" rel="noopener">Visual Studio Marketplace</a> or <a class="link" href="https://open-vsx.org/extension/davesheffer/hunch-vscode" target="_blank" rel="noopener">Open VSX</a>. It reads the same memory home as the CLI and MCP server.</p>
     </section>
 
     <section id="initialize">
@@ -381,7 +384,6 @@ if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElem
       <p>It writes a gitignored <code>.hunch/local.json</code> pointing at the store, installs the <code>--private</code> post-commit hook, and that’s it — Hunch, the MCP server, and the local VS Code extension <strong>auto-detect</strong> it; <code>hunch doctor</code> shows <code>private: on → …</code>. It’s <strong>opt-in and default-off</strong>: no <code>local.json</code> (and no <code>HUNCH_PRIVATE_DIR</code>) means the overlay is completely inert.</p>
       <p>Record sensitive items with <code>private: true</code> on <code>hunch_record_decision</code> / <code>hunch_record_correction</code>; they’re written to the overlay, never the committed repo. Post-commit synthesis routes its auto-captured decisions there too, so a private-memory repo’s auto-decisions never land in the public tree. <code>HUNCH_PRIVATE_DIR</code> overrides <code>local.json</code> per-shell (e.g. for portability); the git hook lives in <code>.git/hooks/</code> and is never committed.</p>
       <p><strong>Auto-commit (on by default, every mode).</strong> Each capture is auto-committed to the store it lands in: a private/shared <em>overlay repo</em> is committed <em>and pushed</em>; the public <code>.hunch/</code> in a regular repo is committed <em>only</em> and rides your next push — Hunch never pushes or merges your code branch. It stages only the <code>.hunch/</code> dir (never your other changes) and is recursion-safe. Opt out with <code>--no-auto-commit</code> on <code>hunch init</code> / <code>private</code> / <code>shared</code>.</p>
-      <p><strong>Private versus shared.</strong> <code>hunch private</code> is a split overlay for selected sensitive records and never advertises its URL. <code>hunch shared --repo &lt;url&gt;</code> is the team Matrix: every capture routes to one dedicated repository and Hunch writes a committed, credential-free <code>.hunch/team.json</code> so fresh clones can discover it.</p>
       <div class="note"><span class="ic">ℹ</span><strong>Leak-safe by construction.</strong> Committed files (the auto <code>CLAUDE.md</code> grounding) and the CI PR comment render <em>public-only</em> — a private record can’t reach a public surface. A private constraint is still <em>enforced</em> on your machine (pre-edit hook + local <code>hunch check</code>), just never posted. Keep the var <strong>unset in CI</strong>; the scaffolded guard also passes <code>--public-only</code> and neutralizes it as defense-in-depth.</div>
     </section>
 
@@ -403,7 +405,7 @@ if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElem
           <tr><td><strong>Code map</strong></td><td>How your code connects — functions, files, and components — so Hunch can see the ripple effect of a change.</td></tr>
         </tbody>
       </table>
-      <p>It is all saved as plain, readable files in the configured Git memory home — the code repo by default, or a dedicated private repo in Matrix mode — with a fast local search index rebuilt from those files on demand.</p>
+      <p>It's all saved as plain, readable files in your repo, with a fast local search index built from them on demand.</p>
     </section>
 
     <section id="provenance">
@@ -525,7 +527,7 @@ if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElem
           <tr><td><b>Auto-trust</b></td><td>a capture is live advisory memory instantly; migrate an old draft backlog once with <code>hunch adopt-drafts</code></td></tr>
           <tr><td><b>Self-repair</b></td><td>renames heal every exact file binding — decision files, tripwire &amp; constraint scopes, policy selectors — from git’s own rename detection; each repair is a revertable timeline move</td></tr>
           <tr><td><b>Inline escalations</b></td><td>only what the graph can’t settle itself asks you: a topic conflict, a candidate rule, a proposed rule with its proof, a repaired rule needing a fresh proof — each a question with its resolution verb</td></tr>
-          <tr><td><b>Local-first</b></td><td>public-repo memory auto-commits locally and rides your next code push; a private/shared overlay commits and synchronizes its own memory-only repository by default</td></tr>
+          <tr><td><b>Local-first</b></td><td>memory auto-commits locally and rides your next push; <code>hunch push</code> (or the panel’s Approve-to-push) is the explicit outward step</td></tr>
         </tbody>
       </table>
       <p>In VS Code, the <b>Hunch Memory</b> panel is the same spine as a source-control view: the timeline with click-to-diff and one-click local revert, a <b>⚖ Needs your decision</b> group that exists only while something real needs you, and a <b>🏛 Constitution</b> group where activate / demote / withdraw / retire are each one audited click.</p>
@@ -542,10 +544,6 @@ Agent: hunch_record_correction({ rule: "never import lodash; use src/utils",
 <span class="d">→</span> con_… recorded. A later edit that adds `import _ from "lodash"` to that scope is
   DENIED (strict) and the PR fails CI — in Cursor, Copilot, Windsurf, or Claude Code alike.</pre></div>
       <p>The <code>UserPromptSubmit</code> hook nudges the agent to persist a rule whenever your prompt reads like a correction. Scoping is conservative by default (the file you were in); a repo-wide rule is only <em>blocking</em> when you pass <code>applies_to_all</code>, so one correction can’t silently gate the whole tree.</p>
-      <p><strong>Correction → proof-backed proposal.</strong> When the correction has a supported deterministic matcher, upgrade it into a reviewable policy packet and inspect the proof card:</p>
-      <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">terminal</span><button class="copy">Copy</button></div><pre><span class="k">hunch</span> policy upgrade-correction &lt;constraint-id&gt;
-<span class="k">hunch</span> policy card &lt;policy-id&gt;</pre></div>
-      <p>The upgrade writes evidence, a plan, and a proof but leaves the policy <em>proposed</em> with <code>authority: none</code>. In v1.9 its source-currentness activation gate is mechanically blocked, so even a human cannot activate this correction policy yet. The original correction guard stays in force. Other proved policy types still require explicit audited human acceptance.</p>
     </section>
 
     <section id="merge-verdict">
@@ -596,8 +594,6 @@ Agent: hunch_record_correction({ rule: "never import lodash; use src/utils",
         <thead><tr><th>Command</th><th>What it does</th></tr></thead>
         <tbody>
           <tr><td><code>init</code></td><td>Scaffold <code>.hunch/</code>, index, install hooks, wire up assistants.</td></tr>
-          <tr><td><code>shared</code></td><td>Connect one dedicated team-memory repo. With <code>--repo</code>, writes committed <code>.hunch/team.json</code>; <code>--migrate</code> moves existing public memory; <code>--sync</code> retries pending overlay publication.</td></tr>
-          <tr><td><code>private</code></td><td>Configure a non-advertised split overlay for selected sensitive memory.</td></tr>
           <tr><td><code>index</code></td><td>Parse the repo into a symbol/dependency graph (deterministic, no LLM).</td></tr>
           <tr><td><code>backfill</code></td><td>Replay git history to seed decisions (cold-start fix). <code>--since 90d</code></td></tr>
           <tr><td><code>sync</code></td><td>Capture a decision from a commit (run by the post-commit hook).</td></tr>
@@ -649,19 +645,9 @@ Agent: hunch_record_correction({ rule: "never import lodash; use src/utils",
 <span class="k">hunch</span> backfill --since 90d          <span class="c"># seed decisions from recent history (no empty day-1)</span>
 <span class="c"># …reload your assistant, then ask: "why is X built this way?"</span></pre></div>
 
-      <h3>Connect a dedicated team-memory repo</h3>
-      <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">maintainer</span><button class="copy">Copy</button></div><pre><span class="k">npm</span> i -g @davesheffer/hunch@1.9.0
-<span class="k">hunch</span> shared --repo git@github.com:acme/project-hunch-memory.git
-<span class="k">git</span> add .gitignore .hunch/team.json
-<span class="k">git</span> commit -m "chore: connect shared Hunch memory"
-<span class="k">git</span> push
-<span class="c"># add --migrate only when moving existing public .hunch/ memory</span></pre></div>
-
-      <h3>Join a repo that uses the team Matrix</h3>
-      <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">teammate</span><button class="copy">Copy</button></div><pre><span class="k">npm</span> i -g @davesheffer/hunch@1.9.0
-<span class="k">git</span> pull                            <span class="c"># receive committed .hunch/team.json</span>
-<span class="k">hunch</span> init                          <span class="c"># validate, clone memory locally, wire assistants</span>
-<span class="k">hunch</span> doctor                        <span class="c"># confirm the shared route</span>
+      <h3>Join a repo that already uses Hunch</h3>
+      <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">terminal</span><button class="copy">Copy</button></div><pre><span class="k">git</span> pull                            <span class="c"># the .hunch/ graph travels with the code</span>
+<span class="k">hunch</span> init                          <span class="c"># wire YOUR assistants to the shared graph (idempotent)</span>
 <span class="c"># …reload your assistant — the team's memory is now in context</span></pre></div>
 
       <h3>Ask why a file is the way it is</h3>
@@ -669,11 +655,12 @@ Agent: hunch_record_correction({ rule: "never import lodash; use src/utils",
 <span class="k">hunch</span> timeline src/auth/session.ts             <span class="c"># how the thinking changed over time</span>
 <span class="k">hunch</span> why src/auth/session.ts --as-of v1.2.0   <span class="c"># what was believed at a past release</span></pre></div>
 
-      <h3>Turn a correction into a proof-backed proposal</h3>
-      <p>Have the assistant record the correction, then upgrade a supported exact matcher into a proof-backed proposal. The upgrade never grants authority:</p>
-      <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">terminal</span><button class="copy">Copy</button></div><pre><span class="k">hunch</span> policy upgrade-correction &lt;constraint-id&gt;
-<span class="k">hunch</span> policy card &lt;policy-id&gt;          <span class="c"># inspect exact evidence + uncertainty</span></pre></div>
-      <p class="muted" style="font-size:.86em">The policy stays proposed with <code>authority: none</code>. Its v1.9 source-currentness gate is deliberately blocked, so <code>policy accept</code> must reject it until that safety is implemented and cleared. The original correction guard is retained.</p>
+      <h3>Turn a correction into an enforced rule</h3>
+      <p>Tell your assistant the rule (it records it for you), or do it from the CLI — then confirm it so it actually blocks. Name the actual violation with <code>--forbid-dep</code> (or <code>--forbid-symbol</code>): the rule then blocks the real change <em>across the file's whole life</em> and stays quiet on edits that don't break it, where a scope-only rule relaxes to advisory once the file is edited again.</p>
+      <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">terminal</span><button class="copy">Copy</button></div><pre><span class="k">hunch</span> record-constraint "never import lodash; use src/utils" \
+      --scope "src/**" --severity blocking --forbid-dep "lodash"
+<span class="k">hunch</span> review --accept &lt;id&gt;            <span class="c"># confirm → now held against every assistant</span></pre></div>
+      <p class="muted" style="font-size:.86em"><code>--forbid-dep</code> matches the <em>parsed</em> import (a comment or string naming the module can't trip it; a submodule like <code>lodash/groupBy</code> is caught). A correction your assistant records is given the same matcher automatically. <code>--match &lt;regex&gt;</code> remains as a lint-grade textual fallback. None of these are bypass-proof — deliberate indirection can still route around any rule.</p>
 
       <h3>Curate the draft queue</h3>
       <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">terminal</span><button class="copy">Copy</button></div><pre><span class="k">hunch</span> review                        <span class="c"># segmented: ready-to-confirm vs needs-scrutiny</span>
@@ -712,8 +699,7 @@ Agent: hunch_record_correction({ rule: "never import lodash; use src/utils",
 
     <section id="storage">
       <h2>Where it’s stored<a class="anchor" href="#storage">#</a></h2>
-      <p>The source of truth is plain, readable JSON under <code>.hunch/</code> — one file per record. By default that directory lives in the code repository. In Matrix mode the shared records live under <code>.hunch/</code> in a dedicated private memory repository; the code repo commits only the credential-free <code>.hunch/team.json</code> locator while each machine keeps its clone and <code>.hunch/local.json</code> pointer ignored.</p>
-      <p>A fast local SQLite search index is derived from the JSON and can be rebuilt at any time. It is never the source of truth and is never published to either repository.</p>
+      <p>The source of truth is plain, readable JSON in a Git repository you control: under <code>.hunch/</code> in the code repo by default, or in a dedicated private memory repo in Matrix mode. The code repo then carries only the credential-free <code>.hunch/team.json</code>; local paths and the derived SQLite search index stay ignored and can be rebuilt at any time.</p>
     </section>
 
     <section id="doctor">
@@ -741,15 +727,15 @@ Agent: hunch_record_correction({ rule: "never import lodash; use src/utils",
 <span class="k">git</span> add .gitignore .hunch/team.json
 <span class="k">git</span> commit -m "chore: connect shared Hunch memory"
 <span class="k">git</span> push</pre></div>
-      <p>Use a credential-free HTTPS/SSH URL and leave authentication in SSH or the Git credential helper. Add <code>--migrate</code> only when moving existing public <code>.hunch/</code> records into the dedicated store; the migration copies before removing, pushes the surviving memory, then prints the public-repo commit instructions.</p>
-      <p>After the pointer commit lands, each teammate installs v1.9.0, pulls, and runs <code>hunch init</code>. The committed <code>.hunch/team.json</code> advertises the exact repository and branch. Hunch validates it, creates an ignored <code>.hunch-private/</code> clone, and merges the local path/preferences into ignored <code>.hunch/local.json</code>. An unparseable local config is never overwritten.</p>
-      <p><strong>Always pumping.</strong> Memory-reading and writing CLI operations attempt a bounded pull at startup. A long-lived MCP server checks the remote at tool-request boundaries, notices local out-of-process JSON changes on every request, and rebuilds its derived index only when the source changed. Captures commit and two-way synchronize the memory-only repository by default; concurrent JSON records merge by record identity. A failed push remains local and is retried by the next capture or <code>hunch shared --sync</code>.</p>
-      <p><strong>Authority stays fail-closed.</strong> Captures are useful advisory memory immediately. Generic proved policy types require explicit audited human acceptance; v1.9 correction-derived policies are stricter and remain mechanically non-activatable until their source-currentness gate is implemented and cleared. Use <code>--public-only</code> for CI receipts or comments that may be exposed publicly; an internal check without that flag can apply the shared graph.</p>
+      <p>Use a credential-free HTTPS or SSH URL and leave authentication in SSH or the Git credential helper. Add <code>--migrate</code> only when moving existing public <code>.hunch/</code> records into the dedicated store.</p>
+      <p>After the pointer commit lands, each teammate installs v1.9.0, pulls, and runs <code>hunch init</code>. Hunch validates <code>.hunch/team.json</code>, creates an ignored <code>.hunch-private/</code> clone, and merges the local path and preferences into ignored <code>.hunch/local.json</code>. An unparseable local config is never overwritten.</p>
+      <p><strong>Always pumping.</strong> CLI operations attempt a bounded pull at startup; long-lived MCP servers refresh at tool-request boundaries. Captures commit and synchronize the memory-only repository by default, concurrent JSON records merge by identity, and a failed push stays local for <code>hunch shared --sync</code> to retry.</p>
+      <p><strong>Authority stays fail-closed.</strong> Captures become advisory memory immediately. Blocking policy authority still requires an explicit audited human action, and public receipts should use <code>--public-only</code> so the shared graph never appears on a public surface.</p>
       <h3>Pause or roll back without deleting memory</h3>
       <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">terminal</span><button class="copy">Copy</button></div><pre><span class="k">hunch</span> firmness off
 <span class="k">hunch</span> shared --repo git@github.com:acme/project-hunch-memory.git --no-auto-commit
-<span class="k">npm</span> i -g @davesheffer/hunch@1.8.3</pre></div>
-      <p>This preserves shared reads and local records while disabling agent-hook enforcement and automatic memory publication before the package rollback. Revert the setup commit only if new clones must stop discovering the Matrix. Do not delete the memory remote or local overlays. Version 1.8.3 rejects v1.9's source-gated correction-policy IR instead of silently bypassing it, so upgrade every client to v1.9 before resuming Matrix policy workflows; then <code>hunch shared --sync</code> publishes pending memory.</p>
+<span class="k">npm</span> i -g @davesheffer/hunch@1.8.5</pre></div>
+      <p>This preserves every shared and local memory record while disabling enforcement and automatic publication. Revert the <code>.hunch/team.json</code> setup commit only if new clones must stop discovering the Matrix; do not delete the memory repo or local overlay. Upgrade every client to v1.9 before resuming Matrix policy workflows, then run <code>hunch shared --sync</code>.</p>
     </section>
 
     <section id="maintenance">
@@ -758,6 +744,14 @@ Agent: hunch_record_correction({ rule: "never import lodash; use src/utils",
       <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">terminal</span><button class="copy">Copy</button></div><pre><span class="k">hunch</span> compact   <span class="c"># prune rejected/superseded/stale low-value drafts</span>
 <span class="k">hunch</span> stale     <span class="c"># list records whose files changed after they were last verified</span></pre></div>
       <p>Since v1.8 there is no draft backlog to triage: captured memory auto-trusts as advisory the moment it lands, and <code>hunch escalations</code> asks you inline about the few things the graph can't settle itself. Migrating an older repo? One <code>hunch adopt-drafts</code> clears a legacy queue, and <code>hunch log</code> shows every memory move — each one revertable.</p>
+    </section>
+
+    <section id="release-integrity">
+      <h2>Release integrity<a class="anchor" href="#release-integrity">#</a></h2>
+      <p>Hunch tests release artifacts before publication credentials are available. The immutable npm tarball and VSIX are then passed to isolated publishers, which verify the public registries converged on the expected version. npm publishes with GitHub Actions provenance; one tested VSIX goes unchanged to both editor registries.</p>
+      <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">audit</span><button class="copy">Copy</button></div><pre><span class="k">npm</span> view @davesheffer/hunch@1.9.0 version dist.integrity dist.attestations --json
+<span class="k">git</span> tag --list v1.9.0 vscode-v0.17.2</pre></div>
+      <p>Inspect <a class="link" href="https://github.com/davesheffer/hunch/actions" target="_blank" rel="noopener">GitHub Actions</a>, the <a class="link" href="https://marketplace.visualstudio.com/items?itemName=davesheffer.hunch-vscode" target="_blank" rel="noopener">Visual Studio Marketplace</a>, and <a class="link" href="https://open-vsx.org/extension/davesheffer/hunch-vscode" target="_blank" rel="noopener">Open VSX</a> for the public receipts.</p>
     </section>
 
     <section id="develop">
@@ -775,7 +769,7 @@ Agent: hunch_record_correction({ rule: "never import lodash; use src/utils",
 
 <footer>
   <span>hunch — engineering memory. Apache-2.0.</span>
-  <span><a class="link" href="/">Home</a> · <a class="link" href="/blog">Blog</a> · <a class="link" href="/changelog">Changelog</a> · <a class="link" href="https://www.npmjs.com/package/@davesheffer/hunch" target="_blank" rel="noopener">npm</a> · <a class="link" href="https://github.com/davesheffer/hunch" target="_blank" rel="noopener">GitHub</a></span>
+  <span><a class="link" href="/">Home</a> · <a class="link" href="/blog">Blog</a> · <a class="link" href="/changelog">Changelog</a> · <a class="link" href="https://www.npmjs.com/package/@davesheffer/hunch" target="_blank" rel="noopener">npm</a> · <a class="link" href="https://marketplace.visualstudio.com/items?itemName=davesheffer.hunch-vscode" target="_blank" rel="noopener">VS Code</a> · <a class="link" href="https://github.com/davesheffer/hunch" target="_blank" rel="noopener">GitHub</a></span>
 </footer>
 
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js" integrity="sha384-g4NTh/Iv5PPU4xPyhEWqPcwtNXOvdaDI8LLnyYfyNZOjKJeYQyjzQ9X5275eBjpt" crossorigin="anonymous"></script>
@@ -978,7 +972,7 @@ Agent: hunch_record_correction({ rule: "never import lodash; use src/utils",
     {q:"What are the requirements? (Node version)", kw:["requirement","requirements","node version","node 20","node 18","what node","system requirements","prerequisite","prerequisites","what do i need installed","need to install","docker","container","devcontainer","dev container","codespaces"], a:`Just <b>Node 22.13+</b> and a <b>git</b> repo. It runs anywhere that Node release does, including Docker, dev containers, and Codespaces; older Node releases are not supported. → <a href="#install">Install</a>`},
     {q:"Does it work on big repos or monorepos?", kw:["big repo","large repo","huge repo","huge monorepo","monorepo","mono repo","repo size","max repo","maximum repo","million line","large codebase","big codebase","many files","how many files","chokes","workspaces","multiple packages","packages in one repo","scale","scales","indexing time","take forever","eat all my memory"], a:`Yes. Indexing is <b>incremental</b> — the first pass on a large repo is a one-time cost, then it only re-reads what changed, so it stays fast. Monorepos with many packages are fine. There's no hard repo-size limit. → <a href="#graph">The reasoning graph</a>`},
     {q:"Do I need git? Does it work without git?", kw:["without git","not in git","no git","need git","git required","require git","mercurial","svn","subversion","not git","do i need git"], a:`Hunch is <b>git-native</b> — it stores memory as files committed to your repo and learns from your commit history, so it needs a git repo. If your project isn't in git yet, run <code>git init</code> first. Mercurial and SVN aren't supported. → <a href="#initialize">Initialize a repo</a>`},
-    {q:"Is my memory safe from corruption?", kw:["corrupt","corrupted","corruption","sqlite index","index get corrupted","rebuild","rebuild the index","reindex","atomic write","atomic writes","schema migration","migration","migrate","drop records","manually edit","edited the json","broke the json","data integrity","compatible","version mismatch","newer version than"], a:`Yes. The JSON under <code>.hunch/</code> is the source of truth and is written <b>atomically</b>, so an interrupted write cannot truncate it. SQLite is derived and rebuildable. Records forward-migrate before validation and are never silently dropped. One deliberate exception is safer: pre-v1.9 clients reject v1.9 source-gated correction policies instead of bypassing their activation gate, so upgrade every team client before resuming Matrix policy workflows. → <a href="#storage">Where it's stored</a>`},
+    {q:"Is my memory safe from corruption?", kw:["corrupt","corrupted","corruption","sqlite index","index get corrupted","rebuild","rebuild the index","reindex","atomic write","atomic writes","schema migration","migration","migrate","drop records","manually edit","edited the json","broke the json","data integrity","compatible","version mismatch","newer version than"], a:`Yes. The JSON in <code>.hunch/</code> is the source of truth and is written <b>atomically</b> (write-temp-then-rename), so an interrupted write can't truncate it. The fast SQLite index is just derived — rebuild it anytime with <code>hunch index</code>. Old records are auto-migrated to the current format before use and never silently dropped, so teammates on different versions stay compatible. → <a href="#storage">Where it's stored</a>`},
     {q:"What if a note is wrong, stale, or a false positive?", kw:["wrong","false positive","false positives","false alarm","stale","out of date","outdated","override","dismiss","get past","disagree","intentional","on purpose","nagging","delete a constraint","remove a rule","contradict","contradicts","hallucinated","inaccurate","just wrong","bad advice","edit a note","edit a decision","change a note","fix a note"], a:`You stay in control. Every note carries a <b>confidence</b> — low-confidence auto-guesses stay advisory and never block. Anything wrong you can edit or supersede (the old version stays in history, never lost). Only <b>human-confirmed</b>, high-confidence rules can block, and even those you can dismiss, override, or soften by lowering the firmness level. Stale notes get flagged automatically. → <a href="#provenance">Provenance &amp; confidence</a>`},
     {q:"Is there vendor lock-in? Can I take my memory with me?", kw:["lock in","lock-in","lockin","vendor lock","export","take my memory","take it with me","portable","proprietary","own my data","my data later","leave hunch"], a:`No lock-in. The source of truth is plain JSON in a Git repository you control — the code repo or your dedicated Matrix memory repo. Keep or copy that repository anywhere; removing Hunch integration never requires deleting the memory history. → <a href="#storage">Where it's stored</a>`},
     {q:"It's installed — what do I do day to day?", kw:["day to day","daily","now what","do i do","what do i do","once installed","after install","after init","use it day","my workflow","whats next","installed now"], a:`Mostly nothing! Notes are captured automatically every time you commit, and your AI assistant reads the relevant ones on its own before editing. You only step in to <b>confirm</b> an important rule or to <b>correct</b> the AI — and that correction becomes a saved rule. → <a href="#first-query">Your first query</a>`},

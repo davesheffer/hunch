@@ -16,6 +16,10 @@ strict enforcement.
 **Memory is the input. The product boundary is the receipt:** relevant evidence before an edit,
 then a deterministic check of the change against the rules your team has explicitly trusted.
 
+> **New in v1.9.0:** Matrix mode gives the whole team one live, private Git memory across fresh
+> clones, worktrees, CLI checks, and MCP assistants. The same release also makes the package and
+> VS Code publication paths immutable: tested artifacts are the exact artifacts published.
+
 ## Start in five minutes
 
 Requires Node 22.13+ and a git repository.
@@ -139,8 +143,8 @@ but stops automatic memory commits and pushes. As a team-coordinated rollback, r
 commit to stop discovery after teammates pull the revert. Existing machines retain their ignored
 local overlay until they are deliberately disconnected; do not delete the memory repo as part of a
 rollback. For this rollout, reinstall the previous published package with
-`npm i -g @davesheffer/hunch@1.8.3`; the release receipt resolves and records that exact rollback
-target from the npm registry instead of trusting Git tags. Version 1.8.3 fails closed when it sees a
+`npm i -g @davesheffer/hunch@1.8.5`; the release receipt resolves and records that exact rollback
+target from the npm registry instead of trusting Git tags. Version 1.8.5 fails closed when it sees a
 v1.9 source-gated correction policy, so pause enforcement first as shown above and upgrade every
 team client to v1.9 before resuming Matrix policy workflows.
 
@@ -175,11 +179,23 @@ hunch private --repo git@github.com:you/project-memory.git
 
 Local tools see the combined graph; public CI and committed documentation stay public-only.
 
+## Releases you can trace to source
+
+Hunch releases are built and tested without publication credentials. The resulting npm tarball or
+VSIX is content-addressed, carried unchanged into a minimal publisher, and checked again against the
+registry after publication. The npm path also runs native, atomic-write, and Matrix safety checks on
+Windows and macOS and verifies provenance back to the exact source tag.
+
+The editor companion is published from an exact `vscode-v*` tag to both registries:
+
+- [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=davesheffer.hunch-vscode)
+- [Open VSX](https://open-vsx.org/extension/davesheffer/hunch-vscode)
+
 ## Learn more
 
 - [Full documentation](https://hunch-pi.vercel.app/docs)
 - [Copy-paste cookbook](https://hunch-pi.vercel.app/cookbook)
-- [VS Code extension](vscode-extension/README.md)
+- [VS Code extension guide](vscode-extension/README.md)
 - [Contributing](CONTRIBUTING.md)
 - [Architecture benchmark](bench/architectural-conformance.md)
 - [Competitive landscape (dated; re-verify before quoting)](docs/competitive-landscape.md)

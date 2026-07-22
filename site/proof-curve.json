@@ -1,132 +1,136 @@
 {
   "schema": "hunch.public-proof/1",
   "source": "hunch.stats/1",
-  "generated_at": "2026-07-12T05:17:45.622Z",
+  "generated_at": "2026-07-22T14:06:51.075Z",
   "stock_series": [
     {
       "at": "2026-06-14T23:33:55+03:00",
       "memories": 1
     },
     {
-      "at": "2026-06-15T16:10:38+03:00",
-      "memories": 5
+      "at": "2026-06-16T10:13:00+03:00",
+      "memories": 6
     },
     {
-      "at": "2026-06-24T08:11:10.011Z",
-      "memories": 9
+      "at": "2026-06-26T19:27:22.308Z",
+      "memories": 11
     },
     {
-      "at": "2026-06-26T20:32:52.891Z",
-      "memories": 13
-    },
-    {
-      "at": "2026-06-26T22:33:06.423Z",
-      "memories": 17
+      "at": "2026-06-26T21:14:31.613Z",
+      "memories": 16
     },
     {
       "at": "2026-07-02T10:03:17+03:00",
       "memories": 21
     },
     {
-      "at": "2026-07-02T12:18:04.386Z",
-      "memories": 25
+      "at": "2026-07-02T12:30:49.139Z",
+      "memories": 26
     },
     {
-      "at": "2026-07-02T13:25:28.787Z",
-      "memories": 29
+      "at": "2026-07-04T07:05:07+03:00",
+      "memories": 31
     },
     {
-      "at": "2026-07-04T04:13:53.040Z",
-      "memories": 33
-    },
-    {
-      "at": "2026-07-05T05:20:03.393Z",
-      "memories": 37
+      "at": "2026-07-05T01:08:53+03:00",
+      "memories": 36
     },
     {
       "at": "2026-07-05T05:23:11.079Z",
       "memories": 41
     },
     {
-      "at": "2026-07-05T05:38:00.356Z",
-      "memories": 45
+      "at": "2026-07-05T05:38:18.363Z",
+      "memories": 46
     },
     {
-      "at": "2026-07-05T06:02:55.688Z",
-      "memories": 49
+      "at": "2026-07-05T06:20:41.668Z",
+      "memories": 51
     },
     {
-      "at": "2026-07-05T06:21:09.079Z",
-      "memories": 53
-    },
-    {
-      "at": "2026-07-05T06:50:24.513Z",
-      "memories": 57
+      "at": "2026-07-05T06:46:00.619Z",
+      "memories": 56
     },
     {
       "at": "2026-07-08T07:07:35.610Z",
       "memories": 61
     },
     {
-      "at": "2026-07-08T15:05:59+03:00",
-      "memories": 65
+      "at": "2026-07-08T15:50:28+03:00",
+      "memories": 66
     },
     {
-      "at": "2026-07-09T03:25:24.057Z",
-      "memories": 69
-    },
-    {
-      "at": "2026-07-09T03:46:10.845Z",
-      "memories": 73
+      "at": "2026-07-09T03:42:43.895Z",
+      "memories": 71
     },
     {
       "at": "2026-07-10T00:00:00+03:00",
-      "memories": 77
+      "memories": 76
     },
     {
-      "at": "2026-07-11T13:49:52.825Z",
+      "at": "2026-07-11T15:18:44.689Z",
       "memories": 81
     },
     {
-      "at": "2026-07-11T18:46:48.580Z",
-      "memories": 85
+      "at": "2026-07-11T23:46:23.803Z",
+      "memories": 86
     },
     {
-      "at": "2026-07-12T04:02:21.744Z",
-      "memories": 89
-    },
-    {
-      "at": "2026-07-12T08:13:28+03:00",
+      "at": "2026-07-12T06:20:23.987Z",
       "memories": 91
+    },
+    {
+      "at": "2026-07-12T08:04:53.311Z",
+      "memories": 96
+    },
+    {
+      "at": "2026-07-13T10:17:42+03:00",
+      "memories": 101
+    },
+    {
+      "at": "2026-07-13T12:55:41+03:00",
+      "memories": 106
+    },
+    {
+      "at": "2026-07-13T14:19:18+03:00",
+      "memories": 111
+    },
+    {
+      "at": "2026-07-14T14:40:30.937Z",
+      "memories": 116
+    },
+    {
+      "at": "2026-07-22T15:22:25+03:00",
+      "memories": 118
     }
   ],
   "stock": {
     "decisions": {
-      "total": 91,
-      "accepted": 57,
-      "superseded": 19,
-      "proposed": 15,
+      "total": 118,
+      "accepted": 82,
+      "superseded": 28,
+      "proposed": 8,
       "rejected": 0
     },
     "invariants": {
-      "total": 8,
+      "total": 9,
       "locked": 6,
-      "advisory": 2,
+      "advisory": 3,
       "stale": 7
     },
     "components": 16,
     "bugs": {
-      "total": 1,
-      "open": 0,
+      "total": 2,
+      "open": 1,
       "investigating": 0,
       "fixed": 1,
       "regressed": 0
     },
     "runbooks": 1,
     "coverage": {
-      "components_with_decision": 11,
+      "components_with_decision": 14,
       "components_total": 16,
-      "pct": 0.69
+      "pct": 0.88
     }
   },
   "return": {

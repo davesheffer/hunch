@@ -2,6 +2,12 @@
 
 ## Your repo's memory, running itself — visible, reversible, one click when it matters.
 
+[![Visual Studio Marketplace](https://img.shields.io/visual-studio-marketplace/v/davesheffer.hunch-vscode?label=VS%20Marketplace)](https://marketplace.visualstudio.com/items?itemName=davesheffer.hunch-vscode)
+[![Open VSX](https://img.shields.io/open-vsx/v/davesheffer/hunch-vscode?label=Open%20VSX)](https://open-vsx.org/extension/davesheffer/hunch-vscode)
+
+Install from either registry, install the Hunch CLI with
+`npm i -g @davesheffer/hunch`, and run `hunch init` in the repository.
+
 Your repo's engineering memory ([Hunch](https://github.com/davesheffer/hunch)), in the editor.
 Memory is captured, committed, and repaired automatically in the background; this extension is
 where you *see* it and where the few decisions that genuinely need a human get asked.
@@ -58,6 +64,20 @@ The data layer is a pure reader of the committed JSON source of truth — **no n
 server**. It refreshes automatically when `.hunch/` (or the configured private overlay) changes on
 disk; private overlay memory is visible only in your local editor and is never committed or pushed
 by this extension.
+
+### Matrix-ready team memory
+
+With Hunch v1.9, the panel also follows a repository's committed `.hunch/team.json` route. Each
+machine keeps its clone path and credentials local, while the extension refreshes from the same
+dedicated memory repository as the CLI and MCP server. Public-only boundaries and human-only policy
+authority remain unchanged.
+
+### One tested VSIX, two registries
+
+Extension releases are bound to an exact `vscode-v*` source tag. A credential-free job runs the full
+Hunch release gate, builds one VSIX, and records its digest; isolated publishers then send those
+unchanged bytes to the Visual Studio Marketplace and Open VSX and verify both registries converged
+on the same version and package.
 
 ## Develop / run
 ```bash
