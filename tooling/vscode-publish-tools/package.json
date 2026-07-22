@@ -1,0 +1,13 @@
+{
+  "name": "hunch-vscode-publish-tools",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Reviewed, locked CLI closure for deterministic VS Code and Open VSX publication.",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "dependencies": {
+    "@vscode/vsce": "3.9.2",
+    "ovsx": "1.0.2"
+  }
+}

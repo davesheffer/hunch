@@ -1,24 +1,23 @@
 {
-  "id": "ev_123821f5b3",
+  "id": "ev_c5360e67ea",
   "kind": "correction",
-  "occurred_at": "2026-06-16T10:29:10.567Z",
+  "occurred_at": "2026-06-16T10:29:10.398Z",
   "repository": "git-remote:sha256:801e97f9f304a28a5268713d3cb80e058933b84e243c849f687345cfb9eb842a",
   "files": [
-    "src/core/migrate.ts",
-    "src/store/jsonStore.ts"
+    "src/synthesis/**"
   ],
   "symbols": [],
-  "text_ref": "con_947c578b2c",
+  "text_ref": "con_2ce3f2a547",
   "related_records": [
-    "con_947c578b2c",
-    "dec_093de2b0bd"
+    "con_2ce3f2a547",
+    "dec_65b058de66"
   ],
   "data_class": "public",
-  "content_hash": "sha1:b2a25004435e9219db2db667d99db16571ecc9fb",
+  "content_hash": "sha1:a86fb46eddda9253d20d81c840419b0969de8291",
   "compiler": {
     "status": "uncompilable",
     "policy": null,
-    "reason": "Correction has 2 scopes; exactly one concrete file is required. The legacy Constraint remains active.",
+    "reason": "Correction scope is not one safe, concrete repository-relative file. The legacy Constraint remains active.",
     "scope_suggestion": {
       "repos": [],
       "paths": [],
@@ -29,8 +28,8 @@
     "source": "derived",
     "confidence": 1,
     "evidence": [
-      "con_947c578b2c"
+      "con_2ce3f2a547"
     ],
-    "last_verified": "2026-06-16T10:29:10.567Z"
+    "last_verified": "2026-06-16T10:29:10.398Z"
   }
 }

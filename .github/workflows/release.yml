@@ -164,6 +164,7 @@ jobs:
             throw new Error("release gate package identity does not match the candidate");
           }
           if (releaseGate.source?.commit !== process.env.GITHUB_SHA
+            || releaseGate.source?.commit_after !== process.env.GITHUB_SHA
             || releaseGate.source?.tag !== process.env.GITHUB_REF_NAME
             || releaseGate.source?.tag_commit_matches !== true
             || releaseGate.source?.clean !== true) {
@@ -691,6 +692,7 @@ jobs:
             || manifest.release_gate?.file_sha256 !== sha256(releaseGateBytes)
             || releaseGate.matrix?.packages?.candidate?.sha256 !== tarballSha256
             || releaseGate.source?.commit !== manifest.source.commit
+            || releaseGate.source?.commit_after !== manifest.source.commit
             || releaseGate.matrix?.source?.candidate_commit !== manifest.source.commit) {
             throw new Error("candidate, release-gate, Matrix, and tgz digests do not form one evidence chain");
           }

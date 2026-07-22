@@ -176,3 +176,35 @@ test("hunch index commits refreshed grounding atomically with an auto-pumped gra
     assert.match(git("show", "HEAD:CLAUDE.md"), /\b2 decisions\b/);
   } finally { cleanup(); }
 });
+
+test("hunch index --no-auto-commit refreshes the graph without moving HEAD", () => {
+  const { root, git, cleanup } = repo("hunch-index-no-autocommit-");
+  try {
+    mkdirSync(join(root, "src"), { recursive: true });
+    writeFileSync(join(root, "src/app.ts"), "export const app = () => 1;\n");
+    writeFileSync(join(root, ".gitignore"), "");
+    ensureGitignore(root);
+    const store = new HunchStore(hunchPaths(root));
+    store.json.ensureDirs();
+    indexRepo(store, root, { churn: false });
+    store.reindex();
+    store.close();
+    git("add", "-A");
+    git("commit", "-qm", "fixture: indexed baseline");
+
+    writeFileSync(join(root, "src/app.ts"), "export const app = () => 2;\nexport const addedForIndex = true;\n");
+    git("add", "src/app.ts");
+    git("commit", "-qm", "feat: change indexed source");
+    const before = git("rev-parse", "HEAD");
+
+    const run = spawnSync(process.execPath, [TSX, CLI, "index", "--no-auto-commit"], {
+      cwd: root,
+      encoding: "utf8",
+      env: { ...process.env, HUNCH_SYNTH_PROVIDER: "deterministic", GIT_CONFIG_NOSYSTEM: "1" },
+    });
+    assert.equal(run.status, 0, `${run.stdout}\n${run.stderr}`);
+    assert.equal(git("rev-parse", "HEAD"), before, "a validation-only index cannot create a clean invisible commit");
+    assert.notEqual(git("status", "--porcelain"), "", "the refreshed graph remains visible for the caller to review");
+    assert.equal(git("log", "-1", "--pretty=%s"), "feat: change indexed source");
+  } finally { cleanup(); }
+});
