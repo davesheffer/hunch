@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-const workflow = readFileSync(".github/workflows/vscode-marketplace.yml", "utf8");
+const workflow = readFileSync(".github/workflows/vscode-open-vsx.yml", "utf8");
 const publisherToolManifest = JSON.parse(readFileSync("tooling/vscode-publish-tools/package.json", "utf8"));
 const publisherToolLock = JSON.parse(readFileSync("tooling/vscode-publish-tools/package-lock.json", "utf8"));
 
@@ -49,6 +49,9 @@ function contractErrors(source: string): string[] {
 
   if (/^\s{2}workflow_dispatch:/m.test(source)) errors.push("manual branch dispatch is forbidden");
   if (!/tags: \["vscode-v\[0-9\]\*"\]/.test(source)) errors.push("push trigger is not restricted to extension-version tags");
+  if (/marketplace\.visualstudio\.com|VSCODE_PUBLISH_VSCE_PAT|name: Publish to VS Code Marketplace/.test(source)) {
+    errors.push("Microsoft Marketplace publishing is forbidden");
+  }
   if (!validate) errors.push("missing no-secret validate job");
   if (!publish) errors.push("missing isolated publish job");
   if (!validate || !publish) return errors;
@@ -125,8 +128,7 @@ function contractErrors(source: string): string[] {
   }
 
   if (!/needs: validate/.test(publish)) errors.push("publish job does not depend on validation");
-  if (!/environment: vscode-publish/.test(publish)
-    || !/Historical workflow revisions lack both this environment and these[\s\S]*names, so they receive no publisher credential/.test(source)) {
+  if (!/environment: vscode-publish/.test(publish)) {
     errors.push("publisher credentials are not restricted to the new protected environment");
   }
   if (/actions\/checkout|npm run gate:release|\.bin\/vsce" package/.test(publish)) errors.push("publish job rebuilds repository bytes");
@@ -135,7 +137,7 @@ function contractErrors(source: string): string[] {
   }
   const verifyIndex = publish.indexOf("name: Verify exact candidate before registry access");
   const preflightIndex = publish.indexOf("name: Query exact public registry state");
-  const firstPublishIndex = publish.indexOf("name: Publish to VS Code Marketplace");
+  const firstPublishIndex = publish.indexOf("name: Publish to Open VSX");
   if (verifyIndex < 0 || preflightIndex < verifyIndex || firstPublishIndex < preflightIndex) {
     errors.push("artifact is not verified before any registry operation");
   }
@@ -154,40 +156,35 @@ function contractErrors(source: string): string[] {
 
   const secretSteps = stepBlocks(publish).filter((step) => /secrets\./.test(step));
   const secretReferences = [...source.matchAll(/secrets\.([A-Z0-9_]+)/g)].map((match) => match[1]).sort();
-  if (secretSteps.length !== 2
-    || secretSteps.some((step) => !/name: Publish to (?:VS Code Marketplace|Open VSX)/.test(step))
-    || JSON.stringify(secretReferences) !== JSON.stringify(["VSCODE_PUBLISH_OVSX_PAT", "VSCODE_PUBLISH_VSCE_PAT"])) {
-    errors.push("environment-only registry credentials escape the two exact publish steps");
+  if (secretSteps.length !== 1
+    || secretSteps.some((step) => !/name: Publish to Open VSX/.test(step))
+    || JSON.stringify(secretReferences) !== JSON.stringify(["VSCODE_PUBLISH_OVSX_PAT"])) {
+    errors.push("the environment-only Open VSX credential escapes its exact publish step");
   }
-  for (const [registry, preflightOutput] of [["VS Code Marketplace", "marketplace_present"], ["Open VSX", "open_vsx_present"]] as const) {
-    const step = stepBlocks(publish).find((candidate) => candidate.includes(`name: Publish to ${registry}`));
-    if (!step || !/continue-on-error: true/.test(step)
-      || !new RegExp(`if: steps\\.registry-preflight\\.outputs\\.${preflightOutput} != 'true'`).test(step)) {
-      errors.push(`${registry} failure is not isolated or an exact existing version is not idempotent`);
-    }
+  const openVsxStep = stepBlocks(publish).find((candidate) => candidate.includes("name: Publish to Open VSX"));
+  if (!openVsxStep || !/continue-on-error: true/.test(openVsxStep)
+    || !/if: steps\.registry-preflight\.outputs\.open_vsx_present != 'true'/.test(openVsxStep)) {
+    errors.push("Open VSX failure is not isolated or an exact existing version is not idempotent");
   }
 
-  if (!/marketplace\.visualstudio\.com\/_apis\/public\/gallery\/extensionquery/.test(publish)
-    || !/open-vsx\.org\/api\/\$\{PUBLISHER\}\/\$\{NAME\}\/\$\{version\}/.test(publish)
-    || !/poll\("VS Code Marketplace", checkMarketplace\)/.test(publish)
+  if (!/open-vsx\.org\/api\/\$\{PUBLISHER\}\/\$\{NAME\}\/\$\{version\}/.test(publish)
     || !/poll\("Open VSX", checkOpenVsx\)/.test(publish)
-    || !/!marketplace\.verified \|\| !openVsx\.verified/.test(publish)
-    || !/marketplace\.version !== version \|\| openVsx\.version !== version/.test(publish)
+    || !/!openVsx\.verified \|\| openVsx\.identity !== IDENTITY/.test(publish)
+    || !/openVsx\.version !== version \|\| openVsx\.asset_sha256 !== expectedVsixSha256/.test(publish)
     || (source.match(/const verifyRegistryAsset = async/g) ?? []).length !== 2
     || (source.match(/response\.arrayBuffer\(\)/g) ?? []).length !== 2
     || (source.match(/assetSha256 !== expectedVsixSha256/g) ?? []).length !== 2
-    || !/marketplace\.asset_sha256 !== expectedVsixSha256 \|\| openVsx\.asset_sha256 !== expectedVsixSha256/.test(publish)
     || !/asset_url: parsed\.href/.test(publish)
     || !/resolved_asset_url: response\.url/.test(publish)) {
-    errors.push("both registries are not required to converge on the exact identity, version, and VSIX bytes");
+    errors.push("Open VSX is not required to converge on the exact identity, version, and VSIX bytes");
   }
   if (!/"already_present"/.test(publish)
     || !/"converged_after_publish_error"/.test(publish)
-    || !/schema: "hunch\.vscode-publication\.v1"/.test(publish)
+    || !/schema: "hunch\.vscode-publication\.v2"/.test(publish)
     || !/result: "converged"/.test(publish)
     || !/vscode-publication-receipt\.json/.test(publish)
     || !new RegExp(`actions/upload-artifact@${pins.uploadArtifact}`).test(publish)) {
-    errors.push("idempotent dual-registry publication lacks a content-addressed receipt");
+    errors.push("idempotent Open VSX publication lacks a content-addressed receipt");
   }
 
   const officialActionUses = [...source.matchAll(/uses: (actions\/[A-Za-z0-9_-]+)@([^\s#]+)/g)];
@@ -199,7 +196,7 @@ function contractErrors(source: string): string[] {
   return errors;
 }
 
-test("VSIX releases are gated, allowlisted, locked, environment-isolated, and dual-registry convergent", () => {
+test("VSIX releases are gated, allowlisted, locked, environment-isolated, and Open VSX convergent", () => {
   assert.deepEqual(contractErrors(workflow), []);
 });
 
@@ -269,22 +266,22 @@ test("contract rejects sensitive VSIX paths, traversal gaps, artifact substituti
   assert.ok(contractErrors(unstableRerunArtifact).includes("validated VSIX candidate is not uploaded immutably"));
 });
 
-test("contract rejects historical-secret access, non-idempotent republish, and one-registry success", () => {
+test("contract rejects Microsoft Marketplace, historical-secret access, non-idempotent republish, and weak Open VSX proof", () => {
+  const withMicrosoftMarketplace = `${workflow}\n# VSCODE_PUBLISH_VSCE_PAT\n`;
+  assert.ok(contractErrors(withMicrosoftMarketplace).includes("Microsoft Marketplace publishing is forbidden"));
+
   const noEnvironment = workflow.replace("    environment: vscode-publish\n", "");
   assert.ok(contractErrors(noEnvironment).includes("publisher credentials are not restricted to the new protected environment"));
 
   const nonIdempotent = workflow.replace(
-    "id: vsce\n        if: steps.registry-preflight.outputs.marketplace_present != 'true'",
-    "id: vsce\n        if: always()",
+    "id: ovsx\n        if: steps.registry-preflight.outputs.open_vsx_present != 'true'",
+    "id: ovsx\n        if: always()",
   );
-  assert.ok(contractErrors(nonIdempotent).includes("VS Code Marketplace failure is not isolated or an exact existing version is not idempotent"));
-
-  const oneRegistryEnough = workflow.replace("!marketplace.verified || !openVsx.verified", "!marketplace.verified && !openVsx.verified");
-  assert.ok(contractErrors(oneRegistryEnough).includes("both registries are not required to converge on the exact identity, version, and VSIX bytes"));
+  assert.ok(contractErrors(nonIdempotent).includes("Open VSX failure is not isolated or an exact existing version is not idempotent"));
 
   const noRegistryByteProof = workflow.replaceAll("assetSha256 !== expectedVsixSha256", "false");
-  assert.ok(contractErrors(noRegistryByteProof).includes("both registries are not required to converge on the exact identity, version, and VSIX bytes"));
+  assert.ok(contractErrors(noRegistryByteProof).includes("Open VSX is not required to converge on the exact identity, version, and VSIX bytes"));
 
-  const noPublicationReceipt = workflow.replace('schema: "hunch.vscode-publication.v1"', 'schema: "unverified"');
-  assert.ok(contractErrors(noPublicationReceipt).includes("idempotent dual-registry publication lacks a content-addressed receipt"));
+  const noPublicationReceipt = workflow.replace('schema: "hunch.vscode-publication.v2"', 'schema: "unverified"');
+  assert.ok(contractErrors(noPublicationReceipt).includes("idempotent Open VSX publication lacks a content-addressed receipt"));
 });

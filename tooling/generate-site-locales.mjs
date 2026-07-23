@@ -7,6 +7,7 @@ import { changelogLocales } from "./changelog-locales.mjs";
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const sourcePath = path.join(repoRoot, "site", "index.html");
 const siteOrigin = "https://hunch-pi.vercel.app";
+const normalizeLf = (value) => value.replace(/\r\n?/g, "\n");
 
 const locales = {
   he: {
@@ -273,7 +274,7 @@ function replaceRequired(html, from, to, locale) {
   return html.replaceAll(from, to);
 }
 
-const source = await readFile(sourcePath, "utf8");
+const source = normalizeLf(await readFile(sourcePath, "utf8"));
 for (const [locale, copy] of Object.entries(locales)) {
   let html = source;
   html = replaceRequired(html, '<html lang="en">', `<html lang="${locale}"${copy.dir === "rtl" ? ' dir="rtl"' : ""}>`, locale);
@@ -299,11 +300,11 @@ for (const [locale, copy] of Object.entries(locales)) {
 }
 
 const blogDir = path.join(repoRoot, "site", "blog");
-const [blogIndexSource, blogPostSource, postsSource] = await Promise.all([
+const [blogIndexSource, blogPostSource, postsSource] = (await Promise.all([
   readFile(path.join(blogDir, "index.html"), "utf8"),
   readFile(path.join(blogDir, "post.html"), "utf8"),
   readFile(path.join(blogDir, "posts.js"), "utf8"),
-]);
+])).map(normalizeLf);
 
 const sourceSlugs = [...postsSource.matchAll(/\bslug:\s*"([^"]+)"/g)].map((match) => match[1]);
 if (!sourceSlugs.length) throw new Error("No blog posts found in site/blog/posts.js");
@@ -424,7 +425,7 @@ for (const [locale, copy] of Object.entries(blogLocales)) {
 }
 
 const changelogSourcePath = path.join(repoRoot, "site", "changelog.html");
-const changelogSource = await readFile(changelogSourcePath, "utf8");
+const changelogSource = normalizeLf(await readFile(changelogSourcePath, "utf8"));
 const changelogRowPattern = /<div class="clog-row"><span class="rel-tag">([^<]+)<\/span><span class="clog-t">([\s\S]*?)<\/span><\/div>/g;
 const changelogRowCount = [...changelogSource.matchAll(changelogRowPattern)].length;
 for (const [locale, copy] of Object.entries(changelogLocales)) {

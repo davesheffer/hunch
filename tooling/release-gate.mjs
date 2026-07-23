@@ -66,10 +66,10 @@ export const RELEASE_TEST_COVERAGE = Object.freeze({
   release_pipeline_contract: [
     ".github/workflows/ci.yml",
     ".github/workflows/release.yml",
-    ".github/workflows/vscode-marketplace.yml",
+    ".github/workflows/vscode-open-vsx.yml",
     "test/grounding-capture-commit.test.ts",
     "test/release-gate.test.ts",
-    "test/vscode-marketplace-workflow.test.ts",
+    "test/vscode-open-vsx-workflow.test.ts",
     "test/workflow-release-contract.test.ts",
     "tooling/release-gate.mjs",
     "tooling/production-dependency-audit.mjs",
