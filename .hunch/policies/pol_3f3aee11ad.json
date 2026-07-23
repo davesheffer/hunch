@@ -3,8 +3,8 @@
   "topic": "store.sqlite-driver",
   "origin": "generic",
   "ir_version": 1,
-  "revision": 4,
-  "state": "proposed",
+  "revision": 5,
+  "state": "active_advisory",
   "statement": "Replace better-sqlite3 with Node's built-in node:sqlite (v1.0.0)",
   "rationale": "better-sqlite3 was Hunch's only remaining native SQLite dependency: prebuild-install (its installer) is deprecated upstream with no fix coming, node-gyp fallback builds fail on machines without toolchains, and Windows global upgrades hit EPERM when a running node process holds better_sqlite3.node locked. The derived index uses only FTS5, WAL, recursive CTEs, and plain BLOBs — all covered by node:sqlite (unflagged since Node 22.13, verified live). Vectors were already brute-force JS, no loadable extension needed.",
   "scope": {
@@ -34,11 +34,18 @@
   },
   "severity": "warning",
   "surfaces": [
-    "cli",
+    "pre_edit",
+    "pre_commit",
+    "ci",
     "mcp",
-    "ci"
+    "cli"
   ],
-  "authority": null,
+  "authority": {
+    "kind": "human",
+    "actor": "human:davesheffer",
+    "event": "approval-advisory:2026-07-23T05:44:06.244Z",
+    "at": "2026-07-23T05:44:06.244Z"
+  },
   "activation_gate": null,
   "evidence": [
     "dec_b3cafd3855",
@@ -52,7 +59,7 @@
   "supersedes": null,
   "superseded_by": null,
   "exception_of": null,
-  "valid_from": null,
+  "valid_from": "2026-07-23T05:44:06.244Z",
   "valid_to": null,
   "data_class": "public",
   "limitations": [
@@ -103,10 +110,18 @@
       "at": "2026-07-23T05:44:02.919Z",
       "reason": "Proof proof_4689f6cdc5 reached P3.",
       "proof": "proof_4689f6cdc5"
+    },
+    {
+      "action": "approved_advisory",
+      "actor_kind": "human",
+      "actor": "human:davesheffer",
+      "at": "2026-07-23T05:44:06.244Z",
+      "reason": "Human activated policy as advisory.",
+      "proof": "proof_4689f6cdc5"
     }
   ],
   "created_at": "2026-07-10T19:34:54.964Z",
-  "updated_at": "2026-07-23T05:44:02.919Z",
+  "updated_at": "2026-07-23T05:44:06.244Z",
   "provenance": {
     "source": "derived",
     "confidence": 0.8,
