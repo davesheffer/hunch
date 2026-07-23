@@ -169,6 +169,7 @@ function contractErrors(source: string): string[] {
 
   if (!/open-vsx\.org\/api\/\$\{PUBLISHER\}\/\$\{NAME\}\/\$\{version\}/.test(publish)
     || !/poll\("Open VSX", checkOpenVsx\)/.test(publish)
+    || !/const MAX_CONVERGENCE_ATTEMPTS = 36/.test(publish)
     || !/!openVsx\.verified \|\| openVsx\.identity !== IDENTITY/.test(publish)
     || !/openVsx\.version !== version \|\| openVsx\.asset_sha256 !== expectedVsixSha256/.test(publish)
     || (source.match(/const verifyRegistryAsset = async/g) ?? []).length !== 2

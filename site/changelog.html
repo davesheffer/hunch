@@ -107,7 +107,8 @@
     <div class="clog">
       <div class="clog-group">
         <div class="clog-date">Jul 23, 2026</div>
-        <div class="clog-row"><span class="rel-tag">v1.9.1</span><span class="clog-t"><b>Reliable Open VSX and npm publishing</b> — the editor companion now has one explicit public home: Open VSX. Its immutable release gate still validates one credential-free VSIX, publishes only those bytes, and verifies the public download digest. npm trusted publishing no longer receives setup-node's placeholder token, so the OIDC-only gate can reach publication without accepting a long-lived credential.</span></div>
+        <div class="clog-row"><span class="rel-tag">v1.9.2</span><span class="clog-t"><b>npm OIDC reaches the registry</b> — trusted publishing keeps setup-node's required npm registry configuration, permits only its exact fixed non-secret sentinel, and still rejects every real long-lived npm credential. Open VSX verification also allows the public index a bounded three-minute visibility window. The immutable candidate, provenance, digest, and public-registry verification gates remain unchanged.</span></div>
+        <div class="clog-row"><span class="rel-tag">v1.9.1</span><span class="clog-t"><b>Open VSX-only editor publishing</b> — the editor companion now has one explicit public home: Open VSX. Its immutable release gate validates one credential-free VSIX, publishes only those bytes, and verifies the public download digest. The accompanying npm hardening exposed setup-node's required sentinel as a follow-up release issue before npm publication.</span></div>
       </div>
       <div class="clog-group">
         <div class="clog-date">Jul 22, 2026</div>

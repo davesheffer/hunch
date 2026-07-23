@@ -16,7 +16,7 @@ strict enforcement.
 **Memory is the input. The product boundary is the receipt:** relevant evidence before an edit,
 then a deterministic check of the change against the rules your team has explicitly trusted.
 
-> **New in v1.9.1:** Matrix mode gives the whole team one live, private Git memory across fresh
+> **New in v1.9.2:** Matrix mode gives the whole team one live, private Git memory across fresh
 > clones, worktrees, CLI checks, and MCP assistants. npm publishes with short-lived OIDC
 > credentials, while the editor companion ships as one immutable, publicly verified Open VSX
 > artifact.
@@ -82,7 +82,7 @@ Git repo that every teammate can access, install the Matrix release on team mach
 have one maintainer run:
 
 ```bash
-npm i -g @davesheffer/hunch@1.9.1
+npm i -g @davesheffer/hunch@1.9.2
 hunch shared --repo git@github.com:acme/project-hunch-memory.git
 git add .gitignore .hunch/team.json
 git commit -m "chore: connect shared Hunch memory"
@@ -97,7 +97,7 @@ printed by Hunch. Omit `--migrate` for a new setup.
 After the pointer commit lands, teammates need Hunch installed and Git access to the memory repo:
 
 ```bash
-npm i -g @davesheffer/hunch@1.9.1
+npm i -g @davesheffer/hunch@1.9.2
 git pull
 hunch init
 hunch doctor

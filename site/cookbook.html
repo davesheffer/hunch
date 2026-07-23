@@ -318,13 +318,13 @@ if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElem
     <section id="matrix">
       <h2>10 · Connect the team-memory Matrix<a class="anchor" href="#matrix">#</a></h2>
       <p>Create a dedicated private Git repository for memory. It must differ from every code-repo remote, and its committed URL must not contain credentials. On one maintainer machine:</p>
-      <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">terminal</span><button class="copy">Copy</button></div><pre><span class="k">npm</span> i -g @davesheffer/hunch@1.9.1
+      <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">terminal</span><button class="copy">Copy</button></div><pre><span class="k">npm</span> i -g @davesheffer/hunch@1.9.2
 <span class="k">hunch</span> shared --repo git@github.com:acme/project-hunch-memory.git
 <span class="k">git</span> add .gitignore .hunch/team.json
 <span class="k">git</span> commit -m "chore: connect shared Hunch memory"
 <span class="k">git</span> push</pre></div>
       <p>Add <code>--migrate</code> only when moving existing public <code>.hunch/</code> memory into the dedicated store. On every teammate machine:</p>
-      <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">terminal</span><button class="copy">Copy</button></div><pre><span class="k">npm</span> i -g @davesheffer/hunch@1.9.1
+      <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">terminal</span><button class="copy">Copy</button></div><pre><span class="k">npm</span> i -g @davesheffer/hunch@1.9.2
 <span class="k">git</span> pull
 <span class="k">hunch</span> init
 <span class="k">hunch</span> doctor</pre></div>
@@ -376,9 +376,9 @@ PARAMETER num_ctx 32768</pre></div>
     <section id="editor-release">
       <h2>14 · Install the editor companion and verify a release<a class="anchor" href="#editor-release">#</a></h2>
       <p>Install Hunch from <a class="link" href="https://open-vsx.org/extension/davesheffer/hunch-vscode" target="_blank" rel="noopener">Open VSX</a>, then open a repository initialized with the Hunch CLI. The extension reads the same public, private, or Matrix memory home and never writes Hunch JSON directly.</p>
-      <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">audit</span><button class="copy">Copy</button></div><pre><span class="k">npm</span> view @davesheffer/hunch@1.9.1 version dist.integrity dist.attestations --json
-<span class="k">git</span> tag --list v1.9.1 vscode-v0.17.3</pre></div>
-      <p><b>Observe:</b> npm reports version 1.9.1, an integrity digest, and provenance metadata; Open VSX reports 0.17.3. Each tag’s GitHub Actions run validates the exact content-addressed artifact before isolated publishing begins and verifies the same public bytes afterward.</p>
+      <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">audit</span><button class="copy">Copy</button></div><pre><span class="k">npm</span> view @davesheffer/hunch@1.9.2 version dist.integrity dist.attestations --json
+<span class="k">git</span> tag --list v1.9.2 vscode-v0.17.3</pre></div>
+      <p><b>Observe:</b> npm reports version 1.9.2, an integrity digest, and provenance metadata; Open VSX reports 0.17.3. Each tag’s GitHub Actions run validates the exact content-addressed artifact before isolated publishing begins and verifies the same public bytes afterward.</p>
     </section>
 </main>
 
