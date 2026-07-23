@@ -1,9 +1,10 @@
 {
   "id": "pol_443e11b271",
   "topic": "wiki.derived-view",
+  "origin": "generic",
   "ir_version": 1,
-  "revision": 2,
-  "state": "proposed",
+  "revision": 3,
+  "state": "retired",
   "statement": "Wiki homes mirror memory homes: public store → committed wiki/, full graph → overlay-repo wiki (--private)",
   "rationale": "The first wiki cut rendered PUBLIC-store records only — correct for committed pages, but owners with a private overlay (or shared mode, where the overlay IS the store) got a wiki blind to most of their graph. Requirement: the wiki must be able to read the private overlay when chosen, and a private wiki must live in the private repo.",
   "scope": {
@@ -42,6 +43,7 @@
     "ci"
   ],
   "authority": null,
+  "activation_gate": null,
   "evidence": [
     "dec_710fd0fb4f"
   ],
@@ -51,14 +53,23 @@
   ],
   "supersedes": null,
   "superseded_by": null,
+  "exception_of": null,
   "valid_from": null,
-  "valid_to": null,
+  "valid_to": "2026-07-23T05:44:09.245Z",
   "data_class": "public",
   "limitations": [
     "TypeScript/JavaScript static graph only in Gate G1.",
     "Dynamic calls and runtime dependency injection are not covered.",
     "Legacy bridge preserves unified calls/imports/depends_on/contains reachability semantics."
   ],
+  "candidate": {
+    "alternatives": [],
+    "uncertainty": [],
+    "conflicts": [],
+    "incumbent": null,
+    "scope_suggestion": null,
+    "counterexamples": []
+  },
   "legacy_refs": [
     "dec_710fd0fb4f"
   ],
@@ -78,10 +89,18 @@
       "at": "2026-07-10T06:13:12.042Z",
       "reason": "Proof proof_eb6ae29151 reached P3.",
       "proof": "proof_eb6ae29151"
+    },
+    {
+      "action": "retired",
+      "actor_kind": "human",
+      "actor": "human:davesheffer",
+      "at": "2026-07-23T05:44:09.245Z",
+      "reason": "Human rejected public/private wiki-home mirroring; generated public wiki must remain uncommitted and private-overlay-only.",
+      "proof": "proof_eb6ae29151"
     }
   ],
   "created_at": "2026-07-10T06:13:01.403Z",
-  "updated_at": "2026-07-10T06:13:12.042Z",
+  "updated_at": "2026-07-23T05:44:09.245Z",
   "provenance": {
     "source": "derived",
     "confidence": 1,
