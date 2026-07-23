@@ -155,6 +155,14 @@ test("static plans converge across clones but code, reverts, and merges advance 
     assert.equal(canonicalStaticGraphBaseline(cloneA), commonCodeCommit);
     assert.equal(plan(cloneA, storeA, policy.id).id, originalB.id, "ordinary non-indexed docs do not churn a static plan");
 
+    writeFileSync(join(cloneA, ".gitattributes"), ".hunch/**/*.json merge=hunch\n");
+    git(cloneA, "add", ".gitattributes");
+    git(cloneA, "commit", "-qm", "chore: update checkout attributes");
+    const attributesCommit = git(cloneA, "rev-parse", "HEAD");
+    assert.equal(canonicalStaticGraphBaseline(cloneA), attributesCommit,
+      "checkout attributes advance the baseline because replay safety depends on their exact tree");
+    assert.equal(plan(cloneA, storeA, policy.id).corpus.current_baseline.ref, attributesCommit);
+
     writeFileSync(join(cloneA, "src/api/orders.ts"), [
       'import { fetchOrders } from "../services/orders.js";',
       "export function listOrders(user: string){ return fetchOrders(user.trim()); }",
