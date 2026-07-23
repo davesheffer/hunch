@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const TRANSFORM_ATTRIBUTES = ["filter", "working-tree-encoding", "ident", "eol", "text", "crlf", "merge"];
+const CHECKOUT_TRANSFORM_ATTRIBUTES = ["filter", "working-tree-encoding", "ident", "eol", "text", "crlf"];
 const MAX_ATTRIBUTE_BYTES = 64 * 1024 * 1024;
 
 function nulFields(bytes: Buffer): Buffer[] {
@@ -18,9 +18,11 @@ function nulFields(bytes: Buffer): Buffer[] {
 }
 
 /** Inspect the exact target tree plus repository-local info attributes without
- * checking it out. Any transform/merge driver could execute code or make the
- * worktree bytes diverge from the raw blobs bound by receipts, so fail closed.
- * LFS is allowed only when callers explicitly disable its smudge/process hooks. */
+ * checking it out. Any checkout transform could execute code or make the worktree
+ * bytes diverge from the raw blobs bound by receipts, so fail closed. Merge
+ * attributes are intentionally excluded: worktree materialization never invokes a
+ * merge driver. LFS is allowed only when callers explicitly disable its
+ * smudge/process hooks. */
 export function hasUnsafeCheckoutAttributes(
   root: string,
   commit: string,
@@ -45,7 +47,7 @@ export function hasUnsafeCheckoutAttributes(
       stdio: ["ignore", "pipe", "ignore"],
     });
     if (!paths.length) return false;
-    const raw = execFileSync("git", ["-C", root, "check-attr", "--cached", "-z", "--stdin", ...TRANSFORM_ATTRIBUTES], {
+    const raw = execFileSync("git", ["-C", root, "check-attr", "--cached", "-z", "--stdin", ...CHECKOUT_TRANSFORM_ATTRIBUTES], {
       env: exactEnv,
       input: paths,
       timeout: 10_000,
@@ -58,7 +60,7 @@ export function hasUnsafeCheckoutAttributes(
     for (let index = 0; index < fields.length; index += 3) {
       const attribute = fields[index + 1]!.toString("utf8");
       const value = fields[index + 2]!.toString("utf8");
-      if (!TRANSFORM_ATTRIBUTES.includes(attribute)) return true;
+      if (!CHECKOUT_TRANSFORM_ATTRIBUTES.includes(attribute)) return true;
       if (value === "unspecified" || value === "unset") continue;
       if (opts.allowDisabledLfs && attribute === "filter" && value === "lfs") continue;
       return true;
