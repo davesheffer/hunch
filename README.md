@@ -16,9 +16,10 @@ strict enforcement.
 **Memory is the input. The product boundary is the receipt:** relevant evidence before an edit,
 then a deterministic check of the change against the rules your team has explicitly trusted.
 
-> **New in v1.9.0:** Matrix mode gives the whole team one live, private Git memory across fresh
-> clones, worktrees, CLI checks, and MCP assistants. The same release also makes the package and
-> VS Code publication paths immutable: tested artifacts are the exact artifacts published.
+> **New in v1.9.1:** Matrix mode gives the whole team one live, private Git memory across fresh
+> clones, worktrees, CLI checks, and MCP assistants. npm publishes with short-lived OIDC
+> credentials, while the editor companion ships as one immutable, publicly verified Open VSX
+> artifact.
 
 ## Start in five minutes
 
@@ -81,7 +82,7 @@ Git repo that every teammate can access, install the Matrix release on team mach
 have one maintainer run:
 
 ```bash
-npm i -g @davesheffer/hunch@1.9.0
+npm i -g @davesheffer/hunch@1.9.1
 hunch shared --repo git@github.com:acme/project-hunch-memory.git
 git add .gitignore .hunch/team.json
 git commit -m "chore: connect shared Hunch memory"
@@ -96,7 +97,7 @@ printed by Hunch. Omit `--migrate` for a new setup.
 After the pointer commit lands, teammates need Hunch installed and Git access to the memory repo:
 
 ```bash
-npm i -g @davesheffer/hunch@1.9.0
+npm i -g @davesheffer/hunch@1.9.1
 git pull
 hunch init
 hunch doctor
@@ -186,10 +187,9 @@ VSIX is content-addressed, carried unchanged into a minimal publisher, and check
 registry after publication. The npm path also runs native, atomic-write, and Matrix safety checks on
 Windows and macOS and verifies provenance back to the exact source tag.
 
-The editor companion is published from an exact `vscode-v*` tag to both registries:
-
-- [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=davesheffer.hunch-vscode)
-- [Open VSX](https://open-vsx.org/extension/davesheffer/hunch-vscode)
+The editor companion is published from an exact `vscode-v*` tag to
+[Open VSX](https://open-vsx.org/extension/davesheffer/hunch-vscode). The workflow verifies the
+downloaded public VSIX has the same digest as the credential-free release candidate.
 
 ## Learn more
 

@@ -1,11 +1,10 @@
 # One-time GitHub setup:
 # - Create the protected `vscode-publish` environment.
-# - Define only environment secrets `VSCODE_PUBLISH_VSCE_PAT` and
-#   `VSCODE_PUBLISH_OVSX_PAT` there.
-# - Delete repository/organization copies and the legacy `VSCE_PAT`/`OVSX_PAT`
-#   names. Historical workflow revisions lack both this environment and these
-#   names, so they receive no publisher credential.
-name: VS Code Marketplace
+# - Define only environment secret `VSCODE_PUBLISH_OVSX_PAT` there.
+# - Repository/organization secrets and legacy names are ignored. An immutable
+#   tagged workflow can retry only its own validated candidate; registry
+#   preflight and public digest verification make that retry idempotent.
+name: Open VSX
 
 on:
   push:
@@ -15,9 +14,9 @@ permissions:
   contents: read
 
 # Extension releases share one lane so an older tag cannot race a newer one at
-# either registry. A failed registry can be retried without rebuilding the VSIX.
+# Open VSX. A failed publication can be retried without rebuilding the VSIX.
 concurrency:
-  group: hunch-vscode-marketplace
+  group: hunch-vscode-open-vsx
   cancel-in-progress: false
 
 jobs:
@@ -347,7 +346,7 @@ jobs:
               commit: process.env.GITHUB_SHA,
               ref: process.env.GITHUB_REF,
               tag: process.env.GITHUB_REF_NAME,
-              workflow: ".github/workflows/vscode-marketplace.yml",
+              workflow: ".github/workflows/vscode-open-vsx.yml",
             },
             publisher_tools: {
               package_json_sha256: sha256(publisherToolsPackageBytes),
@@ -686,7 +685,7 @@ jobs:
           const expectedVsixSha256 = process.env.VSIX_SHA256;
           if (process.env.EXTENSION_IDENTITY !== IDENTITY || !/^\d+\.\d+\.\d+$/.test(version ?? "")
             || !/^sha256:[0-9a-f]{64}$/.test(expectedVsixSha256 ?? "")) {
-            throw new Error("refusing invalid extension identity, Marketplace version, or VSIX digest");
+            throw new Error("refusing invalid extension identity, version, or VSIX digest");
           }
           const verifyRegistryAsset = async (label, assetUrl) => {
             let parsed;
@@ -707,39 +706,6 @@ jobs:
             return { asset_url: parsed.href, resolved_asset_url: response.url, asset_sha256: assetSha256, asset_size: bytes.length };
           };
 
-          const checkMarketplace = async () => {
-            const endpoint = "https://marketplace.visualstudio.com/_apis/public/gallery/extensionquery";
-            const response = await fetch(endpoint, {
-              method: "POST",
-              headers: {
-                Accept: "application/json;api-version=3.0-preview.1",
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                filters: [{ pageNumber: 1, pageSize: 1, criteria: [{ filterType: 7, value: IDENTITY }] }],
-                assetTypes: [],
-                flags: 19,
-              }),
-              signal: AbortSignal.timeout(15_000),
-            });
-            if (!response.ok) throw new Error(`VS Code Marketplace query failed closed: HTTP ${response.status}`);
-            const payload = await response.json();
-            const extensions = payload.results?.[0]?.extensions ?? [];
-            if (!Array.isArray(extensions) || extensions.length > 1) throw new Error("VS Code Marketplace returned an ambiguous identity");
-            if (extensions.length === 0) return { present: false };
-            const extension = extensions[0];
-            if (`${extension.publisher?.publisherName}.${extension.extensionName}`.toLowerCase() !== IDENTITY) {
-              throw new Error("VS Code Marketplace returned a mismatched extension identity");
-            }
-            const exactVersions = (extension.versions ?? []).filter((candidate) => candidate.version === version);
-            if (exactVersions.length === 0) return { present: false };
-            const universalVersions = exactVersions.filter((candidate) => !candidate.targetPlatform || candidate.targetPlatform === "universal");
-            if (universalVersions.length !== 1) throw new Error("VS Code Marketplace exact version has no unambiguous universal VSIX");
-            const asset = universalVersions[0].files?.find((file) => file.assetType === "Microsoft.VisualStudio.Services.VSIXPackage");
-            if (!asset?.source) throw new Error("VS Code Marketplace exact version has no VSIX package asset");
-            return { present: true, ...await verifyRegistryAsset("VS Code Marketplace", asset.source) };
-          };
-
           const checkOpenVsx = async () => {
             const endpoint = `https://open-vsx.org/api/${PUBLISHER}/${NAME}/${version}`;
             const response = await fetch(endpoint, { signal: AbortSignal.timeout(15_000) });
@@ -753,13 +719,12 @@ jobs:
             return { present: true, ...await verifyRegistryAsset("Open VSX", extension.files.download) };
           };
 
-          const [marketplace, openVsx] = await Promise.all([checkMarketplace(), checkOpenVsx()]);
-          appendFileSync(process.env.GITHUB_OUTPUT, `marketplace_present=${marketplace.present}\n`);
+          const openVsx = await checkOpenVsx();
           appendFileSync(process.env.GITHUB_OUTPUT, `open_vsx_present=${openVsx.present}\n`);
           NODE
 
       - name: Install locked publisher clients (no registry credentials)
-        if: steps.registry-preflight.outputs.marketplace_present != 'true' || steps.registry-preflight.outputs.open_vsx_present != 'true'
+        if: steps.registry-preflight.outputs.open_vsx_present != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -769,24 +734,8 @@ jobs:
           test "$(node -p "require('./vscode-release-candidate/publish-tools/node_modules/@vscode/vsce/package.json').version")" = "3.9.2"
           test "$(node -p "require('./vscode-release-candidate/publish-tools/node_modules/ovsx/package.json').version")" = "1.0.2"
 
-      # Credentials exist only in their exact registry step. Each publication
-      # remains independent; final public queries require BOTH registries to
-      # converge on the exact identity and version.
-      - name: Publish to VS Code Marketplace
-        id: vsce
-        if: steps.registry-preflight.outputs.marketplace_present != 'true'
-        continue-on-error: true
-        shell: bash
-        env:
-          VSCE_PAT: ${{ secrets.VSCODE_PUBLISH_VSCE_PAT }}
-          VSIX_PATH: ${{ steps.candidate.outputs.vsix_path }}
-        run: |
-          set -euo pipefail
-          test -n "${VSCE_PAT}" || { echo "VSCODE_PUBLISH_VSCE_PAT is not configured in the vscode-publish environment." >&2; exit 1; }
-          "${GITHUB_WORKSPACE}/vscode-release-candidate/publish-tools/node_modules/.bin/vsce" publish \
-            --packagePath "${VSIX_PATH}" \
-            --pat "${VSCE_PAT}"
-
+      # The credential exists only in the Open VSX publication step. The final
+      # public query requires the exact identity, version, and VSIX bytes.
       - name: Publish to Open VSX
         id: ovsx
         if: steps.registry-preflight.outputs.open_vsx_present != 'true'
@@ -801,7 +750,7 @@ jobs:
           "${GITHUB_WORKSPACE}/vscode-release-candidate/publish-tools/node_modules/.bin/ovsx" create-namespace davesheffer --pat "${OVSX_PAT}" || true
           "${GITHUB_WORKSPACE}/vscode-release-candidate/publish-tools/node_modules/.bin/ovsx" publish "${VSIX_PATH}" --pat "${OVSX_PAT}"
 
-      - name: Verify both registries converge and write publication receipt
+      - name: Verify Open VSX converges and write publication receipt
         if: always()
         shell: bash
         env:
@@ -809,9 +758,7 @@ jobs:
           EXTENSION_VERSION: ${{ steps.candidate.outputs.extension_version }}
           VSIX_SHA256: ${{ steps.candidate.outputs.vsix_sha256 }}
           ENTRY_MANIFEST_SHA256: ${{ steps.candidate.outputs.entry_manifest_sha256 }}
-          MARKETPLACE_PREFLIGHT: ${{ steps.registry-preflight.outputs.marketplace_present }}
           OPEN_VSX_PREFLIGHT: ${{ steps.registry-preflight.outputs.open_vsx_present }}
-          MARKETPLACE_PUBLISH_OUTCOME: ${{ steps.vsce.outcome }}
           OPEN_VSX_PUBLISH_OUTCOME: ${{ steps.ovsx.outcome }}
         run: |
           set -euo pipefail
@@ -827,7 +774,7 @@ jobs:
           const expectedVsixSha256 = process.env.VSIX_SHA256;
           if (process.env.EXTENSION_IDENTITY !== IDENTITY || !/^\d+\.\d+\.\d+$/.test(version ?? "")
             || !/^sha256:[0-9a-f]{64}$/.test(expectedVsixSha256 ?? "")) {
-            throw new Error("cannot verify registries without the validated extension identity, version, and VSIX digest");
+            throw new Error("cannot verify Open VSX without the validated extension identity, version, and VSIX digest");
           }
           const stable = (value) => {
             if (Array.isArray(value)) return value.map(stable);
@@ -856,44 +803,6 @@ jobs:
               throw new Error(`${label} exact version exists with different VSIX bytes (${assetSha256})`);
             }
             return { asset_url: parsed.href, resolved_asset_url: response.url, asset_sha256: assetSha256, asset_size: bytes.length };
-          };
-
-          const checkMarketplace = async () => {
-            const endpoint = "https://marketplace.visualstudio.com/_apis/public/gallery/extensionquery";
-            const response = await fetch(endpoint, {
-              method: "POST",
-              headers: {
-                Accept: "application/json;api-version=3.0-preview.1",
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                filters: [{ pageNumber: 1, pageSize: 1, criteria: [{ filterType: 7, value: IDENTITY }] }],
-                assetTypes: [],
-                flags: 19,
-              }),
-              signal: AbortSignal.timeout(15_000),
-            });
-            if (!response.ok) throw new Error(`VS Code Marketplace query failed closed: HTTP ${response.status}`);
-            const payload = await response.json();
-            const extensions = payload.results?.[0]?.extensions ?? [];
-            if (!Array.isArray(extensions) || extensions.length > 1) throw new Error("VS Code Marketplace returned an ambiguous identity");
-            if (extensions.length === 0) return { verified: false, endpoint };
-            const extension = extensions[0];
-            const observedIdentity = `${extension.publisher?.publisherName}.${extension.extensionName}`.toLowerCase();
-            if (observedIdentity !== IDENTITY) throw new Error(`VS Code Marketplace identity mismatch: ${observedIdentity}`);
-            const exactVersions = (extension.versions ?? []).filter((candidate) => candidate.version === version);
-            if (exactVersions.length === 0) return { verified: false, endpoint, identity: observedIdentity, version: null };
-            const universalVersions = exactVersions.filter((candidate) => !candidate.targetPlatform || candidate.targetPlatform === "universal");
-            if (universalVersions.length !== 1) throw new Error("VS Code Marketplace exact version has no unambiguous universal VSIX");
-            const asset = universalVersions[0].files?.find((file) => file.assetType === "Microsoft.VisualStudio.Services.VSIXPackage");
-            if (!asset?.source) throw new Error("VS Code Marketplace exact version has no VSIX package asset");
-            return {
-              verified: true,
-              endpoint,
-              identity: observedIdentity,
-              version,
-              ...await verifyRegistryAsset("VS Code Marketplace", asset.source),
-            };
           };
 
           const checkOpenVsx = async () => {
@@ -931,15 +840,10 @@ jobs:
             throw new Error(`${label} did not converge on ${IDENTITY}@${version}: ${lastError}`);
           };
 
-          const [marketplace, openVsx] = await Promise.all([
-            poll("VS Code Marketplace", checkMarketplace),
-            poll("Open VSX", checkOpenVsx),
-          ]);
-          if (!marketplace.verified || !openVsx.verified
-            || marketplace.identity !== IDENTITY || openVsx.identity !== IDENTITY
-            || marketplace.version !== version || openVsx.version !== version
-            || marketplace.asset_sha256 !== expectedVsixSha256 || openVsx.asset_sha256 !== expectedVsixSha256) {
-            throw new Error("both registries must converge on the exact extension identity, version, and VSIX bytes");
+          const openVsx = await poll("Open VSX", checkOpenVsx);
+          if (!openVsx.verified || openVsx.identity !== IDENTITY
+            || openVsx.version !== version || openVsx.asset_sha256 !== expectedVsixSha256) {
+            throw new Error("Open VSX must converge on the exact extension identity, version, and VSIX bytes");
           }
 
           const candidateManifestBytes = readFileSync(resolve("vscode-release-candidate", "vscode-release-candidate-manifest.json"));
@@ -954,7 +858,7 @@ jobs:
             ? "already_present"
             : outcome === "success" ? "published" : "converged_after_publish_error";
           const body = {
-            schema: "hunch.vscode-publication.v1",
+            schema: "hunch.vscode-publication.v2",
             result: "converged",
             extension: { identity: IDENTITY, version },
             source: {
@@ -962,7 +866,7 @@ jobs:
               commit: process.env.GITHUB_SHA,
               ref: process.env.GITHUB_REF,
               tag: process.env.GITHUB_REF_NAME,
-              workflow: ".github/workflows/vscode-marketplace.yml",
+              workflow: ".github/workflows/vscode-open-vsx.yml",
               run_id: process.env.GITHUB_RUN_ID,
               run_attempt: process.env.GITHUB_RUN_ATTEMPT,
             },
@@ -973,12 +877,6 @@ jobs:
               entry_manifest_sha256: process.env.ENTRY_MANIFEST_SHA256,
             },
             registries: {
-              vscode_marketplace: {
-                ...marketplace,
-                preflight_present: process.env.MARKETPLACE_PREFLIGHT === "true",
-                publish_step_outcome: process.env.MARKETPLACE_PUBLISH_OUTCOME,
-                mode: mode(process.env.MARKETPLACE_PREFLIGHT, process.env.MARKETPLACE_PUBLISH_OUTCOME),
-              },
               open_vsx: {
                 ...openVsx,
                 preflight_present: process.env.OPEN_VSX_PREFLIGHT === "true",
@@ -996,7 +894,7 @@ jobs:
           );
           NODE
 
-      - name: Upload dual-registry publication receipt
+      - name: Upload Open VSX publication receipt
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: vscode-publication-receipt-${{ github.run_id }}-${{ github.run_attempt }}

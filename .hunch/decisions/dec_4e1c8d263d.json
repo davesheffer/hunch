@@ -1,0 +1,55 @@
+{
+  "id": "dec_4e1c8d263d",
+  "title": "Open VSX is the sole public registry for the VS Code extension",
+  "topic": "release.vscode-registry",
+  "status": "accepted",
+  "context": "The maintainer explicitly uses Open VSX and does not need Microsoft Visual Studio Marketplace distribution. Requiring both registries forced an unused Azure DevOps credential into the release contract and made an otherwise valid Open VSX publication converge only when Microsoft publishing also succeeded.",
+  "decision": "Publish immutable VS Code extension releases only to Open VSX. Validate one credential-free VSIX, carry the exact candidate into an environment-isolated Open VSX publisher, and verify the public download matches the expected identity, version, and SHA-256. Keep npm publishing separate and OIDC-only.",
+  "consequences": [
+    "The extension release needs only the protected vscode-publish environment secret VSCODE_PUBLISH_OVSX_PAT.",
+    "Microsoft Marketplace will not receive new extension versions unless this decision is explicitly revisited.",
+    "Revisit if concrete user demand makes Microsoft Marketplace distribution worth a separately configured publishing identity and its own verified release target."
+  ],
+  "alternatives_rejected": [
+    "Continue dual-publishing to Open VSX and Microsoft Visual Studio Marketplace — rejected because Microsoft distribution is unused, requires an Azure DevOps publishing identity, and makes an irrelevant registry a release blocker.",
+    "Rerun the immutable vscode-v0.17.2 dual-target workflow and accept a red job after Open VSX succeeds — rejected because it leaves the public release receipt failed and the documented distribution contract false.",
+    "Switch to Microsoft Marketplace only — rejected because it removes the registry the maintainer actually uses and retains the unwanted Azure dependency."
+  ],
+  "rejected_tripwires": [],
+  "related_components": [
+    "cmp_555e43ab1a"
+  ],
+  "related_files": [
+    ".github/workflows/vscode-open-vsx.yml",
+    "test/vscode-open-vsx-workflow.test.ts",
+    "vscode-extension/README.md",
+    "README.md",
+    "docs/cookbook.md",
+    "site/docs.html",
+    "site/cookbook.html"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-07-23T10:51:09.602Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 0.95,
+    "evidence": [
+      ".github/workflows/vscode-open-vsx.yml",
+      "test/vscode-open-vsx-workflow.test.ts",
+      "vscode-extension/README.md",
+      "README.md",
+      "docs/cookbook.md",
+      "site/docs.html",
+      "site/cookbook.html"
+    ]
+  },
+  "date": "2026-07-23T10:51:09.602Z"
+}

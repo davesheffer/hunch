@@ -189,6 +189,8 @@ test("npm publication isolates OIDC from repository code and publishes only vali
   assert.match(validate, /actions\/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02/);
   assert.match(publish, /actions\/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093/);
   assert.match(publish, /actions\/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38/);
+  assert.doesNotMatch(publish, /registry-url:/,
+    "the OIDC publish job must not let setup-node inject a placeholder NODE_AUTH_TOKEN");
   assert.match(publish, /actions\/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02/);
 
   assert.match(publish, /candidate version .* is not newer than current .* dist-tag/,

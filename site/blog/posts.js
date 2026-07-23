@@ -12,7 +12,7 @@ window.POSTS = [
 
 <h2>Connect once; keep the graph live</h2>
 <p>A maintainer connects the codebase to a dedicated private Git repository with <code>hunch shared --repo …</code>. Hunch commits only a credential-free <code>.hunch/team.json</code> pointer to the code repo. Every teammate then runs <code>hunch init</code>; authentication remains in SSH or the normal Git credential helper.</p>
-<pre><code>npm i -g @davesheffer/hunch@1.9.0
+<pre><code>npm i -g @davesheffer/hunch@1.9.1
 hunch shared --repo git@github.com:acme/project-hunch-memory.git
 git add .gitignore .hunch/team.json</code></pre>
 <p>CLI operations refresh the memory at startup, long-lived MCP servers refresh at request boundaries, and captures synchronize automatically. Concurrent structured records merge by identity. A failed push remains safe locally and is retried by the next capture or <code>hunch shared --sync</code>.</p>
@@ -21,7 +21,7 @@ git add .gitignore .hunch/team.json</code></pre>
 <p>The memory repository stays private and under your control. Local paths and credentials are ignored; public receipts use <code>--public-only</code>. Hunch hosts nothing, and captured advice still cannot acquire blocking authority without an explicit human action.</p>
 
 <h2>The release holds itself to the same standard</h2>
-<p>The npm package and VS Code 0.17.2 are now treated as immutable release artifacts. CI validates them before publication credentials exist, records their digests, and passes the same bytes to isolated publishers. One tested VSIX goes unchanged to the <a class="link" href="https://marketplace.visualstudio.com/items?itemName=davesheffer.hunch-vscode">Visual Studio Marketplace</a> and <a class="link" href="https://open-vsx.org/extension/davesheffer/hunch-vscode">Open VSX</a>.</p>
+<p>The npm package and VS Code 0.17.3 are treated as immutable release artifacts. CI validates them before publication credentials exist, records their digests, and passes the same bytes to isolated publishers. npm authenticates with short-lived OIDC credentials; the tested VSIX goes unchanged to <a class="link" href="https://open-vsx.org/extension/davesheffer/hunch-vscode">Open VSX</a> and its public download is verified byte for byte.</p>
 
 <h2>Try the Matrix</h2>
 <p>Create a private Git repository for memory, connect one codebase, commit the pointer, and let a second clone run <code>hunch init</code>. Ask both assistants why a guarded file is shaped that way. They now answer from the same living history.</p>

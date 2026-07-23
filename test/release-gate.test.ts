@@ -218,8 +218,8 @@ test("Phase 2O release gate is fail-closed, content-addressed, and publish-neutr
   assert.ok(RELEASE_TEST_COVERAGE.release_pipeline_contract.includes(".github/workflows/release.yml"));
   assert.ok(RELEASE_TEST_COVERAGE.release_pipeline_contract.includes("test/workflow-release-contract.test.ts"),
     "the receipt binds the workflow contract that guards trusted publication");
-  assert.ok(RELEASE_TEST_COVERAGE.release_pipeline_contract.includes(".github/workflows/vscode-marketplace.yml"));
-  assert.ok(RELEASE_TEST_COVERAGE.release_pipeline_contract.includes("test/vscode-marketplace-workflow.test.ts"));
+  assert.ok(RELEASE_TEST_COVERAGE.release_pipeline_contract.includes(".github/workflows/vscode-open-vsx.yml"));
+  assert.ok(RELEASE_TEST_COVERAGE.release_pipeline_contract.includes("test/vscode-open-vsx-workflow.test.ts"));
   assert.ok(RELEASE_TEST_COVERAGE.release_pipeline_contract.includes("test/grounding-capture-commit.test.ts"),
     "the receipt binds the real CLI proof that release indexing cannot auto-commit");
   assert.ok(RELEASE_TEST_COVERAGE.release_pipeline_contract.includes("tooling/production-dependency-audit.mjs"),

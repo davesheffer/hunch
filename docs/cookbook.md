@@ -161,7 +161,7 @@ remote, and the URL committed into the code repository must not contain credenti
 On one maintainer machine:
 
 ```bash
-npm i -g @davesheffer/hunch@1.9.0
+npm i -g @davesheffer/hunch@1.9.1
 hunch shared --repo git@github.com:acme/project-hunch-memory.git
 git add .gitignore .hunch/team.json
 git commit -m "chore: connect shared Hunch memory"
@@ -173,7 +173,7 @@ into the dedicated store. Review the reported untrack/ignore changes and follow 
 Hunch prints. On every teammate machine:
 
 ```bash
-npm i -g @davesheffer/hunch@1.9.0
+npm i -g @davesheffer/hunch@1.9.1
 git pull
 hunch init
 hunch doctor
@@ -264,18 +264,17 @@ Then point `HUNCH_SYNTH_MODEL` at `hunch-synth` instead of the base model.
 
 ## 14. Install the editor companion and verify a release
 
-Install Hunch from the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=davesheffer.hunch-vscode)
-or [Open VSX](https://open-vsx.org/extension/davesheffer/hunch-vscode), then open a repository that
+Install Hunch from [Open VSX](https://open-vsx.org/extension/davesheffer/hunch-vscode), then open a repository that
 already has the Hunch CLI and run `hunch init`. The extension reads the same public, private, or
 Matrix memory home as the CLI; it never writes Hunch JSON directly.
 
 For a release audit, start with the exact tags and public registry metadata:
 
 ```bash
-npm view @davesheffer/hunch@1.9.0 version dist.integrity dist.attestations --json
-git tag --list v1.9.0 vscode-v0.17.2
+npm view @davesheffer/hunch@1.9.1 version dist.integrity dist.attestations --json
+git tag --list v1.9.1 vscode-v0.17.3
 ```
 
-**Observe:** npm reports `1.9.0`, an integrity digest, and provenance metadata. Both extension
-registries report `0.17.2`. The GitHub Actions run for each tag shows a credential-free validation
-job followed by publication of the same content-addressed artifact.
+**Observe:** npm reports `1.9.1`, an integrity digest, and provenance metadata. Open VSX reports
+`0.17.3`. The GitHub Actions run for each tag shows a credential-free validation job followed by
+publication and public byte verification of the same content-addressed artifact.
