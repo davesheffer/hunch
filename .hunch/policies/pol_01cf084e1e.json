@@ -3,8 +3,8 @@
   "topic": "wiki.specs-ledger",
   "origin": "generic",
   "ir_version": 1,
-  "revision": 8,
-  "state": "proposed",
+  "revision": 9,
+  "state": "active_advisory",
   "statement": "Doc adoption: the wiki takes over stale docs — healed, wiki-managed copies; originals preserved and auto-released",
   "rationale": "Owner directive: once a doc grades do-not-trust, the wiki must take it in — copy it, heal it, and manage it from there — so the wiki alone is a sufficient reading surface. The prior ledger only graded and routed; its rejection of 'copying doc prose' targeted a second EDITABLE truth, which adoption avoids by making the copy a generated artifact.",
   "scope": {
@@ -39,11 +39,18 @@
   },
   "severity": "warning",
   "surfaces": [
-    "cli",
+    "pre_edit",
+    "pre_commit",
+    "ci",
     "mcp",
-    "ci"
+    "cli"
   ],
-  "authority": null,
+  "authority": {
+    "kind": "human",
+    "actor": "human:davesheffer",
+    "event": "approval-advisory:2026-07-23T05:42:56.883Z",
+    "at": "2026-07-23T05:42:56.883Z"
+  },
   "activation_gate": null,
   "evidence": [
     "dec_a2899939d9"
@@ -55,7 +62,7 @@
   "supersedes": null,
   "superseded_by": null,
   "exception_of": null,
-  "valid_from": null,
+  "valid_from": "2026-07-23T05:42:56.883Z",
   "valid_to": null,
   "data_class": "public",
   "limitations": [
@@ -138,10 +145,18 @@
       "at": "2026-07-23T05:42:42.065Z",
       "reason": "Proof proof_65106964c0 reached P3.",
       "proof": "proof_65106964c0"
+    },
+    {
+      "action": "approved_advisory",
+      "actor_kind": "human",
+      "actor": "human:davesheffer",
+      "at": "2026-07-23T05:42:56.883Z",
+      "reason": "Human activated policy as advisory.",
+      "proof": "proof_65106964c0"
     }
   ],
   "created_at": "2026-07-10T06:31:06.322Z",
-  "updated_at": "2026-07-23T05:42:42.065Z",
+  "updated_at": "2026-07-23T05:42:56.883Z",
   "provenance": {
     "source": "derived",
     "confidence": 1,
