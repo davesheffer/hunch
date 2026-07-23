@@ -12,7 +12,7 @@ window.POSTS = [
 
 <h2>Connect once; keep the graph live</h2>
 <p>A maintainer connects the codebase to a dedicated private Git repository with <code>hunch shared --repo …</code>. Hunch commits only a credential-free <code>.hunch/team.json</code> pointer to the code repo. Every teammate then runs <code>hunch init</code>; authentication remains in SSH or the normal Git credential helper.</p>
-<pre><code>npm i -g @davesheffer/hunch@1.9.1
+<pre><code>npm i -g @davesheffer/hunch@1.9.2
 hunch shared --repo git@github.com:acme/project-hunch-memory.git
 git add .gitignore .hunch/team.json</code></pre>
 <p>CLI operations refresh the memory at startup, long-lived MCP servers refresh at request boundaries, and captures synchronize automatically. Concurrent structured records merge by identity. A failed push remains safe locally and is retried by the next capture or <code>hunch shared --sync</code>.</p>

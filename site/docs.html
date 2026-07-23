@@ -722,13 +722,13 @@ Agent: hunch_record_correction({ rule: "never import lodash; use src/utils",
       <h2>Working as a team — the Matrix <span class="pill ok">v1.9</span><a class="anchor" href="#team">#</a></h2>
       <p>Matrix mode gives a project one living engineering-memory spine across teammates, branches, worktrees, agents, and operating systems. The source of truth is a <strong>separate private Git repository you control</strong>; Hunch hosts nothing and never places credentials in the code repository.</p>
       <p>Create that repository first, grant the team normal Git access, and have one maintainer connect it:</p>
-      <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">maintainer</span><button class="copy">Copy</button></div><pre><span class="k">npm</span> i -g @davesheffer/hunch@1.9.1
+      <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">maintainer</span><button class="copy">Copy</button></div><pre><span class="k">npm</span> i -g @davesheffer/hunch@1.9.2
 <span class="k">hunch</span> shared --repo git@github.com:acme/project-hunch-memory.git
 <span class="k">git</span> add .gitignore .hunch/team.json
 <span class="k">git</span> commit -m "chore: connect shared Hunch memory"
 <span class="k">git</span> push</pre></div>
       <p>Use a credential-free HTTPS or SSH URL and leave authentication in SSH or the Git credential helper. Add <code>--migrate</code> only when moving existing public <code>.hunch/</code> records into the dedicated store.</p>
-      <p>After the pointer commit lands, each teammate installs v1.9.1, pulls, and runs <code>hunch init</code>. Hunch validates <code>.hunch/team.json</code>, creates an ignored <code>.hunch-private/</code> clone, and merges the local path and preferences into ignored <code>.hunch/local.json</code>. An unparseable local config is never overwritten.</p>
+      <p>After the pointer commit lands, each teammate installs v1.9.2, pulls, and runs <code>hunch init</code>. Hunch validates <code>.hunch/team.json</code>, creates an ignored <code>.hunch-private/</code> clone, and merges the local path and preferences into ignored <code>.hunch/local.json</code>. An unparseable local config is never overwritten.</p>
       <p><strong>Always pumping.</strong> CLI operations attempt a bounded pull at startup; long-lived MCP servers refresh at tool-request boundaries. Captures commit and synchronize the memory-only repository by default, concurrent JSON records merge by identity, and a failed push stays local for <code>hunch shared --sync</code> to retry.</p>
       <p><strong>Authority stays fail-closed.</strong> Captures become advisory memory immediately. Blocking policy authority still requires an explicit audited human action, and public receipts should use <code>--public-only</code> so the shared graph never appears on a public surface.</p>
       <h3>Pause or roll back without deleting memory</h3>
@@ -749,8 +749,8 @@ Agent: hunch_record_correction({ rule: "never import lodash; use src/utils",
     <section id="release-integrity">
       <h2>Release integrity<a class="anchor" href="#release-integrity">#</a></h2>
       <p>Hunch tests release artifacts before publication credentials are available. The immutable npm tarball and VSIX are then passed to isolated publishers, which verify the public registries converged on the expected version. npm publishes with GitHub Actions provenance; one tested VSIX goes unchanged to Open VSX and is downloaded again for byte verification.</p>
-      <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">audit</span><button class="copy">Copy</button></div><pre><span class="k">npm</span> view @davesheffer/hunch@1.9.1 version dist.integrity dist.attestations --json
-<span class="k">git</span> tag --list v1.9.1 vscode-v0.17.3</pre></div>
+      <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">audit</span><button class="copy">Copy</button></div><pre><span class="k">npm</span> view @davesheffer/hunch@1.9.2 version dist.integrity dist.attestations --json
+<span class="k">git</span> tag --list v1.9.2 vscode-v0.17.3</pre></div>
       <p>Inspect <a class="link" href="https://github.com/davesheffer/hunch/actions" target="_blank" rel="noopener">GitHub Actions</a>, <a class="link" href="https://www.npmjs.com/package/@davesheffer/hunch" target="_blank" rel="noopener">npm</a>, and <a class="link" href="https://open-vsx.org/extension/davesheffer/hunch-vscode" target="_blank" rel="noopener">Open VSX</a> for the public receipts.</p>
     </section>
 

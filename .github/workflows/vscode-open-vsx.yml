@@ -683,6 +683,7 @@ jobs:
           const NAME = "hunch-vscode";
           const version = process.env.EXTENSION_VERSION;
           const expectedVsixSha256 = process.env.VSIX_SHA256;
+          const MAX_CONVERGENCE_ATTEMPTS = 36;
           if (process.env.EXTENSION_IDENTITY !== IDENTITY || !/^\d+\.\d+\.\d+$/.test(version ?? "")
             || !/^sha256:[0-9a-f]{64}$/.test(expectedVsixSha256 ?? "")) {
             throw new Error("refusing invalid extension identity, version, or VSIX digest");
@@ -827,7 +828,7 @@ jobs:
 
           const poll = async (label, check) => {
             let lastError = "exact version not visible";
-            for (let attempt = 1; attempt <= 12; attempt += 1) {
+            for (let attempt = 1; attempt <= MAX_CONVERGENCE_ATTEMPTS; attempt += 1) {
               try {
                 const state = await check();
                 if (state.verified) return { ...state, attempts: attempt };
@@ -835,7 +836,7 @@ jobs:
               } catch (error) {
                 lastError = error instanceof Error ? error.message : String(error);
               }
-              if (attempt < 12) await pause(5_000);
+              if (attempt < MAX_CONVERGENCE_ATTEMPTS) await pause(5_000);
             }
             throw new Error(`${label} did not converge on ${IDENTITY}@${version}: ${lastError}`);
           };

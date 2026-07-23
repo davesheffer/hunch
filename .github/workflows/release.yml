@@ -294,6 +294,7 @@ jobs:
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: 24
+          registry-url: https://registry.npmjs.org
           package-manager-cache: false
 
       # npm trusted publishing currently requires npm >=11.5.1 and Node >=22.14.
@@ -326,7 +327,14 @@ jobs:
           const candidateDirectory = resolve("release-candidate");
           const tarballPath = resolve(candidateDirectory, "package.tgz");
 
-          for (const tokenName of ["NODE_AUTH_TOKEN", "NPM_TOKEN", "NPM_AUTH_TOKEN"]) {
+          // setup-node writes an npmrc that references NODE_AUTH_TOKEN and exports this
+          // documented fixed sentinel when no token was supplied. npm's OIDC client needs
+          // that registry configuration; only the exact non-secret sentinel is permitted.
+          const SETUP_NODE_SENTINEL = "XXXXX-XXXXX-XXXXX-XXXXX";
+          if (process.env.NODE_AUTH_TOKEN && process.env.NODE_AUTH_TOKEN !== SETUP_NODE_SENTINEL) {
+            throw new Error("long-lived npm credential NODE_AUTH_TOKEN is forbidden");
+          }
+          for (const tokenName of ["NPM_TOKEN", "NPM_AUTH_TOKEN"]) {
             if (process.env[tokenName]) throw new Error(`long-lived npm credential ${tokenName} is forbidden`);
           }
           const nonPublishingEnvironment = { ...process.env };

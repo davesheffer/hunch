@@ -161,7 +161,7 @@ remote, and the URL committed into the code repository must not contain credenti
 On one maintainer machine:
 
 ```bash
-npm i -g @davesheffer/hunch@1.9.1
+npm i -g @davesheffer/hunch@1.9.2
 hunch shared --repo git@github.com:acme/project-hunch-memory.git
 git add .gitignore .hunch/team.json
 git commit -m "chore: connect shared Hunch memory"
@@ -173,7 +173,7 @@ into the dedicated store. Review the reported untrack/ignore changes and follow 
 Hunch prints. On every teammate machine:
 
 ```bash
-npm i -g @davesheffer/hunch@1.9.1
+npm i -g @davesheffer/hunch@1.9.2
 git pull
 hunch init
 hunch doctor
@@ -271,10 +271,10 @@ Matrix memory home as the CLI; it never writes Hunch JSON directly.
 For a release audit, start with the exact tags and public registry metadata:
 
 ```bash
-npm view @davesheffer/hunch@1.9.1 version dist.integrity dist.attestations --json
-git tag --list v1.9.1 vscode-v0.17.3
+npm view @davesheffer/hunch@1.9.2 version dist.integrity dist.attestations --json
+git tag --list v1.9.2 vscode-v0.17.3
 ```
 
-**Observe:** npm reports `1.9.1`, an integrity digest, and provenance metadata. Open VSX reports
+**Observe:** npm reports `1.9.2`, an integrity digest, and provenance metadata. Open VSX reports
 `0.17.3`. The GitHub Actions run for each tag shows a credential-free validation job followed by
 publication and public byte verification of the same content-addressed artifact.
