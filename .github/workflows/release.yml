@@ -493,7 +493,7 @@ jobs:
                 throw new Error(`exact Sigstore bundle verification failed: ${`${verified.stderr}\n${verified.stdout}`.trim()}`);
               }
               const result = parseJson(verified.stdout, "exact Sigstore bundle verification");
-              if (!/^\\d+\\.\\d+\\.\\d+/.test(result.sigstore_version ?? "")) {
+              if (!/^\d+\.\d+\.\d+/.test(result.sigstore_version ?? "")) {
                 throw new Error("exact Sigstore bundle verification did not identify its verifier");
               }
               return result;
