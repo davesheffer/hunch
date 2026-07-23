@@ -1,4 +1,2 @@
 .hunch/**/*.json merge=hunch
 .hunch/manifest.json merge=text
-site/** text=auto eol=lf
-tooling/*.mjs text eol=lf
