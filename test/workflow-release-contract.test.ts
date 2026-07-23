@@ -210,6 +210,10 @@ test("npm publication isolates OIDC from repository code and publishes only vali
   assert.match(publish, /cryptographic_attestation_verified/);
   assert.match(publish, /raw_and_cryptographic_bundle_match/);
   assert.match(publish, /cryptographic_attestation_bundle_sha256/);
+  const sigstoreVersionGuard = /if \(!\/\^(.+?)\/\.test\(result\.sigstore_version/.exec(publish)?.[1];
+  assert.ok(sigstoreVersionGuard, "the Sigstore verifier version guard must remain executable workflow code");
+  assert.equal(new RegExp(sigstoreVersionGuard).test("4.0.0"), true,
+    "the Sigstore verifier version guard must recognize a real semantic version");
   assert.match(publish, /attestation_bundle_sha256/);
   assert.match(publish, /signature_audit_sha256/);
   assert.match(publish, /dependency\.uri === expectedDependencyUri/,
