@@ -1,8 +1,9 @@
 {
   "id": "pol_01cf084e1e",
   "topic": "wiki.specs-ledger",
+  "origin": "generic",
   "ir_version": 1,
-  "revision": 7,
+  "revision": 8,
   "state": "proposed",
   "statement": "Doc adoption: the wiki takes over stale docs — healed, wiki-managed copies; originals preserved and auto-released",
   "rationale": "Owner directive: once a doc grades do-not-trust, the wiki must take it in — copy it, heal it, and manage it from there — so the wiki alone is a sufficient reading surface. The prior ledger only graded and routed; its rejection of 'copying doc prose' targeted a second EDITABLE truth, which adoption avoids by making the copy a generated artifact.",
@@ -43,15 +44,17 @@
     "ci"
   ],
   "authority": null,
+  "activation_gate": null,
   "evidence": [
     "dec_a2899939d9"
   ],
-  "proof": "proof_21c5ad0aa6",
+  "proof": "proof_65106964c0",
   "reversal_conditions": [
     "Source decision dec_a2899939d9 is superseded or explicitly retired."
   ],
   "supersedes": null,
   "superseded_by": null,
+  "exception_of": null,
   "valid_from": null,
   "valid_to": null,
   "data_class": "public",
@@ -60,6 +63,14 @@
     "Dynamic calls and runtime dependency injection are not covered.",
     "Legacy bridge preserves unified calls/imports/depends_on/contains reachability semantics."
   ],
+  "candidate": {
+    "alternatives": [],
+    "uncertainty": [],
+    "conflicts": [],
+    "incumbent": null,
+    "scope_suggestion": null,
+    "counterexamples": []
+  },
   "legacy_refs": [
     "dec_a2899939d9"
   ],
@@ -119,10 +130,18 @@
       "at": "2026-07-10T09:29:18.766Z",
       "reason": "Proof proof_21c5ad0aa6 reached P3.",
       "proof": "proof_21c5ad0aa6"
+    },
+    {
+      "action": "proved",
+      "actor_kind": "system",
+      "actor": "hunch:evidence-harness",
+      "at": "2026-07-23T05:42:42.065Z",
+      "reason": "Proof proof_65106964c0 reached P3.",
+      "proof": "proof_65106964c0"
     }
   ],
   "created_at": "2026-07-10T06:31:06.322Z",
-  "updated_at": "2026-07-10T09:29:18.766Z",
+  "updated_at": "2026-07-23T05:42:42.065Z",
   "provenance": {
     "source": "derived",
     "confidence": 1,
