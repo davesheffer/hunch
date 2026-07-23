@@ -1,0 +1,55 @@
+{
+  "id": "dec_becff916ba",
+  "title": "chore(release): publish through Open VSX and repair npm OIDC",
+  "topic": null,
+  "status": "accepted",
+  "context": "What changed: added normalizeLf; renamed test/vscode-marketplace-workflow.test.ts→test/vscode-open-vsx-workflow.test.ts.",
+  "decision": "Changed site/blog, test/release-gate.test.ts, test/vscode-marketplace-workflow.test.ts, test/vscode-open-vsx-workflow.test.ts, test/workflow-release-contract.test.ts, tooling/changelog-locales.mjs: added normalizeLf; renamed test/vscode-marketplace-workflow.test.ts→test/vscode-open-vsx-workflow.test.ts.",
+  "consequences": [],
+  "alternatives_rejected": [],
+  "rejected_tripwires": [],
+  "related_components": [
+    "cmp_04c6efb58b",
+    "cmp_a94a8fe5cc",
+    "cmp_c099a42a55"
+  ],
+  "related_files": [
+    "site/blog/posts.js",
+    "test/release-gate.test.ts",
+    "test/vscode-marketplace-workflow.test.ts",
+    "test/vscode-open-vsx-workflow.test.ts",
+    "test/workflow-release-contract.test.ts",
+    "tooling/changelog-locales.mjs",
+    "tooling/generate-site-locales.mjs",
+    "tooling/release-gate.mjs"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "59f26f8",
+  "valid_from": "2026-07-23T13:52:34+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "inferred",
+    "confidence": 0.45,
+    "evidence": [
+      "commit:59f26f8",
+      "synth:provider=deterministic",
+      "branch:codex/openvsx-only-v1.9.1",
+      "site/blog/posts.js",
+      "test/release-gate.test.ts",
+      "test/vscode-marketplace-workflow.test.ts",
+      "test/vscode-open-vsx-workflow.test.ts",
+      "test/workflow-release-contract.test.ts",
+      "tooling/changelog-locales.mjs",
+      "tooling/generate-site-locales.mjs",
+      "tooling/release-gate.mjs"
+    ],
+    "last_verified": "2026-07-23T10:52:40.280Z"
+  },
+  "date": "2026-07-23T13:52:34+03:00"
+}
