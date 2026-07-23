@@ -30,6 +30,18 @@ export function blockingEvidenceError(proof: PolicyProof, dispositions: HistoryD
 
 const proofRank: Record<ProofClass, number> = { P0: 0, P1: 1, P2: 2, P3: 3, P4: 4, P5: 5 };
 
+/** Activation is a runtime property, not merely an approval-time check. The
+ * audit fallback keeps correction policies compiled before `origin` was added
+ * fail-closed after they are loaded by the current schema. */
+export function activationGateError(policy: PolicySpec): string | null {
+  const isMd1Correction = policy.origin === "correction_md1a"
+    || policy.audit.some((event) => event.action === "compiled" && event.actor === "hunch:correction-policy-materializer");
+  if (isMd1Correction && policy.activation_gate?.status !== "blocked") {
+    return "MD-1a correction policy is missing its required source-currentness activation gate";
+  }
+  return policy.activation_gate?.status === "blocked" ? policy.activation_gate.reason : null;
+}
+
 /** Rechecked on every blocking evaluation; a hand-edited lifecycle flag without
  * a current P3 proof is a configuration error, never authority. */
 export function blockingProofError(
@@ -40,6 +52,8 @@ export function blockingProofError(
   currentBehaviorAttestations: G2BehaviorAttestation[] = [],
 ): string | null {
   if (policy.state !== "active_blocking") return null;
+  const activationError = activationGateError(policy);
+  if (activationError) return activationError;
   if (policy.authority?.kind !== "human") return "active blocking policy has no human authority event";
   const behaviorAttestationError = executableBehaviorAttestationError(policy, currentBehaviorAttestations);
   if (behaviorAttestationError) return behaviorAttestationError;
@@ -101,6 +115,8 @@ export function approvePolicy(
   composition: PolicySpec[] = [],
   currentBehaviorAttestations: G2BehaviorAttestation[] = [],
 ): PolicySpec {
+  const activationError = activationGateError(policy);
+  if (activationError) throw new Error(`policy ${policy.id} cannot activate: ${activationError}`);
   requireHuman(actor);
   const behaviorAttestationError = executableBehaviorAttestationError(policy, currentBehaviorAttestations);
   if (behaviorAttestationError) throw new Error(behaviorAttestationError);

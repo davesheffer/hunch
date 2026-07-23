@@ -1,0 +1,39 @@
+{
+  "id": "dec_e19e4f2f26",
+  "title": "fix(ci): stabilize matrix gate and patch transitive audits",
+  "topic": null,
+  "status": "accepted",
+  "context": "Touched 1 file(s) across test/team-matrix-e2e.test.ts.",
+  "decision": "Changed code in test/team-matrix-e2e.test.ts (1 file(s)).",
+  "consequences": [],
+  "alternatives_rejected": [],
+  "rejected_tripwires": [],
+  "related_components": [
+    "cmp_a94a8fe5cc"
+  ],
+  "related_files": [
+    "test/team-matrix-e2e.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "e5e0a12",
+  "valid_from": "2026-07-22T14:28:25+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "inferred",
+    "confidence": 0.3,
+    "evidence": [
+      "commit:e5e0a12",
+      "synth:provider=deterministic",
+      "branch:codex/matrix-v1.9.0",
+      "test/team-matrix-e2e.test.ts"
+    ],
+    "last_verified": "2026-07-22T11:28:31.546Z"
+  },
+  "date": "2026-07-22T14:28:25+03:00"
+}

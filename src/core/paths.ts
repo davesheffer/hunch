@@ -1,6 +1,6 @@
 /** Filesystem layout for the Hunch (DESIGN.md §6 folder structure). */
 import { join } from "node:path";
-import { existsSync, statSync } from "node:fs";
+import { existsSync, realpathSync, statSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
 export const HUNCH_DIR = ".hunch";
@@ -43,7 +43,16 @@ export function hunchPaths(root: string): HunchPaths {
  *  PRIVATE overlay store (HUNCH_PRIVATE_DIR), which lives in a separate repo the
  *  user controls rather than under the current repo's `.hunch/`. */
 export function hunchPathsForDir(hunchDir: string): HunchPaths {
-  const hunch = resolve(hunchDir);
+  const lexical = resolve(hunchDir);
+  // An explicitly configured PRIVATE overlay may intentionally be a
+  // final-component symlink to a distinct physical repository. Resolve that
+  // user-selected root before handing it to JsonStore; public hunchPaths()
+  // deliberately does not do this, so a committed public `.hunch` symlink and
+  // every kind/record symlink remain fail-closed.
+  let hunch = lexical;
+  try {
+    if (statSync(lexical).isDirectory()) hunch = realpathSync(lexical);
+  } catch { /* missing overlay root is created at the lexical location */ }
   return {
     root: dirname(hunch),
     hunch,

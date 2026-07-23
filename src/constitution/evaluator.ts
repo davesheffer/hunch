@@ -7,6 +7,8 @@ import { headSha } from "../extractors/git.js";
 import { canonicalHash, proofEvaluationHash } from "./canonical.js";
 import { evaluateExecutableBehaviorPolicy, type BehaviorEvaluationOptions } from "./behaviorEvaluator.js";
 import { policyCompositionBinding } from "./composition.js";
+import { activationGateError } from "./lifecycle.js";
+import { canonicalStaticGraphBaseline } from "./staticGraphBaseline.js";
 import {
   POLICY_EVALUATOR,
   PolicyEvaluationSchema,
@@ -44,11 +46,39 @@ export function graphSnapshotFromRecords(root: string, head: string, symbols: Sy
   return { root, head, symbols, edges, components, graph_hash: snapshotHash(symbols, edges, components) };
 }
 
+/** Bind a filesystem-derived graph to its content, never to a Git commit whose
+ * tree may not contain the scanned bytes. The graph hash is independent of the
+ * receipt head, so it is safe to use as the explicit checkout identity. */
+export function checkoutGraphSnapshot(root: string, symbols: Symbol[], edges: Edge[], components: Component[] = []): GraphSnapshot {
+  const snapshot = graphSnapshotFromRecords(root, "checkout", symbols, edges, components);
+  return { ...snapshot, head: `checkout:${snapshot.graph_hash}` };
+}
+
+/** Bind a semantic check receipt to both the selected source surface and the
+ * exact raw source bytes. The graph hash remains explicit because two source
+ * bodies can differ while producing the same topology. */
+export function sourceGraphSnapshot(
+  root: string,
+  source: { kind: string; revision?: string; content_hash: string },
+  symbols: Symbol[],
+  edges: Edge[],
+  components: Component[] = [],
+): GraphSnapshot {
+  const snapshot = graphSnapshotFromRecords(root, source.kind, symbols, edges, components);
+  const revision = source.revision ? `:${source.revision}` : "";
+  return {
+    ...snapshot,
+    head: `${source.kind}${revision}:${source.content_hash}:${snapshot.graph_hash}`,
+  };
+}
+
 export function graphSnapshot(store: HunchStore, root: string, opts: { publicOnly?: boolean; head?: string } = {}): GraphSnapshot {
   const symbols = opts.publicOnly ? store.json.loadAll("symbols") : store.recs("symbols");
   const edges = opts.publicOnly ? store.json.loadAll("edges") : store.recs("edges");
   const components = opts.publicOnly ? store.json.loadAll("components") : store.recs("components");
-  return graphSnapshotFromRecords(root, opts.head ?? (headSha(root) || "working-tree"), symbols, edges, components);
+  const repositoryHead = headSha(root);
+  const head = opts.head ?? (repositoryHead ? canonicalStaticGraphBaseline(root, repositoryHead) : "working-tree");
+  return graphSnapshotFromRecords(root, head, symbols, edges, components);
 }
 
 function resolveSelector(snapshot: GraphSnapshot, selector: PolicySelector): Binding {
@@ -397,20 +427,23 @@ export function evaluatePolicy(
   store: HunchStore,
   root: string,
   policy: PolicySpec,
-  opts: { publicOnly?: boolean; composition?: PolicySpec[]; behavior?: BehaviorEvaluationOptions } = {},
+  opts: { publicOnly?: boolean; composition?: PolicySpec[]; behavior?: BehaviorEvaluationOptions; snapshot?: GraphSnapshot } = {},
 ): PolicyEvaluation {
   if (policy.assertion.kind === "executable-behavior") {
     if (opts.composition?.length) throw new Error("executable-behavior policies cannot participate in parent/exception composition");
     return evaluateExecutableBehaviorPolicy(root, policy, opts.behavior);
   }
-  const snapshot = graphSnapshot(store, root, opts);
+  // Read-only gates can supply an ephemeral scan of changed source. Executable
+  // behavior deliberately ignores it and keeps using its isolated checkout path.
+  const snapshot = opts.snapshot ?? graphSnapshot(store, root, opts);
   return opts.composition?.length
     ? evaluateCompositePolicyOnSnapshot(policy, opts.composition, snapshot)
     : evaluatePolicyOnSnapshot(policy, snapshot);
 }
 
 export function policyIsActive(policy: PolicySpec): boolean {
-  return policy.state === "active_advisory" || policy.state === "active_blocking";
+  return (policy.state === "active_advisory" || policy.state === "active_blocking")
+    && !activationGateError(policy);
 }
 
 export function policyBlocks(policy: PolicySpec, evaluation: PolicyEvaluation): boolean {
@@ -418,6 +451,7 @@ export function policyBlocks(policy: PolicySpec, evaluation: PolicyEvaluation): 
     && !policy.exception_of
     && policy.severity === "blocking"
     && policy.authority?.kind === "human"
+    && !activationGateError(policy)
     && evaluation.result === "violated";
 }
 

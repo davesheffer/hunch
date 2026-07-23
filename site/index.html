@@ -4,16 +4,27 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Hunch — your codebase remembers why</title>
-<meta name="description" content="Git stores what the code is. Hunch stores why — a git-native reasoning graph of decisions, bugs, and invariants, enforced deterministically across any MCP assistant." />
+<meta name="description" content="Hunch gives AI the engineering memory behind your code — the decisions, trade-offs, and bugs your team already learned from." />
 <meta property="og:title" content="Hunch — your codebase remembers why" />
-<meta property="og:description" content="Architectural Conformance for AI code: a git-native graph of decisions, bugs, and invariants that keeps AI changes true to your architecture — with the receipt for every call." />
+<meta property="og:description" content="Give every AI coding session the decisions, trade-offs, and hard-won lessons behind your code." />
 <meta property="og:image" content="https://hunch-pi.vercel.app/hunch-og.png" />
+<meta property="og:url" content="https://hunch-pi.vercel.app/" />
+<meta property="og:locale" content="en_US" />
+<link rel="canonical" href="https://hunch-pi.vercel.app/" />
+<link rel="alternate" hreflang="en" href="https://hunch-pi.vercel.app/" />
+<link rel="alternate" hreflang="he" href="https://hunch-pi.vercel.app/he" />
+<link rel="alternate" hreflang="ru" href="https://hunch-pi.vercel.app/ru" />
+<link rel="alternate" hreflang="ar" href="https://hunch-pi.vercel.app/ar" />
+<link rel="alternate" hreflang="es" href="https://hunch-pi.vercel.app/es" />
+<link rel="alternate" hreflang="x-default" href="https://hunch-pi.vercel.app/" />
+<link rel="icon" href="/hunch-mark.svg" type="image/svg+xml" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600&family=IBM+Plex+Sans+Hebrew:wght@400;500;600&display=swap" rel="stylesheet" />
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="upgrade.css" />
-<link rel="stylesheet" href="/proof-curve.css" />
+<link rel="stylesheet" href="/brand.css" />
+<link rel="stylesheet" href="/upgrade.css" />
 <style>
   /* ──────────────────────────── tokens ──────────────────────────── */
   :root{
@@ -55,6 +66,7 @@
   :focus-visible{outline:2px solid var(--moss);outline-offset:3px;border-radius:4px}
   code,kbd{font-family:var(--mono);font-size:.86em;background:var(--bg-2);border:1px solid var(--line-2);border-radius:5px;padding:.1em .38em}
   .mono{font-family:var(--mono)}
+  .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 
   .wrap{max-width:var(--maxw);margin:0 auto;padding:0 24px}
 
@@ -62,37 +74,46 @@
   .nav{position:sticky;top:0;z-index:50;background:color-mix(in srgb,var(--bg) 92%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--line-2)}
   .nav-in{display:flex;align-items:center;gap:26px;height:60px}
   .brand{font-family:var(--mono);font-weight:500;font-size:15px;letter-spacing:-.01em;display:flex;align-items:center;gap:9px}
-  .brand .dot{width:8px;height:8px;border-radius:50%;background:var(--moss);display:inline-block}
-  .nav-links{display:flex;gap:22px;margin-left:auto;align-items:center}
+  .nav-links{display:flex;gap:22px;margin-inline-start:auto;align-items:center}
   .nav-links a{font-size:14px;color:var(--mut);transition:color .15s var(--ease)}
   .nav-links a:hover{color:var(--ink)}
+  .lang-picker{position:relative;display:inline-flex;align-items:center;color:var(--mut)}
+  .lang-picker::after{content:"⌄";position:absolute;inset-inline-end:9px;top:50%;font:12px/1 var(--mono);transform:translateY(-58%);pointer-events:none;color:var(--mut-2)}
+  .lang-select{appearance:none;-webkit-appearance:none;min-width:54px;padding-block:7px;padding-inline:10px 25px;border:1px solid var(--line);border-radius:8px;background:color-mix(in srgb,var(--bg) 82%,transparent);color:var(--ink-2);font:500 11.5px/1 var(--mono);letter-spacing:.04em;cursor:pointer;transition:border-color .25s ease,background-color .25s ease,color .25s ease}
+  .lang-select:hover{border-color:rgba(58,107,88,.35);background:var(--surface);color:var(--ink)}
   .btn{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:13.5px;font-weight:500;
     padding:9px 16px;border-radius:9px;border:1px solid var(--ink);background:var(--ink);color:var(--bg);
-    transition:background .16s var(--ease),color .16s var(--ease)}
+    transform:translateY(0);box-shadow:0 0 0 rgba(28,32,30,0);
+    transition:transform .42s cubic-bezier(.16,1,.3,1),background-color .3s ease,border-color .3s ease,color .3s ease,box-shadow .42s cubic-bezier(.16,1,.3,1)}
   .btn:hover{background:var(--moss-ink);border-color:var(--moss-ink);color:#fff}
   .btn.ghost{background:transparent;color:var(--ink);border-color:var(--line)}
   .btn.ghost:hover{background:var(--bg-2);color:var(--ink)}
+  @media (hover:hover){.btn:hover{transform:translateY(-1px);box-shadow:0 10px 24px -16px rgba(28,32,30,.42)}}
+  .btn:active{transform:translateY(0);box-shadow:0 4px 12px -10px rgba(28,32,30,.3);transition-duration:.12s}
+  @media (prefers-reduced-motion:reduce){.btn{transition:none}.btn:hover,.btn:active{transform:none}}
   @media (max-width:720px){
     .nav-links a.hide-s{display:none}
     .nav-in{gap:14px}
     .nav-links{gap:14px}
-    .btn{padding:8px 13px;font-size:13px}
+    .btn{padding:9px 14px;font-size:13.5px}
+    .hero-cta .btn{min-height:46px;padding:11px 18px;font-size:14.5px;line-height:1.25}
   }
+  @media (max-width:520px){.nav-links a.hide-xs{display:none}}
 
   /* ──────────────────────────── hero ──────────────────────────── */
-  .hero.wrap{padding:104px 24px 96px}
+  .hero.wrap{
+    min-height:calc(100vh - 60px);min-height:calc(100svh - 60px);
+    padding:40px 24px;display:flex;flex-direction:column;justify-content:center;text-align:start;
+  }
   .eyebrow{font-family:var(--mono);font-size:12.5px;letter-spacing:.06em;color:var(--mut);text-transform:lowercase}
   h1{
     font-family:var(--mono);font-weight:300;letter-spacing:-.035em;
     font-size:clamp(38px,6.2vw,64px);line-height:1.12;margin:22px 0 0;max-width:15ch;
   }
   h1 b{font-weight:500;color:var(--moss-ink)}
+  .hero h1{margin:0}
   .hero p.lede{max-width:var(--measure);color:var(--ink-2);font-size:18px;margin:28px 0 0}
   .hero-cta{display:flex;gap:12px;margin-top:36px;flex-wrap:wrap;align-items:center}
-  .hero-facts{margin-top:56px;font-family:var(--mono);font-size:13px;color:var(--mut);display:flex;gap:10px;flex-wrap:wrap;align-items:center}
-  .hero-facts span::after{content:"·";margin-left:10px;color:var(--mut-2)}
-  .hero-facts span:last-child::after{content:""}
-
   /* ───────────── hero art: the graph that holds the line ─────────────
      full-bleed behind the hero text; a soft wash keeps the measure readable.
      the cursor is an agent: edges near it illuminate. */
@@ -106,10 +127,10 @@
   .hero-art::after{ /* readability wash over the text column */
     content:"";position:absolute;inset:0;
     background:
-      radial-gradient(680px 520px at 24% 34%, var(--bg) 38%, color-mix(in srgb,var(--bg) 55%,transparent) 68%, transparent 88%),
+      radial-gradient(680px 520px at 24% 50%, var(--bg) 38%, color-mix(in srgb,var(--bg) 55%,transparent) 68%, transparent 88%),
       linear-gradient(to bottom, color-mix(in srgb,var(--bg) 65%,transparent), transparent 22%, transparent 78%, var(--bg));
   }
-  @media (max-width:760px){.hero-art{opacity:.5}}
+  @media (max-width:760px){.hero-art{opacity:.82}}
 
   /* load-in: one quiet moment */
   .rise{opacity:0;transform:translateY(10px);animation:rise .7s var(--ease) forwards}
@@ -131,8 +152,9 @@
   }
   .term .c-cmd{color:var(--ink);font-weight:500}
   .term .c-id{color:var(--moss-ink);font-weight:500}
-  .term .c-key{color:var(--mut)}
+  .term .c-key{color:var(--mut);unicode-bidi:plaintext}
   .term .c-warn{color:var(--ember)}
+  .term,.copyline{direction:ltr;text-align:left}
   .caret{display:inline-block;width:7px;height:15px;background:var(--moss);vertical-align:-2px;animation:blink 1.1s steps(1) infinite}
   @keyframes blink{50%{opacity:0}}
   @media (prefers-reduced-motion:reduce){.caret{animation:none}}
@@ -144,37 +166,6 @@
   .sec-head p{color:var(--ink-2);margin:18px 0 0}
   .panel{background:var(--bg-2)}
 
-  /* the twist — the page's own decision chips */
-  .dnote{position:relative;display:inline-block}
-  .dnote>button{
-    font-family:var(--mono);font-size:11.5px;color:var(--mut);background:none;border:none;cursor:pointer;
-    padding:2px 1px;border-bottom:1px dotted var(--mut-2);letter-spacing:.02em;
-  }
-  .dnote>button:hover,.dnote>button[aria-expanded="true"]{color:var(--moss-ink);border-bottom-color:var(--moss)}
-  .dnote .pop{
-    display:none;position:absolute;left:0;top:calc(100% + 8px);z-index:30;width:min(340px,calc(100vw - 40px));
-    background:var(--ink);color:var(--bg);border-radius:10px;padding:12px 14px;
-    font-size:13px;line-height:1.55;font-family:var(--sans);
-    animation:pop-in .18s var(--ease);
-  }
-  @keyframes pop-in{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
-  .dnote .pop b{font-family:var(--mono);font-weight:500;font-size:11.5px;color:#a7c4b5;display:block;margin-bottom:4px}
-  .dnote>button[aria-expanded="true"]+.pop,.dnote:hover .pop{display:block}
-  @media (prefers-reduced-motion:reduce){.dnote .pop{animation:none}}
-  .sec-label{display:flex;align-items:baseline;gap:14px}
-  .sec-label .eyebrow{white-space:nowrap}
-
-  /* problem cards */
-  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:52px}
-  @media (max-width:860px){.grid3{grid-template-columns:1fr}}
-  .card{
-    background:var(--surface);border:1px solid var(--line-2);border-radius:var(--r);padding:26px 24px;
-    transition:border-color .16s var(--ease),background .16s var(--ease);
-  }
-  .card:hover{border-color:var(--line);background:#fff}
-  .card h3{font-family:var(--mono);font-weight:500;font-size:15px;letter-spacing:-.01em;margin:0 0 10px}
-  .card p{margin:0;font-size:14.5px;color:var(--mut);line-height:1.6}
-
   /* how it works — a real sequence */
   .steps{margin-top:56px;border-top:1px solid var(--line);max-width:820px}
   .step{display:grid;grid-template-columns:92px 1fr auto;gap:22px;align-items:baseline;padding:30px 0;border-bottom:1px solid var(--line)}
@@ -183,48 +174,6 @@
   .step h3{margin:0 0 8px;font-size:17.5px;font-weight:600;letter-spacing:-.01em}
   .step p{margin:0;color:var(--mut);font-size:15px;max-width:52ch}
   .step-cmd{font-family:var(--mono);font-size:12.5px;color:var(--moss-ink);white-space:nowrap}
-
-  /* chain: bug → decision → constraint */
-  .chain{display:grid;grid-template-columns:1fr auto 1fr auto 1fr;gap:12px;align-items:stretch;margin-top:56px}
-  @media (max-width:900px){.chain{grid-template-columns:1fr}.chain .arr{transform:rotate(90deg);justify-self:center}}
-  .chain .arr{align-self:center;color:var(--mut-2);font-family:var(--mono)}
-  .node{background:var(--surface);border:1px solid var(--line-2);border-radius:var(--r);padding:22px}
-  .node .tag{font-family:var(--mono);font-size:11.5px;letter-spacing:.04em;color:var(--mut)}
-  .node .tag.b{color:var(--ember)}
-  .node .tag.d{color:var(--moss-ink)}
-  .node h3{font-size:15.5px;font-weight:600;margin:10px 0 8px;letter-spacing:-.01em}
-  .node p{margin:0;font-size:13.5px;color:var(--mut);line-height:1.6}
-
-  /* features — grouped, unfoldable */
-  .fgroups{margin-top:56px;display:grid;gap:52px}
-  .fgroup .glabel{font-family:var(--mono);font-size:12.5px;letter-spacing:.06em;color:var(--moss-ink);margin-bottom:6px}
-  .fgroup .gwhy{font-size:14px;color:var(--mut);margin:0 0 18px;max-width:60ch}
-  details.f{border-top:1px solid var(--line-2)}
-  details.f:last-child{border-bottom:1px solid var(--line-2)}
-  details.f summary{
-    list-style:none;cursor:pointer;display:flex;align-items:baseline;gap:16px;padding:15px 4px;
-    transition:background .14s var(--ease);border-radius:6px;
-  }
-  details.f summary::-webkit-details-marker{display:none}
-  details.f summary:hover{background:var(--moss-wash)}
-  details.f summary .fname{font-weight:600;font-size:15px;letter-spacing:-.01em;min-width:210px}
-  details.f summary .fhint{color:var(--mut);font-size:13.5px;flex:1}
-  details.f summary .fplus{font-family:var(--mono);color:var(--mut-2);font-size:13px;transition:transform .18s var(--ease)}
-  details.f[open] summary .fplus{transform:rotate(45deg)}
-  details.f .fbody{padding:2px 4px 20px;max-width:70ch;color:var(--ink-2);font-size:14.5px}
-  details.f .fbody code{font-size:.85em}
-  @media (max-width:720px){details.f summary{flex-wrap:wrap}details.f summary .fhint{display:none}}
-
-  /* comparison */
-  .cmp{margin-top:56px;border:1px solid var(--line-2);border-radius:var(--r);overflow:hidden;background:var(--surface)}
-  .cmp table{width:100%;border-collapse:collapse;font-size:14.5px}
-  .cmp th,.cmp td{text-align:left;padding:15px 20px;border-bottom:1px solid var(--line-2);vertical-align:top}
-  .cmp tr:last-child td{border-bottom:none}
-  .cmp thead th{font-family:var(--mono);font-size:12.5px;letter-spacing:.04em;font-weight:500;color:var(--mut);background:var(--bg-2)}
-  .cmp td:first-child{color:var(--mut);font-size:13.5px;width:22%}
-  .cmp td:nth-child(2){color:var(--mut)}
-  .cmp td:nth-child(3) b{color:var(--moss-ink)}
-  @media (max-width:720px){.cmp{overflow-x:auto}.cmp table{min-width:560px}}
 
   /* quickstart */
   .qs{display:grid;grid-template-columns:1.05fr .95fr;gap:44px;margin-top:56px;align-items:start}
@@ -240,15 +189,57 @@
   .prov{display:flex;flex-wrap:wrap;gap:10px;margin-top:30px}
   .prov span{font-family:var(--mono);font-size:12.5px;color:var(--mut);border:1px solid var(--line-2);border-radius:999px;padding:7px 14px;background:var(--surface)}
 
+  /* the page's story: one decision, forgotten and found again */
+  .story-grid{display:grid;grid-template-columns:minmax(0,.92fr) minmax(380px,1.08fr);gap:72px;margin-top:58px;align-items:start}
+  .story-beats{border-top:1px solid var(--line)}
+  .story-beat{display:grid;grid-template-columns:74px 1fr;gap:18px;padding:27px 0;border-bottom:1px solid var(--line)}
+  .story-when{font-family:var(--mono);font-size:11.5px;letter-spacing:.05em;color:var(--mut);text-transform:uppercase}
+  .story-beat h3{margin:0 0 7px;font-size:18px;line-height:1.35}
+  .story-beat p{margin:0;color:var(--mut);font-size:15px}
+  .receipt{position:sticky;top:88px;background:var(--ink);color:var(--bg);border-radius:var(--r);overflow:hidden;box-shadow:0 24px 60px rgba(20,31,25,.13)}
+  .receipt-head{display:flex;justify-content:space-between;gap:18px;padding:14px 18px;border-bottom:1px solid rgba(255,255,255,.1);font:12px var(--mono);color:#aeb8b3}
+  .receipt-head b{color:#b9d2c5;font-weight:500}
+  .receipt-body{padding:26px 26px 28px}
+  .receipt-kicker{font:11.5px var(--mono);letter-spacing:.05em;color:#93b6a4;text-transform:uppercase}
+  .receipt-body h3{margin:12px 0 20px;font:500 21px/1.35 var(--mono);letter-spacing:-.02em;color:#fff}
+  .receipt-row{display:grid;grid-template-columns:88px 1fr;gap:16px;padding:13px 0;border-top:1px solid rgba(255,255,255,.09);font-size:14px}
+  .receipt-row span{font-family:var(--mono);font-size:11.5px;color:#93a099}
+  .receipt-row p{margin:0;color:#d9dedb;line-height:1.55}
+  .receipt-foot{margin:20px 0 0;font:12px var(--mono);color:#aacabb}
+
+  .outcome-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:0;margin-top:54px;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+  .outcome{padding:28px 0 30px;padding-inline-end:28px}
+  .outcome+.outcome{border-inline-start:1px solid var(--line);padding-inline-start:28px}
+  .outcome .step-n{display:block;margin-bottom:12px}
+  .outcome h3{margin:0 0 8px;font-size:18px}
+  .outcome p{margin:0;color:var(--mut);font-size:14.5px}
+
+  .tech-intro{display:grid;grid-template-columns:1fr .8fr;gap:54px;align-items:end}
+  .tech-intro>p{margin:0;color:var(--mut);max-width:48ch}
+  .tech-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:1px;margin-top:54px;background:var(--line);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+  .tech-item{background:var(--surface);padding:25px 26px}
+  .tech-item code{display:inline-block;margin-bottom:12px;color:var(--moss-ink)}
+  .tech-item h3{margin:0 0 7px;font-size:16px}
+  .tech-item p{margin:0;color:var(--mut);font-size:14px}
+  .tech-link{margin:26px 0 0;color:var(--mut);font-size:14px}
+
+  @media (max-width:860px){
+    .story-grid,.tech-intro{grid-template-columns:1fr;gap:40px}
+    .receipt{position:relative;top:auto}
+    .outcome-grid{grid-template-columns:1fr}
+    .outcome{padding:24px 0}.outcome+.outcome{border-inline-start:0;border-top:1px solid var(--line);padding-inline-start:0}
+  }
+  @media (max-width:620px){
+    .story-beat{grid-template-columns:1fr;gap:7px}
+    .tech-grid{grid-template-columns:1fr}
+    .receipt-row{grid-template-columns:1fr;gap:5px}
+  }
+
   /* CTA */
-  .cta{padding:120px 0 128px;text-align:left}
+  .cta{padding:120px 0 128px;text-align:start}
   .cta h2{font-size:clamp(30px,4.4vw,46px);max-width:18ch}
   .cta p{color:var(--mut);max-width:52ch;margin:20px 0 0}
   .cta .hero-cta{margin-top:34px}
-
-  /* grounded footer note */
-  .wrap.grounded{border-top:1px solid var(--line-2);padding:26px 24px;font-family:var(--mono);font-size:12.5px;color:var(--mut)}
-  .grounded b{color:var(--moss-ink);font-weight:500}
 
   /* footer */
   footer{border-top:1px solid var(--line-2);padding:56px 0 72px;background:var(--bg-2)}
@@ -258,20 +249,48 @@
   .foot a{display:block;font-size:14px;color:var(--ink-2);padding:4px 0}
   .foot a:hover{color:var(--moss-ink)}
   .foot .about{font-size:14px;color:var(--mut);max-width:34ch;margin-top:12px}
+
+  /* Localized pages retain the same quiet identity while respecting script. */
+  html[lang="he"]{--sans-local:"IBM Plex Sans Hebrew",var(--sans)}
+  html[lang="ar"]{--sans-local:"IBM Plex Sans Arabic",var(--sans)}
+  html[lang="he"] body,html[lang="ar"] body{font-family:var(--sans-local)}
+  html[lang="he"] .btn,html[lang="ar"] .btn{font-family:var(--sans-local);font-weight:500;letter-spacing:0}
+  html[lang="ru"] .btn,html[lang="es"] .btn{font-family:var(--sans);font-weight:500;letter-spacing:0}
+  html[lang="he"] h1,html[lang="he"] h2,html[lang="ar"] h1,html[lang="ar"] h2{font-family:var(--sans-local);letter-spacing:-.025em}
+  html[lang="ar"] h1,html[lang="ar"] h2{letter-spacing:0}
+  html[lang="he"] .eyebrow,html[lang="he"] .step-n,html[lang="he"] .copybtn,html[lang="he"] .story-when,html[lang="he"] .receipt-head,html[lang="he"] .receipt-kicker,html[lang="he"] .receipt-body h3,html[lang="he"] .receipt-row span,html[lang="he"] .receipt-foot,html[lang="he"] .install-note,html[lang="he"] .term .c-key,html[lang="he"] .foot h4,
+  html[lang="ar"] .eyebrow,html[lang="ar"] .step-n,html[lang="ar"] .copybtn,html[lang="ar"] .story-when,html[lang="ar"] .receipt-head,html[lang="ar"] .receipt-kicker,html[lang="ar"] .receipt-body h3,html[lang="ar"] .receipt-row span,html[lang="ar"] .receipt-foot,html[lang="ar"] .install-note,html[lang="ar"] .term .c-key,html[lang="ar"] .foot h4{font-family:var(--sans-local);letter-spacing:0;text-transform:none}
+  html[dir="rtl"] .receipt-head bdi{font-family:var(--mono);direction:ltr;unicode-bidi:isolate}
+  html[dir="rtl"] .hero-art::after{background:radial-gradient(680px 520px at 76% 50%,var(--bg) 38%,color-mix(in srgb,var(--bg) 55%,transparent) 68%,transparent 88%),linear-gradient(to bottom,color-mix(in srgb,var(--bg) 65%,transparent),transparent 22%,transparent 78%,var(--bg))}
+  html[dir="rtl"] code,html[dir="rtl"] kbd{direction:ltr;unicode-bidi:isolate}
+  html[dir="rtl"] .tech-item code{direction:rtl}
+  html[dir="rtl"] .tech-item code.literal{direction:ltr}
+  html[lang="he"] .tech-item code:not(.literal),html[lang="ar"] .tech-item code:not(.literal){font-family:var(--sans-local);letter-spacing:0}
 </style>
+<link rel="stylesheet" href="/navigation.css" />
 </head>
 <body>
 
 <nav class="nav" aria-label="Main">
   <div class="wrap nav-in">
-    <a class="brand" href="/"><span class="dot" aria-hidden="true"></span>hunch</a>
+    <a class="brand" href="/"><span class="brand-mark" aria-hidden="true"></span>hunch</a>
     <div class="nav-links">
       <a href="#how" class="hide-s">How it works</a>
-      <a href="#inside" class="hide-s">Features</a>
-      <a href="docs.html">Docs</a>
-      <a href="blog/">Blog</a>
-      <a href="changelog.html" class="hide-s">Changelog</a>
+      <a href="#inside" class="hide-s">Under the hood</a>
+      <a href="/docs" class="hide-xs">Docs</a>
+      <a href="/blog/" class="hide-xs">Blog</a>
+      <a href="/changelog" class="hide-s">Changelog</a>
       <a href="https://github.com/davesheffer/hunch" class="hide-s">GitHub</a>
+      <label class="lang-picker">
+        <span class="sr-only">Language</span>
+        <select class="lang-select" id="language-switch" aria-label="Language">
+          <option value="/" selected>EN</option>
+          <option value="/he">HE</option>
+          <option value="/ru">RU</option>
+          <option value="/ar">AR</option>
+          <option value="/es">ES</option>
+        </select>
+      </label>
       <a class="btn" href="#start">Get started</a>
     </div>
   </div>
@@ -284,85 +303,54 @@
        rarely, the strict flavor blocks (ember). The cursor is an agent too:
        edges near it illuminate. Decorative: aria-hidden, pointer-events none. -->
   <div class="hero-art" aria-hidden="true"><canvas id="holdline"></canvas></div>
-  <p class="eyebrow rise">architectural conformance for AI code · git-native · local-first</p>
-  <h1 class="rise d1">Let AI fly.<br /><b>Hunch holds the line.</b></h1>
-  <p class="lede rise d2">
-    Your repo remembers what changed. Hunch teaches it to remember <em>why</em> — the decisions,
-    the trade-offs, the bugs you already paid for — and keeps every AI session consistent with
-    them. The invariants a pattern tool can't see (layering, must-reach, dependency direction)
-    are held quietly, deterministically, from a git-native graph. When a change would undo
-    something you chose on purpose, Hunch shows the receipt: the decision, and the bug it
-    protects you from. <b>Advisory by default. Memory that holds, not just recalls.</b>
-  </p>
+  <span class="eyebrow rise">v1.9 · shared team memory</span>
+  <h1 class="rise d1">Give AI your<br /><b>team's memory.</b></h1>
+  <p class="lede rise d2">Hunch gives every coding agent the decisions, trade-offs, and hard-won lessons behind your code—so each session starts with what your team already knows.</p>
   <div class="hero-cta rise d3">
     <a class="btn" href="#start">Get started</a>
-    <a class="btn ghost" href="blog/">Read the benchmark</a>
-  </div>
-  <div class="hero-facts rise d3">
-    <span>plain files in your repo</span><span>advisory by default</span><span>no SaaS, $0</span><span>works offline</span><span>Apache-2.0</span>
+    <a class="btn ghost" href="#story">See how it works</a>
   </div>
 
 </header>
 
-<!-- One public job: a shareable, source-backed proof of compounding value. -->
-<section class="proof-curve" id="proof" aria-labelledby="proof-title">
-  <div class="wrap proof-shell">
-    <div class="proof-head">
-      <div>
-        <span class="eyebrow">public receipt · hunch.stats/1</span>
-        <h2 id="proof-title">Memory rises. Return has to be earned.</h2>
-      </div>
-      <div>
-        <p>This is Hunch measuring itself on its own repository. Stock comes from the committed graph. Catches begin at zero and move only when a real gate blocks a real reversal.</p>
-        <div class="proof-meta">Generated <span data-proof="generated">from the latest public graph</span> · no private overlay</div>
-      </div>
-    </div>
-    <div class="proof-instrument">
-      <div class="proof-plot" role="img" aria-label="Engineering memory stock rising over time while the return line begins at zero">
-        <span class="proof-axis y">accumulated memory</span><span class="proof-axis x">repository lifetime →</span>
-        <div class="proof-trace">
-          <svg viewBox="0 0 700 190" preserveAspectRatio="none" aria-hidden="true">
-            <defs><linearGradient id="proofWash" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3a6b58" stop-opacity=".18"/><stop offset="1" stop-color="#3a6b58" stop-opacity="0"/></linearGradient></defs>
-            <path class="proof-area" data-proof-area d=""/>
-            <path class="proof-stock-line" data-proof-stock pathLength="1" d=""/>
-            <path class="proof-return-line" d="M475 180 L700 180"/>
-            <circle class="proof-point" data-proof-point cx="700" cy="18" r="4"/>
-          </svg>
-        </div>
-        <span class="proof-now">loading public receipt…</span>
-      </div>
-      <div class="proof-ledger" aria-live="polite">
-        <div class="proof-row"><span>accepted decisions</span><strong data-proof="decisions">—</strong></div>
-        <div class="proof-row"><span>locked invariants</span><strong data-proof="locked">—</strong></div>
-        <div class="proof-row"><span>architecture covered</span><strong data-proof="coverage">—</strong></div>
-        <div class="proof-row return"><span>violations caught</span><strong data-proof="caught">—</strong></div>
-        <div class="proof-row return"><span>bugs re-prevented</span><strong data-proof="reprevented">—</strong></div>
-        <div class="proof-row"><span>payback ratio</span><strong data-proof="payback">—</strong></div>
-        <p class="proof-note"><b>Honest by construction.</b> The page computes nothing. Every number is copied from <code>hunch stats --json</code>; zero remains zero until the repository earns otherwise.</p>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ─────────────────────────── problem ─────────────────────────── -->
-<section id="problem">
+<!-- ─────────────────────────── story ─────────────────────────── -->
+<section id="story">
   <div class="wrap">
     <div class="sec-head">
-      <div class="sec-label">
-        <span class="eyebrow">the problem</span>
-        <span class="dnote"><button aria-expanded="false" aria-describedby="dn2">dec_site_002</button>
-          <span class="pop" role="tooltip" id="dn2"><b>why this section leads</b>Engineers trust a symptom they've felt over a feature list. The page opens with the failure mode, not the product.</span>
-        </span>
-      </div>
-      <h2>Every AI session starts from zero.</h2>
-      <p>The model re-reads your code, re-guesses the intent, and happily "fixes" the thing you
-      deliberately did last month — because the reasoning lives in PRs, Slack, and people's heads,
-      not in the repo.</p>
+      <span class="eyebrow">a familiar story</span>
+      <h2>The bug was fixed. The reason was not.</h2>
+      <p>A non-obvious safeguard survives in the code. The story behind it slowly disappears.</p>
     </div>
-    <div class="grid3">
-      <div class="card"><h3>Stateless by design</h3><p>Typical assistant memory is ephemeral RAG over your current code. The horizon is this session — value stays flat.</p></div>
-      <div class="card"><h3>Intent evaporates</h3><p>The codebase records the final state, never the rejected alternative or the invariant you must never break.</p></div>
-      <div class="card"><h3>The same mistakes, again</h3><p>Without memory, the agent re-discovers the bug you already fixed — and undoes the workaround that prevents it.</p></div>
+    <div class="story-grid">
+      <div class="story-beats">
+        <article class="story-beat">
+          <span class="story-when">Monday</span>
+          <div><h3>A team solves a painful logout bug.</h3><p>They move sessions server-side so a leaked token can be revoked immediately. The choice adds complexity, but it closes the hole.</p></div>
+        </article>
+        <article class="story-beat">
+          <span class="story-when">Months later</span>
+          <div><h3>The code remains. The context fades.</h3><p>The incident is buried in an old pull request. Two people have changed teams. The unusual session flow now looks like needless machinery.</p></div>
+        </article>
+        <article class="story-beat">
+          <span class="story-when">Next session</span>
+          <div><h3>An AI assistant offers to “simplify” it.</h3><p>The change is tidy and locally correct. It also reopens the exact failure the team already paid to understand.</p></div>
+        </article>
+        <article class="story-beat">
+          <span class="story-when">With Hunch</span>
+          <div><h3>The reason arrives before the edit.</h3><p>The assistant sees what was chosen, what was rejected, and which bug the choice prevents. It takes a better path without asking the team to retell the story.</p></div>
+        </article>
+      </div>
+      <aside class="receipt" aria-label="Example engineering memory receipt">
+        <div class="receipt-head"><span>before editing · <bdi>src/auth/session.ts</bdi></span><b>memory found</b></div>
+        <div class="receipt-body">
+          <span class="receipt-kicker">Why this code exists</span>
+          <h3>Logout must revoke access immediately.</h3>
+          <div class="receipt-row"><span>chosen</span><p>Keep sessions server-side and let tokens carry only an opaque ID.</p></div>
+          <div class="receipt-row"><span>rejected</span><p>JWT-only sessions; they remain valid after logout until they expire.</p></div>
+          <div class="receipt-row"><span>protects</span><p>Leaked token usable after a user resets their session.</p></div>
+          <p class="receipt-foot">advisory · decision and bug attached as evidence</p>
+        </div>
+      </aside>
     </div>
   </div>
 </section>
@@ -371,184 +359,37 @@
 <section id="how" class="panel">
   <div class="wrap">
     <div class="sec-head">
-      <div class="sec-label">
-        <span class="eyebrow">how it works</span>
-        <span class="dnote"><button aria-expanded="false" aria-describedby="dn3">dec_site_003</button>
-          <span class="pop" role="tooltip" id="dn3"><b>why three numbered steps</b>The pipeline really has three layers — index, learn, ground. The numbers are the architecture, not marketing rhythm.</span>
-        </span>
-      </div>
-      <h2>Memory as a byproduct of normal work.</h2>
-      <p>No documentation chore. The index is deterministic, learning happens on every commit, and
-      grounding reaches your assistant through every door it has.</p>
+      <span class="eyebrow">what changes</span>
+      <h2>Your assistant starts with the team's memory.</h2>
+      <p>Hunch learns from normal engineering work, then brings the relevant part back at the moment it matters.</p>
     </div>
-    <div class="steps">
-      <div class="step">
-        <span class="step-n">01 / index</span>
-        <div><h3>Map the code, no LLM</h3><p>Hunch maps how functions, files, and components connect, so it can see the ripple effect of any change. Fast, entirely on your machine.</p></div>
-        <span class="step-cmd">hunch index</span>
-      </div>
-      <div class="step">
-        <span class="step-n">02 / learn</span>
-        <div><h3>Turn events into memory</h3><p>Each commit becomes a structured <em>decision</em>; a failing test becomes a <em>bug</em> with its likely cause; recurring or severe bugs are promoted into <em>constraints</em> — rules the AI must respect.</p></div>
-        <span class="step-cmd">post-commit → synthesis</span>
-      </div>
-      <div class="step">
-        <span class="step-n">03 / ground</span>
-        <div><h3>Feed it back, with citations</h3><p>Your assistant reads it through an MCP server, an auto-maintained CLAUDE.md, and slash commands — every answer cites its source, confidence, and evidence.</p></div>
-        <span class="step-cmd">MCP + CLAUDE.md + hooks</span>
-      </div>
+    <div class="outcome-grid">
+      <article class="outcome"><span class="step-n">01 / remember</span><h3>Work leaves a trail.</h3><p>Commits, test failures, and your corrections become durable decisions, bugs, and rules—without a separate documentation ritual.</p></article>
+      <article class="outcome"><span class="step-n">02 / recall</span><h3>The right context shows up.</h3><p>Before changing a file, the assistant sees why it is shaped this way, what depends on it, and what has failed there before.</p></article>
+      <article class="outcome"><span class="step-n">03 / protect</span><h3>Old mistakes stay learned.</h3><p>Hunch quietly flags a reversal and explains why. You decide what happens next; blocking is opt-in.</p></article>
     </div>
   </div>
 </section>
 
-<!-- ─────────────────────────── graph ─────────────────────────── -->
-<section id="graph">
+<!-- ─────────────────────────── technical reveal ─────────────────────────── -->
+<section id="inside">
   <div class="wrap">
-    <div class="sec-head">
-      <span class="eyebrow">the reasoning graph</span>
-      <h2>A bug spawns a decision. A decision spawns a constraint.</h2>
-      <p>The links are what let an agent answer "why" and "what must not break" with evidence —
-      every node attached to its components, symbols, and commits.</p>
+    <div class="tech-intro">
+      <div class="sec-head">
+        <span class="eyebrow">under the hood</span>
+        <h2>Local at the core. Precise when it matters.</h2>
+      </div>
+      <p>The friendly story is backed by a deterministic code graph and plain, reviewable records. Hunch can explain its answer—and show the evidence behind it.</p>
     </div>
-    <div class="chain">
-      <div class="node">
-        <span class="tag b">bug_009 · critical</span>
-        <h3>Leaked token usable after reset</h3>
-        <p>A stateless JWT couldn't be revoked server-side. Caught by <code>auth.revocation.spec.ts</code>, root cause attributed.</p>
-      </div>
-      <span class="arr" aria-hidden="true">→</span>
-      <div class="node">
-        <span class="tag d">dec_017 · accepted</span>
-        <h3>Store sessions in Redis, not JWT-only</h3>
-        <p>Sessions move server-side; the JWT carries only an opaque id. Alternatives rejected, consequences recorded, <code>commit a1b2c3d</code> as evidence.</p>
-      </div>
-      <span class="arr" aria-hidden="true">→</span>
-      <div class="node">
-        <span class="tag">con_004 · blocking</span>
-        <h3>Revocation must be server-side</h3>
-        <p>Never trust JWT expiry alone for logout. Scoped to <code>src/auth/**</code> — checked before any edit in that scope.</p>
-      </div>
+    <div class="tech-grid">
+      <article class="tech-item"><code class="literal">.hunch/team.json</code><h3>Git-native memory</h3><p>Keep memory beside the code or connect the whole team to one dedicated private Git repository. Fresh clones discover it from a credential-free pointer.</p></article>
+      <article class="tech-item"><code>code graph</code><h3>Real blast radius</h3><p>Symbols, callers, components, and dependencies connect the reason to the code it governs.</p></article>
+      <article class="tech-item"><code>MCP + rules</code><h3>Works across assistants</h3><p>Claude Code, Cursor, VS Code, Windsurf, Codex, and others read from the same memory.</p></article>
+      <article class="tech-item"><code>conformance</code><h3>Deterministic checks</h3><p>Layering, must-reach paths, rejected approaches, and known regressions are checked without an LLM verdict.</p></article>
+      <article class="tech-item"><code>provenance</code><h3>Receipts, not guesses</h3><p>Every answer carries its source, confidence, commit, and the history behind the recommendation.</p></article>
+      <article class="tech-item"><code>local-first</code><h3>Your memory stays yours</h3><p>No SaaS is required. Private reasoning can live in a separate overlay you control.</p></article>
     </div>
-  </div>
-</section>
-
-<!-- ─────────────────────────── features ─────────────────────────── -->
-<section id="inside" class="panel">
-  <div class="wrap">
-    <div class="sec-head">
-      <div class="sec-label">
-        <span class="eyebrow">what's inside</span>
-        <span class="dnote"><button aria-expanded="false" aria-describedby="dn4">dec_site_004</button>
-          <span class="pop" role="tooltip" id="dn4"><b>why four groups, not a top-20 list</b>Twenty numbered cards hide the architecture. The groups are the product's real jobs: remember, guard, retrieve, share.</span>
-        </span>
-      </div>
-      <h2>Everything is local, diffable, and yours.</h2>
-      <p>Twenty-five capabilities, four jobs. Unfold what you care about.</p>
-    </div>
-
-    <div class="fgroups">
-      <div class="fgroup">
-        <div class="glabel">memory / — what the graph holds</div>
-        <p class="gwhy">Records with provenance, safe writes, and a time axis — memory you can audit.</p>
-        <details class="f"><summary><span class="fname">Memory that runs itself</span><span class="fhint">auto-trust: no review queue, ever — v1.8</span><span class="fplus">+</span></summary>
-          <div class="fbody">Every capture enters the graph as live advisory memory the moment it lands — grounding every assistant immediately. Nothing gains blocking power until you explicitly vouch. <code>hunch log</code> shows every move the memory made (capture · adopt · supersede · prune · repair), each one revertable with one command.</div></details>
-        <details class="f"><summary><span class="fname">Self-repair on rename</span><span class="fhint">bindings heal themselves, zero guessing — v1.8</span><span class="fplus">+</span></summary>
-          <div class="fbody">Rename a file and the next sync heals every decision binding, tripwire scope, constraint scope, and policy selector that matched it exactly — from git's own rename detection, never a fuzzy guess. Repairs land as revertable timeline moves; a repaired rule asks once for a fresh proof before it can block again.</div></details>
-        <details class="f"><summary><span class="fname">Inline escalations</span><span class="fhint">the graph asks; you answer in the moment — v1.8</span><span class="fplus">+</span></summary>
-          <div class="fbody"><code>hunch escalations</code> lists only what the graph can't settle itself — a topic conflict, a candidate rule, a proposed rule carrying its proof — each a question with its resolution verb. Normally empty. No backlog to manage, no queue to rot.</div></details>
-        <details class="f"><summary><span class="fname">Provenance on everything</span><span class="fhint">source, confidence, evidence — on every record</span><span class="fplus">+</span></summary>
-          <div class="fbody">Every record shows where it came from and how much to trust it. Auto-captured guesses stay advisory; only what you've confirmed is trusted enough to block.</div></details>
-        <details class="f"><summary><span class="fname">Git is the sync</span><span class="fhint">plain files beside your code, merge-clean</span><span class="fplus">+</span></summary>
-          <div class="fbody">The graph lives in your repo and travels with it — reviewable in PRs, synced by push/pull. Teammates' edits merge cleanly, no conflict markers.</div></details>
-        <details class="f"><summary><span class="fname">Atomic &amp; durable</span><span class="fhint">interrupted writes can't truncate the index</span><span class="fplus">+</span></summary>
-          <div class="fbody">An interrupted write can never corrupt the graph, and damaged state refuses to overwrite good data. Boring on purpose.</div></details>
-        <details class="f"><summary><span class="fname">Time-travel memory</span><span class="fhint">query the graph as of any commit</span><span class="fplus">+</span></summary>
-          <div class="fbody">Ask what the team believed as of any commit or tag. History is closed, never deleted — superseded decisions stay auditable forever.</div></details>
-        <details class="f"><summary><span class="fname">Private memory</span><span class="fhint">open-source the code, not the reasoning</span><span class="fplus">+</span></summary>
-          <div class="fbody">Open-source the code without open-sourcing the reasoning. Sensitive decisions live in a separate private repo you control — your local queries see them, public outputs never can.</div></details>
-        <details class="f"><summary><span class="fname">Decision-grounding</span><span class="fhint">doc≠graph drift, caught deterministically</span><span class="fplus">+</span></summary>
-          <div class="fbody">Docs drift; the graph doesn't. Your assistant is told which decision is current — including what was rejected — before it edits, and prose still describing a superseded decision is caught. CI can gate on it.</div></details>
-        <details class="f"><summary><span class="fname">Component wiki &amp; specs ledger</span><span class="fhint">stale docs adopted &amp; healed — never rewritten</span><span class="fplus">+</span></summary>
-          <div class="fbody">A wiki rendered <em>from</em> the graph, and every repo doc graded: grounded, stale, or unverified. Stale docs get a wiki-managed copy healed to the current decision — your original is never touched, and the copy retires once you heal it. Staleness is drift-gated, not scheduled.</div></details>
-      </div>
-
-      <div class="fgroup">
-        <div class="glabel">guards / — what it stops</div>
-        <p class="gwhy">Deterministic checks over the graph. Advisory by default; blocking only on what you've confirmed.</p>
-        <details class="f"><summary><span class="fname">Regression Guard</span><span class="fhint">stop re-adding what a decision retired</span><span class="fplus">+</span></summary>
-          <div class="fbody">Re-adding what a past decision deliberately removed gets flagged before it lands — the AI stops silently undoing intentional design.</div></details>
-        <details class="f"><summary><span class="fname">Veto — Decision Guard</span><span class="fhint">stop re-introducing what you rejected</span><span class="fplus">+</span></summary>
-          <div class="fbody">Re-introducing an approach you rejected — even one that never existed in code — is caught with a receipt: what you rejected, what you chose instead, and why.</div></details>
-        <details class="f"><summary><span class="fname">Redundancy Guard</span><span class="fhint">"this already exists, three modules over"</span><span class="fplus">+</span></summary>
-          <div class="fbody">The agent writes a helper that already exists three modules over; Hunch points at the original. Tuned quiet — a refactor that just moves code isn't mistaken for a duplicate.</div></details>
-        <details class="f"><summary><span class="fname">CI Constraint Guard</span><span class="fhint">memory that can hold a merge — when you ask it to</span><span class="fplus">+</span></summary>
-          <div class="fbody">Every PR gets a comment naming the invariants and decisions it touches — and the check fails when a confirmed blocking rule is actually broken.</div></details>
-        <details class="f"><summary><span class="fname">Causal Merge Verdict</span><span class="fhint">BLOCK / WARN / PASS, with the why</span><span class="fplus">+</span></summary>
-          <div class="fbody">One verdict per diff — BLOCK / WARN / PASS — with each rule cited back to the decision behind it and the bug it prevents reopening. Catches what a diff-only reviewer can't.</div></details>
-        <details class="f"><summary><span class="fname">Intent-conformance</span><span class="fhint">does pay still reach verifySession?</span><span class="fplus">+</span></summary>
-          <div class="fbody">Beyond "did the diff touch a guarded file": does the code still honor the recorded design — layering, must-reach, dependency direction? Drift is flagged even when nothing in scope changed.</div></details>
-        <details class="f"><summary><span class="fname">Never Twice</span><span class="fhint">correct the agent once, it holds forever</span><span class="fplus">+</span></summary>
-          <div class="fbody">Correct the agent once — "no, never call X here" — and it becomes an enforced rule every assistant is held to, in every future session.</div></details>
-      </div>
-
-      <div class="fgroup">
-        <div class="glabel">retrieval / — how the why comes back</div>
-        <p class="gwhy">Grounding that reaches the agent at reasoning time, with citations.</p>
-        <details class="f"><summary><span class="fname">MCP-native, two-way</span><span class="fhint">query the why; write decisions back</span><span class="fplus">+</span></summary>
-          <div class="fbody">Assistants ask why a file is shaped the way it is, what breaks if it changes, and whether a bug has happened before — and record new decisions back as you work.</div></details>
-        <details class="f"><summary><span class="fname">Structure without grep</span><span class="fhint">the repo map, served from the graph</span><span class="fplus">+</span></summary>
-          <div class="fbody">Agents burn search rounds rediscovering structure the graph already holds. One call returns the repo map, a directory’s contents, a file’s outline, or a symbol’s definition site with its callers — so the agent knows exactly which file to read, first try.</div></details>
-        <details class="f"><summary><span class="fname">TypeScript, JavaScript &amp; Python</span><span class="fhint">a language registry — each new language is one entry</span><span class="fplus">+</span></summary>
-          <div class="fbody">Deep code-structure parsing (symbols, call edges, imports, blast radius) covers TypeScript, JavaScript, and Python via one <code>LanguageSpec</code> registry — adding a language is a registry entry plus a tree-sitter grammar, not edits scattered across the extractor. The "why" layer — decisions, bugs, rules — has always worked for any language, because it reads your commits.</div></details>
-        <details class="f"><summary><span class="fname">Graph-augmented retrieval</span><span class="fhint">+41.7pt recall@10 over plain search</span><span class="fplus">+</span></summary>
-          <div class="fbody">Answers pull in the cross-file evidence plain search misses — measured +41.7pt recall@10 on a cross-file benchmark, no embeddings required.</div></details>
-        <details class="f"><summary><span class="fname">Runbook memory</span><span class="fhint">the proven steps for recurring tasks</span><span class="fplus">+</span></summary>
-          <div class="fbody">The <em>how</em> beside the why: proven procedures for recurring tasks, distilled from real work and returned on demand — so an agent reuses the procedure instead of re-deriving it.</div></details>
-        <details class="f"><summary><span class="fname">Fragility report</span><span class="fhint">the riskiest code, with its bug history</span><span class="fplus">+</span></summary>
-          <div class="fbody">The riskiest code in your repo, ranked — with the real bug history behind each entry, not a generic lecture.</div></details>
-        <details class="f"><summary><span class="fname">Deep Synthesis</span><span class="fhint">several takes, reconciled, fact-checked</span><span class="fplus">+</span></summary>
-          <div class="fbody">Several independent readings of a change, reconciled into one note that's trusted only where they agree. Always advisory.</div></details>
-      </div>
-
-      <div class="fgroup">
-        <div class="glabel">team / — sharing and judging</div>
-        <p class="gwhy">One source of truth across branches, worktrees, teammates, and agents.</p>
-        <details class="f"><summary><span class="fname">Works offline, $0 SaaS</span><span class="fhint">subscription-billed synthesis, heuristic fallback</span><span class="fplus">+</span></summary>
-          <div class="fbody">No SaaS, no API key. Learning bills to the coding subscription you already pay for — and without one, a deterministic fallback keeps the loop alive.</div></details>
-        <details class="f"><summary><span class="fname">Shared team memory</span><span class="fhint">one store; fresh clones auto-connect</span><span class="fplus">+</span></summary>
-          <div class="fbody">One memory across branches, worktrees, teammates, and agents — and a fresh clone connects itself to the team's store on init.</div></details>
-        <details class="f"><summary><span class="fname">Multi-candidate verdict</span><span class="fhint">rank 5 agent solutions in 10 minutes</span><span class="fplus">+</span></summary>
-          <div class="fbody">Five agent-generated solutions to one task? Ranked by architectural fit in one command — the best-behaved candidate wins.</div></details>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ─────────────────────────── compare ─────────────────────────── -->
-<section id="different">
-  <div class="wrap">
-    <div class="sec-head">
-      <div class="sec-label">
-        <span class="eyebrow">why it's different</span>
-        <span class="dnote"><button aria-expanded="false" aria-describedby="dn5">dec_site_005</button>
-          <span class="pop" role="tooltip" id="dn5"><b>why no vendor names</b>This page compares Hunch's verifiable properties with the capability boundary of memory alone. Named products move quickly; the dated research note is re-verified separately.</span>
-        </span>
-      </div>
-      <h2>Memory recalls the lesson. Hunch checks whether the next change repeats it.</h2>
-    </div>
-    <div class="cmp">
-      <table>
-        <thead><tr><th></th><th>A memory layer alone</th><th>Hunch</th></tr></thead>
-        <tbody>
-          <tr><td>Purpose</td><td>Recall relevant context</td><td>Recall it, then <b>check the change</b></td></tr>
-          <tr><td>Authority</td><td>The model decides what to follow</td><td>Captured memory advises; only <b>human-confirmed</b> rules can block</td></tr>
-          <tr><td>Evidence</td><td>A fact, note, or retrieved passage</td><td>Decisions linked to <b>rejected alternatives, bugs, constraints, and code</b></td></tr>
-          <tr><td>History</td><td>The context considered relevant now</td><td>Non-destructive supersession: what changed, when, and <b>why</b></td></tr>
-          <tr><td>Outcome</td><td>Context in the prompt</td><td>A cited <b>PASS / WARN / BLOCK receipt</b>; strictness is opt-in</td></tr>
-          <tr><td>Portability</td><td>Depends on the memory product</td><td>Plain git-tracked JSON + <b>client-agnostic MCP</b></td></tr>
-        </tbody>
-      </table>
-    </div>
+    <p class="tech-link">That is the short version. <a href="/docs">Explore the architecture and full feature set →</a></p>
   </div>
 </section>
 
@@ -557,23 +398,14 @@
   <div class="wrap">
     <div class="sec-head">
       <span class="eyebrow">get started</span>
-      <h2>One npm install — wired into every assistant.</h2>
+      <h2>Give your next AI session a memory.</h2>
     </div>
     <div class="qs">
       <div class="qs-steps">
         <div class="steps" style="margin-top:0">
-          <div class="step">
-            <div><h3>Install it</h3><p>Node 22.13+. <code>npm install -g @davesheffer/hunch</code> puts a global <code>hunch</code> on your PATH. That's the whole install — no build step, no native compiles, no SaaS.</p></div>
-          </div>
-          <div class="step">
-            <div><h3>Initialize — wires every assistant</h3><p>One <code>hunch init</code> indexes the repo, installs the hooks + merge driver, and writes MCP config + rules for Claude Code, Cursor, VS Code, Windsurf, Codex &amp; Antigravity — all pointing at the same <code>.hunch/</code> graph.</p></div>
-          </div>
-          <div class="step">
-            <div><h3>Seed the memory</h3><p><code>hunch backfill --since 90d</code> replays recent history, so an empty graph isn't your day-one experience.</p></div>
-          </div>
-          <div class="step">
-            <div><h3>Just ask</h3><p>In any of those editors: <em>"why is the session module built this way?"</em> — answered from memory, with the commit as evidence.</p></div>
-          </div>
+          <div class="step"><div><h3>Install and initialize</h3><p>One command indexes the repository, connects supported assistants, and keeps the memory beside your code.</p></div></div>
+          <div class="step"><div><h3>Bring the recent past with you</h3><p><code>hunch backfill --since 90d</code> turns recent history into a useful day-one memory.</p></div></div>
+          <div class="step"><div><h3>Ask a real question</h3><p>Try <em>“why is the session module built this way?”</em> Your assistant answers from the team's history, with evidence.</p></div></div>
         </div>
         <div class="prov" aria-label="Supported assistants">
           <span>Claude Code</span><span>Cursor</span><span>VS Code</span><span>Windsurf</span><span>Codex</span><span>Antigravity</span><span>AGENTS.md</span>
@@ -598,9 +430,10 @@
           <code id="install-cmd">npm i -g @davesheffer/hunch && hunch init</code>
           <button class="copybtn" data-copy="#install-cmd">copy</button>
         </div>
-        <p style="font-family:var(--mono);font-size:12.5px;color:var(--mut);margin:14px 2px 0;line-height:1.7">
+        <p class="install-note" style="font-family:var(--mono);font-size:12.5px;color:var(--mut);margin:14px 2px 0;line-height:1.7">
           Claude Code? Install as a plugin instead:<br />
           <code>/plugin marketplace add davesheffer/hunch</code> → <code>/plugin install hunch@hunch</code>
+          <br /><a href="https://marketplace.visualstudio.com/items?itemName=davesheffer.hunch-vscode">Visual Studio Marketplace</a> · <a href="https://open-vsx.org/extension/davesheffer/hunch-vscode">Open VSX</a>
         </p>
       </div>
     </div>
@@ -611,52 +444,49 @@
 <section class="cta">
   <div class="wrap">
     <h2>Make your codebase remember why.</h2>
-    <p>The longer it runs, the smarter it gets — and the more expensive it is to go back to a stateless AI.</p>
+    <p>Keep the decisions your team already made available to every person and every assistant that comes next.</p>
     <div class="hero-cta">
       <a class="btn" href="#start">Get started</a>
-      <a class="btn ghost" href="docs.html">Read the docs</a>
+      <a class="btn ghost" href="/docs">Read the docs</a>
     </div>
   </div>
 </section>
 
-<div class="wrap grounded">
-  <span class="dnote"><button aria-expanded="false" aria-describedby="dn1">dec_site_001</button>
-    <span class="pop" role="tooltip" id="dn1" style="top:auto;bottom:calc(100% + 8px)"><b>why the headline is set in mono</b>The product is a CLI. The headline is set in its own material — the terminal — at a light weight, so it reads calm, not loud.</span>
-  </span>
-  &nbsp; this page is <b>grounded</b> — 5 decisions annotate why it looks the way it does. hover any <b>dec_site_*</b>.
-</div>
 
 <footer>
   <div class="wrap foot">
     <div>
-      <a class="brand" href="/"><span class="dot" aria-hidden="true"></span>hunch</a>
+      <a class="brand" href="/"><span class="brand-mark" aria-hidden="true"></span>hunch</a>
       <p class="about">Git stores what the code is. Hunch stores why — a persistent, git-native reasoning graph for the age of AI engineering.</p>
     </div>
     <div>
       <h4>product</h4>
       <a href="#how">How it works</a>
-      <a href="#inside">Features</a>
-      <a href="#different">Why it's different</a>
-      <a href="changelog.html">Changelog</a>
+      <a href="#inside">Under the hood</a>
+      <a href="/blog/">Benchmark</a>
+      <a href="/changelog">Changelog</a>
     </div>
     <div>
       <h4>develop</h4>
       <a href="#start">Get started</a>
-      <a href="docs.html">Docs</a>
-      <a href="docs.html#mcp">MCP tools</a>
+      <a href="/docs">Docs</a>
+      <a href="/docs#mcp">MCP tools</a>
       <a href="https://open-vsx.org/extension/davesheffer/hunch-vscode">VS Code extension</a>
+      <a href="https://marketplace.visualstudio.com/items?itemName=davesheffer.hunch-vscode">Visual Studio Marketplace</a>
     </div>
     <div>
       <h4>connect</h4>
       <a href="https://github.com/davesheffer/hunch">GitHub ↗</a>
       <a href="https://www.npmjs.com/package/@davesheffer/hunch">npm ↗</a>
-      <a href="blog/">Blog</a>
+      <a href="/blog/">Blog</a>
     </div>
   </div>
 </footer>
 
 <script>
-  // hero art v2 — "the graph that holds the line", full-bleed.
+  // Hero art — "the graph that holds the line", full-bleed. The memory
+  // nucleus gives the constellation one legible focal point: decisions, bugs,
+  // and rules converge on the reason an agent needs before it edits.
   // Two depth layers of a memory graph behind the hero; agent edits streak in
   // continuously, guarded edges HOLD them (traveling pulse + shockwave ring +
   // typewriter receipt). The cursor is an agent too: edges near it illuminate,
@@ -667,6 +497,8 @@
     if (!cv || !cv.getContext) return;
     const ctx = cv.getContext("2d");
     const MOSS = [58, 107, 88], MOSSINK = [44, 82, 63], EMBER = [180, 84, 62], INK = [28, 32, 30];
+    const rtl = document.documentElement.dir === "rtl";
+    const canvasFont = document.documentElement.lang === "he" ? "'IBM Plex Sans Hebrew',sans-serif" : document.documentElement.lang === "ar" ? "'IBM Plex Sans Arabic',sans-serif" : "'IBM Plex Mono',monospace";
     const rgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
     let W = 0, H = 0, dpr = 1;
     function size() {
@@ -691,8 +523,9 @@
         for (let i = 0; i < L.n; i++) {
           // bias the constellation rightward; the CSS wash owns the text column
           const gx = Math.pow(rnd(), 0.72);
+          const graphX = 40 + gx * (W - 80);
           L.nodes.push({
-            x: 40 + gx * (W - 80), y: 30 + rnd() * (H - 60),
+            x: rtl ? W - graphX : graphX, y: 30 + rnd() * (H - 60),
             kind: i % 3 === 2 ? 1 : 0, r: (1.6 + rnd() * 2.2) * L.depth,
             px: rnd() * 6.28, py: rnd() * 6.28,
           });
@@ -750,6 +583,98 @@
       return [n.x + dx + mouse.ox * L.par, n.y + dy + mouse.oy * L.par];
     }
 
+    const memoryBeats = [
+      { label: "decision", angle: -2.55 },
+      { label: "bug", angle: -0.18 },
+      { label: "rule", angle: 1.72 },
+    ];
+    function drawMemoryNucleus(now) {
+      const compact = W < 620;
+      const x = W * (rtl ? (compact ? 0.30 : 0.25) : (compact ? 0.70 : 0.75));
+      const y = H * (compact ? 0.14 : 0.45);
+      const r = compact ? Math.min(68, W * 0.18) : Math.min(142, W * 0.11);
+      const coreR = compact ? 21 : 29;
+      const motion = reduce ? 0 : now;
+      const proximity = mouse.x > -9000 ? Math.max(0, 1 - Math.hypot(mouse.x - x, mouse.y - y) / (r * 1.8)) : 0;
+      const breathe = reduce ? 0.5 : 0.5 + 0.5 * Math.sin(motion / 1250);
+      const sweep = reduce ? -0.7 : motion / 2100;
+
+      ctx.save();
+      const halo = ctx.createRadialGradient(x, y, coreR * 0.4, x, y, r * 1.45);
+      halo.addColorStop(0, rgba(MOSS, 0.18 + proximity * 0.08));
+      halo.addColorStop(0.42, rgba(MOSS, 0.07));
+      halo.addColorStop(1, rgba(MOSS, 0));
+      ctx.fillStyle = halo;
+      ctx.beginPath(); ctx.arc(x, y, r * 1.45, 0, Math.PI * 2); ctx.fill();
+
+      // Incomplete history rings: persistent, layered, never a closed loop.
+      ctx.lineCap = "round";
+      for (let i = 0; i < 3; i++) {
+        ctx.strokeStyle = rgba(MOSS, 0.12 + i * 0.055 + proximity * 0.08);
+        ctx.lineWidth = i === 2 ? 1.4 : 0.8;
+        ctx.setLineDash(i === 1 ? [2, 8] : []);
+        ctx.lineDashOffset = -motion / 70;
+        ctx.beginPath();
+        ctx.arc(x, y, r * (0.58 + i * 0.23), sweep + i * 1.55, sweep + i * 1.55 + Math.PI * (1.12 + i * 0.12));
+        ctx.stroke();
+      }
+      ctx.setLineDash([]);
+
+      const cycle = reduce ? 2.55 : (motion / 1450) % memoryBeats.length;
+      const activeIndex = Math.floor(cycle);
+      const local = cycle - activeIndex;
+      const satellites = memoryBeats.map((beat, index) => {
+        const sx = x + Math.cos(beat.angle) * r;
+        const sy = y + Math.sin(beat.angle) * r;
+        const active = index === activeIndex;
+        ctx.strokeStyle = rgba(MOSS, active ? 0.46 : 0.2);
+        ctx.lineWidth = active ? 1.35 : 0.8;
+        ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(x, y); ctx.stroke();
+
+        if (active && local < 0.78) {
+          const k = local / 0.78;
+          const eased = k * k * (3 - 2 * k);
+          const px = sx + (x - sx) * eased, py = sy + (y - sy) * eased;
+          ctx.fillStyle = rgba(MOSS, 0.95);
+          ctx.shadowColor = rgba(MOSS, 0.75); ctx.shadowBlur = 12;
+          ctx.beginPath(); ctx.arc(px, py, compact ? 2.6 : 3.2, 0, Math.PI * 2); ctx.fill();
+          ctx.shadowBlur = 0;
+        }
+        return { ...beat, x: sx, y: sy, active };
+      });
+
+      for (const node of satellites) {
+        const nodeR = (compact ? 4 : 5) + (node.active ? breathe * 1.8 : 0);
+        ctx.fillStyle = rgba(MOSS, node.active ? 0.95 : 0.68);
+        ctx.shadowColor = rgba(MOSS, node.active ? 0.52 : 0.18); ctx.shadowBlur = node.active ? 12 : 5;
+        ctx.beginPath(); ctx.arc(node.x, node.y, nodeR, 0, Math.PI * 2); ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.font = `500 ${compact ? 9.5 : 11.5}px ${canvasFont}`;
+        ctx.textBaseline = "middle";
+        ctx.textAlign = node.x < x ? "right" : "left";
+        ctx.fillStyle = rgba(MOSSINK, node.active ? 0.92 : 0.62);
+        ctx.fillText(node.label, node.x + (node.x < x ? -9 : 9), node.y);
+      }
+
+      ctx.fillStyle = rgba(MOSS, 0.14 + breathe * 0.08 + proximity * 0.08);
+      ctx.beginPath(); ctx.arc(x, y, coreR + 9 + breathe * 3, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = rgba(MOSSINK, 0.98);
+      ctx.shadowColor = rgba(MOSS, 0.58 + proximity * 0.2); ctx.shadowBlur = 18 + proximity * 10;
+      ctx.beginPath(); ctx.arc(x, y, coreR, 0, Math.PI * 2); ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = rgba([247, 248, 247], 0.98);
+      ctx.font = `500 ${compact ? 10.5 : 13}px ${canvasFont}`;
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText("why", x, y + 0.5);
+
+      if (!compact) {
+        ctx.fillStyle = rgba(MOSSINK, 0.72 + proximity * 0.2);
+        ctx.font = `500 11.5px ${canvasFont}`;
+        ctx.fillText("reason recalled before edit", x, y + r + 34);
+      }
+      ctx.restore();
+    }
+
     function frame(now) {
       if (!running) return;
       t = now;
@@ -798,6 +723,8 @@
           }
         }
       }
+
+      drawMemoryNucleus(now);
 
       // agent streaks with glowing trails
       if (!reduce && now > nextStreak) { spawnStreak(now); nextStreak = now + 900 + Math.random() * 900; }
@@ -863,7 +790,7 @@
         if (dt > 260) {
           const shown = Math.min(ev.chip.length, Math.floor((dt - 260) / 34));
           const a = dt > 2700 ? Math.max(0, (3400 - dt) / 700) : 1;
-          ctx.font = "500 12.5px 'IBM Plex Mono',monospace";
+          ctx.font = `500 12.5px ${canvasFont}`;
           ctx.textAlign = ev.mx < W * 0.55 ? "left" : "right";
           ctx.fillStyle = rgba(ev.blocked ? EMBER : MOSSINK, a);
           ctx.fillText(ev.chip.slice(0, shown), ev.mx + (ev.mx < W * 0.55 ? 14 : -14), ev.my - 14);
@@ -900,30 +827,8 @@
 </script>
 
 <script>
-  // decision chips: click toggles (touch); hover handled by CSS. Keep the pop
-  // inside the viewport — a chip near the right edge would push it off-screen.
-  function clampPop(note) {
-    const pop = note.querySelector('.pop');
-    if (!pop) return;
-    pop.style.left = '0px';
-    const r = pop.getBoundingClientRect();
-    const over = r.right - (window.innerWidth - 16);
-    if (over > 0) pop.style.left = `${-over}px`;
-  }
-  document.querySelectorAll('.dnote').forEach(note => {
-    note.addEventListener('mouseenter', () => clampPop(note));
-  });
-  document.querySelectorAll('.dnote > button').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const open = btn.getAttribute('aria-expanded') === 'true';
-      document.querySelectorAll('.dnote > button[aria-expanded="true"]').forEach(b => b.setAttribute('aria-expanded', 'false'));
-      btn.setAttribute('aria-expanded', String(!open));
-      if (!open) clampPop(btn.closest('.dnote'));
-    });
-  });
-  document.addEventListener('click', e => {
-    if (!e.target.closest('.dnote')) document.querySelectorAll('.dnote > button[aria-expanded="true"]').forEach(b => b.setAttribute('aria-expanded', 'false'));
-  });
+  const languageSwitch = document.getElementById('language-switch');
+  languageSwitch?.addEventListener('change', event => { location.href = event.currentTarget.value; });
 
   // copy button
   document.querySelectorAll('.copybtn').forEach(btn => {
@@ -935,7 +840,6 @@
 </script>
 <script defer src="/_vercel/insights/script.js"></script>
 <script defer src="/_vercel/speed-insights/script.js"></script>
-<script src="upgrade.js"></script>
-<script src="/proof-curve.js"></script>
+<script src="/upgrade.js"></script>
 </body>
 </html>

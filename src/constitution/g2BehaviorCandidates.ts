@@ -1,14 +1,14 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { SyntaxNode } from "tree-sitter";
 import { shortHash } from "../core/ids.js";
+import { compareCodeUnits } from "../core/canonicalOrder.js";
 import type { Decision } from "../core/types.js";
 import { loadNativeTreeSitter } from "../extractors/nativeTreeSitter.js";
 import type { HunchStore } from "../store/hunchStore.js";
-import { commitMeta, revExists } from "../extractors/git.js";
 import { canonicalHash } from "./canonical.js";
 import {
   buildG2CandidateReview,
@@ -22,7 +22,13 @@ import {
   replayGitArgs,
   replaySafeEnvironment,
 } from "./replay.js";
-import { dependencySnapshotForCommit } from "./g2BehaviorDependencies.js";
+import { dependencySnapshotForCommit, materializeDependencySnapshot } from "./g2BehaviorDependencies.js";
+import { hasUnsafeCheckoutAttributes } from "./safeCheckout.js";
+import {
+  replacementFreeCommitFiles,
+  replacementFreeExactCommit,
+  replacementFreeGitEnvironment,
+} from "./replacementFreeGit.js";
 import {
   NODE_TEST_REPORTER_SOURCE,
   exactNodeTestPattern,
@@ -189,6 +195,7 @@ function fileAt(root: string, commit: string, file: string): string | null {
   try {
     return execFileSync("git", ["-C", root, "show", `${commit}:${file}`], {
       encoding: "utf8",
+      env: replacementFreeGitEnvironment(),
       maxBuffer: 10 * 1024 * 1024,
       stdio: ["ignore", "pipe", "ignore"],
     });
@@ -349,8 +356,9 @@ function literalNodeTestCases(file: string, source: string): LiteralNodeTestCase
 function addedLineNumbers(root: string, knownBad: string, knownGood: string, file: string): Set<number> {
   let diff: string;
   try {
-    diff = execFileSync("git", ["-C", root, "diff", "--unified=0", "--no-ext-diff", knownBad, knownGood, "--", file], {
+    diff = execFileSync("git", ["-C", root, "diff", "--unified=0", "--no-ext-diff", "--no-textconv", knownBad, knownGood, "--", file], {
       encoding: "utf8",
+      env: replacementFreeGitEnvironment(),
       maxBuffer: 10 * 1024 * 1024,
       stdio: ["ignore", "pipe", "ignore"],
     });
@@ -417,12 +425,26 @@ function currentHumanDecision(store: HunchStore, decisionId: string): Decision {
 
 function directDecisionCommit(store: HunchStore, root: string, decisionId: string): DirectDecisionCommit {
   const decision = currentHumanDecision(store, decisionId);
-  const meta = commitMeta(decision.commit!, root);
-  if (!meta) throw new Error(`G2 behavior decision ${decisionId} fixing commit is unavailable`);
+  const sha = replacementFreeExactCommit(root, decision.commit!);
+  if (!sha || !FULL_SHA.test(sha)) throw new Error(`G2 behavior decision ${decisionId} fixing commit is unavailable`);
+  let subject: string;
+  let date: string;
+  try {
+    const raw = execFileSync("git", ["-C", root, "show", "-s", "--format=%s%x00%aI", sha], {
+      encoding: "utf8",
+      env: replacementFreeGitEnvironment(),
+      maxBuffer: 10 * 1024 * 1024,
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trimEnd();
+    [subject = "", date = ""] = raw.split("\0");
+  } catch {
+    throw new Error(`G2 behavior decision ${decisionId} fixing commit metadata is unavailable`);
+  }
   let knownBad: string;
   try {
-    knownBad = execFileSync("git", ["-C", root, "rev-parse", `${meta.sha}^`], {
+    knownBad = execFileSync("git", ["-C", root, "rev-parse", `${sha}^`], {
       encoding: "utf8",
+      env: replacementFreeGitEnvironment(),
       stdio: ["ignore", "pipe", "ignore"],
     }).trim();
   } catch {
@@ -430,10 +452,10 @@ function directDecisionCommit(store: HunchStore, root: string, decisionId: strin
   }
   if (!FULL_SHA.test(knownBad)) throw new Error(`G2 behavior decision ${decisionId} first parent is invalid`);
   return {
-    commit: meta.sha,
-    subject: meta.subject,
-    date: meta.date,
-    changedFiles: new Set(meta.files),
+    commit: sha,
+    subject,
+    date,
+    changedFiles: new Set(replacementFreeCommitFiles(root, sha)),
     decisionId: decision.id,
     knownBad,
     groundingHash: canonicalHash(decision),
@@ -512,7 +534,7 @@ function directDecisionReview(
     ));
     if (resolution) candidate.human_review = resolution;
   }
-  candidates.sort((left, right) => left.test.file.localeCompare(right.test.file) || left.test.name.localeCompare(right.test.name));
+  candidates.sort((left, right) => compareCodeUnits(left.test.file, right.test.file) || compareCodeUnits(left.test.name, right.test.name));
   const items = candidates.slice(0, limit);
   const reviewCounts = candidates.some((candidate) => candidate.human_review !== undefined) ? {
     selected_candidates: candidates.filter((candidate) => candidate.human_review?.disposition === "selected").length,
@@ -583,9 +605,9 @@ export function buildG2BehaviorCandidateReview(
   const candidates: G2BehaviorCandidate[] = [];
   const failures: G2BehaviorCandidateReview["extraction_failures"] = [];
   const withoutTests: string[] = [];
-  for (const commit of [...commits.values()].sort((left, right) => left.commit.localeCompare(right.commit))) {
+  for (const commit of [...commits.values()].sort((left, right) => compareCodeUnits(left.commit, right.commit))) {
     let found = false;
-    for (const file of [...commit.changedFiles].filter(safeTestFile).sort()) {
+    for (const file of [...commit.changedFiles].filter(safeTestFile).sort(compareCodeUnits)) {
       const after = fileAt(root, commit.commit, file);
       if (after == null) {
         failures.push({ commit: commit.commit, file, error: "known-good test source unavailable" });
@@ -605,9 +627,9 @@ export function buildG2BehaviorCandidateReview(
           statement: name,
           test: { file, name, source_hash: sourceHash },
           runner: runnerFor(file, name),
-          decision_ids: [...commit.decisionIds].sort(),
-          source_candidate_ids: [...commit.sourceCandidateIds].sort(),
-          source_attestation_ids: [...commit.sourceAttestationIds].sort(),
+          decision_ids: [...commit.decisionIds].sort(compareCodeUnits),
+          source_candidate_ids: [...commit.sourceCandidateIds].sort(compareCodeUnits),
+          source_attestation_ids: [...commit.sourceAttestationIds].sort(compareCodeUnits),
           proposed_corpus: {
             known_bad: { ref: commit.knownBad, expected: "failed" },
             known_good: { ref: commit.commit, expected: "passed" },
@@ -629,10 +651,10 @@ export function buildG2BehaviorCandidateReview(
     ));
     if (resolution) candidate.human_review = resolution;
   }
-  candidates.sort((left, right) => right.commit_date.localeCompare(left.commit_date)
-    || left.commit.localeCompare(right.commit)
-    || left.test.file.localeCompare(right.test.file)
-    || left.test.name.localeCompare(right.test.name));
+  candidates.sort((left, right) => compareCodeUnits(right.commit_date, left.commit_date)
+    || compareCodeUnits(left.commit, right.commit)
+    || compareCodeUnits(left.test.file, right.test.file)
+    || compareCodeUnits(left.test.name, right.test.name));
   const items = candidates.slice(0, limit);
   const reviewCounts = candidates.some((candidate) => candidate.human_review !== undefined) ? {
     selected_candidates: candidates.filter((candidate) => candidate.human_review?.disposition === "selected").length,
@@ -648,8 +670,8 @@ export function buildG2BehaviorCandidateReview(
     candidate_commits: commits.size,
     behavior_candidates: candidates.length,
     ...reviewCounts,
-    commits_without_added_tests: withoutTests.sort(),
-    extraction_failures: failures.sort((left, right) => left.commit.localeCompare(right.commit) || left.file.localeCompare(right.file)),
+    commits_without_added_tests: withoutTests.sort(compareCodeUnits),
+    extraction_failures: failures.sort((left, right) => compareCodeUnits(left.commit, right.commit) || compareCodeUnits(left.file, right.file)),
     items,
     has_more: candidates.length > items.length,
     limitations: LIMITATIONS,
@@ -696,11 +718,15 @@ function runLeg(
   source: string,
   budgetMs: number,
 ): G2BehaviorReplayLeg {
-  if (!FULL_SHA.test(commit) || !revExists(commit, root)) return errorLeg(commit, expected, "commit-ref-unresolved");
+  if (!FULL_SHA.test(commit) || replacementFreeExactCommit(root, commit) !== commit) return errorLeg(commit, expected, "commit-ref-unresolved");
   const run = mkdtempSync(join(session, `${expected}-`));
   const checkout = join(run, "checkout");
   const dependencySnapshot = dependencySnapshotForCommit(root, commit);
   const dependencySnapshotId = dependencySnapshot?.snapshot.id;
+  if (hasUnsafeCheckoutAttributes(root, commit, env, { allowDisabledLfs: true })) {
+    rmSync(run, { recursive: true, force: true });
+    return errorLeg(commit, expected, "unsafe-checkout-attributes", dependencySnapshotId);
+  }
   let added = false;
   let leg: G2BehaviorReplayLeg;
   try {
@@ -711,7 +737,7 @@ function runLeg(
     });
     added = true;
     if (dependencySnapshot) {
-      symlinkSync(dependencySnapshot.nodeModules, join(checkout, "node_modules"), process.platform === "win32" ? "junction" : "dir");
+      materializeDependencySnapshot(dependencySnapshot, join(checkout, "node_modules"));
     }
     const testFile = join(checkout, candidate.test.file);
     mkdirSync(dirname(testFile), { recursive: true });
@@ -735,7 +761,7 @@ function runLeg(
     if (candidate.runner.kind === "node-test") {
       args = testArgs;
     } else {
-      const tsx = dependencySnapshot ? join(dependencySnapshot.nodeModules, "tsx", "dist", "cli.mjs") : "";
+      const tsx = dependencySnapshot ? join(checkout, "node_modules", "tsx", "dist", "cli.mjs") : "";
       args = existsSync(tsx) ? [tsx, ...testArgs] : null;
     }
     if (!args) {

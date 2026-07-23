@@ -1,6 +1,6 @@
 {
   "name": "@davesheffer/hunch",
-  "version": "1.8.5",
+  "version": "1.9.0",
   "license": "Apache-2.0",
   "author": "Dave Sheffer <dave.sheffer1@gmail.com>",
   "description": "Engineering memory and a deterministic Change Gate for AI-assisted codebases: decisions, rejected approaches, constraints, and bug lineage become portable context and opt-in enforcement for every MCP assistant.",
@@ -20,6 +20,7 @@
     "dist/**/*.js",
     "bench/constitution-exp03-v1.json",
     "tooling/competitive-watch.mjs",
+    "tooling/md1-benchmark.mjs",
     "LICENSE",
     "NOTICE"
   ],
@@ -53,11 +54,15 @@
     "build": "npm run clean && tsc -p tsconfig.json",
     "dev": "tsx src/cli/index.ts",
     "hunch": "tsx src/cli/index.ts",
-    "test": "tsx --test test/*.test.ts",
+    "test": "tsx --test --test-concurrency=2 test/*.test.ts",
+    "test:e2e:md1": "tsx --test test/md1-e2e.test.ts",
+    "test:e2e:team-matrix": "tsx --test test/team-matrix-e2e.test.ts",
+    "verify:matrix": "node tooling/matrix-release-verification.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "rehearse:constitution": "npm run build && node tooling/constitution-clean-rehearsal.mjs",
     "gate:release": "node tooling/release-gate.mjs",
     "site:proof": "npm run build && node tooling/generate-public-proof.mjs",
+    "bench:md1": "node tooling/md1-benchmark.mjs",
     "research:competitors": "node tooling/competitive-watch.mjs",
     "prepublishOnly": "npm run build"
   },

@@ -1,0 +1,42 @@
+{
+  "id": "dec_01a873308e",
+  "title": "fix(constitution): track checkout attribute baselines",
+  "topic": null,
+  "status": "accepted",
+  "context": "Touched 2 file(s) across src/constitution, test/static-graph-baseline.test.ts.",
+  "decision": "Changed code in src/constitution, test/static-graph-baseline.test.ts (2 file(s)).",
+  "consequences": [],
+  "alternatives_rejected": [],
+  "rejected_tripwires": [],
+  "related_components": [
+    "cmp_587d48fb03",
+    "cmp_a94a8fe5cc"
+  ],
+  "related_files": [
+    "src/constitution/staticGraphBaseline.ts",
+    "test/static-graph-baseline.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "adca253",
+  "valid_from": "2026-07-23T08:38:17+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "inferred",
+    "confidence": 0.3,
+    "evidence": [
+      "commit:adca253",
+      "synth:provider=deterministic",
+      "branch:codex/matrix-v1.9.0",
+      "src/constitution/staticGraphBaseline.ts",
+      "test/static-graph-baseline.test.ts"
+    ],
+    "last_verified": "2026-07-23T05:38:22.794Z"
+  },
+  "date": "2026-07-23T08:38:17+03:00"
+}

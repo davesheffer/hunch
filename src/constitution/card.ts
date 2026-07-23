@@ -20,6 +20,7 @@ export interface ProofCard {
     evidence: string[];
     candidate: PolicySpec["candidate"];
     exception_of: string | null;
+    activation_gate: PolicySpec["activation_gate"];
   };
   proof: { id: string; proof_class: ProofClass; plan_hash: string; generated_at: string };
   evidence_vector: {
@@ -72,8 +73,9 @@ export function buildProofCard(
   const baselineClean = proof.current.total === 1 && proof.current.satisfied === 1 && proof.current.unknown === 0 && proof.current.error === 0;
   const dispositionAssessment = assessHistoryDispositions(proof, dispositions);
   const evidenceError = blockingEvidenceError(proof, dispositions);
+  const activationError = policy.activation_gate?.status === "blocked" ? policy.activation_gate.reason : null;
   const proofStrongEnough = proofRank[proof.proof_class] >= proofRank.P3;
-  const eligible = semanticMatch && baselineClean && proofStrongEnough && !evidenceError;
+  const eligible = semanticMatch && baselineClean && proofStrongEnough && !evidenceError && !activationError;
   const canBlock = eligible && policy.state === "active_blocking" && policy.severity === "blocking" && policy.authority?.kind === "human";
   const unknownResults = proof.current.unknown + proof.known_bad.unknown + proof.known_good.unknown + proof.accepted_history.unknown + proof.mutations.unknown;
   const errorResults = proof.current.error + proof.known_bad.error + proof.known_good.error + proof.accepted_history.error + proof.mutations.error;
@@ -86,6 +88,7 @@ export function buildProofCard(
   if (unknownResults || errorResults) actions.push("Repair or explicitly resolve every unknown/error proof result.");
   if (proof.mutation_controls.failed) actions.push("Repair every failed required mutation control before considering blocking approval.");
   if (policy.candidate.conflicts.length) actions.push("Resolve every direct candidate conflict with a human disposition before lifecycle promotion.");
+  if (activationError) actions.push(`Activation is mechanically blocked: ${activationError}`);
   if (shadowPrecision?.recommendation === "eligible_for_p4_review") actions.push("Shadow thresholds are met; a human may review P4 evidence, but measurement grants no authority.");
   else if (shadowPrecision) actions.push("Continue bounded shadow review until every reported precision threshold is met.");
   if (eligible && !canBlock) actions.push("A human may review and explicitly activate blocking mode; the proof and any earlier advisory approval grant no blocking authority by themselves.");
@@ -104,6 +107,7 @@ export function buildProofCard(
       evidence: [...policy.evidence],
       candidate: policy.candidate,
       exception_of: policy.exception_of,
+      activation_gate: policy.activation_gate,
     },
     proof: { id: proof.id, proof_class: proof.proof_class, plan_hash: proof.plan_hash, generated_at: proof.generated_at },
     evidence_vector: {
@@ -135,7 +139,7 @@ export function buildProofCard(
       current: policy.authority,
       eligible_for_human_blocking_approval: eligible,
       can_block_now: canBlock,
-      blocking_evidence_error: evidenceError,
+      blocking_evidence_error: activationError ?? evidenceError,
     },
     actions,
   };
@@ -157,6 +161,7 @@ export function renderProofCard(card: ProofCard): string {
     `  candidate alternatives: ${card.policy.candidate.alternatives.length} · conflicts: ${card.policy.candidate.conflicts.length} · incumbent: ${card.policy.candidate.incumbent ?? "none"}`,
     `  scope suggestion: ${card.policy.candidate.scope_suggestion ? JSON.stringify(card.policy.candidate.scope_suggestion) : "none — narrow compiled scope retained"}`,
     `  exception parent: ${card.policy.exception_of ?? "none"}`,
+    ...(card.policy.activation_gate ? [`  activation gate: ${card.policy.activation_gate.status} — ${card.policy.activation_gate.reason}`] : []),
     `  ${line("current", card.evidence_vector.current)}`,
     `  ${line("known bad", card.evidence_vector.known_bad)}`,
     `  ${line("known good", card.evidence_vector.known_good)}`,

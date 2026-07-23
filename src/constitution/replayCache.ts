@@ -7,7 +7,7 @@ import { canonicalHash } from "./canonical.js";
 import { graphSnapshotFromRecords, type GraphSnapshot } from "./evaluator.js";
 import { DataClassSchema, POLICY_EVALUATOR, type DataClass } from "./schema.js";
 
-export const REPLAY_CACHE_ENGINE = { name: "hunch-tsjs-static-index", version: "3" } as const;
+export const REPLAY_CACHE_ENGINE = { name: "hunch-tsjs-static-index", version: "4" } as const;
 
 const ReplayGraphCacheSchema = z.object({
   version: z.literal(1),

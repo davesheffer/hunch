@@ -61,6 +61,7 @@ export interface PolicyLite {
   statement: string;
   proof: string | null;
   authority: unknown;
+  activation_gate?: { kind: string; status: string; reason: string } | null;
   /** the policy's most recent audit action, when the caller has it — lets the
    *  scan surface auto-repaired policies that need a fresh proof. */
   last_action?: string | null;
@@ -97,6 +98,17 @@ export function policyEscalations(policies: readonly PolicyLite[]): Escalation[]
         resolution: `hunch policy prove ${p.id} — then accept/reject; or hunch policy reject ${p.id} --reason "..."`,
       });
     } else if (p.state === "proposed") {
+      if (p.activation_gate?.status === "blocked") {
+        out.push({
+          kind: "policy-proposal",
+          topic: p.id,
+          decisionIds: [p.id],
+          question: `Proposed rule "${clip(p.statement)}" (${p.id}) is ready for review but mechanically blocked from activation — keep it as evidence?`,
+          detail: `state proposed · ${p.proof ? `proof ${p.proof}` : "no proof"} · authority none · activation gate ${p.activation_gate.kind}`,
+          resolution: `inspect: hunch policy card ${p.id} — activation remains unavailable until the source-currentness gate is implemented and cleared`,
+        });
+        continue;
+      }
       out.push({
         kind: "policy-proposal",
         topic: p.id,

@@ -2,10 +2,11 @@ import { execFileSync, spawnSync } from "node:child_process";
 import type { HunchStore } from "../store/hunchStore.js";
 import { headSha } from "../extractors/git.js";
 import { canonicalHash, canonicalJson } from "./canonical.js";
+import { replacementFreeGitEnvironment } from "./replacementFreeGit.js";
 import { shortHash } from "../core/ids.js";
 import { compileDecisionPolicy, type CompilePolicyOptions } from "./compiler.js";
-import { evaluatePolicy, policyBlocks, policyIsActive } from "./evaluator.js";
-import { approvePolicy, blockingProofError, demotePolicy, linkPolicyException, proposeProvedPolicy, retirePolicy, withdrawPolicy } from "./lifecycle.js";
+import { evaluatePolicy, policyBlocks, type GraphSnapshot } from "./evaluator.js";
+import { activationGateError, approvePolicy, blockingProofError, demotePolicy, linkPolicyException, proposeProvedPolicy, retirePolicy, withdrawPolicy } from "./lifecycle.js";
 import { provePolicy } from "./proof.js";
 import { PolicyRepository } from "./repository.js";
 import type { PolicyEvaluation, PolicyProof, PolicySpec, ProofCorpus } from "./schema.js";
@@ -126,6 +127,13 @@ import {
   type ExperimentStop,
 } from "./experiment.js";
 import { executeExp01Assignment } from "./experimentRunner.js";
+import {
+  materializeCorrectionPolicies,
+  materializeCorrectionPolicy,
+  type CorrectionPolicySweep,
+  type CorrectionPolicyUpgrade,
+  type CorrectionUpgradeOptions,
+} from "./correctionPolicyMaterializer.js";
 
 export interface PolicyEvaluationSet {
   policy: PolicySpec;
@@ -133,6 +141,29 @@ export interface PolicyEvaluationSet {
   blocks: boolean;
   strict_error: boolean;
   gate_error?: string;
+}
+
+/** Client-neutral evaluator receipt plus the fail-closed enforcement decision.
+ * The canonical evaluation hash remains untouched; adapters expose the wrapper
+ * so a persisted active-state configuration error can never disappear behind a
+ * valid-looking satisfied/violated receipt. */
+export type PolicyEvaluationEnvelope = PolicyEvaluation & {
+  enforcement: {
+    blocks: boolean;
+    strict_error: boolean;
+    gate_error: string | null;
+  };
+};
+
+export function policyEvaluationEnvelope(result: PolicyEvaluationSet): PolicyEvaluationEnvelope {
+  return {
+    ...result.evaluation,
+    enforcement: {
+      blocks: result.blocks,
+      strict_error: result.strict_error,
+      gate_error: result.gate_error ?? null,
+    },
+  };
 }
 
 export interface PolicyRelationSummary {
@@ -223,6 +254,7 @@ export function shadowCommitEligible(root: string, policy: PolicySpec, commit: s
   const sourceCommit = policy.assertion.test.source_commit;
   const check = spawnSync("git", ["-C", root, "merge-base", "--is-ancestor", sourceCommit, commit], {
     encoding: "utf8",
+    env: replacementFreeGitEnvironment(),
     stdio: ["ignore", "ignore", "pipe"],
   });
   if (check.status === 0) return true;
@@ -862,6 +894,7 @@ export class ConstitutionService {
     const manifest = this.g2Repository.currentPlan();
     const commits = manifest ? execFileSync("git", ["-C", this.root, "rev-list", "--first-parent", `--max-count=${maxCommits}`, "HEAD"], {
       encoding: "utf8",
+      env: replacementFreeGitEnvironment(),
       stdio: ["ignore", "pipe", "ignore"],
     }).trim().split("\n").filter((commit) => /^[a-f0-9]{40}$/.test(commit)) : [];
     const attempted = (manifest?.policy_ids.length ?? 0) * commits.length;
@@ -1163,6 +1196,14 @@ export class ConstitutionService {
     return ingestLocalEvidence(this.store, this.root, this.repository, opts);
   }
 
+  upgradeCorrection(id: string, opts: CorrectionUpgradeOptions = {}): CorrectionPolicyUpgrade {
+    return materializeCorrectionPolicy(this.store, this.root, this.repository, id, opts);
+  }
+
+  upgradeCorrections(opts: CorrectionUpgradeOptions = {}): CorrectionPolicySweep {
+    return materializeCorrectionPolicies(this.store, this.root, this.repository, opts);
+  }
+
   plan(id: string, opts: ProofPlanOptions = {}): ProofPlan {
     const policy = this.get(id, opts);
     const home = opts.publicOnly ? "public" : opts.privateOnly ? "private" : this.repository.homeOfPolicy(id);
@@ -1173,14 +1214,14 @@ export class ConstitutionService {
       ?? this.repository.putPlan(generated, policy.id, { private: home === "private", public: home === "public" });
   }
 
-  prove(id: string, opts: { now?: string } = {}): { policy: PolicySpec; proof: PolicyProof } {
+  prove(id: string, opts: { now?: string; repositoryName?: string } = {}): { policy: PolicySpec; proof: PolicyProof } {
     const policy = this.get(id);
     const behaviorBindingError = executableBehaviorAttestationError(policy, this.g2BehaviorAttestationRepository.current());
     if (behaviorBindingError) throw new Error(behaviorBindingError);
     const publicOnly = policy.data_class === "public" && this.repository.homeOfPolicy(id) === "public";
     const homeOpts = publicOnly ? { publicOnly: true } : { privateOnly: true };
     const composition = this.composition(policy, homeOpts);
-    const plan = this.plan(id, { publicOnly, now: opts.now });
+    const plan = this.plan(id, { publicOnly, now: opts.now, repositoryName: opts.repositoryName });
     const proof = provePolicy(this.store, this.root, policy, { publicOnly, now: opts.now, plan, composition });
     this.repository.putProof(proof, policy.id);
     const proposed = proposeProvedPolicy(policy, proof, opts.now ?? proof.generated_at, composition, this.g2BehaviorAttestationRepository.current());
@@ -1240,7 +1281,7 @@ export class ConstitutionService {
     return this.repository.putDisposition(disposition, policy.id);
   }
 
-  private compileShadowRecord(id: string, opts: { now?: string; latencyMs?: number; commit?: string } = {}): ShadowEvaluationRecord {
+  private compileShadowRecord(id: string, opts: { now?: string; latencyMs?: number; commit?: string; snapshot?: GraphSnapshot; behavior?: BehaviorEvaluationOptions } = {}): ShadowEvaluationRecord {
     const policy = this.get(id);
     if (!policy.proof) throw new Error(`policy ${id} has no proof`);
     const home = this.repository.homeOfPolicy(id);
@@ -1257,13 +1298,18 @@ export class ConstitutionService {
     } else if (opts.commit && opts.commit !== currentHead) {
       throw new Error(`historical shadow backfill supports executable-behavior policies only; ${policy.id} is ${policy.assertion.kind}`);
     } else {
-      evaluation = evaluatePolicy(this.store, this.root, policy, { publicOnly: home === "public", composition });
+      evaluation = evaluatePolicy(this.store, this.root, policy, {
+        publicOnly: home === "public",
+        composition,
+        snapshot: opts.snapshot,
+        behavior: opts.behavior,
+      });
     }
     const latencyMs = opts.latencyMs ?? performance.now() - started;
     const sameMatches = canonicalJson(evaluation.matches);
     const alsoDetectedBy = evaluation.result === "violated"
       && (!opts.commit || opts.commit === currentHead)
-      ? this.evaluate({ activeOnly: true, publicOnly: home === "public" })
+      ? this.evaluate({ activeOnly: true, publicOnly: home === "public", snapshot: opts.snapshot, behavior: opts.behavior })
         .filter((candidate) => candidate.policy.id !== id
           && candidate.evaluation.result === "violated"
           && canonicalJson(candidate.evaluation.matches) === sameMatches)
@@ -1273,7 +1319,7 @@ export class ConstitutionService {
     return record;
   }
 
-  recordShadow(id: string, opts: { now?: string; latencyMs?: number; commit?: string } = {}): ShadowEvaluationRecord {
+  recordShadow(id: string, opts: { now?: string; latencyMs?: number; commit?: string; snapshot?: GraphSnapshot; behavior?: BehaviorEvaluationOptions } = {}): ShadowEvaluationRecord {
     const record = this.compileShadowRecord(id, opts);
     return this.repository.putShadowEvaluation(record, record.policy_id);
   }
@@ -1306,7 +1352,13 @@ export class ConstitutionService {
     const audit = this.repository.listShadowDispositions(opts).filter((record) => record.policy_id === id);
     const current = currentShadowDispositions(audit);
     const history = this.repository.listDispositions(opts).filter((record) => record.policy_id === id && record.proof_id === proof.id);
-    const scoringRecords = records.filter((record) => shadowCommitEligible(this.root, policy, record.evaluation.repository.head));
+    const scoringRecords = records.filter((record) => shadowCommitEligible(
+      this.root,
+      policy,
+      // Workspace receipts retain their content-addressed pseudo-head for
+      // dedupe, but ancestry eligibility is anchored to the real base commit.
+      record.evaluation.repository.base ?? record.evaluation.repository.head,
+    ));
     const report = scoreShadowPrecision(policy, proof, scoringRecords, audit, history, thresholds);
     return {
       ...report,
@@ -1436,12 +1488,23 @@ export class ConstitutionService {
     };
   }
 
-  evaluate(opts: { id?: string; activeOnly?: boolean; publicOnly?: boolean; behavior?: BehaviorEvaluationOptions } = {}): PolicyEvaluationSet[] {
+  evaluate(opts: { id?: string; activeOnly?: boolean; publicOnly?: boolean; behavior?: BehaviorEvaluationOptions; snapshot?: GraphSnapshot } = {}): PolicyEvaluationSet[] {
     let policies = opts.id ? [this.get(opts.id, opts)] : this.list(opts);
-    if (opts.activeOnly) policies = policies.filter(policyIsActive);
+    // Select the persisted active lifecycle states, including invalid/tampered
+    // ones. The evaluator below must surface their gate/proof error so strict CI
+    // fails visibly; filtering through policyIsActive would silently erase the
+    // exact fail-closed configuration errors this seam is responsible for.
+    if (opts.activeOnly) {
+      policies = policies.filter((policy) => policy.state === "active_advisory" || policy.state === "active_blocking");
+    }
     return policies.map((policy) => {
       const composition = this.composition(policy, opts);
-      const evaluation = evaluatePolicy(this.store, this.root, policy, { publicOnly: opts.publicOnly, composition, behavior: opts.behavior });
+      const evaluation = evaluatePolicy(this.store, this.root, policy, {
+        publicOnly: opts.publicOnly,
+        composition,
+        behavior: opts.behavior,
+        snapshot: opts.snapshot,
+      });
       let proof: PolicyProof | undefined;
       let dispositions: HistoryDisposition[] = [];
       if (policy.state === "active_blocking" && policy.proof) {
@@ -1451,7 +1514,12 @@ export class ConstitutionService {
         dispositions = this.repository.listDispositions(homeOpts).filter((record) => record.policy_id === policy.id && record.proof_id === policy.proof);
       }
       const behaviorBindingError = executableBehaviorAttestationError(policy, this.g2BehaviorAttestationRepository.current());
-      const gateError = behaviorBindingError ?? blockingProofError(policy, proof, dispositions, composition, this.g2BehaviorAttestationRepository.current());
+      const activeActivationError = policy.state === "active_advisory" || policy.state === "active_blocking"
+        ? activationGateError(policy)
+        : null;
+      const gateError = behaviorBindingError
+        ?? activeActivationError
+        ?? blockingProofError(policy, proof, dispositions, composition, this.g2BehaviorAttestationRepository.current());
       return {
         policy,
         evaluation,

@@ -4,20 +4,26 @@
  * resolve a best-effort call graph + import dependency graph, derive components
  * from the directory layout, and compute churn / fan-in / fan-out metrics.
  *
- * Writes Symbol/Edge/Component records to the JSON source of truth. The caller
+ * `scanRepo` derives Symbol/Edge/Component records without mutating the store.
+ * `indexRepo` persists that exact scan into the JSON source of truth; its caller
  * then runs HunchStore.reindex() to refresh the SQLite index.
  */
-import { readFileSync, statSync, readdirSync } from "node:fs";
-import { join, relative, dirname, posix } from "node:path";
+import { dirname, posix } from "node:path";
 import type { HunchStore } from "../store/hunchStore.js";
 import { parseSource, attributeCalls } from "./parse.js";
 import { symbolId, componentId, edgeId, sha1 } from "../core/ids.js";
 import { externalImportNodeId, externalPackage } from "../core/externalImports.js";
 import { resolveRelativeImport } from "../core/relativeImports.js";
 import { extracted, inferred, type Symbol, type Edge, type Component } from "../core/types.js";
-import { isGitRepo, trackedFiles, fileGitMetrics } from "./git.js";
-import { CODE_EXTENSIONS, languageFor } from "./languages.js";
-const SKIP_DIRS = new Set(["node_modules", ".git", "dist", "build", ".hunch", "coverage", ".next", "out"]);
+import { isGitRepo, fileGitMetrics, revExists } from "./git.js";
+import { languageFor } from "./languages.js";
+import {
+  assertCleanIndexedCode,
+  repoSourceInventory,
+  type RepoScanSource,
+  type RepoScanSourceIdentity,
+  type RepoSourceIssue,
+} from "./repoSource.js";
 
 export interface IndexResult {
   files: number;
@@ -28,9 +34,66 @@ export interface IndexResult {
   skipped: number;
 }
 
-export function indexRepo(store: HunchStore, root: string, opts: { churn?: boolean } = {}): IndexResult {
-  const files = listCodeFiles(root);
+export interface RepoScan {
+  result: IndexResult;
+  symbols: Symbol[];
+  edges: Edge[];
+  components: Component[];
+  source: RepoScanSourceIdentity & { content_hash: string };
+  issues: RepoSourceIssue[];
+}
+
+export interface ScanRepoOptions {
+  churn?: boolean;
+  source?: RepoScanSource;
+}
+
+export interface IndexRepoOptions {
+  churn?: boolean;
+  /** Explicit immutable source for setup paths that must never persist checkout
+   * bytes. Normal durable refreshes should use requireClean instead. */
+  source?: RepoScanSource;
+  /** Production publication paths set this to prove graph bytes came only from
+   * committed code. Library fixtures and disposable replay checkouts opt in. */
+  requireClean?: boolean;
+  /** Authoritative replay/proof paths cannot represent a partial graph. Reject
+   * every read, path, mode, or parse issue before writing derived JSON. */
+  requireComplete?: boolean;
+}
+
+/** Read-only policy evaluators must never turn an omitted source file into a
+ * false satisfied receipt. Call this after scanRepo when the consumer cannot
+ * represent partial-graph uncertainty directly. */
+export function assertCompleteRepoScan(scan: RepoScan): void {
+  if (!scan.issues.length) return;
+  const sample = scan.issues.slice(0, 5)
+    .map((issue) => `${issue.path} [${issue.code}]`)
+    .join(", ");
+  const more = scan.issues.length > 5 ? ` (+${scan.issues.length - 5} more)` : "";
+  throw new Error(`incomplete semantic source scan rejected ${scan.issues.length} file(s): ${sample}${more}`);
+}
+
+/** Derive the current repository graph without writing JSON or rebuilding SQLite.
+ * Read-only gates use this so checking changed code can never rewrite or publish
+ * the durable graph merely by inspecting it. Existing public graph records remain
+ * inputs for the same churn/component enrichment semantics as a persisted index. */
+export function scanRepo(store: HunchStore, root: string, opts: ScanRepoOptions = {}): RepoScan {
+  const inventory = repoSourceInventory(root, opts.source);
+  const files = inventory.entries;
   const useGit = isGitRepo(root);
+
+  // Fast scans intentionally skip the expensive 90-day history walk. Zero is
+  // not a fresh measurement, though: overwriting a previously measured value
+  // makes full and fast scans ping-pong symbols/index.json and can create an
+  // endless stream of memory-only commits. Churn is file-level, so retain the
+  // latest durable value for every still-indexed file; genuinely new files use
+  // the conservative zero default until the next full scan.
+  const preservedChurn = new Map<string, number>();
+  if (opts.churn === false) {
+    for (const symbol of store.json.loadAll("symbols")) {
+      preservedChurn.set(symbol.file, Math.max(preservedChurn.get(symbol.file) ?? 0, symbol.metrics.churn_90d));
+    }
+  }
 
   // ---- pass 1: parse files -> symbols, remember per-file calls & imports ----
   const symbols: Symbol[] = [];
@@ -41,34 +104,50 @@ export function indexRepo(store: HunchStore, root: string, opts: { churn?: boole
   const perFileImports: Array<{ file: string; imports: string[] }> = [];
   // Batched per-file git metrics (churn + last commit) in TWO `git log` spawns
   // total, instead of two per file — the dominant cost of indexing a large repo.
-  const rels = files.map((abs) => toPosix(relative(root, abs)));
+  const rels = files.map((file) => file.path);
   const gitMeta = useGit ? fileGitMetrics(root, rels, opts.churn === false ? 0 : 90) : null;
   let skipped = 0;
+  const issues: RepoSourceIssue[] = [];
+  const sourceFingerprint: Array<{ path: string; mode: string; content: string }> = [];
 
-  for (const abs of files) {
-    const rel = toPosix(relative(root, abs));
-    let src: string;
-    try {
-      src = readFileSync(abs, "utf8");
-    } catch {
-      skipped++;
+  for (const file of files) {
+    const rel = file.path;
+    const read = file.read();
+    if (read.absent) {
+      sourceFingerprint.push({ path: rel, mode: read.mode, content: "absent" });
       continue;
     }
+    if (read.source === null) {
+      skipped++;
+      const issue = read.issue ?? { path: rel, code: "read_failed" as const, detail: `${rel} could not be read` };
+      issues.push(issue);
+      sourceFingerprint.push({ path: rel, mode: read.mode, content: read.contentHash ?? `skipped:${issue.code}` });
+      continue;
+    }
+    const src = read.source;
+    sourceFingerprint.push({ path: rel, mode: read.mode, content: read.contentHash! });
     // one bad/oversized file must never abort the whole index run
     let parsed;
     try {
       parsed = parseSource(rel, src);
     } catch {
       skipped++;
+      issues.push({ path: rel, code: "parse_failed", detail: `${rel} could not be parsed` });
       continue;
     }
     if (!parsed) {
       skipped++;
+      issues.push({ path: rel, code: "parse_failed", detail: `${rel} has no supported parser` });
+      continue;
+    }
+    if (!parsed.parseable) {
+      skipped++;
+      issues.push({ path: rel, code: "parse_failed", detail: `${rel} contains syntax errors and cannot prove a complete semantic graph` });
       continue;
     }
 
     const m = gitMeta?.get(rel);
-    const churn = m?.churn ?? 0;
+    const churn = opts.churn === false ? (preservedChurn.get(rel) ?? 0) : (m?.churn ?? 0);
     const last = m?.lastCommit ?? "";
 
     const idsInFile: string[] = [];
@@ -200,9 +279,6 @@ export function indexRepo(store: HunchStore, root: string, opts: { churn?: boole
     }
   }
 
-  // persist
-  store.json.replaceAll("symbols", symbols);
-  store.json.replaceAll("edges", edges);
   // Components are derived-but-ENRICHED records: layout facts (paths, kind, name)
   // come from this scan, while curation/synthesis (responsibility, owners, status,
   // fragility from raiseFragility, upgraded provenance) lives only on the stored
@@ -225,35 +301,34 @@ export function indexRepo(store: HunchStore, root: string, opts: { churn?: boole
     };
     return stamp(merged) === stamp(prev) ? prev : { ...merged, updated_at: draft.updated_at };
   });
-  store.json.replaceAll("components", compsOut);
+  return {
+    result: { files: files.length, symbols: symbols.length, edges: edges.length, components: compsOut.length, skipped },
+    symbols,
+    edges,
+    components: compsOut,
+    source: { ...inventory.identity, content_hash: sha1(JSON.stringify(sourceFingerprint)) },
+    issues,
+  };
+}
 
-  return { files: files.length, symbols: symbols.length, edges: edges.length, components: compsOut.length, skipped };
+/** Persist one pure scan into the Git-native source of truth. */
+export function indexRepo(store: HunchStore, root: string, opts: IndexRepoOptions = {}): IndexResult {
+  if (opts.requireClean) assertCleanIndexedCode(root);
+  // A clean preflight followed by a filesystem read still has a TOCTOU seam.
+  // Durable Git-backed publication therefore derives from immutable HEAD blobs;
+  // unborn and non-Git repositories retain the historical safe-filesystem path.
+  const source = opts.requireClean && isGitRepo(root) && revExists("HEAD", root)
+    ? { kind: "commit" as const, ref: "HEAD" }
+    : opts.source;
+  const scan = scanRepo(store, root, { churn: opts.churn, source });
+  if (opts.requireComplete) assertCompleteRepoScan(scan);
+  store.json.replaceAll("symbols", scan.symbols);
+  store.json.replaceAll("edges", scan.edges);
+  store.json.replaceAll("components", scan.components);
+  return scan.result;
 }
 
 // ---- helpers --------------------------------------------------------------
-
-function listCodeFiles(root: string): string[] {
-  if (isGitRepo(root)) {
-    // Apply SKIP_DIRS to the git-tracked list too: a repo that (accidentally)
-    // tracks node_modules/ or dist/ must not flood the graph with vendored symbols.
-    const tracked = trackedFiles(root, CODE_EXTENSIONS)
-      .filter((f) => !f.split(/[\\/]/).some((seg) => SKIP_DIRS.has(seg)))
-      .map((f) => join(root, f));
-    if (tracked.length > 0) return tracked; // else fall through (nothing committed yet)
-  }
-  const out: string[] = [];
-  const walk = (dir: string) => {
-    for (const name of readdirSync(dir)) {
-      if (SKIP_DIRS.has(name)) continue;
-      const abs = join(dir, name);
-      const st = statSync(abs);
-      if (st.isDirectory()) walk(abs);
-      else if (languageFor(name) !== null) out.push(abs);
-    }
-  };
-  walk(root);
-  return out;
-}
 
 /** Resolve a callee name to a symbol id: prefer same-file, otherwise require a
  * unique symbol in a statically imported local file. A unique repository-wide

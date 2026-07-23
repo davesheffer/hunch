@@ -13,12 +13,20 @@ permissions:
 jobs:
   ci:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [22, 24]
     steps:
-      - uses: actions/checkout@v5
-
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
-          node-version: 22
+          # The Matrix release verifier resolves and rebuilds the pinned
+          # compatibility tag; a shallow PR checkout cannot prove that bound.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: ${{ matrix.node-version }}
           cache: npm
 
       # npm ci installs the EXACT, integrity-hashed lockfile tree (no drift,
@@ -35,18 +43,52 @@ jobs:
 
       - name: Upload release-gate receipt
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: constitution-release-gate-${{ github.sha }}
+          name: constitution-release-gate-node-${{ matrix.node-version }}-${{ github.sha }}
           path: release-gate.json
           if-no-files-found: error
 
-  windows-native-lock:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v5
+      # Exercise the exact lifecycle and package manifest npm will use before a
+      # version tag can be cut. The release workflow repeats the fail-closed
+      # release gate on the tag; this pre-tag Node 24 leg catches packaging-only
+      # regressions while the change is still a PR/main commit.
+      - name: Build Node 24 npm package candidate
+        if: matrix.node-version == 24
+        id: package-candidate
+        run: |
+          npm run prepublishOnly
+          npm pack --dry-run --json > npm-package-manifest.json
+          node -e 'const fs=require("node:fs"); const value=JSON.parse(fs.readFileSync("npm-package-manifest.json","utf8")); if (!Array.isArray(value) || value.length !== 1 || !Array.isArray(value[0].files)) throw new Error("npm package manifest is malformed");'
 
-      - uses: actions/setup-node@v5
+      - name: Write Node 24 package-candidate receipt
+        if: ${{ always() && matrix.node-version == 24 }}
+        env:
+          CANDIDATE_OUTCOME: ${{ steps.package-candidate.outcome }}
+        run: node -e 'const fs=require("node:fs"),crypto=require("node:crypto"); const manifest=fs.existsSync("npm-package-manifest.json")?fs.readFileSync("npm-package-manifest.json"):null; const body={schema:"hunch.npm-package-candidate.v1",commit:process.env.GITHUB_SHA,node:process.version,outcome:process.env.CANDIDATE_OUTCOME,manifest_sha256:manifest?"sha256:"+crypto.createHash("sha256").update(manifest).digest("hex"):null}; const content_hash="sha256:"+crypto.createHash("sha256").update(JSON.stringify(body)).digest("hex"); fs.writeFileSync("npm-package-candidate-receipt.json",JSON.stringify({...body,content_hash},null,2)+"\n");'
+
+      - name: Upload Node 24 package-candidate receipt
+        if: ${{ always() && matrix.node-version == 24 }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: npm-package-candidate-node-24-${{ github.sha }}
+          path: |
+            npm-package-candidate-receipt.json
+            npm-package-manifest.json
+          if-no-files-found: error
+
+  platform-matrix-safety:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: 22
           cache: npm
@@ -54,7 +96,24 @@ jobs:
       - name: Install (locked)
         run: npm ci
 
-      # Reproduce the original EBUSY class: a live parser process must not hold
-      # either installed tree-sitter addon, so both package files remain movable.
-      - name: Native bindings remain replaceable during a live parser session
-        run: npx --no-install tsx --test test/parse.test.ts
+      # Exercise the platform-specific native lock regression plus the real
+      # multi-clone Matrix and atomic persistence paths on Windows. The complete
+      # release gate runs on both supported Node lines above.
+      - name: Native bindings, atomic writes, and the team Matrix stay safe
+        id: matrix-safety
+        run: npx --no-install tsx --test --test-concurrency=1 test/parse.test.ts test/io.test.ts test/migrate.test.ts test/matrix-release-verification.test.ts test/team-matrix-e2e.test.ts
+
+      - name: Write platform Matrix safety receipt
+        if: always()
+        env:
+          MATRIX_SAFETY_OUTCOME: ${{ steps.matrix-safety.outcome }}
+          MATRIX_RUNNER_OS: ${{ runner.os }}
+        run: node -e 'const fs=require("node:fs"),crypto=require("node:crypto"); const body={schema:"hunch.platform-matrix-safety.v1",commit:process.env.GITHUB_SHA,node:process.version,runner_os:process.env.MATRIX_RUNNER_OS,outcome:process.env.MATRIX_SAFETY_OUTCOME,tests:["test/parse.test.ts","test/io.test.ts","test/migrate.test.ts","test/matrix-release-verification.test.ts","test/team-matrix-e2e.test.ts"]}; const content_hash="sha256:"+crypto.createHash("sha256").update(JSON.stringify(body)).digest("hex"); fs.writeFileSync("platform-matrix-safety.json",JSON.stringify({...body,content_hash},null,2)+"\n");'
+
+      - name: Upload platform Matrix safety receipt
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: platform-matrix-safety-${{ matrix.os }}-${{ github.sha }}
+          path: platform-matrix-safety.json
+          if-no-files-found: error

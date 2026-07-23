@@ -66,7 +66,7 @@ export async function syncCommit(
   store: HunchStore,
   root: string,
   sha?: string,
-  opts: { force?: boolean; private?: boolean; localOnly?: boolean; deep?: boolean; verify?: boolean; samples?: number } = {},
+  opts: { force?: boolean; private?: boolean; home?: "public" | "private"; localOnly?: boolean; deep?: boolean; verify?: boolean; samples?: number } = {},
 ): Promise<SyncResult> {
   const target = sha || headSha(root);
   if (!target) return { status: "skipped", reason: "no HEAD commit" };
@@ -83,7 +83,7 @@ export async function syncCommit(
   // Check the store this capture WILL write to. Looking only in the public store
   // made private/shared re-syncs re-draft the same commit and let `--force`
   // overwrite a human-confirmed overlay decision.
-  const home = store.captureHome(!!opts.private);
+  const home = opts.home ?? store.captureHome(!!opts.private);
   const existing = home === "private" ? store.getPrivateRec("decisions", id) : store.json.get("decisions", id);
   // Never clobber a human-confirmed decision with a low-confidence auto-draft —
   // even under --force. Skip BEFORE synthesizing so we never pay for a draft we'd
@@ -227,7 +227,8 @@ export async function syncCommit(
   };
   // Route to the record's ONE home: the overlay when asked (--private) or in unified
   // ("shared") mode; else the public store. Same contract as every other capture path.
-  store.putCapture("decisions", decision, opts.private);
+  if (home === "private") store.putPrivate("decisions", decision);
+  else store.json.put("decisions", decision);
   return { status: "written", decision, provider: provider.name };
 }
 
@@ -236,6 +237,17 @@ export interface FailureResult {
   bug: Bug;
   constraint?: Constraint;
   provider: string;
+  touchedHomes: Array<"public" | "private">;
+}
+
+type SynthesisHome = "public" | "private";
+
+function putBugInHome(store: HunchStore, bug: Bug, home: SynthesisHome): Bug {
+  return home === "private" ? store.putPrivate("bugs", bug) : store.json.put("bugs", bug);
+}
+
+function putConstraintInHome(store: HunchStore, constraint: Constraint, home: SynthesisHome): Constraint {
+  return home === "private" ? store.putPrivate("constraints", constraint) : store.json.put("constraints", constraint);
 }
 
 /** Capture a Bug from a test failure. Suspects are ranked churn×recency×fan-in. */
@@ -297,19 +309,19 @@ export async function recordFailure(
       evidence: [`test:${failure.test}`, ...affectedFiles.slice(0, 6)],
     },
   };
-  store.putCapture("bugs", bug, opts.private);
+  putBugInHome(store, bug, home);
 
   // Promotion (DESIGN §4): a recurrence or a SUBSTANTIATED high-severity bug raises
   // a regression Constraint to stop it coming back, and bumps fragility.
   let constraint: Constraint | undefined;
   if (shouldPromoteConstraint(draft.severity, bug.root_cause, !!prior)) {
-    constraint = promoteConstraint(store, bug, opts.private);
+    constraint = promoteConstraint(store, bug, home);
     bug.lineage.spawned_constraint = constraint.id;
-    store.putWhereItLives("bugs", bug); // re-persist with the link, in the same home
+    putBugInHome(store, bug, home);
   }
-  raiseFragility(store, affectedFiles);
+  raiseFragility(store, affectedFiles, home);
 
-  return { status: "written", bug, constraint, provider: provider.name };
+  return { status: "written", bug, constraint, provider: provider.name, touchedHomes: [home] };
 }
 
 export interface CapturedFailure {
@@ -322,6 +334,7 @@ export interface TestRunCapture {
   fixed: Bug[];
   /** True when the output wasn't recognized TAP/spec and we captured one coarse bug. */
   fallback: boolean;
+  touchedHomes: Array<"public" | "private">;
 }
 
 /** Orchestrate one `hunch test` run into graph writes: capture each failing test
@@ -346,24 +359,28 @@ export async function captureTestRun(
   }
 
   const results: CapturedFailure[] = [];
+  const touchedHomes = new Set<SynthesisHome>();
   for (const f of failures) {
     const r = await recordFailure(store, root, f, { private: input.private });
+    r.touchedHomes.forEach((home) => touchedHomes.add(home));
     results.push({ bug: r.bug, constraint: r.constraint });
   }
 
   let sha: string | null = null;
   try { sha = headSha(root); } catch { /* not a git repo / no HEAD — leave null */ }
   const fixed: Bug[] = [];
+  const home = store.captureHome(!!input.private);
   for (const name of report.passed) {
-    const b = store.getRec("bugs", bugId(name)); // a unified-mode bug lives in the overlay
+    const b = home === "private" ? store.getPrivateRec("bugs", bugId(name)) : store.json.get("bugs", bugId(name));
     if (b && b.status === "open") {
       const resolved: Bug = { ...b, status: "fixed", lineage: { ...b.lineage, fixed_commit: sha } };
-      store.putWhereItLives("bugs", resolved);
+      putBugInHome(store, resolved, home);
+      touchedHomes.add(home);
       fixed.push(resolved);
     }
   }
 
-  return { results, fixed, fallback };
+  return { results, fixed, fallback, touchedHomes: [...touchedHomes] };
 }
 
 /** Whether a bug should auto-promote a regression Constraint (a do-not-break
@@ -378,7 +395,7 @@ export function shouldPromoteConstraint(severity: Bug["severity"], rootCause: st
 }
 
 /** Turn a bug into an advisory regression constraint scoped to its files. */
-function promoteConstraint(store: HunchStore, bug: Bug, isPrivate = false): Constraint {
+function promoteConstraint(store: HunchStore, bug: Bug, home: SynthesisHome): Constraint {
   const scope = bug.affected_files.length ? bug.affected_files : ["**"];
   const statement = `Regression guard: "${bug.title}" must not recur.`;
   const con: Constraint = {
@@ -398,16 +415,39 @@ function promoteConstraint(store: HunchStore, bug: Bug, isPrivate = false): Cons
     valid_to: null,
     provenance: { source: "derived", confidence: Math.min(0.9, bug.provenance.confidence + 0.2), evidence: [`bug:${bug.id}`] },
   };
-  return store.putCapture("constraints", con, isPrivate);
+  return putConstraintInHome(store, con, home);
 }
 
 /** Bump fragility on components owning the affected files. */
-function raiseFragility(store: HunchStore, files: string[]): void {
-  const comps = store.json.loadAll("components");
-  for (const c of comps) {
-    if (files.some((f) => c.paths.some((g) => pathMatchesGlob(f, g)))) {
-      const next = Math.min(1, Math.round((c.fragility + 0.1) * 100) / 100);
-      if (next !== c.fragility) store.json.put("components", { ...c, fragility: next, updated_at: new Date().toISOString() });
+function raiseFragility(store: HunchStore, files: string[], home: SynthesisHome): void {
+  const target = new Map(store.recsInHome("components", home).map((component) => [component.id, component] as const));
+  // Components are normally a public derived graph. A private/team failure must
+  // not mutate that public record, but it must still teach the private spine.
+  // Seed an overlay shadow from the latest public component on first failure;
+  // subsequent failures preserve its private curation while refreshing derived
+  // identity/path fields from public code.
+  const components = home === "private"
+    ? [...store.recsInHome("components", "public"), ...[...target.values()].filter((component) => !store.json.get("components", component.id))]
+    : [...target.values()];
+  for (const base of components) {
+    const prior = target.get(base.id);
+    const paths = base.paths;
+    if (files.some((f) => paths.some((g) => pathMatchesGlob(f, g)))) {
+      const current = Math.max(base.fragility, prior?.fragility ?? 0);
+      const next = Math.min(1, Math.round((current + 0.1) * 100) / 100);
+      if (!prior || next !== prior.fragility) {
+        const updated = {
+          ...base,
+          ...(prior ?? {}),
+          kind: base.kind,
+          name: base.name,
+          paths,
+          fragility: next,
+          updated_at: new Date().toISOString(),
+        };
+        if (home === "private") store.putPrivate("components", updated);
+        else store.json.put("components", updated);
+      }
     }
   }
 }

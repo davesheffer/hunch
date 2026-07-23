@@ -1,0 +1,44 @@
+{
+  "id": "dec_3870ea4204",
+  "title": "fix(constitution): allow merge-only replay attributes",
+  "topic": null,
+  "status": "accepted",
+  "context": "What changed: added git, committedRepo; new dep(s): node:assert/strict, node:child_process, node:fs, node:os, node:path, node:test; 1 new file(s).",
+  "decision": "Changed src/constitution, test/safe-checkout.test.ts: added git, committedRepo; new dep(s): node:assert/strict, node:child_process, node:fs, node:os, node:path, node:test; 1 new file(s).",
+  "consequences": [
+    "Adds dependency: node:assert/strict, node:child_process, node:fs, node:os, node:path, node:test."
+  ],
+  "alternatives_rejected": [],
+  "rejected_tripwires": [],
+  "related_components": [
+    "cmp_587d48fb03",
+    "cmp_a94a8fe5cc"
+  ],
+  "related_files": [
+    "src/constitution/safeCheckout.ts",
+    "test/safe-checkout.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "3f669ed",
+  "valid_from": "2026-07-23T08:41:01+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "inferred",
+    "confidence": 0.45,
+    "evidence": [
+      "commit:3f669ed",
+      "synth:provider=deterministic",
+      "branch:codex/matrix-v1.9.0",
+      "src/constitution/safeCheckout.ts",
+      "test/safe-checkout.test.ts"
+    ],
+    "last_verified": "2026-07-23T05:41:06.461Z"
+  },
+  "date": "2026-07-23T08:41:01+03:00"
+}

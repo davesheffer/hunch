@@ -1,9 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { HunchStore } from "../src/store/hunchStore.js";
 import { hunchPaths } from "../src/core/paths.js";
 import { indexRepo } from "../src/extractors/indexer.js";
@@ -14,7 +14,7 @@ import { canonicalHash, canonicalJson, policySemanticHash } from "../src/constit
 import { policyProofHash } from "../src/constitution/composition.js";
 import { approvePolicy, blockingEvidenceError, linkPolicyException } from "../src/constitution/lifecycle.js";
 import { movePolicyArtifactsToPrivate } from "../src/constitution/repository.js";
-import { evaluateCompositePolicyOnSnapshot, evaluatePolicyOnSnapshot, graphSnapshot, mutateSnapshotForPolicy } from "../src/constitution/evaluator.js";
+import { evaluateCompositePolicyOnSnapshot, evaluatePolicyOnSnapshot, graphSnapshot, mutateSnapshotForPolicy, policyBlocks, policyIsActive } from "../src/constitution/evaluator.js";
 import { clampCandidateLimit } from "../src/constitution/bootstrap.js";
 import { provePolicy } from "../src/constitution/proof.js";
 import { replayProofPlan } from "../src/constitution/replay.js";
@@ -27,6 +27,10 @@ import { buildProofCard, renderProofCard } from "../src/constitution/card.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { nodeTestInfrastructureError } from "../src/constitution/g2BehaviorCandidates.js";
+import { policyEscalations } from "../src/core/escalations.js";
+import { directConflict } from "../src/constitution/structural.js";
+import { ensureGitignore } from "../src/integrations/gitignore.js";
+import { runSourceMutation } from "../src/constitution/sourceMutation.js";
 
 const NOW = "2026-07-10T10:00:00.000Z";
 
@@ -75,6 +79,47 @@ function layeredRepo(apiBody = 'import { fetchOrders } from "../services/orders.
   indexRepo(store, root, { churn: false });
   store.reindex();
   return { root, store, cleanup: () => { store.close(); rmSync(root, { recursive: true, force: true }); } };
+}
+
+function duplicatePolicyHomesFixture() {
+  const fixture = layeredRepo();
+  const { root, store } = fixture;
+  store.json.put("decisions", decision("dec_duplicate_plan_home"));
+  store.reindex();
+  const policy = new ConstitutionService(store, root).compile("dec_duplicate_plan_home", {
+    through: "fetchOrders",
+    now: NOW,
+  });
+
+  const overlayRoot = join(root, ".hunch-private");
+  const overlayHunch = join(overlayRoot, ".hunch");
+  mkdirSync(join(overlayHunch, "policies"), { recursive: true });
+  execFileSync("git", ["init", "-q", "-b", "main", overlayRoot]);
+  execFileSync("git", ["-C", overlayRoot, "config", "user.email", "plan-home@test.invalid"]);
+  execFileSync("git", ["-C", overlayRoot, "config", "user.name", "Plan Home Test"]);
+  writeFileSync(join(overlayHunch, "manifest.json"), readFileSync(join(root, ".hunch/manifest.json"), "utf8"));
+  writeFileSync(
+    join(overlayHunch, "policies", `${policy.id}.json`),
+    readFileSync(join(root, ".hunch/policies", `${policy.id}.json`), "utf8"),
+  );
+  ensureGitignore(overlayRoot);
+  execFileSync("git", ["-C", overlayRoot, "add", "-A"]);
+  execFileSync("git", ["-C", overlayRoot, "commit", "-qm", "fixture: duplicate private policy"]);
+
+  ensureGitignore(root);
+  writeFileSync(join(root, ".hunch/local.json"), `${JSON.stringify({
+    privateDir: ".hunch-private/.hunch",
+    mode: "private",
+    autoCommit: true,
+  }, null, 2)}\n`);
+  execFileSync("git", ["-C", root, "add", "-A"]);
+  execFileSync("git", ["-C", root, "commit", "-qm", "fixture: duplicate policy homes"]);
+  return { ...fixture, policy, overlayRoot };
+}
+
+function initializePrivateOverlay(privateRoot: string): void {
+  mkdirSync(privateRoot, { recursive: true });
+  execFileSync("git", ["init", "-q", dirname(privateRoot)]);
 }
 
 function commitFiles(root: string, files: string[], message: string): string {
@@ -262,6 +307,70 @@ test("Gate G1: decision -> must-pass-through policy -> P3 proof -> human block -
   }
 });
 
+test("policy plan --public-only pumps the actual public home when a duplicate private policy exists", () => {
+  const fixture = duplicatePolicyHomesFixture();
+  try {
+    const tsx = join(process.cwd(), "node_modules/tsx/dist/cli.mjs");
+    const cli = join(process.cwd(), "src/cli/index.ts");
+    const publicBefore = execFileSync("git", ["-C", fixture.root, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+    const privateBefore = execFileSync("git", ["-C", fixture.overlayRoot, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+    const run = spawnSync(process.execPath, [tsx, cli, "policy", "plan", fixture.policy.id, "--public-only"], {
+      cwd: fixture.root,
+      env: { ...process.env, HUNCH_PRIVATE_DIR: "" },
+      encoding: "utf8",
+    });
+    assert.equal(run.status, 0, run.stderr);
+    const plan = JSON.parse(run.stdout) as { id: string };
+    const publicAfter = execFileSync("git", ["-C", fixture.root, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+    const privateAfter = execFileSync("git", ["-C", fixture.overlayRoot, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+    assert.notEqual(publicAfter, publicBefore, "the newly written public plan is durably committed");
+    assert.equal(privateAfter, privateBefore, "duplicate-home preference cannot redirect the public-only flush");
+    assert.match(execFileSync("git", ["-C", fixture.root, "show", "--name-only", "--format=", "HEAD"], { encoding: "utf8" }),
+      new RegExp(`\\.hunch/plans/${plan.id}\\.json`));
+    assert.equal(execFileSync("git", ["-C", fixture.root, "status", "--porcelain", "--", ".hunch/plans"], { encoding: "utf8" }), "");
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test("hunch_policy_plan public_only pumps the actual public home when a duplicate private policy exists", async () => {
+  const fixture = duplicatePolicyHomesFixture();
+  let client: Client | null = null;
+  try {
+    const tsx = join(process.cwd(), "node_modules/tsx/dist/cli.mjs");
+    const cli = join(process.cwd(), "src/cli/index.ts");
+    const publicBefore = execFileSync("git", ["-C", fixture.root, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+    const privateBefore = execFileSync("git", ["-C", fixture.overlayRoot, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+    const transport = new StdioClientTransport({
+      command: process.execPath,
+      args: [tsx, cli, "mcp"],
+      cwd: fixture.root,
+      env: { ...process.env, HUNCH_PRIVATE_DIR: "" },
+    });
+    client = new Client({ name: "policy-plan-home-test", version: "1.0.0" });
+    await client.connect(transport);
+    const call = await client.callTool({
+      name: "hunch_policy_plan",
+      arguments: { policy_id: fixture.policy.id, public_only: true },
+    });
+    assert.equal(call.isError, undefined, JSON.stringify(call));
+    const plan = JSON.parse((call.content[0] as { type: "text"; text: string }).text) as { id: string };
+    await client.close();
+    client = null;
+
+    const publicAfter = execFileSync("git", ["-C", fixture.root, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+    const privateAfter = execFileSync("git", ["-C", fixture.overlayRoot, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+    assert.notEqual(publicAfter, publicBefore, "the MCP write is durably committed in public memory");
+    assert.equal(privateAfter, privateBefore, "the duplicate private policy remains untouched");
+    assert.match(execFileSync("git", ["-C", fixture.root, "show", "--name-only", "--format=", "HEAD"], { encoding: "utf8" }),
+      new RegExp(`\\.hunch/plans/${plan.id}\\.json`));
+    assert.equal(execFileSync("git", ["-C", fixture.root, "status", "--porcelain", "--", ".hunch/plans"], { encoding: "utf8" }), "");
+  } finally {
+    if (client) await client.close();
+    fixture.cleanup();
+  }
+});
+
 test("ambiguous selector is unknown and never blocks", () => {
   const { root, store, cleanup } = layeredRepo();
   try {
@@ -282,7 +391,7 @@ test("ambiguous selector is unknown and never blocks", () => {
   }
 });
 
-test("ProofPlan fallback stays anchored to the policy introduction commit across lifecycle updates", () => {
+test("ProofPlan fallback canonicalizes a memory-only policy introduction and stays anchored across lifecycle and code updates", () => {
   const { root, store, cleanup } = layeredRepo();
   try {
     store.json.put("decisions", decision("dec_plan_origin"));
@@ -290,9 +399,11 @@ test("ProofPlan fallback stays anchored to the policy introduction commit across
     const service = new ConstitutionService(store, root);
     const compiled = service.compile("dec_plan_origin", { through: "fetchOrders", now: NOW });
     const file = `.hunch/policies/${compiled.id}.json`;
+    const sourceBaseline = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
     const introduced = commitFiles(root, [file], "fixture: introduce policy semantics");
     const first = service.plan(compiled.id, { publicOnly: true, now: NOW });
-    assert.equal(first.source_commit, introduced);
+    assert.notEqual(introduced, sourceBaseline);
+    assert.equal(first.source_commit, sourceBaseline, "a Hunch-only introduction maps to the preceding static-graph boundary");
 
     service.repository.putPolicy({
       ...compiled,
@@ -302,8 +413,16 @@ test("ProofPlan fallback stays anchored to the policy introduction commit across
     });
     commitFiles(root, [file], "fixture: update policy lifecycle only");
     const later = service.plan(compiled.id, { publicOnly: true, now: "2026-07-10T10:06:00.000Z" });
-    assert.equal(later.source_commit, introduced, "proof attachment and lifecycle commits cannot erase earlier accepted history");
-    assert.notEqual(later.corpus.current_baseline.ref, introduced);
+    assert.equal(later.source_commit, sourceBaseline, "proof attachment and lifecycle commits cannot erase earlier accepted history");
+    assert.equal(later.corpus.current_baseline.ref, sourceBaseline);
+
+    writeFileSync(join(root, "src/api/orders.ts"),
+      'import { fetchOrders } from "../services/orders.js";\nexport function listOrders(u){ return fetchOrders(u.trim()); }\n');
+    const laterCode = commitFiles(root, ["src/api/orders.ts"], "fixture: later indexed-code change");
+    const afterCode = service.plan(compiled.id, { publicOnly: true, now: "2026-07-10T10:07:00.000Z" });
+    assert.equal(afterCode.source_commit, sourceBaseline,
+      "later code must not make a memory-only policy introduction jump forward to its publication SHA");
+    assert.equal(afterCode.corpus.current_baseline.ref, laterCode);
   } finally {
     cleanup();
   }
@@ -589,7 +708,7 @@ test("private evidence produces private policy/proof and public-only evaluation 
   const { root, store: initial, cleanup } = layeredRepo();
   initial.close();
   const privateRoot = join(root, "private-overlay/.hunch");
-  mkdirSync(privateRoot, { recursive: true });
+  initializePrivateOverlay(privateRoot);
   writeFileSync(join(root, ".hunch/local.json"), JSON.stringify({ privateDir: privateRoot, autoCommit: false, mode: "private" }));
   const store = new HunchStore(hunchPaths(root));
   try {
@@ -648,7 +767,7 @@ test("private composite receipts and member hashes never cross into the public p
   const { root, store: initial, cleanup } = layeredRepo('import { dbQuery } from "../db/client.js";\nexport function listOrders(u){ return dbQuery(u); }\n');
   initial.close();
   const privateRoot = join(root, "private-overlay/.hunch");
-  mkdirSync(privateRoot, { recursive: true });
+  initializePrivateOverlay(privateRoot);
   writeFileSync(join(root, ".hunch/local.json"), JSON.stringify({ privateDir: privateRoot, autoCommit: false, mode: "private" }));
   const store = new HunchStore(hunchPaths(root));
   try {
@@ -838,7 +957,7 @@ test("Phase 2A bootstrap inherits private taint and public-only reads reveal not
   const { root, store: initial, cleanup } = layeredRepo();
   initial.close();
   const privateRoot = join(root, "private-bootstrap/.hunch");
-  mkdirSync(privateRoot, { recursive: true });
+  initializePrivateOverlay(privateRoot);
   writeFileSync(join(root, ".hunch/local.json"), JSON.stringify({ privateDir: privateRoot, autoCommit: false, mode: "private" }));
   const store = new HunchStore(hunchPaths(root));
   try {
@@ -864,7 +983,7 @@ test("Phase 2A home selection cannot substitute a same-id private decision into 
   const { root, store: initial, cleanup } = layeredRepo();
   initial.close();
   const privateRoot = join(root, "private-collision/.hunch");
-  mkdirSync(privateRoot, { recursive: true });
+  initializePrivateOverlay(privateRoot);
   writeFileSync(join(root, ".hunch/local.json"), JSON.stringify({ privateDir: privateRoot, autoCommit: false, mode: "private" }));
   const store = new HunchStore(hunchPaths(root));
   try {
@@ -1324,7 +1443,7 @@ test("Phase 2Q G2 shadow sweep is real-state deduplicated, retry-safe, private, 
   const { root, store: initial, cleanup } = layeredRepo();
   initial.close();
   const privateRoot = join(root, "private-g2-shadow/.hunch");
-  mkdirSync(privateRoot, { recursive: true });
+  initializePrivateOverlay(privateRoot);
   writeFileSync(join(root, ".hunch/local.json"), JSON.stringify({ privateDir: privateRoot, autoCommit: false, mode: "private" }));
   const store = new HunchStore(hunchPaths(root));
   try {
@@ -1436,7 +1555,7 @@ test("Phase 2R G2 candidate review separates human grounding from structural coi
   const { root, store: initial, cleanup } = layeredRepo();
   initial.close();
   const privateRoot = join(root, "private-g2-candidates/.hunch");
-  mkdirSync(privateRoot, { recursive: true });
+  initializePrivateOverlay(privateRoot);
   writeFileSync(join(root, ".hunch/local.json"), JSON.stringify({ privateDir: privateRoot, autoCommit: false, mode: "private" }));
 
   writeFileSync(join(root, "src/global.ts"), "export function resolve(id){ return id; }\n");
@@ -1518,7 +1637,7 @@ test("Phase 2S G2 candidate attestations are exact, append-only, private, and no
   const { root, store: initial, cleanup } = layeredRepo();
   initial.close();
   const privateRoot = join(root, "private-g2-attestations/.hunch");
-  mkdirSync(privateRoot, { recursive: true });
+  initializePrivateOverlay(privateRoot);
   writeFileSync(join(root, ".hunch/local.json"), JSON.stringify({ privateDir: privateRoot, autoCommit: false, mode: "private" }));
 
   writeFileSync(join(root, "src/api/orders.ts"), 'import { fetchOrders } from "../services/orders.js";\nexport function listOrders(u){ return fetchOrders(u); }\nexport function guardedOrders(){ return fetchOrders("guarded"); }\n');
@@ -1809,7 +1928,9 @@ test("Phase 2U/2V/2W/2X/2Y replays, attests, and proves exact executable behavio
   const { root, store: initial, cleanup } = layeredRepo();
   initial.close();
   const privateRoot = join(root, "private-g2-behavior/.hunch");
-  mkdirSync(privateRoot, { recursive: true });
+  initializePrivateOverlay(privateRoot);
+  const fixtureExclude = join(root, ".git/info/exclude");
+  writeFileSync(fixtureExclude, `${readFileSync(fixtureExclude, "utf8")}\nprivate-g2-behavior/\n`);
   writeFileSync(join(root, ".hunch/local.json"), JSON.stringify({ privateDir: privateRoot, autoCommit: false, mode: "private" }));
 
   mkdirSync(join(root, "test"), { recursive: true });
@@ -2180,6 +2301,22 @@ test("Phase 2U/2V/2W/2X/2Y replays, attests, and proves exact executable behavio
     const postIntroductionPrecision = service.shadowReport(behaviorPolicy.id, { minApplicable: 0 }, { privateOnly: true });
     assert.equal(postIntroductionPrecision.counts.total, 0, "commits before the policy fixing commit never enter its operational precision denominator");
     assert.equal(postIntroductionPrecision.evaluations.length, 1, "the excluded raw observation remains in the audit view");
+
+    writeFileSync(join(root, "src/guard.mjs"), "export function guarded(){ return false; }\n");
+    const workingShadowRun = spawnSync(process.execPath, [
+      tsx, cli, "policy", "shadow", behaviorPolicy.id, "--record",
+    ], { cwd: root, encoding: "utf8" });
+    assert.equal(workingShadowRun.status, 0, workingShadowRun.stderr);
+    assert.match(
+      workingShadowRun.stdout,
+      /recorded .*: violated on sha1:/,
+      "CLI shadow recording must execute the dirty working snapshot instead of satisfied HEAD",
+    );
+    const workingShadowReport = service.shadowReport(behaviorPolicy.id, { minApplicable: 0 }, { privateOnly: true });
+    assert.equal(workingShadowReport.counts.total, 1, "working receipts score against their real base commit instead of a pseudo-head Git error");
+    assert.ok(workingShadowReport.evaluations.some(({ record }) => record.evaluation.result === "violated"));
+    writeFileSync(join(root, "src/guard.mjs"), "export function verify(){ return true; }\nexport function guarded(){ return verify(); }\n");
+
     assert.deepEqual(service.g2BehaviorPolicyMaterialize({
       ...bounds,
       now: "2026-07-11T20:31:00.000Z",
@@ -2372,6 +2509,92 @@ test("Phase 3 unresolved refs and history-enumeration failures stay visible as d
     assert.equal(refused.current.error, 1);
     assert.equal(refused.replay_receipts[0]?.error_code, "unsafe-local-filter-config");
     assert.equal(existsSync(filterSentinel), false, "replay refuses arbitrary local checkout filters instead of executing them");
+
+    execFileSync("git", ["config", "--unset", "filter.evil.smudge"], { cwd: root, stdio: "ignore" });
+    writeFileSync(join(root, ".git/info/attributes"), "*.ts ident\n");
+    const transformed = provePolicy(store, root, policy, { publicOnly: true, now: NOW, plan: base });
+    assert.equal(transformed.current.error, 1);
+    assert.equal(transformed.replay_receipts[0]?.error_code, "unsafe-checkout-attributes");
+  } finally {
+    cleanup();
+  }
+});
+
+test("authoritative proof replay rejects a committed partial graph instead of minting P3", () => {
+  const { root, store, cleanup } = layeredRepo();
+  try {
+    writeFileSync(join(root, "src/api/bad.ts"), 'import { dbQuery } from "../db/client.js";\nexport function guard( { return dbQuery();\n');
+    commitFiles(root, ["src/api/bad.ts"], "fixture: malformed component import");
+    const indexed = indexRepo(store, root, { churn: false });
+    assert.equal(indexed.skipped, 1, "ordinary indexing reports but does not conceal the malformed fixture");
+    store.reindex();
+    const api = store.json.loadAll("components").find((component) => component.name === "Api")!;
+    const db = store.json.loadAll("components").find((component) => component.name === "Db")!;
+    assert.ok(api && db, "valid anchor files keep both component selectors resolvable");
+    const policy = PolicySpecSchema.parse({
+      id: "pol_fa11c0ffee",
+      topic: "fixture.complete-proof-graph",
+      ir_version: 1,
+      revision: 1,
+      state: "proposed",
+      statement: "Api must not depend directly on Db",
+      scope: { repos: [], paths: ["src/api/**"], components: [api.id] },
+      assertion: {
+        kind: "not-reaches",
+        subject: { selector: `component-id:${api.id}` },
+        relation: { edges: ["depends_on"], transitive: false, max_depth: 1 },
+        object: { selector: `component-id:${db.id}` },
+      },
+      severity: "warning",
+      surfaces: ["cli", "ci"],
+      authority: null,
+      evidence: ["fixture:malformed-source"],
+      proof: null,
+      data_class: "public",
+      created_at: NOW,
+      updated_at: NOW,
+      provenance: { source: "human_confirmed", confidence: 1, evidence: ["fixture"] },
+    });
+    const service = new ConstitutionService(store, root);
+    service.repository.putPolicy(policy);
+    const tsx = join(process.cwd(), "node_modules/tsx/dist/cli.mjs");
+    const cli = join(process.cwd(), "src/cli/index.ts");
+    const graphBefore = canonicalHash({
+      symbols: store.json.loadAll("symbols"),
+      edges: store.json.loadAll("edges"),
+      components: store.json.loadAll("components"),
+    });
+    const cliAttempt = spawnSync(process.execPath, [tsx, cli, "policy", "prove", policy.id], {
+      cwd: root,
+      encoding: "utf8",
+      env: { ...process.env, HUNCH_PRIVATE_DIR: "", HUNCH_SYNTH_PROVIDER: "deterministic" },
+    });
+    assert.equal(cliAttempt.status, 1, `${cliAttempt.stdout}${cliAttempt.stderr}`);
+    assert.match(`${cliAttempt.stdout}${cliAttempt.stderr}`, /incomplete semantic source scan rejected 1 file/i);
+    assert.equal(canonicalHash({
+      symbols: store.json.loadAll("symbols"),
+      edges: store.json.loadAll("edges"),
+      components: store.json.loadAll("components"),
+    }), graphBefore, "authoritative CLI proof refuses before publishing a partial graph");
+
+    assert.throws(
+      () => service.prove(policy.id, { now: "2026-07-19T15:00:00.000Z" }),
+      /is P0|cannot become proved|clean current baseline/i,
+    );
+    const proved = service.repository.listProofs()
+      .find((candidate) => candidate.policy_hash === policyProofHash(policy, []))!;
+    assert.ok(proved, "the deterministic P0 receipt remains inspectable after the state transition is refused");
+    assert.equal(proved.proof_class, "P0");
+    assert.equal(proved.current.error, 1);
+    assert.equal(proved.replay_receipts[0]?.error_code, "snapshot-index-failed");
+    const unchanged = service.repository.getPolicy(policy.id)!;
+    assert.equal(unchanged.state, "proposed");
+    assert.equal(unchanged.proof, null);
+    assert.throws(
+      () => service.approve(policy.id, "advisory", "human:reviewer"),
+      /has no proof/i,
+      "an incomplete replay can never cross the human activation gate",
+    );
   } finally {
     cleanup();
   }
@@ -2792,7 +3015,7 @@ test("Phase 2B exact-home history compilation cannot leak a same-id private judg
   const fix = commitFiles(root, ["src/payments/charge.ts"], "fix: private history session validation");
   initial.close();
   const privateRoot = join(root, "private-history/.hunch");
-  mkdirSync(privateRoot, { recursive: true });
+  initializePrivateOverlay(privateRoot);
   writeFileSync(join(root, ".hunch/local.json"), JSON.stringify({ privateDir: privateRoot, autoCommit: false, mode: "private" }));
   const store = new HunchStore(hunchPaths(root));
   try {
@@ -2876,11 +3099,1462 @@ test("Phase 2C local adapters normalize corrections, test failures, and incident
   }
 });
 
+test("MD-1a upgrades one exact top-level package correction into an idempotent non-authoritative proof packet", () => {
+  const { root, store, cleanup } = layeredRepo();
+  try {
+    const correction = buildCorrectionConstraint({
+      rule: "never import axios",
+      scope_hint_file: "src/api/orders.ts",
+      severity: "blocking",
+      knownDeps: ["axios"],
+    }, NOW);
+    store.json.put("constraints", correction);
+    store.reindex();
+
+    const service = new ConstitutionService(store, root);
+    const first = service.upgradeCorrection(correction.id, {
+      publicOnly: true,
+      now: "2026-07-10T12:00:00.000Z",
+    });
+    assert.equal(first.status, "proved");
+    assert.equal(first.policy?.state, "proposed");
+    assert.equal(first.policy?.ir_version, 3,
+      "source-gated correction policies use a new IR version so older clients reject them instead of bypassing the activation gate");
+    assert.throws(
+      () => PolicySpecSchema.parse({ ...first.policy!, ir_version: 1 }),
+      /source-gated correction policies require Policy IR v3/i,
+      "a correction artifact cannot be downgraded to the legacy graph-policy IR",
+    );
+    assert.equal(first.policy?.authority, null, "correction upgrade never grants authority");
+    assert.equal(first.policy?.activation_gate?.status, "blocked");
+    assert.deepEqual(first.policy?.assertion, {
+      kind: "not-reaches",
+      subject: { selector: "symbol:src/api/orders.ts:listOrders" },
+      relation: { edges: ["imports"], transitive: false, max_depth: 1 },
+      object: { selector: "external:axios" },
+    });
+    assert.equal(first.proof?.proof_class, "P3");
+    assert.equal(first.evidence.compiler?.status, "compiled");
+    assert.equal(first.evidence.compiler?.policy, first.policy?.id);
+    assert.ok(first.evidence.related_records.includes(correction.id));
+    assert.ok(first.evidence.related_records.includes(first.policy!.id));
+    assert.deepEqual(first.review, {
+      status: "ready_for_review",
+      rule: "never import axios",
+      meaning: "src/api/orders.ts must not directly import axios through a supported static ESM import declaration.",
+      why: correction.rationale,
+      catches: "A static TypeScript/JavaScript import of axios in src/api/orders.ts.",
+      does_not_catch: "re-exports, require(), dynamic import(), aliases, runtime loading, or anchor-symbol rename/removal until the proposal is repaired.",
+      authority: "none",
+      next_action: "Review this proposal; keep it non-active until source-currentness safety is in place.",
+    });
+    assert.throws(
+      () => service.approve(first.policy!.id, "advisory", "human:test-owner", { now: "2026-07-10T12:01:00.000Z" }),
+      /cannot activate.*MD-2/i,
+      "MD-1a is mechanically non-activatable, not merely unapproved",
+    );
+    const card = service.card(first.policy!.id, { publicOnly: true });
+    assert.equal(card.authority.eligible_for_human_blocking_approval, false);
+    assert.ok(card.actions.some((action) => /activation is mechanically blocked/i.test(action)));
+    const escalation = policyEscalations([{ ...first.policy!, last_action: first.policy!.audit.at(-1)?.action ?? null }])[0]!;
+    assert.match(escalation.resolution, /source-currentness gate/i);
+    assert.doesNotMatch(escalation.resolution, /policy accept/i);
+
+    const second = service.upgradeCorrection(correction.id, {
+      publicOnly: true,
+      now: "2026-07-10T12:05:00.000Z",
+    });
+    assert.equal(second.status, "already_proved");
+    assert.equal(second.policy?.id, first.policy?.id);
+    assert.equal(second.policy?.revision, first.policy?.revision, "retry does not append another proof lifecycle event");
+    assert.equal(second.proof?.id, first.proof?.id);
+    assert.equal(canonicalJson(second.evidence), canonicalJson(first.evidence));
+  } finally {
+    cleanup();
+  }
+});
+
+test("MD-1a rejects a proof when a merge resolution changes source outside every parent", () => {
+  const { root, store, cleanup } = layeredRepo();
+  try {
+    const correction = buildCorrectionConstraint({
+      rule: "never import axios",
+      scope_hint_file: "src/api/orders.ts",
+      severity: "blocking",
+      knownDeps: ["axios"],
+    }, NOW);
+    store.json.put("constraints", correction);
+    store.reindex();
+
+    const service = new ConstitutionService(store, root);
+    const first = service.upgradeCorrection(correction.id, {
+      publicOnly: true,
+      now: "2026-07-10T12:00:00.000Z",
+    });
+    assert.equal(first.status, "proved");
+    commitFiles(root, [".hunch"], "hunch: publish correction proof packet");
+
+    const probe = join(root, ".hunch/merge-resolution-probe.txt");
+    writeFileSync(probe, "base\n");
+    commitFiles(root, [".hunch/merge-resolution-probe.txt"], "hunch: seed merge-resolution probe");
+    const memoryOnly = service.upgradeCorrection(correction.id, {
+      publicOnly: true,
+      now: "2026-07-10T12:01:00.000Z",
+    });
+    assert.equal(memoryOnly.status, "already_proved", "linear memory-only publication preserves source currentness");
+
+    const primaryBranch = execFileSync("git", ["branch", "--show-current"], {
+      cwd: root,
+      encoding: "utf8",
+    }).trim();
+    execFileSync("git", ["checkout", "-qb", "memory-side"], { cwd: root, stdio: "ignore" });
+    writeFileSync(probe, "side\n");
+    commitFiles(root, [".hunch/merge-resolution-probe.txt"], "hunch: side edits merge probe");
+
+    execFileSync("git", ["checkout", "-q", primaryBranch], { cwd: root, stdio: "ignore" });
+    writeFileSync(probe, "primary\n");
+    commitFiles(root, [".hunch/merge-resolution-probe.txt"], "hunch: primary edits merge probe");
+    const merge = spawnSync("git", ["merge", "--no-ff", "memory-side", "-m", "hunch: merge memory branches"], {
+      cwd: root,
+      encoding: "utf8",
+    });
+    assert.equal(merge.status, 1, `fixture needs a merge conflict, got: ${merge.stdout}${merge.stderr}`);
+
+    writeFileSync(probe, "resolved\n");
+    writeFileSync(
+      join(root, "src/api/orders.ts"),
+      'import { fetchOrders } from "../services/orders.js";\nexport function listOrders(u){ return fetchOrders(u); }\n// source changed only in merge resolution\n',
+    );
+    commitFiles(root, [".hunch/merge-resolution-probe.txt", "src/api/orders.ts"], "hunch: resolve memory merge");
+
+    const stale = service.upgradeCorrection(correction.id, {
+      publicOnly: true,
+      now: "2026-07-10T12:02:00.000Z",
+    });
+    assert.equal(stale.status, "pending");
+    assert.match(stale.reason, /proof baseline is not the current source-equivalent HEAD/i);
+  } finally {
+    cleanup();
+  }
+});
+
+test("MD-1a activation gates fail closed at advisory and blocking runtime evaluation seams", () => {
+  const { root, store, cleanup } = layeredRepo();
+  try {
+    const correction = buildCorrectionConstraint({
+      rule: "never import axios",
+      scope_hint_file: "src/api/orders.ts",
+      severity: "blocking",
+      knownDeps: ["axios"],
+    }, NOW);
+    store.json.put("constraints", correction);
+    store.reindex();
+    const service = new ConstitutionService(store, root);
+    const proved = service.upgradeCorrection(correction.id, { publicOnly: true, now: "2026-07-10T12:00:00.000Z" });
+    const authority = {
+      kind: "human" as const,
+      actor: "human:test-owner",
+      event: "tampered-lifecycle-fixture",
+      at: "2026-07-10T12:01:00.000Z",
+    };
+
+    const advisory = PolicySpecSchema.parse({
+      ...proved.policy!,
+      state: "active_advisory",
+      authority,
+      activation_gate: null,
+    });
+    service.repository.putPolicy(advisory);
+    const advisoryResult = service.evaluate({ id: advisory.id })[0]!;
+    assert.equal(advisoryResult.blocks, false);
+    assert.match(advisoryResult.gate_error ?? "", /MD-1a.*missing.*activation gate/i);
+    assert.equal(policyIsActive(advisory), false, "a serialized gate bypass is excluded from active advisory evaluation");
+    const activeAdvisory = service.evaluate({ activeOnly: true, publicOnly: true });
+    assert.equal(activeAdvisory.length, 1, "persisted active-state errors stay visible to active-only adapters");
+    assert.equal(activeAdvisory[0]?.strict_error, false, "an advisory configuration error is visible but cannot block");
+    assert.match(activeAdvisory[0]?.gate_error ?? "", /MD-1a.*missing.*activation gate/i);
+
+    const blocking = PolicySpecSchema.parse({
+      ...proved.policy!,
+      state: "active_blocking",
+      severity: "blocking",
+      authority,
+    });
+    service.repository.putPolicy(blocking);
+    const blockingResult = service.evaluate({ id: blocking.id })[0]!;
+    assert.equal(blockingResult.blocks, false);
+    assert.equal(blockingResult.strict_error, true);
+    assert.match(blockingResult.gate_error ?? "", /cannot activate until MD-2/i);
+    assert.equal(policyBlocks(blocking, blockingResult.evaluation), false,
+      "direct block calculation also rechecks the activation gate");
+    assert.equal(policyIsActive(blocking), false);
+    const activeBlocking = service.evaluate({ activeOnly: true, publicOnly: true });
+    assert.equal(activeBlocking.length, 1);
+    assert.equal(activeBlocking[0]?.blocks, false);
+    assert.equal(activeBlocking[0]?.strict_error, true, "strict adapters fail closed on persisted invalid blocking state");
+    assert.match(activeBlocking[0]?.gate_error ?? "", /cannot activate until MD-2/i);
+  } finally {
+    cleanup();
+  }
+});
+
+test("MD-1a automatic correction paths reject human-confirmed provenance lookalikes without artifacts", () => {
+  const { root, store, cleanup } = layeredRepo();
+  try {
+    const sources = ["not_human_confirmed", "human_confirmed_pending"];
+    for (const [index, source] of sources.entries()) {
+      const correction = buildCorrectionConstraint({
+        rule: `never import lookalike-package-${index}`,
+        scope_hint_file: "src/api/orders.ts",
+        severity: "blocking",
+        knownDeps: [`lookalike-package-${index}`],
+      }, NOW);
+      store.json.put("constraints", {
+        ...correction,
+        provenance: { ...correction.provenance, source },
+      });
+    }
+    store.reindex();
+
+    const service = new ConstitutionService(store, root);
+    const ingestion = service.ingest({ publicOnly: true, since: "90d", maxEvents: 100, now: "2026-07-10T12:00:00.000Z" });
+    const sweep = service.upgradeCorrections({ publicOnly: true, now: "2026-07-10T12:00:00.000Z" });
+
+    assert.equal(ingestion.scanned, sources.length);
+    assert.equal(ingestion.eligible, 0);
+    assert.equal(ingestion.normalized, 0);
+    assert.deepEqual(ingestion.events, []);
+    assert.equal(sweep.scanned, 0);
+    assert.deepEqual(sweep.upgrades, []);
+    assert.deepEqual(service.repository.listEvidence({ publicOnly: true }), []);
+    assert.deepEqual(service.repository.listPolicies({ publicOnly: true }), []);
+    assert.deepEqual(service.repository.listPlans({ publicOnly: true }), []);
+    assert.deepEqual(service.repository.listProofs({ publicOnly: true }), []);
+  } finally {
+    cleanup();
+  }
+});
+
+test("MD-1a private proof packet is byte-reusable across differently named linked worktrees", () => {
+  const fixture = layeredRepo();
+  fixture.store.close();
+  const producer = `${fixture.root}-md1-producer`;
+  const consumer = `${fixture.root}-md1-consumer-with-a-different-directory-name`;
+  const overlayRoot = execFileSync("mktemp", ["-d", join(tmpdir(), "hunch-md1-worktree-overlay-XXXXXX")], { encoding: "utf8" }).trim();
+  const privateRoot = join(overlayRoot, ".hunch");
+  let producerStore: HunchStore | null = null;
+  let consumerStore: HunchStore | null = null;
+  try {
+    execFileSync("git", ["init", "-q", overlayRoot]);
+    execFileSync("git", ["config", "user.email", "test@example.com"], { cwd: overlayRoot });
+    execFileSync("git", ["config", "user.name", "Test Human"], { cwd: overlayRoot });
+  initializePrivateOverlay(privateRoot);
+    execFileSync("git", ["worktree", "add", "-q", "-b", "md1-producer", producer], { cwd: fixture.root });
+    execFileSync("git", ["worktree", "add", "-q", "-b", "md1-consumer", consumer], { cwd: fixture.root });
+    for (const worktree of [producer, consumer]) {
+      mkdirSync(join(worktree, ".hunch"), { recursive: true });
+      writeFileSync(join(worktree, ".hunch/local.json"), JSON.stringify({
+        privateDir: privateRoot,
+        autoCommit: false,
+        mode: "private",
+      }) + "\n");
+    }
+
+    producerStore = new HunchStore(hunchPaths(producer));
+    indexRepo(producerStore, producer, { churn: false });
+    const correction = buildCorrectionConstraint({
+      rule: "never import axios",
+      scope_hint_file: "src/api/orders.ts",
+      severity: "blocking",
+      knownDeps: ["axios"],
+    }, NOW);
+    producerStore.putPrivate("constraints", correction);
+    producerStore.reindex();
+    const producerService = new ConstitutionService(producerStore, producer);
+    const first = producerService.upgradeCorrection(correction.id, {
+      privateOnly: true,
+      now: "2026-07-10T12:00:00.000Z",
+    });
+    assert.equal(first.status, "proved");
+    assert.ok(first.policy && first.plan && first.proof);
+    const files = {
+      evidence: join(privateRoot, "evidence", `${first.evidence.id}.json`),
+      plan: join(privateRoot, "plans", `${first.plan.id}.json`),
+      proof: join(privateRoot, "proofs", `${first.proof.id}.json`),
+      policy: join(privateRoot, "policies", `${first.policy.id}.json`),
+    };
+    const before = Object.fromEntries(Object.entries(files).map(([name, file]) => [name, readFileSync(file, "utf8")])) as Record<string, string>;
+    producerStore.close();
+    producerStore = null;
+
+    consumerStore = new HunchStore(hunchPaths(consumer));
+    indexRepo(consumerStore, consumer, { churn: false });
+    consumerStore.reindex();
+    const second = new ConstitutionService(consumerStore, consumer).upgradeCorrection(correction.id, {
+      privateOnly: true,
+      now: "2026-07-10T12:05:00.000Z",
+    });
+    const after = Object.fromEntries(Object.entries(files).map(([name, file]) => [name, readFileSync(file, "utf8")])) as Record<string, string>;
+
+    assert.deepEqual({
+      status: second.status,
+      non_reuse_reason: second.status === "already_proved" ? null : second.reason,
+      evidence_bytes_unchanged: after.evidence === before.evidence,
+      plan_bytes_unchanged: after.plan === before.plan,
+      proof_bytes_unchanged: after.proof === before.proof,
+      policy_bytes_unchanged: after.policy === before.policy,
+      evidence_id_reused: second.evidence.id === first.evidence.id,
+      plan_id_reused: second.plan?.id === first.plan.id,
+      proof_id_reused: second.proof?.id === first.proof.id,
+      policy_id_reused: second.policy?.id === first.policy.id,
+    }, {
+      status: "already_proved",
+      non_reuse_reason: null,
+      evidence_bytes_unchanged: true,
+      plan_bytes_unchanged: true,
+      proof_bytes_unchanged: true,
+      policy_bytes_unchanged: true,
+      evidence_id_reused: true,
+      plan_id_reused: true,
+      proof_id_reused: true,
+      policy_id_reused: true,
+    }, "worktree directory names are not proof identity and cannot churn an existing packet");
+    assert.equal(canonicalJson(second.evidence), canonicalJson(first.evidence));
+    assert.equal(canonicalJson(second.plan), canonicalJson(first.plan));
+    assert.equal(canonicalJson(second.proof), canonicalJson(first.proof));
+  } finally {
+    producerStore?.close();
+    consumerStore?.close();
+    for (const worktree of [consumer, producer]) {
+      try { execFileSync("git", ["worktree", "remove", "--force", worktree], { cwd: fixture.root, stdio: "ignore" }); } catch { /* cleanup best-effort */ }
+      rmSync(worktree, { recursive: true, force: true });
+    }
+    rmSync(overlayRoot, { recursive: true, force: true });
+    fixture.cleanup();
+  }
+});
+
+test("MD-1a private proof packet is byte-reusable across ordinary clones after origin is renamed", () => {
+  const fixture = layeredRepo();
+  fixture.store.close();
+  const base = execFileSync("mktemp", ["-d", join(tmpdir(), "hunch-md1-clone-identity-XXXXXX")], { encoding: "utf8" }).trim();
+  const remote = join(base, "canonical-history.git");
+  const producer = join(base, "producer-checkout");
+  const consumer = join(base, "consumer-checkout-with-a-different-name");
+  const overlayRoot = join(base, "private-overlay");
+  const privateRoot = join(overlayRoot, ".hunch");
+  let producerStore: HunchStore | null = null;
+  let consumerStore: HunchStore | null = null;
+  try {
+    execFileSync("git", ["init", "--bare", "-q", "-b", "main", remote]);
+    execFileSync("git", ["remote", "add", "origin", remote], { cwd: fixture.root });
+    execFileSync("git", ["push", "-q", "origin", "HEAD:main"], { cwd: fixture.root });
+    execFileSync("git", ["clone", "-q", remote, producer]);
+    execFileSync("git", ["clone", "-q", remote, consumer]);
+    execFileSync("git", ["remote", "rename", "origin", "upstream"], { cwd: consumer });
+    execFileSync("git", ["init", "-q", overlayRoot]);
+    mkdirSync(privateRoot, { recursive: true });
+    for (const checkout of [producer, consumer]) {
+      execFileSync("git", ["config", "user.email", "test@example.com"], { cwd: checkout });
+      execFileSync("git", ["config", "user.name", "Test Human"], { cwd: checkout });
+      mkdirSync(join(checkout, ".hunch"), { recursive: true });
+      writeFileSync(join(checkout, ".hunch/local.json"), JSON.stringify({
+        privateDir: privateRoot,
+        autoCommit: false,
+        mode: "private",
+      }) + "\n");
+    }
+
+    producerStore = new HunchStore(hunchPaths(producer));
+    indexRepo(producerStore, producer, { churn: false });
+    const correction = buildCorrectionConstraint({
+      rule: "never import axios",
+      scope_hint_file: "src/api/orders.ts",
+      severity: "blocking",
+      knownDeps: ["axios"],
+    }, NOW);
+    producerStore.putPrivate("constraints", correction);
+    producerStore.reindex();
+    const first = new ConstitutionService(producerStore, producer).upgradeCorrection(correction.id, {
+      privateOnly: true,
+      now: "2026-07-10T12:00:00.000Z",
+    });
+    assert.equal(first.status, "proved");
+    assert.ok(first.policy && first.plan && first.proof);
+    const files = {
+      evidence: join(privateRoot, "evidence", `${first.evidence.id}.json`),
+      plan: join(privateRoot, "plans", `${first.plan.id}.json`),
+      proof: join(privateRoot, "proofs", `${first.proof.id}.json`),
+      policy: join(privateRoot, "policies", `${first.policy.id}.json`),
+    };
+    const before = Object.fromEntries(Object.entries(files).map(([name, file]) => [name, readFileSync(file, "utf8")])) as Record<string, string>;
+    producerStore.close();
+    producerStore = null;
+
+    consumerStore = new HunchStore(hunchPaths(consumer));
+    indexRepo(consumerStore, consumer, { churn: false });
+    consumerStore.reindex();
+    const second = new ConstitutionService(consumerStore, consumer).upgradeCorrection(correction.id, {
+      privateOnly: true,
+      now: "2026-07-10T12:05:00.000Z",
+    });
+    const after = Object.fromEntries(Object.entries(files).map(([name, file]) => [name, readFileSync(file, "utf8")])) as Record<string, string>;
+
+    assert.equal(execFileSync("git", ["remote"], { cwd: consumer, encoding: "utf8" }).trim(), "upstream",
+      "the consumer has no specially named origin remote");
+    assert.deepEqual({
+      status: second.status,
+      evidence_bytes_unchanged: after.evidence === before.evidence,
+      plan_bytes_unchanged: after.plan === before.plan,
+      proof_bytes_unchanged: after.proof === before.proof,
+      policy_bytes_unchanged: after.policy === before.policy,
+      evidence_id_reused: second.evidence.id === first.evidence.id,
+      plan_id_reused: second.plan?.id === first.plan.id,
+      proof_id_reused: second.proof?.id === first.proof.id,
+      policy_id_reused: second.policy?.id === first.policy.id,
+    }, {
+      status: "already_proved",
+      evidence_bytes_unchanged: true,
+      plan_bytes_unchanged: true,
+      proof_bytes_unchanged: true,
+      policy_bytes_unchanged: true,
+      evidence_id_reused: true,
+      plan_id_reused: true,
+      proof_id_reused: true,
+      policy_id_reused: true,
+    }, "checkout names and remote aliases are not correction proof identity");
+  } finally {
+    producerStore?.close();
+    consumerStore?.close();
+    rmSync(base, { recursive: true, force: true });
+    fixture.cleanup();
+  }
+});
+
+test("MD-1a never reuses an orphan proof packet or rewrites an incumbent human lifecycle", () => {
+  const orphanFixture = layeredRepo();
+  try {
+    const correction = buildCorrectionConstraint({
+      rule: "never import axios",
+      scope_hint_file: "src/api/orders.ts",
+      knownDeps: ["axios"],
+    }, NOW);
+    orphanFixture.store.json.put("constraints", correction);
+    orphanFixture.store.reindex();
+    const service = new ConstitutionService(orphanFixture.store, orphanFixture.root);
+    const first = service.upgradeCorrection(correction.id, { publicOnly: true, now: "2026-07-10T12:00:00.000Z" });
+    const policyPath = join(orphanFixture.root, ".hunch/policies", `${first.policy!.id}.json`);
+    const policyBytes = readFileSync(policyPath, "utf8");
+    rmSync(join(orphanFixture.root, ".hunch/plans", `${first.plan!.id}.json`));
+    const retry = service.upgradeCorrection(correction.id, { publicOnly: true, now: "2026-07-10T12:05:00.000Z" });
+    assert.equal(retry.status, "pending");
+    assert.match(retry.reason, /no exact bound plan/i);
+    assert.equal(readFileSync(policyPath, "utf8"), policyBytes, "automation preserves the incumbent byte-for-byte");
+  } finally {
+    orphanFixture.cleanup();
+  }
+
+  const authorityFixture = layeredRepo();
+  try {
+    const correction = buildCorrectionConstraint({
+      rule: "never import axios",
+      scope_hint_file: "src/api/orders.ts",
+      knownDeps: ["axios"],
+    }, NOW);
+    authorityFixture.store.json.put("constraints", correction);
+    authorityFixture.store.reindex();
+    const service = new ConstitutionService(authorityFixture.store, authorityFixture.root);
+    const first = service.upgradeCorrection(correction.id, { publicOnly: true, now: "2026-07-10T12:00:00.000Z" });
+    const active = PolicySpecSchema.parse({
+      ...first.policy!,
+      state: "active_advisory",
+      authority: {
+        kind: "human",
+        actor: "human:test-owner",
+        event: "legacy-incumbent-fixture",
+        at: "2026-07-10T12:01:00.000Z",
+      },
+      valid_from: "2026-07-10T12:01:00.000Z",
+    });
+    service.repository.putPolicy(active);
+    const policyPath = join(authorityFixture.root, ".hunch/policies", `${active.id}.json`);
+    const planPath = join(authorityFixture.root, ".hunch/plans", `${first.plan!.id}.json`);
+    const proofPath = join(authorityFixture.root, ".hunch/proofs", `${first.proof!.id}.json`);
+    const before = {
+      policy: readFileSync(policyPath, "utf8"),
+      plan: readFileSync(planPath, "utf8"),
+      proof: readFileSync(proofPath, "utf8"),
+    };
+
+    const planClaim = service.repository.putPlanIfAbsent(
+      { ...first.plan!, created_at: "2026-07-10T12:09:00.000Z" },
+      active.id,
+      { public: true },
+    );
+    const proofClaim = service.repository.putProofIfAbsent(
+      { ...first.proof!, generated_at: "2026-07-10T12:09:00.000Z" },
+      active.id,
+      { public: true },
+    );
+    assert.equal(planClaim.created, false);
+    assert.equal(proofClaim.created, false);
+    const covered = service.upgradeCorrection(correction.id, { publicOnly: true, now: "2026-07-10T12:10:00.000Z" });
+    assert.equal(covered.status, "already_proved");
+    assert.equal(covered.policy?.state, "active_advisory");
+    assert.equal(covered.policy?.authority?.actor, "human:test-owner");
+    assert.deepEqual({
+      policy: readFileSync(policyPath, "utf8"),
+      plan: readFileSync(planPath, "utf8"),
+      proof: readFileSync(proofPath, "utf8"),
+    }, before, "CAS retries and materialization never replace human lifecycle or immutable proof bytes");
+  } finally {
+    authorityFixture.cleanup();
+  }
+
+  const forgedFixture = layeredRepo();
+  try {
+    const correction = buildCorrectionConstraint({
+      rule: "never import axios",
+      scope_hint_file: "src/api/orders.ts",
+      knownDeps: ["axios"],
+    }, NOW);
+    forgedFixture.store.json.put("constraints", correction);
+    forgedFixture.store.reindex();
+    const service = new ConstitutionService(forgedFixture.store, forgedFixture.root);
+    const first = service.upgradeCorrection(correction.id, { publicOnly: true, now: "2026-07-10T12:00:00.000Z" });
+    const policyPath = join(forgedFixture.root, ".hunch/policies", `${first.policy!.id}.json`);
+    const proofPath = join(forgedFixture.root, ".hunch/proofs", `${first.proof!.id}.json`);
+    const policyBytes = readFileSync(policyPath, "utf8");
+    writeFileSync(proofPath, JSON.stringify({
+      ...first.proof!,
+      evaluator: { ...first.proof!.evaluator, version: "forged" },
+    }, null, 2) + "\n");
+    const retry = service.upgradeCorrection(correction.id, { publicOnly: true, now: "2026-07-10T12:05:00.000Z" });
+    assert.equal(retry.status, "pending");
+    assert.match(retry.reason, /evaluator version is stale/i);
+    assert.equal(readFileSync(policyPath, "utf8"), policyBytes);
+  } finally {
+    forgedFixture.cleanup();
+  }
+
+  const oversizedFixture = layeredRepo();
+  try {
+    const correction = buildCorrectionConstraint({
+      rule: "never import axios",
+      scope_hint_file: "src/api/orders.ts",
+      knownDeps: ["axios"],
+    }, NOW);
+    oversizedFixture.store.json.put("constraints", correction);
+    oversizedFixture.store.reindex();
+    const service = new ConstitutionService(oversizedFixture.store, oversizedFixture.root);
+    const first = service.upgradeCorrection(correction.id, { publicOnly: true, now: "2026-07-10T12:00:00.000Z" });
+    rmSync(join(oversizedFixture.root, ".hunch/policies", `${first.policy!.id}.json`));
+    rmSync(join(oversizedFixture.root, ".hunch/plans", `${first.plan!.id}.json`));
+    rmSync(join(oversizedFixture.root, ".hunch/proofs", `${first.proof!.id}.json`));
+    const compiled = PolicySpecSchema.parse({
+      ...first.policy!,
+      revision: 1,
+      state: "compiled",
+      proof: null,
+      audit: first.policy!.audit.filter((event) => event.action === "compiled"),
+    });
+    service.repository.putPolicy(compiled);
+    service.plan(compiled.id, {
+      publicOnly: true,
+      maxCommits: 20,
+      maxMutations: 3,
+      maxMinutes: 5,
+      now: "2026-07-10T12:01:00.000Z",
+      repositoryName: first.plan!.repository,
+    });
+    service.prove(compiled.id, { now: "2026-07-10T12:01:00.000Z", repositoryName: first.plan!.repository });
+    const retry = service.upgradeCorrection(correction.id, { publicOnly: true, now: "2026-07-10T12:05:00.000Z" });
+    assert.equal(retry.status, "pending");
+    assert.match(retry.reason, /exceeds the MD-1a automatic replay budget/i);
+  } finally {
+    oversizedFixture.cleanup();
+  }
+});
+
+test("MD-1a keeps unsupported corrections on the unchanged legacy fast path and mints no policy", () => {
+  const { root, store, cleanup } = layeredRepo();
+  try {
+    const correction = buildCorrectionConstraint({
+      rule: "never bypass the service boundary",
+      scope_hint_file: "src/api/orders.ts",
+      severity: "blocking",
+    }, NOW);
+    store.json.put("constraints", correction);
+    store.reindex();
+    const service = new ConstitutionService(store, root);
+
+    const first = service.upgradeCorrection(correction.id, { publicOnly: true, now: "2026-07-10T12:00:00.000Z" });
+    assert.equal(first.status, "legacy_only");
+    assert.equal(first.policy, null);
+    assert.equal(first.plan, null);
+    assert.equal(first.proof, null);
+    assert.equal(first.review, null);
+    assert.equal(first.evidence.compiler?.status, "uncompilable");
+    assert.match(first.reason, /no exact structured forbidden-package meaning/i);
+    assert.equal(service.list({ publicOnly: true }).length, 0);
+    assert.equal(store.json.get("constraints", correction.id)?.status, "active", "legacy guard is retained unchanged");
+
+    const bytes = canonicalJson(first.evidence);
+    const retry = service.upgradeCorrection(correction.id, { publicOnly: true, now: "2026-07-10T12:05:00.000Z" });
+    assert.equal(retry.status, "legacy_only");
+    assert.equal(canonicalJson(retry.evidence), bytes);
+    assert.equal(service.list({ publicOnly: true }).length, 0);
+  } finally {
+    cleanup();
+  }
+});
+
+test("MD-1a rejects package subpaths, built-ins, and scheme specifiers instead of widening them", () => {
+  const { root, store, cleanup } = layeredRepo();
+  try {
+    const service = new ConstitutionService(store, root);
+    for (const dependency of ["lodash/fp", "fs", "fs/promises", "node:fs", "foo:bar"]) {
+      const correction: Constraint = {
+        ...buildCorrectionConstraint({
+          rule: `never import ${dependency}`,
+          scope_hint_file: "src/api/orders.ts",
+          severity: "blocking",
+        }, NOW),
+        forbids: { deps: [dependency], symbols: [], patterns: [] },
+      };
+      store.json.put("constraints", correction);
+      store.reindex();
+      const upgrade = service.upgradeCorrection(correction.id, { publicOnly: true, now: "2026-07-10T12:00:00.000Z" });
+      assert.equal(upgrade.status, "legacy_only");
+      assert.match(upgrade.reason, /not one exact top-level npm package identity/i);
+      assert.match(upgrade.reason, /unsupported/i);
+    }
+    assert.equal(service.list({ publicOnly: true }).length, 0);
+    assert.equal(service.repository.listPlans({ publicOnly: true }).length, 0);
+    assert.equal(service.repository.listProofs({ publicOnly: true }).length, 0);
+  } finally {
+    cleanup();
+  }
+});
+
+test("MD-1a keeps non-TypeScript/JavaScript corrections on the legacy path", () => {
+  const { root, store, cleanup } = layeredRepo();
+  try {
+    writeFileSync(join(root, "src/app.py"), "def load_orders():\n    return []\n");
+    commitFiles(root, ["src/app.py"], "fixture: add Python application");
+    indexRepo(store, root, { churn: false });
+    store.reindex();
+
+    const correction: Constraint = {
+      ...buildCorrectionConstraint({
+        rule: "never import axios",
+        scope_hint_file: "src/app.py",
+        severity: "blocking",
+      }, NOW),
+      forbids: { deps: ["axios"], symbols: [], patterns: [] },
+    };
+    store.json.put("constraints", correction);
+    store.reindex();
+
+    const service = new ConstitutionService(store, root);
+    const upgrade = service.upgradeCorrection(correction.id, { publicOnly: true, now: "2026-07-10T12:00:00.000Z" });
+    assert.equal(upgrade.status, "legacy_only");
+    assert.equal(upgrade.evidence.compiler?.status, "uncompilable");
+    assert.match(upgrade.reason, /outside MD-1a.*TypeScript\/JavaScript.*import-declaration projection/i);
+    assert.equal(upgrade.policy, null);
+    assert.equal(upgrade.plan, null);
+    assert.equal(upgrade.proof, null);
+    assert.equal(service.list({ publicOnly: true }).length, 0);
+    assert.equal(service.repository.listPlans({ publicOnly: true }).length, 0);
+    assert.equal(service.repository.listProofs({ publicOnly: true }).length, 0);
+  } finally {
+    cleanup();
+  }
+});
+
+test("MD-1a rejects a tracked source symlink without touching its external target", () => {
+  const outsideRoot = execFileSync("mktemp", ["-d", join(tmpdir(), "hunch-md1-symlink-target-XXXXXX")], { encoding: "utf8" }).trim();
+  const outsideFile = join(outsideRoot, "outside.ts");
+  const outsideBytes = 'import { fetchOrders } from "./orders.js";\nexport function listOrders(u){ return fetchOrders(u); }\n';
+  writeFileSync(outsideFile, outsideBytes);
+  const { root, store, cleanup } = layeredRepo();
+  try {
+    const sourceFile = join(root, "src/api/orders.ts");
+    rmSync(sourceFile);
+    symlinkSync(outsideFile, sourceFile);
+    commitFiles(root, ["src/api/orders.ts"], "fixture: track source symlink");
+    indexRepo(store, root, { churn: false });
+    store.reindex();
+
+    const correction: Constraint = {
+      ...buildCorrectionConstraint({
+        rule: "never import axios",
+        scope_hint_file: "src/api/orders.ts",
+        severity: "blocking",
+      }, NOW),
+      forbids: { deps: ["axios"], symbols: [], patterns: [] },
+    };
+    store.json.put("constraints", correction);
+    store.reindex();
+
+    const service = new ConstitutionService(store, root);
+    const upgrade = service.upgradeCorrection(correction.id, { publicOnly: true, now: "2026-07-10T12:00:00.000Z" });
+    assert.equal(upgrade.status, "legacy_only");
+    assert.equal(upgrade.evidence.compiler?.status, "uncompilable");
+    assert.match(upgrade.reason, /symbolic link|regular source blob/i);
+    assert.equal(readFileSync(outsideFile, "utf8"), outsideBytes);
+    assert.equal(upgrade.policy, null);
+    assert.equal(upgrade.plan, null);
+    assert.equal(upgrade.proof, null);
+    assert.equal(service.list({ publicOnly: true }).length, 0);
+    assert.equal(service.repository.listPlans({ publicOnly: true }).length, 0);
+    assert.equal(service.repository.listProofs({ publicOnly: true }).length, 0);
+  } finally {
+    cleanup();
+    rmSync(outsideRoot, { recursive: true, force: true });
+  }
+});
+
+test("source mutation independently refuses a symlink and preserves the external target", () => {
+  const outsideRoot = execFileSync("mktemp", ["-d", join(tmpdir(), "hunch-mutation-symlink-target-XXXXXX")], { encoding: "utf8" }).trim();
+  const outsideFile = join(outsideRoot, "outside.ts");
+  const outsideBytes = 'import { fetchOrders } from "./orders.js";\nexport function listOrders(u){ return fetchOrders(u); }\n';
+  writeFileSync(outsideFile, outsideBytes);
+  const { root, store, cleanup } = layeredRepo();
+  try {
+    store.json.put("decisions", decision("dec_symlink_mutation_guard"));
+    store.reindex();
+    const service = new ConstitutionService(store, root);
+    const policy = service.compile("dec_symlink_mutation_guard", { now: NOW });
+    const regularBase = graphSnapshot(store, root, { publicOnly: true });
+
+    const sourceFile = join(root, "src/api/orders.ts");
+    rmSync(sourceFile);
+    symlinkSync(outsideFile, sourceFile);
+    const symlinkHead = commitFiles(root, ["src/api/orders.ts"], "fixture: track source symlink");
+
+    const outcome = runSourceMutation(root, policy, { ...regularBase, head: symlinkHead });
+    assert.equal(outcome.error_code, "mutation-source-symlink-unsupported");
+    assert.equal(outcome.snapshot, undefined);
+    assert.equal(outcome.source_patch, undefined);
+    assert.equal(readFileSync(outsideFile, "utf8"), outsideBytes);
+  } finally {
+    cleanup();
+    rmSync(outsideRoot, { recursive: true, force: true });
+  }
+});
+
+test("source mutation refuses repository checkout transforms before creating a worktree", () => {
+  const { root, store, cleanup } = layeredRepo();
+  try {
+    store.json.put("decisions", decision("dec_checkout_attribute_mutation_guard"));
+    store.reindex();
+    const service = new ConstitutionService(store, root);
+    const policy = service.compile("dec_checkout_attribute_mutation_guard", { now: NOW });
+    const base = graphSnapshot(store, root, { publicOnly: true });
+    writeFileSync(join(root, ".git/info/attributes"), "*.ts ident\n");
+
+    const outcome = runSourceMutation(root, policy, base);
+    assert.equal(outcome.error_code, "unsafe-checkout-attributes");
+    assert.equal(outcome.snapshot, undefined);
+    assert.equal(outcome.source_patch, undefined);
+    assert.deepEqual(readdirSync(join(root, ".hunch-cache/mutations")), []);
+  } finally {
+    cleanup();
+  }
+});
+
+test("MD-1a treats a same-id semantic collision as conflict instead of coverage", () => {
+  const { root, store, cleanup } = layeredRepo();
+  try {
+    const correction = buildCorrectionConstraint({
+      rule: "never import axios",
+      scope_hint_file: "src/api/orders.ts",
+      knownDeps: ["axios"],
+    }, NOW);
+    store.json.put("constraints", correction);
+    store.reindex();
+    const service = new ConstitutionService(store, root);
+    const first = service.upgradeCorrection(correction.id, { publicOnly: true, now: "2026-07-10T12:00:00.000Z" });
+    const policyPath = join(root, ".hunch/policies", `${first.policy!.id}.json`);
+    rmSync(policyPath);
+    if (first.policy!.assertion.kind !== "not-reaches") throw new Error("fixture expected not-reaches");
+    const collision = PolicySpecSchema.parse({
+      ...first.policy!,
+      state: "compiled",
+      proof: null,
+      authority: null,
+      activation_gate: null,
+      assertion: {
+        ...first.policy!.assertion,
+        object: { selector: "external:got" },
+      },
+    });
+    service.repository.putPolicy(collision);
+    const collisionBytes = readFileSync(policyPath, "utf8");
+    const retry = service.upgradeCorrection(correction.id, { publicOnly: true, now: "2026-07-10T12:05:00.000Z" });
+    assert.equal(retry.status, "conflicted");
+    assert.match(retry.reason, /occupied by different semantics/i);
+    assert.equal(readFileSync(policyPath, "utf8"), collisionBytes);
+    assert.deepEqual(service.get(collision.id, { publicOnly: true }).assertion, collision.assertion);
+  } finally {
+    cleanup();
+  }
+});
+
+test("MD-1a refuses publication when HEAD or the exact correction changes during artifact CAS", () => {
+  const headFixture = layeredRepo();
+  try {
+    const correction = buildCorrectionConstraint({
+      rule: "never import axios",
+      scope_hint_file: "src/api/orders.ts",
+      knownDeps: ["axios"],
+    }, NOW);
+    headFixture.store.json.put("constraints", correction);
+    headFixture.store.reindex();
+    const service = new ConstitutionService(headFixture.store, headFixture.root);
+    const original = service.repository.putPlanIfAbsent.bind(service.repository);
+    service.repository.putPlanIfAbsent = ((...args: Parameters<typeof original>) => {
+      const claim = original(...args);
+      writeFileSync(join(headFixture.root, "src/services/orders.ts"),
+        'import { dbQuery } from "../db/client.js";\nexport function fetchOrders(u){ return dbQuery(u); }\n// concurrent commit\n');
+      commitFiles(headFixture.root, ["src/services/orders.ts"], "test: concurrent head advance");
+      return claim;
+    }) as typeof service.repository.putPlanIfAbsent;
+    const upgrade = service.upgradeCorrection(correction.id, { publicOnly: true, now: "2026-07-10T12:00:00.000Z" });
+    assert.equal(upgrade.status, "pending");
+    assert.match(upgrade.reason, /HEAD changed while proving/i);
+    assert.equal(service.list({ publicOnly: true }).length, 0);
+  } finally {
+    headFixture.cleanup();
+  }
+
+  const correctionFixture = layeredRepo();
+  try {
+    const correction = buildCorrectionConstraint({
+      rule: "never import axios",
+      scope_hint_file: "src/api/orders.ts",
+      knownDeps: ["axios"],
+    }, NOW);
+    correctionFixture.store.json.put("constraints", correction);
+    correctionFixture.store.reindex();
+    const service = new ConstitutionService(correctionFixture.store, correctionFixture.root);
+    const original = service.repository.putPlanIfAbsent.bind(service.repository);
+    service.repository.putPlanIfAbsent = ((...args: Parameters<typeof original>) => {
+      const claim = original(...args);
+      correctionFixture.store.json.put("constraints", {
+        ...correction,
+        status: "retired",
+        valid_to: "2026-07-10T12:00:01.000Z",
+      });
+      return claim;
+    }) as typeof service.repository.putPlanIfAbsent;
+    const upgrade = service.upgradeCorrection(correction.id, { publicOnly: true, now: "2026-07-10T12:00:00.000Z" });
+    assert.equal(upgrade.status, "conflicted");
+    assert.match(upgrade.reason, /changed or left its public home/i);
+    assert.equal(service.list({ publicOnly: true }).length, 0);
+  } finally {
+    correctionFixture.cleanup();
+  }
+
+  const conflictFixture = layeredRepo();
+  try {
+    const correction = buildCorrectionConstraint({
+      rule: "never import axios",
+      scope_hint_file: "src/api/orders.ts",
+      knownDeps: ["axios"],
+    }, NOW);
+    conflictFixture.store.json.put("constraints", correction);
+    conflictFixture.store.reindex();
+    const service = new ConstitutionService(conflictFixture.store, conflictFixture.root);
+    const original = service.repository.putPolicyIfAbsent.bind(service.repository);
+    service.repository.putPolicyIfAbsent = ((policy, opts) => {
+      const claim = original(policy, opts);
+      if (claim.created) {
+        if (policy.assertion.kind !== "not-reaches") throw new Error("fixture expected not-reaches");
+        service.repository.putPolicy(PolicySpecSchema.parse({
+          ...policy,
+          id: "pol_aaaaaaaaaa",
+          topic: "test.concurrent-conflict",
+          state: "compiled",
+          proof: null,
+          activation_gate: null,
+          scope: { ...policy.scope, paths: ["src/api/**"] },
+          assertion: { ...policy.assertion, kind: "reaches" },
+        }));
+      }
+      return claim;
+    }) as typeof service.repository.putPolicyIfAbsent;
+    const upgrade = service.upgradeCorrection(correction.id, { publicOnly: true, now: "2026-07-10T12:00:00.000Z" });
+    assert.equal(upgrade.status, "conflicted");
+    assert.match(upgrade.reason, /appeared during publication/i);
+    assert.equal(upgrade.policy?.authority, null);
+    assert.equal(upgrade.policy?.activation_gate?.status, "blocked");
+    assert.equal(service.list({ publicOnly: true }).length, 2);
+    assert.equal(directConflict(upgrade.policy!, service.get("pol_aaaaaaaaaa", { publicOnly: true })), true,
+      "an exact correction file overlaps a conflicting incumbent glob");
+  } finally {
+    conflictFixture.cleanup();
+  }
+});
+
+test("MD-1a leaves an exact correction pending when the forbidden import is still present", () => {
+  const { root, store, cleanup } = layeredRepo('import axios from "axios";\nexport function listOrders(u){ return axios.get(u); }\n');
+  try {
+    const correction = buildCorrectionConstraint({
+      rule: "never import axios",
+      scope_hint_file: "src/api/orders.ts",
+      severity: "blocking",
+      knownDeps: ["axios"],
+    }, NOW);
+    store.json.put("constraints", correction);
+    store.reindex();
+    const service = new ConstitutionService(store, root);
+
+    const upgrade = service.upgradeCorrection(correction.id, { publicOnly: true, now: "2026-07-10T12:00:00.000Z" });
+    assert.equal(upgrade.status, "pending");
+    assert.equal(upgrade.evidence.compiler?.status, "eligible");
+    assert.match(upgrade.reason, /currently imports axios/i);
+    assert.equal(upgrade.policy, null);
+    assert.equal(service.list({ publicOnly: true }).length, 0, "a dirty baseline cannot create even a non-authoritative policy");
+    assert.equal(service.repository.listPlans({ publicOnly: true }).length, 0);
+    assert.equal(service.repository.listProofs({ publicOnly: true }).length, 0);
+  } finally {
+    cleanup();
+  }
+});
+
+test("MD-1a waits for a clean committed source baseline before publishing a proof packet", () => {
+  const { root, store, cleanup } = layeredRepo();
+  try {
+    const correction = buildCorrectionConstraint({
+      rule: "never import axios",
+      scope_hint_file: "src/api/orders.ts",
+      severity: "blocking",
+      knownDeps: ["axios"],
+    }, NOW);
+    store.json.put("constraints", correction);
+    writeFileSync(join(root, "src/api/orders.ts"),
+      'import { fetchOrders } from "../services/orders.js";\nexport function listOrders(u){ return fetchOrders(u); }\n// corrected but not committed\n');
+    indexRepo(store, root, { churn: false });
+    store.reindex();
+    const service = new ConstitutionService(store, root);
+
+    const pending = service.upgradeCorrection(correction.id, { publicOnly: true, now: "2026-07-10T12:00:00.000Z" });
+    assert.equal(pending.status, "pending");
+    assert.equal(pending.evidence.compiler?.status, "eligible");
+    assert.match(pending.reason, /not a clean committed source baseline/i);
+    assert.equal(pending.policy, null);
+    assert.equal(service.list({ publicOnly: true }).length, 0);
+    assert.equal(service.repository.listPlans({ publicOnly: true }).length, 0);
+    assert.equal(service.repository.listProofs({ publicOnly: true }).length, 0);
+
+    commitFiles(root, ["src/api/orders.ts"], "fix: commit corrected source baseline");
+    indexRepo(store, root, { churn: false });
+    store.reindex();
+    const proved = service.upgradeCorrection(correction.id, { publicOnly: true, now: "2026-07-10T12:05:00.000Z" });
+    assert.equal(proved.status, "proved");
+    assert.equal(proved.proof?.proof_class, "P3");
+    assert.equal(proved.authority, "none");
+  } finally {
+    cleanup();
+  }
+});
+
+test("MD-1a discloses anchor churn and fails unknown when the anchor symbol is renamed", () => {
+  const { root, store, cleanup } = layeredRepo();
+  try {
+    const correction = buildCorrectionConstraint({
+      rule: "never import axios",
+      scope_hint_file: "src/api/orders.ts",
+      knownDeps: ["axios"],
+    }, NOW);
+    store.json.put("constraints", correction);
+    store.reindex();
+    const service = new ConstitutionService(store, root);
+    const upgrade = service.upgradeCorrection(correction.id, { publicOnly: true, now: "2026-07-10T12:00:00.000Z" });
+    assert.match(upgrade.review!.does_not_catch, /anchor-symbol rename\/removal/i);
+    writeFileSync(join(root, "src/api/orders.ts"),
+      'import { fetchOrders } from "../services/orders.js";\nexport function listOrdersV2(u){ return fetchOrders(u); }\n');
+    indexRepo(store, root, { churn: false });
+    store.reindex();
+    const evaluation = service.evaluate({ id: upgrade.policy!.id, publicOnly: true })[0]!.evaluation;
+    assert.equal(evaluation.result, "unknown");
+    assert.match(evaluation.explanation, /subject binding is missing/i);
+  } finally {
+    cleanup();
+  }
+});
+
+test("MD-1a private correction batch leaves exact-zero public artifacts and public writers reject private data", () => {
+  const { root, store: initial, cleanup } = layeredRepo();
+  initial.close();
+  const privateRoot = join(root, "private-correction-policy/.hunch");
+  initializePrivateOverlay(privateRoot);
+  writeFileSync(join(root, ".hunch/local.json"), JSON.stringify({ privateDir: privateRoot, autoCommit: false, mode: "private" }));
+  const store = new HunchStore(hunchPaths(root));
+  try {
+    const correction = buildCorrectionConstraint({
+      rule: "never import @secret/billing",
+      scope_hint_file: "src/api/orders.ts",
+      severity: "blocking",
+      knownDeps: ["@secret/billing"],
+    }, NOW);
+    store.putPrivate("constraints", correction);
+    store.reindex();
+    const service = new ConstitutionService(store, root);
+
+    const sweep = service.upgradeCorrections({ privateOnly: true, now: "2026-07-10T12:00:00.000Z" });
+    assert.equal(sweep.scanned, 1);
+    assert.equal(sweep.proved, 1);
+    assert.equal(sweep.authority, "none");
+    const upgrade = sweep.upgrades[0]!;
+    assert.equal(upgrade.status, "proved");
+    assert.equal(upgrade.policy?.data_class, "private");
+    assert.equal(upgrade.evidence.data_class, "private");
+    assert.equal(upgrade.proof?.data_class, "private");
+    assert.ok(existsSync(join(privateRoot, "policies", `${upgrade.policy!.id}.json`)));
+    assert.ok(existsSync(join(privateRoot, "proofs", `${upgrade.proof!.id}.json`)));
+    assert.throws(() => service.repository.putPolicyIfAbsent(upgrade.policy!, { public: true }), /refusing to write private policy/i);
+    assert.throws(() => service.repository.putPlanIfAbsent(upgrade.plan!, upgrade.policy!.id, { public: true }), /refusing to write private proof plan/i);
+    assert.throws(() => service.repository.putProofIfAbsent(upgrade.proof!, upgrade.policy!.id, { public: true }), /refusing to write private proof/i);
+    assert.throws(() => service.repository.putEvidence(upgrade.evidence, { public: true }), /refusing to write private evidence/i);
+
+    const publicView = canonicalJson({
+      policies: service.list({ publicOnly: true }),
+      evidence: service.repository.listEvidence({ publicOnly: true }),
+      plans: service.repository.listPlans({ publicOnly: true }),
+      proofs: service.repository.listProofs({ publicOnly: true }),
+    });
+    assert.equal(publicView, '{"evidence":[],"plans":[],"policies":[],"proofs":[]}');
+    assert.doesNotMatch(publicView, /secret|billing/i);
+    assert.doesNotMatch(publicView, new RegExp(upgrade.policy!.id));
+    assert.doesNotMatch(publicView, new RegExp(upgrade.evidence.id));
+    assert.doesNotMatch(publicView, new RegExp(upgrade.proof!.id));
+  } finally {
+    store.close();
+    cleanup();
+  }
+});
+
+test("MD-1a rejects public references to private-only decisions before evidence or capture is written", async () => {
+  const { root, store: initial, cleanup } = layeredRepo();
+  initial.close();
+  const privateRoot = join(root, "private-source-taint/.hunch");
+  initializePrivateOverlay(privateRoot);
+  writeFileSync(join(root, ".hunch/local.json"), JSON.stringify({ privateDir: privateRoot, autoCommit: false, mode: "private" }));
+  const store = new HunchStore(hunchPaths(root));
+  const privateDecision = {
+    ...decision("dec_private_transport"),
+    title: "PRIVATE_SOURCE_SENTINEL",
+    topic: "private.transport",
+  };
+  store.putPrivate("decisions", privateDecision);
+  const injected = {
+    ...buildCorrectionConstraint({
+      rule: "never import axios",
+      scope_hint_file: "src/api/orders.ts",
+      knownDeps: ["axios"],
+      source_decision: privateDecision.id,
+    }, NOW),
+  };
+  store.json.put("constraints", injected);
+  store.reindex();
+  const service = new ConstitutionService(store, root);
+  assert.throws(
+    () => service.upgradeCorrection(injected.id, { publicOnly: true, now: "2026-07-10T12:00:00.000Z" }),
+    /private-only/i,
+  );
+  const ingest = service.ingest({ publicOnly: true, since: "90d", now: "2026-07-10T12:00:00.000Z" });
+  assert.equal(ingest.normalized, 0);
+  assert.equal(ingest.excluded, 1);
+  const publicArtifacts = canonicalJson({
+    policies: service.list({ publicOnly: true }),
+    evidence: service.repository.listEvidence({ publicOnly: true }),
+    plans: service.repository.listPlans({ publicOnly: true }),
+    proofs: service.repository.listProofs({ publicOnly: true }),
+  });
+  assert.doesNotMatch(publicArtifacts, new RegExp(privateDecision.id));
+  assert.doesNotMatch(publicArtifacts, /PRIVATE_SOURCE_SENTINEL/);
+  store.close();
+
+  const projectRoot = process.cwd();
+  const tsx = join(projectRoot, "node_modules/tsx/dist/cli.mjs");
+  const cli = join(projectRoot, "src/cli/index.ts");
+  const env = { ...process.env, HUNCH_PRIVATE_DIR: "", HUNCH_SYNTH_PROVIDER: "deterministic" };
+  let client: Client | null = null;
+  try {
+    const transport = new StdioClientTransport({ command: process.execPath, args: [tsx, cli, "mcp"], cwd: root, env });
+    client = new Client({ name: "correction-private-source-test", version: "1.0.0" });
+    await client.connect(transport);
+    const rejectedInput = {
+      rule: "never import got",
+      scope_hint_file: "src/api/orders.ts",
+      severity: "blocking" as const,
+      source_decision: privateDecision.id,
+    };
+    const rejected = await client.callTool({ name: "hunch_record_correction", arguments: rejectedInput });
+    const rejectedText = (rejected.content[0] as { type: "text"; text: string }).text;
+    assert.match(rejectedText, /Refusing to record public correction/i);
+    assert.match(rejectedText, /exists only in the private overlay/i);
+    const rejectedId = buildCorrectionConstraint(rejectedInput, NOW).id;
+    const verify = new HunchStore(hunchPaths(root));
+    assert.equal(verify.json.get("constraints", rejectedId), undefined);
+    verify.close();
+  } finally {
+    if (client) await client.close();
+    cleanup();
+  }
+});
+
+test("MD-1a CLI stays plain and MCP requires an explicit flag for full proof artifacts", async () => {
+  const fixture = layeredRepo();
+  const projectRoot = process.cwd();
+  const tsx = join(projectRoot, "node_modules/tsx/dist/cli.mjs");
+  const cli = join(projectRoot, "src/cli/index.ts");
+  let client: Client | null = null;
+  try {
+    const correction = buildCorrectionConstraint({
+      rule: "never import axios",
+      scope_hint_file: "src/api/orders.ts",
+      severity: "blocking",
+      knownDeps: ["axios"],
+    }, NOW);
+    fixture.store.json.put("constraints", correction);
+    fixture.store.reindex();
+    fixture.store.close();
+    const env = { ...process.env, HUNCH_PRIVATE_DIR: "", HUNCH_SYNTH_PROVIDER: "deterministic" };
+
+    const humanRun = spawnSync(process.execPath, [
+      tsx, cli, "policy", "upgrade-correction", correction.id, "--public-only",
+    ], { cwd: fixture.root, env, encoding: "utf8" });
+    assert.equal(humanRun.status, 0, humanRun.stderr);
+    assert.match(humanRun.stdout, /READY FOR REVIEW/);
+    assert.match(humanRun.stdout, /src\/api\/orders\.ts must not directly import axios/);
+    assert.match(humanRun.stdout, /authority: none/);
+    assert.match(humanRun.stdout, /details: hunch policy card pol_/);
+    assert.doesNotMatch(humanRun.stdout, /Policy IR|\bP3\b|corpus|mutation/i);
+
+    const jsonRun = spawnSync(process.execPath, [
+      tsx, cli, "policy", "upgrade-correction", correction.id, "--public-only", "--json",
+    ], { cwd: fixture.root, env, encoding: "utf8" });
+    assert.equal(jsonRun.status, 0, jsonRun.stderr);
+    const cliResult = JSON.parse(jsonRun.stdout) as {
+      status: string;
+      policy: { id: string; authority: unknown };
+      evidence: { id: string };
+      proof: { id: string };
+      review: { meaning: string };
+      authority: string;
+    };
+    assert.equal(cliResult.status, "already_proved");
+    assert.equal(cliResult.policy.authority, null);
+    assert.equal(cliResult.authority, "none");
+
+    const transport = new StdioClientTransport({ command: process.execPath, args: [tsx, cli, "mcp"], cwd: fixture.root, env });
+    client = new Client({ name: "correction-upgrade-contract-test", version: "1.0.0" });
+    await client.connect(transport);
+    const call = await client.callTool({
+      name: "hunch_policy_upgrade_correction",
+      arguments: { constraint_id: correction.id, public_only: true },
+    });
+    const mcpResult = JSON.parse((call.content[0] as { type: "text"; text: string }).text) as {
+      status: string;
+      policy_id: string;
+      evidence_id: string;
+      proof_id: string;
+      review: { meaning: string };
+      authority: string;
+      [key: string]: unknown;
+    };
+    assert.equal(mcpResult.status, "already_proved");
+    assert.equal(mcpResult.policy_id, cliResult.policy.id);
+    assert.equal(mcpResult.evidence_id, cliResult.evidence.id);
+    assert.equal(mcpResult.proof_id, cliResult.proof.id);
+    assert.equal(mcpResult.review.meaning, cliResult.review.meaning);
+    assert.equal(mcpResult.authority, "none");
+    assert.equal("policy" in mcpResult, false);
+    assert.equal("plan" in mcpResult, false);
+    assert.equal("proof" in mcpResult, false);
+    assert.equal("mutation_receipts" in mcpResult, false);
+
+    const auditCall = await client.callTool({
+      name: "hunch_policy_upgrade_correction",
+      arguments: { constraint_id: correction.id, public_only: true, include_artifacts: true },
+    });
+    const auditResult = JSON.parse((auditCall.content[0] as { type: "text"; text: string }).text) as typeof cliResult;
+    assert.equal(auditResult.policy.id, cliResult.policy.id);
+    assert.equal(auditResult.evidence.id, cliResult.evidence.id);
+    assert.equal(auditResult.proof.id, cliResult.proof.id);
+  } finally {
+    if (client) await client.close();
+    fixture.cleanup();
+  }
+});
+
+test("MD-1a capture survives a dirty baseline and ordinary index retries it after the fix", async () => {
+  const fixture = layeredRepo('import axios from "axios";\nexport function listOrders(u){ return axios.get(u); }\n');
+  const projectRoot = process.cwd();
+  const tsx = join(projectRoot, "node_modules/tsx/dist/cli.mjs");
+  const cli = join(projectRoot, "src/cli/index.ts");
+  let client: Client | null = null;
+  try {
+    writeFileSync(join(fixture.root, "package.json"), JSON.stringify({ dependencies: { axios: "1.0.0" } }));
+    commitFiles(fixture.root, ["package.json"], "fixture: declare axios");
+    fixture.store.close();
+    const env = { ...process.env, HUNCH_PRIVATE_DIR: "", HUNCH_SYNTH_PROVIDER: "deterministic" };
+    const transport = new StdioClientTransport({ command: process.execPath, args: [tsx, cli, "mcp"], cwd: fixture.root, env });
+    client = new Client({ name: "automatic-correction-upgrade-test", version: "1.0.0" });
+    await client.connect(transport);
+
+    const capture = await client.callTool({
+      name: "hunch_record_correction",
+      arguments: {
+        rule: "never import axios",
+        scope_hint_file: "src/api/orders.ts",
+        severity: "blocking",
+        rationale: "Direct HTTP clients bypass the shared transport controls.",
+      },
+    });
+    const captureText = (capture.content[0] as { type: "text"; text: string }).text;
+    assert.match(captureText, /Recorded blocking constraint con_/);
+    assert.match(captureText, /REVIEW PENDING/);
+    assert.match(captureText, /After the fix is committed, run hunch index/i);
+    assert.match(captureText, /post-commit hook retries this automatically/i);
+    assert.match(captureText, /immediate guard is already durable/i);
+    assert.doesNotMatch(captureText, /Policy IR|\bP3\b|corpus|mutation/i);
+
+    const correctionId = captureText.match(/constraint (con_[a-f0-9]+)/)?.[1];
+    assert.ok(correctionId);
+    await client.close();
+    client = null;
+
+    const pendingStore = new HunchStore(hunchPaths(fixture.root));
+    assert.equal(new ConstitutionService(pendingStore, fixture.root).list({ publicOnly: true }).length, 0,
+      "capture does not hide a lossy in-process proof job behind its response");
+    pendingStore.close();
+
+    writeFileSync(join(fixture.root, "src/api/orders.ts"),
+      'import { fetchOrders } from "../services/orders.js";\nexport function listOrders(u){ return fetchOrders(u); }\n');
+    commitFiles(fixture.root, ["src/api/orders.ts"], "fix: remove direct axios import");
+    const indexRun = spawnSync(process.execPath, [tsx, cli, "index"], {
+      cwd: fixture.root,
+      env,
+      encoding: "utf8",
+    });
+    assert.equal(indexRun.status, 0, indexRun.stderr);
+    assert.match(indexRun.stdout, /correction reviews: 1 proved/);
+
+    const provedStore = new HunchStore(hunchPaths(fixture.root));
+    const service = new ConstitutionService(provedStore, fixture.root);
+    const policies = service.list({ publicOnly: true });
+    assert.equal(policies.length, 1);
+    assert.equal(policies[0]!.state, "proposed");
+    assert.equal(policies[0]!.authority, null);
+    const proof = service.repository.getProof(policies[0]!.proof!, { publicOnly: true });
+    assert.equal(proof?.proof_class, "P3");
+    provedStore.close();
+  } finally {
+    if (client) await client.close();
+    fixture.cleanup();
+  }
+});
+
+test("MD-1a post-commit sync retries the durable correction queue without an explicit upgrade", () => {
+  const fixture = layeredRepo('import axios from "axios";\nexport function listOrders(u){ return axios.get(u); }\n');
+  const projectRoot = process.cwd();
+  const tsx = join(projectRoot, "node_modules/tsx/dist/cli.mjs");
+  const cli = join(projectRoot, "src/cli/index.ts");
+  try {
+    const correction = buildCorrectionConstraint({
+      rule: "never import axios",
+      scope_hint_file: "src/api/orders.ts",
+      severity: "blocking",
+      knownDeps: ["axios"],
+    }, NOW);
+    fixture.store.json.put("constraints", correction);
+    fixture.store.reindex();
+    fixture.store.close();
+    writeFileSync(join(fixture.root, "src/api/orders.ts"),
+      'import { fetchOrders } from "../services/orders.js";\nexport function listOrders(u){ return fetchOrders(u); }\n');
+    commitFiles(fixture.root, ["src/api/orders.ts"], "fix: remove queued forbidden import");
+    const run = spawnSync(process.execPath, [tsx, cli, "sync", "HEAD", "--quiet", "--no-commit"], {
+      cwd: fixture.root,
+      env: { ...process.env, HUNCH_PRIVATE_DIR: "", HUNCH_SYNTH_PROVIDER: "deterministic" },
+      encoding: "utf8",
+    });
+    assert.equal(run.status, 0, run.stderr);
+    const store = new HunchStore(hunchPaths(fixture.root));
+    const service = new ConstitutionService(store, fixture.root);
+    const policy = service.list({ publicOnly: true })[0]!;
+    assert.equal(policy.state, "proposed");
+    assert.equal(policy.authority, null);
+    assert.equal(service.repository.getProof(policy.proof!, { publicOnly: true })?.proof_class, "P3");
+    store.close();
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test("MD-1a normal public sync folds capture, correction review, graph, and grounding into one clean memory commit", () => {
+  const fixture = layeredRepo('import axios from "axios";\nexport function listOrders(u){ return axios.get(u); }\n');
+  const projectRoot = process.cwd();
+  const tsx = join(projectRoot, "node_modules/tsx/dist/cli.mjs");
+  const cli = join(projectRoot, "src/cli/index.ts");
+  try {
+    writeFileSync(join(fixture.root, "AGENTS.md"), "# Team agent notes\n");
+    ensureGitignore(fixture.root);
+    commitFiles(fixture.root, ["AGENTS.md", ".gitignore"], "fixture: track generated grounding target");
+    const correction = buildCorrectionConstraint({
+      rule: "never import axios",
+      scope_hint_file: "src/api/orders.ts",
+      severity: "blocking",
+      knownDeps: ["axios"],
+    }, NOW);
+    fixture.store.json.put("constraints", correction);
+    fixture.store.reindex();
+    fixture.store.close();
+
+    writeFileSync(join(fixture.root, "src/api/orders.ts"),
+      'import { fetchOrders } from "../services/orders.js";\nexport function listOrders(u){ return fetchOrders(u); }\n');
+    const sourceHead = commitFiles(fixture.root, ["src/api/orders.ts"], "fix: remove queued forbidden import");
+    const commitsBefore = Number(execFileSync("git", ["rev-list", "--count", "HEAD"], { cwd: fixture.root, encoding: "utf8" }).trim());
+    const run = spawnSync(process.execPath, [tsx, cli, "sync", "HEAD", "--quiet"], {
+      cwd: fixture.root,
+      env: { ...process.env, HUNCH_PRIVATE_DIR: "", HUNCH_SYNTH_PROVIDER: "deterministic" },
+      encoding: "utf8",
+    });
+    assert.equal(run.status, 0, run.stderr);
+
+    const commitsAfter = Number(execFileSync("git", ["rev-list", "--count", "HEAD"], { cwd: fixture.root, encoding: "utf8" }).trim());
+    assert.equal(commitsAfter - commitsBefore, 1, "all public sync writes ride one memory commit");
+    assert.match(execFileSync("git", ["log", "-1", "--format=%s"], { cwd: fixture.root, encoding: "utf8" }), /^hunch: capture dec_/);
+    const committedFiles = execFileSync("git", ["diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD"], {
+      cwd: fixture.root,
+      encoding: "utf8",
+    });
+    assert.match(committedFiles, /\.hunch\/decisions\/dec_[a-f0-9]+\.json/);
+    assert.match(committedFiles, new RegExp(`\\.hunch/constraints/${correction.id}\\.json`));
+    assert.match(committedFiles, /\.hunch\/policies\/pol_[a-f0-9]+\.json/);
+    assert.match(committedFiles, /\.hunch\/proofs\/proof_[a-f0-9]+\.json/);
+    assert.match(committedFiles, /^AGENTS\.md$/m, "refreshed grounding rides the same commit");
+    assert.equal(execFileSync("git", ["status", "--porcelain"], { cwd: fixture.root, encoding: "utf8" }), "",
+      "the public memory and grounding tree is clean after the consolidated commit");
+
+    const store = new HunchStore(hunchPaths(fixture.root));
+    const service = new ConstitutionService(store, fixture.root);
+    const policy = service.list({ publicOnly: true })[0]!;
+    assert.equal(service.list({ publicOnly: true }).length, 1);
+    assert.equal(policy.state, "proposed");
+    assert.equal(policy.authority, null);
+    assert.equal(service.repository.getProof(policy.proof!, { publicOnly: true })?.proof_class, "P3");
+    assert.ok(store.recsInHome("decisions", "public").some((record) => !!record.commit && sourceHead.startsWith(record.commit)),
+      "the substantive source commit was captured, not merely swept for correction review");
+    store.close();
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test("MD-1a private split sync commits its proposal only to a standalone overlay and leaves both repositories clean", () => {
+  const fixture = layeredRepo('import billing from "@secret/billing";\nexport function listOrders(u){ return billing.fetch(u); }\n');
+  const overlayRoot = execFileSync("mktemp", ["-d", join(tmpdir(), "hunch-private-sync-XXXXXX")], { encoding: "utf8" }).trim();
+  const privateRoot = join(overlayRoot, ".hunch");
+  const projectRoot = process.cwd();
+  const tsx = join(projectRoot, "node_modules/tsx/dist/cli.mjs");
+  const cli = join(projectRoot, "src/cli/index.ts");
+  try {
+    execFileSync("git", ["init", "-q"], { cwd: overlayRoot });
+    execFileSync("git", ["config", "user.email", "test@example.com"], { cwd: overlayRoot });
+    execFileSync("git", ["config", "user.name", "Test Human"], { cwd: overlayRoot });
+    execFileSync("git", ["commit", "--allow-empty", "-qm", "fixture: initialize private memory repo"], { cwd: overlayRoot });
+  initializePrivateOverlay(privateRoot);
+
+    writeFileSync(join(fixture.root, "AGENTS.md"), "# Team agent notes\n");
+    ensureGitignore(fixture.root);
+    commitFiles(fixture.root, ["AGENTS.md", ".gitignore"], "fixture: track public grounding target");
+    fixture.store.close();
+    writeFileSync(join(fixture.root, ".hunch/local.json"), JSON.stringify({
+      privateDir: privateRoot,
+      autoCommit: true,
+      mode: "private",
+    }) + "\n");
+    const configured = new HunchStore(hunchPaths(fixture.root));
+    const correction = buildCorrectionConstraint({
+      rule: "PRIVATE_CORRECTION_SENTINEL: never import @secret/billing",
+      scope_hint_file: "src/api/orders.ts",
+      severity: "blocking",
+      knownDeps: ["@secret/billing"],
+    }, NOW);
+    configured.putPrivate("constraints", correction);
+    configured.reindex();
+    configured.close();
+
+    writeFileSync(join(fixture.root, "src/api/orders.ts"),
+      'import { fetchOrders } from "../services/orders.js";\nexport function listOrders(u){ return fetchOrders(u); }\n');
+    commitFiles(fixture.root, ["src/api/orders.ts"], "fix: remove private queued forbidden import");
+    const publicCommitsBefore = Number(execFileSync("git", ["rev-list", "--count", "HEAD"], { cwd: fixture.root, encoding: "utf8" }).trim());
+    const privateCommitsBefore = Number(execFileSync("git", ["rev-list", "--count", "HEAD"], { cwd: overlayRoot, encoding: "utf8" }).trim());
+    const run = spawnSync(process.execPath, [tsx, cli, "sync", "HEAD", "--quiet", "--private"], {
+      cwd: fixture.root,
+      env: { ...process.env, HUNCH_PRIVATE_DIR: privateRoot, HUNCH_SYNTH_PROVIDER: "deterministic" },
+      encoding: "utf8",
+    });
+    assert.equal(run.status, 0, run.stderr);
+
+    const publicCommitsAfter = Number(execFileSync("git", ["rev-list", "--count", "HEAD"], { cwd: fixture.root, encoding: "utf8" }).trim());
+    const privateCommitsAfter = Number(execFileSync("git", ["rev-list", "--count", "HEAD"], { cwd: overlayRoot, encoding: "utf8" }).trim());
+    assert.equal(publicCommitsAfter - publicCommitsBefore, 1, "public derived graph and grounding are folded into one commit");
+    assert.equal(privateCommitsAfter - privateCommitsBefore, 1, "private capture and correction proposal are folded into one overlay commit");
+    assert.equal(execFileSync("git", ["status", "--porcelain"], { cwd: fixture.root, encoding: "utf8" }), "",
+      "the public repository is clean after its graph/grounding flush");
+    assert.equal(execFileSync("git", ["status", "--porcelain"], { cwd: overlayRoot, encoding: "utf8" }), "",
+      "the standalone overlay repository is clean after its memory flush");
+
+    const store = new HunchStore(hunchPaths(fixture.root));
+    const service = new ConstitutionService(store, fixture.root);
+    const privatePolicies = service.list({ privateOnly: true });
+    assert.equal(privatePolicies.length, 1);
+    const policy = privatePolicies[0]!;
+    assert.equal(policy.state, "proposed");
+    assert.equal(policy.authority, null);
+    const privateEvidence = service.repository.listEvidence({ privateOnly: true });
+    const privatePlans = service.repository.listPlans({ privateOnly: true });
+    const privateProofs = service.repository.listProofs({ privateOnly: true });
+    assert.equal(privateEvidence.length, 1);
+    assert.equal(privatePlans.length, 1);
+    assert.equal(privateProofs.length, 1);
+    assert.ok(existsSync(join(privateRoot, "policies", `${policy.id}.json`)));
+    assert.ok(existsSync(join(privateRoot, "evidence", `${privateEvidence[0]!.id}.json`)));
+    assert.ok(existsSync(join(privateRoot, "plans", `${privatePlans[0]!.id}.json`)));
+    assert.ok(existsSync(join(privateRoot, "proofs", `${policy.proof}.json`)));
+    const publicView = canonicalJson({
+      constraints: store.recsInHome("constraints", "public"),
+      policies: service.list({ publicOnly: true }),
+      evidence: service.repository.listEvidence({ publicOnly: true }),
+      plans: service.repository.listPlans({ publicOnly: true }),
+      proofs: service.repository.listProofs({ publicOnly: true }),
+    });
+    assert.equal(publicView, '{"constraints":[],"evidence":[],"plans":[],"policies":[],"proofs":[]}');
+    assert.doesNotMatch(publicView, /PRIVATE_CORRECTION_SENTINEL|@secret\/billing/);
+    assert.doesNotMatch(publicView, new RegExp(correction.id));
+    assert.doesNotMatch(publicView, new RegExp(policy.id));
+    const publicGrounding = readFileSync(join(fixture.root, "AGENTS.md"), "utf8");
+    assert.doesNotMatch(publicGrounding, /PRIVATE_CORRECTION_SENTINEL|@secret\/billing/);
+    assert.doesNotMatch(publicGrounding, new RegExp(correction.id));
+    assert.doesNotMatch(publicGrounding, new RegExp(policy.id));
+    store.close();
+  } finally {
+    fixture.cleanup();
+    rmSync(overlayRoot, { recursive: true, force: true });
+  }
+});
+
 test("Phase 2C correction ingestion inherits private home and public reads reveal nothing", () => {
   const { root, store: initial, cleanup } = layeredRepo();
   initial.close();
   const privateRoot = join(root, "private-adapter/.hunch");
-  mkdirSync(privateRoot, { recursive: true });
+  initializePrivateOverlay(privateRoot);
   writeFileSync(join(root, ".hunch/local.json"), JSON.stringify({ privateDir: privateRoot, autoCommit: false, mode: "private" }));
   const store = new HunchStore(hunchPaths(root));
   try {
@@ -2954,7 +4628,7 @@ test("Phase 2D public instruction coverage never resolves through a private-only
     commitFiles(root, ["docs/adr/002-private-collision.md"], "docs: add public collision fixture");
     initial.close();
     const privateRoot = join(root, "private-instruction/.hunch");
-    mkdirSync(privateRoot, { recursive: true });
+    initializePrivateOverlay(privateRoot);
     writeFileSync(join(root, ".hunch/local.json"), JSON.stringify({ privateDir: privateRoot, autoCommit: false, mode: "private" }));
     const store = new HunchStore(hunchPaths(root));
     try {
@@ -2985,7 +4659,7 @@ test("Phase 2D review/conversation exports validate as one batch and preserve ex
   const { root, store: initial, cleanup } = layeredRepo();
   initial.close();
   const privateRoot = join(root, "private-import/.hunch");
-  mkdirSync(privateRoot, { recursive: true });
+  initializePrivateOverlay(privateRoot);
   writeFileSync(join(root, ".hunch/local.json"), JSON.stringify({ privateDir: privateRoot, autoCommit: false, mode: "private" }));
   const store = new HunchStore(hunchPaths(root));
   try {
@@ -3104,7 +4778,7 @@ test("Phase 2D review/conversation exports validate as one batch and preserve ex
   }
 });
 
-test("Gate G1 adapter contract: CLI, MCP, and strict CI expose the identical receipt", async () => {
+test("Gate G1 adapter contract: CLI, MCP, and strict CI share one source-byte-identified working receipt", async () => {
   const fixture = layeredRepo();
   const projectRoot = process.cwd();
   const tsx = join(projectRoot, "node_modules/tsx/dist/cli.mjs");
@@ -3131,7 +4805,21 @@ test("Gate G1 adapter contract: CLI, MCP, and strict CI expose the identical rec
     assert.equal(cliRun.status, 0, cliRun.stderr);
     const cliReceipts = JSON.parse(cliRun.stdout) as Array<{ deterministic_hash: string; result: string }>;
     assert.equal(cliReceipts[0]?.result, "violated");
-    const receipt = cliReceipts[0]!.deterministic_hash;
+    const topologyOnlyReceipt = cliReceipts[0]!.deterministic_hash;
+    writeFileSync(
+      join(fixture.root, "src/api/orders.ts"),
+      'import { dbQuery } from "../db/client.js";\nexport function listOrders(u){ return dbQuery(u); }\n// receipt body-only change\n',
+    );
+    const byteChangedRun = spawnSync(process.execPath, [tsx, cli, "policy", "evaluate", "--active", "--public-only", "--json"], {
+      cwd: fixture.root,
+      env,
+      encoding: "utf8",
+    });
+    assert.equal(byteChangedRun.status, 0, byteChangedRun.stderr);
+    const byteChangedReceipts = JSON.parse(byteChangedRun.stdout) as Array<{ deterministic_hash: string; result: string }>;
+    assert.equal(byteChangedReceipts[0]?.result, "violated", "body-only source change preserves the semantic verdict");
+    const receipt = byteChangedReceipts[0]!.deterministic_hash;
+    assert.notEqual(receipt, topologyOnlyReceipt, "raw source bytes change the receipt even when graph topology is identical");
     const cliCardRun = spawnSync(process.execPath, [tsx, cli, "policy", "card", compiled.id, "--public-only", "--json"], {
       cwd: fixture.root,
       env,
@@ -3146,7 +4834,9 @@ test("Gate G1 adapter contract: CLI, MCP, and strict CI expose the identical rec
       encoding: "utf8",
     });
     assert.equal(ciRun.status, 1, "strict CI blocks the authorized violation");
-    assert.match(ciRun.stdout, new RegExp(receipt.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    const ciReceipt = ciRun.stdout.match(/receipt:\s+(sha1:[0-9a-f]{40})/)?.[1];
+    assert.ok(ciReceipt, `strict CI exposes its deterministic static receipt:\n${ciRun.stdout}\n${ciRun.stderr}`);
+    assert.equal(ciReceipt, receipt, "all three adapters evaluate the same raw-byte-identified working graph");
 
     const shadowRecordRun = spawnSync(process.execPath, [tsx, cli, "policy", "shadow", compiled.id, "--record"], {
       cwd: fixture.root,
@@ -3213,7 +4903,7 @@ test("Gate G1 adapter contract: CLI, MCP, and strict CI expose the identical rec
     const text = (mcp.content[0] as { type: "text"; text: string }).text;
     const mcpReceipts = JSON.parse(text) as Array<{ deterministic_hash: string; result: string }>;
     assert.equal(mcpReceipts[0]?.result, "violated");
-    assert.equal(mcpReceipts[0]?.deterministic_hash, receipt, "all three surfaces share one canonical evaluator receipt");
+    assert.equal(mcpReceipts[0]?.deterministic_hash, receipt, "CLI and MCP share one canonical source-byte evaluator receipt");
     const shadowCall = await client.callTool({ name: "hunch_policy_shadow", arguments: { policy_id: compiled.id, public_only: true } });
     const shadowReport = JSON.parse((shadowCall.content[0] as { type: "text"; text: string }).text) as { counts: { total: number }; recommendation: string };
     assert.equal(shadowReport.counts.total, 1);

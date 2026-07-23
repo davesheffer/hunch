@@ -3,6 +3,31 @@
    global so it works on a static host with no build step. */
 window.POSTS = [
   {
+    slug: "one-memory-for-the-whole-team",
+    title: "Hunch 1.9: one living memory for the whole team",
+    dek: "Matrix mode moves engineering memory into a dedicated private Git repository your team controls, then keeps every clone, worktree, CLI check, and connected assistant on the same live graph.",
+    date: "2026-07-22", tag: "Release", read: "5 min", pinned: true,
+    body: `
+<p class="lead">Hunch began with a deliberately simple home for engineering memory: plain JSON beside the code it explains. <strong>Version 1.9 adds Matrix mode</strong> for teams that need one memory spine across many repositories, clones, worktrees, operating systems, and coding assistants.</p>
+
+<h2>Connect once; keep the graph live</h2>
+<p>A maintainer connects the codebase to a dedicated private Git repository with <code>hunch shared --repo …</code>. Hunch commits only a credential-free <code>.hunch/team.json</code> pointer to the code repo. Every teammate then runs <code>hunch init</code>; authentication remains in SSH or the normal Git credential helper.</p>
+<pre><code>npm i -g @davesheffer/hunch@1.9.0
+hunch shared --repo git@github.com:acme/project-hunch-memory.git
+git add .gitignore .hunch/team.json</code></pre>
+<p>CLI operations refresh the memory at startup, long-lived MCP servers refresh at request boundaries, and captures synchronize automatically. Concurrent structured records merge by identity. A failed push remains safe locally and is retried by the next capture or <code>hunch shared --sync</code>.</p>
+
+<h2>Shared does not mean public</h2>
+<p>The memory repository stays private and under your control. Local paths and credentials are ignored; public receipts use <code>--public-only</code>. Hunch hosts nothing, and captured advice still cannot acquire blocking authority without an explicit human action.</p>
+
+<h2>The release holds itself to the same standard</h2>
+<p>The npm package and VS Code 0.17.2 are now treated as immutable release artifacts. CI validates them before publication credentials exist, records their digests, and passes the same bytes to isolated publishers. One tested VSIX goes unchanged to the <a class="link" href="https://marketplace.visualstudio.com/items?itemName=davesheffer.hunch-vscode">Visual Studio Marketplace</a> and <a class="link" href="https://open-vsx.org/extension/davesheffer/hunch-vscode">Open VSX</a>.</p>
+
+<h2>Try the Matrix</h2>
+<p>Create a private Git repository for memory, connect one codebase, commit the pointer, and let a second clone run <code>hunch init</code>. Ask both assistants why a guarded file is shaped that way. They now answer from the same living history.</p>
+`
+  },
+  {
     slug: "python-joins-the-graph",
     title: "Hunch 1.8.1: the graph learns Python",
     dek: "AI made Python the most popular language on GitHub — and AI-written Python is where architectural drift hides best, because no compiler is watching. v1.8.1 lands Python symbols, call edges, imports and blast radius, built on a registry that makes the next language a single entry. Our first community-driven release.",
@@ -81,7 +106,7 @@ hunch why app/services/orders.py</code></pre>
     slug: "change-gate-private-workflows",
     title: "Hunch 1.5: give every code change a memory — before it ships",
     dek: "The new Change Gate brings the same deterministic pre-flight to the CLI, MCP, and VS Code. Private overlays keep sensitive reasoning local. One workflow, whichever agent is writing the code.",
-    date: "2026-07-09", tag: "Release", read: "7 min", pinned: true,
+    date: "2026-07-09", tag: "Release", read: "7 min", pinned: false,
     cover: {
       src: "/assets/change-gate-release.png",
       alt: "A luminous green safe path crosses a dark dependency graph and passes through a precise red architectural gate."

@@ -30,6 +30,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync, mkdirSync, rmSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { writeFileAtomic } from "../core/io.js";
+import { compareCodeUnits } from "../core/canonicalOrder.js";
 import { hunchPaths, toPosixTarget } from "../core/paths.js";
 import { isLive } from "../core/topics.js";
 import { scanRepoDocs, type RepoDoc } from "../core/docscan.js";
@@ -150,13 +151,13 @@ export function assemblePack(
 
   const symbols = read("symbols")
     .filter((s) => owns(prefixes, s.file))
-    .sort((a, b) => b.metrics.fan_in - a.metrics.fan_in || b.metrics.loc - a.metrics.loc || a.name.localeCompare(b.name));
-  const files = [...new Set(symbols.map((s) => toPosixTarget(s.file)))].sort();
+    .sort((a, b) => b.metrics.fan_in - a.metrics.fan_in || b.metrics.loc - a.metrics.loc || compareCodeUnits(a.name, b.name));
+  const files = [...new Set(symbols.map((s) => toPosixTarget(s.file)))].sort(compareCodeUnits);
 
   const decisions = read("decisions")
     .filter(isLive)
     .filter((d) => d.related_components.includes(component.id) || (d.related_files ?? []).some((f) => owns(prefixes, f)))
-    .sort((a, b) => (b.valid_from ?? b.date).localeCompare(a.valid_from ?? a.date) || a.id.localeCompare(b.id))
+    .sort((a, b) => compareCodeUnits(b.valid_from ?? b.date, a.valid_from ?? a.date) || compareCodeUnits(a.id, b.id))
     .slice(0, 8)
     .map((d) => ({
       id: d.id, topic: d.topic, title: d.title, decision: clip(d.decision, 500), context: clip(d.context, 300),
@@ -169,14 +170,14 @@ export function assemblePack(
   const constraints = read("constraints")
     .filter((c) => c.status !== "retired")
     .filter((c) => c.scope.some((g) => { const p = globPrefix(g); return p !== "" && prefixes.some((q) => q !== "" && (p.startsWith(q) || q.startsWith(p))); }))
-    .sort((a, b) => (SEV[b.severity] ?? 0) - (SEV[a.severity] ?? 0) || a.id.localeCompare(b.id))
+    .sort((a, b) => (SEV[b.severity] ?? 0) - (SEV[a.severity] ?? 0) || compareCodeUnits(a.id, b.id))
     .slice(0, 8)
     .map((c) => ({ id: c.id, severity: c.severity, statement: clip(c.statement, 300), rationale: clip(c.rationale, 200) }));
 
   const symbolNames = new Set(symbols.map((s) => s.name));
   const bugs = read("bugs")
     .filter((b) => b.affected_files.some((f) => owns(prefixes, f)) || b.affected_symbols.some((s) => symbolNames.has(s)))
-    .sort((a, b) => (SEV[b.severity] ?? 0) - (SEV[a.severity] ?? 0) || a.id.localeCompare(b.id))
+    .sort((a, b) => (SEV[b.severity] ?? 0) - (SEV[a.severity] ?? 0) || compareCodeUnits(a.id, b.id))
     .slice(0, 6)
     .map((b) => ({ id: b.id, title: b.title, root_cause: clip(b.root_cause, 250), severity: b.severity, status: b.status }));
 
@@ -189,7 +190,7 @@ export function assemblePack(
     if (e.to === component.id && componentsById.has(e.from) && e.from !== component.id) usedBy.set(e.from, componentsById.get(e.from)!.name);
   }
   const rel = (m: Map<string, string>) =>
-    [...m].map(([id, name]) => ({ id, name, slug: slugById.get(id) ?? null })).sort((a, b) => a.id.localeCompare(b.id));
+    [...m].map(([id, name]) => ({ id, name, slug: slugById.get(id) ?? null })).sort((a, b) => compareCodeUnits(a.id, b.id));
 
   const docs = repoDocs
     .filter((doc) => doc.srcRefs.some((f) => owns(prefixes, f)))
@@ -218,7 +219,7 @@ export function assemblePack(
 function canonical(v: unknown): unknown {
   if (Array.isArray(v)) return v.map(canonical);
   if (v && typeof v === "object") {
-    return Object.fromEntries(Object.entries(v as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b)).map(([k, x]) => [k, canonical(x)]));
+    return Object.fromEntries(Object.entries(v as Record<string, unknown>).sort(([a], [b]) => compareCodeUnits(a, b)).map(([k, x]) => [k, canonical(x)]));
   }
   return v;
 }
@@ -466,7 +467,7 @@ export interface NowItem {
  *  from the roadmap with zero file maintenance). Home-scoped like every read. */
 export function nowData(decisions: readonly Decision[], recentLimit = 10): { recent: NowItem[]; roadmap: NowItem[]; pendingReview: number } {
   const clip1 = (s: string): string => (s.length > 220 ? s.slice(0, 219).trimEnd() + "…" : s).replace(/\s*\n\s*/g, " ");
-  const byDateDesc = (a: Decision, b: Decision) => (b.valid_from ?? b.date).localeCompare(a.valid_from ?? a.date) || a.id.localeCompare(b.id);
+  const byDateDesc = (a: Decision, b: Decision) => compareCodeUnits(b.valid_from ?? b.date, a.valid_from ?? a.date) || compareCodeUnits(a.id, b.id);
   const recent = [...decisions].sort(byDateDesc).slice(0, recentLimit)
     .map((d) => ({ id: d.id, topic: d.topic, title: d.title, status: d.status, date: (d.valid_from ?? d.date).slice(0, 10), note: clip1(d.decision) }));
   // Roadmap = INTENT the human vouched for. Auto-synthesized drafts are also
@@ -568,13 +569,22 @@ function pageState(
   return { state: "fresh", reason: "" };
 }
 
+/** Stable component order is part of page identity because slug collisions are
+ * resolved first-come. Keep it independent of the host's collation locale. */
+export function compareWikiComponents(
+  left: Pick<Component, "id" | "name">,
+  right: Pick<Component, "id" | "name">,
+): number {
+  return compareCodeUnits(left.name, right.name) || compareCodeUnits(left.id, right.id);
+}
+
 export function wikiStatus(store: HunchStore, home: WikiHome, srcRoot: string): WikiStatus {
   const manifest = readWikiManifestAt(home.manifestPath);
   const decisions = home.source === "all" ? store.recs("decisions") : store.json.loadAll("decisions");
   const docs = scanRepoDocs(decisions, srcRoot);
   const components = (home.source === "all" ? store.recs("components") : store.json.loadAll("components"))
     .filter((c) => c.status === "active")
-    .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
+    .sort(compareWikiComponents);
 
   // Adoption slugs are assigned FIRST (single authority): every stale doc gets a
   // wiki-managed, graph-healed copy, and the packs/renderers receive its path.
@@ -621,7 +631,7 @@ export function wikiStatus(store: HunchStore, home: WikiHome, srcRoot: string): 
   // hand-editing it grades stale instead of staying invisible forever.
   const repoWide = (home.source === "all" ? store.recs("constraints") : store.json.loadAll("constraints"))
     .filter((c) => c.status !== "retired" && c.scope.every((g) => globPrefix(g) === ""))
-    .sort((a, b) => (SEV[b.severity] ?? 0) - (SEV[a.severity] ?? 0) || a.id.localeCompare(b.id))
+    .sort((a, b) => (SEV[b.severity] ?? 0) - (SEV[a.severity] ?? 0) || compareCodeUnits(a.id, b.id))
     .slice(0, 10);
   const indexPage = `${home.dir}/README.md`;
   const indexHash = sha16(JSON.stringify(canonical({

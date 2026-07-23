@@ -8,6 +8,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="icon" href="/hunch-mark.svg" type="image/svg+xml" />
+<link rel="stylesheet" href="/brand.css" />
 <style>
   :root{
     --bg:#fbfcfb;
@@ -52,7 +54,6 @@
   }
   .top-row{width:100%;max-width:1400px;margin:0 auto;padding:0 24px;display:flex;align-items:center;justify-content:space-between;gap:20px}
   .brand{display:flex;align-items:center;gap:10px;font-weight:600;font-size:16px;letter-spacing:-.01em}
-  .brand .dot{width:8px;height:8px;border-radius:50%;background:var(--accent);display:inline-block}
   .brand .tag{font-family:var(--mono);font-size:11px;font-weight:500;color:var(--muted);border:1px solid var(--line);border-radius:6px;padding:2px 7px;margin-left:4px}
   .top-links{display:flex;align-items:center;gap:26px;font-size:14px;color:var(--ink-soft)}
   .top-links a{font-weight:450;transition:color .2s}
@@ -178,7 +179,7 @@ if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElem
     <div style="display:flex;align-items:center;gap:14px">
       <button class="menu-btn" id="menuBtn" aria-label="Toggle navigation"><span></span></button>
       <a class="brand" href="/">
-        <span class="dot" aria-hidden="true"></span> hunch <span class="tag">cookbook</span>
+        <span class="brand-mark" aria-hidden="true"></span> hunch <span class="tag">cookbook</span>
       </a>
     </div>
     <nav class="top-links">
@@ -213,8 +214,10 @@ if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElem
       <h4>Advanced</h4>
       <a href="#skills">Skills that fire</a>
       <a href="#bench">Benchmark your setup</a>
+      <a href="#matrix">Team-memory Matrix</a>
       <a href="#private">Private overlay</a>
       <a href="#local-models">Local models</a>
+      <a href="#editor-release">Editor + release audit</a>
     </div>
     <div class="nav-group">
       <h4>More</h4>
@@ -312,15 +315,36 @@ if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElem
       <p>Rules learned the hard way: use <code>--no-repro</code> (diagnosis mode) or everything ceilings at PASS; drop tasks that fail for <em>every</em> arm (they measure spec-guessing, not diagnosis); verify skill invocations in transcripts before comparing arms.</p>
     </section>
 
+    <section id="matrix">
+      <h2>10 · Connect the team-memory Matrix<a class="anchor" href="#matrix">#</a></h2>
+      <p>Create a dedicated private Git repository for memory. It must differ from every code-repo remote, and its committed URL must not contain credentials. On one maintainer machine:</p>
+      <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">terminal</span><button class="copy">Copy</button></div><pre><span class="k">npm</span> i -g @davesheffer/hunch@1.9.0
+<span class="k">hunch</span> shared --repo git@github.com:acme/project-hunch-memory.git
+<span class="k">git</span> add .gitignore .hunch/team.json
+<span class="k">git</span> commit -m "chore: connect shared Hunch memory"
+<span class="k">git</span> push</pre></div>
+      <p>Add <code>--migrate</code> only when moving existing public <code>.hunch/</code> memory into the dedicated store. On every teammate machine:</p>
+      <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">terminal</span><button class="copy">Copy</button></div><pre><span class="k">npm</span> i -g @davesheffer/hunch@1.9.0
+<span class="k">git</span> pull
+<span class="k">hunch</span> init
+<span class="k">hunch</span> doctor</pre></div>
+      <p><b>Observe:</b> the code repo commits only <code>.hunch/team.json</code>; credentials remain in SSH or the Git credential helper. Each machine gets an ignored memory clone and local pointer. CLI operations refresh at startup, MCP tools refresh at request boundaries, and captures synchronize automatically.</p>
+      <p>For a coordinated pause or rollback that preserves every memory record:</p>
+      <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">terminal</span><button class="copy">Copy</button></div><pre><span class="k">hunch</span> firmness off
+<span class="k">hunch</span> shared --repo git@github.com:acme/project-hunch-memory.git --no-auto-commit
+<span class="k">npm</span> i -g @davesheffer/hunch@1.8.5</pre></div>
+      <p>Revert the <code>.hunch/team.json</code> setup commit only if new clones must stop discovering the Matrix. Do not delete the memory repo or local overlay; after upgrading every client to v1.9, <code>hunch shared --sync</code> publishes pending memory.</p>
+    </section>
+
     <section id="private">
-      <h2>10 · Private overlay (public repo, private memory)<a class="anchor" href="#private">#</a></h2>
+      <h2>11 · Private overlay (public repo, private memory)<a class="anchor" href="#private">#</a></h2>
       <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">terminal</span><button class="copy">Copy</button></div><pre><span class="k">hunch</span> init --private-sync   <span class="c"># captures go to the HUNCH_PRIVATE_DIR overlay</span>
 <span class="k">hunch</span> private               <span class="c"># point a clone at the overlay</span></pre></div>
       <p><b>Observe:</b> <code>hunch_*</code> tools see the union; the public repo carries only what you curate.</p>
     </section>
 
     <section id="loop">
-      <h2>11 · The self-running memory loop (v1.8.0+)<a class="anchor" href="#loop">#</a></h2>
+      <h2>12 · The self-running memory loop (v1.8.0+)<a class="anchor" href="#loop">#</a></h2>
       <p>Nothing to manage. Capture happens on every commit, memory lands trusted-advisory immediately, and renames heal their own bindings:</p>
       <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">terminal</span><button class="copy">Copy</button></div><pre><span class="k">hunch</span> log                    <span class="c"># every memory move: capture · adopt · supersede · prune · repair</span>
 <span class="k">hunch</span> log --diff &lt;sha&gt;       <span class="c"># what one move changed</span>
@@ -333,7 +357,7 @@ if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElem
     </section>
 
     <section id="local-models">
-      <h2>12 · Use a local or self-hosted model<a class="anchor" href="#local-models">#</a></h2>
+      <h2>13 · Use a local or self-hosted model<a class="anchor" href="#local-models">#</a></h2>
       <p>Point Hunch at any OpenAI-compatible chat-completions endpoint. Ollama, vLLM, LM Studio, and llama.cpp work without a subscription CLI:</p>
       <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">terminal</span><button class="copy">Copy</button></div><pre><span class="k">export</span> HUNCH_SYNTH_PROVIDER=ollama
 <span class="k">export</span> HUNCH_SYNTH_BASE_URL=http://localhost:11434/v1
@@ -347,6 +371,14 @@ PARAMETER num_ctx 32768</pre></div>
 <span class="k">hunch</span> doctor</pre></div>
       <p><b>Observe:</b> <code>hunch doctor</code> reports <code>openai-compat</code> and no longer warns that <code>num_ctx</code> is unpinned.</p>
       <div class="note warn"><span class="ic">!</span><b>Public remotes fail closed.</b> Localhost, private/link-local IPs, and conventional LAN names work directly. Every public endpoint requires <code>HUNCH_SYNTH_ALLOW_METERED=1</code>; set it only when you trust the endpoint and understand any billing.</div>
+    </section>
+
+    <section id="editor-release">
+      <h2>14 · Install the editor companion and verify a release<a class="anchor" href="#editor-release">#</a></h2>
+      <p>Install Hunch from the <a class="link" href="https://marketplace.visualstudio.com/items?itemName=davesheffer.hunch-vscode" target="_blank" rel="noopener">Visual Studio Marketplace</a> or <a class="link" href="https://open-vsx.org/extension/davesheffer/hunch-vscode" target="_blank" rel="noopener">Open VSX</a>, then open a repository initialized with the Hunch CLI. The extension reads the same public, private, or Matrix memory home and never writes Hunch JSON directly.</p>
+      <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">audit</span><button class="copy">Copy</button></div><pre><span class="k">npm</span> view @davesheffer/hunch@1.9.0 version dist.integrity dist.attestations --json
+<span class="k">git</span> tag --list v1.9.0 vscode-v0.17.2</pre></div>
+      <p><b>Observe:</b> npm reports version 1.9.0, an integrity digest, and provenance metadata; both extension registries report 0.17.2. Each tag’s GitHub Actions run validates the exact content-addressed artifact before isolated publishing begins.</p>
     </section>
 </main>
 

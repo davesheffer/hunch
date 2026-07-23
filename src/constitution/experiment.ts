@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { z } from "zod";
 import { writeFileAtomic } from "../core/io.js";
 import { shortHash } from "../core/ids.js";
+import { compareCodeUnits } from "../core/canonicalOrder.js";
 import type { HunchStore } from "../store/hunchStore.js";
 import { canonicalHash } from "./canonical.js";
 import { currentAppendOnly, loadPrivateRecords } from "./g2.js";
@@ -356,7 +357,7 @@ export function compileExperimentRun(
   if (preregistration.experiment === "EXP-01") {
     if (bank.cases.length !== input.sample_per_arm) throw new Error("EXP-01 requires exactly sample_per_arm fresh case templates; every case is run once in every arm");
     for (const item of bank.cases) {
-      const orderedArms = [...arms].sort((a, b) => rank(preregistration.assignment.seed, item.block, item.id, a).localeCompare(rank(preregistration.assignment.seed, item.block, item.id, b)));
+      const orderedArms = [...arms].sort((a, b) => compareCodeUnits(rank(preregistration.assignment.seed, item.block, item.id, a), rank(preregistration.assignment.seed, item.block, item.id, b)));
       for (const arm of orderedArms) {
         const treatmentHash = canonicalHash(treatmentFor(preregistration.experiment, arm, item));
         const id = `expassign_${shortHash(canonicalHash({ preregistration: preregistration.content_hash, bank: bank.content_hash, case_id: item.id, arm, treatment_hash: treatmentHash }))}`;
@@ -368,9 +369,9 @@ export function compileExperimentRun(
     const byBlock = new Map<string, typeof bank.cases>();
     for (const item of bank.cases) byBlock.set(item.block, [...(byBlock.get(item.block) ?? []), item]);
     let offset = 0;
-    for (const [block, blockCases] of [...byBlock.entries()].sort(([a], [b]) => a.localeCompare(b))) {
-      const ordered = [...blockCases].sort((a, b) => rank(preregistration.assignment.seed, block, a.id).localeCompare(rank(preregistration.assignment.seed, block, b.id)));
-      const armOrder = [...arms].sort((a, b) => rank(preregistration.assignment.seed, block, "arm", a).localeCompare(rank(preregistration.assignment.seed, block, "arm", b)));
+    for (const [block, blockCases] of [...byBlock.entries()].sort(([a], [b]) => compareCodeUnits(a, b))) {
+      const ordered = [...blockCases].sort((a, b) => compareCodeUnits(rank(preregistration.assignment.seed, block, a.id), rank(preregistration.assignment.seed, block, b.id)));
+      const armOrder = [...arms].sort((a, b) => compareCodeUnits(rank(preregistration.assignment.seed, block, "arm", a), rank(preregistration.assignment.seed, block, "arm", b)));
       for (const [index, item] of ordered.entries()) {
         const arm = armOrder[(offset + index) % armOrder.length]!;
         const treatmentHash = canonicalHash(treatmentFor(preregistration.experiment, arm, item));
@@ -382,7 +383,7 @@ export function compileExperimentRun(
     const counts = new Map(arms.map((arm) => [arm, assignments.filter((item) => item.arm === arm).length]));
     if ([...counts.values()].some((count) => count !== input.sample_per_arm)) throw new Error("EXP-03 blocks cannot be assigned to an exactly balanced arm allocation; adjust block sizes");
   }
-  assignments.sort((a, b) => rank(preregistration.assignment.seed, "execution", a.id).localeCompare(rank(preregistration.assignment.seed, "execution", b.id)));
+  assignments.sort((a, b) => compareCodeUnits(rank(preregistration.assignment.seed, "execution", a.id), rank(preregistration.assignment.seed, "execution", b.id)));
   assignments.forEach((assignment, order) => { assignment.order = order; });
   if (assignments.length > preregistration.sample_plan.maximum_total) throw new Error("assignment count exceeds preregistered maximum_total");
   const isExp01 = preregistration.experiment === "EXP-01";

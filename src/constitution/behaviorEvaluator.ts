@@ -1,13 +1,15 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { headSha, revExists } from "../extractors/git.js";
+import { headSha } from "../extractors/git.js";
 import { canonicalHash } from "./canonical.js";
 import { nodeTestInfrastructureError } from "./g2BehaviorCandidates.js";
-import { dependencySnapshotForCommit } from "./g2BehaviorDependencies.js";
+import { dependencySnapshotForCommit, materializeDependencySnapshot } from "./g2BehaviorDependencies.js";
 import { cleanupReplayWorktree, hasUnsafeReplayFilter, replayGitArgs } from "./replay.js";
+import { hasUnsafeCheckoutAttributes } from "./safeCheckout.js";
+import { replacementFreeExactCommit, replacementFreeGitEnvironment } from "./replacementFreeGit.js";
 import {
   BEHAVIOR_POLICY_EVALUATOR,
   PolicyEvaluationSchema,
@@ -45,6 +47,7 @@ function behaviorEnvironment(home: string, gitConfig: string): NodeJS.ProcessEnv
     HOME: home,
     GIT_CONFIG_GLOBAL: gitConfig,
     GIT_CONFIG_NOSYSTEM: "1",
+    GIT_NO_REPLACE_OBJECTS: "1",
     GIT_TERMINAL_PROMPT: "0",
     GIT_LFS_SKIP_SMUDGE: "1",
     HUNCH_PRIVATE_DIR: "",
@@ -55,10 +58,17 @@ function behaviorEnvironment(home: string, gitConfig: string): NodeJS.ProcessEnv
   };
 }
 
+function behaviorWorkspaceCaptureEnvironment(home: string, gitConfig: string): NodeJS.ProcessEnv {
+  const env = behaviorEnvironment(home, gitConfig);
+  if (process.env.GIT_INDEX_FILE) env.GIT_INDEX_FILE = process.env.GIT_INDEX_FILE;
+  return env;
+}
+
 function sourceAt(root: string, commit: string, file: string): string | null {
   try {
     return execFileSync("git", ["-C", root, "show", `${commit}:${file}`], {
       encoding: "utf8",
+      env: replacementFreeGitEnvironment(),
       maxBuffer: 10 * 1024 * 1024,
       stdio: ["ignore", "pipe", "ignore"],
     });
@@ -108,7 +118,7 @@ export function evaluateExecutableBehaviorPolicy(
   let workspace: BehaviorWorkspaceSnapshot | undefined;
   if (opts.workspace && /^[a-f0-9]{40}$/.test(commit)) {
     const probe = mkdtempSync(join(tmpdir(), "hunch-behavior-workspace-probe-"));
-    const env = behaviorEnvironment(probe, join(probe, "global.gitconfig"));
+    const env = behaviorWorkspaceCaptureEnvironment(probe, join(probe, "global.gitconfig"));
     try {
       writeFileSync(join(probe, "global.gitconfig"), "");
       workspace = captureBehaviorWorkspace(root, commit, opts.workspace, env);
@@ -135,7 +145,7 @@ export function evaluateExecutableBehaviorPolicy(
     exit_code: null,
     selected_event: null,
   } as const;
-  if (!/^[a-f0-9]{40}$/.test(commit) || !revExists(commit, root)) {
+  if (!/^[a-f0-9]{40}$/.test(commit) || replacementFreeExactCommit(root, commit) !== commit) {
     return evaluation(policy, baseExecution.commit, { ...baseExecution, error_code: "commit-ref-unresolved" }, "error", "executable behavior commit does not resolve");
   }
   const source = sourceAt(root, assertion.test.source_commit, assertion.test.file);
@@ -164,6 +174,8 @@ export function evaluateExecutableBehaviorPolicy(
   try {
     if (hasUnsafeReplayFilter(root, env)) {
       result = evaluation(policy, commit, { ...baseExecution, commit, dependency_snapshot_id: dependency.snapshot.id, error_code: "unsafe-local-filter-config" }, "error", "repository has an unsafe local Git content filter");
+    } else if (hasUnsafeCheckoutAttributes(root, commit, env, { allowDisabledLfs: true })) {
+      result = evaluation(policy, commit, { ...baseExecution, commit, dependency_snapshot_id: dependency.snapshot.id, error_code: "unsafe-checkout-attributes" }, "error", "repository has checkout attributes that could transform or merge exact source bytes");
     } else {
       execFileSync("git", replayGitArgs(root, hooks, ["worktree", "add", "--detach", "--force", checkout, commit]), {
         env,
@@ -172,7 +184,7 @@ export function evaluateExecutableBehaviorPolicy(
       });
       added = true;
       if (workspace) applyBehaviorWorkspace(root, checkout, workspace, env);
-      symlinkSync(dependency.nodeModules, join(checkout, "node_modules"), process.platform === "win32" ? "junction" : "dir");
+      materializeDependencySnapshot(dependency, join(checkout, "node_modules"));
       const testFile = join(checkout, assertion.test.file);
       mkdirSync(dirname(testFile), { recursive: true });
       writeFileSync(testFile, source);
@@ -186,7 +198,7 @@ export function evaluateExecutableBehaviorPolicy(
       ];
       const args = assertion.runner === "node-test"
         ? common
-        : [join(dependency.nodeModules, "tsx", "dist", "cli.mjs"), ...common];
+        : [join(checkout, "node_modules", "tsx", "dist", "cli.mjs"), ...common];
       const run = spawnSync(process.execPath, args, {
         cwd: checkout,
         env,

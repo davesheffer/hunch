@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, readdirSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -137,6 +138,8 @@ test("private overlay: a RELATIVE privateDir in local.json resolves against the 
   const prev = process.env.HUNCH_PRIVATE_DIR;
   delete process.env.HUNCH_PRIVATE_DIR;
   try {
+    mkdirSync(join(pub, ".hunch-private", ".hunch"), { recursive: true });
+    execFileSync("git", ["init", "-q", join(pub, ".hunch-private")]);
     mkdirSync(join(pub, ".hunch"), { recursive: true });
     writeFileSync(join(pub, ".hunch", "local.json"), JSON.stringify({ privateDir: ".hunch-private/.hunch" }));
     const store = new HunchStore(hunchPaths(pub));

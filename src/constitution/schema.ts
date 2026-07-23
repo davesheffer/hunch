@@ -5,6 +5,10 @@ export const POLICY_IR_VERSION = 1;
 export const POLICY_EVALUATOR = { name: "hunch-graph-policy", version: "1.3.0" } as const;
 export const MUTATION_ENGINE = { name: "hunch-static-graph-controls", version: "5" } as const;
 export const EXECUTABLE_BEHAVIOR_IR_VERSION = 2;
+/** Source-gated correction policies deliberately use an IR unknown to pre-Matrix
+ * clients. Those clients then reject the artifact instead of loading it without
+ * understanding (and potentially bypassing) its activation gate. */
+export const CORRECTION_POLICY_IR_VERSION = 3;
 export const BEHAVIOR_POLICY_EVALUATOR = { name: "hunch-executable-behavior", version: "1.0.0" } as const;
 export const BEHAVIOR_MUTATION_ENGINE = { name: "hunch-behavior-controls", version: "1" } as const;
 
@@ -235,10 +239,22 @@ export const PolicyAuthoritySchema = z.object({
 });
 export type PolicyAuthority = z.infer<typeof PolicyAuthoritySchema>;
 
+export const PolicyActivationGateSchema = z.object({
+  kind: z.literal("source_currentness"),
+  status: z.literal("blocked"),
+  reason: z.string().min(1),
+}).strict();
+export type PolicyActivationGate = z.infer<typeof PolicyActivationGateSchema>;
+
 export const PolicySpecSchema = z.object({
   id: z.string().regex(/^pol_[a-f0-9]{10}$/),
   topic: z.string().min(1),
-  ir_version: z.union([z.literal(POLICY_IR_VERSION), z.literal(EXECUTABLE_BEHAVIOR_IR_VERSION)]),
+  origin: z.enum(["generic", "correction_md1a"]).default("generic"),
+  ir_version: z.union([
+    z.literal(POLICY_IR_VERSION),
+    z.literal(EXECUTABLE_BEHAVIOR_IR_VERSION),
+    z.literal(CORRECTION_POLICY_IR_VERSION),
+  ]),
   revision: z.number().int().min(1),
   state: PolicyStateSchema,
   statement: z.string().min(1),
@@ -248,6 +264,7 @@ export const PolicySpecSchema = z.object({
   severity: z.enum(["advisory", "warning", "blocking"]).default("warning"),
   surfaces: z.array(z.enum(["pre_edit", "pre_commit", "ci", "mcp", "cli"])).default(["cli", "mcp"]),
   authority: PolicyAuthoritySchema.nullable().default(null),
+  activation_gate: PolicyActivationGateSchema.nullable().default(null),
   evidence: z.array(z.string()).default([]),
   proof: z.string().nullable().default(null),
   reversal_conditions: z.array(z.string()).default([]),
@@ -265,11 +282,20 @@ export const PolicySpecSchema = z.object({
   updated_at: z.string().datetime({ offset: true }),
   provenance: ProvenanceSchema,
 }).passthrough().superRefine((policy, context) => {
-  if (policy.assertion.kind === "executable-behavior" && policy.ir_version !== EXECUTABLE_BEHAVIOR_IR_VERSION) {
-    context.addIssue({ code: "custom", path: ["ir_version"], message: `executable-behavior requires Policy IR v${EXECUTABLE_BEHAVIOR_IR_VERSION}` });
-  }
-  if (policy.assertion.kind !== "executable-behavior" && policy.ir_version !== POLICY_IR_VERSION) {
-    context.addIssue({ code: "custom", path: ["ir_version"], message: `graph assertions require Policy IR v${POLICY_IR_VERSION}` });
+  if (policy.origin === "correction_md1a") {
+    if (policy.assertion.kind === "executable-behavior") {
+      context.addIssue({ code: "custom", path: ["assertion", "kind"], message: "source-gated correction policies require a graph assertion" });
+    }
+    if (policy.ir_version !== CORRECTION_POLICY_IR_VERSION) {
+      context.addIssue({ code: "custom", path: ["ir_version"], message: `source-gated correction policies require Policy IR v${CORRECTION_POLICY_IR_VERSION}` });
+    }
+  } else {
+    if (policy.assertion.kind === "executable-behavior" && policy.ir_version !== EXECUTABLE_BEHAVIOR_IR_VERSION) {
+      context.addIssue({ code: "custom", path: ["ir_version"], message: `executable-behavior requires Policy IR v${EXECUTABLE_BEHAVIOR_IR_VERSION}` });
+    }
+    if (policy.assertion.kind !== "executable-behavior" && policy.ir_version !== POLICY_IR_VERSION) {
+      context.addIssue({ code: "custom", path: ["ir_version"], message: `graph assertions require Policy IR v${POLICY_IR_VERSION}` });
+    }
   }
 });
 export type PolicySpec = z.infer<typeof PolicySpecSchema>;

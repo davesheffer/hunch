@@ -1,0 +1,48 @@
+{
+  "id": "dec_18fa2dcccd",
+  "title": "docs(release): publish v1.9 team memory guide",
+  "topic": null,
+  "status": "accepted",
+  "context": "Touched 5 file(s) across site/blog, tooling/blog-locales.mjs, tooling/changelog-locales.mjs, tooling/generate-site-locales.mjs.",
+  "decision": "Changed code in site/blog, tooling/blog-locales.mjs, tooling/changelog-locales.mjs, tooling/generate-site-locales.mjs (5 file(s)).",
+  "consequences": [],
+  "alternatives_rejected": [],
+  "rejected_tripwires": [],
+  "related_components": [
+    "cmp_04c6efb58b",
+    "cmp_c099a42a55"
+  ],
+  "related_files": [
+    "site/blog/i18n.js",
+    "site/blog/posts.js",
+    "tooling/blog-locales.mjs",
+    "tooling/changelog-locales.mjs",
+    "tooling/generate-site-locales.mjs"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "5703fa1",
+  "valid_from": "2026-07-22T17:40:03+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "inferred",
+    "confidence": 0.3,
+    "evidence": [
+      "commit:5703fa1",
+      "synth:provider=deterministic",
+      "branch:codex/matrix-v1.9.0",
+      "site/blog/i18n.js",
+      "site/blog/posts.js",
+      "tooling/blog-locales.mjs",
+      "tooling/changelog-locales.mjs",
+      "tooling/generate-site-locales.mjs"
+    ],
+    "last_verified": "2026-07-22T14:40:09.070Z"
+  },
+  "date": "2026-07-22T17:40:03+03:00"
+}

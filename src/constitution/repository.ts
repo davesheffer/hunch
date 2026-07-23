@@ -1,9 +1,9 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import type { HunchStore } from "../store/hunchStore.js";
-import { writeFileAtomic } from "../core/io.js";
+import { writeFileAtomic, writeFileAtomicIfAbsent } from "../core/io.js";
 import { shortHash } from "../core/ids.js";
-import { policySemanticHash, proofPlanContentHash } from "./canonical.js";
+import { canonicalHash, policySemanticHash, proofPlanContentHash } from "./canonical.js";
 import { proofCorpusContentHash } from "./corpus.js";
 import { currentHistoryDispositions, historyDispositionContentHash, historyDispositionJudgmentHash } from "./disposition.js";
 import { assertCompositionBinding, compositionDescendants, policyProofHash } from "./composition.js";
@@ -225,9 +225,45 @@ export class PolicyRepository {
     return parsed;
   }
 
-  putProof(proof: PolicyProof, policyId: string): PolicyProof {
+  /** Publish a new policy lifecycle record without overwriting a concurrent
+   * writer. Used by automated proposal materializers so human authority always
+   * wins a race. */
+  putPolicyIfAbsent(policy: PolicySpec, opts: { private?: boolean; public?: boolean } = {}): { policy: PolicySpec; created: boolean } {
+    const parsed = PolicySpecSchema.parse(policy);
+    if (opts.private && opts.public) throw new Error("choose only one policy home");
+    const home = opts.private ? "private" : opts.public ? "public" : parsed.data_class !== "public" || this.store.unified ? "private" : "public";
+    if (home === "public" && parsed.data_class !== "public") {
+      throw new Error(`refusing to write ${parsed.data_class} policy ${parsed.id} into the public home`);
+    }
+    const homeOpts = home === "public" ? { publicOnly: true } : { privateOnly: true };
+    const existing = this.getPolicy(parsed.id, homeOpts);
+    const otherHome = this.getPolicy(parsed.id, home === "public" ? { privateOnly: true } : { publicOnly: true });
+    if (existing && otherHome) throw new Error(`policy ${parsed.id} exists in both public and private homes`);
+    if (existing) return { policy: existing, created: false };
+    if (otherHome) throw new Error(`policy ${parsed.id} already exists in the ${home === "public" ? "private" : "public"} home`);
+    const dir = this.dir(home, "policies");
+    mkdirSync(dir, { recursive: true });
+    if (writeFileAtomicIfAbsent(join(dir, `${parsed.id}.json`), encode(parsed))) {
+      const racedOtherHome = this.getPolicy(parsed.id, home === "public" ? { privateOnly: true } : { publicOnly: true });
+      if (racedOtherHome) throw new Error(`policy ${parsed.id} was published concurrently in both public and private homes`);
+      return { policy: parsed, created: true };
+    }
+    const winner = this.getPolicy(parsed.id, homeOpts);
+    if (!winner) throw new Error(`policy ${parsed.id} appeared concurrently but could not be read`);
+    return { policy: winner, created: false };
+  }
+
+  putProof(proof: PolicyProof, policyId: string, opts: { private?: boolean; public?: boolean } = {}): PolicyProof {
     const parsed = PolicyProofSchema.parse(proof);
-    const home = this.homeOfPolicy(policyId) ?? (parsed.data_class === "public" && !this.store.unified ? "public" : "private");
+    if (opts.private && opts.public) throw new Error("choose only one proof home");
+    const home = opts.private
+      ? "private"
+      : opts.public
+        ? "public"
+        : this.homeOfPolicy(policyId) ?? (parsed.data_class === "public" && !this.store.unified ? "public" : "private");
+    if (home === "public" && parsed.data_class !== "public") {
+      throw new Error(`refusing to write ${parsed.data_class} proof ${parsed.id} into the public home`);
+    }
     const homeOpts = home === "public" ? { publicOnly: true } : { privateOnly: true };
     const policy = this.getPolicy(policyId, homeOpts);
     if (policy) {
@@ -246,6 +282,44 @@ export class PolicyRepository {
     return parsed;
   }
 
+  /** Publish an immutable proof without replacing a concurrent writer. */
+  putProofIfAbsent(proof: PolicyProof, policyId: string, opts: { private?: boolean; public?: boolean } = {}): { proof: PolicyProof; created: boolean } {
+    const parsed = PolicyProofSchema.parse(proof);
+    if (opts.private && opts.public) throw new Error("choose only one proof home");
+    const home = opts.private
+      ? "private"
+      : opts.public
+        ? "public"
+        : this.homeOfPolicy(policyId) ?? (parsed.data_class === "public" && !this.store.unified ? "public" : "private");
+    if (home === "public" && parsed.data_class !== "public") {
+      throw new Error(`refusing to write ${parsed.data_class} proof ${parsed.id} into the public home`);
+    }
+    const homeOpts = home === "public" ? { publicOnly: true } : { privateOnly: true };
+    const policy = this.getPolicy(policyId, homeOpts);
+    if (policy) {
+      const composition = compositionDescendants(policy, this.listPolicies(homeOpts));
+      assertCompositionBinding(policy, composition, parsed.composition);
+      if (parsed.policy_hash !== policyProofHash(policy, composition)) throw new Error(`composite proof ${parsed.id} policy hash mismatch`);
+      if (composition.length) {
+        const plan = this.listPlans(homeOpts).find((candidate) => candidate.content_hash === parsed.plan_hash);
+        if (!plan || plan.policy_candidate_hash !== parsed.policy_hash) throw new Error(`composite proof ${parsed.id} has no exact bound proof plan`);
+        assertCompositionBinding(policy, composition, plan.composition);
+      }
+    }
+    const existing = this.getProof(parsed.id, homeOpts);
+    if (existing) {
+      if (immutableProofHash(existing) !== immutableProofHash(parsed)) throw new Error(`proof ${parsed.id} already exists with different immutable content`);
+      return { proof: existing, created: false };
+    }
+    const dir = this.dir(home, "proofs");
+    mkdirSync(dir, { recursive: true });
+    if (writeFileAtomicIfAbsent(join(dir, `${parsed.id}.json`), encode(parsed))) return { proof: parsed, created: true };
+    const winner = this.getProof(parsed.id, homeOpts);
+    if (!winner) throw new Error(`proof ${parsed.id} appeared concurrently but could not be read`);
+    if (immutableProofHash(winner) !== immutableProofHash(parsed)) throw new Error(`proof ${parsed.id} appeared concurrently with different immutable content`);
+    return { proof: winner, created: false };
+  }
+
   putPlan(plan: ProofPlan, policyId: string, opts: { private?: boolean; public?: boolean } = {}): ProofPlan {
     const parsed = validatePlan(plan);
     if (opts.private && opts.public) throw new Error("choose only one proof-plan home");
@@ -254,6 +328,9 @@ export class PolicyRepository {
       : opts.public
         ? "public"
         : this.homeOfPolicy(policyId) ?? (parsed.data_class === "public" && !this.store.unified ? "public" : "private");
+    if (home === "public" && parsed.data_class !== "public") {
+      throw new Error(`refusing to write ${parsed.data_class} proof plan ${parsed.id} into the public home`);
+    }
     const homeOpts = home === "public" ? { publicOnly: true } : { privateOnly: true };
     const policy = this.getPolicy(policyId, homeOpts);
     if (policy) {
@@ -265,6 +342,39 @@ export class PolicyRepository {
     mkdirSync(dir, { recursive: true });
     writeFileAtomic(join(dir, `${parsed.id}.json`), encode(parsed));
     return parsed;
+  }
+
+  /** Publish an immutable proof plan without replacing a concurrent writer. */
+  putPlanIfAbsent(plan: ProofPlan, policyId: string, opts: { private?: boolean; public?: boolean } = {}): { plan: ProofPlan; created: boolean } {
+    const parsed = validatePlan(plan);
+    if (opts.private && opts.public) throw new Error("choose only one proof-plan home");
+    const home = opts.private
+      ? "private"
+      : opts.public
+        ? "public"
+        : this.homeOfPolicy(policyId) ?? (parsed.data_class === "public" && !this.store.unified ? "public" : "private");
+    if (home === "public" && parsed.data_class !== "public") {
+      throw new Error(`refusing to write ${parsed.data_class} proof plan ${parsed.id} into the public home`);
+    }
+    const homeOpts = home === "public" ? { publicOnly: true } : { privateOnly: true };
+    const policy = this.getPolicy(policyId, homeOpts);
+    if (policy) {
+      const composition = compositionDescendants(policy, this.listPolicies(homeOpts));
+      assertCompositionBinding(policy, composition, parsed.composition);
+      if (parsed.policy_candidate_hash !== policyProofHash(policy, composition)) throw new Error(`composite plan ${parsed.id} policy hash mismatch`);
+    }
+    const existing = this.getPlan(parsed.id, homeOpts);
+    if (existing) {
+      if (existing.content_hash !== parsed.content_hash) throw new Error(`proof plan ${parsed.id} already exists with different immutable content`);
+      return { plan: existing, created: false };
+    }
+    const dir = this.dir(home, "plans");
+    mkdirSync(dir, { recursive: true });
+    if (writeFileAtomicIfAbsent(join(dir, `${parsed.id}.json`), encode(parsed))) return { plan: parsed, created: true };
+    const winner = this.getPlan(parsed.id, homeOpts);
+    if (!winner) throw new Error(`proof plan ${parsed.id} appeared concurrently but could not be read`);
+    if (winner.content_hash !== parsed.content_hash) throw new Error(`proof plan ${parsed.id} appeared concurrently with different immutable content`);
+    return { plan: winner, created: false };
   }
 
   putCorpus(corpus: ProofCorpus, policyId: string): ProofCorpus {
@@ -282,9 +392,13 @@ export class PolicyRepository {
     return parsed;
   }
 
-  putEvidence(event: EvidenceEvent, opts: { private?: boolean } = {}): EvidenceEvent {
+  putEvidence(event: EvidenceEvent, opts: { private?: boolean; public?: boolean } = {}): EvidenceEvent {
     const parsed = EvidenceEventSchema.parse(event);
-    const home = opts.private || parsed.data_class !== "public" || this.store.unified ? "private" : "public";
+    if (opts.private && opts.public) throw new Error("choose only one evidence home");
+    const home = opts.private ? "private" : opts.public ? "public" : parsed.data_class !== "public" || this.store.unified ? "private" : "public";
+    if (home === "public" && parsed.data_class !== "public") {
+      throw new Error(`refusing to write ${parsed.data_class} evidence ${parsed.id} into the public home`);
+    }
     const dir = this.dir(home, "evidence");
     mkdirSync(dir, { recursive: true });
     writeFileAtomic(join(dir, `${parsed.id}.json`), encode(parsed));
@@ -388,6 +502,11 @@ export class PolicyRepository {
     writeFileAtomic(join(dir, `${parsed.id}.json`), encode(parsed));
     return parsed;
   }
+}
+
+function immutableProofHash(proof: PolicyProof): string {
+  const { generated_at: _generatedAt, ...payload } = proof;
+  return canonicalHash(payload);
 }
 
 function validatePlan(raw: unknown): ProofPlan {

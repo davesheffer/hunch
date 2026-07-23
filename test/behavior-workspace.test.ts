@@ -151,12 +151,14 @@ test("executable advisory evaluation distinguishes committed, staged, and workin
 
 test("CLI, MCP, and check share one non-blocking working-snapshot receipt without public leakage", async () => {
   const fixture = workspaceFixture();
-  const privateRoot = join(fixture.root, "private/.hunch");
+  const privateRepo = mkdtempSync(join(tmpdir(), "hunch-behavior-private-"));
+  const privateRoot = join(privateRepo, ".hunch");
   const tsx = join(process.cwd(), "node_modules/tsx/dist/cli.mjs");
   const cli = join(process.cwd(), "src/cli/index.ts");
   const env = { ...process.env, HUNCH_PRIVATE_DIR: privateRoot, HUNCH_SYNTH_PROVIDER: "deterministic", NO_COLOR: "1" };
   let client: Client | null = null;
   try {
+    execFileSync("git", ["init", "-q", privateRepo]);
     mkdirSync(join(privateRoot, "policies"), { recursive: true });
     mkdirSync(join(privateRoot, "behavior-attestations"), { recursive: true });
     writeFileSync(join(privateRoot, "policies", `${fixture.policy.id}.json`), `${JSON.stringify(fixture.policy, null, 2)}\n`);
@@ -172,6 +174,16 @@ test("CLI, MCP, and check share one non-blocking working-snapshot receipt withou
     const cliReceipt = (JSON.parse(cliRun.stdout) as Array<{ result: string; deterministic_hash: string }>)[0]!;
     assert.equal(cliReceipt.result, "violated");
 
+    const defaultCliRun = spawnSync(process.execPath, [tsx, cli, "policy", "evaluate", fixture.policy.id, "--active", "--strict", "--json"], {
+      cwd: fixture.root,
+      env,
+      encoding: "utf8",
+    });
+    assert.equal(defaultCliRun.status, 0, defaultCliRun.stderr);
+    const defaultCliReceipt = (JSON.parse(defaultCliRun.stdout) as Array<{ result: string; deterministic_hash: string }>)[0]!;
+    assert.equal(defaultCliReceipt.result, "violated", "default CLI evaluation must execute the dirty working snapshot, not clean HEAD");
+    assert.equal(defaultCliReceipt.deterministic_hash, cliReceipt.deterministic_hash, "default and explicit working CLI evaluation bind one source");
+
     const transport = new StdioClientTransport({ command: process.execPath, args: [tsx, cli, "mcp"], cwd: fixture.root, env });
     client = new Client({ name: "behavior-workspace-contract-test", version: "1.0.0" });
     await client.connect(transport);
@@ -182,6 +194,14 @@ test("CLI, MCP, and check share one non-blocking working-snapshot receipt withou
     const mcpReceipt = (JSON.parse((mcpCall.content[0] as { type: "text"; text: string }).text) as Array<{ result: string; deterministic_hash: string }>)[0]!;
     assert.equal(mcpReceipt.result, "violated");
     assert.equal(mcpReceipt.deterministic_hash, cliReceipt.deterministic_hash);
+
+    const defaultMcpCall = await client.callTool({
+      name: "hunch_policy_evaluate",
+      arguments: { policy_id: fixture.policy.id, active_only: true },
+    });
+    const defaultMcpReceipt = (JSON.parse((defaultMcpCall.content[0] as { type: "text"; text: string }).text) as Array<{ result: string; deterministic_hash: string }>)[0]!;
+    assert.equal(defaultMcpReceipt.result, "violated", "default MCP evaluation must execute the dirty working snapshot, not clean HEAD");
+    assert.equal(defaultMcpReceipt.deterministic_hash, cliReceipt.deterministic_hash, "default and explicit working MCP evaluation bind one source");
 
     const checkRun = spawnSync(process.execPath, [tsx, cli, "check", "--working", "--strict"], {
       cwd: fixture.root,
@@ -230,9 +250,49 @@ test("CLI, MCP, and check share one non-blocking working-snapshot receipt withou
     });
     assert.equal(workingCli.status, 0, workingCli.stderr);
     assert.equal((JSON.parse(workingCli.stdout) as Array<{ result: string }>)[0]?.result, "satisfied", "working evaluation sees the unstaged repair over the staged regression");
+
+    execFileSync("git", ["tag", "-a", "v1", "-m", "fixture: annotated policy ref"], { cwd: fixture.root });
+    const exactCli = (ref: string) => spawnSync(process.execPath, [tsx, cli, "policy", "evaluate", fixture.policy.id, "--active", "--commit", ref, "--json"], {
+      cwd: fixture.root,
+      env,
+      encoding: "utf8",
+    });
+    const headCli = exactCli("HEAD");
+    const tagCli = exactCli("v1");
+    assert.equal(headCli.status, 0, headCli.stderr);
+    assert.equal(tagCli.status, 0, tagCli.stderr);
+    const headCommitReceipt = (JSON.parse(headCli.stdout) as Array<{ result: string; deterministic_hash: string }>)[0]!;
+    const tagCommitReceipt = (JSON.parse(tagCli.stdout) as Array<{ result: string; deterministic_hash: string }>)[0]!;
+    assert.equal(tagCommitReceipt.deterministic_hash, headCommitReceipt.deterministic_hash, "annotated tags and their peeled commit share one CLI identity");
+
+    const headMcp = await client.callTool({
+      name: "hunch_policy_evaluate",
+      arguments: { policy_id: fixture.policy.id, active_only: true, commit: "HEAD" },
+    });
+    const tagMcp = await client.callTool({
+      name: "hunch_policy_evaluate",
+      arguments: { policy_id: fixture.policy.id, active_only: true, commit: "v1" },
+    });
+    const headMcpReceipt = (JSON.parse((headMcp.content[0] as { type: "text"; text: string }).text) as Array<{ deterministic_hash: string }>)[0]!;
+    const tagMcpReceipt = (JSON.parse((tagMcp.content[0] as { type: "text"; text: string }).text) as Array<{ deterministic_hash: string }>)[0]!;
+    assert.equal(headMcpReceipt.deterministic_hash, headCommitReceipt.deterministic_hash);
+    assert.equal(tagMcpReceipt.deterministic_hash, headCommitReceipt.deterministic_hash, "annotated tags and their peeled commit share one MCP identity");
+
+    const exactCheck = (ref: string) => spawnSync(process.execPath, [tsx, cli, "check", "--commit", ref, "--strict"], {
+      cwd: fixture.root,
+      env,
+      encoding: "utf8",
+    });
+    const headCheck = exactCheck("HEAD");
+    const tagCheck = exactCheck("v1");
+    assert.equal(headCheck.status, 0, headCheck.stderr);
+    assert.equal(tagCheck.status, 0, tagCheck.stderr);
+    assert.match(headCheck.stdout, new RegExp(`receipt: ${headCommitReceipt.deterministic_hash}`));
+    assert.match(tagCheck.stdout, new RegExp(`receipt: ${headCommitReceipt.deterministic_hash}`), "check peels annotated tags to the same exact commit receipt");
   } finally {
     if (client) await client.close();
     fixture.cleanup();
+    rmSync(privateRepo, { recursive: true, force: true });
   }
 });
 
@@ -243,7 +303,8 @@ test("CLI, MCP, and check share one non-blocking working-snapshot receipt withou
 // Labels are not evidence (dec_ce86ca9cec); only this execution is.
 test("CLI, MCP, check, and the VS Code seam share one non-blocking working-snapshot receipt without public leakage", async () => {
   const fixture = workspaceFixture();
-  const privateRoot = join(fixture.root, "private/.hunch");
+  const privateRepo = mkdtempSync(join(tmpdir(), "hunch-behavior-vscode-private-"));
+  const privateRoot = join(privateRepo, ".hunch");
   const tsx = join(process.cwd(), "node_modules/tsx/dist/cli.mjs");
   const cli = join(process.cwd(), "src/cli/index.ts");
   const envPatch: Record<string, string> = { HUNCH_PRIVATE_DIR: privateRoot, HUNCH_SYNTH_PROVIDER: "deterministic", NO_COLOR: "1" };
@@ -251,6 +312,7 @@ test("CLI, MCP, check, and the VS Code seam share one non-blocking working-snaps
   let client: Client | null = null;
   let binDir: string | null = null;
   try {
+    execFileSync("git", ["init", "-q", privateRepo]);
     mkdirSync(join(privateRoot, "policies"), { recursive: true });
     mkdirSync(join(privateRoot, "behavior-attestations"), { recursive: true });
     writeFileSync(join(privateRoot, "policies", `${fixture.policy.id}.json`), `${JSON.stringify(fixture.policy, null, 2)}\n`);
@@ -311,5 +373,6 @@ test("CLI, MCP, check, and the VS Code seam share one non-blocking working-snaps
     if (client) await client.close();
     if (binDir) { try { rmSync(binDir, { recursive: true, force: true }); } catch { /* best effort */ } }
     fixture.cleanup();
+    rmSync(privateRepo, { recursive: true, force: true });
   }
 });

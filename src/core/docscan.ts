@@ -20,6 +20,7 @@ import { join, extname } from "node:path";
 import type { Decision } from "./types.js";
 import { parseDocAnchors } from "./docanchors.js";
 import { currentForTopic } from "./topics.js";
+import { compareCodeUnits } from "./canonicalOrder.js";
 
 export const STALE_MARKER = /\b(proposed|not yet implemented|no code yet)\b/i;
 export const SRC_REF = /\bsrc\/[A-Za-z0-9_\-/]+\.ts\b/g;
@@ -129,5 +130,5 @@ export function scanRepoDocs(decisions: readonly Decision[], root: string): Repo
     const title = /^#\s+(.+)$/m.exec(text)?.[1]?.trim() ?? doc.rel;
     out.push({ rel: doc.rel, title, topics, srcRefs, status, issues });
   }
-  return out.sort((a, b) => a.rel.localeCompare(b.rel));
+  return out.sort((a, b) => compareCodeUnits(a.rel, b.rel));
 }

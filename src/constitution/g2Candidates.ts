@@ -164,7 +164,7 @@ export function buildG2CandidateReview(
   const graphStore = new HunchStore(hunchPathsForDir(scratchRoot));
   try {
     graphStore.json.ensureDirs();
-    indexRepo(graphStore, root, { churn: false });
+    indexRepo(graphStore, root, { churn: false, requireComplete: true });
     return buildFromIndexedGraph(store, graphStore, root, opts, resolutions);
   } finally {
     graphStore.close();

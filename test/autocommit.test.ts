@@ -12,7 +12,7 @@ import { execFileSync } from "node:child_process";
 import { commitAndPushHunch } from "../src/extractors/git.js";
 import { HunchStore } from "../src/store/hunchStore.js";
 import { hunchPaths } from "../src/core/paths.js";
-import { flushCapture } from "../src/integrations/sync.js";
+import { flushCapture, flushMemoryHome } from "../src/integrations/sync.js";
 
 const g = (cwd: string, ...a: string[]): string =>
   execFileSync("git", a, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
@@ -55,6 +55,27 @@ test("commitAndPushHunch push:false COMMITS the memory but never touches the rem
   } finally { rmSync(base, { recursive: true, force: true }); }
 });
 
+test("commitAndPushHunch never commits a force-tracked .hunch/local.json overlay pointer", () => {
+  const { root, cleanup } = projectRepo();
+  try {
+    writeFileSync(join(root, ".hunch", "local.json"), JSON.stringify({ privateDir: "/safe/placeholder" }) + "\n");
+    g(root, "add", "-f", ".hunch/local.json", ".hunch/manifest.json");
+    g(root, "commit", "-q", "-m", "track legacy local config");
+    const before = g(root, "rev-parse", "HEAD");
+
+    writeFileSync(join(root, ".hunch", "local.json"), JSON.stringify({ privateDir: "/SECRET/private-overlay" }) + "\n");
+    writeFileSync(join(root, ".hunch", "decisions", "dec_safe.json"), "{}\n");
+    const result = commitAndPushHunch(join(root, ".hunch"), "hunch: capture dec_safe", { push: false });
+
+    assert.equal(result, null);
+    assert.equal(g(root, "rev-parse", "HEAD"), before, "no automatic commit was created");
+    assert.doesNotMatch(g(root, "show", "HEAD:.hunch/local.json"), /SECRET/,
+      "the machine-local private pointer never enters history");
+    assert.equal(g(root, "diff", "--cached", "--name-only", "--", ".hunch"), "",
+      "the refused memory set is left unstaged");
+  } finally { cleanup(); }
+});
+
 test("store.autoCommit defaults ON with no local.json; an explicit false opts out (and kills privateAutoCommit)", () => {
   const { root, cleanup } = projectRepo();
   try {
@@ -71,6 +92,7 @@ test("store.autoCommit defaults ON with no local.json; an explicit false opts ou
 
       const overlay = join(root, ".hunch-private", ".hunch");
       mkdirSync(overlay, { recursive: true });
+      g(join(root, ".hunch-private"), "init", "-q");
       writeFileSync(join(root, ".hunch", "local.json"), JSON.stringify({ privateDir: overlay }) + "\n");
       const shared = new HunchStore(hunchPaths(root));
       assert.equal(shared.privateAutoCommit, true); // overlay configured, no opt-out → ON
@@ -122,6 +144,48 @@ test("flushCapture public path skips QUIETLY (no commit) when the user has non-m
       store.close();
       assert.equal(r, "committed");
       assert.match(g(root, "log", "-1", "--format=%s"), /capture dec_wip/); // swept up next flush
+    });
+  } finally { cleanup(); }
+});
+
+test("flushMemoryHome honors an explicit public Constitution home even when shared mode routes ordinary captures private", () => {
+  const { root, cleanup } = projectRepo();
+  try {
+    withoutPrivateEnv(() => {
+      const overlayRoot = join(root, ".hunch-private");
+      const overlayHunch = join(overlayRoot, ".hunch");
+      mkdirSync(join(overlayHunch, "policies"), { recursive: true });
+      g(overlayRoot, "init", "-q", "-b", "main", "."); cfg(overlayRoot);
+      writeFileSync(join(overlayHunch, "manifest.json"), '{"schema_version":1}\n');
+      g(overlayRoot, "add", "-A"); g(overlayRoot, "commit", "-q", "-m", "private seed");
+      const privateHead = g(overlayRoot, "rev-parse", "HEAD");
+
+      writeFileSync(join(root, ".gitignore"), ".hunch/local.json\n.hunch-private/\n");
+      g(root, "add", ".gitignore", ".hunch/manifest.json");
+      g(root, "commit", "-q", "-m", "track public memory home");
+      writeFileSync(join(root, ".hunch", "local.json"), JSON.stringify({
+        privateDir: overlayHunch,
+        autoCommit: true,
+        mode: "shared",
+      }) + "\n");
+      mkdirSync(join(root, ".hunch", "policies"), { recursive: true });
+      writeFileSync(join(root, ".hunch", "policies", "pol_public.json"),
+        '{"id":"pol_public","data_class":"public"}\n');
+      writeFileSync(join(overlayHunch, "policies", "pol_private_pending.json"),
+        '{"id":"pol_private_pending","data_class":"private"}\n');
+
+      const store = new HunchStore(hunchPaths(root));
+      assert.equal(store.unified, true);
+      assert.equal(store.captureHome(false), "private", "ordinary shared captures still route to the overlay");
+      const result = flushMemoryHome(store, hunchPaths(root).hunch, "public", "hunch: publish public policy");
+      store.close();
+
+      assert.equal(result, "committed");
+      assert.match(g(root, "show", "HEAD:.hunch/policies/pol_public.json"), /pol_public/);
+      assert.equal(g(overlayRoot, "rev-parse", "HEAD"), privateHead,
+        "the explicit public flush never commits the private overlay");
+      assert.match(g(overlayRoot, "status", "--porcelain", "--", ".hunch/policies/pol_private_pending.json"), /^\?\?/,
+        "a pending private artifact remains untouched for its own home flush");
     });
   } finally { cleanup(); }
 });

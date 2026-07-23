@@ -1,12 +1,14 @@
-import { basename } from "node:path";
 import { shortHash } from "../core/ids.js";
-import { firstCommitForFile, headSha, revExists, revParse } from "../extractors/git.js";
+import { stableRepositoryName } from "../extractors/git.js";
 import type { HunchStore } from "../store/hunchStore.js";
 import { canonicalHash, policySemanticHash } from "./canonical.js";
 import { policyCompositionBinding, policyProofHash } from "./composition.js";
 import { graphSnapshot, mutationOperatorForPolicy, selectedPolicyForComposition } from "./evaluator.js";
 import type { PolicyRepository } from "./repository.js";
 import { createExecutableBehaviorProofPlan } from "./behaviorProof.js";
+import { canonicalStaticGraphBaseline, isAncestorOrSame } from "./staticGraphBaseline.js";
+import { replacementFreeExactCommit, replacementFreeFirstCommitForFile } from "./replacementFreeGit.js";
+export { canonicalStaticGraphBaseline } from "./staticGraphBaseline.js";
 import {
   POLICY_EVALUATOR,
   MUTATION_ENGINE,
@@ -25,6 +27,8 @@ export interface ProofPlanOptions {
   publicOnly?: boolean;
   privateOnly?: boolean;
   composition?: PolicySpec[];
+  /** Optional stable artifact label for worktree-agnostic materializers. */
+  repositoryName?: string;
 }
 
 function clamp(value: number | undefined, fallback: number, min: number, max: number): number {
@@ -72,18 +76,25 @@ export function createProofPlan(
     if (opts.composition?.length) throw new Error("executable-behavior policies cannot have exception composition");
     return createExecutableBehaviorProofPlan(root, repository, policy, { now: opts.now, privateOnly: true });
   }
-  const head = headSha(root);
-  if (!head) throw new Error("proof planning needs a Git repository with a current HEAD");
+  const repositoryHead = replacementFreeExactCommit(root, "HEAD");
+  if (!repositoryHead) throw new Error("proof planning needs a Git repository with a current HEAD");
+  const head = canonicalStaticGraphBaseline(root, repositoryHead);
   const composition = opts.composition ?? [];
   const parentHash = policySemanticHash(policy);
   const policyHash = policyProofHash(policy, composition);
   const compositionBinding = policyCompositionBinding(policy, composition);
   const corpus = repository.getCorpus(policy.id, opts);
+  // Proof plans are shared memory. A clone-local directory basename would mint
+  // different plan IDs for Architect, Developer, CI, and linked worktrees even
+  // when every one of them is looking at the same repository and policy. An
+  // existing immutable corpus remains the compatibility authority for artifacts
+  // created before stable repository identities were introduced.
+  const repositoryName = opts.repositoryName ?? corpus?.repository ?? stableRepositoryName(root);
   if (corpus) {
     if (corpus.policy_hash !== parentHash) {
       throw new Error(`proof corpus ${corpus.id} is stale for policy ${policy.id}; re-import it after the policy semantic change`);
     }
-    if (corpus.repository !== basename(root) || corpus.data_class !== policy.data_class) {
+    if (corpus.repository !== repositoryName || corpus.data_class !== policy.data_class) {
       throw new Error(`proof corpus ${corpus.id} does not match repository/data class for policy ${policy.id}`);
     }
   }
@@ -98,10 +109,18 @@ export function createProofPlan(
     .filter((ref) => ref.startsWith("dec_"))
     .map(readDecision)
     .find((record) => !!record);
-  const policyCommit = firstCommitForFile(`.hunch/policies/${policy.id}.json`, root);
+  const policyCommit = replacementFreeFirstCommitForFile(root, `.hunch/policies/${policy.id}.json`);
   const sourceRef = sourceEvent?.commit ?? decision?.commit ?? (policyCommit || head);
-  if (!revExists(sourceRef, root)) throw new Error(`proof-plan source commit ${sourceRef} does not resolve in this repository`);
-  const sourceCommit = revParse(sourceRef, root);
+  const rawSource = replacementFreeExactCommit(root, sourceRef);
+  if (!rawSource) throw new Error(`proof-plan source commit ${sourceRef} does not resolve in this repository`);
+  // Canonicalize the source independently of current HEAD. A policy introduced
+  // by a Hunch-only publication commit remains anchored to the indexed-code (or
+  // merge) boundary immediately before that publication, even after later code
+  // commits advance the current baseline.
+  const sourceCommit = canonicalStaticGraphBaseline(root, rawSource);
+  if (!isAncestorOrSame(root, sourceCommit, head)) {
+    throw new Error(`proof-plan source commit ${sourceCommit} is not an ancestor of canonical graph baseline ${head}`);
+  }
   const structural = events.find((event) => event.structural_delta && (event.kind === "bug_fix" || event.kind === "revert" || event.kind === "decision"));
   const structuralKnownBad = structural?.structural_delta
     ? [{
@@ -136,7 +155,7 @@ export function createProofPlan(
   const body = {
     policy_id: policy.id,
     policy_candidate_hash: policyHash,
-    repository: basename(root),
+    repository: repositoryName,
     data_class: policy.data_class,
     source_commit: sourceCommit,
     valid_from_commit: sourceCommit,
