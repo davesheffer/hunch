@@ -15,9 +15,18 @@ test("CI scaffold pins an engine-compatible Hunch release and keeps public outpu
   assert.match(yaml, /hunch check .*--strict .*--public-only/);
 });
 
-test("repository Hunch Guard pins the exact package release", () => {
+test("repository Hunch Guard uses the exact package release from the trusted PR base", () => {
   const yaml = readFileSync(new URL("../.github/workflows/hunch-guard.yml", import.meta.url), "utf8");
-  assert.ok(yaml.includes(`npm install -g ${HUNCH_PACKAGE_SPEC}`));
+  const fetchBase = yaml.indexOf('git fetch --no-tags origin "+refs/heads/${{ github.base_ref }}:refs/remotes/origin/${{ github.base_ref }}"');
+  const readBaseVersion = yaml.indexOf('git show "origin/${{ github.base_ref }}:package.json"');
+  const installBaseVersion = yaml.indexOf('npm install -g "@davesheffer/hunch@$HUNCH_BASE_VERSION"');
+
+  assert.ok(fetchBase >= 0, "the trusted PR base is fetched explicitly");
+  assert.ok(readBaseVersion > fetchBase, "the version is read only after the trusted base is available");
+  assert.ok(installBaseVersion > readBaseVersion, "the exact trusted-base version is installed");
+  assert.match(yaml, /if \(!\/\^\\d\+\\\.\\d\+\\\.\\d\+/);
+  assert.ok(!yaml.includes(`npm install -g ${HUNCH_PACKAGE_SPEC}`),
+    "a release PR must not try to install its own unpublished candidate version");
 });
 
 test("CI scaffold is idempotent and never clobbers an existing workflow", () => {

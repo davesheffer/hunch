@@ -22,16 +22,23 @@ jobs:
         with:
           node-version: 22
 
-      - name: Install Hunch
-        # Keep the guard on the exact npm release reviewed by this repository.
-        # Version bumps update this pin alongside package.json.
-        run: npm install -g @davesheffer/hunch@1.9.4
-
       - name: Fetch the PR base branch
         # checkout sets up no origin/<base> tracking ref; create it explicitly so
         # the guard's base...head diff resolves (otherwise it sees zero changes and
         # passes vacuously).
         run: git fetch --no-tags origin "+refs/heads/${{ github.base_ref }}:refs/remotes/origin/${{ github.base_ref }}"
+
+      - name: Install the trusted base's exact Hunch release
+        # A release PR names a package version that does not exist until its tag
+        # workflow publishes it. Bootstrap the guard from the target branch
+        # instead: the PR cannot choose the checker that judges its own diff, and
+        # npm still receives one exact, reviewed version.
+        run: |
+          HUNCH_BASE_VERSION="$(
+            git show "origin/${{ github.base_ref }}:package.json" |
+            node -e 'const fs = require("node:fs"); const version = JSON.parse(fs.readFileSync(0, "utf8")).version; if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(version)) throw new Error(`invalid trusted-base package version: ${String(version)}`); process.stdout.write(version);'
+          )"
+          npm install -g "@davesheffer/hunch@$HUNCH_BASE_VERSION"
 
       - name: Run Constraint Guard
         id: guard
