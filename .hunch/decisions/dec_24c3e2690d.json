@@ -1,0 +1,54 @@
+{
+  "id": "dec_24c3e2690d",
+  "title": "fix(distribution): pin exact npm package launchers",
+  "topic": null,
+  "status": "accepted",
+  "context": "What changed: added publishedMcpInvocation. Touches invariant(s): con_8460b6770f (Config/provider writers must merge idempotently into existing user files and refuse to clobber an unparseable file).",
+  "decision": "Changed src/cli, src/core, src/integrations, test/antigravity.test.ts, test/ci-action.test.ts, test/providers.test.ts: added publishedMcpInvocation.",
+  "consequences": [],
+  "alternatives_rejected": [],
+  "rejected_tripwires": [],
+  "related_components": [
+    "cmp_50037f41a9",
+    "cmp_863ac67d4a",
+    "cmp_a94a8fe5cc",
+    "cmp_b256a6aed0"
+  ],
+  "related_files": [
+    "src/cli/invocation.ts",
+    "src/core/version.ts",
+    "src/integrations/ciAction.ts",
+    "test/antigravity.test.ts",
+    "test/ci-action.test.ts",
+    "test/providers.test.ts",
+    "test/version.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "cb7da0c",
+  "valid_from": "2026-07-26T13:06:13+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "inferred",
+    "confidence": 0.45,
+    "evidence": [
+      "commit:cb7da0c",
+      "synth:provider=deterministic",
+      "branch:fix/sampson-issues-23-19",
+      "src/cli/invocation.ts",
+      "src/core/version.ts",
+      "src/integrations/ciAction.ts",
+      "test/antigravity.test.ts",
+      "test/ci-action.test.ts",
+      "test/providers.test.ts",
+      "test/version.test.ts"
+    ],
+    "last_verified": "2026-07-26T10:06:20.369Z"
+  },
+  "date": "2026-07-26T13:06:13+03:00"
+}
