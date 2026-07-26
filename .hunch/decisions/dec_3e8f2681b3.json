@@ -1,0 +1,39 @@
+{
+  "id": "dec_3e8f2681b3",
+  "title": "fix(ci): bootstrap Hunch Guard from trusted base",
+  "topic": null,
+  "status": "accepted",
+  "context": "Touched 1 file(s) across test/ci-action.test.ts.",
+  "decision": "Changed code in test/ci-action.test.ts (1 file(s)).",
+  "consequences": [],
+  "alternatives_rejected": [],
+  "rejected_tripwires": [],
+  "related_components": [
+    "cmp_a94a8fe5cc"
+  ],
+  "related_files": [
+    "test/ci-action.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "3d1f37c",
+  "valid_from": "2026-07-26T13:46:16+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "inferred",
+    "confidence": 0.3,
+    "evidence": [
+      "commit:3d1f37c",
+      "synth:provider=deterministic",
+      "branch:agent/release-v1.9.4",
+      "test/ci-action.test.ts"
+    ],
+    "last_verified": "2026-07-26T10:46:24.666Z"
+  },
+  "date": "2026-07-26T13:46:16+03:00"
+}
