@@ -8,8 +8,10 @@
  */
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { RootsListChangedNotificationSchema } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { hunchPaths, findRoot, toPosixTarget } from "../core/paths.js";
+import { resolveActiveRoot } from "./roots.js";
 import { HunchStore } from "../store/hunchStore.js";
 import { selectEmbedder } from "../store/embedder.js";
 import { decisionId } from "../core/ids.js";
@@ -132,14 +134,57 @@ function resolveFiles(store: HunchStore, target: string): string[] {
   return files.size ? [...files] : [toPosixTarget(target)];
 }
 
-export function buildServer(root: string): McpServer {
+type PreparedRoot = {
+  root: string;
+  teamFile: string;
+  teamAdvertised: boolean;
+  startupTeamConfig: ReturnType<typeof readTeamConfig>;
+  startupTeamRoute: ReturnType<typeof teamRemoteContract>;
+  store: HunchStore;
+  nextRemotePullAt: number;
+  consecutivePullFailures: number;
+  indexedSourceStamp: string | undefined;
+};
+
+function pullBackoff(status: HunchPullStatus, finishedAt: number, failures: number): {
+  nextRemotePullAt: number;
+  consecutivePullFailures: number;
+} {
+  if (status === "updated" || status === "current") {
+    return { consecutivePullFailures: 0, nextRemotePullAt: finishedAt + 1_000 };
+  }
+  if (status === "busy") {
+    return { consecutivePullFailures: failures, nextRemotePullAt: finishedAt + 100 };
+  }
+  if (status === "unconfigured") {
+    return { consecutivePullFailures: 0, nextRemotePullAt: finishedAt + 30_000 };
+  }
+  const consecutivePullFailures = Math.min(failures + 1, 6);
+  return {
+    consecutivePullFailures,
+    nextRemotePullAt: finishedAt + Math.min(30_000, 1_000 * (2 ** (consecutivePullFailures - 1))),
+  };
+}
+
+function rebuildFreshIndex(store: HunchStore): string | undefined {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const before = store.sourceStamp();
+    store.reindexFresh();
+    const after = store.sourceStamp();
+    if (before === after) return after;
+  }
+  return undefined;
+}
+
+/** Prepare and validate a complete root context before publishing it to handlers.
+ *  A failed re-home therefore leaves the previous graph fully active. */
+function prepareRoot(root: string, explicitOverlay: boolean, requireIndex: boolean): PreparedRoot {
   // Team auto-discovery: a committed .hunch/team.json advertises the shared store — a
   // fresh clone (a new teammate, a headless agent, a CI workflow) wires itself BEFORE the
   // store is constructed, so every consumer resolves the same single source of truth.
   // Once that declaration is present it is fail-closed: starting against the public
   // graph after an invalid config, failed first clone, or dead pointer would let both
   // reads and writes silently escape the team's memory spine.
-  const explicitOverlay = !!process.env.HUNCH_PRIVATE_DIR?.trim();
   const teamFile = join(hunchPaths(root).hunch, "team.json");
   const teamAdvertised = !explicitOverlay && existsSync(teamFile);
   const startupTeamConfig = teamAdvertised ? readTeamConfig(root) : null;
@@ -148,17 +193,76 @@ export function buildServer(root: string): McpServer {
   }
   ensureTeamOverlay(root);
   const store = new HunchStore(hunchPaths(root));
-  if (teamAdvertised && (store.mode !== "shared"
-    || !store.privateDir
-    || !existsSync(store.privateDir)
-    || !overlayMatchesTeamRemote(root, join(store.privateDir, "..")))) {
+  try {
+    if (teamAdvertised && (store.mode !== "shared"
+      || !store.privateDir
+      || !existsSync(store.privateDir)
+      || !overlayMatchesTeamRemote(root, join(store.privateDir, "..")))) {
+      throw new Error("the advertised team memory store is unavailable or tracks a different remote; refusing to start MCP on another graph");
+    }
+    const startupTeamRoute = teamAdvertised && store.privateDir
+      ? teamRemoteContract(root, join(store.privateDir, ".."))
+      : null;
+    if (startupTeamRoute) pinSharedRemote(store, startupTeamRoute);
+
+    let nextRemotePullAt = 0;
+    let consecutivePullFailures = 0;
+    if (store.privateDir) {
+      try {
+        const status = pullHunchStatus(store.privateDir, {
+          timeoutMs: 5_000,
+          remote: startupTeamRoute ?? advertisedTeamRemoteContract(root, join(store.privateDir, "..")),
+        });
+        ({ nextRemotePullAt, consecutivePullFailures } = pullBackoff(status, Date.now(), 0));
+      } catch {
+        // Offline / no remote — proceed with the validated local store.
+      }
+    }
+
+    let indexedSourceStamp: string | undefined;
+    try {
+      indexedSourceStamp = rebuildFreshIndex(store);
+    } catch (error) {
+      if (requireIndex) throw error;
+      console.error("[hunch-mcp] reindex on startup failed:", (error as Error).message);
+    }
+
+    return {
+      root,
+      teamFile,
+      teamAdvertised,
+      startupTeamConfig,
+      startupTeamRoute,
+      store,
+      nextRemotePullAt,
+      consecutivePullFailures,
+      indexedSourceStamp,
+    };
+  } catch (error) {
     store.close();
-    throw new Error("the advertised team memory store is unavailable or tracks a different remote; refusing to start MCP on another graph");
+    throw error;
   }
-  const startupTeamRoute = teamAdvertised && store.privateDir
-    ? teamRemoteContract(root, join(store.privateDir, ".."))
-    : null;
-  if (startupTeamRoute) pinSharedRemote(store, startupTeamRoute);
+}
+
+export type RootControlledServer = {
+  server: McpServer;
+  getRoot: () => string;
+  setRoot: (next: string) => void;
+};
+
+export function buildServerWithRootControl(initialRoot: string): RootControlledServer {
+  const explicitOverlay = !!process.env.HUNCH_PRIVATE_DIR?.trim();
+  const initial = prepareRoot(initialRoot, explicitOverlay, false);
+  let root = initial.root;
+  let teamFile = initial.teamFile;
+  let teamAdvertised = initial.teamAdvertised;
+  let startupTeamConfig = initial.startupTeamConfig;
+  let startupTeamRoute = initial.startupTeamRoute;
+  let store = initial.store;
+  let nextRemotePullAt = initial.nextRemotePullAt;
+  let consecutivePullFailures = initial.consecutivePullFailures;
+  let indexedSourceStamp = initial.indexedSourceStamp;
+
   const matchesStartupTeamRoute = (): boolean => {
     if (!teamAdvertised || !store.privateDir || !startupTeamConfig || !startupTeamRoute) return !teamAdvertised;
     const currentTeamConfig = readTeamConfig(root);
@@ -174,21 +278,9 @@ export function buildServer(root: string): McpServer {
   // session sees memory captured on other machines/worktrees before we index — making the
   // overlay genuinely one source of truth. Remote calls are bounded; request-time failures
   // back off exponentially instead of freezing every tool on the same unavailable remote.
-  let nextRemotePullAt = 0;
-  let consecutivePullFailures = 0;
   const notePull = (status: HunchPullStatus, finishedAt: number): void => {
-    if (status === "updated" || status === "current") {
-      consecutivePullFailures = 0;
-      nextRemotePullAt = finishedAt + 1_000;
-    } else if (status === "busy") {
-      nextRemotePullAt = finishedAt + 100;
-    } else if (status === "unconfigured") {
-      consecutivePullFailures = 0;
-      nextRemotePullAt = finishedAt + 30_000;
-    } else {
-      consecutivePullFailures = Math.min(consecutivePullFailures + 1, 6);
-      nextRemotePullAt = finishedAt + Math.min(30_000, 1_000 * (2 ** (consecutivePullFailures - 1)));
-    }
+    ({ nextRemotePullAt, consecutivePullFailures } =
+      pullBackoff(status, finishedAt, consecutivePullFailures));
   };
   const pullTeamMemory = (force = false): void => {
     if (!store.privateDir) return;
@@ -199,37 +291,93 @@ export function buildServer(root: string): McpServer {
       remote: startupTeamRoute ?? advertisedTeamRemoteContract(root, join(store.privateDir, "..")),
     }), Date.now());
   };
-  if (store.privateDir) {
-    try { pullTeamMemory(true); } catch { /* offline / no remote — proceed with local */ }
-  }
   // A source stamp is acknowledged ONLY after a stable, successful rebuild. If
   // another process changes the atomic JSON tree during the rebuild, retry once;
   // continued churn leaves the marker unset so the next request tries again.
-  let indexedSourceStamp: string | undefined;
   const refreshIndex = (): void => {
-    for (let attempt = 0; attempt < 2; attempt++) {
-      const before = store.sourceStamp();
-      store.reindexFresh();
-      const after = store.sourceStamp();
-      if (before === after) {
-        indexedSourceStamp = after;
-        return;
-      }
-    }
-    indexedSourceStamp = undefined;
+    indexedSourceStamp = rebuildFreshIndex(store);
   };
-  // Ensure the SQLite index reflects the JSON source of truth on startup.
-  try {
-    refreshIndex();
-  } catch (e) {
-    console.error("[hunch-mcp] reindex on startup failed:", (e as Error).message);
-  }
   // Resolve the embedder ONCE for this long-lived process (never throws; null when
   // the optional model isn't installed). The model then loads lazily on the first
   // hunch_query and stays warm — and hybridSearch degrades to FTS until then.
   const embedderReady = selectEmbedder();
 
   const server = new McpServer({ name: "hunch", version: HUNCH_VERSION });
+  let activeRequests = 0;
+  let pendingRoot: string | null = null;
+  let pendingScheduled = false;
+  let closed = false;
+
+  const activateRoot = (next: string): void => {
+    const canonical = findRoot(next);
+    if (canonical === root) return;
+    const prepared = prepareRoot(canonical, explicitOverlay, true);
+    const previous = store;
+    root = prepared.root;
+    teamFile = prepared.teamFile;
+    teamAdvertised = prepared.teamAdvertised;
+    startupTeamConfig = prepared.startupTeamConfig;
+    startupTeamRoute = prepared.startupTeamRoute;
+    store = prepared.store;
+    nextRemotePullAt = prepared.nextRemotePullAt;
+    consecutivePullFailures = prepared.consecutivePullFailures;
+    indexedSourceStamp = prepared.indexedSourceStamp;
+    previous.close();
+    console.error(`[hunch-mcp] serving Hunch at ${root} (client root)`);
+  };
+
+  const applyPendingRoot = (): void => {
+    pendingScheduled = false;
+    if (closed || activeRequests || !pendingRoot) return;
+    const next = pendingRoot;
+    pendingRoot = null;
+    try {
+      activateRoot(next);
+    } catch (error) {
+      console.error(`[hunch-mcp] client root change refused: ${(error as Error).message}`);
+    }
+  };
+
+  const schedulePendingRoot = (): void => {
+    if (closed || activeRequests || !pendingRoot || pendingScheduled) return;
+    pendingScheduled = true;
+    queueMicrotask(applyPendingRoot);
+  };
+
+  const setRoot = (next: string): void => {
+    if (closed) throw new Error("MCP server is closed");
+    const canonical = findRoot(next);
+    if (canonical === root) {
+      pendingRoot = null;
+      return;
+    }
+    if (activeRequests) {
+      pendingRoot = canonical;
+      return;
+    }
+    pendingRoot = null;
+    activateRoot(canonical);
+  };
+
+  const dispose = (): void => {
+    if (closed) return;
+    closed = true;
+    pendingRoot = null;
+    store.close();
+  };
+  const underlyingClose = server.close.bind(server);
+  server.close = async (): Promise<void> => {
+    try {
+      await underlyingClose();
+    } finally {
+      dispose();
+    }
+  };
+  const priorOnClose = server.server.onclose;
+  server.server.onclose = () => {
+    dispose();
+    priorOnClose?.();
+  };
 
   // A long-lived MCP process is the team's ambient memory connection. Another clone may
   // capture and push a decision minutes after this process starts, so startup-only sync
@@ -251,45 +399,50 @@ export function buildServer(root: string): McpServer {
   ) => unknown;
   server.registerTool = ((name: string, config: unknown, callback: UntypedToolHandler) =>
     registerTool(name, config, async (...args: unknown[]) => {
-      // Routing is live state, not a startup constant. A branch switch or
-      // `hunch shared` can add/remove team.json while this stdio process remains
-      // alive; serving the old store after that boundary would write the wrong
-      // graph. Refuse and require a reconnect instead of attempting an in-place
-      // HunchStore swap while requests may be active.
-      // The explicit process overlay intentionally outranks committed team
-      // discovery for this process, both at startup and at every later request.
-      const teamFileNow = !explicitOverlay && existsSync(teamFile);
-      if (teamFileNow !== teamAdvertised) {
-        return err("The committed team-memory routing changed after this MCP process started. Reconnect Hunch before reading or writing memory.");
-      }
-      const currentTeamConfig = teamFileNow ? readTeamConfig(root) : null;
-      if (teamAdvertised && !matchesStartupTeamRoute()) {
-        return err("The team-memory URL or branch changed after this MCP process started. Refusing the old graph; reconnect Hunch first.");
-      }
-      if (teamFileNow && (!currentTeamConfig
-        || store.mode !== "shared"
-        || !store.privateDir
-        || !overlayMatchesTeamRemote(root, join(store.privateDir, "..")))) {
-        return err("The committed team memory destination is invalid or no longer matches this process. Refusing the stale graph; reconnect Hunch first.");
-      }
-      if (store.mode === "shared" && store.privateDir) {
-        try { pullTeamMemory(); } catch { /* offline / lock held / invalid remote — use local */ }
-        // Recompute the full semantic + physical snapshot after the synchronous
-        // network seam. A paired team.json/origin change can occur while fetch is
-        // blocked; serving after that race would attach the old checkout to a new
-        // destination even though the pull itself correctly refused.
-        if (teamAdvertised && !matchesStartupTeamRoute()) {
-          return err("The team-memory route changed during refresh. Refusing to serve a stale or redirected graph; reconnect Hunch first.");
+      activeRequests++;
+      try {
+        // Routing is live state, not a startup constant. A branch switch or
+        // `hunch shared` can add/remove team.json while this stdio process remains
+        // alive; serving the old store after that boundary would write the wrong
+        // graph. Protocol-driven root swaps are prepared atomically and deferred
+        // until this request count reaches zero, so every handler sees one stable
+        // root/store/route epoch for its complete execution.
+        const teamFileNow = !explicitOverlay && existsSync(teamFile);
+        if (teamFileNow !== teamAdvertised) {
+          return err("The committed team-memory routing changed after this MCP process started. Reconnect Hunch before reading or writing memory.");
         }
-        try {
-          if (store.sourceStamp() !== indexedSourceStamp) refreshIndex();
-        } catch { /* corrupt/churning local source — serve the last durable indexed view */ }
+        const currentTeamConfig = teamFileNow ? readTeamConfig(root) : null;
+        if (teamAdvertised && !matchesStartupTeamRoute()) {
+          return err("The team-memory URL or branch changed after this MCP process started. Refusing the old graph; reconnect Hunch first.");
+        }
+        if (teamFileNow && (!currentTeamConfig
+          || store.mode !== "shared"
+          || !store.privateDir
+          || !overlayMatchesTeamRemote(root, join(store.privateDir, "..")))) {
+          return err("The committed team memory destination is invalid or no longer matches this process. Refusing the stale graph; reconnect Hunch first.");
+        }
+        if (store.mode === "shared" && store.privateDir) {
+          try { pullTeamMemory(); } catch { /* offline / lock held / invalid remote — use local */ }
+          // Recompute the full semantic + physical snapshot after the synchronous
+          // network seam. A paired team.json/origin change can occur while fetch is
+          // blocked; serving after that race would attach the old checkout to a new
+          // destination even though the pull itself correctly refused.
+          if (teamAdvertised && !matchesStartupTeamRoute()) {
+            return err("The team-memory route changed during refresh. Refusing to serve a stale or redirected graph; reconnect Hunch first.");
+          }
+          try {
+            if (store.sourceStamp() !== indexedSourceStamp) refreshIndex();
+          } catch { /* corrupt/churning local source — serve the last durable indexed view */ }
+        }
+        const result = await callback(...args);
+        if (teamAdvertised && !matchesStartupTeamRoute()) {
+          return err("The team-memory route changed while the tool was running. Its startup destination was not published; reconnect Hunch before retrying.");
+        }
+        return result;
+      } finally {
+        activeRequests--;
+        schedulePendingRoot();
       }
-      const result = await callback(...args);
-      if (teamAdvertised && !matchesStartupTeamRoute()) {
-        return err("The team-memory route changed while the tool was running. Its startup destination was not published; reconnect Hunch before retrying.");
-      }
-      return result;
     })) as typeof server.registerTool;
 
   // -- hunch_query ----------------------------------------------------------
@@ -696,6 +849,25 @@ export function buildServer(root: string): McpServer {
         // same-id public record (and vice versa).
         const home = store.captureHome(!!decision.private);
         const existing = home === "private" ? store.getPrivateRec("decisions", id) : store.json.get("decisions", id);
+        // A commit-keyed id intentionally lets a human capture upgrade the machine draft
+        // for that commit. Once the slot is human-confirmed, however, a differently
+        // identified decision must never reuse it: that would silently replace the first
+        // ADR while reporting success (issue #23). Topic is the canonical identity when
+        // both sides have one; otherwise a matching title permits anchoring/refining the
+        // same record without blocking the existing draft-upgrade contract.
+        const sameHumanIdentity = existing?.topic && decision.topic
+          ? decision.topic === existing.topic
+          : existing?.title === decision.title;
+        const conflictsWithHuman = !!existing?.provenance.source.includes("human_confirmed")
+          && !sameHumanIdentity;
+        if (conflictsWithHuman) {
+          return err(
+            `Decision id ${id} already identifies a different human-confirmed decision: ` +
+            `"${existing!.title}"${existing!.topic ? ` (topic "${existing!.topic}")` : ""}. ` +
+            `Refusing to overwrite it with "${decision.title}"${decision.topic ? ` (topic "${decision.topic}")` : ""}. ` +
+            "Record the additional decision without commit, or reuse the incumbent topic/title when refining the same decision.",
+          );
+        }
         const source = existing && existing.provenance.source.includes("llm_draft")
           ? "llm_draft+human_confirmed"
           : "human_confirmed";
@@ -1470,7 +1642,17 @@ export function buildServer(root: string): McpServer {
     },
   );
 
-  return server;
+  return {
+    server,
+    getRoot: () => root,
+    setRoot,
+  };
+}
+
+/** Back-compatible server construction for tests and callers that do not need
+ *  to drive roots directly. The server still owns and closes its active store. */
+export function buildServer(root: string): McpServer {
+  return buildServerWithRootControl(root).server;
 }
 
 function provLine(record: unknown): string {
@@ -1480,11 +1662,44 @@ function provLine(record: unknown): string {
   return `\n      ⟨${p.source ?? "?"}, confidence ${p.confidence ?? "?"}${v}⟩`;
 }
 
+/** Query client roots after initialization and follow later list changes.
+ *  Generation ordering prevents a slow stale roots/list response from winning. */
+export function wireClientRoots(control: RootControlledServer, fallback: string): void {
+  let generation = 0;
+  const syncRoots = async (): Promise<void> => {
+    const mine = ++generation;
+    try {
+      if (!control.server.server.getClientCapabilities()?.roots) return;
+      const response = await control.server.server.listRoots();
+      if (mine !== generation) return;
+      const next = resolveActiveRoot((response?.roots ?? []).map((root) => root.uri), fallback);
+      if (!next) {
+        console.error("[hunch-mcp] multiple client roots are equally plausible; keeping the current Hunch root");
+        return;
+      }
+      control.setRoot(next);
+    } catch (error) {
+      // A client without roots support keeps the spawn root. A client-provided
+      // root that fails fail-closed validation is also refused without taking
+      // down the existing, already-validated graph.
+      if (mine === generation) {
+        console.error(`[hunch-mcp] could not apply client roots: ${(error as Error).message}`);
+      }
+    }
+  };
+  control.server.server.oninitialized = () => { void syncRoots(); };
+  control.server.server.setNotificationHandler(
+    RootsListChangedNotificationSchema,
+    async () => { await syncRoots(); },
+  );
+}
+
 /** Start the stdio server (called by `hunch mcp`). */
 export async function startServer(cwd: string = process.cwd()): Promise<void> {
-  const root = findRoot(cwd);
-  const server = buildServer(root);
+  const fallback = findRoot(cwd);
+  const control = buildServerWithRootControl(fallback);
+  wireClientRoots(control, fallback);
   const transport = new StdioServerTransport();
-  await server.connect(transport);
-  console.error(`[hunch-mcp] serving Hunch at ${root} over stdio`);
+  await control.server.connect(transport);
+  console.error(`[hunch-mcp] serving Hunch over stdio (spawn root ${control.getRoot()}; resolving client roots…)`);
 }
