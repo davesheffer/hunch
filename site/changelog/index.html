@@ -106,6 +106,10 @@
 
     <div class="clog">
       <div class="clog-group">
+        <div class="clog-date">Jul 26, 2026</div>
+        <div class="clog-row"><span class="rel-tag">v1.9.4</span><span class="clog-t"><b>Collision-safe MCP, reproducible installs</b> — MCP assistants keep repository roots and simultaneous decision captures isolated across projects, while generated MCP, hook, plugin, and CI commands execute the exact Hunch npm release that created them. This removes stale-global and retired GitHub-tarball failure paths without sacrificing deterministic installs.</span></div>
+      </div>
+      <div class="clog-group">
         <div class="clog-date">Jul 23, 2026</div>
         <div class="clog-row"><span class="rel-tag">v1.9.3</span><span class="clog-t"><b>Verified npm release receipts</b> — fixes the executable semantic-version guard used after successful Sigstore bundle verification, so the immutable npm release closes with a content-addressed publication receipt instead of rejecting its own verifier metadata.</span></div>
         <div class="clog-row"><span class="rel-tag">v1.9.2</span><span class="clog-t"><b>npm OIDC reaches the registry</b> — trusted publishing keeps setup-node's required npm registry configuration, permits only its exact fixed non-secret sentinel, and still rejects every real long-lived npm credential. Open VSX verification also allows the public index a bounded three-minute visibility window. The immutable candidate, provenance, digest, and public-registry verification gates remain unchanged.</span></div>
