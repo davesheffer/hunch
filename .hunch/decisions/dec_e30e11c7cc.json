@@ -1,0 +1,42 @@
+{
+  "id": "dec_e30e11c7cc",
+  "title": "chore(release): v1.9.4 - collision-safe MCP and reproducible installs",
+  "topic": null,
+  "status": "accepted",
+  "context": "Touched 2 file(s) across site/blog, tooling/changelog-locales.mjs.",
+  "decision": "Changed code in site/blog, tooling/changelog-locales.mjs (2 file(s)).",
+  "consequences": [],
+  "alternatives_rejected": [],
+  "rejected_tripwires": [],
+  "related_components": [
+    "cmp_04c6efb58b",
+    "cmp_c099a42a55"
+  ],
+  "related_files": [
+    "site/blog/posts.js",
+    "tooling/changelog-locales.mjs"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "1dec301",
+  "valid_from": "2026-07-26T13:43:00+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "inferred",
+    "confidence": 0.3,
+    "evidence": [
+      "commit:1dec301",
+      "synth:provider=deterministic",
+      "branch:agent/release-v1.9.4",
+      "site/blog/posts.js",
+      "tooling/changelog-locales.mjs"
+    ],
+    "last_verified": "2026-07-26T10:43:08.217Z"
+  },
+  "date": "2026-07-26T13:43:00+03:00"
+}
