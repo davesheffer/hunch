@@ -4,8 +4,9 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { writeAntigravityMcp, antigravityMcpFile } from "../src/integrations/providers.js";
+import { publishedMcpInvocation } from "../src/cli/invocation.js";
 
-const INV = { command: "npx", args: ["-y", "@davesheffer/hunch"] };
+const INV = publishedMcpInvocation();
 
 test("antigravity: registers the hunch stdio server in the global config when installed", () => {
   const home = mkdtempSync(join(tmpdir(), "hunch-ag-"));
@@ -14,7 +15,7 @@ test("antigravity: registers the hunch stdio server in the global config when in
     const file = writeAntigravityMcp(INV, home);
     assert.equal(file, join(home, ".gemini", "antigravity", "mcp_config.json"));
     const cfg = JSON.parse(readFileSync(file!, "utf8"));
-    assert.deepEqual(cfg.mcpServers.hunch, { command: "npx", args: ["-y", "@davesheffer/hunch", "mcp"] });
+    assert.deepEqual(cfg.mcpServers.hunch, { command: INV.command, args: [...INV.args, "mcp"] });
   } finally { rmSync(home, { recursive: true, force: true }); }
 });
 

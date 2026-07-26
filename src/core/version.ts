@@ -16,3 +16,14 @@ export const HUNCH_VERSION: string = (() => {
     return "0.0.0";
   }
 })();
+
+/** Exact public npm package consumed by generated CI and shared MCP/provider
+ * configs. A floating package name would let one committed configuration run
+ * different Hunch semantics as npm's latest release changes. */
+export const HUNCH_PACKAGE_SPEC = `@davesheffer/hunch@${HUNCH_VERSION}`;
+
+/** npm alias used by npx launchers. Giving the fetched package a distinct local
+ * alias prevents npm exec from treating this repository (which has the same
+ * package name) as satisfying the request and then falling through to an older
+ * global `hunch` executable. */
+export const HUNCH_NPX_PACKAGE_SPEC = `hunch-exact@npm:${HUNCH_PACKAGE_SPEC}`;

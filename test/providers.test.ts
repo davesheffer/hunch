@@ -4,6 +4,7 @@ import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { tempStore } from "./helpers.js";
 import { scaffoldProviders, writeCursorMcp, writeVscodeMcp, writeCodexConfig, writeWindsurfMcp, writeAntigravityWorkspaceMcp } from "../src/integrations/providers.js";
+import { publishedMcpInvocation } from "../src/cli/invocation.js";
 
 const inv = { command: "C:\\Program Files\\nodejs\\node.exe", args: ["C:\\repo\\dist\\cli\\index.js"] };
 
@@ -56,6 +57,25 @@ test("scaffoldProviders writes MCP config + grounding for every assistant", () =
     const antigravityHooks = JSON.parse(readFileSync(join(root, ".agents/hooks.json"), "utf8"));
     assert.match(antigravityHooks.hunch.PreInvocation[0].command, /hook.*--provider.*antigravity/);
     assert.match(antigravityHooks.hunch.PreToolUse[0].matcher, /write_to_file/);
+  } finally { cleanup(); }
+});
+
+test("published provider MCP and hook commands force the exact npm package", () => {
+  const { store, root, cleanup } = tempStore();
+  const published = publishedMcpInvocation();
+  try {
+    scaffoldProviders(root, published, store, { home: root });
+
+    const cursor = JSON.parse(readFileSync(join(root, ".cursor/mcp.json"), "utf8"));
+    assert.deepEqual(cursor.mcpServers.hunch, {
+      command: published.command,
+      args: [...published.args, "mcp"],
+    });
+
+    const hooks = JSON.parse(readFileSync(join(root, ".cursor/hooks.json"), "utf8"));
+    const command = hooks.hooks.preToolUse[0].command as string;
+    assert.ok(command.includes(published.args[1]!));
+    assert.match(command, /"hunch" "hook" "--provider" "cursor"/);
   } finally { cleanup(); }
 });
 

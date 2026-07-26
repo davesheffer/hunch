@@ -4,20 +4,20 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ciWorkflowYaml, writeCiWorkflow } from "../src/integrations/ciAction.js";
-import { HUNCH_VERSION } from "../src/core/version.js";
+import { HUNCH_PACKAGE_SPEC } from "../src/core/version.js";
 
 test("CI scaffold pins an engine-compatible Hunch release and keeps public output private-safe", () => {
   const yaml = ciWorkflowYaml();
   assert.match(yaml, /ref: \$\{\{ github\.event\.pull_request\.head\.sha \}\}/);
   assert.match(yaml, /node-version: 22\.13\.0/);
-  assert.match(yaml, new RegExp(`npm install -g @davesheffer/hunch@${HUNCH_VERSION.replaceAll(".", "\\.")}`));
+  assert.ok(yaml.includes(`npm install -g ${HUNCH_PACKAGE_SPEC}`));
   assert.match(yaml, /HUNCH_PRIVATE_DIR: ""/);
   assert.match(yaml, /hunch check .*--strict .*--public-only/);
 });
 
 test("repository Hunch Guard pins the exact package release", () => {
   const yaml = readFileSync(new URL("../.github/workflows/hunch-guard.yml", import.meta.url), "utf8");
-  assert.match(yaml, new RegExp(`npm install -g @davesheffer/hunch@${HUNCH_VERSION.replaceAll(".", "\\.")}`));
+  assert.ok(yaml.includes(`npm install -g ${HUNCH_PACKAGE_SPEC}`));
 });
 
 test("CI scaffold is idempotent and never clobbers an existing workflow", () => {

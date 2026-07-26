@@ -7,6 +7,7 @@
 import { fileURLToPath } from "node:url";
 import type { Invocation } from "../integrations/scaffold.js";
 import { probeOllamaNumCtx, type ProviderResolution } from "../synthesis/provider.js";
+import { HUNCH_NPX_PACKAGE_SPEC } from "../core/version.js";
 
 export interface ResolvedInvocation {
   /** Shell command prefix for the git hook (e.g. `node /abs/dist/cli/index.js`). */
@@ -15,11 +16,15 @@ export interface ResolvedInvocation {
   mcp: Invocation;
 }
 
-/** Published package name — used for OS-agnostic invocations (see below). */
-const PKG = "@davesheffer/hunch";
-
 export function dim(s: string): string {
   return `\x1b[2m${s}\x1b[0m`;
+}
+
+/** Portable invocation written into committed MCP/provider configuration.
+ * Keep it independently testable so the distribution pin cannot silently
+ * regress to npm's moving latest tag. */
+export function publishedMcpInvocation(): Invocation {
+  return { command: "npx", args: ["-y", `--package=${HUNCH_NPX_PACKAGE_SPEC}`, "hunch"] };
 }
 
 /** The doctor command's synthesis-status line(s) for a resolved provider.
@@ -78,15 +83,16 @@ export function resolveInvocation(): ResolvedInvocation {
   // Running from an installed copy (global, local, or npx cache — i.e. NOT a
   // source checkout we're hacking on). The MCP/provider config files we write
   // are committed and shared across a team via git, so they must NOT embed this
-  // machine's absolute path or OS-specific separators. Reference Hunch by its
-  // published package name instead, which `npx` resolves the same on any OS and
-  // any clone. The git hook lives in per-machine .git/hooks (never committed),
-  // so it keeps the PATH-robust absolute-node invocation below.
+  // machine's absolute path or OS-specific separators. Reference the exact
+  // published Hunch package instead, which `npx` resolves the same on any OS
+  // and any clone without floating to a newer release. The git hook lives in
+  // per-machine .git/hooks (never committed), so it keeps the PATH-robust
+  // absolute-node invocation below.
   const installed = !isDev && entry.replace(/\\/g, "/").includes("/node_modules/");
   if (installed) {
     return {
       shell: `${q(process.execPath)} ${q(entry)}`,
-      mcp: { command: "npx", args: ["-y", PKG] },
+      mcp: publishedMcpInvocation(),
     };
   }
 

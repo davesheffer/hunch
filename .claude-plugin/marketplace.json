@@ -9,7 +9,7 @@
     {
       "name": "hunch",
       "source": "./plugin",
-      "description": "The hunch_* MCP tools (why, constraints, blast radius, merge verdict, capture) plus /hunch:capture, /hunch:heal, /hunch:why, /hunch:fix, /hunch:fragile. Requires Node 22.13+; runs `npx @davesheffer/hunch mcp` per project.",
+      "description": "The hunch_* MCP tools (why, constraints, blast radius, merge verdict, capture) plus /hunch:capture, /hunch:heal, /hunch:why, /hunch:fix, /hunch:fragile. Requires Node 22.13+; launches the exact npm package `@davesheffer/hunch@1.9.3` per project.",
       "author": {
         "name": "Dave Sheffer",
         "email": "dave.sheffer1@gmail.com"

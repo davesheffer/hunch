@@ -8,7 +8,7 @@
  */
 import { mkdirSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { HUNCH_VERSION } from "../core/version.js";
+import { HUNCH_PACKAGE_SPEC } from "../core/version.js";
 
 // `\${{ … }}` keeps GitHub Actions expressions literal inside this template
 // literal (a bare `${` would be JS interpolation).
@@ -45,7 +45,7 @@ jobs:
         # Pin the same release that generated this file so every assistant and CI
         # evaluate the graph with identical semantics. Dependabot/Renovate (or a
         # deliberate hunch-ci refresh) can advance this in a reviewed change.
-        run: npm install -g @davesheffer/hunch@${HUNCH_VERSION}
+        run: npm install -g ${HUNCH_PACKAGE_SPEC}
 
       - name: Fetch the PR base branch
         # checkout sets up no origin/<base> tracking ref; create it explicitly so
