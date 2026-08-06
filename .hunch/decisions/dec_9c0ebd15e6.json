@@ -1,0 +1,103 @@
+{
+  "id": "dec_9c0ebd15e6",
+  "title": "Guard .gitignore sync with fast test rather than CI round-trip discovery",
+  "topic": null,
+  "status": "accepted",
+  "context": "One-sided edit of ENTRIES (added .hunch/events.log) without updating OVERLAY_IGNORE caused silent CI failure after 7 minutes with an opaque hash error. No local test caught it.",
+  "decision": "Added test asserting OVERLAY_IGNORE equals runtime-generated .gitignore byte-for-byte, catching drift locally in 25ms rather than after 7-minute CI run.",
+  "consequences": [
+    "One-sided synchronization errors fail immediately in development, not in CI",
+    "The dual-source-of-truth invariant is explicit and tested",
+    "Debug cycle time reduced from 7 minutes to 25ms",
+    "Future edits must satisfy the test or fail fast"
+  ],
+  "alternatives_rejected": [
+    "Just fix the one entry and rely on CI to catch future mismatches",
+    "Auto-generate OVERLAY_IGNORE from ENTRIES (requires architectural refactor)",
+    "Keep manual synchronization without test coverage"
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Just fix the one entry and rely on CI to catch future mismatches",
+      "scope": [
+        "test/**",
+        "tooling/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Auto-generate OVERLAY_IGNORE from ENTRIES (requires architectural refactor)",
+      "scope": [
+        "test/**",
+        "tooling/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Keep manual synchronization without test coverage",
+      "scope": [
+        "test/**",
+        "tooling/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_04c6efb58b",
+    "cmp_a94a8fe5cc"
+  ],
+  "related_files": [
+    "test/gitignore.test.ts",
+    "tooling/matrix-release-verification.mjs"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "f65aac2",
+  "valid_from": "2026-08-06T13:47:43+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft",
+    "confidence": 0.65,
+    "evidence": [
+      "commit:f65aac2",
+      "synth:provider=claude-cli",
+      "branch:fix/round3-high-severity",
+      "test/gitignore.test.ts",
+      "tooling/matrix-release-verification.mjs"
+    ],
+    "last_verified": "2026-08-06T10:48:54.091Z"
+  },
+  "date": "2026-08-06T13:47:43+03:00"
+}
