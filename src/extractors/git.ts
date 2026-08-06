@@ -597,8 +597,8 @@ export function commitAndPushHunch(hunchDir: string, message: string, opts: Hunc
     // a clean overlay store — most dangerously, the overlay was never its own git repo so `git -C`
     // walked UP to the PROJECT repo. Committing/pushing there would overwrite/delete the user's
     // code (we shipped exactly this). Refuse hard: unstage and bail without committing or pushing.
-    const memoryPaths = stagedMemoryPaths(hunchDir, env);
-    if (memoryPaths === null) {
+    const staged = stagedMemoryPaths(hunchDir, env);
+    if (staged === null) {
       try { execFileSync("git", ["-C", hunchDir, "reset", "-q", "--", "."], { stdio: "ignore", env }); } catch { /* best-effort unstage */ }
       // Public-store commits (push:false) skip QUIETLY: a non-memory staged set there is
       // usually just the user's own staged work, not a misconfigured overlay — the record
@@ -609,6 +609,15 @@ export function commitAndPushHunch(hunchDir: string, message: string, opts: Hunc
       }
       return null;
     }
+    // Unstage every derived artifact the scan skipped (catch-log, SQLite index,
+    // atomic-write temps). A public store keeps ordinary ignore semantics, so one
+    // created before those ignore entries existed still stages them above — and the
+    // commit below is `--only` over the memory paths, which would leave them in the
+    // index forever. A permanently dirty index is what the release gate reads as an
+    // unstable tree, and it is exactly what `git reset -- .` used to clean up as a
+    // side effect of the abort path these artifacts no longer take.
+    if (staged.derived.length) run(["reset", "-q", "--", ...staged.derived]);
+    const memoryPaths = staged.memory;
     if (memoryPaths.length === 0) return null;
     // Grounding docs refreshed by this capture ride the same memory commit, so committed record
     // counts can never go stale (the refresh-counts treadmill: every capture commit bumped the
@@ -724,8 +733,15 @@ export function headFileContent(root: string, rel: string): string | null {
  *  The overlay store is entirely JSON (decisions/, bugs/, …, manifest.json). A real memory sync
  *  is purely additive; a DELETION, rename, or any non-.json staged path means hunchDir is NOT a
  *  clean overlay repo (e.g. it resolved to the project repo), so committing there would clobber
- *  code. Empty stage ⇒ [] (nothing to commit); invalid stage ⇒ null. The transient mkdir lock is ignored. */
-function stagedMemoryPaths(hunchDir: string, env: NodeJS.ProcessEnv): string[] | null {
+ *  code. Empty stage ⇒ [] (nothing to commit); invalid stage ⇒ null. The transient mkdir lock is ignored.
+ *
+ *  Returns the derived artifacts it skipped alongside the memory paths. The caller MUST
+ *  unstage those: the commit is `--only` over the memory paths, so anything skipped but
+ *  left staged sits in the index forever. (The old code never had to care — it returned
+ *  null on any non-JSON path, and the caller's blanket `reset -- .` swept the index
+ *  clean as a side effect of aborting.) */
+interface StagedMemory { memory: string[]; derived: string[] }
+function stagedMemoryPaths(hunchDir: string, env: NodeJS.ProcessEnv): StagedMemory | null {
   let out = "";
   let prefix = "";
   try { prefix = execFileSync("git", ["-C", hunchDir, "rev-parse", "--show-prefix"], { encoding: "utf8", env }).trim().replace(/\\/g, "/"); }
@@ -734,8 +750,9 @@ function stagedMemoryPaths(hunchDir: string, env: NodeJS.ProcessEnv): string[] |
   try { out = execFileSync("git", ["-C", hunchDir, "diff", "--cached", "--no-ext-diff", "--no-textconv", "--name-status"], { encoding: "utf8", env }); }
   catch { return null; }
   const lines = out.split("\n").map((l) => l.trim()).filter(Boolean);
-  if (!lines.length) return [];
+  if (!lines.length) return { memory: [], derived: [] };
   const memoryPaths: string[] = [];
+  const derivedPaths: string[] = [];
   for (const line of lines) {
     const parts = line.split("\t");
     const status = (parts[0] ?? "").trim();
@@ -746,10 +763,29 @@ function stagedMemoryPaths(hunchDir: string, env: NodeJS.ProcessEnv): string[] |
     if (!normalizedPath.startsWith(prefix)) return null; // never bless another staged JSON file
     const memoryRelativePath = normalizedPath.slice(prefix.length);
     if (!memoryRelativePath || memoryRelativePath === "local.json") return null; // machine-local overlay pointer; never publish it
+    // Known CLONE-LOCAL/DERIVED artifacts are skipped, never treated as a topology
+    // violation — mirroring committableOverlayJsonPaths below, which already carves
+    // out exactly these. Without this, the strict hook's own catch-log
+    // (.hunch/events.log, append-only with no rotation) made this function return
+    // null forever from its first line onward: the public flush then unstaged
+    // everything and aborted SILENTLY on every later capture, while the MCP tool
+    // still reported success and records piled up untracked.
+    if (isDerivedStoreArtifact(memoryRelativePath)) { derivedPaths.push(memoryRelativePath); continue; }
     if (!normalizedPath.endsWith(".json")) return null; // the store is entirely JSON records
     memoryPaths.push(memoryRelativePath);
   }
-  return [...new Set(memoryPaths)];
+  return { memory: [...new Set(memoryPaths)], derived: [...new Set(derivedPaths)] };
+}
+
+/** Clone-local / DERIVED artifacts that legitimately sit inside a `.hunch` store but
+ *  are never memory records: the SQLite index, temp files, and the strict hook's
+ *  append-only catch-log. A store carrying one of these is a NORMAL store, not a
+ *  topology violation — so both enumerators skip them rather than refusing the whole
+ *  commit. Shared so the public and overlay paths can never disagree again. */
+function isDerivedStoreArtifact(relativeName: string): boolean {
+  return /^[^/]+\.sqlite[^/]*$/i.test(relativeName)
+    || relativeName.split("/").some((segment) => segment.includes(".tmp"))
+    || relativeName === "events.log";
 }
 
 /** Enumerate ordinary JSON files already contained under an overlay. Push-capable
@@ -777,9 +813,7 @@ function committableOverlayJsonPaths(hunchDir: string): string[] | null {
           paths.push(relativeName);
         } else if (relativeName === "local.json") {
           return false;
-        } else if (/^[^/]+\.sqlite[^/]*$/i.test(relativeName)
-          || relativeName.split("/").some((segment) => segment.includes(".tmp"))
-          || relativeName === "events.log") {
+        } else if (isDerivedStoreArtifact(relativeName)) {
           // Known clone-local/derived artifacts are never staged. Everything
           // else is a topology violation: a shared graph repository cannot
           // quietly carry arbitrary source alongside its JSON memory.

@@ -540,14 +540,30 @@ export class HunchStore {
   }
 
   /** Post-fusion rerank by graph PRIORS (dec_25e277f479): relevance ordering, not
-   *  just reachability. Rank-based blend — blended(i) = 1/(60+i) × liveness ×
-   *  provenance × recency — so bm25's negative scale never leaks in. Priors are
-   *  BOUNDED (a superseded or ancient record dims, never disappears): liveness 0.6
+   *  just reachability. Trust weight w = liveness × provenance × recency: liveness 0.6
    *  for superseded/retired/rejected, provenance 1.0 / 0.85 / 0.75 for
    *  human_confirmed / llm_draft / extracted-inferred, recency 0.7 + 0.3·½^(age/90d).
    *  Runbook trigger phrases matching the query boost ×1.5 (exact intent beats
    *  keyword luck). Structural refs (symbols/components/edges) stay neutral.
-   *  Deterministic; ties keep fused order (stable sort). */
+   *
+   *  The prior is applied as a BOUNDED POSITIONAL SHIFT, not as a multiplier on a
+   *  rank-derived score. That is deliberate and load-bearing. The old form —
+   *  `1/(60+i) × w`, sorted descending, sliced to `limit` — could not keep the
+   *  "dims, never disappears" promise it made: across a fused pool of 24 the
+   *  positional term spans only 1/60…1/83 (a 0.72 ratio) while w spans 0.48…1.0 on
+   *  this repo's own records, so the prior was WIDER than the entire pool's
+   *  positional spread and simply overrode fusion. Worse, `priorMeta` returns null
+   *  for structural refs, which left them at w = 1 — a ceiling above what any record
+   *  that is not both human_confirmed and brand-new can reach. Measured over this
+   *  repo's 152 committed decisions with the rest of the pool structural (symbols are
+   *  ~91% of the corpus): 38% of decisions were dropped from the top-12 even when
+   *  they were the #1 fused hit, and 88% from fused rank 8. Both retrieval layers
+   *  ranked the record first and the rerank alone threw it away.
+   *
+   *  A shift of at most ±MAX_PRIOR_SHIFT positions restores the intended semantics:
+   *  a stale or low-provenance record visibly dims, an exact runbook-trigger match
+   *  visibly promotes, and neither can leapfrog the whole pool. Same measurement
+   *  after: 0% evicted from fused ranks 0–8. Deterministic; ties keep fused order. */
   private rerankByPriors(hits: SearchHit[], limit: number, query?: string): SearchHit[] {
     if (!hits.length) return hits; // a SINGLE hit still runs — topic-chain promotion must fire for the lone stale match
     const now = Date.now();
@@ -557,10 +573,10 @@ export class HunchStore {
     // predecessor's rank — the reader asked about the topic, and the graph's one
     // live answer must be reachable even when only history matches lexically.
     const present = new Set(hits.map((h) => h.ref));
-    // Each candidate carries its BASE rank position; an injected successor
-    // inherits its predecessor's position (× a hair under, so an exact-match
-    // live record already in the pool is never displaced by an injection).
-    const pool = hits.map((h, i) => ({ h, base: 1 / (60 + i) }));
+    // Each candidate carries its fused POSITION; an injected successor inherits its
+    // predecessor's position + a half step, so it lands immediately after it and an
+    // exact-match live record already in the pool is never displaced by an injection.
+    const pool = hits.map((h, i) => ({ h, pos: i }));
     for (const [i, h] of hits.entries()) {
       if (h.kind !== "decisions") continue;
       const d = this.recs("decisions").find((x) => x.id === h.ref);
@@ -570,10 +586,10 @@ export class HunchStore {
       present.add(cur.id);
       pool.push({
         h: { ref: cur.id, kind: "decisions", title: cur.title, snippet: `current for topic "${d.topic}" (supersedes ${h.ref})`, score: h.score },
-        base: (1 / (60 + i)) * 0.98,
+        pos: i + 0.5,
       });
     }
-    const scored = pool.map(({ h, base }) => {
+    const scored = pool.map(({ h, pos }) => {
       const m = this.priorMeta(h.ref, h.kind);
       let w = 1;
       if (m) {
@@ -585,9 +601,11 @@ export class HunchStore {
         }
         if (q && m.triggers?.some((tr) => q.includes(tr) || tr.includes(q))) w *= 1.5;
       }
-      return { h, s: base * w };
+      // w > 1 (a trigger match) shifts UP, w < 1 shifts DOWN, both clamped.
+      const shift = Math.max(-MAX_PRIOR_SHIFT, Math.min(MAX_PRIOR_SHIFT, (1 - w) * PRIOR_SHIFT_SCALE));
+      return { h, pos: pos + shift };
     });
-    scored.sort((a, b) => b.s - a.s);
+    scored.sort((a, b) => a.pos - b.pos);
     return scored.slice(0, limit).map((x) => x.h);
   }
 
@@ -1640,6 +1658,14 @@ const RRF_W_FTS = numEnv("HUNCH_RRF_W_FTS", 1);
 const RRF_W_SEM = numEnv("HUNCH_RRF_W_SEM", 0.7);
 const RRF_W_GRAPH = numEnv("HUNCH_RRF_W_GRAPH", 0.5);
 const GRAPH_GAMMA = numEnv("HUNCH_GRAPH_GAMMA", 0.25);
+
+/** Prior tuning: how far a trust weight may move a hit from its FUSED position.
+ *  SCALE maps the weight's realistic span onto positions (this repo's own decisions
+ *  span w 0.48…1.0, so ×12 reaches the clamp at the low end); MAX_PRIOR_SHIFT is the
+ *  hard bound that keeps the prior a dimmer rather than the primary sort key — see
+ *  rerankByPriors for the measurement that fixed it at 4. */
+const PRIOR_SHIFT_SCALE = numEnv("HUNCH_PRIOR_SHIFT_SCALE", 12);
+const MAX_PRIOR_SHIFT = numEnv("HUNCH_MAX_PRIOR_SHIFT", 4);
 function numEnv(name: string, dflt: number): number {
   const v = Number(process.env[name]);
   // >= 0, not > 0: zero is the documented kill-switch (HUNCH_RRF_W_*=0 disables

@@ -315,7 +315,7 @@ export async function recordFailure(
   // a regression Constraint to stop it coming back, and bumps fragility.
   let constraint: Constraint | undefined;
   if (shouldPromoteConstraint(draft.severity, bug.root_cause, !!prior)) {
-    constraint = promoteConstraint(store, bug, home);
+    constraint = promoteConstraint(store, bug, home, !!prior);
     bug.lineage.spawned_constraint = constraint.id;
     putBugInHome(store, bug, home);
   }
@@ -394,16 +394,38 @@ export function shouldPromoteConstraint(severity: Bug["severity"], rootCause: st
   return severe && rootCause.trim().length > 0;
 }
 
-/** Turn a bug into an advisory regression constraint scoped to its files. */
-function promoteConstraint(store: HunchStore, bug: Bug, home: SynthesisHome): Constraint {
+/** Turn a bug into a regression constraint scoped to its files.
+ *
+ *  Severity policy mirrors buildCorrectionConstraint's scope-footgun guard, for the
+ *  same reason: a BLOCKING constraint DENIES edits under strict firmness, and neither
+ *  input here is human-confirmed. `bug.severity` is whatever the synthesis provider's
+ *  enum emitted (provenance "derived", an LLM label no human saw), and `affected_files`
+ *  is EMPTY whenever suspect ranking resolves nothing — the common case for a failure
+ *  that names no known symbol. Left unguarded those compose into the worst outcome:
+ *  one model-labeled "critical" failure with no resolvable suspects mints
+ *  scope ["**"] + severity "blocking", a repo-wide deny on every subsequent edit.
+ *
+ *  So blocking requires BOTH a real file scope AND deterministic corroboration — a
+ *  recurrence, meaning the graph itself already saw and closed this symptom. Everything
+ *  else lands as a warning: still surfaced at edit time and in CI, and still promotable
+ *  by a human via `hunch record-constraint`, but never an automatic deny.
+ *
+ *  Exported for the same reason as shouldPromoteConstraint — it is policy, and policy
+ *  should be provable without spinning up a provider. */
+export function shouldBlockOnPromotion(severity: Bug["severity"], affectedFiles: string[], isRecurrence: boolean): boolean {
+  return severity === "critical" && affectedFiles.length > 0 && isRecurrence;
+}
+
+function promoteConstraint(store: HunchStore, bug: Bug, home: SynthesisHome, isRecurrence: boolean): Constraint {
   const scope = bug.affected_files.length ? bug.affected_files : ["**"];
+  const blocking = shouldBlockOnPromotion(bug.severity, bug.affected_files, isRecurrence);
   const statement = `Regression guard: "${bug.title}" must not recur.`;
   const con: Constraint = {
     id: constraintId(statement),
     type: bug.severity === "critical" ? "security" : "correctness",
     statement,
     scope,
-    severity: bug.severity === "critical" ? "blocking" : "warning",
+    severity: blocking ? "blocking" : "warning",
     enforcement: "advisory_v1",
     match: null,
     forbids: null,

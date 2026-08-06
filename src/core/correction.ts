@@ -8,6 +8,7 @@
  *   - buildCorrectionConstraint(): mint the Constraint record (human-confirmed,
  *     scoped conservatively) that the pre-edit hook + CI guard then enforce.
  */
+import { isAbsolute, relative } from "node:path";
 import { constraintId } from "./ids.js";
 import { toPosixTarget } from "./paths.js";
 import { deriveForbids } from "./constraintmatch.js";
@@ -61,6 +62,34 @@ export interface CorrectionInput {
    *  auto-derived ONLY for a dep that actually exists — so a non-dependency phrasing
    *  never silently mints a never-firing rule. */
   knownDeps?: string[];
+  /** Repo root, used to relativize an ABSOLUTE `scope_hint_file`. Agents naturally
+   *  produce absolute paths (edit-tool payloads and MCP roots are absolute), but every
+   *  consumer matches repo-relative paths — so without this an absolute hint mints a
+   *  scope that can never match. */
+  root?: string;
+}
+
+/** Normalize a scope hint to a repo-relative POSIX path.
+ *
+ *  An ABSOLUTE hint is the shape an agent naturally sends, but `checkConstraints`
+ *  anchors its globs at `^` against repo-relative paths, so an absolute scope matches
+ *  NOTHING — while the constraint keeps `severity: "blocking"` and
+ *  `provenance: human_confirmed`, and the MCP tool affirmatively reports it as enforced
+ *  at edit time and in CI. It also leaks the developer's local filesystem path into the
+ *  committed graph and CLAUDE.md.
+ *
+ *  Returns "" when the hint cannot be made repo-relative (no root, or a path outside the
+ *  repo). The caller then falls back to "**", where the existing severity guard
+ *  down-ranks a non-explicit blocking rule to a warning — fail-safe and honest, rather
+ *  than a blocking rule enforced nowhere. */
+function repoRelativeHint(rawHint: string, root?: string): string {
+  if (!rawHint) return "";
+  const looksAbsolute = isAbsolute(rawHint) || /^[a-zA-Z]:/.test(rawHint);
+  if (!looksAbsolute) return rawHint;
+  if (!root) return "";
+  const rel = toPosixTarget(relative(root, rawHint));
+  if (!rel || rel === ".." || rel.startsWith("../") || isAbsolute(rel) || /^[a-zA-Z]:/.test(rel)) return "";
+  return rel;
 }
 
 /**
@@ -77,7 +106,7 @@ export function buildCorrectionConstraint(input: CorrectionInput, now: string): 
   // A blank/"." scope hint would mint a meaningless or repo-wide constraint by
   // accident, so fall back to "**" (which the severity guard below then keeps
   // non-blocking unless applies_to_all was explicitly set).
-  const hinted = input.scope_hint_file ? toPosixTarget(input.scope_hint_file) : "";
+  const hinted = repoRelativeHint(input.scope_hint_file ? toPosixTarget(input.scope_hint_file) : "", input.root);
   const scope = input.applies_to_all || !hinted || hinted === "." ? ["**"] : [hinted];
   const repoWide = scope.length === 1 && scope[0] === "**";
 

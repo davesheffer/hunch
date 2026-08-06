@@ -996,7 +996,7 @@ export function buildServerWithRootControl(initialRoot: string): RootControlledS
         "When a human corrects the agent ('no, do it this way' / 'never call X here'), persist that correction as a first-class, SCOPED Constraint with provenance — so the pre-edit hook and the CI Constraint Guard hold EVERY assistant to it from now on, instead of it being forgotten next session. Writes to the shared .hunch/ graph (client-agnostic). Set severity:'blocking' only when the human said never/must; set applies_to_all:true only when the rule is genuinely repo-wide (otherwise it is scoped to scope_hint_file).",
       inputSchema: {
         rule: z.string().describe("The invariant in the human's words, e.g. \"never call the pay-per-token API here\"."),
-        scope_hint_file: z.string().optional().describe("A file the correction was about; scopes the constraint to it (the conservative default)."),
+        scope_hint_file: z.string().optional().describe("A file the correction was about; scopes the constraint to it (the conservative default). Prefer a REPO-RELATIVE path (src/foo.ts); an absolute path is relativized against the repo root, and one outside the repo is discarded rather than scoped to a path that could never match."),
         severity: z.enum(["advisory", "warning", "blocking"]).optional().describe("Default 'warning'. Use 'blocking' only for a hard never/must rule."),
         applies_to_all: z.boolean().optional().describe("True ONLY if the rule is genuinely repo-wide (scopes to **); required to make a repo-wide rule blocking."),
         type: z.enum(["security", "performance", "correctness", "architecture", "compliance"]).optional(),
@@ -1008,7 +1008,11 @@ export function buildServerWithRootControl(initialRoot: string): RootControlledS
     async (input): Promise<ToolResult> => {
       try {
         if (!input.rule || !input.rule.trim()) return err("rule is required — state the invariant in plain words.");
-        const rec = buildCorrectionConstraint({ ...input, knownDeps: knownRepoDeps(root) }, new Date().toISOString());
+        // root: relativizes an ABSOLUTE scope_hint_file. Agents naturally send absolute
+        // paths (edit-tool payloads and MCP roots are absolute) and every consumer matches
+        // repo-relative — without this the rule would be blocking-but-inert and would leak
+        // the local filesystem path into the committed graph.
+        const rec = buildCorrectionConstraint({ ...input, knownDeps: knownRepoDeps(root), root }, new Date().toISOString());
         // Private corrections go to the overlay (enforced locally via the merged read,
         // never rendered into the public CI comment, which is public-only by construction).
         const home = store.captureHome(!!input.private);

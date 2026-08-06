@@ -25,6 +25,8 @@ const ENTRIES = [
   // Per-machine private-overlay pointer written by `hunch private` (holds the local
   // path to the private store) — never committed.
   ".hunch/local.json",
+  // The strict hook's append-only catch-log: clone-local, never a memory record.
+  ".hunch/events.log",
   // A local PRIVATE overlay store (HUNCH_PRIVATE_DIR) for sensitive memory — never
   // committed. This is the conventional in-repo path; point the env elsewhere for a
   // fully separate private repo.
