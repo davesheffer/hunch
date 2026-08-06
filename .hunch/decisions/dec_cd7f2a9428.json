@@ -1,0 +1,136 @@
+{
+  "id": "dec_cd7f2a9428",
+  "title": "Require corroboration for blocking synthesis constraints",
+  "topic": null,
+  "status": "accepted",
+  "context": "Model-synthesized severity labels with empty affected_files were auto-minting repo-wide blocking denies, silently preventing all subsequent edits under strict firmness. Touches invariant(s): con_2ce3f2a547 (Synthesis must use an explicitly selected coding-assistant subscription CLI or the deterministic local fallback; never call a pay-per-token API); con_8460b6770f (Config/provider writers must merge idempotently into existing user files and refuse to clobber an unparseable file); con_902759b3dc (All JSON writes to .hunch/ must be atomic (temp-file + rename) so an interrupted write can never truncate the index); con_a87360128b (Semantic vectors are a derived layer in SQLite, never the source of truth; reconcile by content hash on reindex); con_e04226bd05 (The MCP server must stay client-agnostic: all assistants point to the same .hunch/ graph; no Claude-only behavior in the server).",
+  "decision": "Blocking constraints now require both a real file scope AND deterministic corroboration (recurrence), mirroring the safety guard already used in human-correction paths.",
+  "consequences": [
+    "Prevents model output from silently creating repo-wide denies",
+    "Aligns constraint-generation safety policy across synthesis and human-correction paths",
+    "Requires repeated signals or explicit validation before enforcement escalates to blocking level"
+  ],
+  "alternatives_rejected": [
+    "Allow model-supplied severity to directly mint blocking constraints",
+    "Check only file scope without requiring deterministic corroboration",
+    "Accept inconsistent safety gates between human and model constraint paths"
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Allow model-supplied severity to directly mint blocking constraints",
+      "scope": [
+        "src/core/**",
+        "src/extractors/**",
+        "src/integrations/**",
+        "src/mcp/**",
+        "src/store/**",
+        "src/synthesis/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Check only file scope without requiring deterministic corroboration",
+      "scope": [
+        "src/core/**",
+        "src/extractors/**",
+        "src/integrations/**",
+        "src/mcp/**",
+        "src/store/**",
+        "src/synthesis/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Accept inconsistent safety gates between human and model constraint paths",
+      "scope": [
+        "src/core/**",
+        "src/extractors/**",
+        "src/integrations/**",
+        "src/mcp/**",
+        "src/store/**",
+        "src/synthesis/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_863ac67d4a",
+    "cmp_a94a8fe5cc",
+    "cmp_b256a6aed0",
+    "cmp_ba75dfc94f",
+    "cmp_cdfb395bb7",
+    "cmp_dfa5b5acde",
+    "cmp_e0ccfe26fe"
+  ],
+  "related_files": [
+    "src/core/correction.ts",
+    "src/extractors/git.ts",
+    "src/integrations/gitignore.ts",
+    "src/mcp/server.ts",
+    "src/store/hunchStore.ts",
+    "src/synthesis/synthesize.ts",
+    "test/blocking-trust.test.ts",
+    "test/eventslog-pump.test.ts",
+    "test/gitignore.test.ts",
+    "test/rankeviction.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "b50467c",
+  "valid_from": "2026-08-06T13:25:19+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft+summary",
+    "confidence": 0.5,
+    "evidence": [
+      "commit:b50467c",
+      "synth:provider=claude-cli",
+      "branch:fix/round3-high-severity",
+      "src/core/correction.ts",
+      "src/extractors/git.ts",
+      "src/integrations/gitignore.ts",
+      "src/mcp/server.ts",
+      "src/store/hunchStore.ts",
+      "src/synthesis/synthesize.ts",
+      "test/blocking-trust.test.ts",
+      "test/eventslog-pump.test.ts"
+    ],
+    "last_verified": "2026-08-06T10:26:22.950Z"
+  },
+  "date": "2026-08-06T13:25:19+03:00"
+}
