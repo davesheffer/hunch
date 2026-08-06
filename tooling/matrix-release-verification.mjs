@@ -60,7 +60,12 @@ const OVERLAY_ATTRIBUTES = [
   ".hunch/manifest.json merge=text",
   "",
 ].join("\n");
-const OVERLAY_IGNORE = [
+/** Byte-exact expected content of a clone's .gitignore — the soak lane refuses any
+ *  overlay residue that is not one of these canonical clone-local capabilities.
+ *  MUST mirror ENTRIES in src/integrations/gitignore.ts exactly; test/gitignore.test.ts
+ *  fails if the two drift (adding an entry on one side only silently fails the release
+ *  gate with "Matrix release verification failed" and nothing pointing at the cause). */
+export const OVERLAY_IGNORE = [
   "# >>> hunch (derived runtime index — regenerable from .hunch/*.json) >>>",
   ".hunch/*.sqlite",
   ".hunch/*.sqlite-shm",
@@ -69,6 +74,7 @@ const OVERLAY_IGNORE = [
   ".hunch/**/*.tmp*",
   ".hunch-cache/",
   ".hunch/local.json",
+  ".hunch/events.log",
   ".hunch-private/",
   "# <<< hunch <<<",
   "",

@@ -15,6 +15,24 @@ function inTmp(fn: (root: string) => void) {
 }
 const read = (root: string) => readFileSync(join(root, ".gitignore"), "utf8");
 
+/** The release gate's soak lane compares each clone's .gitignore BYTE-EXACTLY against
+ *  its own copy of the managed block (tooling/matrix-release-verification.mjs,
+ *  OVERLAY_IGNORE). Adding an entry on one side only doesn't fail any unit test — it
+ *  fails the release gate, in CI, with "Matrix release verification failed" and a
+ *  content hash that points at nothing. Shipped exactly that by adding
+ *  .hunch/events.log to ENTRIES alone. This guard makes the drift local and obvious. */
+test("the release gate's OVERLAY_IGNORE mirrors the managed block byte-for-byte", async () => {
+  const { OVERLAY_IGNORE } = await import("../tooling/matrix-release-verification.mjs");
+  inTmp((root) => {
+    ensureGitignore(root);
+    assert.equal(
+      read(root),
+      OVERLAY_IGNORE,
+      "tooling/matrix-release-verification.mjs OVERLAY_IGNORE drifted from ENTRIES in src/integrations/gitignore.ts — update BOTH",
+    );
+  });
+});
+
 test("ensureGitignore creates a managed block when no .gitignore exists", () => {
   inTmp((root) => {
     assert.equal(ensureGitignore(root).action, "created");
