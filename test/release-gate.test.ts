@@ -219,7 +219,7 @@ test("Phase 2O release gate is fail-closed, content-addressed, and publish-neutr
   assert.ok(RELEASE_TEST_COVERAGE.release_pipeline_contract.includes("tooling/vscode-publish-tools/package-lock.json"),
     "the receipt binds the reviewed transitive publisher-tool closure");
   assert.deepEqual(RELEASE_TEST_COVERAGE.matrix_release_resilience,
-    ["test/matrix-release-verification.test.ts", "test/team-matrix-e2e.test.ts", "tooling/matrix-release-verification.mjs"],
+    ["test/git-platform-portability.test.ts", "test/matrix-release-verification.test.ts", "test/team-matrix-e2e.test.ts", "tooling/matrix-release-verification.mjs"],
     "the release receipt binds pinned-version compatibility, crash recovery, and concurrent convergence");
   assert.deepEqual(RELEASE_TEST_COVERAGE.md1_correction_bridge.slice(-2),
     ["test/md1-benchmark.test.ts", "tooling/md1-benchmark.mjs"],

@@ -3,7 +3,7 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { devNull } from "node:os";
-import { isAbsolute, resolve, join, basename, dirname } from "node:path";
+import { isAbsolute, resolve, join, basename, dirname, relative, sep } from "node:path";
 import { mkdirSync, rmSync, statSync, lstatSync, realpathSync, readFileSync, renameSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { MEMLOG_FORMAT } from "../core/memorylog.js";
@@ -156,27 +156,44 @@ export function gitWorktreeRoot(cwd: string): string | null {
  * `.hunch-private/.hunch` can never stage or commit into the code repository. */
 export function isGitRepoRoot(cwd: string): boolean {
   const raw = gitSafeIsolated(["rev-parse", "--show-toplevel"], cwd);
-  const top = raw ? canonicalPath(raw) : null;
-  if (!top) return false;
-  return top === canonicalPath(cwd);
+  return !!raw && sameFilesystemEntry(raw, cwd);
 }
 
 function canonicalPath(path: string): string {
   try { return realpathSync(path); } catch { return resolve(path); }
 }
 
+/** Git for Windows accepts the DOS device name, not Node's native `\\.\nul`
+ * spelling, when a null path is supplied through Git config or `-c`. */
+export function gitNullDevice(): string {
+  return process.platform === "win32" ? "NUL" : devNull;
+}
+
+/** Compare physical identity before path text. Git for Windows may return an
+ * 8.3/short or differently-cased spelling for the same directory. */
+function sameFilesystemEntry(left: string, right: string): boolean {
+  try {
+    const leftStat = statSync(left, { bigint: true });
+    const rightStat = statSync(right, { bigint: true });
+    if (leftStat.ino !== 0n && rightStat.ino !== 0n) {
+      return leftStat.dev === rightStat.dev && leftStat.ino === rightStat.ino;
+    }
+  } catch { /* fall back to canonical path text */ }
+  return canonicalPath(left) === canonicalPath(right);
+}
+
 /** Whether two paths resolve to the same repository identity. Comparing only
  * worktree roots is insufficient: linked worktrees have different roots but
  * share one Git common directory and therefore one publishable history. */
 export function sameGitRepository(left: string, right: string): boolean {
-  if (canonicalPath(left) === canonicalPath(right)) return true;
+  if (sameFilesystemEntry(left, right)) return true;
   const common = (cwd: string): string => {
     const value = gitSafeIsolated(["rev-parse", "--git-common-dir"], cwd);
     return value ? (isAbsolute(value) ? value : resolve(cwd, value)) : "";
   };
   const leftCommon = common(left);
   const rightCommon = common(right);
-  return !!leftCommon && !!rightCommon && canonicalPath(leftCommon) === canonicalPath(rightCommon);
+  return !!leftCommon && !!rightCommon && sameFilesystemEntry(leftCommon, rightCommon);
 }
 
 function remoteIdentity(raw: string, cwd: string, purpose: "route" | "publication" = "route"): string {
@@ -518,7 +535,7 @@ export function commitAndPushHunch(hunchDir: string, message: string, opts: Hunc
       // remote .gitignore, local info/exclude, or ambient excludesFile must not
       // be able to silently stop the shared graph's heartbeat.
       for (let index = 0; index < paths.length; index += 128) {
-        if (!run(["-c", `core.attributesFile=${devNull}`, "add", "-f", "--", ...paths.slice(index, index + 128)])) {
+        if (!run(["-c", `core.attributesFile=${gitNullDevice()}`, "add", "-f", "--", ...paths.slice(index, index + 128)])) {
           run(["reset", "-q", "--", "."]);
           return null;
         }
@@ -553,7 +570,7 @@ export function commitAndPushHunch(hunchDir: string, message: string, opts: Hunc
     for (const file of opts.alsoStage ?? []) {
       run(opts.push === false
         ? ["add", "--", file]
-        : ["-c", `core.attributesFile=${devNull}`, "add", "--", file]);
+        : ["-c", `core.attributesFile=${gitNullDevice()}`, "add", "--", file]);
     }
     // Only sync+push when a memory commit was actually created — never run pull/push against the
     // enclosing repo on an empty stage. Two-way sync: MERGE the remote BEFORE pushing so a push
@@ -576,7 +593,7 @@ export function commitAndPushHunch(hunchDir: string, message: string, opts: Hunc
       execFileSync("git", [
         "-C", hunchDir,
         "-c", `core.hooksPath=${hooksDir}`,
-        ...(opts.push === false ? [] : ["-c", `core.attributesFile=${devNull}`]),
+        ...(opts.push === false ? [] : ["-c", `core.attributesFile=${gitNullDevice()}`]),
         "-c", "commit.gpgsign=false",
         "commit", "--no-gpg-sign", "--only", "-m", message, "--", ...commitPaths,
       ], { stdio: "ignore", env, timeout: 15_000 });
@@ -668,21 +685,22 @@ function committableOverlayJsonPaths(hunchDir: string): string[] | null {
       for (const entry of readdirSync(dir, { withFileTypes: true })) {
         if (!prefix && entry.name === ".hunch-commit.lock") continue;
         const absolute = join(dir, entry.name);
-        const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
+        const relativeName = prefix ? `${prefix}/${entry.name}` : entry.name;
         const stat = lstatSync(absolute);
         if (stat.isSymbolicLink()) return false;
         if (stat.isDirectory()) {
-          if (!walk(absolute, relative)) return false;
+          if (!walk(absolute, relativeName)) return false;
         } else if (!stat.isFile()) {
           return false;
-        } else if (relative.endsWith(".json") && relative !== "local.json") {
-          if (!realpathSync(absolute).startsWith(`${root}/`)) return false;
-          paths.push(relative);
-        } else if (relative === "local.json") {
+        } else if (relativeName.endsWith(".json") && relativeName !== "local.json") {
+          const fromRoot = relative(root, realpathSync(absolute));
+          if (fromRoot === ".." || fromRoot.startsWith(`..${sep}`) || isAbsolute(fromRoot)) return false;
+          paths.push(relativeName);
+        } else if (relativeName === "local.json") {
           return false;
-        } else if (/^[^/]+\.sqlite[^/]*$/i.test(relative)
-          || relative.split("/").some((segment) => segment.includes(".tmp"))
-          || relative === "events.log") {
+        } else if (/^[^/]+\.sqlite[^/]*$/i.test(relativeName)
+          || relativeName.split("/").some((segment) => segment.includes(".tmp"))
+          || relativeName === "events.log") {
           // Known clone-local/derived artifacts are never staged. Everything
           // else is a topology violation: a shared graph repository cannot
           // quietly carry arbitrary source alongside its JSON memory.
@@ -746,11 +764,17 @@ function overlayGitTreeIsSafe(hunchDir: string, revision: string, env: NodeJS.Pr
 
 const MAX_ATTRIBUTES_BYTES = 4 * 1024 * 1024;
 
-function boundedAttributesFileIsSafe(file: string, expectedCanonicalPath: string): boolean {
+function boundedAttributesFileIsSafe(file: string, trustedParent: string): boolean {
   try {
+    const parent = dirname(file);
+    const parentStat = lstatSync(parent);
+    // Git metadata is local attacker input too. In particular, never let a
+    // redirected .git/info parent move the attributes capability outside the
+    // validated overlay while still presenting a parser-safe file.
+    if (parentStat.isSymbolicLink() || !parentStat.isDirectory()
+      || !sameFilesystemEntry(parent, trustedParent)) return false;
     const stat = lstatSync(file);
     if (stat.isSymbolicLink() || !stat.isFile() || stat.nlink !== 1 || stat.size > MAX_ATTRIBUTES_BYTES) return false;
-    if (realpathSync(file) !== expectedCanonicalPath) return false;
     return hunchAttributesAreSafe(readFileSync(file, "utf8"));
   } catch (error) {
     return (error as NodeJS.ErrnoException).code === "ENOENT";
@@ -779,7 +803,7 @@ function overlayGitMetadataDir(hunchDir: string, env: NodeJS.ProcessEnv): string
     const overlayRoot = dirname(realpathSync(hunchDir));
     const expected = realpathSync(join(overlayRoot, ".git"));
     const actual = absoluteGitMetadataDir(hunchDir, env);
-    return actual === expected ? expected : null;
+    return actual && sameFilesystemEntry(actual, expected) ? expected : null;
   } catch {
     return null;
   }
@@ -796,8 +820,8 @@ function overlayAttributeSourcesAreSafe(hunchDir: string, env: NodeJS.ProcessEnv
     if (canonicalHunch !== join(overlayRoot, ".hunch") || !safeOverlayTree(overlayRoot)) return false;
     const gitDir = overlayGitMetadataDir(hunchDir, env);
     if (!gitDir) return false;
-    if (!boundedAttributesFileIsSafe(join(overlayRoot, ".gitattributes"), join(overlayRoot, ".gitattributes"))
-      || !boundedAttributesFileIsSafe(join(gitDir, "info", "attributes"), join(gitDir, "info", "attributes"))) {
+    if (!boundedAttributesFileIsSafe(join(overlayRoot, ".gitattributes"), overlayRoot)
+      || !boundedAttributesFileIsSafe(join(gitDir, "info", "attributes"), join(gitDir, "info"))) {
       return false;
     }
     const walk = (dir: string): boolean => {
@@ -811,7 +835,7 @@ function overlayAttributeSourcesAreSafe(hunchDir: string, env: NodeJS.ProcessEnv
         } else if (!stat.isFile()) {
           return false;
         } else if (entry.name === ".gitattributes"
-          && !boundedAttributesFileIsSafe(path, path)) {
+          && !boundedAttributesFileIsSafe(path, dir)) {
           return false;
         }
       }
@@ -859,7 +883,8 @@ function disabledHooksDir(hunchDir: string): string | null {
     const hooksDir = join(gitDir, "hunch-disabled-hooks");
     mkdirSync(hooksDir, { recursive: true });
     const stat = lstatSync(hooksDir);
-    if (stat.isSymbolicLink() || !stat.isDirectory() || realpathSync(hooksDir) !== hooksDir
+    if (stat.isSymbolicLink() || !stat.isDirectory()
+      || relative(gitDir, realpathSync(hooksDir)) !== "hunch-disabled-hooks"
       || readdirSync(hooksDir).length !== 0) return null;
     return hooksDir;
   } catch {
@@ -996,7 +1021,7 @@ function adoptContractHead(
     execFileSync("git", [
       "-C", hunchDir,
       "-c", `core.hooksPath=${hooksDir}`,
-      "-c", `core.attributesFile=${devNull}`,
+      "-c", `core.attributesFile=${gitNullDevice()}`,
       "reset", "--hard", fetchedHead,
     ], {
       stdio: "ignore", env, timeout: 5_000,
@@ -1045,7 +1070,7 @@ function mergeRemote(
       execFileSync("git", [
         "-C", hunchDir,
         "-c", `core.hooksPath=${hooksDir}`,
-        "-c", `core.attributesFile=${devNull}`,
+        "-c", `core.attributesFile=${gitNullDevice()}`,
         "-c", "commit.gpgsign=false",
         ...args,
       ], {

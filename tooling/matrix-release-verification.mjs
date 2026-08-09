@@ -647,15 +647,56 @@ function withoutPeerPlacementMarkers(value) {
   return value;
 }
 
-function installedDependencyProjection(sourceRoot) {
+function platformSelectorAllows(value, current) {
+  const selectors = Array.isArray(value) ? value : (typeof value === "string" ? [value] : []);
+  if (!selectors.length) return true;
+  if (selectors.includes(`!${current}`)) return false;
+  const positive = selectors.filter((selector) => typeof selector === "string" && !selector.startsWith("!"));
+  return positive.length === 0 || positive.includes(current);
+}
+
+/** npm retains every platform variant in package-lock.json. Depending on npm
+ * version, the hidden installed lock may retain or omit incompatible optional
+ * packages, so bind every retained entry and permit only those safe omissions. */
+export function expectedInstalledDependencyPackages(
+  packages,
+  installedPackages = {},
+  platform = process.platform,
+  arch = process.arch,
+) {
+  return Object.fromEntries(Object.entries(packages ?? {}).filter(([path, entry]) => {
+    if (path === "") return false;
+    // npm versions differ on whether the hidden installed lock retains metadata
+    // for incompatible optional packages. If retained, require exact root-lock
+    // bytes; if omitted, permit omission only when this platform cannot install it.
+    if (Object.prototype.hasOwnProperty.call(installedPackages, path)) return true;
+    if (!entry || typeof entry !== "object" || entry.optional !== true) return true;
+    return platformSelectorAllows(entry.os, platform) && platformSelectorAllows(entry.cpu, arch);
+  }));
+}
+
+export function assertInstalledDependencyPackages(
+  rootPackages,
+  installedPackages,
+  platform = process.platform,
+  arch = process.arch,
+) {
+  const projection = {
+    expected: stable(withoutPeerPlacementMarkers(
+      expectedInstalledDependencyPackages(rootPackages, installedPackages, platform, arch),
+    )),
+    installed: stable(withoutPeerPlacementMarkers(installedPackages ?? {})),
+  };
+  if (!jsonEqual(projection.expected, projection.installed)) {
+    throw new Error("node_modules does not match the candidate package-lock; run npm ci before Matrix verification");
+  }
+  return projection;
+}
+
+export function installedDependencyProjection(sourceRoot) {
   const rootLock = JSON.parse(readFileSync(join(sourceRoot, "package-lock.json"), "utf8"));
   const installedLock = JSON.parse(readFileSync(join(projectRoot, "node_modules", ".package-lock.json"), "utf8"));
-  const expected = { ...rootLock.packages };
-  delete expected[""];
-  return {
-    expected: stable(withoutPeerPlacementMarkers(expected)),
-    installed: stable(withoutPeerPlacementMarkers(installedLock.packages ?? {})),
-  };
+  return assertInstalledDependencyPackages(rootLock.packages, installedLock.packages);
 }
 
 function packageSource(sourceRoot, packagesDir, cacheDir, env) {
@@ -1351,10 +1392,7 @@ async function executeMatrixVerification(options) {
     const legacyDependencyLock = dependencyLockProjection(legacySource);
     const candidateDependencyLock = dependencyLockProjection(candidateSource);
     const dependencyLock = assertDependencyLockProjection(legacyDependencyLock, candidateDependencyLock);
-    const installedDependencies = installedDependencyProjection(candidateSource);
-    if (!jsonEqual(installedDependencies.expected, installedDependencies.installed)) {
-      throw new Error("node_modules does not match the candidate package-lock; run npm ci before Matrix verification");
-    }
+    installedDependencyProjection(candidateSource);
     const legacyPack = packageSource(legacySource, packagesDir, join(temp, "legacy-npm-cache"), env);
     const candidatePack = packageSource(candidateSource, packagesDir, join(temp, "candidate-npm-cache"), env);
     if (legacyPack.version !== baseline.tag.slice(1)) {

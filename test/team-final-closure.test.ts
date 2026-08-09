@@ -18,6 +18,7 @@ import { test } from "node:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { SCHEMA_VERSION } from "../src/core/migrate.js";
+import { gitNullDevice } from "../src/extractors/git.js";
 
 const PROJECT_ROOT = process.cwd();
 const TSX = join(PROJECT_ROOT, "node_modules/tsx/dist/cli.mjs");
@@ -39,7 +40,12 @@ function git(cwd: string, ...args: string[]): string {
   return execFileSync("git", args, {
     cwd,
     encoding: "utf8",
-    env: { ...process.env, GIT_CONFIG_NOSYSTEM: "1", GIT_TERMINAL_PROMPT: "0" },
+    env: {
+      ...process.env,
+      GIT_CONFIG_GLOBAL: gitNullDevice(),
+      GIT_CONFIG_NOSYSTEM: "1",
+      GIT_TERMINAL_PROMPT: "0",
+    },
     stdio: ["ignore", "pipe", "pipe"],
   }).trim();
 }
@@ -212,6 +218,9 @@ function makeSharedFixture(base: string, name: string): SharedFixture {
   const code = makeCodeFixture(base, `${name}-code`);
   expectCli(code, ["shared", "--repo", memoryRemote, "--no-hook"]);
   expectCli(code, ["shared", "--sync"]);
+  // The overlay is a distinct clone and does not inherit the code checkout's
+  // local identity. Keep direct fixture commits independent of global config.
+  configureRepo(join(code.root, ".hunch-private"), "Shared Memory");
   git(code.root, "add", ".gitignore", ".hunch/team.json");
   git(code.root, "commit", "-qm", "chore: advertise shared memory");
   git(code.root, "push", "-q", "origin", "main");

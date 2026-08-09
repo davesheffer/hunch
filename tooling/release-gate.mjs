@@ -51,7 +51,7 @@ export const RELEASE_TEST_COVERAGE = Object.freeze({
     "tooling/md1-benchmark.mjs",
   ],
   correction_retry_durability: ["test/sync-repair-commit.test.ts", "test/sync.test.ts"],
-  overlay_publication_safety: ["test/overlay-commit-guard.test.ts", "test/singlesource.test.ts", "test/worktree.test.ts", "test/team-matrix-e2e.test.ts"],
+  overlay_publication_safety: ["test/overlay-commit-guard.test.ts", "test/git-platform-portability.test.ts", "test/singlesource.test.ts", "test/worktree.test.ts", "test/team-matrix-e2e.test.ts"],
   safe_recursive_scanning: [
     "test/indexer.test.ts",
     "test/comments.test.ts",
@@ -59,6 +59,7 @@ export const RELEASE_TEST_COVERAGE = Object.freeze({
     "test/safe-repo-file.test.ts",
     "test/check-nonmutating.test.ts",
     "test/index-source-publication.test.ts",
+    "test/git-platform-portability.test.ts",
   ],
   destructive_action_safety: ["test/compact.test.ts", "test/revert-move-safety.test.ts"],
   cross_locale_determinism: ["test/canonical-locale.test.ts"],
@@ -76,6 +77,7 @@ export const RELEASE_TEST_COVERAGE = Object.freeze({
     "tooling/vscode-publish-tools/package-lock.json",
   ],
   matrix_release_resilience: [
+    "test/git-platform-portability.test.ts",
     "test/matrix-release-verification.test.ts",
     "test/team-matrix-e2e.test.ts",
     "tooling/matrix-release-verification.mjs",

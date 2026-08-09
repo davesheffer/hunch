@@ -130,11 +130,17 @@ test("npm publication isolates OIDC from repository code and publishes only vali
   assert.match(platformSafety, /actions\/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38[\s\S]*node-version: 22[\s\S]*cache: npm/);
   assert.match(platformSafety, /^        run: npm ci$/m,
     "the platform gate uses the repository's exact integrity-locked dependency tree");
-  const platformTestCommand = "npx --no-install tsx --test --test-concurrency=1 test/parse.test.ts test/io.test.ts test/migrate.test.ts test/matrix-release-verification.test.ts test/team-matrix-e2e.test.ts";
+  const platformTestCommand = "npx --no-install tsx --test --test-concurrency=1 test/parse.test.ts test/io.test.ts test/migrate.test.ts test/git-platform-portability.test.ts test/matrix-release-verification.test.ts test/team-matrix-e2e.test.ts";
+  const platformTestFiles = platformTestCommand.split(" ").filter((part) => part.startsWith("test/"));
   assert.ok(platformSafety.includes(`run: ${platformTestCommand}`),
     "the tagged release reruns native, atomic-write, and real team-Matrix safety on both non-Linux platforms");
-  assert.ok(jobBlock(ci, "platform-matrix-safety").includes(`run: ${platformTestCommand}`),
+  const ciPlatformSafety = jobBlock(ci, "platform-matrix-safety");
+  assert.ok(ciPlatformSafety.includes(`run: ${platformTestCommand}`),
     "release platform safety must stay byte-for-byte aligned with the proven CI test command");
+  for (const [name, block] of [["CI", ciPlatformSafety], ["release", platformSafety]] as const) {
+    assert.ok(block.includes(`tests:${JSON.stringify(platformTestFiles)}`),
+      `${name} receipt must name exactly the tests executed by its platform command`);
+  }
   assert.match(platformSafety, /tagged-platform-matrix-safety\.v1[\s\S]*tagged-platform-matrix-safety-\$\{\{ matrix\.os \}\}-\$\{\{ github\.sha \}\}-\$\{\{ github\.run_id \}\}/,
     "each platform uploads a content-addressed receipt bound to the tag commit");
   assert.match(platformSafety, /actions\/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02/);
