@@ -7,10 +7,11 @@ other integrations are derived delivery surfaces.
 
 This file is the public execution view. `hunch now` remains the detailed live decision ledger.
 
-## Current baseline — v1.12.2
+## Current baseline — v1.13.0
 
 - Architectural Conformance and decision-grounding are deterministic release gates.
-- Delivery receipts show which records reached agents and which never did.
+- CLI, MCP, and edit hooks share one currentness-checked, hard-budgeted delivery envelope.
+- Delivery receipts record exact IDs, rank, reason, provenance status, and estimated token cost.
 - Grounding survives helper-agent delegation and context compaction.
 - Public checks exclude private overlays, and generated artifacts are drift-checked.
 

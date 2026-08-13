@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.13.0 — 2026-08-13
 
 ### Truthful, provenance-checked delivery envelopes
 

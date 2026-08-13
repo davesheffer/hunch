@@ -7,13 +7,13 @@
     "source": "github"
   },
   "websiteUrl": "https://hunch-pi.vercel.app",
-  "version": "1.12.2",
+  "version": "1.13.0",
   "packages": [
     {
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@davesheffer/hunch",
-      "version": "1.12.2",
+      "version": "1.13.0",
       "runtimeHint": "npx",
       "packageArguments": [
         {
