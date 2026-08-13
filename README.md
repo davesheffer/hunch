@@ -6,9 +6,9 @@
 [![GitHub stars](https://img.shields.io/github/stars/davesheffer/hunch?color=2742ff&label=%E2%98%85%20star)](https://github.com/davesheffer/hunch)
 [![license](https://img.shields.io/npm/l/@davesheffer/hunch?color=2742ff)](LICENSE)
 
-Hunch is engineering memory for AI-assisted codebases. It records the decisions, constraints,
-rejected approaches, and bug history behind your code, then gives every connected assistant the
-relevant context before it makes a change.
+Hunch is the engineering-memory and architectural-conformance layer for AI-assisted codebases. It
+records the decisions, constraints, rejected approaches, and bug history behind your code, delivers
+the relevant evidence before an assistant changes anything, then checks the result deterministically.
 
 Memory starts **advisory**. Nothing blocks until you explicitly trust a precise rule and choose
 strict enforcement.
@@ -16,9 +16,10 @@ strict enforcement.
 **Memory is the input. The product boundary is the receipt:** relevant evidence before an edit,
 then a deterministic check of the change against the rules your team has explicitly trusted.
 
-> **New in v1.9.4:** MCP connections stay collision-safe across repositories and simultaneous
-> captures, while generated MCP, hook, plugin, and CI commands pin the exact npm release that
-> created them.
+> **New in v1.12.2:** Windows hooks now reach Hunch reliably, valid tagged-template paths no longer
+> take down the conformance scan, and release checks measure drift as a fresh public clone sees it.
+
+See the public [roadmap](ROADMAP.md) for what is next and what is deliberately out of scope.
 
 ## Start in five minutes
 
@@ -81,7 +82,7 @@ Git repo that every teammate can access, install the Matrix release on team mach
 have one maintainer run:
 
 ```bash
-npm i -g @davesheffer/hunch@1.9.4
+npm i -g @davesheffer/hunch@1.12.2
 hunch shared --repo git@github.com:acme/project-hunch-memory.git
 git add .gitignore .hunch/team.json
 git commit -m "chore: connect shared Hunch memory"
@@ -96,7 +97,7 @@ printed by Hunch. Omit `--migrate` for a new setup.
 After the pointer commit lands, teammates need Hunch installed and Git access to the memory repo:
 
 ```bash
-npm i -g @davesheffer/hunch@1.9.4
+npm i -g @davesheffer/hunch@1.12.2
 git pull
 hunch init
 hunch doctor
@@ -124,10 +125,8 @@ hunch policy card pol_...
 ```
 
 The upgrade creates evidence, a plan, and a proof but leaves the policy proposed with
-`authority: none`. In v1.9 its source-currentness activation gate is deliberately blocked, so even a
-human cannot activate an upgraded correction yet. Other proved policy types still require an
-explicit audited human acceptance before they can become advisory or blocking; Hunch never grants
-that authority automatically.
+`authority: none`. A proved policy still requires explicit, audited human acceptance before it can
+become advisory or blocking; Hunch never grants that authority automatically.
 
 Need to pause or roll back without deleting memory?
 
@@ -143,10 +142,9 @@ but stops automatic memory commits and pushes. As a team-coordinated rollback, r
 commit to stop discovery after teammates pull the revert. Existing machines retain their ignored
 local overlay until they are deliberately disconnected; do not delete the memory repo as part of a
 rollback. For this rollout, reinstall the previous published package with
-`npm i -g @davesheffer/hunch@1.8.5`; the release receipt resolves and records that exact rollback
-target from the npm registry instead of trusting Git tags. Version 1.8.5 fails closed when it sees a
-v1.9 source-gated correction policy, so pause enforcement first as shown above and upgrade every
-team client to v1.9 before resuming Matrix policy workflows.
+`npm i -g @davesheffer/hunch@1.12.1`; the release receipt resolves and records the verified rollback
+target from the npm registry instead of trusting Git tags. Pause enforcement first as shown above,
+and keep every team client on the same release before resuming Matrix policy workflows.
 
 ## Synthesis without surprise billing
 

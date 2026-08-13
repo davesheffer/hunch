@@ -47,6 +47,10 @@ export interface ServedEntry {
   /** what the delivery grounded: a repo-relative file, or a moment like "(subagent:Explore)" */
   target: string;
   session_id?: string;
+  rank?: number;
+  delivery_reason?: string;
+  provenance_status?: string;
+  token_cost?: number;
 }
 
 export interface ServedRow {
@@ -55,6 +59,21 @@ export interface ServedRow {
   serves: number;
   refreshes: number;
   last_at: string;
+  best_rank: number | null;
+  average_token_cost: number | null;
+}
+
+export interface ServedReceipt {
+  at: string;
+  session_id: string | null;
+  event: ServedEvent;
+  kind: string;
+  record_id: string;
+  target: string;
+  rank: number | null;
+  delivery_reason: string | null;
+  provenance_status: string | null;
+  token_cost: number | null;
 }
 
 export interface ServedSummary {
@@ -64,9 +83,38 @@ export interface ServedSummary {
   first_at: string | null;
   last_at: string | null;
   rows: ServedRow[];
+  recent: ServedReceipt[];
 }
 
 let sqlite: typeof import("node:sqlite") | null = null;
+
+const RECEIPT_COLUMNS = [
+  ["rank", "INTEGER"],
+  ["delivery_reason", "TEXT"],
+  ["provenance_status", "TEXT"],
+  ["token_cost", "INTEGER"],
+] as const;
+
+function columnNames(db: DatabaseSync): Set<string> {
+  const rows = db.prepare("PRAGMA table_info(served)").all() as unknown as Array<{ name: string }>;
+  return new Set(rows.map((row) => row.name));
+}
+
+/** Additive, idempotent migration for machine-local ledgers created by older releases. */
+function ensureReceiptColumns(db: DatabaseSync): void {
+  const existing = columnNames(db);
+  for (const [name, type] of RECEIPT_COLUMNS) {
+    if (existing.has(name)) continue;
+    try {
+      db.exec(`ALTER TABLE served ADD COLUMN ${name} ${type}`);
+    } catch (error) {
+      // Two hook processes may race the same migration. Only swallow when the
+      // other process demonstrably completed this exact additive change.
+      if (!columnNames(db).has(name)) throw error;
+    }
+    existing.add(name);
+  }
+}
 
 function openServedDb(root: string): DatabaseSync {
   sqlite ??= loadSqlite();
@@ -82,6 +130,7 @@ function openServedDb(root: string): DatabaseSync {
     target TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS served_record ON served (record_id);`);
+  ensureReceiptColumns(db);
   return db;
 }
 
@@ -92,9 +141,22 @@ export function recordServed(root: string, entries: readonly ServedEntry[]): voi
     const db = openServedDb(root);
     try {
       const at = new Date().toISOString();
-      const insert = db.prepare("INSERT INTO served (at, session, event, kind, record_id, target) VALUES (?, ?, ?, ?, ?, ?)");
+      const insert = db.prepare(
+        "INSERT INTO served (at, session, event, kind, record_id, target, rank, delivery_reason, provenance_status, token_cost) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      );
       for (const entry of entries) {
-        insert.run(at, entry.session_id ?? null, entry.event, entry.kind, entry.record_id, entry.target);
+        insert.run(
+          at,
+          entry.session_id ?? null,
+          entry.event,
+          entry.kind,
+          entry.record_id,
+          entry.target,
+          entry.rank ?? null,
+          entry.delivery_reason ?? null,
+          entry.provenance_status ?? null,
+          entry.token_cost ?? null,
+        );
       }
     } finally {
       db.close();
@@ -106,20 +168,29 @@ export function recordServed(root: string, entries: readonly ServedEntry[]): voi
 
 /** The ledger, aggregated per record. Never throws; an unreadable ledger reads as empty. */
 export function servedSummary(root: string): ServedSummary {
-  const empty: ServedSummary = { total: 0, distinct_records: 0, distinct_sessions: 0, first_at: null, last_at: null, rows: [] };
+  const empty: ServedSummary = { total: 0, distinct_records: 0, distinct_sessions: 0, first_at: null, last_at: null, rows: [], recent: [] };
   try {
     const db = openServedDb(root);
     try {
       const totals = db.prepare(
         "SELECT COUNT(*) AS total, COUNT(DISTINCT record_id) AS records, COUNT(DISTINCT session) AS sessions, MIN(at) AS first_at, MAX(at) AS last_at FROM served",
       ).get() as { total: number; records: number; sessions: number; first_at: string | null; last_at: string | null } | undefined;
-      const rows = db.prepare(
+      const rawRows = db.prepare(
         `SELECT record_id, kind,
            SUM(CASE WHEN event = 'served' THEN 1 ELSE 0 END) AS serves,
            SUM(CASE WHEN event = 'refreshed' THEN 1 ELSE 0 END) AS refreshes,
-           MAX(at) AS last_at
+           MAX(at) AS last_at,
+           MIN(rank) AS best_rank,
+           ROUND(AVG(token_cost), 2) AS average_token_cost
          FROM served GROUP BY record_id, kind ORDER BY serves DESC, refreshes DESC`,
       ).all() as unknown as ServedRow[];
+      const rawRecent = db.prepare(
+        `SELECT at, session AS session_id, event, kind, record_id, target,
+           rank, delivery_reason, provenance_status, token_cost
+         FROM served ORDER BY rowid DESC LIMIT 50`,
+      ).all() as unknown as ServedReceipt[];
+      const rows = rawRows.map((row) => ({ ...row }));
+      const recent = rawRecent.map((receipt) => ({ ...receipt }));
       return {
         total: totals?.total ?? 0,
         distinct_records: totals?.records ?? 0,
@@ -127,6 +198,7 @@ export function servedSummary(root: string): ServedSummary {
         first_at: totals?.first_at ?? null,
         last_at: totals?.last_at ?? null,
         rows,
+        recent,
       };
     } finally {
       db.close();

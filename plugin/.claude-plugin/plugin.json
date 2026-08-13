@@ -1,6 +1,6 @@
 {
   "name": "hunch",
-  "displayName": "Hunch — Engineering Memory OS",
+  "displayName": "Hunch — Engineering Memory + Change Gate",
   "description": "A git-native reasoning graph of decisions, bugs, and invariants for your codebase — queried and enforced at reasoning time. Adds the hunch_* MCP tools plus /hunch:capture, /hunch:heal, /hunch:why, /hunch:fix, /hunch:fragile.",
   "author": {
     "name": "Dave Sheffer",

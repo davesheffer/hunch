@@ -692,7 +692,13 @@ export function buildServerWithRootControl(initialRoot: string): RootControlledS
           );
         }
       }
-      return ok(formatContext(ctx));
+      return ok(formatContext(ctx, {
+        root,
+        symbols: store.recs("symbols"),
+        components: store.recs("components"),
+        decisionCorpus: store.recs("decisions"),
+        historical: !!asOf,
+      }));
     },
   );
 

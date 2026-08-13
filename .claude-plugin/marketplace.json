@@ -4,12 +4,12 @@
     "name": "Dave Sheffer",
     "email": "dave.sheffer1@gmail.com"
   },
-  "description": "Hunch — Engineering Memory OS: a git-native reasoning graph of decisions, bugs, and invariants, enforced at reasoning time.",
+  "description": "Hunch — engineering memory and a deterministic Change Gate for AI-assisted codebases.",
   "plugins": [
     {
       "name": "hunch",
       "source": "./plugin",
-      "description": "The hunch_* MCP tools (why, constraints, blast radius, merge verdict, capture) plus /hunch:capture, /hunch:heal, /hunch:why, /hunch:fix, /hunch:fragile. Requires Node 22.13+; launches the exact npm package `@davesheffer/hunch@1.9.4` per project.",
+      "description": "The hunch_* MCP tools (why, constraints, blast radius, merge verdict, capture) plus /hunch:capture, /hunch:heal, /hunch:why, /hunch:fix, /hunch:fragile. Requires Node 22.13+; launches the exact npm package `@davesheffer/hunch@1.12.2` per project.",
       "author": {
         "name": "Dave Sheffer",
         "email": "dave.sheffer1@gmail.com"
