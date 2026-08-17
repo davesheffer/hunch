@@ -5,13 +5,13 @@
   "evidence": [
     "git show <sha>:CLAUDE.md counts line across 39f12dd / 96665f5 / d7eb334 / e285acc / c2e45da",
     ".git/hooks/post-commit invokes %APPDATA%/npm/node_modules/@davesheffer/hunch/dist/cli/index.js",
-    "npm ls -g @davesheffer/hunch: 1.9.4 before the fix, 1.10.1 after"
+    "npm ls -g @davesheffer/hunch: 1.9.4 before the fix, 1.10.1 after",
+    "2026-08-13: the live post-commit hook invokes this checkout's src/cli/index.ts (v1.12.2), not the global v1.12.1 install; the recorded skew path no longer applies"
   ],
   "method": null,
   "severity": "medium",
-  "triage": "open",
+  "triage": "stale",
   "affected_files": [
-    ".git/hooks/post-commit",
     "src/integrations/hooks.ts",
     "src/integrations/providers.ts"
   ],
@@ -27,8 +27,9 @@
     "source": "human_confirmed",
     "confidence": 0.95,
     "evidence": [
-      "three CI gate failures + the per-commit counts-line evidence above"
+      "three CI gate failures + the per-commit counts-line evidence above",
+      "2026-08-13: the live post-commit hook invokes this checkout's src/cli/index.ts (v1.12.2), not the global v1.12.1 install; the recorded skew path no longer applies"
     ],
-    "last_verified": "2026-08-06T06:13:39.206Z"
+    "last_verified": "2026-08-13T09:17:01.410Z"
   }
 }

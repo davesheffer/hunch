@@ -1,0 +1,53 @@
+{
+  "id": "dec_bounded_graph_context_20260813",
+  "title": "Extend Hunch graph retrieval; do not build a duplicate code graph",
+  "topic": "graph-context-retrieval",
+  "status": "accepted",
+  "context": "Implementation review on 2026-08-13 confirmed that Hunch already has the core code-knowledge-graph capabilities needed by coding agents: deterministic Tree-sitter parsing; symbol extraction; call/called-by and import/dependency edges; component derivation; fan-in/fan-out/churn metrics; recursive dependencies/dependents; file blast radius; shortest paths; structure orientation; FTS + optional semantic + graph retrieval; why() joins to decisions/bugs/constraints; and deterministic intent-conformance predicates. The retrieval graph stream currently expands primarily one hop even though the graph engine can traverse deeper. ORC also needs token-efficient structural context, but duplicating this graph in ORC would create competing sources of structural truth.",
+  "decision": "Hunch remains the structural code-graph and engineering-memory layer. Do not add a separate generic code graph to ORC. Evolve Hunch retrieval toward bounded relevance traversal: start from lexical/semantic/task seeds, traverse a small number of graph hops with depth decay and hard node/token caps, and rank nodes using structural/evidence signals such as multiple useful paths, changed files, fan-in, active bug lineage, live decisions and active constraints. The retrieval objective is the smallest structurally complete context needed by the coding agent, not maximum reachable context. ORC may consume this ranked Hunch context and remains responsible for the final global context budget across source, Git diff, Hunch, visual/DOM evidence and task instructions.",
+  "consequences": [
+    "Hunch graph retrieval becomes the preferred structural context source for ORC and direct coding-agent use.",
+    "ORC should not maintain a second durable generic symbol/dependency graph; ORC-specific ephemeral preview/source-map indexes remain allowed.",
+    "Multi-hop retrieval must be bounded and measured; blind recursive expansion is explicitly rejected because it can increase graph noise and token use.",
+    "Evaluate bounded traversal against current one-hop retrieval using recall/task success, review findings, exploratory grep/tool rounds, input tokens, latency and cost.",
+    "Hunch should preserve deterministic/model-free graph operation so structural retrieval still works without embeddings."
+  ],
+  "alternatives_rejected": [
+    "Build a separate code knowledge graph inside ORC — rejected because Hunch already owns and uses the required deterministic structural graph; revisit only if ORC develops a structural requirement that cannot be represented or served by Hunch without violating the ORC/Hunch boundary.",
+    "Send the whole reachable dependency neighborhood to the LLM — rejected because unbounded traversal converts structural awareness into context noise; revisit only if measurements demonstrate a bounded-context failure mode that requires a specifically justified deeper edge/path class.",
+    "Keep retrieval permanently one-hop — rejected because Hunch already supports deeper graph traversal and some tasks require structurally connected context beyond direct neighbors; revisit only if A/B measurements show deeper bounded traversal does not improve quality or token/tool efficiency."
+  ],
+  "rejected_tripwires": [],
+  "related_components": [],
+  "related_files": [
+    "src/extractors/indexer.ts",
+    "src/extractors/parse.ts",
+    "src/store/hunchStore.ts",
+    "src/core/types.ts",
+    "src/mcp/server.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-08-13T20:00:00+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 1,
+    "evidence": [
+      "2026-08-13 implementation review",
+      "src/extractors/indexer.ts",
+      "src/extractors/parse.ts",
+      "src/store/hunchStore.ts",
+      "src/core/types.ts",
+      "src/mcp/server.ts"
+    ],
+    "last_verified": "2026-08-13T20:00:00+03:00"
+  },
+  "date": "2026-08-13T20:00:00+03:00"
+}

@@ -166,9 +166,15 @@ test("Phase 2O release gate is fail-closed, content-addressed, and publish-neutr
     "vscode-build",
     "repository-index",
     "architectural-conformance",
+    "memory-drift",
     "clean-install-rehearsal",
     "production-dependency-audit",
   ]);
+  assert.deepEqual(
+    RELEASE_GATES.find((gate) => gate.id === "memory-drift")?.command,
+    ["node", "dist/cli/index.js", "drift"],
+    "the doc≠graph spoke must be gated on what a contributor's public-only clone sees",
+  );
   assert.deepEqual(Object.keys(RELEASE_TEST_COVERAGE), [
     "legacy_receipt_compatibility",
     "compiler_golden_set",

@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { hunchPaths } from "../src/core/paths.js";
 import { HunchStore } from "../src/store/hunchStore.js";
-import { extracted, inferred, type Provenance, type Constraint } from "../src/core/types.js";
+import { extracted, inferred, type Constraint, type Provenance } from "../src/core/types.js";
 
 export function tempStore(): { store: HunchStore; root: string; cleanup: () => void } {
   const root = mkdtempSync(join(tmpdir(), "hunch-test-"));

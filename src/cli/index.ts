@@ -61,6 +61,7 @@ import { writeMcpJson, writeSlashCommands, installClaudeHooks } from "../integra
 import { scaffoldProviders, regenerateGrounding, refreshExistingGrounding, refreshCommittableGrounding } from "../integrations/providers.js";
 import { healClaudeConfigCaseSplit } from "../integrations/claudeConfig.js";
 import { formatContext, formatStructure } from "../core/format.js";
+import { buildDeliveryEnvelope } from "../core/delivery.js";
 import { readConfig, writeConfig, FIRMNESS_LEVELS, isFirmness, type Firmness } from "../core/config.js";
 import { blockingInScope, vetoInScope, proposedEditLines } from "../core/hookpolicy.js";
 import { isHumanConfirmed } from "../core/strictgate.js";
@@ -90,7 +91,7 @@ import { computeDrift } from "../core/drift.js";
 import { renderCompilerScorecard, scoreCompilerCaseBank } from "../constitution/scorecard.js";
 import { generateWiki, wikiStatus, wikiPrompt, publicHome, privateHome, readWikiManifestAt, nowData, type WikiPack } from "../wiki/wiki.js";
 import { adoptProsePrompt } from "../wiki/adopt.js";
-import { topicCollisions, renderGrounding, isInForce } from "../core/topics.js";
+import { topicCollisions, isInForce } from "../core/topics.js";
 import { pendingEscalations, policyEscalations } from "../core/escalations.js";
 import { premiseEscalations } from "../core/premises.js";
 import { parseDocAnchors, renderDocGrounding } from "../core/docanchors.js";
@@ -117,7 +118,7 @@ import { repairDecisionReference } from "../core/refrepair.js";
 import { resolveInvocation, dim, synthesisStatusLines, maybeWarnOllamaContext } from "./invocation.js";
 
 const program = new Command();
-program.name("hunch").description("Hunch — an Engineering Memory OS: a git-native reasoning graph for your codebase.").version(HUNCH_VERSION);
+program.name("hunch").description("Hunch — engineering memory and a deterministic Change Gate for AI-assisted codebases.").version(HUNCH_VERSION);
 
 let openStore: HunchStore | null = null;
 type TeamStoreOptions = { requireFreshTeamMemory?: boolean };
@@ -3352,7 +3353,13 @@ program
         return;
       }
     }
-    process.stdout.write(formatContext(ctx));
+    process.stdout.write(formatContext(ctx, {
+      root,
+      symbols: store.recs("symbols"),
+      components: store.recs("components"),
+      decisionCorpus: store.recs("decisions"),
+      historical: !!asOf,
+    }));
     store.close();
   });
 
@@ -3569,7 +3576,9 @@ program
       };
       console.log("  Most delivered:");
       for (const row of summary.rows.slice(0, 10)) {
-        console.log(`    ${String(row.serves).padStart(4)}× (+${row.refreshes} still-current) ${row.record_id} — ${titleOf(row)}`);
+        const delivery = row.best_rank == null ? "" : ` · best rank ${row.best_rank}`;
+        const cost = row.average_token_cost == null ? "" : ` · ~${row.average_token_cost} tokens`;
+        console.log(`    ${String(row.serves).padStart(4)}× (+${row.refreshes} still-current) ${row.record_id}${delivery}${cost} — ${titleOf(row)}`);
       }
       const servedIds = new Set(summary.rows.map((r) => r.record_id));
       const neverServed = [
@@ -3681,15 +3690,16 @@ program
           };
           const type = (evt.agent_type ?? "").toLowerCase();
           const L: string[] = [];
-          const served: Array<{ kind: string; record_id: string }> = [];
+          const served: Array<{ kind: string; record_id: string; token_cost: number }> = [];
           if (/explore|search|investigat/.test(type)) {
             // Orient from the graph, not grep rounds: the component map IS the shape.
             const components = s.advisoryRecs("components").filter((c) => c.status === "active");
             if (!components.length) return;
             L.push(`🧠 Hunch — repo shape for a delegated explorer: ${components.length} component(s).`);
             for (const c of components.slice(0, 12)) {
-              L.push(`- ${c.name}${c.paths.length ? ` (${c.paths.slice(0, 2).join(", ")})` : ""}${c.responsibility ? ` — ${clip1(c.responsibility, 90)}` : ""}`);
-              served.push({ kind: "components", record_id: c.id });
+              const line = `- ${c.name}${c.paths.length ? ` (${c.paths.slice(0, 2).join(", ")})` : ""}${c.responsibility ? ` — ${clip1(c.responsibility, 90)}` : ""}`;
+              L.push(line);
+              served.push({ kind: "components", record_id: c.id, token_cost: Math.ceil([...line].length / 4) });
             }
             if (components.length > 12) L.push(`…and ${components.length - 12} more — hunch_structure() for the full map.`);
             L.push("Orient: hunch_structure(target) · hunch_why(target) · hunch_context(task).");
@@ -3701,8 +3711,9 @@ program
             if (!decisions.length) return;
             L.push(`🧠 Hunch — live decisions for a delegated planner (${decisions.length} in force; plans must not re-propose the rejected).`);
             for (const d of decisions.slice(0, 6)) {
-              L.push(`- ${d.title} (${d.id})${d.alternatives_rejected.length ? ` — rejected: ${clip1(d.alternatives_rejected[0]!, 80)}` : ""}`);
-              served.push({ kind: "decisions", record_id: d.id });
+              const line = `- ${d.title} (${d.id})${d.alternatives_rejected.length ? ` — rejected: ${clip1(d.alternatives_rejected[0]!, 80)}` : ""}`;
+              L.push(line);
+              served.push({ kind: "decisions", record_id: d.id, token_cost: Math.ceil([...line].length / 4) });
             }
             L.push("Before finalizing a plan: hunch_why(target) · hunch_current_decision(topic) · hunch_check_constraints(scope).");
           } else {
@@ -3713,8 +3724,9 @@ program
             if (!constraints.length) return;
             L.push(`🧠 Hunch — delegated agent grounding: ${constraints.length} invariant(s) in force in this repo.`);
             for (const c of constraints.slice(0, 8)) {
-              L.push(`- [${c.severity}] ${clip1(c.statement, 140)}${c.scope.length ? ` (scope: ${c.scope.slice(0, 3).join(", ")})` : ""}`);
-              served.push({ kind: "constraints", record_id: c.id });
+              const line = `- [${c.severity}] ${clip1(c.statement, 140)}${c.scope.length ? ` (scope: ${c.scope.slice(0, 3).join(", ")})` : ""}`;
+              L.push(line);
+              served.push({ kind: "constraints", record_id: c.id, token_cost: Math.ceil([...line].length / 4) });
             }
             if (constraints.length > 8) L.push(`…and ${constraints.length - 8} more — hunch_check_constraints(scope) for your files.`);
             L.push("Before editing: hunch_check_constraints(scope) · hunch_why(target). Orient: hunch_context(task).");
@@ -3722,7 +3734,15 @@ program
           // No dedup here: the hook event carries the PARENT session id, but each
           // spawned agent is a fresh empty context — deduping would ground the
           // first Explore and silently starve every later one.
-          recordServed(root, served.map((r) => ({ ...r, event: "served", target: `(subagent:${evt.agent_type ?? "any"})`, session_id: evt.session_id })));
+          recordServed(root, served.map((r, index) => ({
+            ...r,
+            event: "served",
+            target: `(subagent:${evt.agent_type ?? "any"})`,
+            session_id: evt.session_id,
+            rank: index + 1,
+            delivery_reason: "ranked",
+            provenance_status: "unverified",
+          })));
           emitContext(provider, "SubagentStart", L.join("\n"));
         } finally {
           s.close();
@@ -3860,41 +3880,45 @@ program
       const hasContent =
         ctx.constraints.length || ctx.decisions.length || ctx.bugs.length || ctx.blast_radius.length || ctx.findings.length || retired.length || docGround;
       if (!hasContent) return; // no noise on files Hunch hasn't learned yet
-      let text = formatContext(ctx).trim();
-      if (firmness !== "advisory" && ctx.constraints.length) {
-        const names = ctx.constraints.map((c) => `[${c.severity}] ${c.statement}`).join("; ");
-        text += `\n\n⚠ This file is in scope of ${ctx.constraints.length} invariant(s): ${names}. Preserve them.`;
-      }
-      if (retired.length) {
-        const items = retired.map((r) => `${[...r.symbols, ...r.deps].join(", ")} (${r.decision})`).join("; ");
-        text += `\n\n⚠ Deliberately RETIRED from this file — do not re-introduce without cause: ${items}.`;
-      }
-      // Decision-grounding (§3): for topic-anchored decisions governing this file, state
-      // the current decision assertively (graph over any stale doc) + what it rejected.
-      // The FULL decision set is passed alongside the file slice so a topic contested
-      // somewhere else in the graph is reported as unresolved instead of being asserted
-      // as settled — the collision's two sides often live in different files.
-      const grounding = renderGrounding(ctx.decisions, store.recs("decisions"));
-      if (grounding) text += `\n\n${grounding}`;
-      if (docGround) text += `\n\n${docGround}`;
+      const envelope = buildDeliveryEnvelope(ctx, {
+        root,
+        symbols: store.recs("symbols"),
+        components: store.recs("components"),
+        decisionCorpus: store.recs("decisions"),
+        supplements: [
+          ...(retired.length ? [{
+            id: "retired-code",
+            kind: "retired-code",
+            priority: 200,
+            text: `⚠ Deliberately RETIRED from this file — do not re-introduce without cause: ${retired.map((r) => `${[...r.symbols, ...r.deps].join(", ")} (${r.decision})`).join("; ")}.`,
+          }] : []),
+          ...(docGround ? [{ id: "doc-grounding", kind: "doc-grounding", priority: 100, text: docGround }] : []),
+        ],
+      });
+      const text = envelope.text.trim();
       // Identical grounding already shown this session → one-line delta instead of
       // the full 10-16KB block. Any record change re-sends the full text; the
       // strict-gate deny path above never routes through this (dec_244397d920).
       // Delivery receipts (dec_925f4bcaad): the ledger of what actually reached
       // an agent. A full injection is a serve; a delta one-liner attests the
       // earlier serve is still standing. Never throws, never blocks.
-      const receipts = (event: "served" | "refreshed") => recordServed(root, [
-        ...ctx.constraints.map((c) => ({ event, kind: "constraints", record_id: c.id, target, session_id: evt.session_id })),
-        ...ctx.decisions.map((d) => ({ event, kind: "decisions", record_id: d.id, target, session_id: evt.session_id })),
-        ...ctx.bugs.map((b) => ({ event, kind: "bugs", record_id: b.id, target, session_id: evt.session_id })),
-        ...ctx.findings.map((f) => ({ event, kind: "findings", record_id: f.id, target, session_id: evt.session_id })),
-      ]);
+      const receipts = (event: "served" | "refreshed") => recordServed(root, envelope.delivered.map((item) => ({
+        event,
+        kind: item.kind,
+        record_id: item.record_id,
+        target,
+        session_id: evt.session_id,
+        rank: item.rank,
+        delivery_reason: item.delivery_reason,
+        provenance_status: item.provenance_status,
+        token_cost: item.token_cost,
+      })));
       if (injectionMode(evt.session_id, `pre:${target}`, text) === "delta") {
         receipts("refreshed");
         emitContext(
           provider,
           "PreToolUse",
-          `Hunch grounding for ${target}: unchanged this session (${ctx.decisions.length} decision(s), ${ctx.constraints.length} invariant(s) shown earlier — still current; hunch_why("${target}") to re-expand).`,
+          `Hunch grounding for ${target}: unchanged this session (${envelope.delivered.filter((item) => item.kind === "decisions").length} decision(s), ${envelope.delivered.filter((item) => item.kind === "constraints").length} invariant(s) shown earlier — still current; hunch_why("${target}") to re-expand).`,
         );
         return;
       }

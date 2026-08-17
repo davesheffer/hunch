@@ -3,7 +3,7 @@
   "title": "Component wiki is a generated, drift-gated VIEW of the graph — never a second source of truth",
   "topic": "wiki.derived-view",
   "status": "superseded",
-  "context": "OpenWiki (LangChain) showed demand for generated repo wikis, but its freshness model is a scheduled agent re-reading git diffs — probabilistic, silently stale between runs, and billed per-token via API keys. Hunch already had every primitive to do this deterministically: component/symbol/edge graph, topic anchors + doc-anchor drift, atomic IO, and subscription-only synthesis.",
+  "context": "Generated repo wikis are a well-established want, but the common freshness model — a scheduled agent re-reading git diffs — is probabilistic and silently stale between runs. Hunch already had every primitive to do this deterministically: component/symbol/edge graph, topic anchors + doc-anchor drift, atomic IO, and subscription-only synthesis.",
   "decision": "`hunch wiki` renders one page per active component from PUBLIC-store graph queries only (assemblePack in src/wiki/wiki.ts). Freshness is deterministic: each page's graph inputs are content-hashed (packHash) into .hunch/wiki-manifest.json (atomic write); a mismatch is a `wiki-stale` drift finding folded into computeDrift (advisory; `hunch wiki --check` is the CI gate), healed by `hunch wiki --heal` which regenerates ONLY stale pages and removes orphans. Every cited decision with a topic is pinned via the existing `<!-- hunch:topic <topic> <dec_id> -->` marker, so supersession fires the established doc-anchor-stale drift and the pre-edit hook grounds wiki edits with zero new machinery. LLM prose (Overview section) is optional garnish via SynthProvider.draftProse — subscription CLI only, feature-detected, any failure degrades to the deterministic template; the freshness hash covers graph inputs only, never prose. Page bodies carry no timestamps so identical inputs are byte-identical (idempotent regen, no git noise).",
   "consequences": [
     "wiki-stale stays advisory in `hunch drift` (never gates the doc≠graph exit code); `hunch wiki --check` exits non-zero for repos that want a CI freshness gate",
@@ -13,7 +13,7 @@
     "renderHunchSection gained an optional root param so every assistant grounding doc advertises the wiki once adopted"
   ],
   "alternatives_rejected": [
-    "OpenWiki-style scheduled agent that re-reads diffs and rewrites prose: probabilistic freshness, silent drift between runs, regen scope guessed by a model instead of computed from the graph",
+    "A scheduled agent that re-reads diffs and rewrites prose: probabilistic freshness, silent drift between runs, regen scope guessed by a model instead of computed from the graph",
     "Wiki as an editable/second source of truth: two truths diverge; pages are regenerable artifacts and say so in their header",
     "Including LLM prose in the freshness hash: nondeterministic output would make every page permanently 'stale'",
     "Rendering from store.recs() (private overlay included): committed pages are a publicly-posted leak surface — public store only, per dec_9c4289a4bb",
@@ -41,7 +41,7 @@
     "deps": []
   },
   "provenance": {
-    "source": "human_confirmed",
+    "source": "human_confirmed+agent_redacted",
     "confidence": 0.95,
     "evidence": [
       "src/wiki/wiki.ts",
@@ -50,7 +50,8 @@
       "src/integrations/claudemd.ts",
       "src/integrations/providers.ts",
       "src/cli/index.ts",
-      "test/wiki.test.ts"
+      "test/wiki.test.ts",
+      "prose redacted by agent 2026-08-11 (commit 8d6c2e9): competitive/positioning wording removed; decision substance, alternatives and lineage unchanged"
     ]
   },
   "date": "2026-07-02T12:09:51.336Z"

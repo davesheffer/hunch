@@ -3,11 +3,11 @@
   "title": "hunch_capture_decision gains deciding:true — a verdict loop (candidates → evidenced attacks → convergence → tripwires) runs BEFORE the grilling when the choice is not yet made",
   "topic": "capture.verdict-loop",
   "status": "accepted",
-  "context": "Post-hoc alternatives_rejected are the known weakness of every ADR system: rationalization written backwards after the choice. A decision made THROUGH a structured verdict loop arrives with rejected alternatives that are attacks that actually ran and failed — which is what makes the downstream guards (veto, rejected-alternative drift, Never Twice) bite on substance. The loop's outputs map near-1:1 onto the Decision schema: candidates killed → alternatives_rejected, flip conditions → 'revisit if' clauses embedded per rejection, failed attacks → context (tested-safe surface), convergence strength → confidence. Red-team verdict that shaped the form: decision-manufacturing is on hunch's turf (decisions ARE the record hunch keeps); installed doctrine files are not (they rot — the product's own doc≠graph thesis).",
+  "context": "Post-hoc alternatives_rejected are the known weakness of every ADR system: rationalization written backwards after the choice. A decision made THROUGH a structured verdict loop arrives with rejected alternatives that are attacks that actually ran and failed — which is what makes the downstream guards (veto, rejected-alternative drift, Never Twice) bite on substance. The loop's outputs map near-1:1 onto the Decision schema: candidates killed → alternatives_rejected, flip conditions → 'revisit if' clauses embedded per rejection, failed attacks → context (tested-safe surface), convergence strength → confidence. Red-team verdict that shaped the form: decision-manufacturing is squarely in scope (decisions ARE the record hunch keeps); installed doctrine files are not (they rot — the product's own doc≠graph thesis).",
   "decision": "Extend the existing grilling protocol in the MCP server: hunch_capture_decision accepts deciding:true and prepends a five-step VERDICT LOOP (split, candidates ≥ 2, independent evidenced attacks, convergence with failed-attacks-kept, tripwires as 'revisit if' clauses) before the standard grilling commit rules. One text-function upgrade, zero new tools, client-agnostic (tool-result text only). Default capture unchanged.",
   "consequences": [],
   "alternatives_rejected": [
-    "Ship the protocol as a scaffolded /hunch-fable (or /decide) command in hunch init: rejected — generic rigor doctrine is off-turf and rots as installed static prose while hunch sells drift detection; three independent red-team attacks converged (turf, self-contradiction, injection-channel trust); revisit if users repeatedly ask for the protocol as a command — then as opt-in flag, never default",
+    "Ship the protocol as a scaffolded /hunch-fable (or /decide) command in hunch init: rejected — generic rigor doctrine sits outside this tool's scope and rots as installed static prose, which contradicts the product's own doc≠graph thesis; three independent red-team attacks converged (scope, self-contradiction, injection-channel trust); revisit if users repeatedly ask for the protocol as a command — then as opt-in flag, never default",
     "A new hunch_decide MCP tool separate from capture: rejected — second front door splits the capture funnel and the token flow; the verdict loop IS the front half of capture, not a sibling",
     "Threshold-triggered escalation injecting the full protocol via the pre-edit hook: rejected for the protocol content (noise risk poisons the grounding channel — the flagship surface); a facts-only risk escalation remains a separate, open idea"
   ],
@@ -30,11 +30,13 @@
     "deps": []
   },
   "provenance": {
-    "source": "human_confirmed",
+    "source": "human_confirmed+agent_redacted",
     "confidence": 0.95,
     "evidence": [
       "src/mcp/server.ts",
-      "test/captureguard.test.ts"
+      "test/captureguard.test.ts",
+      "prose redacted by agent 2026-08-11 (commit 8d6c2e9): competitive/positioning wording removed; decision substance, alternatives and lineage unchanged",
+      "prose redacted by agent 2026-08-11 (publication scan): positioning wording removed; decision substance, alternatives and lineage unchanged"
     ]
   },
   "date": "2026-07-08T07:07:35.610Z"

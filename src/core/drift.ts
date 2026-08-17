@@ -43,6 +43,16 @@ export function computeDrift(store: HunchStore, root: string): DriftReport {
   // anchor-stale. Keeps the doc≠graph gate's false-positive rate ~zero: a routine
   // narrowing supersession (successor lists fewer files) never flags files still governed.
   const liveFiles = new Set(decisions.filter(isLive).flatMap((d) => (d.related_files ?? []).map(toPosixTarget)));
+  // A related_files entry may name a DIRECTORY ("vscode-extension/"), which governs every
+  // file beneath it. Exact Set.has cannot see that, so a live directory-scoped decision
+  // failed to suppress anchor-stale for files it plainly covers — a false positive that
+  // only appeared on a public-only store, because an overlay decision happened to claim
+  // the same file by exact path and masked it locally.
+  const liveDirs = [...liveFiles].filter((f) => f.endsWith("/"));
+  const governedByLiveDecision = (file: string): boolean => {
+    const p = toPosixTarget(file);
+    return liveFiles.has(p) || liveDirs.some((dir) => p.startsWith(dir));
+  };
   const premiseEnv: PremiseEnv = { now: new Date().toISOString(), exists: (p) => existsSync(join(root, p)) };
 
   for (const d of decisions) {
@@ -81,7 +91,7 @@ export function computeDrift(store: HunchStore, root: string): DriftReport {
       const current = currentForTopic(decisions, d.topic);
       if (current && current.id !== d.id) {
         for (const f of d.related_files ?? []) {
-          if (!f || f.includes("*") || liveFiles.has(toPosixTarget(f))) continue;
+          if (!f || f.includes("*") || governedByLiveDecision(f)) continue;
           if (!referenceExists(store, root, d.id, f)) continue; // missing file is history → dead-ref's job
           findings.push({
             kind: "anchor-stale",

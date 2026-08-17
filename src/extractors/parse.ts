@@ -121,7 +121,45 @@ export function parseSource(file: string, source: string): ParsedFile | null {
     });
   }
   symbols.sort((a, b) => a.startByte - b.startByte);
-  return { symbols, imports, calls, parseable: !tree.rootNode.hasError };
+  return { symbols, imports, calls, parseable: isParseable(tree.rootNode, spec) };
+}
+
+/** True when every ERROR/MISSING node in the tree sits in an ancestor shape this
+ *  language declares as a known grammar limitation (LanguageSpec.toleratedErrorScopes).
+ *
+ *  This matters because `conform` is fail-CLOSED on scan completeness: one file
+ *  reporting parseable:false rejects the WHOLE architectural-conformance scan, so a
+ *  grammar false positive takes down the gate for the entire repo. Scoping the
+ *  tolerance to a declared ancestor pair — rather than downgrading unparseable files
+ *  to a warning — keeps the completeness guarantee intact for real syntax errors.
+ *
+ *  A tolerated ERROR's children are not visited: tree-sitter reports the same span
+ *  again as a nested ERROR child, and the raw text inside a template literal cannot
+ *  contain an independent error to hide. */
+function isParseable(root: SyntaxNode, spec: LanguageSpec): boolean {
+  if (!root.hasError) return true; // covers ERROR and MISSING; no walk needed
+  const scopes = spec.toleratedErrorScopes ?? [];
+  if (scopes.length === 0) return false;
+  let ok = true;
+  const visit = (node: SyntaxNode): void => {
+    if (!ok) return;
+    if (node.type === "ERROR" || node.isMissing) {
+      if (!inToleratedScope(node, scopes)) ok = false;
+      return;
+    }
+    for (let i = 0; i < node.childCount; i++) visit(node.child(i)!);
+  };
+  visit(root);
+  return ok;
+}
+
+function inToleratedScope(node: SyntaxNode, scopes: NonNullable<LanguageSpec["toleratedErrorScopes"]>): boolean {
+  for (let ancestor = node.parent; ancestor; ancestor = ancestor.parent) {
+    for (const scope of scopes) {
+      if (ancestor.type === scope.node && ancestor.parent?.type === scope.parentIs) return true;
+    }
+  }
+  return false;
 }
 
 /** Walk up to the nearest node whose type is a definition this language recognizes. */

@@ -1,0 +1,41 @@
+{
+  "id": "dec_336bba255b",
+  "title": "Evidence discipline for measurement claims in records and upstream PRs",
+  "topic": "evidence-discipline-measurement-claims",
+  "status": "accepted",
+  "context": "Shipping adrkit PR #120 took four adversarial review rounds. Every round found claim-level defects rather than code defects, and the same failure shapes recurred. Three of them survived multiple drafts, including one where the central thesis of a decision record was logically false. The cost was several rewrites of prose that had already been reviewed; the rules below are what would have caught each one on the first pass.",
+  "decision": "When a record, changelog, commit message, or PR body states a measurement or a capability, it must be verifiable by someone who re-runs it, and the check must be observed failing. Seven rules, each earned from a specific defect:\n\n1. ASSERT EXACT VALUES, NOT BOUNDS. `expect(x).toBeLessThan(fileBytes)` is satisfied by every wrong smaller number. A deliberately broken byte-cut passed that assertion and was caught only after tightening it to an exact expected value.\n\n2. NEVER QUOTE MEASUREMENTS OF FILES THE CHANGE ITSELF EDITS. Two rounds of numbers went stale because the commit was amended after measuring. Quote files the diff does not touch, so the numbers stay checkable after it lands.\n\n3. MEASURE CANONICAL CONTENT, NOT THE WORKING TREE. On a CRLF checkout every byte count differs from the LF blob CI and other platforms see. Measure from `git show HEAD:<path>`, and say so.\n\n4. A GLOB IN A RECORD IS A CLAIM SOMEONE WILL RE-RUN. `packages/**/src/**/*.ts` was quoted for a 144-file corpus; git resolves that pathspec to 115 files. When tools disagree on a glob, spell the corpus out in prose.\n\n5. BEFORE ARGUING A NEW SIGNAL ADDS CAPABILITY, CHECK WHETHER IT IS DERIVABLE FROM AN EXISTING ONE. The PR originally claimed two new fields made scan completeness answerable; `scannedBytes == fileBytes` is logically equivalent to the pre-existing `truncated === false`, so the capability already existed and the record was claiming credit for nothing.\n\n6. PLATFORM-SKIPPED TESTS ARE A BLIND SPOT. An exhaustive `toEqual` inside `test.skipIf(sep === '\\\\')` was invisible locally on Windows and would have failed Linux CI. Grep for `skipIf` / `skip` whenever changing the shape of a returned object.\n\n7. JUDGE SUITE HEALTH BY FAILING TEST NAMES AGAINST A BASELINE, NEVER BY COUNTS. With ~98 pre-existing platform failures, counts are noise and flakes move them run to run; set-difference over names is the only reliable regression signal.\n\nAnd the meta-rule that found most of the above: VERIFY BY MUTATION. Break the code deliberately, one edit at a time, and confirm a NAMED test fails. A test that passes against a broken implementation is not coverage, whatever it asserts.",
+  "consequences": [
+    "A measurement in a record is now expected to name the corpus precisely, the content form (canonical LF), and files the change does not edit.",
+    "New tests are expected to have been observed failing via mutation, not merely written after the code.",
+    "Suite verification on a platform with a broken baseline is legitimate provided the comparison is name-based; a green suite cannot be claimed from such a platform, only an unchanged one."
+  ],
+  "alternatives_rejected": [
+    "Rely on careful review of the prose instead of mutation — rejected: three rounds of careful review by independent reviewers still left the false-thesis claim and the stale numbers standing. Only mutation and independent recomputation caught them.",
+    "Recompute measurements with the same script that produced them — rejected: a shared bug reproduces itself. The numbers were only trusted once a second, independently written script agreed against HEAD blobs.",
+    "Judge the test suite by pass/fail counts — rejected: counts differed run to run from flakes while the failing-name set stayed identical, which would have manufactured phantom regressions and hidden real ones."
+  ],
+  "rejected_tripwires": [],
+  "related_components": [],
+  "related_files": [],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-08-11T11:47:41.434Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "premises": [],
+  "provenance": {
+    "source": "agent_recorded",
+    "confidence": 0.75,
+    "evidence": [
+      "packages/core/test/markers-scan.test.ts",
+      "packages/cli/test/explain-markers.test.ts"
+    ]
+  },
+  "date": "2026-08-11T11:47:41.434Z"
+}

@@ -28,6 +28,12 @@ export const RELEASE_GATES = Object.freeze([
   { id: "vscode-build", command: ["npm", "run", "build", "--prefix", "vscode-extension"] },
   { id: "repository-index", command: ["node", "dist/cli/index.js", "index", "--no-auto-commit"] },
   { id: "architectural-conformance", command: ["node", "dist/cli/index.js", "conform", "--strict"] },
+  // doc≠graph, the other truth spoke. Runs AFTER repository-index so it reads the
+  // freshly regenerated grounding. gateEnvironment() points HUNCH_PRIVATE_DIR at an
+  // empty overlay for every gate, so this measures what a CONTRIBUTOR's clone sees —
+  // the union-vs-public divergence that shipped undetected existed precisely because
+  // no gate here ever ran drift (fnd_5a7a683920).
+  { id: "memory-drift", command: ["node", "dist/cli/index.js", "drift"] },
   { id: "clean-install-rehearsal", command: ["node", "tooling/constitution-clean-rehearsal.mjs", "--output", "$REHEARSAL_OUTPUT"] },
   { id: "production-dependency-audit", command: ["node", "tooling/production-dependency-audit.mjs"] },
 ]);

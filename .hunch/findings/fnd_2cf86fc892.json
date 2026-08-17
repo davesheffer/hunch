@@ -1,30 +1,34 @@
 {
   "id": "fnd_2cf86fc892",
   "title": "The release gate races the asynchronous post-commit auto-capture: HEAD can move mid-gate",
-  "observation": "Gate run #5 for v1.12.0 failed source-integrity with 'HEAD moved from 8d6cdeb to fda97ba' after a fully green suite (1046/1046): the post-commit hook's auto-capture from the immediately preceding source commit landed its own 'hunch: capture' commit WHILE the ~25-minute gate was running. This is a new instance of the refresh-treadmill family (fnd_6391b4242f) with a different mechanism: not stale grounding counts, but capture-commit latency overlapping the gate window. Workaround that worked: wait for capture quiescence (clean tree + stable HEAD for ~20s) before starting the gate. Candidate fixes: (a) the gate waits for capture quiescence in preflight, or (b) the gate pins its baseline to gate-start HEAD and tolerates trailing commits that touch only .hunch/ + regenerated grounding docs.",
+  "observation": "RESOLVED by daffc71 (dec_290bf70a65) — this finding was still filed open but the fix had already shipped. tooling/release-gate.mjs:632-640 implements candidate fix (b): observeNormalizedSource() diffs gate-start HEAD against observed HEAD and, when every changed path passes isMemoryChurnPath (.hunch/** plus the five GROUNDING_DOC_PATHS), normalizes the observed commit back to the gate-start commit and records it in toleratedMemoryCommits. The receipt keeps commit_after as the RAW head for transparency and itemizes tolerated_memory_commits so a reader can audit exactly what rode in. statusWithoutMemoryChurn() does the same for working-tree dirt, keeping a rename fatal unless BOTH sides are churn. Anything touching real source still fails hard. Re-checked 2026-08-12 while about to re-implement it — querying the graph first would have been cheaper than reading the code.",
   "evidence": [
-    "release_ce1f7506ea64 receipt: 'Release gate source-integrity failure: test: HEAD moved from 8d6cdeb131efbaf22932d252f3a1d9ee1d23d414 to fda97ba5cceed590171a4cd4eb93ea65156b36e7'; fda97ba = 'hunch: capture dec_4294444f84'",
-    "Gate run #6 after 20s quiescence check: release_a925ed03a14f passed, candidate_ready: yes"
+    "tooling/release-gate.mjs:632-640 observeNormalizedSource() — HEAD-move tolerance gated on isMemoryChurnPath",
+    "tooling/release-gate.mjs:110-127 isMemoryChurnPath + statusWithoutMemoryChurn",
+    "tooling/release-gate.mjs:689-691 receipt itemizes tolerated_memory_commits",
+    "test/release-gate.test.ts 'memory churn never reads as source mutation: paths, status filtering, and what stays fatal' passes"
   ],
   "method": null,
   "severity": "medium",
-  "triage": "open",
+  "triage": "resolved",
   "affected_files": [
     "tooling/release-gate.mjs",
     "src/integrations/hooks.ts"
   ],
   "affected_symbols": [],
   "violates_constraint": null,
-  "spawned_decision": null,
+  "spawned_decision": "dec_290bf70a65",
   "observed_at": "2026-08-10T08:44:49.502Z",
-  "resolved_commit": null,
+  "resolved_commit": "daffc71",
   "provenance": {
     "source": "human_confirmed",
     "confidence": 0.95,
     "evidence": [
-      "release_ce1f7506ea64 receipt: 'Release gate source-integrity failure: test: HEAD moved from 8d6cdeb131efbaf22932d252f3a1d9ee1d23d414 to fda97ba5cceed590171a4cd4eb93ea65156b36e7'; fda97ba = 'hunch: capture dec_4294444f84'",
-      "Gate run #6 after 20s quiescence check: release_a925ed03a14f passed, candidate_ready: yes"
+      "tooling/release-gate.mjs:632-640 observeNormalizedSource() — HEAD-move tolerance gated on isMemoryChurnPath",
+      "tooling/release-gate.mjs:110-127 isMemoryChurnPath + statusWithoutMemoryChurn",
+      "tooling/release-gate.mjs:689-691 receipt itemizes tolerated_memory_commits",
+      "test/release-gate.test.ts 'memory churn never reads as source mutation: paths, status filtering, and what stays fatal' passes"
     ],
-    "last_verified": "2026-08-10T08:44:49.502Z"
+    "last_verified": "2026-08-12T07:24:55.848Z"
   }
 }

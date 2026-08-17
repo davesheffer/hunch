@@ -3,8 +3,8 @@
   "title": "Compounding-value surface: hunch stats --json is the one data source; VS Code extension is the flagship human surface + distribution; public web shrinks to a single proof-curve",
   "topic": "human-ui-strategy",
   "status": "accepted",
-  "context": "Extends dec_df253f50b4 ('no web UI; build review-queue in extension') into the full human surface. Distribution is the bottleneck (1 star, no traction); the VS Code Marketplace is a search-indexed discovery channel and one build reaches Cursor/Windsurf/Copilot/VSCode, which a Vercel link cannot. The moat is the accumulated .hunch/ graph, not the gate (a PreToolUse deterministic check is a commodity primitive Anthropic can ship natively) — so every surface must render accumulation->return ('this happened because the graph existed'), never activity ('47 memories saved'). Positioning to gate-forward ('blocks the change + hands you the receipt') is a framing refinement of the already-live dec_78bff967ce (Architectural Conformance for AI code), not re-litigated here.",
-  "decision": "Build `hunch stats --json` as the SINGLE data contract (stock -> return -> compounding), rendered read-only by three panes of glass: (1) CLI receipt footer for headless Claude Code, (2) the VS Code extension (status-bar ambient number, sidebar compounding curve, hover-to-see-decision, inline block receipt) as the flagship + marketplace distribution play, (3) a single shareable public proof-curve for cold-share (the one job the extension structurally can't do). The only new persistence is a git-tracked JSONL catch-log at .hunch/events.log. Non-negotiable: the extension and web compute nothing; if a number can't come from `hunch stats --json` or a .hunch/ file it doesn't exist — otherwise the pane of glass forks into a second product.",
+  "context": "Extends dec_df253f50b4 ('no web UI; build review-queue in extension') into the full human surface. One VS Code build reaches Cursor/Windsurf/Copilot/VSCode from a single artifact, which a hosted link cannot. Every surface must render accumulation->return ('this happened because the graph existed'), never activity ('47 memories saved'). Framing as gate-forward ('blocks the change + hands you the receipt') refines the already-live dec_78bff967ce (Architectural Conformance for AI code) and is not re-litigated here.",
+  "decision": "Build `hunch stats --json` as the SINGLE data contract (stock -> return -> compounding), rendered read-only by three panes of glass: (1) CLI receipt footer for headless Claude Code, (2) the VS Code extension (status-bar ambient number, sidebar compounding curve, hover-to-see-decision, inline block receipt) as the flagship human surface, (3) a single shareable public proof-curve for sharing outside the editor (the one job the extension structurally can't do). The only new persistence is a git-tracked JSONL catch-log at .hunch/events.log. Non-negotiable: the extension and web compute nothing; if a number can't come from `hunch stats --json` or a .hunch/ file it doesn't exist — otherwise the pane of glass forks into a second product.",
   "consequences": [
     "New git-tracked persistence .hunch/events.log (JSONL). Append is SPLIT across two different gates, not one: constraint/veto blocks fire at src/core/hookpolicy.ts (BlockingHit currently carries only `reason` and must be extended to thread {decision,subject,object,assert,bug}); conformance catches (assert not-calls/calls/imports) come from `hunch conform`, NOT the interactive edit hook. The spec's 'append one line at the block path, ~30 lines' conflates the two.",
     "coverage ('% of architecture protected') is REAL today: 27/81 decisions carry related_components, giving 11/13 components covered = 85% (verified by running `hunch stats` 2026-07-09). An earlier red-team claim of 0% was a measurement error — a line-anchored grep missed pretty-printed multi-line related_components arrays; the field is well-populated.",
@@ -13,7 +13,7 @@
     "Build order (each independently shippable): .hunch/events.log catch-log -> `hunch stats --json` -> CLI receipt footer -> VS Code extension (status bar -> inline receipt -> hover -> sidebar curve) -> public proof-curve."
   ],
   "alternatives_rejected": [
-    "Vercel dashboard as the primary human surface — a link nobody finds; forfeits marketplace discovery and ambient in-editor value. Kept ONLY as a shrunk single proof-curve for cold-share.",
+    "A hosted dashboard as the primary human surface — forfeits ambient in-editor value and lives outside the tool the work happens in. Kept ONLY as a shrunk single proof-curve for sharing outside the editor.",
     "Extension as a second brain with its own enforcement/rules — forks the product; it must stay a read-only pane of glass over stats --json.",
     "Reporting 'caught' and 'prevented' as one number — attribution attack surface. Keep deterministic 'caught' (gate blocked it) separate from model-dependent 'prevented' (benchmark on/off delta, n=90 caveat).",
     "Recording the spec's illustrative headline numbers (37 caught, 9 re-prevented) as real — RED-TEAM (verified against the live graph 2026-07-09 by running `hunch stats`): the RETURN metrics are unachievable today — catch-log starts empty so 0 caught, and bugs (1 total, status 'open', 0 regressed) make bugs_reprevented structurally 0 until a bug regresses. Return/compounding must start at honest zero. NOTE: the spec's coverage number is NOT overclaimed — real coverage is 85% (11/13), close to the spec's 62% illustration; an initial 0% red-team reading was a grep artifact, corrected."
@@ -41,14 +41,15 @@
     "deps": []
   },
   "provenance": {
-    "source": "human_confirmed",
+    "source": "human_confirmed+agent_redacted",
     "confidence": 0.95,
     "evidence": [
       "src/cli/index.ts",
       "src/core/hookpolicy.ts",
       "src/core/checkreport.ts",
       "src/core/types.ts",
-      "vscode-extension/"
+      "vscode-extension/",
+      "prose redacted by agent 2026-08-11 (commit 8d6c2e9): competitive/positioning wording removed; decision substance, alternatives and lineage unchanged"
     ],
     "last_verified": "2026-08-09T10:48:25.465Z"
   },

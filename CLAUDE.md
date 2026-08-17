@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Hunch is an **Engineering Memory OS**: a CLI + MCP server that builds a persistent, git-native reasoning graph (decisions, bugs, constraints, components) over a codebase and surfaces it to coding assistants. Published as `@davesheffer/hunch` (`hunch` binary). Pure TypeScript ESM, Node ≥22.13, no build step at dev time (run via `tsx`).
+Hunch is an **engineering-memory and architectural-conformance layer**: a CLI + MCP server that builds a persistent, git-native reasoning graph (decisions, bugs, constraints, components), delivers the relevant evidence to coding assistants, and checks their changes deterministically. Published as `@davesheffer/hunch` (`hunch` binary). Pure TypeScript ESM, Node ≥22.13, no build step at dev time (run via `tsx`).
 
 Hunch keeps memory *true* along two spokes: **graph≠code** (Architectural Conformance / intent-conformance — does the code still satisfy recorded intent?) and, as of v0.39.0, **doc≠graph** (**decision-grounding** — does the prose still match the live decision?). The doc≠graph spoke extends to markdown itself (`src/core/docanchors.ts`): a `<!-- hunch:topic <topic> [dec_id] -->` marker in AGENTS.md/CLAUDE.md/docs grounds the pre-edit hook with that topic's current decision, and a *pinned* marker whose decision gets superseded fires deterministic `doc-anchor-stale` drift (CI-gated in `hunch drift`, healed via `hunch heal`). A decision can carry an optional `topic` anchor (drift-detection key; defaults null, no schema bump, existing graphs load unchanged) with a `current`/`history`/`rejected` query contract. Read-time grounding surfaces a file's topic-anchored decisions on the pre-edit hook (doc-precedence framing: follow the graph, not a stale doc — including what each decision *rejected*), and the deterministic `anchor-stale` drift kind fires when a file is still anchored to a SUPERSEDED decision while a current one exists for its topic.
 
@@ -38,7 +38,7 @@ This repo's full engineering memory lives in a **private overlay**; a **curated 
 <!-- HUNCH:START — auto-generated, do not edit by hand -->
 ## 🧠 Hunch (Engineering Memory)
 
-This repo has **Hunch** — a curated graph of *why* the code is the way it is (decisions, bug history, invariants). It currently holds **178 decisions, 2 bugs, 10 constraints, 17 components, 3 policies, 3 open findings**.
+This repo has **Hunch** — a curated graph of *why* the code is the way it is (decisions, bug history, invariants). It currently holds **179 decisions, 2 bugs, 10 constraints, 17 components, 3 policies, 2 open findings**.
 
 **Consult Hunch via the `hunch_*` MCP tools — pick by MOMENT, not from memory:**
 

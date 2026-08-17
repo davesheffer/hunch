@@ -1,6 +1,6 @@
 # Contributing to Hunch
 
-Thanks for helping build the Engineering Memory OS.
+Thanks for helping build Hunch's engineering-memory and deterministic Change Gate.
 
 ## License of contributions
 

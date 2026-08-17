@@ -21,7 +21,8 @@
   "related_files": [
     "src/store/hunchStore.ts",
     "bench/golden-retrieval.json",
-    "test/rankpriors.test.ts"
+    "test/rankpriors.test.ts",
+    "src/eval/harness.ts"
   ],
   "supersedes": "dec_25e277f479",
   "superseded_by": null,

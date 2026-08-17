@@ -6,7 +6,7 @@
   "context": "Extension ballooned to 20 commands, 4 webviews, tree view, codelens, diagnostics, decorations—unmaintainable scope the author could no longer explain. Core value (decision memory) drowned in noise.",
   "decision": "Delete 9 files and 2,176 lines. Keep only: (1) 'Hunch: Why is this?' surface (file brief, symbol context, invariants, bug history), (2) 'Hunch: Capture…' picker for writing decisions. All mutations delegated to hunch CLI or MCP write path; extension never edits .hunch/ JSON directly. Remove: Change Gate, all command hub, diagnostics, decorations, webviews.",
   "consequences": [
-    "Single, defensible value proposition: see why + capture what you decided",
+    "Single, focused purpose: see why + capture what you decided",
     "~58% LOC reduction (3776 → 1600); 56% fewer files (16 → 7)",
     "All memory mutations auditable (goes through MCP/CLI, not direct edits)",
     "Maintenance surface shrinks enough to stay coherent"
@@ -121,7 +121,7 @@
     ]
   },
   "provenance": {
-    "source": "llm_draft+summary",
+    "source": "llm_draft+summary+agent_redacted",
     "confidence": 0.5,
     "evidence": [
       "commit:4730cc5",
@@ -134,7 +134,8 @@
       "vscode-extension/src/diagnostics.ts",
       "vscode-extension/src/extension.ts",
       "vscode-extension/src/graph.ts",
-      "vscode-extension/src/home.ts"
+      "vscode-extension/src/home.ts",
+      "prose redacted by agent 2026-08-11 (publication scan): positioning wording removed; decision substance, alternatives and lineage unchanged"
     ],
     "last_verified": "2026-07-13T06:10:56.437Z"
   },

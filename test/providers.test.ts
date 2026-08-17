@@ -76,7 +76,48 @@ test("published provider MCP and hook commands force the exact npm package", () 
     const hooks = JSON.parse(readFileSync(join(root, ".cursor/hooks.json"), "utf8"));
     const command = hooks.hooks.preToolUse[0].command as string;
     assert.ok(command.includes(published.args[1]!));
-    assert.match(command, /"hunch" "hook" "--provider" "cursor"/);
+    assert.match(command, /hunch hook --provider cursor/);
+  } finally { cleanup(); }
+});
+
+test("published hook commands are unquoted so PowerShell can run them (VS Code on Windows)", () => {
+  const { store, root, cleanup } = tempStore();
+  try {
+    scaffoldProviders(root, publishedMcpInvocation(), store, { home: root });
+    for (const [file, event] of [
+      [".github/hooks/hunch.json", "PreToolUse"], [".cursor/hooks.json", "preToolUse"],
+      [".windsurf/hooks.json", "pre_write_code"],
+    ] as const) {
+      const command = JSON.parse(readFileSync(join(root, file), "utf8")).hooks[event][0].command as string;
+      // A LEADING quote is the whole bug: PowerShell parses `"npx" "-y" …` as a
+      // string expression and dies with `Unexpected token '"-y"'` before the
+      // hook runs. No token of the published npx invocation needs quoting.
+      assert.doesNotMatch(command, /"/, `${file} hook command must carry no shell quotes: ${command}`);
+      assert.ok(command.startsWith("npx -y --package="), `${file}: ${command}`);
+    }
+  } finally { cleanup(); }
+});
+
+test("a LEGACY fully-quoted hook command is replaced, not duplicated", () => {
+  const { store, root, cleanup } = tempStore();
+  const legacy = '"npx" "-y" "--package=hunch-exact@npm:@davesheffer/hunch@1.10.0" "hunch" "hook" "--provider" "cursor"';
+  try {
+    mkdirSync(join(root, ".cursor"), { recursive: true });
+    writeFileSync(join(root, ".cursor/hooks.json"), JSON.stringify({ version: 1, hooks: { preToolUse: [{ command: legacy }] } }));
+    scaffoldProviders(root, publishedMcpInvocation(), store, { home: root });
+    const entries = JSON.parse(readFileSync(join(root, ".cursor/hooks.json"), "utf8")).hooks.preToolUse as Array<{ command: string }>;
+    assert.equal(entries.length, 1, "the legacy quoted entry is replaced, not left alongside the fixed one");
+    assert.doesNotMatch(entries[0]!.command, /"/);
+  } finally { cleanup(); }
+});
+
+test("machine-local paths with spaces stay quoted (POSIX sh word-splitting)", () => {
+  const { store, root, cleanup } = tempStore();
+  try {
+    scaffoldProviders(root, inv, store, { home: root });
+    const command = JSON.parse(readFileSync(join(root, ".cursor/hooks.json"), "utf8")).hooks.preToolUse[0].command as string;
+    assert.match(command, /^"C:\\\\Program Files\\\\nodejs\\\\node\.exe" "C:\\\\repo/);
+    assert.match(command, / hook --provider cursor$/);
   } finally { cleanup(); }
 });
 

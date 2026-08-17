@@ -3,7 +3,7 @@
 <!-- HUNCH:START — auto-generated, do not edit by hand -->
 ## 🧠 Hunch (Engineering Memory)
 
-This repo has **Hunch** — a curated graph of *why* the code is the way it is (decisions, bug history, invariants). It currently holds **178 decisions, 2 bugs, 10 constraints, 17 components, 3 policies, 3 open findings**.
+This repo has **Hunch** — a curated graph of *why* the code is the way it is (decisions, bug history, invariants). It currently holds **179 decisions, 2 bugs, 10 constraints, 17 components, 3 policies, 2 open findings**.
 
 **Consult Hunch via the `hunch_*` MCP tools — pick by MOMENT, not from memory:**
 

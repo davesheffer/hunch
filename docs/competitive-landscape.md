@@ -72,27 +72,10 @@ should be re-verified before quoting.
   building the correction→rule loop without the provenance layer.
 - **"Guardrails" as a term is captured by model/runtime safety** (NeMo
   Guardrails, Lakera, GA Guard) — not architecture. Architecture-drift
-  content recommends deterministic "architecture tests," which is Hunch's
-  conformance ground. Avoid "guardrails" in positioning.
+  content instead recommends deterministic "architecture tests."
 - **"Context engineering" won the umbrella-category war** (Sourcegraph, mem0,
   Supermemory, multiple papers); "agent memory" is its persistence
-  subcategory. Speak "context engineering" for reach; keep "engineering
-  memory" + deterministic receipts as the owned differentiator.
-
-### Threat ranking (for Hunch's differentiators)
-
-1. **Roam** — signed, fail-closed, SARIF-emitting change evidence at high
-   release velocity. Hunch's edge remains curated rationale (decisions with
-   rejected alternatives, bug lineage) and human-gated authority; Roam's
-   evidence is structure-derived.
-2. **Memco Spark** — funded, team-shaped shared memory for coding agents;
-   threatens the Matrix/team story. Hunch's edge: git-native, self-hosted,
-   no SaaS dependency, enforcement included.
-3. **CodeRabbit Rules Miner** — the correction→rule loop with massive PR-side
-   distribution, minus provenance/receipts.
-4. **GitMem** — Never-Twice-shaped lessons loop, now productized.
-5. **Copilot Memory** — commoditizes recall at platform scale; validates the
-   governance thesis rather than attacking it (for now).
+  subcategory.
 
 ### Actions
 
@@ -102,10 +85,6 @@ should be re-verified before quoting.
   release verification into signed change receipts.
 - Fix `tooling/competitive-watch.mjs` to fall back to unauthenticated requests
   when the ambient token is rejected.
-- Adopt "context engineering" vocabulary in outward positioning; do not adopt
-  "guardrails."
-- Strategic response to this snapshot: own the category's measuring stick —
-  see [strategy-driftbench.md](./strategy-driftbench.md) (2026-08-09).
 
 This document tracks public product direction around persistent memory, code intelligence, and
 governance for AI coding agents. It is not a feature-scorecard or a legal conclusion. The sources
@@ -162,42 +141,8 @@ Hunch is strongest where these properties operate together:
 Any one of these can be reproduced. The product claim is the complete chain from engineering event,
 to curated rationale, to scoped authority, to a deterministic change receipt.
 
-## Copying assessment
+## Revision practice
 
-**Finding on 2026-07-16: no credible public evidence that a screened competitor copied Hunch.**
-
-The strongest disconfirming evidence is chronology:
-
-- Cursor Memories reached general availability in July 2025.
-- GitMem's first public release is dated February 18, 2026.
-- projectmem reports real usage beginning March 30 and published its paper on June 10, 2026.
-- Roam documented graph-ranked retrieval and its post-edit verification loop on June 11, 2026.
-- [Hunch's first commit](https://github.com/davesheffer/hunch/commit/a2d3f811ad9058fe1d69dd67a45a1c43648cafef) is dated June 14, 2026.
-
-Additional checks performed for this snapshot:
-
-- GitHub exact-phrase searches for distinctive Hunch language, including “Causal Merge Verdict,”
-  “corrections become enforced,” and “content-matched constraints,” found no reuse by the screened
-  competitors.
-- An exact-clone scan across 52,306 current TypeScript source lines in Hunch, Knowit, GitMem, and
-  mnemo found no cross-repository clone at an 8-line / 70-token threshold.
-
-This cannot inspect private repositories, establish what an author read, or rule out conceptual
-inspiration. Escalate only when several signals converge: a feature first appears after Hunch's
-dated release, the overlap is distinctive rather than categorical, and wording, schema, code, or
-access evidence independently supports the same conclusion.
-
-## Operating watchlist
-
-Run the public metadata and exact-phrase check monthly:
-
-```bash
-npm run research:competitors
-
-# Authenticated code search adds the phrase-copy check.
-GITHUB_TOKEN="$(gh auth token)" npm run research:competitors
-```
-
-Review projectmem and Roam weekly while their governance surfaces are moving quickly. Review
-Knowing, GitMem, Knowit, Copilot Memory, Cursor, Windsurf, and Memco monthly. Record observations
-with dates; never silently replace the history of an earlier assessment.
+Observations are recorded with the date they were made. An earlier assessment is never silently
+replaced — a later snapshot is added alongside it, so the history of what was believed when stays
+readable.

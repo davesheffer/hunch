@@ -131,6 +131,43 @@ test("parseSource reports syntax-error trees without inventing a clean parse", (
   assert.equal(parsed.parseable, false);
 });
 
+// ES2018 lets a TAGGED template carry an invalid escape (`String.raw`C:\Users\x``).
+// tree-sitter-javascript never implemented that relaxation, so it emits an ERROR
+// node — and because `conform` is fail-CLOSED on scan completeness, one such file
+// used to reject the architectural-conformance scan for the WHOLE repo. Windows
+// paths in tests are exactly where String.raw is idiomatic (fnd_62239a8621).
+const BS = String.fromCharCode(92);
+const TICK = String.fromCharCode(96);
+const tagged = (body: string) => `const s = String.raw${TICK}${body}${TICK};`;
+
+test("an invalid escape in a TAGGED template does not fail the scan (fnd_62239a8621)", () => {
+  for (const body of [`C:${BS}Users${BS}x`, `${BS}u12`, `${BS}u{zz}`, `${BS}u{`]) {
+    const parsed = parseSource("probe.ts", tagged(body))!;
+    assert.equal(parsed.parseable, true, `String.raw with ${JSON.stringify(body)} must stay parseable`);
+  }
+});
+
+test("the same escape in an UNTAGGED template is a real syntax error and still fails", () => {
+  // Outside a tagged template ES gives no relaxation, so tree-sitter is RIGHT here.
+  // The grammar hangs a tagged template_string off a call_expression and an untagged
+  // one off its consumer; that pair is the whole discriminator, so pin both sides.
+  const parsed = parseSource("probe.ts", `const s = ${TICK}C:${BS}x${TICK};`)!;
+  assert.equal(parsed.parseable, false);
+});
+
+test("a genuine syntax error BESIDE a tolerated one still fails the scan", () => {
+  const parsed = parseSource("probe.ts", `${tagged(BS + "x")} function f( { return 1 }`)!;
+  assert.equal(parsed.parseable, false, "tolerating the template must not blanket-forgive the file");
+});
+
+test("symbols after a tolerated template are still extracted", () => {
+  const parsed = parseSource("probe.ts", `${tagged("C:" + BS + "x")}\nexport function after() { return helper(); }`)!;
+  const after = parsed.symbols.find((s) => s.name === "after");
+  assert.ok(after, "the symbol following the template must survive");
+  // The def node starts at `function`, NOT at the `export` keyword.
+  assert.equal(after.bodyText, "function after() { return helper(); }");
+});
+
 test("Hunch can completely parse its VS Code graph adapter", () => {
   const source = readFileSync(new URL("../vscode-extension/src/hunchData.ts", import.meta.url), "utf8");
   assert.equal(source.includes("\0"), false, "raw NUL bytes are accepted by TypeScript but rejected by tree-sitter");

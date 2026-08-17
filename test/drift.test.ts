@@ -129,6 +129,38 @@ test("drift anchor-stale: a file still governed by another LIVE decision is not 
   assert.equal(computeDrift(store, root).findings.filter((f) => f.kind === "anchor-stale").length, 0);
 });
 
+test("drift anchor-stale: a live decision claiming a DIRECTORY governs the files beneath it", (t) => {
+  // Regression: liveFiles was an exact-string Set, so a live decision listing
+  // "vscode-extension/" did not suppress anchor-stale for
+  // "vscode-extension/src/hunchData.ts". It only showed up on a public-only store —
+  // an overlay decision claiming the same file by exact path masked it locally.
+  const { store, root, cleanup } = tempStore();
+  t.after(cleanup);
+  mkdirSync(join(root, "ext", "src"), { recursive: true });
+  writeFileSync(join(root, "ext", "src", "data.ts"), "export const x = 1;\n");
+  store.json.put("decisions", DEC({ id: "dec_old", topic: "ui", status: "superseded", superseded_by: "dec_new", related_files: ["ext/src/data.ts"] }) as never);
+  store.json.put("decisions", DEC({ id: "dec_new", topic: "ui", title: "New UI", related_files: ["ext/"] }) as never);
+  assert.equal(
+    computeDrift(store, root).findings.filter((f) => f.kind === "anchor-stale").length,
+    0,
+    "a directory-scoped live decision covers files under it",
+  );
+});
+
+test("drift anchor-stale: a directory entry does NOT govern a sibling path that merely shares its prefix", (t) => {
+  const { store, root, cleanup } = tempStore();
+  t.after(cleanup);
+  mkdirSync(join(root, "ext-tools"), { recursive: true });
+  writeFileSync(join(root, "ext-tools", "data.ts"), "export const x = 1;\n");
+  store.json.put("decisions", DEC({ id: "dec_old", topic: "ui", status: "superseded", superseded_by: "dec_new", related_files: ["ext-tools/data.ts"] }) as never);
+  store.json.put("decisions", DEC({ id: "dec_new", topic: "ui", title: "New UI", related_files: ["ext/"] }) as never);
+  assert.equal(
+    computeDrift(store, root).findings.filter((f) => f.kind === "anchor-stale").length,
+    1,
+    "'ext/' must not swallow 'ext-tools/...' — the trailing slash is what makes the prefix safe",
+  );
+});
+
 test("drift anchor-stale: un-anchored (topic null) superseded decision is not flagged (no semantic firing)", (t) => {
   const { store, root, cleanup } = tempStore();
   t.after(cleanup);

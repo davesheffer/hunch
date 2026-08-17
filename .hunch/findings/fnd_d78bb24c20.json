@@ -1,18 +1,15 @@
 {
   "id": "fnd_d78bb24c20",
   "title": "Windows host: sync/team test cluster fails on a stock setup",
-  "observation": "12 tests across 7 files fail on a stock Windows host (PowerShell, Git-for-Windows, core.symlinks=false) while Linux CI is green: two-way sync retry paths, read-side slow-remote timeout/lock release, force-staged shared publication, the real post-commit hook publish, team route contract (60s timeouts), private attach info-attributes rejection, revert-move safety, static-baseline replacement refs, and the production dependency audit. Test-environment classes (mktemp, symlink EPERM, locale, separator literals) were fixed separately the same day — this residue looks like real win32 behavior differences in git transport/hook execution, not test-env noise.",
+  "observation": "STILL OPEN, but the 2026-08-11 claim that it reproduces in the working repo did NOT hold on 2026-08-12. A full `npm test` (--test-concurrency=2, the exact config the reopen note said reproduces it) ran green on this Windows host: 1080 tests, 1073 pass, 0 fail, 7 skipped, exit 0, ~19.5 min. So either the cluster is flaky rather than deterministic, or something between 2026-08-11 and 2026-08-12 changed it.\n\nA plausible mechanism now exists for at least part of it: this host carried an UNCOMMITTED local core.autocrlf=false while the system value is true, and .gitattributes had no text directive — so the working repo and a fresh clone did not see the same bytes. 3cb75af makes LF canonical (`* text=auto eol=lf` + renormalize of 13 CRLF-committed files), which removes that divergence. That is a HYPOTHESIS, not a measurement: the clean-clone case has NOT been re-run since 3cb75af, and doing so is the next step. Do not file this resolved on the working-repo run alone — this finding was already wrongly filed resolved once on exactly that kind of evidence.",
   "evidence": [
-    "npm test 2026-08-04 run 1: 936 tests, 109 fail (env classes included)",
-    "npm test 2026-08-04 run 2 (after portability fixes e621292): 936 tests, 915 pass, 14 fail, 6 skip",
-    "3 of the 14 fixed same day (5608020: locale precondition, readlink separators, git-dematerialized symlink); the remaining cluster is this finding",
-    "timeout signatures 60s (team-route-contract), 33s (post-commit hook), ~10s (sync retries) point at git transport/hook exec divergence on win32",
-    "resolved 2026-08-04 by 67bd4d7 (product: core.autocrlf pin) + 5a9c033 (deps re-review) + ed71361 (sh-fixture paths, NUL device, WAL fixture, cleanup retry)",
-    "re-verified per file: revert-move 1/1, sync 17/17, private-setup-clone-safety 3/3, team-route-contract 25/25 across runs, static-graph-baseline green, production-dependency-audit 3/3, team-final-closure 10/10"
+    "2026-08-12 npm test (--test-concurrency=2) on the working repo: 'tests 1080 / pass 1073 / fail 0 / skipped 7', exit 0",
+    "git ls-files --eol | grep -c i/crlf: 12 before 3cb75af, 0 after",
+    "git config: system core.autocrlf=true, local core.autocrlf=false (uncommitted), .gitattributes had no text directive before 3cb75af"
   ],
   "method": null,
   "severity": "medium",
-  "triage": "resolved",
+  "triage": "open",
   "affected_files": [
     "test/sync.test.ts",
     "test/team-route-contract.test.ts",
@@ -20,19 +17,22 @@
     "test/private-setup-clone-safety.test.ts",
     "test/revert-move-safety.test.ts",
     "test/static-graph-baseline.test.ts",
-    "test/production-dependency-audit.test.ts"
+    "test/production-dependency-audit.test.ts",
+    ".gitattributes"
   ],
   "affected_symbols": [],
   "violates_constraint": null,
   "spawned_decision": null,
   "observed_at": "2026-08-04T07:26:53.804Z",
-  "resolved_commit": "ed71361",
+  "resolved_commit": null,
   "provenance": {
     "source": "human_confirmed",
     "confidence": 0.95,
     "evidence": [
-      "npm test runs 2026-08-04, this host"
+      "2026-08-12 npm test (--test-concurrency=2) on the working repo: 'tests 1080 / pass 1073 / fail 0 / skipped 7', exit 0",
+      "git ls-files --eol | grep -c i/crlf: 12 before 3cb75af, 0 after",
+      "git config: system core.autocrlf=true, local core.autocrlf=false (uncommitted), .gitattributes had no text directive before 3cb75af"
     ],
-    "last_verified": "2026-08-04T08:11:49.556Z"
+    "last_verified": "2026-08-12T07:25:18.292Z"
   }
 }

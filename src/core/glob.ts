@@ -58,3 +58,11 @@ export function pathMatchesGlob(path: string, glob: string): boolean {
   if (!/[*?]/.test(g) && p.startsWith(g.endsWith("/") ? g : g + "/")) return true;
   return false;
 }
+
+/** Do two concrete repo paths identify the same path at different prefix depth?
+ * Segment-anchored: `x/scenario.ts` relates to `scenario.ts`, never `io.ts`. */
+export function pathsRelated(left: string, right: string): boolean {
+  const a = norm(left);
+  const b = norm(right);
+  return a === b || a.endsWith(`/${b}`) || b.endsWith(`/${a}`);
+}

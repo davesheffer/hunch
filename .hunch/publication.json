@@ -1,0 +1,16 @@
+{
+  "_comment": "Opt-in publication vocabulary for THIS repo. The hunch package ships no term list — a list tuned to one project's prose fires on another project's ordinary engineering writing. Patterns are JS regex source, matched case-insensitively against PROSE fields only (never ids, paths or evidence). Advisory: a match prints a warning naming the matched text, it never blocks a capture. Patterns that would themselves be sensitive to publish (anything naming specific companies or products) belong in the gitignored .hunch/publication.local.json, which is merged on top of this file.",
+  "vocabulary": [
+    "\\bmoats?\\b",
+    "\\bdefensib(?:le|ility)\\b",
+    "\\bgo[- ]to[- ]market\\b|\\bGTM\\b",
+    "\\b(?:our|the|hunch'?s) turf\\b|\\boff[- ]turf\\b|\\bon[- ]turf\\b",
+    "\\b(?:hunch|we|the product) sells\\b|\\bvalue prop(?:osition)?\\b",
+    "\\bno traction\\b|\\btraction problem\\b",
+    "\\bthreat ranking\\b|\\bcompetitive (?:advantage|threat|position\\w*|dynamics)\\b",
+    "\\bpricing (?:strategy|tier|model)\\b|\\bmonetiz(?:e|ation|ing)\\b|\\bprice point\\b",
+    "\\bfundrais\\w+|\\binvestors?\\b|\\bpitch deck\\b|\\bcap table\\b|\\bterm sheet\\b",
+    "\\bTAM\\b|\\bmarket (?:siz\\w+|timing|window|opportunity|share)\\b",
+    "\\bbeachhead\\b|\\bland grab\\b|\\bwedge (?:into|strategy)\\b"
+  ]
+}

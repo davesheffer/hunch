@@ -116,25 +116,46 @@ function writeJson(file: string, obj: unknown): string {
   return file;
 }
 
+/** Quote one argv token only when it needs quoting. These commands are run by
+ * whatever shell the host assistant uses, which on Windows is PowerShell — and
+ * PowerShell parses a QUOTED first token as a string expression, not a command,
+ * so the old quote-everything form died before the hook ever ran:
+ *
+ *   "npx" "-y" "--package=…" "hunch" "hook" "--provider" "vscode"
+ *   → Unexpected token '"-y"' in expression or statement.
+ *
+ * A token of safe characters is a command/word in PowerShell, cmd AND POSIX sh,
+ * so quote-only-when-needed is the one shape all three accept. Backslash is not
+ * safe bare (sh eats it as an escape), so Windows paths still get quoted — those
+ * appear only in per-machine source-checkout installs, never in the published
+ * npx invocation that `hunch init` writes into tracked config. */
+function shellToken(part: string): string {
+  return /^[A-Za-z0-9_@:=+.,/-]+$/.test(part) ? part : JSON.stringify(part);
+}
+
 /** Provider hook commands live in tracked config files, so use the structured
  * invocation (the same portable npx package reference as MCP) rather than a
- * machine-local CLI path. JSON quoting is accepted by POSIX shells and keeps
- * paths with spaces intact for source/dev installs. */
+ * machine-local CLI path. */
 function hookCommand(inv: Invocation, provider: HookProvider): string {
-  return [...[inv.command], ...inv.args, "hook", "--provider", provider].map((part) => JSON.stringify(part)).join(" ");
+  return [inv.command, ...inv.args, "hook", "--provider", provider].map(shellToken).join(" ");
 }
 
 function isHunchProviderHook(entry: unknown): boolean {
   const e = entry && typeof entry === "object" ? entry as Record<string, unknown> : null;
   const command = typeof e?.command === "string" ? e.command : "";
-  // Anchored to the exact shape hookCommand() writes — JSON-quoted parts ending
-  // in "hook" "--provider" "<name>" — plus a Hunch launcher (the pinned npm
-  // package spec, or a quoted …/index.js|ts path for source installs). The old
-  // unanchored /index\.(js|ts)/ + /\bhook\b/ pair classified FOREIGN entries
-  // like `node ./hook/index.js` as ours and silently deleted them, violating
-  // the leave-every-foreign-hook-in-place contract (con_8460b6770f, issue #41).
-  return /(?:@davesheffer\/hunch|[\\/]index\.(?:js|ts)")/.test(command)
-    && /\s"hook"(?:\s+"--provider"\s+"[a-z]+")?\s*$/.test(command);
+  // Anchored to the shapes hookCommand() writes — a Hunch launcher (the pinned
+  // npm package spec, or a …/index.js|ts path for source installs) plus a tail
+  // of `hook --provider <name>`, tokens quoted or bare. The old unanchored
+  // /index\.(js|ts)/ + /\bhook\b/ pair classified FOREIGN entries like
+  // `node ./hook/index.js` as ours and silently deleted them, violating the
+  // leave-every-foreign-hook-in-place contract (con_8460b6770f, issue #41), so
+  // the bare tail must still carry --provider to match; only the LEGACY
+  // fully-quoted form (written before this quoting fix, and by hunch versions
+  // that predate --provider) may omit it, and its quotes keep it unambiguous.
+  const launcher = /@davesheffer\/hunch|[\\/]index\.(?:js|ts)(?=["\s]|$)/.test(command);
+  const legacyTail = /\s"hook"(?:\s+"--provider"\s+"[a-z]+")?\s*$/.test(command);
+  const tail = /\s"?hook"?\s+"?--provider"?\s+"?[a-z]+"?\s*$/.test(command);
+  return launcher && (legacyTail || tail);
 }
 
 /** Merge our command entries into a standard `{ hooks: { Event: [] } }` file.

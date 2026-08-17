@@ -19,7 +19,7 @@ import { RESET_SQL, embedHash } from "./schema.js";
 import { selectEmbedder, type Embedder } from "./embedder.js";
 import { JsonStore } from "./jsonStore.js";
 import { gitCommonDir, gitWorktreeRoot, sameGitPublication } from "../extractors/git.js";
-import { pathMatchesGlob } from "../core/glob.js";
+import { pathMatchesGlob, pathsRelated } from "../core/glob.js";
 import { currentForTopic, isInForce } from "../core/topics.js";
 import { edgeId } from "../core/ids.js";
 import { isStrictBlocker, isVetoBlocker, type VetoTier } from "../core/strictgate.js";
@@ -866,16 +866,16 @@ export class HunchStore {
     const components = this.recs("components");
     const asOf = opts.asOf;
 
-    // pathRelated, not bare endsWith: "scenario.ts".endsWith("io.ts") is true,
+    // pathsRelated, not bare endsWith: "scenario.ts".endsWith("io.ts") is true,
     // so an unanchored suffix pulled unrelated files' records into why()/the
     // pre-edit grounding block (issue #32). Segment-anchored matching only.
-    const matchedSymbols = symbols.filter((s) => s.file === target || s.name === target || s.id === target || pathRelated(s.file, target));
+    const matchedSymbols = symbols.filter((s) => s.file === target || s.name === target || s.id === target || pathsRelated(s.file, target));
     const symIds = new Set(matchedSymbols.map((s) => s.id));
     const fileSet = new Set(matchedSymbols.map((s) => s.file));
     const isPath = target.includes("/") || target.includes(".");
 
     const fileMatch = (files: string[]) =>
-      files.some((f) => f === target || (isPath && pathRelated(f, target)) || fileSet.has(f));
+      files.some((f) => f === target || (isPath && pathsRelated(f, target)) || fileSet.has(f));
 
     return {
       target,
@@ -1126,7 +1126,7 @@ export class HunchStore {
     return this.recs("findings")
       .filter(live)
       .filter((f) =>
-        f.affected_files.some((af) => pathMatchesGlob(t, af) || pathMatchesGlob(af, t) || pathRelated(toPosixTarget(af), t))
+        f.affected_files.some((af) => pathMatchesGlob(t, af) || pathMatchesGlob(af, t) || pathsRelated(toPosixTarget(af), t))
         || f.affected_symbols.some((s) => s === scope))
       .sort((a, b) => (SEV_FINDING[b.severity] ?? 0) - (SEV_FINDING[a.severity] ?? 0) || a.id.localeCompare(b.id));
   }
@@ -1361,7 +1361,7 @@ export class HunchStore {
     const addedDeps = new Set(added.deps);
     if (!addedSyms.size && !addedDeps.size) return [];
     const fileRelevant = (related: string[]) =>
-      related.some((f) => files.some((x) => pathRelated(x, f)));
+      related.some((f) => files.some((x) => pathsRelated(x, f)));
     const decisions = this.recs("decisions");
     // decisions tied to an active blocking constraint via source_decision
     const blockingDec = new Set(
@@ -1472,7 +1472,7 @@ export class HunchStore {
     for (const d of this.recs("decisions")) {
       if (!isInForce(d)) continue;
       if (!d.retired.symbols.length && !d.retired.deps.length) continue;
-      if (!d.related_files.some((f) => pathRelated(f, file))) continue;
+      if (!d.related_files.some((f) => pathsRelated(f, file))) continue;
       out.push({ decision: d.id, title: d.title, symbols: d.retired.symbols, deps: d.retired.deps });
     }
     return out;
@@ -1673,10 +1673,6 @@ const SEV_FINDING: Record<string, number> = { critical: 4, high: 3, medium: 2, l
 /** Do two repo paths refer to the same file? Exact match, or one is a trailing
  *  path-SEGMENT suffix of the other (e.g. "x.ts" vs "src/x.ts") — anchored at a
  *  "/" boundary so "re.ts" never matches "store.ts" (the bare-endsWith hazard). */
-function pathRelated(a: string, b: string): boolean {
-  return a === b || a.endsWith("/" + b) || b.endsWith("/" + a);
-}
-
 function inWindow(valid_from: string | undefined, valid_to: string | null | undefined, asOf: string | undefined): boolean {
   if (!asOf) return true;
   if (valid_from && valid_from > asOf) return false;

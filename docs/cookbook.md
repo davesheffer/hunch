@@ -161,7 +161,7 @@ remote, and the URL committed into the code repository must not contain credenti
 On one maintainer machine:
 
 ```bash
-npm i -g @davesheffer/hunch@1.9.4
+npm i -g @davesheffer/hunch@1.13.1
 hunch shared --repo git@github.com:acme/project-hunch-memory.git
 git add .gitignore .hunch/team.json
 git commit -m "chore: connect shared Hunch memory"
@@ -173,7 +173,7 @@ into the dedicated store. Review the reported untrack/ignore changes and follow 
 Hunch prints. On every teammate machine:
 
 ```bash
-npm i -g @davesheffer/hunch@1.9.4
+npm i -g @davesheffer/hunch@1.13.1
 git pull
 hunch init
 hunch doctor
@@ -189,14 +189,13 @@ For a coordinated pause or rollback that preserves every memory record:
 ```bash
 hunch firmness off
 hunch shared --repo git@github.com:acme/project-hunch-memory.git --no-auto-commit
-npm i -g @davesheffer/hunch@1.8.5
+npm i -g @davesheffer/hunch@1.12.1
 ```
 
 Revert the `.hunch/team.json` setup commit only if new clones must stop discovering the Matrix. Do
 not delete the memory repo or local overlay; after upgrading again, `hunch shared --sync` publishes
-pending local memory. Version 1.8.5 rejects v1.9's source-gated correction-policy IR instead of
-silently bypassing it, so pause enforcement first and upgrade every client to v1.9 before resuming
-Matrix policy workflows.
+pending local memory. Pause enforcement first and keep every client on the same release before
+resuming Matrix policy workflows.
 
 ## 11. Private overlay (public repo, private memory)
 
@@ -271,10 +270,10 @@ Matrix memory home as the CLI; it never writes Hunch JSON directly.
 For a release audit, start with the exact tags and public registry metadata:
 
 ```bash
-npm view @davesheffer/hunch@1.9.4 version dist.integrity dist.attestations --json
-git tag --list v1.9.4 vscode-v0.17.3
+npm view @davesheffer/hunch@1.13.1 version dist.integrity dist.attestations --json
+git tag --list v1.13.1 vscode-v0.17.3
 ```
 
-**Observe:** npm reports `1.9.4`, an integrity digest, and provenance metadata. Open VSX reports
+**Observe:** npm reports `1.13.1`, an integrity digest, and provenance metadata. Open VSX reports
 `0.17.3`. The GitHub Actions run for each tag shows a credential-free validation job followed by
 publication and public byte verification of the same content-addressed artifact.

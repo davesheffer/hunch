@@ -1,0 +1,34 @@
+{
+  "id": "dec_05833ce8d6",
+  "title": "Provider hook commands quote only tokens that need it (PowerShell command position)",
+  "topic": "provider-hook-command-quoting",
+  "status": "accepted",
+  "context": "",
+  "decision": "",
+  "consequences": [],
+  "alternatives_rejected": [
+    "Prefix the command with PowerShell's & call operator: invalid in POSIX sh and cmd, and hookCommand also feeds Cursor/Windsurf/Antigravity configs that other shells run.",
+    "Branch on process.platform at scaffold time: these hook configs are git-tracked and shared across a team, so a Windows-only shape would break Linux/macOS clones.",
+    "Leave it and document the workaround: the published npx invocation is what every installed user gets, so the DEFAULT path was broken for VS Code on Windows."
+  ],
+  "rejected_tripwires": [],
+  "related_components": [],
+  "related_files": [],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-08-12T06:15:03.547Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "premises": [],
+  "provenance": {
+    "source": "agent_recorded",
+    "confidence": 0.75,
+    "evidence": []
+  },
+  "date": "2026-08-12T06:15:03.547Z"
+}

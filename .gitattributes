@@ -1,2 +1,7 @@
 .hunch/**/*.json merge=hunch
 .hunch/manifest.json merge=text
+
+# Line endings are canonical LF in the index and the worktree. Without this a
+# fresh Windows clone inherits system core.autocrlf=true, checks out CRLF, and
+# fails a cluster of byte-identity tests that Linux CI never sees (fnd_5a7a683920).
+* text=auto eol=lf

@@ -32,6 +32,16 @@ docs/superpowers/
 .codex/config.toml
 .claude/settings.json
 
+# Codex lifecycle hooks — HAND-MAINTAINED, NOT scaffolded. `hunch init` wires Codex to
+# writeCodexConfig only (the MCP entry above); there is no Codex hooks writer, and "codex"
+# is not one of HOOK_PROVIDERS (src/core/agenthook.ts), so `hunch hook --provider codex`
+# would emit nothing. Nothing regenerates this file — a fresh clone simply has no Codex
+# hooks. That is the honest state: Codex has a hooks subsystem (a live hooks/list RPC),
+# but a Codex hook has never been OBSERVED spawning. Ignored because the local copy
+# hardcodes an absolute node + install path. If execution is ever proven, add
+# writeCodexHooks() + a "codex" dialect and move this line into the block above.
+.codex/hooks.json
+
 # npm auth: references ${NPM_TOKEN} env var, but never commit in case a real token is pasted.
 .npmrc
 
@@ -42,6 +52,9 @@ docs/superpowers/
 # the repo demos its own graph. Everything else in .hunch/ stays local-only.
 .hunch/*
 !.hunch/manifest.json
+# Opt-in publication vocabulary — repo-scoped policy, useless if it cannot travel
+# with the repo (the package deliberately ships no term list of its own).
+!.hunch/publication.json
 !.hunch/decisions/
 !.hunch/constraints/
 !.hunch/components/

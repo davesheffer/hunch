@@ -30,6 +30,12 @@ export interface LanguageSpec {
    *  must NOT create call edges to unrelated repo symbols that happen to share the
    *  name (DESIGN: keep the graph clean). */
   builtinMethods: Set<string>;
+  /** Ancestor shapes in which an ERROR node is a known limitation of THIS grammar
+   *  rather than a real syntax error. parse.ts forgives an error only when some
+   *  ancestor has type `node` AND that ancestor's own parent has type `parentIs` —
+   *  the pair is what keeps the tolerance narrow. Omit for a language with no known
+   *  grammar false positives; that spec then stays strictly fail-closed. */
+  toleratedErrorScopes?: ReadonlyArray<{ readonly node: string; readonly parentIs: string }>;
 }
 
 const TS_QUERY = `
@@ -82,6 +88,16 @@ const TS_SHARED = {
     "iface.name": "iface.def", "type.name": "type.def", "arrow.name": "arrow.def",
   },
   builtinMethods: TS_BUILTIN_METHODS,
+  // ES2018 relaxed template literals: an INVALID escape (`\x` with no hex, `\u`
+  // short, `\u{` unterminated) is legal inside a TAGGED template — the cooked
+  // value is undefined and the raw text survives, which is the entire point of
+  // String.raw`C:\Users\x`. tree-sitter-javascript never implemented that
+  // relaxation and is identical through 0.25.0, so it emits an ERROR node inside
+  // the template_string. In an UNTAGGED template the same escape IS a syntax
+  // error, and the grammar models the two differently — a tagged template's
+  // template_string hangs off a call_expression, an untagged one off whatever
+  // consumes the value — so requiring that pair keeps genuine errors failing.
+  toleratedErrorScopes: [{ node: "template_string", parentIs: "call_expression" }],
 } as const;
 
 const TYPESCRIPT: LanguageSpec = {

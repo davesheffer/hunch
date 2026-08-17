@@ -225,8 +225,16 @@ export async function syncCommit(
     },
     date: meta.date, // the commit date
   };
-  // Route to the record's ONE home: the overlay when asked (--private) or in unified
-  // ("shared") mode; else the public store. Same contract as every other capture path.
+  // Route to the resolved home: the overlay when asked (--private / opts.home) or in
+  // unified ("shared") mode; else the public store.
+  //
+  // DELIBERATELY home-scoped, NOT putCapture. Synthesis keeps the public and private
+  // spines separate: a public failure must never reach through and rewrite a same-id
+  // private record, which putCapture's cross-home collision guard would either throw on
+  // or (via putWhereItLives) silently redirect. test/private-capture.test.ts pins that
+  // behaviour — "public post-promotion rewrite cannot overwrite the private collision".
+  // An earlier comment here claimed the "same contract as every other capture path",
+  // which read as an accidental bypass and invited exactly that wrong fix.
   if (home === "private") store.putPrivate("decisions", decision);
   else store.json.put("decisions", decision);
   return { status: "written", decision, provider: provider.name };

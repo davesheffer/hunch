@@ -15,7 +15,7 @@
     "One catch-all observation entity with a kind discriminator (finding|measurement|fact|incident): kind:'misc' becomes a dumping ground; separate schemas can follow the proven Finding shape later; revisit if Measurement/Fact land and share >80% of the schema",
     "A dedicated SQLite findings table: dec_d32af7b821 established new kinds ride the unified FTS+graph index; a table adds schema churn for no query need",
     "Valid-time supersession lifecycle (like decisions): an observation is not an answer that gets replaced — it gets triaged; supersession semantics would force fake topics",
-    "Blocking enforcement for critical findings: a finding is evidence, not a rule; enforcement belongs to constraints (link via violates_constraint), keeping the model-out-of-the-block-path moat"
+    "Blocking enforcement for critical findings: a finding is evidence, not a rule; enforcement belongs to constraints (link via violates_constraint), keeping the model-out-of-the-block-path guarantee"
   ],
   "rejected_tripwires": [],
   "related_components": [
@@ -46,7 +46,7 @@
     "deps": []
   },
   "provenance": {
-    "source": "human_confirmed",
+    "source": "human_confirmed+agent_redacted",
     "confidence": 0.95,
     "evidence": [
       "src/core/types.ts",
@@ -58,7 +58,8 @@
       "src/cli/index.ts",
       "src/integrations/scaffold.ts",
       "src/integrations/claudemd.ts",
-      "test/findings.test.ts"
+      "test/findings.test.ts",
+      "prose redacted by agent 2026-08-11 (publication scan): positioning wording removed; decision substance, alternatives and lineage unchanged"
     ]
   },
   "date": "2026-08-04T05:42:44.770Z"

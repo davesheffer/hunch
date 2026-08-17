@@ -1,5 +1,46 @@
 # Changelog
 
+## 1.13.1 — 2026-08-15
+
+### MCP delivery receipts arrive as structured data
+
+`hunch_context` now advertises an MCP output schema and returns the canonical delivery envelope in
+`structuredContent` while preserving the existing text response for older clients. Orchestrators
+can consume exact delivered and omitted record IDs, rank, delivery reason, provenance/currentness,
+token cost, budget use and blocking overflow without parsing prose.
+
+Every record actually returned by MCP is also appended to the same machine-local served ledger used
+by agent hooks. Budget-omitted or stale records are never receipted, and receipt persistence remains
+best-effort so telemetry failure cannot block context delivery.
+
+## 1.13.0 — 2026-08-13
+
+### Truthful, provenance-checked delivery envelopes
+
+CLI, MCP, and edit-hook context now share a deterministic ranked headline envelope. It checks
+record anchors and decision-commit reachability, withholds definitively stale records, packs to the
+requested context budget, and returns the exact delivered IDs used by the machine-local receipt
+ledger. Active blocking constraints are never silently discarded when a requested budget is too
+small; the envelope reports that exceptional overflow explicitly.
+
+Edit-hook decision, documentation, and retired-code grounding now competes inside that same hard
+budget instead of overflowing after packing. Delivery receipts add rank, delivery reason,
+provenance/currentness status, and estimated token cost, with an additive migration for existing
+machine-local ledgers and the fields available from `hunch served --json`.
+
+## 1.12.2 — 2026-08-12
+
+### Grounding that reliably reaches Windows agents
+
+Generated hook commands now execute correctly under PowerShell, cmd, and sh, and rerunning
+`hunch init` replaces the broken form instead of installing a duplicate. Architectural Conformance
+also tolerates the exact tagged-template escape shape that TypeScript accepts but the underlying
+grammar rejects, without weakening fail-closed handling for real syntax errors.
+
+The release gate now includes public-only memory drift, so it verifies the same graph and grounding
+a fresh contributor clone receives. See the [complete release history](https://hunch-pi.vercel.app/changelog)
+for v1.12.1 delivery receipts and v1.12.0 delegation/compaction coverage.
+
 ## 1.9.0 — 2026-07-22
 
 ### One living engineering memory for the whole team
