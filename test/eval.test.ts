@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { tempStore, prov } from "./helpers.js";
-import { evaluateRetrieval, evaluateGraphLift, loadGoldenSet } from "../src/eval/harness.js";
+import { evaluateRetrieval, evaluateGraphLift, evaluateTraversalLift, loadGoldenSet } from "../src/eval/harness.js";
 
 const SYM = (id: string, name: string, file: string) => ({
   id, file, name, kind: "function", signature_hash: "sha1:test",
@@ -41,6 +41,24 @@ test("eval harness: evaluateGraphLift reports a positive delta on a neighbor-onl
   const lift = await evaluateGraphLift(store, [{ query: "alphazoomwidget", expected: ["sym_beta"] }], { k: 10 });
   assert.ok(lift.recallDelta > 0, "graph lift is positive");
   assert.equal(lift.on.n, 1);
+});
+
+test("eval harness: bounded traversal reports lift over the 1-hop baseline", async (t) => {
+  const { store, cleanup } = graphStore();
+  t.after(cleanup);
+  store.json.put("symbols", SYM("sym_gamma", "gammaneedleworker", "src/c.ts") as never);
+  store.json.put("edges", EDGE("sym_beta", "sym_gamma") as never);
+  store.reindex();
+
+  const lift = await evaluateTraversalLift(
+    store,
+    [{ query: "alphazoomwidget", expected: ["sym_gamma"] }],
+    { k: 10 },
+  );
+  assert.equal(lift.oneHop.recallAtK, 0, "the historical baseline misses the 2-hop answer");
+  assert.equal(lift.bounded.recallAtK, 1, "the bounded traversal retrieves the answer");
+  assert.equal(lift.recallDelta, 1);
+  assert.ok(lift.mrrDelta > 0);
 });
 
 test("eval harness: a self-retrieval case scores recall 1 regardless of the graph", async (t) => {

@@ -69,5 +69,12 @@
       "dec_7cce5bcd8a"
     ],
     "note": "hookcache decision"
+  },
+  {
+    "query": "evaluateGraphLift",
+    "expected": [
+      "sym_2a33513ef4"
+    ],
+    "note": "hybridSearch is structurally relevant at two hops through evaluateRetrieval; the 1-hop baseline cannot reach it"
   }
 ]

@@ -35,6 +35,14 @@ export interface SearchHit {
   score: number;
 }
 
+export interface HybridSearchOpts {
+  embedder?: Embedder | null;
+  graphWeight?: number;
+  graphDepth?: number;
+  graphNodeCap?: number;
+  graphTokenCap?: number;
+}
+
 /** Git cannot resolve repository identity from a cwd that does not exist yet.
  * Probe the nearest real directory so a planned nested overlay cannot evade the
  * public-repository boundary merely by deferring mkdir until its first write. */
@@ -687,7 +695,7 @@ export class HunchStore {
    *  sync FTS (zero added latency) when there's no embedder or no vectors yet, so
    *  the lean install and fallback regressions are unaffected. Pass
    *  `embedder: null` to FORCE FTS-only without auto-selecting. */
-  async hybridSearch(query: string, limit = 12, opts: { embedder?: Embedder | null; graphWeight?: number } = {}): Promise<SearchHit[]> {
+  async hybridSearch(query: string, limit = 12, opts: HybridSearchOpts = {}): Promise<SearchHit[]> {
     // Explicit `embedder: null` forces pure FTS-only (no semantic, no graph) — the
     // documented escape hatch and the lean-fallback regression guard.
     if (opts.embedder === null) return this.search(query, limit);
@@ -709,7 +717,11 @@ export class HunchStore {
     // The graph stream is model-free, so it contributes even on a lean (no-embeddings)
     // install. With neither semantic nor graph signal, return pure FTS so the
     // zero-fusion-overhead fast path is preserved.
-    const graph = this.graphExpand([...fts, ...sem], 50, gw);
+    const graph = this.graphExpand([...fts, ...sem], {
+      maxDepth: boundedWhole(opts.graphDepth, GRAPH_MAX_DEPTH, GRAPH_DEPTH_HARD_MAX),
+      nodeCap: boundedWhole(opts.graphNodeCap, GRAPH_NODE_CAP, GRAPH_NODE_HARD_MAX),
+      tokenCap: boundedWhole(opts.graphTokenCap, GRAPH_TOKEN_CAP, GRAPH_TOKEN_HARD_MAX),
+    }, gw);
     if (!sem.length && !graph.length) return this.rerankByPriors(fts, limit, query);
     // Fuse with headroom so the prior rerank can promote from below the cut line.
     return this.rerankByPriors(this.rrfFuse(fts, sem, graph, Math.max(limit, 24), gw), limit, query);
@@ -812,44 +824,85 @@ export class HunchStore {
     return [...acc.values()].sort((a, b) => b.score - a.score).slice(0, limit).map((e) => ({ ...e.hit, score: e.score }));
   }
 
-  /** Graph retrieval stream (roadmap #1): 1-hop expansion over the dependency graph
-   *  from the lexical/semantic seed hits. For each seed SYMBOL, surface its direct
-   *  neighbors (callers/callees, importers/imported, container) — the cross-file
-   *  evidence a "why" question needs but that neither bm25 nor cosine reaches. Each
-   *  neighbor accrues GAMMA-decayed support per linking seed (one pulled in by several
-   *  top seeds ranks higher); seeds themselves are excluded, so this only ADDS context.
-   *  Deterministic, model-free (runs on a lean install too), one indexed query per seed. */
-  private graphExpand(seeds: SearchHit[], n: number, weight = RRF_W_GRAPH): SearchHit[] {
-    if (weight <= 0) return [];
-    const symSeeds = seeds.filter((h) => h.ref.startsWith("sym_"));
-    if (!symSeeds.length) return [];
-    const seen = new Set(seeds.map((h) => h.ref)); // never re-surface a seed
+  /** Bounded relevance traversal over the dependency graph. Lexical/semantic symbol
+   *  and component hits seed a small number of depth layers; support decays per hop
+   *  and adds across multiple useful paths. Each frontier and the returned context
+   *  obey a hard node cap, while hydration obeys a separate token cap. Only records
+   *  present in the search index can enter the frontier, so shared external-package
+   *  hubs never become context or bridge unrelated symbols. */
+  private graphExpand(
+    seeds: SearchHit[],
+    opts: { maxDepth: number; nodeCap: number; tokenCap: number },
+    weight = RRF_W_GRAPH,
+  ): SearchHit[] {
+    if (weight <= 0 || GRAPH_GAMMA <= 0 || opts.maxDepth <= 0 || opts.nodeCap <= 0 || opts.tokenCap <= 0) return [];
+    const seedRefs = new Set(seeds.map((h) => h.ref)); // never re-surface a seed
+    let frontier = new Map<string, number>();
+    seeds.forEach((hit, rank) => {
+      if (!isGraphContextRef(hit.ref)) return;
+      frontier.set(hit.ref, (frontier.get(hit.ref) ?? 0) + 1 / (RRF_K + rank + 1));
+    });
+    if (!frontier.size) return [];
+
     const nbStmt = this.db.prepare(
       /* sql */ `
-      SELECT e."to"   AS nb FROM edges e WHERE e."from" = ? AND e.type IN ('calls','depends_on','imports','contains')
+      SELECT e."to" AS nb
+        FROM edges e JOIN search s ON s.ref = e."to"
+       WHERE e."from" = ? AND e.type IN ('calls','depends_on','imports','contains')
+         AND s.kind IN ('symbols','components')
       UNION
-      SELECT e."from" AS nb FROM edges e WHERE e."to"   = ? AND e.type IN ('calls','depends_on','imports','contains')`,
+      SELECT e."from" AS nb
+        FROM edges e JOIN search s ON s.ref = e."from"
+       WHERE e."to" = ? AND e.type IN ('calls','depends_on','imports','contains')
+         AND s.kind IN ('symbols','components')
+       ORDER BY nb`,
     );
+    const expanded = new Set<string>();
     const score = new Map<string, number>();
-    symSeeds.forEach((h, i) => {
-      const contrib = GRAPH_GAMMA / (RRF_K + i + 1);
-      for (const r of nbStmt.all(h.ref, h.ref) as Array<{ nb: string }>) {
-        if (seen.has(r.nb)) continue;
-        score.set(r.nb, (score.get(r.nb) ?? 0) + contrib);
+
+    for (let depth = 1; depth <= opts.maxDepth && frontier.size; depth++) {
+      const layer = new Map<string, number>();
+      const rankedFrontier = [...frontier.entries()]
+        .sort((a, b) => b[1] - a[1] || compareRefs(a[0], b[0]))
+        .slice(0, opts.nodeCap);
+      for (const [ref, support] of rankedFrontier) {
+        if (expanded.has(ref)) continue;
+        expanded.add(ref);
+        const contribution = support * GRAPH_GAMMA;
+        for (const row of nbStmt.all(ref, ref) as Array<{ nb: string }>) {
+          if (seedRefs.has(row.nb) || expanded.has(row.nb)) continue;
+          layer.set(row.nb, (layer.get(row.nb) ?? 0) + contribution);
+        }
       }
-    });
+      const rankedLayer = [...layer.entries()]
+        .sort((a, b) => b[1] - a[1] || compareRefs(a[0], b[0]))
+        .slice(0, opts.nodeCap);
+      for (const [ref, support] of rankedLayer) score.set(ref, (score.get(ref) ?? 0) + support);
+      frontier = new Map(rankedLayer);
+    }
+
     if (!score.size) return [];
-    const top = [...score.entries()].sort((a, b) => b[1] - a[1]).slice(0, n);
+    const top = [...score.entries()]
+      .sort((a, b) => b[1] - a[1] || compareRefs(a[0], b[0]))
+      .slice(0, opts.nodeCap);
     // Hydrate title/snippet from the FTS table in ONE query (mirrors cosineRank).
     const placeholders = top.map(() => "?").join(",");
-    const meta = new Map<string, { title: string; body: string }>();
-    for (const row of this.db.prepare(`SELECT ref, title, body FROM search WHERE ref IN (${placeholders})`).all(...top.map(([ref]) => ref)) as Array<{ ref: string; title: string; body: string }>) {
-      meta.set(row.ref, { title: row.title, body: row.body });
+    const meta = new Map<string, { kind: string; title: string; body: string }>();
+    for (const row of this.db.prepare(`SELECT ref, kind, title, body FROM search WHERE ref IN (${placeholders})`).all(...top.map(([ref]) => ref)) as Array<{ ref: string; kind: string; title: string; body: string }>) {
+      meta.set(row.ref, { kind: row.kind, title: row.title, body: row.body });
     }
-    return top.map(([ref, s]) => {
+    const hits: SearchHit[] = [];
+    let usedTokens = 0;
+    for (const [ref, s] of top) {
       const m = meta.get(ref);
-      return { ref, kind: ref.startsWith("cmp_") ? "component" : "symbol", title: m?.title ?? ref, snippet: (m?.body ?? "").slice(0, 120), score: s };
-    });
+      if (!m) continue;
+      const hit = { ref, kind: m.kind, title: m.title, snippet: m.body.slice(0, 120), score: s };
+      const tokenCost = estimatedSearchHitTokens(hit);
+      if (usedTokens + tokenCost > opts.tokenCap) continue;
+      hits.push(hit);
+      usedTokens += tokenCost;
+    }
+    return hits;
   }
 
   /** All decisions/bugs/constraints/symbols/components touching a file path or
@@ -1695,7 +1748,13 @@ const RRF_K = numEnv("HUNCH_RRF_K", 60);
 const RRF_W_FTS = numEnv("HUNCH_RRF_W_FTS", 1);
 const RRF_W_SEM = numEnv("HUNCH_RRF_W_SEM", 0.7);
 const RRF_W_GRAPH = numEnv("HUNCH_RRF_W_GRAPH", 0.5);
-const GRAPH_GAMMA = numEnv("HUNCH_GRAPH_GAMMA", 0.25);
+const GRAPH_GAMMA = Math.min(1, numEnv("HUNCH_GRAPH_GAMMA", 0.25));
+const GRAPH_DEPTH_HARD_MAX = 8;
+const GRAPH_NODE_HARD_MAX = 500;
+const GRAPH_TOKEN_HARD_MAX = 100_000;
+const GRAPH_MAX_DEPTH = boundedWhole(numEnv("HUNCH_GRAPH_MAX_DEPTH", 2), 2, GRAPH_DEPTH_HARD_MAX);
+const GRAPH_NODE_CAP = boundedWhole(numEnv("HUNCH_GRAPH_NODE_CAP", 50), 50, GRAPH_NODE_HARD_MAX);
+const GRAPH_TOKEN_CAP = boundedWhole(numEnv("HUNCH_GRAPH_TOKEN_CAP", 2_000), 2_000, GRAPH_TOKEN_HARD_MAX);
 
 /** Prior tuning: how far a trust weight may move a hit from its FUSED position.
  *  SCALE maps the weight's realistic span onto positions (this repo's own decisions
@@ -1709,6 +1768,23 @@ function numEnv(name: string, dflt: number): number {
   // >= 0, not > 0: zero is the documented kill-switch (HUNCH_RRF_W_*=0 disables
   // a stream); rejecting it silently re-enabled the default weight (issue #33).
   return Number.isFinite(v) && v >= 0 ? v : dflt;
+}
+
+function boundedWhole(value: number | undefined, dflt: number, hardMax: number): number {
+  if (value === undefined || !Number.isFinite(value) || value < 0) return dflt;
+  return Math.min(Math.floor(value), hardMax);
+}
+
+function isGraphContextRef(ref: string): boolean {
+  return ref.startsWith("sym_") || ref.startsWith("cmp_");
+}
+
+function compareRefs(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+function estimatedSearchHitTokens(hit: Pick<SearchHit, "ref" | "kind" | "title" | "snippet">): number {
+  return Math.max(1, Math.ceil([...`${hit.kind} ${hit.ref}\n${hit.title}\n${hit.snippet}`].length / 4));
 }
 
 /** Pack a vector's exact bytes for SQLite. Explicit offset+length so a SUBARRAY

@@ -3,7 +3,9 @@
  * golden set of "why" questions by EXACT ref match — Recall@k + MRR — with no LLM in
  * the scoring path, so it runs as a stable, reproducible CI signal. The `graphWeight`
  * knob lets ONE store be scored graph-OFF (0) vs graph-ON to measure the dependency-
- * graph stream's lift — the measurement gate for the graph-RRF decision.
+ * graph stream's lift — the measurement gate for the graph-RRF decision. Traversal
+ * depth is also injectable so the shipped bounded traversal can be compared directly
+ * with its 1-hop baseline on the same cases.
  */
 import type { HunchStore, SearchHit } from "../store/hunchStore.js";
 import type { Embedder } from "../store/embedder.js";
@@ -35,6 +37,9 @@ export interface EvalOpts {
   k?: number;
   embedder?: Embedder | null; // omit -> deterministic FTS+graph (no semantic) for CI
   graphWeight?: number; // 0 disables the graph stream (A/B the lift)
+  graphDepth?: number; // 1 is the historical baseline; omit to score the shipped bound
+  graphNodeCap?: number;
+  graphTokenCap?: number;
   kind?: string; // restrict scoring to one record kind (e.g. "runbooks") — scoped retrieval
 }
 
@@ -48,7 +53,13 @@ export async function evaluateRetrieval(store: HunchStore, cases: EvalCase[], op
     // buries terse records before any filter.
     const hits = opts.kind
       ? await store.searchScoped(c.query, opts.kind, k, { embedder: opts.embedder })
-      : await store.hybridSearch(c.query, k, { embedder: opts.embedder, graphWeight: opts.graphWeight });
+      : await store.hybridSearch(c.query, k, {
+        embedder: opts.embedder,
+        graphWeight: opts.graphWeight,
+        graphDepth: opts.graphDepth,
+        graphNodeCap: opts.graphNodeCap,
+        graphTokenCap: opts.graphTokenCap,
+      });
     const top = hits.slice(0, k).map((h: SearchHit) => h.ref);
     const expected = new Set(c.expected);
     let found = 0;
@@ -88,6 +99,22 @@ export async function evaluateGraphLift(
   // value tunes it. Either way "on" is whatever ships, "off" is the baseline.
   const on = await evaluateRetrieval(store, cases, opts);
   return { off, on, recallDelta: on.recallAtK - off.recallAtK, mrrDelta: on.mrr - off.mrr };
+}
+
+/** Compare the historical 1-hop graph with the shipped bounded traversal. */
+export async function evaluateTraversalLift(
+  store: HunchStore,
+  cases: EvalCase[],
+  opts: EvalOpts = {},
+): Promise<{ oneHop: EvalMetrics; bounded: EvalMetrics; recallDelta: number; mrrDelta: number }> {
+  const oneHop = await evaluateRetrieval(store, cases, { ...opts, graphDepth: 1 });
+  const bounded = await evaluateRetrieval(store, cases, opts);
+  return {
+    oneHop,
+    bounded,
+    recallDelta: bounded.recallAtK - oneHop.recallAtK,
+    mrrDelta: bounded.mrr - oneHop.mrr,
+  };
 }
 
 /** Parse + validate a golden-set JSON string (array of {query, expected[]}). */

@@ -47,6 +47,75 @@ test("graph stream: a hop also walks BACKWARD (a caller of the seed surfaces)", 
   assert.ok(hits.includes("sym_caller"), "the seed's caller surfaced via a backward 1-hop");
 });
 
+test("graph stream: bounded traversal reaches a relevant 2-hop symbol that a 1-hop baseline misses", async (t) => {
+  const { store, cleanup } = tempStore();
+  t.after(cleanup);
+  store.json.put("symbols", SYM("sym_alpha", "alphazoomwidget", "src/a.ts") as never);
+  store.json.put("symbols", SYM("sym_beta", "betaquuxhandler", "src/b.ts") as never);
+  store.json.put("symbols", SYM("sym_gamma", "gammaneedleworker", "src/c.ts") as never);
+  store.json.put("edges", EDGE("sym_alpha", "sym_beta") as never);
+  store.json.put("edges", EDGE("sym_beta", "sym_gamma") as never);
+  store.reindex();
+
+  const oneHop = (await store.hybridSearch("alphazoomwidget", 12, { graphDepth: 1 })).map((h) => h.ref);
+  const bounded = (await store.hybridSearch("alphazoomwidget", 12)).map((h) => h.ref);
+  assert.ok(!oneHop.includes("sym_gamma"), "the 1-hop baseline cannot reach gamma");
+  assert.ok(bounded.includes("sym_gamma"), "the shipped bounded traversal reaches gamma at depth 2");
+});
+
+test("graph stream: depth decays support while multiple paths strengthen a 2-hop result", async (t) => {
+  const { store, cleanup } = tempStore();
+  t.after(cleanup);
+  for (const [id, name] of [
+    ["sym_seed", "pathrankseed"],
+    ["sym_direct_a", "directanode"],
+    ["sym_direct_b", "directbnode"],
+    ["sym_shared", "sharedtwopathnode"],
+    ["sym_single", "singlepathnode"],
+  ]) store.json.put("symbols", SYM(id, name, `src/${id}.ts`) as never);
+  store.json.put("edges", EDGE("sym_seed", "sym_direct_a") as never);
+  store.json.put("edges", EDGE("sym_seed", "sym_direct_b") as never);
+  store.json.put("edges", EDGE("sym_direct_a", "sym_shared") as never);
+  store.json.put("edges", EDGE("sym_direct_b", "sym_shared") as never);
+  store.json.put("edges", EDGE("sym_direct_a", "sym_single") as never);
+  store.reindex();
+
+  const refs = (await store.hybridSearch("pathrankseed", 12)).map((h) => h.ref);
+  assert.ok(refs.indexOf("sym_direct_a") < refs.indexOf("sym_shared"), "one hop outranks a deeper result");
+  assert.ok(refs.indexOf("sym_shared") < refs.indexOf("sym_single"), "two supporting paths outrank one at equal depth");
+});
+
+test("graph stream: node and token caps are hard limits on added context", async (t) => {
+  const { store, cleanup } = tempStore();
+  t.after(cleanup);
+  store.json.put("symbols", SYM("sym_seed", "uniqueseedtoken", "src/seed.ts") as never);
+  for (const id of ["a", "b", "c"]) {
+    store.json.put("symbols", SYM(`sym_${id}`, `neighbor${id}name`, `src/${id}.ts`) as never);
+    store.json.put("edges", EDGE("sym_seed", `sym_${id}`) as never);
+  }
+  store.reindex();
+
+  const nodeCapped = await store.hybridSearch("uniqueseedtoken", 12, { graphNodeCap: 1 });
+  assert.equal(nodeCapped.filter((h) => h.ref !== "sym_seed").length, 1, "only one graph node crosses the node cap");
+
+  const tokenCapped = await store.hybridSearch("uniqueseedtoken", 12, { graphTokenCap: 1 });
+  assert.deepEqual(tokenCapped.map((h) => h.ref), ["sym_seed"], "a graph hit larger than the token budget is excluded");
+});
+
+test("graph stream: external package hubs are never surfaced or traversed", async (t) => {
+  const { store, cleanup } = tempStore();
+  t.after(cleanup);
+  store.json.put("symbols", SYM("sym_alpha", "alphahubcaller", "src/a.ts") as never);
+  store.json.put("symbols", SYM("sym_unrelated", "unrelatedhubcaller", "src/u.ts") as never);
+  store.json.put("edges", EDGE("sym_alpha", "ext_shared") as never);
+  store.json.put("edges", EDGE("sym_unrelated", "ext_shared") as never);
+  store.reindex();
+
+  const hits = (await store.hybridSearch("alphahubcaller", 12)).map((h) => h.ref);
+  assert.ok(!hits.includes("ext_shared"), "an unindexed external package is not context");
+  assert.ok(!hits.includes("sym_unrelated"), "the traversal cannot fan out through a shared package hub");
+});
+
 test("graph stream: no edges ⇒ hybridSearch equals pure FTS (no spurious neighbors)", async (t) => {
   const { store, cleanup } = tempStore();
   t.after(cleanup);

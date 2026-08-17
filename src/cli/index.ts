@@ -85,7 +85,7 @@ import {
 import { draftDuplicateOf, isAcceptedDuplicateAnchor } from "../core/dupdetect.js";
 import { planAutoReview, planMutations, type AutoReviewPlan, type AutoReviewEntry } from "../core/autoreview.js";
 import type { RelevanceVerdict, ExistingDecisionRef } from "../synthesis/provider.js";
-import { loadGoldenSet, evaluateGraphLift } from "../eval/harness.js";
+import { loadGoldenSet, evaluateRetrieval, evaluateTraversalLift } from "../eval/harness.js";
 import { loadGuardCases, evalGuards, generateGuardCases } from "../eval/guards.js";
 import { computeDrift } from "../core/drift.js";
 import { renderCompilerScorecard, scoreCompilerCaseBank } from "../constitution/scorecard.js";
@@ -1354,16 +1354,20 @@ program
     // Default is deterministic (FTS + graph, no model). --semantic only adds the
     // semantic leg when embeddings actually exist; otherwise it's still FTS + graph.
     const embedder = opts.semantic ? await selectEmbedder() : undefined;
-    const lift = await evaluateGraphLift(store, cases, { k, embedder, kind: opts.kind });
+    const evalOpts = { k, embedder, kind: opts.kind };
+    const off = await evaluateRetrieval(store, cases, { ...evalOpts, graphWeight: 0 });
+    const traversal = await evaluateTraversalLift(store, cases, evalOpts);
     const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
     const dpt = (x: number) => `${x >= 0 ? "+" : ""}${(x * 100).toFixed(1)}pt`;
     const dnum = (x: number) => `${x >= 0 ? "+" : ""}${x.toFixed(3)}`;
     console.log(`Eval over ${cases.length} case(s), k=${k}${opts.semantic ? " (semantic + graph + FTS)" : " (FTS + graph)"}\n`);
     console.log(`                Recall@${k}    MRR      hit-rate`);
-    console.log(`  graph OFF     ${pct(lift.off.recallAtK).padStart(7)}    ${lift.off.mrr.toFixed(3)}    ${pct(lift.off.hitRate)}`);
-    console.log(`  graph ON      ${pct(lift.on.recallAtK).padStart(7)}    ${lift.on.mrr.toFixed(3)}    ${pct(lift.on.hitRate)}`);
-    console.log(`  graph LIFT    ${dpt(lift.recallDelta).padStart(7)}    ${dnum(lift.mrrDelta)}`);
-    const misses = lift.on.perCase.filter((c) => c.found === 0);
+    console.log(`  graph OFF     ${pct(off.recallAtK).padStart(7)}    ${off.mrr.toFixed(3)}    ${pct(off.hitRate)}`);
+    console.log(`  graph 1-HOP   ${pct(traversal.oneHop.recallAtK).padStart(7)}    ${traversal.oneHop.mrr.toFixed(3)}    ${pct(traversal.oneHop.hitRate)}`);
+    console.log(`  graph BOUNDED ${pct(traversal.bounded.recallAtK).padStart(7)}    ${traversal.bounded.mrr.toFixed(3)}    ${pct(traversal.bounded.hitRate)}`);
+    console.log(`  graph LIFT    ${dpt(traversal.bounded.recallAtK - off.recallAtK).padStart(7)}    ${dnum(traversal.bounded.mrr - off.mrr)}`);
+    console.log(`  depth LIFT    ${dpt(traversal.recallDelta).padStart(7)}    ${dnum(traversal.mrrDelta)}`);
+    const misses = traversal.bounded.perCase.filter((c) => c.found === 0);
     if (misses.length) {
       console.log(`\n  ${misses.length} case(s) with no expected hit — curate or tune:`);
       for (const m of misses.slice(0, 10)) console.log(`    · "${m.query}"`);
