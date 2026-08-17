@@ -27,6 +27,7 @@ import {
   releaseSourceStateError,
   releaseTestManifest,
   selectPreviousVersion,
+  statusDiffLines,
   validateReleaseContext,
   verifyReleaseReceipt,
 } from "../tooling/release-gate.mjs";
@@ -299,17 +300,36 @@ test("Phase 2O release gate is fail-closed, content-addressed, and publish-neutr
   let observedSource = { ...expectedSource };
   const guardedCalls: string[] = [];
   const guardedErrors: string[] = [];
+  let observedAtFailure: unknown;
   const guardedResults = executeGuardedReleasePlan(RELEASE_GATES, (gate) => {
     guardedCalls.push(gate.id);
     if (gate.id === "test") observedSource = { ...observedSource, commit: "b".repeat(40) };
     return { exitCode: 0 };
-  }, expectedSource, () => observedSource, (gate, error) => guardedErrors.push(`${gate.id}: ${error}`));
+  }, expectedSource, () => observedSource, (gate, error, observed) => {
+    guardedErrors.push(`${gate.id}: ${error}`);
+    observedAtFailure = observed;
+  });
   assert.deepEqual(guardedCalls, ["typecheck", "test"], "HEAD movement stops the plan at the responsible gate");
   assert.deepEqual(guardedResults.map((result) => result.status), ["passed", "failed"]);
   assert.match(guardedErrors[0] ?? "", /^test: HEAD moved/);
+  // A bare "HEAD moved"/"working tree changed" string names no path — the observed
+  // source state is threaded to the caller so it CAN report exactly what changed.
+  assert.deepEqual(observedAtFailure, observedSource, "onSourceError receives the observed source, not just the reason string");
   assert.match(releaseSourceStateError(expectedSource, observedSource) ?? "", /HEAD moved/);
   assert.match(releaseSourceStateError(expectedSource, { ...expectedSource, status: " M package.json" }) ?? "", /working tree changed/);
   assert.match(releaseSourceStateError(expectedSource, { ...expectedSource, tag_commit_matches: false }) ?? "", /release tag stopped/);
+
+  assert.deepEqual(
+    statusDiffLines("", " M package.json\n?? scratch.txt"),
+    { added: [" M package.json", "?? scratch.txt"], removed: [] },
+    "a clean expected state reports every dirty porcelain line as newly added",
+  );
+  assert.deepEqual(
+    statusDiffLines(" M package.json\n?? scratch.txt", "?? scratch.txt\n M src/index.ts"),
+    { added: [" M src/index.ts"], removed: [" M package.json"] },
+    "only the actual symmetric difference is reported, not the whole status blob",
+  );
+  assert.deepEqual(statusDiffLines("", ""), { added: [], removed: [] });
 });
 
 test("memory churn never reads as source mutation: paths, status filtering, and what stays fatal", () => {
