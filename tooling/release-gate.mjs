@@ -369,10 +369,18 @@ function run(command, args, options = {}) {
   return { exitCode: child.status ?? 1 };
 }
 
-function git(args) {
-  const child = spawnSync("git", args, { cwd: projectRoot, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+// trimEnd, NOT trim: `git status --porcelain` lines that are unstaged-only start
+// with a LEADING SPACE ("` M path`" — blank index column, "M" worktree column).
+// A blanket .trim() eats that leading space off whichever path sorts first in
+// the whole blob, shifting statusWithoutMemoryChurn's fixed slice(3) path
+// extraction by one column — ".hunch/evidence/x.json" reads as
+// "hunch/evidence/x.json", silently fails isMemoryChurnPath's `.hunch/` prefix
+// check, and a routine derived-memory write misreports as a real source
+// mutation (root cause of an intermittent repository-index CI flake).
+export function git(args, cwd = projectRoot) {
+  const child = spawnSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
   if (child.status !== 0) throw new Error(child.stderr.trim() || `git ${args.join(" ")} failed`);
-  return child.stdout.trim();
+  return child.stdout.trimEnd();
 }
 
 function tagPointsToCommit(tag, commit) {

@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 
 import {
@@ -22,6 +25,7 @@ import {
   executeGuardedReleasePlan,
   executeReleasePlan,
   gateEnvironment,
+  git,
   guardedReceiptWrite,
   npmDistTagForVersion,
   releaseSourceStateError,
@@ -356,6 +360,38 @@ test("memory churn never reads as source mutation: paths, status filtering, and 
     "a rename OUT of churn paths stays fatal",
   );
   assert.equal(statusWithoutMemoryChurn(""), "", "clean stays clean");
+});
+
+test("git() preserves the leading space of an unstaged-only porcelain line", () => {
+  // Root cause of the intermittent "the working tree changed" flake at the
+  // repository-index stage: `git status --porcelain` marks an unstaged-only
+  // change with a LEADING SPACE (" M path" — blank index column). A blanket
+  // .trim() on the whole stdout blob eats that leading space off whichever
+  // path sorts first, shifting statusWithoutMemoryChurn's fixed slice(3) path
+  // extraction by one column: ".hunch/evidence/x.json" reads as
+  // "hunch/evidence/x.json" and silently fails the `.hunch/` prefix check —
+  // a routine derived-memory write then misreports as real source mutation.
+  // ".hunch/evidence" sorts before any plain top-level file, so a repo whose
+  // ONLY dirt is an unstaged (not `git add`ed) evidence-record edit puts that
+  // exact failure mode at the very first line of the whole status blob.
+  const repo = mkdtempSync(join(tmpdir(), "hunch-release-gate-git-trim-"));
+  try {
+    execFileSync("git", ["init", "-q"], { cwd: repo });
+    execFileSync("git", ["config", "user.email", "test@example.com"], { cwd: repo });
+    execFileSync("git", ["config", "user.name", "Test"], { cwd: repo });
+    mkdirSync(join(repo, ".hunch", "evidence"), { recursive: true });
+    writeFileSync(join(repo, ".hunch", "evidence", "ev_test.json"), '{"a":1}\n');
+    execFileSync("git", ["add", "."], { cwd: repo });
+    execFileSync("git", ["commit", "-q", "-m", "init"], { cwd: repo });
+    // Unstaged-only edit — NOT `git add`ed — so its porcelain code is " M", not "M ".
+    writeFileSync(join(repo, ".hunch", "evidence", "ev_test.json"), '{"a":2}\n');
+
+    const status = git(RELEASE_CLEAN_STATUS_ARGS, repo);
+    assert.equal(status[0], " ", "the first porcelain line's leading index-column space must survive git()");
+    assert.equal(statusWithoutMemoryChurn(status), "", "an unstaged-only .hunch/ edit sorted first is still recognized as memory churn");
+  } finally {
+    rmSync(repo, { recursive: true, force: true });
+  }
 });
 
 test("guarded receipt write and gate environment isolation", () => {
