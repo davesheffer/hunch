@@ -828,8 +828,8 @@ export class HunchStore {
    *  and component hits seed a small number of depth layers; support decays per hop
    *  and adds across multiple useful paths. Each frontier and the returned context
    *  obey a hard node cap, while hydration obeys a separate token cap. Only records
-   *  present in the search index can enter the frontier, so shared external-package
-   *  hubs never become context or bridge unrelated symbols. */
+   *  present in the indexed symbol/component tables can enter the frontier, so
+   *  shared external-package hubs never become context or bridge unrelated symbols. */
   private graphExpand(
     seeds: SearchHit[],
     opts: { maxDepth: number; nodeCap: number; tokenCap: number },
@@ -847,14 +847,16 @@ export class HunchStore {
     const nbStmt = this.db.prepare(
       /* sql */ `
       SELECT e."to" AS nb
-        FROM edges e JOIN search s ON s.ref = e."to"
+        FROM edges e
        WHERE e."from" = ? AND e.type IN ('calls','depends_on','imports','contains')
-         AND s.kind IN ('symbols','components')
+         AND (EXISTS (SELECT 1 FROM symbols s WHERE s.id = e."to")
+           OR EXISTS (SELECT 1 FROM components c WHERE c.id = e."to"))
       UNION
       SELECT e."from" AS nb
-        FROM edges e JOIN search s ON s.ref = e."from"
+        FROM edges e
        WHERE e."to" = ? AND e.type IN ('calls','depends_on','imports','contains')
-         AND s.kind IN ('symbols','components')
+         AND (EXISTS (SELECT 1 FROM symbols s WHERE s.id = e."from")
+           OR EXISTS (SELECT 1 FROM components c WHERE c.id = e."from"))
        ORDER BY nb`,
     );
     const expanded = new Set<string>();
@@ -864,10 +866,13 @@ export class HunchStore {
       const layer = new Map<string, number>();
       const rankedFrontier = [...frontier.entries()]
         .sort((a, b) => b[1] - a[1] || compareRefs(a[0], b[0]))
-        .slice(0, opts.nodeCap);
+        .slice(0, opts.nodeCap)
+        .filter(([ref]) => !expanded.has(ref));
+      // Mark the whole frontier visited before walking it. Otherwise an edge
+      // between peers in this layer credits whichever peer sorts second as if
+      // it were deeper context, making scores depend on ref ordering.
+      for (const [ref] of rankedFrontier) expanded.add(ref);
       for (const [ref, support] of rankedFrontier) {
-        if (expanded.has(ref)) continue;
-        expanded.add(ref);
         const contribution = support * GRAPH_GAMMA;
         for (const row of nbStmt.all(ref, ref) as Array<{ nb: string }>) {
           if (seedRefs.has(row.nb) || expanded.has(row.nb)) continue;

@@ -85,6 +85,26 @@ test("graph stream: depth decays support while multiple paths strengthen a 2-hop
   assert.ok(refs.indexOf("sym_shared") < refs.indexOf("sym_single"), "two supporting paths outrank one at equal depth");
 });
 
+test("graph stream: same-layer neighbors do not give each other order-dependent deeper support", async (t) => {
+  const { store, cleanup } = tempStore();
+  t.after(cleanup);
+  for (const [id, name] of [
+    ["sym_seed", "layerorderseed"],
+    ["sym_alpha", "layeralphanode"],
+    ["sym_beta", "layerbetanode"],
+  ]) store.json.put("symbols", SYM(id, name, `src/${id}.ts`) as never);
+  store.json.put("edges", EDGE("sym_seed", "sym_alpha") as never);
+  store.json.put("edges", EDGE("sym_seed", "sym_beta") as never);
+  store.json.put("edges", EDGE("sym_alpha", "sym_beta") as never);
+  store.reindex();
+
+  const refs = (await store.hybridSearch("layerorderseed", 12)).map((h) => h.ref);
+  assert.ok(
+    refs.indexOf("sym_alpha") < refs.indexOf("sym_beta"),
+    "equal-support same-layer nodes retain the stable ref tie-break instead of crediting traversal order",
+  );
+});
+
 test("graph stream: node and token caps are hard limits on added context", async (t) => {
   const { store, cleanup } = tempStore();
   t.after(cleanup);
