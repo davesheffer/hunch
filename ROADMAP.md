@@ -1,5 +1,7 @@
 # Hunch roadmap
 
+Updated 2026-08-21.
+
 Hunch is building the validated delivery layer for engineering intent: record why the code is the
 way it is, deliver the right evidence at the moment an agent needs it, and deterministically check
 the resulting change. The graph is the source of truth; assistant rules, prompts, receipts, and
@@ -40,7 +42,9 @@ This boundary is intentionally vendor-neutral: the same Hunch knowledge must rem
 The next shared Hunch/ORC contract is the [Engineering Landscape Graph](docs/engineering-landscape.md).
 Hunch publishes durable, repository-evidenced landscape fragments; ORC's reciprocal
 [`ENGINEERING-LANDSCAPE.md`](https://github.com/davesheffer/orc/blob/main/docs/ENGINEERING-LANDSCAPE.md)
-owns authorized cross-repository traversal, live discovery and task-scoped assembly.
+owns authorized cross-repository traversal, live discovery and task-scoped assembly. Hunch Memory's
+reciprocal [transport contract](https://github.com/davesheffer/hunch-memory/blob/main/docs/ENGINEERING-LANDSCAPE-TRANSPORT.md)
+preserves the fragment and native receipt without owning ranking, traversal or ORC caching.
 
 ## Engineering Landscape Graph — planned
 
@@ -57,7 +61,9 @@ facts that govern them.
    derived evidence and human-vouched facts.
 3. **HLG-3 — bounded landscape delivery.** Return task-relevant resources, relationships and linked
    Hunch reasoning through the existing ranking, budget, currentness and native receipt envelope;
-   add an explicit CLI/MCP view only as a projection over that machinery.
+   add an explicit CLI/MCP view only as a projection over that machinery. Freeze the additive
+   envelope before Hunch Memory implements transport; the service must preserve IDs, source/graph
+   evidence, omissions and the native receipt byte-for-byte or by canonical hash.
 4. **HLG-4 — cross-repository references and drift intake.** Preserve stable external repository and
    contract references. Accept ORC-observed mismatches only as evidenced findings/proposals; live
    observation never silently rewrites declared architecture.
@@ -68,8 +74,10 @@ Hunch's graph or making Hunch a runtime/control plane.
 
 ### Immediate implementation handoff — HLG-1
 
-Start from `main@8481edc`. The architecture and Hunch/ORC ownership boundary are frozen; the next
-change is the smallest executable contract slice, not discovery or orchestration:
+Branch from current `main`. Commit `8481edc` is the last code baseline reviewed for this handoff,
+not a branch target; later documentation/ledger commits are part of current `main` and must not be
+dropped. The architecture and Hunch/ORC ownership boundary are frozen; the next change is the
+smallest executable contract slice, not discovery or orchestration:
 
 1. Add one extensible, versioned resource record in `src/core/types.ts` with stable kind-qualified
    identity, lifecycle, credential-free locator, provenance and currentness.
@@ -122,7 +130,7 @@ authority.
 ## Next — complete validated delivery
 
 1. Rank every delivered record by task relevance, recency, and trusted provenance.
-2. Enforce a hard context budget with a small headline tier and progressive disclosure.
+2. Enforce a hard context budget with a default 3–8 non-blocking headline target per role-specific delivery; pin mandatory blocking constraints outside that target, count duplicate IDs once, and require a recorded mandatory/ambiguity reason plus token accounting when more are delivered. Use progressive disclosure for deeper context.
 3. Validate citations and currentness at delivery time; stale evidence must be omitted or labeled.
 4. Extend receipts from “served” to usefulness signals: heeded, near miss, prevented, and unused.
 5. Add builder, reviewer, and architect delivery profiles. Profiles may change ranking and
