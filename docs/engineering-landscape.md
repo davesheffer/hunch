@@ -1,13 +1,17 @@
 # Engineering Landscape Graph
 
-Updated 2026-08-20. This document defines Hunch's durable side of the product-to-code landscape.
+Updated 2026-08-21. This document defines Hunch's durable side of the product-to-code landscape.
 The graph remains the authority for engineering semantics inside a repository; it does not make
 Hunch a runtime discovery service or cross-provider orchestrator.
 
 The reciprocal ORC contract is
-[`docs/ENGINEERING-LANDSCAPE.md`](https://github.com/davesheffer/orc/blob/main/docs/ENGINEERING-LANDSCAPE.md).
-That document owns live discovery, authorized cross-repository traversal, task-scoped assembly and
-execution evidence. The two documents describe one boundary from opposite sides.
+[`docs/ENGINEERING-LANDSCAPE.md`](https://github.com/davesheffer/orc/blob/main/docs/ENGINEERING-LANDSCAPE.md);
+the reciprocal service contract is
+[Hunch Memory landscape transport](https://github.com/davesheffer/hunch-memory/blob/main/docs/ENGINEERING-LANDSCAPE-TRANSPORT.md).
+ORC owns live discovery, authorized cross-repository traversal, task-scoped assembly and execution
+evidence. Hunch Memory preserves one authorized store's fragment and native receipt without
+reranking, following external references or owning ORC's cache. The three documents describe one
+boundary from their canonical owners.
 
 ## Product outcome
 
@@ -168,6 +172,11 @@ omitted-item evidence
 native delivery receipt identity
 ```
 
+The default bounded orientation target is 3–8 non-blocking landscape/decision headlines per
+role-specific delivery. Mandatory blocking constraints are pinned outside that target, duplicate
+IDs count once, and more items require a recorded mandatory/ambiguity reason plus explicit token
+accounting. The hard caller budget and honest overflow remain authoritative.
+
 A future `hunch landscape <target-or-task>` CLI/MCP surface may make the view explicit, but it must
 reuse the graph, ranking/currentness rules and receipt machinery. It must not become a second
 context envelope or ORC-specific API.
@@ -177,7 +186,7 @@ context envelope or ORC-specific API.
 ```text
 repository task
   -> Hunch returns the relevant durable landscape fragment
-  -> Hunch Memory transports the fragment and native receipt
+  -> Hunch Memory transports one authorized store's versioned fragment and native receipt
   -> ORC follows authorized repository/resource references
   -> ORC combines other Hunch fragments + Git + live runtime + optional providers
   -> ORC freezes a task-scoped landscape snapshot
