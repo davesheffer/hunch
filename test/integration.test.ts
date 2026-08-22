@@ -294,3 +294,51 @@ test("syncCommit drives synthesis through the openai-compat provider end-to-end 
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("syncCommit reports the ACTUAL (fallback) provider when the openai-compat call fails", async () => {
+  const root = gitRepo();
+  const store = new HunchStore(hunchPaths(root));
+  store.json.ensureDirs();
+  appendFileSync(join(root, "src/a.ts"), "export function b(){ return 2; }\n");
+  execFileSync("git", ["add", "-A"], { cwd: root, stdio: "ignore" });
+  execFileSync("git", ["commit", "-m", "feat: add b"], { cwd: root, stdio: "ignore" });
+
+  // Respond with a non-200 status so OpenAICompatProvider's run() throws before
+  // it ever gets to parse a body — this is what a real network/auth/CLI failure
+  // looks like from the caller's side.
+  const server = createServer((req, res) => {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      res.statusCode = 500;
+      res.setHeader("content-type", "application/json");
+      res.end(JSON.stringify({ error: "internal server error" }));
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
+  const { port } = server.address() as AddressInfo;
+
+  const savedProvider = process.env.HUNCH_SYNTH_PROVIDER;
+  process.env.HUNCH_SYNTH_PROVIDER = "openai-compat";
+  process.env.HUNCH_SYNTH_BASE_URL = `http://127.0.0.1:${port}`;
+  process.env.HUNCH_SYNTH_MODEL = "local-test-model";
+  __resetAvailabilityCacheForTests();
+  try {
+    const r = await syncCommit(store, root);
+    assert.equal(r.status, "written", `expected written, got skipped: ${r.reason}`);
+    assert.equal(
+      r.provider,
+      "deterministic",
+      "a failed openai-compat call must report the ACTUAL (fallback) provider, not the one that was merely selected — this is exactly what backfill's LLM-vs-heuristic tally keys off",
+    );
+    assert.equal(r.decision!.provenance.source, "inferred");
+  } finally {
+    process.env.HUNCH_SYNTH_PROVIDER = savedProvider ?? "deterministic";
+    delete process.env.HUNCH_SYNTH_BASE_URL;
+    delete process.env.HUNCH_SYNTH_MODEL;
+    __resetAvailabilityCacheForTests();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    store.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
