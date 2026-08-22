@@ -103,6 +103,24 @@ test("assemblePack: ownership by path prefix pulls symbols, decisions, scoped co
   assert.deepEqual(pack.bugs.map((b) => b.id), ["bug_trunc"]);
 });
 
+// deriveComponents() now emits the root '.' component's `paths` as an exact
+// file list (e.g. ["README.md"]) instead of the glob "./**" — see
+// src/extractors/indexer.ts. This test constructs that fixed shape directly
+// (it does not exercise indexer.ts at all) to confirm assemblePack's existing
+// globPrefix()/owns() machinery in src/wiki/wiki.ts already handles a
+// glob-char-free `paths` entry correctly, with no changes needed there: it
+// passes before and after the indexer.ts fix.
+test("assemblePack: an exact-file-list component path (no glob) owns that file", (t) => {
+  const { store, cleanup } = tempStore();
+  t.after(cleanup);
+  store.json.put("components", CMP({ id: "cmp_root", name: "Root", paths: ["README.md"] }) as never);
+  store.json.put("symbols", SYM({ id: "sym_readme", file: "README.md", name: "overview" }) as never);
+
+  const pack = assemblePack(store, CMP({ id: "cmp_root", name: "Root", paths: ["README.md"] }) as never);
+  assert.deepEqual(pack.files, ["README.md"]);
+  assert.deepEqual(pack.symbols.map((s) => s.name), ["overview"]);
+});
+
 test("assemblePack: superseded decisions are history, not page content", (t) => {
   const { store, cleanup } = tempStore();
   t.after(cleanup);

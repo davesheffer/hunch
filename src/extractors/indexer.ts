@@ -481,7 +481,17 @@ function deriveComponents(symbols: Symbol[]): ComponentDraft[] {
       kind: "module",
       name: capitalize(name),
       responsibility: "",
-      paths: [dir.endsWith("/") ? dir + "**" : dir + "/**"],
+      // Root-level files (dir === ".") have no directory to glob under: "./**"
+      // is read inconsistently by the two downstream matchers — pathMatchesGlob
+      // (src/core/glob.ts) strips a leading "./" before matching, so "./**"
+      // becomes "**" and matches every file in the repo, while wiki.ts's
+      // owns()/globPrefix() do NOT strip it, so "./**" matches nothing. An
+      // exact file list sidesteps both matchers disagreeing on the same glob.
+      // Trade-off: unlike directory components, the root component only
+      // covers root files present (and symbol-bearing) at the last index — a
+      // brand-new root file isn't owned until the next reindex. This is an
+      // accepted, minor asymmetry, not something this fix addresses.
+      paths: dir === "." ? [...fileSet].sort() : [dir.endsWith("/") ? dir + "**" : dir + "/**"],
       status: "active",
       owners: [],
       fragility: 0,
