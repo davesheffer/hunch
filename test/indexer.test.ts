@@ -45,6 +45,30 @@ test("indexRepo builds symbols, call edges, components, and cross-file blast rad
   rmSync(root, { recursive: true, force: true });
 });
 
+test("root-level files get an exact-file-list component path, not a '.'-rooted glob", () => {
+  const root = mkdtempSync(join(tmpdir(), "hunch-idx-"));
+  mkdirSync(join(root, "src"), { recursive: true });
+  writeFileSync(join(root, "config.ts"), `export function loadConfig(){ return true; }\n`);
+  writeFileSync(join(root, "src/foo.ts"), `export function foo(){ return true; }\n`);
+
+  const store = new HunchStore(hunchPaths(root));
+  store.json.ensureDirs();
+  indexRepo(store, root, { churn: false });
+
+  const comps = store.json.loadAll("components");
+  const rootComponent = comps.find((c) => c.name === ".")!;
+  assert.ok(rootComponent, "root '.' component derived");
+  assert.deepEqual(rootComponent.paths, ["config.ts"], "root component paths is the exact file list, not a glob");
+  assert.ok(!rootComponent.paths.some((p) => p.includes("*")), "root component paths contains no glob characters");
+
+  const srcComponent = comps.find((c) => c.name === "Src")!;
+  assert.ok(srcComponent, "src component derived");
+  assert.deepEqual(srcComponent.paths, ["src/**"], "non-root component paths is still a directory glob");
+
+  store.close();
+  rmSync(root, { recursive: true, force: true });
+});
+
 test("reindex preserves component enrichment and does not churn timestamps", () => {
   const root = fixtureRepo();
   const store = new HunchStore(hunchPaths(root));
