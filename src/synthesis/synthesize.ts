@@ -147,10 +147,16 @@ export async function syncCommit(
   // grounding. No-ops when no assistant CLI is available; never raises trust (dec_9a2f2fe72a).
   if (wantVerify) draft = await verifyDecisionSafe(await selectVerifier({ root }), input, draft);
 
+  // The draft's own drafter, not merely the one selected — draftDecisionSafe sets
+  // fellBackTo when the selected provider threw and it silently substituted the
+  // deterministic heuristic. Every telemetry/return below must report THIS, since
+  // backfill's LLM-vs-heuristic tally reads it directly off the return value.
+  const actualProvider = draft.fellBackTo ?? provider.name;
+
   // Advisory synthesis telemetry for `hunch review` — which provider ran, how many drafts
   // were reconciled, their agreement, and the verifier's grounding. Rides in `evidence`
   // (no schema change → respects forward-migration invariant con_947c578b2c).
-  const synthBits = [`provider=${provider.name}`];
+  const synthBits = [`provider=${actualProvider}`];
   if (draft.samples) synthBits.push(`samples=${draft.samples}`);
   if (draft.agreement != null) synthBits.push(`agreement=${draft.agreement}`);
   if (draft.grounded != null) synthBits.push(`grounded=${draft.grounded}`);
@@ -237,7 +243,7 @@ export async function syncCommit(
   // which read as an accidental bypass and invited exactly that wrong fix.
   if (home === "private") store.putPrivate("decisions", decision);
   else store.json.put("decisions", decision);
-  return { status: "written", decision, provider: provider.name };
+  return { status: "written", decision, provider: actualProvider };
 }
 
 export interface FailureResult {
@@ -285,6 +291,9 @@ export async function recordFailure(
     suspects: suspects.map((s) => `${s.name} @ ${s.file}`),
   };
   const draft = await draftBugSafe(provider, input);
+  // The draft's own drafter, not merely the one selected — see the identical
+  // comment in syncCommit above.
+  const actualProvider = draft.fellBackTo ?? provider.name;
 
   // Seed the id from the test id (stable), not the LLM title — one bug per test.
   const id = bugId(failure.test);
@@ -329,7 +338,7 @@ export async function recordFailure(
   }
   raiseFragility(store, affectedFiles, home);
 
-  return { status: "written", bug, constraint, provider: provider.name, touchedHomes: [home] };
+  return { status: "written", bug, constraint, provider: actualProvider, touchedHomes: [home] };
 }
 
 export interface CapturedFailure {
@@ -570,18 +579,25 @@ function recentDiffFor(root: string): string {
 export async function draftDecisionSafe(provider: SynthProvider, input: CommitInput): Promise<DecisionDraft> {
   try {
     return await provider.draftDecision(input);
-  } catch {
+  } catch (error) {
     // A provider failure (network, bad creds, CLI crash, unparseable output) must
     // never abort the learning loop — fall back to the deterministic heuristic
     // draft, which is honestly labeled ("inferred") rather than a hollow llm_draft.
-    return new DeterministicProvider().draftDecision(input);
+    // fellBackTo/fallbackReason tell the caller what ACTUALLY drafted this, not
+    // merely what was selected — see syncCommit, which must report this instead
+    // of the originally-selected provider's name.
+    const draft = await new DeterministicProvider().draftDecision(input);
+    return { ...draft, fellBackTo: "deterministic", fallbackReason: error instanceof Error ? error.message : String(error) };
   }
 }
 
 export async function draftBugSafe(provider: SynthProvider, input: FailureInput): Promise<BugDraft> {
   try {
     return await provider.draftBug(input);
-  } catch {
-    return new DeterministicProvider().draftBug(input);
+  } catch (error) {
+    // See draftDecisionSafe above — the same fallback contract applies to bugs,
+    // and recordFailure must report the actual (fallback) provider likewise.
+    const draft = await new DeterministicProvider().draftBug(input);
+    return { ...draft, fellBackTo: "deterministic", fallbackReason: error instanceof Error ? error.message : String(error) };
   }
 }
