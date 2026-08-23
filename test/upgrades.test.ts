@@ -74,7 +74,7 @@ test("analyzeDiff ignores .py files just like other code files pre-registry (san
   assert.deepEqual(a.addedSymbols, [], "non-code extension is still ignored");
 });
 
-test("analyzeDiff detects a changed (both-sides) symbol as 'changed', and ignores non-code files", () => {
+test("analyzeDiff detects a changed (both-sides) symbol as 'changed', and tracks the accompanying markdown edit as substantive churn (not a declaration)", () => {
   const diff = [
     "diff --git a/README.md b/README.md",
     "--- a/README.md",
@@ -91,7 +91,12 @@ test("analyzeDiff detects a changed (both-sides) symbol as 'changed', and ignore
   const a = analyzeDiff(diff);
   assert.deepEqual(a.changedSymbols.map((s) => s.name), ["f"]);
   assert.equal(a.addedSymbols.length, 0);
-  assert.equal(a.filesAdded.length, 0); // README.md not counted
+  assert.equal(a.filesAdded.length, 0); // both files are MODIFIES, not adds — no "new file mode"
+  // README.md is a modify, not an add, so it was never going to land in filesAdded
+  // regardless of isCode/isSubstantive — but its churn IS now tracked (issue #12):
+  // filesModified and addedLines include it, while it contributes no declaration.
+  assert.deepEqual(a.filesModified.sort(), ["README.md", "src/x.ts"]);
+  assert.equal(a.addedLines, 2, "one added line each for README.md and src/x.ts");
 });
 
 test("content lines starting with ++/-- are NOT mistaken for file headers (regression: header collision)", () => {

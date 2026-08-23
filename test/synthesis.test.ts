@@ -73,12 +73,19 @@ test("isTrivialSubject: chore(deps) subjects are recognized as SKIP_SUBJECT (reg
   assert.equal(isTrivialSubject({ subject: "wip", body: "" }), true);
 });
 
+
 test("deterministic provider is always available and drafts a low-confidence decision", async () => {
   const p = await selectProvider();
   assert.equal(p.name, "deterministic");
   const d = await p.draftDecision({ subject: "feat: add X", body: "", files: ["src/x.ts"], diff: "" });
   assert.ok(d.title.length > 0);
   assert.ok(d.confidence <= 0.4, "auto-captured = advisory/low-confidence");
+});
+
+test("deterministic provider's empty-subject title fallback doesn't claim \"Code\" for a markdown-only commit (issue #12)", async () => {
+  const p = await selectProvider();
+  const d = await p.draftDecision({ subject: "", body: "", files: ["docs/adr/0001-x.md"], diff: "" });
+  assert.doesNotMatch(d.title, /\bcode\b/i, `must not claim "code": ${d.title}`);
 });
 
 test("recordFailure ranks suspects, writes a bug, and promotes a constraint on recurrence", async () => {

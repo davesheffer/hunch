@@ -513,7 +513,7 @@ program
     if (written) pumpMemoryHome(store, root, home, `hunch: backfill ${written} decision(s)`);
     // Honest tally of where the tokens went: trivial commits are seeded by the
     // free deterministic heuristic, only substantive ones spend the LLM.
-    console.log(`Done: ${written} decision(s) seeded (${llm} via LLM, ${heuristic} heuristic), ${skipped} skipped (trivial/non-code/already-captured).`);
+    console.log(`Done: ${written} decision(s) seeded (${llm} via LLM, ${heuristic} heuristic), ${skipped} skipped (trivial/not substantive/already-captured).`);
     store.close();
   });
 

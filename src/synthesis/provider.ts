@@ -31,6 +31,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { writeFileAtomic } from "../core/io.js";
 import { summarizeDiff, type DiffAnalysis } from "../extractors/diff.js";
+import { languageFor } from "../extractors/languages.js";
 import type { Decision } from "../core/types.js";
 
 const IS_WIN = process.platform === "win32";
@@ -798,6 +799,9 @@ export class DeterministicProvider implements SynthProvider {
     const dirs = topDirs(input.files);
     const a = input.analysis;
     const summary = a ? summarizeDiff(a) : "";
+    // input.files can be markdown-only (issue #12) — don't claim "code" for a
+    // commit that touched none.
+    const noun = input.files.some((f) => languageFor(f) !== null) ? "code" : "content";
     const verb = /^(add|introduce|create|feat)/i.test(input.subject) ? "introduced"
       : /^(remove|delete|drop)/i.test(input.subject) ? "removed"
       : /^(refactor|rework|restructure)/i.test(input.subject) ? "refactored"
@@ -813,12 +817,12 @@ export class DeterministicProvider implements SynthProvider {
     const informative = !!(a && (a.addedSymbols.length || a.removedSymbols.length || a.changedSymbols.length || a.addedDeps.length || a.removedDeps.length));
 
     return {
-      title: input.subject || "Code change",
+      title: input.subject || `${cap(noun)} change`,
       context: [input.body, summary && `What changed: ${summary}.`].filter(Boolean).join(" ").slice(0, 500)
         || `Touched ${input.files.length} file(s) across ${dirs.join(", ") || "the repo"}.`,
       decision: summary
         ? `${cap(verb)} ${dirs.join(", ") || "the repo"}: ${summary}.`
-        : `${cap(verb)} code in ${dirs.join(", ") || "the repo"} (${input.files.length} file(s)).`,
+        : `${cap(verb)} ${noun} in ${dirs.join(", ") || "the repo"} (${input.files.length} file(s)).`,
       consequences,
       alternatives_rejected: [],
       // advisory either way, but real extraction earns a touch more confidence
