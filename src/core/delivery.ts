@@ -47,14 +47,25 @@ export interface DeliveredSupplement {
   id: string;
   kind: string;
   delivered: boolean;
-  reason: "supplemental" | "budget" | "empty";
+  reason: "supplemental" | "budget" | "empty" | "abstained";
   rank: number;
   token_cost: number;
 }
 
 export interface DeliveryOmission extends DeliveryRef {
-  reason: "budget" | "stale-provenance" | "retired";
+  reason: "budget" | "stale-provenance" | "retired" | DeliveryAbstentionReason;
   detail: string;
+}
+
+export type DeliveryAbstentionReason = "low-confidence" | "insufficient-context" | "low-relevance";
+
+export interface DeliveryAbstention {
+  /** True when Hunch found prescriptive memory but deliberately withheld it. */
+  active: boolean;
+  withheld: number;
+  reasons: Record<DeliveryAbstentionReason, number>;
+  /** A concrete recovery path instead of a silent empty result. */
+  retry_hint: string | null;
 }
 
 export interface DeliveryEnvelope {
@@ -67,6 +78,7 @@ export interface DeliveryEnvelope {
   /** True only when the requested budget is mathematically too small to name
    * every active blocking invariant. Safety wins, and the overflow is explicit. */
   blocking_overflow: boolean;
+  abstention: DeliveryAbstention;
 }
 
 export interface DeliveryOptions {
@@ -93,9 +105,19 @@ interface Candidate {
   provenance: ProvenanceState;
   staleDetail?: string;
   retiredDetail?: string;
+  abstainReason?: DeliveryAbstentionReason;
+  abstainDetail?: string;
 }
 
 const SEVERITY = { advisory: 1, warning: 2, blocking: 3, low: 1, medium: 2, high: 3, critical: 4 } as const;
+const MIN_ADVISORY_CONFIDENCE = 0.5;
+const MIN_UNCONDITIONED_CONFIDENCE = 0.7;
+const TASK_STOP_WORDS = new Set([
+  "a", "an", "and", "are", "as", "at", "be", "been", "but", "by", "can", "does", "for", "from",
+  "has", "have", "in", "into", "is", "it", "its", "of", "on", "or", "that", "the", "this", "to",
+  "use", "uses", "using", "was", "when", "where", "which", "while", "with", "without",
+  "bug", "fix", "issue", "problem",
+]);
 
 function clipHeadline(value: string, max: number): string {
   const flat = value.replace(/\s+/g, " ").trim();
@@ -109,6 +131,108 @@ function sourceTier(source: string | undefined): string {
   if (parts.includes("agent_recorded")) return "agent";
   if (parts.includes("llm_draft")) return "model";
   return source || "unknown";
+}
+
+function stemToken(token: string): string {
+  if (!/^[a-z0-9]+$/.test(token)) return token;
+  if (token.endsWith("ies") && token.length > 5) return `${token.slice(0, -3)}y`;
+  for (const suffix of ["ing", "ed", "es", "s"]) {
+    if (token.endsWith(suffix) && token.length - suffix.length >= 4) return token.slice(0, -suffix.length);
+  }
+  return token;
+}
+
+function lexicalTokens(value: string): Set<string> {
+  const expanded = value.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/[_-]+/g, " ").toLowerCase();
+  const words = expanded.match(/[\p{L}\p{N}]+/gu) ?? [];
+  return new Set(words.map(stemToken).filter((token) => token.length >= 3 && !TASK_STOP_WORDS.has(token)));
+}
+
+function codeSyntaxTokens(value: string): Set<string> {
+  const out = new Set<string>();
+  for (const fragment of value.split(/\s+/)) {
+    // Code-shaped spans identify the API/file nouns without treating every symbol
+    // name anywhere in a large repository as a noun. The latter erased ordinary
+    // evidence words such as "empty" and "throws" in real task phrases.
+    if (!/[.$()[\]`/\\_:<>]/.test(fragment)) continue;
+    for (const token of lexicalTokens(fragment)) out.add(token);
+  }
+  return out;
+}
+
+interface QueryProfile {
+  taskPhrase: boolean;
+  evidenceTerms: Set<string>;
+  allTerms: Set<string>;
+}
+
+/** Separate task evidence (symptoms/expected behavior) from code nouns. A file,
+ * symbol, or API noun proves scope, not that a prescriptive decision answers the
+ * current problem. Low-authority memory must match the evidence terms too. */
+function queryProfile(target: string, options: DeliveryOptions): QueryProfile {
+  const normalized = toPosixTarget(target.trim());
+  const exactSymbol = (options.symbols ?? []).some((symbol) =>
+    symbol.id === normalized || symbol.name === normalized || symbol.file === normalized || pathsRelated(symbol.file, normalized)
+  );
+  const exactComponent = (options.components ?? []).some((component) => component.id === normalized);
+  const hasWhitespace = /\s/.test(normalized);
+  const pathLike = !hasWhitespace && (normalized.includes("/") || /\.[a-z0-9]{1,8}$/i.test(normalized));
+  const taskPhrase = !exactSymbol && !exactComponent && !pathLike && hasWhitespace;
+  const allTerms = lexicalTokens(normalized);
+  if (!taskPhrase) return { taskPhrase, evidenceTerms: new Set(), allTerms };
+
+  const codeTerms = codeSyntaxTokens(normalized);
+  const evidenceTerms = new Set([...allTerms].filter((token) => !codeTerms.has(token)));
+  return { taskPhrase, evidenceTerms, allTerms };
+}
+
+function decisionAbstention(
+  decision: Decision,
+  query: QueryProfile,
+): { reason: DeliveryAbstentionReason; detail: string } | null {
+  const source = decision.provenance.source ?? "";
+  if (source.split("+").includes("human_confirmed")) return null;
+  const confidence = decision.provenance.confidence ?? 0;
+  if (confidence < MIN_ADVISORY_CONFIDENCE) {
+    return {
+      reason: "low-confidence",
+      detail: `non-human decision confidence ${confidence.toFixed(2)} is below the ${MIN_ADVISORY_CONFIDENCE.toFixed(2)} delivery floor`,
+    };
+  }
+  if (confidence >= MIN_UNCONDITIONED_CONFIDENCE) return null;
+  if (!query.taskPhrase || !query.evidenceTerms.size) {
+    return {
+      reason: "insufficient-context",
+      detail: "low-authority prescriptive memory needs a task phrase with symptoms or expected behavior, not only a file/symbol/API target",
+    };
+  }
+
+  const recordTerms = lexicalTokens([
+    decision.title,
+    decision.context,
+    decision.decision,
+    ...decision.consequences,
+    ...decision.alternatives_rejected,
+  ].join(" "));
+  const evidenceOverlap = [...query.evidenceTerms].filter((term) => recordTerms.has(term)).length;
+  const allOverlap = [...query.allTerms].filter((term) => recordTerms.has(term)).length;
+  const requiredEvidence = query.evidenceTerms.size >= 5 ? 2 : 1;
+  if (evidenceOverlap < requiredEvidence || allOverlap / Math.max(1, query.allTerms.size) < 0.2) {
+    return {
+      reason: "low-relevance",
+      detail: `weak task-evidence match (${evidenceOverlap}/${query.evidenceTerms.size} symptom terms; ${allOverlap}/${query.allTerms.size} total terms) for confidence ${confidence.toFixed(2)}`,
+    };
+  }
+  return null;
+}
+
+function emptyAbstention(): DeliveryAbstention {
+  return {
+    active: false,
+    withheld: 0,
+    reasons: { "low-confidence": 0, "insufficient-context": 0, "low-relevance": 0 },
+    retry_hint: null,
+  };
 }
 
 function isSafeDeliveryAnchor(value: string): boolean {
@@ -232,6 +356,7 @@ export function buildDeliveryEnvelope(ctx: AssembledContext, options: DeliveryOp
     ?? (options.root ? localCommitReachability(options.root) : (() => "unknown" as const));
   const canValidateAnchors = options.root !== undefined || options.symbols !== undefined || options.components !== undefined;
   const candidates: Candidate[] = [];
+  const query = queryProfile(ctx.target, options);
 
   for (const constraint of ctx.constraints) {
     const retired = !options.historical && (constraint.status === "retired" || constraint.valid_to != null);
@@ -268,6 +393,7 @@ export function buildDeliveryEnvelope(ctx: AssembledContext, options: DeliveryOp
       true,
       canValidateAnchors,
     );
+    const abstention = decisionAbstention(decision, query);
     candidates.push({
       ref: { kind: "decisions", record_id: decision.id },
       mandatory: false,
@@ -275,6 +401,8 @@ export function buildDeliveryEnvelope(ctx: AssembledContext, options: DeliveryOp
       provenance: validation.state,
       staleDetail: validation.detail,
       retiredDetail: retired ? `decision is ${decision.status} at HEAD` : undefined,
+      abstainReason: abstention?.reason,
+      abstainDetail: abstention?.detail,
       line: `${decision.id} | decision/${decision.status} | ${clipHeadline(`${decision.title}: ${decision.decision}`, 220)} | scope ${clipHeadline(decision.related_files.join(", ") || decision.related_components.join(", ") || "unanchored", 100)} | ${sourceTier(decision.provenance.source)}/${validation.state} | hunch_why("${decision.id}")`,
     });
   }
@@ -335,7 +463,7 @@ export function buildDeliveryEnvelope(ctx: AssembledContext, options: DeliveryOp
   if (!hasAnything) {
     const empty = `# Hunch context for "${ctx.target}"\n\n(No recorded constraints/decisions/bugs for this target yet — Hunch is still learning it.)\n`;
     const text = fitText(empty, cap);
-    return { text, delivered: [], supplements: [], omitted: [], budget_tokens: budget, used_chars: charCount(text), blocking_overflow: false };
+    return { text, delivered: [], supplements: [], omitted: [], budget_tokens: budget, used_chars: charCount(text), blocking_overflow: false, abstention: emptyAbstention() };
   }
 
   const omitted: DeliveryOmission[] = [];
@@ -349,6 +477,10 @@ export function buildDeliveryEnvelope(ctx: AssembledContext, options: DeliveryOp
       omitted.push({ ...candidate.ref, reason: "stale-provenance", detail: candidate.staleDetail ?? "provenance is stale" });
       continue;
     }
+    if (candidate.abstainReason && !candidate.mandatory && candidate.ref) {
+      omitted.push({ ...candidate.ref, reason: candidate.abstainReason, detail: candidate.abstainDetail ?? "delivery confidence gate abstained" });
+      continue;
+    }
     eligible.push(candidate);
   }
   eligible.sort((left, right) => Number(right.mandatory) - Number(left.mandatory) || right.score - left.score || (left.ref?.record_id ?? left.line).localeCompare(right.ref?.record_id ?? right.line));
@@ -360,6 +492,9 @@ export function buildDeliveryEnvelope(ctx: AssembledContext, options: DeliveryOp
     "",
     "## 🧠 Ranked memory (Invariants · Decisions · Bugs · Known findings)",
   ];
+  if (candidates.some((candidate) => candidate.abstainReason)) {
+    lines.push("Evidence rule: explicit task, repro, and test evidence outranks advisory memory; weak unverified matches are withheld.");
+  }
   let text = `${lines.join("\n")}\n`;
   const delivered: DeliveredItem[] = [];
   const supplements: DeliveredSupplement[] = [];
@@ -401,7 +536,10 @@ export function buildDeliveryEnvelope(ctx: AssembledContext, options: DeliveryOp
     }
     const next = `- supplemental/${supplement.kind} | ${content}\n`;
     const tokenCost = estimatedTokens(next);
-    if (charCount(text) + charCount(next) <= cap) {
+    const abstainedMemory = omitted.some((item) => item.reason === "low-confidence" || item.reason === "insufficient-context" || item.reason === "low-relevance");
+    if (abstainedMemory && delivered.length === 0 && supplement.kind.startsWith("search-")) {
+      supplements.push({ id: supplement.id, kind: supplement.kind, delivered: false, reason: "abstained", rank: index + 1, token_cost: tokenCost });
+    } else if (charCount(text) + charCount(next) <= cap) {
       text += next;
       supplements.push({ id: supplement.id, kind: supplement.kind, delivered: true, reason: "supplemental", rank: index + 1, token_cost: tokenCost });
     } else {
@@ -416,9 +554,21 @@ export function buildDeliveryEnvelope(ctx: AssembledContext, options: DeliveryOp
 
   const staleCount = omitted.filter((item) => item.reason === "stale-provenance" || item.reason === "retired").length;
   const budgetCount = omitted.filter((item) => item.reason === "budget").length;
+  const abstention = emptyAbstention();
+  for (const item of omitted) {
+    if (item.reason === "low-confidence" || item.reason === "insufficient-context" || item.reason === "low-relevance") {
+      abstention.active = true;
+      abstention.withheld++;
+      abstention.reasons[item.reason]++;
+    }
+  }
+  if (abstention.active) {
+    abstention.retry_hint = "Retry hunch_context with the concrete symptom, expected behavior, failing API, and repro evidence; do not let advisory memory override the task or tests.";
+  }
   const notes = [
     staleCount ? `${staleCount} stale/retired record(s) withheld; run hunch drift or hunch_why(id) to inspect.` : "",
     budgetCount ? `${budgetCount} lower-ranked record(s) omitted by budget; use hunch_why(id) to drill down.` : "",
+    abstention.active ? `${abstention.withheld} weak prescriptive record(s) withheld by confidence/relevance abstention. ${abstention.retry_hint}` : "",
   ].filter(Boolean);
   if (notes.length) {
     const footer = `… ${notes.join(" ")}\n`;
@@ -435,5 +585,6 @@ export function buildDeliveryEnvelope(ctx: AssembledContext, options: DeliveryOp
     budget_tokens: budget,
     used_chars: charCount(text),
     blocking_overflow: blockingOverflow,
+    abstention,
   };
 }
