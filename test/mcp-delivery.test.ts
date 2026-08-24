@@ -70,10 +70,12 @@ test("hunch_context exposes the delivery envelope and records exactly what MCP s
       provenance_status: string;
       token_cost: number;
     }>;
+    hypotheses: unknown[];
     omitted: unknown[];
     budget_tokens: number;
     used_chars: number;
     blocking_overflow: boolean;
+    abstention: { active: boolean; withheld: number; retry_hint: string | null };
   };
   const text = (result.content as Array<{ type: string; text?: string }>).map((item) => item.text ?? "").join("\n");
 
@@ -87,10 +89,17 @@ test("hunch_context exposes the delivery envelope and records exactly what MCP s
     token_cost: structured.delivered[0]?.token_cost,
   }]);
   assert.ok((structured.delivered[0]?.token_cost ?? 0) > 0);
+  assert.deepEqual(structured.hypotheses, []);
   assert.deepEqual(structured.omitted, []);
   assert.equal(structured.budget_tokens, 400);
   assert.equal(structured.used_chars, [...structured.text].length);
   assert.equal(structured.blocking_overflow, false);
+  assert.deepEqual(structured.abstention, {
+    active: false,
+    withheld: 0,
+    reasons: { "low-confidence": 0, "insufficient-context": 0, "low-relevance": 0 },
+    retry_hint: null,
+  });
 
   const receipts = servedSummary(root);
   assert.equal(receipts.total, 1);

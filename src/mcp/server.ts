@@ -164,23 +164,43 @@ const DELIVERY_OUTPUT_SCHEMA = z.object({
     provenance_status: z.enum(["current", "unverified", "stale"]),
     token_cost: z.number().int().nonnegative(),
   })),
+  hypotheses: z.array(z.object({
+    kind: z.literal("decision"),
+    record_id: z.string(),
+    rank: z.number().int().positive(),
+    why: z.string(),
+    where: z.array(z.string()),
+    historical_pattern: z.string(),
+    verify: z.string(),
+    disprove: z.string(),
+  })),
   supplements: z.array(z.object({
     id: z.string(),
     kind: z.string(),
     delivered: z.boolean(),
-    reason: z.enum(["supplemental", "budget", "empty"]),
+    reason: z.enum(["supplemental", "budget", "empty", "abstained"]),
     rank: z.number().int().positive(),
     token_cost: z.number().int().nonnegative(),
   })),
   omitted: z.array(z.object({
     kind: z.enum(["constraints", "decisions", "bugs", "findings"]),
     record_id: z.string(),
-    reason: z.enum(["budget", "stale-provenance", "retired"]),
+    reason: z.enum(["budget", "stale-provenance", "retired", "actionability-cap", "low-confidence", "insufficient-context", "low-relevance"]),
     detail: z.string(),
   })),
   budget_tokens: z.number().int().nonnegative(),
   used_chars: z.number().int().nonnegative(),
   blocking_overflow: z.boolean(),
+  abstention: z.object({
+    active: z.boolean(),
+    withheld: z.number().int().nonnegative(),
+    reasons: z.object({
+      "low-confidence": z.number().int().nonnegative(),
+      "insufficient-context": z.number().int().nonnegative(),
+      "low-relevance": z.number().int().nonnegative(),
+    }),
+    retry_hint: z.string().nullable(),
+  }),
 });
 
 /** Return the same human-readable brief older clients consume plus the exact
