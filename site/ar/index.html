@@ -4,10 +4,10 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Hunch — قاعدة شيفرتك تتذكّر السبب</title>
-<meta name="description" content="يمنح Hunch الذكاء الاصطناعي الذاكرة الهندسية وراء شيفرتك: القرارات والمفاضلات والأخطاء التي تعلّم منها فريقك بالفعل." />
-<meta property="og:title" content="Hunch — قاعدة شيفرتك تتذكّر السبب" />
-<meta property="og:description" content="امنح كل جلسة برمجة بالذكاء الاصطناعي قرارات فريقك ومفاضلاته ودروسه المتراكمة." />
+<title>Hunch — ذاكرة المشروع لمساعدي البرمجة بالذكاء الاصطناعي</title>
+<meta name="description" content="يشرح Hunch لمساعدي البرمجة لماذا بُنيت الشيفرة بهذه الطريقة، وما الأخطاء التي أُصلحت، وما القرارات التي لا ينبغي تكرارها." />
+<meta property="og:title" content="Hunch — ذاكرة المشروع لمساعدي البرمجة بالذكاء الاصطناعي" />
+<meta property="og:description" content="يستطيع الذكاء الاصطناعي قراءة الشيفرة. ويعطيه Hunch القرارات والإصلاحات والتحذيرات قبل أن يجري تغييرًا." />
 <meta property="og:image" content="https://hunch-pi.vercel.app/hunch-og.png" />
 <meta property="og:url" content="https://hunch-pi.vercel.app/ar" />
 <meta property="og:locale" content="ar" />
@@ -114,6 +114,7 @@
   h1 b{font-weight:500;color:var(--moss-ink)}
   .hero h1{margin:0}
   .hero p.lede{max-width:var(--measure);color:var(--ink-2);font-size:18px;margin:28px 0 0}
+  .hero p.hero-note{max-width:var(--measure);color:var(--mut);font-size:14px;margin:17px 0 0}
   .hero-cta{display:flex;gap:12px;margin-top:36px;flex-wrap:wrap;align-items:center}
   .release-section{padding:0 0 72px}
   .release-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:28px;box-shadow:0 22px 54px -44px rgba(20,31,25,.42)}
@@ -324,36 +325,16 @@
        rarely, the strict flavor blocks (ember). The cursor is an agent too:
        edges near it illuminate. Decorative: aria-hidden, pointer-events none. -->
   <div class="hero-art" aria-hidden="true"><canvas id="holdline"></canvas></div>
-  <span class="eyebrow rise">v1.19 · بحث تصحيحات مضبوط بحدود الأدلة</span>
-  <h1 class="rise d1">ما تقرر يبقى مقررًا.<br /><b>وما أُصلح يبقى مُصلحًا.</b></h1>
-  <p class="lede rise d2">يضمن Hunch ألا يعيد وكلاء البرمجة لديك اتخاذ قرارٍ حُسم من قبل، وألا يعيدوا خطأً تم إصلاحه — فكل جلسة تبدأ من القرارات والمفاضلات والدروس التي دفع فريقك ثمنها بالفعل.</p>
+  <span class="eyebrow rise">ذاكرة المشروع لمساعدي البرمجة بالذكاء الاصطناعي</span>
+  <h1 class="rise d1">يستطيع الذكاء الاصطناعي قراءة الشيفرة.<br /><b>ويشرح Hunch لماذا بُنيت بهذه الطريقة.</b></h1>
+  <p class="lede rise d2">يعطي Hunch كلًا من Claude وCursor وCodex وغيرهم قرارات فريقك وإصلاحات الأخطاء والتحذيرات قبل أن يغيّروا الشيفرة.</p>
+  <p class="hero-note rise d2">يعمل Hunch مع أدوات الذكاء الاصطناعي التي تستخدمها بالفعل. وهو ليس نموذجًا آخر، ولا يرسل ذاكرة مشروعك إلى خدمة Hunch.</p>
   <div class="hero-cta rise d3">
     <a class="btn" href="#start">ابدأ الآن</a>
     <a class="btn ghost" href="#story">شاهد كيف يعمل</a>
   </div>
 
 </header>
-
-<section class="release-section" aria-labelledby="release-proof-title">
-  <div class="wrap">
-    <div class="release-card">
-      <div class="release-head">
-        <div>
-          <span class="eyebrow">v1.19 · إيصال نقل</span>
-          <h2 id="release-proof-title">رؤية أوسع، مع حد صارم للأدلة.</h2>
-          <p class="release-copy">في اختبار نقل مسجل مسبقًا من 12 حالة، وجدت الرؤية الإضافية المحدودة 6/12 من التصريحات المتغيرة مقابل 3/12 في القائمة المسطحة من خمسة. وحافظ اختبار منفصل على النتائج الخمس كلها مع فحص تصريحات أقل بنسبة 41.9٪.</p>
-        </div>
-        <code class="release-install">npm i -g @davesheffer/hunch</code>
-      </div>
-      <div class="release-metrics" aria-label="نتائج معيار الإصدار 1.19">
-        <div class="release-metric"><strong>25% → 50%</strong><span>تغطية التصريحات المتغيرة</span></div>
-        <div class="release-metric"><strong>8/12 → 10/12</strong><span>تغطية الملفات الصحيحة</span></div>
-        <div class="release-metric"><strong>18.9 → 11</strong><span>التصريحات المفحوصة</span></div>
-      </div>
-      <p class="release-caveat">هذه نتائج نقل ضيقة، وليست ادعاءً بأن Hunch أدق بمرتين عمومًا. تضيف الأدلة شروحًا إلى القائمة فقط؛ ولا تعيد ترتيب المرشحين أو تدّعي المالك الدقيق للتصحيح.</p>
-    </div>
-  </div>
-</section>
 
 <!-- ─────────────────────────── story ─────────────────────────── -->
 <section id="story">
@@ -382,7 +363,7 @@
           <div><h3>يصل السبب قبل التعديل.</h3><p>يرى المساعد ما اختير وما رُفض وأي خطأ يمنعه القرار. فيسلك طريقًا أفضل من دون أن يطلب من الفريق رواية القصة من جديد.</p></div>
         </article>
       </div>
-      <aside class="receipt" aria-label="مثال على بطاقة ذاكرة هندسية">
+      <aside class="receipt" aria-label="مثال على بطاقة ذاكرة المشروع">
         <div class="receipt-head"><span>قبل تعديل · <bdi>src/auth/session.ts</bdi></span><b>وُجدت ذاكرة</b></div>
         <div class="receipt-body">
           <span class="receipt-kicker">لماذا توجد هذه الشيفرة</span>
@@ -401,14 +382,35 @@
 <section id="how" class="panel">
   <div class="wrap">
     <div class="sec-head">
-      <span class="eyebrow">ما الذي يتغيّر</span>
-      <h2>يبدأ المساعد بذاكرة الفريق.</h2>
-      <p>يتعلّم Hunch من العمل الهندسي المعتاد، ثم يعيد الجزء المناسب من الذاكرة في اللحظة التي تحتاج إليه.</p>
+      <span class="eyebrow">ماذا يفعل Hunch</span>
+      <h2>يعطي كل مساعد برمجة ذاكرة المشروع نفسها.</h2>
+      <p>يحفظ Hunch ما تعلّمه فريقك، ويعيده قبل التعديل، ويحذّر عندما قد يكرر التغيير خطأً قديمًا.</p>
     </div>
     <div class="outcome-grid">
-      <article class="outcome"><span class="step-n">01 / تذكّر</span><h3>يترك العمل أثرًا.</h3><p>تتحول الـ commits وأعطال الاختبارات وتصحيحاتكم إلى قرارات وأخطاء وقواعد دائمة، من دون طقس توثيق منفصل.</p></article>
-      <article class="outcome"><span class="step-n">02 / استرجع</span><h3>يظهر السياق المناسب.</h3><p>قبل تغيير ملف، يرى المساعد لماذا بُني بهذه الطريقة، وما الذي يعتمد عليه، وما الذي تعطل هنا من قبل.</p></article>
-      <article class="outcome"><span class="step-n">03 / احمِ</span><h3>تبقى الأخطاء القديمة دروسًا مستفادة.</h3><p>يشير Hunch بهدوء إلى التراجع ويشرح سببه. أنتم تقررون ما يحدث بعد ذلك؛ والحظر اختياري.</p></article>
+      <article class="outcome"><span class="step-n">01 / احفظ</span><h3>احتفظ بما تعلّمه الفريق.</h3><p>تصبح القرارات وأعطال الاختبارات وتصحيحاتكم ذاكرة للمشروع بدلًا من أن تضيع في المحادثات وطلبات السحب القديمة.</p></article>
+      <article class="outcome"><span class="step-n">02 / ذكّر</span><h3>اشرح قبل تغيير الشيفرة.</h3><p>يرى المساعد لماذا بُني الملف بهذه الطريقة، وما الذي يعتمد عليه، وما الذي تعطل هنا من قبل.</p></article>
+      <article class="outcome"><span class="step-n">03 / حذّر</span><h3>التقط الأخطاء المتكررة.</h3><p>إذا خالف التغيير قرارًا موثوقًا أو أعاد خطأً معروفًا، يشرح Hunch التعارض. والحظر اختياري.</p></article>
+    </div>
+  </div>
+</section>
+
+<section class="release-section" aria-labelledby="release-proof-title">
+  <div class="wrap">
+    <div class="release-card">
+      <div class="release-head">
+        <div>
+          <span class="eyebrow">ما تحسّن في v1.19</span>
+          <h2 id="release-proof-title">اعثر على الشيفرة المحتملة أسرع. وافحص أقل.</h2>
+          <p class="release-copy">في اختبار من 12 مشكلة على شيفرة غير مألوفة، وجد Hunch الجزء المتغير في 6 حالات بدلًا من 3. وفي اختبار منفصل حافظ على النتائج الخمس الناجحة نفسها مع فحص شيفرة أقل بنسبة 41.9٪.</p>
+        </div>
+        <code class="release-install">npm i -g @davesheffer/hunch</code>
+      </div>
+      <div class="release-metrics" aria-label="نتائج اختبار الإصدار 1.19 بلغة بسيطة">
+        <div class="release-metric"><strong>3/12 → 6/12</strong><span>مشكلات عُثر فيها على الشيفرة المتغيرة</span></div>
+        <div class="release-metric"><strong>8/12 → 10/12</strong><span>مشكلات عُثر فيها على الملف الصحيح</span></div>
+        <div class="release-metric"><strong>18.9 → 11</strong><span>أجزاء شيفرة للفحص في المتوسط</span></div>
+      </div>
+      <p class="release-caveat">هذه اختبارات صغيرة ومضبوطة، وليست وعدًا بأن Hunch أدق بمرتين في كل مكان. عندما يعرف فقط أين ينبغي البحث، يقول ذلك بدلًا من الادعاء بأنه يعرف الإصلاح الدقيق.</p>
     </div>
   </div>
 </section>
@@ -418,20 +420,20 @@
   <div class="wrap">
     <div class="tech-intro">
       <div class="sec-head">
-        <span class="eyebrow">ما وراء الواجهة</span>
-        <h2>محلي في جوهره. دقيق حين يهم.</h2>
+        <span class="eyebrow">ما يحدث خلف الكواليس</span>
+        <h2>يبقى Hunch تحت سيطرتك ويعرض كيف وصل إلى إجابته.</h2>
       </div>
-      <p>تدعم القصة البسيطة خريطة حتمية للشيفرة وسجلات واضحة قابلة للمراجعة. يشرح Hunch إجابته ويعرض الدليل وراءها.</p>
+      <p>تُحفظ ذاكرة المشروع في ملفات واضحة يمكنك مراجعتها والتراجع عنها. يربط Hunch كل سبب محفوظ بالشيفرة التي يؤثر فيها ويذكر مصدر كل إجابة.</p>
     </div>
     <div class="tech-grid">
-      <article class="tech-item"><code class="literal">.hunch/team.json</code><h3>ذاكرة داخل Git</h3><p>احتفظ بالذاكرة بجانب الشيفرة أو اربط الفريق كله بمستودع Git خاص ومخصص واحد. تكتشفه النسخ الجديدة عبر مؤشر خالٍ من بيانات الاعتماد.</p></article>
-      <article class="tech-item"><code>خريطة الشيفرة</code><h3>نطاق تأثير حقيقي</h3><p>تربط الرموز والاستدعاءات والمكوّنات والتبعيات السبب بالشيفرة التي يحكمها.</p></article>
-      <article class="tech-item"><code>MCP + قواعد</code><h3>يعمل عبر عدة مساعدين</h3><p>يقرأ Claude Code وCursor وVS Code وWindsurf وCodex وغيرهم من الذاكرة نفسها.</p></article>
-      <article class="tech-item"><code>المطابقة</code><h3>فحوصات حتمية</h3><p>تُفحص الطبقات والمسارات الإلزامية والأساليب المرفوضة والتراجعات المعروفة من دون حكم صادر عن LLM.</p></article>
-      <article class="tech-item"><code>المصدر</code><h3>أدلة لا تخمينات</h3><p>تحمل كل إجابة مصدرها ومستوى الثقة والـ commit والتاريخ وراء التوصية.</p></article>
-      <article class="tech-item"><code>محلي أولًا</code><h3>تبقى ذاكرتكم ملككم</h3><p>لا حاجة إلى SaaS. ويمكن للمعرفة الخاصة أن تعيش في طبقة منفصلة تتحكمون بها.</p></article>
+      <article class="tech-item"><code class="literal">محفوظ مع Git</code><h3>ذاكرة يمكنك فحصها</h3><p>تُحفظ القرارات كملفات عادية. يمكن لفريقك مراجعتها ومقارنتها والتراجع عنها مثل الشيفرة.</p></article>
+      <article class="tech-item"><code>روابط الشيفرة</code><h3>يعرف ما قد يتأثر بالتغيير</h3><p>يتتبع Hunch الروابط بين الملفات والدوال ليظهر السبب المناسب في المكان المناسب.</p></article>
+      <article class="tech-item"><code>أدوات الذكاء الاصطناعي</code><h3>ذاكرة واحدة لكل المساعدين</h3><p>يمكن لـ Claude Code وCursor وVS Code وWindsurf وCodex وغيرهم استخدام ذاكرة المشروع نفسها.</p></article>
+      <article class="tech-item"><code>قواعد واضحة</code><h3>يفحص القاعدة نفسها كل مرة</h3><p>بالنسبة إلى القواعد التي يثق بها فريقك، يفحص Hunch الشيفرة مباشرة بدلًا من مطالبة ذكاء اصطناعي آخر بالتخمين.</p></article>
+      <article class="tech-item"><code>المصدر مرفق</code><h3>يعرض مصدر الإجابة</h3><p>تشير كل إجابة إلى القرار أو الخطأ أو الـ commit أو التصحيح الذي يدعمها.</p></article>
+      <article class="tech-item"><code>لا سحابة لـ Hunch</code><h3>تبقى ذاكرتكم ملككم</h3><p>لا يتطلب Hunch حسابًا مستضافًا. احتفظوا بالذاكرة في المشروع أو في مستودع Git خاص يتحكم به الفريق.</p></article>
     </div>
-    <p class="tech-link">هذه هي النسخة المختصرة. <a href="/docs">استكشف البنية وكل الإمكانات ←</a></p>
+    <p class="tech-link">هل تريد التفاصيل التقنية؟ <a href="/docs">اقرأ كيف يعمل Hunch ←</a></p>
   </div>
 </section>
 
@@ -445,8 +447,8 @@
     <div class="qs">
       <div class="qs-steps">
         <div class="steps" style="margin-top:0">
-          <div class="step"><div><h3>ثبّت وابدأ</h3><p>يفهرس أمر واحد المستودع، ويربط المساعدين المدعومين، ويحفظ الذاكرة بجانب الشيفرة.</p></div></div>
-          <div class="step"><div><h3>خذ الماضي القريب معك</h3><p>يحوّل <code>hunch backfill --since 90d</code> التاريخ الحديث إلى ذاكرة مفيدة منذ اليوم الأول.</p></div></div>
+          <div class="step"><div><h3>ثبّت Hunch</h3><p>يقرأ أمر واحد مشروعك ويربط مساعدي البرمجة الذين تستخدمهم بالفعل.</p></div></div>
+          <div class="step"><div><h3>أضف التاريخ الحديث</h3><p>يجد <code>hunch backfill --since 90d</code> قرارات ودروسًا مفيدة في commits آخر 90 يومًا.</p></div></div>
           <div class="step"><div><h3>اطرح سؤالًا حقيقيًا</h3><p>جرّب: <em>«لماذا بُنيت وحدة الجلسات بهذه الطريقة؟»</em> يجيب مساعدك من تاريخ الفريق ويرفق الدليل.</p></div></div>
         </div>
         <div class="prov" aria-label="المساعدون المدعومون">
@@ -459,13 +461,13 @@
           <pre style="min-height:0"><span class="c-key"># التثبيت من npm — يتطلب Node 22.13+</span>
 <span class="c-cmd">$ npm install -g @davesheffer/hunch</span>
 
-<span class="c-key"># فهرسة + hooks + ربط جميع المساعدين</span>
+<span class="c-key"># ربط Hunch بالمشروع والمساعدين</span>
 <span class="c-cmd">$ cd your-repo && hunch init</span>
 
-<span class="c-key"># بداية باردة: استخرج القرارات من التاريخ</span>
+<span class="c-key"># تعلّم اختياري من آخر 90 يومًا</span>
 <span class="c-cmd">$ hunch backfill --since 90d</span>
 
-<span class="c-key"># السبب وراء أي ملف أو رمز</span>
+<span class="c-key"># اسأل عن سبب وجود ملف</span>
 <span class="c-cmd">$ hunch why src/auth/session.ts</span></pre>
         </div>
         <div class="copyline">
@@ -499,7 +501,7 @@
   <div class="wrap foot">
     <div>
       <a class="brand" href="/ar"><span class="brand-mark" aria-hidden="true"></span>hunch</a>
-      <p class="about">يحفظ Git ما في الشيفرة. ويحفظ Hunch السبب — خريطة تفكير دائمة داخل Git لعصر الهندسة بالذكاء الاصطناعي.</p>
+      <p class="about">يحفظ Git الشيفرة. ويحفظ Hunch القرارات وإصلاحات الأخطاء والتحذيرات التي تشرح سبب بنائها بهذه الطريقة.</p>
     </div>
     <div>
       <h4>المنتج</h4>

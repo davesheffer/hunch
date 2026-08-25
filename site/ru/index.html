@@ -4,10 +4,10 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Hunch — ваша кодовая база помнит почему</title>
-<meta name="description" content="Hunch даёт ИИ инженерную память о коде: решения, компромиссы и ошибки, на которых ваша команда уже научилась." />
-<meta property="og:title" content="Hunch — ваша кодовая база помнит почему" />
-<meta property="og:description" content="Передайте каждому сеансу разработки с ИИ решения, компромиссы и накопленный опыт вашей команды." />
+<title>Hunch — память проекта для ИИ-помощников по коду</title>
+<meta name="description" content="Hunch объясняет ИИ-помощникам, почему код устроен именно так, какие ошибки уже исправили и какие решения не стоит повторять." />
+<meta property="og:title" content="Hunch — память проекта для ИИ-помощников по коду" />
+<meta property="og:description" content="ИИ умеет читать код. Hunch показывает ему решения, исправления и предупреждения до того, как он внесёт изменение." />
 <meta property="og:image" content="https://hunch-pi.vercel.app/hunch-og.png" />
 <meta property="og:url" content="https://hunch-pi.vercel.app/ru" />
 <meta property="og:locale" content="ru_RU" />
@@ -114,6 +114,7 @@
   h1 b{font-weight:500;color:var(--moss-ink)}
   .hero h1{margin:0}
   .hero p.lede{max-width:var(--measure);color:var(--ink-2);font-size:18px;margin:28px 0 0}
+  .hero p.hero-note{max-width:var(--measure);color:var(--mut);font-size:14px;margin:17px 0 0}
   .hero-cta{display:flex;gap:12px;margin-top:36px;flex-wrap:wrap;align-items:center}
   .release-section{padding:0 0 72px}
   .release-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:28px;box-shadow:0 22px 54px -44px rgba(20,31,25,.42)}
@@ -324,36 +325,16 @@
        rarely, the strict flavor blocks (ember). The cursor is an agent too:
        edges near it illuminate. Decorative: aria-hidden, pointer-events none. -->
   <div class="hero-art" aria-hidden="true"><canvas id="holdline"></canvas></div>
-  <span class="eyebrow rise">v1.19 · поиск исправлений с границами доказательности</span>
-  <h1 class="rise d1">Решённое остаётся решённым.<br /><b>Исправленное — исправленным.</b></h1>
-  <p class="lede rise d2">Hunch гарантирует: ваши агенты никогда не переигрывают уже принятое решение и никогда не возвращают исправленный баг — каждый сеанс начинается с решений, компромиссов и уроков, за которые команда уже заплатила.</p>
+  <span class="eyebrow rise">память проекта для ИИ-помощников по коду</span>
+  <h1 class="rise d1">Ваш ИИ умеет читать код.<br /><b>Hunch объясняет, почему код устроен именно так.</b></h1>
+  <p class="lede rise d2">Hunch передаёт Claude, Cursor, Codex и другим помощникам решения, исправления ошибок и предупреждения вашей команды до того, как они изменят код.</p>
+  <p class="hero-note rise d2">Hunch работает с уже знакомыми вам ИИ-инструментами. Это не ещё одна модель, и память проекта не отправляется в сервис Hunch.</p>
   <div class="hero-cta rise d3">
     <a class="btn" href="#start">Начать</a>
     <a class="btn ghost" href="#story">Посмотреть, как это работает</a>
   </div>
 
 </header>
-
-<section class="release-section" aria-labelledby="release-proof-title">
-  <div class="wrap">
-    <div class="release-card">
-      <div class="release-head">
-        <div>
-          <span class="eyebrow">v1.19 · квитанция переноса</span>
-          <h2 id="release-proof-title">Более широкий обзор с жёсткой границей доказательств.</h2>
-          <p class="release-copy">В заранее зарегистрированном переносе из 12 случаев ограниченный дополнительный обзор нашёл 6/12 изменённых объявлений против 3/12 в плоской пятёрке. Отдельный перенос сохранил все пять попаданий при проверке на 41,9% меньшего числа объявлений.</p>
-        </div>
-        <code class="release-install">npm i -g @davesheffer/hunch</code>
-      </div>
-      <div class="release-metrics" aria-label="Результаты теста версии 1.19">
-        <div class="release-metric"><strong>25% → 50%</strong><span>охват изменённых объявлений</span></div>
-        <div class="release-metric"><strong>8/12 → 10/12</strong><span>охват правильных файлов</span></div>
-        <div class="release-metric"><strong>18.9 → 11</strong><span>проверено объявлений</span></div>
-      </div>
-      <p class="release-caveat">Это узкие результаты переноса, а не заявление, что Hunch в целом вдвое точнее. Доказательства лишь аннотируют список: они не меняют порядок и не заявляют точного владельца исправления.</p>
-    </div>
-  </div>
-</section>
 
 <!-- ─────────────────────────── story ─────────────────────────── -->
 <section id="story">
@@ -382,7 +363,7 @@
           <div><h3>Причина появляется до правки.</h3><p>Помощник видит, что выбрали, что отвергли и какую ошибку предотвращает решение. Он выбирает лучший путь, не заставляя команду пересказывать историю.</p></div>
         </article>
       </div>
-      <aside class="receipt" aria-label="Пример карточки инженерной памяти">
+      <aside class="receipt" aria-label="Пример карточки памяти проекта">
         <div class="receipt-head"><span>перед изменением · <bdi>src/auth/session.ts</bdi></span><b>память найдена</b></div>
         <div class="receipt-body">
           <span class="receipt-kicker">Почему существует этот код</span>
@@ -401,14 +382,35 @@
 <section id="how" class="panel">
   <div class="wrap">
     <div class="sec-head">
-      <span class="eyebrow">что меняется</span>
-      <h2>Помощник начинает с памяти команды.</h2>
-      <p>Hunch учится на обычной инженерной работе и возвращает нужный фрагмент памяти именно тогда, когда он важен.</p>
+      <span class="eyebrow">что делает Hunch</span>
+      <h2>Он даёт каждому помощнику одну и ту же память проекта.</h2>
+      <p>Hunch сохраняет опыт команды, возвращает его перед правкой и предупреждает, если изменение может повторить старую ошибку.</p>
     </div>
     <div class="outcome-grid">
-      <article class="outcome"><span class="step-n">01 / запомнить</span><h3>Работа оставляет след.</h3><p>Коммиты, падения тестов и ваши исправления становятся долговечными решениями, ошибками и правилами — без отдельного ритуала документирования.</p></article>
-      <article class="outcome"><span class="step-n">02 / вспомнить</span><h3>Нужный контекст появляется вовремя.</h3><p>Перед изменением файла помощник видит, почему тот устроен именно так, что от него зависит и что здесь уже ломалось.</p></article>
-      <article class="outcome"><span class="step-n">03 / защитить</span><h3>Старые ошибки остаются усвоенными.</h3><p>Hunch спокойно отмечает откат и объясняет причину. Что делать дальше, решаете вы; блокировка включается только по вашему выбору.</p></article>
+      <article class="outcome"><span class="step-n">01 / сохранить</span><h3>Сохраните опыт команды.</h3><p>Решения, падения тестов и ваши исправления становятся памятью проекта, а не исчезают в старых чатах и pull request.</p></article>
+      <article class="outcome"><span class="step-n">02 / напомнить</span><h3>Объясните до изменения кода.</h3><p>Помощник видит, почему файл устроен так, что от него зависит и что здесь уже ломалось.</p></article>
+      <article class="outcome"><span class="step-n">03 / предупредить</span><h3>Замечайте повторные ошибки.</h3><p>Если изменение противоречит доверенному решению или возвращает известную ошибку, Hunch объясняет конфликт. Блокировка необязательна.</p></article>
+    </div>
+  </div>
+</section>
+
+<section class="release-section" aria-labelledby="release-proof-title">
+  <div class="wrap">
+    <div class="release-card">
+      <div class="release-head">
+        <div>
+          <span class="eyebrow">что улучшилось в v1.19</span>
+          <h2 id="release-proof-title">Быстрее находите нужный код. Проверяйте меньше.</h2>
+          <p class="release-copy">В тесте из 12 задач на незнакомом коде Hunch нашёл изменённый фрагмент в 6 случаях вместо 3. В отдельном тесте он сохранил те же пять успешных находок, но потребовал просмотреть на 41,9% меньше кода.</p>
+        </div>
+        <code class="release-install">npm i -g @davesheffer/hunch</code>
+      </div>
+      <div class="release-metrics" aria-label="Результаты теста версии 1.19 простыми словами">
+        <div class="release-metric"><strong>3/12 → 6/12</strong><span>задач, где найден изменённый код</span></div>
+        <div class="release-metric"><strong>8/12 → 10/12</strong><span>задач, где найден правильный файл</span></div>
+        <div class="release-metric"><strong>18.9 → 11</strong><span>фрагментов кода для просмотра в среднем</span></div>
+      </div>
+      <p class="release-caveat">Это небольшие контролируемые тесты, а не обещание двойной точности везде. Если Hunch знает только место для поиска, он честно говорит об этом, а не притворяется, что знает точное исправление.</p>
     </div>
   </div>
 </section>
@@ -418,20 +420,20 @@
   <div class="wrap">
     <div class="tech-intro">
       <div class="sec-head">
-        <span class="eyebrow">что внутри</span>
-        <h2>Локально в основе. Точно в важный момент.</h2>
+        <span class="eyebrow">что происходит за кулисами</span>
+        <h2>Hunch остаётся под вашим контролем и показывает свою работу.</h2>
       </div>
-      <p>За простой историей стоят детерминированный граф кода и понятные записи, доступные для проверки. Hunch объясняет ответ и показывает доказательства.</p>
+      <p>Память проекта хранится в понятных файлах, которые можно проверить и отменить. Hunch связывает каждую сохранённую причину с нужным кодом и указывает источник ответа.</p>
     </div>
     <div class="tech-grid">
-      <article class="tech-item"><code class="literal">.hunch/team.json</code><h3>Память в Git</h3><p>Храните память рядом с кодом или подключите всю команду к одному выделенному приватному Git-репозиторию. Новые клоны находят его по указателю без учётных данных.</p></article>
-      <article class="tech-item"><code>граф кода</code><h3>Реальный радиус изменений</h3><p>Символы, вызовы, компоненты и зависимости связывают причину с кодом, который она защищает.</p></article>
-      <article class="tech-item"><code>MCP + правила</code><h3>Работает с разными помощниками</h3><p>Claude Code, Cursor, VS Code, Windsurf, Codex и другие читают одну и ту же память.</p></article>
-      <article class="tech-item"><code>соответствие</code><h3>Детерминированные проверки</h3><p>Слои, обязательные пути, отвергнутые подходы и известные регрессии проверяются без вердикта LLM.</p></article>
-      <article class="tech-item"><code>происхождение</code><h3>Доказательства вместо догадок</h3><p>Каждый ответ содержит источник, уверенность, коммит и историю, на которой основана рекомендация.</p></article>
-      <article class="tech-item"><code>сначала локально</code><h3>Ваша память остаётся вашей</h3><p>SaaS не требуется. Приватные знания могут жить в отдельном слое под вашим контролем.</p></article>
+      <article class="tech-item"><code class="literal">хранится в Git</code><h3>Память, которую можно проверить</h3><p>Решения сохраняются как обычные файлы. Команда может просматривать, сравнивать и отменять их так же, как код.</p></article>
+      <article class="tech-item"><code>связи в коде</code><h3>Знает, на что может повлиять изменение</h3><p>Hunch следует связям между файлами и функциями, чтобы нужная причина появилась в нужном месте.</p></article>
+      <article class="tech-item"><code>ваши ИИ-инструменты</code><h3>Одна память для всех помощников</h3><p>Claude Code, Cursor, VS Code, Windsurf, Codex и другие могут использовать одну память проекта.</p></article>
+      <article class="tech-item"><code>ясные правила</code><h3>Каждый раз проверяет одно и то же правило</h3><p>Для правил, которым доверяет команда, Hunch проверяет сам код, а не просит другой ИИ угадать.</p></article>
+      <article class="tech-item"><code>источник указан</code><h3>Показывает источник ответа</h3><p>Каждый ответ ссылается на решение, ошибку, коммит или исправление, которое его подтверждает.</p></article>
+      <article class="tech-item"><code>без облака Hunch</code><h3>Ваша память остаётся вашей</h3><p>Hunch не требует облачного аккаунта. Храните память в проекте или в приватном Git-репозитории команды.</p></article>
     </div>
-    <p class="tech-link">Это краткая версия. <a href="/docs">Изучить архитектуру и все возможности →</a></p>
+    <p class="tech-link">Нужны технические подробности? <a href="/docs">Как работает Hunch →</a></p>
   </div>
 </section>
 
@@ -445,8 +447,8 @@
     <div class="qs">
       <div class="qs-steps">
         <div class="steps" style="margin-top:0">
-          <div class="step"><div><h3>Установите и инициализируйте</h3><p>Одна команда индексирует репозиторий, подключает поддерживаемых помощников и хранит память рядом с кодом.</p></div></div>
-          <div class="step"><div><h3>Возьмите недавнее прошлое с собой</h3><p><code>hunch backfill --since 90d</code> превращает недавнюю историю в полезную память уже в первый день.</p></div></div>
+          <div class="step"><div><h3>Установите Hunch</h3><p>Одна команда читает проект и подключает помощников по коду, которыми вы уже пользуетесь.</p></div></div>
+          <div class="step"><div><h3>Добавьте недавнюю историю</h3><p><code>hunch backfill --since 90d</code> находит полезные решения и уроки в коммитах за последние 90 дней.</p></div></div>
           <div class="step"><div><h3>Задайте настоящий вопрос</h3><p>Спросите: <em>«Почему модуль сессий устроен именно так?»</em> Помощник ответит из истории команды и приложит доказательства.</p></div></div>
         </div>
         <div class="prov" aria-label="Поддерживаемые помощники">
@@ -459,13 +461,13 @@
           <pre style="min-height:0"><span class="c-key"># установка из npm — требуется Node 22.13+</span>
 <span class="c-cmd">$ npm install -g @davesheffer/hunch</span>
 
-<span class="c-key"># индекс + hooks + подключение всех помощников</span>
+<span class="c-key"># подключить Hunch к проекту и помощникам</span>
 <span class="c-cmd">$ cd your-repo && hunch init</span>
 
-<span class="c-key"># холодный старт: извлечь решения из истории</span>
+<span class="c-key"># при желании изучить последние 90 дней</span>
 <span class="c-cmd">$ hunch backfill --since 90d</span>
 
-<span class="c-key"># «почему» за каждым файлом или символом</span>
+<span class="c-key"># спросить, зачем нужен файл</span>
 <span class="c-cmd">$ hunch why src/auth/session.ts</span></pre>
         </div>
         <div class="copyline">
@@ -499,7 +501,7 @@
   <div class="wrap foot">
     <div>
       <a class="brand" href="/ru"><span class="brand-mark" aria-hidden="true"></span>hunch</a>
-      <p class="about">Git хранит, что находится в коде. Hunch хранит почему — постоянный граф рассуждений в Git для эпохи разработки с ИИ.</p>
+      <p class="about">Git хранит код. Hunch хранит решения, исправления и предупреждения, которые объясняют, почему код устроен именно так.</p>
     </div>
     <div>
       <h4>продукт</h4>

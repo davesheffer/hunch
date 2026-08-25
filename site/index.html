@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Hunch — your codebase remembers why</title>
-<meta name="description" content="Hunch gives AI the engineering memory behind your code — the decisions, trade-offs, and bugs your team already learned from." />
-<meta property="og:title" content="Hunch — your codebase remembers why" />
-<meta property="og:description" content="Give every AI coding session the decisions, trade-offs, and hard-won lessons behind your code." />
+<title>Hunch — project memory for AI coding assistants</title>
+<meta name="description" content="Hunch tells AI coding assistants why your code is built this way, which bugs were already fixed, and which decisions should not be repeated." />
+<meta property="og:title" content="Hunch — project memory for AI coding assistants" />
+<meta property="og:description" content="Your AI can read the code. Hunch gives it the decisions, bug fixes, and warnings behind the code before it makes a change." />
 <meta property="og:image" content="https://hunch-pi.vercel.app/hunch-og.png" />
 <meta property="og:url" content="https://hunch-pi.vercel.app/" />
 <meta property="og:locale" content="en_US" />
@@ -113,6 +113,7 @@
   h1 b{font-weight:500;color:var(--moss-ink)}
   .hero h1{margin:0}
   .hero p.lede{max-width:var(--measure);color:var(--ink-2);font-size:18px;margin:28px 0 0}
+  .hero p.hero-note{max-width:var(--measure);color:var(--mut);font-size:14px;margin:17px 0 0}
   .hero-cta{display:flex;gap:12px;margin-top:36px;flex-wrap:wrap;align-items:center}
   .release-section{padding:0 0 72px}
   .release-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:28px;box-shadow:0 22px 54px -44px rgba(20,31,25,.42)}
@@ -323,36 +324,16 @@
        rarely, the strict flavor blocks (ember). The cursor is an agent too:
        edges near it illuminate. Decorative: aria-hidden, pointer-events none. -->
   <div class="hero-art" aria-hidden="true"><canvas id="holdline"></canvas></div>
-  <span class="eyebrow rise">v1.19 · evidence-bounded correction search</span>
-  <h1 class="rise d1">Decided stays decided.<br /><b>Fixed stays fixed.</b></h1>
-  <p class="lede rise d2">Hunch guarantees your coding agents never re-make a decided decision and never re-introduce a fixed bug — every session starts from the decisions, trade-offs, and hard-won lessons your team already paid for.</p>
+  <span class="eyebrow rise">project memory for AI coding assistants</span>
+  <h1 class="rise d1">Your AI can read the code.<br /><b>Hunch explains why it is that way.</b></h1>
+  <p class="lede rise d2">Hunch gives Claude, Cursor, Codex, and other coding assistants the decisions, bug fixes, and warnings your team learned before they change your code.</p>
+  <p class="hero-note rise d2">It works with the AI tools you already use. It is not another model, and it does not send your project memory to a Hunch service.</p>
   <div class="hero-cta rise d3">
     <a class="btn" href="#start">Get started</a>
     <a class="btn ghost" href="#story">See how it works</a>
   </div>
 
 </header>
-
-<section class="release-section" aria-labelledby="release-proof-title">
-  <div class="wrap">
-    <div class="release-card">
-      <div class="release-head">
-        <div>
-          <span class="eyebrow">v1.19 · transfer receipt</span>
-          <h2 id="release-proof-title">A wider view, with a hard evidence boundary.</h2>
-          <p class="release-copy">On a preregistered 12-case transfer, the bounded supplemental view found 6/12 changed declarations versus 3/12 for the flat top five. A separate transfer kept all five hits while inspecting 41.9% fewer declarations.</p>
-        </div>
-        <code class="release-install">npm i -g @davesheffer/hunch</code>
-      </div>
-      <div class="release-metrics" aria-label="Version 1.19 benchmark results">
-        <div class="release-metric"><strong>25% → 50%</strong><span>changed-declaration coverage</span></div>
-        <div class="release-metric"><strong>8/12 → 10/12</strong><span>correct-file coverage</span></div>
-        <div class="release-metric"><strong>18.9 → 11</strong><span>declarations inspected</span></div>
-      </div>
-      <p class="release-caveat">These are narrow transfer results, not a claim that Hunch is 2× more accurate overall. Evidence annotates the shortlist; it does not reorder candidates or claim exact ownership.</p>
-    </div>
-  </div>
-</section>
 
 <!-- ─────────────────────────── story ─────────────────────────── -->
 <section id="story">
@@ -381,7 +362,7 @@
           <div><h3>The reason arrives before the edit.</h3><p>The assistant sees what was chosen, what was rejected, and which bug the choice prevents. It takes a better path without asking the team to retell the story.</p></div>
         </article>
       </div>
-      <aside class="receipt" aria-label="Example engineering memory receipt">
+      <aside class="receipt" aria-label="Example project memory card">
         <div class="receipt-head"><span>before editing · <bdi>src/auth/session.ts</bdi></span><b>memory found</b></div>
         <div class="receipt-body">
           <span class="receipt-kicker">Why this code exists</span>
@@ -400,14 +381,35 @@
 <section id="how" class="panel">
   <div class="wrap">
     <div class="sec-head">
-      <span class="eyebrow">what changes</span>
-      <h2>Your assistant starts with the team's memory.</h2>
-      <p>Hunch learns from normal engineering work, then brings the relevant part back at the moment it matters.</p>
+      <span class="eyebrow">what Hunch does</span>
+      <h2>It gives every coding assistant the same project memory.</h2>
+      <p>Hunch saves what your team learns, brings it back before an edit, and warns when a change could repeat an old mistake.</p>
     </div>
     <div class="outcome-grid">
-      <article class="outcome"><span class="step-n">01 / remember</span><h3>Work leaves a trail.</h3><p>Commits, test failures, and your corrections become durable decisions, bugs, and rules—without a separate documentation ritual.</p></article>
-      <article class="outcome"><span class="step-n">02 / recall</span><h3>The right context shows up.</h3><p>Before changing a file, the assistant sees why it is shaped this way, what depends on it, and what has failed there before.</p></article>
-      <article class="outcome"><span class="step-n">03 / protect</span><h3>Old mistakes stay learned.</h3><p>Hunch quietly flags a reversal and explains why. You decide what happens next; blocking is opt-in.</p></article>
+      <article class="outcome"><span class="step-n">01 / save</span><h3>Keep what the team learned.</h3><p>Decisions, test failures, and your corrections become project memory instead of disappearing into old chats and pull requests.</p></article>
+      <article class="outcome"><span class="step-n">02 / remind</span><h3>Explain before changing code.</h3><p>The assistant sees why a file is built this way, what depends on it, and what broke there before.</p></article>
+      <article class="outcome"><span class="step-n">03 / warn</span><h3>Catch repeated mistakes.</h3><p>If a change goes against a trusted decision or reopens a known bug, Hunch explains the conflict. Blocking is optional.</p></article>
+    </div>
+  </div>
+</section>
+
+<section class="release-section" aria-labelledby="release-proof-title">
+  <div class="wrap">
+    <div class="release-card">
+      <div class="release-head">
+        <div>
+          <span class="eyebrow">what improved in v1.19</span>
+          <h2 id="release-proof-title">Find the likely code sooner. Inspect less.</h2>
+          <p class="release-copy">In a 12-problem test on unfamiliar code, Hunch found the changed piece of code in 6 cases instead of 3. In a separate test, it kept the same five successful finds while asking developers to inspect 41.9% less code.</p>
+        </div>
+        <code class="release-install">npm i -g @davesheffer/hunch</code>
+      </div>
+      <div class="release-metrics" aria-label="Plain-language version 1.19 test results">
+        <div class="release-metric"><strong>3/12 → 6/12</strong><span>problems where the changed code was found</span></div>
+        <div class="release-metric"><strong>8/12 → 10/12</strong><span>problems where the correct file was found</span></div>
+        <div class="release-metric"><strong>18.9 → 11</strong><span>pieces of code to inspect on average</span></div>
+      </div>
+      <p class="release-caveat">These were small, controlled tests—not a promise that Hunch is twice as accurate everywhere. When it only knows where to investigate, Hunch says so instead of pretending it knows the exact fix.</p>
     </div>
   </div>
 </section>
@@ -417,20 +419,20 @@
   <div class="wrap">
     <div class="tech-intro">
       <div class="sec-head">
-        <span class="eyebrow">under the hood</span>
-        <h2>Local at the core. Precise when it matters.</h2>
+        <span class="eyebrow">what happens behind the scenes</span>
+        <h2>Hunch stays under your control and shows its work.</h2>
       </div>
-      <p>The friendly story is backed by a deterministic code graph and plain, reviewable records. Hunch can explain its answer—and show the evidence behind it.</p>
+      <p>Your project memory is made of readable files you can review and undo. Hunch connects each saved reason to the code it affects and includes the source with every answer.</p>
     </div>
     <div class="tech-grid">
-      <article class="tech-item"><code class="literal">.hunch/team.json</code><h3>Git-native memory</h3><p>Keep memory beside the code or connect the whole team to one dedicated private Git repository. Fresh clones discover it from a credential-free pointer.</p></article>
-      <article class="tech-item"><code>code graph</code><h3>Real blast radius</h3><p>Symbols, callers, components, and dependencies connect the reason to the code it governs.</p></article>
-      <article class="tech-item"><code>MCP + rules</code><h3>Works across assistants</h3><p>Claude Code, Cursor, VS Code, Windsurf, Codex, and others read from the same memory.</p></article>
-      <article class="tech-item"><code>conformance</code><h3>Deterministic checks</h3><p>Layering, must-reach paths, rejected approaches, and known regressions are checked without an LLM verdict.</p></article>
-      <article class="tech-item"><code>provenance</code><h3>Receipts, not guesses</h3><p>Every answer carries its source, confidence, commit, and the history behind the recommendation.</p></article>
-      <article class="tech-item"><code>local-first</code><h3>Your memory stays yours</h3><p>No SaaS is required. Private reasoning can live in a separate overlay you control.</p></article>
+      <article class="tech-item"><code class="literal">saved with Git</code><h3>Memory you can inspect</h3><p>Decisions are saved as plain files. Your team can review, compare, and undo them just like code.</p></article>
+      <article class="tech-item"><code>code connections</code><h3>Knows what a change may affect</h3><p>Hunch follows the connections between files and functions so the right reason appears in the right place.</p></article>
+      <article class="tech-item"><code>your AI tools</code><h3>One memory across assistants</h3><p>Claude Code, Cursor, VS Code, Windsurf, Codex, and others can all use the same project memory.</p></article>
+      <article class="tech-item"><code>clear rules</code><h3>Checks the same rule every time</h3><p>For rules your team chooses to trust, Hunch checks the code directly instead of asking another AI to guess.</p></article>
+      <article class="tech-item"><code>source included</code><h3>Shows where answers came from</h3><p>Every answer points back to the decision, bug, commit, or correction that supports it.</p></article>
+      <article class="tech-item"><code>no Hunch cloud</code><h3>Your memory stays yours</h3><p>Hunch does not require a hosted account. Keep memory in your project or in a private Git repository your team controls.</p></article>
     </div>
-    <p class="tech-link">That is the short version. <a href="/docs">Explore the architecture and full feature set →</a></p>
+    <p class="tech-link">Want the technical details? <a href="/docs">Read how Hunch works →</a></p>
   </div>
 </section>
 
@@ -444,8 +446,8 @@
     <div class="qs">
       <div class="qs-steps">
         <div class="steps" style="margin-top:0">
-          <div class="step"><div><h3>Install and initialize</h3><p>One command indexes the repository, connects supported assistants, and keeps the memory beside your code.</p></div></div>
-          <div class="step"><div><h3>Bring the recent past with you</h3><p><code>hunch backfill --since 90d</code> turns recent history into a useful day-one memory.</p></div></div>
+          <div class="step"><div><h3>Install Hunch</h3><p>One command reads your project and connects the coding assistants you already use.</p></div></div>
+          <div class="step"><div><h3>Add recent history</h3><p><code>hunch backfill --since 90d</code> finds useful decisions and lessons in the last 90 days of commits.</p></div></div>
           <div class="step"><div><h3>Ask a real question</h3><p>Try <em>“why is the session module built this way?”</em> Your assistant answers from the team's history, with evidence.</p></div></div>
         </div>
         <div class="prov" aria-label="Supported assistants">
@@ -458,13 +460,13 @@
           <pre style="min-height:0"><span class="c-key"># install from npm — Node 22.13+</span>
 <span class="c-cmd">$ npm install -g @davesheffer/hunch</span>
 
-<span class="c-key"># index + hooks + wire up every assistant</span>
+<span class="c-key"># connect Hunch to this project and your assistants</span>
 <span class="c-cmd">$ cd your-repo && hunch init</span>
 
-<span class="c-key"># cold start: seed decisions from history</span>
+<span class="c-key"># optionally learn from the last 90 days</span>
 <span class="c-cmd">$ hunch backfill --since 90d</span>
 
-<span class="c-key"># the "why" behind any file or symbol</span>
+<span class="c-key"># ask what a file is for</span>
 <span class="c-cmd">$ hunch why src/auth/session.ts</span></pre>
         </div>
         <div class="copyline">
@@ -498,7 +500,7 @@
   <div class="wrap foot">
     <div>
       <a class="brand" href="/"><span class="brand-mark" aria-hidden="true"></span>hunch</a>
-      <p class="about">Git stores what the code is. Hunch stores why — a persistent, git-native reasoning graph for the age of AI engineering.</p>
+      <p class="about">Git stores the code. Hunch stores the decisions, bug fixes, and warnings that explain why the code is that way.</p>
     </div>
     <div>
       <h4>product</h4>

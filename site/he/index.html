@@ -4,10 +4,10 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Hunch — בסיס הקוד שלך זוכר למה</title>
-<meta name="description" content="Hunch מעניק ל-AI את הזיכרון ההנדסי שמאחורי הקוד — ההחלטות, הפשרות והבאגים שהצוות שלכם כבר למד מהם." />
-<meta property="og:title" content="Hunch — בסיס הקוד שלך זוכר למה" />
-<meta property="og:description" content="תנו לכל סשן קידוד עם AI את ההחלטות, הפשרות והלקחים שהצוות כבר צבר." />
+<title>Hunch — זיכרון לפרויקט עבור עוזרי קוד מבוססי AI</title>
+<meta name="description" content="Hunch מסביר לעוזרי קוד מבוססי AI למה הקוד בנוי כך, אילו באגים כבר תוקנו ואילו החלטות לא כדאי לקבל שוב." />
+<meta property="og:title" content="Hunch — זיכרון לפרויקט עבור עוזרי קוד מבוססי AI" />
+<meta property="og:description" content="ה-AI יודע לקרוא את הקוד. Hunch נותן לו את ההחלטות, תיקוני הבאגים והאזהרות שמאחוריו לפני השינוי." />
 <meta property="og:image" content="https://hunch-pi.vercel.app/hunch-og.png" />
 <meta property="og:url" content="https://hunch-pi.vercel.app/he" />
 <meta property="og:locale" content="he_IL" />
@@ -114,6 +114,7 @@
   h1 b{font-weight:500;color:var(--moss-ink)}
   .hero h1{margin:0}
   .hero p.lede{max-width:var(--measure);color:var(--ink-2);font-size:18px;margin:28px 0 0}
+  .hero p.hero-note{max-width:var(--measure);color:var(--mut);font-size:14px;margin:17px 0 0}
   .hero-cta{display:flex;gap:12px;margin-top:36px;flex-wrap:wrap;align-items:center}
   .release-section{padding:0 0 72px}
   .release-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:28px;box-shadow:0 22px 54px -44px rgba(20,31,25,.42)}
@@ -324,36 +325,16 @@
        rarely, the strict flavor blocks (ember). The cursor is an agent too:
        edges near it illuminate. Decorative: aria-hidden, pointer-events none. -->
   <div class="hero-art" aria-hidden="true"><canvas id="holdline"></canvas></div>
-  <span class="eyebrow rise">v1.19 · חיפוש תיקונים מבוסס ראיות</span>
-  <h1 class="rise d1">מה שהוחלט נשאר מוחלט.<br /><b>מה שתוקן נשאר מתוקן.</b></h1>
-  <p class="lede rise d2">Hunch מבטיח שסוכני הקוד שלכם לעולם לא יחליטו מחדש החלטה שהוכרעה ולעולם לא יחזירו באג שתוקן — כל סשן מתחיל מההחלטות, הפשרות והלקחים שהצוות כבר שילם עליהם.</p>
+  <span class="eyebrow rise">זיכרון לפרויקט עבור עוזרי קוד מבוססי AI</span>
+  <h1 class="rise d1">ה-AI שלכם יודע לקרוא את הקוד.<br /><b>Hunch מסביר למה הוא בנוי כך.</b></h1>
+  <p class="lede rise d2">Hunch נותן ל-Claude, ל-Cursor, ל-Codex ולעוזרי קוד אחרים את ההחלטות, תיקוני הבאגים והאזהרות שהצוות למד — לפני שהם משנים את הקוד.</p>
+  <p class="hero-note rise d2">Hunch עובד עם כלי ה-AI שכבר יש לכם. הוא אינו מודל נוסף, ואינו שולח את זיכרון הפרויקט לשירות של Hunch.</p>
   <div class="hero-cta rise d3">
     <a class="btn" href="#start">מתחילים</a>
     <a class="btn ghost" href="#story">כך זה עובד</a>
   </div>
 
 </header>
-
-<section class="release-section" aria-labelledby="release-proof-title">
-  <div class="wrap">
-    <div class="release-card">
-      <div class="release-head">
-        <div>
-          <span class="eyebrow">v1.19 · קבלת העברה</span>
-          <h2 id="release-proof-title">מבט רחב יותר, עם גבול ראיות קשיח.</h2>
-          <p class="release-copy">במבחן העברה שנרשם מראש ובו 12 מקרים, התצוגה המשלימה המוגבלת מצאה 6/12 הצהרות שהשתנו לעומת 3/12 בחמישייה השטוחה. מבחן נפרד שמר על כל חמש הפגיעות תוך בדיקה של 41.9% פחות הצהרות.</p>
-        </div>
-        <code class="release-install">npm i -g @davesheffer/hunch</code>
-      </div>
-      <div class="release-metrics" aria-label="תוצאות מדד גרסה 1.19">
-        <div class="release-metric"><strong>25% → 50%</strong><span>כיסוי הצהרות שהשתנו</span></div>
-        <div class="release-metric"><strong>8/12 → 10/12</strong><span>כיסוי קבצים נכונים</span></div>
-        <div class="release-metric"><strong>18.9 → 11</strong><span>הצהרות שנבדקו</span></div>
-      </div>
-      <p class="release-caveat">אלו תוצאות העברה צרות, לא טענה ש-Hunch מדויק פי 2 באופן כללי. הראיות מוסיפות הערות לרשימה; הן אינן משנות את הסדר ואינן טוענות לבעלות מדויקת.</p>
-    </div>
-  </div>
-</section>
 
 <!-- ─────────────────────────── story ─────────────────────────── -->
 <section id="story">
@@ -382,7 +363,7 @@
           <div><h3>הסיבה מגיעה לפני העריכה.</h3><p>העוזר רואה מה נבחר, מה נדחה ואיזה באג הבחירה מונעת. הוא בוחר דרך טובה יותר בלי לבקש מהצוות לספר שוב את הסיפור.</p></div>
         </article>
       </div>
-      <aside class="receipt" aria-label="דוגמה לקבלת זיכרון הנדסי">
+      <aside class="receipt" aria-label="דוגמה לכרטיס זיכרון של הפרויקט">
         <div class="receipt-head"><span>לפני עריכת · <bdi>src/auth/session.ts</bdi></span><b>נמצא זיכרון</b></div>
         <div class="receipt-body">
           <span class="receipt-kicker">למה הקוד הזה קיים</span>
@@ -401,14 +382,35 @@
 <section id="how" class="panel">
   <div class="wrap">
     <div class="sec-head">
-      <span class="eyebrow">מה משתנה</span>
-      <h2>העוזר מתחיל עם הזיכרון של הצוות.</h2>
-      <p>Hunch לומד מהעבודה ההנדסית הרגילה ומחזיר את החלק הרלוונטי בדיוק ברגע שבו הוא נדרש.</p>
+      <span class="eyebrow">מה Hunch עושה</span>
+      <h2>הוא נותן לכל עוזר קוד את אותו זיכרון של הפרויקט.</h2>
+      <p>Hunch שומר את מה שהצוות למד, מחזיר אותו לפני עריכה ומזהיר כששינוי עלול לחזור על טעות ישנה.</p>
     </div>
     <div class="outcome-grid">
-      <article class="outcome"><span class="step-n">01 / לזכור</span><h3>העבודה משאירה עקבות.</h3><p>קומיטים, כשלי בדיקות והתיקונים שלכם הופכים להחלטות, באגים וכללים שנשמרים לאורך זמן—בלי טקס תיעוד נפרד.</p></article>
-      <article class="outcome"><span class="step-n">02 / להיזכר</span><h3>ההקשר הנכון מופיע.</h3><p>לפני שינוי קובץ, העוזר רואה למה הוא בנוי כך, מה תלוי בו ומה כבר נכשל שם בעבר.</p></article>
-      <article class="outcome"><span class="step-n">03 / להגן</span><h3>טעויות ישנות נשארות לקח.</h3><p>Hunch מסמן בשקט נסיגה ומסביר למה. אתם מחליטים מה קורה עכשיו; חסימה מופעלת רק אם בוחרים בה.</p></article>
+      <article class="outcome"><span class="step-n">01 / לשמור</span><h3>שמרו את מה שהצוות למד.</h3><p>החלטות, כשלי בדיקות והתיקונים שלכם הופכים לזיכרון הפרויקט במקום להיעלם בצ'אטים וב-pull requests ישנים.</p></article>
+      <article class="outcome"><span class="step-n">02 / להזכיר</span><h3>הסבירו לפני שינוי הקוד.</h3><p>העוזר רואה למה קובץ בנוי כך, מה תלוי בו ומה כבר התקלקל שם בעבר.</p></article>
+      <article class="outcome"><span class="step-n">03 / להזהיר</span><h3>זהו טעויות שחוזרות.</h3><p>אם שינוי סותר החלטה מהימנה או מחזיר באג מוכר, Hunch מסביר את ההתנגשות. חסימה היא אופציונלית.</p></article>
+    </div>
+  </div>
+</section>
+
+<section class="release-section" aria-labelledby="release-proof-title">
+  <div class="wrap">
+    <div class="release-card">
+      <div class="release-head">
+        <div>
+          <span class="eyebrow">מה השתפר ב-v1.19</span>
+          <h2 id="release-proof-title">מצאו את הקוד הסביר מהר יותר. בדקו פחות.</h2>
+          <p class="release-copy">במבחן של 12 בעיות על קוד לא מוכר, Hunch מצא את קטע הקוד שהשתנה ב-6 מקרים במקום ב-3. במבחן נפרד הוא שמר על אותם חמישה ממצאים מוצלחים, עם 41.9% פחות קוד לבדיקה.</p>
+        </div>
+        <code class="release-install">npm i -g @davesheffer/hunch</code>
+      </div>
+      <div class="release-metrics" aria-label="תוצאות מבחן גרסה 1.19 בשפה פשוטה">
+        <div class="release-metric"><strong>3/12 → 6/12</strong><span>בעיות שבהן נמצא הקוד שהשתנה</span></div>
+        <div class="release-metric"><strong>8/12 → 10/12</strong><span>בעיות שבהן נמצא הקובץ הנכון</span></div>
+        <div class="release-metric"><strong>18.9 → 11</strong><span>קטעי קוד לבדיקה בממוצע</span></div>
+      </div>
+      <p class="release-caveat">אלה מבחנים קטנים ומבוקרים — לא הבטחה ש-Hunch מדויק פי שניים בכל מקום. כשהוא יודע רק איפה לחקור, Hunch אומר זאת במקום להעמיד פנים שהוא יודע את התיקון המדויק.</p>
     </div>
   </div>
 </section>
@@ -418,20 +420,20 @@
   <div class="wrap">
     <div class="tech-intro">
       <div class="sec-head">
-        <span class="eyebrow">מאחורי הקלעים</span>
-        <h2>מקומי בליבה. מדויק כשזה חשוב.</h2>
+        <span class="eyebrow">מה קורה מאחורי הקלעים</span>
+        <h2>Hunch נשאר בשליטתכם ומראה איך הגיע לתשובה.</h2>
       </div>
-      <p>מאחורי הסיפור הפשוט עומדים גרף קוד דטרמיניסטי ורשומות ברורות שאפשר לסקור. Hunch מסביר את התשובה—ומציג את הראיות שמאחוריה.</p>
+      <p>זיכרון הפרויקט נשמר בקבצים קריאים שאפשר לבדוק ולבטל. Hunch מחבר כל סיבה שמורה לקוד שהיא משפיעה עליו ומצרף מקור לכל תשובה.</p>
     </div>
     <div class="tech-grid">
-      <article class="tech-item"><code class="literal">.hunch/team.json</code><h3>זיכרון שנשמר ב-Git</h3><p>שמרו את הזיכרון לצד הקוד או חברו את כל הצוות למאגר Git פרטי ייעודי אחד. עותקים חדשים מגלים אותו דרך מצביע ללא פרטי גישה.</p></article>
-      <article class="tech-item"><code>גרף קוד</code><h3>טווח השפעה אמיתי</h3><p>סמלים, קוראים, רכיבים ותלויות מחברים את הסיבה לקוד שעליו היא מגנה.</p></article>
-      <article class="tech-item"><code>MCP + כללים</code><h3>עובד עם עוזרים שונים</h3><p>Claude Code, Cursor, VS Code, Windsurf, Codex ואחרים קוראים מאותו זיכרון.</p></article>
-      <article class="tech-item"><code>התאמה</code><h3>בדיקות דטרמיניסטיות</h3><p>שכבות, מסלולים שחייבים להתקיים, גישות שנדחו ורגרסיות מוכרות נבדקים בלי פסק דין של LLM.</p></article>
-      <article class="tech-item"><code>מקור</code><h3>ראיות, לא ניחושים</h3><p>כל תשובה כוללת מקור, רמת ביטחון, קומיט וההיסטוריה שמאחורי ההמלצה.</p></article>
-      <article class="tech-item"><code>מקומי תחילה</code><h3>הזיכרון נשאר שלכם</h3><p>אין צורך ב-SaaS. ידע פרטי יכול להישמר בשכבה נפרדת שנמצאת בשליטתכם.</p></article>
+      <article class="tech-item"><code class="literal">נשמר עם Git</code><h3>זיכרון שאפשר לבדוק</h3><p>החלטות נשמרות כקבצים פשוטים. הצוות יכול לבדוק, להשוות ולבטל אותן בדיוק כמו קוד.</p></article>
+      <article class="tech-item"><code>חיבורי קוד</code><h3>יודע על מה שינוי עשוי להשפיע</h3><p>Hunch עוקב אחרי החיבורים בין קבצים ופונקציות כדי שהסיבה הנכונה תופיע במקום הנכון.</p></article>
+      <article class="tech-item"><code>כלי ה-AI שלכם</code><h3>זיכרון אחד לכל העוזרים</h3><p>Claude Code, Cursor, VS Code, Windsurf, Codex ואחרים יכולים להשתמש באותו זיכרון פרויקט.</p></article>
+      <article class="tech-item"><code>כללים ברורים</code><h3>בודק את אותו כלל בכל פעם</h3><p>עבור כללים שהצוות בוחר לסמוך עליהם, Hunch בודק את הקוד ישירות במקום לבקש מ-AI אחר לנחש.</p></article>
+      <article class="tech-item"><code>המקור מצורף</code><h3>מראה מאיפה התשובה הגיעה</h3><p>כל תשובה מפנה להחלטה, לבאג, לקומיט או לתיקון שתומכים בה.</p></article>
+      <article class="tech-item"><code>ללא ענן של Hunch</code><h3>הזיכרון נשאר שלכם</h3><p>Hunch לא דורש חשבון מתארח. שמרו את הזיכרון בפרויקט או במאגר Git פרטי שבשליטת הצוות.</p></article>
     </div>
-    <p class="tech-link">זו הגרסה הקצרה. <a href="/docs">לארכיטקטורה ולכל היכולות ←</a></p>
+    <p class="tech-link">רוצים את הפרטים הטכניים? <a href="/docs">כך Hunch עובד ←</a></p>
   </div>
 </section>
 
@@ -445,8 +447,8 @@
     <div class="qs">
       <div class="qs-steps">
         <div class="steps" style="margin-top:0">
-          <div class="step"><div><h3>התקנה ואתחול</h3><p>פקודה אחת מאנדקסת את המאגר, מחברת את העוזרים הנתמכים ושומרת את הזיכרון לצד הקוד.</p></div></div>
-          <div class="step"><div><h3>קחו את העבר הקרוב איתכם</h3><p><code>hunch backfill --since 90d</code> הופך את ההיסטוריה האחרונה לזיכרון שימושי כבר מהיום הראשון.</p></div></div>
+          <div class="step"><div><h3>התקינו את Hunch</h3><p>פקודה אחת קוראת את הפרויקט ומחברת את עוזרי הקוד שכבר נמצאים בשימוש.</p></div></div>
+          <div class="step"><div><h3>הוסיפו היסטוריה אחרונה</h3><p><code>hunch backfill --since 90d</code> מוצא החלטות ולקחים שימושיים ב-90 הימים האחרונים של הקומיטים.</p></div></div>
           <div class="step"><div><h3>שאלו שאלה אמיתית</h3><p>נסו <em>„למה מודול הסשן בנוי כך?”</em> העוזר עונה מתוך ההיסטוריה של הצוות ומצרף ראיות.</p></div></div>
         </div>
         <div class="prov" aria-label="עוזרים נתמכים">
@@ -459,13 +461,13 @@
           <pre style="min-height:0"><span class="c-key"># התקנה מ-npm — נדרש Node 22.13+</span>
 <span class="c-cmd">$ npm install -g @davesheffer/hunch</span>
 
-<span class="c-key"># אינדוקס + hooks + חיבור כל העוזרים</span>
+<span class="c-key"># חיבור Hunch לפרויקט ולעוזרים</span>
 <span class="c-cmd">$ cd your-repo && hunch init</span>
 
-<span class="c-key"># התחלה קרה: חילוץ החלטות מההיסטוריה</span>
+<span class="c-key"># אפשר ללמוד מ-90 הימים האחרונים</span>
 <span class="c-cmd">$ hunch backfill --since 90d</span>
 
-<span class="c-key"># ה'למה' שמאחורי כל קובץ או סמל</span>
+<span class="c-key"># לשאול למה קובץ קיים</span>
 <span class="c-cmd">$ hunch why src/auth/session.ts</span></pre>
         </div>
         <div class="copyline">
@@ -499,7 +501,7 @@
   <div class="wrap foot">
     <div>
       <a class="brand" href="/he"><span class="brand-mark" aria-hidden="true"></span>hunch</a>
-      <p class="about">Git שומר מה יש בקוד. Hunch שומר למה — גרף חשיבה מתמשך שנשמר ב-Git לעידן ההנדסה עם AI.</p>
+      <p class="about">Git שומר את הקוד. Hunch שומר את ההחלטות, תיקוני הבאגים והאזהרות שמסבירים למה הקוד בנוי כך.</p>
     </div>
     <div>
       <h4>מוצר</h4>
