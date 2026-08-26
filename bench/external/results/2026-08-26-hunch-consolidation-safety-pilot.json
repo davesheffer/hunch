@@ -1,0 +1,178 @@
+{
+  "experiment": "hunch-consolidation-safety-pilot",
+  "date": "2026-08-26",
+  "verdict": "mixed/inconclusive",
+  "verdictReason": "All four conditions scored 0/6, so the pilot has a complete floor effect and cannot distinguish accumulation harm from no-memory, relevant-only memory, or a bounded raw episode.",
+  "preregistration": "2026-08-26-hunch-consolidation-safety-pilot-preregistration.md",
+  "manifest": "2026-08-26-hunch-consolidation-safety-pilot-manifest.json",
+  "integrity": {
+    "preregisteredSessions": 24,
+    "validSessions": 24,
+    "infrastructureExclusions": 0,
+    "memoryProvenanceVerified": true,
+    "futureFreeHistory": true,
+    "historyThroughPreFixOnly": true,
+    "isolatedScoring": true,
+    "networkPolicy": "deny-all",
+    "webToolsDenied": true
+  },
+  "outcomes": {
+    "A": {
+      "sessions": 6,
+      "sourcePasses": 0,
+      "issueContractPasses": 0,
+      "meanTurns": 50.5,
+      "meanDurationMs": 488733,
+      "existingTestTouchRows": 1
+    },
+    "E": {
+      "sessions": 6,
+      "sourcePasses": 0,
+      "issueContractPasses": 0,
+      "meanTurns": 50.6666666667,
+      "meanDurationMs": 384509,
+      "existingTestTouchRows": 2
+    },
+    "C-rel": {
+      "sessions": 6,
+      "sourcePasses": 0,
+      "issueContractPasses": 0,
+      "meanTurns": 49.5,
+      "meanDurationMs": 314635,
+      "hunchCalls": 14,
+      "contextDecisionDeliveries": 3,
+      "contextSupplementDeliveries": 44,
+      "contextAbstentions": 1,
+      "contextWithheldRecords": 1,
+      "visibleItemTokenCost": 2626,
+      "existingTestTouchRows": 0
+    },
+    "C-full": {
+      "sessions": 6,
+      "sourcePasses": 0,
+      "issueContractPasses": 0,
+      "meanTurns": 49.3333333333,
+      "meanDurationMs": 352894,
+      "hunchCalls": 18,
+      "contextDecisionDeliveries": 3,
+      "contextSupplementDeliveries": 20,
+      "contextAbstentions": 4,
+      "contextWithheldRecords": 25,
+      "visibleItemTokenCost": 2070,
+      "existingTestTouchRows": 0
+    }
+  },
+  "pairedComparisons": {
+    "E-vs-A": {
+      "wins": 0,
+      "harms": 0,
+      "concordantFailures": 6
+    },
+    "C-rel-vs-A": {
+      "wins": 0,
+      "harms": 0,
+      "concordantFailures": 6
+    },
+    "C-full-vs-A": {
+      "wins": 0,
+      "harms": 0,
+      "concordantFailures": 6
+    },
+    "C-full-vs-C-rel": {
+      "accumulationWins": 0,
+      "accumulationHarms": 0,
+      "concordantFailures": 6
+    }
+  },
+  "contextDecisionIds": {
+    "zod-5917": {
+      "C-rel": [
+        "dec_875001003a",
+        "dec_875001003a",
+        "dec_875001003a"
+      ],
+      "C-full": [
+        "dec_875001003a",
+        "dec_875001003a",
+        "dec_2fbac4f75a"
+      ]
+    },
+    "zod-5937": {
+      "C-rel": [],
+      "C-full": []
+    }
+  },
+  "retrievalCheckpoints": [
+    {
+      "snapshot": "structural-only",
+      "decisionCount": 0,
+      "zod-5917RelevantRanks": [],
+      "zod-5937RelevantRanks": []
+    },
+    {
+      "snapshot": "prefix-25",
+      "decisionCount": 41,
+      "zod-5917RelevantRanks": ["dec_875001003a@1", "dec_2fbac4f75a@3", "dec_5db25c7e3c@4"],
+      "zod-5937RelevantRanks": ["dec_875001003a@2", "dec_2fbac4f75a@4"]
+    },
+    {
+      "snapshot": "prefix-50",
+      "decisionCount": 83,
+      "zod-5917RelevantRanks": ["dec_875001003a@1", "dec_2fbac4f75a@5", "dec_5db25c7e3c@6"],
+      "zod-5937RelevantRanks": ["dec_875001003a@2", "dec_2fbac4f75a@4"]
+    },
+    {
+      "snapshot": "prefix-75",
+      "decisionCount": 125,
+      "zod-5917RelevantRanks": ["dec_875001003a@1", "dec_2fbac4f75a@5", "dec_5db25c7e3c@6"],
+      "zod-5937RelevantRanks": ["dec_875001003a@2", "dec_2fbac4f75a@3"]
+    },
+    {
+      "snapshot": "accumulated",
+      "decisionCount": 167,
+      "zod-5917RelevantRanks": ["dec_875001003a@1", "dec_4cf174e125@2", "dec_2fbac4f75a@5", "dec_5db25c7e3c@6"],
+      "zod-5937RelevantRanks": ["dec_875001003a@1", "dec_2fbac4f75a@3", "dec_4cf174e125@5"]
+    },
+    {
+      "snapshot": "relevant-only",
+      "decisionCount": 5,
+      "zod-5917RelevantRanks": ["dec_875001003a@1", "dec_4cf174e125@2", "dec_2fbac4f75a@4", "dec_5db25c7e3c@5"],
+      "zod-5937RelevantRanks": ["dec_875001003a@3", "dec_4cf174e125@4", "dec_2fbac4f75a@5"]
+    }
+  ],
+  "interpretationRules": {
+    "paperWarningTransferSupported": false,
+    "hunchArchitecturalMitigationSupported": false,
+    "episodicFirstSupported": false,
+    "causalSurgeryTriggered": false
+  },
+  "deviations": [
+    "The pre-solver checkpoint audit used the text-only `hunch query` command. It preserved IDs and ranks but that command does not emit token-cost, abstention, or withheld-record fields. Those fields are available and reported for the actual solver MCP context calls, not for the fixed checkpoint queries."
+  ],
+  "rawResults": [
+    {
+      "file": "2026-08-26T18-40-12-129Z-p79616.json",
+      "sha256": "d49147da4896d3dc89d84c2de51e9da8ff0ef459273e2b64907f7777f9b67fef"
+    },
+    {
+      "file": "2026-08-26T18-40-12-129Z-p79617.json",
+      "sha256": "7c309793750c799dac14cd14c0c81281c8210ebab8d1d091ec7147533c23f6ea"
+    },
+    {
+      "file": "2026-08-26T18-40-12-129Z-p79618.json",
+      "sha256": "593576ae4ba318e14351414755b04d3e3dd354fbe64eedd42c462dd920934993"
+    },
+    {
+      "file": "2026-08-26T19-22-32-492Z-p65452.json",
+      "sha256": "df2b40edb6d838363b4523202f2c212d8b8c591844483f20e7439b0204d1663e"
+    },
+    {
+      "file": "2026-08-26T19-28-20-854Z-p21049.json",
+      "sha256": "fc984d1bc59c0ac5b93214d7407151ebf70de859be609bed7b8732e6f3be0445"
+    },
+    {
+      "file": "2026-08-26T19-27-11-445Z-p19590.json",
+      "sha256": "9fa83775e2a7883cb92fae1c596645dcb2f197162c2bdd134addd2e0c396e618"
+    }
+  ]
+}
