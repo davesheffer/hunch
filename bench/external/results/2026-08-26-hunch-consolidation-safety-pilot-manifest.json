@@ -1,0 +1,95 @@
+{
+  "experiment": "hunch-consolidation-safety-pilot",
+  "frozenAt": "2026-08-26",
+  "preregistrationCommit": "ba38aa6d3ddd1ea0534d15b48090b8837ccdb90c",
+  "hunchRevision": "ba38aa6d3ddd1ea0534d15b48090b8837ccdb90c",
+  "hunchRunnerSha256": "70948caf89d8d44ca2e616994aec003389ff6e8bdc08327f95224c7e42809b9f",
+  "zodSourceRevisionAtLaunch": "e516c3baf22615e20934116abebfed6c000222c2",
+  "zodMemoryCutoff": "2026-01-08",
+  "zodMemoryCodeRevision": "9977fb0868432461de265a773319e80a90ba3e37",
+  "taskManifestSha256": "f8286f142b54f36b15c7973278a127a110e321b60cb66a0dedf2527bb1b77e39",
+  "episodeFixtureSha256": "66b2d8bbd312de0e2b29a578c5d2dcb081a49ac1514a729e453584ef193325fb",
+  "tasks": {
+    "zod-5917": {
+      "fixSha": "02c2baf7d0d615872fa4528a8020603b71211702",
+      "issueContractSha256": "d9c23ab8098f532f2aa6b578ad2d757b66e1643934ffe44e3a456143eb496cbe"
+    },
+    "zod-5937": {
+      "fixSha": "1cab69383fcdeae2a366d5e2a2fc4d8fc765d168",
+      "issueContractSha256": "77995ae0df6c37a68ec220c31140061cb0766eb0bee986da852bd19f23e8dc59"
+    }
+  },
+  "solver": {
+    "modelArgument": "claude-sonnet-5",
+    "claudeCodeVersion": "2.1.186",
+    "nodeVersion": "v24.19.0",
+    "maxTurns": 50,
+    "repeats": 3,
+    "reproductionEnabled": false
+  },
+  "synthesis": {
+    "provider": "claude-cli",
+    "historicalCommitLimit": 200,
+    "captured": 167,
+    "provenanceCounts": {
+      "llm_draft": 107,
+      "llm_draft+summary": 11,
+      "inferred": 49
+    },
+    "index": {
+      "symbols": 2190,
+      "edges": 2128,
+      "components": 4,
+      "parseSkippedFiles": 4
+    }
+  },
+  "snapshots": {
+    "structuralOnly": {
+      "localName": "zod-memory-p0",
+      "gitHead": "8a4f9a07add5cfff6bb94cf9dca0d41d8f94f0f2",
+      "decisionCount": 0
+    },
+    "prefix25": {
+      "localName": "zod-memory-p25",
+      "gitHead": "3af7a2fd0605c1bd7d59cd80a438a95a5dd47bad",
+      "decisionCount": 41
+    },
+    "prefix50": {
+      "localName": "zod-memory-p50",
+      "gitHead": "3d4db4c918f6737a7cff1643f2ae03808e55944a",
+      "decisionCount": 83
+    },
+    "prefix75": {
+      "localName": "zod-memory-p75",
+      "gitHead": "2c043901fcfd940c9c6f87fe9eba5d063fc51446",
+      "decisionCount": 125
+    },
+    "accumulated": {
+      "localName": "zod-memory-full",
+      "gitHead": "6f53d809027ae08c056bc548b844b086d2f3070f",
+      "decisionCount": 167,
+      "claudeMdSha256": "282a8e0d67a8b7cb4392bc5472b5adf1d5f0185a0fbc1579db77c14a63af67a5"
+    },
+    "relevantOnly": {
+      "localName": "zod-memory-rel",
+      "gitHead": "b50eb7a7ad8b0ed63bace284fa52686e71f25db7",
+      "decisionCount": 5,
+      "claudeMdSha256": "fd6b6642a456b2b8cdd21854d7db8c9c527bb40030985b2f42087a621f86b06a"
+    }
+  },
+  "relevantRecords": {
+    "dec_2fbac4f75a.json": "b146fe6861ef2fc036548cbe237dd1343e0bd55611eb7aa0f4bb3421ba9332e8",
+    "dec_4cf174e125.json": "911cd8fbe99b08feb27224b13ce7c03851c172a168b3df29541f40f65476c2ab",
+    "dec_5db25c7e3c.json": "d326ed6d528851e120e1477cf59c8941fa9d9963f4b7d5abb0daee8c368e091b",
+    "dec_875001003a.json": "f1901130ec621458fac6470b7e31cf871f94b162f86fceb9791b92e1b6a3a4a2",
+    "dec_c9214ac8b6.json": "600bc51bf0b40299b58b38a8e769c6ef51c9f2c442237238c04a6fa37f46019d"
+  },
+  "retrievalAudit": {
+    "completedBeforeSolverScoring": true,
+    "snapshots": ["structuralOnly", "prefix25", "prefix50", "prefix75", "accumulated", "relevantOnly"],
+    "queries": {
+      "zod-5917": "Zod preprocess optional position missing object key undefined expected nonoptional optin optout",
+      "zod-5937": "Zod preprocess catch missing object key undefined fallback JSON Schema optin optout"
+    }
+  }
+}
