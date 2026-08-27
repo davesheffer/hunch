@@ -1,0 +1,127 @@
+{
+  "schema_version": 1,
+  "protocol_version": 4,
+  "experiment": "hunch-direct-memory-capacity-stress",
+  "status": "complete",
+  "calibration_valid": true,
+  "planned_cli_calls": 102,
+  "completed_cli_calls": 102,
+  "completed_repeats": 3,
+  "validity_gates_by_repeat": {
+    "1": {
+      "clean_protected": "72/72",
+      "additive_protected": "72/72",
+      "additive_later_facts": "36/36",
+      "passed": true
+    },
+    "2": {
+      "clean_protected": "72/72",
+      "additive_protected": "72/72",
+      "additive_later_facts": "36/36",
+      "passed": true
+    },
+    "3": {
+      "clean_protected": "72/72",
+      "additive_protected": "72/72",
+      "additive_later_facts": "36/36",
+      "passed": true
+    }
+  },
+  "protected_accuracy_by_repeat": {
+    "1": {
+      "clean": "72/72",
+      "additive": "72/72",
+      "rewritten": "72/72",
+      "rescue": "72/72"
+    },
+    "2": {
+      "clean": "72/72",
+      "additive": "72/72",
+      "rewritten": "72/72",
+      "rescue": "72/72"
+    },
+    "3": {
+      "clean": "72/72",
+      "additive": "72/72",
+      "rewritten": "66/72",
+      "rescue": "72/72"
+    }
+  },
+  "pooled_protected_accuracy": {
+    "clean": {
+      "correct": 216,
+      "total": 216,
+      "accuracy": 1
+    },
+    "additive": {
+      "correct": 216,
+      "total": 216,
+      "accuracy": 1
+    },
+    "rewritten": {
+      "correct": 210,
+      "total": 216,
+      "accuracy": 0.9722222222222222
+    },
+    "rescue": {
+      "correct": 216,
+      "total": 216,
+      "accuracy": 1
+    }
+  },
+  "pooled_later_fact_accuracy": {
+    "clean_absence_control": "108/108",
+    "additive": "108/108",
+    "rewritten": "108/108",
+    "rescue": "108/108"
+  },
+  "primary_contrast": {
+    "additive_minus_rewritten_percentage_points": 2.7777777777777777,
+    "paired_harms": 6,
+    "paired_wins": 0,
+    "rescued_harms": 6,
+    "rescue_rate": 1,
+    "repeats_with_additive_above_rewritten": 1,
+    "required_percentage_points": 10,
+    "required_directional_repeats": 2
+  },
+  "observed_corruption_pattern": {
+    "repeat": 3,
+    "affected_fact": "schema_namespace",
+    "affected_cases": 6,
+    "onset_round": 26,
+    "description": "The rewritten memory merged the original and prototype schema namespaces into values such as aster.violet/prototype. The QA model copied the merged value, which is not the protected original value.",
+    "correlated_batch_pattern": true
+  },
+  "replacement_trace": {
+    "cap_compliant_memories": 540,
+    "cap_compliant_memories_total": 540,
+    "protected_literal_checks_retained": 6480,
+    "protected_literal_checks_total": 6480,
+    "final_memory_words_mean": 41.666666666666664,
+    "final_memory_words_min": 34,
+    "final_memory_words_max": 46,
+    "target_words": 90,
+    "hard_max_words": 100
+  },
+  "frozen_decisions": {
+    "bounded_repeated_replacement_degradation_supported": false,
+    "hunch_immutable_additive_mitigation_supported": false,
+    "interpretation": "A real replacement-only semantic merge appeared in one repeat and was fully rescued, but the pooled 2.78-point effect and one-of-three repeat direction did not meet the frozen 10-point and two-of-three thresholds."
+  },
+  "execution": {
+    "cli_reported_cost_usd": 15.492394,
+    "aggregate_call_duration_minutes": 42.14626666666667,
+    "parallel_wall_time_minutes": 15.4
+  },
+  "integrity": {
+    "git_head_during_runs": "4fed7c2ee7b060846a4cbb6273d21e5b4f520729",
+    "runner_sha256": "b62a6dfc36355039e89a6e12ab810890e7da8a19a94f8ff12e0fd917a50737eb",
+    "case_bank_sha256": "3805543c8fa5a5373e35ba7efbb429eebc5e58b95463172151d51d64c6f31f2e",
+    "raw_repeat_sha256": {
+      "1": "9e89691908c5fd01c756dbe9f242e275ced5280053fa489961ca682edf772170",
+      "2": "e478b5045a3d3abe3e4fc79e9a51c358e4b98d36ffa8f1dbd92486c9d1da600f",
+      "3": "7a1c098f913993fba2c3732110c487edfc4a9b0c6b52348b58b69f31750e9244"
+    }
+  }
+}
