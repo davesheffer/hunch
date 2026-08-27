@@ -1,0 +1,895 @@
+{
+  "schema_version": 1,
+  "protocol_version": 5,
+  "experiment": "hunch-schema-collision-targeted-replication",
+  "status": "complete",
+  "trajectory_index": 11,
+  "case_id": "ember-archive",
+  "case_name": "Ember Archive",
+  "case_replicate": 2,
+  "started_at": "2026-08-27T04:36:46.500Z",
+  "model": "claude-sonnet-5",
+  "claude_cli_version": "2.1.186 (Claude Code)",
+  "git_head": "33cd6483bc7cf0faf2826c60edb306abc33d8c5f",
+  "runner_sha256": "f3bd2a02569e0fa886cf4941ac0c5796678bb8fda8b695119a2e1f1d931a2f71",
+  "fixture_source_sha256": "7a1c098f913993fba2c3732110c487edfc4a9b0c6b52348b58b69f31750e9244",
+  "fixture_sha256": "8382dc0a314ba1cedc70cd295709117be62faf957cb4c51391a8d3abbd28b558",
+  "system_prompt_sha256": "ced040c0d0e2979fa7f23d256137c9b31ac844b98fafc77291fd1361d3a8e275",
+  "condition_order": [
+    "rewritten",
+    "rescue",
+    "baseline",
+    "additive"
+  ],
+  "checkpoints": [
+    {
+      "step": 1,
+      "source_round": 26,
+      "observation": "The ember demo client uses encryption profile ember-toy-cipher.",
+      "memory_text": "Ember Archive: owner=Priya Noll, queue=silver-73, retry_cap=5, idempotency_header=X-Ember-Stamp, forbidden_fallback=temp-file, primary_region=ember-central, preview_region=ember-preview-west, deployment_zone=aspen-zone, schema_namespace=ember.coral, prototype_schema_namespace=ember.prototype, encryption_profile=cipher-kite, demo_client_encryption_profile=ember-toy-cipher, audit_topic=audit-ember-maple, audit_retention=ember-equinox, health_path=/health/ember-glow, lease_duration_s=71, recovery_contact=priya-ember, checksum_salt=salt-ember-dawn, admin_panel_accent=ember-saffron, telemetry_sink=ember-northstar, preview_renderer_retry_policy=ember-eleven, dashboard_cache=ember-linen, doc_lang=Slovene, mobile_demo_header=X-ember-Demo, shadow_importer_queue=ember-pebble-lab, sandbox_fallback=ember-scratch-pad, reporting_timezone=ember-meridian, metrics_prefix=ember-compass, thumbnail_prototype_storage=ember-canvas, replay_simulator_cadence=ember-solstice, canary_color=ember-plum, support_reply_lang=ember-common, rollout_window=Thursday sunrise, debug_console_port=ember-harbor, archive_tier=ember-glacier, compliance_tag=moonstone, notification_channel=ember-signal, backup_demonstrator=ember-vault.",
+      "words": 42,
+      "contains_production_literal": true,
+      "contains_prototype_literal": true,
+      "call": {
+        "role": "replacement_update",
+        "duration_ms": 20832,
+        "prompt_sha256": "283daa404c539e3912180f7048e2606620d6052e8e5e124726a8e4ac965e0b5a",
+        "raw_stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"api_error_status\":null,\"duration_ms\":19438,\"duration_api_ms\":20069,\"ttft_ms\":13549,\"ttft_stream_ms\":3574,\"time_to_request_ms\":342,\"num_turns\":2,\"result\":\"Memory updated.\",\"stop_reason\":\"end_turn\",\"session_id\":\"90e9450b-5802-415e-9061-f30ea32edcf4\",\"total_cost_usd\":0.066349,\"usage\":{\"input_tokens\":4,\"cache_creation_input_tokens\":1828,\"cache_read_input_tokens\":2824,\"output_tokens\":1823,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":1828,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"not_available\",\"iterations\":[{\"input_tokens\":2,\"output_tokens\":8,\"cache_read_input_tokens\":1412,\"cache_creation_input_tokens\":1828,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":1828},\"type\":\"message\"}],\"speed\":\"standard\"},\"modelUsage\":{\"claude-haiku-4-5-20251001\":{\"inputTokens\":972,\"outputTokens\":18,\"cacheReadInputTokens\":0,\"cacheCreationInputTokens\":0,\"webSearchRequests\":0,\"costUSD\":0.001062,\"contextWindow\":200000,\"maxOutputTokens\":32000},\"claude-sonnet-5\":{\"inputTokens\":4,\"outputTokens\":1823,\"cacheReadInputTokens\":2824,\"cacheCreationInputTokens\":1828,\"webSearchRequests\":0,\"costUSD\":0.065287,\"contextWindow\":200000,\"maxOutputTokens\":32000}},\"permission_denials\":[],\"structured_output\":{\"memory_text\":\"Ember Archive: owner=Priya Noll, queue=silver-73, retry_cap=5, idempotency_header=X-Ember-Stamp, forbidden_fallback=temp-file, primary_region=ember-central, preview_region=ember-preview-west, deployment_zone=aspen-zone, schema_namespace=ember.coral, prototype_schema_namespace=ember.prototype, encryption_profile=cipher-kite, demo_client_encryption_profile=ember-toy-cipher, audit_topic=audit-ember-maple, audit_retention=ember-equinox, health_path=/health/ember-glow, lease_duration_s=71, recovery_contact=priya-ember, checksum_salt=salt-ember-dawn, admin_panel_accent=ember-saffron, telemetry_sink=ember-northstar, preview_renderer_retry_policy=ember-eleven, dashboard_cache=ember-linen, doc_lang=Slovene, mobile_demo_header=X-ember-Demo, shadow_importer_queue=ember-pebble-lab, sandbox_fallback=ember-scratch-pad, reporting_timezone=ember-meridian, metrics_prefix=ember-compass, thumbnail_prototype_storage=ember-canvas, replay_simulator_cadence=ember-solstice, canary_color=ember-plum, support_reply_lang=ember-common, rollout_window=Thursday sunrise, debug_console_port=ember-harbor, archive_tier=ember-glacier, compliance_tag=moonstone, notification_channel=ember-signal, backup_demonstrator=ember-vault.\"},\"terminal_reason\":\"completed\",\"fast_mode_state\":\"off\",\"uuid\":\"582cf2bf-3157-4fb7-9be0-70d3ba1c0e98\"}\n",
+        "raw_stderr": "",
+        "envelope": {
+          "type": "result",
+          "subtype": "success",
+          "is_error": false,
+          "api_error_status": null,
+          "duration_ms": 19438,
+          "duration_api_ms": 20069,
+          "ttft_ms": 13549,
+          "ttft_stream_ms": 3574,
+          "time_to_request_ms": 342,
+          "num_turns": 2,
+          "result": "Memory updated.",
+          "stop_reason": "end_turn",
+          "session_id": "90e9450b-5802-415e-9061-f30ea32edcf4",
+          "total_cost_usd": 0.066349,
+          "usage": {
+            "input_tokens": 4,
+            "cache_creation_input_tokens": 1828,
+            "cache_read_input_tokens": 2824,
+            "output_tokens": 1823,
+            "server_tool_use": {
+              "web_search_requests": 0,
+              "web_fetch_requests": 0
+            },
+            "service_tier": "standard",
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 1828,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "inference_geo": "not_available",
+            "iterations": [
+              {
+                "input_tokens": 2,
+                "output_tokens": 8,
+                "cache_read_input_tokens": 1412,
+                "cache_creation_input_tokens": 1828,
+                "cache_creation": {
+                  "ephemeral_5m_input_tokens": 0,
+                  "ephemeral_1h_input_tokens": 1828
+                },
+                "type": "message"
+              }
+            ],
+            "speed": "standard"
+          },
+          "modelUsage": {
+            "claude-haiku-4-5-20251001": {
+              "inputTokens": 972,
+              "outputTokens": 18,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0,
+              "webSearchRequests": 0,
+              "costUSD": 0.001062,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            },
+            "claude-sonnet-5": {
+              "inputTokens": 4,
+              "outputTokens": 1823,
+              "cacheReadInputTokens": 2824,
+              "cacheCreationInputTokens": 1828,
+              "webSearchRequests": 0,
+              "costUSD": 0.065287,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            }
+          },
+          "permission_denials": [],
+          "structured_output": {
+            "memory_text": "Ember Archive: owner=Priya Noll, queue=silver-73, retry_cap=5, idempotency_header=X-Ember-Stamp, forbidden_fallback=temp-file, primary_region=ember-central, preview_region=ember-preview-west, deployment_zone=aspen-zone, schema_namespace=ember.coral, prototype_schema_namespace=ember.prototype, encryption_profile=cipher-kite, demo_client_encryption_profile=ember-toy-cipher, audit_topic=audit-ember-maple, audit_retention=ember-equinox, health_path=/health/ember-glow, lease_duration_s=71, recovery_contact=priya-ember, checksum_salt=salt-ember-dawn, admin_panel_accent=ember-saffron, telemetry_sink=ember-northstar, preview_renderer_retry_policy=ember-eleven, dashboard_cache=ember-linen, doc_lang=Slovene, mobile_demo_header=X-ember-Demo, shadow_importer_queue=ember-pebble-lab, sandbox_fallback=ember-scratch-pad, reporting_timezone=ember-meridian, metrics_prefix=ember-compass, thumbnail_prototype_storage=ember-canvas, replay_simulator_cadence=ember-solstice, canary_color=ember-plum, support_reply_lang=ember-common, rollout_window=Thursday sunrise, debug_console_port=ember-harbor, archive_tier=ember-glacier, compliance_tag=moonstone, notification_channel=ember-signal, backup_demonstrator=ember-vault."
+          },
+          "terminal_reason": "completed",
+          "fast_mode_state": "off",
+          "uuid": "582cf2bf-3157-4fb7-9be0-70d3ba1c0e98"
+        },
+        "parsed": {
+          "memory_text": "Ember Archive: owner=Priya Noll, queue=silver-73, retry_cap=5, idempotency_header=X-Ember-Stamp, forbidden_fallback=temp-file, primary_region=ember-central, preview_region=ember-preview-west, deployment_zone=aspen-zone, schema_namespace=ember.coral, prototype_schema_namespace=ember.prototype, encryption_profile=cipher-kite, demo_client_encryption_profile=ember-toy-cipher, audit_topic=audit-ember-maple, audit_retention=ember-equinox, health_path=/health/ember-glow, lease_duration_s=71, recovery_contact=priya-ember, checksum_salt=salt-ember-dawn, admin_panel_accent=ember-saffron, telemetry_sink=ember-northstar, preview_renderer_retry_policy=ember-eleven, dashboard_cache=ember-linen, doc_lang=Slovene, mobile_demo_header=X-ember-Demo, shadow_importer_queue=ember-pebble-lab, sandbox_fallback=ember-scratch-pad, reporting_timezone=ember-meridian, metrics_prefix=ember-compass, thumbnail_prototype_storage=ember-canvas, replay_simulator_cadence=ember-solstice, canary_color=ember-plum, support_reply_lang=ember-common, rollout_window=Thursday sunrise, debug_console_port=ember-harbor, archive_tier=ember-glacier, compliance_tag=moonstone, notification_channel=ember-signal, backup_demonstrator=ember-vault."
+        }
+      }
+    },
+    {
+      "step": 2,
+      "source_round": 27,
+      "observation": "The ember staging probe health path is /health/ember-stage.",
+      "memory_text": "Ember Archive: owner=Priya Noll, queue=silver-73, retry_cap=5, idempotency_header=X-Ember-Stamp, forbidden_fallback=temp-file, primary_region=ember-central, preview_region=ember-preview-west, deployment_zone=aspen-zone, schema_namespace=ember.coral, prototype_schema_namespace=ember.prototype, encryption_profile=cipher-kite, demo_client_encryption_profile=ember-toy-cipher, audit_topic=audit-ember-maple, audit_retention=ember-equinox, health_path=/health/ember-glow, staging_probe_health_path=/health/ember-stage, lease_duration_s=71, recovery_contact=priya-ember, checksum_salt=salt-ember-dawn, admin_panel_accent=ember-saffron, telemetry_sink=ember-northstar, preview_renderer_retry_policy=ember-eleven, dashboard_cache=ember-linen, doc_lang=Slovene, mobile_demo_header=X-ember-Demo, shadow_importer_queue=ember-pebble-lab, sandbox_fallback=ember-scratch-pad, reporting_timezone=ember-meridian, metrics_prefix=ember-compass, thumbnail_prototype_storage=ember-canvas, replay_simulator_cadence=ember-solstice, canary_color=ember-plum, support_reply_lang=ember-common, rollout_window=Thursday sunrise, debug_console_port=ember-harbor, archive_tier=ember-glacier, compliance_tag=moonstone, notification_channel=ember-signal, backup_demonstrator=ember-vault.",
+      "words": 43,
+      "contains_production_literal": true,
+      "contains_prototype_literal": true,
+      "call": {
+        "role": "replacement_update",
+        "duration_ms": 7205,
+        "prompt_sha256": "c4fca7a7f6e04c0d296eddf3570d1115529f1bf625a5435b28f9d617bdaf1673",
+        "raw_stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"api_error_status\":null,\"duration_ms\":6162,\"duration_api_ms\":6872,\"ttft_ms\":4771,\"ttft_stream_ms\":1808,\"time_to_request_ms\":250,\"num_turns\":2,\"result\":\"Memory updated with the new staging probe health path incorporated alongside all preserved existing facts.\",\"stop_reason\":\"end_turn\",\"session_id\":\"08104d75-9401-4913-bedb-dd95b63528e9\",\"total_cost_usd\":0.019312499999999996,\"usage\":{\"input_tokens\":4,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":3501,\"output_tokens\":659,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":0,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"not_available\",\"iterations\":[{\"input_tokens\":2,\"output_tokens\":32,\"cache_read_input_tokens\":2071,\"cache_creation_input_tokens\":0,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":0},\"type\":\"message\"}],\"speed\":\"standard\"},\"modelUsage\":{\"claude-haiku-4-5-20251001\":{\"inputTokens\":987,\"outputTokens\":16,\"cacheReadInputTokens\":0,\"cacheCreationInputTokens\":0,\"webSearchRequests\":0,\"costUSD\":0.001067,\"contextWindow\":200000,\"maxOutputTokens\":32000},\"claude-sonnet-5\":{\"inputTokens\":4,\"outputTokens\":659,\"cacheReadInputTokens\":3501,\"cacheCreationInputTokens\":0,\"webSearchRequests\":0,\"costUSD\":0.018245499999999998,\"contextWindow\":200000,\"maxOutputTokens\":32000}},\"permission_denials\":[],\"structured_output\":{\"memory_text\":\"Ember Archive: owner=Priya Noll, queue=silver-73, retry_cap=5, idempotency_header=X-Ember-Stamp, forbidden_fallback=temp-file, primary_region=ember-central, preview_region=ember-preview-west, deployment_zone=aspen-zone, schema_namespace=ember.coral, prototype_schema_namespace=ember.prototype, encryption_profile=cipher-kite, demo_client_encryption_profile=ember-toy-cipher, audit_topic=audit-ember-maple, audit_retention=ember-equinox, health_path=/health/ember-glow, staging_probe_health_path=/health/ember-stage, lease_duration_s=71, recovery_contact=priya-ember, checksum_salt=salt-ember-dawn, admin_panel_accent=ember-saffron, telemetry_sink=ember-northstar, preview_renderer_retry_policy=ember-eleven, dashboard_cache=ember-linen, doc_lang=Slovene, mobile_demo_header=X-ember-Demo, shadow_importer_queue=ember-pebble-lab, sandbox_fallback=ember-scratch-pad, reporting_timezone=ember-meridian, metrics_prefix=ember-compass, thumbnail_prototype_storage=ember-canvas, replay_simulator_cadence=ember-solstice, canary_color=ember-plum, support_reply_lang=ember-common, rollout_window=Thursday sunrise, debug_console_port=ember-harbor, archive_tier=ember-glacier, compliance_tag=moonstone, notification_channel=ember-signal, backup_demonstrator=ember-vault.\"},\"terminal_reason\":\"completed\",\"fast_mode_state\":\"off\",\"uuid\":\"ba17c06e-83c9-403b-a6dc-caa2434b1cb5\"}\n",
+        "raw_stderr": "",
+        "envelope": {
+          "type": "result",
+          "subtype": "success",
+          "is_error": false,
+          "api_error_status": null,
+          "duration_ms": 6162,
+          "duration_api_ms": 6872,
+          "ttft_ms": 4771,
+          "ttft_stream_ms": 1808,
+          "time_to_request_ms": 250,
+          "num_turns": 2,
+          "result": "Memory updated with the new staging probe health path incorporated alongside all preserved existing facts.",
+          "stop_reason": "end_turn",
+          "session_id": "08104d75-9401-4913-bedb-dd95b63528e9",
+          "total_cost_usd": 0.019312499999999996,
+          "usage": {
+            "input_tokens": 4,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 3501,
+            "output_tokens": 659,
+            "server_tool_use": {
+              "web_search_requests": 0,
+              "web_fetch_requests": 0
+            },
+            "service_tier": "standard",
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "inference_geo": "not_available",
+            "iterations": [
+              {
+                "input_tokens": 2,
+                "output_tokens": 32,
+                "cache_read_input_tokens": 2071,
+                "cache_creation_input_tokens": 0,
+                "cache_creation": {
+                  "ephemeral_5m_input_tokens": 0,
+                  "ephemeral_1h_input_tokens": 0
+                },
+                "type": "message"
+              }
+            ],
+            "speed": "standard"
+          },
+          "modelUsage": {
+            "claude-haiku-4-5-20251001": {
+              "inputTokens": 987,
+              "outputTokens": 16,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0,
+              "webSearchRequests": 0,
+              "costUSD": 0.001067,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            },
+            "claude-sonnet-5": {
+              "inputTokens": 4,
+              "outputTokens": 659,
+              "cacheReadInputTokens": 3501,
+              "cacheCreationInputTokens": 0,
+              "webSearchRequests": 0,
+              "costUSD": 0.018245499999999998,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            }
+          },
+          "permission_denials": [],
+          "structured_output": {
+            "memory_text": "Ember Archive: owner=Priya Noll, queue=silver-73, retry_cap=5, idempotency_header=X-Ember-Stamp, forbidden_fallback=temp-file, primary_region=ember-central, preview_region=ember-preview-west, deployment_zone=aspen-zone, schema_namespace=ember.coral, prototype_schema_namespace=ember.prototype, encryption_profile=cipher-kite, demo_client_encryption_profile=ember-toy-cipher, audit_topic=audit-ember-maple, audit_retention=ember-equinox, health_path=/health/ember-glow, staging_probe_health_path=/health/ember-stage, lease_duration_s=71, recovery_contact=priya-ember, checksum_salt=salt-ember-dawn, admin_panel_accent=ember-saffron, telemetry_sink=ember-northstar, preview_renderer_retry_policy=ember-eleven, dashboard_cache=ember-linen, doc_lang=Slovene, mobile_demo_header=X-ember-Demo, shadow_importer_queue=ember-pebble-lab, sandbox_fallback=ember-scratch-pad, reporting_timezone=ember-meridian, metrics_prefix=ember-compass, thumbnail_prototype_storage=ember-canvas, replay_simulator_cadence=ember-solstice, canary_color=ember-plum, support_reply_lang=ember-common, rollout_window=Thursday sunrise, debug_console_port=ember-harbor, archive_tier=ember-glacier, compliance_tag=moonstone, notification_channel=ember-signal, backup_demonstrator=ember-vault."
+          },
+          "terminal_reason": "completed",
+          "fast_mode_state": "off",
+          "uuid": "ba17c06e-83c9-403b-a6dc-caa2434b1cb5"
+        },
+        "parsed": {
+          "memory_text": "Ember Archive: owner=Priya Noll, queue=silver-73, retry_cap=5, idempotency_header=X-Ember-Stamp, forbidden_fallback=temp-file, primary_region=ember-central, preview_region=ember-preview-west, deployment_zone=aspen-zone, schema_namespace=ember.coral, prototype_schema_namespace=ember.prototype, encryption_profile=cipher-kite, demo_client_encryption_profile=ember-toy-cipher, audit_topic=audit-ember-maple, audit_retention=ember-equinox, health_path=/health/ember-glow, staging_probe_health_path=/health/ember-stage, lease_duration_s=71, recovery_contact=priya-ember, checksum_salt=salt-ember-dawn, admin_panel_accent=ember-saffron, telemetry_sink=ember-northstar, preview_renderer_retry_policy=ember-eleven, dashboard_cache=ember-linen, doc_lang=Slovene, mobile_demo_header=X-ember-Demo, shadow_importer_queue=ember-pebble-lab, sandbox_fallback=ember-scratch-pad, reporting_timezone=ember-meridian, metrics_prefix=ember-compass, thumbnail_prototype_storage=ember-canvas, replay_simulator_cadence=ember-solstice, canary_color=ember-plum, support_reply_lang=ember-common, rollout_window=Thursday sunrise, debug_console_port=ember-harbor, archive_tier=ember-glacier, compliance_tag=moonstone, notification_channel=ember-signal, backup_demonstrator=ember-vault."
+        }
+      }
+    },
+    {
+      "step": 3,
+      "source_round": 28,
+      "observation": "The escalation room for Ember Archive is room-ember-halo.",
+      "memory_text": "Ember Archive: owner=Priya Noll, queue=silver-73, retry_cap=5, idempotency_header=X-Ember-Stamp, forbidden_fallback=temp-file, primary_region=ember-central, preview_region=ember-preview-west, deployment_zone=aspen-zone, schema_namespace=ember.coral, prototype_schema_namespace=ember.prototype, encryption_profile=cipher-kite, demo_client_encryption_profile=ember-toy-cipher, audit_topic=audit-ember-maple, audit_retention=ember-equinox, health_path=/health/ember-glow, staging_probe_health_path=/health/ember-stage, lease_duration_s=71, recovery_contact=priya-ember, checksum_salt=salt-ember-dawn, telemetry_sink=ember-northstar, dashboard_cache=ember-linen, doc_lang=Slovene, shadow_importer_queue=ember-pebble-lab, sandbox_fallback=ember-scratch-pad, reporting_timezone=ember-meridian, metrics_prefix=ember-compass, canary_color=ember-plum, rollout_window=Thursday sunrise, archive_tier=ember-glacier, compliance_tag=moonstone, notification_channel=ember-signal, backup_demonstrator=ember-vault, escalation_room=room-ember-halo.",
+      "words": 37,
+      "contains_production_literal": true,
+      "contains_prototype_literal": true,
+      "call": {
+        "role": "replacement_update",
+        "duration_ms": 7581,
+        "prompt_sha256": "40bbd3a685f695cfdb5238d381cc7daddfcf7adc0c12efc48ef630383be5f779",
+        "raw_stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"api_error_status\":null,\"duration_ms\":6548,\"duration_api_ms\":6732,\"ttft_ms\":2774,\"ttft_stream_ms\":2215,\"time_to_request_ms\":802,\"num_turns\":2,\"result\":\"Done.\",\"stop_reason\":\"end_turn\",\"session_id\":\"a5ed41b4-d106-48fb-a3ce-0f38fbc797c3\",\"total_cost_usd\":0.024244,\"usage\":{\"input_tokens\":4,\"cache_creation_input_tokens\":625,\"cache_read_input_tokens\":2902,\"output_tokens\":617,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":625,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"not_available\",\"iterations\":[{\"input_tokens\":2,\"output_tokens\":5,\"cache_read_input_tokens\":1451,\"cache_creation_input_tokens\":625,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":625},\"type\":\"message\"}],\"speed\":\"standard\"},\"modelUsage\":{\"claude-haiku-4-5-20251001\":{\"inputTokens\":1003,\"outputTokens\":19,\"cacheReadInputTokens\":0,\"cacheCreationInputTokens\":0,\"webSearchRequests\":0,\"costUSD\":0.001098,\"contextWindow\":200000,\"maxOutputTokens\":32000},\"claude-sonnet-5\":{\"inputTokens\":4,\"outputTokens\":617,\"cacheReadInputTokens\":2902,\"cacheCreationInputTokens\":625,\"webSearchRequests\":0,\"costUSD\":0.023146,\"contextWindow\":200000,\"maxOutputTokens\":32000}},\"permission_denials\":[],\"structured_output\":{\"memory_text\":\"Ember Archive: owner=Priya Noll, queue=silver-73, retry_cap=5, idempotency_header=X-Ember-Stamp, forbidden_fallback=temp-file, primary_region=ember-central, preview_region=ember-preview-west, deployment_zone=aspen-zone, schema_namespace=ember.coral, prototype_schema_namespace=ember.prototype, encryption_profile=cipher-kite, demo_client_encryption_profile=ember-toy-cipher, audit_topic=audit-ember-maple, audit_retention=ember-equinox, health_path=/health/ember-glow, staging_probe_health_path=/health/ember-stage, lease_duration_s=71, recovery_contact=priya-ember, checksum_salt=salt-ember-dawn, telemetry_sink=ember-northstar, dashboard_cache=ember-linen, doc_lang=Slovene, shadow_importer_queue=ember-pebble-lab, sandbox_fallback=ember-scratch-pad, reporting_timezone=ember-meridian, metrics_prefix=ember-compass, canary_color=ember-plum, rollout_window=Thursday sunrise, archive_tier=ember-glacier, compliance_tag=moonstone, notification_channel=ember-signal, backup_demonstrator=ember-vault, escalation_room=room-ember-halo.\"},\"terminal_reason\":\"completed\",\"fast_mode_state\":\"off\",\"uuid\":\"85fd1f19-8700-4cbc-8fdf-a854dde998cc\"}\n",
+        "raw_stderr": "",
+        "envelope": {
+          "type": "result",
+          "subtype": "success",
+          "is_error": false,
+          "api_error_status": null,
+          "duration_ms": 6548,
+          "duration_api_ms": 6732,
+          "ttft_ms": 2774,
+          "ttft_stream_ms": 2215,
+          "time_to_request_ms": 802,
+          "num_turns": 2,
+          "result": "Done.",
+          "stop_reason": "end_turn",
+          "session_id": "a5ed41b4-d106-48fb-a3ce-0f38fbc797c3",
+          "total_cost_usd": 0.024244,
+          "usage": {
+            "input_tokens": 4,
+            "cache_creation_input_tokens": 625,
+            "cache_read_input_tokens": 2902,
+            "output_tokens": 617,
+            "server_tool_use": {
+              "web_search_requests": 0,
+              "web_fetch_requests": 0
+            },
+            "service_tier": "standard",
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 625,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "inference_geo": "not_available",
+            "iterations": [
+              {
+                "input_tokens": 2,
+                "output_tokens": 5,
+                "cache_read_input_tokens": 1451,
+                "cache_creation_input_tokens": 625,
+                "cache_creation": {
+                  "ephemeral_5m_input_tokens": 0,
+                  "ephemeral_1h_input_tokens": 625
+                },
+                "type": "message"
+              }
+            ],
+            "speed": "standard"
+          },
+          "modelUsage": {
+            "claude-haiku-4-5-20251001": {
+              "inputTokens": 1003,
+              "outputTokens": 19,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0,
+              "webSearchRequests": 0,
+              "costUSD": 0.001098,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            },
+            "claude-sonnet-5": {
+              "inputTokens": 4,
+              "outputTokens": 617,
+              "cacheReadInputTokens": 2902,
+              "cacheCreationInputTokens": 625,
+              "webSearchRequests": 0,
+              "costUSD": 0.023146,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            }
+          },
+          "permission_denials": [],
+          "structured_output": {
+            "memory_text": "Ember Archive: owner=Priya Noll, queue=silver-73, retry_cap=5, idempotency_header=X-Ember-Stamp, forbidden_fallback=temp-file, primary_region=ember-central, preview_region=ember-preview-west, deployment_zone=aspen-zone, schema_namespace=ember.coral, prototype_schema_namespace=ember.prototype, encryption_profile=cipher-kite, demo_client_encryption_profile=ember-toy-cipher, audit_topic=audit-ember-maple, audit_retention=ember-equinox, health_path=/health/ember-glow, staging_probe_health_path=/health/ember-stage, lease_duration_s=71, recovery_contact=priya-ember, checksum_salt=salt-ember-dawn, telemetry_sink=ember-northstar, dashboard_cache=ember-linen, doc_lang=Slovene, shadow_importer_queue=ember-pebble-lab, sandbox_fallback=ember-scratch-pad, reporting_timezone=ember-meridian, metrics_prefix=ember-compass, canary_color=ember-plum, rollout_window=Thursday sunrise, archive_tier=ember-glacier, compliance_tag=moonstone, notification_channel=ember-signal, backup_demonstrator=ember-vault, escalation_room=room-ember-halo."
+          },
+          "terminal_reason": "completed",
+          "fast_mode_state": "off",
+          "uuid": "85fd1f19-8700-4cbc-8fdf-a854dde998cc"
+        },
+        "parsed": {
+          "memory_text": "Ember Archive: owner=Priya Noll, queue=silver-73, retry_cap=5, idempotency_header=X-Ember-Stamp, forbidden_fallback=temp-file, primary_region=ember-central, preview_region=ember-preview-west, deployment_zone=aspen-zone, schema_namespace=ember.coral, prototype_schema_namespace=ember.prototype, encryption_profile=cipher-kite, demo_client_encryption_profile=ember-toy-cipher, audit_topic=audit-ember-maple, audit_retention=ember-equinox, health_path=/health/ember-glow, staging_probe_health_path=/health/ember-stage, lease_duration_s=71, recovery_contact=priya-ember, checksum_salt=salt-ember-dawn, telemetry_sink=ember-northstar, dashboard_cache=ember-linen, doc_lang=Slovene, shadow_importer_queue=ember-pebble-lab, sandbox_fallback=ember-scratch-pad, reporting_timezone=ember-meridian, metrics_prefix=ember-compass, canary_color=ember-plum, rollout_window=Thursday sunrise, archive_tier=ember-glacier, compliance_tag=moonstone, notification_channel=ember-signal, backup_demonstrator=ember-vault, escalation_room=room-ember-halo."
+        }
+      }
+    },
+    {
+      "step": 4,
+      "source_round": 29,
+      "observation": "The ember analytics sandbox audit topic is ember-analytics-noise.",
+      "memory_text": "Ember Archive: owner=Priya Noll, queue=silver-73, retry_cap=5, idempotency_header=X-Ember-Stamp, forbidden_fallback=temp-file, primary_region=ember-central, preview_region=ember-preview-west, deployment_zone=aspen-zone, schema_namespace=ember.coral, prototype_schema_namespace=ember.prototype, encryption_profile=cipher-kite, demo_client_encryption_profile=ember-toy-cipher, audit_topic=audit-ember-maple, analytics_sandbox_audit_topic=ember-analytics-noise, audit_retention=ember-equinox, health_path=/health/ember-glow, staging_probe_health_path=/health/ember-stage, lease_duration_s=71, recovery_contact=priya-ember, checksum_salt=salt-ember-dawn, telemetry_sink=ember-northstar, dashboard_cache=ember-linen, doc_lang=Slovene, shadow_importer_queue=ember-pebble-lab, sandbox_fallback=ember-scratch-pad, reporting_timezone=ember-meridian, metrics_prefix=ember-compass, canary_color=ember-plum, rollout_window=Thursday sunrise, archive_tier=ember-glacier, compliance_tag=moonstone, notification_channel=ember-signal, backup_demonstrator=ember-vault, escalation_room=room-ember-halo.",
+      "words": 38,
+      "contains_production_literal": true,
+      "contains_prototype_literal": true,
+      "call": {
+        "role": "replacement_update",
+        "duration_ms": 15812,
+        "prompt_sha256": "936b5dc8ee1305f9ae98bcff5bc92ce5b78a547aada7de30b446389bb28364e2",
+        "raw_stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"api_error_status\":null,\"duration_ms\":14738,\"duration_api_ms\":15172,\"ttft_ms\":10715,\"ttft_stream_ms\":2513,\"time_to_request_ms\":748,\"num_turns\":2,\"result\":\"Done.\",\"stop_reason\":\"end_turn\",\"session_id\":\"50d46f94-edb7-472e-8390-62ae1a378a45\",\"total_cost_usd\":0.080143,\"usage\":{\"input_tokens\":4,\"cache_creation_input_tokens\":3211,\"cache_read_input_tokens\":1350,\"output_tokens\":1853,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":3211,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"not_available\",\"iterations\":[{\"input_tokens\":2,\"output_tokens\":5,\"cache_read_input_tokens\":1350,\"cache_creation_input_tokens\":1861,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":1861},\"type\":\"message\"}],\"speed\":\"standard\"},\"modelUsage\":{\"claude-haiku-4-5-20251001\":{\"inputTokens\":933,\"outputTokens\":16,\"cacheReadInputTokens\":0,\"cacheCreationInputTokens\":0,\"webSearchRequests\":0,\"costUSD\":0.001013,\"contextWindow\":200000,\"maxOutputTokens\":32000},\"claude-sonnet-5\":{\"inputTokens\":4,\"outputTokens\":1853,\"cacheReadInputTokens\":1350,\"cacheCreationInputTokens\":3211,\"webSearchRequests\":0,\"costUSD\":0.07913,\"contextWindow\":200000,\"maxOutputTokens\":32000}},\"permission_denials\":[],\"structured_output\":{\"memory_text\":\"Ember Archive: owner=Priya Noll, queue=silver-73, retry_cap=5, idempotency_header=X-Ember-Stamp, forbidden_fallback=temp-file, primary_region=ember-central, preview_region=ember-preview-west, deployment_zone=aspen-zone, schema_namespace=ember.coral, prototype_schema_namespace=ember.prototype, encryption_profile=cipher-kite, demo_client_encryption_profile=ember-toy-cipher, audit_topic=audit-ember-maple, analytics_sandbox_audit_topic=ember-analytics-noise, audit_retention=ember-equinox, health_path=/health/ember-glow, staging_probe_health_path=/health/ember-stage, lease_duration_s=71, recovery_contact=priya-ember, checksum_salt=salt-ember-dawn, telemetry_sink=ember-northstar, dashboard_cache=ember-linen, doc_lang=Slovene, shadow_importer_queue=ember-pebble-lab, sandbox_fallback=ember-scratch-pad, reporting_timezone=ember-meridian, metrics_prefix=ember-compass, canary_color=ember-plum, rollout_window=Thursday sunrise, archive_tier=ember-glacier, compliance_tag=moonstone, notification_channel=ember-signal, backup_demonstrator=ember-vault, escalation_room=room-ember-halo.\"},\"terminal_reason\":\"completed\",\"fast_mode_state\":\"off\",\"uuid\":\"63091866-4e0e-4601-b56a-e0778af2f939\"}\n",
+        "raw_stderr": "",
+        "envelope": {
+          "type": "result",
+          "subtype": "success",
+          "is_error": false,
+          "api_error_status": null,
+          "duration_ms": 14738,
+          "duration_api_ms": 15172,
+          "ttft_ms": 10715,
+          "ttft_stream_ms": 2513,
+          "time_to_request_ms": 748,
+          "num_turns": 2,
+          "result": "Done.",
+          "stop_reason": "end_turn",
+          "session_id": "50d46f94-edb7-472e-8390-62ae1a378a45",
+          "total_cost_usd": 0.080143,
+          "usage": {
+            "input_tokens": 4,
+            "cache_creation_input_tokens": 3211,
+            "cache_read_input_tokens": 1350,
+            "output_tokens": 1853,
+            "server_tool_use": {
+              "web_search_requests": 0,
+              "web_fetch_requests": 0
+            },
+            "service_tier": "standard",
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 3211,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "inference_geo": "not_available",
+            "iterations": [
+              {
+                "input_tokens": 2,
+                "output_tokens": 5,
+                "cache_read_input_tokens": 1350,
+                "cache_creation_input_tokens": 1861,
+                "cache_creation": {
+                  "ephemeral_5m_input_tokens": 0,
+                  "ephemeral_1h_input_tokens": 1861
+                },
+                "type": "message"
+              }
+            ],
+            "speed": "standard"
+          },
+          "modelUsage": {
+            "claude-haiku-4-5-20251001": {
+              "inputTokens": 933,
+              "outputTokens": 16,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0,
+              "webSearchRequests": 0,
+              "costUSD": 0.001013,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            },
+            "claude-sonnet-5": {
+              "inputTokens": 4,
+              "outputTokens": 1853,
+              "cacheReadInputTokens": 1350,
+              "cacheCreationInputTokens": 3211,
+              "webSearchRequests": 0,
+              "costUSD": 0.07913,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            }
+          },
+          "permission_denials": [],
+          "structured_output": {
+            "memory_text": "Ember Archive: owner=Priya Noll, queue=silver-73, retry_cap=5, idempotency_header=X-Ember-Stamp, forbidden_fallback=temp-file, primary_region=ember-central, preview_region=ember-preview-west, deployment_zone=aspen-zone, schema_namespace=ember.coral, prototype_schema_namespace=ember.prototype, encryption_profile=cipher-kite, demo_client_encryption_profile=ember-toy-cipher, audit_topic=audit-ember-maple, analytics_sandbox_audit_topic=ember-analytics-noise, audit_retention=ember-equinox, health_path=/health/ember-glow, staging_probe_health_path=/health/ember-stage, lease_duration_s=71, recovery_contact=priya-ember, checksum_salt=salt-ember-dawn, telemetry_sink=ember-northstar, dashboard_cache=ember-linen, doc_lang=Slovene, shadow_importer_queue=ember-pebble-lab, sandbox_fallback=ember-scratch-pad, reporting_timezone=ember-meridian, metrics_prefix=ember-compass, canary_color=ember-plum, rollout_window=Thursday sunrise, archive_tier=ember-glacier, compliance_tag=moonstone, notification_channel=ember-signal, backup_demonstrator=ember-vault, escalation_room=room-ember-halo."
+          },
+          "terminal_reason": "completed",
+          "fast_mode_state": "off",
+          "uuid": "63091866-4e0e-4601-b56a-e0778af2f939"
+        },
+        "parsed": {
+          "memory_text": "Ember Archive: owner=Priya Noll, queue=silver-73, retry_cap=5, idempotency_header=X-Ember-Stamp, forbidden_fallback=temp-file, primary_region=ember-central, preview_region=ember-preview-west, deployment_zone=aspen-zone, schema_namespace=ember.coral, prototype_schema_namespace=ember.prototype, encryption_profile=cipher-kite, demo_client_encryption_profile=ember-toy-cipher, audit_topic=audit-ember-maple, analytics_sandbox_audit_topic=ember-analytics-noise, audit_retention=ember-equinox, health_path=/health/ember-glow, staging_probe_health_path=/health/ember-stage, lease_duration_s=71, recovery_contact=priya-ember, checksum_salt=salt-ember-dawn, telemetry_sink=ember-northstar, dashboard_cache=ember-linen, doc_lang=Slovene, shadow_importer_queue=ember-pebble-lab, sandbox_fallback=ember-scratch-pad, reporting_timezone=ember-meridian, metrics_prefix=ember-compass, canary_color=ember-plum, rollout_window=Thursday sunrise, archive_tier=ember-glacier, compliance_tag=moonstone, notification_channel=ember-signal, backup_demonstrator=ember-vault, escalation_room=room-ember-halo."
+        }
+      }
+    },
+    {
+      "step": 5,
+      "source_round": 30,
+      "observation": "The ember batch simulator lease mode is ember-elastic.",
+      "memory_text": "Ember Archive: owner=Priya Noll, queue=silver-73, retry_cap=5, idempotency_header=X-Ember-Stamp, forbidden_fallback=temp-file, primary_region=ember-central, preview_region=ember-preview-west, deployment_zone=aspen-zone, schema_namespace=ember.coral, prototype_schema_namespace=ember.prototype, encryption_profile=cipher-kite, demo_client_encryption_profile=ember-toy-cipher, audit_topic=audit-ember-maple, analytics_sandbox_audit_topic=ember-analytics-noise, audit_retention=ember-equinox, health_path=/health/ember-glow, staging_probe_health_path=/health/ember-stage, lease_duration_s=71, batch_simulator_lease_mode=ember-elastic, recovery_contact=priya-ember, checksum_salt=salt-ember-dawn, telemetry_sink=ember-northstar, dashboard_cache=ember-linen, doc_lang=Slovene, shadow_importer_queue=ember-pebble-lab, sandbox_fallback=ember-scratch-pad, reporting_timezone=ember-meridian, metrics_prefix=ember-compass, canary_color=ember-plum, rollout_window=Thursday sunrise, archive_tier=ember-glacier, compliance_tag=moonstone, notification_channel=ember-signal, backup_demonstrator=ember-vault, escalation_room=room-ember-halo.",
+      "words": 39,
+      "contains_production_literal": true,
+      "contains_prototype_literal": true,
+      "call": {
+        "role": "replacement_update",
+        "duration_ms": 84097,
+        "prompt_sha256": "ae1ab45eb4543991b998fbe9b99bdec681149c0df7e9e802687b9e3c2eaeb263",
+        "raw_stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"api_error_status\":null,\"duration_ms\":82570,\"duration_api_ms\":81862,\"ttft_ms\":16480,\"ttft_stream_ms\":4199,\"time_to_request_ms\":1821,\"num_turns\":2,\"result\":\"Memory consolidated successfully with the new observation (batch_simulator_lease_mode=ember-elastic) incorporated alongside all prior facts, well within the word limit.\",\"stop_reason\":\"end_turn\",\"session_id\":\"02611709-36b2-4187-917b-ae7157d8c293\",\"total_cost_usd\":0.09787500000000002,\"usage\":{\"input_tokens\":4,\"cache_creation_input_tokens\":3693,\"cache_read_input_tokens\":1370,\"output_tokens\":2368,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":3693,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"not_available\",\"iterations\":[{\"input_tokens\":2,\"output_tokens\":58,\"cache_read_input_tokens\":1370,\"cache_creation_input_tokens\":2323,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":2323},\"type\":\"message\"}],\"speed\":\"standard\"},\"modelUsage\":{\"claude-haiku-4-5-20251001\":{\"inputTokens\":945,\"outputTokens\":19,\"cacheReadInputTokens\":0,\"cacheCreationInputTokens\":0,\"webSearchRequests\":0,\"costUSD\":0.00104,\"contextWindow\":200000,\"maxOutputTokens\":32000},\"claude-sonnet-5\":{\"inputTokens\":4,\"outputTokens\":2368,\"cacheReadInputTokens\":1370,\"cacheCreationInputTokens\":3693,\"webSearchRequests\":0,\"costUSD\":0.096835,\"contextWindow\":200000,\"maxOutputTokens\":32000}},\"permission_denials\":[],\"structured_output\":{\"memory_text\":\"Ember Archive: owner=Priya Noll, queue=silver-73, retry_cap=5, idempotency_header=X-Ember-Stamp, forbidden_fallback=temp-file, primary_region=ember-central, preview_region=ember-preview-west, deployment_zone=aspen-zone, schema_namespace=ember.coral, prototype_schema_namespace=ember.prototype, encryption_profile=cipher-kite, demo_client_encryption_profile=ember-toy-cipher, audit_topic=audit-ember-maple, analytics_sandbox_audit_topic=ember-analytics-noise, audit_retention=ember-equinox, health_path=/health/ember-glow, staging_probe_health_path=/health/ember-stage, lease_duration_s=71, batch_simulator_lease_mode=ember-elastic, recovery_contact=priya-ember, checksum_salt=salt-ember-dawn, telemetry_sink=ember-northstar, dashboard_cache=ember-linen, doc_lang=Slovene, shadow_importer_queue=ember-pebble-lab, sandbox_fallback=ember-scratch-pad, reporting_timezone=ember-meridian, metrics_prefix=ember-compass, canary_color=ember-plum, rollout_window=Thursday sunrise, archive_tier=ember-glacier, compliance_tag=moonstone, notification_channel=ember-signal, backup_demonstrator=ember-vault, escalation_room=room-ember-halo.\"},\"terminal_reason\":\"completed\",\"fast_mode_state\":\"off\",\"uuid\":\"171d64aa-c2da-420c-a4ec-4261e4a79068\"}\n",
+        "raw_stderr": "",
+        "envelope": {
+          "type": "result",
+          "subtype": "success",
+          "is_error": false,
+          "api_error_status": null,
+          "duration_ms": 82570,
+          "duration_api_ms": 81862,
+          "ttft_ms": 16480,
+          "ttft_stream_ms": 4199,
+          "time_to_request_ms": 1821,
+          "num_turns": 2,
+          "result": "Memory consolidated successfully with the new observation (batch_simulator_lease_mode=ember-elastic) incorporated alongside all prior facts, well within the word limit.",
+          "stop_reason": "end_turn",
+          "session_id": "02611709-36b2-4187-917b-ae7157d8c293",
+          "total_cost_usd": 0.09787500000000002,
+          "usage": {
+            "input_tokens": 4,
+            "cache_creation_input_tokens": 3693,
+            "cache_read_input_tokens": 1370,
+            "output_tokens": 2368,
+            "server_tool_use": {
+              "web_search_requests": 0,
+              "web_fetch_requests": 0
+            },
+            "service_tier": "standard",
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 3693,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "inference_geo": "not_available",
+            "iterations": [
+              {
+                "input_tokens": 2,
+                "output_tokens": 58,
+                "cache_read_input_tokens": 1370,
+                "cache_creation_input_tokens": 2323,
+                "cache_creation": {
+                  "ephemeral_5m_input_tokens": 0,
+                  "ephemeral_1h_input_tokens": 2323
+                },
+                "type": "message"
+              }
+            ],
+            "speed": "standard"
+          },
+          "modelUsage": {
+            "claude-haiku-4-5-20251001": {
+              "inputTokens": 945,
+              "outputTokens": 19,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0,
+              "webSearchRequests": 0,
+              "costUSD": 0.00104,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            },
+            "claude-sonnet-5": {
+              "inputTokens": 4,
+              "outputTokens": 2368,
+              "cacheReadInputTokens": 1370,
+              "cacheCreationInputTokens": 3693,
+              "webSearchRequests": 0,
+              "costUSD": 0.096835,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            }
+          },
+          "permission_denials": [],
+          "structured_output": {
+            "memory_text": "Ember Archive: owner=Priya Noll, queue=silver-73, retry_cap=5, idempotency_header=X-Ember-Stamp, forbidden_fallback=temp-file, primary_region=ember-central, preview_region=ember-preview-west, deployment_zone=aspen-zone, schema_namespace=ember.coral, prototype_schema_namespace=ember.prototype, encryption_profile=cipher-kite, demo_client_encryption_profile=ember-toy-cipher, audit_topic=audit-ember-maple, analytics_sandbox_audit_topic=ember-analytics-noise, audit_retention=ember-equinox, health_path=/health/ember-glow, staging_probe_health_path=/health/ember-stage, lease_duration_s=71, batch_simulator_lease_mode=ember-elastic, recovery_contact=priya-ember, checksum_salt=salt-ember-dawn, telemetry_sink=ember-northstar, dashboard_cache=ember-linen, doc_lang=Slovene, shadow_importer_queue=ember-pebble-lab, sandbox_fallback=ember-scratch-pad, reporting_timezone=ember-meridian, metrics_prefix=ember-compass, canary_color=ember-plum, rollout_window=Thursday sunrise, archive_tier=ember-glacier, compliance_tag=moonstone, notification_channel=ember-signal, backup_demonstrator=ember-vault, escalation_room=room-ember-halo."
+          },
+          "terminal_reason": "completed",
+          "fast_mode_state": "off",
+          "uuid": "171d64aa-c2da-420c-a4ec-4261e4a79068"
+        },
+        "parsed": {
+          "memory_text": "Ember Archive: owner=Priya Noll, queue=silver-73, retry_cap=5, idempotency_header=X-Ember-Stamp, forbidden_fallback=temp-file, primary_region=ember-central, preview_region=ember-preview-west, deployment_zone=aspen-zone, schema_namespace=ember.coral, prototype_schema_namespace=ember.prototype, encryption_profile=cipher-kite, demo_client_encryption_profile=ember-toy-cipher, audit_topic=audit-ember-maple, analytics_sandbox_audit_topic=ember-analytics-noise, audit_retention=ember-equinox, health_path=/health/ember-glow, staging_probe_health_path=/health/ember-stage, lease_duration_s=71, batch_simulator_lease_mode=ember-elastic, recovery_contact=priya-ember, checksum_salt=salt-ember-dawn, telemetry_sink=ember-northstar, dashboard_cache=ember-linen, doc_lang=Slovene, shadow_importer_queue=ember-pebble-lab, sandbox_fallback=ember-scratch-pad, reporting_timezone=ember-meridian, metrics_prefix=ember-compass, canary_color=ember-plum, rollout_window=Thursday sunrise, archive_tier=ember-glacier, compliance_tag=moonstone, notification_channel=ember-signal, backup_demonstrator=ember-vault, escalation_room=room-ember-halo."
+        }
+      }
+    }
+  ],
+  "qa_calls": {
+    "rewritten": {
+      "role": "downstream_qa",
+      "duration_ms": 5564,
+      "prompt_sha256": "7df337d35e04dc68fd90080b1de50d8b0de565d3a9e623e05883e861e37986de",
+      "raw_stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"api_error_status\":null,\"duration_ms\":3536,\"duration_api_ms\":4272,\"ttft_ms\":1668,\"ttft_stream_ms\":1666,\"time_to_request_ms\":249,\"num_turns\":2,\"result\":\"production_schema_namespace: ember.coral\\nprototype_schema_namespace: ember.prototype\",\"stop_reason\":\"end_turn\",\"session_id\":\"2c7cf895-87f0-4fe8-9d50-89993b5ab8fd\",\"total_cost_usd\":0.0210675,\"usage\":{\"input_tokens\":4,\"cache_creation_input_tokens\":1519,\"cache_read_input_tokens\":1373,\"output_tokens\":167,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":1519,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"not_available\",\"iterations\":[{\"input_tokens\":2,\"output_tokens\":34,\"cache_read_input_tokens\":1373,\"cache_creation_input_tokens\":146,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":146},\"type\":\"message\"}],\"speed\":\"standard\"},\"modelUsage\":{\"claude-haiku-4-5-20251001\":{\"inputTokens\":916,\"outputTokens\":16,\"cacheReadInputTokens\":0,\"cacheCreationInputTokens\":0,\"webSearchRequests\":0,\"costUSD\":0.000996,\"contextWindow\":200000,\"maxOutputTokens\":32000},\"claude-sonnet-5\":{\"inputTokens\":4,\"outputTokens\":167,\"cacheReadInputTokens\":1373,\"cacheCreationInputTokens\":1519,\"webSearchRequests\":0,\"costUSD\":0.0200715,\"contextWindow\":200000,\"maxOutputTokens\":32000}},\"permission_denials\":[],\"structured_output\":{\"production_schema_namespace\":\"ember.coral\",\"prototype_schema_namespace\":\"ember.prototype\"},\"terminal_reason\":\"completed\",\"fast_mode_state\":\"off\",\"uuid\":\"f4a87f98-881e-4267-a703-60a6a66d5a0e\"}\n",
+      "raw_stderr": "",
+      "envelope": {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false,
+        "api_error_status": null,
+        "duration_ms": 3536,
+        "duration_api_ms": 4272,
+        "ttft_ms": 1668,
+        "ttft_stream_ms": 1666,
+        "time_to_request_ms": 249,
+        "num_turns": 2,
+        "result": "production_schema_namespace: ember.coral\nprototype_schema_namespace: ember.prototype",
+        "stop_reason": "end_turn",
+        "session_id": "2c7cf895-87f0-4fe8-9d50-89993b5ab8fd",
+        "total_cost_usd": 0.0210675,
+        "usage": {
+          "input_tokens": 4,
+          "cache_creation_input_tokens": 1519,
+          "cache_read_input_tokens": 1373,
+          "output_tokens": 167,
+          "server_tool_use": {
+            "web_search_requests": 0,
+            "web_fetch_requests": 0
+          },
+          "service_tier": "standard",
+          "cache_creation": {
+            "ephemeral_1h_input_tokens": 1519,
+            "ephemeral_5m_input_tokens": 0
+          },
+          "inference_geo": "not_available",
+          "iterations": [
+            {
+              "input_tokens": 2,
+              "output_tokens": 34,
+              "cache_read_input_tokens": 1373,
+              "cache_creation_input_tokens": 146,
+              "cache_creation": {
+                "ephemeral_5m_input_tokens": 0,
+                "ephemeral_1h_input_tokens": 146
+              },
+              "type": "message"
+            }
+          ],
+          "speed": "standard"
+        },
+        "modelUsage": {
+          "claude-haiku-4-5-20251001": {
+            "inputTokens": 916,
+            "outputTokens": 16,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0,
+            "webSearchRequests": 0,
+            "costUSD": 0.000996,
+            "contextWindow": 200000,
+            "maxOutputTokens": 32000
+          },
+          "claude-sonnet-5": {
+            "inputTokens": 4,
+            "outputTokens": 167,
+            "cacheReadInputTokens": 1373,
+            "cacheCreationInputTokens": 1519,
+            "webSearchRequests": 0,
+            "costUSD": 0.0200715,
+            "contextWindow": 200000,
+            "maxOutputTokens": 32000
+          }
+        },
+        "permission_denials": [],
+        "structured_output": {
+          "production_schema_namespace": "ember.coral",
+          "prototype_schema_namespace": "ember.prototype"
+        },
+        "terminal_reason": "completed",
+        "fast_mode_state": "off",
+        "uuid": "f4a87f98-881e-4267-a703-60a6a66d5a0e"
+      },
+      "parsed": {
+        "production_schema_namespace": "ember.coral",
+        "prototype_schema_namespace": "ember.prototype"
+      }
+    },
+    "rescue": {
+      "role": "downstream_qa",
+      "duration_ms": 5467,
+      "prompt_sha256": "9ce4c9a3746a7c0e4448b37d870c03fa084993dfda2f3c6a5676c2d15feffbda",
+      "raw_stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"api_error_status\":null,\"duration_ms\":3765,\"duration_api_ms\":3988,\"ttft_ms\":2576,\"ttft_stream_ms\":2575,\"time_to_request_ms\":719,\"num_turns\":2,\"result\":\"Production schema namespace: ember.coral\\nPrototype schema namespace: ember.prototype\",\"stop_reason\":\"end_turn\",\"session_id\":\"a6a38417-b4b3-405d-a16e-950e65e4c7d8\",\"total_cost_usd\":0.020508000000000002,\"usage\":{\"input_tokens\":4,\"cache_creation_input_tokens\":1551,\"cache_read_input_tokens\":1440,\"output_tokens\":129,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":1551,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"not_available\",\"iterations\":[{\"input_tokens\":2,\"output_tokens\":32,\"cache_read_input_tokens\":1440,\"cache_creation_input_tokens\":111,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":111},\"type\":\"message\"}],\"speed\":\"standard\"},\"modelUsage\":{\"claude-haiku-4-5-20251001\":{\"inputTokens\":953,\"outputTokens\":16,\"cacheReadInputTokens\":0,\"cacheCreationInputTokens\":0,\"webSearchRequests\":0,\"costUSD\":0.001033,\"contextWindow\":200000,\"maxOutputTokens\":32000},\"claude-sonnet-5\":{\"inputTokens\":4,\"outputTokens\":129,\"cacheReadInputTokens\":1440,\"cacheCreationInputTokens\":1551,\"webSearchRequests\":0,\"costUSD\":0.019475000000000003,\"contextWindow\":200000,\"maxOutputTokens\":32000}},\"permission_denials\":[],\"structured_output\":{\"production_schema_namespace\":\"ember.coral\",\"prototype_schema_namespace\":\"ember.prototype\"},\"terminal_reason\":\"completed\",\"fast_mode_state\":\"off\",\"uuid\":\"071a8c6e-216d-409f-965f-4d6f8f06514b\"}\n",
+      "raw_stderr": "",
+      "envelope": {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false,
+        "api_error_status": null,
+        "duration_ms": 3765,
+        "duration_api_ms": 3988,
+        "ttft_ms": 2576,
+        "ttft_stream_ms": 2575,
+        "time_to_request_ms": 719,
+        "num_turns": 2,
+        "result": "Production schema namespace: ember.coral\nPrototype schema namespace: ember.prototype",
+        "stop_reason": "end_turn",
+        "session_id": "a6a38417-b4b3-405d-a16e-950e65e4c7d8",
+        "total_cost_usd": 0.020508000000000002,
+        "usage": {
+          "input_tokens": 4,
+          "cache_creation_input_tokens": 1551,
+          "cache_read_input_tokens": 1440,
+          "output_tokens": 129,
+          "server_tool_use": {
+            "web_search_requests": 0,
+            "web_fetch_requests": 0
+          },
+          "service_tier": "standard",
+          "cache_creation": {
+            "ephemeral_1h_input_tokens": 1551,
+            "ephemeral_5m_input_tokens": 0
+          },
+          "inference_geo": "not_available",
+          "iterations": [
+            {
+              "input_tokens": 2,
+              "output_tokens": 32,
+              "cache_read_input_tokens": 1440,
+              "cache_creation_input_tokens": 111,
+              "cache_creation": {
+                "ephemeral_5m_input_tokens": 0,
+                "ephemeral_1h_input_tokens": 111
+              },
+              "type": "message"
+            }
+          ],
+          "speed": "standard"
+        },
+        "modelUsage": {
+          "claude-haiku-4-5-20251001": {
+            "inputTokens": 953,
+            "outputTokens": 16,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0,
+            "webSearchRequests": 0,
+            "costUSD": 0.001033,
+            "contextWindow": 200000,
+            "maxOutputTokens": 32000
+          },
+          "claude-sonnet-5": {
+            "inputTokens": 4,
+            "outputTokens": 129,
+            "cacheReadInputTokens": 1440,
+            "cacheCreationInputTokens": 1551,
+            "webSearchRequests": 0,
+            "costUSD": 0.019475000000000003,
+            "contextWindow": 200000,
+            "maxOutputTokens": 32000
+          }
+        },
+        "permission_denials": [],
+        "structured_output": {
+          "production_schema_namespace": "ember.coral",
+          "prototype_schema_namespace": "ember.prototype"
+        },
+        "terminal_reason": "completed",
+        "fast_mode_state": "off",
+        "uuid": "071a8c6e-216d-409f-965f-4d6f8f06514b"
+      },
+      "parsed": {
+        "production_schema_namespace": "ember.coral",
+        "prototype_schema_namespace": "ember.prototype"
+      }
+    },
+    "baseline": {
+      "role": "downstream_qa",
+      "duration_ms": 5150,
+      "prompt_sha256": "afde613029c4a5bfa6f6917fa7b23a3581d21b5aaa2977208a5bcba732d6b100",
+      "raw_stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"api_error_status\":null,\"duration_ms\":3812,\"duration_api_ms\":4155,\"ttft_ms\":2080,\"ttft_stream_ms\":2079,\"time_to_request_ms\":640,\"num_turns\":2,\"result\":\"production_schema_namespace: ember.coral\\nprototype_schema_namespace: ember.prototype\",\"stop_reason\":\"end_turn\",\"session_id\":\"3cfad48f-7da7-4399-97cf-97774bf1ea17\",\"total_cost_usd\":0.008233,\"usage\":{\"input_tokens\":4,\"cache_creation_input_tokens\":151,\"cache_read_input_tokens\":2782,\"output_tokens\":172,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":151,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"not_available\",\"iterations\":[{\"input_tokens\":2,\"output_tokens\":34,\"cache_read_input_tokens\":1391,\"cache_creation_input_tokens\":151,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":151},\"type\":\"message\"}],\"speed\":\"standard\"},\"modelUsage\":{\"claude-haiku-4-5-20251001\":{\"inputTokens\":932,\"outputTokens\":16,\"cacheReadInputTokens\":0,\"cacheCreationInputTokens\":0,\"webSearchRequests\":0,\"costUSD\":0.0010119999999999999,\"contextWindow\":200000,\"maxOutputTokens\":32000},\"claude-sonnet-5\":{\"inputTokens\":4,\"outputTokens\":172,\"cacheReadInputTokens\":2782,\"cacheCreationInputTokens\":151,\"webSearchRequests\":0,\"costUSD\":0.007221,\"contextWindow\":200000,\"maxOutputTokens\":32000}},\"permission_denials\":[],\"structured_output\":{\"production_schema_namespace\":\"ember.coral\",\"prototype_schema_namespace\":\"ember.prototype\"},\"terminal_reason\":\"completed\",\"fast_mode_state\":\"off\",\"uuid\":\"3e25a52e-8097-4a16-8066-2fddcdc79a99\"}\n",
+      "raw_stderr": "",
+      "envelope": {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false,
+        "api_error_status": null,
+        "duration_ms": 3812,
+        "duration_api_ms": 4155,
+        "ttft_ms": 2080,
+        "ttft_stream_ms": 2079,
+        "time_to_request_ms": 640,
+        "num_turns": 2,
+        "result": "production_schema_namespace: ember.coral\nprototype_schema_namespace: ember.prototype",
+        "stop_reason": "end_turn",
+        "session_id": "3cfad48f-7da7-4399-97cf-97774bf1ea17",
+        "total_cost_usd": 0.008233,
+        "usage": {
+          "input_tokens": 4,
+          "cache_creation_input_tokens": 151,
+          "cache_read_input_tokens": 2782,
+          "output_tokens": 172,
+          "server_tool_use": {
+            "web_search_requests": 0,
+            "web_fetch_requests": 0
+          },
+          "service_tier": "standard",
+          "cache_creation": {
+            "ephemeral_1h_input_tokens": 151,
+            "ephemeral_5m_input_tokens": 0
+          },
+          "inference_geo": "not_available",
+          "iterations": [
+            {
+              "input_tokens": 2,
+              "output_tokens": 34,
+              "cache_read_input_tokens": 1391,
+              "cache_creation_input_tokens": 151,
+              "cache_creation": {
+                "ephemeral_5m_input_tokens": 0,
+                "ephemeral_1h_input_tokens": 151
+              },
+              "type": "message"
+            }
+          ],
+          "speed": "standard"
+        },
+        "modelUsage": {
+          "claude-haiku-4-5-20251001": {
+            "inputTokens": 932,
+            "outputTokens": 16,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0,
+            "webSearchRequests": 0,
+            "costUSD": 0.0010119999999999999,
+            "contextWindow": 200000,
+            "maxOutputTokens": 32000
+          },
+          "claude-sonnet-5": {
+            "inputTokens": 4,
+            "outputTokens": 172,
+            "cacheReadInputTokens": 2782,
+            "cacheCreationInputTokens": 151,
+            "webSearchRequests": 0,
+            "costUSD": 0.007221,
+            "contextWindow": 200000,
+            "maxOutputTokens": 32000
+          }
+        },
+        "permission_denials": [],
+        "structured_output": {
+          "production_schema_namespace": "ember.coral",
+          "prototype_schema_namespace": "ember.prototype"
+        },
+        "terminal_reason": "completed",
+        "fast_mode_state": "off",
+        "uuid": "3e25a52e-8097-4a16-8066-2fddcdc79a99"
+      },
+      "parsed": {
+        "production_schema_namespace": "ember.coral",
+        "prototype_schema_namespace": "ember.prototype"
+      }
+    },
+    "additive": {
+      "role": "downstream_qa",
+      "duration_ms": 6239,
+      "prompt_sha256": "a6587d7638595fbd88e6cce5d73a0a9757d5530ac138d93015c61cbfc7d14071",
+      "raw_stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"api_error_status\":null,\"duration_ms\":5244,\"duration_api_ms\":5776,\"ttft_ms\":3188,\"ttft_stream_ms\":2642,\"time_to_request_ms\":563,\"num_turns\":2,\"result\":\"production_schema_namespace: ember.coral\\nprototype_schema_namespace: ember.prototype\",\"stop_reason\":\"end_turn\",\"session_id\":\"f4b6d3fe-d5cd-402d-b621-8fd93323f3bd\",\"total_cost_usd\":0.010183,\"usage\":{\"input_tokens\":4,\"cache_creation_input_tokens\":197,\"cache_read_input_tokens\":3198,\"output_tokens\":218,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":197,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"not_available\",\"iterations\":[{\"input_tokens\":2,\"output_tokens\":34,\"cache_read_input_tokens\":1599,\"cache_creation_input_tokens\":197,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":197},\"type\":\"message\"}],\"speed\":\"standard\"},\"modelUsage\":{\"claude-haiku-4-5-20251001\":{\"inputTokens\":1054,\"outputTokens\":18,\"cacheReadInputTokens\":0,\"cacheCreationInputTokens\":0,\"webSearchRequests\":0,\"costUSD\":0.001144,\"contextWindow\":200000,\"maxOutputTokens\":32000},\"claude-sonnet-5\":{\"inputTokens\":4,\"outputTokens\":218,\"cacheReadInputTokens\":3198,\"cacheCreationInputTokens\":197,\"webSearchRequests\":0,\"costUSD\":0.009038999999999998,\"contextWindow\":200000,\"maxOutputTokens\":32000}},\"permission_denials\":[],\"structured_output\":{\"production_schema_namespace\":\"ember.coral\",\"prototype_schema_namespace\":\"ember.prototype\"},\"terminal_reason\":\"completed\",\"fast_mode_state\":\"off\",\"uuid\":\"7a4d31b7-a68f-4bc7-a184-a1998056058f\"}\n",
+      "raw_stderr": "",
+      "envelope": {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false,
+        "api_error_status": null,
+        "duration_ms": 5244,
+        "duration_api_ms": 5776,
+        "ttft_ms": 3188,
+        "ttft_stream_ms": 2642,
+        "time_to_request_ms": 563,
+        "num_turns": 2,
+        "result": "production_schema_namespace: ember.coral\nprototype_schema_namespace: ember.prototype",
+        "stop_reason": "end_turn",
+        "session_id": "f4b6d3fe-d5cd-402d-b621-8fd93323f3bd",
+        "total_cost_usd": 0.010183,
+        "usage": {
+          "input_tokens": 4,
+          "cache_creation_input_tokens": 197,
+          "cache_read_input_tokens": 3198,
+          "output_tokens": 218,
+          "server_tool_use": {
+            "web_search_requests": 0,
+            "web_fetch_requests": 0
+          },
+          "service_tier": "standard",
+          "cache_creation": {
+            "ephemeral_1h_input_tokens": 197,
+            "ephemeral_5m_input_tokens": 0
+          },
+          "inference_geo": "not_available",
+          "iterations": [
+            {
+              "input_tokens": 2,
+              "output_tokens": 34,
+              "cache_read_input_tokens": 1599,
+              "cache_creation_input_tokens": 197,
+              "cache_creation": {
+                "ephemeral_5m_input_tokens": 0,
+                "ephemeral_1h_input_tokens": 197
+              },
+              "type": "message"
+            }
+          ],
+          "speed": "standard"
+        },
+        "modelUsage": {
+          "claude-haiku-4-5-20251001": {
+            "inputTokens": 1054,
+            "outputTokens": 18,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0,
+            "webSearchRequests": 0,
+            "costUSD": 0.001144,
+            "contextWindow": 200000,
+            "maxOutputTokens": 32000
+          },
+          "claude-sonnet-5": {
+            "inputTokens": 4,
+            "outputTokens": 218,
+            "cacheReadInputTokens": 3198,
+            "cacheCreationInputTokens": 197,
+            "webSearchRequests": 0,
+            "costUSD": 0.009038999999999998,
+            "contextWindow": 200000,
+            "maxOutputTokens": 32000
+          }
+        },
+        "permission_denials": [],
+        "structured_output": {
+          "production_schema_namespace": "ember.coral",
+          "prototype_schema_namespace": "ember.prototype"
+        },
+        "terminal_reason": "completed",
+        "fast_mode_state": "off",
+        "uuid": "7a4d31b7-a68f-4bc7-a184-a1998056058f"
+      },
+      "parsed": {
+        "production_schema_namespace": "ember.coral",
+        "prototype_schema_namespace": "ember.prototype"
+      }
+    }
+  },
+  "condition_scores": {
+    "rewritten": {
+      "condition": "rewritten",
+      "production_expected": "ember.coral",
+      "production_observed": "ember.coral",
+      "production_correct": true,
+      "prototype_expected": "ember.prototype",
+      "prototype_observed": "ember.prototype",
+      "prototype_correct": true,
+      "semantic_merge_signature": false
+    },
+    "rescue": {
+      "condition": "rescue",
+      "production_expected": "ember.coral",
+      "production_observed": "ember.coral",
+      "production_correct": true,
+      "prototype_expected": "ember.prototype",
+      "prototype_observed": "ember.prototype",
+      "prototype_correct": true,
+      "semantic_merge_signature": false
+    },
+    "baseline": {
+      "condition": "baseline",
+      "production_expected": "ember.coral",
+      "production_observed": "ember.coral",
+      "production_correct": true,
+      "prototype_expected": "ember.prototype",
+      "prototype_observed": "ember.prototype",
+      "prototype_correct": true,
+      "semantic_merge_signature": false
+    },
+    "additive": {
+      "condition": "additive",
+      "production_expected": "ember.coral",
+      "production_observed": "ember.coral",
+      "production_correct": true,
+      "prototype_expected": "ember.prototype",
+      "prototype_observed": "ember.prototype",
+      "prototype_correct": true,
+      "semantic_merge_signature": false
+    }
+  },
+  "paired_score": {
+    "harm": false,
+    "win": false,
+    "rescued_harm": false,
+    "semantic_merge_harm": false
+  },
+  "completed_at": "2026-08-27T04:39:24.842Z"
+}

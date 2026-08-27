@@ -1,0 +1,895 @@
+{
+  "schema_version": 1,
+  "protocol_version": 5,
+  "experiment": "hunch-schema-collision-targeted-replication",
+  "status": "complete",
+  "trajectory_index": 13,
+  "case_id": "aster-relay",
+  "case_name": "Aster Relay",
+  "case_replicate": 3,
+  "started_at": "2026-08-27T04:37:03.496Z",
+  "model": "claude-sonnet-5",
+  "claude_cli_version": "2.1.186 (Claude Code)",
+  "git_head": "33cd6483bc7cf0faf2826c60edb306abc33d8c5f",
+  "runner_sha256": "f3bd2a02569e0fa886cf4941ac0c5796678bb8fda8b695119a2e1f1d931a2f71",
+  "fixture_source_sha256": "7a1c098f913993fba2c3732110c487edfc4a9b0c6b52348b58b69f31750e9244",
+  "fixture_sha256": "2041f0ef9498e2151a59accace1b1c74a51db1732cbc3c260cc05ffccdcac694",
+  "system_prompt_sha256": "ced040c0d0e2979fa7f23d256137c9b31ac844b98fafc77291fd1361d3a8e275",
+  "condition_order": [
+    "baseline",
+    "additive",
+    "rewritten",
+    "rescue"
+  ],
+  "checkpoints": [
+    {
+      "step": 1,
+      "source_round": 26,
+      "observation": "The aster demo client uses encryption profile aster-toy-cipher.",
+      "memory_text": "Aster Relay: owner=Mira Sol, queue=quartz-17, retry_cap=4, idempotency_header=X-Aster-Idem, forbidden_fallback=local-disk, primary_region=aurora-north, preview_region=aster-preview-west, deployment_zone=cedar-zone, schema_namespace=aster.violet, prototype_schema_namespace=aster.prototype, encryption_profile=cipher-lark, demo_client_encryption_profile=aster-toy-cipher, audit_topic=audit-aster-cedar, audit_retention=aster-equinox, health_path=/health/aster-pulse, lease_duration_s=47, recovery_contact=rhea-aster, checksum_salt=salt-aster-moon, telemetry_sink=aster-northstar, dashboard_cache=aster-linen, doc_lang=Finnish, sandbox_fallback=aster-scratch-pad, reporting_timezone=aster-meridian, metrics_prefix=aster-compass, canary_color=aster-plum, rollout_window=Tuesday dawn, archive_tier=aster-glacier, compliance_tag=heliotrope, notification_channel=aster-signal, backup_demonstrator=aster-vault.",
+      "words": 34,
+      "contains_production_literal": true,
+      "contains_prototype_literal": true,
+      "call": {
+        "role": "replacement_update",
+        "duration_ms": 15314,
+        "prompt_sha256": "415330510cb51e8eb54bdd7c3eb607f63b2fc99a1ea4248f00ee94d98d683f0d",
+        "raw_stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"api_error_status\":null,\"duration_ms\":14347,\"duration_api_ms\":15012,\"ttft_ms\":10522,\"ttft_stream_ms\":1810,\"time_to_request_ms\":376,\"num_turns\":2,\"result\":\"Memory consolidated and replaced successfully.\",\"stop_reason\":\"end_turn\",\"session_id\":\"8a288a2f-bbb6-474d-8a69-c6898dc1233d\",\"total_cost_usd\":0.063818,\"usage\":{\"input_tokens\":4,\"cache_creation_input_tokens\":1748,\"cache_read_input_tokens\":2832,\"output_tokens\":1752,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":1748,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"not_available\",\"iterations\":[{\"input_tokens\":2,\"output_tokens\":17,\"cache_read_input_tokens\":1416,\"cache_creation_input_tokens\":1748,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":1748},\"type\":\"message\"}],\"speed\":\"standard\"},\"modelUsage\":{\"claude-haiku-4-5-20251001\":{\"inputTokens\":1002,\"outputTokens\":20,\"cacheReadInputTokens\":0,\"cacheCreationInputTokens\":0,\"webSearchRequests\":0,\"costUSD\":0.0011020000000000001,\"contextWindow\":200000,\"maxOutputTokens\":32000},\"claude-sonnet-5\":{\"inputTokens\":4,\"outputTokens\":1752,\"cacheReadInputTokens\":2832,\"cacheCreationInputTokens\":1748,\"webSearchRequests\":0,\"costUSD\":0.062716,\"contextWindow\":200000,\"maxOutputTokens\":32000}},\"permission_denials\":[],\"structured_output\":{\"memory_text\":\"Aster Relay: owner=Mira Sol, queue=quartz-17, retry_cap=4, idempotency_header=X-Aster-Idem, forbidden_fallback=local-disk, primary_region=aurora-north, preview_region=aster-preview-west, deployment_zone=cedar-zone, schema_namespace=aster.violet, prototype_schema_namespace=aster.prototype, encryption_profile=cipher-lark, demo_client_encryption_profile=aster-toy-cipher, audit_topic=audit-aster-cedar, audit_retention=aster-equinox, health_path=/health/aster-pulse, lease_duration_s=47, recovery_contact=rhea-aster, checksum_salt=salt-aster-moon, telemetry_sink=aster-northstar, dashboard_cache=aster-linen, doc_lang=Finnish, sandbox_fallback=aster-scratch-pad, reporting_timezone=aster-meridian, metrics_prefix=aster-compass, canary_color=aster-plum, rollout_window=Tuesday dawn, archive_tier=aster-glacier, compliance_tag=heliotrope, notification_channel=aster-signal, backup_demonstrator=aster-vault.\"},\"terminal_reason\":\"completed\",\"fast_mode_state\":\"off\",\"uuid\":\"3c013072-75f3-47cc-ab25-1affb4d97cbe\"}\n",
+        "raw_stderr": "",
+        "envelope": {
+          "type": "result",
+          "subtype": "success",
+          "is_error": false,
+          "api_error_status": null,
+          "duration_ms": 14347,
+          "duration_api_ms": 15012,
+          "ttft_ms": 10522,
+          "ttft_stream_ms": 1810,
+          "time_to_request_ms": 376,
+          "num_turns": 2,
+          "result": "Memory consolidated and replaced successfully.",
+          "stop_reason": "end_turn",
+          "session_id": "8a288a2f-bbb6-474d-8a69-c6898dc1233d",
+          "total_cost_usd": 0.063818,
+          "usage": {
+            "input_tokens": 4,
+            "cache_creation_input_tokens": 1748,
+            "cache_read_input_tokens": 2832,
+            "output_tokens": 1752,
+            "server_tool_use": {
+              "web_search_requests": 0,
+              "web_fetch_requests": 0
+            },
+            "service_tier": "standard",
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 1748,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "inference_geo": "not_available",
+            "iterations": [
+              {
+                "input_tokens": 2,
+                "output_tokens": 17,
+                "cache_read_input_tokens": 1416,
+                "cache_creation_input_tokens": 1748,
+                "cache_creation": {
+                  "ephemeral_5m_input_tokens": 0,
+                  "ephemeral_1h_input_tokens": 1748
+                },
+                "type": "message"
+              }
+            ],
+            "speed": "standard"
+          },
+          "modelUsage": {
+            "claude-haiku-4-5-20251001": {
+              "inputTokens": 1002,
+              "outputTokens": 20,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0,
+              "webSearchRequests": 0,
+              "costUSD": 0.0011020000000000001,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            },
+            "claude-sonnet-5": {
+              "inputTokens": 4,
+              "outputTokens": 1752,
+              "cacheReadInputTokens": 2832,
+              "cacheCreationInputTokens": 1748,
+              "webSearchRequests": 0,
+              "costUSD": 0.062716,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            }
+          },
+          "permission_denials": [],
+          "structured_output": {
+            "memory_text": "Aster Relay: owner=Mira Sol, queue=quartz-17, retry_cap=4, idempotency_header=X-Aster-Idem, forbidden_fallback=local-disk, primary_region=aurora-north, preview_region=aster-preview-west, deployment_zone=cedar-zone, schema_namespace=aster.violet, prototype_schema_namespace=aster.prototype, encryption_profile=cipher-lark, demo_client_encryption_profile=aster-toy-cipher, audit_topic=audit-aster-cedar, audit_retention=aster-equinox, health_path=/health/aster-pulse, lease_duration_s=47, recovery_contact=rhea-aster, checksum_salt=salt-aster-moon, telemetry_sink=aster-northstar, dashboard_cache=aster-linen, doc_lang=Finnish, sandbox_fallback=aster-scratch-pad, reporting_timezone=aster-meridian, metrics_prefix=aster-compass, canary_color=aster-plum, rollout_window=Tuesday dawn, archive_tier=aster-glacier, compliance_tag=heliotrope, notification_channel=aster-signal, backup_demonstrator=aster-vault."
+          },
+          "terminal_reason": "completed",
+          "fast_mode_state": "off",
+          "uuid": "3c013072-75f3-47cc-ab25-1affb4d97cbe"
+        },
+        "parsed": {
+          "memory_text": "Aster Relay: owner=Mira Sol, queue=quartz-17, retry_cap=4, idempotency_header=X-Aster-Idem, forbidden_fallback=local-disk, primary_region=aurora-north, preview_region=aster-preview-west, deployment_zone=cedar-zone, schema_namespace=aster.violet, prototype_schema_namespace=aster.prototype, encryption_profile=cipher-lark, demo_client_encryption_profile=aster-toy-cipher, audit_topic=audit-aster-cedar, audit_retention=aster-equinox, health_path=/health/aster-pulse, lease_duration_s=47, recovery_contact=rhea-aster, checksum_salt=salt-aster-moon, telemetry_sink=aster-northstar, dashboard_cache=aster-linen, doc_lang=Finnish, sandbox_fallback=aster-scratch-pad, reporting_timezone=aster-meridian, metrics_prefix=aster-compass, canary_color=aster-plum, rollout_window=Tuesday dawn, archive_tier=aster-glacier, compliance_tag=heliotrope, notification_channel=aster-signal, backup_demonstrator=aster-vault."
+        }
+      }
+    },
+    {
+      "step": 2,
+      "source_round": 27,
+      "observation": "The aster staging probe health path is /health/aster-stage.",
+      "memory_text": "Aster Relay: owner=Mira Sol, queue=quartz-17, retry_cap=4, idempotency_header=X-Aster-Idem, forbidden_fallback=local-disk, primary_region=aurora-north, preview_region=aster-preview-west, deployment_zone=cedar-zone, schema_namespace=aster.violet, prototype_schema_namespace=aster.prototype, encryption_profile=cipher-lark, demo_client_encryption_profile=aster-toy-cipher, audit_topic=audit-aster-cedar, audit_retention=aster-equinox, health_path=/health/aster-pulse, staging_health_path=/health/aster-stage, lease_duration_s=47, recovery_contact=rhea-aster, checksum_salt=salt-aster-moon, telemetry_sink=aster-northstar, dashboard_cache=aster-linen, doc_lang=Finnish, sandbox_fallback=aster-scratch-pad, reporting_timezone=aster-meridian, metrics_prefix=aster-compass, canary_color=aster-plum, rollout_window=Tuesday dawn, archive_tier=aster-glacier, compliance_tag=heliotrope, notification_channel=aster-signal, backup_demonstrator=aster-vault.",
+      "words": 35,
+      "contains_production_literal": true,
+      "contains_prototype_literal": true,
+      "call": {
+        "role": "replacement_update",
+        "duration_ms": 20680,
+        "prompt_sha256": "4fa6b6ea1ed6505010f1aa9848a72f930028b8b667fc5f1b3bfc85b3d6169d15",
+        "raw_stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"api_error_status\":null,\"duration_ms\":19658,\"duration_api_ms\":19689,\"ttft_ms\":14680,\"ttft_stream_ms\":3748,\"time_to_request_ms\":972,\"num_turns\":2,\"result\":\"Memory replaced with a single consolidated entry for Aster Relay, incorporating the new staging health path (`/health/aster-stage`) alongside all prior facts, within the 90-word limit.\",\"stop_reason\":\"end_turn\",\"session_id\":\"edb11b07-ddf6-4e55-a4a9-1fdfcb73a0bc\",\"total_cost_usd\":0.09213350000000001,\"usage\":{\"input_tokens\":4,\"cache_creation_input_tokens\":3472,\"cache_read_input_tokens\":1295,\"output_tokens\":2229,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":3472,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"not_available\",\"iterations\":[{\"input_tokens\":2,\"output_tokens\":65,\"cache_read_input_tokens\":1295,\"cache_creation_input_tokens\":2177,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":2177},\"type\":\"message\"}],\"speed\":\"standard\"},\"modelUsage\":{\"claude-haiku-4-5-20251001\":{\"inputTokens\":916,\"outputTokens\":21,\"cacheReadInputTokens\":0,\"cacheCreationInputTokens\":0,\"webSearchRequests\":0,\"costUSD\":0.001021,\"contextWindow\":200000,\"maxOutputTokens\":32000},\"claude-sonnet-5\":{\"inputTokens\":4,\"outputTokens\":2229,\"cacheReadInputTokens\":1295,\"cacheCreationInputTokens\":3472,\"webSearchRequests\":0,\"costUSD\":0.09111250000000001,\"contextWindow\":200000,\"maxOutputTokens\":32000}},\"permission_denials\":[],\"structured_output\":{\"memory_text\":\"Aster Relay: owner=Mira Sol, queue=quartz-17, retry_cap=4, idempotency_header=X-Aster-Idem, forbidden_fallback=local-disk, primary_region=aurora-north, preview_region=aster-preview-west, deployment_zone=cedar-zone, schema_namespace=aster.violet, prototype_schema_namespace=aster.prototype, encryption_profile=cipher-lark, demo_client_encryption_profile=aster-toy-cipher, audit_topic=audit-aster-cedar, audit_retention=aster-equinox, health_path=/health/aster-pulse, staging_health_path=/health/aster-stage, lease_duration_s=47, recovery_contact=rhea-aster, checksum_salt=salt-aster-moon, telemetry_sink=aster-northstar, dashboard_cache=aster-linen, doc_lang=Finnish, sandbox_fallback=aster-scratch-pad, reporting_timezone=aster-meridian, metrics_prefix=aster-compass, canary_color=aster-plum, rollout_window=Tuesday dawn, archive_tier=aster-glacier, compliance_tag=heliotrope, notification_channel=aster-signal, backup_demonstrator=aster-vault.\"},\"terminal_reason\":\"completed\",\"fast_mode_state\":\"off\",\"uuid\":\"d0fc9a19-5223-43a0-8192-0ea67d6fd48b\"}\n",
+        "raw_stderr": "",
+        "envelope": {
+          "type": "result",
+          "subtype": "success",
+          "is_error": false,
+          "api_error_status": null,
+          "duration_ms": 19658,
+          "duration_api_ms": 19689,
+          "ttft_ms": 14680,
+          "ttft_stream_ms": 3748,
+          "time_to_request_ms": 972,
+          "num_turns": 2,
+          "result": "Memory replaced with a single consolidated entry for Aster Relay, incorporating the new staging health path (`/health/aster-stage`) alongside all prior facts, within the 90-word limit.",
+          "stop_reason": "end_turn",
+          "session_id": "edb11b07-ddf6-4e55-a4a9-1fdfcb73a0bc",
+          "total_cost_usd": 0.09213350000000001,
+          "usage": {
+            "input_tokens": 4,
+            "cache_creation_input_tokens": 3472,
+            "cache_read_input_tokens": 1295,
+            "output_tokens": 2229,
+            "server_tool_use": {
+              "web_search_requests": 0,
+              "web_fetch_requests": 0
+            },
+            "service_tier": "standard",
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 3472,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "inference_geo": "not_available",
+            "iterations": [
+              {
+                "input_tokens": 2,
+                "output_tokens": 65,
+                "cache_read_input_tokens": 1295,
+                "cache_creation_input_tokens": 2177,
+                "cache_creation": {
+                  "ephemeral_5m_input_tokens": 0,
+                  "ephemeral_1h_input_tokens": 2177
+                },
+                "type": "message"
+              }
+            ],
+            "speed": "standard"
+          },
+          "modelUsage": {
+            "claude-haiku-4-5-20251001": {
+              "inputTokens": 916,
+              "outputTokens": 21,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0,
+              "webSearchRequests": 0,
+              "costUSD": 0.001021,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            },
+            "claude-sonnet-5": {
+              "inputTokens": 4,
+              "outputTokens": 2229,
+              "cacheReadInputTokens": 1295,
+              "cacheCreationInputTokens": 3472,
+              "webSearchRequests": 0,
+              "costUSD": 0.09111250000000001,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            }
+          },
+          "permission_denials": [],
+          "structured_output": {
+            "memory_text": "Aster Relay: owner=Mira Sol, queue=quartz-17, retry_cap=4, idempotency_header=X-Aster-Idem, forbidden_fallback=local-disk, primary_region=aurora-north, preview_region=aster-preview-west, deployment_zone=cedar-zone, schema_namespace=aster.violet, prototype_schema_namespace=aster.prototype, encryption_profile=cipher-lark, demo_client_encryption_profile=aster-toy-cipher, audit_topic=audit-aster-cedar, audit_retention=aster-equinox, health_path=/health/aster-pulse, staging_health_path=/health/aster-stage, lease_duration_s=47, recovery_contact=rhea-aster, checksum_salt=salt-aster-moon, telemetry_sink=aster-northstar, dashboard_cache=aster-linen, doc_lang=Finnish, sandbox_fallback=aster-scratch-pad, reporting_timezone=aster-meridian, metrics_prefix=aster-compass, canary_color=aster-plum, rollout_window=Tuesday dawn, archive_tier=aster-glacier, compliance_tag=heliotrope, notification_channel=aster-signal, backup_demonstrator=aster-vault."
+          },
+          "terminal_reason": "completed",
+          "fast_mode_state": "off",
+          "uuid": "d0fc9a19-5223-43a0-8192-0ea67d6fd48b"
+        },
+        "parsed": {
+          "memory_text": "Aster Relay: owner=Mira Sol, queue=quartz-17, retry_cap=4, idempotency_header=X-Aster-Idem, forbidden_fallback=local-disk, primary_region=aurora-north, preview_region=aster-preview-west, deployment_zone=cedar-zone, schema_namespace=aster.violet, prototype_schema_namespace=aster.prototype, encryption_profile=cipher-lark, demo_client_encryption_profile=aster-toy-cipher, audit_topic=audit-aster-cedar, audit_retention=aster-equinox, health_path=/health/aster-pulse, staging_health_path=/health/aster-stage, lease_duration_s=47, recovery_contact=rhea-aster, checksum_salt=salt-aster-moon, telemetry_sink=aster-northstar, dashboard_cache=aster-linen, doc_lang=Finnish, sandbox_fallback=aster-scratch-pad, reporting_timezone=aster-meridian, metrics_prefix=aster-compass, canary_color=aster-plum, rollout_window=Tuesday dawn, archive_tier=aster-glacier, compliance_tag=heliotrope, notification_channel=aster-signal, backup_demonstrator=aster-vault."
+        }
+      }
+    },
+    {
+      "step": 3,
+      "source_round": 28,
+      "observation": "The escalation room for Aster Relay is room-aster-orbit.",
+      "memory_text": "Aster Relay: owner=Mira Sol, queue=quartz-17, retry_cap=4, idempotency_header=X-Aster-Idem, forbidden_fallback=local-disk, primary_region=aurora-north, preview_region=aster-preview-west, deployment_zone=cedar-zone, schema_namespace=aster.violet, prototype_schema_namespace=aster.prototype, encryption_profile=cipher-lark, demo_client_encryption_profile=aster-toy-cipher, audit_topic=audit-aster-cedar, audit_retention=aster-equinox, health_path=/health/aster-pulse, staging_health_path=/health/aster-stage, lease_duration_s=47, recovery_contact=rhea-aster, checksum_salt=salt-aster-moon, telemetry_sink=aster-northstar, dashboard_cache=aster-linen, doc_lang=Finnish, sandbox_fallback=aster-scratch-pad, reporting_timezone=aster-meridian, metrics_prefix=aster-compass, canary_color=aster-plum, rollout_window=Tuesday dawn, archive_tier=aster-glacier, compliance_tag=heliotrope, notification_channel=aster-signal, backup_demonstrator=aster-vault, escalation_room=room-aster-orbit.",
+      "words": 36,
+      "contains_production_literal": true,
+      "contains_prototype_literal": true,
+      "call": {
+        "role": "replacement_update",
+        "duration_ms": 19453,
+        "prompt_sha256": "4acf9c0331e2e510bebf5bf7bc5d6007fd7a9470fa99ee4746bd298bfe019021",
+        "raw_stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"api_error_status\":null,\"duration_ms\":18189,\"duration_api_ms\":18334,\"ttft_ms\":14041,\"ttft_stream_ms\":2940,\"time_to_request_ms\":921,\"num_turns\":2,\"result\":\"Memory replaced with a consolidated entry for Aster Relay, incorporating the new escalation_room=room-aster-orbit fact alongside all previously stored details.\",\"stop_reason\":\"end_turn\",\"session_id\":\"fb1c973a-19ff-4687-9afe-2ad5a9c2c7b1\",\"total_cost_usd\":0.094118,\"usage\":{\"input_tokens\":4,\"cache_creation_input_tokens\":3548,\"cache_read_input_tokens\":1314,\"output_tokens\":2277,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":3548,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"not_available\",\"iterations\":[{\"input_tokens\":2,\"output_tokens\":56,\"cache_read_input_tokens\":1314,\"cache_creation_input_tokens\":2234,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":2234},\"type\":\"message\"}],\"speed\":\"standard\"},\"modelUsage\":{\"claude-haiku-4-5-20251001\":{\"inputTokens\":931,\"outputTokens\":21,\"cacheReadInputTokens\":0,\"cacheCreationInputTokens\":0,\"webSearchRequests\":0,\"costUSD\":0.001036,\"contextWindow\":200000,\"maxOutputTokens\":32000},\"claude-sonnet-5\":{\"inputTokens\":4,\"outputTokens\":2277,\"cacheReadInputTokens\":1314,\"cacheCreationInputTokens\":3548,\"webSearchRequests\":0,\"costUSD\":0.093082,\"contextWindow\":200000,\"maxOutputTokens\":32000}},\"permission_denials\":[],\"structured_output\":{\"memory_text\":\"Aster Relay: owner=Mira Sol, queue=quartz-17, retry_cap=4, idempotency_header=X-Aster-Idem, forbidden_fallback=local-disk, primary_region=aurora-north, preview_region=aster-preview-west, deployment_zone=cedar-zone, schema_namespace=aster.violet, prototype_schema_namespace=aster.prototype, encryption_profile=cipher-lark, demo_client_encryption_profile=aster-toy-cipher, audit_topic=audit-aster-cedar, audit_retention=aster-equinox, health_path=/health/aster-pulse, staging_health_path=/health/aster-stage, lease_duration_s=47, recovery_contact=rhea-aster, checksum_salt=salt-aster-moon, telemetry_sink=aster-northstar, dashboard_cache=aster-linen, doc_lang=Finnish, sandbox_fallback=aster-scratch-pad, reporting_timezone=aster-meridian, metrics_prefix=aster-compass, canary_color=aster-plum, rollout_window=Tuesday dawn, archive_tier=aster-glacier, compliance_tag=heliotrope, notification_channel=aster-signal, backup_demonstrator=aster-vault, escalation_room=room-aster-orbit.\"},\"terminal_reason\":\"completed\",\"fast_mode_state\":\"off\",\"uuid\":\"44895ccb-4df6-4257-af15-a5616c2ef9e4\"}\n",
+        "raw_stderr": "",
+        "envelope": {
+          "type": "result",
+          "subtype": "success",
+          "is_error": false,
+          "api_error_status": null,
+          "duration_ms": 18189,
+          "duration_api_ms": 18334,
+          "ttft_ms": 14041,
+          "ttft_stream_ms": 2940,
+          "time_to_request_ms": 921,
+          "num_turns": 2,
+          "result": "Memory replaced with a consolidated entry for Aster Relay, incorporating the new escalation_room=room-aster-orbit fact alongside all previously stored details.",
+          "stop_reason": "end_turn",
+          "session_id": "fb1c973a-19ff-4687-9afe-2ad5a9c2c7b1",
+          "total_cost_usd": 0.094118,
+          "usage": {
+            "input_tokens": 4,
+            "cache_creation_input_tokens": 3548,
+            "cache_read_input_tokens": 1314,
+            "output_tokens": 2277,
+            "server_tool_use": {
+              "web_search_requests": 0,
+              "web_fetch_requests": 0
+            },
+            "service_tier": "standard",
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 3548,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "inference_geo": "not_available",
+            "iterations": [
+              {
+                "input_tokens": 2,
+                "output_tokens": 56,
+                "cache_read_input_tokens": 1314,
+                "cache_creation_input_tokens": 2234,
+                "cache_creation": {
+                  "ephemeral_5m_input_tokens": 0,
+                  "ephemeral_1h_input_tokens": 2234
+                },
+                "type": "message"
+              }
+            ],
+            "speed": "standard"
+          },
+          "modelUsage": {
+            "claude-haiku-4-5-20251001": {
+              "inputTokens": 931,
+              "outputTokens": 21,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0,
+              "webSearchRequests": 0,
+              "costUSD": 0.001036,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            },
+            "claude-sonnet-5": {
+              "inputTokens": 4,
+              "outputTokens": 2277,
+              "cacheReadInputTokens": 1314,
+              "cacheCreationInputTokens": 3548,
+              "webSearchRequests": 0,
+              "costUSD": 0.093082,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            }
+          },
+          "permission_denials": [],
+          "structured_output": {
+            "memory_text": "Aster Relay: owner=Mira Sol, queue=quartz-17, retry_cap=4, idempotency_header=X-Aster-Idem, forbidden_fallback=local-disk, primary_region=aurora-north, preview_region=aster-preview-west, deployment_zone=cedar-zone, schema_namespace=aster.violet, prototype_schema_namespace=aster.prototype, encryption_profile=cipher-lark, demo_client_encryption_profile=aster-toy-cipher, audit_topic=audit-aster-cedar, audit_retention=aster-equinox, health_path=/health/aster-pulse, staging_health_path=/health/aster-stage, lease_duration_s=47, recovery_contact=rhea-aster, checksum_salt=salt-aster-moon, telemetry_sink=aster-northstar, dashboard_cache=aster-linen, doc_lang=Finnish, sandbox_fallback=aster-scratch-pad, reporting_timezone=aster-meridian, metrics_prefix=aster-compass, canary_color=aster-plum, rollout_window=Tuesday dawn, archive_tier=aster-glacier, compliance_tag=heliotrope, notification_channel=aster-signal, backup_demonstrator=aster-vault, escalation_room=room-aster-orbit."
+          },
+          "terminal_reason": "completed",
+          "fast_mode_state": "off",
+          "uuid": "44895ccb-4df6-4257-af15-a5616c2ef9e4"
+        },
+        "parsed": {
+          "memory_text": "Aster Relay: owner=Mira Sol, queue=quartz-17, retry_cap=4, idempotency_header=X-Aster-Idem, forbidden_fallback=local-disk, primary_region=aurora-north, preview_region=aster-preview-west, deployment_zone=cedar-zone, schema_namespace=aster.violet, prototype_schema_namespace=aster.prototype, encryption_profile=cipher-lark, demo_client_encryption_profile=aster-toy-cipher, audit_topic=audit-aster-cedar, audit_retention=aster-equinox, health_path=/health/aster-pulse, staging_health_path=/health/aster-stage, lease_duration_s=47, recovery_contact=rhea-aster, checksum_salt=salt-aster-moon, telemetry_sink=aster-northstar, dashboard_cache=aster-linen, doc_lang=Finnish, sandbox_fallback=aster-scratch-pad, reporting_timezone=aster-meridian, metrics_prefix=aster-compass, canary_color=aster-plum, rollout_window=Tuesday dawn, archive_tier=aster-glacier, compliance_tag=heliotrope, notification_channel=aster-signal, backup_demonstrator=aster-vault, escalation_room=room-aster-orbit."
+        }
+      }
+    },
+    {
+      "step": 4,
+      "source_round": 29,
+      "observation": "The aster analytics sandbox audit topic is aster-analytics-noise.",
+      "memory_text": "Aster Relay: owner=Mira Sol, queue=quartz-17, retry_cap=4, idempotency_header=X-Aster-Idem, forbidden_fallback=local-disk, primary_region=aurora-north, preview_region=aster-preview-west, deployment_zone=cedar-zone, schema_namespace=aster.violet, prototype_schema_namespace=aster.prototype, encryption_profile=cipher-lark, demo_client_encryption_profile=aster-toy-cipher, audit_topic=audit-aster-cedar, analytics_sandbox_audit_topic=aster-analytics-noise, audit_retention=aster-equinox, health_path=/health/aster-pulse, staging_health_path=/health/aster-stage, lease_duration_s=47, recovery_contact=rhea-aster, checksum_salt=salt-aster-moon, telemetry_sink=aster-northstar, dashboard_cache=aster-linen, doc_lang=Finnish, sandbox_fallback=aster-scratch-pad, reporting_timezone=aster-meridian, metrics_prefix=aster-compass, canary_color=aster-plum, rollout_window=Tuesday dawn, archive_tier=aster-glacier, compliance_tag=heliotrope, notification_channel=aster-signal, backup_demonstrator=aster-vault, escalation_room=room-aster-orbit.",
+      "words": 37,
+      "contains_production_literal": true,
+      "contains_prototype_literal": true,
+      "call": {
+        "role": "replacement_update",
+        "duration_ms": 22520,
+        "prompt_sha256": "248fa18e4409dd36154c611ba65c6ce018fad96d8b3f6369f6eeb5e000ac4498",
+        "raw_stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"api_error_status\":null,\"duration_ms\":21376,\"duration_api_ms\":21527,\"ttft_ms\":12037,\"ttft_stream_ms\":4130,\"time_to_request_ms\":924,\"num_turns\":2,\"result\":\"Done.\",\"stop_reason\":\"end_turn\",\"session_id\":\"61609031-5a2c-4c25-99cb-e4af2d229d2e\",\"total_cost_usd\":0.076486,\"usage\":{\"input_tokens\":4,\"cache_creation_input_tokens\":3093,\"cache_read_input_tokens\":1332,\"output_tokens\":1753,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":3093,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"not_available\",\"iterations\":[{\"input_tokens\":2,\"output_tokens\":5,\"cache_read_input_tokens\":1332,\"cache_creation_input_tokens\":1761,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":1761},\"type\":\"message\"}],\"speed\":\"standard\"},\"modelUsage\":{\"claude-haiku-4-5-20251001\":{\"inputTokens\":940,\"outputTokens\":21,\"cacheReadInputTokens\":0,\"cacheCreationInputTokens\":0,\"webSearchRequests\":0,\"costUSD\":0.001045,\"contextWindow\":200000,\"maxOutputTokens\":32000},\"claude-sonnet-5\":{\"inputTokens\":4,\"outputTokens\":1753,\"cacheReadInputTokens\":1332,\"cacheCreationInputTokens\":3093,\"webSearchRequests\":0,\"costUSD\":0.07544100000000001,\"contextWindow\":200000,\"maxOutputTokens\":32000}},\"permission_denials\":[],\"structured_output\":{\"memory_text\":\"Aster Relay: owner=Mira Sol, queue=quartz-17, retry_cap=4, idempotency_header=X-Aster-Idem, forbidden_fallback=local-disk, primary_region=aurora-north, preview_region=aster-preview-west, deployment_zone=cedar-zone, schema_namespace=aster.violet, prototype_schema_namespace=aster.prototype, encryption_profile=cipher-lark, demo_client_encryption_profile=aster-toy-cipher, audit_topic=audit-aster-cedar, analytics_sandbox_audit_topic=aster-analytics-noise, audit_retention=aster-equinox, health_path=/health/aster-pulse, staging_health_path=/health/aster-stage, lease_duration_s=47, recovery_contact=rhea-aster, checksum_salt=salt-aster-moon, telemetry_sink=aster-northstar, dashboard_cache=aster-linen, doc_lang=Finnish, sandbox_fallback=aster-scratch-pad, reporting_timezone=aster-meridian, metrics_prefix=aster-compass, canary_color=aster-plum, rollout_window=Tuesday dawn, archive_tier=aster-glacier, compliance_tag=heliotrope, notification_channel=aster-signal, backup_demonstrator=aster-vault, escalation_room=room-aster-orbit.\"},\"terminal_reason\":\"completed\",\"fast_mode_state\":\"off\",\"uuid\":\"3bfb8122-dfb9-43e3-9ded-ff13ed65c68c\"}\n",
+        "raw_stderr": "",
+        "envelope": {
+          "type": "result",
+          "subtype": "success",
+          "is_error": false,
+          "api_error_status": null,
+          "duration_ms": 21376,
+          "duration_api_ms": 21527,
+          "ttft_ms": 12037,
+          "ttft_stream_ms": 4130,
+          "time_to_request_ms": 924,
+          "num_turns": 2,
+          "result": "Done.",
+          "stop_reason": "end_turn",
+          "session_id": "61609031-5a2c-4c25-99cb-e4af2d229d2e",
+          "total_cost_usd": 0.076486,
+          "usage": {
+            "input_tokens": 4,
+            "cache_creation_input_tokens": 3093,
+            "cache_read_input_tokens": 1332,
+            "output_tokens": 1753,
+            "server_tool_use": {
+              "web_search_requests": 0,
+              "web_fetch_requests": 0
+            },
+            "service_tier": "standard",
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 3093,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "inference_geo": "not_available",
+            "iterations": [
+              {
+                "input_tokens": 2,
+                "output_tokens": 5,
+                "cache_read_input_tokens": 1332,
+                "cache_creation_input_tokens": 1761,
+                "cache_creation": {
+                  "ephemeral_5m_input_tokens": 0,
+                  "ephemeral_1h_input_tokens": 1761
+                },
+                "type": "message"
+              }
+            ],
+            "speed": "standard"
+          },
+          "modelUsage": {
+            "claude-haiku-4-5-20251001": {
+              "inputTokens": 940,
+              "outputTokens": 21,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0,
+              "webSearchRequests": 0,
+              "costUSD": 0.001045,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            },
+            "claude-sonnet-5": {
+              "inputTokens": 4,
+              "outputTokens": 1753,
+              "cacheReadInputTokens": 1332,
+              "cacheCreationInputTokens": 3093,
+              "webSearchRequests": 0,
+              "costUSD": 0.07544100000000001,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            }
+          },
+          "permission_denials": [],
+          "structured_output": {
+            "memory_text": "Aster Relay: owner=Mira Sol, queue=quartz-17, retry_cap=4, idempotency_header=X-Aster-Idem, forbidden_fallback=local-disk, primary_region=aurora-north, preview_region=aster-preview-west, deployment_zone=cedar-zone, schema_namespace=aster.violet, prototype_schema_namespace=aster.prototype, encryption_profile=cipher-lark, demo_client_encryption_profile=aster-toy-cipher, audit_topic=audit-aster-cedar, analytics_sandbox_audit_topic=aster-analytics-noise, audit_retention=aster-equinox, health_path=/health/aster-pulse, staging_health_path=/health/aster-stage, lease_duration_s=47, recovery_contact=rhea-aster, checksum_salt=salt-aster-moon, telemetry_sink=aster-northstar, dashboard_cache=aster-linen, doc_lang=Finnish, sandbox_fallback=aster-scratch-pad, reporting_timezone=aster-meridian, metrics_prefix=aster-compass, canary_color=aster-plum, rollout_window=Tuesday dawn, archive_tier=aster-glacier, compliance_tag=heliotrope, notification_channel=aster-signal, backup_demonstrator=aster-vault, escalation_room=room-aster-orbit."
+          },
+          "terminal_reason": "completed",
+          "fast_mode_state": "off",
+          "uuid": "3bfb8122-dfb9-43e3-9ded-ff13ed65c68c"
+        },
+        "parsed": {
+          "memory_text": "Aster Relay: owner=Mira Sol, queue=quartz-17, retry_cap=4, idempotency_header=X-Aster-Idem, forbidden_fallback=local-disk, primary_region=aurora-north, preview_region=aster-preview-west, deployment_zone=cedar-zone, schema_namespace=aster.violet, prototype_schema_namespace=aster.prototype, encryption_profile=cipher-lark, demo_client_encryption_profile=aster-toy-cipher, audit_topic=audit-aster-cedar, analytics_sandbox_audit_topic=aster-analytics-noise, audit_retention=aster-equinox, health_path=/health/aster-pulse, staging_health_path=/health/aster-stage, lease_duration_s=47, recovery_contact=rhea-aster, checksum_salt=salt-aster-moon, telemetry_sink=aster-northstar, dashboard_cache=aster-linen, doc_lang=Finnish, sandbox_fallback=aster-scratch-pad, reporting_timezone=aster-meridian, metrics_prefix=aster-compass, canary_color=aster-plum, rollout_window=Tuesday dawn, archive_tier=aster-glacier, compliance_tag=heliotrope, notification_channel=aster-signal, backup_demonstrator=aster-vault, escalation_room=room-aster-orbit."
+        }
+      }
+    },
+    {
+      "step": 5,
+      "source_round": 30,
+      "observation": "The aster batch simulator lease mode is aster-elastic.",
+      "memory_text": "Aster Relay: owner=Mira Sol, queue=quartz-17, retry_cap=4, idempotency_header=X-Aster-Idem, forbidden_fallback=local-disk, primary_region=aurora-north, preview_region=aster-preview-west, deployment_zone=cedar-zone, schema_namespace=aster.violet, prototype_schema_namespace=aster.prototype, encryption_profile=cipher-lark, demo_client_encryption_profile=aster-toy-cipher, audit_topic=audit-aster-cedar, analytics_sandbox_audit_topic=aster-analytics-noise, audit_retention=aster-equinox, health_path=/health/aster-pulse, staging_health_path=/health/aster-stage, lease_duration_s=47, batch_simulator_lease_mode=aster-elastic, recovery_contact=rhea-aster, checksum_salt=salt-aster-moon, telemetry_sink=aster-northstar, dashboard_cache=aster-linen, doc_lang=Finnish, sandbox_fallback=aster-scratch-pad, reporting_timezone=aster-meridian, metrics_prefix=aster-compass, canary_color=aster-plum, rollout_window=Tuesday dawn, archive_tier=aster-glacier, compliance_tag=heliotrope, notification_channel=aster-signal, backup_demonstrator=aster-vault, escalation_room=room-aster-orbit.",
+      "words": 38,
+      "contains_production_literal": true,
+      "contains_prototype_literal": true,
+      "call": {
+        "role": "replacement_update",
+        "duration_ms": 8141,
+        "prompt_sha256": "4f837c4257c418ab4b0b7af9b2465aeca76205ff7438d30e0429df9f535f7009",
+        "raw_stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"api_error_status\":null,\"duration_ms\":7104,\"duration_api_ms\":6729,\"ttft_ms\":5704,\"ttft_stream_ms\":2659,\"time_to_request_ms\":1354,\"num_turns\":2,\"result\":\"Memory updated.\",\"stop_reason\":\"end_turn\",\"session_id\":\"f7690cd2-34e6-4337-a666-264bb1c655bc\",\"total_cost_usd\":0.034824,\"usage\":{\"input_tokens\":4,\"cache_creation_input_tokens\":1915,\"cache_read_input_tokens\":1352,\"output_tokens\":557,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":1915,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"not_available\",\"iterations\":[{\"input_tokens\":2,\"output_tokens\":8,\"cache_read_input_tokens\":1352,\"cache_creation_input_tokens\":563,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":563},\"type\":\"message\"}],\"speed\":\"standard\"},\"modelUsage\":{\"claude-haiku-4-5-20251001\":{\"inputTokens\":953,\"outputTokens\":20,\"cacheReadInputTokens\":0,\"cacheCreationInputTokens\":0,\"webSearchRequests\":0,\"costUSD\":0.001053,\"contextWindow\":200000,\"maxOutputTokens\":32000},\"claude-sonnet-5\":{\"inputTokens\":4,\"outputTokens\":557,\"cacheReadInputTokens\":1352,\"cacheCreationInputTokens\":1915,\"webSearchRequests\":0,\"costUSD\":0.033771,\"contextWindow\":200000,\"maxOutputTokens\":32000}},\"permission_denials\":[],\"structured_output\":{\"memory_text\":\"Aster Relay: owner=Mira Sol, queue=quartz-17, retry_cap=4, idempotency_header=X-Aster-Idem, forbidden_fallback=local-disk, primary_region=aurora-north, preview_region=aster-preview-west, deployment_zone=cedar-zone, schema_namespace=aster.violet, prototype_schema_namespace=aster.prototype, encryption_profile=cipher-lark, demo_client_encryption_profile=aster-toy-cipher, audit_topic=audit-aster-cedar, analytics_sandbox_audit_topic=aster-analytics-noise, audit_retention=aster-equinox, health_path=/health/aster-pulse, staging_health_path=/health/aster-stage, lease_duration_s=47, batch_simulator_lease_mode=aster-elastic, recovery_contact=rhea-aster, checksum_salt=salt-aster-moon, telemetry_sink=aster-northstar, dashboard_cache=aster-linen, doc_lang=Finnish, sandbox_fallback=aster-scratch-pad, reporting_timezone=aster-meridian, metrics_prefix=aster-compass, canary_color=aster-plum, rollout_window=Tuesday dawn, archive_tier=aster-glacier, compliance_tag=heliotrope, notification_channel=aster-signal, backup_demonstrator=aster-vault, escalation_room=room-aster-orbit.\"},\"terminal_reason\":\"completed\",\"fast_mode_state\":\"off\",\"uuid\":\"5fbeb430-6326-4e73-a2b5-e8612dff9124\"}\n",
+        "raw_stderr": "",
+        "envelope": {
+          "type": "result",
+          "subtype": "success",
+          "is_error": false,
+          "api_error_status": null,
+          "duration_ms": 7104,
+          "duration_api_ms": 6729,
+          "ttft_ms": 5704,
+          "ttft_stream_ms": 2659,
+          "time_to_request_ms": 1354,
+          "num_turns": 2,
+          "result": "Memory updated.",
+          "stop_reason": "end_turn",
+          "session_id": "f7690cd2-34e6-4337-a666-264bb1c655bc",
+          "total_cost_usd": 0.034824,
+          "usage": {
+            "input_tokens": 4,
+            "cache_creation_input_tokens": 1915,
+            "cache_read_input_tokens": 1352,
+            "output_tokens": 557,
+            "server_tool_use": {
+              "web_search_requests": 0,
+              "web_fetch_requests": 0
+            },
+            "service_tier": "standard",
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 1915,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "inference_geo": "not_available",
+            "iterations": [
+              {
+                "input_tokens": 2,
+                "output_tokens": 8,
+                "cache_read_input_tokens": 1352,
+                "cache_creation_input_tokens": 563,
+                "cache_creation": {
+                  "ephemeral_5m_input_tokens": 0,
+                  "ephemeral_1h_input_tokens": 563
+                },
+                "type": "message"
+              }
+            ],
+            "speed": "standard"
+          },
+          "modelUsage": {
+            "claude-haiku-4-5-20251001": {
+              "inputTokens": 953,
+              "outputTokens": 20,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0,
+              "webSearchRequests": 0,
+              "costUSD": 0.001053,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            },
+            "claude-sonnet-5": {
+              "inputTokens": 4,
+              "outputTokens": 557,
+              "cacheReadInputTokens": 1352,
+              "cacheCreationInputTokens": 1915,
+              "webSearchRequests": 0,
+              "costUSD": 0.033771,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            }
+          },
+          "permission_denials": [],
+          "structured_output": {
+            "memory_text": "Aster Relay: owner=Mira Sol, queue=quartz-17, retry_cap=4, idempotency_header=X-Aster-Idem, forbidden_fallback=local-disk, primary_region=aurora-north, preview_region=aster-preview-west, deployment_zone=cedar-zone, schema_namespace=aster.violet, prototype_schema_namespace=aster.prototype, encryption_profile=cipher-lark, demo_client_encryption_profile=aster-toy-cipher, audit_topic=audit-aster-cedar, analytics_sandbox_audit_topic=aster-analytics-noise, audit_retention=aster-equinox, health_path=/health/aster-pulse, staging_health_path=/health/aster-stage, lease_duration_s=47, batch_simulator_lease_mode=aster-elastic, recovery_contact=rhea-aster, checksum_salt=salt-aster-moon, telemetry_sink=aster-northstar, dashboard_cache=aster-linen, doc_lang=Finnish, sandbox_fallback=aster-scratch-pad, reporting_timezone=aster-meridian, metrics_prefix=aster-compass, canary_color=aster-plum, rollout_window=Tuesday dawn, archive_tier=aster-glacier, compliance_tag=heliotrope, notification_channel=aster-signal, backup_demonstrator=aster-vault, escalation_room=room-aster-orbit."
+          },
+          "terminal_reason": "completed",
+          "fast_mode_state": "off",
+          "uuid": "5fbeb430-6326-4e73-a2b5-e8612dff9124"
+        },
+        "parsed": {
+          "memory_text": "Aster Relay: owner=Mira Sol, queue=quartz-17, retry_cap=4, idempotency_header=X-Aster-Idem, forbidden_fallback=local-disk, primary_region=aurora-north, preview_region=aster-preview-west, deployment_zone=cedar-zone, schema_namespace=aster.violet, prototype_schema_namespace=aster.prototype, encryption_profile=cipher-lark, demo_client_encryption_profile=aster-toy-cipher, audit_topic=audit-aster-cedar, analytics_sandbox_audit_topic=aster-analytics-noise, audit_retention=aster-equinox, health_path=/health/aster-pulse, staging_health_path=/health/aster-stage, lease_duration_s=47, batch_simulator_lease_mode=aster-elastic, recovery_contact=rhea-aster, checksum_salt=salt-aster-moon, telemetry_sink=aster-northstar, dashboard_cache=aster-linen, doc_lang=Finnish, sandbox_fallback=aster-scratch-pad, reporting_timezone=aster-meridian, metrics_prefix=aster-compass, canary_color=aster-plum, rollout_window=Tuesday dawn, archive_tier=aster-glacier, compliance_tag=heliotrope, notification_channel=aster-signal, backup_demonstrator=aster-vault, escalation_room=room-aster-orbit."
+        }
+      }
+    }
+  ],
+  "qa_calls": {
+    "baseline": {
+      "role": "downstream_qa",
+      "duration_ms": 7249,
+      "prompt_sha256": "6652f165d52a6e0ea661b9f94b1bc0f3859a000b713e45bbf71d5ed804a95330",
+      "raw_stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"api_error_status\":null,\"duration_ms\":5409,\"duration_api_ms\":6113,\"ttft_ms\":3599,\"ttft_stream_ms\":2466,\"time_to_request_ms\":275,\"num_turns\":2,\"result\":\"production_schema_namespace: aster.violet\\nprototype_schema_namespace: aster.prototype\",\"stop_reason\":\"end_turn\",\"session_id\":\"f9953112-ebf1-4747-b2d7-226022b0c147\",\"total_cost_usd\":0.01202,\"usage\":{\"input_tokens\":4,\"cache_creation_input_tokens\":258,\"cache_read_input_tokens\":2790,\"output_tokens\":279,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":258,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"not_available\",\"iterations\":[{\"input_tokens\":2,\"output_tokens\":34,\"cache_read_input_tokens\":1395,\"cache_creation_input_tokens\":258,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":258},\"type\":\"message\"}],\"speed\":\"standard\"},\"modelUsage\":{\"claude-haiku-4-5-20251001\":{\"inputTokens\":960,\"outputTokens\":18,\"cacheReadInputTokens\":0,\"cacheCreationInputTokens\":0,\"webSearchRequests\":0,\"costUSD\":0.00105,\"contextWindow\":200000,\"maxOutputTokens\":32000},\"claude-sonnet-5\":{\"inputTokens\":4,\"outputTokens\":279,\"cacheReadInputTokens\":2790,\"cacheCreationInputTokens\":258,\"webSearchRequests\":0,\"costUSD\":0.01097,\"contextWindow\":200000,\"maxOutputTokens\":32000}},\"permission_denials\":[],\"structured_output\":{\"production_schema_namespace\":\"aster.violet\",\"prototype_schema_namespace\":\"aster.prototype\"},\"terminal_reason\":\"completed\",\"fast_mode_state\":\"off\",\"uuid\":\"08034950-8fa5-432a-a802-40da9179c9e5\"}\n",
+      "raw_stderr": "",
+      "envelope": {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false,
+        "api_error_status": null,
+        "duration_ms": 5409,
+        "duration_api_ms": 6113,
+        "ttft_ms": 3599,
+        "ttft_stream_ms": 2466,
+        "time_to_request_ms": 275,
+        "num_turns": 2,
+        "result": "production_schema_namespace: aster.violet\nprototype_schema_namespace: aster.prototype",
+        "stop_reason": "end_turn",
+        "session_id": "f9953112-ebf1-4747-b2d7-226022b0c147",
+        "total_cost_usd": 0.01202,
+        "usage": {
+          "input_tokens": 4,
+          "cache_creation_input_tokens": 258,
+          "cache_read_input_tokens": 2790,
+          "output_tokens": 279,
+          "server_tool_use": {
+            "web_search_requests": 0,
+            "web_fetch_requests": 0
+          },
+          "service_tier": "standard",
+          "cache_creation": {
+            "ephemeral_1h_input_tokens": 258,
+            "ephemeral_5m_input_tokens": 0
+          },
+          "inference_geo": "not_available",
+          "iterations": [
+            {
+              "input_tokens": 2,
+              "output_tokens": 34,
+              "cache_read_input_tokens": 1395,
+              "cache_creation_input_tokens": 258,
+              "cache_creation": {
+                "ephemeral_5m_input_tokens": 0,
+                "ephemeral_1h_input_tokens": 258
+              },
+              "type": "message"
+            }
+          ],
+          "speed": "standard"
+        },
+        "modelUsage": {
+          "claude-haiku-4-5-20251001": {
+            "inputTokens": 960,
+            "outputTokens": 18,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0,
+            "webSearchRequests": 0,
+            "costUSD": 0.00105,
+            "contextWindow": 200000,
+            "maxOutputTokens": 32000
+          },
+          "claude-sonnet-5": {
+            "inputTokens": 4,
+            "outputTokens": 279,
+            "cacheReadInputTokens": 2790,
+            "cacheCreationInputTokens": 258,
+            "webSearchRequests": 0,
+            "costUSD": 0.01097,
+            "contextWindow": 200000,
+            "maxOutputTokens": 32000
+          }
+        },
+        "permission_denials": [],
+        "structured_output": {
+          "production_schema_namespace": "aster.violet",
+          "prototype_schema_namespace": "aster.prototype"
+        },
+        "terminal_reason": "completed",
+        "fast_mode_state": "off",
+        "uuid": "08034950-8fa5-432a-a802-40da9179c9e5"
+      },
+      "parsed": {
+        "production_schema_namespace": "aster.violet",
+        "prototype_schema_namespace": "aster.prototype"
+      }
+    },
+    "additive": {
+      "role": "downstream_qa",
+      "duration_ms": 17267,
+      "prompt_sha256": "667abe69b28628b4e20136fcf58b904b2d71b689b5110862aeeeb3219599a38f",
+      "raw_stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"api_error_status\":null,\"duration_ms\":16282,\"duration_api_ms\":17069,\"ttft_ms\":14772,\"ttft_stream_ms\":14754,\"time_to_request_ms\":412,\"num_turns\":2,\"result\":\"production_schema_namespace: aster.violet\\nprototype_schema_namespace: aster.prototype\",\"stop_reason\":\"end_turn\",\"session_id\":\"910abd90-f0ea-476b-93c7-d3bacef454be\",\"total_cost_usd\":0.009340999999999999,\"usage\":{\"input_tokens\":4,\"cache_creation_input_tokens\":172,\"cache_read_input_tokens\":3208,\"output_tokens\":193,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":172,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"not_available\",\"iterations\":[{\"input_tokens\":2,\"output_tokens\":34,\"cache_read_input_tokens\":1604,\"cache_creation_input_tokens\":172,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":172},\"type\":\"message\"}],\"speed\":\"standard\"},\"modelUsage\":{\"claude-haiku-4-5-20251001\":{\"inputTokens\":1092,\"outputTokens\":16,\"cacheReadInputTokens\":0,\"cacheCreationInputTokens\":0,\"webSearchRequests\":0,\"costUSD\":0.001172,\"contextWindow\":200000,\"maxOutputTokens\":32000},\"claude-sonnet-5\":{\"inputTokens\":4,\"outputTokens\":193,\"cacheReadInputTokens\":3208,\"cacheCreationInputTokens\":172,\"webSearchRequests\":0,\"costUSD\":0.008169,\"contextWindow\":200000,\"maxOutputTokens\":32000}},\"permission_denials\":[],\"structured_output\":{\"production_schema_namespace\":\"aster.violet\",\"prototype_schema_namespace\":\"aster.prototype\"},\"terminal_reason\":\"completed\",\"fast_mode_state\":\"off\",\"uuid\":\"36b7264e-7eb3-43a6-97d1-05b2dc8d4bee\"}\n",
+      "raw_stderr": "",
+      "envelope": {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false,
+        "api_error_status": null,
+        "duration_ms": 16282,
+        "duration_api_ms": 17069,
+        "ttft_ms": 14772,
+        "ttft_stream_ms": 14754,
+        "time_to_request_ms": 412,
+        "num_turns": 2,
+        "result": "production_schema_namespace: aster.violet\nprototype_schema_namespace: aster.prototype",
+        "stop_reason": "end_turn",
+        "session_id": "910abd90-f0ea-476b-93c7-d3bacef454be",
+        "total_cost_usd": 0.009340999999999999,
+        "usage": {
+          "input_tokens": 4,
+          "cache_creation_input_tokens": 172,
+          "cache_read_input_tokens": 3208,
+          "output_tokens": 193,
+          "server_tool_use": {
+            "web_search_requests": 0,
+            "web_fetch_requests": 0
+          },
+          "service_tier": "standard",
+          "cache_creation": {
+            "ephemeral_1h_input_tokens": 172,
+            "ephemeral_5m_input_tokens": 0
+          },
+          "inference_geo": "not_available",
+          "iterations": [
+            {
+              "input_tokens": 2,
+              "output_tokens": 34,
+              "cache_read_input_tokens": 1604,
+              "cache_creation_input_tokens": 172,
+              "cache_creation": {
+                "ephemeral_5m_input_tokens": 0,
+                "ephemeral_1h_input_tokens": 172
+              },
+              "type": "message"
+            }
+          ],
+          "speed": "standard"
+        },
+        "modelUsage": {
+          "claude-haiku-4-5-20251001": {
+            "inputTokens": 1092,
+            "outputTokens": 16,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0,
+            "webSearchRequests": 0,
+            "costUSD": 0.001172,
+            "contextWindow": 200000,
+            "maxOutputTokens": 32000
+          },
+          "claude-sonnet-5": {
+            "inputTokens": 4,
+            "outputTokens": 193,
+            "cacheReadInputTokens": 3208,
+            "cacheCreationInputTokens": 172,
+            "webSearchRequests": 0,
+            "costUSD": 0.008169,
+            "contextWindow": 200000,
+            "maxOutputTokens": 32000
+          }
+        },
+        "permission_denials": [],
+        "structured_output": {
+          "production_schema_namespace": "aster.violet",
+          "prototype_schema_namespace": "aster.prototype"
+        },
+        "terminal_reason": "completed",
+        "fast_mode_state": "off",
+        "uuid": "36b7264e-7eb3-43a6-97d1-05b2dc8d4bee"
+      },
+      "parsed": {
+        "production_schema_namespace": "aster.violet",
+        "prototype_schema_namespace": "aster.prototype"
+      }
+    },
+    "rewritten": {
+      "role": "downstream_qa",
+      "duration_ms": 8049,
+      "prompt_sha256": "60d7facfc05bc2c1d2eabfdc5685b0221f77c38a1636527449b358cfa46c6ec8",
+      "raw_stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"api_error_status\":null,\"duration_ms\":7030,\"duration_api_ms\":7127,\"ttft_ms\":5043,\"ttft_stream_ms\":2237,\"time_to_request_ms\":913,\"num_turns\":2,\"result\":\"production_schema_namespace: aster.violet\\nprototype_schema_namespace: aster.prototype\",\"stop_reason\":\"end_turn\",\"session_id\":\"b3d6a248-ad73-4ee9-a90c-67bc4b967f42\",\"total_cost_usd\":0.0328655,\"usage\":{\"input_tokens\":4,\"cache_creation_input_tokens\":1843,\"cache_read_input_tokens\":1355,\"output_tokens\":509,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":1843,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"not_available\",\"iterations\":[{\"input_tokens\":2,\"output_tokens\":34,\"cache_read_input_tokens\":1355,\"cache_creation_input_tokens\":488,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":488},\"type\":\"message\"}],\"speed\":\"standard\"},\"modelUsage\":{\"claude-haiku-4-5-20251001\":{\"inputTokens\":923,\"outputTokens\":18,\"cacheReadInputTokens\":0,\"cacheCreationInputTokens\":0,\"webSearchRequests\":0,\"costUSD\":0.001013,\"contextWindow\":200000,\"maxOutputTokens\":32000},\"claude-sonnet-5\":{\"inputTokens\":4,\"outputTokens\":509,\"cacheReadInputTokens\":1355,\"cacheCreationInputTokens\":1843,\"webSearchRequests\":0,\"costUSD\":0.0318525,\"contextWindow\":200000,\"maxOutputTokens\":32000}},\"permission_denials\":[],\"structured_output\":{\"production_schema_namespace\":\"aster.violet\",\"prototype_schema_namespace\":\"aster.prototype\"},\"terminal_reason\":\"completed\",\"fast_mode_state\":\"off\",\"uuid\":\"bef4ef5a-9a56-4d6a-8a53-2bf68be12d2c\"}\n",
+      "raw_stderr": "",
+      "envelope": {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false,
+        "api_error_status": null,
+        "duration_ms": 7030,
+        "duration_api_ms": 7127,
+        "ttft_ms": 5043,
+        "ttft_stream_ms": 2237,
+        "time_to_request_ms": 913,
+        "num_turns": 2,
+        "result": "production_schema_namespace: aster.violet\nprototype_schema_namespace: aster.prototype",
+        "stop_reason": "end_turn",
+        "session_id": "b3d6a248-ad73-4ee9-a90c-67bc4b967f42",
+        "total_cost_usd": 0.0328655,
+        "usage": {
+          "input_tokens": 4,
+          "cache_creation_input_tokens": 1843,
+          "cache_read_input_tokens": 1355,
+          "output_tokens": 509,
+          "server_tool_use": {
+            "web_search_requests": 0,
+            "web_fetch_requests": 0
+          },
+          "service_tier": "standard",
+          "cache_creation": {
+            "ephemeral_1h_input_tokens": 1843,
+            "ephemeral_5m_input_tokens": 0
+          },
+          "inference_geo": "not_available",
+          "iterations": [
+            {
+              "input_tokens": 2,
+              "output_tokens": 34,
+              "cache_read_input_tokens": 1355,
+              "cache_creation_input_tokens": 488,
+              "cache_creation": {
+                "ephemeral_5m_input_tokens": 0,
+                "ephemeral_1h_input_tokens": 488
+              },
+              "type": "message"
+            }
+          ],
+          "speed": "standard"
+        },
+        "modelUsage": {
+          "claude-haiku-4-5-20251001": {
+            "inputTokens": 923,
+            "outputTokens": 18,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0,
+            "webSearchRequests": 0,
+            "costUSD": 0.001013,
+            "contextWindow": 200000,
+            "maxOutputTokens": 32000
+          },
+          "claude-sonnet-5": {
+            "inputTokens": 4,
+            "outputTokens": 509,
+            "cacheReadInputTokens": 1355,
+            "cacheCreationInputTokens": 1843,
+            "webSearchRequests": 0,
+            "costUSD": 0.0318525,
+            "contextWindow": 200000,
+            "maxOutputTokens": 32000
+          }
+        },
+        "permission_denials": [],
+        "structured_output": {
+          "production_schema_namespace": "aster.violet",
+          "prototype_schema_namespace": "aster.prototype"
+        },
+        "terminal_reason": "completed",
+        "fast_mode_state": "off",
+        "uuid": "bef4ef5a-9a56-4d6a-8a53-2bf68be12d2c"
+      },
+      "parsed": {
+        "production_schema_namespace": "aster.violet",
+        "prototype_schema_namespace": "aster.prototype"
+      }
+    },
+    "rescue": {
+      "role": "downstream_qa",
+      "duration_ms": 4519,
+      "prompt_sha256": "2f4e6a69a91fa367ef71c673369afa225afa0a95880b4c902163825b1b96ba2a",
+      "raw_stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"api_error_status\":null,\"duration_ms\":3550,\"duration_api_ms\":3818,\"ttft_ms\":2459,\"ttft_stream_ms\":2458,\"time_to_request_ms\":666,\"num_turns\":2,\"result\":\"production_schema_namespace: aster.violet\\nprototype_schema_namespace: aster.prototype\",\"stop_reason\":\"end_turn\",\"session_id\":\"351a240c-54fe-4569-a916-4a94b9bd3d2c\",\"total_cost_usd\":0.020388,\"usage\":{\"input_tokens\":4,\"cache_creation_input_tokens\":1533,\"cache_read_input_tokens\":1422,\"output_tokens\":131,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":1533,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"not_available\",\"iterations\":[{\"input_tokens\":2,\"output_tokens\":34,\"cache_read_input_tokens\":1422,\"cache_creation_input_tokens\":111,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":111},\"type\":\"message\"}],\"speed\":\"standard\"},\"modelUsage\":{\"claude-haiku-4-5-20251001\":{\"inputTokens\":962,\"outputTokens\":18,\"cacheReadInputTokens\":0,\"cacheCreationInputTokens\":0,\"webSearchRequests\":0,\"costUSD\":0.001052,\"contextWindow\":200000,\"maxOutputTokens\":32000},\"claude-sonnet-5\":{\"inputTokens\":4,\"outputTokens\":131,\"cacheReadInputTokens\":1422,\"cacheCreationInputTokens\":1533,\"webSearchRequests\":0,\"costUSD\":0.019336,\"contextWindow\":200000,\"maxOutputTokens\":32000}},\"permission_denials\":[],\"structured_output\":{\"production_schema_namespace\":\"aster.violet\",\"prototype_schema_namespace\":\"aster.prototype\"},\"terminal_reason\":\"completed\",\"fast_mode_state\":\"off\",\"uuid\":\"560d792b-7d33-40f9-aef5-71b151876d7d\"}\n",
+      "raw_stderr": "",
+      "envelope": {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false,
+        "api_error_status": null,
+        "duration_ms": 3550,
+        "duration_api_ms": 3818,
+        "ttft_ms": 2459,
+        "ttft_stream_ms": 2458,
+        "time_to_request_ms": 666,
+        "num_turns": 2,
+        "result": "production_schema_namespace: aster.violet\nprototype_schema_namespace: aster.prototype",
+        "stop_reason": "end_turn",
+        "session_id": "351a240c-54fe-4569-a916-4a94b9bd3d2c",
+        "total_cost_usd": 0.020388,
+        "usage": {
+          "input_tokens": 4,
+          "cache_creation_input_tokens": 1533,
+          "cache_read_input_tokens": 1422,
+          "output_tokens": 131,
+          "server_tool_use": {
+            "web_search_requests": 0,
+            "web_fetch_requests": 0
+          },
+          "service_tier": "standard",
+          "cache_creation": {
+            "ephemeral_1h_input_tokens": 1533,
+            "ephemeral_5m_input_tokens": 0
+          },
+          "inference_geo": "not_available",
+          "iterations": [
+            {
+              "input_tokens": 2,
+              "output_tokens": 34,
+              "cache_read_input_tokens": 1422,
+              "cache_creation_input_tokens": 111,
+              "cache_creation": {
+                "ephemeral_5m_input_tokens": 0,
+                "ephemeral_1h_input_tokens": 111
+              },
+              "type": "message"
+            }
+          ],
+          "speed": "standard"
+        },
+        "modelUsage": {
+          "claude-haiku-4-5-20251001": {
+            "inputTokens": 962,
+            "outputTokens": 18,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0,
+            "webSearchRequests": 0,
+            "costUSD": 0.001052,
+            "contextWindow": 200000,
+            "maxOutputTokens": 32000
+          },
+          "claude-sonnet-5": {
+            "inputTokens": 4,
+            "outputTokens": 131,
+            "cacheReadInputTokens": 1422,
+            "cacheCreationInputTokens": 1533,
+            "webSearchRequests": 0,
+            "costUSD": 0.019336,
+            "contextWindow": 200000,
+            "maxOutputTokens": 32000
+          }
+        },
+        "permission_denials": [],
+        "structured_output": {
+          "production_schema_namespace": "aster.violet",
+          "prototype_schema_namespace": "aster.prototype"
+        },
+        "terminal_reason": "completed",
+        "fast_mode_state": "off",
+        "uuid": "560d792b-7d33-40f9-aef5-71b151876d7d"
+      },
+      "parsed": {
+        "production_schema_namespace": "aster.violet",
+        "prototype_schema_namespace": "aster.prototype"
+      }
+    }
+  },
+  "condition_scores": {
+    "baseline": {
+      "condition": "baseline",
+      "production_expected": "aster.violet",
+      "production_observed": "aster.violet",
+      "production_correct": true,
+      "prototype_expected": "aster.prototype",
+      "prototype_observed": "aster.prototype",
+      "prototype_correct": true,
+      "semantic_merge_signature": false
+    },
+    "additive": {
+      "condition": "additive",
+      "production_expected": "aster.violet",
+      "production_observed": "aster.violet",
+      "production_correct": true,
+      "prototype_expected": "aster.prototype",
+      "prototype_observed": "aster.prototype",
+      "prototype_correct": true,
+      "semantic_merge_signature": false
+    },
+    "rewritten": {
+      "condition": "rewritten",
+      "production_expected": "aster.violet",
+      "production_observed": "aster.violet",
+      "production_correct": true,
+      "prototype_expected": "aster.prototype",
+      "prototype_observed": "aster.prototype",
+      "prototype_correct": true,
+      "semantic_merge_signature": false
+    },
+    "rescue": {
+      "condition": "rescue",
+      "production_expected": "aster.violet",
+      "production_observed": "aster.violet",
+      "production_correct": true,
+      "prototype_expected": "aster.prototype",
+      "prototype_observed": "aster.prototype",
+      "prototype_correct": true,
+      "semantic_merge_signature": false
+    }
+  },
+  "paired_score": {
+    "harm": false,
+    "win": false,
+    "rescued_harm": false,
+    "semantic_merge_harm": false
+  },
+  "completed_at": "2026-08-27T04:39:06.778Z"
+}

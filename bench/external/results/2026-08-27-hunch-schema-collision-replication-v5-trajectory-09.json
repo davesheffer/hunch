@@ -1,0 +1,895 @@
+{
+  "schema_version": 1,
+  "protocol_version": 5,
+  "experiment": "hunch-schema-collision-targeted-replication",
+  "status": "complete",
+  "trajectory_index": 9,
+  "case_id": "cinder-index",
+  "case_name": "Cinder Index",
+  "case_replicate": 2,
+  "started_at": "2026-08-27T04:34:02.722Z",
+  "model": "claude-sonnet-5",
+  "claude_cli_version": "2.1.186 (Claude Code)",
+  "git_head": "33cd6483bc7cf0faf2826c60edb306abc33d8c5f",
+  "runner_sha256": "f3bd2a02569e0fa886cf4941ac0c5796678bb8fda8b695119a2e1f1d931a2f71",
+  "fixture_source_sha256": "7a1c098f913993fba2c3732110c487edfc4a9b0c6b52348b58b69f31750e9244",
+  "fixture_sha256": "5f75842ea700daca1d6e542e2d45342b76915afb604220a4659858d30120bd24",
+  "system_prompt_sha256": "ced040c0d0e2979fa7f23d256137c9b31ac844b98fafc77291fd1361d3a8e275",
+  "condition_order": [
+    "baseline",
+    "additive",
+    "rewritten",
+    "rescue"
+  ],
+  "checkpoints": [
+    {
+      "step": 1,
+      "source_round": 26,
+      "observation": "The cinder demo client uses encryption profile cinder-toy-cipher.",
+      "memory_text": "Cinder Index: owner=Leena Quill, queue=amber-43, retry_cap=3, idempotency_header=X-Cinder-Key, forbidden_fallback=direct-sql, primary_region=caldera-west, preview_region=cinder-preview-west, deployment_zone=maple-zone, schema_namespace=cinder.saffron, prototype_schema_namespace=cinder.prototype, encryption_profile=cipher-wren, demo_client_encryption_profile=cinder-toy-cipher, audit_topic=audit-cinder-ash, audit_retention=cinder-equinox, health_path=/health/cinder-spark, lease_duration_s=61, recovery_contact=lena-cinder, checksum_salt=salt-cinder-sun, admin_panel_accent=cinder-saffron, telemetry_sink=cinder-northstar, preview_renderer_retry_policy=cinder-eleven, dashboard_cache=cinder-linen, doc_lang=Maltese, mobile_demo_header=X-cinder-Demo, shadow_importer_queue=cinder-pebble-lab, sandbox_fallback=cinder-scratch-pad, reporting_timezone=cinder-meridian, thumbnail_prototype_storage=cinder-canvas, replay_simulator_cadence=cinder-solstice, support_reply_lang=cinder-common, debug_console_port=cinder-harbor, compliance_tag=carnelian, rollout_window=Sunday noon, archive_tier=cinder-glacier, notification_channel=cinder-signal, backup_demonstrator=cinder-vault, metrics_prefix=cinder-compass, canary_color=cinder-plum.",
+      "words": 42,
+      "contains_production_literal": true,
+      "contains_prototype_literal": true,
+      "call": {
+        "role": "replacement_update",
+        "duration_ms": 37631,
+        "prompt_sha256": "1ee9b20a53b48e6dd451c04678a6cca802c6adf64fa0ab23606ee671a3198e47",
+        "raw_stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"api_error_status\":null,\"duration_ms\":36766,\"duration_api_ms\":37015,\"ttft_ms\":30328,\"ttft_stream_ms\":3050,\"time_to_request_ms\":984,\"num_turns\":2,\"result\":\"Consolidated memory for Cinder Index has been created, merging the new demo client encryption profile fact (cinder-toy-cipher) with all previously stored configuration details, staying within the word limit.\",\"stop_reason\":\"end_turn\",\"session_id\":\"33ee4aab-8a48-4ee1-ba6b-e77394155fe0\",\"total_cost_usd\":0.16783,\"usage\":{\"input_tokens\":4,\"cache_creation_input_tokens\":4685,\"cache_read_input_tokens\":2874,\"output_tokens\":4737,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":4685,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"not_available\",\"iterations\":[{\"input_tokens\":2,\"output_tokens\":65,\"cache_read_input_tokens\":1437,\"cache_creation_input_tokens\":4685,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":4685},\"type\":\"message\"}],\"speed\":\"standard\"},\"modelUsage\":{\"claude-haiku-4-5-20251001\":{\"inputTokens\":1003,\"outputTokens\":19,\"cacheReadInputTokens\":0,\"cacheCreationInputTokens\":0,\"webSearchRequests\":0,\"costUSD\":0.001098,\"contextWindow\":200000,\"maxOutputTokens\":32000},\"claude-sonnet-5\":{\"inputTokens\":4,\"outputTokens\":4737,\"cacheReadInputTokens\":2874,\"cacheCreationInputTokens\":4685,\"webSearchRequests\":0,\"costUSD\":0.166732,\"contextWindow\":200000,\"maxOutputTokens\":32000}},\"permission_denials\":[],\"structured_output\":{\"memory_text\":\"Cinder Index: owner=Leena Quill, queue=amber-43, retry_cap=3, idempotency_header=X-Cinder-Key, forbidden_fallback=direct-sql, primary_region=caldera-west, preview_region=cinder-preview-west, deployment_zone=maple-zone, schema_namespace=cinder.saffron, prototype_schema_namespace=cinder.prototype, encryption_profile=cipher-wren, demo_client_encryption_profile=cinder-toy-cipher, audit_topic=audit-cinder-ash, audit_retention=cinder-equinox, health_path=/health/cinder-spark, lease_duration_s=61, recovery_contact=lena-cinder, checksum_salt=salt-cinder-sun, admin_panel_accent=cinder-saffron, telemetry_sink=cinder-northstar, preview_renderer_retry_policy=cinder-eleven, dashboard_cache=cinder-linen, doc_lang=Maltese, mobile_demo_header=X-cinder-Demo, shadow_importer_queue=cinder-pebble-lab, sandbox_fallback=cinder-scratch-pad, reporting_timezone=cinder-meridian, thumbnail_prototype_storage=cinder-canvas, replay_simulator_cadence=cinder-solstice, support_reply_lang=cinder-common, debug_console_port=cinder-harbor, compliance_tag=carnelian, rollout_window=Sunday noon, archive_tier=cinder-glacier, notification_channel=cinder-signal, backup_demonstrator=cinder-vault, metrics_prefix=cinder-compass, canary_color=cinder-plum.\"},\"terminal_reason\":\"completed\",\"fast_mode_state\":\"off\",\"uuid\":\"4763f09c-6ca2-4012-a7a4-8f3f74b5f353\"}\n",
+        "raw_stderr": "",
+        "envelope": {
+          "type": "result",
+          "subtype": "success",
+          "is_error": false,
+          "api_error_status": null,
+          "duration_ms": 36766,
+          "duration_api_ms": 37015,
+          "ttft_ms": 30328,
+          "ttft_stream_ms": 3050,
+          "time_to_request_ms": 984,
+          "num_turns": 2,
+          "result": "Consolidated memory for Cinder Index has been created, merging the new demo client encryption profile fact (cinder-toy-cipher) with all previously stored configuration details, staying within the word limit.",
+          "stop_reason": "end_turn",
+          "session_id": "33ee4aab-8a48-4ee1-ba6b-e77394155fe0",
+          "total_cost_usd": 0.16783,
+          "usage": {
+            "input_tokens": 4,
+            "cache_creation_input_tokens": 4685,
+            "cache_read_input_tokens": 2874,
+            "output_tokens": 4737,
+            "server_tool_use": {
+              "web_search_requests": 0,
+              "web_fetch_requests": 0
+            },
+            "service_tier": "standard",
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 4685,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "inference_geo": "not_available",
+            "iterations": [
+              {
+                "input_tokens": 2,
+                "output_tokens": 65,
+                "cache_read_input_tokens": 1437,
+                "cache_creation_input_tokens": 4685,
+                "cache_creation": {
+                  "ephemeral_5m_input_tokens": 0,
+                  "ephemeral_1h_input_tokens": 4685
+                },
+                "type": "message"
+              }
+            ],
+            "speed": "standard"
+          },
+          "modelUsage": {
+            "claude-haiku-4-5-20251001": {
+              "inputTokens": 1003,
+              "outputTokens": 19,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0,
+              "webSearchRequests": 0,
+              "costUSD": 0.001098,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            },
+            "claude-sonnet-5": {
+              "inputTokens": 4,
+              "outputTokens": 4737,
+              "cacheReadInputTokens": 2874,
+              "cacheCreationInputTokens": 4685,
+              "webSearchRequests": 0,
+              "costUSD": 0.166732,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            }
+          },
+          "permission_denials": [],
+          "structured_output": {
+            "memory_text": "Cinder Index: owner=Leena Quill, queue=amber-43, retry_cap=3, idempotency_header=X-Cinder-Key, forbidden_fallback=direct-sql, primary_region=caldera-west, preview_region=cinder-preview-west, deployment_zone=maple-zone, schema_namespace=cinder.saffron, prototype_schema_namespace=cinder.prototype, encryption_profile=cipher-wren, demo_client_encryption_profile=cinder-toy-cipher, audit_topic=audit-cinder-ash, audit_retention=cinder-equinox, health_path=/health/cinder-spark, lease_duration_s=61, recovery_contact=lena-cinder, checksum_salt=salt-cinder-sun, admin_panel_accent=cinder-saffron, telemetry_sink=cinder-northstar, preview_renderer_retry_policy=cinder-eleven, dashboard_cache=cinder-linen, doc_lang=Maltese, mobile_demo_header=X-cinder-Demo, shadow_importer_queue=cinder-pebble-lab, sandbox_fallback=cinder-scratch-pad, reporting_timezone=cinder-meridian, thumbnail_prototype_storage=cinder-canvas, replay_simulator_cadence=cinder-solstice, support_reply_lang=cinder-common, debug_console_port=cinder-harbor, compliance_tag=carnelian, rollout_window=Sunday noon, archive_tier=cinder-glacier, notification_channel=cinder-signal, backup_demonstrator=cinder-vault, metrics_prefix=cinder-compass, canary_color=cinder-plum."
+          },
+          "terminal_reason": "completed",
+          "fast_mode_state": "off",
+          "uuid": "4763f09c-6ca2-4012-a7a4-8f3f74b5f353"
+        },
+        "parsed": {
+          "memory_text": "Cinder Index: owner=Leena Quill, queue=amber-43, retry_cap=3, idempotency_header=X-Cinder-Key, forbidden_fallback=direct-sql, primary_region=caldera-west, preview_region=cinder-preview-west, deployment_zone=maple-zone, schema_namespace=cinder.saffron, prototype_schema_namespace=cinder.prototype, encryption_profile=cipher-wren, demo_client_encryption_profile=cinder-toy-cipher, audit_topic=audit-cinder-ash, audit_retention=cinder-equinox, health_path=/health/cinder-spark, lease_duration_s=61, recovery_contact=lena-cinder, checksum_salt=salt-cinder-sun, admin_panel_accent=cinder-saffron, telemetry_sink=cinder-northstar, preview_renderer_retry_policy=cinder-eleven, dashboard_cache=cinder-linen, doc_lang=Maltese, mobile_demo_header=X-cinder-Demo, shadow_importer_queue=cinder-pebble-lab, sandbox_fallback=cinder-scratch-pad, reporting_timezone=cinder-meridian, thumbnail_prototype_storage=cinder-canvas, replay_simulator_cadence=cinder-solstice, support_reply_lang=cinder-common, debug_console_port=cinder-harbor, compliance_tag=carnelian, rollout_window=Sunday noon, archive_tier=cinder-glacier, notification_channel=cinder-signal, backup_demonstrator=cinder-vault, metrics_prefix=cinder-compass, canary_color=cinder-plum."
+        }
+      }
+    },
+    {
+      "step": 2,
+      "source_round": 27,
+      "observation": "The cinder staging probe health path is /health/cinder-stage.",
+      "memory_text": "Cinder Index: owner=Leena Quill, queue=amber-43, retry_cap=3, idempotency_header=X-Cinder-Key, forbidden_fallback=direct-sql, primary_region=caldera-west, preview_region=cinder-preview-west, deployment_zone=maple-zone, schema_namespace=cinder.saffron, prototype_schema_namespace=cinder.prototype, encryption_profile=cipher-wren, demo_client_encryption_profile=cinder-toy-cipher, audit_topic=audit-cinder-ash, audit_retention=cinder-equinox, health_path=/health/cinder-spark, staging_probe_health_path=/health/cinder-stage, lease_duration_s=61, recovery_contact=lena-cinder, checksum_salt=salt-cinder-sun, admin_panel_accent=cinder-saffron, telemetry_sink=cinder-northstar, preview_renderer_retry_policy=cinder-eleven, dashboard_cache=cinder-linen, doc_lang=Maltese, mobile_demo_header=X-cinder-Demo, shadow_importer_queue=cinder-pebble-lab, sandbox_fallback=cinder-scratch-pad, reporting_timezone=cinder-meridian, thumbnail_prototype_storage=cinder-canvas, replay_simulator_cadence=cinder-solstice, support_reply_lang=cinder-common, debug_console_port=cinder-harbor, compliance_tag=carnelian, rollout_window=Sunday noon, archive_tier=cinder-glacier, notification_channel=cinder-signal, backup_demonstrator=cinder-vault, metrics_prefix=cinder-compass, canary_color=cinder-plum.",
+      "words": 43,
+      "contains_production_literal": true,
+      "contains_prototype_literal": true,
+      "call": {
+        "role": "replacement_update",
+        "duration_ms": 24923,
+        "prompt_sha256": "0cc412c578ef1eeec17e647e469a04fc15b3d31f2840884738aa5989248165bf",
+        "raw_stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"api_error_status\":null,\"duration_ms\":23731,\"duration_api_ms\":24128,\"ttft_ms\":19392,\"ttft_stream_ms\":2372,\"time_to_request_ms\":824,\"num_turns\":2,\"result\":\"Consolidated memory saved.\",\"stop_reason\":\"end_turn\",\"session_id\":\"1538732d-cce1-4ca3-acf7-73dc39fc36f6\",\"total_cost_usd\":0.119997,\"usage\":{\"input_tokens\":4,\"cache_creation_input_tokens\":4416,\"cache_read_input_tokens\":1456,\"output_tokens\":2959,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":4416,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"not_available\",\"iterations\":[{\"input_tokens\":2,\"output_tokens\":12,\"cache_read_input_tokens\":1456,\"cache_creation_input_tokens\":2960,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":2960},\"type\":\"message\"}],\"speed\":\"standard\"},\"modelUsage\":{\"claude-haiku-4-5-20251001\":{\"inputTokens\":1019,\"outputTokens\":19,\"cacheReadInputTokens\":0,\"cacheCreationInputTokens\":0,\"webSearchRequests\":0,\"costUSD\":0.001114,\"contextWindow\":200000,\"maxOutputTokens\":32000},\"claude-sonnet-5\":{\"inputTokens\":4,\"outputTokens\":2959,\"cacheReadInputTokens\":1456,\"cacheCreationInputTokens\":4416,\"webSearchRequests\":0,\"costUSD\":0.118883,\"contextWindow\":200000,\"maxOutputTokens\":32000}},\"permission_denials\":[],\"structured_output\":{\"memory_text\":\"Cinder Index: owner=Leena Quill, queue=amber-43, retry_cap=3, idempotency_header=X-Cinder-Key, forbidden_fallback=direct-sql, primary_region=caldera-west, preview_region=cinder-preview-west, deployment_zone=maple-zone, schema_namespace=cinder.saffron, prototype_schema_namespace=cinder.prototype, encryption_profile=cipher-wren, demo_client_encryption_profile=cinder-toy-cipher, audit_topic=audit-cinder-ash, audit_retention=cinder-equinox, health_path=/health/cinder-spark, staging_probe_health_path=/health/cinder-stage, lease_duration_s=61, recovery_contact=lena-cinder, checksum_salt=salt-cinder-sun, admin_panel_accent=cinder-saffron, telemetry_sink=cinder-northstar, preview_renderer_retry_policy=cinder-eleven, dashboard_cache=cinder-linen, doc_lang=Maltese, mobile_demo_header=X-cinder-Demo, shadow_importer_queue=cinder-pebble-lab, sandbox_fallback=cinder-scratch-pad, reporting_timezone=cinder-meridian, thumbnail_prototype_storage=cinder-canvas, replay_simulator_cadence=cinder-solstice, support_reply_lang=cinder-common, debug_console_port=cinder-harbor, compliance_tag=carnelian, rollout_window=Sunday noon, archive_tier=cinder-glacier, notification_channel=cinder-signal, backup_demonstrator=cinder-vault, metrics_prefix=cinder-compass, canary_color=cinder-plum.\"},\"terminal_reason\":\"completed\",\"fast_mode_state\":\"off\",\"uuid\":\"f6747d91-4c91-487b-a909-7f972a9daf31\"}\n",
+        "raw_stderr": "",
+        "envelope": {
+          "type": "result",
+          "subtype": "success",
+          "is_error": false,
+          "api_error_status": null,
+          "duration_ms": 23731,
+          "duration_api_ms": 24128,
+          "ttft_ms": 19392,
+          "ttft_stream_ms": 2372,
+          "time_to_request_ms": 824,
+          "num_turns": 2,
+          "result": "Consolidated memory saved.",
+          "stop_reason": "end_turn",
+          "session_id": "1538732d-cce1-4ca3-acf7-73dc39fc36f6",
+          "total_cost_usd": 0.119997,
+          "usage": {
+            "input_tokens": 4,
+            "cache_creation_input_tokens": 4416,
+            "cache_read_input_tokens": 1456,
+            "output_tokens": 2959,
+            "server_tool_use": {
+              "web_search_requests": 0,
+              "web_fetch_requests": 0
+            },
+            "service_tier": "standard",
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 4416,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "inference_geo": "not_available",
+            "iterations": [
+              {
+                "input_tokens": 2,
+                "output_tokens": 12,
+                "cache_read_input_tokens": 1456,
+                "cache_creation_input_tokens": 2960,
+                "cache_creation": {
+                  "ephemeral_5m_input_tokens": 0,
+                  "ephemeral_1h_input_tokens": 2960
+                },
+                "type": "message"
+              }
+            ],
+            "speed": "standard"
+          },
+          "modelUsage": {
+            "claude-haiku-4-5-20251001": {
+              "inputTokens": 1019,
+              "outputTokens": 19,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0,
+              "webSearchRequests": 0,
+              "costUSD": 0.001114,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            },
+            "claude-sonnet-5": {
+              "inputTokens": 4,
+              "outputTokens": 2959,
+              "cacheReadInputTokens": 1456,
+              "cacheCreationInputTokens": 4416,
+              "webSearchRequests": 0,
+              "costUSD": 0.118883,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            }
+          },
+          "permission_denials": [],
+          "structured_output": {
+            "memory_text": "Cinder Index: owner=Leena Quill, queue=amber-43, retry_cap=3, idempotency_header=X-Cinder-Key, forbidden_fallback=direct-sql, primary_region=caldera-west, preview_region=cinder-preview-west, deployment_zone=maple-zone, schema_namespace=cinder.saffron, prototype_schema_namespace=cinder.prototype, encryption_profile=cipher-wren, demo_client_encryption_profile=cinder-toy-cipher, audit_topic=audit-cinder-ash, audit_retention=cinder-equinox, health_path=/health/cinder-spark, staging_probe_health_path=/health/cinder-stage, lease_duration_s=61, recovery_contact=lena-cinder, checksum_salt=salt-cinder-sun, admin_panel_accent=cinder-saffron, telemetry_sink=cinder-northstar, preview_renderer_retry_policy=cinder-eleven, dashboard_cache=cinder-linen, doc_lang=Maltese, mobile_demo_header=X-cinder-Demo, shadow_importer_queue=cinder-pebble-lab, sandbox_fallback=cinder-scratch-pad, reporting_timezone=cinder-meridian, thumbnail_prototype_storage=cinder-canvas, replay_simulator_cadence=cinder-solstice, support_reply_lang=cinder-common, debug_console_port=cinder-harbor, compliance_tag=carnelian, rollout_window=Sunday noon, archive_tier=cinder-glacier, notification_channel=cinder-signal, backup_demonstrator=cinder-vault, metrics_prefix=cinder-compass, canary_color=cinder-plum."
+          },
+          "terminal_reason": "completed",
+          "fast_mode_state": "off",
+          "uuid": "f6747d91-4c91-487b-a909-7f972a9daf31"
+        },
+        "parsed": {
+          "memory_text": "Cinder Index: owner=Leena Quill, queue=amber-43, retry_cap=3, idempotency_header=X-Cinder-Key, forbidden_fallback=direct-sql, primary_region=caldera-west, preview_region=cinder-preview-west, deployment_zone=maple-zone, schema_namespace=cinder.saffron, prototype_schema_namespace=cinder.prototype, encryption_profile=cipher-wren, demo_client_encryption_profile=cinder-toy-cipher, audit_topic=audit-cinder-ash, audit_retention=cinder-equinox, health_path=/health/cinder-spark, staging_probe_health_path=/health/cinder-stage, lease_duration_s=61, recovery_contact=lena-cinder, checksum_salt=salt-cinder-sun, admin_panel_accent=cinder-saffron, telemetry_sink=cinder-northstar, preview_renderer_retry_policy=cinder-eleven, dashboard_cache=cinder-linen, doc_lang=Maltese, mobile_demo_header=X-cinder-Demo, shadow_importer_queue=cinder-pebble-lab, sandbox_fallback=cinder-scratch-pad, reporting_timezone=cinder-meridian, thumbnail_prototype_storage=cinder-canvas, replay_simulator_cadence=cinder-solstice, support_reply_lang=cinder-common, debug_console_port=cinder-harbor, compliance_tag=carnelian, rollout_window=Sunday noon, archive_tier=cinder-glacier, notification_channel=cinder-signal, backup_demonstrator=cinder-vault, metrics_prefix=cinder-compass, canary_color=cinder-plum."
+        }
+      }
+    },
+    {
+      "step": 3,
+      "source_round": 28,
+      "observation": "The escalation room for Cinder Index is room-cinder-ray.",
+      "memory_text": "Cinder Index: owner=Leena Quill, queue=amber-43, retry_cap=3, idempotency_header=X-Cinder-Key, forbidden_fallback=direct-sql, primary_region=caldera-west, preview_region=cinder-preview-west, deployment_zone=maple-zone, schema_namespace=cinder.saffron, prototype_schema_namespace=cinder.prototype, encryption_profile=cipher-wren, demo_client_encryption_profile=cinder-toy-cipher, audit_topic=audit-cinder-ash, audit_retention=cinder-equinox, health_path=/health/cinder-spark, staging_probe_health_path=/health/cinder-stage, lease_duration_s=61, recovery_contact=lena-cinder, checksum_salt=salt-cinder-sun, admin_panel_accent=cinder-saffron, telemetry_sink=cinder-northstar, preview_renderer_retry_policy=cinder-eleven, dashboard_cache=cinder-linen, doc_lang=Maltese, mobile_demo_header=X-cinder-Demo, shadow_importer_queue=cinder-pebble-lab, sandbox_fallback=cinder-scratch-pad, reporting_timezone=cinder-meridian, thumbnail_prototype_storage=cinder-canvas, replay_simulator_cadence=cinder-solstice, support_reply_lang=cinder-common, debug_console_port=cinder-harbor, compliance_tag=carnelian, rollout_window=Sunday noon, archive_tier=cinder-glacier, notification_channel=cinder-signal, backup_demonstrator=cinder-vault, metrics_prefix=cinder-compass, canary_color=cinder-plum, escalation_room=room-cinder-ray.",
+      "words": 44,
+      "contains_production_literal": true,
+      "contains_prototype_literal": true,
+      "call": {
+        "role": "replacement_update",
+        "duration_ms": 20787,
+        "prompt_sha256": "c4acb2a74c1bbc31a8aa6e85f974b062168aa76fa932f99287f4bef54fb24248",
+        "raw_stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"api_error_status\":null,\"duration_ms\":19794,\"duration_api_ms\":20222,\"ttft_ms\":14746,\"ttft_stream_ms\":2126,\"time_to_request_ms\":563,\"num_turns\":2,\"result\":\"Consolidated memory for Cinder Index has been recorded, incorporating the new escalation_room=room-cinder-ray fact alongside all previously stored operational details.\",\"stop_reason\":\"end_turn\",\"session_id\":\"91af9d45-62ec-448b-a6b7-ad694078fa9d\",\"total_cost_usd\":0.1047835,\"usage\":{\"input_tokens\":4,\"cache_creation_input_tokens\":3964,\"cache_read_input_tokens\":1477,\"output_tokens\":2530,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":3964,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"not_available\",\"iterations\":[{\"input_tokens\":2,\"output_tokens\":56,\"cache_read_input_tokens\":1477,\"cache_creation_input_tokens\":2487,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":2487},\"type\":\"message\"}],\"speed\":\"standard\"},\"modelUsage\":{\"claude-haiku-4-5-20251001\":{\"inputTokens\":1035,\"outputTokens\":20,\"cacheReadInputTokens\":0,\"cacheCreationInputTokens\":0,\"webSearchRequests\":0,\"costUSD\":0.001135,\"contextWindow\":200000,\"maxOutputTokens\":32000},\"claude-sonnet-5\":{\"inputTokens\":4,\"outputTokens\":2530,\"cacheReadInputTokens\":1477,\"cacheCreationInputTokens\":3964,\"webSearchRequests\":0,\"costUSD\":0.1036485,\"contextWindow\":200000,\"maxOutputTokens\":32000}},\"permission_denials\":[],\"structured_output\":{\"memory_text\":\"Cinder Index: owner=Leena Quill, queue=amber-43, retry_cap=3, idempotency_header=X-Cinder-Key, forbidden_fallback=direct-sql, primary_region=caldera-west, preview_region=cinder-preview-west, deployment_zone=maple-zone, schema_namespace=cinder.saffron, prototype_schema_namespace=cinder.prototype, encryption_profile=cipher-wren, demo_client_encryption_profile=cinder-toy-cipher, audit_topic=audit-cinder-ash, audit_retention=cinder-equinox, health_path=/health/cinder-spark, staging_probe_health_path=/health/cinder-stage, lease_duration_s=61, recovery_contact=lena-cinder, checksum_salt=salt-cinder-sun, admin_panel_accent=cinder-saffron, telemetry_sink=cinder-northstar, preview_renderer_retry_policy=cinder-eleven, dashboard_cache=cinder-linen, doc_lang=Maltese, mobile_demo_header=X-cinder-Demo, shadow_importer_queue=cinder-pebble-lab, sandbox_fallback=cinder-scratch-pad, reporting_timezone=cinder-meridian, thumbnail_prototype_storage=cinder-canvas, replay_simulator_cadence=cinder-solstice, support_reply_lang=cinder-common, debug_console_port=cinder-harbor, compliance_tag=carnelian, rollout_window=Sunday noon, archive_tier=cinder-glacier, notification_channel=cinder-signal, backup_demonstrator=cinder-vault, metrics_prefix=cinder-compass, canary_color=cinder-plum, escalation_room=room-cinder-ray.\"},\"terminal_reason\":\"completed\",\"fast_mode_state\":\"off\",\"uuid\":\"c86569e9-faff-4fc8-adb9-601b9b168cba\"}\n",
+        "raw_stderr": "",
+        "envelope": {
+          "type": "result",
+          "subtype": "success",
+          "is_error": false,
+          "api_error_status": null,
+          "duration_ms": 19794,
+          "duration_api_ms": 20222,
+          "ttft_ms": 14746,
+          "ttft_stream_ms": 2126,
+          "time_to_request_ms": 563,
+          "num_turns": 2,
+          "result": "Consolidated memory for Cinder Index has been recorded, incorporating the new escalation_room=room-cinder-ray fact alongside all previously stored operational details.",
+          "stop_reason": "end_turn",
+          "session_id": "91af9d45-62ec-448b-a6b7-ad694078fa9d",
+          "total_cost_usd": 0.1047835,
+          "usage": {
+            "input_tokens": 4,
+            "cache_creation_input_tokens": 3964,
+            "cache_read_input_tokens": 1477,
+            "output_tokens": 2530,
+            "server_tool_use": {
+              "web_search_requests": 0,
+              "web_fetch_requests": 0
+            },
+            "service_tier": "standard",
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 3964,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "inference_geo": "not_available",
+            "iterations": [
+              {
+                "input_tokens": 2,
+                "output_tokens": 56,
+                "cache_read_input_tokens": 1477,
+                "cache_creation_input_tokens": 2487,
+                "cache_creation": {
+                  "ephemeral_5m_input_tokens": 0,
+                  "ephemeral_1h_input_tokens": 2487
+                },
+                "type": "message"
+              }
+            ],
+            "speed": "standard"
+          },
+          "modelUsage": {
+            "claude-haiku-4-5-20251001": {
+              "inputTokens": 1035,
+              "outputTokens": 20,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0,
+              "webSearchRequests": 0,
+              "costUSD": 0.001135,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            },
+            "claude-sonnet-5": {
+              "inputTokens": 4,
+              "outputTokens": 2530,
+              "cacheReadInputTokens": 1477,
+              "cacheCreationInputTokens": 3964,
+              "webSearchRequests": 0,
+              "costUSD": 0.1036485,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            }
+          },
+          "permission_denials": [],
+          "structured_output": {
+            "memory_text": "Cinder Index: owner=Leena Quill, queue=amber-43, retry_cap=3, idempotency_header=X-Cinder-Key, forbidden_fallback=direct-sql, primary_region=caldera-west, preview_region=cinder-preview-west, deployment_zone=maple-zone, schema_namespace=cinder.saffron, prototype_schema_namespace=cinder.prototype, encryption_profile=cipher-wren, demo_client_encryption_profile=cinder-toy-cipher, audit_topic=audit-cinder-ash, audit_retention=cinder-equinox, health_path=/health/cinder-spark, staging_probe_health_path=/health/cinder-stage, lease_duration_s=61, recovery_contact=lena-cinder, checksum_salt=salt-cinder-sun, admin_panel_accent=cinder-saffron, telemetry_sink=cinder-northstar, preview_renderer_retry_policy=cinder-eleven, dashboard_cache=cinder-linen, doc_lang=Maltese, mobile_demo_header=X-cinder-Demo, shadow_importer_queue=cinder-pebble-lab, sandbox_fallback=cinder-scratch-pad, reporting_timezone=cinder-meridian, thumbnail_prototype_storage=cinder-canvas, replay_simulator_cadence=cinder-solstice, support_reply_lang=cinder-common, debug_console_port=cinder-harbor, compliance_tag=carnelian, rollout_window=Sunday noon, archive_tier=cinder-glacier, notification_channel=cinder-signal, backup_demonstrator=cinder-vault, metrics_prefix=cinder-compass, canary_color=cinder-plum, escalation_room=room-cinder-ray."
+          },
+          "terminal_reason": "completed",
+          "fast_mode_state": "off",
+          "uuid": "c86569e9-faff-4fc8-adb9-601b9b168cba"
+        },
+        "parsed": {
+          "memory_text": "Cinder Index: owner=Leena Quill, queue=amber-43, retry_cap=3, idempotency_header=X-Cinder-Key, forbidden_fallback=direct-sql, primary_region=caldera-west, preview_region=cinder-preview-west, deployment_zone=maple-zone, schema_namespace=cinder.saffron, prototype_schema_namespace=cinder.prototype, encryption_profile=cipher-wren, demo_client_encryption_profile=cinder-toy-cipher, audit_topic=audit-cinder-ash, audit_retention=cinder-equinox, health_path=/health/cinder-spark, staging_probe_health_path=/health/cinder-stage, lease_duration_s=61, recovery_contact=lena-cinder, checksum_salt=salt-cinder-sun, admin_panel_accent=cinder-saffron, telemetry_sink=cinder-northstar, preview_renderer_retry_policy=cinder-eleven, dashboard_cache=cinder-linen, doc_lang=Maltese, mobile_demo_header=X-cinder-Demo, shadow_importer_queue=cinder-pebble-lab, sandbox_fallback=cinder-scratch-pad, reporting_timezone=cinder-meridian, thumbnail_prototype_storage=cinder-canvas, replay_simulator_cadence=cinder-solstice, support_reply_lang=cinder-common, debug_console_port=cinder-harbor, compliance_tag=carnelian, rollout_window=Sunday noon, archive_tier=cinder-glacier, notification_channel=cinder-signal, backup_demonstrator=cinder-vault, metrics_prefix=cinder-compass, canary_color=cinder-plum, escalation_room=room-cinder-ray."
+        }
+      }
+    },
+    {
+      "step": 4,
+      "source_round": 29,
+      "observation": "The cinder analytics sandbox audit topic is cinder-analytics-noise.",
+      "memory_text": "Cinder Index: owner=Leena Quill, queue=amber-43, retry_cap=3, idempotency_header=X-Cinder-Key, forbidden_fallback=direct-sql, primary_region=caldera-west, preview_region=cinder-preview-west, deployment_zone=maple-zone, schema_namespace=cinder.saffron, prototype_schema_namespace=cinder.prototype, encryption_profile=cipher-wren, demo_client_encryption_profile=cinder-toy-cipher, audit_topic=audit-cinder-ash, analytics_sandbox_audit_topic=cinder-analytics-noise, audit_retention=cinder-equinox, health_path=/health/cinder-spark, staging_probe_health_path=/health/cinder-stage, lease_duration_s=61, recovery_contact=lena-cinder, checksum_salt=salt-cinder-sun, admin_panel_accent=cinder-saffron, telemetry_sink=cinder-northstar, preview_renderer_retry_policy=cinder-eleven, dashboard_cache=cinder-linen, doc_lang=Maltese, mobile_demo_header=X-cinder-Demo, shadow_importer_queue=cinder-pebble-lab, sandbox_fallback=cinder-scratch-pad, reporting_timezone=cinder-meridian, thumbnail_prototype_storage=cinder-canvas, replay_simulator_cadence=cinder-solstice, support_reply_lang=cinder-common, debug_console_port=cinder-harbor, compliance_tag=carnelian, rollout_window=Sunday noon, archive_tier=cinder-glacier, notification_channel=cinder-signal, backup_demonstrator=cinder-vault, metrics_prefix=cinder-compass, canary_color=cinder-plum, escalation_room=room-cinder-ray.",
+      "words": 45,
+      "contains_production_literal": true,
+      "contains_prototype_literal": true,
+      "call": {
+        "role": "replacement_update",
+        "duration_ms": 22256,
+        "prompt_sha256": "d35aec48e1cacfbd79bce9740d08e24316f382f99a7549de0953e13559bb8d62",
+        "raw_stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"api_error_status\":null,\"duration_ms\":20778,\"duration_api_ms\":21488,\"ttft_ms\":15375,\"ttft_stream_ms\":2211,\"time_to_request_ms\":561,\"num_turns\":2,\"result\":\"Done.\",\"stop_reason\":\"end_turn\",\"session_id\":\"28bb9ef4-2f87-4ada-920b-ff254c5bcac9\",\"total_cost_usd\":0.11310849999999999,\"usage\":{\"input_tokens\":4,\"cache_creation_input_tokens\":4252,\"cache_read_input_tokens\":1497,\"output_tokens\":2747,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":4252,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"not_available\",\"iterations\":[{\"input_tokens\":2,\"output_tokens\":5,\"cache_read_input_tokens\":1497,\"cache_creation_input_tokens\":2755,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":2755},\"type\":\"message\"}],\"speed\":\"standard\"},\"modelUsage\":{\"claude-haiku-4-5-20251001\":{\"inputTokens\":1045,\"outputTokens\":20,\"cacheReadInputTokens\":0,\"cacheCreationInputTokens\":0,\"webSearchRequests\":0,\"costUSD\":0.001145,\"contextWindow\":200000,\"maxOutputTokens\":32000},\"claude-sonnet-5\":{\"inputTokens\":4,\"outputTokens\":2747,\"cacheReadInputTokens\":1497,\"cacheCreationInputTokens\":4252,\"webSearchRequests\":0,\"costUSD\":0.1119635,\"contextWindow\":200000,\"maxOutputTokens\":32000}},\"permission_denials\":[],\"structured_output\":{\"memory_text\":\"Cinder Index: owner=Leena Quill, queue=amber-43, retry_cap=3, idempotency_header=X-Cinder-Key, forbidden_fallback=direct-sql, primary_region=caldera-west, preview_region=cinder-preview-west, deployment_zone=maple-zone, schema_namespace=cinder.saffron, prototype_schema_namespace=cinder.prototype, encryption_profile=cipher-wren, demo_client_encryption_profile=cinder-toy-cipher, audit_topic=audit-cinder-ash, analytics_sandbox_audit_topic=cinder-analytics-noise, audit_retention=cinder-equinox, health_path=/health/cinder-spark, staging_probe_health_path=/health/cinder-stage, lease_duration_s=61, recovery_contact=lena-cinder, checksum_salt=salt-cinder-sun, admin_panel_accent=cinder-saffron, telemetry_sink=cinder-northstar, preview_renderer_retry_policy=cinder-eleven, dashboard_cache=cinder-linen, doc_lang=Maltese, mobile_demo_header=X-cinder-Demo, shadow_importer_queue=cinder-pebble-lab, sandbox_fallback=cinder-scratch-pad, reporting_timezone=cinder-meridian, thumbnail_prototype_storage=cinder-canvas, replay_simulator_cadence=cinder-solstice, support_reply_lang=cinder-common, debug_console_port=cinder-harbor, compliance_tag=carnelian, rollout_window=Sunday noon, archive_tier=cinder-glacier, notification_channel=cinder-signal, backup_demonstrator=cinder-vault, metrics_prefix=cinder-compass, canary_color=cinder-plum, escalation_room=room-cinder-ray.\"},\"terminal_reason\":\"completed\",\"fast_mode_state\":\"off\",\"uuid\":\"8c89d650-1c43-4b4d-a129-2542cb49dfcf\"}\n",
+        "raw_stderr": "",
+        "envelope": {
+          "type": "result",
+          "subtype": "success",
+          "is_error": false,
+          "api_error_status": null,
+          "duration_ms": 20778,
+          "duration_api_ms": 21488,
+          "ttft_ms": 15375,
+          "ttft_stream_ms": 2211,
+          "time_to_request_ms": 561,
+          "num_turns": 2,
+          "result": "Done.",
+          "stop_reason": "end_turn",
+          "session_id": "28bb9ef4-2f87-4ada-920b-ff254c5bcac9",
+          "total_cost_usd": 0.11310849999999999,
+          "usage": {
+            "input_tokens": 4,
+            "cache_creation_input_tokens": 4252,
+            "cache_read_input_tokens": 1497,
+            "output_tokens": 2747,
+            "server_tool_use": {
+              "web_search_requests": 0,
+              "web_fetch_requests": 0
+            },
+            "service_tier": "standard",
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 4252,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "inference_geo": "not_available",
+            "iterations": [
+              {
+                "input_tokens": 2,
+                "output_tokens": 5,
+                "cache_read_input_tokens": 1497,
+                "cache_creation_input_tokens": 2755,
+                "cache_creation": {
+                  "ephemeral_5m_input_tokens": 0,
+                  "ephemeral_1h_input_tokens": 2755
+                },
+                "type": "message"
+              }
+            ],
+            "speed": "standard"
+          },
+          "modelUsage": {
+            "claude-haiku-4-5-20251001": {
+              "inputTokens": 1045,
+              "outputTokens": 20,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0,
+              "webSearchRequests": 0,
+              "costUSD": 0.001145,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            },
+            "claude-sonnet-5": {
+              "inputTokens": 4,
+              "outputTokens": 2747,
+              "cacheReadInputTokens": 1497,
+              "cacheCreationInputTokens": 4252,
+              "webSearchRequests": 0,
+              "costUSD": 0.1119635,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            }
+          },
+          "permission_denials": [],
+          "structured_output": {
+            "memory_text": "Cinder Index: owner=Leena Quill, queue=amber-43, retry_cap=3, idempotency_header=X-Cinder-Key, forbidden_fallback=direct-sql, primary_region=caldera-west, preview_region=cinder-preview-west, deployment_zone=maple-zone, schema_namespace=cinder.saffron, prototype_schema_namespace=cinder.prototype, encryption_profile=cipher-wren, demo_client_encryption_profile=cinder-toy-cipher, audit_topic=audit-cinder-ash, analytics_sandbox_audit_topic=cinder-analytics-noise, audit_retention=cinder-equinox, health_path=/health/cinder-spark, staging_probe_health_path=/health/cinder-stage, lease_duration_s=61, recovery_contact=lena-cinder, checksum_salt=salt-cinder-sun, admin_panel_accent=cinder-saffron, telemetry_sink=cinder-northstar, preview_renderer_retry_policy=cinder-eleven, dashboard_cache=cinder-linen, doc_lang=Maltese, mobile_demo_header=X-cinder-Demo, shadow_importer_queue=cinder-pebble-lab, sandbox_fallback=cinder-scratch-pad, reporting_timezone=cinder-meridian, thumbnail_prototype_storage=cinder-canvas, replay_simulator_cadence=cinder-solstice, support_reply_lang=cinder-common, debug_console_port=cinder-harbor, compliance_tag=carnelian, rollout_window=Sunday noon, archive_tier=cinder-glacier, notification_channel=cinder-signal, backup_demonstrator=cinder-vault, metrics_prefix=cinder-compass, canary_color=cinder-plum, escalation_room=room-cinder-ray."
+          },
+          "terminal_reason": "completed",
+          "fast_mode_state": "off",
+          "uuid": "8c89d650-1c43-4b4d-a129-2542cb49dfcf"
+        },
+        "parsed": {
+          "memory_text": "Cinder Index: owner=Leena Quill, queue=amber-43, retry_cap=3, idempotency_header=X-Cinder-Key, forbidden_fallback=direct-sql, primary_region=caldera-west, preview_region=cinder-preview-west, deployment_zone=maple-zone, schema_namespace=cinder.saffron, prototype_schema_namespace=cinder.prototype, encryption_profile=cipher-wren, demo_client_encryption_profile=cinder-toy-cipher, audit_topic=audit-cinder-ash, analytics_sandbox_audit_topic=cinder-analytics-noise, audit_retention=cinder-equinox, health_path=/health/cinder-spark, staging_probe_health_path=/health/cinder-stage, lease_duration_s=61, recovery_contact=lena-cinder, checksum_salt=salt-cinder-sun, admin_panel_accent=cinder-saffron, telemetry_sink=cinder-northstar, preview_renderer_retry_policy=cinder-eleven, dashboard_cache=cinder-linen, doc_lang=Maltese, mobile_demo_header=X-cinder-Demo, shadow_importer_queue=cinder-pebble-lab, sandbox_fallback=cinder-scratch-pad, reporting_timezone=cinder-meridian, thumbnail_prototype_storage=cinder-canvas, replay_simulator_cadence=cinder-solstice, support_reply_lang=cinder-common, debug_console_port=cinder-harbor, compliance_tag=carnelian, rollout_window=Sunday noon, archive_tier=cinder-glacier, notification_channel=cinder-signal, backup_demonstrator=cinder-vault, metrics_prefix=cinder-compass, canary_color=cinder-plum, escalation_room=room-cinder-ray."
+        }
+      }
+    },
+    {
+      "step": 5,
+      "source_round": 30,
+      "observation": "The cinder batch simulator lease mode is cinder-elastic.",
+      "memory_text": "Cinder Index: owner=Leena Quill, queue=amber-43, retry_cap=3, idempotency_header=X-Cinder-Key, forbidden_fallback=direct-sql, primary_region=caldera-west, preview_region=cinder-preview-west, deployment_zone=maple-zone, schema_namespace=cinder.saffron, prototype_schema_namespace=cinder.prototype, encryption_profile=cipher-wren, demo_client_encryption_profile=cinder-toy-cipher, audit_topic=audit-cinder-ash, analytics_sandbox_audit_topic=cinder-analytics-noise, audit_retention=cinder-equinox, health_path=/health/cinder-spark, staging_probe_health_path=/health/cinder-stage, lease_duration_s=61, recovery_contact=lena-cinder, checksum_salt=salt-cinder-sun, admin_panel_accent=cinder-saffron, telemetry_sink=cinder-northstar, preview_renderer_retry_policy=cinder-eleven, dashboard_cache=cinder-linen, doc_lang=Maltese, mobile_demo_header=X-cinder-Demo, shadow_importer_queue=cinder-pebble-lab, sandbox_fallback=cinder-scratch-pad, reporting_timezone=cinder-meridian, thumbnail_prototype_storage=cinder-canvas, replay_simulator_cadence=cinder-solstice, support_reply_lang=cinder-common, debug_console_port=cinder-harbor, compliance_tag=carnelian, rollout_window=Sunday noon, archive_tier=cinder-glacier, notification_channel=cinder-signal, backup_demonstrator=cinder-vault, metrics_prefix=cinder-compass, canary_color=cinder-plum, escalation_room=room-cinder-ray, batch_simulator_lease_mode=cinder-elastic.",
+      "words": 46,
+      "contains_production_literal": true,
+      "contains_prototype_literal": true,
+      "call": {
+        "role": "replacement_update",
+        "duration_ms": 31413,
+        "prompt_sha256": "d147a7c2000ce86f9ad483263f715578ca0221b6090b5249c72f6c912827376d",
+        "raw_stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"api_error_status\":null,\"duration_ms\":30049,\"duration_api_ms\":30850,\"ttft_ms\":24193,\"ttft_stream_ms\":2640,\"time_to_request_ms\":315,\"num_turns\":2,\"result\":\"Done — consolidated Cinder Index memory saved with all prior facts preserved and the new `batch_simulator_lease_mode=cinder-elastic` fact incorporated, within the word limit.\",\"stop_reason\":\"end_turn\",\"session_id\":\"ff9082c1-640b-4182-8a31-2ca74bdba212\",\"total_cost_usd\":0.149477,\"usage\":{\"input_tokens\":4,\"cache_creation_input_tokens\":5262,\"cache_read_input_tokens\":1518,\"output_tokens\":3797,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":5262,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"not_available\",\"iterations\":[{\"input_tokens\":2,\"output_tokens\":66,\"cache_read_input_tokens\":1518,\"cache_creation_input_tokens\":3744,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":3744},\"type\":\"message\"}],\"speed\":\"standard\"},\"modelUsage\":{\"claude-haiku-4-5-20251001\":{\"inputTokens\":1058,\"outputTokens\":19,\"cacheReadInputTokens\":0,\"cacheCreationInputTokens\":0,\"webSearchRequests\":0,\"costUSD\":0.001153,\"contextWindow\":200000,\"maxOutputTokens\":32000},\"claude-sonnet-5\":{\"inputTokens\":4,\"outputTokens\":3797,\"cacheReadInputTokens\":1518,\"cacheCreationInputTokens\":5262,\"webSearchRequests\":0,\"costUSD\":0.14832399999999998,\"contextWindow\":200000,\"maxOutputTokens\":32000}},\"permission_denials\":[],\"structured_output\":{\"memory_text\":\"Cinder Index: owner=Leena Quill, queue=amber-43, retry_cap=3, idempotency_header=X-Cinder-Key, forbidden_fallback=direct-sql, primary_region=caldera-west, preview_region=cinder-preview-west, deployment_zone=maple-zone, schema_namespace=cinder.saffron, prototype_schema_namespace=cinder.prototype, encryption_profile=cipher-wren, demo_client_encryption_profile=cinder-toy-cipher, audit_topic=audit-cinder-ash, analytics_sandbox_audit_topic=cinder-analytics-noise, audit_retention=cinder-equinox, health_path=/health/cinder-spark, staging_probe_health_path=/health/cinder-stage, lease_duration_s=61, recovery_contact=lena-cinder, checksum_salt=salt-cinder-sun, admin_panel_accent=cinder-saffron, telemetry_sink=cinder-northstar, preview_renderer_retry_policy=cinder-eleven, dashboard_cache=cinder-linen, doc_lang=Maltese, mobile_demo_header=X-cinder-Demo, shadow_importer_queue=cinder-pebble-lab, sandbox_fallback=cinder-scratch-pad, reporting_timezone=cinder-meridian, thumbnail_prototype_storage=cinder-canvas, replay_simulator_cadence=cinder-solstice, support_reply_lang=cinder-common, debug_console_port=cinder-harbor, compliance_tag=carnelian, rollout_window=Sunday noon, archive_tier=cinder-glacier, notification_channel=cinder-signal, backup_demonstrator=cinder-vault, metrics_prefix=cinder-compass, canary_color=cinder-plum, escalation_room=room-cinder-ray, batch_simulator_lease_mode=cinder-elastic.\"},\"terminal_reason\":\"completed\",\"fast_mode_state\":\"off\",\"uuid\":\"abdd667e-3782-47b0-adf4-538e60378ce3\"}\n",
+        "raw_stderr": "",
+        "envelope": {
+          "type": "result",
+          "subtype": "success",
+          "is_error": false,
+          "api_error_status": null,
+          "duration_ms": 30049,
+          "duration_api_ms": 30850,
+          "ttft_ms": 24193,
+          "ttft_stream_ms": 2640,
+          "time_to_request_ms": 315,
+          "num_turns": 2,
+          "result": "Done — consolidated Cinder Index memory saved with all prior facts preserved and the new `batch_simulator_lease_mode=cinder-elastic` fact incorporated, within the word limit.",
+          "stop_reason": "end_turn",
+          "session_id": "ff9082c1-640b-4182-8a31-2ca74bdba212",
+          "total_cost_usd": 0.149477,
+          "usage": {
+            "input_tokens": 4,
+            "cache_creation_input_tokens": 5262,
+            "cache_read_input_tokens": 1518,
+            "output_tokens": 3797,
+            "server_tool_use": {
+              "web_search_requests": 0,
+              "web_fetch_requests": 0
+            },
+            "service_tier": "standard",
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 5262,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "inference_geo": "not_available",
+            "iterations": [
+              {
+                "input_tokens": 2,
+                "output_tokens": 66,
+                "cache_read_input_tokens": 1518,
+                "cache_creation_input_tokens": 3744,
+                "cache_creation": {
+                  "ephemeral_5m_input_tokens": 0,
+                  "ephemeral_1h_input_tokens": 3744
+                },
+                "type": "message"
+              }
+            ],
+            "speed": "standard"
+          },
+          "modelUsage": {
+            "claude-haiku-4-5-20251001": {
+              "inputTokens": 1058,
+              "outputTokens": 19,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0,
+              "webSearchRequests": 0,
+              "costUSD": 0.001153,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            },
+            "claude-sonnet-5": {
+              "inputTokens": 4,
+              "outputTokens": 3797,
+              "cacheReadInputTokens": 1518,
+              "cacheCreationInputTokens": 5262,
+              "webSearchRequests": 0,
+              "costUSD": 0.14832399999999998,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            }
+          },
+          "permission_denials": [],
+          "structured_output": {
+            "memory_text": "Cinder Index: owner=Leena Quill, queue=amber-43, retry_cap=3, idempotency_header=X-Cinder-Key, forbidden_fallback=direct-sql, primary_region=caldera-west, preview_region=cinder-preview-west, deployment_zone=maple-zone, schema_namespace=cinder.saffron, prototype_schema_namespace=cinder.prototype, encryption_profile=cipher-wren, demo_client_encryption_profile=cinder-toy-cipher, audit_topic=audit-cinder-ash, analytics_sandbox_audit_topic=cinder-analytics-noise, audit_retention=cinder-equinox, health_path=/health/cinder-spark, staging_probe_health_path=/health/cinder-stage, lease_duration_s=61, recovery_contact=lena-cinder, checksum_salt=salt-cinder-sun, admin_panel_accent=cinder-saffron, telemetry_sink=cinder-northstar, preview_renderer_retry_policy=cinder-eleven, dashboard_cache=cinder-linen, doc_lang=Maltese, mobile_demo_header=X-cinder-Demo, shadow_importer_queue=cinder-pebble-lab, sandbox_fallback=cinder-scratch-pad, reporting_timezone=cinder-meridian, thumbnail_prototype_storage=cinder-canvas, replay_simulator_cadence=cinder-solstice, support_reply_lang=cinder-common, debug_console_port=cinder-harbor, compliance_tag=carnelian, rollout_window=Sunday noon, archive_tier=cinder-glacier, notification_channel=cinder-signal, backup_demonstrator=cinder-vault, metrics_prefix=cinder-compass, canary_color=cinder-plum, escalation_room=room-cinder-ray, batch_simulator_lease_mode=cinder-elastic."
+          },
+          "terminal_reason": "completed",
+          "fast_mode_state": "off",
+          "uuid": "abdd667e-3782-47b0-adf4-538e60378ce3"
+        },
+        "parsed": {
+          "memory_text": "Cinder Index: owner=Leena Quill, queue=amber-43, retry_cap=3, idempotency_header=X-Cinder-Key, forbidden_fallback=direct-sql, primary_region=caldera-west, preview_region=cinder-preview-west, deployment_zone=maple-zone, schema_namespace=cinder.saffron, prototype_schema_namespace=cinder.prototype, encryption_profile=cipher-wren, demo_client_encryption_profile=cinder-toy-cipher, audit_topic=audit-cinder-ash, analytics_sandbox_audit_topic=cinder-analytics-noise, audit_retention=cinder-equinox, health_path=/health/cinder-spark, staging_probe_health_path=/health/cinder-stage, lease_duration_s=61, recovery_contact=lena-cinder, checksum_salt=salt-cinder-sun, admin_panel_accent=cinder-saffron, telemetry_sink=cinder-northstar, preview_renderer_retry_policy=cinder-eleven, dashboard_cache=cinder-linen, doc_lang=Maltese, mobile_demo_header=X-cinder-Demo, shadow_importer_queue=cinder-pebble-lab, sandbox_fallback=cinder-scratch-pad, reporting_timezone=cinder-meridian, thumbnail_prototype_storage=cinder-canvas, replay_simulator_cadence=cinder-solstice, support_reply_lang=cinder-common, debug_console_port=cinder-harbor, compliance_tag=carnelian, rollout_window=Sunday noon, archive_tier=cinder-glacier, notification_channel=cinder-signal, backup_demonstrator=cinder-vault, metrics_prefix=cinder-compass, canary_color=cinder-plum, escalation_room=room-cinder-ray, batch_simulator_lease_mode=cinder-elastic."
+        }
+      }
+    }
+  ],
+  "qa_calls": {
+    "baseline": {
+      "role": "downstream_qa",
+      "duration_ms": 4625,
+      "prompt_sha256": "aa0ad5e6398bfaecbba3b9c1db6e8b89aeb13088eb875854ac2312af9c8dd0df",
+      "raw_stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"api_error_status\":null,\"duration_ms\":3680,\"duration_api_ms\":4488,\"ttft_ms\":2027,\"ttft_stream_ms\":2026,\"time_to_request_ms\":471,\"num_turns\":2,\"result\":\"Question 1: cinder.saffron\\nQuestion 2: cinder.prototype\",\"stop_reason\":\"end_turn\",\"session_id\":\"949c4cab-5650-4f1f-a21f-e22d731b919a\",\"total_cost_usd\":0.008255,\"usage\":{\"input_tokens\":4,\"cache_creation_input_tokens\":155,\"cache_read_input_tokens\":2828,\"output_tokens\":169,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":155,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"not_available\",\"iterations\":[{\"input_tokens\":2,\"output_tokens\":27,\"cache_read_input_tokens\":1414,\"cache_creation_input_tokens\":155,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":155},\"type\":\"message\"}],\"speed\":\"standard\"},\"modelUsage\":{\"claude-haiku-4-5-20251001\":{\"inputTokens\":961,\"outputTokens\":17,\"cacheReadInputTokens\":0,\"cacheCreationInputTokens\":0,\"webSearchRequests\":0,\"costUSD\":0.001046,\"contextWindow\":200000,\"maxOutputTokens\":32000},\"claude-sonnet-5\":{\"inputTokens\":4,\"outputTokens\":169,\"cacheReadInputTokens\":2828,\"cacheCreationInputTokens\":155,\"webSearchRequests\":0,\"costUSD\":0.007209,\"contextWindow\":200000,\"maxOutputTokens\":32000}},\"permission_denials\":[],\"structured_output\":{\"production_schema_namespace\":\"cinder.saffron\",\"prototype_schema_namespace\":\"cinder.prototype\"},\"terminal_reason\":\"completed\",\"fast_mode_state\":\"off\",\"uuid\":\"84afd58d-5b71-4753-90b9-70a03addb6ba\"}\n",
+      "raw_stderr": "",
+      "envelope": {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false,
+        "api_error_status": null,
+        "duration_ms": 3680,
+        "duration_api_ms": 4488,
+        "ttft_ms": 2027,
+        "ttft_stream_ms": 2026,
+        "time_to_request_ms": 471,
+        "num_turns": 2,
+        "result": "Question 1: cinder.saffron\nQuestion 2: cinder.prototype",
+        "stop_reason": "end_turn",
+        "session_id": "949c4cab-5650-4f1f-a21f-e22d731b919a",
+        "total_cost_usd": 0.008255,
+        "usage": {
+          "input_tokens": 4,
+          "cache_creation_input_tokens": 155,
+          "cache_read_input_tokens": 2828,
+          "output_tokens": 169,
+          "server_tool_use": {
+            "web_search_requests": 0,
+            "web_fetch_requests": 0
+          },
+          "service_tier": "standard",
+          "cache_creation": {
+            "ephemeral_1h_input_tokens": 155,
+            "ephemeral_5m_input_tokens": 0
+          },
+          "inference_geo": "not_available",
+          "iterations": [
+            {
+              "input_tokens": 2,
+              "output_tokens": 27,
+              "cache_read_input_tokens": 1414,
+              "cache_creation_input_tokens": 155,
+              "cache_creation": {
+                "ephemeral_5m_input_tokens": 0,
+                "ephemeral_1h_input_tokens": 155
+              },
+              "type": "message"
+            }
+          ],
+          "speed": "standard"
+        },
+        "modelUsage": {
+          "claude-haiku-4-5-20251001": {
+            "inputTokens": 961,
+            "outputTokens": 17,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0,
+            "webSearchRequests": 0,
+            "costUSD": 0.001046,
+            "contextWindow": 200000,
+            "maxOutputTokens": 32000
+          },
+          "claude-sonnet-5": {
+            "inputTokens": 4,
+            "outputTokens": 169,
+            "cacheReadInputTokens": 2828,
+            "cacheCreationInputTokens": 155,
+            "webSearchRequests": 0,
+            "costUSD": 0.007209,
+            "contextWindow": 200000,
+            "maxOutputTokens": 32000
+          }
+        },
+        "permission_denials": [],
+        "structured_output": {
+          "production_schema_namespace": "cinder.saffron",
+          "prototype_schema_namespace": "cinder.prototype"
+        },
+        "terminal_reason": "completed",
+        "fast_mode_state": "off",
+        "uuid": "84afd58d-5b71-4753-90b9-70a03addb6ba"
+      },
+      "parsed": {
+        "production_schema_namespace": "cinder.saffron",
+        "prototype_schema_namespace": "cinder.prototype"
+      }
+    },
+    "additive": {
+      "role": "downstream_qa",
+      "duration_ms": 9520,
+      "prompt_sha256": "c1a30158bb9b2def650017d3291918883ae794b2342051fef927094d83ba661c",
+      "raw_stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"api_error_status\":null,\"duration_ms\":8644,\"duration_api_ms\":9497,\"ttft_ms\":6672,\"ttft_stream_ms\":4983,\"time_to_request_ms\":584,\"num_turns\":2,\"result\":\"production_schema_namespace: cinder.saffron\\nprototype_schema_namespace: cinder.prototype\",\"stop_reason\":\"end_turn\",\"session_id\":\"671dc706-e5b7-43c2-8379-a70a5375b97f\",\"total_cost_usd\":0.015982999999999997,\"usage\":{\"input_tokens\":4,\"cache_creation_input_tokens\":359,\"cache_read_input_tokens\":3262,\"output_tokens\":383,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":359,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"not_available\",\"iterations\":[{\"input_tokens\":2,\"output_tokens\":37,\"cache_read_input_tokens\":1631,\"cache_creation_input_tokens\":359,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":359},\"type\":\"message\"}],\"speed\":\"standard\"},\"modelUsage\":{\"claude-haiku-4-5-20251001\":{\"inputTokens\":1092,\"outputTokens\":15,\"cacheReadInputTokens\":0,\"cacheCreationInputTokens\":0,\"webSearchRequests\":0,\"costUSD\":0.001167,\"contextWindow\":200000,\"maxOutputTokens\":32000},\"claude-sonnet-5\":{\"inputTokens\":4,\"outputTokens\":383,\"cacheReadInputTokens\":3262,\"cacheCreationInputTokens\":359,\"webSearchRequests\":0,\"costUSD\":0.014816,\"contextWindow\":200000,\"maxOutputTokens\":32000}},\"permission_denials\":[],\"structured_output\":{\"production_schema_namespace\":\"cinder.saffron\",\"prototype_schema_namespace\":\"cinder.prototype\"},\"terminal_reason\":\"completed\",\"fast_mode_state\":\"off\",\"uuid\":\"b5a2c424-31ca-421e-a66d-a53623789e1c\"}\n",
+      "raw_stderr": "",
+      "envelope": {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false,
+        "api_error_status": null,
+        "duration_ms": 8644,
+        "duration_api_ms": 9497,
+        "ttft_ms": 6672,
+        "ttft_stream_ms": 4983,
+        "time_to_request_ms": 584,
+        "num_turns": 2,
+        "result": "production_schema_namespace: cinder.saffron\nprototype_schema_namespace: cinder.prototype",
+        "stop_reason": "end_turn",
+        "session_id": "671dc706-e5b7-43c2-8379-a70a5375b97f",
+        "total_cost_usd": 0.015982999999999997,
+        "usage": {
+          "input_tokens": 4,
+          "cache_creation_input_tokens": 359,
+          "cache_read_input_tokens": 3262,
+          "output_tokens": 383,
+          "server_tool_use": {
+            "web_search_requests": 0,
+            "web_fetch_requests": 0
+          },
+          "service_tier": "standard",
+          "cache_creation": {
+            "ephemeral_1h_input_tokens": 359,
+            "ephemeral_5m_input_tokens": 0
+          },
+          "inference_geo": "not_available",
+          "iterations": [
+            {
+              "input_tokens": 2,
+              "output_tokens": 37,
+              "cache_read_input_tokens": 1631,
+              "cache_creation_input_tokens": 359,
+              "cache_creation": {
+                "ephemeral_5m_input_tokens": 0,
+                "ephemeral_1h_input_tokens": 359
+              },
+              "type": "message"
+            }
+          ],
+          "speed": "standard"
+        },
+        "modelUsage": {
+          "claude-haiku-4-5-20251001": {
+            "inputTokens": 1092,
+            "outputTokens": 15,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0,
+            "webSearchRequests": 0,
+            "costUSD": 0.001167,
+            "contextWindow": 200000,
+            "maxOutputTokens": 32000
+          },
+          "claude-sonnet-5": {
+            "inputTokens": 4,
+            "outputTokens": 383,
+            "cacheReadInputTokens": 3262,
+            "cacheCreationInputTokens": 359,
+            "webSearchRequests": 0,
+            "costUSD": 0.014816,
+            "contextWindow": 200000,
+            "maxOutputTokens": 32000
+          }
+        },
+        "permission_denials": [],
+        "structured_output": {
+          "production_schema_namespace": "cinder.saffron",
+          "prototype_schema_namespace": "cinder.prototype"
+        },
+        "terminal_reason": "completed",
+        "fast_mode_state": "off",
+        "uuid": "b5a2c424-31ca-421e-a66d-a53623789e1c"
+      },
+      "parsed": {
+        "production_schema_namespace": "cinder.saffron",
+        "prototype_schema_namespace": "cinder.prototype"
+      }
+    },
+    "rewritten": {
+      "role": "downstream_qa",
+      "duration_ms": 8525,
+      "prompt_sha256": "0e39e4922193106016d359d44b7d9c5830fe0027a532b1e2b6e6d7ed73cc73bd",
+      "raw_stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"api_error_status\":null,\"duration_ms\":7130,\"duration_api_ms\":7296,\"ttft_ms\":5618,\"ttft_stream_ms\":5617,\"time_to_request_ms\":829,\"num_turns\":2,\"result\":\"production_schema_namespace: cinder.saffron\\nprototype_schema_namespace: cinder.prototype\",\"stop_reason\":\"end_turn\",\"session_id\":\"d008d502-2c83-40c0-b021-f5f7ebee1a53\",\"total_cost_usd\":0.023188,\"usage\":{\"input_tokens\":4,\"cache_creation_input_tokens\":1677,\"cache_read_input_tokens\":1520,\"output_tokens\":181,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":1677,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"not_available\",\"iterations\":[{\"input_tokens\":2,\"output_tokens\":37,\"cache_read_input_tokens\":1520,\"cache_creation_input_tokens\":157,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":157},\"type\":\"message\"}],\"speed\":\"standard\"},\"modelUsage\":{\"claude-haiku-4-5-20251001\":{\"inputTokens\":1028,\"outputTokens\":17,\"cacheReadInputTokens\":0,\"cacheCreationInputTokens\":0,\"webSearchRequests\":0,\"costUSD\":0.001113,\"contextWindow\":200000,\"maxOutputTokens\":32000},\"claude-sonnet-5\":{\"inputTokens\":4,\"outputTokens\":181,\"cacheReadInputTokens\":1520,\"cacheCreationInputTokens\":1677,\"webSearchRequests\":0,\"costUSD\":0.022075,\"contextWindow\":200000,\"maxOutputTokens\":32000}},\"permission_denials\":[],\"structured_output\":{\"production_schema_namespace\":\"cinder.saffron\",\"prototype_schema_namespace\":\"cinder.prototype\"},\"terminal_reason\":\"completed\",\"fast_mode_state\":\"off\",\"uuid\":\"c83ff621-ca3f-4d01-8e3a-1bb9f34f3ed4\"}\n",
+      "raw_stderr": "",
+      "envelope": {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false,
+        "api_error_status": null,
+        "duration_ms": 7130,
+        "duration_api_ms": 7296,
+        "ttft_ms": 5618,
+        "ttft_stream_ms": 5617,
+        "time_to_request_ms": 829,
+        "num_turns": 2,
+        "result": "production_schema_namespace: cinder.saffron\nprototype_schema_namespace: cinder.prototype",
+        "stop_reason": "end_turn",
+        "session_id": "d008d502-2c83-40c0-b021-f5f7ebee1a53",
+        "total_cost_usd": 0.023188,
+        "usage": {
+          "input_tokens": 4,
+          "cache_creation_input_tokens": 1677,
+          "cache_read_input_tokens": 1520,
+          "output_tokens": 181,
+          "server_tool_use": {
+            "web_search_requests": 0,
+            "web_fetch_requests": 0
+          },
+          "service_tier": "standard",
+          "cache_creation": {
+            "ephemeral_1h_input_tokens": 1677,
+            "ephemeral_5m_input_tokens": 0
+          },
+          "inference_geo": "not_available",
+          "iterations": [
+            {
+              "input_tokens": 2,
+              "output_tokens": 37,
+              "cache_read_input_tokens": 1520,
+              "cache_creation_input_tokens": 157,
+              "cache_creation": {
+                "ephemeral_5m_input_tokens": 0,
+                "ephemeral_1h_input_tokens": 157
+              },
+              "type": "message"
+            }
+          ],
+          "speed": "standard"
+        },
+        "modelUsage": {
+          "claude-haiku-4-5-20251001": {
+            "inputTokens": 1028,
+            "outputTokens": 17,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0,
+            "webSearchRequests": 0,
+            "costUSD": 0.001113,
+            "contextWindow": 200000,
+            "maxOutputTokens": 32000
+          },
+          "claude-sonnet-5": {
+            "inputTokens": 4,
+            "outputTokens": 181,
+            "cacheReadInputTokens": 1520,
+            "cacheCreationInputTokens": 1677,
+            "webSearchRequests": 0,
+            "costUSD": 0.022075,
+            "contextWindow": 200000,
+            "maxOutputTokens": 32000
+          }
+        },
+        "permission_denials": [],
+        "structured_output": {
+          "production_schema_namespace": "cinder.saffron",
+          "prototype_schema_namespace": "cinder.prototype"
+        },
+        "terminal_reason": "completed",
+        "fast_mode_state": "off",
+        "uuid": "c83ff621-ca3f-4d01-8e3a-1bb9f34f3ed4"
+      },
+      "parsed": {
+        "production_schema_namespace": "cinder.saffron",
+        "prototype_schema_namespace": "cinder.prototype"
+      }
+    },
+    "rescue": {
+      "role": "downstream_qa",
+      "duration_ms": 14032,
+      "prompt_sha256": "4b264e82a837d81c0651024572d88f1af0b1bc48703126853072c0f9a5789637",
+      "raw_stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"api_error_status\":null,\"duration_ms\":13047,\"duration_api_ms\":13053,\"ttft_ms\":7090,\"ttft_stream_ms\":6599,\"time_to_request_ms\":1048,\"num_turns\":2,\"result\":\"production_schema_namespace: cinder.saffron\\nprototype_schema_namespace: cinder.prototype\",\"stop_reason\":\"end_turn\",\"session_id\":\"68fd947a-d726-4da5-a064-40027804ec4f\",\"total_cost_usd\":0.022434000000000003,\"usage\":{\"input_tokens\":4,\"cache_creation_input_tokens\":1704,\"cache_read_input_tokens\":1590,\"output_tokens\":137,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":1704,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"not_available\",\"iterations\":[{\"input_tokens\":2,\"output_tokens\":37,\"cache_read_input_tokens\":1590,\"cache_creation_input_tokens\":114,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":114},\"type\":\"message\"}],\"speed\":\"standard\"},\"modelUsage\":{\"claude-haiku-4-5-20251001\":{\"inputTokens\":1069,\"outputTokens\":17,\"cacheReadInputTokens\":0,\"cacheCreationInputTokens\":0,\"webSearchRequests\":0,\"costUSD\":0.001154,\"contextWindow\":200000,\"maxOutputTokens\":32000},\"claude-sonnet-5\":{\"inputTokens\":4,\"outputTokens\":137,\"cacheReadInputTokens\":1590,\"cacheCreationInputTokens\":1704,\"webSearchRequests\":0,\"costUSD\":0.021280000000000004,\"contextWindow\":200000,\"maxOutputTokens\":32000}},\"permission_denials\":[],\"structured_output\":{\"production_schema_namespace\":\"cinder.saffron\",\"prototype_schema_namespace\":\"cinder.prototype\"},\"terminal_reason\":\"completed\",\"fast_mode_state\":\"off\",\"uuid\":\"750c7fa6-8dca-4545-a8d8-a0636d8bf130\"}\n",
+      "raw_stderr": "",
+      "envelope": {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false,
+        "api_error_status": null,
+        "duration_ms": 13047,
+        "duration_api_ms": 13053,
+        "ttft_ms": 7090,
+        "ttft_stream_ms": 6599,
+        "time_to_request_ms": 1048,
+        "num_turns": 2,
+        "result": "production_schema_namespace: cinder.saffron\nprototype_schema_namespace: cinder.prototype",
+        "stop_reason": "end_turn",
+        "session_id": "68fd947a-d726-4da5-a064-40027804ec4f",
+        "total_cost_usd": 0.022434000000000003,
+        "usage": {
+          "input_tokens": 4,
+          "cache_creation_input_tokens": 1704,
+          "cache_read_input_tokens": 1590,
+          "output_tokens": 137,
+          "server_tool_use": {
+            "web_search_requests": 0,
+            "web_fetch_requests": 0
+          },
+          "service_tier": "standard",
+          "cache_creation": {
+            "ephemeral_1h_input_tokens": 1704,
+            "ephemeral_5m_input_tokens": 0
+          },
+          "inference_geo": "not_available",
+          "iterations": [
+            {
+              "input_tokens": 2,
+              "output_tokens": 37,
+              "cache_read_input_tokens": 1590,
+              "cache_creation_input_tokens": 114,
+              "cache_creation": {
+                "ephemeral_5m_input_tokens": 0,
+                "ephemeral_1h_input_tokens": 114
+              },
+              "type": "message"
+            }
+          ],
+          "speed": "standard"
+        },
+        "modelUsage": {
+          "claude-haiku-4-5-20251001": {
+            "inputTokens": 1069,
+            "outputTokens": 17,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0,
+            "webSearchRequests": 0,
+            "costUSD": 0.001154,
+            "contextWindow": 200000,
+            "maxOutputTokens": 32000
+          },
+          "claude-sonnet-5": {
+            "inputTokens": 4,
+            "outputTokens": 137,
+            "cacheReadInputTokens": 1590,
+            "cacheCreationInputTokens": 1704,
+            "webSearchRequests": 0,
+            "costUSD": 0.021280000000000004,
+            "contextWindow": 200000,
+            "maxOutputTokens": 32000
+          }
+        },
+        "permission_denials": [],
+        "structured_output": {
+          "production_schema_namespace": "cinder.saffron",
+          "prototype_schema_namespace": "cinder.prototype"
+        },
+        "terminal_reason": "completed",
+        "fast_mode_state": "off",
+        "uuid": "750c7fa6-8dca-4545-a8d8-a0636d8bf130"
+      },
+      "parsed": {
+        "production_schema_namespace": "cinder.saffron",
+        "prototype_schema_namespace": "cinder.prototype"
+      }
+    }
+  },
+  "condition_scores": {
+    "baseline": {
+      "condition": "baseline",
+      "production_expected": "cinder.saffron",
+      "production_observed": "cinder.saffron",
+      "production_correct": true,
+      "prototype_expected": "cinder.prototype",
+      "prototype_observed": "cinder.prototype",
+      "prototype_correct": true,
+      "semantic_merge_signature": false
+    },
+    "additive": {
+      "condition": "additive",
+      "production_expected": "cinder.saffron",
+      "production_observed": "cinder.saffron",
+      "production_correct": true,
+      "prototype_expected": "cinder.prototype",
+      "prototype_observed": "cinder.prototype",
+      "prototype_correct": true,
+      "semantic_merge_signature": false
+    },
+    "rewritten": {
+      "condition": "rewritten",
+      "production_expected": "cinder.saffron",
+      "production_observed": "cinder.saffron",
+      "production_correct": true,
+      "prototype_expected": "cinder.prototype",
+      "prototype_observed": "cinder.prototype",
+      "prototype_correct": true,
+      "semantic_merge_signature": false
+    },
+    "rescue": {
+      "condition": "rescue",
+      "production_expected": "cinder.saffron",
+      "production_observed": "cinder.saffron",
+      "production_correct": true,
+      "prototype_expected": "cinder.prototype",
+      "prototype_observed": "cinder.prototype",
+      "prototype_correct": true,
+      "semantic_merge_signature": false
+    }
+  },
+  "paired_score": {
+    "harm": false,
+    "win": false,
+    "rescued_harm": false,
+    "semantic_merge_harm": false
+  },
+  "completed_at": "2026-08-27T04:36:56.498Z"
+}

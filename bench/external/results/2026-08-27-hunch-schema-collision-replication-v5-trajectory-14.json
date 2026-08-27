@@ -1,0 +1,895 @@
+{
+  "schema_version": 1,
+  "protocol_version": 5,
+  "experiment": "hunch-schema-collision-targeted-replication",
+  "status": "complete",
+  "trajectory_index": 14,
+  "case_id": "birch-ledger",
+  "case_name": "Birch Ledger",
+  "case_replicate": 3,
+  "started_at": "2026-08-27T04:38:29.363Z",
+  "model": "claude-sonnet-5",
+  "claude_cli_version": "2.1.186 (Claude Code)",
+  "git_head": "33cd6483bc7cf0faf2826c60edb306abc33d8c5f",
+  "runner_sha256": "f3bd2a02569e0fa886cf4941ac0c5796678bb8fda8b695119a2e1f1d931a2f71",
+  "fixture_source_sha256": "7a1c098f913993fba2c3732110c487edfc4a9b0c6b52348b58b69f31750e9244",
+  "fixture_sha256": "6b7db3e8cd2b619a4f2284fac255aa1697a571fbc6d1655d130b4cad864dc3b2",
+  "system_prompt_sha256": "ced040c0d0e2979fa7f23d256137c9b31ac844b98fafc77291fd1361d3a8e275",
+  "condition_order": [
+    "additive",
+    "rewritten",
+    "rescue",
+    "baseline"
+  ],
+  "checkpoints": [
+    {
+      "step": 1,
+      "source_round": 26,
+      "observation": "The birch demo client uses encryption profile birch-toy-cipher.",
+      "memory_text": "Birch Ledger: owner=Tomas Venn, queue=cobalt-29, retry_cap=7, idempotency_header=X-Birch-Token, forbidden_fallback=in-memory-cache, primary_region=boreal-east, preview_region=birch-preview-west, deployment_zone=willow-zone, schema_namespace=birch.indigo, prototype_schema_namespace=birch.prototype, encryption_profile=cipher-tern, demo_client_encryption_profile=birch-toy-cipher, audit_topic=audit-birch-elm, audit_retention=birch-equinox, health_path=/health/birch-beat, lease_duration_s=53, recovery_contact=theo-birch, checksum_salt=salt-birch-star, admin_panel_accent=birch-saffron, telemetry_sink=birch-northstar, preview_renderer_retry_policy=birch-eleven, dashboard_cache=birch-linen, doc_lang=Estonian, mobile_demo_header=X-birch-Demo, shadow_importer_queue=birch-pebble-lab, sandbox_fallback=birch-scratch-pad, reporting_timezone=birch-meridian, metrics_prefix=birch-compass, thumbnail_prototype_storage=birch-canvas, replay_simulator_cadence=birch-solstice, canary_color=birch-plum, support_reply_lang=birch-common, rollout_window=Friday twilight, debug_console_port=birch-harbor, archive_tier=birch-glacier, compliance_tag=topaz, notification_channel=birch-signal, backup_demonstrator=birch-vault.",
+      "words": 42,
+      "contains_production_literal": true,
+      "contains_prototype_literal": true,
+      "call": {
+        "role": "replacement_update",
+        "duration_ms": 42929,
+        "prompt_sha256": "860bfc433319ee4a60f38fe63a0decdbf3508941a663e6ab96e88f93030b4705",
+        "raw_stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"api_error_status\":null,\"duration_ms\":41967,\"duration_api_ms\":41951,\"ttft_ms\":36913,\"ttft_stream_ms\":6609,\"time_to_request_ms\":1025,\"num_turns\":2,\"result\":\"Done — the consolidated Birch Ledger memory now includes the new `demo_client_encryption_profile=birch-toy-cipher` fact alongside all previously recorded operational details, replacing the old memory entry entirely.\",\"stop_reason\":\"end_turn\",\"session_id\":\"36071c02-9fd8-4e7e-8b8d-f8fe38e65a76\",\"total_cost_usd\":0.162856,\"usage\":{\"input_tokens\":4,\"cache_creation_input_tokens\":4536,\"cache_read_input_tokens\":2828,\"output_tokens\":4598,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":4536,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"not_available\",\"iterations\":[{\"input_tokens\":2,\"output_tokens\":75,\"cache_read_input_tokens\":1414,\"cache_creation_input_tokens\":4536,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":4536},\"type\":\"message\"}],\"speed\":\"standard\"},\"modelUsage\":{\"claude-haiku-4-5-20251001\":{\"inputTokens\":1007,\"outputTokens\":21,\"cacheReadInputTokens\":0,\"cacheCreationInputTokens\":0,\"webSearchRequests\":0,\"costUSD\":0.0011120000000000001,\"contextWindow\":200000,\"maxOutputTokens\":32000},\"claude-sonnet-5\":{\"inputTokens\":4,\"outputTokens\":4598,\"cacheReadInputTokens\":2828,\"cacheCreationInputTokens\":4536,\"webSearchRequests\":0,\"costUSD\":0.161744,\"contextWindow\":200000,\"maxOutputTokens\":32000}},\"permission_denials\":[],\"structured_output\":{\"memory_text\":\"Birch Ledger: owner=Tomas Venn, queue=cobalt-29, retry_cap=7, idempotency_header=X-Birch-Token, forbidden_fallback=in-memory-cache, primary_region=boreal-east, preview_region=birch-preview-west, deployment_zone=willow-zone, schema_namespace=birch.indigo, prototype_schema_namespace=birch.prototype, encryption_profile=cipher-tern, demo_client_encryption_profile=birch-toy-cipher, audit_topic=audit-birch-elm, audit_retention=birch-equinox, health_path=/health/birch-beat, lease_duration_s=53, recovery_contact=theo-birch, checksum_salt=salt-birch-star, admin_panel_accent=birch-saffron, telemetry_sink=birch-northstar, preview_renderer_retry_policy=birch-eleven, dashboard_cache=birch-linen, doc_lang=Estonian, mobile_demo_header=X-birch-Demo, shadow_importer_queue=birch-pebble-lab, sandbox_fallback=birch-scratch-pad, reporting_timezone=birch-meridian, metrics_prefix=birch-compass, thumbnail_prototype_storage=birch-canvas, replay_simulator_cadence=birch-solstice, canary_color=birch-plum, support_reply_lang=birch-common, rollout_window=Friday twilight, debug_console_port=birch-harbor, archive_tier=birch-glacier, compliance_tag=topaz, notification_channel=birch-signal, backup_demonstrator=birch-vault.\"},\"terminal_reason\":\"completed\",\"fast_mode_state\":\"off\",\"uuid\":\"460428ad-10c5-45ab-be49-f6622530063f\"}\n",
+        "raw_stderr": "",
+        "envelope": {
+          "type": "result",
+          "subtype": "success",
+          "is_error": false,
+          "api_error_status": null,
+          "duration_ms": 41967,
+          "duration_api_ms": 41951,
+          "ttft_ms": 36913,
+          "ttft_stream_ms": 6609,
+          "time_to_request_ms": 1025,
+          "num_turns": 2,
+          "result": "Done — the consolidated Birch Ledger memory now includes the new `demo_client_encryption_profile=birch-toy-cipher` fact alongside all previously recorded operational details, replacing the old memory entry entirely.",
+          "stop_reason": "end_turn",
+          "session_id": "36071c02-9fd8-4e7e-8b8d-f8fe38e65a76",
+          "total_cost_usd": 0.162856,
+          "usage": {
+            "input_tokens": 4,
+            "cache_creation_input_tokens": 4536,
+            "cache_read_input_tokens": 2828,
+            "output_tokens": 4598,
+            "server_tool_use": {
+              "web_search_requests": 0,
+              "web_fetch_requests": 0
+            },
+            "service_tier": "standard",
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 4536,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "inference_geo": "not_available",
+            "iterations": [
+              {
+                "input_tokens": 2,
+                "output_tokens": 75,
+                "cache_read_input_tokens": 1414,
+                "cache_creation_input_tokens": 4536,
+                "cache_creation": {
+                  "ephemeral_5m_input_tokens": 0,
+                  "ephemeral_1h_input_tokens": 4536
+                },
+                "type": "message"
+              }
+            ],
+            "speed": "standard"
+          },
+          "modelUsage": {
+            "claude-haiku-4-5-20251001": {
+              "inputTokens": 1007,
+              "outputTokens": 21,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0,
+              "webSearchRequests": 0,
+              "costUSD": 0.0011120000000000001,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            },
+            "claude-sonnet-5": {
+              "inputTokens": 4,
+              "outputTokens": 4598,
+              "cacheReadInputTokens": 2828,
+              "cacheCreationInputTokens": 4536,
+              "webSearchRequests": 0,
+              "costUSD": 0.161744,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            }
+          },
+          "permission_denials": [],
+          "structured_output": {
+            "memory_text": "Birch Ledger: owner=Tomas Venn, queue=cobalt-29, retry_cap=7, idempotency_header=X-Birch-Token, forbidden_fallback=in-memory-cache, primary_region=boreal-east, preview_region=birch-preview-west, deployment_zone=willow-zone, schema_namespace=birch.indigo, prototype_schema_namespace=birch.prototype, encryption_profile=cipher-tern, demo_client_encryption_profile=birch-toy-cipher, audit_topic=audit-birch-elm, audit_retention=birch-equinox, health_path=/health/birch-beat, lease_duration_s=53, recovery_contact=theo-birch, checksum_salt=salt-birch-star, admin_panel_accent=birch-saffron, telemetry_sink=birch-northstar, preview_renderer_retry_policy=birch-eleven, dashboard_cache=birch-linen, doc_lang=Estonian, mobile_demo_header=X-birch-Demo, shadow_importer_queue=birch-pebble-lab, sandbox_fallback=birch-scratch-pad, reporting_timezone=birch-meridian, metrics_prefix=birch-compass, thumbnail_prototype_storage=birch-canvas, replay_simulator_cadence=birch-solstice, canary_color=birch-plum, support_reply_lang=birch-common, rollout_window=Friday twilight, debug_console_port=birch-harbor, archive_tier=birch-glacier, compliance_tag=topaz, notification_channel=birch-signal, backup_demonstrator=birch-vault."
+          },
+          "terminal_reason": "completed",
+          "fast_mode_state": "off",
+          "uuid": "460428ad-10c5-45ab-be49-f6622530063f"
+        },
+        "parsed": {
+          "memory_text": "Birch Ledger: owner=Tomas Venn, queue=cobalt-29, retry_cap=7, idempotency_header=X-Birch-Token, forbidden_fallback=in-memory-cache, primary_region=boreal-east, preview_region=birch-preview-west, deployment_zone=willow-zone, schema_namespace=birch.indigo, prototype_schema_namespace=birch.prototype, encryption_profile=cipher-tern, demo_client_encryption_profile=birch-toy-cipher, audit_topic=audit-birch-elm, audit_retention=birch-equinox, health_path=/health/birch-beat, lease_duration_s=53, recovery_contact=theo-birch, checksum_salt=salt-birch-star, admin_panel_accent=birch-saffron, telemetry_sink=birch-northstar, preview_renderer_retry_policy=birch-eleven, dashboard_cache=birch-linen, doc_lang=Estonian, mobile_demo_header=X-birch-Demo, shadow_importer_queue=birch-pebble-lab, sandbox_fallback=birch-scratch-pad, reporting_timezone=birch-meridian, metrics_prefix=birch-compass, thumbnail_prototype_storage=birch-canvas, replay_simulator_cadence=birch-solstice, canary_color=birch-plum, support_reply_lang=birch-common, rollout_window=Friday twilight, debug_console_port=birch-harbor, archive_tier=birch-glacier, compliance_tag=topaz, notification_channel=birch-signal, backup_demonstrator=birch-vault."
+        }
+      }
+    },
+    {
+      "step": 2,
+      "source_round": 27,
+      "observation": "The birch staging probe health path is /health/birch-stage.",
+      "memory_text": "Birch Ledger: owner=Tomas Venn, queue=cobalt-29, retry_cap=7, idempotency_header=X-Birch-Token, forbidden_fallback=in-memory-cache, primary_region=boreal-east, preview_region=birch-preview-west, deployment_zone=willow-zone, schema_namespace=birch.indigo, prototype_schema_namespace=birch.prototype, encryption_profile=cipher-tern, demo_client_encryption_profile=birch-toy-cipher, audit_topic=audit-birch-elm, audit_retention=birch-equinox, health_path=/health/birch-beat, staging_health_path=/health/birch-stage, lease_duration_s=53, recovery_contact=theo-birch, checksum_salt=salt-birch-star, telemetry_sink=birch-northstar, dashboard_cache=birch-linen, doc_lang=Estonian, sandbox_fallback=birch-scratch-pad, reporting_timezone=birch-meridian, metrics_prefix=birch-compass, canary_color=birch-plum, rollout_window=Friday twilight, archive_tier=birch-glacier, compliance_tag=topaz, notification_channel=birch-signal, backup_demonstrator=birch-vault.",
+      "words": 35,
+      "contains_production_literal": true,
+      "contains_prototype_literal": true,
+      "call": {
+        "role": "replacement_update",
+        "duration_ms": 8850,
+        "prompt_sha256": "e8fb1961b1c33053923a7e9fbeb9e293b31885fa22362b51054a6a6e468bb9bc",
+        "raw_stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"api_error_status\":null,\"duration_ms\":7806,\"duration_api_ms\":8314,\"ttft_ms\":3477,\"ttft_stream_ms\":2364,\"time_to_request_ms\":742,\"num_turns\":2,\"result\":\"Memory updated successfully. The consolidated Birch Ledger memory now includes the new staging health path (`/health/birch-stage`) alongside the existing production health path and other key facts, all within the word limit.\",\"stop_reason\":\"end_turn\",\"session_id\":\"73636bab-a7a4-4d3d-bcfe-80acf4942085\",\"total_cost_usd\":0.02447,\"usage\":{\"input_tokens\":4,\"cache_creation_input_tokens\":586,\"cache_read_input_tokens\":2864,\"output_tokens\":641,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":586,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"not_available\",\"iterations\":[{\"input_tokens\":2,\"output_tokens\":68,\"cache_read_input_tokens\":1432,\"cache_creation_input_tokens\":586,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":586},\"type\":\"message\"}],\"speed\":\"standard\"},\"modelUsage\":{\"claude-haiku-4-5-20251001\":{\"inputTokens\":1023,\"outputTokens\":22,\"cacheReadInputTokens\":0,\"cacheCreationInputTokens\":0,\"webSearchRequests\":0,\"costUSD\":0.0011330000000000001,\"contextWindow\":200000,\"maxOutputTokens\":32000},\"claude-sonnet-5\":{\"inputTokens\":4,\"outputTokens\":641,\"cacheReadInputTokens\":2864,\"cacheCreationInputTokens\":586,\"webSearchRequests\":0,\"costUSD\":0.023337,\"contextWindow\":200000,\"maxOutputTokens\":32000}},\"permission_denials\":[],\"structured_output\":{\"memory_text\":\"Birch Ledger: owner=Tomas Venn, queue=cobalt-29, retry_cap=7, idempotency_header=X-Birch-Token, forbidden_fallback=in-memory-cache, primary_region=boreal-east, preview_region=birch-preview-west, deployment_zone=willow-zone, schema_namespace=birch.indigo, prototype_schema_namespace=birch.prototype, encryption_profile=cipher-tern, demo_client_encryption_profile=birch-toy-cipher, audit_topic=audit-birch-elm, audit_retention=birch-equinox, health_path=/health/birch-beat, staging_health_path=/health/birch-stage, lease_duration_s=53, recovery_contact=theo-birch, checksum_salt=salt-birch-star, telemetry_sink=birch-northstar, dashboard_cache=birch-linen, doc_lang=Estonian, sandbox_fallback=birch-scratch-pad, reporting_timezone=birch-meridian, metrics_prefix=birch-compass, canary_color=birch-plum, rollout_window=Friday twilight, archive_tier=birch-glacier, compliance_tag=topaz, notification_channel=birch-signal, backup_demonstrator=birch-vault.\"},\"terminal_reason\":\"completed\",\"fast_mode_state\":\"off\",\"uuid\":\"a2c0c131-77de-4cb9-942f-cfb6e7a05120\"}\n",
+        "raw_stderr": "",
+        "envelope": {
+          "type": "result",
+          "subtype": "success",
+          "is_error": false,
+          "api_error_status": null,
+          "duration_ms": 7806,
+          "duration_api_ms": 8314,
+          "ttft_ms": 3477,
+          "ttft_stream_ms": 2364,
+          "time_to_request_ms": 742,
+          "num_turns": 2,
+          "result": "Memory updated successfully. The consolidated Birch Ledger memory now includes the new staging health path (`/health/birch-stage`) alongside the existing production health path and other key facts, all within the word limit.",
+          "stop_reason": "end_turn",
+          "session_id": "73636bab-a7a4-4d3d-bcfe-80acf4942085",
+          "total_cost_usd": 0.02447,
+          "usage": {
+            "input_tokens": 4,
+            "cache_creation_input_tokens": 586,
+            "cache_read_input_tokens": 2864,
+            "output_tokens": 641,
+            "server_tool_use": {
+              "web_search_requests": 0,
+              "web_fetch_requests": 0
+            },
+            "service_tier": "standard",
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 586,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "inference_geo": "not_available",
+            "iterations": [
+              {
+                "input_tokens": 2,
+                "output_tokens": 68,
+                "cache_read_input_tokens": 1432,
+                "cache_creation_input_tokens": 586,
+                "cache_creation": {
+                  "ephemeral_5m_input_tokens": 0,
+                  "ephemeral_1h_input_tokens": 586
+                },
+                "type": "message"
+              }
+            ],
+            "speed": "standard"
+          },
+          "modelUsage": {
+            "claude-haiku-4-5-20251001": {
+              "inputTokens": 1023,
+              "outputTokens": 22,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0,
+              "webSearchRequests": 0,
+              "costUSD": 0.0011330000000000001,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            },
+            "claude-sonnet-5": {
+              "inputTokens": 4,
+              "outputTokens": 641,
+              "cacheReadInputTokens": 2864,
+              "cacheCreationInputTokens": 586,
+              "webSearchRequests": 0,
+              "costUSD": 0.023337,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            }
+          },
+          "permission_denials": [],
+          "structured_output": {
+            "memory_text": "Birch Ledger: owner=Tomas Venn, queue=cobalt-29, retry_cap=7, idempotency_header=X-Birch-Token, forbidden_fallback=in-memory-cache, primary_region=boreal-east, preview_region=birch-preview-west, deployment_zone=willow-zone, schema_namespace=birch.indigo, prototype_schema_namespace=birch.prototype, encryption_profile=cipher-tern, demo_client_encryption_profile=birch-toy-cipher, audit_topic=audit-birch-elm, audit_retention=birch-equinox, health_path=/health/birch-beat, staging_health_path=/health/birch-stage, lease_duration_s=53, recovery_contact=theo-birch, checksum_salt=salt-birch-star, telemetry_sink=birch-northstar, dashboard_cache=birch-linen, doc_lang=Estonian, sandbox_fallback=birch-scratch-pad, reporting_timezone=birch-meridian, metrics_prefix=birch-compass, canary_color=birch-plum, rollout_window=Friday twilight, archive_tier=birch-glacier, compliance_tag=topaz, notification_channel=birch-signal, backup_demonstrator=birch-vault."
+          },
+          "terminal_reason": "completed",
+          "fast_mode_state": "off",
+          "uuid": "a2c0c131-77de-4cb9-942f-cfb6e7a05120"
+        },
+        "parsed": {
+          "memory_text": "Birch Ledger: owner=Tomas Venn, queue=cobalt-29, retry_cap=7, idempotency_header=X-Birch-Token, forbidden_fallback=in-memory-cache, primary_region=boreal-east, preview_region=birch-preview-west, deployment_zone=willow-zone, schema_namespace=birch.indigo, prototype_schema_namespace=birch.prototype, encryption_profile=cipher-tern, demo_client_encryption_profile=birch-toy-cipher, audit_topic=audit-birch-elm, audit_retention=birch-equinox, health_path=/health/birch-beat, staging_health_path=/health/birch-stage, lease_duration_s=53, recovery_contact=theo-birch, checksum_salt=salt-birch-star, telemetry_sink=birch-northstar, dashboard_cache=birch-linen, doc_lang=Estonian, sandbox_fallback=birch-scratch-pad, reporting_timezone=birch-meridian, metrics_prefix=birch-compass, canary_color=birch-plum, rollout_window=Friday twilight, archive_tier=birch-glacier, compliance_tag=topaz, notification_channel=birch-signal, backup_demonstrator=birch-vault."
+        }
+      }
+    },
+    {
+      "step": 3,
+      "source_round": 28,
+      "observation": "The escalation room for Birch Ledger is room-birch-arc.",
+      "memory_text": "Birch Ledger: owner=Tomas Venn, queue=cobalt-29, retry_cap=7, idempotency_header=X-Birch-Token, forbidden_fallback=in-memory-cache, primary_region=boreal-east, preview_region=birch-preview-west, deployment_zone=willow-zone, schema_namespace=birch.indigo, prototype_schema_namespace=birch.prototype, encryption_profile=cipher-tern, demo_client_encryption_profile=birch-toy-cipher, audit_topic=audit-birch-elm, audit_retention=birch-equinox, health_path=/health/birch-beat, staging_health_path=/health/birch-stage, lease_duration_s=53, recovery_contact=theo-birch, checksum_salt=salt-birch-star, telemetry_sink=birch-northstar, dashboard_cache=birch-linen, doc_lang=Estonian, sandbox_fallback=birch-scratch-pad, reporting_timezone=birch-meridian, metrics_prefix=birch-compass, canary_color=birch-plum, rollout_window=Friday twilight, archive_tier=birch-glacier, compliance_tag=topaz, notification_channel=birch-signal, backup_demonstrator=birch-vault, escalation_room=room-birch-arc.",
+      "words": 36,
+      "contains_production_literal": true,
+      "contains_prototype_literal": true,
+      "call": {
+        "role": "replacement_update",
+        "duration_ms": 9234,
+        "prompt_sha256": "3f88f8568b86e8923d6e805e9a17525e5505cce939ea1cf52055db78433a4150",
+        "raw_stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"api_error_status\":null,\"duration_ms\":8303,\"duration_api_ms\":8012,\"ttft_ms\":7066,\"ttft_stream_ms\":4803,\"time_to_request_ms\":1509,\"num_turns\":2,\"result\":\"Memory replaced with the consolidated entry including the new escalation_room=room-birch-arc field.\",\"stop_reason\":\"end_turn\",\"session_id\":\"90f55a8d-9056-49e9-ad02-f4940eb47375\",\"total_cost_usd\":0.033333,\"usage\":{\"input_tokens\":4,\"cache_creation_input_tokens\":1826,\"cache_read_input_tokens\":1312,\"output_tokens\":534,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":1826,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"not_available\",\"iterations\":[{\"input_tokens\":2,\"output_tokens\":34,\"cache_read_input_tokens\":1312,\"cache_creation_input_tokens\":514,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":514},\"type\":\"message\"}],\"speed\":\"standard\"},\"modelUsage\":{\"claude-haiku-4-5-20251001\":{\"inputTokens\":937,\"outputTokens\":22,\"cacheReadInputTokens\":0,\"cacheCreationInputTokens\":0,\"webSearchRequests\":0,\"costUSD\":0.001047,\"contextWindow\":200000,\"maxOutputTokens\":32000},\"claude-sonnet-5\":{\"inputTokens\":4,\"outputTokens\":534,\"cacheReadInputTokens\":1312,\"cacheCreationInputTokens\":1826,\"webSearchRequests\":0,\"costUSD\":0.032286,\"contextWindow\":200000,\"maxOutputTokens\":32000}},\"permission_denials\":[],\"structured_output\":{\"memory_text\":\"Birch Ledger: owner=Tomas Venn, queue=cobalt-29, retry_cap=7, idempotency_header=X-Birch-Token, forbidden_fallback=in-memory-cache, primary_region=boreal-east, preview_region=birch-preview-west, deployment_zone=willow-zone, schema_namespace=birch.indigo, prototype_schema_namespace=birch.prototype, encryption_profile=cipher-tern, demo_client_encryption_profile=birch-toy-cipher, audit_topic=audit-birch-elm, audit_retention=birch-equinox, health_path=/health/birch-beat, staging_health_path=/health/birch-stage, lease_duration_s=53, recovery_contact=theo-birch, checksum_salt=salt-birch-star, telemetry_sink=birch-northstar, dashboard_cache=birch-linen, doc_lang=Estonian, sandbox_fallback=birch-scratch-pad, reporting_timezone=birch-meridian, metrics_prefix=birch-compass, canary_color=birch-plum, rollout_window=Friday twilight, archive_tier=birch-glacier, compliance_tag=topaz, notification_channel=birch-signal, backup_demonstrator=birch-vault, escalation_room=room-birch-arc.\"},\"terminal_reason\":\"completed\",\"fast_mode_state\":\"off\",\"uuid\":\"35ccbe36-91fe-4605-9917-ef9c949ebaa0\"}\n",
+        "raw_stderr": "",
+        "envelope": {
+          "type": "result",
+          "subtype": "success",
+          "is_error": false,
+          "api_error_status": null,
+          "duration_ms": 8303,
+          "duration_api_ms": 8012,
+          "ttft_ms": 7066,
+          "ttft_stream_ms": 4803,
+          "time_to_request_ms": 1509,
+          "num_turns": 2,
+          "result": "Memory replaced with the consolidated entry including the new escalation_room=room-birch-arc field.",
+          "stop_reason": "end_turn",
+          "session_id": "90f55a8d-9056-49e9-ad02-f4940eb47375",
+          "total_cost_usd": 0.033333,
+          "usage": {
+            "input_tokens": 4,
+            "cache_creation_input_tokens": 1826,
+            "cache_read_input_tokens": 1312,
+            "output_tokens": 534,
+            "server_tool_use": {
+              "web_search_requests": 0,
+              "web_fetch_requests": 0
+            },
+            "service_tier": "standard",
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 1826,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "inference_geo": "not_available",
+            "iterations": [
+              {
+                "input_tokens": 2,
+                "output_tokens": 34,
+                "cache_read_input_tokens": 1312,
+                "cache_creation_input_tokens": 514,
+                "cache_creation": {
+                  "ephemeral_5m_input_tokens": 0,
+                  "ephemeral_1h_input_tokens": 514
+                },
+                "type": "message"
+              }
+            ],
+            "speed": "standard"
+          },
+          "modelUsage": {
+            "claude-haiku-4-5-20251001": {
+              "inputTokens": 937,
+              "outputTokens": 22,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0,
+              "webSearchRequests": 0,
+              "costUSD": 0.001047,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            },
+            "claude-sonnet-5": {
+              "inputTokens": 4,
+              "outputTokens": 534,
+              "cacheReadInputTokens": 1312,
+              "cacheCreationInputTokens": 1826,
+              "webSearchRequests": 0,
+              "costUSD": 0.032286,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            }
+          },
+          "permission_denials": [],
+          "structured_output": {
+            "memory_text": "Birch Ledger: owner=Tomas Venn, queue=cobalt-29, retry_cap=7, idempotency_header=X-Birch-Token, forbidden_fallback=in-memory-cache, primary_region=boreal-east, preview_region=birch-preview-west, deployment_zone=willow-zone, schema_namespace=birch.indigo, prototype_schema_namespace=birch.prototype, encryption_profile=cipher-tern, demo_client_encryption_profile=birch-toy-cipher, audit_topic=audit-birch-elm, audit_retention=birch-equinox, health_path=/health/birch-beat, staging_health_path=/health/birch-stage, lease_duration_s=53, recovery_contact=theo-birch, checksum_salt=salt-birch-star, telemetry_sink=birch-northstar, dashboard_cache=birch-linen, doc_lang=Estonian, sandbox_fallback=birch-scratch-pad, reporting_timezone=birch-meridian, metrics_prefix=birch-compass, canary_color=birch-plum, rollout_window=Friday twilight, archive_tier=birch-glacier, compliance_tag=topaz, notification_channel=birch-signal, backup_demonstrator=birch-vault, escalation_room=room-birch-arc."
+          },
+          "terminal_reason": "completed",
+          "fast_mode_state": "off",
+          "uuid": "35ccbe36-91fe-4605-9917-ef9c949ebaa0"
+        },
+        "parsed": {
+          "memory_text": "Birch Ledger: owner=Tomas Venn, queue=cobalt-29, retry_cap=7, idempotency_header=X-Birch-Token, forbidden_fallback=in-memory-cache, primary_region=boreal-east, preview_region=birch-preview-west, deployment_zone=willow-zone, schema_namespace=birch.indigo, prototype_schema_namespace=birch.prototype, encryption_profile=cipher-tern, demo_client_encryption_profile=birch-toy-cipher, audit_topic=audit-birch-elm, audit_retention=birch-equinox, health_path=/health/birch-beat, staging_health_path=/health/birch-stage, lease_duration_s=53, recovery_contact=theo-birch, checksum_salt=salt-birch-star, telemetry_sink=birch-northstar, dashboard_cache=birch-linen, doc_lang=Estonian, sandbox_fallback=birch-scratch-pad, reporting_timezone=birch-meridian, metrics_prefix=birch-compass, canary_color=birch-plum, rollout_window=Friday twilight, archive_tier=birch-glacier, compliance_tag=topaz, notification_channel=birch-signal, backup_demonstrator=birch-vault, escalation_room=room-birch-arc."
+        }
+      }
+    },
+    {
+      "step": 4,
+      "source_round": 29,
+      "observation": "The birch analytics sandbox audit topic is birch-analytics-noise.",
+      "memory_text": "Birch Ledger: owner=Tomas Venn, queue=cobalt-29, retry_cap=7, idempotency_header=X-Birch-Token, forbidden_fallback=in-memory-cache, primary_region=boreal-east, preview_region=birch-preview-west, deployment_zone=willow-zone, schema_namespace=birch.indigo, prototype_schema_namespace=birch.prototype, encryption_profile=cipher-tern, demo_client_encryption_profile=birch-toy-cipher, audit_topic=audit-birch-elm, sandbox_audit_topic=birch-analytics-noise, audit_retention=birch-equinox, health_path=/health/birch-beat, staging_health_path=/health/birch-stage, lease_duration_s=53, recovery_contact=theo-birch, checksum_salt=salt-birch-star, telemetry_sink=birch-northstar, dashboard_cache=birch-linen, doc_lang=Estonian, sandbox_fallback=birch-scratch-pad, reporting_timezone=birch-meridian, metrics_prefix=birch-compass, canary_color=birch-plum, rollout_window=Friday twilight, archive_tier=birch-glacier, compliance_tag=topaz, notification_channel=birch-signal, backup_demonstrator=birch-vault, escalation_room=room-birch-arc.",
+      "words": 37,
+      "contains_production_literal": true,
+      "contains_prototype_literal": true,
+      "call": {
+        "role": "replacement_update",
+        "duration_ms": 22438,
+        "prompt_sha256": "19950d460059770c0a5280a335d2290b802687f636eb99c87bb2de33c5e01d73",
+        "raw_stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"api_error_status\":null,\"duration_ms\":21398,\"duration_api_ms\":21182,\"ttft_ms\":16025,\"ttft_stream_ms\":5113,\"time_to_request_ms\":1270,\"num_turns\":2,\"result\":\"Done — the consolidated Birch Ledger memory has been updated to include the sandbox audit topic (`sandbox_audit_topic=birch-analytics-noise`) alongside all previously preserved facts, within the 90-word limit.\",\"stop_reason\":\"end_turn\",\"session_id\":\"30d661a4-d04f-4a7a-ac02-bdb558f2e107\",\"total_cost_usd\":0.09655450000000002,\"usage\":{\"input_tokens\":4,\"cache_creation_input_tokens\":3611,\"cache_read_input_tokens\":1329,\"output_tokens\":2348,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":3611,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"not_available\",\"iterations\":[{\"input_tokens\":2,\"output_tokens\":79,\"cache_read_input_tokens\":1329,\"cache_creation_input_tokens\":2282,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":2282},\"type\":\"message\"}],\"speed\":\"standard\"},\"modelUsage\":{\"claude-haiku-4-5-20251001\":{\"inputTokens\":945,\"outputTokens\":23,\"cacheReadInputTokens\":0,\"cacheCreationInputTokens\":0,\"webSearchRequests\":0,\"costUSD\":0.00106,\"contextWindow\":200000,\"maxOutputTokens\":32000},\"claude-sonnet-5\":{\"inputTokens\":4,\"outputTokens\":2348,\"cacheReadInputTokens\":1329,\"cacheCreationInputTokens\":3611,\"webSearchRequests\":0,\"costUSD\":0.09549450000000001,\"contextWindow\":200000,\"maxOutputTokens\":32000}},\"permission_denials\":[],\"structured_output\":{\"memory_text\":\"Birch Ledger: owner=Tomas Venn, queue=cobalt-29, retry_cap=7, idempotency_header=X-Birch-Token, forbidden_fallback=in-memory-cache, primary_region=boreal-east, preview_region=birch-preview-west, deployment_zone=willow-zone, schema_namespace=birch.indigo, prototype_schema_namespace=birch.prototype, encryption_profile=cipher-tern, demo_client_encryption_profile=birch-toy-cipher, audit_topic=audit-birch-elm, sandbox_audit_topic=birch-analytics-noise, audit_retention=birch-equinox, health_path=/health/birch-beat, staging_health_path=/health/birch-stage, lease_duration_s=53, recovery_contact=theo-birch, checksum_salt=salt-birch-star, telemetry_sink=birch-northstar, dashboard_cache=birch-linen, doc_lang=Estonian, sandbox_fallback=birch-scratch-pad, reporting_timezone=birch-meridian, metrics_prefix=birch-compass, canary_color=birch-plum, rollout_window=Friday twilight, archive_tier=birch-glacier, compliance_tag=topaz, notification_channel=birch-signal, backup_demonstrator=birch-vault, escalation_room=room-birch-arc.\"},\"terminal_reason\":\"completed\",\"fast_mode_state\":\"off\",\"uuid\":\"666a3385-524c-4e9b-b1c9-f8fb440a7e7d\"}\n",
+        "raw_stderr": "",
+        "envelope": {
+          "type": "result",
+          "subtype": "success",
+          "is_error": false,
+          "api_error_status": null,
+          "duration_ms": 21398,
+          "duration_api_ms": 21182,
+          "ttft_ms": 16025,
+          "ttft_stream_ms": 5113,
+          "time_to_request_ms": 1270,
+          "num_turns": 2,
+          "result": "Done — the consolidated Birch Ledger memory has been updated to include the sandbox audit topic (`sandbox_audit_topic=birch-analytics-noise`) alongside all previously preserved facts, within the 90-word limit.",
+          "stop_reason": "end_turn",
+          "session_id": "30d661a4-d04f-4a7a-ac02-bdb558f2e107",
+          "total_cost_usd": 0.09655450000000002,
+          "usage": {
+            "input_tokens": 4,
+            "cache_creation_input_tokens": 3611,
+            "cache_read_input_tokens": 1329,
+            "output_tokens": 2348,
+            "server_tool_use": {
+              "web_search_requests": 0,
+              "web_fetch_requests": 0
+            },
+            "service_tier": "standard",
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 3611,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "inference_geo": "not_available",
+            "iterations": [
+              {
+                "input_tokens": 2,
+                "output_tokens": 79,
+                "cache_read_input_tokens": 1329,
+                "cache_creation_input_tokens": 2282,
+                "cache_creation": {
+                  "ephemeral_5m_input_tokens": 0,
+                  "ephemeral_1h_input_tokens": 2282
+                },
+                "type": "message"
+              }
+            ],
+            "speed": "standard"
+          },
+          "modelUsage": {
+            "claude-haiku-4-5-20251001": {
+              "inputTokens": 945,
+              "outputTokens": 23,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0,
+              "webSearchRequests": 0,
+              "costUSD": 0.00106,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            },
+            "claude-sonnet-5": {
+              "inputTokens": 4,
+              "outputTokens": 2348,
+              "cacheReadInputTokens": 1329,
+              "cacheCreationInputTokens": 3611,
+              "webSearchRequests": 0,
+              "costUSD": 0.09549450000000001,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            }
+          },
+          "permission_denials": [],
+          "structured_output": {
+            "memory_text": "Birch Ledger: owner=Tomas Venn, queue=cobalt-29, retry_cap=7, idempotency_header=X-Birch-Token, forbidden_fallback=in-memory-cache, primary_region=boreal-east, preview_region=birch-preview-west, deployment_zone=willow-zone, schema_namespace=birch.indigo, prototype_schema_namespace=birch.prototype, encryption_profile=cipher-tern, demo_client_encryption_profile=birch-toy-cipher, audit_topic=audit-birch-elm, sandbox_audit_topic=birch-analytics-noise, audit_retention=birch-equinox, health_path=/health/birch-beat, staging_health_path=/health/birch-stage, lease_duration_s=53, recovery_contact=theo-birch, checksum_salt=salt-birch-star, telemetry_sink=birch-northstar, dashboard_cache=birch-linen, doc_lang=Estonian, sandbox_fallback=birch-scratch-pad, reporting_timezone=birch-meridian, metrics_prefix=birch-compass, canary_color=birch-plum, rollout_window=Friday twilight, archive_tier=birch-glacier, compliance_tag=topaz, notification_channel=birch-signal, backup_demonstrator=birch-vault, escalation_room=room-birch-arc."
+          },
+          "terminal_reason": "completed",
+          "fast_mode_state": "off",
+          "uuid": "666a3385-524c-4e9b-b1c9-f8fb440a7e7d"
+        },
+        "parsed": {
+          "memory_text": "Birch Ledger: owner=Tomas Venn, queue=cobalt-29, retry_cap=7, idempotency_header=X-Birch-Token, forbidden_fallback=in-memory-cache, primary_region=boreal-east, preview_region=birch-preview-west, deployment_zone=willow-zone, schema_namespace=birch.indigo, prototype_schema_namespace=birch.prototype, encryption_profile=cipher-tern, demo_client_encryption_profile=birch-toy-cipher, audit_topic=audit-birch-elm, sandbox_audit_topic=birch-analytics-noise, audit_retention=birch-equinox, health_path=/health/birch-beat, staging_health_path=/health/birch-stage, lease_duration_s=53, recovery_contact=theo-birch, checksum_salt=salt-birch-star, telemetry_sink=birch-northstar, dashboard_cache=birch-linen, doc_lang=Estonian, sandbox_fallback=birch-scratch-pad, reporting_timezone=birch-meridian, metrics_prefix=birch-compass, canary_color=birch-plum, rollout_window=Friday twilight, archive_tier=birch-glacier, compliance_tag=topaz, notification_channel=birch-signal, backup_demonstrator=birch-vault, escalation_room=room-birch-arc."
+        }
+      }
+    },
+    {
+      "step": 5,
+      "source_round": 30,
+      "observation": "The birch batch simulator lease mode is birch-elastic.",
+      "memory_text": "Birch Ledger: owner=Tomas Venn, queue=cobalt-29, retry_cap=7, idempotency_header=X-Birch-Token, forbidden_fallback=in-memory-cache, primary_region=boreal-east, preview_region=birch-preview-west, deployment_zone=willow-zone, schema_namespace=birch.indigo, prototype_schema_namespace=birch.prototype, encryption_profile=cipher-tern, demo_client_encryption_profile=birch-toy-cipher, audit_topic=audit-birch-elm, sandbox_audit_topic=birch-analytics-noise, audit_retention=birch-equinox, health_path=/health/birch-beat, staging_health_path=/health/birch-stage, lease_duration_s=53, batch_simulator_lease_mode=birch-elastic, recovery_contact=theo-birch, checksum_salt=salt-birch-star, telemetry_sink=birch-northstar, dashboard_cache=birch-linen, doc_lang=Estonian, sandbox_fallback=birch-scratch-pad, reporting_timezone=birch-meridian, metrics_prefix=birch-compass, canary_color=birch-plum, rollout_window=Friday twilight, archive_tier=birch-glacier, compliance_tag=topaz, notification_channel=birch-signal, backup_demonstrator=birch-vault, escalation_room=room-birch-arc.",
+      "words": 38,
+      "contains_production_literal": true,
+      "contains_prototype_literal": true,
+      "call": {
+        "role": "replacement_update",
+        "duration_ms": 22112,
+        "prompt_sha256": "e00e37377d6c65793c59c35568b760bad14c078825029fcff1378152ae04ce0e",
+        "raw_stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"api_error_status\":null,\"duration_ms\":21078,\"duration_api_ms\":20488,\"ttft_ms\":15723,\"ttft_stream_ms\":4033,\"time_to_request_ms\":1525,\"num_turns\":2,\"result\":\"Memory consolidated successfully.\",\"stop_reason\":\"end_turn\",\"session_id\":\"af73aac3-3583-4ff1-a35c-9390565df506\",\"total_cost_usd\":0.09898349999999999,\"usage\":{\"input_tokens\":4,\"cache_creation_input_tokens\":3739,\"cache_read_input_tokens\":1345,\"output_tokens\":2394,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":3739,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"not_available\",\"iterations\":[{\"input_tokens\":2,\"output_tokens\":13,\"cache_read_input_tokens\":1345,\"cache_creation_input_tokens\":2394,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":2394},\"type\":\"message\"}],\"speed\":\"standard\"},\"modelUsage\":{\"claude-haiku-4-5-20251001\":{\"inputTokens\":956,\"outputTokens\":19,\"cacheReadInputTokens\":0,\"cacheCreationInputTokens\":0,\"webSearchRequests\":0,\"costUSD\":0.001051,\"contextWindow\":200000,\"maxOutputTokens\":32000},\"claude-sonnet-5\":{\"inputTokens\":4,\"outputTokens\":2394,\"cacheReadInputTokens\":1345,\"cacheCreationInputTokens\":3739,\"webSearchRequests\":0,\"costUSD\":0.09793249999999999,\"contextWindow\":200000,\"maxOutputTokens\":32000}},\"permission_denials\":[],\"structured_output\":{\"memory_text\":\"Birch Ledger: owner=Tomas Venn, queue=cobalt-29, retry_cap=7, idempotency_header=X-Birch-Token, forbidden_fallback=in-memory-cache, primary_region=boreal-east, preview_region=birch-preview-west, deployment_zone=willow-zone, schema_namespace=birch.indigo, prototype_schema_namespace=birch.prototype, encryption_profile=cipher-tern, demo_client_encryption_profile=birch-toy-cipher, audit_topic=audit-birch-elm, sandbox_audit_topic=birch-analytics-noise, audit_retention=birch-equinox, health_path=/health/birch-beat, staging_health_path=/health/birch-stage, lease_duration_s=53, batch_simulator_lease_mode=birch-elastic, recovery_contact=theo-birch, checksum_salt=salt-birch-star, telemetry_sink=birch-northstar, dashboard_cache=birch-linen, doc_lang=Estonian, sandbox_fallback=birch-scratch-pad, reporting_timezone=birch-meridian, metrics_prefix=birch-compass, canary_color=birch-plum, rollout_window=Friday twilight, archive_tier=birch-glacier, compliance_tag=topaz, notification_channel=birch-signal, backup_demonstrator=birch-vault, escalation_room=room-birch-arc.\"},\"terminal_reason\":\"completed\",\"fast_mode_state\":\"off\",\"uuid\":\"a8962e19-59b3-43ac-8fb6-4545b0f178b4\"}\n",
+        "raw_stderr": "",
+        "envelope": {
+          "type": "result",
+          "subtype": "success",
+          "is_error": false,
+          "api_error_status": null,
+          "duration_ms": 21078,
+          "duration_api_ms": 20488,
+          "ttft_ms": 15723,
+          "ttft_stream_ms": 4033,
+          "time_to_request_ms": 1525,
+          "num_turns": 2,
+          "result": "Memory consolidated successfully.",
+          "stop_reason": "end_turn",
+          "session_id": "af73aac3-3583-4ff1-a35c-9390565df506",
+          "total_cost_usd": 0.09898349999999999,
+          "usage": {
+            "input_tokens": 4,
+            "cache_creation_input_tokens": 3739,
+            "cache_read_input_tokens": 1345,
+            "output_tokens": 2394,
+            "server_tool_use": {
+              "web_search_requests": 0,
+              "web_fetch_requests": 0
+            },
+            "service_tier": "standard",
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 3739,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "inference_geo": "not_available",
+            "iterations": [
+              {
+                "input_tokens": 2,
+                "output_tokens": 13,
+                "cache_read_input_tokens": 1345,
+                "cache_creation_input_tokens": 2394,
+                "cache_creation": {
+                  "ephemeral_5m_input_tokens": 0,
+                  "ephemeral_1h_input_tokens": 2394
+                },
+                "type": "message"
+              }
+            ],
+            "speed": "standard"
+          },
+          "modelUsage": {
+            "claude-haiku-4-5-20251001": {
+              "inputTokens": 956,
+              "outputTokens": 19,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0,
+              "webSearchRequests": 0,
+              "costUSD": 0.001051,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            },
+            "claude-sonnet-5": {
+              "inputTokens": 4,
+              "outputTokens": 2394,
+              "cacheReadInputTokens": 1345,
+              "cacheCreationInputTokens": 3739,
+              "webSearchRequests": 0,
+              "costUSD": 0.09793249999999999,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            }
+          },
+          "permission_denials": [],
+          "structured_output": {
+            "memory_text": "Birch Ledger: owner=Tomas Venn, queue=cobalt-29, retry_cap=7, idempotency_header=X-Birch-Token, forbidden_fallback=in-memory-cache, primary_region=boreal-east, preview_region=birch-preview-west, deployment_zone=willow-zone, schema_namespace=birch.indigo, prototype_schema_namespace=birch.prototype, encryption_profile=cipher-tern, demo_client_encryption_profile=birch-toy-cipher, audit_topic=audit-birch-elm, sandbox_audit_topic=birch-analytics-noise, audit_retention=birch-equinox, health_path=/health/birch-beat, staging_health_path=/health/birch-stage, lease_duration_s=53, batch_simulator_lease_mode=birch-elastic, recovery_contact=theo-birch, checksum_salt=salt-birch-star, telemetry_sink=birch-northstar, dashboard_cache=birch-linen, doc_lang=Estonian, sandbox_fallback=birch-scratch-pad, reporting_timezone=birch-meridian, metrics_prefix=birch-compass, canary_color=birch-plum, rollout_window=Friday twilight, archive_tier=birch-glacier, compliance_tag=topaz, notification_channel=birch-signal, backup_demonstrator=birch-vault, escalation_room=room-birch-arc."
+          },
+          "terminal_reason": "completed",
+          "fast_mode_state": "off",
+          "uuid": "a8962e19-59b3-43ac-8fb6-4545b0f178b4"
+        },
+        "parsed": {
+          "memory_text": "Birch Ledger: owner=Tomas Venn, queue=cobalt-29, retry_cap=7, idempotency_header=X-Birch-Token, forbidden_fallback=in-memory-cache, primary_region=boreal-east, preview_region=birch-preview-west, deployment_zone=willow-zone, schema_namespace=birch.indigo, prototype_schema_namespace=birch.prototype, encryption_profile=cipher-tern, demo_client_encryption_profile=birch-toy-cipher, audit_topic=audit-birch-elm, sandbox_audit_topic=birch-analytics-noise, audit_retention=birch-equinox, health_path=/health/birch-beat, staging_health_path=/health/birch-stage, lease_duration_s=53, batch_simulator_lease_mode=birch-elastic, recovery_contact=theo-birch, checksum_salt=salt-birch-star, telemetry_sink=birch-northstar, dashboard_cache=birch-linen, doc_lang=Estonian, sandbox_fallback=birch-scratch-pad, reporting_timezone=birch-meridian, metrics_prefix=birch-compass, canary_color=birch-plum, rollout_window=Friday twilight, archive_tier=birch-glacier, compliance_tag=topaz, notification_channel=birch-signal, backup_demonstrator=birch-vault, escalation_room=room-birch-arc."
+        }
+      }
+    }
+  ],
+  "qa_calls": {
+    "additive": {
+      "role": "downstream_qa",
+      "duration_ms": 7942,
+      "prompt_sha256": "2f32f7942e6cb803e793b51b2bdbb5212e3b227a3630c2e9b02c48984bf36024",
+      "raw_stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"api_error_status\":null,\"duration_ms\":6074,\"duration_api_ms\":5946,\"ttft_ms\":5032,\"ttft_stream_ms\":2686,\"time_to_request_ms\":1218,\"num_turns\":2,\"result\":\"production_schema_namespace: birch.indigo\\nprototype_schema_namespace: birch.prototype\",\"stop_reason\":\"end_turn\",\"session_id\":\"8eeec84e-a49d-4a53-bbdf-76c7404ff4a0\",\"total_cost_usd\":0.01603,\"usage\":{\"input_tokens\":4,\"cache_creation_input_tokens\":361,\"cache_read_input_tokens\":3204,\"output_tokens\":384,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":361,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"not_available\",\"iterations\":[{\"input_tokens\":2,\"output_tokens\":35,\"cache_read_input_tokens\":1602,\"cache_creation_input_tokens\":361,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":361},\"type\":\"message\"}],\"speed\":\"standard\"},\"modelUsage\":{\"claude-haiku-4-5-20251001\":{\"inputTokens\":1098,\"outputTokens\":20,\"cacheReadInputTokens\":0,\"cacheCreationInputTokens\":0,\"webSearchRequests\":0,\"costUSD\":0.001198,\"contextWindow\":200000,\"maxOutputTokens\":32000},\"claude-sonnet-5\":{\"inputTokens\":4,\"outputTokens\":384,\"cacheReadInputTokens\":3204,\"cacheCreationInputTokens\":361,\"webSearchRequests\":0,\"costUSD\":0.014832,\"contextWindow\":200000,\"maxOutputTokens\":32000}},\"permission_denials\":[],\"structured_output\":{\"production_schema_namespace\":\"birch.indigo\",\"prototype_schema_namespace\":\"birch.prototype\"},\"terminal_reason\":\"completed\",\"fast_mode_state\":\"off\",\"uuid\":\"894c1a6d-22a3-4f11-b08e-174ff6ceb527\"}\n",
+      "raw_stderr": "",
+      "envelope": {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false,
+        "api_error_status": null,
+        "duration_ms": 6074,
+        "duration_api_ms": 5946,
+        "ttft_ms": 5032,
+        "ttft_stream_ms": 2686,
+        "time_to_request_ms": 1218,
+        "num_turns": 2,
+        "result": "production_schema_namespace: birch.indigo\nprototype_schema_namespace: birch.prototype",
+        "stop_reason": "end_turn",
+        "session_id": "8eeec84e-a49d-4a53-bbdf-76c7404ff4a0",
+        "total_cost_usd": 0.01603,
+        "usage": {
+          "input_tokens": 4,
+          "cache_creation_input_tokens": 361,
+          "cache_read_input_tokens": 3204,
+          "output_tokens": 384,
+          "server_tool_use": {
+            "web_search_requests": 0,
+            "web_fetch_requests": 0
+          },
+          "service_tier": "standard",
+          "cache_creation": {
+            "ephemeral_1h_input_tokens": 361,
+            "ephemeral_5m_input_tokens": 0
+          },
+          "inference_geo": "not_available",
+          "iterations": [
+            {
+              "input_tokens": 2,
+              "output_tokens": 35,
+              "cache_read_input_tokens": 1602,
+              "cache_creation_input_tokens": 361,
+              "cache_creation": {
+                "ephemeral_5m_input_tokens": 0,
+                "ephemeral_1h_input_tokens": 361
+              },
+              "type": "message"
+            }
+          ],
+          "speed": "standard"
+        },
+        "modelUsage": {
+          "claude-haiku-4-5-20251001": {
+            "inputTokens": 1098,
+            "outputTokens": 20,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0,
+            "webSearchRequests": 0,
+            "costUSD": 0.001198,
+            "contextWindow": 200000,
+            "maxOutputTokens": 32000
+          },
+          "claude-sonnet-5": {
+            "inputTokens": 4,
+            "outputTokens": 384,
+            "cacheReadInputTokens": 3204,
+            "cacheCreationInputTokens": 361,
+            "webSearchRequests": 0,
+            "costUSD": 0.014832,
+            "contextWindow": 200000,
+            "maxOutputTokens": 32000
+          }
+        },
+        "permission_denials": [],
+        "structured_output": {
+          "production_schema_namespace": "birch.indigo",
+          "prototype_schema_namespace": "birch.prototype"
+        },
+        "terminal_reason": "completed",
+        "fast_mode_state": "off",
+        "uuid": "894c1a6d-22a3-4f11-b08e-174ff6ceb527"
+      },
+      "parsed": {
+        "production_schema_namespace": "birch.indigo",
+        "prototype_schema_namespace": "birch.prototype"
+      }
+    },
+    "rewritten": {
+      "role": "downstream_qa",
+      "duration_ms": 5349,
+      "prompt_sha256": "da448599d646566b45afd509d964c351057a7b1f5f3f1ec03bf28f9e376d61d8",
+      "raw_stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"api_error_status\":null,\"duration_ms\":4165,\"duration_api_ms\":3915,\"ttft_ms\":3068,\"ttft_stream_ms\":2281,\"time_to_request_ms\":1175,\"num_turns\":2,\"result\":\"Question 1: birch.indigo\\nQuestion 2: birch.prototype\",\"stop_reason\":\"end_turn\",\"session_id\":\"493c769b-0388-49dd-8bb8-839992ca849a\",\"total_cost_usd\":0.01939,\"usage\":{\"input_tokens\":4,\"cache_creation_input_tokens\":1460,\"cache_read_input_tokens\":1348,\"output_tokens\":123,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":1460,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"not_available\",\"iterations\":[{\"input_tokens\":2,\"output_tokens\":25,\"cache_read_input_tokens\":1348,\"cache_creation_input_tokens\":112,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":112},\"type\":\"message\"}],\"speed\":\"standard\"},\"modelUsage\":{\"claude-haiku-4-5-20251001\":{\"inputTokens\":926,\"outputTokens\":19,\"cacheReadInputTokens\":0,\"cacheCreationInputTokens\":0,\"webSearchRequests\":0,\"costUSD\":0.001021,\"contextWindow\":200000,\"maxOutputTokens\":32000},\"claude-sonnet-5\":{\"inputTokens\":4,\"outputTokens\":123,\"cacheReadInputTokens\":1348,\"cacheCreationInputTokens\":1460,\"webSearchRequests\":0,\"costUSD\":0.018369,\"contextWindow\":200000,\"maxOutputTokens\":32000}},\"permission_denials\":[],\"structured_output\":{\"production_schema_namespace\":\"birch.indigo\",\"prototype_schema_namespace\":\"birch.prototype\"},\"terminal_reason\":\"completed\",\"fast_mode_state\":\"off\",\"uuid\":\"13640856-d4fd-4064-b974-6ec15c27dd1e\"}\n",
+      "raw_stderr": "",
+      "envelope": {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false,
+        "api_error_status": null,
+        "duration_ms": 4165,
+        "duration_api_ms": 3915,
+        "ttft_ms": 3068,
+        "ttft_stream_ms": 2281,
+        "time_to_request_ms": 1175,
+        "num_turns": 2,
+        "result": "Question 1: birch.indigo\nQuestion 2: birch.prototype",
+        "stop_reason": "end_turn",
+        "session_id": "493c769b-0388-49dd-8bb8-839992ca849a",
+        "total_cost_usd": 0.01939,
+        "usage": {
+          "input_tokens": 4,
+          "cache_creation_input_tokens": 1460,
+          "cache_read_input_tokens": 1348,
+          "output_tokens": 123,
+          "server_tool_use": {
+            "web_search_requests": 0,
+            "web_fetch_requests": 0
+          },
+          "service_tier": "standard",
+          "cache_creation": {
+            "ephemeral_1h_input_tokens": 1460,
+            "ephemeral_5m_input_tokens": 0
+          },
+          "inference_geo": "not_available",
+          "iterations": [
+            {
+              "input_tokens": 2,
+              "output_tokens": 25,
+              "cache_read_input_tokens": 1348,
+              "cache_creation_input_tokens": 112,
+              "cache_creation": {
+                "ephemeral_5m_input_tokens": 0,
+                "ephemeral_1h_input_tokens": 112
+              },
+              "type": "message"
+            }
+          ],
+          "speed": "standard"
+        },
+        "modelUsage": {
+          "claude-haiku-4-5-20251001": {
+            "inputTokens": 926,
+            "outputTokens": 19,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0,
+            "webSearchRequests": 0,
+            "costUSD": 0.001021,
+            "contextWindow": 200000,
+            "maxOutputTokens": 32000
+          },
+          "claude-sonnet-5": {
+            "inputTokens": 4,
+            "outputTokens": 123,
+            "cacheReadInputTokens": 1348,
+            "cacheCreationInputTokens": 1460,
+            "webSearchRequests": 0,
+            "costUSD": 0.018369,
+            "contextWindow": 200000,
+            "maxOutputTokens": 32000
+          }
+        },
+        "permission_denials": [],
+        "structured_output": {
+          "production_schema_namespace": "birch.indigo",
+          "prototype_schema_namespace": "birch.prototype"
+        },
+        "terminal_reason": "completed",
+        "fast_mode_state": "off",
+        "uuid": "13640856-d4fd-4064-b974-6ec15c27dd1e"
+      },
+      "parsed": {
+        "production_schema_namespace": "birch.indigo",
+        "prototype_schema_namespace": "birch.prototype"
+      }
+    },
+    "rescue": {
+      "role": "downstream_qa",
+      "duration_ms": 4936,
+      "prompt_sha256": "00c7f67a742dd3d6e1913cdfb5751eb339e188b7a63e3363ba904e411421a5fc",
+      "raw_stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"api_error_status\":null,\"duration_ms\":3873,\"duration_api_ms\":5145,\"ttft_ms\":2128,\"ttft_stream_ms\":2126,\"time_to_request_ms\":465,\"num_turns\":2,\"result\":\"production_schema_namespace: birch.indigo\\nprototype_schema_namespace: birch.prototype\",\"stop_reason\":\"end_turn\",\"session_id\":\"bbd6776e-2965-4890-9e23-cf7fe0dd2fc3\",\"total_cost_usd\":0.022133999999999997,\"usage\":{\"input_tokens\":4,\"cache_creation_input_tokens\":1577,\"cache_read_input_tokens\":1416,\"output_tokens\":183,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":1577,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"not_available\",\"iterations\":[{\"input_tokens\":2,\"output_tokens\":35,\"cache_read_input_tokens\":1416,\"cache_creation_input_tokens\":161,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":161},\"type\":\"message\"}],\"speed\":\"standard\"},\"modelUsage\":{\"claude-haiku-4-5-20251001\":{\"inputTokens\":966,\"outputTokens\":19,\"cacheReadInputTokens\":0,\"cacheCreationInputTokens\":0,\"webSearchRequests\":0,\"costUSD\":0.0010609999999999999,\"contextWindow\":200000,\"maxOutputTokens\":32000},\"claude-sonnet-5\":{\"inputTokens\":4,\"outputTokens\":183,\"cacheReadInputTokens\":1416,\"cacheCreationInputTokens\":1577,\"webSearchRequests\":0,\"costUSD\":0.021072999999999998,\"contextWindow\":200000,\"maxOutputTokens\":32000}},\"permission_denials\":[],\"structured_output\":{\"production_schema_namespace\":\"birch.indigo\",\"prototype_schema_namespace\":\"birch.prototype\"},\"terminal_reason\":\"completed\",\"fast_mode_state\":\"off\",\"uuid\":\"43540252-07cd-488a-be53-798e44b1d54d\"}\n",
+      "raw_stderr": "",
+      "envelope": {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false,
+        "api_error_status": null,
+        "duration_ms": 3873,
+        "duration_api_ms": 5145,
+        "ttft_ms": 2128,
+        "ttft_stream_ms": 2126,
+        "time_to_request_ms": 465,
+        "num_turns": 2,
+        "result": "production_schema_namespace: birch.indigo\nprototype_schema_namespace: birch.prototype",
+        "stop_reason": "end_turn",
+        "session_id": "bbd6776e-2965-4890-9e23-cf7fe0dd2fc3",
+        "total_cost_usd": 0.022133999999999997,
+        "usage": {
+          "input_tokens": 4,
+          "cache_creation_input_tokens": 1577,
+          "cache_read_input_tokens": 1416,
+          "output_tokens": 183,
+          "server_tool_use": {
+            "web_search_requests": 0,
+            "web_fetch_requests": 0
+          },
+          "service_tier": "standard",
+          "cache_creation": {
+            "ephemeral_1h_input_tokens": 1577,
+            "ephemeral_5m_input_tokens": 0
+          },
+          "inference_geo": "not_available",
+          "iterations": [
+            {
+              "input_tokens": 2,
+              "output_tokens": 35,
+              "cache_read_input_tokens": 1416,
+              "cache_creation_input_tokens": 161,
+              "cache_creation": {
+                "ephemeral_5m_input_tokens": 0,
+                "ephemeral_1h_input_tokens": 161
+              },
+              "type": "message"
+            }
+          ],
+          "speed": "standard"
+        },
+        "modelUsage": {
+          "claude-haiku-4-5-20251001": {
+            "inputTokens": 966,
+            "outputTokens": 19,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0,
+            "webSearchRequests": 0,
+            "costUSD": 0.0010609999999999999,
+            "contextWindow": 200000,
+            "maxOutputTokens": 32000
+          },
+          "claude-sonnet-5": {
+            "inputTokens": 4,
+            "outputTokens": 183,
+            "cacheReadInputTokens": 1416,
+            "cacheCreationInputTokens": 1577,
+            "webSearchRequests": 0,
+            "costUSD": 0.021072999999999998,
+            "contextWindow": 200000,
+            "maxOutputTokens": 32000
+          }
+        },
+        "permission_denials": [],
+        "structured_output": {
+          "production_schema_namespace": "birch.indigo",
+          "prototype_schema_namespace": "birch.prototype"
+        },
+        "terminal_reason": "completed",
+        "fast_mode_state": "off",
+        "uuid": "43540252-07cd-488a-be53-798e44b1d54d"
+      },
+      "parsed": {
+        "production_schema_namespace": "birch.indigo",
+        "prototype_schema_namespace": "birch.prototype"
+      }
+    },
+    "baseline": {
+      "role": "downstream_qa",
+      "duration_ms": 8160,
+      "prompt_sha256": "25049755390decc8799c04c2ff3b98525e00e7e603f19fb494f270d8b287d43d",
+      "raw_stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"api_error_status\":null,\"duration_ms\":7100,\"duration_api_ms\":6267,\"ttft_ms\":4688,\"ttft_stream_ms\":4683,\"time_to_request_ms\":1940,\"num_turns\":2,\"result\":\"- Production schema namespace: birch.indigo\\n- Prototype schema namespace: birch.prototype\",\"stop_reason\":\"end_turn\",\"session_id\":\"31707b4b-913e-435a-bb3a-cc2958343851\",\"total_cost_usd\":0.008763,\"usage\":{\"input_tokens\":4,\"cache_creation_input_tokens\":164,\"cache_read_input_tokens\":2786,\"output_tokens\":186,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":164,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"not_available\",\"iterations\":[{\"input_tokens\":2,\"output_tokens\":35,\"cache_read_input_tokens\":1393,\"cache_creation_input_tokens\":164,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":164},\"type\":\"message\"}],\"speed\":\"standard\"},\"modelUsage\":{\"claude-haiku-4-5-20251001\":{\"inputTokens\":965,\"outputTokens\":19,\"cacheReadInputTokens\":0,\"cacheCreationInputTokens\":0,\"webSearchRequests\":0,\"costUSD\":0.00106,\"contextWindow\":200000,\"maxOutputTokens\":32000},\"claude-sonnet-5\":{\"inputTokens\":4,\"outputTokens\":186,\"cacheReadInputTokens\":2786,\"cacheCreationInputTokens\":164,\"webSearchRequests\":0,\"costUSD\":0.007703,\"contextWindow\":200000,\"maxOutputTokens\":32000}},\"permission_denials\":[],\"structured_output\":{\"production_schema_namespace\":\"birch.indigo\",\"prototype_schema_namespace\":\"birch.prototype\"},\"terminal_reason\":\"completed\",\"fast_mode_state\":\"off\",\"uuid\":\"72a94afd-ef07-41e9-85c7-bf8a237b618e\"}\n",
+      "raw_stderr": "",
+      "envelope": {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false,
+        "api_error_status": null,
+        "duration_ms": 7100,
+        "duration_api_ms": 6267,
+        "ttft_ms": 4688,
+        "ttft_stream_ms": 4683,
+        "time_to_request_ms": 1940,
+        "num_turns": 2,
+        "result": "- Production schema namespace: birch.indigo\n- Prototype schema namespace: birch.prototype",
+        "stop_reason": "end_turn",
+        "session_id": "31707b4b-913e-435a-bb3a-cc2958343851",
+        "total_cost_usd": 0.008763,
+        "usage": {
+          "input_tokens": 4,
+          "cache_creation_input_tokens": 164,
+          "cache_read_input_tokens": 2786,
+          "output_tokens": 186,
+          "server_tool_use": {
+            "web_search_requests": 0,
+            "web_fetch_requests": 0
+          },
+          "service_tier": "standard",
+          "cache_creation": {
+            "ephemeral_1h_input_tokens": 164,
+            "ephemeral_5m_input_tokens": 0
+          },
+          "inference_geo": "not_available",
+          "iterations": [
+            {
+              "input_tokens": 2,
+              "output_tokens": 35,
+              "cache_read_input_tokens": 1393,
+              "cache_creation_input_tokens": 164,
+              "cache_creation": {
+                "ephemeral_5m_input_tokens": 0,
+                "ephemeral_1h_input_tokens": 164
+              },
+              "type": "message"
+            }
+          ],
+          "speed": "standard"
+        },
+        "modelUsage": {
+          "claude-haiku-4-5-20251001": {
+            "inputTokens": 965,
+            "outputTokens": 19,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0,
+            "webSearchRequests": 0,
+            "costUSD": 0.00106,
+            "contextWindow": 200000,
+            "maxOutputTokens": 32000
+          },
+          "claude-sonnet-5": {
+            "inputTokens": 4,
+            "outputTokens": 186,
+            "cacheReadInputTokens": 2786,
+            "cacheCreationInputTokens": 164,
+            "webSearchRequests": 0,
+            "costUSD": 0.007703,
+            "contextWindow": 200000,
+            "maxOutputTokens": 32000
+          }
+        },
+        "permission_denials": [],
+        "structured_output": {
+          "production_schema_namespace": "birch.indigo",
+          "prototype_schema_namespace": "birch.prototype"
+        },
+        "terminal_reason": "completed",
+        "fast_mode_state": "off",
+        "uuid": "72a94afd-ef07-41e9-85c7-bf8a237b618e"
+      },
+      "parsed": {
+        "production_schema_namespace": "birch.indigo",
+        "prototype_schema_namespace": "birch.prototype"
+      }
+    }
+  },
+  "condition_scores": {
+    "additive": {
+      "condition": "additive",
+      "production_expected": "birch.indigo",
+      "production_observed": "birch.indigo",
+      "production_correct": true,
+      "prototype_expected": "birch.prototype",
+      "prototype_observed": "birch.prototype",
+      "prototype_correct": true,
+      "semantic_merge_signature": false
+    },
+    "rewritten": {
+      "condition": "rewritten",
+      "production_expected": "birch.indigo",
+      "production_observed": "birch.indigo",
+      "production_correct": true,
+      "prototype_expected": "birch.prototype",
+      "prototype_observed": "birch.prototype",
+      "prototype_correct": true,
+      "semantic_merge_signature": false
+    },
+    "rescue": {
+      "condition": "rescue",
+      "production_expected": "birch.indigo",
+      "production_observed": "birch.indigo",
+      "production_correct": true,
+      "prototype_expected": "birch.prototype",
+      "prototype_observed": "birch.prototype",
+      "prototype_correct": true,
+      "semantic_merge_signature": false
+    },
+    "baseline": {
+      "condition": "baseline",
+      "production_expected": "birch.indigo",
+      "production_observed": "birch.indigo",
+      "production_correct": true,
+      "prototype_expected": "birch.prototype",
+      "prototype_observed": "birch.prototype",
+      "prototype_correct": true,
+      "semantic_merge_signature": false
+    }
+  },
+  "paired_score": {
+    "harm": false,
+    "win": false,
+    "rescued_harm": false,
+    "semantic_merge_harm": false
+  },
+  "completed_at": "2026-08-27T04:40:41.395Z"
+}
