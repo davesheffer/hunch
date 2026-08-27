@@ -1,0 +1,74 @@
+{
+  "schema_version": 1,
+  "protocol_version": 5,
+  "experiment": "hunch-schema-collision-targeted-replication",
+  "v5_model_calls_before_freeze": 0,
+  "base_git_head": "2fc3e8b65372c3a64dccdf15a7ad817038f4260c",
+  "model": "claude-sonnet-5",
+  "claude_cli_version": "2.1.186",
+  "projects": 6,
+  "trajectories_per_project": 3,
+  "independent_trajectories": 18,
+  "rewrites_per_trajectory": 5,
+  "calls_per_trajectory": 9,
+  "planned_calls_total": 162,
+  "files": {
+    "runner": {
+      "path": "bench/external/run-schema-collision-replication.ts",
+      "sha256": "f3bd2a02569e0fa886cf4941ac0c5796678bb8fda8b695119a2e1f1d931a2f71"
+    },
+    "unit_tests": {
+      "path": "test/schema-collision-replication.test.ts",
+      "sha256": "02da659e79672c08794ed9ea0efcee90f88b71addce7fa5d28ff7cca3a1f8eb2"
+    },
+    "preregistration": {
+      "path": "bench/external/results/2026-08-27-hunch-schema-collision-replication-v5-preregistration.md",
+      "sha256": "d0294ca22222a168aa1ced0c1d5c95d2267f35b03e4087c32588a9779ddc6112"
+    },
+    "fixture_source": {
+      "path": "bench/external/results/2026-08-27-hunch-direct-memory-capacity-stress-v4-repeat-3.json",
+      "sha256": "7a1c098f913993fba2c3732110c487edfc4a9b0c6b52348b58b69f31750e9244"
+    },
+    "fixture_builder_dependency": {
+      "path": "bench/external/run-consolidation-memory-stress.ts",
+      "sha256": "b62a6dfc36355039e89a6e12ab810890e7da8a19a94f8ff12e0fd917a50737eb"
+    }
+  },
+  "prompt_components": {
+    "system_prompt_sha256": "ced040c0d0e2979fa7f23d256137c9b31ac844b98fafc77291fd1361d3a8e275",
+    "update_schema_sha256": "07d0ea6047a38617d92530067855be241aa64a49a7dc903dd995392e6c1eed61",
+    "qa_schema_sha256": "ed6873b9eb7eb5def93426e02fae8b5021b82311a056d10929a9bf6a7bd251b9"
+  },
+  "fixtures": {
+    "aster-relay": {
+      "sha256": "2041f0ef9498e2151a59accace1b1c74a51db1732cbc3c260cc05ffccdcac694",
+      "first_update_prompt_sha256": "415330510cb51e8eb54bdd7c3eb607f63b2fc99a1ea4248f00ee94d98d683f0d"
+    },
+    "birch-ledger": {
+      "sha256": "6b7db3e8cd2b619a4f2284fac255aa1697a571fbc6d1655d130b4cad864dc3b2",
+      "first_update_prompt_sha256": "860bfc433319ee4a60f38fe63a0decdbf3508941a663e6ab96e88f93030b4705"
+    },
+    "cinder-index": {
+      "sha256": "5f75842ea700daca1d6e542e2d45342b76915afb604220a4659858d30120bd24",
+      "first_update_prompt_sha256": "1ee9b20a53b48e6dd451c04678a6cca802c6adf64fa0ab23606ee671a3198e47"
+    },
+    "delta-beacon": {
+      "sha256": "61dd378f374761a56924481cf1ef28d4e63c55bb1cc3c02e64adf3d21fa1243b",
+      "first_update_prompt_sha256": "30ce0d79840bbc3db95068ecaa35ac19102447dc01006ec6d5894234cbc4570a"
+    },
+    "ember-archive": {
+      "sha256": "8382dc0a314ba1cedc70cd295709117be62faf957cb4c51391a8d3abbd28b558",
+      "first_update_prompt_sha256": "283daa404c539e3912180f7048e2606620d6052e8e5e124726a8e4ac965e0b5a"
+    },
+    "fable-router": {
+      "sha256": "73a0069ada357889be44f3c2a5f2e1c445dc103b1e081fdc1e1fe8f329ee5dbd",
+      "first_update_prompt_sha256": "7db59aaf425b154aab16ec2a711ba7015aa9c19b83b68f3408ec029a67d866c1"
+    }
+  },
+  "dry_run_verification": {
+    "unit_tests_passed": 6,
+    "typecheck_passed": true,
+    "model_calls_made": 0,
+    "condition_order_rotates_every_four_trajectories": true
+  }
+}
