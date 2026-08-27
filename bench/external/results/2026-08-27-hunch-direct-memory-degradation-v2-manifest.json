@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "protocol_version": 2,
+  "experiment": "hunch-direct-memory-degradation",
+  "v2_model_calls_before_freeze": 0,
+  "base_git_head": "adb09d4083989abad50902ffdd0bb42214c53cb1",
+  "model": "claude-sonnet-5",
+  "claude_cli_version": "2.1.186",
+  "max_cli_turns_per_call": 2,
+  "planned_repeats": 3,
+  "planned_calls_per_repeat": 16,
+  "planned_calls_total": 48,
+  "inherits_design_and_decision_rules_from": "bench/external/results/2026-08-27-hunch-direct-memory-degradation-preregistration.md",
+  "files": {
+    "case_bank": {
+      "path": "bench/external/consolidation-memory-cases.json",
+      "sha256": "b328919518e05e7409213dc30567166d986417bd7ece88bce3a587a04f052ccf"
+    },
+    "runner": {
+      "path": "bench/external/run-consolidation-memory.ts",
+      "sha256": "be6b94199399fbd47fc158775711ed602585ff445d9479f2fc538caac1b93583"
+    },
+    "unit_tests": {
+      "path": "test/consolidation-memory-bench.test.ts",
+      "sha256": "177594b3ae74211831327d86c6ae270076113c19c0e5d9400355a8a783d0f9bb"
+    },
+    "v2_preregistration": {
+      "path": "bench/external/results/2026-08-27-hunch-direct-memory-degradation-v2-preregistration.md",
+      "sha256": "26e9b24ec309dad58e6d61b59f32a5279d528f84997b30a545e1b2f901a77ad5"
+    }
+  },
+  "prompt_components": {
+    "system_prompt_sha256": "09795251b3f87c1f23db45bda79ec222568bb6b7007878ef86801456a821996b",
+    "update_schema_sha256": "2042fa02dab0a4f7eb840405527e382e8edcda9b297971e6ac8c363018a3ca8d",
+    "qa_schema_sha256": "a3e493c3921aa5e34c22086c3339ada1cb559aab19c6691b1a3febde042960d0",
+    "first_update_prompt_sha256_by_repeat": {
+      "1": "f677fbeddc95c295d3f04487a652ae8444f8ef0220d9c98b1ad114054158b42e",
+      "2": "b814b172af164e997a6b6fd3711e25aa73b5cb4db14ffe4e403b94f57097757e",
+      "3": "75358fa855a0330192f7f6ac4e1a0e919bb6ec249d4b6303d7f1d6afd6e0e7d8"
+    }
+  },
+  "dry_run_verification": {
+    "unit_tests_passed": 6,
+    "typecheck_passed": true,
+    "model_calls_made": 0,
+    "condition_orders": {
+      "1": ["clean", "additive", "rewritten", "rescue"],
+      "2": ["additive", "rewritten", "rescue", "clean"],
+      "3": ["rewritten", "rescue", "clean", "additive"]
+    }
+  }
+}

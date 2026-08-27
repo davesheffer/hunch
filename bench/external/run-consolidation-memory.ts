@@ -103,6 +103,7 @@ interface UpdateCheckpoint {
 
 interface BenchmarkResult {
   schema_version: 1;
+  protocol_version: 2;
   experiment: "hunch-direct-memory-degradation";
   status: "running" | "complete" | "infrastructure_failure";
   repeat_index: number;
@@ -483,7 +484,10 @@ function runClaude(prompt: string, schema: object, model: string, role: ClaudeCa
     "--model",
     model,
     "--max-turns",
-    "1",
+    // Schema-constrained output is delivered through Claude Code's
+    // StructuredOutput protocol. One generation turn emits the tool call and
+    // the second lets the CLI finalize it into `structured_output`.
+    "2",
   ];
   const run = spawnSync("claude", args, {
     cwd: tmpdir(),
@@ -564,6 +568,7 @@ export function dryRunSummary(bank: CaseBank, repeatIndex: number, model = DEFAU
   return {
     valid: true,
     no_model_calls_made: true,
+    protocol_version: 2,
     repeat_index: repeatIndex,
     model,
     case_count: bank.cases.length,
@@ -571,6 +576,7 @@ export function dryRunSummary(bank: CaseBank, repeatIndex: number, model = DEFAU
     protected_units: bank.cases.length * PROTECTED_KEYS.length,
     new_fact_units: bank.cases.length * NEW_FACT_KEYS.length,
     planned_model_calls: 12 + CONDITIONS.length,
+    max_cli_turns_per_call: 2,
     condition_order: conditionOrder(repeatIndex),
     case_bank_sha256: sha256(readFileSync(DEFAULT_CASE_BANK_PATH)),
     runner_sha256: sha256(readFileSync(THIS_FILE)),
@@ -591,10 +597,11 @@ async function main(): Promise<void> {
   }
 
   mkdirSync(options.resultsDir, { recursive: true });
-  const outputPath = join(options.resultsDir, `2026-08-27-hunch-direct-memory-degradation-repeat-${options.repeatIndex}.json`);
+  const outputPath = join(options.resultsDir, `2026-08-27-hunch-direct-memory-degradation-v2-repeat-${options.repeatIndex}.json`);
   if (existsSync(outputPath)) throw new Error(`refusing to overwrite frozen evidence: ${outputPath}`);
   const result: BenchmarkResult = {
     schema_version: 1,
+    protocol_version: 2,
     experiment: "hunch-direct-memory-degradation",
     status: "running",
     repeat_index: options.repeatIndex,

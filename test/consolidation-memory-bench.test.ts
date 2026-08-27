@@ -106,7 +106,9 @@ test("dry run freezes a three-repeat, sixteen-call-per-repeat design without mod
   const summary = dryRunSummary(bank, 2);
   assert.equal(summary.valid, true);
   assert.equal(summary.no_model_calls_made, true);
+  assert.equal(summary.protocol_version, 2);
   assert.equal(summary.planned_model_calls, 16);
+  assert.equal(summary.max_cli_turns_per_call, 2);
   assert.equal(summary.protected_units, 32);
 });
 
