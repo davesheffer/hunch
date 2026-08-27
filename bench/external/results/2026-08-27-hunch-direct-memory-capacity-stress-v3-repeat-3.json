@@ -1,0 +1,1372 @@
+{
+  "schema_version": 1,
+  "protocol_version": 3,
+  "experiment": "hunch-direct-memory-capacity-stress",
+  "status": "infrastructure_failure",
+  "repeat_index": 3,
+  "started_at": "2026-08-27T04:02:54.393Z",
+  "model": "claude-sonnet-5",
+  "claude_cli_version": "2.1.186 (Claude Code)",
+  "git_head": "688a60c5a1f1aa7e7dde75c245abbacf6b154a4b",
+  "runner_sha256": "e12a0dd22449d477df62b91c231c3756b11f2f1246285f58c9f6cec0ff222c74",
+  "case_bank_sha256": "3805543c8fa5a5373e35ba7efbb429eebc5e58b95463172151d51d64c6f31f2e",
+  "system_prompt_sha256": "fb06f5a610d1b9f7109e838b417e1274aefba5068f09599ce129d21e7294b275",
+  "case_count": 6,
+  "protected_units": 72,
+  "update_rounds": 30,
+  "word_cap": 100,
+  "condition_order": [
+    "rewritten",
+    "rescue",
+    "clean",
+    "additive"
+  ],
+  "checkpoints": [
+    {
+      "round": 1,
+      "observation_by_case": {
+        "aster-relay": "The Aster Relay administration panel accent is aster-saffron.",
+        "birch-ledger": "The Birch Ledger administration panel accent is birch-saffron.",
+        "cinder-index": "The Cinder Index administration panel accent is cinder-saffron.",
+        "delta-beacon": "The Delta Beacon administration panel accent is delta-saffron.",
+        "ember-archive": "The Ember Archive administration panel accent is ember-saffron.",
+        "fable-router": "The Fable Router administration panel accent is fable-saffron."
+      },
+      "memories": [
+        {
+          "case_id": "aster-relay",
+          "memory_text": "Aster Relay uses queue quartz-17. Its retry cap is 4. Its idempotency header is X-Aster-Idem. Its forbidden fallback is local-disk. Its primary region is aurora-north. Its schema namespace is aster.violet. Its encryption profile is cipher-lark. Its audit topic is audit-aster-cedar. Its health path is /health/aster-pulse. Its lease duration in seconds is 47. Its recovery contact is rhea-aster. Its checksum salt is salt-aster-moon. Its administration panel accent is aster-saffron.",
+          "chars": 483,
+          "words": 68,
+          "protected_exact_retention": {
+            "queue": true,
+            "retry_cap": true,
+            "idempotency_header": true,
+            "forbidden_fallback": true,
+            "primary_region": true,
+            "schema_namespace": true,
+            "encryption_profile": true,
+            "audit_topic": true,
+            "health_path": true,
+            "lease_seconds": true,
+            "recovery_contact": true,
+            "checksum_salt": true
+          }
+        },
+        {
+          "case_id": "birch-ledger",
+          "memory_text": "Birch Ledger uses queue cobalt-29. Its retry cap is 7. Its idempotency header is X-Birch-Token. Its forbidden fallback is in-memory-cache. Its primary region is boreal-east. Its schema namespace is birch.indigo. Its encryption profile is cipher-tern. Its audit topic is audit-birch-elm. Its health path is /health/birch-beat. Its lease duration in seconds is 53. Its recovery contact is theo-birch. Its checksum salt is salt-birch-star. Its administration panel accent is birch-saffron.",
+          "chars": 486,
+          "words": 68,
+          "protected_exact_retention": {
+            "queue": true,
+            "retry_cap": true,
+            "idempotency_header": true,
+            "forbidden_fallback": true,
+            "primary_region": true,
+            "schema_namespace": true,
+            "encryption_profile": true,
+            "audit_topic": true,
+            "health_path": true,
+            "lease_seconds": true,
+            "recovery_contact": true,
+            "checksum_salt": true
+          }
+        },
+        {
+          "case_id": "cinder-index",
+          "memory_text": "Cinder Index uses queue amber-43. Its retry cap is 3. Its idempotency header is X-Cinder-Key. Its forbidden fallback is direct-sql. Its primary region is caldera-west. Its schema namespace is cinder.saffron. Its encryption profile is cipher-wren. Its audit topic is audit-cinder-ash. Its health path is /health/cinder-spark. Its lease duration in seconds is 61. Its recovery contact is lena-cinder. Its checksum salt is salt-cinder-sun. Its administration panel accent is cinder-saffron.",
+          "chars": 487,
+          "words": 68,
+          "protected_exact_retention": {
+            "queue": true,
+            "retry_cap": true,
+            "idempotency_header": true,
+            "forbidden_fallback": true,
+            "primary_region": true,
+            "schema_namespace": true,
+            "encryption_profile": true,
+            "audit_topic": true,
+            "health_path": true,
+            "lease_seconds": true,
+            "recovery_contact": true,
+            "checksum_salt": true
+          }
+        },
+        {
+          "case_id": "delta-beacon",
+          "memory_text": "Delta Beacon uses queue violet-61. Its retry cap is 6. Its idempotency header is X-Delta-Nonce. Its forbidden fallback is stdout-buffer. Its primary region is delta-south. Its schema namespace is delta.cobalt. Its encryption profile is cipher-heron. Its audit topic is audit-delta-pine. Its health path is /health/delta-flare. Its lease duration in seconds is 67. Its recovery contact is oren-delta. Its checksum salt is salt-delta-tide. Its administration panel accent is delta-saffron.",
+          "chars": 487,
+          "words": 68,
+          "protected_exact_retention": {
+            "queue": true,
+            "retry_cap": true,
+            "idempotency_header": true,
+            "forbidden_fallback": true,
+            "primary_region": true,
+            "schema_namespace": true,
+            "encryption_profile": true,
+            "audit_topic": true,
+            "health_path": true,
+            "lease_seconds": true,
+            "recovery_contact": true,
+            "checksum_salt": true
+          }
+        },
+        {
+          "case_id": "ember-archive",
+          "memory_text": "Ember Archive uses queue silver-73. Its retry cap is 5. Its idempotency header is X-Ember-Stamp. Its forbidden fallback is temp-file. Its primary region is ember-central. Its schema namespace is ember.coral. Its encryption profile is cipher-kite. Its audit topic is audit-ember-maple. Its health path is /health/ember-glow. Its lease duration in seconds is 71. Its recovery contact is priya-ember. Its checksum salt is salt-ember-dawn. Its administration panel accent is ember-saffron.",
+          "chars": 485,
+          "words": 68,
+          "protected_exact_retention": {
+            "queue": true,
+            "retry_cap": true,
+            "idempotency_header": true,
+            "forbidden_fallback": true,
+            "primary_region": true,
+            "schema_namespace": true,
+            "encryption_profile": true,
+            "audit_topic": true,
+            "health_path": true,
+            "lease_seconds": true,
+            "recovery_contact": true,
+            "checksum_salt": true
+          }
+        },
+        {
+          "case_id": "fable-router",
+          "memory_text": "Fable Router uses queue jade-89. Its retry cap is 8. Its idempotency header is X-Fable-Route. Its forbidden fallback is global-map. Its primary region is fable-coast. Its schema namespace is fable.teal. Its encryption profile is cipher-finch. Its audit topic is audit-fable-oak. Its health path is /health/fable-turn. Its lease duration in seconds is 79. Its recovery contact is sana-fable. Its checksum salt is salt-fable-cloud. Its administration panel accent is fable-saffron.",
+          "chars": 479,
+          "words": 68,
+          "protected_exact_retention": {
+            "queue": true,
+            "retry_cap": true,
+            "idempotency_header": true,
+            "forbidden_fallback": true,
+            "primary_region": true,
+            "schema_namespace": true,
+            "encryption_profile": true,
+            "audit_topic": true,
+            "health_path": true,
+            "lease_seconds": true,
+            "recovery_contact": true,
+            "checksum_salt": true
+          }
+        }
+      ],
+      "call": {
+        "role": "replacement_update",
+        "duration_ms": 12236,
+        "prompt_sha256": "d163b0d28e587b478f3c9604696afe586fbaf212b70cac7bd365e1d16a984fc5",
+        "raw_stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"api_error_status\":null,\"duration_ms\":11051,\"duration_api_ms\":11779,\"ttft_ms\":2127,\"ttft_stream_ms\":2125,\"time_to_request_ms\":704,\"num_turns\":2,\"result\":\"Consolidated memories saved for all six cases.\",\"stop_reason\":\"end_turn\",\"session_id\":\"dd5cdb94-6be8-4b7a-a2f0-73d4278d8b6e\",\"total_cost_usd\":0.0750315,\"usage\":{\"input_tokens\":3,\"cache_creation_input_tokens\":3767,\"cache_read_input_tokens\":2381,\"output_tokens\":1381,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":3767,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"not_available\",\"iterations\":[{\"input_tokens\":2,\"output_tokens\":17,\"cache_read_input_tokens\":2381,\"cache_creation_input_tokens\":1386,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":1386},\"type\":\"message\"}],\"speed\":\"standard\"},\"modelUsage\":{\"claude-haiku-4-5-20251001\":{\"inputTokens\":1561,\"outputTokens\":14,\"cacheReadInputTokens\":0,\"cacheCreationInputTokens\":0,\"webSearchRequests\":0,\"costUSD\":0.001631,\"contextWindow\":200000,\"maxOutputTokens\":32000},\"claude-sonnet-5\":{\"inputTokens\":3,\"outputTokens\":1381,\"cacheReadInputTokens\":2381,\"cacheCreationInputTokens\":3767,\"webSearchRequests\":0,\"costUSD\":0.0734005,\"contextWindow\":200000,\"maxOutputTokens\":32000}},\"permission_denials\":[],\"structured_output\":{\"memories\":[{\"case_id\":\"cinder-index\",\"memory_text\":\"Cinder Index uses queue amber-43. Its retry cap is 3. Its idempotency header is X-Cinder-Key. Its forbidden fallback is direct-sql. Its primary region is caldera-west. Its schema namespace is cinder.saffron. Its encryption profile is cipher-wren. Its audit topic is audit-cinder-ash. Its health path is /health/cinder-spark. Its lease duration in seconds is 61. Its recovery contact is lena-cinder. Its checksum salt is salt-cinder-sun. Its administration panel accent is cinder-saffron.\"},{\"case_id\":\"delta-beacon\",\"memory_text\":\"Delta Beacon uses queue violet-61. Its retry cap is 6. Its idempotency header is X-Delta-Nonce. Its forbidden fallback is stdout-buffer. Its primary region is delta-south. Its schema namespace is delta.cobalt. Its encryption profile is cipher-heron. Its audit topic is audit-delta-pine. Its health path is /health/delta-flare. Its lease duration in seconds is 67. Its recovery contact is oren-delta. Its checksum salt is salt-delta-tide. Its administration panel accent is delta-saffron.\"},{\"case_id\":\"ember-archive\",\"memory_text\":\"Ember Archive uses queue silver-73. Its retry cap is 5. Its idempotency header is X-Ember-Stamp. Its forbidden fallback is temp-file. Its primary region is ember-central. Its schema namespace is ember.coral. Its encryption profile is cipher-kite. Its audit topic is audit-ember-maple. Its health path is /health/ember-glow. Its lease duration in seconds is 71. Its recovery contact is priya-ember. Its checksum salt is salt-ember-dawn. Its administration panel accent is ember-saffron.\"},{\"case_id\":\"fable-router\",\"memory_text\":\"Fable Router uses queue jade-89. Its retry cap is 8. Its idempotency header is X-Fable-Route. Its forbidden fallback is global-map. Its primary region is fable-coast. Its schema namespace is fable.teal. Its encryption profile is cipher-finch. Its audit topic is audit-fable-oak. Its health path is /health/fable-turn. Its lease duration in seconds is 79. Its recovery contact is sana-fable. Its checksum salt is salt-fable-cloud. Its administration panel accent is fable-saffron.\"},{\"case_id\":\"aster-relay\",\"memory_text\":\"Aster Relay uses queue quartz-17. Its retry cap is 4. Its idempotency header is X-Aster-Idem. Its forbidden fallback is local-disk. Its primary region is aurora-north. Its schema namespace is aster.violet. Its encryption profile is cipher-lark. Its audit topic is audit-aster-cedar. Its health path is /health/aster-pulse. Its lease duration in seconds is 47. Its recovery contact is rhea-aster. Its checksum salt is salt-aster-moon. Its administration panel accent is aster-saffron.\"},{\"case_id\":\"birch-ledger\",\"memory_text\":\"Birch Ledger uses queue cobalt-29. Its retry cap is 7. Its idempotency header is X-Birch-Token. Its forbidden fallback is in-memory-cache. Its primary region is boreal-east. Its schema namespace is birch.indigo. Its encryption profile is cipher-tern. Its audit topic is audit-birch-elm. Its health path is /health/birch-beat. Its lease duration in seconds is 53. Its recovery contact is theo-birch. Its checksum salt is salt-birch-star. Its administration panel accent is birch-saffron.\"}]},\"terminal_reason\":\"completed\",\"fast_mode_state\":\"off\",\"uuid\":\"b8b73ab0-e603-4018-8bf3-fd415538b1d8\"}\n",
+        "raw_stderr": "",
+        "envelope": {
+          "type": "result",
+          "subtype": "success",
+          "is_error": false,
+          "api_error_status": null,
+          "duration_ms": 11051,
+          "duration_api_ms": 11779,
+          "ttft_ms": 2127,
+          "ttft_stream_ms": 2125,
+          "time_to_request_ms": 704,
+          "num_turns": 2,
+          "result": "Consolidated memories saved for all six cases.",
+          "stop_reason": "end_turn",
+          "session_id": "dd5cdb94-6be8-4b7a-a2f0-73d4278d8b6e",
+          "total_cost_usd": 0.0750315,
+          "usage": {
+            "input_tokens": 3,
+            "cache_creation_input_tokens": 3767,
+            "cache_read_input_tokens": 2381,
+            "output_tokens": 1381,
+            "server_tool_use": {
+              "web_search_requests": 0,
+              "web_fetch_requests": 0
+            },
+            "service_tier": "standard",
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 3767,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "inference_geo": "not_available",
+            "iterations": [
+              {
+                "input_tokens": 2,
+                "output_tokens": 17,
+                "cache_read_input_tokens": 2381,
+                "cache_creation_input_tokens": 1386,
+                "cache_creation": {
+                  "ephemeral_5m_input_tokens": 0,
+                  "ephemeral_1h_input_tokens": 1386
+                },
+                "type": "message"
+              }
+            ],
+            "speed": "standard"
+          },
+          "modelUsage": {
+            "claude-haiku-4-5-20251001": {
+              "inputTokens": 1561,
+              "outputTokens": 14,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0,
+              "webSearchRequests": 0,
+              "costUSD": 0.001631,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            },
+            "claude-sonnet-5": {
+              "inputTokens": 3,
+              "outputTokens": 1381,
+              "cacheReadInputTokens": 2381,
+              "cacheCreationInputTokens": 3767,
+              "webSearchRequests": 0,
+              "costUSD": 0.0734005,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            }
+          },
+          "permission_denials": [],
+          "structured_output": {
+            "memories": [
+              {
+                "case_id": "cinder-index",
+                "memory_text": "Cinder Index uses queue amber-43. Its retry cap is 3. Its idempotency header is X-Cinder-Key. Its forbidden fallback is direct-sql. Its primary region is caldera-west. Its schema namespace is cinder.saffron. Its encryption profile is cipher-wren. Its audit topic is audit-cinder-ash. Its health path is /health/cinder-spark. Its lease duration in seconds is 61. Its recovery contact is lena-cinder. Its checksum salt is salt-cinder-sun. Its administration panel accent is cinder-saffron."
+              },
+              {
+                "case_id": "delta-beacon",
+                "memory_text": "Delta Beacon uses queue violet-61. Its retry cap is 6. Its idempotency header is X-Delta-Nonce. Its forbidden fallback is stdout-buffer. Its primary region is delta-south. Its schema namespace is delta.cobalt. Its encryption profile is cipher-heron. Its audit topic is audit-delta-pine. Its health path is /health/delta-flare. Its lease duration in seconds is 67. Its recovery contact is oren-delta. Its checksum salt is salt-delta-tide. Its administration panel accent is delta-saffron."
+              },
+              {
+                "case_id": "ember-archive",
+                "memory_text": "Ember Archive uses queue silver-73. Its retry cap is 5. Its idempotency header is X-Ember-Stamp. Its forbidden fallback is temp-file. Its primary region is ember-central. Its schema namespace is ember.coral. Its encryption profile is cipher-kite. Its audit topic is audit-ember-maple. Its health path is /health/ember-glow. Its lease duration in seconds is 71. Its recovery contact is priya-ember. Its checksum salt is salt-ember-dawn. Its administration panel accent is ember-saffron."
+              },
+              {
+                "case_id": "fable-router",
+                "memory_text": "Fable Router uses queue jade-89. Its retry cap is 8. Its idempotency header is X-Fable-Route. Its forbidden fallback is global-map. Its primary region is fable-coast. Its schema namespace is fable.teal. Its encryption profile is cipher-finch. Its audit topic is audit-fable-oak. Its health path is /health/fable-turn. Its lease duration in seconds is 79. Its recovery contact is sana-fable. Its checksum salt is salt-fable-cloud. Its administration panel accent is fable-saffron."
+              },
+              {
+                "case_id": "aster-relay",
+                "memory_text": "Aster Relay uses queue quartz-17. Its retry cap is 4. Its idempotency header is X-Aster-Idem. Its forbidden fallback is local-disk. Its primary region is aurora-north. Its schema namespace is aster.violet. Its encryption profile is cipher-lark. Its audit topic is audit-aster-cedar. Its health path is /health/aster-pulse. Its lease duration in seconds is 47. Its recovery contact is rhea-aster. Its checksum salt is salt-aster-moon. Its administration panel accent is aster-saffron."
+              },
+              {
+                "case_id": "birch-ledger",
+                "memory_text": "Birch Ledger uses queue cobalt-29. Its retry cap is 7. Its idempotency header is X-Birch-Token. Its forbidden fallback is in-memory-cache. Its primary region is boreal-east. Its schema namespace is birch.indigo. Its encryption profile is cipher-tern. Its audit topic is audit-birch-elm. Its health path is /health/birch-beat. Its lease duration in seconds is 53. Its recovery contact is theo-birch. Its checksum salt is salt-birch-star. Its administration panel accent is birch-saffron."
+              }
+            ]
+          },
+          "terminal_reason": "completed",
+          "fast_mode_state": "off",
+          "uuid": "b8b73ab0-e603-4018-8bf3-fd415538b1d8"
+        },
+        "parsed": {
+          "memories": [
+            {
+              "case_id": "cinder-index",
+              "memory_text": "Cinder Index uses queue amber-43. Its retry cap is 3. Its idempotency header is X-Cinder-Key. Its forbidden fallback is direct-sql. Its primary region is caldera-west. Its schema namespace is cinder.saffron. Its encryption profile is cipher-wren. Its audit topic is audit-cinder-ash. Its health path is /health/cinder-spark. Its lease duration in seconds is 61. Its recovery contact is lena-cinder. Its checksum salt is salt-cinder-sun. Its administration panel accent is cinder-saffron."
+            },
+            {
+              "case_id": "delta-beacon",
+              "memory_text": "Delta Beacon uses queue violet-61. Its retry cap is 6. Its idempotency header is X-Delta-Nonce. Its forbidden fallback is stdout-buffer. Its primary region is delta-south. Its schema namespace is delta.cobalt. Its encryption profile is cipher-heron. Its audit topic is audit-delta-pine. Its health path is /health/delta-flare. Its lease duration in seconds is 67. Its recovery contact is oren-delta. Its checksum salt is salt-delta-tide. Its administration panel accent is delta-saffron."
+            },
+            {
+              "case_id": "ember-archive",
+              "memory_text": "Ember Archive uses queue silver-73. Its retry cap is 5. Its idempotency header is X-Ember-Stamp. Its forbidden fallback is temp-file. Its primary region is ember-central. Its schema namespace is ember.coral. Its encryption profile is cipher-kite. Its audit topic is audit-ember-maple. Its health path is /health/ember-glow. Its lease duration in seconds is 71. Its recovery contact is priya-ember. Its checksum salt is salt-ember-dawn. Its administration panel accent is ember-saffron."
+            },
+            {
+              "case_id": "fable-router",
+              "memory_text": "Fable Router uses queue jade-89. Its retry cap is 8. Its idempotency header is X-Fable-Route. Its forbidden fallback is global-map. Its primary region is fable-coast. Its schema namespace is fable.teal. Its encryption profile is cipher-finch. Its audit topic is audit-fable-oak. Its health path is /health/fable-turn. Its lease duration in seconds is 79. Its recovery contact is sana-fable. Its checksum salt is salt-fable-cloud. Its administration panel accent is fable-saffron."
+            },
+            {
+              "case_id": "aster-relay",
+              "memory_text": "Aster Relay uses queue quartz-17. Its retry cap is 4. Its idempotency header is X-Aster-Idem. Its forbidden fallback is local-disk. Its primary region is aurora-north. Its schema namespace is aster.violet. Its encryption profile is cipher-lark. Its audit topic is audit-aster-cedar. Its health path is /health/aster-pulse. Its lease duration in seconds is 47. Its recovery contact is rhea-aster. Its checksum salt is salt-aster-moon. Its administration panel accent is aster-saffron."
+            },
+            {
+              "case_id": "birch-ledger",
+              "memory_text": "Birch Ledger uses queue cobalt-29. Its retry cap is 7. Its idempotency header is X-Birch-Token. Its forbidden fallback is in-memory-cache. Its primary region is boreal-east. Its schema namespace is birch.indigo. Its encryption profile is cipher-tern. Its audit topic is audit-birch-elm. Its health path is /health/birch-beat. Its lease duration in seconds is 53. Its recovery contact is theo-birch. Its checksum salt is salt-birch-star. Its administration panel accent is birch-saffron."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "round": 2,
+      "observation_by_case": {
+        "aster-relay": "Aster Relay telemetry is exported to sink aster-northstar.",
+        "birch-ledger": "Birch Ledger telemetry is exported to sink birch-northstar.",
+        "cinder-index": "Cinder Index telemetry is exported to sink cinder-northstar.",
+        "delta-beacon": "Delta Beacon telemetry is exported to sink delta-northstar.",
+        "ember-archive": "Ember Archive telemetry is exported to sink ember-northstar.",
+        "fable-router": "Fable Router telemetry is exported to sink fable-northstar."
+      },
+      "memories": [
+        {
+          "case_id": "aster-relay",
+          "memory_text": "Aster Relay uses queue quartz-17. Its retry cap is 4. Its idempotency header is X-Aster-Idem. Its forbidden fallback is local-disk. Its primary region is aurora-north. Its schema namespace is aster.violet. Its encryption profile is cipher-lark. Its audit topic is audit-aster-cedar. Its health path is /health/aster-pulse. Its lease duration in seconds is 47. Its recovery contact is rhea-aster. Its checksum salt is salt-aster-moon. Its administration panel accent is aster-saffron. Its telemetry is exported to sink aster-northstar.",
+          "chars": 534,
+          "words": 75,
+          "protected_exact_retention": {
+            "queue": true,
+            "retry_cap": true,
+            "idempotency_header": true,
+            "forbidden_fallback": true,
+            "primary_region": true,
+            "schema_namespace": true,
+            "encryption_profile": true,
+            "audit_topic": true,
+            "health_path": true,
+            "lease_seconds": true,
+            "recovery_contact": true,
+            "checksum_salt": true
+          }
+        },
+        {
+          "case_id": "birch-ledger",
+          "memory_text": "Birch Ledger uses queue cobalt-29. Its retry cap is 7. Its idempotency header is X-Birch-Token. Its forbidden fallback is in-memory-cache. Its primary region is boreal-east. Its schema namespace is birch.indigo. Its encryption profile is cipher-tern. Its audit topic is audit-birch-elm. Its health path is /health/birch-beat. Its lease duration in seconds is 53. Its recovery contact is theo-birch. Its checksum salt is salt-birch-star. Its administration panel accent is birch-saffron. Its telemetry is exported to sink birch-northstar.",
+          "chars": 537,
+          "words": 75,
+          "protected_exact_retention": {
+            "queue": true,
+            "retry_cap": true,
+            "idempotency_header": true,
+            "forbidden_fallback": true,
+            "primary_region": true,
+            "schema_namespace": true,
+            "encryption_profile": true,
+            "audit_topic": true,
+            "health_path": true,
+            "lease_seconds": true,
+            "recovery_contact": true,
+            "checksum_salt": true
+          }
+        },
+        {
+          "case_id": "cinder-index",
+          "memory_text": "Cinder Index uses queue amber-43. Its retry cap is 3. Its idempotency header is X-Cinder-Key. Its forbidden fallback is direct-sql. Its primary region is caldera-west. Its schema namespace is cinder.saffron. Its encryption profile is cipher-wren. Its audit topic is audit-cinder-ash. Its health path is /health/cinder-spark. Its lease duration in seconds is 61. Its recovery contact is lena-cinder. Its checksum salt is salt-cinder-sun. Its administration panel accent is cinder-saffron. Its telemetry is exported to sink cinder-northstar.",
+          "chars": 539,
+          "words": 75,
+          "protected_exact_retention": {
+            "queue": true,
+            "retry_cap": true,
+            "idempotency_header": true,
+            "forbidden_fallback": true,
+            "primary_region": true,
+            "schema_namespace": true,
+            "encryption_profile": true,
+            "audit_topic": true,
+            "health_path": true,
+            "lease_seconds": true,
+            "recovery_contact": true,
+            "checksum_salt": true
+          }
+        },
+        {
+          "case_id": "delta-beacon",
+          "memory_text": "Delta Beacon uses queue violet-61. Its retry cap is 6. Its idempotency header is X-Delta-Nonce. Its forbidden fallback is stdout-buffer. Its primary region is delta-south. Its schema namespace is delta.cobalt. Its encryption profile is cipher-heron. Its audit topic is audit-delta-pine. Its health path is /health/delta-flare. Its lease duration in seconds is 67. Its recovery contact is oren-delta. Its checksum salt is salt-delta-tide. Its administration panel accent is delta-saffron. Its telemetry is exported to sink delta-northstar.",
+          "chars": 538,
+          "words": 75,
+          "protected_exact_retention": {
+            "queue": true,
+            "retry_cap": true,
+            "idempotency_header": true,
+            "forbidden_fallback": true,
+            "primary_region": true,
+            "schema_namespace": true,
+            "encryption_profile": true,
+            "audit_topic": true,
+            "health_path": true,
+            "lease_seconds": true,
+            "recovery_contact": true,
+            "checksum_salt": true
+          }
+        },
+        {
+          "case_id": "ember-archive",
+          "memory_text": "Ember Archive uses queue silver-73. Its retry cap is 5. Its idempotency header is X-Ember-Stamp. Its forbidden fallback is temp-file. Its primary region is ember-central. Its schema namespace is ember.coral. Its encryption profile is cipher-kite. Its audit topic is audit-ember-maple. Its health path is /health/ember-glow. Its lease duration in seconds is 71. Its recovery contact is priya-ember. Its checksum salt is salt-ember-dawn. Its administration panel accent is ember-saffron. Its telemetry is exported to sink ember-northstar.",
+          "chars": 536,
+          "words": 75,
+          "protected_exact_retention": {
+            "queue": true,
+            "retry_cap": true,
+            "idempotency_header": true,
+            "forbidden_fallback": true,
+            "primary_region": true,
+            "schema_namespace": true,
+            "encryption_profile": true,
+            "audit_topic": true,
+            "health_path": true,
+            "lease_seconds": true,
+            "recovery_contact": true,
+            "checksum_salt": true
+          }
+        },
+        {
+          "case_id": "fable-router",
+          "memory_text": "Fable Router uses queue jade-89. Its retry cap is 8. Its idempotency header is X-Fable-Route. Its forbidden fallback is global-map. Its primary region is fable-coast. Its schema namespace is fable.teal. Its encryption profile is cipher-finch. Its audit topic is audit-fable-oak. Its health path is /health/fable-turn. Its lease duration in seconds is 79. Its recovery contact is sana-fable. Its checksum salt is salt-fable-cloud. Its administration panel accent is fable-saffron. Its telemetry is exported to sink fable-northstar.",
+          "chars": 530,
+          "words": 75,
+          "protected_exact_retention": {
+            "queue": true,
+            "retry_cap": true,
+            "idempotency_header": true,
+            "forbidden_fallback": true,
+            "primary_region": true,
+            "schema_namespace": true,
+            "encryption_profile": true,
+            "audit_topic": true,
+            "health_path": true,
+            "lease_seconds": true,
+            "recovery_contact": true,
+            "checksum_salt": true
+          }
+        }
+      ],
+      "call": {
+        "role": "replacement_update",
+        "duration_ms": 12773,
+        "prompt_sha256": "77021e3b91aca321a833dd03432e6c92a170ece077cdc5095f2d5bd408471931",
+        "raw_stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"api_error_status\":null,\"duration_ms\":11843,\"duration_api_ms\":12382,\"ttft_ms\":10310,\"ttft_stream_ms\":2176,\"time_to_request_ms\":616,\"num_turns\":2,\"result\":\"Done — each case now has a single consolidated memory that preserves all original facts and adds the new telemetry sink observation.\",\"stop_reason\":\"end_turn\",\"session_id\":\"d9b839bb-9d7f-40e8-abd4-dad55860b19a\",\"total_cost_usd\":0.08021199999999999,\"usage\":{\"input_tokens\":3,\"cache_creation_input_tokens\":3965,\"cache_read_input_tokens\":2490,\"output_tokens\":1503,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":3965,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"not_available\",\"iterations\":[{\"input_tokens\":2,\"output_tokens\":39,\"cache_read_input_tokens\":2490,\"cache_creation_input_tokens\":1475,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":1475},\"type\":\"message\"}],\"speed\":\"standard\"},\"modelUsage\":{\"claude-haiku-4-5-20251001\":{\"inputTokens\":1637,\"outputTokens\":18,\"cacheReadInputTokens\":0,\"cacheCreationInputTokens\":0,\"webSearchRequests\":0,\"costUSD\":0.001727,\"contextWindow\":200000,\"maxOutputTokens\":32000},\"claude-sonnet-5\":{\"inputTokens\":3,\"outputTokens\":1503,\"cacheReadInputTokens\":2490,\"cacheCreationInputTokens\":3965,\"webSearchRequests\":0,\"costUSD\":0.078485,\"contextWindow\":200000,\"maxOutputTokens\":32000}},\"permission_denials\":[],\"structured_output\":{\"memories\":[{\"case_id\":\"delta-beacon\",\"memory_text\":\"Delta Beacon uses queue violet-61. Its retry cap is 6. Its idempotency header is X-Delta-Nonce. Its forbidden fallback is stdout-buffer. Its primary region is delta-south. Its schema namespace is delta.cobalt. Its encryption profile is cipher-heron. Its audit topic is audit-delta-pine. Its health path is /health/delta-flare. Its lease duration in seconds is 67. Its recovery contact is oren-delta. Its checksum salt is salt-delta-tide. Its administration panel accent is delta-saffron. Its telemetry is exported to sink delta-northstar.\"},{\"case_id\":\"ember-archive\",\"memory_text\":\"Ember Archive uses queue silver-73. Its retry cap is 5. Its idempotency header is X-Ember-Stamp. Its forbidden fallback is temp-file. Its primary region is ember-central. Its schema namespace is ember.coral. Its encryption profile is cipher-kite. Its audit topic is audit-ember-maple. Its health path is /health/ember-glow. Its lease duration in seconds is 71. Its recovery contact is priya-ember. Its checksum salt is salt-ember-dawn. Its administration panel accent is ember-saffron. Its telemetry is exported to sink ember-northstar.\"},{\"case_id\":\"fable-router\",\"memory_text\":\"Fable Router uses queue jade-89. Its retry cap is 8. Its idempotency header is X-Fable-Route. Its forbidden fallback is global-map. Its primary region is fable-coast. Its schema namespace is fable.teal. Its encryption profile is cipher-finch. Its audit topic is audit-fable-oak. Its health path is /health/fable-turn. Its lease duration in seconds is 79. Its recovery contact is sana-fable. Its checksum salt is salt-fable-cloud. Its administration panel accent is fable-saffron. Its telemetry is exported to sink fable-northstar.\"},{\"case_id\":\"aster-relay\",\"memory_text\":\"Aster Relay uses queue quartz-17. Its retry cap is 4. Its idempotency header is X-Aster-Idem. Its forbidden fallback is local-disk. Its primary region is aurora-north. Its schema namespace is aster.violet. Its encryption profile is cipher-lark. Its audit topic is audit-aster-cedar. Its health path is /health/aster-pulse. Its lease duration in seconds is 47. Its recovery contact is rhea-aster. Its checksum salt is salt-aster-moon. Its administration panel accent is aster-saffron. Its telemetry is exported to sink aster-northstar.\"},{\"case_id\":\"birch-ledger\",\"memory_text\":\"Birch Ledger uses queue cobalt-29. Its retry cap is 7. Its idempotency header is X-Birch-Token. Its forbidden fallback is in-memory-cache. Its primary region is boreal-east. Its schema namespace is birch.indigo. Its encryption profile is cipher-tern. Its audit topic is audit-birch-elm. Its health path is /health/birch-beat. Its lease duration in seconds is 53. Its recovery contact is theo-birch. Its checksum salt is salt-birch-star. Its administration panel accent is birch-saffron. Its telemetry is exported to sink birch-northstar.\"},{\"case_id\":\"cinder-index\",\"memory_text\":\"Cinder Index uses queue amber-43. Its retry cap is 3. Its idempotency header is X-Cinder-Key. Its forbidden fallback is direct-sql. Its primary region is caldera-west. Its schema namespace is cinder.saffron. Its encryption profile is cipher-wren. Its audit topic is audit-cinder-ash. Its health path is /health/cinder-spark. Its lease duration in seconds is 61. Its recovery contact is lena-cinder. Its checksum salt is salt-cinder-sun. Its administration panel accent is cinder-saffron. Its telemetry is exported to sink cinder-northstar.\"}]},\"terminal_reason\":\"completed\",\"fast_mode_state\":\"off\",\"uuid\":\"d29fc433-3548-4923-bec0-0d70d6050896\"}\n",
+        "raw_stderr": "",
+        "envelope": {
+          "type": "result",
+          "subtype": "success",
+          "is_error": false,
+          "api_error_status": null,
+          "duration_ms": 11843,
+          "duration_api_ms": 12382,
+          "ttft_ms": 10310,
+          "ttft_stream_ms": 2176,
+          "time_to_request_ms": 616,
+          "num_turns": 2,
+          "result": "Done — each case now has a single consolidated memory that preserves all original facts and adds the new telemetry sink observation.",
+          "stop_reason": "end_turn",
+          "session_id": "d9b839bb-9d7f-40e8-abd4-dad55860b19a",
+          "total_cost_usd": 0.08021199999999999,
+          "usage": {
+            "input_tokens": 3,
+            "cache_creation_input_tokens": 3965,
+            "cache_read_input_tokens": 2490,
+            "output_tokens": 1503,
+            "server_tool_use": {
+              "web_search_requests": 0,
+              "web_fetch_requests": 0
+            },
+            "service_tier": "standard",
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 3965,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "inference_geo": "not_available",
+            "iterations": [
+              {
+                "input_tokens": 2,
+                "output_tokens": 39,
+                "cache_read_input_tokens": 2490,
+                "cache_creation_input_tokens": 1475,
+                "cache_creation": {
+                  "ephemeral_5m_input_tokens": 0,
+                  "ephemeral_1h_input_tokens": 1475
+                },
+                "type": "message"
+              }
+            ],
+            "speed": "standard"
+          },
+          "modelUsage": {
+            "claude-haiku-4-5-20251001": {
+              "inputTokens": 1637,
+              "outputTokens": 18,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0,
+              "webSearchRequests": 0,
+              "costUSD": 0.001727,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            },
+            "claude-sonnet-5": {
+              "inputTokens": 3,
+              "outputTokens": 1503,
+              "cacheReadInputTokens": 2490,
+              "cacheCreationInputTokens": 3965,
+              "webSearchRequests": 0,
+              "costUSD": 0.078485,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            }
+          },
+          "permission_denials": [],
+          "structured_output": {
+            "memories": [
+              {
+                "case_id": "delta-beacon",
+                "memory_text": "Delta Beacon uses queue violet-61. Its retry cap is 6. Its idempotency header is X-Delta-Nonce. Its forbidden fallback is stdout-buffer. Its primary region is delta-south. Its schema namespace is delta.cobalt. Its encryption profile is cipher-heron. Its audit topic is audit-delta-pine. Its health path is /health/delta-flare. Its lease duration in seconds is 67. Its recovery contact is oren-delta. Its checksum salt is salt-delta-tide. Its administration panel accent is delta-saffron. Its telemetry is exported to sink delta-northstar."
+              },
+              {
+                "case_id": "ember-archive",
+                "memory_text": "Ember Archive uses queue silver-73. Its retry cap is 5. Its idempotency header is X-Ember-Stamp. Its forbidden fallback is temp-file. Its primary region is ember-central. Its schema namespace is ember.coral. Its encryption profile is cipher-kite. Its audit topic is audit-ember-maple. Its health path is /health/ember-glow. Its lease duration in seconds is 71. Its recovery contact is priya-ember. Its checksum salt is salt-ember-dawn. Its administration panel accent is ember-saffron. Its telemetry is exported to sink ember-northstar."
+              },
+              {
+                "case_id": "fable-router",
+                "memory_text": "Fable Router uses queue jade-89. Its retry cap is 8. Its idempotency header is X-Fable-Route. Its forbidden fallback is global-map. Its primary region is fable-coast. Its schema namespace is fable.teal. Its encryption profile is cipher-finch. Its audit topic is audit-fable-oak. Its health path is /health/fable-turn. Its lease duration in seconds is 79. Its recovery contact is sana-fable. Its checksum salt is salt-fable-cloud. Its administration panel accent is fable-saffron. Its telemetry is exported to sink fable-northstar."
+              },
+              {
+                "case_id": "aster-relay",
+                "memory_text": "Aster Relay uses queue quartz-17. Its retry cap is 4. Its idempotency header is X-Aster-Idem. Its forbidden fallback is local-disk. Its primary region is aurora-north. Its schema namespace is aster.violet. Its encryption profile is cipher-lark. Its audit topic is audit-aster-cedar. Its health path is /health/aster-pulse. Its lease duration in seconds is 47. Its recovery contact is rhea-aster. Its checksum salt is salt-aster-moon. Its administration panel accent is aster-saffron. Its telemetry is exported to sink aster-northstar."
+              },
+              {
+                "case_id": "birch-ledger",
+                "memory_text": "Birch Ledger uses queue cobalt-29. Its retry cap is 7. Its idempotency header is X-Birch-Token. Its forbidden fallback is in-memory-cache. Its primary region is boreal-east. Its schema namespace is birch.indigo. Its encryption profile is cipher-tern. Its audit topic is audit-birch-elm. Its health path is /health/birch-beat. Its lease duration in seconds is 53. Its recovery contact is theo-birch. Its checksum salt is salt-birch-star. Its administration panel accent is birch-saffron. Its telemetry is exported to sink birch-northstar."
+              },
+              {
+                "case_id": "cinder-index",
+                "memory_text": "Cinder Index uses queue amber-43. Its retry cap is 3. Its idempotency header is X-Cinder-Key. Its forbidden fallback is direct-sql. Its primary region is caldera-west. Its schema namespace is cinder.saffron. Its encryption profile is cipher-wren. Its audit topic is audit-cinder-ash. Its health path is /health/cinder-spark. Its lease duration in seconds is 61. Its recovery contact is lena-cinder. Its checksum salt is salt-cinder-sun. Its administration panel accent is cinder-saffron. Its telemetry is exported to sink cinder-northstar."
+              }
+            ]
+          },
+          "terminal_reason": "completed",
+          "fast_mode_state": "off",
+          "uuid": "d29fc433-3548-4923-bec0-0d70d6050896"
+        },
+        "parsed": {
+          "memories": [
+            {
+              "case_id": "delta-beacon",
+              "memory_text": "Delta Beacon uses queue violet-61. Its retry cap is 6. Its idempotency header is X-Delta-Nonce. Its forbidden fallback is stdout-buffer. Its primary region is delta-south. Its schema namespace is delta.cobalt. Its encryption profile is cipher-heron. Its audit topic is audit-delta-pine. Its health path is /health/delta-flare. Its lease duration in seconds is 67. Its recovery contact is oren-delta. Its checksum salt is salt-delta-tide. Its administration panel accent is delta-saffron. Its telemetry is exported to sink delta-northstar."
+            },
+            {
+              "case_id": "ember-archive",
+              "memory_text": "Ember Archive uses queue silver-73. Its retry cap is 5. Its idempotency header is X-Ember-Stamp. Its forbidden fallback is temp-file. Its primary region is ember-central. Its schema namespace is ember.coral. Its encryption profile is cipher-kite. Its audit topic is audit-ember-maple. Its health path is /health/ember-glow. Its lease duration in seconds is 71. Its recovery contact is priya-ember. Its checksum salt is salt-ember-dawn. Its administration panel accent is ember-saffron. Its telemetry is exported to sink ember-northstar."
+            },
+            {
+              "case_id": "fable-router",
+              "memory_text": "Fable Router uses queue jade-89. Its retry cap is 8. Its idempotency header is X-Fable-Route. Its forbidden fallback is global-map. Its primary region is fable-coast. Its schema namespace is fable.teal. Its encryption profile is cipher-finch. Its audit topic is audit-fable-oak. Its health path is /health/fable-turn. Its lease duration in seconds is 79. Its recovery contact is sana-fable. Its checksum salt is salt-fable-cloud. Its administration panel accent is fable-saffron. Its telemetry is exported to sink fable-northstar."
+            },
+            {
+              "case_id": "aster-relay",
+              "memory_text": "Aster Relay uses queue quartz-17. Its retry cap is 4. Its idempotency header is X-Aster-Idem. Its forbidden fallback is local-disk. Its primary region is aurora-north. Its schema namespace is aster.violet. Its encryption profile is cipher-lark. Its audit topic is audit-aster-cedar. Its health path is /health/aster-pulse. Its lease duration in seconds is 47. Its recovery contact is rhea-aster. Its checksum salt is salt-aster-moon. Its administration panel accent is aster-saffron. Its telemetry is exported to sink aster-northstar."
+            },
+            {
+              "case_id": "birch-ledger",
+              "memory_text": "Birch Ledger uses queue cobalt-29. Its retry cap is 7. Its idempotency header is X-Birch-Token. Its forbidden fallback is in-memory-cache. Its primary region is boreal-east. Its schema namespace is birch.indigo. Its encryption profile is cipher-tern. Its audit topic is audit-birch-elm. Its health path is /health/birch-beat. Its lease duration in seconds is 53. Its recovery contact is theo-birch. Its checksum salt is salt-birch-star. Its administration panel accent is birch-saffron. Its telemetry is exported to sink birch-northstar."
+            },
+            {
+              "case_id": "cinder-index",
+              "memory_text": "Cinder Index uses queue amber-43. Its retry cap is 3. Its idempotency header is X-Cinder-Key. Its forbidden fallback is direct-sql. Its primary region is caldera-west. Its schema namespace is cinder.saffron. Its encryption profile is cipher-wren. Its audit topic is audit-cinder-ash. Its health path is /health/cinder-spark. Its lease duration in seconds is 61. Its recovery contact is lena-cinder. Its checksum salt is salt-cinder-sun. Its administration panel accent is cinder-saffron. Its telemetry is exported to sink cinder-northstar."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "round": 3,
+      "observation_by_case": {
+        "aster-relay": "The current owner of Aster Relay is Mira Sol.",
+        "birch-ledger": "The current owner of Birch Ledger is Tomas Venn.",
+        "cinder-index": "The current owner of Cinder Index is Leena Quill.",
+        "delta-beacon": "The current owner of Delta Beacon is Oren Vale.",
+        "ember-archive": "The current owner of Ember Archive is Priya Noll.",
+        "fable-router": "The current owner of Fable Router is Sana Pike."
+      },
+      "memories": [
+        {
+          "case_id": "aster-relay",
+          "memory_text": "Aster Relay uses queue quartz-17. Its retry cap is 4. Its idempotency header is X-Aster-Idem. Its forbidden fallback is local-disk. Its primary region is aurora-north. Its schema namespace is aster.violet. Its encryption profile is cipher-lark. Its audit topic is audit-aster-cedar. Its health path is /health/aster-pulse. Its lease duration in seconds is 47. Its recovery contact is rhea-aster. Its checksum salt is salt-aster-moon. Its administration panel accent is aster-saffron. Its telemetry is exported to sink aster-northstar. Its current owner is Mira Sol.",
+          "chars": 565,
+          "words": 81,
+          "protected_exact_retention": {
+            "queue": true,
+            "retry_cap": true,
+            "idempotency_header": true,
+            "forbidden_fallback": true,
+            "primary_region": true,
+            "schema_namespace": true,
+            "encryption_profile": true,
+            "audit_topic": true,
+            "health_path": true,
+            "lease_seconds": true,
+            "recovery_contact": true,
+            "checksum_salt": true
+          }
+        },
+        {
+          "case_id": "birch-ledger",
+          "memory_text": "Birch Ledger uses queue cobalt-29. Its retry cap is 7. Its idempotency header is X-Birch-Token. Its forbidden fallback is in-memory-cache. Its primary region is boreal-east. Its schema namespace is birch.indigo. Its encryption profile is cipher-tern. Its audit topic is audit-birch-elm. Its health path is /health/birch-beat. Its lease duration in seconds is 53. Its recovery contact is theo-birch. Its checksum salt is salt-birch-star. Its administration panel accent is birch-saffron. Its telemetry is exported to sink birch-northstar. Its current owner is Tomas Venn.",
+          "chars": 570,
+          "words": 81,
+          "protected_exact_retention": {
+            "queue": true,
+            "retry_cap": true,
+            "idempotency_header": true,
+            "forbidden_fallback": true,
+            "primary_region": true,
+            "schema_namespace": true,
+            "encryption_profile": true,
+            "audit_topic": true,
+            "health_path": true,
+            "lease_seconds": true,
+            "recovery_contact": true,
+            "checksum_salt": true
+          }
+        },
+        {
+          "case_id": "cinder-index",
+          "memory_text": "Cinder Index uses queue amber-43. Its retry cap is 3. Its idempotency header is X-Cinder-Key. Its forbidden fallback is direct-sql. Its primary region is caldera-west. Its schema namespace is cinder.saffron. Its encryption profile is cipher-wren. Its audit topic is audit-cinder-ash. Its health path is /health/cinder-spark. Its lease duration in seconds is 61. Its recovery contact is lena-cinder. Its checksum salt is salt-cinder-sun. Its administration panel accent is cinder-saffron. Its telemetry is exported to sink cinder-northstar. Its current owner is Leena Quill.",
+          "chars": 573,
+          "words": 81,
+          "protected_exact_retention": {
+            "queue": true,
+            "retry_cap": true,
+            "idempotency_header": true,
+            "forbidden_fallback": true,
+            "primary_region": true,
+            "schema_namespace": true,
+            "encryption_profile": true,
+            "audit_topic": true,
+            "health_path": true,
+            "lease_seconds": true,
+            "recovery_contact": true,
+            "checksum_salt": true
+          }
+        },
+        {
+          "case_id": "delta-beacon",
+          "memory_text": "Delta Beacon uses queue violet-61. Its retry cap is 6. Its idempotency header is X-Delta-Nonce. Its forbidden fallback is stdout-buffer. Its primary region is delta-south. Its schema namespace is delta.cobalt. Its encryption profile is cipher-heron. Its audit topic is audit-delta-pine. Its health path is /health/delta-flare. Its lease duration in seconds is 67. Its recovery contact is oren-delta. Its checksum salt is salt-delta-tide. Its administration panel accent is delta-saffron. Its telemetry is exported to sink delta-northstar. Its current owner is Oren Vale.",
+          "chars": 570,
+          "words": 81,
+          "protected_exact_retention": {
+            "queue": true,
+            "retry_cap": true,
+            "idempotency_header": true,
+            "forbidden_fallback": true,
+            "primary_region": true,
+            "schema_namespace": true,
+            "encryption_profile": true,
+            "audit_topic": true,
+            "health_path": true,
+            "lease_seconds": true,
+            "recovery_contact": true,
+            "checksum_salt": true
+          }
+        },
+        {
+          "case_id": "ember-archive",
+          "memory_text": "Ember Archive uses queue silver-73. Its retry cap is 5. Its idempotency header is X-Ember-Stamp. Its forbidden fallback is temp-file. Its primary region is ember-central. Its schema namespace is ember.coral. Its encryption profile is cipher-kite. Its audit topic is audit-ember-maple. Its health path is /health/ember-glow. Its lease duration in seconds is 71. Its recovery contact is priya-ember. Its checksum salt is salt-ember-dawn. Its administration panel accent is ember-saffron. Its telemetry is exported to sink ember-northstar. Its current owner is Priya Noll.",
+          "chars": 569,
+          "words": 81,
+          "protected_exact_retention": {
+            "queue": true,
+            "retry_cap": true,
+            "idempotency_header": true,
+            "forbidden_fallback": true,
+            "primary_region": true,
+            "schema_namespace": true,
+            "encryption_profile": true,
+            "audit_topic": true,
+            "health_path": true,
+            "lease_seconds": true,
+            "recovery_contact": true,
+            "checksum_salt": true
+          }
+        },
+        {
+          "case_id": "fable-router",
+          "memory_text": "Fable Router uses queue jade-89. Its retry cap is 8. Its idempotency header is X-Fable-Route. Its forbidden fallback is global-map. Its primary region is fable-coast. Its schema namespace is fable.teal. Its encryption profile is cipher-finch. Its audit topic is audit-fable-oak. Its health path is /health/fable-turn. Its lease duration in seconds is 79. Its recovery contact is sana-fable. Its checksum salt is salt-fable-cloud. Its administration panel accent is fable-saffron. Its telemetry is exported to sink fable-northstar. Its current owner is Sana Pike.",
+          "chars": 562,
+          "words": 81,
+          "protected_exact_retention": {
+            "queue": true,
+            "retry_cap": true,
+            "idempotency_header": true,
+            "forbidden_fallback": true,
+            "primary_region": true,
+            "schema_namespace": true,
+            "encryption_profile": true,
+            "audit_topic": true,
+            "health_path": true,
+            "lease_seconds": true,
+            "recovery_contact": true,
+            "checksum_salt": true
+          }
+        }
+      ],
+      "call": {
+        "role": "replacement_update",
+        "duration_ms": 13306,
+        "prompt_sha256": "9ef7999a0a49cb4393a67195fda4df7feb03d9192f74d0e1806eba50421fbdf4",
+        "raw_stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"api_error_status\":null,\"duration_ms\":12408,\"duration_api_ms\":12919,\"ttft_ms\":1974,\"ttft_stream_ms\":1972,\"time_to_request_ms\":529,\"num_turns\":2,\"result\":\"All six memories have been consolidated with the ownership information added while preserving all existing facts.\",\"stop_reason\":\"end_turn\",\"session_id\":\"bdc70bb6-d2ec-4978-8cbf-d6ed9fbb8787\",\"total_cost_usd\":0.0841795,\"usage\":{\"input_tokens\":3,\"cache_creation_input_tokens\":4156,\"cache_read_input_tokens\":2581,\"output_tokens\":1581,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":4156,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"not_available\",\"iterations\":[{\"input_tokens\":2,\"output_tokens\":29,\"cache_read_input_tokens\":2581,\"cache_creation_input_tokens\":1575,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":1575},\"type\":\"message\"}],\"speed\":\"standard\"},\"modelUsage\":{\"claude-haiku-4-5-20251001\":{\"inputTokens\":1709,\"outputTokens\":16,\"cacheReadInputTokens\":0,\"cacheCreationInputTokens\":0,\"webSearchRequests\":0,\"costUSD\":0.001789,\"contextWindow\":200000,\"maxOutputTokens\":32000},\"claude-sonnet-5\":{\"inputTokens\":3,\"outputTokens\":1581,\"cacheReadInputTokens\":2581,\"cacheCreationInputTokens\":4156,\"webSearchRequests\":0,\"costUSD\":0.0823905,\"contextWindow\":200000,\"maxOutputTokens\":32000}},\"permission_denials\":[],\"structured_output\":{\"memories\":[{\"case_id\":\"ember-archive\",\"memory_text\":\"Ember Archive uses queue silver-73. Its retry cap is 5. Its idempotency header is X-Ember-Stamp. Its forbidden fallback is temp-file. Its primary region is ember-central. Its schema namespace is ember.coral. Its encryption profile is cipher-kite. Its audit topic is audit-ember-maple. Its health path is /health/ember-glow. Its lease duration in seconds is 71. Its recovery contact is priya-ember. Its checksum salt is salt-ember-dawn. Its administration panel accent is ember-saffron. Its telemetry is exported to sink ember-northstar. Its current owner is Priya Noll.\"},{\"case_id\":\"fable-router\",\"memory_text\":\"Fable Router uses queue jade-89. Its retry cap is 8. Its idempotency header is X-Fable-Route. Its forbidden fallback is global-map. Its primary region is fable-coast. Its schema namespace is fable.teal. Its encryption profile is cipher-finch. Its audit topic is audit-fable-oak. Its health path is /health/fable-turn. Its lease duration in seconds is 79. Its recovery contact is sana-fable. Its checksum salt is salt-fable-cloud. Its administration panel accent is fable-saffron. Its telemetry is exported to sink fable-northstar. Its current owner is Sana Pike.\"},{\"case_id\":\"aster-relay\",\"memory_text\":\"Aster Relay uses queue quartz-17. Its retry cap is 4. Its idempotency header is X-Aster-Idem. Its forbidden fallback is local-disk. Its primary region is aurora-north. Its schema namespace is aster.violet. Its encryption profile is cipher-lark. Its audit topic is audit-aster-cedar. Its health path is /health/aster-pulse. Its lease duration in seconds is 47. Its recovery contact is rhea-aster. Its checksum salt is salt-aster-moon. Its administration panel accent is aster-saffron. Its telemetry is exported to sink aster-northstar. Its current owner is Mira Sol.\"},{\"case_id\":\"birch-ledger\",\"memory_text\":\"Birch Ledger uses queue cobalt-29. Its retry cap is 7. Its idempotency header is X-Birch-Token. Its forbidden fallback is in-memory-cache. Its primary region is boreal-east. Its schema namespace is birch.indigo. Its encryption profile is cipher-tern. Its audit topic is audit-birch-elm. Its health path is /health/birch-beat. Its lease duration in seconds is 53. Its recovery contact is theo-birch. Its checksum salt is salt-birch-star. Its administration panel accent is birch-saffron. Its telemetry is exported to sink birch-northstar. Its current owner is Tomas Venn.\"},{\"case_id\":\"cinder-index\",\"memory_text\":\"Cinder Index uses queue amber-43. Its retry cap is 3. Its idempotency header is X-Cinder-Key. Its forbidden fallback is direct-sql. Its primary region is caldera-west. Its schema namespace is cinder.saffron. Its encryption profile is cipher-wren. Its audit topic is audit-cinder-ash. Its health path is /health/cinder-spark. Its lease duration in seconds is 61. Its recovery contact is lena-cinder. Its checksum salt is salt-cinder-sun. Its administration panel accent is cinder-saffron. Its telemetry is exported to sink cinder-northstar. Its current owner is Leena Quill.\"},{\"case_id\":\"delta-beacon\",\"memory_text\":\"Delta Beacon uses queue violet-61. Its retry cap is 6. Its idempotency header is X-Delta-Nonce. Its forbidden fallback is stdout-buffer. Its primary region is delta-south. Its schema namespace is delta.cobalt. Its encryption profile is cipher-heron. Its audit topic is audit-delta-pine. Its health path is /health/delta-flare. Its lease duration in seconds is 67. Its recovery contact is oren-delta. Its checksum salt is salt-delta-tide. Its administration panel accent is delta-saffron. Its telemetry is exported to sink delta-northstar. Its current owner is Oren Vale.\"}]},\"terminal_reason\":\"completed\",\"fast_mode_state\":\"off\",\"uuid\":\"a2b9deea-9f55-4fde-b55d-69db1c51cdec\"}\n",
+        "raw_stderr": "",
+        "envelope": {
+          "type": "result",
+          "subtype": "success",
+          "is_error": false,
+          "api_error_status": null,
+          "duration_ms": 12408,
+          "duration_api_ms": 12919,
+          "ttft_ms": 1974,
+          "ttft_stream_ms": 1972,
+          "time_to_request_ms": 529,
+          "num_turns": 2,
+          "result": "All six memories have been consolidated with the ownership information added while preserving all existing facts.",
+          "stop_reason": "end_turn",
+          "session_id": "bdc70bb6-d2ec-4978-8cbf-d6ed9fbb8787",
+          "total_cost_usd": 0.0841795,
+          "usage": {
+            "input_tokens": 3,
+            "cache_creation_input_tokens": 4156,
+            "cache_read_input_tokens": 2581,
+            "output_tokens": 1581,
+            "server_tool_use": {
+              "web_search_requests": 0,
+              "web_fetch_requests": 0
+            },
+            "service_tier": "standard",
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 4156,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "inference_geo": "not_available",
+            "iterations": [
+              {
+                "input_tokens": 2,
+                "output_tokens": 29,
+                "cache_read_input_tokens": 2581,
+                "cache_creation_input_tokens": 1575,
+                "cache_creation": {
+                  "ephemeral_5m_input_tokens": 0,
+                  "ephemeral_1h_input_tokens": 1575
+                },
+                "type": "message"
+              }
+            ],
+            "speed": "standard"
+          },
+          "modelUsage": {
+            "claude-haiku-4-5-20251001": {
+              "inputTokens": 1709,
+              "outputTokens": 16,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0,
+              "webSearchRequests": 0,
+              "costUSD": 0.001789,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            },
+            "claude-sonnet-5": {
+              "inputTokens": 3,
+              "outputTokens": 1581,
+              "cacheReadInputTokens": 2581,
+              "cacheCreationInputTokens": 4156,
+              "webSearchRequests": 0,
+              "costUSD": 0.0823905,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            }
+          },
+          "permission_denials": [],
+          "structured_output": {
+            "memories": [
+              {
+                "case_id": "ember-archive",
+                "memory_text": "Ember Archive uses queue silver-73. Its retry cap is 5. Its idempotency header is X-Ember-Stamp. Its forbidden fallback is temp-file. Its primary region is ember-central. Its schema namespace is ember.coral. Its encryption profile is cipher-kite. Its audit topic is audit-ember-maple. Its health path is /health/ember-glow. Its lease duration in seconds is 71. Its recovery contact is priya-ember. Its checksum salt is salt-ember-dawn. Its administration panel accent is ember-saffron. Its telemetry is exported to sink ember-northstar. Its current owner is Priya Noll."
+              },
+              {
+                "case_id": "fable-router",
+                "memory_text": "Fable Router uses queue jade-89. Its retry cap is 8. Its idempotency header is X-Fable-Route. Its forbidden fallback is global-map. Its primary region is fable-coast. Its schema namespace is fable.teal. Its encryption profile is cipher-finch. Its audit topic is audit-fable-oak. Its health path is /health/fable-turn. Its lease duration in seconds is 79. Its recovery contact is sana-fable. Its checksum salt is salt-fable-cloud. Its administration panel accent is fable-saffron. Its telemetry is exported to sink fable-northstar. Its current owner is Sana Pike."
+              },
+              {
+                "case_id": "aster-relay",
+                "memory_text": "Aster Relay uses queue quartz-17. Its retry cap is 4. Its idempotency header is X-Aster-Idem. Its forbidden fallback is local-disk. Its primary region is aurora-north. Its schema namespace is aster.violet. Its encryption profile is cipher-lark. Its audit topic is audit-aster-cedar. Its health path is /health/aster-pulse. Its lease duration in seconds is 47. Its recovery contact is rhea-aster. Its checksum salt is salt-aster-moon. Its administration panel accent is aster-saffron. Its telemetry is exported to sink aster-northstar. Its current owner is Mira Sol."
+              },
+              {
+                "case_id": "birch-ledger",
+                "memory_text": "Birch Ledger uses queue cobalt-29. Its retry cap is 7. Its idempotency header is X-Birch-Token. Its forbidden fallback is in-memory-cache. Its primary region is boreal-east. Its schema namespace is birch.indigo. Its encryption profile is cipher-tern. Its audit topic is audit-birch-elm. Its health path is /health/birch-beat. Its lease duration in seconds is 53. Its recovery contact is theo-birch. Its checksum salt is salt-birch-star. Its administration panel accent is birch-saffron. Its telemetry is exported to sink birch-northstar. Its current owner is Tomas Venn."
+              },
+              {
+                "case_id": "cinder-index",
+                "memory_text": "Cinder Index uses queue amber-43. Its retry cap is 3. Its idempotency header is X-Cinder-Key. Its forbidden fallback is direct-sql. Its primary region is caldera-west. Its schema namespace is cinder.saffron. Its encryption profile is cipher-wren. Its audit topic is audit-cinder-ash. Its health path is /health/cinder-spark. Its lease duration in seconds is 61. Its recovery contact is lena-cinder. Its checksum salt is salt-cinder-sun. Its administration panel accent is cinder-saffron. Its telemetry is exported to sink cinder-northstar. Its current owner is Leena Quill."
+              },
+              {
+                "case_id": "delta-beacon",
+                "memory_text": "Delta Beacon uses queue violet-61. Its retry cap is 6. Its idempotency header is X-Delta-Nonce. Its forbidden fallback is stdout-buffer. Its primary region is delta-south. Its schema namespace is delta.cobalt. Its encryption profile is cipher-heron. Its audit topic is audit-delta-pine. Its health path is /health/delta-flare. Its lease duration in seconds is 67. Its recovery contact is oren-delta. Its checksum salt is salt-delta-tide. Its administration panel accent is delta-saffron. Its telemetry is exported to sink delta-northstar. Its current owner is Oren Vale."
+              }
+            ]
+          },
+          "terminal_reason": "completed",
+          "fast_mode_state": "off",
+          "uuid": "a2b9deea-9f55-4fde-b55d-69db1c51cdec"
+        },
+        "parsed": {
+          "memories": [
+            {
+              "case_id": "ember-archive",
+              "memory_text": "Ember Archive uses queue silver-73. Its retry cap is 5. Its idempotency header is X-Ember-Stamp. Its forbidden fallback is temp-file. Its primary region is ember-central. Its schema namespace is ember.coral. Its encryption profile is cipher-kite. Its audit topic is audit-ember-maple. Its health path is /health/ember-glow. Its lease duration in seconds is 71. Its recovery contact is priya-ember. Its checksum salt is salt-ember-dawn. Its administration panel accent is ember-saffron. Its telemetry is exported to sink ember-northstar. Its current owner is Priya Noll."
+            },
+            {
+              "case_id": "fable-router",
+              "memory_text": "Fable Router uses queue jade-89. Its retry cap is 8. Its idempotency header is X-Fable-Route. Its forbidden fallback is global-map. Its primary region is fable-coast. Its schema namespace is fable.teal. Its encryption profile is cipher-finch. Its audit topic is audit-fable-oak. Its health path is /health/fable-turn. Its lease duration in seconds is 79. Its recovery contact is sana-fable. Its checksum salt is salt-fable-cloud. Its administration panel accent is fable-saffron. Its telemetry is exported to sink fable-northstar. Its current owner is Sana Pike."
+            },
+            {
+              "case_id": "aster-relay",
+              "memory_text": "Aster Relay uses queue quartz-17. Its retry cap is 4. Its idempotency header is X-Aster-Idem. Its forbidden fallback is local-disk. Its primary region is aurora-north. Its schema namespace is aster.violet. Its encryption profile is cipher-lark. Its audit topic is audit-aster-cedar. Its health path is /health/aster-pulse. Its lease duration in seconds is 47. Its recovery contact is rhea-aster. Its checksum salt is salt-aster-moon. Its administration panel accent is aster-saffron. Its telemetry is exported to sink aster-northstar. Its current owner is Mira Sol."
+            },
+            {
+              "case_id": "birch-ledger",
+              "memory_text": "Birch Ledger uses queue cobalt-29. Its retry cap is 7. Its idempotency header is X-Birch-Token. Its forbidden fallback is in-memory-cache. Its primary region is boreal-east. Its schema namespace is birch.indigo. Its encryption profile is cipher-tern. Its audit topic is audit-birch-elm. Its health path is /health/birch-beat. Its lease duration in seconds is 53. Its recovery contact is theo-birch. Its checksum salt is salt-birch-star. Its administration panel accent is birch-saffron. Its telemetry is exported to sink birch-northstar. Its current owner is Tomas Venn."
+            },
+            {
+              "case_id": "cinder-index",
+              "memory_text": "Cinder Index uses queue amber-43. Its retry cap is 3. Its idempotency header is X-Cinder-Key. Its forbidden fallback is direct-sql. Its primary region is caldera-west. Its schema namespace is cinder.saffron. Its encryption profile is cipher-wren. Its audit topic is audit-cinder-ash. Its health path is /health/cinder-spark. Its lease duration in seconds is 61. Its recovery contact is lena-cinder. Its checksum salt is salt-cinder-sun. Its administration panel accent is cinder-saffron. Its telemetry is exported to sink cinder-northstar. Its current owner is Leena Quill."
+            },
+            {
+              "case_id": "delta-beacon",
+              "memory_text": "Delta Beacon uses queue violet-61. Its retry cap is 6. Its idempotency header is X-Delta-Nonce. Its forbidden fallback is stdout-buffer. Its primary region is delta-south. Its schema namespace is delta.cobalt. Its encryption profile is cipher-heron. Its audit topic is audit-delta-pine. Its health path is /health/delta-flare. Its lease duration in seconds is 67. Its recovery contact is oren-delta. Its checksum salt is salt-delta-tide. Its administration panel accent is delta-saffron. Its telemetry is exported to sink delta-northstar. Its current owner is Oren Vale."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "round": 4,
+      "observation_by_case": {
+        "aster-relay": "The separate aster preview renderer uses retry policy aster-eleven.",
+        "birch-ledger": "The separate birch preview renderer uses retry policy birch-eleven.",
+        "cinder-index": "The separate cinder preview renderer uses retry policy cinder-eleven.",
+        "delta-beacon": "The separate delta preview renderer uses retry policy delta-eleven.",
+        "ember-archive": "The separate ember preview renderer uses retry policy ember-eleven.",
+        "fable-router": "The separate fable preview renderer uses retry policy fable-eleven."
+      },
+      "memories": [
+        {
+          "case_id": "aster-relay",
+          "memory_text": "Aster Relay uses queue quartz-17. Its retry cap is 4. Its idempotency header is X-Aster-Idem. Its forbidden fallback is local-disk. Its primary region is aurora-north. Its schema namespace is aster.violet. Its encryption profile is cipher-lark. Its audit topic is audit-aster-cedar. Its health path is /health/aster-pulse. Its lease duration in seconds is 47. Its recovery contact is rhea-aster. Its checksum salt is salt-aster-moon. Its administration panel accent is aster-saffron. Its telemetry is exported to sink aster-northstar. Its current owner is Mira Sol. The separate aster preview renderer uses retry policy aster-eleven.",
+          "chars": 633,
+          "words": 90,
+          "protected_exact_retention": {
+            "queue": true,
+            "retry_cap": true,
+            "idempotency_header": true,
+            "forbidden_fallback": true,
+            "primary_region": true,
+            "schema_namespace": true,
+            "encryption_profile": true,
+            "audit_topic": true,
+            "health_path": true,
+            "lease_seconds": true,
+            "recovery_contact": true,
+            "checksum_salt": true
+          }
+        },
+        {
+          "case_id": "birch-ledger",
+          "memory_text": "Birch Ledger uses queue cobalt-29. Its retry cap is 7. Its idempotency header is X-Birch-Token. Its forbidden fallback is in-memory-cache. Its primary region is boreal-east. Its schema namespace is birch.indigo. Its encryption profile is cipher-tern. Its audit topic is audit-birch-elm. Its health path is /health/birch-beat. Its lease duration in seconds is 53. Its recovery contact is theo-birch. Its checksum salt is salt-birch-star. Its administration panel accent is birch-saffron. Its telemetry is exported to sink birch-northstar. Its current owner is Tomas Venn. The separate birch preview renderer uses retry policy birch-eleven.",
+          "chars": 638,
+          "words": 90,
+          "protected_exact_retention": {
+            "queue": true,
+            "retry_cap": true,
+            "idempotency_header": true,
+            "forbidden_fallback": true,
+            "primary_region": true,
+            "schema_namespace": true,
+            "encryption_profile": true,
+            "audit_topic": true,
+            "health_path": true,
+            "lease_seconds": true,
+            "recovery_contact": true,
+            "checksum_salt": true
+          }
+        },
+        {
+          "case_id": "cinder-index",
+          "memory_text": "Cinder Index uses queue amber-43. Its retry cap is 3. Its idempotency header is X-Cinder-Key. Its forbidden fallback is direct-sql. Its primary region is caldera-west. Its schema namespace is cinder.saffron. Its encryption profile is cipher-wren. Its audit topic is audit-cinder-ash. Its health path is /health/cinder-spark. Its lease duration in seconds is 61. Its recovery contact is lena-cinder. Its checksum salt is salt-cinder-sun. Its administration panel accent is cinder-saffron. Its telemetry is exported to sink cinder-northstar. Its current owner is Leena Quill. The separate cinder preview renderer uses retry policy cinder-eleven.",
+          "chars": 643,
+          "words": 90,
+          "protected_exact_retention": {
+            "queue": true,
+            "retry_cap": true,
+            "idempotency_header": true,
+            "forbidden_fallback": true,
+            "primary_region": true,
+            "schema_namespace": true,
+            "encryption_profile": true,
+            "audit_topic": true,
+            "health_path": true,
+            "lease_seconds": true,
+            "recovery_contact": true,
+            "checksum_salt": true
+          }
+        },
+        {
+          "case_id": "delta-beacon",
+          "memory_text": "Delta Beacon uses queue violet-61. Its retry cap is 6. Its idempotency header is X-Delta-Nonce. Its forbidden fallback is stdout-buffer. Its primary region is delta-south. Its schema namespace is delta.cobalt. Its encryption profile is cipher-heron. Its audit topic is audit-delta-pine. Its health path is /health/delta-flare. Its lease duration in seconds is 67. Its recovery contact is oren-delta. Its checksum salt is salt-delta-tide. Its administration panel accent is delta-saffron. Its telemetry is exported to sink delta-northstar. Its current owner is Oren Vale. The separate delta preview renderer uses retry policy delta-eleven.",
+          "chars": 638,
+          "words": 90,
+          "protected_exact_retention": {
+            "queue": true,
+            "retry_cap": true,
+            "idempotency_header": true,
+            "forbidden_fallback": true,
+            "primary_region": true,
+            "schema_namespace": true,
+            "encryption_profile": true,
+            "audit_topic": true,
+            "health_path": true,
+            "lease_seconds": true,
+            "recovery_contact": true,
+            "checksum_salt": true
+          }
+        },
+        {
+          "case_id": "ember-archive",
+          "memory_text": "Ember Archive uses queue silver-73. Its retry cap is 5. Its idempotency header is X-Ember-Stamp. Its forbidden fallback is temp-file. Its primary region is ember-central. Its schema namespace is ember.coral. Its encryption profile is cipher-kite. Its audit topic is audit-ember-maple. Its health path is /health/ember-glow. Its lease duration in seconds is 71. Its recovery contact is priya-ember. Its checksum salt is salt-ember-dawn. Its administration panel accent is ember-saffron. Its telemetry is exported to sink ember-northstar. Its current owner is Priya Noll. The separate ember preview renderer uses retry policy ember-eleven.",
+          "chars": 637,
+          "words": 90,
+          "protected_exact_retention": {
+            "queue": true,
+            "retry_cap": true,
+            "idempotency_header": true,
+            "forbidden_fallback": true,
+            "primary_region": true,
+            "schema_namespace": true,
+            "encryption_profile": true,
+            "audit_topic": true,
+            "health_path": true,
+            "lease_seconds": true,
+            "recovery_contact": true,
+            "checksum_salt": true
+          }
+        },
+        {
+          "case_id": "fable-router",
+          "memory_text": "Fable Router uses queue jade-89. Its retry cap is 8. Its idempotency header is X-Fable-Route. Its forbidden fallback is global-map. Its primary region is fable-coast. Its schema namespace is fable.teal. Its encryption profile is cipher-finch. Its audit topic is audit-fable-oak. Its health path is /health/fable-turn. Its lease duration in seconds is 79. Its recovery contact is sana-fable. Its checksum salt is salt-fable-cloud. Its administration panel accent is fable-saffron. Its telemetry is exported to sink fable-northstar. Its current owner is Sana Pike. The separate fable preview renderer uses retry policy fable-eleven.",
+          "chars": 630,
+          "words": 90,
+          "protected_exact_retention": {
+            "queue": true,
+            "retry_cap": true,
+            "idempotency_header": true,
+            "forbidden_fallback": true,
+            "primary_region": true,
+            "schema_namespace": true,
+            "encryption_profile": true,
+            "audit_topic": true,
+            "health_path": true,
+            "lease_seconds": true,
+            "recovery_contact": true,
+            "checksum_salt": true
+          }
+        }
+      ],
+      "call": {
+        "role": "replacement_update",
+        "duration_ms": 15164,
+        "prompt_sha256": "d7e28d254c6190db5b79da805690075e1bfc3f27f5c2b3eac22d9698feff8444",
+        "raw_stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"api_error_status\":null,\"duration_ms\":14258,\"duration_api_ms\":14816,\"ttft_ms\":2244,\"ttft_stream_ms\":2091,\"time_to_request_ms\":509,\"num_turns\":2,\"result\":\"All six memories have been consolidated successfully, preserving all prior facts for each system while incorporating the new preview renderer retry policy observations without cross-mixing data between cases.\",\"stop_reason\":\"end_turn\",\"session_id\":\"758ea507-9704-40ff-9741-4709c3386004\",\"total_cost_usd\":0.09104999999999999,\"usage\":{\"input_tokens\":3,\"cache_creation_input_tokens\":4404,\"cache_read_input_tokens\":2684,\"output_tokens\":1753,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":4404,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"not_available\",\"iterations\":[{\"input_tokens\":2,\"output_tokens\":57,\"cache_read_input_tokens\":2684,\"cache_creation_input_tokens\":1720,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":1720},\"type\":\"message\"}],\"speed\":\"standard\"},\"modelUsage\":{\"claude-haiku-4-5-20251001\":{\"inputTokens\":1758,\"outputTokens\":14,\"cacheReadInputTokens\":0,\"cacheCreationInputTokens\":0,\"webSearchRequests\":0,\"costUSD\":0.001828,\"contextWindow\":200000,\"maxOutputTokens\":32000},\"claude-sonnet-5\":{\"inputTokens\":3,\"outputTokens\":1753,\"cacheReadInputTokens\":2684,\"cacheCreationInputTokens\":4404,\"webSearchRequests\":0,\"costUSD\":0.089222,\"contextWindow\":200000,\"maxOutputTokens\":32000}},\"permission_denials\":[],\"structured_output\":{\"memories\":[{\"case_id\":\"fable-router\",\"memory_text\":\"Fable Router uses queue jade-89. Its retry cap is 8. Its idempotency header is X-Fable-Route. Its forbidden fallback is global-map. Its primary region is fable-coast. Its schema namespace is fable.teal. Its encryption profile is cipher-finch. Its audit topic is audit-fable-oak. Its health path is /health/fable-turn. Its lease duration in seconds is 79. Its recovery contact is sana-fable. Its checksum salt is salt-fable-cloud. Its administration panel accent is fable-saffron. Its telemetry is exported to sink fable-northstar. Its current owner is Sana Pike. The separate fable preview renderer uses retry policy fable-eleven.\"},{\"case_id\":\"aster-relay\",\"memory_text\":\"Aster Relay uses queue quartz-17. Its retry cap is 4. Its idempotency header is X-Aster-Idem. Its forbidden fallback is local-disk. Its primary region is aurora-north. Its schema namespace is aster.violet. Its encryption profile is cipher-lark. Its audit topic is audit-aster-cedar. Its health path is /health/aster-pulse. Its lease duration in seconds is 47. Its recovery contact is rhea-aster. Its checksum salt is salt-aster-moon. Its administration panel accent is aster-saffron. Its telemetry is exported to sink aster-northstar. Its current owner is Mira Sol. The separate aster preview renderer uses retry policy aster-eleven.\"},{\"case_id\":\"birch-ledger\",\"memory_text\":\"Birch Ledger uses queue cobalt-29. Its retry cap is 7. Its idempotency header is X-Birch-Token. Its forbidden fallback is in-memory-cache. Its primary region is boreal-east. Its schema namespace is birch.indigo. Its encryption profile is cipher-tern. Its audit topic is audit-birch-elm. Its health path is /health/birch-beat. Its lease duration in seconds is 53. Its recovery contact is theo-birch. Its checksum salt is salt-birch-star. Its administration panel accent is birch-saffron. Its telemetry is exported to sink birch-northstar. Its current owner is Tomas Venn. The separate birch preview renderer uses retry policy birch-eleven.\"},{\"case_id\":\"cinder-index\",\"memory_text\":\"Cinder Index uses queue amber-43. Its retry cap is 3. Its idempotency header is X-Cinder-Key. Its forbidden fallback is direct-sql. Its primary region is caldera-west. Its schema namespace is cinder.saffron. Its encryption profile is cipher-wren. Its audit topic is audit-cinder-ash. Its health path is /health/cinder-spark. Its lease duration in seconds is 61. Its recovery contact is lena-cinder. Its checksum salt is salt-cinder-sun. Its administration panel accent is cinder-saffron. Its telemetry is exported to sink cinder-northstar. Its current owner is Leena Quill. The separate cinder preview renderer uses retry policy cinder-eleven.\"},{\"case_id\":\"delta-beacon\",\"memory_text\":\"Delta Beacon uses queue violet-61. Its retry cap is 6. Its idempotency header is X-Delta-Nonce. Its forbidden fallback is stdout-buffer. Its primary region is delta-south. Its schema namespace is delta.cobalt. Its encryption profile is cipher-heron. Its audit topic is audit-delta-pine. Its health path is /health/delta-flare. Its lease duration in seconds is 67. Its recovery contact is oren-delta. Its checksum salt is salt-delta-tide. Its administration panel accent is delta-saffron. Its telemetry is exported to sink delta-northstar. Its current owner is Oren Vale. The separate delta preview renderer uses retry policy delta-eleven.\"},{\"case_id\":\"ember-archive\",\"memory_text\":\"Ember Archive uses queue silver-73. Its retry cap is 5. Its idempotency header is X-Ember-Stamp. Its forbidden fallback is temp-file. Its primary region is ember-central. Its schema namespace is ember.coral. Its encryption profile is cipher-kite. Its audit topic is audit-ember-maple. Its health path is /health/ember-glow. Its lease duration in seconds is 71. Its recovery contact is priya-ember. Its checksum salt is salt-ember-dawn. Its administration panel accent is ember-saffron. Its telemetry is exported to sink ember-northstar. Its current owner is Priya Noll. The separate ember preview renderer uses retry policy ember-eleven.\"}]},\"terminal_reason\":\"completed\",\"fast_mode_state\":\"off\",\"uuid\":\"56f7ac62-e96f-44a9-bec8-81c46d74dcd2\"}\n",
+        "raw_stderr": "",
+        "envelope": {
+          "type": "result",
+          "subtype": "success",
+          "is_error": false,
+          "api_error_status": null,
+          "duration_ms": 14258,
+          "duration_api_ms": 14816,
+          "ttft_ms": 2244,
+          "ttft_stream_ms": 2091,
+          "time_to_request_ms": 509,
+          "num_turns": 2,
+          "result": "All six memories have been consolidated successfully, preserving all prior facts for each system while incorporating the new preview renderer retry policy observations without cross-mixing data between cases.",
+          "stop_reason": "end_turn",
+          "session_id": "758ea507-9704-40ff-9741-4709c3386004",
+          "total_cost_usd": 0.09104999999999999,
+          "usage": {
+            "input_tokens": 3,
+            "cache_creation_input_tokens": 4404,
+            "cache_read_input_tokens": 2684,
+            "output_tokens": 1753,
+            "server_tool_use": {
+              "web_search_requests": 0,
+              "web_fetch_requests": 0
+            },
+            "service_tier": "standard",
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 4404,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "inference_geo": "not_available",
+            "iterations": [
+              {
+                "input_tokens": 2,
+                "output_tokens": 57,
+                "cache_read_input_tokens": 2684,
+                "cache_creation_input_tokens": 1720,
+                "cache_creation": {
+                  "ephemeral_5m_input_tokens": 0,
+                  "ephemeral_1h_input_tokens": 1720
+                },
+                "type": "message"
+              }
+            ],
+            "speed": "standard"
+          },
+          "modelUsage": {
+            "claude-haiku-4-5-20251001": {
+              "inputTokens": 1758,
+              "outputTokens": 14,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0,
+              "webSearchRequests": 0,
+              "costUSD": 0.001828,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            },
+            "claude-sonnet-5": {
+              "inputTokens": 3,
+              "outputTokens": 1753,
+              "cacheReadInputTokens": 2684,
+              "cacheCreationInputTokens": 4404,
+              "webSearchRequests": 0,
+              "costUSD": 0.089222,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            }
+          },
+          "permission_denials": [],
+          "structured_output": {
+            "memories": [
+              {
+                "case_id": "fable-router",
+                "memory_text": "Fable Router uses queue jade-89. Its retry cap is 8. Its idempotency header is X-Fable-Route. Its forbidden fallback is global-map. Its primary region is fable-coast. Its schema namespace is fable.teal. Its encryption profile is cipher-finch. Its audit topic is audit-fable-oak. Its health path is /health/fable-turn. Its lease duration in seconds is 79. Its recovery contact is sana-fable. Its checksum salt is salt-fable-cloud. Its administration panel accent is fable-saffron. Its telemetry is exported to sink fable-northstar. Its current owner is Sana Pike. The separate fable preview renderer uses retry policy fable-eleven."
+              },
+              {
+                "case_id": "aster-relay",
+                "memory_text": "Aster Relay uses queue quartz-17. Its retry cap is 4. Its idempotency header is X-Aster-Idem. Its forbidden fallback is local-disk. Its primary region is aurora-north. Its schema namespace is aster.violet. Its encryption profile is cipher-lark. Its audit topic is audit-aster-cedar. Its health path is /health/aster-pulse. Its lease duration in seconds is 47. Its recovery contact is rhea-aster. Its checksum salt is salt-aster-moon. Its administration panel accent is aster-saffron. Its telemetry is exported to sink aster-northstar. Its current owner is Mira Sol. The separate aster preview renderer uses retry policy aster-eleven."
+              },
+              {
+                "case_id": "birch-ledger",
+                "memory_text": "Birch Ledger uses queue cobalt-29. Its retry cap is 7. Its idempotency header is X-Birch-Token. Its forbidden fallback is in-memory-cache. Its primary region is boreal-east. Its schema namespace is birch.indigo. Its encryption profile is cipher-tern. Its audit topic is audit-birch-elm. Its health path is /health/birch-beat. Its lease duration in seconds is 53. Its recovery contact is theo-birch. Its checksum salt is salt-birch-star. Its administration panel accent is birch-saffron. Its telemetry is exported to sink birch-northstar. Its current owner is Tomas Venn. The separate birch preview renderer uses retry policy birch-eleven."
+              },
+              {
+                "case_id": "cinder-index",
+                "memory_text": "Cinder Index uses queue amber-43. Its retry cap is 3. Its idempotency header is X-Cinder-Key. Its forbidden fallback is direct-sql. Its primary region is caldera-west. Its schema namespace is cinder.saffron. Its encryption profile is cipher-wren. Its audit topic is audit-cinder-ash. Its health path is /health/cinder-spark. Its lease duration in seconds is 61. Its recovery contact is lena-cinder. Its checksum salt is salt-cinder-sun. Its administration panel accent is cinder-saffron. Its telemetry is exported to sink cinder-northstar. Its current owner is Leena Quill. The separate cinder preview renderer uses retry policy cinder-eleven."
+              },
+              {
+                "case_id": "delta-beacon",
+                "memory_text": "Delta Beacon uses queue violet-61. Its retry cap is 6. Its idempotency header is X-Delta-Nonce. Its forbidden fallback is stdout-buffer. Its primary region is delta-south. Its schema namespace is delta.cobalt. Its encryption profile is cipher-heron. Its audit topic is audit-delta-pine. Its health path is /health/delta-flare. Its lease duration in seconds is 67. Its recovery contact is oren-delta. Its checksum salt is salt-delta-tide. Its administration panel accent is delta-saffron. Its telemetry is exported to sink delta-northstar. Its current owner is Oren Vale. The separate delta preview renderer uses retry policy delta-eleven."
+              },
+              {
+                "case_id": "ember-archive",
+                "memory_text": "Ember Archive uses queue silver-73. Its retry cap is 5. Its idempotency header is X-Ember-Stamp. Its forbidden fallback is temp-file. Its primary region is ember-central. Its schema namespace is ember.coral. Its encryption profile is cipher-kite. Its audit topic is audit-ember-maple. Its health path is /health/ember-glow. Its lease duration in seconds is 71. Its recovery contact is priya-ember. Its checksum salt is salt-ember-dawn. Its administration panel accent is ember-saffron. Its telemetry is exported to sink ember-northstar. Its current owner is Priya Noll. The separate ember preview renderer uses retry policy ember-eleven."
+              }
+            ]
+          },
+          "terminal_reason": "completed",
+          "fast_mode_state": "off",
+          "uuid": "56f7ac62-e96f-44a9-bec8-81c46d74dcd2"
+        },
+        "parsed": {
+          "memories": [
+            {
+              "case_id": "fable-router",
+              "memory_text": "Fable Router uses queue jade-89. Its retry cap is 8. Its idempotency header is X-Fable-Route. Its forbidden fallback is global-map. Its primary region is fable-coast. Its schema namespace is fable.teal. Its encryption profile is cipher-finch. Its audit topic is audit-fable-oak. Its health path is /health/fable-turn. Its lease duration in seconds is 79. Its recovery contact is sana-fable. Its checksum salt is salt-fable-cloud. Its administration panel accent is fable-saffron. Its telemetry is exported to sink fable-northstar. Its current owner is Sana Pike. The separate fable preview renderer uses retry policy fable-eleven."
+            },
+            {
+              "case_id": "aster-relay",
+              "memory_text": "Aster Relay uses queue quartz-17. Its retry cap is 4. Its idempotency header is X-Aster-Idem. Its forbidden fallback is local-disk. Its primary region is aurora-north. Its schema namespace is aster.violet. Its encryption profile is cipher-lark. Its audit topic is audit-aster-cedar. Its health path is /health/aster-pulse. Its lease duration in seconds is 47. Its recovery contact is rhea-aster. Its checksum salt is salt-aster-moon. Its administration panel accent is aster-saffron. Its telemetry is exported to sink aster-northstar. Its current owner is Mira Sol. The separate aster preview renderer uses retry policy aster-eleven."
+            },
+            {
+              "case_id": "birch-ledger",
+              "memory_text": "Birch Ledger uses queue cobalt-29. Its retry cap is 7. Its idempotency header is X-Birch-Token. Its forbidden fallback is in-memory-cache. Its primary region is boreal-east. Its schema namespace is birch.indigo. Its encryption profile is cipher-tern. Its audit topic is audit-birch-elm. Its health path is /health/birch-beat. Its lease duration in seconds is 53. Its recovery contact is theo-birch. Its checksum salt is salt-birch-star. Its administration panel accent is birch-saffron. Its telemetry is exported to sink birch-northstar. Its current owner is Tomas Venn. The separate birch preview renderer uses retry policy birch-eleven."
+            },
+            {
+              "case_id": "cinder-index",
+              "memory_text": "Cinder Index uses queue amber-43. Its retry cap is 3. Its idempotency header is X-Cinder-Key. Its forbidden fallback is direct-sql. Its primary region is caldera-west. Its schema namespace is cinder.saffron. Its encryption profile is cipher-wren. Its audit topic is audit-cinder-ash. Its health path is /health/cinder-spark. Its lease duration in seconds is 61. Its recovery contact is lena-cinder. Its checksum salt is salt-cinder-sun. Its administration panel accent is cinder-saffron. Its telemetry is exported to sink cinder-northstar. Its current owner is Leena Quill. The separate cinder preview renderer uses retry policy cinder-eleven."
+            },
+            {
+              "case_id": "delta-beacon",
+              "memory_text": "Delta Beacon uses queue violet-61. Its retry cap is 6. Its idempotency header is X-Delta-Nonce. Its forbidden fallback is stdout-buffer. Its primary region is delta-south. Its schema namespace is delta.cobalt. Its encryption profile is cipher-heron. Its audit topic is audit-delta-pine. Its health path is /health/delta-flare. Its lease duration in seconds is 67. Its recovery contact is oren-delta. Its checksum salt is salt-delta-tide. Its administration panel accent is delta-saffron. Its telemetry is exported to sink delta-northstar. Its current owner is Oren Vale. The separate delta preview renderer uses retry policy delta-eleven."
+            },
+            {
+              "case_id": "ember-archive",
+              "memory_text": "Ember Archive uses queue silver-73. Its retry cap is 5. Its idempotency header is X-Ember-Stamp. Its forbidden fallback is temp-file. Its primary region is ember-central. Its schema namespace is ember.coral. Its encryption profile is cipher-kite. Its audit topic is audit-ember-maple. Its health path is /health/ember-glow. Its lease duration in seconds is 71. Its recovery contact is priya-ember. Its checksum salt is salt-ember-dawn. Its administration panel accent is ember-saffron. Its telemetry is exported to sink ember-northstar. Its current owner is Priya Noll. The separate ember preview renderer uses retry policy ember-eleven."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "round": 5,
+      "observation_by_case": {
+        "aster-relay": "Aster Relay audit events are retained through aster-equinox.",
+        "birch-ledger": "Birch Ledger audit events are retained through birch-equinox.",
+        "cinder-index": "Cinder Index audit events are retained through cinder-equinox.",
+        "delta-beacon": "Delta Beacon audit events are retained through delta-equinox.",
+        "ember-archive": "Ember Archive audit events are retained through ember-equinox.",
+        "fable-router": "Fable Router audit events are retained through fable-equinox."
+      },
+      "memories": [
+        {
+          "case_id": "aster-relay",
+          "memory_text": "Aster Relay uses queue quartz-17. Its retry cap is 4. Its idempotency header is X-Aster-Idem. Its forbidden fallback is local-disk. Its primary region is aurora-north. Its schema namespace is aster.violet. Its encryption profile is cipher-lark. Its audit topic is audit-aster-cedar, retained through aster-equinox. Its health path is /health/aster-pulse. Its lease duration in seconds is 47. Its recovery contact is rhea-aster. Its checksum salt is salt-aster-moon. Its administration panel accent is aster-saffron. Its telemetry is exported to sink aster-northstar. Its current owner is Mira Sol. The separate aster preview renderer uses retry policy aster-eleven.",
+          "chars": 665,
+          "words": 93,
+          "protected_exact_retention": {
+            "queue": true,
+            "retry_cap": true,
+            "idempotency_header": true,
+            "forbidden_fallback": true,
+            "primary_region": true,
+            "schema_namespace": true,
+            "encryption_profile": true,
+            "audit_topic": true,
+            "health_path": true,
+            "lease_seconds": true,
+            "recovery_contact": true,
+            "checksum_salt": true
+          }
+        },
+        {
+          "case_id": "birch-ledger",
+          "memory_text": "Birch Ledger uses queue cobalt-29. Its retry cap is 7. Its idempotency header is X-Birch-Token. Its forbidden fallback is in-memory-cache. Its primary region is boreal-east. Its schema namespace is birch.indigo. Its encryption profile is cipher-tern. Its audit topic is audit-birch-elm, retained through birch-equinox. Its health path is /health/birch-beat. Its lease duration in seconds is 53. Its recovery contact is theo-birch. Its checksum salt is salt-birch-star. Its administration panel accent is birch-saffron. Its telemetry is exported to sink birch-northstar. Its current owner is Tomas Venn. The separate birch preview renderer uses retry policy birch-eleven.",
+          "chars": 670,
+          "words": 93,
+          "protected_exact_retention": {
+            "queue": true,
+            "retry_cap": true,
+            "idempotency_header": true,
+            "forbidden_fallback": true,
+            "primary_region": true,
+            "schema_namespace": true,
+            "encryption_profile": true,
+            "audit_topic": true,
+            "health_path": true,
+            "lease_seconds": true,
+            "recovery_contact": true,
+            "checksum_salt": true
+          }
+        },
+        {
+          "case_id": "cinder-index",
+          "memory_text": "Cinder Index uses queue amber-43. Its retry cap is 3. Its idempotency header is X-Cinder-Key. Its forbidden fallback is direct-sql. Its primary region is caldera-west. Its schema namespace is cinder.saffron. Its encryption profile is cipher-wren. Its audit topic is audit-cinder-ash, retained through cinder-equinox. Its health path is /health/cinder-spark. Its lease duration in seconds is 61. Its recovery contact is lena-cinder. Its checksum salt is salt-cinder-sun. Its administration panel accent is cinder-saffron. Its telemetry is exported to sink cinder-northstar. Its current owner is Leena Quill. The separate cinder preview renderer uses retry policy cinder-eleven.",
+          "chars": 676,
+          "words": 93,
+          "protected_exact_retention": {
+            "queue": true,
+            "retry_cap": true,
+            "idempotency_header": true,
+            "forbidden_fallback": true,
+            "primary_region": true,
+            "schema_namespace": true,
+            "encryption_profile": true,
+            "audit_topic": true,
+            "health_path": true,
+            "lease_seconds": true,
+            "recovery_contact": true,
+            "checksum_salt": true
+          }
+        },
+        {
+          "case_id": "delta-beacon",
+          "memory_text": "Delta Beacon uses queue violet-61. Its retry cap is 6. Its idempotency header is X-Delta-Nonce. Its forbidden fallback is stdout-buffer. Its primary region is delta-south. Its schema namespace is delta.cobalt. Its encryption profile is cipher-heron. Its audit topic is audit-delta-pine, retained through delta-equinox. Its health path is /health/delta-flare. Its lease duration in seconds is 67. Its recovery contact is oren-delta. Its checksum salt is salt-delta-tide. Its administration panel accent is delta-saffron. Its telemetry is exported to sink delta-northstar. Its current owner is Oren Vale. The separate delta preview renderer uses retry policy delta-eleven.",
+          "chars": 670,
+          "words": 93,
+          "protected_exact_retention": {
+            "queue": true,
+            "retry_cap": true,
+            "idempotency_header": true,
+            "forbidden_fallback": true,
+            "primary_region": true,
+            "schema_namespace": true,
+            "encryption_profile": true,
+            "audit_topic": true,
+            "health_path": true,
+            "lease_seconds": true,
+            "recovery_contact": true,
+            "checksum_salt": true
+          }
+        },
+        {
+          "case_id": "ember-archive",
+          "memory_text": "Ember Archive uses queue silver-73. Its retry cap is 5. Its idempotency header is X-Ember-Stamp. Its forbidden fallback is temp-file. Its primary region is ember-central. Its schema namespace is ember.coral. Its encryption profile is cipher-kite. Its audit topic is audit-ember-maple, retained through ember-equinox. Its health path is /health/ember-glow. Its lease duration in seconds is 71. Its recovery contact is priya-ember. Its checksum salt is salt-ember-dawn. Its administration panel accent is ember-saffron. Its telemetry is exported to sink ember-northstar. Its current owner is Priya Noll. The separate ember preview renderer uses retry policy ember-eleven.",
+          "chars": 669,
+          "words": 93,
+          "protected_exact_retention": {
+            "queue": true,
+            "retry_cap": true,
+            "idempotency_header": true,
+            "forbidden_fallback": true,
+            "primary_region": true,
+            "schema_namespace": true,
+            "encryption_profile": true,
+            "audit_topic": true,
+            "health_path": true,
+            "lease_seconds": true,
+            "recovery_contact": true,
+            "checksum_salt": true
+          }
+        },
+        {
+          "case_id": "fable-router",
+          "memory_text": "Fable Router uses queue jade-89. Its retry cap is 8. Its idempotency header is X-Fable-Route. Its forbidden fallback is global-map. Its primary region is fable-coast. Its schema namespace is fable.teal. Its encryption profile is cipher-finch. Its audit topic is audit-fable-oak, retained through fable-equinox. Its health path is /health/fable-turn. Its lease duration in seconds is 79. Its recovery contact is sana-fable. Its checksum salt is salt-fable-cloud. Its administration panel accent is fable-saffron. Its telemetry is exported to sink fable-northstar. Its current owner is Sana Pike. The separate fable preview renderer uses retry policy fable-eleven.",
+          "chars": 662,
+          "words": 93,
+          "protected_exact_retention": {
+            "queue": true,
+            "retry_cap": true,
+            "idempotency_header": true,
+            "forbidden_fallback": true,
+            "primary_region": true,
+            "schema_namespace": true,
+            "encryption_profile": true,
+            "audit_topic": true,
+            "health_path": true,
+            "lease_seconds": true,
+            "recovery_contact": true,
+            "checksum_salt": true
+          }
+        }
+      ],
+      "call": {
+        "role": "replacement_update",
+        "duration_ms": 15189,
+        "prompt_sha256": "dc9a4be4cffe3bf43b4329f5df6b93585829a24be3a7b751c0d509620595011a",
+        "raw_stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"api_error_status\":null,\"duration_ms\":14263,\"duration_api_ms\":14819,\"ttft_ms\":2133,\"ttft_stream_ms\":2023,\"time_to_request_ms\":505,\"num_turns\":2,\"result\":\"Done — all six memories have been consolidated with the new audit retention facts incorporated, preserving all prior details per case.\",\"stop_reason\":\"end_turn\",\"session_id\":\"e8d0818f-67ed-4f96-995d-2d1555dfb48b\",\"total_cost_usd\":0.093776,\"usage\":{\"input_tokens\":3,\"cache_creation_input_tokens\":4577,\"cache_read_input_tokens\":2806,\"output_tokens\":1786,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":4577,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"not_available\",\"iterations\":[{\"input_tokens\":2,\"output_tokens\":39,\"cache_read_input_tokens\":2806,\"cache_creation_input_tokens\":1771,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":1771},\"type\":\"message\"}],\"speed\":\"standard\"},\"modelUsage\":{\"claude-haiku-4-5-20251001\":{\"inputTokens\":1853,\"outputTokens\":17,\"cacheReadInputTokens\":0,\"cacheCreationInputTokens\":0,\"webSearchRequests\":0,\"costUSD\":0.001938,\"contextWindow\":200000,\"maxOutputTokens\":32000},\"claude-sonnet-5\":{\"inputTokens\":3,\"outputTokens\":1786,\"cacheReadInputTokens\":2806,\"cacheCreationInputTokens\":4577,\"webSearchRequests\":0,\"costUSD\":0.091838,\"contextWindow\":200000,\"maxOutputTokens\":32000}},\"permission_denials\":[],\"structured_output\":{\"memories\":[{\"case_id\":\"aster-relay\",\"memory_text\":\"Aster Relay uses queue quartz-17. Its retry cap is 4. Its idempotency header is X-Aster-Idem. Its forbidden fallback is local-disk. Its primary region is aurora-north. Its schema namespace is aster.violet. Its encryption profile is cipher-lark. Its audit topic is audit-aster-cedar, retained through aster-equinox. Its health path is /health/aster-pulse. Its lease duration in seconds is 47. Its recovery contact is rhea-aster. Its checksum salt is salt-aster-moon. Its administration panel accent is aster-saffron. Its telemetry is exported to sink aster-northstar. Its current owner is Mira Sol. The separate aster preview renderer uses retry policy aster-eleven.\"},{\"case_id\":\"birch-ledger\",\"memory_text\":\"Birch Ledger uses queue cobalt-29. Its retry cap is 7. Its idempotency header is X-Birch-Token. Its forbidden fallback is in-memory-cache. Its primary region is boreal-east. Its schema namespace is birch.indigo. Its encryption profile is cipher-tern. Its audit topic is audit-birch-elm, retained through birch-equinox. Its health path is /health/birch-beat. Its lease duration in seconds is 53. Its recovery contact is theo-birch. Its checksum salt is salt-birch-star. Its administration panel accent is birch-saffron. Its telemetry is exported to sink birch-northstar. Its current owner is Tomas Venn. The separate birch preview renderer uses retry policy birch-eleven.\"},{\"case_id\":\"cinder-index\",\"memory_text\":\"Cinder Index uses queue amber-43. Its retry cap is 3. Its idempotency header is X-Cinder-Key. Its forbidden fallback is direct-sql. Its primary region is caldera-west. Its schema namespace is cinder.saffron. Its encryption profile is cipher-wren. Its audit topic is audit-cinder-ash, retained through cinder-equinox. Its health path is /health/cinder-spark. Its lease duration in seconds is 61. Its recovery contact is lena-cinder. Its checksum salt is salt-cinder-sun. Its administration panel accent is cinder-saffron. Its telemetry is exported to sink cinder-northstar. Its current owner is Leena Quill. The separate cinder preview renderer uses retry policy cinder-eleven.\"},{\"case_id\":\"delta-beacon\",\"memory_text\":\"Delta Beacon uses queue violet-61. Its retry cap is 6. Its idempotency header is X-Delta-Nonce. Its forbidden fallback is stdout-buffer. Its primary region is delta-south. Its schema namespace is delta.cobalt. Its encryption profile is cipher-heron. Its audit topic is audit-delta-pine, retained through delta-equinox. Its health path is /health/delta-flare. Its lease duration in seconds is 67. Its recovery contact is oren-delta. Its checksum salt is salt-delta-tide. Its administration panel accent is delta-saffron. Its telemetry is exported to sink delta-northstar. Its current owner is Oren Vale. The separate delta preview renderer uses retry policy delta-eleven.\"},{\"case_id\":\"ember-archive\",\"memory_text\":\"Ember Archive uses queue silver-73. Its retry cap is 5. Its idempotency header is X-Ember-Stamp. Its forbidden fallback is temp-file. Its primary region is ember-central. Its schema namespace is ember.coral. Its encryption profile is cipher-kite. Its audit topic is audit-ember-maple, retained through ember-equinox. Its health path is /health/ember-glow. Its lease duration in seconds is 71. Its recovery contact is priya-ember. Its checksum salt is salt-ember-dawn. Its administration panel accent is ember-saffron. Its telemetry is exported to sink ember-northstar. Its current owner is Priya Noll. The separate ember preview renderer uses retry policy ember-eleven.\"},{\"case_id\":\"fable-router\",\"memory_text\":\"Fable Router uses queue jade-89. Its retry cap is 8. Its idempotency header is X-Fable-Route. Its forbidden fallback is global-map. Its primary region is fable-coast. Its schema namespace is fable.teal. Its encryption profile is cipher-finch. Its audit topic is audit-fable-oak, retained through fable-equinox. Its health path is /health/fable-turn. Its lease duration in seconds is 79. Its recovery contact is sana-fable. Its checksum salt is salt-fable-cloud. Its administration panel accent is fable-saffron. Its telemetry is exported to sink fable-northstar. Its current owner is Sana Pike. The separate fable preview renderer uses retry policy fable-eleven.\"}]},\"terminal_reason\":\"completed\",\"fast_mode_state\":\"off\",\"uuid\":\"19bc11fc-2aa6-4945-83bf-af633e276c26\"}\n",
+        "raw_stderr": "",
+        "envelope": {
+          "type": "result",
+          "subtype": "success",
+          "is_error": false,
+          "api_error_status": null,
+          "duration_ms": 14263,
+          "duration_api_ms": 14819,
+          "ttft_ms": 2133,
+          "ttft_stream_ms": 2023,
+          "time_to_request_ms": 505,
+          "num_turns": 2,
+          "result": "Done — all six memories have been consolidated with the new audit retention facts incorporated, preserving all prior details per case.",
+          "stop_reason": "end_turn",
+          "session_id": "e8d0818f-67ed-4f96-995d-2d1555dfb48b",
+          "total_cost_usd": 0.093776,
+          "usage": {
+            "input_tokens": 3,
+            "cache_creation_input_tokens": 4577,
+            "cache_read_input_tokens": 2806,
+            "output_tokens": 1786,
+            "server_tool_use": {
+              "web_search_requests": 0,
+              "web_fetch_requests": 0
+            },
+            "service_tier": "standard",
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 4577,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "inference_geo": "not_available",
+            "iterations": [
+              {
+                "input_tokens": 2,
+                "output_tokens": 39,
+                "cache_read_input_tokens": 2806,
+                "cache_creation_input_tokens": 1771,
+                "cache_creation": {
+                  "ephemeral_5m_input_tokens": 0,
+                  "ephemeral_1h_input_tokens": 1771
+                },
+                "type": "message"
+              }
+            ],
+            "speed": "standard"
+          },
+          "modelUsage": {
+            "claude-haiku-4-5-20251001": {
+              "inputTokens": 1853,
+              "outputTokens": 17,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0,
+              "webSearchRequests": 0,
+              "costUSD": 0.001938,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            },
+            "claude-sonnet-5": {
+              "inputTokens": 3,
+              "outputTokens": 1786,
+              "cacheReadInputTokens": 2806,
+              "cacheCreationInputTokens": 4577,
+              "webSearchRequests": 0,
+              "costUSD": 0.091838,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            }
+          },
+          "permission_denials": [],
+          "structured_output": {
+            "memories": [
+              {
+                "case_id": "aster-relay",
+                "memory_text": "Aster Relay uses queue quartz-17. Its retry cap is 4. Its idempotency header is X-Aster-Idem. Its forbidden fallback is local-disk. Its primary region is aurora-north. Its schema namespace is aster.violet. Its encryption profile is cipher-lark. Its audit topic is audit-aster-cedar, retained through aster-equinox. Its health path is /health/aster-pulse. Its lease duration in seconds is 47. Its recovery contact is rhea-aster. Its checksum salt is salt-aster-moon. Its administration panel accent is aster-saffron. Its telemetry is exported to sink aster-northstar. Its current owner is Mira Sol. The separate aster preview renderer uses retry policy aster-eleven."
+              },
+              {
+                "case_id": "birch-ledger",
+                "memory_text": "Birch Ledger uses queue cobalt-29. Its retry cap is 7. Its idempotency header is X-Birch-Token. Its forbidden fallback is in-memory-cache. Its primary region is boreal-east. Its schema namespace is birch.indigo. Its encryption profile is cipher-tern. Its audit topic is audit-birch-elm, retained through birch-equinox. Its health path is /health/birch-beat. Its lease duration in seconds is 53. Its recovery contact is theo-birch. Its checksum salt is salt-birch-star. Its administration panel accent is birch-saffron. Its telemetry is exported to sink birch-northstar. Its current owner is Tomas Venn. The separate birch preview renderer uses retry policy birch-eleven."
+              },
+              {
+                "case_id": "cinder-index",
+                "memory_text": "Cinder Index uses queue amber-43. Its retry cap is 3. Its idempotency header is X-Cinder-Key. Its forbidden fallback is direct-sql. Its primary region is caldera-west. Its schema namespace is cinder.saffron. Its encryption profile is cipher-wren. Its audit topic is audit-cinder-ash, retained through cinder-equinox. Its health path is /health/cinder-spark. Its lease duration in seconds is 61. Its recovery contact is lena-cinder. Its checksum salt is salt-cinder-sun. Its administration panel accent is cinder-saffron. Its telemetry is exported to sink cinder-northstar. Its current owner is Leena Quill. The separate cinder preview renderer uses retry policy cinder-eleven."
+              },
+              {
+                "case_id": "delta-beacon",
+                "memory_text": "Delta Beacon uses queue violet-61. Its retry cap is 6. Its idempotency header is X-Delta-Nonce. Its forbidden fallback is stdout-buffer. Its primary region is delta-south. Its schema namespace is delta.cobalt. Its encryption profile is cipher-heron. Its audit topic is audit-delta-pine, retained through delta-equinox. Its health path is /health/delta-flare. Its lease duration in seconds is 67. Its recovery contact is oren-delta. Its checksum salt is salt-delta-tide. Its administration panel accent is delta-saffron. Its telemetry is exported to sink delta-northstar. Its current owner is Oren Vale. The separate delta preview renderer uses retry policy delta-eleven."
+              },
+              {
+                "case_id": "ember-archive",
+                "memory_text": "Ember Archive uses queue silver-73. Its retry cap is 5. Its idempotency header is X-Ember-Stamp. Its forbidden fallback is temp-file. Its primary region is ember-central. Its schema namespace is ember.coral. Its encryption profile is cipher-kite. Its audit topic is audit-ember-maple, retained through ember-equinox. Its health path is /health/ember-glow. Its lease duration in seconds is 71. Its recovery contact is priya-ember. Its checksum salt is salt-ember-dawn. Its administration panel accent is ember-saffron. Its telemetry is exported to sink ember-northstar. Its current owner is Priya Noll. The separate ember preview renderer uses retry policy ember-eleven."
+              },
+              {
+                "case_id": "fable-router",
+                "memory_text": "Fable Router uses queue jade-89. Its retry cap is 8. Its idempotency header is X-Fable-Route. Its forbidden fallback is global-map. Its primary region is fable-coast. Its schema namespace is fable.teal. Its encryption profile is cipher-finch. Its audit topic is audit-fable-oak, retained through fable-equinox. Its health path is /health/fable-turn. Its lease duration in seconds is 79. Its recovery contact is sana-fable. Its checksum salt is salt-fable-cloud. Its administration panel accent is fable-saffron. Its telemetry is exported to sink fable-northstar. Its current owner is Sana Pike. The separate fable preview renderer uses retry policy fable-eleven."
+              }
+            ]
+          },
+          "terminal_reason": "completed",
+          "fast_mode_state": "off",
+          "uuid": "19bc11fc-2aa6-4945-83bf-af633e276c26"
+        },
+        "parsed": {
+          "memories": [
+            {
+              "case_id": "aster-relay",
+              "memory_text": "Aster Relay uses queue quartz-17. Its retry cap is 4. Its idempotency header is X-Aster-Idem. Its forbidden fallback is local-disk. Its primary region is aurora-north. Its schema namespace is aster.violet. Its encryption profile is cipher-lark. Its audit topic is audit-aster-cedar, retained through aster-equinox. Its health path is /health/aster-pulse. Its lease duration in seconds is 47. Its recovery contact is rhea-aster. Its checksum salt is salt-aster-moon. Its administration panel accent is aster-saffron. Its telemetry is exported to sink aster-northstar. Its current owner is Mira Sol. The separate aster preview renderer uses retry policy aster-eleven."
+            },
+            {
+              "case_id": "birch-ledger",
+              "memory_text": "Birch Ledger uses queue cobalt-29. Its retry cap is 7. Its idempotency header is X-Birch-Token. Its forbidden fallback is in-memory-cache. Its primary region is boreal-east. Its schema namespace is birch.indigo. Its encryption profile is cipher-tern. Its audit topic is audit-birch-elm, retained through birch-equinox. Its health path is /health/birch-beat. Its lease duration in seconds is 53. Its recovery contact is theo-birch. Its checksum salt is salt-birch-star. Its administration panel accent is birch-saffron. Its telemetry is exported to sink birch-northstar. Its current owner is Tomas Venn. The separate birch preview renderer uses retry policy birch-eleven."
+            },
+            {
+              "case_id": "cinder-index",
+              "memory_text": "Cinder Index uses queue amber-43. Its retry cap is 3. Its idempotency header is X-Cinder-Key. Its forbidden fallback is direct-sql. Its primary region is caldera-west. Its schema namespace is cinder.saffron. Its encryption profile is cipher-wren. Its audit topic is audit-cinder-ash, retained through cinder-equinox. Its health path is /health/cinder-spark. Its lease duration in seconds is 61. Its recovery contact is lena-cinder. Its checksum salt is salt-cinder-sun. Its administration panel accent is cinder-saffron. Its telemetry is exported to sink cinder-northstar. Its current owner is Leena Quill. The separate cinder preview renderer uses retry policy cinder-eleven."
+            },
+            {
+              "case_id": "delta-beacon",
+              "memory_text": "Delta Beacon uses queue violet-61. Its retry cap is 6. Its idempotency header is X-Delta-Nonce. Its forbidden fallback is stdout-buffer. Its primary region is delta-south. Its schema namespace is delta.cobalt. Its encryption profile is cipher-heron. Its audit topic is audit-delta-pine, retained through delta-equinox. Its health path is /health/delta-flare. Its lease duration in seconds is 67. Its recovery contact is oren-delta. Its checksum salt is salt-delta-tide. Its administration panel accent is delta-saffron. Its telemetry is exported to sink delta-northstar. Its current owner is Oren Vale. The separate delta preview renderer uses retry policy delta-eleven."
+            },
+            {
+              "case_id": "ember-archive",
+              "memory_text": "Ember Archive uses queue silver-73. Its retry cap is 5. Its idempotency header is X-Ember-Stamp. Its forbidden fallback is temp-file. Its primary region is ember-central. Its schema namespace is ember.coral. Its encryption profile is cipher-kite. Its audit topic is audit-ember-maple, retained through ember-equinox. Its health path is /health/ember-glow. Its lease duration in seconds is 71. Its recovery contact is priya-ember. Its checksum salt is salt-ember-dawn. Its administration panel accent is ember-saffron. Its telemetry is exported to sink ember-northstar. Its current owner is Priya Noll. The separate ember preview renderer uses retry policy ember-eleven."
+            },
+            {
+              "case_id": "fable-router",
+              "memory_text": "Fable Router uses queue jade-89. Its retry cap is 8. Its idempotency header is X-Fable-Route. Its forbidden fallback is global-map. Its primary region is fable-coast. Its schema namespace is fable.teal. Its encryption profile is cipher-finch. Its audit topic is audit-fable-oak, retained through fable-equinox. Its health path is /health/fable-turn. Its lease duration in seconds is 79. Its recovery contact is sana-fable. Its checksum salt is salt-fable-cloud. Its administration panel accent is fable-saffron. Its telemetry is exported to sink fable-northstar. Its current owner is Sana Pike. The separate fable preview renderer uses retry policy fable-eleven."
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "qa_calls": {},
+  "completed_at": "2026-08-27T04:04:19.853Z",
+  "failure": {
+    "message": "birch-ledger: replacement memory exceeds frozen 100-word cap (101)",
+    "stack": "Error: birch-ledger: replacement memory exceeds frozen 100-word cap (101)\n    at validateStressMemoryText (/Users/nofarkulishevski/Documents/GitHub/hunch-latest/bench/external/run-consolidation-memory-stress.ts:388:38)\n    at updateStressMemories (/Users/nofarkulishevski/Documents/GitHub/hunch-latest/bench/external/run-consolidation-memory-stress.ts:781:27)\n    at main (/Users/nofarkulishevski/Documents/GitHub/hunch-latest/bench/external/run-consolidation-memory-stress.ts:879:19)\n    at <anonymous> (/Users/nofarkulishevski/Documents/GitHub/hunch-latest/bench/external/run-consolidation-memory-stress.ts:928:79)\n    at ModuleJob.run (node:internal/modules/esm/module_job:343:25)\n    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:681:26)\n    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5)"
+  }
+}
