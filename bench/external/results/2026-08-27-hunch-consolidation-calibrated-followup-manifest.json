@@ -1,0 +1,108 @@
+{
+  "experiment": "hunch-consolidation-calibrated-followup",
+  "frozenAt": "2026-08-27",
+  "phase": "pre-calibration",
+  "preregistrationCommit": "da6f3d15fa67a1499aa37c2e90c2f20f0923c3b1",
+  "hunchRevision": "da6f3d15fa67a1499aa37c2e90c2f20f0923c3b1",
+  "runnerSha256": "70948caf89d8d44ca2e616994aec003389ff6e8bdc08327f95224c7e42809b9f",
+  "taskManifestSha256": "f8286f142b54f36b15c7973278a127a110e321b60cb66a0dedf2527bb1b77e39",
+  "zodSourceRevisionAtLaunch": "e516c3baf22615e20934116abebfed6c000222c2",
+  "zodMemoryCutoff": "2026-01-08",
+  "zodMemoryCodeRevision": "9977fb0868432461de265a773319e80a90ba3e37",
+  "solver": {
+    "modelArgument": "claude-sonnet-5",
+    "claudeCodeVersion": "2.1.186",
+    "nodeVersion": "v24.19.0",
+    "maxTurns": 50,
+    "reproductionEnabled": false,
+    "calibrationRepeats": 2
+  },
+  "calibration": {
+    "candidates": [
+      "zod-4461",
+      "zod-5229",
+      "zod-5296",
+      "zod-5625",
+      "zod-5842",
+      "zod-5917"
+    ],
+    "eligibility": "exactly one source-accuracy pass out of two",
+    "maximumSelectedTasks": 2,
+    "tieBreak": "lexicographic task ID",
+    "noOutcomeBasedExtension": true
+  },
+  "accumulatedSnapshot": {
+    "gitHead": "6f53d809027ae08c056bc548b844b086d2f3070f",
+    "decisionCount": 167
+  },
+  "queryBoundedSnapshots": {
+    "zod-4461": {
+      "query": "Zod unsafe eval CSP Function allowsEval jitless",
+      "gitHead": "c316f05f329e6e8531ccbe1b671d80aea5ea8029",
+      "decisionIds": [
+        "dec_e6b26bbb10",
+        "dec_2da813046e",
+        "dec_9643477630",
+        "dec_19a125eeca"
+      ]
+    },
+    "zod-5229": {
+      "query": "Zod tuple missing element default value parser optional",
+      "gitHead": "be3fbedcd8aa087f3308d649f91e7ad091e84973",
+      "decisionIds": [
+        "dec_2da813046e",
+        "dec_875001003a",
+        "dec_2fbac4f75a",
+        "dec_81bef9527f",
+        "dec_9643477630"
+      ]
+    },
+    "zod-5296": {
+      "query": "Zod record transformed key output input type",
+      "gitHead": "4d648cc1941bcf3cc693b0f93e156b4751d190c8",
+      "decisionIds": [
+        "dec_52d921d63b",
+        "dec_20843bab4f",
+        "dec_577c2e8e04",
+        "dec_17ebc539e7",
+        "dec_a302897969"
+      ]
+    },
+    "zod-5625": {
+      "query": "Zod codec invert inverse flip encode decode composition",
+      "gitHead": "d6e8ec55bcfe0c691e274a2a215cc44cdb7ec0ad",
+      "decisionIds": [
+        "dec_eb980724b2",
+        "dec_a302897969",
+        "dec_d169cc149f",
+        "dec_e024d23716"
+      ]
+    },
+    "zod-5842": {
+      "query": "Zod object merge refine checks silently dropped pick omit",
+      "gitHead": "770f38f7c0031be6598a62648fde94948a39bffd",
+      "decisionIds": [
+        "dec_f119f9ac5c",
+        "dec_56894e5f94",
+        "dec_7f4d5fef7b",
+        "dec_6351e44935"
+      ]
+    },
+    "zod-5917": {
+      "query": "Zod preprocess optional position missing object key undefined expected nonoptional",
+      "gitHead": "31a4ab4b1420b650505233c1273910ca1aa50434",
+      "decisionIds": [
+        "dec_4cf174e125",
+        "dec_875001003a",
+        "dec_22819cc921",
+        "dec_2fbac4f75a",
+        "dec_5db25c7e3c"
+      ]
+    }
+  },
+  "snapshotIntegrity": {
+    "retainedRecordsByteIdenticalToAccumulated": true,
+    "structuralGraphDerivedFromSameCutoffRevision": true,
+    "snapshotsCleanAndCommitted": true
+  }
+}
