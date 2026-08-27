@@ -1,0 +1,895 @@
+{
+  "schema_version": 1,
+  "protocol_version": 5,
+  "experiment": "hunch-schema-collision-targeted-replication",
+  "status": "complete",
+  "trajectory_index": 12,
+  "case_id": "fable-router",
+  "case_name": "Fable Router",
+  "case_replicate": 2,
+  "started_at": "2026-08-27T04:36:57.147Z",
+  "model": "claude-sonnet-5",
+  "claude_cli_version": "2.1.186 (Claude Code)",
+  "git_head": "33cd6483bc7cf0faf2826c60edb306abc33d8c5f",
+  "runner_sha256": "f3bd2a02569e0fa886cf4941ac0c5796678bb8fda8b695119a2e1f1d931a2f71",
+  "fixture_source_sha256": "7a1c098f913993fba2c3732110c487edfc4a9b0c6b52348b58b69f31750e9244",
+  "fixture_sha256": "73a0069ada357889be44f3c2a5f2e1c445dc103b1e081fdc1e1fe8f329ee5dbd",
+  "system_prompt_sha256": "ced040c0d0e2979fa7f23d256137c9b31ac844b98fafc77291fd1361d3a8e275",
+  "condition_order": [
+    "rescue",
+    "baseline",
+    "additive",
+    "rewritten"
+  ],
+  "checkpoints": [
+    {
+      "step": 1,
+      "source_round": 26,
+      "observation": "The fable demo client uses encryption profile fable-toy-cipher.",
+      "memory_text": "Fable Router: owner=Sana Pike, queue=jade-89, retry_cap=8, idempotency_header=X-Fable-Route, forbidden_fallback=global-map, primary_region=fable-coast, preview_region=fable-preview-west, deployment_zone=alder-zone, schema_namespace=fable.teal, prototype_schema_namespace=fable.prototype, encryption_profile=cipher-finch, demo_client_encryption_profile=fable-toy-cipher, audit_topic=audit-fable-oak, audit_retention=fable-equinox, health_path=/health/fable-turn, lease_duration_s=79, recovery_contact=sana-fable, checksum_salt=salt-fable-cloud, admin_panel_accent=fable-saffron, telemetry_sink=fable-northstar, preview_renderer_retry_policy=fable-eleven, dashboard_cache=fable-linen, doc_lang=Basque, mobile_demo_header=X-fable-Demo, shadow_importer_queue=fable-pebble-lab, sandbox_fallback=fable-scratch-pad, reporting_timezone=fable-meridian, metrics_prefix=fable-compass, canary_color=fable-plum, rollout_window=Wednesday midnight, archive_tier=fable-glacier, compliance_tag=aquamarine, notification_channel=fable-signal, backup_demonstrator=fable-vault.",
+      "words": 38,
+      "contains_production_literal": true,
+      "contains_prototype_literal": true,
+      "call": {
+        "role": "replacement_update",
+        "duration_ms": 7900,
+        "prompt_sha256": "7db59aaf425b154aab16ec2a711ba7015aa9c19b83b68f3408ec029a67d866c1",
+        "raw_stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"api_error_status\":null,\"duration_ms\":5765,\"duration_api_ms\":6593,\"ttft_ms\":4674,\"ttft_stream_ms\":2055,\"time_to_request_ms\":517,\"num_turns\":2,\"result\":\"Memory updated.\",\"stop_reason\":\"end_turn\",\"session_id\":\"f35cb930-5b65-4f2f-937e-6f8d4e805ba8\",\"total_cost_usd\":0.021733,\"usage\":{\"input_tokens\":4,\"cache_creation_input_tokens\":553,\"cache_read_input_tokens\":2814,\"output_tokens\":547,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":553,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"not_available\",\"iterations\":[{\"input_tokens\":2,\"output_tokens\":8,\"cache_read_input_tokens\":1407,\"cache_creation_input_tokens\":553,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":553},\"type\":\"message\"}],\"speed\":\"standard\"},\"modelUsage\":{\"claude-haiku-4-5-20251001\":{\"inputTokens\":1001,\"outputTokens\":20,\"cacheReadInputTokens\":0,\"cacheCreationInputTokens\":0,\"webSearchRequests\":0,\"costUSD\":0.001101,\"contextWindow\":200000,\"maxOutputTokens\":32000},\"claude-sonnet-5\":{\"inputTokens\":4,\"outputTokens\":547,\"cacheReadInputTokens\":2814,\"cacheCreationInputTokens\":553,\"webSearchRequests\":0,\"costUSD\":0.020631999999999998,\"contextWindow\":200000,\"maxOutputTokens\":32000}},\"permission_denials\":[],\"structured_output\":{\"memory_text\":\"Fable Router: owner=Sana Pike, queue=jade-89, retry_cap=8, idempotency_header=X-Fable-Route, forbidden_fallback=global-map, primary_region=fable-coast, preview_region=fable-preview-west, deployment_zone=alder-zone, schema_namespace=fable.teal, prototype_schema_namespace=fable.prototype, encryption_profile=cipher-finch, demo_client_encryption_profile=fable-toy-cipher, audit_topic=audit-fable-oak, audit_retention=fable-equinox, health_path=/health/fable-turn, lease_duration_s=79, recovery_contact=sana-fable, checksum_salt=salt-fable-cloud, admin_panel_accent=fable-saffron, telemetry_sink=fable-northstar, preview_renderer_retry_policy=fable-eleven, dashboard_cache=fable-linen, doc_lang=Basque, mobile_demo_header=X-fable-Demo, shadow_importer_queue=fable-pebble-lab, sandbox_fallback=fable-scratch-pad, reporting_timezone=fable-meridian, metrics_prefix=fable-compass, canary_color=fable-plum, rollout_window=Wednesday midnight, archive_tier=fable-glacier, compliance_tag=aquamarine, notification_channel=fable-signal, backup_demonstrator=fable-vault.\"},\"terminal_reason\":\"completed\",\"fast_mode_state\":\"off\",\"uuid\":\"b20f6201-59bb-44f0-bce1-213bf0df7e19\"}\n",
+        "raw_stderr": "",
+        "envelope": {
+          "type": "result",
+          "subtype": "success",
+          "is_error": false,
+          "api_error_status": null,
+          "duration_ms": 5765,
+          "duration_api_ms": 6593,
+          "ttft_ms": 4674,
+          "ttft_stream_ms": 2055,
+          "time_to_request_ms": 517,
+          "num_turns": 2,
+          "result": "Memory updated.",
+          "stop_reason": "end_turn",
+          "session_id": "f35cb930-5b65-4f2f-937e-6f8d4e805ba8",
+          "total_cost_usd": 0.021733,
+          "usage": {
+            "input_tokens": 4,
+            "cache_creation_input_tokens": 553,
+            "cache_read_input_tokens": 2814,
+            "output_tokens": 547,
+            "server_tool_use": {
+              "web_search_requests": 0,
+              "web_fetch_requests": 0
+            },
+            "service_tier": "standard",
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 553,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "inference_geo": "not_available",
+            "iterations": [
+              {
+                "input_tokens": 2,
+                "output_tokens": 8,
+                "cache_read_input_tokens": 1407,
+                "cache_creation_input_tokens": 553,
+                "cache_creation": {
+                  "ephemeral_5m_input_tokens": 0,
+                  "ephemeral_1h_input_tokens": 553
+                },
+                "type": "message"
+              }
+            ],
+            "speed": "standard"
+          },
+          "modelUsage": {
+            "claude-haiku-4-5-20251001": {
+              "inputTokens": 1001,
+              "outputTokens": 20,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0,
+              "webSearchRequests": 0,
+              "costUSD": 0.001101,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            },
+            "claude-sonnet-5": {
+              "inputTokens": 4,
+              "outputTokens": 547,
+              "cacheReadInputTokens": 2814,
+              "cacheCreationInputTokens": 553,
+              "webSearchRequests": 0,
+              "costUSD": 0.020631999999999998,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            }
+          },
+          "permission_denials": [],
+          "structured_output": {
+            "memory_text": "Fable Router: owner=Sana Pike, queue=jade-89, retry_cap=8, idempotency_header=X-Fable-Route, forbidden_fallback=global-map, primary_region=fable-coast, preview_region=fable-preview-west, deployment_zone=alder-zone, schema_namespace=fable.teal, prototype_schema_namespace=fable.prototype, encryption_profile=cipher-finch, demo_client_encryption_profile=fable-toy-cipher, audit_topic=audit-fable-oak, audit_retention=fable-equinox, health_path=/health/fable-turn, lease_duration_s=79, recovery_contact=sana-fable, checksum_salt=salt-fable-cloud, admin_panel_accent=fable-saffron, telemetry_sink=fable-northstar, preview_renderer_retry_policy=fable-eleven, dashboard_cache=fable-linen, doc_lang=Basque, mobile_demo_header=X-fable-Demo, shadow_importer_queue=fable-pebble-lab, sandbox_fallback=fable-scratch-pad, reporting_timezone=fable-meridian, metrics_prefix=fable-compass, canary_color=fable-plum, rollout_window=Wednesday midnight, archive_tier=fable-glacier, compliance_tag=aquamarine, notification_channel=fable-signal, backup_demonstrator=fable-vault."
+          },
+          "terminal_reason": "completed",
+          "fast_mode_state": "off",
+          "uuid": "b20f6201-59bb-44f0-bce1-213bf0df7e19"
+        },
+        "parsed": {
+          "memory_text": "Fable Router: owner=Sana Pike, queue=jade-89, retry_cap=8, idempotency_header=X-Fable-Route, forbidden_fallback=global-map, primary_region=fable-coast, preview_region=fable-preview-west, deployment_zone=alder-zone, schema_namespace=fable.teal, prototype_schema_namespace=fable.prototype, encryption_profile=cipher-finch, demo_client_encryption_profile=fable-toy-cipher, audit_topic=audit-fable-oak, audit_retention=fable-equinox, health_path=/health/fable-turn, lease_duration_s=79, recovery_contact=sana-fable, checksum_salt=salt-fable-cloud, admin_panel_accent=fable-saffron, telemetry_sink=fable-northstar, preview_renderer_retry_policy=fable-eleven, dashboard_cache=fable-linen, doc_lang=Basque, mobile_demo_header=X-fable-Demo, shadow_importer_queue=fable-pebble-lab, sandbox_fallback=fable-scratch-pad, reporting_timezone=fable-meridian, metrics_prefix=fable-compass, canary_color=fable-plum, rollout_window=Wednesday midnight, archive_tier=fable-glacier, compliance_tag=aquamarine, notification_channel=fable-signal, backup_demonstrator=fable-vault."
+        }
+      }
+    },
+    {
+      "step": 2,
+      "source_round": 27,
+      "observation": "The fable staging probe health path is /health/fable-stage.",
+      "memory_text": "Fable Router: owner=Sana Pike, queue=jade-89, retry_cap=8, idempotency_header=X-Fable-Route, forbidden_fallback=global-map, primary_region=fable-coast, preview_region=fable-preview-west, deployment_zone=alder-zone, schema_namespace=fable.teal, prototype_schema_namespace=fable.prototype, encryption_profile=cipher-finch, demo_client_encryption_profile=fable-toy-cipher, audit_topic=audit-fable-oak, audit_retention=fable-equinox, health_path=/health/fable-turn, staging_probe_health_path=/health/fable-stage, lease_duration_s=79, recovery_contact=sana-fable, checksum_salt=salt-fable-cloud, admin_panel_accent=fable-saffron, telemetry_sink=fable-northstar, preview_renderer_retry_policy=fable-eleven, dashboard_cache=fable-linen, doc_lang=Basque, mobile_demo_header=X-fable-Demo, shadow_importer_queue=fable-pebble-lab, sandbox_fallback=fable-scratch-pad, reporting_timezone=fable-meridian, metrics_prefix=fable-compass, canary_color=fable-plum, rollout_window=Wednesday midnight, archive_tier=fable-glacier, compliance_tag=aquamarine, notification_channel=fable-signal, backup_demonstrator=fable-vault.",
+      "words": 39,
+      "contains_production_literal": true,
+      "contains_prototype_literal": true,
+      "call": {
+        "role": "replacement_update",
+        "duration_ms": 21785,
+        "prompt_sha256": "d35474f8a406ab3d27c77edcc393e11093f60192d3b33f385c7a85af157f7146",
+        "raw_stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"api_error_status\":null,\"duration_ms\":20737,\"duration_api_ms\":20691,\"ttft_ms\":15400,\"ttft_stream_ms\":3329,\"time_to_request_ms\":1029,\"num_turns\":2,\"result\":\"Memory updated: the Fable Router entry now includes the new `staging_probe_health_path=/health/fable-stage` fact alongside all previously recorded configuration details, consolidated into one self-contained record.\",\"stop_reason\":\"end_turn\",\"session_id\":\"a8bbde1c-1cdf-4680-b2b3-6797c93e94b3\",\"total_cost_usd\":0.095695,\"usage\":{\"input_tokens\":4,\"cache_creation_input_tokens\":3615,\"cache_read_input_tokens\":1360,\"output_tokens\":2311,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":3615,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"not_available\",\"iterations\":[{\"input_tokens\":2,\"output_tokens\":69,\"cache_read_input_tokens\":1360,\"cache_creation_input_tokens\":2255,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":2255},\"type\":\"message\"}],\"speed\":\"standard\"},\"modelUsage\":{\"claude-haiku-4-5-20251001\":{\"inputTokens\":970,\"outputTokens\":20,\"cacheReadInputTokens\":0,\"cacheCreationInputTokens\":0,\"webSearchRequests\":0,\"costUSD\":0.00107,\"contextWindow\":200000,\"maxOutputTokens\":32000},\"claude-sonnet-5\":{\"inputTokens\":4,\"outputTokens\":2311,\"cacheReadInputTokens\":1360,\"cacheCreationInputTokens\":3615,\"webSearchRequests\":0,\"costUSD\":0.094625,\"contextWindow\":200000,\"maxOutputTokens\":32000}},\"permission_denials\":[],\"structured_output\":{\"memory_text\":\"Fable Router: owner=Sana Pike, queue=jade-89, retry_cap=8, idempotency_header=X-Fable-Route, forbidden_fallback=global-map, primary_region=fable-coast, preview_region=fable-preview-west, deployment_zone=alder-zone, schema_namespace=fable.teal, prototype_schema_namespace=fable.prototype, encryption_profile=cipher-finch, demo_client_encryption_profile=fable-toy-cipher, audit_topic=audit-fable-oak, audit_retention=fable-equinox, health_path=/health/fable-turn, staging_probe_health_path=/health/fable-stage, lease_duration_s=79, recovery_contact=sana-fable, checksum_salt=salt-fable-cloud, admin_panel_accent=fable-saffron, telemetry_sink=fable-northstar, preview_renderer_retry_policy=fable-eleven, dashboard_cache=fable-linen, doc_lang=Basque, mobile_demo_header=X-fable-Demo, shadow_importer_queue=fable-pebble-lab, sandbox_fallback=fable-scratch-pad, reporting_timezone=fable-meridian, metrics_prefix=fable-compass, canary_color=fable-plum, rollout_window=Wednesday midnight, archive_tier=fable-glacier, compliance_tag=aquamarine, notification_channel=fable-signal, backup_demonstrator=fable-vault.\"},\"terminal_reason\":\"completed\",\"fast_mode_state\":\"off\",\"uuid\":\"d02fbd0b-b11f-40b6-a314-b5f6d4fa5ded\"}\n",
+        "raw_stderr": "",
+        "envelope": {
+          "type": "result",
+          "subtype": "success",
+          "is_error": false,
+          "api_error_status": null,
+          "duration_ms": 20737,
+          "duration_api_ms": 20691,
+          "ttft_ms": 15400,
+          "ttft_stream_ms": 3329,
+          "time_to_request_ms": 1029,
+          "num_turns": 2,
+          "result": "Memory updated: the Fable Router entry now includes the new `staging_probe_health_path=/health/fable-stage` fact alongside all previously recorded configuration details, consolidated into one self-contained record.",
+          "stop_reason": "end_turn",
+          "session_id": "a8bbde1c-1cdf-4680-b2b3-6797c93e94b3",
+          "total_cost_usd": 0.095695,
+          "usage": {
+            "input_tokens": 4,
+            "cache_creation_input_tokens": 3615,
+            "cache_read_input_tokens": 1360,
+            "output_tokens": 2311,
+            "server_tool_use": {
+              "web_search_requests": 0,
+              "web_fetch_requests": 0
+            },
+            "service_tier": "standard",
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 3615,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "inference_geo": "not_available",
+            "iterations": [
+              {
+                "input_tokens": 2,
+                "output_tokens": 69,
+                "cache_read_input_tokens": 1360,
+                "cache_creation_input_tokens": 2255,
+                "cache_creation": {
+                  "ephemeral_5m_input_tokens": 0,
+                  "ephemeral_1h_input_tokens": 2255
+                },
+                "type": "message"
+              }
+            ],
+            "speed": "standard"
+          },
+          "modelUsage": {
+            "claude-haiku-4-5-20251001": {
+              "inputTokens": 970,
+              "outputTokens": 20,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0,
+              "webSearchRequests": 0,
+              "costUSD": 0.00107,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            },
+            "claude-sonnet-5": {
+              "inputTokens": 4,
+              "outputTokens": 2311,
+              "cacheReadInputTokens": 1360,
+              "cacheCreationInputTokens": 3615,
+              "webSearchRequests": 0,
+              "costUSD": 0.094625,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            }
+          },
+          "permission_denials": [],
+          "structured_output": {
+            "memory_text": "Fable Router: owner=Sana Pike, queue=jade-89, retry_cap=8, idempotency_header=X-Fable-Route, forbidden_fallback=global-map, primary_region=fable-coast, preview_region=fable-preview-west, deployment_zone=alder-zone, schema_namespace=fable.teal, prototype_schema_namespace=fable.prototype, encryption_profile=cipher-finch, demo_client_encryption_profile=fable-toy-cipher, audit_topic=audit-fable-oak, audit_retention=fable-equinox, health_path=/health/fable-turn, staging_probe_health_path=/health/fable-stage, lease_duration_s=79, recovery_contact=sana-fable, checksum_salt=salt-fable-cloud, admin_panel_accent=fable-saffron, telemetry_sink=fable-northstar, preview_renderer_retry_policy=fable-eleven, dashboard_cache=fable-linen, doc_lang=Basque, mobile_demo_header=X-fable-Demo, shadow_importer_queue=fable-pebble-lab, sandbox_fallback=fable-scratch-pad, reporting_timezone=fable-meridian, metrics_prefix=fable-compass, canary_color=fable-plum, rollout_window=Wednesday midnight, archive_tier=fable-glacier, compliance_tag=aquamarine, notification_channel=fable-signal, backup_demonstrator=fable-vault."
+          },
+          "terminal_reason": "completed",
+          "fast_mode_state": "off",
+          "uuid": "d02fbd0b-b11f-40b6-a314-b5f6d4fa5ded"
+        },
+        "parsed": {
+          "memory_text": "Fable Router: owner=Sana Pike, queue=jade-89, retry_cap=8, idempotency_header=X-Fable-Route, forbidden_fallback=global-map, primary_region=fable-coast, preview_region=fable-preview-west, deployment_zone=alder-zone, schema_namespace=fable.teal, prototype_schema_namespace=fable.prototype, encryption_profile=cipher-finch, demo_client_encryption_profile=fable-toy-cipher, audit_topic=audit-fable-oak, audit_retention=fable-equinox, health_path=/health/fable-turn, staging_probe_health_path=/health/fable-stage, lease_duration_s=79, recovery_contact=sana-fable, checksum_salt=salt-fable-cloud, admin_panel_accent=fable-saffron, telemetry_sink=fable-northstar, preview_renderer_retry_policy=fable-eleven, dashboard_cache=fable-linen, doc_lang=Basque, mobile_demo_header=X-fable-Demo, shadow_importer_queue=fable-pebble-lab, sandbox_fallback=fable-scratch-pad, reporting_timezone=fable-meridian, metrics_prefix=fable-compass, canary_color=fable-plum, rollout_window=Wednesday midnight, archive_tier=fable-glacier, compliance_tag=aquamarine, notification_channel=fable-signal, backup_demonstrator=fable-vault."
+        }
+      }
+    },
+    {
+      "step": 3,
+      "source_round": 28,
+      "observation": "The escalation room for Fable Router is room-fable-knot.",
+      "memory_text": "Fable Router: owner=Sana Pike, queue=jade-89, retry_cap=8, idempotency_header=X-Fable-Route, forbidden_fallback=global-map, primary_region=fable-coast, preview_region=fable-preview-west, deployment_zone=alder-zone, schema_namespace=fable.teal, prototype_schema_namespace=fable.prototype, encryption_profile=cipher-finch, demo_client_encryption_profile=fable-toy-cipher, audit_topic=audit-fable-oak, audit_retention=fable-equinox, health_path=/health/fable-turn, staging_probe_health_path=/health/fable-stage, lease_duration_s=79, recovery_contact=sana-fable, checksum_salt=salt-fable-cloud, admin_panel_accent=fable-saffron, telemetry_sink=fable-northstar, preview_renderer_retry_policy=fable-eleven, dashboard_cache=fable-linen, doc_lang=Basque, mobile_demo_header=X-fable-Demo, shadow_importer_queue=fable-pebble-lab, sandbox_fallback=fable-scratch-pad, reporting_timezone=fable-meridian, metrics_prefix=fable-compass, canary_color=fable-plum, rollout_window=Wednesday midnight, archive_tier=fable-glacier, compliance_tag=aquamarine, notification_channel=fable-signal, backup_demonstrator=fable-vault, escalation_room=room-fable-knot.",
+      "words": 40,
+      "contains_production_literal": true,
+      "contains_prototype_literal": true,
+      "call": {
+        "role": "replacement_update",
+        "duration_ms": 10871,
+        "prompt_sha256": "713379b3091e1ae2fab6a62a1ebd23c4f3bb518a2daf51352140c69edfb60bba",
+        "raw_stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"api_error_status\":null,\"duration_ms\":9943,\"duration_api_ms\":10500,\"ttft_ms\":7891,\"ttft_stream_ms\":5305,\"time_to_request_ms\":791,\"num_turns\":2,\"result\":\"Done.\",\"stop_reason\":\"end_turn\",\"session_id\":\"9309dd65-1168-4f21-9c4a-9863d275a07f\",\"total_cost_usd\":0.035882000000000004,\"usage\":{\"input_tokens\":4,\"cache_creation_input_tokens\":1966,\"cache_read_input_tokens\":1380,\"output_tokens\":577,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":1966,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"not_available\",\"iterations\":[{\"input_tokens\":2,\"output_tokens\":5,\"cache_read_input_tokens\":1380,\"cache_creation_input_tokens\":586,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":586},\"type\":\"message\"}],\"speed\":\"standard\"},\"modelUsage\":{\"claude-haiku-4-5-20251001\":{\"inputTokens\":987,\"outputTokens\":20,\"cacheReadInputTokens\":0,\"cacheCreationInputTokens\":0,\"webSearchRequests\":0,\"costUSD\":0.001087,\"contextWindow\":200000,\"maxOutputTokens\":32000},\"claude-sonnet-5\":{\"inputTokens\":4,\"outputTokens\":577,\"cacheReadInputTokens\":1380,\"cacheCreationInputTokens\":1966,\"webSearchRequests\":0,\"costUSD\":0.034795,\"contextWindow\":200000,\"maxOutputTokens\":32000}},\"permission_denials\":[],\"structured_output\":{\"memory_text\":\"Fable Router: owner=Sana Pike, queue=jade-89, retry_cap=8, idempotency_header=X-Fable-Route, forbidden_fallback=global-map, primary_region=fable-coast, preview_region=fable-preview-west, deployment_zone=alder-zone, schema_namespace=fable.teal, prototype_schema_namespace=fable.prototype, encryption_profile=cipher-finch, demo_client_encryption_profile=fable-toy-cipher, audit_topic=audit-fable-oak, audit_retention=fable-equinox, health_path=/health/fable-turn, staging_probe_health_path=/health/fable-stage, lease_duration_s=79, recovery_contact=sana-fable, checksum_salt=salt-fable-cloud, admin_panel_accent=fable-saffron, telemetry_sink=fable-northstar, preview_renderer_retry_policy=fable-eleven, dashboard_cache=fable-linen, doc_lang=Basque, mobile_demo_header=X-fable-Demo, shadow_importer_queue=fable-pebble-lab, sandbox_fallback=fable-scratch-pad, reporting_timezone=fable-meridian, metrics_prefix=fable-compass, canary_color=fable-plum, rollout_window=Wednesday midnight, archive_tier=fable-glacier, compliance_tag=aquamarine, notification_channel=fable-signal, backup_demonstrator=fable-vault, escalation_room=room-fable-knot.\"},\"terminal_reason\":\"completed\",\"fast_mode_state\":\"off\",\"uuid\":\"ea0ea73f-c3a8-4294-9c73-fe235d68dade\"}\n",
+        "raw_stderr": "",
+        "envelope": {
+          "type": "result",
+          "subtype": "success",
+          "is_error": false,
+          "api_error_status": null,
+          "duration_ms": 9943,
+          "duration_api_ms": 10500,
+          "ttft_ms": 7891,
+          "ttft_stream_ms": 5305,
+          "time_to_request_ms": 791,
+          "num_turns": 2,
+          "result": "Done.",
+          "stop_reason": "end_turn",
+          "session_id": "9309dd65-1168-4f21-9c4a-9863d275a07f",
+          "total_cost_usd": 0.035882000000000004,
+          "usage": {
+            "input_tokens": 4,
+            "cache_creation_input_tokens": 1966,
+            "cache_read_input_tokens": 1380,
+            "output_tokens": 577,
+            "server_tool_use": {
+              "web_search_requests": 0,
+              "web_fetch_requests": 0
+            },
+            "service_tier": "standard",
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 1966,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "inference_geo": "not_available",
+            "iterations": [
+              {
+                "input_tokens": 2,
+                "output_tokens": 5,
+                "cache_read_input_tokens": 1380,
+                "cache_creation_input_tokens": 586,
+                "cache_creation": {
+                  "ephemeral_5m_input_tokens": 0,
+                  "ephemeral_1h_input_tokens": 586
+                },
+                "type": "message"
+              }
+            ],
+            "speed": "standard"
+          },
+          "modelUsage": {
+            "claude-haiku-4-5-20251001": {
+              "inputTokens": 987,
+              "outputTokens": 20,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0,
+              "webSearchRequests": 0,
+              "costUSD": 0.001087,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            },
+            "claude-sonnet-5": {
+              "inputTokens": 4,
+              "outputTokens": 577,
+              "cacheReadInputTokens": 1380,
+              "cacheCreationInputTokens": 1966,
+              "webSearchRequests": 0,
+              "costUSD": 0.034795,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            }
+          },
+          "permission_denials": [],
+          "structured_output": {
+            "memory_text": "Fable Router: owner=Sana Pike, queue=jade-89, retry_cap=8, idempotency_header=X-Fable-Route, forbidden_fallback=global-map, primary_region=fable-coast, preview_region=fable-preview-west, deployment_zone=alder-zone, schema_namespace=fable.teal, prototype_schema_namespace=fable.prototype, encryption_profile=cipher-finch, demo_client_encryption_profile=fable-toy-cipher, audit_topic=audit-fable-oak, audit_retention=fable-equinox, health_path=/health/fable-turn, staging_probe_health_path=/health/fable-stage, lease_duration_s=79, recovery_contact=sana-fable, checksum_salt=salt-fable-cloud, admin_panel_accent=fable-saffron, telemetry_sink=fable-northstar, preview_renderer_retry_policy=fable-eleven, dashboard_cache=fable-linen, doc_lang=Basque, mobile_demo_header=X-fable-Demo, shadow_importer_queue=fable-pebble-lab, sandbox_fallback=fable-scratch-pad, reporting_timezone=fable-meridian, metrics_prefix=fable-compass, canary_color=fable-plum, rollout_window=Wednesday midnight, archive_tier=fable-glacier, compliance_tag=aquamarine, notification_channel=fable-signal, backup_demonstrator=fable-vault, escalation_room=room-fable-knot."
+          },
+          "terminal_reason": "completed",
+          "fast_mode_state": "off",
+          "uuid": "ea0ea73f-c3a8-4294-9c73-fe235d68dade"
+        },
+        "parsed": {
+          "memory_text": "Fable Router: owner=Sana Pike, queue=jade-89, retry_cap=8, idempotency_header=X-Fable-Route, forbidden_fallback=global-map, primary_region=fable-coast, preview_region=fable-preview-west, deployment_zone=alder-zone, schema_namespace=fable.teal, prototype_schema_namespace=fable.prototype, encryption_profile=cipher-finch, demo_client_encryption_profile=fable-toy-cipher, audit_topic=audit-fable-oak, audit_retention=fable-equinox, health_path=/health/fable-turn, staging_probe_health_path=/health/fable-stage, lease_duration_s=79, recovery_contact=sana-fable, checksum_salt=salt-fable-cloud, admin_panel_accent=fable-saffron, telemetry_sink=fable-northstar, preview_renderer_retry_policy=fable-eleven, dashboard_cache=fable-linen, doc_lang=Basque, mobile_demo_header=X-fable-Demo, shadow_importer_queue=fable-pebble-lab, sandbox_fallback=fable-scratch-pad, reporting_timezone=fable-meridian, metrics_prefix=fable-compass, canary_color=fable-plum, rollout_window=Wednesday midnight, archive_tier=fable-glacier, compliance_tag=aquamarine, notification_channel=fable-signal, backup_demonstrator=fable-vault, escalation_room=room-fable-knot."
+        }
+      }
+    },
+    {
+      "step": 4,
+      "source_round": 29,
+      "observation": "The fable analytics sandbox audit topic is fable-analytics-noise.",
+      "memory_text": "Fable Router: owner=Sana Pike, queue=jade-89, retry_cap=8, idempotency_header=X-Fable-Route, forbidden_fallback=global-map, primary_region=fable-coast, preview_region=fable-preview-west, deployment_zone=alder-zone, schema_namespace=fable.teal, prototype_schema_namespace=fable.prototype, encryption_profile=cipher-finch, demo_client_encryption_profile=fable-toy-cipher, audit_topic=audit-fable-oak, analytics_sandbox_audit_topic=fable-analytics-noise, audit_retention=fable-equinox, health_path=/health/fable-turn, staging_probe_health_path=/health/fable-stage, lease_duration_s=79, recovery_contact=sana-fable, checksum_salt=salt-fable-cloud, telemetry_sink=fable-northstar, dashboard_cache=fable-linen, shadow_importer_queue=fable-pebble-lab, sandbox_fallback=fable-scratch-pad, metrics_prefix=fable-compass, canary_color=fable-plum, rollout_window=Wednesday midnight, archive_tier=fable-glacier, compliance_tag=aquamarine, notification_channel=fable-signal, backup_demonstrator=fable-vault, escalation_room=room-fable-knot.",
+      "words": 36,
+      "contains_production_literal": true,
+      "contains_prototype_literal": true,
+      "call": {
+        "role": "replacement_update",
+        "duration_ms": 9266,
+        "prompt_sha256": "6dd42556b6d93f6d2f52563e3fbe116cdf02d6f6e664aa22e840c56d9a68b2c2",
+        "raw_stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"api_error_status\":null,\"duration_ms\":8372,\"duration_api_ms\":7756,\"ttft_ms\":4677,\"ttft_stream_ms\":4115,\"time_to_request_ms\":2006,\"num_turns\":2,\"result\":\"Done.\",\"stop_reason\":\"end_turn\",\"session_id\":\"84319114-71af-4005-963e-e5b1ac4c9666\",\"total_cost_usd\":0.037046499999999996,\"usage\":{\"input_tokens\":4,\"cache_creation_input_tokens\":2012,\"cache_read_input_tokens\":1399,\"output_tokens\":605,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":2012,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"not_available\",\"iterations\":[{\"input_tokens\":2,\"output_tokens\":5,\"cache_read_input_tokens\":1399,\"cache_creation_input_tokens\":613,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":613},\"type\":\"message\"}],\"speed\":\"standard\"},\"modelUsage\":{\"claude-haiku-4-5-20251001\":{\"inputTokens\":997,\"outputTokens\":17,\"cacheReadInputTokens\":0,\"cacheCreationInputTokens\":0,\"webSearchRequests\":0,\"costUSD\":0.001082,\"contextWindow\":200000,\"maxOutputTokens\":32000},\"claude-sonnet-5\":{\"inputTokens\":4,\"outputTokens\":605,\"cacheReadInputTokens\":1399,\"cacheCreationInputTokens\":2012,\"webSearchRequests\":0,\"costUSD\":0.035964499999999996,\"contextWindow\":200000,\"maxOutputTokens\":32000}},\"permission_denials\":[],\"structured_output\":{\"memory_text\":\"Fable Router: owner=Sana Pike, queue=jade-89, retry_cap=8, idempotency_header=X-Fable-Route, forbidden_fallback=global-map, primary_region=fable-coast, preview_region=fable-preview-west, deployment_zone=alder-zone, schema_namespace=fable.teal, prototype_schema_namespace=fable.prototype, encryption_profile=cipher-finch, demo_client_encryption_profile=fable-toy-cipher, audit_topic=audit-fable-oak, analytics_sandbox_audit_topic=fable-analytics-noise, audit_retention=fable-equinox, health_path=/health/fable-turn, staging_probe_health_path=/health/fable-stage, lease_duration_s=79, recovery_contact=sana-fable, checksum_salt=salt-fable-cloud, telemetry_sink=fable-northstar, dashboard_cache=fable-linen, shadow_importer_queue=fable-pebble-lab, sandbox_fallback=fable-scratch-pad, metrics_prefix=fable-compass, canary_color=fable-plum, rollout_window=Wednesday midnight, archive_tier=fable-glacier, compliance_tag=aquamarine, notification_channel=fable-signal, backup_demonstrator=fable-vault, escalation_room=room-fable-knot.\"},\"terminal_reason\":\"completed\",\"fast_mode_state\":\"off\",\"uuid\":\"a3d65a63-e7a4-4b64-98d5-5818d3320df4\"}\n",
+        "raw_stderr": "",
+        "envelope": {
+          "type": "result",
+          "subtype": "success",
+          "is_error": false,
+          "api_error_status": null,
+          "duration_ms": 8372,
+          "duration_api_ms": 7756,
+          "ttft_ms": 4677,
+          "ttft_stream_ms": 4115,
+          "time_to_request_ms": 2006,
+          "num_turns": 2,
+          "result": "Done.",
+          "stop_reason": "end_turn",
+          "session_id": "84319114-71af-4005-963e-e5b1ac4c9666",
+          "total_cost_usd": 0.037046499999999996,
+          "usage": {
+            "input_tokens": 4,
+            "cache_creation_input_tokens": 2012,
+            "cache_read_input_tokens": 1399,
+            "output_tokens": 605,
+            "server_tool_use": {
+              "web_search_requests": 0,
+              "web_fetch_requests": 0
+            },
+            "service_tier": "standard",
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 2012,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "inference_geo": "not_available",
+            "iterations": [
+              {
+                "input_tokens": 2,
+                "output_tokens": 5,
+                "cache_read_input_tokens": 1399,
+                "cache_creation_input_tokens": 613,
+                "cache_creation": {
+                  "ephemeral_5m_input_tokens": 0,
+                  "ephemeral_1h_input_tokens": 613
+                },
+                "type": "message"
+              }
+            ],
+            "speed": "standard"
+          },
+          "modelUsage": {
+            "claude-haiku-4-5-20251001": {
+              "inputTokens": 997,
+              "outputTokens": 17,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0,
+              "webSearchRequests": 0,
+              "costUSD": 0.001082,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            },
+            "claude-sonnet-5": {
+              "inputTokens": 4,
+              "outputTokens": 605,
+              "cacheReadInputTokens": 1399,
+              "cacheCreationInputTokens": 2012,
+              "webSearchRequests": 0,
+              "costUSD": 0.035964499999999996,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            }
+          },
+          "permission_denials": [],
+          "structured_output": {
+            "memory_text": "Fable Router: owner=Sana Pike, queue=jade-89, retry_cap=8, idempotency_header=X-Fable-Route, forbidden_fallback=global-map, primary_region=fable-coast, preview_region=fable-preview-west, deployment_zone=alder-zone, schema_namespace=fable.teal, prototype_schema_namespace=fable.prototype, encryption_profile=cipher-finch, demo_client_encryption_profile=fable-toy-cipher, audit_topic=audit-fable-oak, analytics_sandbox_audit_topic=fable-analytics-noise, audit_retention=fable-equinox, health_path=/health/fable-turn, staging_probe_health_path=/health/fable-stage, lease_duration_s=79, recovery_contact=sana-fable, checksum_salt=salt-fable-cloud, telemetry_sink=fable-northstar, dashboard_cache=fable-linen, shadow_importer_queue=fable-pebble-lab, sandbox_fallback=fable-scratch-pad, metrics_prefix=fable-compass, canary_color=fable-plum, rollout_window=Wednesday midnight, archive_tier=fable-glacier, compliance_tag=aquamarine, notification_channel=fable-signal, backup_demonstrator=fable-vault, escalation_room=room-fable-knot."
+          },
+          "terminal_reason": "completed",
+          "fast_mode_state": "off",
+          "uuid": "a3d65a63-e7a4-4b64-98d5-5818d3320df4"
+        },
+        "parsed": {
+          "memory_text": "Fable Router: owner=Sana Pike, queue=jade-89, retry_cap=8, idempotency_header=X-Fable-Route, forbidden_fallback=global-map, primary_region=fable-coast, preview_region=fable-preview-west, deployment_zone=alder-zone, schema_namespace=fable.teal, prototype_schema_namespace=fable.prototype, encryption_profile=cipher-finch, demo_client_encryption_profile=fable-toy-cipher, audit_topic=audit-fable-oak, analytics_sandbox_audit_topic=fable-analytics-noise, audit_retention=fable-equinox, health_path=/health/fable-turn, staging_probe_health_path=/health/fable-stage, lease_duration_s=79, recovery_contact=sana-fable, checksum_salt=salt-fable-cloud, telemetry_sink=fable-northstar, dashboard_cache=fable-linen, shadow_importer_queue=fable-pebble-lab, sandbox_fallback=fable-scratch-pad, metrics_prefix=fable-compass, canary_color=fable-plum, rollout_window=Wednesday midnight, archive_tier=fable-glacier, compliance_tag=aquamarine, notification_channel=fable-signal, backup_demonstrator=fable-vault, escalation_room=room-fable-knot."
+        }
+      }
+    },
+    {
+      "step": 5,
+      "source_round": 30,
+      "observation": "The fable batch simulator lease mode is fable-elastic.",
+      "memory_text": "Fable Router: owner=Sana Pike, queue=jade-89, retry_cap=8, idempotency_header=X-Fable-Route, forbidden_fallback=global-map, primary_region=fable-coast, preview_region=fable-preview-west, deployment_zone=alder-zone, schema_namespace=fable.teal, prototype_schema_namespace=fable.prototype, encryption_profile=cipher-finch, demo_client_encryption_profile=fable-toy-cipher, audit_topic=audit-fable-oak, analytics_sandbox_audit_topic=fable-analytics-noise, audit_retention=fable-equinox, health_path=/health/fable-turn, staging_probe_health_path=/health/fable-stage, lease_duration_s=79, recovery_contact=sana-fable, checksum_salt=salt-fable-cloud, telemetry_sink=fable-northstar, dashboard_cache=fable-linen, shadow_importer_queue=fable-pebble-lab, sandbox_fallback=fable-scratch-pad, metrics_prefix=fable-compass, canary_color=fable-plum, rollout_window=Wednesday midnight, archive_tier=fable-glacier, compliance_tag=aquamarine, notification_channel=fable-signal, backup_demonstrator=fable-vault, escalation_room=room-fable-knot, batch_simulator_lease_mode=fable-elastic.",
+      "words": 37,
+      "contains_production_literal": true,
+      "contains_prototype_literal": true,
+      "call": {
+        "role": "replacement_update",
+        "duration_ms": 16597,
+        "prompt_sha256": "a034c576c4c7263a9d56819a804d84b2099c888d3a6771068c6f6ba716e580eb",
+        "raw_stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"api_error_status\":null,\"duration_ms\":15602,\"duration_api_ms\":15623,\"ttft_ms\":10684,\"ttft_stream_ms\":3499,\"time_to_request_ms\":1320,\"num_turns\":2,\"result\":\"Memory updated for Fable Router — consolidated the existing configuration facts and incorporated the new observation (`batch_simulator_lease_mode=fable-elastic`) into a single self-contained entry.\",\"stop_reason\":\"end_turn\",\"session_id\":\"784a335b-bb9b-4224-b9f5-69aab48186e1\",\"total_cost_usd\":0.068388,\"usage\":{\"input_tokens\":4,\"cache_creation_input_tokens\":2822,\"cache_read_input_tokens\":1340,\"output_tokens\":1537,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":2822,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"not_available\",\"iterations\":[{\"input_tokens\":2,\"output_tokens\":68,\"cache_read_input_tokens\":1340,\"cache_creation_input_tokens\":1482,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":1482},\"type\":\"message\"}],\"speed\":\"standard\"},\"modelUsage\":{\"claude-haiku-4-5-20251001\":{\"inputTokens\":953,\"outputTokens\":20,\"cacheReadInputTokens\":0,\"cacheCreationInputTokens\":0,\"webSearchRequests\":0,\"costUSD\":0.001053,\"contextWindow\":200000,\"maxOutputTokens\":32000},\"claude-sonnet-5\":{\"inputTokens\":4,\"outputTokens\":1537,\"cacheReadInputTokens\":1340,\"cacheCreationInputTokens\":2822,\"webSearchRequests\":0,\"costUSD\":0.067335,\"contextWindow\":200000,\"maxOutputTokens\":32000}},\"permission_denials\":[],\"structured_output\":{\"memory_text\":\"Fable Router: owner=Sana Pike, queue=jade-89, retry_cap=8, idempotency_header=X-Fable-Route, forbidden_fallback=global-map, primary_region=fable-coast, preview_region=fable-preview-west, deployment_zone=alder-zone, schema_namespace=fable.teal, prototype_schema_namespace=fable.prototype, encryption_profile=cipher-finch, demo_client_encryption_profile=fable-toy-cipher, audit_topic=audit-fable-oak, analytics_sandbox_audit_topic=fable-analytics-noise, audit_retention=fable-equinox, health_path=/health/fable-turn, staging_probe_health_path=/health/fable-stage, lease_duration_s=79, recovery_contact=sana-fable, checksum_salt=salt-fable-cloud, telemetry_sink=fable-northstar, dashboard_cache=fable-linen, shadow_importer_queue=fable-pebble-lab, sandbox_fallback=fable-scratch-pad, metrics_prefix=fable-compass, canary_color=fable-plum, rollout_window=Wednesday midnight, archive_tier=fable-glacier, compliance_tag=aquamarine, notification_channel=fable-signal, backup_demonstrator=fable-vault, escalation_room=room-fable-knot, batch_simulator_lease_mode=fable-elastic.\"},\"terminal_reason\":\"completed\",\"fast_mode_state\":\"off\",\"uuid\":\"662f4811-7c2a-4f17-9210-63461a1be085\"}\n",
+        "raw_stderr": "",
+        "envelope": {
+          "type": "result",
+          "subtype": "success",
+          "is_error": false,
+          "api_error_status": null,
+          "duration_ms": 15602,
+          "duration_api_ms": 15623,
+          "ttft_ms": 10684,
+          "ttft_stream_ms": 3499,
+          "time_to_request_ms": 1320,
+          "num_turns": 2,
+          "result": "Memory updated for Fable Router — consolidated the existing configuration facts and incorporated the new observation (`batch_simulator_lease_mode=fable-elastic`) into a single self-contained entry.",
+          "stop_reason": "end_turn",
+          "session_id": "784a335b-bb9b-4224-b9f5-69aab48186e1",
+          "total_cost_usd": 0.068388,
+          "usage": {
+            "input_tokens": 4,
+            "cache_creation_input_tokens": 2822,
+            "cache_read_input_tokens": 1340,
+            "output_tokens": 1537,
+            "server_tool_use": {
+              "web_search_requests": 0,
+              "web_fetch_requests": 0
+            },
+            "service_tier": "standard",
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 2822,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "inference_geo": "not_available",
+            "iterations": [
+              {
+                "input_tokens": 2,
+                "output_tokens": 68,
+                "cache_read_input_tokens": 1340,
+                "cache_creation_input_tokens": 1482,
+                "cache_creation": {
+                  "ephemeral_5m_input_tokens": 0,
+                  "ephemeral_1h_input_tokens": 1482
+                },
+                "type": "message"
+              }
+            ],
+            "speed": "standard"
+          },
+          "modelUsage": {
+            "claude-haiku-4-5-20251001": {
+              "inputTokens": 953,
+              "outputTokens": 20,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0,
+              "webSearchRequests": 0,
+              "costUSD": 0.001053,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            },
+            "claude-sonnet-5": {
+              "inputTokens": 4,
+              "outputTokens": 1537,
+              "cacheReadInputTokens": 1340,
+              "cacheCreationInputTokens": 2822,
+              "webSearchRequests": 0,
+              "costUSD": 0.067335,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            }
+          },
+          "permission_denials": [],
+          "structured_output": {
+            "memory_text": "Fable Router: owner=Sana Pike, queue=jade-89, retry_cap=8, idempotency_header=X-Fable-Route, forbidden_fallback=global-map, primary_region=fable-coast, preview_region=fable-preview-west, deployment_zone=alder-zone, schema_namespace=fable.teal, prototype_schema_namespace=fable.prototype, encryption_profile=cipher-finch, demo_client_encryption_profile=fable-toy-cipher, audit_topic=audit-fable-oak, analytics_sandbox_audit_topic=fable-analytics-noise, audit_retention=fable-equinox, health_path=/health/fable-turn, staging_probe_health_path=/health/fable-stage, lease_duration_s=79, recovery_contact=sana-fable, checksum_salt=salt-fable-cloud, telemetry_sink=fable-northstar, dashboard_cache=fable-linen, shadow_importer_queue=fable-pebble-lab, sandbox_fallback=fable-scratch-pad, metrics_prefix=fable-compass, canary_color=fable-plum, rollout_window=Wednesday midnight, archive_tier=fable-glacier, compliance_tag=aquamarine, notification_channel=fable-signal, backup_demonstrator=fable-vault, escalation_room=room-fable-knot, batch_simulator_lease_mode=fable-elastic."
+          },
+          "terminal_reason": "completed",
+          "fast_mode_state": "off",
+          "uuid": "662f4811-7c2a-4f17-9210-63461a1be085"
+        },
+        "parsed": {
+          "memory_text": "Fable Router: owner=Sana Pike, queue=jade-89, retry_cap=8, idempotency_header=X-Fable-Route, forbidden_fallback=global-map, primary_region=fable-coast, preview_region=fable-preview-west, deployment_zone=alder-zone, schema_namespace=fable.teal, prototype_schema_namespace=fable.prototype, encryption_profile=cipher-finch, demo_client_encryption_profile=fable-toy-cipher, audit_topic=audit-fable-oak, analytics_sandbox_audit_topic=fable-analytics-noise, audit_retention=fable-equinox, health_path=/health/fable-turn, staging_probe_health_path=/health/fable-stage, lease_duration_s=79, recovery_contact=sana-fable, checksum_salt=salt-fable-cloud, telemetry_sink=fable-northstar, dashboard_cache=fable-linen, shadow_importer_queue=fable-pebble-lab, sandbox_fallback=fable-scratch-pad, metrics_prefix=fable-compass, canary_color=fable-plum, rollout_window=Wednesday midnight, archive_tier=fable-glacier, compliance_tag=aquamarine, notification_channel=fable-signal, backup_demonstrator=fable-vault, escalation_room=room-fable-knot, batch_simulator_lease_mode=fable-elastic."
+        }
+      }
+    }
+  ],
+  "qa_calls": {
+    "rescue": {
+      "role": "downstream_qa",
+      "duration_ms": 5692,
+      "prompt_sha256": "f632db71aeca9222ef856debfa88e9bb9b5e6f7d5bee0360d01435f29247e64e",
+      "raw_stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"api_error_status\":null,\"duration_ms\":4504,\"duration_api_ms\":4876,\"ttft_ms\":2856,\"ttft_stream_ms\":2854,\"time_to_request_ms\":625,\"num_turns\":2,\"result\":\"production_schema_namespace: fable.teal\\nprototype_schema_namespace: fable.prototype\",\"stop_reason\":\"end_turn\",\"session_id\":\"38fbd02e-e59d-4906-957e-b8efb86ac519\",\"total_cost_usd\":0.020268,\"usage\":{\"input_tokens\":4,\"cache_creation_input_tokens\":1521,\"cache_read_input_tokens\":1410,\"output_tokens\":131,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":1521,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"not_available\",\"iterations\":[{\"input_tokens\":2,\"output_tokens\":34,\"cache_read_input_tokens\":1410,\"cache_creation_input_tokens\":111,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":111},\"type\":\"message\"}],\"speed\":\"standard\"},\"modelUsage\":{\"claude-haiku-4-5-20251001\":{\"inputTokens\":963,\"outputTokens\":19,\"cacheReadInputTokens\":0,\"cacheCreationInputTokens\":0,\"webSearchRequests\":0,\"costUSD\":0.001058,\"contextWindow\":200000,\"maxOutputTokens\":32000},\"claude-sonnet-5\":{\"inputTokens\":4,\"outputTokens\":131,\"cacheReadInputTokens\":1410,\"cacheCreationInputTokens\":1521,\"webSearchRequests\":0,\"costUSD\":0.01921,\"contextWindow\":200000,\"maxOutputTokens\":32000}},\"permission_denials\":[],\"structured_output\":{\"production_schema_namespace\":\"fable.teal\",\"prototype_schema_namespace\":\"fable.prototype\"},\"terminal_reason\":\"completed\",\"fast_mode_state\":\"off\",\"uuid\":\"1552c8d9-5013-4587-874c-71fe1398c149\"}\n",
+      "raw_stderr": "",
+      "envelope": {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false,
+        "api_error_status": null,
+        "duration_ms": 4504,
+        "duration_api_ms": 4876,
+        "ttft_ms": 2856,
+        "ttft_stream_ms": 2854,
+        "time_to_request_ms": 625,
+        "num_turns": 2,
+        "result": "production_schema_namespace: fable.teal\nprototype_schema_namespace: fable.prototype",
+        "stop_reason": "end_turn",
+        "session_id": "38fbd02e-e59d-4906-957e-b8efb86ac519",
+        "total_cost_usd": 0.020268,
+        "usage": {
+          "input_tokens": 4,
+          "cache_creation_input_tokens": 1521,
+          "cache_read_input_tokens": 1410,
+          "output_tokens": 131,
+          "server_tool_use": {
+            "web_search_requests": 0,
+            "web_fetch_requests": 0
+          },
+          "service_tier": "standard",
+          "cache_creation": {
+            "ephemeral_1h_input_tokens": 1521,
+            "ephemeral_5m_input_tokens": 0
+          },
+          "inference_geo": "not_available",
+          "iterations": [
+            {
+              "input_tokens": 2,
+              "output_tokens": 34,
+              "cache_read_input_tokens": 1410,
+              "cache_creation_input_tokens": 111,
+              "cache_creation": {
+                "ephemeral_5m_input_tokens": 0,
+                "ephemeral_1h_input_tokens": 111
+              },
+              "type": "message"
+            }
+          ],
+          "speed": "standard"
+        },
+        "modelUsage": {
+          "claude-haiku-4-5-20251001": {
+            "inputTokens": 963,
+            "outputTokens": 19,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0,
+            "webSearchRequests": 0,
+            "costUSD": 0.001058,
+            "contextWindow": 200000,
+            "maxOutputTokens": 32000
+          },
+          "claude-sonnet-5": {
+            "inputTokens": 4,
+            "outputTokens": 131,
+            "cacheReadInputTokens": 1410,
+            "cacheCreationInputTokens": 1521,
+            "webSearchRequests": 0,
+            "costUSD": 0.01921,
+            "contextWindow": 200000,
+            "maxOutputTokens": 32000
+          }
+        },
+        "permission_denials": [],
+        "structured_output": {
+          "production_schema_namespace": "fable.teal",
+          "prototype_schema_namespace": "fable.prototype"
+        },
+        "terminal_reason": "completed",
+        "fast_mode_state": "off",
+        "uuid": "1552c8d9-5013-4587-874c-71fe1398c149"
+      },
+      "parsed": {
+        "production_schema_namespace": "fable.teal",
+        "prototype_schema_namespace": "fable.prototype"
+      }
+    },
+    "baseline": {
+      "role": "downstream_qa",
+      "duration_ms": 7106,
+      "prompt_sha256": "2af6ffa8a1b993580742e0fe7248841aafc57410b8e8f0cbdc1cc10400cac305",
+      "raw_stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"api_error_status\":null,\"duration_ms\":6081,\"duration_api_ms\":6070,\"ttft_ms\":4244,\"ttft_stream_ms\":3161,\"time_to_request_ms\":1017,\"num_turns\":2,\"result\":\"production_schema_namespace: fable.teal\\nprototype_schema_namespace: fable.prototype\",\"stop_reason\":\"end_turn\",\"session_id\":\"f690a896-3b7f-414b-9b6a-713cd86474a7\",\"total_cost_usd\":0.01173,\"usage\":{\"input_tokens\":4,\"cache_creation_input_tokens\":250,\"cache_read_input_tokens\":2772,\"output_tokens\":271,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":250,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"not_available\",\"iterations\":[{\"input_tokens\":2,\"output_tokens\":34,\"cache_read_input_tokens\":1386,\"cache_creation_input_tokens\":250,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":250},\"type\":\"message\"}],\"speed\":\"standard\"},\"modelUsage\":{\"claude-haiku-4-5-20251001\":{\"inputTokens\":959,\"outputTokens\":18,\"cacheReadInputTokens\":0,\"cacheCreationInputTokens\":0,\"webSearchRequests\":0,\"costUSD\":0.001049,\"contextWindow\":200000,\"maxOutputTokens\":32000},\"claude-sonnet-5\":{\"inputTokens\":4,\"outputTokens\":271,\"cacheReadInputTokens\":2772,\"cacheCreationInputTokens\":250,\"webSearchRequests\":0,\"costUSD\":0.010681,\"contextWindow\":200000,\"maxOutputTokens\":32000}},\"permission_denials\":[],\"structured_output\":{\"production_schema_namespace\":\"fable.teal\",\"prototype_schema_namespace\":\"fable.prototype\"},\"terminal_reason\":\"completed\",\"fast_mode_state\":\"off\",\"uuid\":\"014df9ec-26be-469f-8d7b-87b64628dd8b\"}\n",
+      "raw_stderr": "",
+      "envelope": {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false,
+        "api_error_status": null,
+        "duration_ms": 6081,
+        "duration_api_ms": 6070,
+        "ttft_ms": 4244,
+        "ttft_stream_ms": 3161,
+        "time_to_request_ms": 1017,
+        "num_turns": 2,
+        "result": "production_schema_namespace: fable.teal\nprototype_schema_namespace: fable.prototype",
+        "stop_reason": "end_turn",
+        "session_id": "f690a896-3b7f-414b-9b6a-713cd86474a7",
+        "total_cost_usd": 0.01173,
+        "usage": {
+          "input_tokens": 4,
+          "cache_creation_input_tokens": 250,
+          "cache_read_input_tokens": 2772,
+          "output_tokens": 271,
+          "server_tool_use": {
+            "web_search_requests": 0,
+            "web_fetch_requests": 0
+          },
+          "service_tier": "standard",
+          "cache_creation": {
+            "ephemeral_1h_input_tokens": 250,
+            "ephemeral_5m_input_tokens": 0
+          },
+          "inference_geo": "not_available",
+          "iterations": [
+            {
+              "input_tokens": 2,
+              "output_tokens": 34,
+              "cache_read_input_tokens": 1386,
+              "cache_creation_input_tokens": 250,
+              "cache_creation": {
+                "ephemeral_5m_input_tokens": 0,
+                "ephemeral_1h_input_tokens": 250
+              },
+              "type": "message"
+            }
+          ],
+          "speed": "standard"
+        },
+        "modelUsage": {
+          "claude-haiku-4-5-20251001": {
+            "inputTokens": 959,
+            "outputTokens": 18,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0,
+            "webSearchRequests": 0,
+            "costUSD": 0.001049,
+            "contextWindow": 200000,
+            "maxOutputTokens": 32000
+          },
+          "claude-sonnet-5": {
+            "inputTokens": 4,
+            "outputTokens": 271,
+            "cacheReadInputTokens": 2772,
+            "cacheCreationInputTokens": 250,
+            "webSearchRequests": 0,
+            "costUSD": 0.010681,
+            "contextWindow": 200000,
+            "maxOutputTokens": 32000
+          }
+        },
+        "permission_denials": [],
+        "structured_output": {
+          "production_schema_namespace": "fable.teal",
+          "prototype_schema_namespace": "fable.prototype"
+        },
+        "terminal_reason": "completed",
+        "fast_mode_state": "off",
+        "uuid": "014df9ec-26be-469f-8d7b-87b64628dd8b"
+      },
+      "parsed": {
+        "production_schema_namespace": "fable.teal",
+        "prototype_schema_namespace": "fable.prototype"
+      }
+    },
+    "additive": {
+      "role": "downstream_qa",
+      "duration_ms": 5515,
+      "prompt_sha256": "c0cf59e46ccf69b2d3141283d0200a2e708e2e392c0e0ec9351752f6fedd331e",
+      "raw_stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"api_error_status\":null,\"duration_ms\":4590,\"duration_api_ms\":4639,\"ttft_ms\":2947,\"ttft_stream_ms\":2392,\"time_to_request_ms\":920,\"num_turns\":2,\"result\":\"production schema namespace: fable.teal\\nprototype schema namespace: fable.prototype\",\"stop_reason\":\"end_turn\",\"session_id\":\"1d89def4-5854-4c80-ace8-31b6625c3465\",\"total_cost_usd\":0.010218999999999999,\"usage\":{\"input_tokens\":4,\"cache_creation_input_tokens\":200,\"cache_read_input_tokens\":3186,\"output_tokens\":217,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":200,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"not_available\",\"iterations\":[{\"input_tokens\":2,\"output_tokens\":30,\"cache_read_input_tokens\":1593,\"cache_creation_input_tokens\":200,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":200},\"type\":\"message\"}],\"speed\":\"standard\"},\"modelUsage\":{\"claude-haiku-4-5-20251001\":{\"inputTokens\":1091,\"outputTokens\":18,\"cacheReadInputTokens\":0,\"cacheCreationInputTokens\":0,\"webSearchRequests\":0,\"costUSD\":0.001181,\"contextWindow\":200000,\"maxOutputTokens\":32000},\"claude-sonnet-5\":{\"inputTokens\":4,\"outputTokens\":217,\"cacheReadInputTokens\":3186,\"cacheCreationInputTokens\":200,\"webSearchRequests\":0,\"costUSD\":0.009038,\"contextWindow\":200000,\"maxOutputTokens\":32000}},\"permission_denials\":[],\"structured_output\":{\"production_schema_namespace\":\"fable.teal\",\"prototype_schema_namespace\":\"fable.prototype\"},\"terminal_reason\":\"completed\",\"fast_mode_state\":\"off\",\"uuid\":\"49267222-7a1c-4512-8f84-6f3461ecf38e\"}\n",
+      "raw_stderr": "",
+      "envelope": {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false,
+        "api_error_status": null,
+        "duration_ms": 4590,
+        "duration_api_ms": 4639,
+        "ttft_ms": 2947,
+        "ttft_stream_ms": 2392,
+        "time_to_request_ms": 920,
+        "num_turns": 2,
+        "result": "production schema namespace: fable.teal\nprototype schema namespace: fable.prototype",
+        "stop_reason": "end_turn",
+        "session_id": "1d89def4-5854-4c80-ace8-31b6625c3465",
+        "total_cost_usd": 0.010218999999999999,
+        "usage": {
+          "input_tokens": 4,
+          "cache_creation_input_tokens": 200,
+          "cache_read_input_tokens": 3186,
+          "output_tokens": 217,
+          "server_tool_use": {
+            "web_search_requests": 0,
+            "web_fetch_requests": 0
+          },
+          "service_tier": "standard",
+          "cache_creation": {
+            "ephemeral_1h_input_tokens": 200,
+            "ephemeral_5m_input_tokens": 0
+          },
+          "inference_geo": "not_available",
+          "iterations": [
+            {
+              "input_tokens": 2,
+              "output_tokens": 30,
+              "cache_read_input_tokens": 1593,
+              "cache_creation_input_tokens": 200,
+              "cache_creation": {
+                "ephemeral_5m_input_tokens": 0,
+                "ephemeral_1h_input_tokens": 200
+              },
+              "type": "message"
+            }
+          ],
+          "speed": "standard"
+        },
+        "modelUsage": {
+          "claude-haiku-4-5-20251001": {
+            "inputTokens": 1091,
+            "outputTokens": 18,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0,
+            "webSearchRequests": 0,
+            "costUSD": 0.001181,
+            "contextWindow": 200000,
+            "maxOutputTokens": 32000
+          },
+          "claude-sonnet-5": {
+            "inputTokens": 4,
+            "outputTokens": 217,
+            "cacheReadInputTokens": 3186,
+            "cacheCreationInputTokens": 200,
+            "webSearchRequests": 0,
+            "costUSD": 0.009038,
+            "contextWindow": 200000,
+            "maxOutputTokens": 32000
+          }
+        },
+        "permission_denials": [],
+        "structured_output": {
+          "production_schema_namespace": "fable.teal",
+          "prototype_schema_namespace": "fable.prototype"
+        },
+        "terminal_reason": "completed",
+        "fast_mode_state": "off",
+        "uuid": "49267222-7a1c-4512-8f84-6f3461ecf38e"
+      },
+      "parsed": {
+        "production_schema_namespace": "fable.teal",
+        "prototype_schema_namespace": "fable.prototype"
+      }
+    },
+    "rewritten": {
+      "role": "downstream_qa",
+      "duration_ms": 6684,
+      "prompt_sha256": "88042ad645052c621d298878273bd8f08d21b01b97a8f7dba593d0253343e963",
+      "raw_stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"api_error_status\":null,\"duration_ms\":4556,\"duration_api_ms\":5574,\"ttft_ms\":2894,\"ttft_stream_ms\":2893,\"time_to_request_ms\":331,\"num_turns\":2,\"result\":\"Question 1: fable.teal\\nQuestion 2: fable.prototype\",\"stop_reason\":\"end_turn\",\"session_id\":\"4edf3233-6c1a-4d29-8d8d-a8b02d7bda84\",\"total_cost_usd\":0.019274500000000003,\"usage\":{\"input_tokens\":4,\"cache_creation_input_tokens\":1454,\"cache_read_input_tokens\":1343,\"output_tokens\":121,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":1454,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"not_available\",\"iterations\":[{\"input_tokens\":2,\"output_tokens\":24,\"cache_read_input_tokens\":1343,\"cache_creation_input_tokens\":111,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":111},\"type\":\"message\"}],\"speed\":\"standard\"},\"modelUsage\":{\"claude-haiku-4-5-20251001\":{\"inputTokens\":923,\"outputTokens\":19,\"cacheReadInputTokens\":0,\"cacheCreationInputTokens\":0,\"webSearchRequests\":0,\"costUSD\":0.001018,\"contextWindow\":200000,\"maxOutputTokens\":32000},\"claude-sonnet-5\":{\"inputTokens\":4,\"outputTokens\":121,\"cacheReadInputTokens\":1343,\"cacheCreationInputTokens\":1454,\"webSearchRequests\":0,\"costUSD\":0.018256500000000002,\"contextWindow\":200000,\"maxOutputTokens\":32000}},\"permission_denials\":[],\"structured_output\":{\"production_schema_namespace\":\"fable.teal\",\"prototype_schema_namespace\":\"fable.prototype\"},\"terminal_reason\":\"completed\",\"fast_mode_state\":\"off\",\"uuid\":\"f5e8d37e-3cba-4f6e-b829-9d946c19a3eb\"}\n",
+      "raw_stderr": "",
+      "envelope": {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false,
+        "api_error_status": null,
+        "duration_ms": 4556,
+        "duration_api_ms": 5574,
+        "ttft_ms": 2894,
+        "ttft_stream_ms": 2893,
+        "time_to_request_ms": 331,
+        "num_turns": 2,
+        "result": "Question 1: fable.teal\nQuestion 2: fable.prototype",
+        "stop_reason": "end_turn",
+        "session_id": "4edf3233-6c1a-4d29-8d8d-a8b02d7bda84",
+        "total_cost_usd": 0.019274500000000003,
+        "usage": {
+          "input_tokens": 4,
+          "cache_creation_input_tokens": 1454,
+          "cache_read_input_tokens": 1343,
+          "output_tokens": 121,
+          "server_tool_use": {
+            "web_search_requests": 0,
+            "web_fetch_requests": 0
+          },
+          "service_tier": "standard",
+          "cache_creation": {
+            "ephemeral_1h_input_tokens": 1454,
+            "ephemeral_5m_input_tokens": 0
+          },
+          "inference_geo": "not_available",
+          "iterations": [
+            {
+              "input_tokens": 2,
+              "output_tokens": 24,
+              "cache_read_input_tokens": 1343,
+              "cache_creation_input_tokens": 111,
+              "cache_creation": {
+                "ephemeral_5m_input_tokens": 0,
+                "ephemeral_1h_input_tokens": 111
+              },
+              "type": "message"
+            }
+          ],
+          "speed": "standard"
+        },
+        "modelUsage": {
+          "claude-haiku-4-5-20251001": {
+            "inputTokens": 923,
+            "outputTokens": 19,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0,
+            "webSearchRequests": 0,
+            "costUSD": 0.001018,
+            "contextWindow": 200000,
+            "maxOutputTokens": 32000
+          },
+          "claude-sonnet-5": {
+            "inputTokens": 4,
+            "outputTokens": 121,
+            "cacheReadInputTokens": 1343,
+            "cacheCreationInputTokens": 1454,
+            "webSearchRequests": 0,
+            "costUSD": 0.018256500000000002,
+            "contextWindow": 200000,
+            "maxOutputTokens": 32000
+          }
+        },
+        "permission_denials": [],
+        "structured_output": {
+          "production_schema_namespace": "fable.teal",
+          "prototype_schema_namespace": "fable.prototype"
+        },
+        "terminal_reason": "completed",
+        "fast_mode_state": "off",
+        "uuid": "f5e8d37e-3cba-4f6e-b829-9d946c19a3eb"
+      },
+      "parsed": {
+        "production_schema_namespace": "fable.teal",
+        "prototype_schema_namespace": "fable.prototype"
+      }
+    }
+  },
+  "condition_scores": {
+    "rescue": {
+      "condition": "rescue",
+      "production_expected": "fable.teal",
+      "production_observed": "fable.teal",
+      "production_correct": true,
+      "prototype_expected": "fable.prototype",
+      "prototype_observed": "fable.prototype",
+      "prototype_correct": true,
+      "semantic_merge_signature": false
+    },
+    "baseline": {
+      "condition": "baseline",
+      "production_expected": "fable.teal",
+      "production_observed": "fable.teal",
+      "production_correct": true,
+      "prototype_expected": "fable.prototype",
+      "prototype_observed": "fable.prototype",
+      "prototype_correct": true,
+      "semantic_merge_signature": false
+    },
+    "additive": {
+      "condition": "additive",
+      "production_expected": "fable.teal",
+      "production_observed": "fable.teal",
+      "production_correct": true,
+      "prototype_expected": "fable.prototype",
+      "prototype_observed": "fable.prototype",
+      "prototype_correct": true,
+      "semantic_merge_signature": false
+    },
+    "rewritten": {
+      "condition": "rewritten",
+      "production_expected": "fable.teal",
+      "production_observed": "fable.teal",
+      "production_correct": true,
+      "prototype_expected": "fable.prototype",
+      "prototype_observed": "fable.prototype",
+      "prototype_correct": true,
+      "semantic_merge_signature": false
+    }
+  },
+  "paired_score": {
+    "harm": false,
+    "win": false,
+    "rescued_harm": false,
+    "semantic_merge_harm": false
+  },
+  "completed_at": "2026-08-27T04:38:28.688Z"
+}

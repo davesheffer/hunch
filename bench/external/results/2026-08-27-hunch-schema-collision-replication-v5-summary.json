@@ -1,0 +1,184 @@
+{
+  "schema_version": 1,
+  "protocol_version": 5,
+  "experiment": "hunch-schema-collision-replication",
+  "status": "complete",
+  "valid": true,
+  "planned_trajectories": 18,
+  "completed_trajectories": 18,
+  "planned_cli_calls": 162,
+  "completed_cli_calls": 162,
+  "validity_gates": {
+    "all_calls_complete": {
+      "observed": "162/162",
+      "passed": true
+    },
+    "rewritten_checkpoints_within_100_words": {
+      "observed": "90/90",
+      "maximum_words": 46,
+      "passed": true
+    },
+    "baseline_production": {
+      "observed": "18/18",
+      "required": "17/18",
+      "passed": true
+    },
+    "additive_production": {
+      "observed": "17/18",
+      "required": "17/18",
+      "passed": true
+    },
+    "baseline_both_namespaces": {
+      "observed": "36/36",
+      "required": "34/36",
+      "passed": true
+    },
+    "additive_both_namespaces": {
+      "observed": "35/36",
+      "required": "34/36",
+      "passed": true
+    }
+  },
+  "accuracy": {
+    "baseline": {
+      "production": "18/18",
+      "prototype": "18/18",
+      "both": "36/36"
+    },
+    "additive": {
+      "production": "17/18",
+      "prototype": "18/18",
+      "both": "35/36"
+    },
+    "rewritten": {
+      "production": "18/18",
+      "prototype": "18/18",
+      "both": "36/36"
+    },
+    "rescue": {
+      "production": "18/18",
+      "prototype": "18/18",
+      "both": "36/36"
+    }
+  },
+  "production_accuracy_by_project": {
+    "aster-relay": {
+      "baseline": "3/3",
+      "additive": "3/3",
+      "rewritten": "3/3",
+      "rescue": "3/3"
+    },
+    "birch-ledger": {
+      "baseline": "3/3",
+      "additive": "3/3",
+      "rewritten": "3/3",
+      "rescue": "3/3"
+    },
+    "cinder-index": {
+      "baseline": "3/3",
+      "additive": "3/3",
+      "rewritten": "3/3",
+      "rescue": "3/3"
+    },
+    "delta-beacon": {
+      "baseline": "3/3",
+      "additive": "2/3",
+      "rewritten": "3/3",
+      "rescue": "3/3"
+    },
+    "ember-archive": {
+      "baseline": "3/3",
+      "additive": "3/3",
+      "rewritten": "3/3",
+      "rescue": "3/3"
+    },
+    "fable-router": {
+      "baseline": "3/3",
+      "additive": "3/3",
+      "rewritten": "3/3",
+      "rescue": "3/3"
+    }
+  },
+  "primary_contrast": {
+    "additive_production_accuracy": 0.9444444444444444,
+    "rewritten_production_accuracy": 1,
+    "additive_minus_rewritten_percentage_points": -5.555555555555555,
+    "paired_harms": 0,
+    "paired_wins": 1,
+    "harm_projects": 0,
+    "semantic_merge_harms": 0,
+    "rescued_harms": 0,
+    "harm_trajectories": [],
+    "win_trajectories": [
+      16
+    ]
+  },
+  "frozen_confirmation_checks": {
+    "at_least_four_harms": false,
+    "harms_outnumber_wins": false,
+    "harms_in_at_least_two_projects": false,
+    "at_least_half_harms_match_semantic_merge": false,
+    "rescue_recovers_at_least_75_percent_of_harms": false,
+    "semantic_merge_share": null,
+    "rescue_rate": null
+  },
+  "replacement_trace": {
+    "cap_compliant_checkpoints": 90,
+    "cap_compliant_checkpoints_total": 90,
+    "final_memory_words_mean": 39.5,
+    "final_memory_words_min": 36,
+    "final_memory_words_max": 46,
+    "target_words": 90,
+    "hard_max_words": 100
+  },
+  "observed_anomaly": {
+    "trajectory": 16,
+    "case_id": "delta-beacon",
+    "condition": "additive",
+    "question": "production_schema_namespace",
+    "expected": "delta.cobalt",
+    "observed": "UNKNOWN",
+    "paired_classification": "win",
+    "description": "Additive missed the production namespace while Rewritten answered it correctly. This is the opposite direction from a replacement-memory harm."
+  },
+  "frozen_decisions": {
+    "v4_namespace_collision_signature_confirmed": false,
+    "hunch_immutable_additive_mitigation_supported": false,
+    "interpretation": "The experiment was valid, but the v4 namespace merge did not replicate at the preregistered frequency and breadth. Rewritten produced zero paired harms across 18 isolated trajectories."
+  },
+  "execution": {
+    "started_at": "2026-08-27T04:29:49.101Z",
+    "completed_at": "2026-08-27T04:43:02.674Z",
+    "cli_reported_cost_usd": 7.483627,
+    "aggregate_call_duration_minutes": 36.08225,
+    "parallel_wall_time_minutes": 13.226216666666667,
+    "concurrency_cap": 3,
+    "manual_retries": 0
+  },
+  "integrity": {
+    "git_head_during_runs": "33cd6483bc7cf0faf2826c60edb306abc33d8c5f",
+    "runner_sha256": "f3bd2a02569e0fa886cf4941ac0c5796678bb8fda8b695119a2e1f1d931a2f71",
+    "system_prompt_sha256": "ced040c0d0e2979fa7f23d256137c9b31ac844b98fafc77291fd1361d3a8e275",
+    "source_v4_repeat_3_sha256": "7a1c098f913993fba2c3732110c487edfc4a9b0c6b52348b58b69f31750e9244",
+    "raw_trajectory_sha256": {
+      "1": "e5efad7cbf5381b93c341458364f35ffef1213dd57d2e2f0f34ab055a1c46f63",
+      "2": "96f19f42839540e0ce43325f8bca524dcda1661ce6820797cd28e91db263e7bb",
+      "3": "441e81cc7f4a23c16eada0741da19697ba52a736e8bf61758216442dc6a6da60",
+      "4": "0b481d722a85e06ff75edd6303a9bb8613da3f0e2a76889ccd88b6829d3b2220",
+      "5": "643c3c714c06cf7a1446cb79b46b25e2e67c8d87909e39443c59dabf1db67420",
+      "6": "122e4f09a2e460fe05b51a89fda609e94c86ccf34cd3882476adef055e1cb4d1",
+      "7": "8802e1b60350dafbe1b28690f50512c9f1f234e98937af51c9810eab7dbfb153",
+      "8": "e1584d52c351f7927820e7a534306e8399399c02e9a88360462b26c330b699e8",
+      "9": "d976f646d7a3cb108d4d48070c31fa798b3f74bdc3f7bb52f745f0860870329d",
+      "10": "d7dae6fdf9423f5b6a478d792a3cc50562d94d0eb67aa5631bd9999ed3563251",
+      "11": "d7ccda8ecf534fa043dd9ba205f699ffccf162357b07e3ba2f4b15d1dc8d1e61",
+      "12": "f486a54ddf0fcacc41b256fa58cb8017ad091a471a843d434b14c0f79f34ca51",
+      "13": "bf43d60e7515af605801e17c047a32912ee7f8d6ead2669244b6c2b4969f7746",
+      "14": "76621689cec24760cd95c9b6ffb45974ce8b6281a4db2b1bdce95ad77042fa3b",
+      "15": "94ec8d72a73898de2452acfb0beea3f1dad0a9c4a822328e28b1d136d20847c4",
+      "16": "51c0276a7b8db2d01dca6b3b287dde6c9511ee13957dea56763cbd0479ce2930",
+      "17": "a12653e782b405120694b9fa2e10b0d6b41fff02df950c46840b07b315340e6f",
+      "18": "6483cd00b09c5f43644839c887aed5664f64b6a6d0d6aa3e4300b2bbd8f8b0d1"
+    }
+  }
+}

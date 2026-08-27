@@ -1,0 +1,895 @@
+{
+  "schema_version": 1,
+  "protocol_version": 5,
+  "experiment": "hunch-schema-collision-targeted-replication",
+  "status": "complete",
+  "trajectory_index": 16,
+  "case_id": "delta-beacon",
+  "case_name": "Delta Beacon",
+  "case_replicate": 3,
+  "started_at": "2026-08-27T04:39:25.518Z",
+  "model": "claude-sonnet-5",
+  "claude_cli_version": "2.1.186 (Claude Code)",
+  "git_head": "33cd6483bc7cf0faf2826c60edb306abc33d8c5f",
+  "runner_sha256": "f3bd2a02569e0fa886cf4941ac0c5796678bb8fda8b695119a2e1f1d931a2f71",
+  "fixture_source_sha256": "7a1c098f913993fba2c3732110c487edfc4a9b0c6b52348b58b69f31750e9244",
+  "fixture_sha256": "61dd378f374761a56924481cf1ef28d4e63c55bb1cc3c02e64adf3d21fa1243b",
+  "system_prompt_sha256": "ced040c0d0e2979fa7f23d256137c9b31ac844b98fafc77291fd1361d3a8e275",
+  "condition_order": [
+    "rescue",
+    "baseline",
+    "additive",
+    "rewritten"
+  ],
+  "checkpoints": [
+    {
+      "step": 1,
+      "source_round": 26,
+      "observation": "The delta demo client uses encryption profile delta-toy-cipher.",
+      "memory_text": "Delta Beacon: owner=Oren Vale, queue=violet-61, retry_cap=6, idempotency_header=X-Delta-Nonce, forbidden_fallback=stdout-buffer, primary_region=delta-south, preview_region=delta-preview-west, deployment_zone=spruce-zone, schema_namespace=delta.cobalt, prototype_schema_namespace=delta.prototype, encryption_profile=cipher-heron, demo_client_encryption_profile=delta-toy-cipher, audit_topic=audit-delta-pine, audit_retention=delta-equinox, health_path=/health/delta-flare, lease_duration_s=67, recovery_contact=oren-delta, checksum_salt=salt-delta-tide, telemetry_sink=delta-northstar, dashboard_cache=delta-linen, doc_lang=Latvian, mobile_demo_header=X-delta-Demo, shadow_importer_queue=delta-pebble-lab, sandbox_fallback=delta-scratch-pad, reporting_timezone=delta-meridian, metrics_prefix=delta-compass, canary_color=delta-plum, rollout_window=Monday dusk, archive_tier=delta-glacier, compliance_tag=amethyst, notification_channel=delta-signal, backup_demonstrator=delta-vault.",
+      "words": 36,
+      "contains_production_literal": true,
+      "contains_prototype_literal": true,
+      "call": {
+        "role": "replacement_update",
+        "duration_ms": 8999,
+        "prompt_sha256": "30ce0d79840bbc3db95068ecaa35ac19102447dc01006ec6d5894234cbc4570a",
+        "raw_stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"api_error_status\":null,\"duration_ms\":7954,\"duration_api_ms\":7460,\"ttft_ms\":3790,\"ttft_stream_ms\":3183,\"time_to_request_ms\":1462,\"num_turns\":2,\"result\":\"Memory consolidated and updated.\",\"stop_reason\":\"end_turn\",\"session_id\":\"8af74b71-c479-4d4f-a626-f77dd4abe877\",\"total_cost_usd\":0.024229,\"usage\":{\"input_tokens\":4,\"cache_creation_input_tokens\":621,\"cache_read_input_tokens\":2832,\"output_tokens\":621,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":621,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"not_available\",\"iterations\":[{\"input_tokens\":2,\"output_tokens\":13,\"cache_read_input_tokens\":1416,\"cache_creation_input_tokens\":621,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":621},\"type\":\"message\"}],\"speed\":\"standard\"},\"modelUsage\":{\"claude-haiku-4-5-20251001\":{\"inputTokens\":973,\"outputTokens\":17,\"cacheReadInputTokens\":0,\"cacheCreationInputTokens\":0,\"webSearchRequests\":0,\"costUSD\":0.001058,\"contextWindow\":200000,\"maxOutputTokens\":32000},\"claude-sonnet-5\":{\"inputTokens\":4,\"outputTokens\":621,\"cacheReadInputTokens\":2832,\"cacheCreationInputTokens\":621,\"webSearchRequests\":0,\"costUSD\":0.023171000000000004,\"contextWindow\":200000,\"maxOutputTokens\":32000}},\"permission_denials\":[],\"structured_output\":{\"memory_text\":\"Delta Beacon: owner=Oren Vale, queue=violet-61, retry_cap=6, idempotency_header=X-Delta-Nonce, forbidden_fallback=stdout-buffer, primary_region=delta-south, preview_region=delta-preview-west, deployment_zone=spruce-zone, schema_namespace=delta.cobalt, prototype_schema_namespace=delta.prototype, encryption_profile=cipher-heron, demo_client_encryption_profile=delta-toy-cipher, audit_topic=audit-delta-pine, audit_retention=delta-equinox, health_path=/health/delta-flare, lease_duration_s=67, recovery_contact=oren-delta, checksum_salt=salt-delta-tide, telemetry_sink=delta-northstar, dashboard_cache=delta-linen, doc_lang=Latvian, mobile_demo_header=X-delta-Demo, shadow_importer_queue=delta-pebble-lab, sandbox_fallback=delta-scratch-pad, reporting_timezone=delta-meridian, metrics_prefix=delta-compass, canary_color=delta-plum, rollout_window=Monday dusk, archive_tier=delta-glacier, compliance_tag=amethyst, notification_channel=delta-signal, backup_demonstrator=delta-vault.\"},\"terminal_reason\":\"completed\",\"fast_mode_state\":\"off\",\"uuid\":\"f9d91245-2fea-4439-aef9-aa7d8dd2c9b8\"}\n",
+        "raw_stderr": "",
+        "envelope": {
+          "type": "result",
+          "subtype": "success",
+          "is_error": false,
+          "api_error_status": null,
+          "duration_ms": 7954,
+          "duration_api_ms": 7460,
+          "ttft_ms": 3790,
+          "ttft_stream_ms": 3183,
+          "time_to_request_ms": 1462,
+          "num_turns": 2,
+          "result": "Memory consolidated and updated.",
+          "stop_reason": "end_turn",
+          "session_id": "8af74b71-c479-4d4f-a626-f77dd4abe877",
+          "total_cost_usd": 0.024229,
+          "usage": {
+            "input_tokens": 4,
+            "cache_creation_input_tokens": 621,
+            "cache_read_input_tokens": 2832,
+            "output_tokens": 621,
+            "server_tool_use": {
+              "web_search_requests": 0,
+              "web_fetch_requests": 0
+            },
+            "service_tier": "standard",
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 621,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "inference_geo": "not_available",
+            "iterations": [
+              {
+                "input_tokens": 2,
+                "output_tokens": 13,
+                "cache_read_input_tokens": 1416,
+                "cache_creation_input_tokens": 621,
+                "cache_creation": {
+                  "ephemeral_5m_input_tokens": 0,
+                  "ephemeral_1h_input_tokens": 621
+                },
+                "type": "message"
+              }
+            ],
+            "speed": "standard"
+          },
+          "modelUsage": {
+            "claude-haiku-4-5-20251001": {
+              "inputTokens": 973,
+              "outputTokens": 17,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0,
+              "webSearchRequests": 0,
+              "costUSD": 0.001058,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            },
+            "claude-sonnet-5": {
+              "inputTokens": 4,
+              "outputTokens": 621,
+              "cacheReadInputTokens": 2832,
+              "cacheCreationInputTokens": 621,
+              "webSearchRequests": 0,
+              "costUSD": 0.023171000000000004,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            }
+          },
+          "permission_denials": [],
+          "structured_output": {
+            "memory_text": "Delta Beacon: owner=Oren Vale, queue=violet-61, retry_cap=6, idempotency_header=X-Delta-Nonce, forbidden_fallback=stdout-buffer, primary_region=delta-south, preview_region=delta-preview-west, deployment_zone=spruce-zone, schema_namespace=delta.cobalt, prototype_schema_namespace=delta.prototype, encryption_profile=cipher-heron, demo_client_encryption_profile=delta-toy-cipher, audit_topic=audit-delta-pine, audit_retention=delta-equinox, health_path=/health/delta-flare, lease_duration_s=67, recovery_contact=oren-delta, checksum_salt=salt-delta-tide, telemetry_sink=delta-northstar, dashboard_cache=delta-linen, doc_lang=Latvian, mobile_demo_header=X-delta-Demo, shadow_importer_queue=delta-pebble-lab, sandbox_fallback=delta-scratch-pad, reporting_timezone=delta-meridian, metrics_prefix=delta-compass, canary_color=delta-plum, rollout_window=Monday dusk, archive_tier=delta-glacier, compliance_tag=amethyst, notification_channel=delta-signal, backup_demonstrator=delta-vault."
+          },
+          "terminal_reason": "completed",
+          "fast_mode_state": "off",
+          "uuid": "f9d91245-2fea-4439-aef9-aa7d8dd2c9b8"
+        },
+        "parsed": {
+          "memory_text": "Delta Beacon: owner=Oren Vale, queue=violet-61, retry_cap=6, idempotency_header=X-Delta-Nonce, forbidden_fallback=stdout-buffer, primary_region=delta-south, preview_region=delta-preview-west, deployment_zone=spruce-zone, schema_namespace=delta.cobalt, prototype_schema_namespace=delta.prototype, encryption_profile=cipher-heron, demo_client_encryption_profile=delta-toy-cipher, audit_topic=audit-delta-pine, audit_retention=delta-equinox, health_path=/health/delta-flare, lease_duration_s=67, recovery_contact=oren-delta, checksum_salt=salt-delta-tide, telemetry_sink=delta-northstar, dashboard_cache=delta-linen, doc_lang=Latvian, mobile_demo_header=X-delta-Demo, shadow_importer_queue=delta-pebble-lab, sandbox_fallback=delta-scratch-pad, reporting_timezone=delta-meridian, metrics_prefix=delta-compass, canary_color=delta-plum, rollout_window=Monday dusk, archive_tier=delta-glacier, compliance_tag=amethyst, notification_channel=delta-signal, backup_demonstrator=delta-vault."
+        }
+      }
+    },
+    {
+      "step": 2,
+      "source_round": 27,
+      "observation": "The delta staging probe health path is /health/delta-stage.",
+      "memory_text": "Delta Beacon: owner=Oren Vale, queue=violet-61, retry_cap=6, idempotency_header=X-Delta-Nonce, forbidden_fallback=stdout-buffer, primary_region=delta-south, preview_region=delta-preview-west, deployment_zone=spruce-zone, schema_namespace=delta.cobalt, prototype_schema_namespace=delta.prototype, encryption_profile=cipher-heron, demo_client_encryption_profile=delta-toy-cipher, audit_topic=audit-delta-pine, audit_retention=delta-equinox, health_path=/health/delta-flare, staging_health_path=/health/delta-stage, lease_duration_s=67, recovery_contact=oren-delta, checksum_salt=salt-delta-tide, telemetry_sink=delta-northstar, dashboard_cache=delta-linen, doc_lang=Latvian, mobile_demo_header=X-delta-Demo, shadow_importer_queue=delta-pebble-lab, sandbox_fallback=delta-scratch-pad, reporting_timezone=delta-meridian, metrics_prefix=delta-compass, canary_color=delta-plum, rollout_window=Monday dusk, archive_tier=delta-glacier, compliance_tag=amethyst, notification_channel=delta-signal, backup_demonstrator=delta-vault.",
+      "words": 37,
+      "contains_production_literal": true,
+      "contains_prototype_literal": true,
+      "call": {
+        "role": "replacement_update",
+        "duration_ms": 18891,
+        "prompt_sha256": "78d15130a09d5ab4836c0a4a2030e1d38c0f3d32631b04a08a04a07b84b6cc00",
+        "raw_stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"api_error_status\":null,\"duration_ms\":17846,\"duration_api_ms\":18036,\"ttft_ms\":13427,\"ttft_stream_ms\":2489,\"time_to_request_ms\":1040,\"num_turns\":2,\"result\":\"Consolidated memory saved.\",\"stop_reason\":\"end_turn\",\"session_id\":\"d4a7a751-ed7a-444d-875d-ae04a9d907f4\",\"total_cost_usd\":0.08675250000000001,\"usage\":{\"input_tokens\":4,\"cache_creation_input_tokens\":3383,\"cache_read_input_tokens\":1333,\"output_tokens\":2049,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":3383,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"not_available\",\"iterations\":[{\"input_tokens\":2,\"output_tokens\":12,\"cache_read_input_tokens\":1333,\"cache_creation_input_tokens\":2050,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":2050},\"type\":\"message\"}],\"speed\":\"standard\"},\"modelUsage\":{\"claude-haiku-4-5-20251001\":{\"inputTokens\":921,\"outputTokens\":18,\"cacheReadInputTokens\":0,\"cacheCreationInputTokens\":0,\"webSearchRequests\":0,\"costUSD\":0.001011,\"contextWindow\":200000,\"maxOutputTokens\":32000},\"claude-sonnet-5\":{\"inputTokens\":4,\"outputTokens\":2049,\"cacheReadInputTokens\":1333,\"cacheCreationInputTokens\":3383,\"webSearchRequests\":0,\"costUSD\":0.0857415,\"contextWindow\":200000,\"maxOutputTokens\":32000}},\"permission_denials\":[],\"structured_output\":{\"memory_text\":\"Delta Beacon: owner=Oren Vale, queue=violet-61, retry_cap=6, idempotency_header=X-Delta-Nonce, forbidden_fallback=stdout-buffer, primary_region=delta-south, preview_region=delta-preview-west, deployment_zone=spruce-zone, schema_namespace=delta.cobalt, prototype_schema_namespace=delta.prototype, encryption_profile=cipher-heron, demo_client_encryption_profile=delta-toy-cipher, audit_topic=audit-delta-pine, audit_retention=delta-equinox, health_path=/health/delta-flare, staging_health_path=/health/delta-stage, lease_duration_s=67, recovery_contact=oren-delta, checksum_salt=salt-delta-tide, telemetry_sink=delta-northstar, dashboard_cache=delta-linen, doc_lang=Latvian, mobile_demo_header=X-delta-Demo, shadow_importer_queue=delta-pebble-lab, sandbox_fallback=delta-scratch-pad, reporting_timezone=delta-meridian, metrics_prefix=delta-compass, canary_color=delta-plum, rollout_window=Monday dusk, archive_tier=delta-glacier, compliance_tag=amethyst, notification_channel=delta-signal, backup_demonstrator=delta-vault.\"},\"terminal_reason\":\"completed\",\"fast_mode_state\":\"off\",\"uuid\":\"4bc85276-f4e3-484f-bdac-747bb9396ba4\"}\n",
+        "raw_stderr": "",
+        "envelope": {
+          "type": "result",
+          "subtype": "success",
+          "is_error": false,
+          "api_error_status": null,
+          "duration_ms": 17846,
+          "duration_api_ms": 18036,
+          "ttft_ms": 13427,
+          "ttft_stream_ms": 2489,
+          "time_to_request_ms": 1040,
+          "num_turns": 2,
+          "result": "Consolidated memory saved.",
+          "stop_reason": "end_turn",
+          "session_id": "d4a7a751-ed7a-444d-875d-ae04a9d907f4",
+          "total_cost_usd": 0.08675250000000001,
+          "usage": {
+            "input_tokens": 4,
+            "cache_creation_input_tokens": 3383,
+            "cache_read_input_tokens": 1333,
+            "output_tokens": 2049,
+            "server_tool_use": {
+              "web_search_requests": 0,
+              "web_fetch_requests": 0
+            },
+            "service_tier": "standard",
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 3383,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "inference_geo": "not_available",
+            "iterations": [
+              {
+                "input_tokens": 2,
+                "output_tokens": 12,
+                "cache_read_input_tokens": 1333,
+                "cache_creation_input_tokens": 2050,
+                "cache_creation": {
+                  "ephemeral_5m_input_tokens": 0,
+                  "ephemeral_1h_input_tokens": 2050
+                },
+                "type": "message"
+              }
+            ],
+            "speed": "standard"
+          },
+          "modelUsage": {
+            "claude-haiku-4-5-20251001": {
+              "inputTokens": 921,
+              "outputTokens": 18,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0,
+              "webSearchRequests": 0,
+              "costUSD": 0.001011,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            },
+            "claude-sonnet-5": {
+              "inputTokens": 4,
+              "outputTokens": 2049,
+              "cacheReadInputTokens": 1333,
+              "cacheCreationInputTokens": 3383,
+              "webSearchRequests": 0,
+              "costUSD": 0.0857415,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            }
+          },
+          "permission_denials": [],
+          "structured_output": {
+            "memory_text": "Delta Beacon: owner=Oren Vale, queue=violet-61, retry_cap=6, idempotency_header=X-Delta-Nonce, forbidden_fallback=stdout-buffer, primary_region=delta-south, preview_region=delta-preview-west, deployment_zone=spruce-zone, schema_namespace=delta.cobalt, prototype_schema_namespace=delta.prototype, encryption_profile=cipher-heron, demo_client_encryption_profile=delta-toy-cipher, audit_topic=audit-delta-pine, audit_retention=delta-equinox, health_path=/health/delta-flare, staging_health_path=/health/delta-stage, lease_duration_s=67, recovery_contact=oren-delta, checksum_salt=salt-delta-tide, telemetry_sink=delta-northstar, dashboard_cache=delta-linen, doc_lang=Latvian, mobile_demo_header=X-delta-Demo, shadow_importer_queue=delta-pebble-lab, sandbox_fallback=delta-scratch-pad, reporting_timezone=delta-meridian, metrics_prefix=delta-compass, canary_color=delta-plum, rollout_window=Monday dusk, archive_tier=delta-glacier, compliance_tag=amethyst, notification_channel=delta-signal, backup_demonstrator=delta-vault."
+          },
+          "terminal_reason": "completed",
+          "fast_mode_state": "off",
+          "uuid": "4bc85276-f4e3-484f-bdac-747bb9396ba4"
+        },
+        "parsed": {
+          "memory_text": "Delta Beacon: owner=Oren Vale, queue=violet-61, retry_cap=6, idempotency_header=X-Delta-Nonce, forbidden_fallback=stdout-buffer, primary_region=delta-south, preview_region=delta-preview-west, deployment_zone=spruce-zone, schema_namespace=delta.cobalt, prototype_schema_namespace=delta.prototype, encryption_profile=cipher-heron, demo_client_encryption_profile=delta-toy-cipher, audit_topic=audit-delta-pine, audit_retention=delta-equinox, health_path=/health/delta-flare, staging_health_path=/health/delta-stage, lease_duration_s=67, recovery_contact=oren-delta, checksum_salt=salt-delta-tide, telemetry_sink=delta-northstar, dashboard_cache=delta-linen, doc_lang=Latvian, mobile_demo_header=X-delta-Demo, shadow_importer_queue=delta-pebble-lab, sandbox_fallback=delta-scratch-pad, reporting_timezone=delta-meridian, metrics_prefix=delta-compass, canary_color=delta-plum, rollout_window=Monday dusk, archive_tier=delta-glacier, compliance_tag=amethyst, notification_channel=delta-signal, backup_demonstrator=delta-vault."
+        }
+      }
+    },
+    {
+      "step": 3,
+      "source_round": 28,
+      "observation": "The escalation room for Delta Beacon is room-delta-wave.",
+      "memory_text": "Delta Beacon: owner=Oren Vale, queue=violet-61, retry_cap=6, idempotency_header=X-Delta-Nonce, forbidden_fallback=stdout-buffer, primary_region=delta-south, preview_region=delta-preview-west, deployment_zone=spruce-zone, schema_namespace=delta.cobalt, prototype_schema_namespace=delta.prototype, encryption_profile=cipher-heron, demo_client_encryption_profile=delta-toy-cipher, audit_topic=audit-delta-pine, audit_retention=delta-equinox, health_path=/health/delta-flare, staging_health_path=/health/delta-stage, lease_duration_s=67, recovery_contact=oren-delta, checksum_salt=salt-delta-tide, telemetry_sink=delta-northstar, dashboard_cache=delta-linen, doc_lang=Latvian, mobile_demo_header=X-delta-Demo, shadow_importer_queue=delta-pebble-lab, sandbox_fallback=delta-scratch-pad, reporting_timezone=delta-meridian, metrics_prefix=delta-compass, canary_color=delta-plum, rollout_window=Monday dusk, archive_tier=delta-glacier, compliance_tag=amethyst, notification_channel=delta-signal, backup_demonstrator=delta-vault, escalation_room=room-delta-wave.",
+      "words": 38,
+      "contains_production_literal": true,
+      "contains_prototype_literal": true,
+      "call": {
+        "role": "replacement_update",
+        "duration_ms": 18597,
+        "prompt_sha256": "e98a685aa6702474d11216fb8b00492e864076bc1b62358810e2f44830547f12",
+        "raw_stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"api_error_status\":null,\"duration_ms\":16080,\"duration_api_ms\":16694,\"ttft_ms\":11137,\"ttft_stream_ms\":1798,\"time_to_request_ms\":438,\"num_turns\":2,\"result\":\"Memory for Delta Beacon has been consolidated, preserving all prior facts and incorporating the new escalation room detail (escalation_room=room-delta-wave), within the word limit.\",\"stop_reason\":\"end_turn\",\"session_id\":\"d7071b4d-e51f-4ec7-9f8e-b655a82f7f7a\",\"total_cost_usd\":0.08318,\"usage\":{\"input_tokens\":4,\"cache_creation_input_tokens\":3258,\"cache_read_input_tokens\":1352,\"output_tokens\":1955,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":3258,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"not_available\",\"iterations\":[{\"input_tokens\":2,\"output_tokens\":62,\"cache_read_input_tokens\":1352,\"cache_creation_input_tokens\":1906,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":1906},\"type\":\"message\"}],\"speed\":\"standard\"},\"modelUsage\":{\"claude-haiku-4-5-20251001\":{\"inputTokens\":934,\"outputTokens\":19,\"cacheReadInputTokens\":0,\"cacheCreationInputTokens\":0,\"webSearchRequests\":0,\"costUSD\":0.001029,\"contextWindow\":200000,\"maxOutputTokens\":32000},\"claude-sonnet-5\":{\"inputTokens\":4,\"outputTokens\":1955,\"cacheReadInputTokens\":1352,\"cacheCreationInputTokens\":3258,\"webSearchRequests\":0,\"costUSD\":0.082151,\"contextWindow\":200000,\"maxOutputTokens\":32000}},\"permission_denials\":[],\"structured_output\":{\"memory_text\":\"Delta Beacon: owner=Oren Vale, queue=violet-61, retry_cap=6, idempotency_header=X-Delta-Nonce, forbidden_fallback=stdout-buffer, primary_region=delta-south, preview_region=delta-preview-west, deployment_zone=spruce-zone, schema_namespace=delta.cobalt, prototype_schema_namespace=delta.prototype, encryption_profile=cipher-heron, demo_client_encryption_profile=delta-toy-cipher, audit_topic=audit-delta-pine, audit_retention=delta-equinox, health_path=/health/delta-flare, staging_health_path=/health/delta-stage, lease_duration_s=67, recovery_contact=oren-delta, checksum_salt=salt-delta-tide, telemetry_sink=delta-northstar, dashboard_cache=delta-linen, doc_lang=Latvian, mobile_demo_header=X-delta-Demo, shadow_importer_queue=delta-pebble-lab, sandbox_fallback=delta-scratch-pad, reporting_timezone=delta-meridian, metrics_prefix=delta-compass, canary_color=delta-plum, rollout_window=Monday dusk, archive_tier=delta-glacier, compliance_tag=amethyst, notification_channel=delta-signal, backup_demonstrator=delta-vault, escalation_room=room-delta-wave.\"},\"terminal_reason\":\"completed\",\"fast_mode_state\":\"off\",\"uuid\":\"f6907894-b17f-4fde-80d9-84758758c74f\"}\n",
+        "raw_stderr": "",
+        "envelope": {
+          "type": "result",
+          "subtype": "success",
+          "is_error": false,
+          "api_error_status": null,
+          "duration_ms": 16080,
+          "duration_api_ms": 16694,
+          "ttft_ms": 11137,
+          "ttft_stream_ms": 1798,
+          "time_to_request_ms": 438,
+          "num_turns": 2,
+          "result": "Memory for Delta Beacon has been consolidated, preserving all prior facts and incorporating the new escalation room detail (escalation_room=room-delta-wave), within the word limit.",
+          "stop_reason": "end_turn",
+          "session_id": "d7071b4d-e51f-4ec7-9f8e-b655a82f7f7a",
+          "total_cost_usd": 0.08318,
+          "usage": {
+            "input_tokens": 4,
+            "cache_creation_input_tokens": 3258,
+            "cache_read_input_tokens": 1352,
+            "output_tokens": 1955,
+            "server_tool_use": {
+              "web_search_requests": 0,
+              "web_fetch_requests": 0
+            },
+            "service_tier": "standard",
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 3258,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "inference_geo": "not_available",
+            "iterations": [
+              {
+                "input_tokens": 2,
+                "output_tokens": 62,
+                "cache_read_input_tokens": 1352,
+                "cache_creation_input_tokens": 1906,
+                "cache_creation": {
+                  "ephemeral_5m_input_tokens": 0,
+                  "ephemeral_1h_input_tokens": 1906
+                },
+                "type": "message"
+              }
+            ],
+            "speed": "standard"
+          },
+          "modelUsage": {
+            "claude-haiku-4-5-20251001": {
+              "inputTokens": 934,
+              "outputTokens": 19,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0,
+              "webSearchRequests": 0,
+              "costUSD": 0.001029,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            },
+            "claude-sonnet-5": {
+              "inputTokens": 4,
+              "outputTokens": 1955,
+              "cacheReadInputTokens": 1352,
+              "cacheCreationInputTokens": 3258,
+              "webSearchRequests": 0,
+              "costUSD": 0.082151,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            }
+          },
+          "permission_denials": [],
+          "structured_output": {
+            "memory_text": "Delta Beacon: owner=Oren Vale, queue=violet-61, retry_cap=6, idempotency_header=X-Delta-Nonce, forbidden_fallback=stdout-buffer, primary_region=delta-south, preview_region=delta-preview-west, deployment_zone=spruce-zone, schema_namespace=delta.cobalt, prototype_schema_namespace=delta.prototype, encryption_profile=cipher-heron, demo_client_encryption_profile=delta-toy-cipher, audit_topic=audit-delta-pine, audit_retention=delta-equinox, health_path=/health/delta-flare, staging_health_path=/health/delta-stage, lease_duration_s=67, recovery_contact=oren-delta, checksum_salt=salt-delta-tide, telemetry_sink=delta-northstar, dashboard_cache=delta-linen, doc_lang=Latvian, mobile_demo_header=X-delta-Demo, shadow_importer_queue=delta-pebble-lab, sandbox_fallback=delta-scratch-pad, reporting_timezone=delta-meridian, metrics_prefix=delta-compass, canary_color=delta-plum, rollout_window=Monday dusk, archive_tier=delta-glacier, compliance_tag=amethyst, notification_channel=delta-signal, backup_demonstrator=delta-vault, escalation_room=room-delta-wave."
+          },
+          "terminal_reason": "completed",
+          "fast_mode_state": "off",
+          "uuid": "f6907894-b17f-4fde-80d9-84758758c74f"
+        },
+        "parsed": {
+          "memory_text": "Delta Beacon: owner=Oren Vale, queue=violet-61, retry_cap=6, idempotency_header=X-Delta-Nonce, forbidden_fallback=stdout-buffer, primary_region=delta-south, preview_region=delta-preview-west, deployment_zone=spruce-zone, schema_namespace=delta.cobalt, prototype_schema_namespace=delta.prototype, encryption_profile=cipher-heron, demo_client_encryption_profile=delta-toy-cipher, audit_topic=audit-delta-pine, audit_retention=delta-equinox, health_path=/health/delta-flare, staging_health_path=/health/delta-stage, lease_duration_s=67, recovery_contact=oren-delta, checksum_salt=salt-delta-tide, telemetry_sink=delta-northstar, dashboard_cache=delta-linen, doc_lang=Latvian, mobile_demo_header=X-delta-Demo, shadow_importer_queue=delta-pebble-lab, sandbox_fallback=delta-scratch-pad, reporting_timezone=delta-meridian, metrics_prefix=delta-compass, canary_color=delta-plum, rollout_window=Monday dusk, archive_tier=delta-glacier, compliance_tag=amethyst, notification_channel=delta-signal, backup_demonstrator=delta-vault, escalation_room=room-delta-wave."
+        }
+      }
+    },
+    {
+      "step": 4,
+      "source_round": 29,
+      "observation": "The delta analytics sandbox audit topic is delta-analytics-noise.",
+      "memory_text": "Delta Beacon: owner=Oren Vale, queue=violet-61, retry_cap=6, idempotency_header=X-Delta-Nonce, forbidden_fallback=stdout-buffer, primary_region=delta-south, preview_region=delta-preview-west, deployment_zone=spruce-zone, schema_namespace=delta.cobalt, prototype_schema_namespace=delta.prototype, encryption_profile=cipher-heron, demo_client_encryption_profile=delta-toy-cipher, audit_topic=audit-delta-pine, analytics_sandbox_audit_topic=delta-analytics-noise, audit_retention=delta-equinox, health_path=/health/delta-flare, staging_health_path=/health/delta-stage, lease_duration_s=67, recovery_contact=oren-delta, checksum_salt=salt-delta-tide, telemetry_sink=delta-northstar, dashboard_cache=delta-linen, doc_lang=Latvian, mobile_demo_header=X-delta-Demo, shadow_importer_queue=delta-pebble-lab, sandbox_fallback=delta-scratch-pad, reporting_timezone=delta-meridian, metrics_prefix=delta-compass, canary_color=delta-plum, rollout_window=Monday dusk, archive_tier=delta-glacier, compliance_tag=amethyst, notification_channel=delta-signal, backup_demonstrator=delta-vault, escalation_room=room-delta-wave.",
+      "words": 39,
+      "contains_production_literal": true,
+      "contains_prototype_literal": true,
+      "call": {
+        "role": "replacement_update",
+        "duration_ms": 7356,
+        "prompt_sha256": "132c7ac804fb114656ca51fca37620306420c1e4c98613c4eb76d4cf6895c671",
+        "raw_stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"api_error_status\":null,\"duration_ms\":6313,\"duration_api_ms\":6490,\"ttft_ms\":5277,\"ttft_stream_ms\":2635,\"time_to_request_ms\":955,\"num_turns\":2,\"result\":\"Memory updated.\",\"stop_reason\":\"end_turn\",\"session_id\":\"62f5b78b-0ad6-4e2f-8b1b-513954d70017\",\"total_cost_usd\":0.0355475,\"usage\":{\"input_tokens\":4,\"cache_creation_input_tokens\":1948,\"cache_read_input_tokens\":1369,\"output_tokens\":573,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":1948,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"not_available\",\"iterations\":[{\"input_tokens\":2,\"output_tokens\":8,\"cache_read_input_tokens\":1369,\"cache_creation_input_tokens\":579,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":579},\"type\":\"message\"}],\"speed\":\"standard\"},\"modelUsage\":{\"claude-haiku-4-5-20251001\":{\"inputTokens\":943,\"outputTokens\":19,\"cacheReadInputTokens\":0,\"cacheCreationInputTokens\":0,\"webSearchRequests\":0,\"costUSD\":0.001038,\"contextWindow\":200000,\"maxOutputTokens\":32000},\"claude-sonnet-5\":{\"inputTokens\":4,\"outputTokens\":573,\"cacheReadInputTokens\":1369,\"cacheCreationInputTokens\":1948,\"webSearchRequests\":0,\"costUSD\":0.0345095,\"contextWindow\":200000,\"maxOutputTokens\":32000}},\"permission_denials\":[],\"structured_output\":{\"memory_text\":\"Delta Beacon: owner=Oren Vale, queue=violet-61, retry_cap=6, idempotency_header=X-Delta-Nonce, forbidden_fallback=stdout-buffer, primary_region=delta-south, preview_region=delta-preview-west, deployment_zone=spruce-zone, schema_namespace=delta.cobalt, prototype_schema_namespace=delta.prototype, encryption_profile=cipher-heron, demo_client_encryption_profile=delta-toy-cipher, audit_topic=audit-delta-pine, analytics_sandbox_audit_topic=delta-analytics-noise, audit_retention=delta-equinox, health_path=/health/delta-flare, staging_health_path=/health/delta-stage, lease_duration_s=67, recovery_contact=oren-delta, checksum_salt=salt-delta-tide, telemetry_sink=delta-northstar, dashboard_cache=delta-linen, doc_lang=Latvian, mobile_demo_header=X-delta-Demo, shadow_importer_queue=delta-pebble-lab, sandbox_fallback=delta-scratch-pad, reporting_timezone=delta-meridian, metrics_prefix=delta-compass, canary_color=delta-plum, rollout_window=Monday dusk, archive_tier=delta-glacier, compliance_tag=amethyst, notification_channel=delta-signal, backup_demonstrator=delta-vault, escalation_room=room-delta-wave.\"},\"terminal_reason\":\"completed\",\"fast_mode_state\":\"off\",\"uuid\":\"daf14a43-7efe-4663-af76-db8dfbd688f2\"}\n",
+        "raw_stderr": "",
+        "envelope": {
+          "type": "result",
+          "subtype": "success",
+          "is_error": false,
+          "api_error_status": null,
+          "duration_ms": 6313,
+          "duration_api_ms": 6490,
+          "ttft_ms": 5277,
+          "ttft_stream_ms": 2635,
+          "time_to_request_ms": 955,
+          "num_turns": 2,
+          "result": "Memory updated.",
+          "stop_reason": "end_turn",
+          "session_id": "62f5b78b-0ad6-4e2f-8b1b-513954d70017",
+          "total_cost_usd": 0.0355475,
+          "usage": {
+            "input_tokens": 4,
+            "cache_creation_input_tokens": 1948,
+            "cache_read_input_tokens": 1369,
+            "output_tokens": 573,
+            "server_tool_use": {
+              "web_search_requests": 0,
+              "web_fetch_requests": 0
+            },
+            "service_tier": "standard",
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 1948,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "inference_geo": "not_available",
+            "iterations": [
+              {
+                "input_tokens": 2,
+                "output_tokens": 8,
+                "cache_read_input_tokens": 1369,
+                "cache_creation_input_tokens": 579,
+                "cache_creation": {
+                  "ephemeral_5m_input_tokens": 0,
+                  "ephemeral_1h_input_tokens": 579
+                },
+                "type": "message"
+              }
+            ],
+            "speed": "standard"
+          },
+          "modelUsage": {
+            "claude-haiku-4-5-20251001": {
+              "inputTokens": 943,
+              "outputTokens": 19,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0,
+              "webSearchRequests": 0,
+              "costUSD": 0.001038,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            },
+            "claude-sonnet-5": {
+              "inputTokens": 4,
+              "outputTokens": 573,
+              "cacheReadInputTokens": 1369,
+              "cacheCreationInputTokens": 1948,
+              "webSearchRequests": 0,
+              "costUSD": 0.0345095,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            }
+          },
+          "permission_denials": [],
+          "structured_output": {
+            "memory_text": "Delta Beacon: owner=Oren Vale, queue=violet-61, retry_cap=6, idempotency_header=X-Delta-Nonce, forbidden_fallback=stdout-buffer, primary_region=delta-south, preview_region=delta-preview-west, deployment_zone=spruce-zone, schema_namespace=delta.cobalt, prototype_schema_namespace=delta.prototype, encryption_profile=cipher-heron, demo_client_encryption_profile=delta-toy-cipher, audit_topic=audit-delta-pine, analytics_sandbox_audit_topic=delta-analytics-noise, audit_retention=delta-equinox, health_path=/health/delta-flare, staging_health_path=/health/delta-stage, lease_duration_s=67, recovery_contact=oren-delta, checksum_salt=salt-delta-tide, telemetry_sink=delta-northstar, dashboard_cache=delta-linen, doc_lang=Latvian, mobile_demo_header=X-delta-Demo, shadow_importer_queue=delta-pebble-lab, sandbox_fallback=delta-scratch-pad, reporting_timezone=delta-meridian, metrics_prefix=delta-compass, canary_color=delta-plum, rollout_window=Monday dusk, archive_tier=delta-glacier, compliance_tag=amethyst, notification_channel=delta-signal, backup_demonstrator=delta-vault, escalation_room=room-delta-wave."
+          },
+          "terminal_reason": "completed",
+          "fast_mode_state": "off",
+          "uuid": "daf14a43-7efe-4663-af76-db8dfbd688f2"
+        },
+        "parsed": {
+          "memory_text": "Delta Beacon: owner=Oren Vale, queue=violet-61, retry_cap=6, idempotency_header=X-Delta-Nonce, forbidden_fallback=stdout-buffer, primary_region=delta-south, preview_region=delta-preview-west, deployment_zone=spruce-zone, schema_namespace=delta.cobalt, prototype_schema_namespace=delta.prototype, encryption_profile=cipher-heron, demo_client_encryption_profile=delta-toy-cipher, audit_topic=audit-delta-pine, analytics_sandbox_audit_topic=delta-analytics-noise, audit_retention=delta-equinox, health_path=/health/delta-flare, staging_health_path=/health/delta-stage, lease_duration_s=67, recovery_contact=oren-delta, checksum_salt=salt-delta-tide, telemetry_sink=delta-northstar, dashboard_cache=delta-linen, doc_lang=Latvian, mobile_demo_header=X-delta-Demo, shadow_importer_queue=delta-pebble-lab, sandbox_fallback=delta-scratch-pad, reporting_timezone=delta-meridian, metrics_prefix=delta-compass, canary_color=delta-plum, rollout_window=Monday dusk, archive_tier=delta-glacier, compliance_tag=amethyst, notification_channel=delta-signal, backup_demonstrator=delta-vault, escalation_room=room-delta-wave."
+        }
+      }
+    },
+    {
+      "step": 5,
+      "source_round": 30,
+      "observation": "The delta batch simulator lease mode is delta-elastic.",
+      "memory_text": "Delta Beacon: owner=Oren Vale, queue=violet-61, retry_cap=6, idempotency_header=X-Delta-Nonce, forbidden_fallback=stdout-buffer, primary_region=delta-south, preview_region=delta-preview-west, deployment_zone=spruce-zone, schema_namespace=delta.cobalt, prototype_schema_namespace=delta.prototype, encryption_profile=cipher-heron, demo_client_encryption_profile=delta-toy-cipher, audit_topic=audit-delta-pine, analytics_sandbox_audit_topic=delta-analytics-noise, audit_retention=delta-equinox, health_path=/health/delta-flare, staging_health_path=/health/delta-stage, lease_duration_s=67, recovery_contact=oren-delta, checksum_salt=salt-delta-tide, telemetry_sink=delta-northstar, dashboard_cache=delta-linen, doc_lang=Latvian, mobile_demo_header=X-delta-Demo, shadow_importer_queue=delta-pebble-lab, sandbox_fallback=delta-scratch-pad, reporting_timezone=delta-meridian, metrics_prefix=delta-compass, canary_color=delta-plum, rollout_window=Monday dusk, archive_tier=delta-glacier, compliance_tag=amethyst, notification_channel=delta-signal, backup_demonstrator=delta-vault, escalation_room=room-delta-wave, batch_simulator_lease_mode=delta-elastic.",
+      "words": 40,
+      "contains_production_literal": true,
+      "contains_prototype_literal": true,
+      "call": {
+        "role": "replacement_update",
+        "duration_ms": 11186,
+        "prompt_sha256": "d846b4d87ad4a60e96d0687e68441866045527ac273c3676561604fd2375ac9c",
+        "raw_stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"api_error_status\":null,\"duration_ms\":10072,\"duration_api_ms\":10130,\"ttft_ms\":7814,\"ttft_stream_ms\":4566,\"time_to_request_ms\":893,\"num_turns\":2,\"result\":\"Memory updated.\",\"stop_reason\":\"end_turn\",\"session_id\":\"88a37cec-737d-4b03-bd3d-3e5f630dfad7\",\"total_cost_usd\":0.036464500000000004,\"usage\":{\"input_tokens\":4,\"cache_creation_input_tokens\":1988,\"cache_read_input_tokens\":1389,\"output_tokens\":593,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":1988,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"not_available\",\"iterations\":[{\"input_tokens\":2,\"output_tokens\":8,\"cache_read_input_tokens\":1389,\"cache_creation_input_tokens\":599,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":599},\"type\":\"message\"}],\"speed\":\"standard\"},\"modelUsage\":{\"claude-haiku-4-5-20251001\":{\"inputTokens\":955,\"outputTokens\":18,\"cacheReadInputTokens\":0,\"cacheCreationInputTokens\":0,\"webSearchRequests\":0,\"costUSD\":0.001045,\"contextWindow\":200000,\"maxOutputTokens\":32000},\"claude-sonnet-5\":{\"inputTokens\":4,\"outputTokens\":593,\"cacheReadInputTokens\":1389,\"cacheCreationInputTokens\":1988,\"webSearchRequests\":0,\"costUSD\":0.0354195,\"contextWindow\":200000,\"maxOutputTokens\":32000}},\"permission_denials\":[],\"structured_output\":{\"memory_text\":\"Delta Beacon: owner=Oren Vale, queue=violet-61, retry_cap=6, idempotency_header=X-Delta-Nonce, forbidden_fallback=stdout-buffer, primary_region=delta-south, preview_region=delta-preview-west, deployment_zone=spruce-zone, schema_namespace=delta.cobalt, prototype_schema_namespace=delta.prototype, encryption_profile=cipher-heron, demo_client_encryption_profile=delta-toy-cipher, audit_topic=audit-delta-pine, analytics_sandbox_audit_topic=delta-analytics-noise, audit_retention=delta-equinox, health_path=/health/delta-flare, staging_health_path=/health/delta-stage, lease_duration_s=67, recovery_contact=oren-delta, checksum_salt=salt-delta-tide, telemetry_sink=delta-northstar, dashboard_cache=delta-linen, doc_lang=Latvian, mobile_demo_header=X-delta-Demo, shadow_importer_queue=delta-pebble-lab, sandbox_fallback=delta-scratch-pad, reporting_timezone=delta-meridian, metrics_prefix=delta-compass, canary_color=delta-plum, rollout_window=Monday dusk, archive_tier=delta-glacier, compliance_tag=amethyst, notification_channel=delta-signal, backup_demonstrator=delta-vault, escalation_room=room-delta-wave, batch_simulator_lease_mode=delta-elastic.\"},\"terminal_reason\":\"completed\",\"fast_mode_state\":\"off\",\"uuid\":\"13a3d81d-e29f-42ae-afb0-eaff68300548\"}\n",
+        "raw_stderr": "",
+        "envelope": {
+          "type": "result",
+          "subtype": "success",
+          "is_error": false,
+          "api_error_status": null,
+          "duration_ms": 10072,
+          "duration_api_ms": 10130,
+          "ttft_ms": 7814,
+          "ttft_stream_ms": 4566,
+          "time_to_request_ms": 893,
+          "num_turns": 2,
+          "result": "Memory updated.",
+          "stop_reason": "end_turn",
+          "session_id": "88a37cec-737d-4b03-bd3d-3e5f630dfad7",
+          "total_cost_usd": 0.036464500000000004,
+          "usage": {
+            "input_tokens": 4,
+            "cache_creation_input_tokens": 1988,
+            "cache_read_input_tokens": 1389,
+            "output_tokens": 593,
+            "server_tool_use": {
+              "web_search_requests": 0,
+              "web_fetch_requests": 0
+            },
+            "service_tier": "standard",
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 1988,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "inference_geo": "not_available",
+            "iterations": [
+              {
+                "input_tokens": 2,
+                "output_tokens": 8,
+                "cache_read_input_tokens": 1389,
+                "cache_creation_input_tokens": 599,
+                "cache_creation": {
+                  "ephemeral_5m_input_tokens": 0,
+                  "ephemeral_1h_input_tokens": 599
+                },
+                "type": "message"
+              }
+            ],
+            "speed": "standard"
+          },
+          "modelUsage": {
+            "claude-haiku-4-5-20251001": {
+              "inputTokens": 955,
+              "outputTokens": 18,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0,
+              "webSearchRequests": 0,
+              "costUSD": 0.001045,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            },
+            "claude-sonnet-5": {
+              "inputTokens": 4,
+              "outputTokens": 593,
+              "cacheReadInputTokens": 1389,
+              "cacheCreationInputTokens": 1988,
+              "webSearchRequests": 0,
+              "costUSD": 0.0354195,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000
+            }
+          },
+          "permission_denials": [],
+          "structured_output": {
+            "memory_text": "Delta Beacon: owner=Oren Vale, queue=violet-61, retry_cap=6, idempotency_header=X-Delta-Nonce, forbidden_fallback=stdout-buffer, primary_region=delta-south, preview_region=delta-preview-west, deployment_zone=spruce-zone, schema_namespace=delta.cobalt, prototype_schema_namespace=delta.prototype, encryption_profile=cipher-heron, demo_client_encryption_profile=delta-toy-cipher, audit_topic=audit-delta-pine, analytics_sandbox_audit_topic=delta-analytics-noise, audit_retention=delta-equinox, health_path=/health/delta-flare, staging_health_path=/health/delta-stage, lease_duration_s=67, recovery_contact=oren-delta, checksum_salt=salt-delta-tide, telemetry_sink=delta-northstar, dashboard_cache=delta-linen, doc_lang=Latvian, mobile_demo_header=X-delta-Demo, shadow_importer_queue=delta-pebble-lab, sandbox_fallback=delta-scratch-pad, reporting_timezone=delta-meridian, metrics_prefix=delta-compass, canary_color=delta-plum, rollout_window=Monday dusk, archive_tier=delta-glacier, compliance_tag=amethyst, notification_channel=delta-signal, backup_demonstrator=delta-vault, escalation_room=room-delta-wave, batch_simulator_lease_mode=delta-elastic."
+          },
+          "terminal_reason": "completed",
+          "fast_mode_state": "off",
+          "uuid": "13a3d81d-e29f-42ae-afb0-eaff68300548"
+        },
+        "parsed": {
+          "memory_text": "Delta Beacon: owner=Oren Vale, queue=violet-61, retry_cap=6, idempotency_header=X-Delta-Nonce, forbidden_fallback=stdout-buffer, primary_region=delta-south, preview_region=delta-preview-west, deployment_zone=spruce-zone, schema_namespace=delta.cobalt, prototype_schema_namespace=delta.prototype, encryption_profile=cipher-heron, demo_client_encryption_profile=delta-toy-cipher, audit_topic=audit-delta-pine, analytics_sandbox_audit_topic=delta-analytics-noise, audit_retention=delta-equinox, health_path=/health/delta-flare, staging_health_path=/health/delta-stage, lease_duration_s=67, recovery_contact=oren-delta, checksum_salt=salt-delta-tide, telemetry_sink=delta-northstar, dashboard_cache=delta-linen, doc_lang=Latvian, mobile_demo_header=X-delta-Demo, shadow_importer_queue=delta-pebble-lab, sandbox_fallback=delta-scratch-pad, reporting_timezone=delta-meridian, metrics_prefix=delta-compass, canary_color=delta-plum, rollout_window=Monday dusk, archive_tier=delta-glacier, compliance_tag=amethyst, notification_channel=delta-signal, backup_demonstrator=delta-vault, escalation_room=room-delta-wave, batch_simulator_lease_mode=delta-elastic."
+        }
+      }
+    }
+  ],
+  "qa_calls": {
+    "rescue": {
+      "role": "downstream_qa",
+      "duration_ms": 9773,
+      "prompt_sha256": "01bd9755855ad6c2c1f7abb7851b6805c0f442ee13ff72de48d76646c4b195eb",
+      "raw_stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"api_error_status\":null,\"duration_ms\":7692,\"duration_api_ms\":8223,\"ttft_ms\":4941,\"ttft_stream_ms\":4455,\"time_to_request_ms\":496,\"num_turns\":2,\"result\":\"production_schema_namespace: delta.cobalt\\nprototype_schema_namespace: delta.prototype\",\"stop_reason\":\"end_turn\",\"session_id\":\"b4f149c7-b2eb-45a7-84e9-dce70d5c607b\",\"total_cost_usd\":0.0209095,\"usage\":{\"input_tokens\":4,\"cache_creation_input_tokens\":1574,\"cache_read_input_tokens\":1461,\"output_tokens\":135,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":1574,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"not_available\",\"iterations\":[{\"input_tokens\":2,\"output_tokens\":36,\"cache_read_input_tokens\":1461,\"cache_creation_input_tokens\":113,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":113},\"type\":\"message\"}],\"speed\":\"standard\"},\"modelUsage\":{\"claude-haiku-4-5-20251001\":{\"inputTokens\":964,\"outputTokens\":16,\"cacheReadInputTokens\":0,\"cacheCreationInputTokens\":0,\"webSearchRequests\":0,\"costUSD\":0.001044,\"contextWindow\":200000,\"maxOutputTokens\":32000},\"claude-sonnet-5\":{\"inputTokens\":4,\"outputTokens\":135,\"cacheReadInputTokens\":1461,\"cacheCreationInputTokens\":1574,\"webSearchRequests\":0,\"costUSD\":0.0198655,\"contextWindow\":200000,\"maxOutputTokens\":32000}},\"permission_denials\":[],\"structured_output\":{\"production_schema_namespace\":\"delta.cobalt\",\"prototype_schema_namespace\":\"delta.prototype\"},\"terminal_reason\":\"completed\",\"fast_mode_state\":\"off\",\"uuid\":\"23090ac2-6a30-46da-94cf-0ad2f5ed8cc4\"}\n",
+      "raw_stderr": "",
+      "envelope": {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false,
+        "api_error_status": null,
+        "duration_ms": 7692,
+        "duration_api_ms": 8223,
+        "ttft_ms": 4941,
+        "ttft_stream_ms": 4455,
+        "time_to_request_ms": 496,
+        "num_turns": 2,
+        "result": "production_schema_namespace: delta.cobalt\nprototype_schema_namespace: delta.prototype",
+        "stop_reason": "end_turn",
+        "session_id": "b4f149c7-b2eb-45a7-84e9-dce70d5c607b",
+        "total_cost_usd": 0.0209095,
+        "usage": {
+          "input_tokens": 4,
+          "cache_creation_input_tokens": 1574,
+          "cache_read_input_tokens": 1461,
+          "output_tokens": 135,
+          "server_tool_use": {
+            "web_search_requests": 0,
+            "web_fetch_requests": 0
+          },
+          "service_tier": "standard",
+          "cache_creation": {
+            "ephemeral_1h_input_tokens": 1574,
+            "ephemeral_5m_input_tokens": 0
+          },
+          "inference_geo": "not_available",
+          "iterations": [
+            {
+              "input_tokens": 2,
+              "output_tokens": 36,
+              "cache_read_input_tokens": 1461,
+              "cache_creation_input_tokens": 113,
+              "cache_creation": {
+                "ephemeral_5m_input_tokens": 0,
+                "ephemeral_1h_input_tokens": 113
+              },
+              "type": "message"
+            }
+          ],
+          "speed": "standard"
+        },
+        "modelUsage": {
+          "claude-haiku-4-5-20251001": {
+            "inputTokens": 964,
+            "outputTokens": 16,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0,
+            "webSearchRequests": 0,
+            "costUSD": 0.001044,
+            "contextWindow": 200000,
+            "maxOutputTokens": 32000
+          },
+          "claude-sonnet-5": {
+            "inputTokens": 4,
+            "outputTokens": 135,
+            "cacheReadInputTokens": 1461,
+            "cacheCreationInputTokens": 1574,
+            "webSearchRequests": 0,
+            "costUSD": 0.0198655,
+            "contextWindow": 200000,
+            "maxOutputTokens": 32000
+          }
+        },
+        "permission_denials": [],
+        "structured_output": {
+          "production_schema_namespace": "delta.cobalt",
+          "prototype_schema_namespace": "delta.prototype"
+        },
+        "terminal_reason": "completed",
+        "fast_mode_state": "off",
+        "uuid": "23090ac2-6a30-46da-94cf-0ad2f5ed8cc4"
+      },
+      "parsed": {
+        "production_schema_namespace": "delta.cobalt",
+        "prototype_schema_namespace": "delta.prototype"
+      }
+    },
+    "baseline": {
+      "role": "downstream_qa",
+      "duration_ms": 5904,
+      "prompt_sha256": "b11afb7b389dc81cb0fb061c4c766a0caf5104d9e0c94323cf5295b53f8ea16c",
+      "raw_stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"api_error_status\":null,\"duration_ms\":4781,\"duration_api_ms\":5029,\"ttft_ms\":3288,\"ttft_stream_ms\":2724,\"time_to_request_ms\":1138,\"num_turns\":2,\"result\":\"production_schema_namespace: delta.cobalt\\nprototype_schema_namespace: delta.prototype\",\"stop_reason\":\"end_turn\",\"session_id\":\"5cab2ea6-0e18-4135-ad88-ec009dc6fdef\",\"total_cost_usd\":0.010348,\"usage\":{\"input_tokens\":4,\"cache_creation_input_tokens\":210,\"cache_read_input_tokens\":2790,\"output_tokens\":233,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":210,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"not_available\",\"iterations\":[{\"input_tokens\":2,\"output_tokens\":36,\"cache_read_input_tokens\":1395,\"cache_creation_input_tokens\":210,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":210},\"type\":\"message\"}],\"speed\":\"standard\"},\"modelUsage\":{\"claude-haiku-4-5-20251001\":{\"inputTokens\":933,\"outputTokens\":15,\"cacheReadInputTokens\":0,\"cacheCreationInputTokens\":0,\"webSearchRequests\":0,\"costUSD\":0.001008,\"contextWindow\":200000,\"maxOutputTokens\":32000},\"claude-sonnet-5\":{\"inputTokens\":4,\"outputTokens\":233,\"cacheReadInputTokens\":2790,\"cacheCreationInputTokens\":210,\"webSearchRequests\":0,\"costUSD\":0.00934,\"contextWindow\":200000,\"maxOutputTokens\":32000}},\"permission_denials\":[],\"structured_output\":{\"production_schema_namespace\":\"delta.cobalt\",\"prototype_schema_namespace\":\"delta.prototype\"},\"terminal_reason\":\"completed\",\"fast_mode_state\":\"off\",\"uuid\":\"7c056162-a96b-4b1a-864e-544a8fed98aa\"}\n",
+      "raw_stderr": "",
+      "envelope": {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false,
+        "api_error_status": null,
+        "duration_ms": 4781,
+        "duration_api_ms": 5029,
+        "ttft_ms": 3288,
+        "ttft_stream_ms": 2724,
+        "time_to_request_ms": 1138,
+        "num_turns": 2,
+        "result": "production_schema_namespace: delta.cobalt\nprototype_schema_namespace: delta.prototype",
+        "stop_reason": "end_turn",
+        "session_id": "5cab2ea6-0e18-4135-ad88-ec009dc6fdef",
+        "total_cost_usd": 0.010348,
+        "usage": {
+          "input_tokens": 4,
+          "cache_creation_input_tokens": 210,
+          "cache_read_input_tokens": 2790,
+          "output_tokens": 233,
+          "server_tool_use": {
+            "web_search_requests": 0,
+            "web_fetch_requests": 0
+          },
+          "service_tier": "standard",
+          "cache_creation": {
+            "ephemeral_1h_input_tokens": 210,
+            "ephemeral_5m_input_tokens": 0
+          },
+          "inference_geo": "not_available",
+          "iterations": [
+            {
+              "input_tokens": 2,
+              "output_tokens": 36,
+              "cache_read_input_tokens": 1395,
+              "cache_creation_input_tokens": 210,
+              "cache_creation": {
+                "ephemeral_5m_input_tokens": 0,
+                "ephemeral_1h_input_tokens": 210
+              },
+              "type": "message"
+            }
+          ],
+          "speed": "standard"
+        },
+        "modelUsage": {
+          "claude-haiku-4-5-20251001": {
+            "inputTokens": 933,
+            "outputTokens": 15,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0,
+            "webSearchRequests": 0,
+            "costUSD": 0.001008,
+            "contextWindow": 200000,
+            "maxOutputTokens": 32000
+          },
+          "claude-sonnet-5": {
+            "inputTokens": 4,
+            "outputTokens": 233,
+            "cacheReadInputTokens": 2790,
+            "cacheCreationInputTokens": 210,
+            "webSearchRequests": 0,
+            "costUSD": 0.00934,
+            "contextWindow": 200000,
+            "maxOutputTokens": 32000
+          }
+        },
+        "permission_denials": [],
+        "structured_output": {
+          "production_schema_namespace": "delta.cobalt",
+          "prototype_schema_namespace": "delta.prototype"
+        },
+        "terminal_reason": "completed",
+        "fast_mode_state": "off",
+        "uuid": "7c056162-a96b-4b1a-864e-544a8fed98aa"
+      },
+      "parsed": {
+        "production_schema_namespace": "delta.cobalt",
+        "prototype_schema_namespace": "delta.prototype"
+      }
+    },
+    "additive": {
+      "role": "downstream_qa",
+      "duration_ms": 8649,
+      "prompt_sha256": "9f7833f951ed3a1630d0f2d828e28feb532ff378621c05e73ab6ce7aa8d96323",
+      "raw_stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"api_error_status\":null,\"duration_ms\":6971,\"duration_api_ms\":8540,\"ttft_ms\":5483,\"ttft_stream_ms\":3275,\"time_to_request_ms\":592,\"num_turns\":2,\"result\":\"UNKNOWN and delta.prototype.\",\"stop_reason\":\"end_turn\",\"session_id\":\"1a9f0fae-140f-4b36-be30-ed70031f4bff\",\"total_cost_usd\":0.015258,\"usage\":{\"input_tokens\":4,\"cache_creation_input_tokens\":354,\"cache_read_input_tokens\":3208,\"output_tokens\":358,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":354,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"not_available\",\"iterations\":[{\"input_tokens\":2,\"output_tokens\":17,\"cache_read_input_tokens\":1604,\"cache_creation_input_tokens\":354,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":354},\"type\":\"message\"}],\"speed\":\"standard\"},\"modelUsage\":{\"claude-haiku-4-5-20251001\":{\"inputTokens\":1054,\"outputTokens\":18,\"cacheReadInputTokens\":0,\"cacheCreationInputTokens\":0,\"webSearchRequests\":0,\"costUSD\":0.001144,\"contextWindow\":200000,\"maxOutputTokens\":32000},\"claude-sonnet-5\":{\"inputTokens\":4,\"outputTokens\":358,\"cacheReadInputTokens\":3208,\"cacheCreationInputTokens\":354,\"webSearchRequests\":0,\"costUSD\":0.014114,\"contextWindow\":200000,\"maxOutputTokens\":32000}},\"permission_denials\":[],\"structured_output\":{\"production_schema_namespace\":\"UNKNOWN\",\"prototype_schema_namespace\":\"delta.prototype\"},\"terminal_reason\":\"completed\",\"fast_mode_state\":\"off\",\"uuid\":\"3514e652-a92c-4105-aaa7-e768c4c0309d\"}\n",
+      "raw_stderr": "",
+      "envelope": {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false,
+        "api_error_status": null,
+        "duration_ms": 6971,
+        "duration_api_ms": 8540,
+        "ttft_ms": 5483,
+        "ttft_stream_ms": 3275,
+        "time_to_request_ms": 592,
+        "num_turns": 2,
+        "result": "UNKNOWN and delta.prototype.",
+        "stop_reason": "end_turn",
+        "session_id": "1a9f0fae-140f-4b36-be30-ed70031f4bff",
+        "total_cost_usd": 0.015258,
+        "usage": {
+          "input_tokens": 4,
+          "cache_creation_input_tokens": 354,
+          "cache_read_input_tokens": 3208,
+          "output_tokens": 358,
+          "server_tool_use": {
+            "web_search_requests": 0,
+            "web_fetch_requests": 0
+          },
+          "service_tier": "standard",
+          "cache_creation": {
+            "ephemeral_1h_input_tokens": 354,
+            "ephemeral_5m_input_tokens": 0
+          },
+          "inference_geo": "not_available",
+          "iterations": [
+            {
+              "input_tokens": 2,
+              "output_tokens": 17,
+              "cache_read_input_tokens": 1604,
+              "cache_creation_input_tokens": 354,
+              "cache_creation": {
+                "ephemeral_5m_input_tokens": 0,
+                "ephemeral_1h_input_tokens": 354
+              },
+              "type": "message"
+            }
+          ],
+          "speed": "standard"
+        },
+        "modelUsage": {
+          "claude-haiku-4-5-20251001": {
+            "inputTokens": 1054,
+            "outputTokens": 18,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0,
+            "webSearchRequests": 0,
+            "costUSD": 0.001144,
+            "contextWindow": 200000,
+            "maxOutputTokens": 32000
+          },
+          "claude-sonnet-5": {
+            "inputTokens": 4,
+            "outputTokens": 358,
+            "cacheReadInputTokens": 3208,
+            "cacheCreationInputTokens": 354,
+            "webSearchRequests": 0,
+            "costUSD": 0.014114,
+            "contextWindow": 200000,
+            "maxOutputTokens": 32000
+          }
+        },
+        "permission_denials": [],
+        "structured_output": {
+          "production_schema_namespace": "UNKNOWN",
+          "prototype_schema_namespace": "delta.prototype"
+        },
+        "terminal_reason": "completed",
+        "fast_mode_state": "off",
+        "uuid": "3514e652-a92c-4105-aaa7-e768c4c0309d"
+      },
+      "parsed": {
+        "production_schema_namespace": "UNKNOWN",
+        "prototype_schema_namespace": "delta.prototype"
+      }
+    },
+    "rewritten": {
+      "role": "downstream_qa",
+      "duration_ms": 8899,
+      "prompt_sha256": "200e4dd9aff55b852483328e5d0c851b5696453dc38430e97cce96b57bd5b023",
+      "raw_stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"api_error_status\":null,\"duration_ms\":7771,\"duration_api_ms\":7607,\"ttft_ms\":5722,\"ttft_stream_ms\":5141,\"time_to_request_ms\":1227,\"num_turns\":2,\"result\":\"production_schema_namespace: delta.cobalt\\nprototype_schema_namespace: delta.prototype\",\"stop_reason\":\"end_turn\",\"session_id\":\"9f2d408b-d07b-495e-82a2-eeb4d56a2c4c\",\"total_cost_usd\":0.021467,\"usage\":{\"input_tokens\":4,\"cache_creation_input_tokens\":1542,\"cache_read_input_tokens\":1392,\"output_tokens\":173,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":1542,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"not_available\",\"iterations\":[{\"input_tokens\":2,\"output_tokens\":36,\"cache_read_input_tokens\":1392,\"cache_creation_input_tokens\":150,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":150},\"type\":\"message\"}],\"speed\":\"standard\"},\"modelUsage\":{\"claude-haiku-4-5-20251001\":{\"inputTokens\":926,\"outputTokens\":16,\"cacheReadInputTokens\":0,\"cacheCreationInputTokens\":0,\"webSearchRequests\":0,\"costUSD\":0.001006,\"contextWindow\":200000,\"maxOutputTokens\":32000},\"claude-sonnet-5\":{\"inputTokens\":4,\"outputTokens\":173,\"cacheReadInputTokens\":1392,\"cacheCreationInputTokens\":1542,\"webSearchRequests\":0,\"costUSD\":0.020461,\"contextWindow\":200000,\"maxOutputTokens\":32000}},\"permission_denials\":[],\"structured_output\":{\"production_schema_namespace\":\"delta.cobalt\",\"prototype_schema_namespace\":\"delta.prototype\"},\"terminal_reason\":\"completed\",\"fast_mode_state\":\"off\",\"uuid\":\"dd88a90b-83f7-4e04-8748-d630fec24006\"}\n",
+      "raw_stderr": "",
+      "envelope": {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false,
+        "api_error_status": null,
+        "duration_ms": 7771,
+        "duration_api_ms": 7607,
+        "ttft_ms": 5722,
+        "ttft_stream_ms": 5141,
+        "time_to_request_ms": 1227,
+        "num_turns": 2,
+        "result": "production_schema_namespace: delta.cobalt\nprototype_schema_namespace: delta.prototype",
+        "stop_reason": "end_turn",
+        "session_id": "9f2d408b-d07b-495e-82a2-eeb4d56a2c4c",
+        "total_cost_usd": 0.021467,
+        "usage": {
+          "input_tokens": 4,
+          "cache_creation_input_tokens": 1542,
+          "cache_read_input_tokens": 1392,
+          "output_tokens": 173,
+          "server_tool_use": {
+            "web_search_requests": 0,
+            "web_fetch_requests": 0
+          },
+          "service_tier": "standard",
+          "cache_creation": {
+            "ephemeral_1h_input_tokens": 1542,
+            "ephemeral_5m_input_tokens": 0
+          },
+          "inference_geo": "not_available",
+          "iterations": [
+            {
+              "input_tokens": 2,
+              "output_tokens": 36,
+              "cache_read_input_tokens": 1392,
+              "cache_creation_input_tokens": 150,
+              "cache_creation": {
+                "ephemeral_5m_input_tokens": 0,
+                "ephemeral_1h_input_tokens": 150
+              },
+              "type": "message"
+            }
+          ],
+          "speed": "standard"
+        },
+        "modelUsage": {
+          "claude-haiku-4-5-20251001": {
+            "inputTokens": 926,
+            "outputTokens": 16,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0,
+            "webSearchRequests": 0,
+            "costUSD": 0.001006,
+            "contextWindow": 200000,
+            "maxOutputTokens": 32000
+          },
+          "claude-sonnet-5": {
+            "inputTokens": 4,
+            "outputTokens": 173,
+            "cacheReadInputTokens": 1392,
+            "cacheCreationInputTokens": 1542,
+            "webSearchRequests": 0,
+            "costUSD": 0.020461,
+            "contextWindow": 200000,
+            "maxOutputTokens": 32000
+          }
+        },
+        "permission_denials": [],
+        "structured_output": {
+          "production_schema_namespace": "delta.cobalt",
+          "prototype_schema_namespace": "delta.prototype"
+        },
+        "terminal_reason": "completed",
+        "fast_mode_state": "off",
+        "uuid": "dd88a90b-83f7-4e04-8748-d630fec24006"
+      },
+      "parsed": {
+        "production_schema_namespace": "delta.cobalt",
+        "prototype_schema_namespace": "delta.prototype"
+      }
+    }
+  },
+  "condition_scores": {
+    "rescue": {
+      "condition": "rescue",
+      "production_expected": "delta.cobalt",
+      "production_observed": "delta.cobalt",
+      "production_correct": true,
+      "prototype_expected": "delta.prototype",
+      "prototype_observed": "delta.prototype",
+      "prototype_correct": true,
+      "semantic_merge_signature": false
+    },
+    "baseline": {
+      "condition": "baseline",
+      "production_expected": "delta.cobalt",
+      "production_observed": "delta.cobalt",
+      "production_correct": true,
+      "prototype_expected": "delta.prototype",
+      "prototype_observed": "delta.prototype",
+      "prototype_correct": true,
+      "semantic_merge_signature": false
+    },
+    "additive": {
+      "condition": "additive",
+      "production_expected": "delta.cobalt",
+      "production_observed": "UNKNOWN",
+      "production_correct": false,
+      "prototype_expected": "delta.prototype",
+      "prototype_observed": "delta.prototype",
+      "prototype_correct": true,
+      "semantic_merge_signature": false
+    },
+    "rewritten": {
+      "condition": "rewritten",
+      "production_expected": "delta.cobalt",
+      "production_observed": "delta.cobalt",
+      "production_correct": true,
+      "prototype_expected": "delta.prototype",
+      "prototype_observed": "delta.prototype",
+      "prototype_correct": true,
+      "semantic_merge_signature": false
+    }
+  },
+  "paired_score": {
+    "harm": false,
+    "win": true,
+    "rescued_harm": false,
+    "semantic_merge_harm": false
+  },
+  "completed_at": "2026-08-27T04:41:03.857Z"
+}
