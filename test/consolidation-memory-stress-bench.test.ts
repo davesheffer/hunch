@@ -5,6 +5,7 @@ import {
   STRESS_NEW_FACT_KEYS,
   STRESS_PROTECTED_KEYS,
   STRESS_UPDATE_ROUNDS,
+  STRESS_TARGET_WORDS,
   STRESS_WORD_CAP,
   buildStressCases,
   buildStressPackets,
@@ -102,12 +103,13 @@ test("stress dry run freezes three rotated 34-call repeats without model calls",
   assert.deepEqual(stressConditionOrder(2), ["additive", "rewritten", "rescue", "clean"]);
   assert.deepEqual(stressConditionOrder(3), ["rewritten", "rescue", "clean", "additive"]);
   const summary = stressDryRunSummary(cases, 3);
-  assert.equal(summary.protocol_version, 3);
+  assert.equal(summary.protocol_version, 4);
   assert.equal(summary.no_model_calls_made, true);
   assert.equal(summary.planned_model_calls, 34);
   assert.equal(summary.protected_units, 72);
   assert.equal(summary.new_fact_units, 36);
   assert.equal(summary.word_cap, 100);
+  assert.equal(summary.target_words, STRESS_TARGET_WORDS);
 });
 
 test("stress runner reads schema-constrained CLI output from structured_output", () => {
