@@ -72,6 +72,12 @@
   .prose .inline-art{margin:34px 0 30px;padding:0;border:1px solid var(--line);border-radius:16px;overflow:hidden;background:var(--surface);box-shadow:0 22px 48px -36px rgba(28,32,30,.42)}
   .prose .inline-art img{display:block;width:100%;aspect-ratio:3/2;object-fit:cover}
   .prose .inline-art figcaption{padding:11px 15px;font-family:var(--mono);font-size:11px;line-height:1.45;color:var(--muted-2);border-top:1px solid var(--line)}
+  .report-download{display:grid;grid-template-columns:1fr auto;align-items:center;gap:24px;margin:38px 0 0;padding:24px 26px;border:1px solid rgba(58,107,88,.22);border-radius:16px;background:linear-gradient(135deg,rgba(58,107,88,.09),rgba(58,107,88,.025));box-shadow:var(--shadow)}
+  .report-download .report-eyebrow{display:block;margin-bottom:6px;font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+  .report-download strong{display:block;font-family:var(--serif);font-size:19px;line-height:1.25;color:var(--ink)}
+  .report-download .report-meta{display:block;margin-top:7px;font-family:var(--mono);font-size:11px;color:var(--muted-2)}
+  .report-download .report-button{display:inline-flex;align-items:center;justify-content:center;min-width:126px;padding:11px 17px;border-radius:11px;background:var(--accent);color:#fff;font-weight:600;text-decoration:none;white-space:nowrap;transition:transform .2s var(--ease),box-shadow .2s}
+  .report-download .report-button:hover{transform:translateY(-1px);box-shadow:0 10px 24px -10px rgba(58,107,88,.6)}
 
   .cta{max-width:720px;margin:48px auto 0;padding:0 28px}
   .cta-box{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:30px 32px;box-shadow:var(--shadow);display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap}
@@ -100,7 +106,10 @@
   html[dir="rtl"] .prose blockquote{border-left:0;border-right:3px solid var(--accent);padding-left:0;padding-right:22px}
   html[dir="rtl"] .prose code,html[dir="rtl"] .prose pre{direction:ltr;unicode-bidi:isolate;text-align:left}
   html[dir="rtl"] .np.next{text-align:left}html[dir="rtl"] .np.prev{text-align:right}
+  html[lang="he"] .report-download .report-eyebrow,html[lang="he"] .report-download .report-meta,
+  html[lang="ar"] .report-download .report-eyebrow,html[lang="ar"] .report-download .report-meta{font-family:var(--sans-local);letter-spacing:0;text-transform:none}
   @media(max-width:680px){html[dir="rtl"] .np.next,html[dir="rtl"] .np.prev{text-align:right}}
+  @media(max-width:600px){.report-download{grid-template-columns:1fr;padding:21px}.report-download .report-button{width:100%}}
 </style>
 <link rel="stylesheet" href="/navigation.css" />
 <script defer src="/navigation.js"></script>
@@ -172,6 +181,10 @@
           </header>
           ${p.cover ? `<figure class="cover-art"><img src="${p.cover.src}" alt="${p.cover.alt}" /></figure>` : ""}
           <div class="prose">${p.body}</div>
+          ${p.download ? `<aside class="report-download" aria-label="${p.download.eyebrow}">
+            <div><span class="report-eyebrow">${p.download.eyebrow}</span><strong>${p.download.label}</strong><span class="report-meta">${p.download.meta}</span></div>
+            <a class="report-button" href="${p.download.href}" download>${p.download.action}</a>
+          </aside>` : ""}
         </article>
         <div class="cta"><div class="cta-box">
           <div><h4>${UI.ctaTitle}</h4><p>${UI.ctaBody} <code>npm i -g @davesheffer/hunch</code></p></div>

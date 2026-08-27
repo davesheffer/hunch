@@ -3,10 +3,79 @@
    global so it works on a static host with no build step. */
 window.POSTS = [
   {
+    slug: "testing-hunch-memory-safety",
+    title: "We tested whether Hunch memory degrades. Here is what passed — and what did not.",
+    dek: "A new research paper showed that continuously rewritten LLM memory can become harmful. We audited Hunch against that failure mode, ran 312 direct-memory model calls, followed a suspicious result into a preregistered replication, and wrote down the production boundary we can actually defend.",
+    date: "2026-08-27", tag: "Research", read: "8 min", pinned: true,
+    cover: {
+      src: "/assets/research/hunch-memory-safety-assurance-cover.png",
+      alt: "Cover of the Hunch Memory Safety production readiness assurance report",
+    },
+    download: {
+      eyebrow: "Full evidence packet",
+      label: "Download the 8-page memory safety assurance report",
+      meta: "PDF · 8 pages · 398 KB",
+      action: "Download PDF",
+      href: "/assets/research/hunch-memory-safety-production-readiness-assurance.pdf",
+    },
+    body: `
+<p class="lead">In May 2026, a research team published a result every agent-memory builder should take seriously: <strong>an LLM can turn useful experiences into harmful memory simply by repeatedly rewriting them.</strong> We did not treat the paper as proof that Hunch was safe or unsafe. We treated it as a concrete failure hypothesis and tried to break Hunch with it.</p>
+
+<h2>The paper raised a real production risk</h2>
+<p><a href="https://arxiv.org/abs/2605.12978" target="_blank" rel="noopener">Useful Memories Become Faulty When Continuously Updated by LLMs</a> studies systems that ask a model to repeatedly replace an existing textual memory with a new consolidated summary. In the paper's cleanest ARC-AGI result, GPT-5.4 fell from a 100% no-memory baseline to 52.6% success after ten streaming consolidation rounds. A one-shot/static memory condition remained at 94.7%.</p>
+<p>The practical lesson is architectural: preserve recoverable evidence, keep it separate from abstractions, and gate consolidation instead of rewriting memory after every interaction. The equally important limitation is that the paper diagnoses a mechanism; it does not test Hunch and it does not certify a fix.</p>
+
+<h2>We translated the paper into a falsifiable question</h2>
+<blockquote>If Hunch accumulates or rewrites similar memories, does the model begin merging distinct facts, losing source fidelity, or answering worse than it did without memory?</blockquote>
+<p>We deliberately separated two questions. The first was whether a product-style retrieval task could detect accumulated harm. The second was whether a direct memory harness could isolate the paper's rewrite mechanism. Keeping those questions separate mattered because a benchmark that is too difficult can make every condition score zero — and a row of zeroes is not evidence of safety.</p>
+
+<h2>The first experiment did not prove anything</h2>
+<p>The consolidation-safety pilot completed 24 valid sessions, but every arm landed on the floor: 0/6 on both source and issue contracts. A calibrated follow-up produced 12 more valid rows and the same floor. We stopped there. Those runs were operationally valid but scientifically inconclusive, so they are not counted as a safety win.</p>
+
+<h2>Then we tested the mechanism directly</h2>
+<table>
+  <thead><tr><th>Experiment</th><th>Scale</th><th>Result</th></tr></thead>
+  <tbody>
+    <tr><td><b>Direct v2</b></td><td>48 calls</td><td>Clean, Additive, Rewritten, and Rescue conditions each protected 96/96 checks. No degradation, but no demonstrated advantage for additive memory either.</td></tr>
+    <tr><td><b>Capacity v4</b></td><td>102 calls; 540 memories</td><td>The Rewritten arm missed 6 of 216 checks in one of three repeats. Additive and Rescue stayed at 216/216. The 2.78-point effect was below the preregistered threshold.</td></tr>
+    <tr><td><b>Targeted v5</b></td><td>162 calls; 18 isolated trajectories</td><td>The v4 signature did not replicate. Rewritten scored 36/36; Additive scored 35/36. There were zero paired harms and one Rewritten win.</td></tr>
+  </tbody>
+</table>
+<p>Across the three direct experiments, that is <strong>312 completed model calls</strong>. We found one correlated replacement-only signal worth investigating, then failed to reproduce it in the targeted replication. The correct result is not “Hunch passed a universal safety test.” It is narrower: <strong>no repeatable material degradation met the preregistered thresholds under the tested configurations.</strong></p>
+
+<h2>We audited the architecture, not only the scores</h2>
+<p>The paper's failure mode depends on losing evidence during repeated replacement. Hunch's durable memory path is record-oriented instead:</p>
+<ul>
+  <li><strong>JSON is the source of truth and writes are atomic.</strong> A failed write leaves the prior target intact; the SQLite index is derived and rebuildable.</li>
+  <li><strong>History is additive.</strong> Superseded records remain inspectable, and physical compaction is currently refused rather than silently deleting evidence.</li>
+  <li><strong>Ambiguity fails closed.</strong> When multiple live records disagree, Hunch does not inject one as the authoritative current answer.</li>
+  <li><strong>Agent-written memory is not automatically human authority.</strong> An unconfirmed agent correction remains advisory and cannot create a blocking rule.</li>
+</ul>
+<p>This is directionally aligned with the paper's recommendation, but it is not identical. Hunch preserves structured decisions, bugs, constraints, and their histories; it is not yet a complete raw archive of every agent trajectory.</p>
+
+<h2>What “production ready” means here</h2>
+<p>At the evidence cutoff, the repository also passed 1,370 of 1,371 tests with zero failures and one skip, passed type checking, passed all 7 conformance invariants, and reported no graph drift. Those checks establish implementation integrity, not universal behavioral safety.</p>
+<p>Our decision is <strong>GO WITH CONDITIONS</strong> for controlled, reversible production use with human review, monitoring, backups, conflict telemetry, and a tested rollback path. It is a no-go for unmonitored high-stakes autonomy or for claims that Hunch memory “cannot” corrupt.</p>
+
+<h2>What we still need to test</h2>
+<ul>
+  <li>A non-floor end-to-end retrieval benchmark where the clean baseline is neither 0% nor 100%.</li>
+  <li>Longer memory horizons across multiple current model families.</li>
+  <li>Interrupted writes, disk-full behavior, derived-index corruption, restore, and rollback drills.</li>
+  <li>A small production canary that measures retrieval misses, abstentions, collisions, supersessions, and human corrections.</li>
+</ul>
+
+<h2>Why publish an inconclusive result?</h2>
+<p>Because the tempting version of this story — “a paper found a memory bug and our product passed” — would be false. The useful version is the process: turn a paper into a mechanism, preregister a threshold, report floor effects, follow the one suspicious signal, attempt replication, and publish the boundary that survives.</p>
+<p>The complete assurance report below contains the paper-to-architecture mapping, every experiment outcome, the production gate, and the evidence index. The public discussion for the original paper is also available on <a href="https://www.alphaxiv.org/abs/2605.12978" target="_blank" rel="noopener">alphaXiv</a>.</p>
+`,
+  },
+
+  {
     slug: "configuration-joins-the-graph",
     title: "Hunch 1.18: your configuration is part of the architecture",
     dek: "A service can be perfectly layered in TypeScript and quietly rewired in YAML. Hunch 1.18 brings YAML anchors, aliases, and Helm helpers into the same dependency graph — without pretending templating is executable code or accepting broken configuration.",
-    date: "2026-08-22", tag: "Release", read: "7 min", pinned: true,
+    date: "2026-08-22", tag: "Release", read: "7 min", pinned: false,
     body: `
 <p class="lead">Architecture does not stop where application code ends. A deployment can redirect a service, reuse the wrong credential block, or pull in a chart helper that changes labels across every workload — while the TypeScript, Python, and Go graphs remain perfectly clean. <strong>Hunch 1.18 makes those configuration relationships visible in the same graph as the code they shape.</strong></p>
 

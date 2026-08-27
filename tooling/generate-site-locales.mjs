@@ -377,6 +377,7 @@ window.BLOG_I18N = ${JSON.stringify(browserLocaleData)};
         tag: translated.tag,
         read: translated.read,
         body,
+        download: translated.download || source.download,
         cover: source.cover ? { ...source.cover, alt: translated.title } : source.cover,
       };
     });

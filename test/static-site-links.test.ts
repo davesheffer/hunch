@@ -52,3 +52,15 @@ test("every static-site local route and asset reference resolves", () => {
   assert.ok(localReferences >= 428, "the validator must keep exercising the complete current site surface");
   assert.deepEqual(missing, []);
 });
+
+test("blog download resources are public, root-absolute, and present", () => {
+  const source = readFileSync(join(SITE_ROOT, "blog", "posts.js"), "utf8");
+  const downloads = [...source.matchAll(/\bdownload:\s*\{[\s\S]*?\bhref:\s*"([^"]+)"/g)]
+    .map((match) => match[1]!);
+
+  assert.ok(downloads.length >= 1, "the blog should expose at least one downloadable evidence resource");
+  for (const href of downloads) {
+    assert.ok(href.startsWith("/"), `download link must be root-absolute: ${href}`);
+    assert.ok(localTargetExists(new URL(href, LOCAL_ORIGIN).pathname), `download target is missing: ${href}`);
+  }
+});
