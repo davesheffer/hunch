@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "protocol_version": 3,
+  "experiment": "hunch-direct-memory-capacity-stress",
+  "frozen_at": "2026-08-27T04:01:25Z",
+  "v3_model_calls_before_freeze": 0,
+  "base_git_head": "5dd9f27aa91e94e96eae6490fecfe2863c5c0d50",
+  "model": "claude-sonnet-5",
+  "claude_cli_version": "2.1.186",
+  "max_cli_turns_per_call": 2,
+  "case_count": 6,
+  "protected_facts_per_case": 12,
+  "later_facts_per_case": 6,
+  "update_rounds": 30,
+  "replacement_word_cap": 100,
+  "planned_repeats": 3,
+  "planned_calls_per_repeat": 34,
+  "planned_calls_total": 102,
+  "files": {
+    "runner": {
+      "path": "bench/external/run-consolidation-memory-stress.ts",
+      "sha256": "e12a0dd22449d477df62b91c231c3756b11f2f1246285f58c9f6cec0ff222c74"
+    },
+    "unit_tests": {
+      "path": "test/consolidation-memory-stress-bench.test.ts",
+      "sha256": "ff1d511deece668cb4e2537f020937168807ccc3d1caae70e924cf917d78323f"
+    },
+    "preregistration": {
+      "path": "bench/external/results/2026-08-27-hunch-direct-memory-capacity-stress-v3-preregistration.md",
+      "sha256": "e0a08c68dfe30f6058ba4d8d165c5302a1727924eab1afd8882f432c7b5ed575"
+    }
+  },
+  "frozen_components": {
+    "case_bank_sha256": "3805543c8fa5a5373e35ba7efbb429eebc5e58b95463172151d51d64c6f31f2e",
+    "system_prompt_sha256": "fb06f5a610d1b9f7109e838b417e1274aefba5068f09599ce129d21e7294b275",
+    "update_schema_sha256": "5e4dc907c9d28d99cc0a3f36d924e28bef30eae138a4e81aed0d11aafdf295eb",
+    "qa_schema_sha256": "711f94c890e100ba309393a1bbebb137a5a4f83f964c56da02b0c268cdeffb46",
+    "first_update_prompt_sha256_by_repeat": {
+      "1": "f6ce0966879447595704fc80656d94631a41ff212e7534f70cb7cbf1463b092f",
+      "2": "e5ef1b2a12adc53cd28da178ce3669ee6e981952998460c2cbe1bdc93527c420",
+      "3": "d163b0d28e587b478f3c9604696afe586fbaf212b70cac7bd365e1d16a984fc5"
+    }
+  },
+  "dry_run_verification": {
+    "unit_tests_passed": 7,
+    "typecheck_passed": true,
+    "model_calls_made": 0,
+    "protected_units_per_repeat": 72,
+    "later_fact_units_per_condition_per_repeat": 36,
+    "condition_orders": {
+      "1": ["clean", "additive", "rewritten", "rescue"],
+      "2": ["additive", "rewritten", "rescue", "clean"],
+      "3": ["rewritten", "rescue", "clean", "additive"]
+    }
+  }
+}
