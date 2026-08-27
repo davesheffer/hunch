@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "protocol_version": 4,
+  "experiment": "hunch-direct-memory-capacity-stress",
+  "v4_model_calls_before_freeze": 0,
+  "base_git_head": "53740ce1496c5cc59ae6353bd229c70d5ed523a3",
+  "model": "claude-sonnet-5",
+  "claude_cli_version": "2.1.186",
+  "replacement_target_words": 90,
+  "replacement_hard_max_words": 100,
+  "planned_repeats": 3,
+  "planned_calls_per_repeat": 34,
+  "planned_calls_total": 102,
+  "inherits_cases_scores_gates_and_rules_from": "bench/external/results/2026-08-27-hunch-direct-memory-capacity-stress-v3-preregistration.md",
+  "files": {
+    "runner": {
+      "path": "bench/external/run-consolidation-memory-stress.ts",
+      "sha256": "b62a6dfc36355039e89a6e12ab810890e7da8a19a94f8ff12e0fd917a50737eb"
+    },
+    "unit_tests": {
+      "path": "test/consolidation-memory-stress-bench.test.ts",
+      "sha256": "6b4fbec7ef84d171721115f474172f2cb3f1302d60c4100c516ad0c930c1db60"
+    },
+    "v4_preregistration": {
+      "path": "bench/external/results/2026-08-27-hunch-direct-memory-capacity-stress-v4-preregistration.md",
+      "sha256": "15f3e5c95247771e7d7ee4f43da0c86d0d59e802c04f2b97e33ab5a6a9245bf9"
+    }
+  },
+  "frozen_components": {
+    "case_bank_sha256": "3805543c8fa5a5373e35ba7efbb429eebc5e58b95463172151d51d64c6f31f2e",
+    "system_prompt_sha256": "fb06f5a610d1b9f7109e838b417e1274aefba5068f09599ce129d21e7294b275",
+    "update_schema_sha256": "5e4dc907c9d28d99cc0a3f36d924e28bef30eae138a4e81aed0d11aafdf295eb",
+    "qa_schema_sha256": "711f94c890e100ba309393a1bbebb137a5a4f83f964c56da02b0c268cdeffb46",
+    "first_update_prompt_sha256_by_repeat": {
+      "1": "8b1fbf7a1e7830f66abd00b0f5e88d95bebce98c351f2e25b5f531c63e8d84c7",
+      "2": "38afa6c4cd31e37db5a9233732555038538b361adcaf60de0e1ca3ca5766d53c",
+      "3": "0065a89de5580ca8826233affd50304d03cdf1da723f5843a40b83f48b10be40"
+    }
+  },
+  "dry_run_verification": {
+    "unit_tests_passed": 7,
+    "typecheck_passed": true,
+    "model_calls_made": 0,
+    "condition_orders": {
+      "1": ["clean", "additive", "rewritten", "rescue"],
+      "2": ["additive", "rewritten", "rescue", "clean"],
+      "3": ["rewritten", "rescue", "clean", "additive"]
+    }
+  }
+}

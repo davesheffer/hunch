@@ -43,6 +43,7 @@ export const STRESS_NEW_FACT_KEYS = [
 export const STRESS_CONDITIONS = ["clean", "additive", "rewritten", "rescue"] as const;
 export const STRESS_UPDATE_ROUNDS = 30;
 export const STRESS_WORD_CAP = 100;
+export const STRESS_TARGET_WORDS = 90;
 
 export type StressProtectedKey = typeof STRESS_PROTECTED_KEYS[number];
 export type StressNewFactKey = typeof STRESS_NEW_FACT_KEYS[number];
@@ -125,7 +126,7 @@ interface StressCheckpoint {
 
 interface StressResult {
   schema_version: 1;
-  protocol_version: 3;
+  protocol_version: 4;
   experiment: "hunch-direct-memory-capacity-stress";
   status: "running" | "complete" | "infrastructure_failure";
   repeat_index: number;
@@ -141,6 +142,7 @@ interface StressResult {
   protected_units: number;
   update_rounds: number;
   word_cap: number;
+  target_words: number;
   condition_order: StressCondition[];
   checkpoints: StressCheckpoint[];
   qa_calls: Partial<Record<StressCondition, StressClaudeCall>>;
@@ -545,8 +547,9 @@ export function buildStressUpdatePrompt(cases: StressCase[], prior: Record<strin
   });
   return [
     "For every case below, replace the existing memory with one self-contained consolidated memory.",
-    "Preserve every existing fact unless the new observation explicitly supersedes it; these observations are non-conflicting.",
-    `Incorporate the new observation. Do not mix facts between cases. Use at most ${STRESS_WORD_CAP} words per memory.`,
+    "All observations are non-conflicting. Incorporate the new observation and preserve as many useful existing facts as fit.",
+    `The ${STRESS_WORD_CAP}-word maximum is absolute and takes priority over completeness; target at most ${STRESS_TARGET_WORDS} words for headroom.`,
+    "Use compact key=value clauses, omit lower-priority details when necessary, and never mix facts between cases.",
     "Return exactly one memories entry per case with the unchanged case_id.",
     "",
     ...blocks.flatMap((block) => [block, ""]),
@@ -813,12 +816,13 @@ export function stressDryRunSummary(cases: StressCase[], repeatIndex: number, mo
   return {
     valid: true,
     no_model_calls_made: true,
-    protocol_version: 3,
+    protocol_version: 4,
     repeat_index: repeatIndex,
     model,
     case_count: cases.length,
     update_rounds: STRESS_UPDATE_ROUNDS,
     word_cap: STRESS_WORD_CAP,
+    target_words: STRESS_TARGET_WORDS,
     protected_units: cases.length * STRESS_PROTECTED_KEYS.length,
     new_fact_units: cases.length * STRESS_NEW_FACT_KEYS.length,
     planned_model_calls: STRESS_UPDATE_ROUNDS + STRESS_CONDITIONS.length,
@@ -847,11 +851,11 @@ async function main(): Promise<void> {
   }
 
   mkdirSync(options.resultsDir, { recursive: true });
-  const outputPath = join(options.resultsDir, `2026-08-27-hunch-direct-memory-capacity-stress-v3-repeat-${options.repeatIndex}.json`);
+  const outputPath = join(options.resultsDir, `2026-08-27-hunch-direct-memory-capacity-stress-v4-repeat-${options.repeatIndex}.json`);
   if (existsSync(outputPath)) throw new Error(`refusing to overwrite frozen evidence: ${outputPath}`);
   const result: StressResult = {
     schema_version: 1,
-    protocol_version: 3,
+    protocol_version: 4,
     experiment: "hunch-direct-memory-capacity-stress",
     status: "running",
     repeat_index: options.repeatIndex,
@@ -866,6 +870,7 @@ async function main(): Promise<void> {
     protected_units: cases.length * STRESS_PROTECTED_KEYS.length,
     update_rounds: STRESS_UPDATE_ROUNDS,
     word_cap: STRESS_WORD_CAP,
+    target_words: STRESS_TARGET_WORDS,
     condition_order: stressConditionOrder(options.repeatIndex),
     checkpoints: [],
     qa_calls: {},
