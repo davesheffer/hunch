@@ -1,0 +1,111 @@
+{
+  "experiment": "hunch-consolidation-calibrated-followup",
+  "date": "2026-08-27",
+  "verdict": "calibration-failed-no-eligible-task",
+  "verdictReason": "All six preregistered candidates scored 0/2 on primary source accuracy. None met the frozen exactly-1/2 eligibility rule, so the conditional memory evaluation was not run.",
+  "preregistration": "2026-08-27-hunch-consolidation-calibrated-followup-preregistration.md",
+  "manifest": "2026-08-27-hunch-consolidation-calibrated-followup-manifest.json",
+  "integrity": {
+    "preregisteredCalibrationSessions": 12,
+    "validCalibrationSessions": 12,
+    "infrastructureExclusions": 0,
+    "futureFreeHistory": true,
+    "historyThroughPreFixOnly": true,
+    "isolatedScoring": true,
+    "networkPolicy": "deny-all",
+    "webToolsDenied": true,
+    "outcomeBasedExtensions": 0
+  },
+  "calibration": {
+    "eligibilityRule": "exactly one source-accuracy pass out of two",
+    "eligibleTasks": [],
+    "tasks": [
+      {
+        "task": "zod-4461",
+        "sourcePasses": 0,
+        "sessions": 2,
+        "issueContractPasses": null,
+        "turns": [40, 51],
+        "meanDurationMs": 314687
+      },
+      {
+        "task": "zod-5229",
+        "sourcePasses": 0,
+        "sessions": 2,
+        "issueContractPasses": null,
+        "turns": [24, 21],
+        "meanDurationMs": 213978
+      },
+      {
+        "task": "zod-5296",
+        "sourcePasses": 0,
+        "sessions": 2,
+        "issueContractPasses": null,
+        "turns": [30, 18],
+        "meanDurationMs": 157245
+      },
+      {
+        "task": "zod-5625",
+        "sourcePasses": 0,
+        "sessions": 2,
+        "issueContractPasses": 2,
+        "turns": [49, 48],
+        "meanDurationMs": 298278
+      },
+      {
+        "task": "zod-5842",
+        "sourcePasses": 0,
+        "sessions": 2,
+        "issueContractPasses": null,
+        "turns": [25, 20],
+        "meanDurationMs": 113174
+      },
+      {
+        "task": "zod-5917",
+        "sourcePasses": 0,
+        "sessions": 2,
+        "issueContractPasses": 0,
+        "turns": [51, 34],
+        "meanDurationMs": 422139
+      }
+    ],
+    "totalSourcePasses": 0,
+    "totalSessions": 12,
+    "existingTestTouchRows": 1,
+    "zeroEditRows": 0
+  },
+  "conditionalEvaluation": {
+    "executed": false,
+    "reason": "No calibration task was eligible.",
+    "solverSessions": 0,
+    "pairedComparisons": null,
+    "causalSurgeryTriggered": false
+  },
+  "snapshots": {
+    "accumulatedDecisionCount": 167,
+    "queryBoundedSnapshotsFrozen": 6,
+    "queryBoundedDecisionCounts": {
+      "zod-4461": 4,
+      "zod-5229": 5,
+      "zod-5296": 5,
+      "zod-5625": 4,
+      "zod-5842": 4,
+      "zod-5917": 5
+    },
+    "usedBySolver": false
+  },
+  "rawResults": [
+    {
+      "file": "2026-08-27T02-58-29-323Z-p8849.json",
+      "sha256": "30c072062ac983f81bf11013a45078da44145c66fd37d72d1d8e7f7f18848cbf"
+    },
+    {
+      "file": "2026-08-27T02-58-29-323Z-p8850.json",
+      "sha256": "16b8d283cc1001bbcdfa0f4322e1c9030632da5c47181bde7fde9525a5712b3d"
+    },
+    {
+      "file": "2026-08-27T02-58-29-324Z-p8851.json",
+      "sha256": "5f76e9ca88e1ec5dd6b497f7f45c2295da8883907da4abf7290322f673cfe6bb"
+    }
+  ]
+}
