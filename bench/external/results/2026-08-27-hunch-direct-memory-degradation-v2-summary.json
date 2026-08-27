@@ -1,0 +1,101 @@
+{
+  "schema_version": 1,
+  "protocol_version": 2,
+  "experiment": "hunch-direct-memory-degradation",
+  "status": "complete",
+  "calibration_valid": true,
+  "planned_cli_calls": 48,
+  "completed_cli_calls": 48,
+  "completed_repeats": 3,
+  "validity_gates_by_repeat": {
+    "1": {
+      "clean_protected": "32/32",
+      "additive_later_facts": "16/16",
+      "passed": true
+    },
+    "2": {
+      "clean_protected": "32/32",
+      "additive_later_facts": "16/16",
+      "passed": true
+    },
+    "3": {
+      "clean_protected": "32/32",
+      "additive_later_facts": "16/16",
+      "passed": true
+    }
+  },
+  "pooled_protected_accuracy": {
+    "clean": {
+      "correct": 96,
+      "total": 96,
+      "accuracy": 1
+    },
+    "additive": {
+      "correct": 96,
+      "total": 96,
+      "accuracy": 1
+    },
+    "rewritten": {
+      "correct": 96,
+      "total": 96,
+      "accuracy": 1
+    },
+    "rescue": {
+      "correct": 96,
+      "total": 96,
+      "accuracy": 1
+    }
+  },
+  "pooled_later_fact_accuracy": {
+    "clean_absence_control": {
+      "correct": 48,
+      "total": 48,
+      "accuracy": 1
+    },
+    "additive": {
+      "correct": 48,
+      "total": 48,
+      "accuracy": 1
+    },
+    "rewritten": {
+      "correct": 48,
+      "total": 48,
+      "accuracy": 1
+    },
+    "rescue": {
+      "correct": 48,
+      "total": 48,
+      "accuracy": 1
+    }
+  },
+  "primary_contrast": {
+    "additive_minus_rewritten_percentage_points": 0,
+    "paired_harms": 0,
+    "paired_wins": 0,
+    "rescued_harms": 0,
+    "rescue_rate": null
+  },
+  "replacement_trace": {
+    "protected_literal_checks_retained": 1152,
+    "protected_literal_checks_total": 1152,
+    "final_memory_words_mean": 116.875,
+    "final_memory_words_min": 116,
+    "final_memory_words_max": 118,
+    "word_cap": 120
+  },
+  "frozen_decisions": {
+    "repeated_replacement_mechanism_supported": false,
+    "hunch_immutable_additive_mitigation_supported": false,
+    "interpretation": "No evidence of material repeated-replacement degradation under this frozen configuration. The additive arm matched clean, but the preregistered Hunch mitigation rule also required an observed replacement harm."
+  },
+  "integrity": {
+    "git_head_during_runs": "f2f639dc95435793e582b31f258f3963681de649",
+    "runner_sha256": "be6b94199399fbd47fc158775711ed602585ff445d9479f2fc538caac1b93583",
+    "case_bank_sha256": "b328919518e05e7409213dc30567166d986417bd7ece88bce3a587a04f052ccf",
+    "raw_repeat_sha256": {
+      "1": "61abc6250c4fb9371335444024762c2db8c437724658e53f158d730a4b2e31ea",
+      "2": "815d8d3a49a3d2a196a515ae7284cf8e5fa64fe56b9f9dcf9c73594740642804",
+      "3": "9330ca2466862b6af7bafb81000bc9da65428b745bb53ba863cdc1bc7779248f"
+    }
+  }
+}
