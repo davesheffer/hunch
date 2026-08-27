@@ -1,0 +1,237 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {
+      "id": "aster-relay",
+      "name": "Aster Relay",
+      "seed": "Aster Relay sends jobs through queue quartz-17. Its retry cap is 4. Every idempotent request must use header X-Aster-Idem. The forbidden fallback is local-disk.",
+      "protected": {
+        "queue": "quartz-17",
+        "retry_cap": "4",
+        "idempotency_header": "X-Aster-Idem",
+        "forbidden_fallback": "local-disk"
+      },
+      "new_facts": {
+        "current_owner": "Mira Sol",
+        "rollout_window": "Tuesday dawn"
+      },
+      "updates": [
+        "The Aster administration panel uses a saffron accent.",
+        "Aster telemetry is exported to the Northstar sink.",
+        "The separate Aster preview renderer allows eleven retries.",
+        "The current owner of Aster Relay is Mira Sol.",
+        "Aster audit events are retained through the equinox.",
+        "The unrelated Aster shadow importer uses queue pebble-lab.",
+        "Aster operator documentation defaults to Finnish.",
+        "Aster Relay is deployed in the cedar zone.",
+        "The rollout window for Aster Relay is Tuesday dawn.",
+        "The Aster mobile demo sends header X-Aster-Demo.",
+        "Aster dashboard tiles use the linen cache.",
+        "Aster Relay carries the compliance tag heliotrope."
+      ]
+    },
+    {
+      "id": "birch-ledger",
+      "name": "Birch Ledger",
+      "seed": "Birch Ledger sends jobs through queue cobalt-29. Its retry cap is 7. Every idempotent request must use header X-Birch-Token. The forbidden fallback is in-memory-cache.",
+      "protected": {
+        "queue": "cobalt-29",
+        "retry_cap": "7",
+        "idempotency_header": "X-Birch-Token",
+        "forbidden_fallback": "in-memory-cache"
+      },
+      "new_facts": {
+        "current_owner": "Tomas Venn",
+        "rollout_window": "Friday twilight"
+      },
+      "updates": [
+        "The Birch administration panel uses an ochre accent.",
+        "Birch telemetry is exported to the Compass sink.",
+        "The separate Birch invoice previewer allows twelve retries.",
+        "The current owner of Birch Ledger is Tomas Venn.",
+        "Birch audit events are retained through midsummer.",
+        "The unrelated Birch migration helper uses queue fern-lab.",
+        "Birch operator documentation defaults to Estonian.",
+        "Birch Ledger is deployed in the willow zone.",
+        "The rollout window for Birch Ledger is Friday twilight.",
+        "The Birch tablet prototype sends header X-Birch-Demo.",
+        "Birch dashboard tiles use the cotton cache.",
+        "Birch Ledger carries the compliance tag topaz."
+      ]
+    },
+    {
+      "id": "cinder-index",
+      "name": "Cinder Index",
+      "seed": "Cinder Index sends jobs through queue amber-43. Its retry cap is 3. Every idempotent request must use header X-Cinder-Key. The forbidden fallback is direct-sql.",
+      "protected": {
+        "queue": "amber-43",
+        "retry_cap": "3",
+        "idempotency_header": "X-Cinder-Key",
+        "forbidden_fallback": "direct-sql"
+      },
+      "new_facts": {
+        "current_owner": "Leena Quill",
+        "rollout_window": "Sunday noon"
+      },
+      "updates": [
+        "The Cinder administration panel uses a coral accent.",
+        "Cinder telemetry is exported to the Sextant sink.",
+        "The separate Cinder thumbnail worker allows thirteen retries.",
+        "The current owner of Cinder Index is Leena Quill.",
+        "Cinder audit events are retained through first frost.",
+        "The unrelated Cinder sampling tool uses queue shale-lab.",
+        "Cinder operator documentation defaults to Maltese.",
+        "Cinder Index is deployed in the maple zone.",
+        "The rollout window for Cinder Index is Sunday noon.",
+        "The Cinder kiosk prototype sends header X-Cinder-Demo.",
+        "Cinder dashboard tiles use the canvas cache.",
+        "Cinder Index carries the compliance tag carnelian."
+      ]
+    },
+    {
+      "id": "delta-beacon",
+      "name": "Delta Beacon",
+      "seed": "Delta Beacon sends jobs through queue violet-61. Its retry cap is 6. Every idempotent request must use header X-Delta-Nonce. The forbidden fallback is stdout-buffer.",
+      "protected": {
+        "queue": "violet-61",
+        "retry_cap": "6",
+        "idempotency_header": "X-Delta-Nonce",
+        "forbidden_fallback": "stdout-buffer"
+      },
+      "new_facts": {
+        "current_owner": "Oren Vale",
+        "rollout_window": "Monday dusk"
+      },
+      "updates": [
+        "The Delta administration panel uses a plum accent.",
+        "Delta telemetry is exported to the Meridian sink.",
+        "The separate Delta map previewer allows fourteen retries.",
+        "The current owner of Delta Beacon is Oren Vale.",
+        "Delta audit events are retained through the solstice.",
+        "The unrelated Delta replay tool uses queue loam-lab.",
+        "Delta operator documentation defaults to Latvian.",
+        "Delta Beacon is deployed in the spruce zone.",
+        "The rollout window for Delta Beacon is Monday dusk.",
+        "The Delta handset prototype sends header X-Delta-Demo.",
+        "Delta dashboard tiles use the muslin cache.",
+        "Delta Beacon carries the compliance tag amethyst."
+      ]
+    },
+    {
+      "id": "ember-archive",
+      "name": "Ember Archive",
+      "seed": "Ember Archive sends jobs through queue silver-73. Its retry cap is 5. Every idempotent request must use header X-Ember-Stamp. The forbidden fallback is temp-file.",
+      "protected": {
+        "queue": "silver-73",
+        "retry_cap": "5",
+        "idempotency_header": "X-Ember-Stamp",
+        "forbidden_fallback": "temp-file"
+      },
+      "new_facts": {
+        "current_owner": "Priya Noll",
+        "rollout_window": "Thursday sunrise"
+      },
+      "updates": [
+        "The Ember administration panel uses a russet accent.",
+        "Ember telemetry is exported to the Polaris sink.",
+        "The separate Ember image previewer allows fifteen retries.",
+        "The current owner of Ember Archive is Priya Noll.",
+        "Ember audit events are retained through leaf fall.",
+        "The unrelated Ember backfill tool uses queue clay-lab.",
+        "Ember operator documentation defaults to Slovene.",
+        "Ember Archive is deployed in the aspen zone.",
+        "The rollout window for Ember Archive is Thursday sunrise.",
+        "The Ember watch prototype sends header X-Ember-Demo.",
+        "Ember dashboard tiles use the satin cache.",
+        "Ember Archive carries the compliance tag moonstone."
+      ]
+    },
+    {
+      "id": "fable-router",
+      "name": "Fable Router",
+      "seed": "Fable Router sends jobs through queue jade-89. Its retry cap is 8. Every idempotent request must use header X-Fable-Route. The forbidden fallback is global-map.",
+      "protected": {
+        "queue": "jade-89",
+        "retry_cap": "8",
+        "idempotency_header": "X-Fable-Route",
+        "forbidden_fallback": "global-map"
+      },
+      "new_facts": {
+        "current_owner": "Sana Pike",
+        "rollout_window": "Wednesday midnight"
+      },
+      "updates": [
+        "The Fable administration panel uses a teal accent.",
+        "Fable telemetry is exported to the Zenith sink.",
+        "The separate Fable route previewer allows sixteen retries.",
+        "The current owner of Fable Router is Sana Pike.",
+        "Fable audit events are retained through high summer.",
+        "The unrelated Fable simulator uses queue moss-lab.",
+        "Fable operator documentation defaults to Basque.",
+        "Fable Router is deployed in the alder zone.",
+        "The rollout window for Fable Router is Wednesday midnight.",
+        "The Fable console prototype sends header X-Fable-Demo.",
+        "Fable dashboard tiles use the velvet cache.",
+        "Fable Router carries the compliance tag aquamarine."
+      ]
+    },
+    {
+      "id": "garnet-worker",
+      "name": "Garnet Worker",
+      "seed": "Garnet Worker sends jobs through queue indigo-97. Its retry cap is 2. Every idempotent request must use header X-Garnet-Once. The forbidden fallback is browser-storage.",
+      "protected": {
+        "queue": "indigo-97",
+        "retry_cap": "2",
+        "idempotency_header": "X-Garnet-Once",
+        "forbidden_fallback": "browser-storage"
+      },
+      "new_facts": {
+        "current_owner": "Niko Wren",
+        "rollout_window": "Saturday morning"
+      },
+      "updates": [
+        "The Garnet administration panel uses a crimson accent.",
+        "Garnet telemetry is exported to the Horizon sink.",
+        "The separate Garnet report previewer allows seventeen retries.",
+        "The current owner of Garnet Worker is Niko Wren.",
+        "Garnet audit events are retained through the monsoon.",
+        "The unrelated Garnet load tester uses queue silt-lab.",
+        "Garnet operator documentation defaults to Welsh.",
+        "Garnet Worker is deployed in the larch zone.",
+        "The rollout window for Garnet Worker is Saturday morning.",
+        "The Garnet headset prototype sends header X-Garnet-Demo.",
+        "Garnet dashboard tiles use the denim cache.",
+        "Garnet Worker carries the compliance tag ruby."
+      ]
+    },
+    {
+      "id": "harbor-sync",
+      "name": "Harbor Sync",
+      "seed": "Harbor Sync sends jobs through queue copper-113. Its retry cap is 9. Every idempotent request must use header X-Harbor-Id. The forbidden fallback is best-effort-send.",
+      "protected": {
+        "queue": "copper-113",
+        "retry_cap": "9",
+        "idempotency_header": "X-Harbor-Id",
+        "forbidden_fallback": "best-effort-send"
+      },
+      "new_facts": {
+        "current_owner": "Yara Moss",
+        "rollout_window": "Tuesday midnight"
+      },
+      "updates": [
+        "The Harbor administration panel uses a navy accent.",
+        "Harbor telemetry is exported to the Wayfinder sink.",
+        "The separate Harbor diagram previewer allows eighteen retries.",
+        "The current owner of Harbor Sync is Yara Moss.",
+        "Harbor audit events are retained through the rainy season.",
+        "The unrelated Harbor traffic tool uses queue sand-lab.",
+        "Harbor operator documentation defaults to Catalan.",
+        "Harbor Sync is deployed in the beech zone.",
+        "The rollout window for Harbor Sync is Tuesday midnight.",
+        "The Harbor television prototype sends header X-Harbor-Demo.",
+        "Harbor dashboard tiles use the twill cache.",
+        "Harbor Sync carries the compliance tag copperleaf."
+      ]
+    }
+  ]
+}
