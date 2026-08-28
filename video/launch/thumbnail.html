@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=1280, initial-scale=1" />
+<title>Hunch YouTube thumbnail</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400..600;1,9..144,500&family=Inter:wght@500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --paper: #f5f3ee;
+    --surface: #fffdfa;
+    --ink: #16150f;
+    --soft: #514e43;
+    --muted: #8a877b;
+    --line: rgba(22, 21, 15, .12);
+    --blue: #2742ff;
+    --blue-deep: #1a2fcf;
+    --red: #d94c39;
+    --green: #21865f;
+    --serif: "Fraunces", Georgia, serif;
+    --sans: "Inter", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { width: 1280px; height: 720px; margin: 0; overflow: hidden; }
+  body {
+    position: relative;
+    background:
+      radial-gradient(900px 700px at 105% -15%, rgba(39, 66, 255, .13), transparent 57%),
+      radial-gradient(750px 520px at -8% 110%, rgba(217, 76, 57, .07), transparent 55%),
+      var(--paper);
+    color: var(--ink);
+    font-family: var(--sans);
+  }
+  .frame {
+    height: 100%;
+    padding: 56px 64px 54px;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    position: relative;
+  }
+  .top, .bottom { display: flex; align-items: center; justify-content: space-between; }
+  .brand { display: flex; align-items: center; gap: 15px; }
+  .mark {
+    width: 58px; height: 58px; border-radius: 17px; background: var(--ink);
+    display: grid; place-items: center; box-shadow: 0 16px 34px -16px rgba(22, 21, 15, .65);
+  }
+  .wordmark { font-size: 32px; font-weight: 700; letter-spacing: -.035em; }
+  .eyebrow {
+    display: flex; align-items: center; gap: 10px; color: var(--soft);
+    font: 600 14px/1 var(--mono); letter-spacing: .05em; text-transform: uppercase;
+  }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--blue); box-shadow: 0 0 0 5px rgba(39, 66, 255, .12); }
+  .content {
+    display: grid; grid-template-columns: 1.12fr .88fr; gap: 58px; align-items: center;
+    padding-top: 18px;
+  }
+  h1 {
+    margin: 0; font: 520 82px/.94 var(--serif); letter-spacing: -.045em;
+    max-width: 650px;
+  }
+  h1 .muted { color: var(--muted); display: block; }
+  h1 em { color: var(--blue); display: block; font-style: italic; margin-top: 8px; }
+  .lede { margin: 27px 0 0; max-width: 590px; color: var(--soft); font-size: 22px; line-height: 1.42; font-weight: 600; }
+  .stack { display: flex; flex-direction: column; gap: 15px; }
+  .caption {
+    display: flex; align-items: center; gap: 12px; color: var(--muted);
+    font: 600 13px/1 var(--mono); letter-spacing: .06em; text-transform: uppercase;
+  }
+  .caption::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+  .card {
+    position: relative; overflow: hidden; background: var(--surface); border: 1px solid var(--line);
+    border-radius: 17px; padding: 20px 22px 20px 25px;
+    box-shadow: 0 2px 4px rgba(22, 21, 15, .04), 0 24px 50px -34px rgba(22, 21, 15, .65);
+  }
+  .card::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 5px; }
+  .card.bug::before { background: var(--red); }
+  .card.decision::before { background: var(--blue); }
+  .head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .type { font: 700 13px/1 var(--mono); letter-spacing: .075em; text-transform: uppercase; }
+  .bug .type { color: var(--red); }
+  .decision .type { color: var(--blue-deep); }
+  .state { color: var(--muted); font: 500 12px/1 var(--mono); }
+  .message { font-size: 21px; line-height: 1.32; font-weight: 700; letter-spacing: -.012em; }
+  .bottom { padding-top: 10px; }
+  .promise { color: var(--green); font: 700 17px/1 var(--mono); }
+  .url { color: var(--soft); font: 600 16px/1 var(--mono); }
+</style>
+</head>
+<body>
+  <main class="frame">
+    <header class="top">
+      <div class="brand">
+        <div class="mark" aria-hidden="true">
+          <svg width="36" height="36" viewBox="0 0 32 32" fill="none">
+            <circle cx="16" cy="16" r="5.5" fill="#2742ff" />
+            <circle cx="16" cy="16" r="10.5" stroke="#2742ff" stroke-width="1.5" opacity=".45" />
+            <circle cx="16" cy="16" r="14" stroke="#2742ff" opacity=".16" />
+          </svg>
+        </div>
+        <div class="wordmark">hunch</div>
+      </div>
+      <div class="eyebrow"><span class="dot"></span>Project memory for AI coding assistants</div>
+    </header>
+
+    <section class="content">
+      <div>
+        <h1><span class="muted">Your AI forgot</span><em>why.</em></h1>
+        <p class="lede">Bring back the decision and the old bug before a clean-looking refactor repeats it.</p>
+      </div>
+
+      <div class="stack">
+        <div class="caption">the missing story</div>
+        <article class="card bug">
+          <div class="head"><span class="type">Past bug</span><span class="state">fixed before</span></div>
+          <div class="message">Direct database access skipped authorization and batching.</div>
+        </article>
+        <article class="card decision">
+          <div class="head"><span class="type">Decision</span><span class="state">returned before edit</span></div>
+          <div class="message">Keep routes behind the service layer.</div>
+        </article>
+      </div>
+    </section>
+
+    <footer class="bottom">
+      <div class="promise">the reason comes back before the bug</div>
+      <div class="url">github.com/davesheffer/hunch</div>
+    </footer>
+  </main>
+</body>
+</html>

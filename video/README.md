@@ -1,7 +1,9 @@
-# "What is Hunch" — video kit
+# Hunch launch video kit
 
-Everything for recording day. The full script (narration + shot list) lives in
-the session notes; this folder holds the runnable parts.
+Everything for recording day. The committed launch package now includes the
+[90-second narration and shot list](launch/script.md),
+[publish-ready channel copy](launch/publish-copy.md), and a reproducible
+[YouTube thumbnail](launch/thumbnail.html).
 
 ## Layout
 
@@ -10,6 +12,8 @@ the session notes; this folder holds the runnable parts.
   `v2-service` (the service-layer refactor)
 - `tapes/` — [VHS](https://github.com/charmbracelet/vhs) scripts for the three
   terminal segments; render each with `vhs tapes/<name>.tape`
+- `launch/` — the recording script, thumbnail source, launch checklist, and
+  copy for YouTube, LinkedIn, Show HN, and one rules-permitting community post
 
 ## Recording day, in order
 
@@ -45,5 +49,7 @@ Studio / OBS) in the same rigged repo:
 - The whole team segment (shot 5) runs offline: `setup.sh` creates
   `~/hunch-video-demo-memory.git`, a local bare repo standing in for the
   private team-memory remote.
-- Every command in the tapes was verified against v1.10.5; if a future release
-  changes output shapes, re-run `setup.sh` and eyeball before rendering.
+- The full rig, strict violation/recovery, and shared-memory handoff were
+  replayed successfully on 2026-08-28 against published v1.19.0 and current
+  v1.20.0-rc.6 source. Re-run them against the final stable v1.20.0 package
+  before recording; do not launch from an RC or silently reuse stale output.

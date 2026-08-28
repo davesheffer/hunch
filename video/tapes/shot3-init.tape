@@ -22,6 +22,11 @@ Type "git add -A && git commit -m 'refactor: route orders through the service la
 Enter
 Sleep 3s
 
+Hide
+Type "clear"
+Enter
+Show
+
 Type "hunch sync"
 Enter
 Sleep 8s
@@ -29,6 +34,11 @@ Sleep 8s
 Type "hunch now"
 Enter
 Sleep 5s
+
+Hide
+Type "clear"
+Enter
+Show
 
 Type "hunch why app/api/orders.py"
 Enter

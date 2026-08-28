@@ -1,0 +1,39 @@
+1
+00:00:00,000 --> 00:00:07,000
+Your assistant can read the repo.
+It usually cannot see why the team built it this way.
+
+2
+00:00:07,000 --> 00:00:18,000
+This route uses a service because direct database access once skipped
+authorization and batching. Later, that extra hop looks removable—and repeats the failure.
+
+3
+00:00:18,000 --> 00:00:34,000
+Hunch saves the decision, rejected shortcut, and bug history
+as readable project memory in Git. Ask why, and the reason returns with its evidence.
+
+4
+00:00:34,000 --> 00:00:49,000
+The same memory reaches the coding tools you already use before they edit.
+The assistant can take a better path without making the team repeat the incident.
+
+5
+00:00:49,000 --> 00:01:04,000
+Memory starts advisory. When a team explicitly trusts one precise rule and opts into strict checks,
+Hunch can catch the same mistake deterministically—with the reason attached.
+
+6
+00:01:04,000 --> 00:01:14,000
+Restore the boundary and the receipt passes.
+No model decides the gate, and no Hunch service owns the memory.
+
+7
+00:01:14,000 --> 00:01:23,000
+The same local-first memory can travel through private Git to a teammate
+and across assistants, without becoming a hosted silo.
+
+8
+00:01:23,000 --> 00:01:30,000
+Hunch is free and Apache-2.0. Try it in five minutes.
+If it earns its keep, star it.

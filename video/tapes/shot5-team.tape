@@ -32,6 +32,11 @@ Type "hunch init"
 Enter
 Sleep 6s
 
+Hide
+Type "clear"
+Enter
+Show
+
 Type "hunch why app/api/orders.py"
 Enter
 Sleep 8s

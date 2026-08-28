@@ -1,6 +1,6 @@
 # Shot 4 — the gate (terminal beats; the agent segment is Screen Studio/OBS).
 # Prereqs: video/demo/setup.sh ~/hunch-video-demo    (full stage)
-# Re-running conform --add is safe: the invariant id is deterministic.
+# The full rig already carries the explicitly trusted invariant.
 Output shot4-gate.mp4
 Set FontSize 18
 Set Width 1920
@@ -14,11 +14,13 @@ Type "cd ~/hunch-video-demo && export HUNCH_SYNTH_PROVIDER=deterministic && clea
 Enter
 Show
 
-Type `hunch conform --add "routes must not reach the DB session directly — go through the service layer" --assert not-calls --subject list_orders --object get_session --why "the 2am orders incident, Mar 2024 — direct access skipped auth + batching"`
+Type "# baseline: the trusted service boundary holds"
+Enter
+Type "hunch conform"
 Enter
 Sleep 6s
 
-Type "# the agent's 'optimization', replayed:"
+Type "# the assistant's clean-looking shortcut, replayed:"
 Enter
 Type "git restore --source agent-shortcut -- app/api/orders.py"
 Enter
