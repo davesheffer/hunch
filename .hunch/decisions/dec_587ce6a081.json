@@ -1,0 +1,51 @@
+{
+  "id": "dec_587ce6a081",
+  "title": "Repair the Infection pilot gaps, then rerun the audit",
+  "topic": "roadmap.infection-pilot-remediation",
+  "status": "accepted",
+  "context": "The 2026-08-26 public-history audit of infection/infection at 9dd5c14e found that ADR retrieval could rank narrow project conventions first, but Hunch 1.19 indexed only 27 of 2,518 tracked files, omitted the 1,823-file PHP production tree, returned an empty source shortlist, imported the ADR template as a decision, misclassified accepted status variants, confused issue #1760 with an ADR successor, and ranked superseded ADR 0005 above current ADR 0008. The user explicitly directed that these findings enter the roadmap and that Infection be retested after the fixes.",
+  "decision": "Treat the Infection audit as a product repair and external acceptance gate. First harden ADR import and current-decision retrieval: ignore templates, parse the corpus status variants, resolve explicit ADR successors without confusing issue references, and rank the current decision above superseded history. Then add PHP through the existing demand-triggered LanguageSpec architecture so production PHP source and relevant commit history enter the graph. After both fixes, rerun the same infection/infection audit against a pinned public revision and publish the new receipt and remaining limits. The roadmap item is not complete until that rerun demonstrates correct ADR lifecycle handling and non-empty PHP source inspection.",
+  "consequences": [
+    "The shipped MADR bridge claim is reopened for corpus-compatibility repair rather than treated as complete based only on local fixtures.",
+    "PHP becomes the next demand-triggered language because a real outreach pilot exposed the gap.",
+    "infection/infection becomes a named external regression and acceptance case, not a one-off anecdote.",
+    "Completion requires a reproducible post-fix receipt; implementation alone is insufficient."
+  ],
+  "alternatives_rejected": [
+    "Close the failed audit as a one-off outreach miss — rejected because it would discard direct product evidence and let the same offer fail again; revisit if Hunch permanently stops offering public-repository memory audits.",
+    "Fix only ADR parsing and call the Infection pilot complete — rejected because 1,823 PHP files and the source shortlist would still be outside the graph; revisit if source-level inspection is explicitly removed from the audit offer.",
+    "Add PHP support without rerunning Infection — rejected because local fixtures cannot prove the original external failure is repaired; revisit if the pinned Infection history becomes unavailable, in which case replace it with an equivalently public PHP corpus and preserve the same receipt assertions."
+  ],
+  "rejected_tripwires": [],
+  "related_components": [],
+  "related_files": [
+    "ROADMAP.md",
+    "src/extractors/adrImport.ts",
+    "test/adrimport.test.ts",
+    "src/extractors/languages.ts",
+    "test/languages.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-08-26T18:06:55.554Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "premises": [],
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 0.95,
+    "evidence": [
+      "ROADMAP.md",
+      "src/extractors/adrImport.ts",
+      "test/adrimport.test.ts",
+      "src/extractors/languages.ts",
+      "test/languages.test.ts"
+    ]
+  },
+  "date": "2026-08-26T18:06:55.554Z"
+}
