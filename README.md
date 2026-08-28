@@ -171,7 +171,7 @@ repository, separate from the code repository. Hunch does not host it. Create a 
 that every teammate can access, install Hunch on team machines and CI, then have one maintainer run:
 
 ```bash
-npm i -g @davesheffer/hunch@1.19.0
+npm i -g @davesheffer/hunch@1.20.0
 hunch shared --repo git@github.com:acme/project-hunch-memory.git
 git add .gitignore .hunch/team.json
 git commit -m "chore: connect shared Hunch memory"
@@ -186,7 +186,7 @@ printed by Hunch. Omit `--migrate` for a new setup.
 After the pointer commit lands, teammates need Hunch installed and Git access to the memory repo:
 
 ```bash
-npm i -g @davesheffer/hunch@1.19.0
+npm i -g @davesheffer/hunch@1.20.0
 git pull
 hunch init
 hunch doctor
@@ -234,7 +234,7 @@ but stops automatic memory commits and pushes. As a team-coordinated rollback, r
 commit to stop discovery after teammates pull the revert. Existing machines retain their ignored
 local overlay until they are deliberately disconnected; do not delete the memory repo as part of a
 rollback. For this rollout, reinstall the previous published package with
-`npm i -g @davesheffer/hunch@1.16.0`; the release receipt resolves and records the verified rollback
+`npm i -g @davesheffer/hunch@1.19.0`; the release receipt resolves and records the verified rollback
 target from the npm registry instead of trusting Git tags. Pause enforcement first as shown above,
 and keep every team client on the same release before resuming Matrix policy workflows.
 

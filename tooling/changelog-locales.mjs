@@ -8,6 +8,7 @@ export const changelogLocales = {
       footer: "© Hunch — התאמה ארכיטקטונית לקוד AI.", home: "בית", githubReleases: "גרסאות ב-GitHub"
     },
     titles: [
+      "נתיב זיכרון מאומת אחד — מהסיבה לתוצאה",
       "ראיות הגרסה במקום שבו מתקינים",
       "חיפוש תיקונים עם גבולות ראייתיים",
       "רשומות ADR שהוצאו משימוש כבר לא ממציאות מחליפים",
@@ -38,6 +39,7 @@ export const changelogLocales = {
       footer: "© Hunch — архитектурное соответствие для ИИ-кода.", home: "Главная", githubReleases: "Релизы на GitHub"
     },
     titles: [
+      "Единый проверяемый путь памяти — от причины к результату",
       "Доказательства выпуска там, где устанавливают",
       "Поиск исправлений с границами доказательности",
       "Устаревшие ADR больше не выдумывают преемников",
@@ -68,6 +70,7 @@ export const changelogLocales = {
       footer: "© Hunch — التوافق المعماري لكود الذكاء الاصطناعي.", home: "الرئيسية", githubReleases: "الإصدارات على GitHub"
     },
     titles: [
+      "مسار ذاكرة واحد موثّق من السبب إلى النتيجة",
       "أدلة الإصدار حيث يتم التثبيت",
       "بحث تصحيحات مضبوط بحدود الأدلة",
       "سجلات ADR المهملة لم تعد تختلق خلفاء",
@@ -98,6 +101,7 @@ export const changelogLocales = {
       footer: "© Hunch — conformidad arquitectónica para código de IA.", home: "Inicio", githubReleases: "Versiones en GitHub"
     },
     titles: [
+      "Una ruta de memoria verificable, de la razón al resultado",
       "La evidencia de la versión donde se instala",
       "Búsqueda de correcciones con límites de evidencia",
       "Los ADR obsoletos ya no inventan sucesores",

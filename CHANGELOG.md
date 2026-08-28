@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## 1.20.0 — 2026-08-28
+
+### One verified memory path from reason to result
+
+Stable 1.20 promotes the complete release-candidate line to npm's `latest` channel. Reviewed
+repository landscapes and role-shaped context travel in Hunch's native, content-addressed delivery
+envelope; an exact code change can then be bound to later usefulness evidence without allowing that
+evidence to grant ranking, promotion, policy, or enforcement authority.
+
+PHP repositories and existing ADR corpora now enter the same graph and lifecycle model as the rest
+of the codebase. Bulk graph snapshots make that practical on production-sized repositories, while
+source, provenance, currentness, omissions, and review state remain explicit throughout delivery.
+
 ### Assistant instructions now use the real context argument
 
 Generated grounding now documents `hunch_context(target)`, matching the MCP schema, so an agent can
