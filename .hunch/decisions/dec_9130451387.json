@@ -2,7 +2,7 @@
   "id": "dec_9130451387",
   "title": "Complete HLG-2 deterministic repository fragment discovery",
   "topic": "roadmap.engineering-landscape-hlg-2",
-  "status": "proposed",
+  "status": "accepted",
   "context": "HLG-1 is accepted and the first HLG-2 exact-source slice discovers bounded package and Git-remote candidates. The remaining discovery sources must preserve the same evidence-first candidate boundary before HLG-3 can expose bounded landscape delivery.",
   "decision": "Complete HLG-2 one deterministic source family at a time, beginning with MCP declarations, using the existing bounded issue/evidence/candidate envelope. Discovery reads one exact revision, emits content-addressed candidates without writing graph authority, rejects secret-bearing locators, and leaves identity conflicts unresolved for review. Stop before cross-repository traversal, live health, or a new delivery surface.",
   "consequences": [
@@ -49,7 +49,8 @@
       "docs/engineering-landscape.md",
       "src/extractors/landscapeDiscovery.ts",
       "test/landscape-discovery.test.ts"
-    ]
+    ],
+    "last_verified": "2026-08-28T03:20:20.968Z"
   },
   "date": "2026-08-22T17:33:20.000Z"
 }
