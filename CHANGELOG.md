@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+## 1.20.0-rc.6 — 2026-08-28
+
+### Delivery adapts to the work without changing authority
+
+Hunch now seals `builder`, `reviewer`, and `architect` delivery profiles into every native receipt.
+Profiles only reorder and cap nonblocking material; blocking constraints remain first and mandatory,
+and provenance, currentness, abstention, and authority rules are identical across roles. The CLI,
+MCP surface, hooks, and Hunch Memory bridge share the same versioned policy.
+
+### Outcomes bind to the exact tree change
+
+The new `hunch.change-identity/1` receipt hashes Git's raw tree delta, including paths, modes,
+whitespace, and binary changes, while ignoring commit messages, authors, and squash metadata.
+Usefulness observations may carry that independently validated receipt, giving downstream outcome
+analysis an exact change boundary without granting ranking, promotion, or execution authority.
+
 ## 1.20.0-rc.5 — 2026-08-28
 
 ### Outcome evidence can return without silently becoming authority
