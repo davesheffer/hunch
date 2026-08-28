@@ -3,7 +3,10 @@
   "type": "correctness",
   "statement": "Config/provider writers must merge idempotently into existing user files and refuse to clobber an unparseable file",
   "scope": [
-    "src/integrations/**"
+    "src/integrations/claudeConfig.ts",
+    "src/integrations/claudemd.ts",
+    "src/integrations/providers.ts",
+    "src/integrations/scaffold.ts"
   ],
   "severity": "blocking",
   "enforcement": "advisory_v1",
@@ -15,8 +18,10 @@
   "provenance": {
     "source": "human_confirmed",
     "confidence": 1,
-    "evidence": [],
-    "last_verified": "2026-06-16T10:29:10.725Z"
+    "evidence": [
+      "https://github.com/davesheffer/hunch/issues/94"
+    ],
+    "last_verified": "2026-08-28T18:35:00.000Z"
   },
   "forbids": {
     "deps": [],

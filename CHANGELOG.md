@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Assistant instructions now use the real context argument
+
+Generated grounding now documents `hunch_context(target)`, matching the MCP schema, so an agent can
+copy the signature without sending an invalid `target_or_task` argument. Existing managed grounding
+files self-heal on refresh. Fixed #95.
+
+### Config safety checks now cover config writers, not local Git hooks
+
+The raw-write guard remains blocking for the modules that merge user MCP, provider, and grounding
+configuration, but no longer flags the marker-based local Git hook installer. Fixed #94.
+
 ### Shared decisions no longer disappear behind a transient pull backoff
 
 An already-running MCP process now rechecks shared team memory before claiming that an exact topic

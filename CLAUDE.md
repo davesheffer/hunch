@@ -43,7 +43,7 @@ This repo has **Hunch** — a curated graph of *why* the code is the way it is (
 **Consult Hunch via the `hunch_*` MCP tools — pick by MOMENT, not from memory:**
 
 **Orient (session/task start):**
-- `hunch_context(target_or_task)` — the minimal relevant slice for what you're about to do; a task phrase falls back to the closest graph matches. **Call FIRST.**
+- `hunch_context(target)` — the minimal relevant slice for what you're about to do; a task phrase falls back to the closest graph matches. **Call FIRST.**
 - `hunch_structure(target?)` — the indexed shape of the repo/dir/file/symbol — orient from the graph, not grep rounds.
 - `hunch_runbook(task)` — the proven steps for a recurring task, before re-deriving them.
 - `hunch_escalations()` — the decisions only the HUMAN can make (including one exact imported ADR at a time, topic conflicts, and policy calls). Normally empty; when it isn't, ASK the user inline — an entry is a question, silence is never approval. Apply an ADR answer only through `hunch_review_imported_adr` with its printed source and review hashes.
@@ -78,7 +78,7 @@ This repo has **Hunch** — a curated graph of *why* the code is the way it is (
 ### ⛔ Top invariants (do not break)
 - **[blocking]** Synthesis must use an explicitly selected coding-assistant subscription CLI or the deterministic local fallback; never call a pay-per-token API _(scope: src/synthesis/**; con_2ce3f2a547)_
 - **[blocking]** This repo's generated wiki must never be committed to the public repo — private overlay wiki only (hunch wiki --private); wiki/ stays gitignored _(scope: wiki/**; con_547fff76bd)_
-- **[blocking]** Config/provider writers must merge idempotently into existing user files and refuse to clobber an unparseable file _(scope: src/integrations/**; con_8460b6770f)_
+- **[blocking]** Config/provider writers must merge idempotently into existing user files and refuse to clobber an unparseable file _(scope: src/integrations/claudeConfig.ts, src/integrations/claudemd.ts, src/integrations/providers.ts, src/integrations/scaffold.ts; con_8460b6770f)_
 - **[blocking]** All JSON writes to .hunch/ must be atomic (temp-file + rename) so an interrupted write can never truncate the index _(scope: src/store/**, src/core/io.ts; con_902759b3dc)_
 - **[blocking]** Forward-migrate raw JSON to the current schema BEFORE Zod validation; never silently drop unmigratable records _(scope: src/core/migrate.ts, src/store/jsonStore.ts; con_947c578b2c)_
 - **[blocking]** Semantic vectors are a derived layer in SQLite, never the source of truth; reconcile by content hash on reindex _(scope: src/store/**; con_a87360128b)_

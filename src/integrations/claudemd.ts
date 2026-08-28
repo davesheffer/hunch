@@ -52,7 +52,7 @@ export function renderHunchSection(store: HunchStore, root?: string): string {
   lines.push("**Consult Hunch via the `hunch_*` MCP tools — pick by MOMENT, not from memory:**");
   lines.push("");
   lines.push("**Orient (session/task start):**");
-  lines.push("- `hunch_context(target_or_task)` — the minimal relevant slice for what you're about to do; a task phrase falls back to the closest graph matches. **Call FIRST.**");
+  lines.push("- `hunch_context(target)` — the minimal relevant slice for what you're about to do; a task phrase falls back to the closest graph matches. **Call FIRST.**");
   lines.push("- `hunch_structure(target?)` — the indexed shape of the repo/dir/file/symbol — orient from the graph, not grep rounds.");
   lines.push("- `hunch_runbook(task)` — the proven steps for a recurring task, before re-deriving them.");
   lines.push("- `hunch_escalations()` — the decisions only the HUMAN can make (including one exact imported ADR at a time, topic conflicts, and policy calls). Normally empty; when it isn't, ASK the user inline — an entry is a question, silence is never approval. Apply an ADR answer only through `hunch_review_imported_adr` with its printed source and review hashes.");
