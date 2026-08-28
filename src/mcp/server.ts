@@ -551,14 +551,22 @@ export function buildServerWithRootControl(initialRoot: string): RootControlledS
     ({ nextRemotePullAt, consecutivePullFailures } =
       pullBackoff(status, finishedAt, consecutivePullFailures));
   };
-  const pullTeamMemory = (force = false): void => {
-    if (!store.privateDir) return;
+  type TeamMemoryPullStatus = HunchPullStatus | "cooldown" | "not_shared";
+  const pullTeamMemory = (force = false): TeamMemoryPullStatus => {
+    if (!store.privateDir) return "not_shared";
     const now = Date.now();
-    if (!force && now < nextRemotePullAt) return;
-    notePull(pullHunchStatus(store.privateDir, {
-      timeoutMs: 5_000,
-      remote: startupTeamRoute ?? advertisedTeamRemoteContract(root, join(store.privateDir, "..")),
-    }), Date.now());
+    if (!force && now < nextRemotePullAt) return "cooldown";
+    let status: HunchPullStatus;
+    try {
+      status = pullHunchStatus(store.privateDir, {
+        timeoutMs: 5_000,
+        remote: startupTeamRoute ?? advertisedTeamRemoteContract(root, join(store.privateDir, "..")),
+      });
+    } catch {
+      status = "failed";
+    }
+    notePull(status, Date.now());
+    return status;
   };
   // A source stamp is acknowledged ONLY after a stable, successful rebuild. If
   // another process changes the atomic JSON tree during the rebuild, retry once;
@@ -719,7 +727,7 @@ export function buildServerWithRootControl(initialRoot: string): RootControlledS
           return err("The committed team memory destination is invalid or no longer matches this process. Refusing the stale graph; reconnect Hunch first.");
         }
         if (store.mode === "shared" && store.privateDir) {
-          try { pullTeamMemory(); } catch { /* offline / lock held / invalid remote — use local */ }
+          pullTeamMemory();
           // Recompute the full semantic + physical snapshot after the synchronous
           // network seam. A paired team.json/origin change can occur while fetch is
           // blocked; serving after that race would attach the old checkout to a new
@@ -1252,12 +1260,34 @@ export function buildServerWithRootControl(initialRoot: string): RootControlledS
     {
       title: "Current decision for a topic",
       description:
-        "Decision-grounding: return the single CURRENT (accepted, non-superseded) decision anchored to a topic — the authoritative answer a doc or diff is checked against, plus what it rejected. If a topic has NO current decision, or an unresolved collision (>1 live), it says so and injects nothing (fail-safe).",
+        "Decision-grounding: return the single CURRENT (accepted, non-superseded) decision anchored to a topic — the authoritative answer a doc or diff is checked against, plus what it rejected. A shared-store miss is confirmed against fresh team memory before Hunch says the topic has no current decision. If freshness is unavailable, or a topic has an unresolved collision (>1 live), it injects nothing (fail-safe).",
       inputSchema: { topic: z.string().describe("the decision anchor, e.g. 'auth-transport'") },
     },
     async ({ topic }): Promise<ToolResult> => {
-      const decs = store.recs("decisions");
-      const live = liveForTopic(decs, topic);
+      let decs = store.recs("decisions");
+      let live = liveForTopic(decs, topic);
+      // A prior transient fetch failure may have placed ordinary tool traffic in
+      // backoff. That is acceptable for cached positive reads, but an exact topic
+      // miss is an authority claim: local absence must never be presented as team
+      // absence. Bypass the cooldown once, then reread only after a successful
+      // bounded convergence. An unavailable remote produces an explicit abstention.
+      if (live.length === 0 && store.mode === "shared" && store.privateDir) {
+        const status = pullTeamMemory(true);
+        if (status !== "updated" && status !== "current") {
+          return err(
+            `Shared team memory refresh is ${status}; Hunch cannot confirm that topic "${topic}" has no current decision. Retry when the shared store is available.`,
+          );
+        }
+        try {
+          if (store.sourceStamp() !== indexedSourceStamp) refreshIndex();
+        } catch {
+          return err(
+            `Shared team memory refreshed, but its derived index could not be rebuilt; Hunch cannot confirm that topic "${topic}" is absent. Retry this read.`,
+          );
+        }
+        decs = store.recs("decisions");
+        live = liveForTopic(decs, topic);
+      }
       if (live.length === 0) return ok(`No current decision for topic "${topic}". (Un-anchored, or never captured.)`);
       if (live.length > 1) {
         const list = live.map((d) => `${d.id} ("${d.title}")`).join(", ");

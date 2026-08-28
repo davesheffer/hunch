@@ -6,6 +6,7 @@ import {
   mkdtempSync,
   readFileSync,
   realpathSync,
+  renameSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -151,6 +152,14 @@ async function mcpText(client: Client, name: string, args: Record<string, unknow
   assert.notEqual(response.isError, true, JSON.stringify(response.content));
   const payload = response.content.find((part): part is { type: "text"; text: string } => part.type === "text");
   assert.ok(payload, `${name} returned no text payload`);
+  return payload.text;
+}
+
+async function mcpErrorText(client: Client, name: string, args: Record<string, unknown>): Promise<string> {
+  const response = await client.callTool({ name, arguments: args });
+  assert.equal(response.isError, true, JSON.stringify(response.content));
+  const payload = response.content.find((part): part is { type: "text"; text: string } => part.type === "text");
+  assert.ok(payload, `${name} returned no error text payload`);
   return payload.text;
 }
 
@@ -690,9 +699,30 @@ test("team Matrix: three isolated clones share live memory, catch a bad branch, 
       decision: "Keep the cache-key helper pure so transport repairs cannot invalidate cache identity.",
     });
     assert.ok(remoteTree(memoryRemote).includes(`.hunch/decisions/${implementation.id}.json`));
+
+    // Reproduce a transient read-side sync failure after the remote has advanced.
+    // The old server entered backoff, then interpreted the following local miss as
+    // authoritative absence. Keep the repository/config route intact while making
+    // object transfer fail, restore it, and require the exact miss to bypass backoff.
+    const remoteObjects = join(memoryRemote, "objects");
+    const unavailableObjects = join(memoryRemote, "objects.transiently-unavailable");
+    renameSync(remoteObjects, unavailableObjects);
+    try {
+      const cachedDuringFailure = await mcpText(architectClient, "hunch_current_decision", { topic: "orders.transport" });
+      assert.match(cachedDuringFailure, new RegExp(architecture.id),
+        "a transient remote failure may retain a known local decision while the shared pull backs off");
+      const unconfirmedAbsence = await mcpErrorText(architectClient, "hunch_current_decision", {
+        topic: "matrix.remote-absence-cannot-be-proven",
+      });
+      assert.match(unconfirmedAbsence, /cannot confirm/i,
+        "an unavailable shared store must produce an explicit abstention, never a false topic-absence claim");
+      assert.doesNotMatch(unconfirmedAbsence, /never captured/i);
+    } finally {
+      renameSync(unavailableObjects, remoteObjects);
+    }
     const architectLiveView = await mcpText(architectClient, "hunch_current_decision", { topic: "orders.cache-key" });
     assert.match(architectLiveView, new RegExp(implementation.id),
-      "the architect's already-running MCP must receive the developer's decision without restart");
+      "the architect's already-running MCP must bypass transient pull backoff and receive the developer's decision without restart");
 
     const overlays = [architect, developer, reviewer].map((actor) => {
       const pointer = JSON.parse(readFileSync(join(actor.root, ".hunch", "local.json"), "utf8")) as { privateDir: string; mode: string };

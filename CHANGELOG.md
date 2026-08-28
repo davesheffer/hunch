@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Shared decisions no longer disappear behind a transient pull backoff
+
+An already-running MCP process now rechecks shared team memory before claiming that an exact topic
+has no current decision. A transient Git failure may still leave known local decisions readable,
+but an unconfirmed miss is an explicit error rather than a false “never captured” answer; once the
+store recovers, the same client bypasses backoff and receives the teammate's decision without a
+restart.
+
 ## 1.20.0-rc.6 — 2026-08-28
 
 ### Delivery adapts to the work without changing authority
