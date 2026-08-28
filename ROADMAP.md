@@ -1,6 +1,6 @@
 # Hunch roadmap
 
-Updated 2026-08-27.
+Updated 2026-08-28.
 
 Hunch is building the validated delivery layer for engineering intent: record why the code is the
 way it is, deliver the right evidence at the moment an agent needs it, and deterministically check
@@ -335,16 +335,36 @@ instead of being appended afterward. Each delivered record's receipt records its
 reason, provenance/currentness result, and estimated token cost; older local ledgers migrate
 additively without becoming a new source of truth.
 
+The role-specific delivery checkpoint is complete (2026-08-28). Builder, reviewer and architect
+profiles share the same `hunch.delivery-profile/1` policy and canonical envelope. They reorder only
+non-blocking evidence and presentation; blocking invariants remain mandatory and first, and all
+profiles preserve the same provenance/currentness and abstention gates. Each profile admits at most
+eight non-blocking record headlines, reports every `profile-cap` omission, seals the selected
+profile/policy into the receipt, and records both fields in the additively migrated local served
+ledger. CLI `hunch context --profile ...`, MCP `hunch_context(profile: ...)` and edit hooks use the
+same implementation.
+
+The squash-stable change-identity checkpoint is complete (2026-08-28). `hunch.change-identity/1`
+hashes the exact raw Git tree delta, so a branch range and a squash commit with the same base/tree
+transition share `hchg_*` identity despite different commit metadata. Whitespace, paths, modes and
+binary blob identities remain exact; Git's looser stable patch ID is advisory interoperability only.
+The sealed contract is available through `hunch change-id`, `hunch_change_identity`, and optional
+receipt-bound usefulness attribution.
+
 The first service loop is complete. Hunch Memory verifies the exact store-scoped issuance, validates
 and idempotently retains `hunch.usefulness-observation/1`, and exposes privacy-safe aggregate
 coverage. ORC derives feedback only from eligible terminal outcomes, preserves the exact receipt and
 record identities, and delivers it without granting ranking, promotion, policy or enforcement
 authority. Contradiction and staleness still create only open advisory findings.
 
-Still open: fused task-relevance ranking (FTS/vector/graph), patch/change IDs for squash merges,
-delivery profiles, measured retrieval experiments using the retained signals, and the benchmark
-named above. Aggregate coverage is the gate for those experiments: known, unknown, evidence-backed
-and per-signal counts must establish a meaningful baseline before usefulness can influence ranking.
+Fused task-relevance ranking is already implemented: lexical, optional semantic and bounded graph
+signals are rank-fused, then constrained by liveness, trusted provenance, recency and topic-chain
+successor priors with regression floors. Patch/change IDs and role profiles are now complete.
+Still open is the intentionally evidence-gated OEL-4 experiment: replay the current policy against
+retained usefulness signals and publish the benchmark named above. Aggregate coverage remains its
+gate—known, unknown, evidence-backed and per-signal counts must establish a meaningful baseline
+before usefulness can influence ranking. Until then, retained observations have zero ranking,
+promotion or authority effect.
 
 ## Later — compile into native agent surfaces
 

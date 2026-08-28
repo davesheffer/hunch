@@ -97,6 +97,8 @@ Most memory work happens automatically after commits. These commands cover the c
 | --- | --- |
 | `hunch why <file>` | Explain why a file is built this way and what could be affected by changing it |
 | `hunch query "<question>"` | Search project memory |
+| `hunch context "<task>" --profile reviewer` | Get a bounded builder, reviewer, or architect view without changing enforcement |
+| `hunch change-id <base> [head]` | Bind a branch and its exact squash merge to the same content-based change ID |
 | `hunch check --working` | Check current changes against the decisions and rules your team trusts |
 | `hunch log` | See what Hunch remembered and undo a memory change if needed |
 | `hunch escalations` | See the rare questions that need a human answer |

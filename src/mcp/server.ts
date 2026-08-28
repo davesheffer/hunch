@@ -32,7 +32,17 @@ import {
   VerifiedEvidenceReceiptSchema,
 } from "../core/evidenceMap.js";
 import { collectCorrectionStageSources } from "../extractors/correctionSources.js";
-import { buildDeliveryEnvelope, type DeliveryEnvelope } from "../core/delivery.js";
+import {
+  buildDeliveryEnvelope,
+  DELIVERY_PROFILE_POLICY_VERSION,
+  DELIVERY_PROFILES,
+  type DeliveryEnvelope,
+} from "../core/delivery.js";
+import {
+  CHANGE_IDENTITY_ALGORITHM,
+  CHANGE_IDENTITY_SCHEMA_VERSION,
+  deriveChangeIdentity,
+} from "../core/changeIdentity.js";
 import { armExecutionObligations, loadPipelineState, savePipelineState } from "../core/pipeline.js";
 import { recordServed } from "../core/served.js";
 import { EdgeSchema, ResourceSchema, type Runbook } from "../core/types.js";
@@ -214,6 +224,8 @@ const LANDSCAPE_FRAGMENT_SCHEMA = z.object({
  *  backward-compatible text block. */
 const DELIVERY_OUTPUT_SCHEMA = z.object({
   schema_version: z.literal("hunch.delivery-envelope/1"),
+  profile: z.enum(DELIVERY_PROFILES),
+  ranking_policy: z.literal(DELIVERY_PROFILE_POLICY_VERSION),
   receipt_id: z.string().regex(/^hdr_[a-f0-9]{24}$/),
   text: z.string(),
   delivered: z.array(z.object({
@@ -247,7 +259,7 @@ const DELIVERY_OUTPUT_SCHEMA = z.object({
   omitted: z.array(z.object({
     kind: z.enum(["constraints", "decisions", "bugs", "findings", "resources", "relationships"]),
     record_id: z.string(),
-    reason: z.enum(["budget", "stale-provenance", "retired", "actionability-cap", "endpoint-not-delivered", "landscape-cap", "low-confidence", "insufficient-context", "low-relevance"]),
+    reason: z.enum(["budget", "stale-provenance", "retired", "actionability-cap", "endpoint-not-delivered", "landscape-cap", "profile-cap", "low-confidence", "insufficient-context", "low-relevance"]),
     detail: z.string(),
   })),
   landscape: LANDSCAPE_FRAGMENT_SCHEMA.nullable(),
@@ -265,6 +277,21 @@ const DELIVERY_OUTPUT_SCHEMA = z.object({
     }),
     retry_hint: z.string().nullable(),
   }),
+});
+
+const CHANGE_IDENTITY_OUTPUT_SCHEMA = z.object({
+  schema: z.literal(CHANGE_IDENTITY_SCHEMA_VERSION),
+  algorithm: z.literal(CHANGE_IDENTITY_ALGORITHM),
+  change_id: z.string().regex(/^hchg_[a-f0-9]{24}$/),
+  base_revision: z.string().regex(/^[a-f0-9]{40,64}$/),
+  head_revision: z.string().regex(/^[a-f0-9]{40,64}$/),
+  base_tree: z.string().regex(/^[a-f0-9]{40,64}$/),
+  head_tree: z.string().regex(/^[a-f0-9]{40,64}$/),
+  delta_hash: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+  patch_id: z.string().regex(/^[a-f0-9]{40,64}$/).nullable(),
+  file_count: z.number().int().positive().max(16_384),
+  paths_hash: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+  content_hash: z.string().regex(/^sha256:[a-f0-9]{64}$/),
 });
 
 /** Return the same human-readable brief older clients consume plus the exact
@@ -294,6 +321,8 @@ function deliveredContext(
     delivery_reason: item.delivery_reason,
     provenance_status: item.provenance_status,
     token_cost: item.token_cost,
+    delivery_profile: structuredContent.profile,
+    ranking_policy: structuredContent.ranking_policy,
   })));
   return {
     content: [{ type: "text", text: structuredContent.text }],
@@ -893,6 +922,36 @@ export function buildServerWithRootControl(initialRoot: string): RootControlledS
     },
   );
 
+  // -- hunch_change_identity (squash-stable exact delta identity) ------------
+  server.registerTool(
+    "hunch_change_identity",
+    {
+      title: "Derive an exact squash-stable change identity",
+      description:
+        "Content-address the exact Git tree delta between two revisions. Commit messages, authors and squash metadata do not affect the identity; whitespace, paths, modes and blob bytes do. Read-only and deterministic.",
+      inputSchema: {
+        base_ref: z.string().min(1).max(1_024).describe("Base commit or ref for the exact tree transition."),
+        head_ref: z.string().min(1).max(1_024).optional().describe("Head commit or ref (default HEAD)."),
+        cwd: cwdHintField,
+      },
+      outputSchema: CHANGE_IDENTITY_OUTPUT_SCHEMA,
+    },
+    async ({ base_ref, head_ref }): Promise<ToolResult> => {
+      try {
+        const identity = CHANGE_IDENTITY_OUTPUT_SCHEMA.parse(deriveChangeIdentity(root, base_ref, head_ref ?? "HEAD"));
+        return {
+          content: [{
+            type: "text",
+            text: `${identity.change_id} — ${identity.file_count} exact file delta(s), ${identity.delta_hash}; sealed ${identity.content_hash}`,
+          }],
+          structuredContent: identity,
+        };
+      } catch (error) {
+        return err((error as Error).message);
+      }
+    },
+  );
+
   // -- hunch_context (surgical retrieval) -----------------------------------
   server.registerTool(
     "hunch_context",
@@ -903,11 +962,12 @@ export function buildServerWithRootControl(initialRoot: string): RootControlledS
       inputSchema: {
         target: z.string().describe("A file path, symbol, or task phrase you're about to work on."),
         budget_tokens: z.number().optional().describe("Rough token budget for the brief (default 1500)."),
+        profile: z.enum(DELIVERY_PROFILES).optional().describe("Delivery role: builder (default), reviewer, or architect. Changes non-blocking order only."),
         as_of: z.string().optional().describe("Time-travel ref (commit/tag/branch): assemble the slice as it stood then."),
       },
       outputSchema: DELIVERY_OUTPUT_SCHEMA,
     },
-    async ({ target, budget_tokens, as_of }, extra): Promise<ToolResult> => {
+    async ({ target, budget_tokens, profile, as_of }, extra): Promise<ToolResult> => {
       const asOf = as_of ? asOfDate(as_of, root) : undefined;
       if (as_of && !asOf) return err(`Could not resolve as_of "${as_of}" to a commit.`);
       const ctx = store.assembleContext(target, budget_tokens ?? 1500, { asOf });
@@ -917,6 +977,7 @@ export function buildServerWithRootControl(initialRoot: string): RootControlledS
         components: store.recs("components"),
         decisionCorpus: store.recs("decisions"),
         historical: !!asOf,
+        profile: profile ?? "builder",
       };
       // Task-phrase input ("improve retrieval ranking") resolves no file/symbol and
       // used to return an empty brief while the graph held the answer — fall back to

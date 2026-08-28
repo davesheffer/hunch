@@ -51,6 +51,8 @@ export interface ServedEntry {
   delivery_reason?: string;
   provenance_status?: string;
   token_cost?: number;
+  delivery_profile?: string;
+  ranking_policy?: string;
 }
 
 export interface ServedRow {
@@ -74,6 +76,8 @@ export interface ServedReceipt {
   delivery_reason: string | null;
   provenance_status: string | null;
   token_cost: number | null;
+  delivery_profile: string | null;
+  ranking_policy: string | null;
 }
 
 export interface ServedSummary {
@@ -93,6 +97,8 @@ const RECEIPT_COLUMNS = [
   ["delivery_reason", "TEXT"],
   ["provenance_status", "TEXT"],
   ["token_cost", "INTEGER"],
+  ["delivery_profile", "TEXT"],
+  ["ranking_policy", "TEXT"],
 ] as const;
 
 function columnNames(db: DatabaseSync): Set<string> {
@@ -142,7 +148,7 @@ export function recordServed(root: string, entries: readonly ServedEntry[]): voi
     try {
       const at = new Date().toISOString();
       const insert = db.prepare(
-        "INSERT INTO served (at, session, event, kind, record_id, target, rank, delivery_reason, provenance_status, token_cost) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO served (at, session, event, kind, record_id, target, rank, delivery_reason, provenance_status, token_cost, delivery_profile, ranking_policy) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       );
       for (const entry of entries) {
         insert.run(
@@ -156,6 +162,8 @@ export function recordServed(root: string, entries: readonly ServedEntry[]): voi
           entry.delivery_reason ?? null,
           entry.provenance_status ?? null,
           entry.token_cost ?? null,
+          entry.delivery_profile ?? null,
+          entry.ranking_policy ?? null,
         );
       }
     } finally {
@@ -186,7 +194,7 @@ export function servedSummary(root: string): ServedSummary {
       ).all() as unknown as ServedRow[];
       const rawRecent = db.prepare(
         `SELECT at, session AS session_id, event, kind, record_id, target,
-           rank, delivery_reason, provenance_status, token_cost
+           rank, delivery_reason, provenance_status, token_cost, delivery_profile, ranking_policy
          FROM served ORDER BY rowid DESC LIMIT 50`,
       ).all() as unknown as ServedReceipt[];
       const rows = rawRows.map((row) => ({ ...row }));

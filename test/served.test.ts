@@ -16,8 +16,8 @@ test("served ledger: receipts accrue, aggregate per record, and split serve from
   t.after(() => rmSync(root, { recursive: true, force: true }));
 
   recordServed(root, [
-    { event: "served", kind: "constraints", record_id: "con_a", target: "src/a.ts", session_id: "s1", rank: 1, delivery_reason: "blocking-reserved", provenance_status: "current", token_cost: 42 },
-    { event: "served", kind: "decisions", record_id: "dec_b", target: "src/a.ts", session_id: "s1", rank: 2, delivery_reason: "ranked", provenance_status: "unverified", token_cost: 35 },
+    { event: "served", kind: "constraints", record_id: "con_a", target: "src/a.ts", session_id: "s1", rank: 1, delivery_reason: "blocking-reserved", provenance_status: "current", token_cost: 42, delivery_profile: "reviewer", ranking_policy: "hunch.delivery-profile/1" },
+    { event: "served", kind: "decisions", record_id: "dec_b", target: "src/a.ts", session_id: "s1", rank: 2, delivery_reason: "ranked", provenance_status: "unverified", token_cost: 35, delivery_profile: "reviewer", ranking_policy: "hunch.delivery-profile/1" },
   ]);
   recordServed(root, [
     { event: "refreshed", kind: "constraints", record_id: "con_a", target: "src/a.ts", session_id: "s2", rank: 1, delivery_reason: "blocking-reserved", provenance_status: "current", token_cost: 42 },
@@ -42,6 +42,8 @@ test("served ledger: receipts accrue, aggregate per record, and split serve from
     delivery_reason: "blocking-reserved",
     provenance_status: "current",
     token_cost: 42,
+    delivery_profile: null,
+    ranking_policy: null,
   });
 });
 

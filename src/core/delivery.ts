@@ -28,6 +28,9 @@ import {
 } from "./landscapeDelivery.js";
 
 export const DELIVERY_ENVELOPE_SCHEMA_VERSION = "hunch.delivery-envelope/1" as const;
+export const DELIVERY_PROFILE_POLICY_VERSION = "hunch.delivery-profile/1" as const;
+export const DELIVERY_PROFILES = ["builder", "reviewer", "architect"] as const;
+export type DeliveryProfile = (typeof DELIVERY_PROFILES)[number];
 
 export type DeliveryKind = "constraints" | "decisions" | "bugs" | "findings" | "resources" | "relationships";
 export type CommitReachability = "reachable" | "unreachable" | "unknown";
@@ -68,7 +71,7 @@ export interface DeliveredSupplement {
 
 export interface DeliveryOmission extends DeliveryRef {
   reason: "budget" | "stale-provenance" | "retired" | "actionability-cap"
-    | "endpoint-not-delivered" | "landscape-cap" | DeliveryAbstentionReason;
+    | "endpoint-not-delivered" | "landscape-cap" | "profile-cap" | DeliveryAbstentionReason;
   detail: string;
 }
 
@@ -101,6 +104,9 @@ export interface DeliveryHypothesis {
 
 export interface DeliveryEnvelope {
   schema_version: typeof DELIVERY_ENVELOPE_SCHEMA_VERSION;
+  /** Role-specific ordering only; never enforcement or authority. */
+  profile: DeliveryProfile;
+  ranking_policy: typeof DELIVERY_PROFILE_POLICY_VERSION;
   /** Content-addressed identity for exactly what this envelope returned. */
   receipt_id: string;
   text: string;
@@ -122,6 +128,8 @@ export interface DeliveryEnvelope {
 }
 
 export interface DeliveryOptions {
+  /** Defaults to builder for day-to-day coding work. */
+  profile?: DeliveryProfile;
   root?: string;
   symbols?: readonly Pick<Symbol, "id" | "name" | "file">[];
   components?: readonly Pick<Component, "id" | "status" | "paths">[];
@@ -159,6 +167,33 @@ const SEVERITY = { advisory: 1, warning: 2, blocking: 3, low: 1, medium: 2, high
 const MIN_ADVISORY_CONFIDENCE = 0.5;
 const MIN_UNCONDITIONED_CONFIDENCE = 0.7;
 const MAX_ACTIONABLE_HYPOTHESES = 2;
+const MAX_PROFILE_HEADLINES = 8;
+const PROFILE_BASE_SCORE: Record<DeliveryProfile, Record<DeliveryKind, number>> = {
+  builder: {
+    constraints: 900,
+    decisions: 800,
+    bugs: 750,
+    findings: 650,
+    resources: 550,
+    relationships: 525,
+  },
+  reviewer: {
+    constraints: 800,
+    decisions: 750,
+    bugs: 900,
+    findings: 850,
+    resources: 550,
+    relationships: 525,
+  },
+  architect: {
+    constraints: 800,
+    decisions: 900,
+    bugs: 650,
+    findings: 600,
+    resources: 850,
+    relationships: 825,
+  },
+};
 const TASK_STOP_WORDS = new Set([
   "a", "an", "and", "are", "as", "at", "be", "been", "but", "by", "can", "does", "for", "from",
   "has", "have", "in", "into", "is", "it", "its", "of", "on", "or", "that", "the", "this", "to",
@@ -535,6 +570,10 @@ export function assertDeliveryEnvelope(envelope: DeliveryEnvelope): void {
     throw new Error("delivery envelope schema is unsupported");
   }
   if (!/^hdr_[a-f0-9]{24}$/.test(envelope.receipt_id)) throw new Error("delivery envelope receipt id is invalid");
+  if (!DELIVERY_PROFILES.includes(envelope.profile)
+    || envelope.ranking_policy !== DELIVERY_PROFILE_POLICY_VERSION) {
+    throw new Error("delivery envelope profile policy is unsupported");
+  }
   if (!Number.isSafeInteger(envelope.budget_tokens) || envelope.budget_tokens < 0
     || !Number.isSafeInteger(envelope.used_chars) || envelope.used_chars !== charCount(envelope.text)
     || !Number.isSafeInteger(envelope.accounted_chars) || envelope.accounted_chars < envelope.used_chars) {
@@ -582,6 +621,7 @@ export function assertDeliveryEnvelope(envelope: DeliveryEnvelope): void {
 
 /** Build the one envelope used by CLI, MCP, and the edit hook. */
 export function buildDeliveryEnvelope(ctx: AssembledContext, options: DeliveryOptions = {}): DeliveryEnvelope {
+  const profile = options.profile ?? "builder";
   const budget = Number.isFinite(ctx.budget_tokens) ? Math.max(0, Math.floor(ctx.budget_tokens)) : 1500;
   const cap = budget * 4;
   const reachability = options.commitReachability
@@ -603,7 +643,7 @@ export function buildDeliveryEnvelope(ctx: AssembledContext, options: DeliveryOp
     candidates.push({
       ref: { kind: "constraints", record_id: constraint.id },
       mandatory: !retired && constraint.severity === "blocking",
-      score: 900 + SEVERITY[constraint.severity] * 10 + (constraint.provenance.confidence ?? 0),
+      score: PROFILE_BASE_SCORE[profile].constraints + SEVERITY[constraint.severity] * 10 + (constraint.provenance.confidence ?? 0),
       provenance: validation.state,
       staleDetail: validation.detail,
       retiredDetail: retired ? "constraint is retired at HEAD" : undefined,
@@ -631,7 +671,7 @@ export function buildDeliveryEnvelope(ctx: AssembledContext, options: DeliveryOp
     candidates.push({
       ref: { kind: "decisions", record_id: decision.id },
       mandatory: false,
-      score: 700 + (decision.status === "accepted" ? 20 : 0) + (decision.provenance.confidence ?? 0),
+      score: PROFILE_BASE_SCORE[profile].decisions + (decision.status === "accepted" ? 20 : 0) + (decision.provenance.confidence ?? 0),
       provenance: validation.state,
       staleDetail: validation.detail,
       retiredDetail: retired ? `decision is ${decision.status} at HEAD` : undefined,
@@ -660,7 +700,7 @@ export function buildDeliveryEnvelope(ctx: AssembledContext, options: DeliveryOp
     candidates.push({
       ref: { kind: "bugs", record_id: bug.id },
       mandatory: false,
-      score: 800 + SEVERITY[bug.severity] * 10 + (bug.status === "open" || bug.status === "regressed" ? 10 : 0),
+      score: PROFILE_BASE_SCORE[profile].bugs + SEVERITY[bug.severity] * 10 + (bug.status === "open" || bug.status === "regressed" ? 10 : 0),
       provenance: validation.state,
       staleDetail: validation.detail,
       line: `${bug.id} | bug/${bug.status}/${bug.severity} | ${clipHeadline(`${bug.title} — root cause: ${bug.root_cause}`, 220)} | ${sourceTier(bug.provenance.source)}/${validation.state} | hunch_why("${bug.id}")`,
@@ -683,7 +723,7 @@ export function buildDeliveryEnvelope(ctx: AssembledContext, options: DeliveryOp
     candidates.push({
       ref: { kind: "findings", record_id: finding.id },
       mandatory: false,
-      score: 600 + SEVERITY[finding.severity] * 10,
+      score: PROFILE_BASE_SCORE[profile].findings + SEVERITY[finding.severity] * 10,
       provenance: validation.state,
       staleDetail: validation.detail,
       line: `${finding.id} | finding/${finding.triage}/${finding.severity} | ${clipHeadline(`${finding.title} — ${finding.observation}${evidence}`, 240)} | ${sourceTier(finding.provenance.source)}/${validation.state} | hunch_why("${finding.id}")`,
@@ -698,7 +738,7 @@ export function buildDeliveryEnvelope(ctx: AssembledContext, options: DeliveryOp
     candidates.push({
       ref: { kind: "resources", record_id: record.id },
       mandatory: false,
-      score: 550 - item.selectionRank,
+      score: PROFILE_BASE_SCORE[profile].resources - item.selectionRank,
       provenance: "current",
       line,
       landscapeResource: item,
@@ -716,7 +756,7 @@ export function buildDeliveryEnvelope(ctx: AssembledContext, options: DeliveryOp
     candidates.push({
       ref: { kind: "relationships", record_id: record.id },
       mandatory: false,
-      score: 525 - item.selectionRank,
+      score: PROFILE_BASE_SCORE[profile].relationships - item.selectionRank,
       provenance: "current",
       line,
       landscapeRelationship: item,
@@ -739,6 +779,8 @@ export function buildDeliveryEnvelope(ctx: AssembledContext, options: DeliveryOp
     const text = fitText(empty, cap);
     return finalizeDeliveryEnvelope({
       schema_version: DELIVERY_ENVELOPE_SCHEMA_VERSION,
+      profile,
+      ranking_policy: DELIVERY_PROFILE_POLICY_VERSION,
       text,
       delivered: [],
       hypotheses: [],
@@ -811,14 +853,31 @@ export function buildDeliveryEnvelope(ctx: AssembledContext, options: DeliveryOp
     boundedEligible.push(candidate);
   }
 
-  const recordCandidates = boundedEligible.filter((candidate) => candidate.ref);
-  const structuralCandidates = boundedEligible.filter((candidate) => !candidate.ref);
+  const profileBoundedEligible: Candidate[] = [];
+  let nonBlockingHeadlines = 0;
+  for (const candidate of boundedEligible) {
+    if (candidate.ref && !candidate.mandatory) {
+      if (nonBlockingHeadlines >= MAX_PROFILE_HEADLINES) {
+        omitted.push({
+          ...candidate.ref,
+          reason: "profile-cap",
+          detail: `${profile} delivery is capped at ${MAX_PROFILE_HEADLINES} non-blocking headlines; use hunch_why or a narrower task to expand this record`,
+        });
+        continue;
+      }
+      nonBlockingHeadlines++;
+    }
+    profileBoundedEligible.push(candidate);
+  }
+
+  const recordCandidates = profileBoundedEligible.filter((candidate) => candidate.ref);
+  const structuralCandidates = profileBoundedEligible.filter((candidate) => !candidate.ref);
   const lines = [
     `# Hunch context for "${ctx.target}"`,
     "",
     query.taskPhrase
-      ? `## 🧠 Bounded memory (Invariants · max ${MAX_ACTIONABLE_HYPOTHESES} decision hypotheses · Bugs · Known findings)`
-      : "## 🧠 Ranked memory (Invariants · Decisions · Bugs · Known findings)",
+      ? `## 🧠 ${profile === "builder" ? "Bounded" : `${profile[0]!.toUpperCase()}${profile.slice(1)}-bounded`} memory (Invariants · max ${MAX_ACTIONABLE_HYPOTHESES} decision hypotheses · Bugs · Known findings)`
+      : `## 🧠 ${profile === "builder" ? "Ranked" : `${profile[0]!.toUpperCase()}${profile.slice(1)}-ranked`} memory (Invariants · Decisions · Bugs · Known findings)`,
   ];
   if (candidates.some((candidate) => candidate.abstainReason)) {
     lines.push("Evidence rule: explicit task, repro, and test evidence outranks advisory memory; weak unverified matches are withheld.");
@@ -915,6 +974,7 @@ export function buildDeliveryEnvelope(ctx: AssembledContext, options: DeliveryOp
   const staleCount = omitted.filter((item) => item.reason === "stale-provenance" || item.reason === "retired").length;
   const budgetCount = omitted.filter((item) => item.reason === "budget").length;
   const actionabilityCount = omitted.filter((item) => item.reason === "actionability-cap").length;
+  const profileCapCount = omitted.filter((item) => item.reason === "profile-cap").length;
   const abstention = emptyAbstention();
   for (const item of omitted) {
     if (item.reason === "low-confidence" || item.reason === "insufficient-context" || item.reason === "low-relevance") {
@@ -930,6 +990,7 @@ export function buildDeliveryEnvelope(ctx: AssembledContext, options: DeliveryOp
     staleCount ? `${staleCount} stale/retired record(s) withheld; run hunch drift or hunch_why(id) to inspect.` : "",
     budgetCount ? `${budgetCount} lower-ranked record(s) omitted by budget; use hunch_why(id) to drill down.` : "",
     actionabilityCount ? `${actionabilityCount} additional decision hypothesis/hypotheses withheld by the actionability cap; refine the task evidence or use hunch_why(id).` : "",
+    profileCapCount ? `${profileCapCount} non-blocking record(s) withheld by the ${profile} profile cap; use hunch_why(id) or narrow the task.` : "",
     abstention.active ? `${abstention.withheld} weak prescriptive record(s) withheld by confidence/relevance abstention. ${abstention.retry_hint}` : "",
   ].filter(Boolean);
   if (notes.length) {
@@ -977,11 +1038,11 @@ export function buildDeliveryEnvelope(ctx: AssembledContext, options: DeliveryOp
   const landscapeOmissions = omitted
     .filter((item) => item.kind === "resources" || item.kind === "relationships")
     .flatMap((item) => {
-      if (!["budget", "stale-provenance", "endpoint-not-delivered", "landscape-cap"].includes(item.reason)) return [];
+      if (!["budget", "stale-provenance", "endpoint-not-delivered", "landscape-cap", "profile-cap"].includes(item.reason)) return [];
       return [{
         kind: item.kind as "resources" | "relationships",
         recordId: item.record_id,
-        reason: item.reason as "budget" | "stale-provenance" | "endpoint-not-delivered" | "landscape-cap",
+        reason: (item.reason === "profile-cap" ? "landscape-cap" : item.reason) as "budget" | "stale-provenance" | "endpoint-not-delivered" | "landscape-cap",
         detail: item.detail,
       }];
     });
@@ -999,6 +1060,8 @@ export function buildDeliveryEnvelope(ctx: AssembledContext, options: DeliveryOp
     : null;
   return finalizeDeliveryEnvelope({
     schema_version: DELIVERY_ENVELOPE_SCHEMA_VERSION,
+    profile,
+    ranking_policy: DELIVERY_PROFILE_POLICY_VERSION,
     text,
     delivered,
     hypotheses,

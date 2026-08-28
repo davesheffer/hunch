@@ -64,7 +64,8 @@ import { formatContext, formatStructure } from "../core/format.js";
 import { diagnoseIssueCorrectionStage, formatCorrectionStageDiagnostic } from "../core/correctionStage.js";
 import { compileVerifiedEvidenceMap, formatVerifiedEvidenceMap } from "../core/evidenceMap.js";
 import { collectCorrectionStageSources } from "../extractors/correctionSources.js";
-import { buildDeliveryEnvelope } from "../core/delivery.js";
+import { buildDeliveryEnvelope, DELIVERY_PROFILES, type DeliveryProfile } from "../core/delivery.js";
+import { deriveChangeIdentity } from "../core/changeIdentity.js";
 import { readConfig, writeConfig, FIRMNESS_LEVELS, isFirmness, type Firmness } from "../core/config.js";
 import { blockingInScope, vetoInScope, proposedEditLines } from "../core/hookpolicy.js";
 import { isHumanConfirmed } from "../core/strictgate.js";
@@ -3653,14 +3654,45 @@ program
     }
   });
 
+// ---- change-id (squash-stable exact delta identity) -----------------------
+program
+  .command("change-id")
+  .description("Derive an exact change identity that survives commit-message and squash metadata changes.")
+  .argument("<base>", "base commit or ref")
+  .argument("[head]", "head commit or ref", "HEAD")
+  .option("--json", "emit the complete sealed identity as JSON")
+  .action((base: string, head: string, opts: { json?: boolean }) => {
+    try {
+      const identity = deriveChangeIdentity(findRoot(), base, head);
+      if (opts.json) {
+        console.log(JSON.stringify(identity, null, 2));
+      } else {
+        console.log([
+          `${identity.change_id} (${identity.algorithm})`,
+          `  exact revisions: ${identity.base_revision}..${identity.head_revision}`,
+          `  exact delta: ${identity.delta_hash}`,
+          `  Git stable patch ID: ${identity.patch_id ?? "unavailable (exact Hunch identity still valid)"}`,
+          `  files: ${identity.file_count} (${identity.paths_hash})`,
+          `  sealed receipt: ${identity.content_hash}`,
+        ].join("\n"));
+      }
+    } catch (error) {
+      fail((error as Error).message);
+    }
+  });
+
 // ---- context (surgical retrieval) -----------------------------------------
 program
   .command("context")
   .description("Assemble the minimal relevant Hunch slice for a task on a file/symbol.")
   .argument("<target>", "file path or symbol")
   .option("--budget <n>", "rough token budget", "1500")
+  .option("--profile <profile>", "delivery role: builder, reviewer, or architect", "builder")
   .option("--as-of <ref>", "time-travel: assemble the slice as it stood at a commit/tag/branch")
-  .action(async (target: string, opts: { budget: string; asOf?: string }) => {
+  .action(async (target: string, opts: { budget: string; profile: string; asOf?: string }) => {
+    if (!DELIVERY_PROFILES.includes(opts.profile as DeliveryProfile)) {
+      return fail(`--profile must be one of: ${DELIVERY_PROFILES.join(", ")}`);
+    }
     const { store, root } = storeFor();
     const asOf = opts.asOf ? asOfDate(opts.asOf, root) : undefined;
     if (opts.asOf && !asOf) return fail(`could not resolve --as-of "${opts.asOf}" to a commit`);
@@ -3694,6 +3726,7 @@ program
       components: store.recs("components"),
       decisionCorpus: store.recs("decisions"),
       historical: !!asOf,
+      profile: opts.profile as DeliveryProfile,
     }));
     store.close();
   });
@@ -4269,6 +4302,7 @@ program
         docGround;
       if (!hasContent) return; // no noise on files Hunch hasn't learned yet
       const envelope = buildDeliveryEnvelope(ctx, {
+        profile: "builder",
         root,
         symbols: store.recs("symbols"),
         components: store.recs("components"),
@@ -4300,6 +4334,8 @@ program
         delivery_reason: item.delivery_reason,
         provenance_status: item.provenance_status,
         token_cost: item.token_cost,
+        delivery_profile: envelope.profile,
+        ranking_policy: envelope.ranking_policy,
       })));
       if (injectionMode(evt.session_id, `pre:${target}`, text) === "delta") {
         receipts("refreshed");

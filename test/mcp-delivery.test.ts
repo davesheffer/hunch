@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -146,6 +147,8 @@ test("hunch_context exposes the delivery envelope and records exactly what MCP s
   });
   const structured = result.structuredContent as {
     text: string;
+    profile: string;
+    ranking_policy: string;
     delivered: Array<{
       kind: string;
       record_id: string;
@@ -165,6 +168,8 @@ test("hunch_context exposes the delivery envelope and records exactly what MCP s
   const text = (result.content as Array<{ type: string; text?: string }>).map((item) => item.text ?? "").join("\n");
 
   assert.equal(text, structured.text, "legacy text and structured envelope describe the same delivery");
+  assert.equal(structured.profile, "builder");
+  assert.equal(structured.ranking_policy, "hunch.delivery-profile/1");
   assert.deepEqual(structured.delivered, [{
     kind: "constraints",
     record_id: "con_mcp_receipt",
@@ -200,7 +205,51 @@ test("hunch_context exposes the delivery envelope and records exactly what MCP s
     delivery_reason: "blocking-reserved",
     provenance_status: "current",
     token_cost: structured.delivered[0]?.token_cost,
+    delivery_profile: "builder",
+    ranking_policy: "hunch.delivery-profile/1",
   });
+});
+
+test("hunch_change_identity exposes the exact squash-stable contract without mutating memory", async (t) => {
+  const root = mcpDeliveryFixture();
+  const git = (...args: string[]) => execFileSync("git", ["-C", root, ...args], {
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      GIT_AUTHOR_NAME: "Hunch test",
+      GIT_AUTHOR_EMAIL: "hunch@example.test",
+      GIT_COMMITTER_NAME: "Hunch test",
+      GIT_COMMITTER_EMAIL: "hunch@example.test",
+    },
+  }).trim();
+  git("init", "-q", "-b", "main");
+  git("add", "src");
+  git("commit", "-qm", "base");
+  const base = git("rev-parse", "HEAD");
+  writeFileSync(join(root, "src", "context.ts"), "export const context = 'changed';\n");
+  git("add", "src/context.ts");
+  git("commit", "-qm", "change");
+
+  const server = buildServer(root);
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  const client = new Client({ name: "mcp-change-identity-test", version: "1.0.0" });
+  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+  t.after(async () => {
+    await client.close().catch(() => {});
+    await server.close().catch(() => {});
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  const tool = (await client.listTools()).tools.find((candidate) => candidate.name === "hunch_change_identity");
+  assert.ok(tool?.outputSchema, "tools/list advertises the sealed change identity");
+  const result = await client.callTool({ name: "hunch_change_identity", arguments: { base_ref: base } });
+  const identity = result.structuredContent as Record<string, unknown>;
+  assert.equal(identity.schema, "hunch.change-identity/1");
+  assert.equal(identity.algorithm, "git-raw-tree-delta-sha256/1");
+  assert.match(String(identity.change_id), /^hchg_[a-f0-9]{24}$/);
+  assert.match(String(identity.content_hash), /^sha256:[a-f0-9]{64}$/);
+  assert.equal(identity.file_count, 1);
+  assert.equal(servedSummary(root).total, 0, "read-only identity derivation never manufactures a delivery receipt");
 });
 
 test("hunch_context delivers a reviewed landscape fragment for a plain-English task", async (t) => {

@@ -2,6 +2,11 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import { findingId } from "./ids.js";
 import { FindingSchema, isCredentialFreeText, type Finding } from "./types.js";
+import {
+  assertChangeIdentity,
+  CHANGE_IDENTITY_ALGORITHM,
+  CHANGE_IDENTITY_SCHEMA_VERSION,
+} from "./changeIdentity.js";
 
 export const USEFULNESS_OBSERVATION_SCHEMA_VERSION = "hunch.usefulness-observation/1" as const;
 export const USEFULNESS_SIGNALS = [
@@ -25,6 +30,27 @@ const EvidenceReferenceSchema = z.object({
   ref: z.string().min(1).max(512),
   hash: z.string().regex(SHA256),
 }).strict();
+
+const OutcomeChangeIdentitySchema = z.object({
+  schema: z.literal(CHANGE_IDENTITY_SCHEMA_VERSION),
+  algorithm: z.literal(CHANGE_IDENTITY_ALGORITHM),
+  change_id: z.string().regex(/^hchg_[a-f0-9]{24}$/),
+  base_revision: z.string().regex(GIT_OBJECT),
+  head_revision: z.string().regex(GIT_OBJECT),
+  base_tree: z.string().regex(GIT_OBJECT),
+  head_tree: z.string().regex(GIT_OBJECT),
+  delta_hash: z.string().regex(SHA256),
+  patch_id: z.string().regex(GIT_OBJECT).nullable(),
+  file_count: z.number().int().positive().max(16_384),
+  paths_hash: z.string().regex(SHA256),
+  content_hash: z.string().regex(SHA256),
+}).strict().superRefine((identity, ctx) => {
+  try {
+    assertChangeIdentity(identity);
+  } catch (error) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: (error as Error).message });
+  }
+});
 
 export const UsefulnessObservationSchema = z.object({
   schema: z.literal(USEFULNESS_OBSERVATION_SCHEMA_VERSION),
@@ -50,6 +76,8 @@ export const UsefulnessObservationSchema = z.object({
     recordRevision: z.string().regex(SHA256),
     contentHash: z.string().regex(SHA256),
   }).strict(),
+  /** Optional until hosts can produce it; when present it survives squash metadata. */
+  change: OutcomeChangeIdentitySchema.optional(),
   signal: z.enum(USEFULNESS_SIGNALS),
   evidence: z.array(EvidenceReferenceSchema).max(64),
   observedAt: z.string().min(1).max(64),
@@ -157,6 +185,7 @@ function usefulnessObservationUnsigned(observation: Omit<UsefulnessObservation, 
     episode: { ...observation.episode },
     delivery: { ...observation.delivery },
     record: { ...observation.record },
+    ...(observation.change ? { change: { ...observation.change } } : {}),
     signal: observation.signal,
     evidence: observation.evidence.map((item) => ({ ...item })),
     observedAt: observation.observedAt,
@@ -172,6 +201,7 @@ export function createUsefulnessObservation(input: CreateUsefulnessObservationIn
     episode: { ...input.episode },
     delivery: { ...input.delivery },
     record: { ...input.record },
+    ...(input.change ? { change: { ...input.change } } : {}),
     signal: input.signal,
     evidence: input.evidence.map((item) => ({ ...item })),
     observedAt: input.observedAt,
@@ -207,6 +237,7 @@ export function usefulnessObservationFinding(value: unknown): Finding | null {
     `episode:${observation.episode.episodeId}@${observation.episode.episodeHash}`,
     `delivery:${observation.delivery.receiptRef}@${observation.delivery.receiptHash}`,
     `record:${observation.record.recordId}@${observation.record.recordRevision}`,
+    ...(observation.change ? [`change:${observation.change.change_id}@${observation.change.content_hash}`] : []),
     ...observation.evidence.map((item) => `${item.kind}:${item.ref}@${item.hash}`),
   ];
   return FindingSchema.parse({

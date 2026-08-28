@@ -334,3 +334,90 @@ test("delivery envelope: active blocking invariants are never silently dropped",
   assert.equal(envelope.blocking_overflow, true, "impossible budgets are explicit instead of losing a blocker");
   assert.equal(envelope.abstention.active, false);
 });
+
+test("delivery profiles reorder only non-blocking evidence and are receipt-bound", () => {
+  const blocker = {
+    id: "con_universal",
+    type: "architecture",
+    statement: "The universal invariant must remain first for every delivery role.",
+    scope: ["src/x.ts"],
+    severity: "blocking",
+    enforcement: "advisory_v1",
+    match: null,
+    forbids: null,
+    rationale: "Role-specific presentation cannot change authority.",
+    source_decision: null,
+    violations: [],
+    status: "active",
+    valid_to: null,
+    provenance,
+  } as const;
+  const bug = {
+    id: "bug_regression",
+    title: "A prior regression",
+    symptom: "review failure",
+    root_cause: "missing boundary check",
+    severity: "high",
+    status: "open",
+    affected_files: ["src/x.ts"],
+    affected_symbols: [],
+    lineage: {},
+    provenance,
+  } as const;
+  const finding = {
+    id: "fnd_gap",
+    title: "Known verification gap",
+    observation: "The boundary has not been exercised under failure.",
+    evidence: ["test:x"],
+    method: "run the failure fixture",
+    severity: "high",
+    triage: "open",
+    affected_files: ["src/x.ts"],
+    affected_symbols: [],
+    violates_constraint: null,
+    spawned_decision: null,
+    observed_at: "2026-01-01T00:00:00Z",
+    resolved_commit: null,
+    provenance,
+  } as const;
+  const ctx = context({
+    constraints: [blocker] as never,
+    decisions: [fixtureDecision("dec_design", "src/x.ts")] as never,
+    bugs: [bug] as never,
+    findings: [finding] as never,
+  });
+
+  const builder = buildDeliveryEnvelope(ctx, { profile: "builder" });
+  const reviewer = buildDeliveryEnvelope(ctx, { profile: "reviewer" });
+  const architect = buildDeliveryEnvelope(ctx, { profile: "architect" });
+
+  assert.deepEqual(builder.delivered.map((item) => item.record_id), ["con_universal", "dec_design", "bug_regression", "fnd_gap"]);
+  assert.deepEqual(reviewer.delivered.map((item) => item.record_id), ["con_universal", "bug_regression", "fnd_gap", "dec_design"]);
+  assert.deepEqual(architect.delivered.map((item) => item.record_id), ["con_universal", "dec_design", "bug_regression", "fnd_gap"]);
+  assert.ok([builder, reviewer, architect].every((envelope) => envelope.delivered[0]?.delivery_reason === "blocking-reserved"));
+  assert.equal(reviewer.ranking_policy, "hunch.delivery-profile/1");
+  assert.notEqual(builder.receipt_id, reviewer.receipt_id, "the selected role is sealed into the receipt");
+  assert.match(reviewer.text, /Reviewer-ranked memory/);
+});
+
+test("delivery profiles expose an honest eight-headline non-blocking cap", () => {
+  const bugs = Array.from({ length: 10 }, (_, index) => ({
+    id: `bug_${String(index).padStart(2, "0")}`,
+    title: `Review risk ${index}`,
+    symptom: "risk",
+    root_cause: "fixture",
+    severity: "medium",
+    status: "open",
+    affected_files: ["src/x.ts"],
+    affected_symbols: [],
+    lineage: {},
+    provenance,
+  }));
+  const envelope = buildDeliveryEnvelope(context({ bugs: bugs as never, budget_tokens: 10_000 }), {
+    profile: "reviewer",
+  });
+
+  assert.equal(envelope.delivered.length, 8);
+  assert.equal(envelope.omitted.filter((item) => item.reason === "profile-cap").length, 2);
+  assert.match(envelope.text, /2 non-blocking record\(s\) withheld by the reviewer profile cap/);
+});
