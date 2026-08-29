@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 1.20.1 — 2026-08-29
+
+### Reviewed landscapes stay current safely
+
+A reviewed Engineering Landscape can now be re-reviewed at a newer exact Git revision without
+weakening the no-overwrite guard. `hunch landscape adopt --all --refresh-reviewed` replays the prior
+full review from immutable history, proves the exact stored bytes and repository identity, and then
+replaces only those proven adoption records.
+
+Partial selections, hand edits, forged review IDs, missing history, same-revision conflicts, and
+foreign repositories remain fail-closed.
+
 ## 1.20.0 — 2026-08-28
 
 ### One verified memory path from reason to result
