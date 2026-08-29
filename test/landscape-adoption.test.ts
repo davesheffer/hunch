@@ -99,6 +99,24 @@ function fixture(issues: LandscapeDiscoveryIssue[] = []): LandscapeDiscoveryResu
   return { ...unsigned, discoveryHash: landscapeContentHash(unsigned) };
 }
 
+function fixtureAt(sourceRevision: string, createdAt: string): LandscapeDiscoveryResult {
+  const discovery = structuredClone(fixture());
+  for (const candidateValue of [...discovery.resources, ...discovery.relationships]) {
+    candidateValue.record.currentness.source_revision = sourceRevision;
+    for (const evidence of candidateValue.evidence) evidence.sourceRevision = sourceRevision;
+    if (candidateValue.record.schema === "hunch.resource/1") {
+      candidateValue.record.created_at = createdAt;
+      candidateValue.record.updated_at = createdAt;
+    }
+    const { candidateHash: _candidateHash, ...unsignedCandidate } = candidateValue;
+    candidateValue.candidateHash = landscapeContentHash(unsignedCandidate);
+  }
+  discovery.sourceRevision = sourceRevision;
+  const { discoveryHash: _discoveryHash, ...unsignedDiscovery } = discovery;
+  discovery.discoveryHash = landscapeContentHash(unsignedDiscovery);
+  return discovery;
+}
+
 test("HLG-2 review adopts an exact candidate fragment and is idempotent against its reviewed records", () => {
   const discovery = fixture();
   const first = planLandscapeAdoption({
@@ -132,6 +150,115 @@ test("HLG-2 review adopts an exact candidate fragment and is idempotent against 
   assert.deepEqual(retry.relationshipsToWrite, []);
   assert.deepEqual(retry.receipt.reusedResourceIds, first.receipt.acceptedResourceIds);
   assert.deepEqual(retry.receipt.reusedRelationshipIds, first.receipt.acceptedRelationshipIds);
+});
+
+test("HLG-2 reviewed refresh replaces only byte-proven records from an older exact revision", () => {
+  const previous = fixtureAt("a".repeat(40), "2026-08-26T10:00:00.000Z");
+  const first = planLandscapeAdoption({
+    discovery: previous,
+    expectedDiscoveryHash: previous.discoveryHash,
+    reviewer: "platform-team",
+    reviewedAt: "2026-08-26T11:00:00.000Z",
+    candidateHashes: "all",
+  });
+  const current = fixtureAt("c".repeat(40), "2026-08-27T10:00:00.000Z");
+  const refreshInput = {
+    discovery: current,
+    expectedDiscoveryHash: current.discoveryHash,
+    reviewer: "platform-team",
+    reviewedAt: "2026-08-27T11:00:00.000Z",
+    candidateHashes: "all" as const,
+    existingResources: first.resourcesToWrite,
+    existingRelationships: first.relationshipsToWrite,
+  };
+
+  assert.throws(() => planLandscapeAdoption(refreshInput), /different reviewed content/);
+  assert.throws(() => planLandscapeAdoption({
+    ...refreshInput,
+    refreshReviewed: true,
+  }), /different reviewed content/, "metadata without the prior exact discovery is not replacement authority");
+  assert.throws(() => planLandscapeAdoption({
+    ...refreshInput,
+    candidateHashes: [current.resources[0]!.candidateHash],
+    refreshReviewed: true,
+    previousDiscoveries: [previous],
+  }), /complete candidate set/, "a partial selection cannot stand in for the prior full review");
+
+  const refreshed = planLandscapeAdoption({
+    ...refreshInput,
+    refreshReviewed: true,
+    previousDiscoveries: [previous],
+  });
+  assert.deepEqual(refreshed.refreshedResourceIds, first.receipt.acceptedResourceIds);
+  assert.deepEqual(refreshed.refreshedRelationshipIds, first.receipt.acceptedRelationshipIds);
+  assert.deepEqual(refreshed.receipt.reusedResourceIds, []);
+  assert.deepEqual(refreshed.receipt.reusedRelationshipIds, []);
+  assert.ok(refreshed.resourcesToWrite.every((record) => record.currentness.source_revision === current.sourceRevision));
+  assert.ok(refreshed.relationshipsToWrite.every((record) => record.currentness.source_revision === current.sourceRevision));
+
+  const retry = planLandscapeAdoption({
+    discovery: current,
+    expectedDiscoveryHash: current.discoveryHash,
+    reviewer: "platform-team",
+    reviewedAt: "2026-08-27T11:00:00.000Z",
+    candidateHashes: "all",
+    existingResources: refreshed.resourcesToWrite,
+    existingRelationships: refreshed.relationshipsToWrite,
+  });
+  assert.deepEqual(retry.refreshedResourceIds, []);
+  assert.deepEqual(retry.refreshedRelationshipIds, []);
+  assert.deepEqual(retry.receipt.reusedResourceIds, refreshed.receipt.acceptedResourceIds);
+  assert.deepEqual(retry.receipt.reusedRelationshipIds, refreshed.receipt.acceptedRelationshipIds);
+});
+
+test("HLG-2 reviewed refresh refuses tampered prior bytes and repository/revision proof substitution", () => {
+  const previous = fixtureAt("a".repeat(40), "2026-08-26T10:00:00.000Z");
+  const first = planLandscapeAdoption({
+    discovery: previous,
+    expectedDiscoveryHash: previous.discoveryHash,
+    reviewer: "platform-team",
+    reviewedAt: "2026-08-26T11:00:00.000Z",
+    candidateHashes: "all",
+  });
+  const current = fixtureAt("c".repeat(40), "2026-08-27T10:00:00.000Z");
+  const tampered = structuredClone(first.resourcesToWrite);
+  tampered[0]!.name = "Human edit that retained adoption metadata";
+  const input = {
+    discovery: current,
+    expectedDiscoveryHash: current.discoveryHash,
+    reviewer: "platform-team",
+    reviewedAt: "2026-08-27T11:00:00.000Z",
+    candidateHashes: "all" as const,
+    existingResources: tampered,
+    existingRelationships: first.relationshipsToWrite,
+    refreshReviewed: true,
+  };
+  assert.throws(() => planLandscapeAdoption({
+    ...input,
+    previousDiscoveries: [previous],
+  }), /different reviewed content/);
+  const forgedReview = structuredClone(first.resourcesToWrite);
+  forgedReview[0]!.metadata.landscape_review_id = `lr_${"f".repeat(24)}`;
+  assert.throws(() => planLandscapeAdoption({
+    ...input,
+    existingResources: forgedReview,
+    previousDiscoveries: [previous],
+  }), /different reviewed content/, "a plausible but non-replayable review id is not refresh authority");
+  assert.throws(() => planLandscapeAdoption({
+    ...input,
+    existingResources: first.resourcesToWrite,
+    previousDiscoveries: [current],
+  }), /older exact discovery revision/);
+
+  const foreign = structuredClone(previous);
+  foreign.repositoryRootIdentity = "github.com/other/repository";
+  const { discoveryHash: _discoveryHash, ...unsignedForeign } = foreign;
+  foreign.discoveryHash = landscapeContentHash(unsignedForeign);
+  assert.throws(() => planLandscapeAdoption({
+    ...input,
+    existingResources: first.resourcesToWrite,
+    previousDiscoveries: [foreign],
+  }), /different repository/);
 });
 
 test("HLG-2 review refuses stale hashes, partial relationships, silent issues, and graph overwrites", () => {
@@ -282,4 +409,52 @@ test("HLG-2 CLI review stays read-only and adopt persists only the hash-bound re
   assert.equal(relationships.length, 1);
   assert.ok(resources.every((record) => record.currentness.status === "current"));
   assert.ok(resources.every((record) => record.metadata.discovery_authority === "human_confirmed"));
+
+  const packageJson = JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as Record<string, unknown>;
+  packageJson.version = "2.0.0";
+  writeFileSync(join(root, "package.json"), `${JSON.stringify(packageJson, null, 2)}\n`, "utf8");
+  git("add", "package.json");
+  git("commit", "-qm", "new exact landscape revision");
+
+  const nextReview = spawnSync(process.execPath, [tsx, cli, "landscape", "review", "--json"], {
+    cwd: root,
+    encoding: "utf8",
+    env: { ...process.env, HUNCH_PRIVATE_DIR: "" },
+  });
+  assert.equal(nextReview.status, 0, nextReview.stderr);
+  const nextDiscovery = JSON.parse(nextReview.stdout) as LandscapeDiscoveryResult;
+  assert.notEqual(nextDiscovery.sourceRevision, discovery.sourceRevision);
+
+  const refreshArgs = [
+    tsx,
+    cli,
+    "landscape",
+    "adopt",
+    "--ref",
+    nextDiscovery.sourceRevision,
+    "--expected",
+    nextDiscovery.discoveryHash,
+    "--all",
+    "--reviewed-by",
+    "platform-team",
+  ];
+  const refusedRefresh = spawnSync(process.execPath, refreshArgs, {
+    cwd: root,
+    encoding: "utf8",
+    env: { ...process.env, HUNCH_PRIVATE_DIR: "" },
+  });
+  assert.equal(refusedRefresh.status, 1);
+  assert.match(refusedRefresh.stderr, /different reviewed content/);
+
+  const refreshed = spawnSync(process.execPath, [...refreshArgs, "--refresh-reviewed"], {
+    cwd: root,
+    encoding: "utf8",
+    env: { ...process.env, HUNCH_PRIVATE_DIR: "" },
+  });
+  assert.equal(refreshed.status, 0, refreshed.stderr);
+  assert.match(refreshed.stdout, /\(3 refreshed\)/);
+  const refreshedResources = JSON.parse(readFileSync(join(root, ".hunch/resources/index.json"), "utf8")) as Resource[];
+  const refreshedRelationships = JSON.parse(readFileSync(join(root, ".hunch/edges/index.json"), "utf8")) as Edge[];
+  assert.ok(refreshedResources.every((record) => record.currentness.source_revision === nextDiscovery.sourceRevision));
+  assert.ok(refreshedRelationships.every((record) => record.currentness.source_revision === nextDiscovery.sourceRevision));
 });

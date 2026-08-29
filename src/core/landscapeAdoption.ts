@@ -19,6 +19,7 @@ export const LANDSCAPE_ADOPTION_RECEIPT_SCHEMA_VERSION = "hunch.landscape-adopti
 
 const SHA256 = /^sha256:[a-f0-9]{64}$/;
 const MAX_SELECTIONS = 4_096;
+export const MAX_LANDSCAPE_REFRESH_REVISIONS = 16;
 
 export interface LandscapeReview {
   schema: typeof LANDSCAPE_REVIEW_SCHEMA_VERSION;
@@ -50,6 +51,9 @@ export interface LandscapeAdoptionPlan {
   receipt: LandscapeAdoptionReceipt;
   resourcesToWrite: Resource[];
   relationshipsToWrite: Edge[];
+  /** Existing, byte-proven adoption records replaced by this reviewed revision. */
+  refreshedResourceIds: string[];
+  refreshedRelationshipIds: string[];
 }
 
 export interface PlanLandscapeAdoptionInput {
@@ -62,6 +66,14 @@ export interface PlanLandscapeAdoptionInput {
   acknowledgeIssues?: boolean;
   existingResources?: Resource[];
   existingRelationships?: Edge[];
+  /**
+   * Explicitly allow a newer exact revision to replace records from a prior
+   * reviewed adoption. Every replacement still requires a matching entry in
+   * `previousDiscoveries` so the old accepted bytes can be reconstructed and
+   * verified; metadata alone never grants replacement authority.
+   */
+  refreshReviewed?: boolean;
+  previousDiscoveries?: LandscapeDiscoveryResult[];
 }
 
 function sortedUnique(values: string[], label: string): string[] {
@@ -245,6 +257,73 @@ function sameAcceptedCandidate(
   return landscapeContentHash(record) === landscapeContentHash(expected);
 }
 
+function previousDiscoveriesForRefresh(
+  input: PlanLandscapeAdoptionInput,
+): Map<string, LandscapeDiscoveryResult> {
+  const previous = input.previousDiscoveries ?? [];
+  if (!input.refreshReviewed) {
+    if (previous.length > 0) throw new Error("landscape previous discoveries require explicit reviewed refresh authority");
+    return new Map();
+  }
+  if (input.candidateHashes !== "all") {
+    throw new Error("landscape reviewed refresh requires the complete candidate set (--all)");
+  }
+  if (previous.length > MAX_LANDSCAPE_REFRESH_REVISIONS) {
+    throw new Error(`landscape reviewed refresh exceeds the bounded prior-revision proof limit (${MAX_LANDSCAPE_REFRESH_REVISIONS})`);
+  }
+  const byRevision = new Map<string, LandscapeDiscoveryResult>();
+  for (const discovery of previous) {
+    assertLandscapeDiscoveryIntegrity(discovery);
+    if (discovery.repositoryRootIdentity !== input.discovery.repositoryRootIdentity) {
+      throw new Error("landscape reviewed refresh prior discovery belongs to a different repository");
+    }
+    if (discovery.sourceRevision === input.discovery.sourceRevision) {
+      throw new Error("landscape reviewed refresh requires an older exact discovery revision");
+    }
+    if (byRevision.has(discovery.sourceRevision)) {
+      throw new Error(`landscape reviewed refresh contains duplicate prior revision: ${discovery.sourceRevision}`);
+    }
+    byRevision.set(discovery.sourceRevision, discovery);
+  }
+  return byRevision;
+}
+
+function isProvenPreviousAdoption(
+  record: Resource | Edge,
+  previousDiscoveries: Map<string, LandscapeDiscoveryResult>,
+): boolean {
+  const sourceRevision = record.currentness?.source_revision;
+  if (!sourceRevision) return false;
+  const previous = previousDiscoveries.get(sourceRevision);
+  if (!previous) return false;
+  const candidates: Array<LandscapeCandidate<Resource> | LandscapeCandidate<Edge>> = record.schema === "hunch.resource/1"
+    ? previous.resources
+    : previous.relationships;
+  const candidate = candidates.find((value) => value.record.id === record.id);
+  if (!candidate || !sameAcceptedCandidate(record, candidate, previous.discoveryHash)) return false;
+
+  const reviewer = record.metadata.landscape_reviewed_by;
+  const reviewedAt = record.metadata.landscape_reviewed_at;
+  const reviewId = record.metadata.landscape_review_id;
+  if (typeof reviewer !== "string" || typeof reviewedAt !== "string" || typeof reviewId !== "string") return false;
+  try {
+    const allCandidateHashes = [...previous.resources, ...previous.relationships]
+      .map((value) => value.candidateHash)
+      .sort(compareCodeUnits);
+    const reconstructed = reviewFor({
+      discovery: previous,
+      expectedDiscoveryHash: previous.discoveryHash,
+      reviewer,
+      reviewedAt,
+      candidateHashes: "all",
+      acknowledgeIssues: previous.issues.length > 0,
+    }, allCandidateHashes);
+    return reconstructed.reviewId === reviewId;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Convert an exact candidate discovery into a prevalidated write plan.
  *
@@ -286,6 +365,7 @@ export function planLandscapeAdoption(input: PlanLandscapeAdoptionInput): Landsc
   }
 
   const review = reviewFor(input, selectedCandidateHashes);
+  const previousDiscoveries = previousDiscoveriesForRefresh(input);
   const existingResources = new Map<string, Resource>();
   for (const value of input.existingResources ?? []) {
     const record = ResourceSchema.parse(value);
@@ -302,14 +382,20 @@ export function planLandscapeAdoption(input: PlanLandscapeAdoptionInput): Landsc
   const relationshipsToWrite: Edge[] = [];
   const reusedResourceIds: string[] = [];
   const reusedRelationshipIds: string[] = [];
+  const refreshedResourceIds: string[] = [];
+  const refreshedRelationshipIds: string[] = [];
 
   for (const candidate of selectedResources) {
     const existing = existingResources.get(candidate.record.id);
     if (existing) {
-      if (!sameAcceptedCandidate(existing, candidate, input.discovery.discoveryHash)) {
+      if (sameAcceptedCandidate(existing, candidate, input.discovery.discoveryHash)) {
+        reusedResourceIds.push(existing.id);
+      } else if (input.refreshReviewed && isProvenPreviousAdoption(existing, previousDiscoveries)) {
+        resourcesToWrite.push(acceptedResource(candidate, input.discovery.discoveryHash, review));
+        refreshedResourceIds.push(existing.id);
+      } else {
         throw new Error(`landscape resource ${candidate.record.id} already exists with different reviewed content`);
       }
-      reusedResourceIds.push(existing.id);
     } else {
       resourcesToWrite.push(acceptedResource(candidate, input.discovery.discoveryHash, review));
     }
@@ -317,10 +403,14 @@ export function planLandscapeAdoption(input: PlanLandscapeAdoptionInput): Landsc
   for (const candidate of selectedRelationships) {
     const existing = existingRelationships.get(candidate.record.id);
     if (existing) {
-      if (!sameAcceptedCandidate(existing, candidate, input.discovery.discoveryHash)) {
+      if (sameAcceptedCandidate(existing, candidate, input.discovery.discoveryHash)) {
+        reusedRelationshipIds.push(existing.id);
+      } else if (input.refreshReviewed && isProvenPreviousAdoption(existing, previousDiscoveries)) {
+        relationshipsToWrite.push(acceptedRelationship(candidate, input.discovery.discoveryHash, review));
+        refreshedRelationshipIds.push(existing.id);
+      } else {
         throw new Error(`landscape relationship ${candidate.record.id} already exists with different reviewed content`);
       }
-      reusedRelationshipIds.push(existing.id);
     } else {
       relationshipsToWrite.push(acceptedRelationship(candidate, input.discovery.discoveryHash, review));
     }
@@ -342,5 +432,7 @@ export function planLandscapeAdoption(input: PlanLandscapeAdoptionInput): Landsc
     receipt: { ...receiptUnsigned, receiptId },
     resourcesToWrite,
     relationshipsToWrite,
+    refreshedResourceIds: refreshedResourceIds.sort(compareCodeUnits),
+    refreshedRelationshipIds: refreshedRelationshipIds.sort(compareCodeUnits),
   };
 }

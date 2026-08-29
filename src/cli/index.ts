@@ -112,7 +112,11 @@ import { pendingEscalations, policyEscalations } from "../core/escalations.js";
 import { premiseEscalations } from "../core/premises.js";
 import { parseDocAnchors, renderDocGrounding } from "../core/docanchors.js";
 import { compareCandidates } from "../core/compare.js";
-import { planLandscapeAdoption } from "../core/landscapeAdoption.js";
+import { compareCodeUnits } from "../core/canonicalOrder.js";
+import {
+  MAX_LANDSCAPE_REFRESH_REVISIONS,
+  planLandscapeAdoption,
+} from "../core/landscapeAdoption.js";
 import { discoverRepositoryLandscape } from "../extractors/landscapeDiscovery.js";
 import { checkConformance } from "../core/conformance.js";
 import { ConstitutionService, policyEvaluationEnvelope, type PolicyEvaluationSet } from "../constitution/service.js";
@@ -2804,6 +2808,7 @@ landscapeCmd
   .option("--all", "adopt every candidate in the reviewed discovery")
   .option("--candidate <hashes...>", "adopt only these candidate hashes")
   .option("--acknowledge-issues", "confirm that the printed discovery issues were reviewed")
+  .option("--refresh-reviewed", "replace only byte-proven records from an older reviewed exact revision")
   .action((opts: {
     ref: string;
     expected: string;
@@ -2811,20 +2816,45 @@ landscapeCmd
     all?: boolean;
     candidate?: string[];
     acknowledgeIssues?: boolean;
+    refreshReviewed?: boolean;
   }) => {
     if (opts.all && opts.candidate?.length) return fail("choose either --all or --candidate, not both");
     if (!opts.all && !opts.candidate?.length) return fail("choose --all or name reviewed hashes with --candidate <hashes...>");
+    if (opts.refreshReviewed && !opts.all) return fail("--refresh-reviewed requires --all so the complete prior review can be proven");
     const { store, root } = storeFor();
     try {
       const discovery = discoverRepositoryLandscape(root, opts.ref);
+      const existingResources = store.recs("resources");
+      const existingRelationships = store.recs("edges");
+      const selectedHashes = new Set(opts.all
+        ? [...discovery.resources, ...discovery.relationships].map((candidate) => candidate.candidateHash)
+        : opts.candidate!);
+      const selectedIds = new Set(
+        [...discovery.resources, ...discovery.relationships]
+          .filter((candidate) => selectedHashes.has(candidate.candidateHash))
+          .map((candidate) => candidate.record.id),
+      );
+      const previousRevisions = opts.refreshReviewed
+        ? [...new Set([...existingResources, ...existingRelationships]
+          .filter((record) => selectedIds.has(record.id))
+          .map((record) => record.currentness?.source_revision)
+          .filter((revision): revision is string => Boolean(revision) && revision !== discovery.sourceRevision))]
+          .sort(compareCodeUnits)
+        : [];
+      if (previousRevisions.length > MAX_LANDSCAPE_REFRESH_REVISIONS) {
+        return fail(`reviewed refresh needs ${previousRevisions.length} prior revisions; the safe limit is ${MAX_LANDSCAPE_REFRESH_REVISIONS}`);
+      }
+      const previousDiscoveries = previousRevisions.map((revision) => discoverRepositoryLandscape(root, revision));
       const plan = planLandscapeAdoption({
         discovery,
         expectedDiscoveryHash: opts.expected,
         reviewer: opts.reviewedBy,
         candidateHashes: opts.all ? "all" : opts.candidate!,
         acknowledgeIssues: opts.acknowledgeIssues,
-        existingResources: store.recs("resources"),
-        existingRelationships: store.recs("edges"),
+        existingResources,
+        existingRelationships,
+        refreshReviewed: opts.refreshReviewed,
+        previousDiscoveries,
       });
       for (const resource of plan.resourcesToWrite) store.putCapture("resources", resource);
       for (const relationship of plan.relationshipsToWrite) store.putCapture("edges", relationship);
@@ -2833,7 +2863,8 @@ landscapeCmd
         pumpMemoryHome(store, root, store.captureHome(false), "hunch: adopt reviewed Engineering Landscape candidates");
       }
       console.log(JSON.stringify(plan.receipt, null, 2));
-      console.log(`✓ accepted ${plan.receipt.acceptedResourceIds.length} resource(s) and ${plan.receipt.acceptedRelationshipIds.length} relationship(s); wrote ${plan.resourcesToWrite.length + plan.relationshipsToWrite.length}, reused ${plan.receipt.reusedResourceIds.length + plan.receipt.reusedRelationshipIds.length}.`);
+      const refreshed = plan.refreshedResourceIds.length + plan.refreshedRelationshipIds.length;
+      console.log(`✓ accepted ${plan.receipt.acceptedResourceIds.length} resource(s) and ${plan.receipt.acceptedRelationshipIds.length} relationship(s); wrote ${plan.resourcesToWrite.length + plan.relationshipsToWrite.length} (${refreshed} refreshed), reused ${plan.receipt.reusedResourceIds.length + plan.receipt.reusedRelationshipIds.length}.`);
     } catch (error) {
       fail(error instanceof Error ? error.message : String(error));
     } finally {

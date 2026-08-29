@@ -367,6 +367,17 @@ the ordinary public/private/shared capture boundary, and return a native
 `hunch.landscape-adoption-receipt/1`. Retrying the same exact fragment reuses its accepted records
 instead of duplicating them.
 
+When the repository advances but the reviewed resource identities remain stable, the operator can
+explicitly pass `--all --refresh-reviewed`. This is not a general overwrite switch: Hunch re-runs
+discovery for every older exact revision named by the conflicting records, requires the same
+repository identity, recomputes the prior full-fragment review identity, reconstructs the prior
+human-confirmed form, and compares the complete stored bytes. Only an unchanged record that is
+proven to be the output of that prior adoption may be
+replaced by the newly hash-bound review. Missing Git history, a hand edit (even one retaining copied
+landscape metadata), a partial candidate selection, same-revision conflicts, foreign-repository evidence, and more than the bounded
+prior-revision proof limit remain fail-closed. The ordinary command without
+`--refresh-reviewed` keeps the original no-overwrite behavior.
+
 HLG-2 is therefore complete at the bounded repository-discovery and explicit-adoption boundary.
 
 HLG-3 is complete at the reviewed-delivery boundary. `assembleContext` now selects a deterministic,
