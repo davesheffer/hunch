@@ -1,0 +1,48 @@
+{
+  "schema": "hunch.infection-blind-issue-preregistration/1",
+  "frozen_at": "2026-08-29T02:02:32Z",
+  "repository": "https://github.com/infection/infection",
+  "revision": "94ad32f38ab501f1b3d2a65db97143fca155c402",
+  "issue": {
+    "number": 3423,
+    "url": "https://github.com/infection/infection/issues/3423",
+    "title": "bug: TestFrameworkFinder can break tools resolution",
+    "body_sha256": "4190bbc7cc542cbea5e2241fe7cc75543ac18f3728f2356bef5b32e20eddf700",
+    "open_prs_referencing_issue": 0
+  },
+  "selection": {
+    "reason": "A concrete open bug with no discussion or open implementation, not used to build Hunch PHP support, whose fix can give Infection direct value.",
+    "hunch_used_before_freeze": false
+  },
+  "baseline": {
+    "method": "Issue text, AGENTS.md, source, tests, one analogous finder and Git history inspected with Git and ripgrep only.",
+    "source_hashes": {
+      "src/FileSystem/Finder/TestFrameworkFinder.php": "3a3ea4d13577d473d8b7e70d51a17d7e901e3c5fbbd80c32fac126b3f5ecb2f9",
+      "tests/phpunit/FileSystem/Finder/TestFrameworkFinderTest.php": "afe1685c51a6e91ce459d19394ce18a765b2ffe974577edcd2e035b00ff684b5"
+    },
+    "expected_owner_files": [
+      "src/FileSystem/Finder/TestFrameworkFinder.php",
+      "tests/phpunit/FileSystem/Finder/TestFrameworkFinderTest.php"
+    ],
+    "diagnosis": "TestFrameworkFinder prepends Composer's bin directory to the process-wide PATH before searching. The mutation persists after discovery, so unrelated later executable lookups and child processes inherit a different resolution order.",
+    "smallest_expected_fix": "Pass the Composer bin directory as an explicit highest-priority search directory to test-framework discovery instead of mutating PATH. Preserve custom-path handling, the project-local-first lookup order, the Windows batch-file preference and the non-executable fallback.",
+    "regression_test": "Resolve a test framework from the Composer bin directory while asserting that PATH is byte-for-byte unchanged after find().",
+    "scope_boundary": "Do not refactor StaticAnalysisToolExecutableFinder or the wider command-runner design in this bug fix. Name the analogous side effect separately if it remains.",
+    "acceptance": [
+      "The Composer-bin executable still wins over an executable available only through PATH.",
+      "PATH is unchanged after successful discovery.",
+      "The targeted TestFrameworkFinder test suite passes.",
+      "make cs and make autoreview pass before an upstream PR is proposed."
+    ]
+  },
+  "comparison": {
+    "primary": "Does Hunch return both frozen owner files within its bounded inspection plan?",
+    "secondary": "Does Hunch add a correct repository-specific constraint, dependency or risk that changes the implementation or validation plan?",
+    "no_credit": [
+      "Repeating TestFrameworkFinder.php, which the issue already names.",
+      "Claiming an exact owner when the product policy keeps exact-owner output disabled.",
+      "Adding more files without a concrete reason."
+    ],
+    "publication_rule": "Post upstream only if the investigation produces a verified fix or a concrete new finding useful to Infection. Otherwise publish the null result in Hunch only."
+  }
+}
