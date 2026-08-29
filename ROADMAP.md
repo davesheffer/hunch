@@ -1,6 +1,6 @@
 # Hunch roadmap
 
-Updated 2026-08-28.
+Updated 2026-08-29.
 
 Hunch is building the validated delivery layer for engineering intent: record why the code is the
 way it is, deliver the right evidence at the moment an agent needs it, and deterministically check
@@ -52,7 +52,7 @@ owns authorized cross-repository traversal, live discovery and task-scoped assem
 reciprocal [transport contract](https://github.com/davesheffer/hunch-memory/blob/main/docs/ENGINEERING-LANDSCAPE-TRANSPORT.md)
 preserves the fragment and native receipt without owning ranking, traversal or ORC caching.
 
-## Engineering Landscape Graph — in progress
+## Engineering Landscape Graph — initial production path complete
 
 The repository is one implementation node, not the root of a developer's world. Hunch will extend
 its existing graph so a bounded query can connect product → capability → system → repository →
@@ -208,12 +208,22 @@ bodies are discarded. Invalid/non-UTF-8, unsafe-path, unsupported-mode, oversize
 declarations remain issues, dependency-owned files are ignored before the cap, and symlinks are
 never followed.
 
-HLG-3 begins only after candidate review/adoption preserves identity and provenance through the
-existing delivery receipt. Hunch still does not claim live runtime health, cross-repository
-traversal or a new CLI/MCP surface. HLG-1 is closed by accepted decision `dec_a6d088f409`; the live
-roadmap anchor is `roadmap.engineering-landscape-hlg-2` (`dec_9130451387`).
+HLG-3 now preserves reviewed candidate identity, provenance, omissions and native receipt evidence
+through bounded delivery. HLG-4 adds the first strict advisory drift-intake seam. Hunch still does
+not claim live runtime health or cross-repository traversal: those remain host responsibilities,
+and additional discovery families stay demand-triggered rather than implying this bounded path is
+unfinished. HLG-1 is closed by accepted decision `dec_a6d088f409`; the historical discovery anchor
+is `roadmap.engineering-landscape-hlg-2` (`dec_9130451387`).
 
-## Current baseline — v1.19.0
+## Current baseline — v1.20.2
+
+- Reviewed Engineering Landscape records can advance to a newer exact revision only after immutable
+  history proves the prior complete review; partial, edited, foreign and forged refreshes fail
+  closed.
+- Standalone private/shared memory overlays now persist bounded stale-record deletions without ever
+  deleting from the protected code repository or widening the public-repository safeguard.
+- The 1.20 delivery path binds role-shaped, receipt-proven Hunch context and exact change identity to
+  later usefulness evidence while granting that evidence no ranking, promotion or policy authority.
 
 - Architectural Conformance and decision-grounding are deterministic release gates.
 - CLI, MCP, and edit hooks share one currentness-checked, hard-budgeted delivery envelope.

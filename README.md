@@ -234,7 +234,7 @@ but stops automatic memory commits and pushes. As a team-coordinated rollback, r
 commit to stop discovery after teammates pull the revert. Existing machines retain their ignored
 local overlay until they are deliberately disconnected; do not delete the memory repo as part of a
 rollback. For this rollout, reinstall the previous published package with
-`npm i -g @davesheffer/hunch@1.20.0`; the release receipt resolves and records the verified rollback
+`npm i -g @davesheffer/hunch@1.20.1`; the release receipt resolves and records the verified rollback
 target from the npm registry instead of trusting Git tags. Pause enforcement first as shown above,
 and keep every team client on the same release before resuming Matrix policy workflows.
 
