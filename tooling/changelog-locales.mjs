@@ -8,6 +8,7 @@ export const changelogLocales = {
       footer: "© Hunch — התאמה ארכיטקטונית לקוד AI.", home: "בית", githubReleases: "גרסאות ב-GitHub"
     },
     titles: [
+      "מחיקות בתמונת מצב נשמרות בלי לסכן קוד מקור",
       "נוף הנדסי שנבדק נשאר עדכני בבטחה",
       "נתיב זיכרון מאומת אחד — מהסיבה לתוצאה",
       "ראיות הגרסה במקום שבו מתקינים",
@@ -40,6 +41,7 @@ export const changelogLocales = {
       footer: "© Hunch — архитектурное соответствие для ИИ-кода.", home: "Главная", githubReleases: "Релизы на GitHub"
     },
     titles: [
+      "Удаления снимка сохраняются без риска для исходного кода",
       "Проверенный инженерный ландшафт безопасно остаётся актуальным",
       "Единый проверяемый путь памяти — от причины к результату",
       "Доказательства выпуска там, где устанавливают",
@@ -72,6 +74,7 @@ export const changelogLocales = {
       footer: "© Hunch — التوافق المعماري لكود الذكاء الاصطناعي.", home: "الرئيسية", githubReleases: "الإصدارات على GitHub"
     },
     titles: [
+      "تُحفظ عمليات حذف اللقطة دون تعريض الشفرة المصدرية للخطر",
       "يبقى المشهد الهندسي المُراجع محدثًا بأمان",
       "مسار ذاكرة واحد موثّق من السبب إلى النتيجة",
       "أدلة الإصدار حيث يتم التثبيت",
@@ -104,6 +107,7 @@ export const changelogLocales = {
       footer: "© Hunch — conformidad arquitectónica para código de IA.", home: "Inicio", githubReleases: "Versiones en GitHub"
     },
     titles: [
+      "Las eliminaciones de instantáneas persisten sin poner en riesgo el código fuente",
       "El panorama de ingeniería revisado se mantiene actualizado con seguridad",
       "Una ruta de memoria verificable, de la razón al resultado",
       "La evidencia de la versión donde se instala",

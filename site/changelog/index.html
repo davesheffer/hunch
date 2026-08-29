@@ -108,6 +108,7 @@
     <div class="clog">
       <div class="clog-group">
         <div class="clog-date">Aug 29, 2026</div>
+        <div class="clog-row"><span class="rel-tag">v1.20.2</span><span class="clog-t"><b>Snapshot deletion is durable without risking source</b> — private and shared memory sync now carries stale JSON record deletions only after proving the overlay is a standalone repository distinct from protected code. Public deletion, local configuration, derived artifacts, non-JSON paths, and anything outside the exact Hunch subtree remain fail-closed.</span></div>
         <div class="clog-row"><span class="rel-tag">v1.20.1</span><span class="clog-t"><b>Reviewed landscapes stay current safely</b> — a complete reviewed Engineering Landscape can now be re-reviewed at a newer exact Git revision. Hunch replays the prior immutable discovery, proves the stored bytes and repository identity, and replaces only proven adoption records; partial selections, hand edits, forged review IDs, missing history, same-revision conflicts, and foreign repositories remain fail-closed.</span></div>
       </div>
       <div class="clog-group">

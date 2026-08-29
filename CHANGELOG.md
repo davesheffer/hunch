@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+## 1.20.2 — 2026-08-29
+
+### Snapshot deletion is durable without risking source
+
+Private and shared memory sync now carries stale JSON record deletions after first proving that the
+memory overlay is a standalone Git repository distinct from the protected code repository. This
+closes the durability gap where a graph snapshot was correct on disk but an obsolete per-record
+component remained in remote history and left the local memory repository dirty.
+
+The boundary stays fail-closed: public-repository deletion, `local.json`, derived artifacts,
+non-JSON paths, copies, type changes, and anything outside the exact Hunch subtree are still
+refused. Snapshot ID churn is inspected as an exact add plus delete instead of trusting Git's
+heuristic rename presentation.
+
 ## 1.20.1 — 2026-08-29
 
 ### Reviewed landscapes stay current safely
