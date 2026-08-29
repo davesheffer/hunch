@@ -1,13 +1,13 @@
 /**
- * Safety guard for the overlay auto-commit (bug_overlay_clobber): a Hunch memory sync is PURELY
- * additive JSON. commitAndPushHunch must REFUSE to commit any staged set that deletes files or
- * stages a non-.json file — because that means its dir resolved to a real code repo (e.g. the
- * overlay was never its own git repo), and committing/pushing there would clobber the user's code.
- * We shipped exactly that; this locks the fix.
+ * Safety guard for the overlay auto-commit (bug_overlay_clobber): a Hunch memory sync commits only
+ * contained JSON. Snapshot deletions are allowed only after the private/shared overlay is proven to
+ * be a standalone repository distinct from protected code. Public deletion, non-JSON paths and
+ * anything outside the exact Hunch subtree remain fail-closed. We shipped the original clobber;
+ * this locks both the boundary and the bounded snapshot exception.
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { chmodSync, existsSync, mkdtempSync, mkdirSync, readFileSync, realpathSync, symlinkSync, writeFileSync, rmSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, mkdirSync, readFileSync, realpathSync, symlinkSync, unlinkSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
@@ -110,6 +110,63 @@ test("commitAndPushHunch DOES commit a clean memory-only (JSON) change", () => {
     assert.equal(r, "committed", "commit created; no upstream → not overclaimed as pushed");
     assert.equal(git("rev-list", "--count", "HEAD"), "1", "a memory commit was created");
     assert.match(git("ls-tree", "-r", "--name-only", "HEAD"), /decisions\/dec_1\.json/, "the JSON record was committed");
+  } finally { cleanup(); }
+});
+
+test("commitAndPushHunch commits stale JSON deletion only in a proven standalone overlay", () => {
+  const overlay = repo("hunch-overlay-delete-");
+  const code = repo("hunch-overlay-delete-code-");
+  try {
+    writeFileSync(join(code.root, "app.ts"), "export const protectedSource = true;\n");
+    code.git("add", "-A");
+    code.git("commit", "-qm", "protected code");
+
+    mkdirSync(join(overlay.root, ".hunch", "components"), { recursive: true });
+    writeFileSync(join(overlay.root, ".hunch", "components", "cmp_stale.json"), JSON.stringify({ id: "cmp_stale" }));
+    writeFileSync(join(overlay.root, ".hunch", "components", "cmp_current.json"), JSON.stringify({ id: "cmp_current", revision: 1 }));
+    overlay.git("add", "-A");
+    overlay.git("commit", "-qm", "seed memory snapshot");
+
+    unlinkSync(join(overlay.root, ".hunch", "components", "cmp_stale.json"));
+    writeFileSync(join(overlay.root, ".hunch", "components", "cmp_current.json"), JSON.stringify({ id: "cmp_current", revision: 2 }));
+    writeFileSync(join(overlay.root, ".hunch", "components", "cmp_replacement.json"), JSON.stringify({ id: "cmp_replacement" }));
+    const result = commitAndPushHunch(
+      join(overlay.root, ".hunch"),
+      "memory: replace graph snapshot",
+      { push: true, protectedRepoRoot: code.root },
+    );
+
+    assert.equal(result, "committed", "the standalone overlay records the snapshot replacement locally");
+    assert.equal(overlay.git("status", "--porcelain"), "", "the overlay is clean after the replacement commit");
+    assert.doesNotMatch(overlay.git("ls-tree", "-r", "--name-only", "HEAD"), /cmp_stale\.json/);
+    assert.match(overlay.git("ls-tree", "-r", "--name-only", "HEAD"), /cmp_replacement\.json/);
+    assert.equal(
+      JSON.parse(overlay.git("show", "HEAD:.hunch/components/cmp_current.json")).revision,
+      2,
+      "the same bounded commit carries the current snapshot bytes",
+    );
+    assert.match(code.git("ls-tree", "-r", "--name-only", "HEAD"), /app\.ts/, "protected source is untouched");
+  } finally {
+    overlay.cleanup();
+    code.cleanup();
+  }
+});
+
+test("commitAndPushHunch keeps JSON deletion fail-closed in a public code repository", () => {
+  const { root, git, cleanup } = repo("hunch-public-delete-");
+  try {
+    mkdirSync(join(root, ".hunch", "components"), { recursive: true });
+    writeFileSync(join(root, ".hunch", "components", "cmp_stale.json"), JSON.stringify({ id: "cmp_stale" }));
+    git("add", "-A");
+    git("commit", "-qm", "seed public memory");
+    const before = git("rev-parse", "HEAD");
+
+    unlinkSync(join(root, ".hunch", "components", "cmp_stale.json"));
+    const result = commitAndPushHunch(join(root, ".hunch"), "hunch: public sync", { push: false });
+
+    assert.equal(result, null);
+    assert.equal(git("rev-parse", "HEAD"), before, "public deletion never creates an automatic code-repo commit");
+    assert.match(git("status", "--porcelain"), /^D \.hunch\/components\/cmp_stale\.json$/);
   } finally { cleanup(); }
 });
 

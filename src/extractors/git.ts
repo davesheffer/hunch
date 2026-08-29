@@ -600,12 +600,28 @@ export function commitAndPushHunch(hunchDir: string, message: string, opts: Hunc
     } else {
       run(["add", "--", "."]);
     }
-    // SAFETY BACKSTOP (critical — bug_overlay_clobber): a memory sync is PURELY ADDITIVE small
-    // JSON. If the staged set contains a DELETION, rename, or any non-.json file, hunchDir is NOT
-    // a clean overlay store — most dangerously, the overlay was never its own git repo so `git -C`
-    // walked UP to the PROJECT repo. Committing/pushing there would overwrite/delete the user's
-    // code (we shipped exactly this). Refuse hard: unstage and bail without committing or pushing.
-    const staged = stagedMemoryPaths(hunchDir, env);
+    // Snapshot replacement can remove stale per-record JSON. Only a push-capable
+    // private/shared store may stage those deletions: the publication boundary
+    // above has already proved that it is a standalone repository distinct from
+    // the protected code repository. `-u` is still scoped to this exact Hunch
+    // subtree, and the staged-set guard below admits only contained JSON deletes.
+    // Public stores retain the older no-deletion rule because they live inside
+    // the user's code repository.
+    if (opts.push !== false && !run([
+      "-c", `core.attributesFile=${gitNullDevice()}`,
+      "-c", "core.autocrlf=false",
+      "add", "-u", "--", ".",
+    ])) {
+      run(["reset", "-q", "--", "."]);
+      return null;
+    }
+
+    // SAFETY BACKSTOP (critical — bug_overlay_clobber): only contained JSON
+    // memory bytes may be committed. Renames, copies, type changes, local.json,
+    // derived artifacts and every path outside this exact Hunch subtree remain
+    // fail-closed. A deletion is admitted only for the already-proven standalone
+    // private/shared repository above; it can never delete protected source.
+    const staged = stagedMemoryPaths(hunchDir, env, opts.push !== false);
     if (staged === null) {
       try { execFileSync("git", ["-C", hunchDir, "reset", "-q", "--", "."], { stdio: "ignore", env }); } catch { /* best-effort unstage */ }
       // Public-store commits (push:false) skip QUIETLY: a non-memory staged set there is
@@ -613,7 +629,7 @@ export function commitAndPushHunch(hunchDir: string, message: string, opts: Hunc
       // stays on disk and the next flush's `git add .` sweeps it up. The overlay path
       // stays loud: there it signals the escaped-to-project-repo misconfiguration.
       if (opts.push !== false) {
-        console.error(`hunch: refusing to auto-commit memory at "${hunchDir}" — the staged change includes deletions or non-memory files, so this is not a clean overlay repo. Nothing was committed or pushed. (Use \`hunch shared --repo <url>\` so the overlay is its OWN git repo.)`);
+        console.error(`hunch: refusing to auto-commit memory at "${hunchDir}" — the staged change includes an unsafe deletion or non-memory file, so this is not a clean overlay repo. Nothing was committed or pushed. (Use \`hunch shared --repo <url>\` so the overlay is its OWN git repo.)`);
       }
       return null;
     }
@@ -737,11 +753,12 @@ export function headFileContent(root: string, rel: string): string | null {
   }
 }
 
-/** Is the staged set a clean, MEMORY-ONLY change — only JSON record adds/updates, nothing else?
- *  The overlay store is entirely JSON (decisions/, bugs/, …, manifest.json). A real memory sync
- *  is purely additive; a DELETION, rename, or any non-.json staged path means hunchDir is NOT a
- *  clean overlay repo (e.g. it resolved to the project repo), so committing there would clobber
- *  code. Empty stage ⇒ [] (nothing to commit); invalid stage ⇒ null. The transient mkdir lock is ignored.
+/** Is the staged set a clean, MEMORY-ONLY change — JSON record adds/updates and,
+ *  only after a separate standalone-overlay proof, JSON record deletions?
+ *  The overlay store is entirely JSON (decisions/, bugs/, …, manifest.json).
+ *  Renames, copies, type changes, local.json, non-.json paths and anything outside
+ *  hunchDir always fail closed. Public stores never admit deletion here. Empty
+ *  stage ⇒ [] (nothing to commit); invalid stage ⇒ null. The transient mkdir lock is ignored.
  *
  *  Returns the derived artifacts it skipped alongside the memory paths. The caller MUST
  *  unstage those: the commit is `--only` over the memory paths, so anything skipped but
@@ -749,13 +766,20 @@ export function headFileContent(root: string, rel: string): string | null {
  *  null on any non-JSON path, and the caller's blanket `reset -- .` swept the index
  *  clean as a side effect of aborting.) */
 interface StagedMemory { memory: string[]; derived: string[] }
-function stagedMemoryPaths(hunchDir: string, env: NodeJS.ProcessEnv): StagedMemory | null {
+function stagedMemoryPaths(
+  hunchDir: string,
+  env: NodeJS.ProcessEnv,
+  allowMemoryDeletions = false,
+): StagedMemory | null {
   let out = "";
   let prefix = "";
   try { prefix = execFileSync("git", ["-C", hunchDir, "rev-parse", "--show-prefix"], { encoding: "utf8", env }).trim().replace(/\\/g, "/"); }
   catch { return null; }
   if (!prefix) return null; // a Hunch layout is a scoped subdirectory, never the whole repository
-  try { out = execFileSync("git", ["-C", hunchDir, "diff", "--cached", "--no-ext-diff", "--no-textconv", "--name-status"], { encoding: "utf8", env }); }
+  // Snapshot ID churn is semantically one delete plus one add. Disable Git's
+  // heuristic rename presentation so the exact paths remain independently
+  // auditable against the contained-memory rules below.
+  try { out = execFileSync("git", ["-C", hunchDir, "diff", "--cached", "--no-ext-diff", "--no-textconv", "--no-renames", "--name-status"], { encoding: "utf8", env }); }
   catch { return null; }
   const lines = out.split("\n").map((l) => l.trim()).filter(Boolean);
   if (!lines.length) return { memory: [], derived: [] };
@@ -766,7 +790,7 @@ function stagedMemoryPaths(hunchDir: string, env: NodeJS.ProcessEnv): StagedMemo
     const status = (parts[0] ?? "").trim();
     const path = (parts[parts.length - 1] ?? "").trim();
     if (path.includes(".hunch-commit.lock")) continue; // transient lock dir, never a record
-    if (!/^[AM]$/.test(status)) return null; // only Add / Modify — any D/R/C/T → not a memory sync
+    if (!/^[AMD]$/.test(status) || (status === "D" && !allowMemoryDeletions)) return null;
     const normalizedPath = path.replace(/\\/g, "/");
     if (!normalizedPath.startsWith(prefix)) return null; // never bless another staged JSON file
     const memoryRelativePath = normalizedPath.slice(prefix.length);
