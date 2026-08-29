@@ -36,12 +36,21 @@ interface Result {
   };
   implementation: {
     commit: string;
+    tree: string;
+    files: Array<{ path: string; role: string; sha256: string }>;
     pull_request: { number: number; url: string };
     validation: {
-      targeted_tests: { status: string };
-      autoreview: { status: string };
-      default_unit_suite: { status: string };
-      mutation: { mutation_code_coverage_percent: number; covered_code_msi_percent: number };
+      targeted_tests: { tests: number; assertions: number; skipped: number; status: string };
+      autoreview: { tests: number; assertions: number; status: string };
+      default_unit_suite: { tests: number; assertions: number; skipped: number; status: string };
+      integration_suite: { tests: number; assertions: number; skipped: number; status: string };
+      mutation: {
+        generated: number;
+        killed: number;
+        escaped: number;
+        mutation_code_coverage_percent: number;
+        covered_code_msi_percent: number;
+      };
       zizmor: { status: string };
     };
   };
@@ -84,7 +93,19 @@ test("the Infection blind issue result stays bound to its frozen baseline and ho
   assert.equal(result.comparison.overall_verdict, "no_measured_lift_navigation_support_only");
   assert.match(result.comparison.claim_boundary, /not a general accuracy or productivity improvement/);
 
-  assert.match(result.implementation.commit, /^[0-9a-f]{40}$/);
+  assert.equal(result.implementation.commit, "787606142d231281e38bc3e8ca169dc1e527466d");
+  assert.equal(result.implementation.tree, "e5dabb07a8d91e19d4007b18ba8ef4a89f1f4442");
+  assert.deepEqual(
+    result.implementation.files.map(({ path }) => path),
+    [
+      "src/FileSystem/Finder/TestFrameworkFinder.php",
+      "src/FileSystem/Finder/ComposerBinExecutableFinder.php",
+      "tests/phpunit/FileSystem/Finder/TestFrameworkFinderTest.php",
+      "tests/phpunit/FileSystem/Finder/ComposerBinExecutableFinderTest.php",
+      "devTools/mago-baseline.toml",
+    ],
+  );
+  assert.ok(result.implementation.files.every(({ sha256: hash }) => /^[0-9a-f]{64}$/.test(hash)));
   assert.deepEqual(result.implementation.pull_request, {
     number: 3524,
     url: "https://github.com/infection/infection/pull/3524",
@@ -97,9 +118,33 @@ test("the Infection blind issue result stays bound to its frozen baseline and ho
       failed: 0,
     },
   });
-  assert.equal(result.implementation.validation.targeted_tests.status, "passed");
-  assert.equal(result.implementation.validation.autoreview.status, "passed");
-  assert.equal(result.implementation.validation.default_unit_suite.status, "passed_with_environment_skips");
+  assert.deepEqual(result.implementation.validation.targeted_tests, {
+    tests: 20,
+    assertions: 36,
+    skipped: 2,
+    status: "passed",
+  });
+  assert.deepEqual(result.implementation.validation.autoreview, {
+    command: "CI=1 make autoreview",
+    tests: 1762,
+    assertions: 1722,
+    status: "passed",
+  });
+  assert.deepEqual(result.implementation.validation.default_unit_suite, {
+    tests: 4837,
+    assertions: 13347,
+    skipped: 4,
+    status: "passed_with_environment_skips",
+  });
+  assert.deepEqual(result.implementation.validation.integration_suite, {
+    tests: 1954,
+    assertions: 3191,
+    skipped: 12,
+    status: "passed_with_environment_skips",
+  });
+  assert.equal(result.implementation.validation.mutation.generated, 43);
+  assert.equal(result.implementation.validation.mutation.killed, 43);
+  assert.equal(result.implementation.validation.mutation.escaped, 0);
   assert.equal(result.implementation.validation.mutation.mutation_code_coverage_percent, 100);
   assert.equal(result.implementation.validation.mutation.covered_code_msi_percent, 100);
   assert.equal(result.implementation.validation.zizmor.status, "passed");

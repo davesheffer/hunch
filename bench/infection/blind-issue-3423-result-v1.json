@@ -1,6 +1,6 @@
 {
   "schema": "hunch.infection-blind-issue-result/1",
-  "completed_at": "2026-08-29T02:28:47Z",
+  "completed_at": "2026-08-29T11:00:26Z",
   "repository": "https://github.com/infection/infection",
   "revision": "94ad32f38ab501f1b3d2a65db97143fca155c402",
   "issue": {
@@ -100,8 +100,8 @@
     "claim_boundary": "This single blind issue validates useful navigation and a successful contribution, not a general accuracy or productivity improvement."
   },
   "implementation": {
-    "commit": "2485172cb39759568e21ee6c621500175861e547",
-    "tree": "b5f3a97700c8642c0c3d165a26b9893d8c1d7b7e",
+    "commit": "787606142d231281e38bc3e8ca169dc1e527466d",
+    "tree": "e5dabb07a8d91e19d4007b18ba8ef4a89f1f4442",
     "pull_request": {
       "number": 3524,
       "url": "https://github.com/infection/infection/pull/3524",
@@ -118,12 +118,22 @@
       {
         "path": "src/FileSystem/Finder/TestFrameworkFinder.php",
         "role": "owner",
-        "sha256": "d6ed8b302b879573ede01940568aa74926dd4f4e04ad427666c161aabc885006"
+        "sha256": "c0e186733612a4827eea4ab6d2828bac7eda63b9a8b0f5846191a8e48fc3eaac"
+      },
+      {
+        "path": "src/FileSystem/Finder/ComposerBinExecutableFinder.php",
+        "role": "platform-aware-composer-bin-resolution",
+        "sha256": "e408279ca070ff8409b23e4e0fd71deb4a75773bf0dfa5314a59662821f80124"
       },
       {
         "path": "tests/phpunit/FileSystem/Finder/TestFrameworkFinderTest.php",
         "role": "regression",
-        "sha256": "2e30610b76e2845d68075b0ed1c5ef6ff0359f77875997ff0ca192812cb6e0e3"
+        "sha256": "89fc35ef42f29e75a6284cae5a2d8faafa354b21b662ff1b3a084593ae0ddf65"
+      },
+      {
+        "path": "tests/phpunit/FileSystem/Finder/ComposerBinExecutableFinderTest.php",
+        "role": "platform-resolution-regression",
+        "sha256": "a04993917eaaadd2ed4ea42291e48a03b726209ce981002bd0eda6fb63ea4326"
       },
       {
         "path": "devTools/mago-baseline.toml",
@@ -134,26 +144,33 @@
     "validation": {
       "runtime": "PHP 8.5.10",
       "targeted_tests": {
-        "tests": 12,
-        "assertions": 27,
+        "tests": 20,
+        "assertions": 36,
+        "skipped": 2,
         "status": "passed"
       },
       "autoreview": {
         "command": "CI=1 make autoreview",
-        "tests": 1761,
-        "assertions": 1721,
+        "tests": 1762,
+        "assertions": 1722,
         "status": "passed"
       },
       "default_unit_suite": {
         "tests": 4837,
-        "assertions": 13349,
-        "skipped": 3,
+        "assertions": 13347,
+        "skipped": 4,
+        "status": "passed_with_environment_skips"
+      },
+      "integration_suite": {
+        "tests": 1954,
+        "assertions": 3191,
+        "skipped": 12,
         "status": "passed_with_environment_skips"
       },
       "mutation": {
         "scope": "changed_lines",
-        "generated": 28,
-        "killed": 28,
+        "generated": 43,
+        "killed": 43,
         "escaped": 0,
         "ignored": 0,
         "mutation_code_coverage_percent": 100,
