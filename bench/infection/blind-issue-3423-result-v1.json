@@ -1,0 +1,174 @@
+{
+  "schema": "hunch.infection-blind-issue-result/1",
+  "completed_at": "2026-08-29T02:28:47Z",
+  "repository": "https://github.com/infection/infection",
+  "revision": "94ad32f38ab501f1b3d2a65db97143fca155c402",
+  "issue": {
+    "number": 3423,
+    "url": "https://github.com/infection/infection/issues/3423",
+    "title": "bug: TestFrameworkFinder can break tools resolution"
+  },
+  "preregistration": {
+    "path": "bench/infection/blind-issue-3423-preregistration-v1.json",
+    "commit": "37ade30bf80ad3a06cd175960d3b759deb527e78",
+    "sha256": "96940f856fb03b574dca6803eede65dbf3b7d0554d78b4bb22b1a037a869d68a"
+  },
+  "hunch": {
+    "version": "1.20.0",
+    "implementation_revision": "2f6fe1a87a90b8a42d7c61997c20d07935a4dad4",
+    "arm_metadata_commit": "2dbd477e7107ea2050155e5ce4d480033d330d06",
+    "index": {
+      "symbols": 9791,
+      "edges": 46027,
+      "components": 34,
+      "decisions": 13,
+      "bugs": 0,
+      "constraints": 0
+    }
+  },
+  "arms": {
+    "baseline": {
+      "hunch_used": false,
+      "method": "Issue text, repository instructions, source, tests, analogous finder and Git history inspected with Git and ripgrep only.",
+      "expected_owner_files": [
+        "src/FileSystem/Finder/TestFrameworkFinder.php",
+        "tests/phpunit/FileSystem/Finder/TestFrameworkFinderTest.php"
+      ],
+      "owner_file_hits": 2,
+      "diagnosis_frozen_before_hunch": true
+    },
+    "hunch": {
+      "isolated_clone": true,
+      "same_source_revision": true,
+      "prompt": "bug: TestFrameworkFinder can break tools resolution. Finding a project-local test-framework executable should keep project-local-first precedence without permanently mutating the process PATH used by later executable lookups or child processes.",
+      "shortlist": {
+        "likely_file": "src/FileSystem/Finder/TestFrameworkFinder.php",
+        "selected_files": [
+          "src/FileSystem/Finder/TestFrameworkFinder.php",
+          "src/FileSystem/Finder/ConcreteComposerExecutableFinder.php",
+          "src/FileSystem/Finder/MemoizedComposerExecutableFinder.php",
+          "src/FileSystem/Finder/StaticAnalysisToolExecutableFinder.php",
+          "src/Config/ValueProvider/PhpUnitCustomExecutablePathProvider.php"
+        ],
+        "expected_owner_file_hits": 1,
+        "expected_owner_file_total": 2,
+        "exact_owner_enabled": false,
+        "files_read": 626,
+        "bytes_read": 2277279,
+        "files_skipped": 0,
+        "cluster_receipt_id": "79135d0c0fd36a0c5f8bbfef",
+        "inspection_receipt_id": "2c779f46425d74ba51fca395"
+      },
+      "free_text_context": {
+        "expected_owner_files_returned": [
+          "tests/phpunit/FileSystem/Finder/TestFrameworkFinderTest.php"
+        ],
+        "relevant_symbols_returned": [
+          "test_it_finds_framework_executable",
+          "test_it_adds_vendor_bin_to_path_with_a_local_composer_phar",
+          "shouldUseCustomPath"
+        ]
+      },
+      "why": {
+        "target": "src/FileSystem/Finder/TestFrameworkFinder.php",
+        "recorded_decisions": 0,
+        "recorded_bugs": 0,
+        "recorded_constraints": 0
+      },
+      "combined_owner_file_hits": 2
+    }
+  },
+  "comparison": {
+    "primary": {
+      "metric": "Both preregistered owner files appear in the bounded shortlist inspection plan.",
+      "baseline_hits": 2,
+      "hunch_shortlist_hits": 1,
+      "total": 2,
+      "verdict": "failed"
+    },
+    "secondary": {
+      "metric": "Hunch adds a correct repository-specific constraint, dependency or risk that changes the implementation or validation plan.",
+      "changed_plan": false,
+      "verdict": "no_lift"
+    },
+    "qualitative_support": [
+      "Free-text context surfaced the exact regression-test file and two relevant test methods.",
+      "The shortlist surfaced StaticAnalysisToolExecutableFinder as the analogous side-effect boundary already found by the baseline investigation."
+    ],
+    "baseline_correction": "Symfony ExecutableFinder appends extraDirs after PATH, so merely passing Composer's bin directory as an extra directory would not preserve the preregistered project-local-first requirement. The verified fix explicitly probes Composer's bin before using the unchanged PATH. Hunch did not surface this library behavior.",
+    "overall_verdict": "no_measured_lift_navigation_support_only",
+    "claim_boundary": "This single blind issue validates useful navigation and a successful contribution, not a general accuracy or productivity improvement."
+  },
+  "implementation": {
+    "commit": "2485172cb39759568e21ee6c621500175861e547",
+    "tree": "b5f3a97700c8642c0c3d165a26b9893d8c1d7b7e",
+    "pull_request": {
+      "number": 3524,
+      "url": "https://github.com/infection/infection/pull/3524",
+      "state_at_recording": "open",
+      "mergeable_at_recording": true,
+      "upstream_ci_at_recording": "passed",
+      "upstream_checks": {
+        "total": 61,
+        "passed": 61,
+        "failed": 0
+      }
+    },
+    "files": [
+      {
+        "path": "src/FileSystem/Finder/TestFrameworkFinder.php",
+        "role": "owner",
+        "sha256": "d6ed8b302b879573ede01940568aa74926dd4f4e04ad427666c161aabc885006"
+      },
+      {
+        "path": "tests/phpunit/FileSystem/Finder/TestFrameworkFinderTest.php",
+        "role": "regression",
+        "sha256": "2e30610b76e2845d68075b0ed1c5ef6ff0359f77875997ff0ca192812cb6e0e3"
+      },
+      {
+        "path": "devTools/mago-baseline.toml",
+        "role": "obsolete-baseline-entry-removal",
+        "sha256": "595705a4d25aefe64307383275ef2d4f8994dc48b20f71bbb825f71fa10840cc"
+      }
+    ],
+    "validation": {
+      "runtime": "PHP 8.5.10",
+      "targeted_tests": {
+        "tests": 12,
+        "assertions": 27,
+        "status": "passed"
+      },
+      "autoreview": {
+        "command": "CI=1 make autoreview",
+        "tests": 1761,
+        "assertions": 1721,
+        "status": "passed"
+      },
+      "default_unit_suite": {
+        "tests": 4837,
+        "assertions": 13349,
+        "skipped": 3,
+        "status": "passed_with_environment_skips"
+      },
+      "mutation": {
+        "scope": "changed_lines",
+        "generated": 28,
+        "killed": 28,
+        "escaped": 0,
+        "ignored": 0,
+        "mutation_code_coverage_percent": 100,
+        "covered_code_msi_percent": 100
+      },
+      "zizmor": {
+        "version": "1.29.0",
+        "findings": 0,
+        "status": "passed"
+      }
+    }
+  },
+  "publication": {
+    "rule_satisfied": true,
+    "reason": "The experiment produced a verified regression fix and public Infection pull request despite no measured Hunch accuracy lift.",
+    "marketing_claim_allowed": false
+  }
+}
