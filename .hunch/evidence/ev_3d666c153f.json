@@ -1,0 +1,39 @@
+{
+  "id": "ev_3d666c153f",
+  "kind": "correction",
+  "occurred_at": "2026-08-28T18:35:00.000Z",
+  "repository": "git-remote:sha256:801e97f9f304a28a5268713d3cb80e058933b84e243c849f687345cfb9eb842a",
+  "files": [
+    "src/integrations/claudeConfig.ts",
+    "src/integrations/claudemd.ts",
+    "src/integrations/providers.ts",
+    "src/integrations/scaffold.ts"
+  ],
+  "symbols": [],
+  "text_ref": "con_8460b6770f",
+  "related_records": [
+    "con_8460b6770f",
+    "dec_261e42920c"
+  ],
+  "data_class": "public",
+  "content_hash": "sha1:9ed9e54e043a3bb41afcd7c71a122c2ba023ae66",
+  "compiler": {
+    "status": "uncompilable",
+    "policy": null,
+    "reason": "Correction has 4 scopes; exactly one concrete file is required. The legacy Constraint remains active.",
+    "scope_suggestion": {
+      "repos": [],
+      "paths": [],
+      "components": []
+    }
+  },
+  "provenance": {
+    "source": "derived",
+    "confidence": 1,
+    "evidence": [
+      "con_8460b6770f",
+      "https://github.com/davesheffer/hunch/issues/94"
+    ],
+    "last_verified": "2026-08-28T18:35:00.000Z"
+  }
+}
