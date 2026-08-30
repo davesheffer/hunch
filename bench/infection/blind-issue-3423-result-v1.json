@@ -1,6 +1,6 @@
 {
   "schema": "hunch.infection-blind-issue-result/1",
-  "completed_at": "2026-08-29T11:00:26Z",
+  "completed_at": "2026-08-30T03:37:41Z",
   "repository": "https://github.com/infection/infection",
   "revision": "94ad32f38ab501f1b3d2a65db97143fca155c402",
   "issue": {
@@ -99,9 +99,50 @@
     "overall_verdict": "no_measured_lift_navigation_support_only",
     "claim_boundary": "This single blind issue validates useful navigation and a successful contribution, not a general accuracy or productivity improvement."
   },
+  "review_learning": {
+    "source_review": "https://github.com/infection/infection/pull/3524#pullrequestreview-5060205489",
+    "summary_reply": "https://github.com/infection/infection/pull/3524#issuecomment-5466507511",
+    "observed_after_blind_run": true,
+    "counts_as_original_hunch_lift": false,
+    "hunch_constraint_candidates": [
+      {
+        "statement": "Executable-resolution boundaries used by finder orchestration should be injected so platform behavior can be tested independently.",
+        "scope": [
+          "src/FileSystem/Finder/TestFrameworkFinder.php",
+          "src/FileSystem/Finder/ComposerBinExecutableFinder.php"
+        ],
+        "type": "architecture",
+        "severity": "warning"
+      },
+      {
+        "statement": "Finder orchestration should use Infection's FileSystem abstraction for existence checks instead of direct filesystem functions.",
+        "scope": [
+          "src/FileSystem/Finder/**"
+        ],
+        "type": "architecture",
+        "severity": "warning"
+      },
+      {
+        "statement": "Build executable suffix candidates once with the extensionless candidate first.",
+        "scope": [
+          "src/FileSystem/Finder/ComposerBinExecutableFinder.php"
+        ],
+        "type": "correctness",
+        "severity": "advisory"
+      },
+      {
+        "statement": "Keep a code comment only when it adds a concrete reason that is not already clear from the code.",
+        "scope": [
+          "src/FileSystem/Finder/**"
+        ],
+        "type": "architecture",
+        "severity": "advisory"
+      }
+    ]
+  },
   "implementation": {
-    "commit": "787606142d231281e38bc3e8ca169dc1e527466d",
-    "tree": "e5dabb07a8d91e19d4007b18ba8ef4a89f1f4442",
+    "commit": "04545fd8bb8e27fa4cfde3f67b4daf4820e5939d",
+    "tree": "06f85c60a12f524234e25bcc5f5dfde3f6a3b4e4",
     "pull_request": {
       "number": 3524,
       "url": "https://github.com/infection/infection/pull/3524",
@@ -116,24 +157,29 @@
     },
     "files": [
       {
+        "path": "src/Command/ConfigureCommand.php",
+        "role": "composition-root-wiring",
+        "sha256": "193f8d5e1f6e91eaa2e5392950e9178746e01fce55ff9f8b4f52d4ce009e9d44"
+      },
+      {
         "path": "src/FileSystem/Finder/TestFrameworkFinder.php",
         "role": "owner",
-        "sha256": "c0e186733612a4827eea4ab6d2828bac7eda63b9a8b0f5846191a8e48fc3eaac"
+        "sha256": "af76a4cdbb5d2e2c1dabae53321f1e621eb73f9528e0f9438cb0ed3d9606a9e6"
       },
       {
         "path": "src/FileSystem/Finder/ComposerBinExecutableFinder.php",
         "role": "platform-aware-composer-bin-resolution",
-        "sha256": "e408279ca070ff8409b23e4e0fd71deb4a75773bf0dfa5314a59662821f80124"
+        "sha256": "a8f7771d46348524ced22f45ff283606a36e794adfe0ecea5d9b6929efd644c1"
       },
       {
         "path": "tests/phpunit/FileSystem/Finder/TestFrameworkFinderTest.php",
         "role": "regression",
-        "sha256": "89fc35ef42f29e75a6284cae5a2d8faafa354b21b662ff1b3a084593ae0ddf65"
+        "sha256": "c5ecf43610026eee6c6dff871523b6aa9b1c72af83b8b8f9aad97b7728420c5a"
       },
       {
         "path": "tests/phpunit/FileSystem/Finder/ComposerBinExecutableFinderTest.php",
         "role": "platform-resolution-regression",
-        "sha256": "a04993917eaaadd2ed4ea42291e48a03b726209ce981002bd0eda6fb63ea4326"
+        "sha256": "223a12281b69902f5cf76bcc78064112fb542d6b3fabf60679dd8b9dba4a4d45"
       },
       {
         "path": "devTools/mago-baseline.toml",
@@ -145,8 +191,8 @@
       "runtime": "PHP 8.5.10",
       "targeted_tests": {
         "tests": 20,
-        "assertions": 36,
-        "skipped": 2,
+        "assertions": 42,
+        "skipped": 0,
         "status": "passed"
       },
       "autoreview": {
@@ -162,15 +208,15 @@
         "status": "passed_with_environment_skips"
       },
       "integration_suite": {
-        "tests": 1954,
-        "assertions": 3191,
-        "skipped": 12,
+        "tests": 1950,
+        "assertions": 3188,
+        "skipped": 10,
         "status": "passed_with_environment_skips"
       },
       "mutation": {
         "scope": "changed_lines",
-        "generated": 43,
-        "killed": 43,
+        "generated": 47,
+        "killed": 47,
         "escaped": 0,
         "ignored": 0,
         "mutation_code_coverage_percent": 100,

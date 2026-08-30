@@ -34,6 +34,17 @@ interface Result {
     overall_verdict: string;
     claim_boundary: string;
   };
+  review_learning: {
+    source_review: string;
+    observed_after_blind_run: boolean;
+    counts_as_original_hunch_lift: boolean;
+    hunch_constraint_candidates: Array<{
+      statement: string;
+      scope: string[];
+      type: string;
+      severity: string;
+    }>;
+  };
   implementation: {
     commit: string;
     tree: string;
@@ -93,11 +104,21 @@ test("the Infection blind issue result stays bound to its frozen baseline and ho
   assert.equal(result.comparison.overall_verdict, "no_measured_lift_navigation_support_only");
   assert.match(result.comparison.claim_boundary, /not a general accuracy or productivity improvement/);
 
-  assert.equal(result.implementation.commit, "787606142d231281e38bc3e8ca169dc1e527466d");
-  assert.equal(result.implementation.tree, "e5dabb07a8d91e19d4007b18ba8ef4a89f1f4442");
+  assert.equal(result.review_learning.observed_after_blind_run, true);
+  assert.equal(result.review_learning.counts_as_original_hunch_lift, false);
+  assert.match(result.review_learning.source_review, /pullrequestreview-5060205489$/);
+  assert.equal(result.review_learning.hunch_constraint_candidates.length, 4);
+  assert.deepEqual(
+    result.review_learning.hunch_constraint_candidates.map(({ severity }) => severity),
+    ["warning", "warning", "advisory", "advisory"],
+  );
+
+  assert.equal(result.implementation.commit, "04545fd8bb8e27fa4cfde3f67b4daf4820e5939d");
+  assert.equal(result.implementation.tree, "06f85c60a12f524234e25bcc5f5dfde3f6a3b4e4");
   assert.deepEqual(
     result.implementation.files.map(({ path }) => path),
     [
+      "src/Command/ConfigureCommand.php",
       "src/FileSystem/Finder/TestFrameworkFinder.php",
       "src/FileSystem/Finder/ComposerBinExecutableFinder.php",
       "tests/phpunit/FileSystem/Finder/TestFrameworkFinderTest.php",
@@ -120,8 +141,8 @@ test("the Infection blind issue result stays bound to its frozen baseline and ho
   });
   assert.deepEqual(result.implementation.validation.targeted_tests, {
     tests: 20,
-    assertions: 36,
-    skipped: 2,
+    assertions: 42,
+    skipped: 0,
     status: "passed",
   });
   assert.deepEqual(result.implementation.validation.autoreview, {
@@ -137,13 +158,13 @@ test("the Infection blind issue result stays bound to its frozen baseline and ho
     status: "passed_with_environment_skips",
   });
   assert.deepEqual(result.implementation.validation.integration_suite, {
-    tests: 1954,
-    assertions: 3191,
-    skipped: 12,
+    tests: 1950,
+    assertions: 3188,
+    skipped: 10,
     status: "passed_with_environment_skips",
   });
-  assert.equal(result.implementation.validation.mutation.generated, 43);
-  assert.equal(result.implementation.validation.mutation.killed, 43);
+  assert.equal(result.implementation.validation.mutation.generated, 47);
+  assert.equal(result.implementation.validation.mutation.killed, 47);
   assert.equal(result.implementation.validation.mutation.escaped, 0);
   assert.equal(result.implementation.validation.mutation.mutation_code_coverage_percent, 100);
   assert.equal(result.implementation.validation.mutation.covered_code_msi_percent, 100);
