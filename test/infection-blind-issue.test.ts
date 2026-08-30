@@ -40,6 +40,7 @@ interface Result {
     counts_as_original_hunch_lift: boolean;
     hunch_constraint_candidates: Array<{
       statement: string;
+      source_comment: string;
       scope: string[];
       type: string;
       severity: string;
@@ -106,8 +107,17 @@ test("the Infection blind issue result stays bound to its frozen baseline and ho
 
   assert.equal(result.review_learning.observed_after_blind_run, true);
   assert.equal(result.review_learning.counts_as_original_hunch_lift, false);
-  assert.match(result.review_learning.source_review, /pullrequestreview-5060205489$/);
+  assert.match(result.review_learning.source_review, /pullrequestreview-5059517665$/);
   assert.equal(result.review_learning.hunch_constraint_candidates.length, 4);
+  assert.deepEqual(
+    result.review_learning.hunch_constraint_candidates.map(({ source_comment }) => source_comment),
+    [
+      "https://github.com/infection/infection/pull/3524#discussion_r3888020054",
+      "https://github.com/infection/infection/pull/3524#discussion_r3888022707",
+      "https://github.com/infection/infection/pull/3524#discussion_r3888015207",
+      "https://github.com/infection/infection/pull/3524#discussion_r3888012729",
+    ],
+  );
   assert.deepEqual(
     result.review_learning.hunch_constraint_candidates.map(({ severity }) => severity),
     ["warning", "warning", "advisory", "advisory"],

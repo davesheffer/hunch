@@ -100,13 +100,14 @@
     "claim_boundary": "This single blind issue validates useful navigation and a successful contribution, not a general accuracy or productivity improvement."
   },
   "review_learning": {
-    "source_review": "https://github.com/infection/infection/pull/3524#pullrequestreview-5060205489",
+    "source_review": "https://github.com/infection/infection/pull/3524#pullrequestreview-5059517665",
     "summary_reply": "https://github.com/infection/infection/pull/3524#issuecomment-5466507511",
     "observed_after_blind_run": true,
     "counts_as_original_hunch_lift": false,
     "hunch_constraint_candidates": [
       {
         "statement": "Executable-resolution boundaries used by finder orchestration should be injected so platform behavior can be tested independently.",
+        "source_comment": "https://github.com/infection/infection/pull/3524#discussion_r3888020054",
         "scope": [
           "src/FileSystem/Finder/TestFrameworkFinder.php",
           "src/FileSystem/Finder/ComposerBinExecutableFinder.php"
@@ -116,6 +117,7 @@
       },
       {
         "statement": "Finder orchestration should use Infection's FileSystem abstraction for existence checks instead of direct filesystem functions.",
+        "source_comment": "https://github.com/infection/infection/pull/3524#discussion_r3888022707",
         "scope": [
           "src/FileSystem/Finder/**"
         ],
@@ -124,6 +126,7 @@
       },
       {
         "statement": "Build executable suffix candidates once with the extensionless candidate first.",
+        "source_comment": "https://github.com/infection/infection/pull/3524#discussion_r3888015207",
         "scope": [
           "src/FileSystem/Finder/ComposerBinExecutableFinder.php"
         ],
@@ -132,6 +135,7 @@
       },
       {
         "statement": "Keep a code comment only when it adds a concrete reason that is not already clear from the code.",
+        "source_comment": "https://github.com/infection/infection/pull/3524#discussion_r3888012729",
         "scope": [
           "src/FileSystem/Finder/**"
         ],
