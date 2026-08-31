@@ -1,0 +1,51 @@
+{
+  "id": "dec_e619b6d3b6",
+  "title": "feat(project-dna): add authorized host evidence",
+  "topic": null,
+  "status": "accepted",
+  "context": "What changed: added ProjectDnaDiscoveryOptions, hostEvidenceEvidence, collectHostEvidenceTraits, ProjectDnaHostEvidenceKind, ProjectDnaHostEvidenceDisposition, ProjectDnaHostEvidenceAuthorRole, ProjectDnaHostEvidenceCandidate, ProjectDnaHostEvidenceItem; changed ProjectDnaEvidenceKind, discoverProjectDna; new dep(s): node:crypto, node:assert/strict, node:child_process, node:fs, node:path, node:test; 2 new file(s).",
+  "decision": "Introduced src/core, src/projectDna.ts, test/infection-project-dna-acceptance.test.ts, test/project-dna.test.ts: added ProjectDnaDiscoveryOptions, hostEvidenceEvidence, collectHostEvidenceTraits, ProjectDnaHostEvidenceKind, ProjectDnaHostEvidenceDisposition, ProjectDnaHostEvidenceAuthorRole, ProjectDnaHostEvidenceCandidate, ProjectDnaHostEvidenceItem; changed ProjectDnaEvidenceKind, discoverProjectDna; new dep(s): node:crypto, node:assert/strict, node:child_process, node:fs, node:path, node:test; 2 new file(s).",
+  "consequences": [
+    "Adds dependency: node:crypto, node:assert/strict, node:child_process, node:fs, node:path, node:test.",
+    "Changes ProjectDnaEvidenceKind, discoverProjectDna (signature/behavior)."
+  ],
+  "alternatives_rejected": [],
+  "rejected_tripwires": [],
+  "related_components": [
+    "cmp_a94a8fe5cc",
+    "cmp_b256a6aed0"
+  ],
+  "related_files": [
+    "src/core/projectDna.ts",
+    "src/core/projectDnaHostEvidence.ts",
+    "src/projectDna.ts",
+    "test/infection-project-dna-acceptance.test.ts",
+    "test/project-dna.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "143c867",
+  "valid_from": "2026-08-31T14:42:35+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "inferred",
+    "confidence": 0.45,
+    "evidence": [
+      "commit:143c867",
+      "synth:provider=deterministic",
+      "branch:feat/project-dna-host-evidence",
+      "src/core/projectDna.ts",
+      "src/core/projectDnaHostEvidence.ts",
+      "src/projectDna.ts",
+      "test/infection-project-dna-acceptance.test.ts",
+      "test/project-dna.test.ts"
+    ],
+    "last_verified": "2026-08-31T11:43:20.609Z"
+  },
+  "date": "2026-08-31T14:42:35+03:00"
+}
