@@ -1,0 +1,42 @@
+{
+  "id": "dec_561cb50359",
+  "title": "chore(release): cut 1.22.0",
+  "topic": null,
+  "status": "accepted",
+  "context": "Touched 2 file(s) across .github/workflows, tooling/changelog-locales.mjs.",
+  "decision": "Changed code in .github/workflows, tooling/changelog-locales.mjs (2 file(s)).",
+  "consequences": [],
+  "alternatives_rejected": [],
+  "rejected_tripwires": [],
+  "related_components": [
+    "cmp_04c6efb58b",
+    "cmp_4c40eab00f"
+  ],
+  "related_files": [
+    ".github/workflows/release.yml",
+    "tooling/changelog-locales.mjs"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "e5f4be9",
+  "valid_from": "2026-08-31T14:56:09+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "inferred",
+    "confidence": 0.3,
+    "evidence": [
+      "commit:e5f4be9",
+      "synth:provider=deterministic",
+      "branch:release/1.22.0",
+      ".github/workflows/release.yml",
+      "tooling/changelog-locales.mjs"
+    ],
+    "last_verified": "2026-08-31T11:56:55.614Z"
+  },
+  "date": "2026-08-31T14:56:09+03:00"
+}
