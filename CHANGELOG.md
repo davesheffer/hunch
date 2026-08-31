@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## 1.22.0 — 2026-08-31
+
+### Project DNA learns from authorized collaboration evidence
+
+Hunch can now derive repository-native vocabulary and contribution guidance from bounded,
+caller-supplied pull-request and review evidence. Every evidence batch is canonical, sealed, tied to
+an exact Git revision and validated before use; raw collaboration text never enters the Project DNA
+profile, while each derived trait retains an explainable evidence reference.
+
+The public `@davesheffer/hunch/project-dna` library surface now includes the typed evidence contract,
+validator and stable TypeScript declarations needed by cross-repository consumers. Existing callers
+that provide no host evidence keep the same deterministic code-and-memory-only profile.
+
 ## 1.21.1 — 2026-08-31
 
 ### The agent speaks the repository's language
