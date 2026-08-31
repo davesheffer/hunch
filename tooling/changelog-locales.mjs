@@ -8,6 +8,7 @@ export const changelogLocales = {
       footer: "© Hunch — התאמה ארכיטקטונית לקוד AI.", home: "בית", githubReleases: "גרסאות ב-GitHub"
     },
     titles: [
+      "רענון גרף קר עומד בתקציב המחמיר",
       "Project DNA לומדת מראיות שיתוף פעולה מורשות",
       "הסוכן מדבר בשפה של המאגר",
       "מחיקות בתמונת מצב נשמרות בלי לסכן קוד מקור",
@@ -43,6 +44,7 @@ export const changelogLocales = {
       footer: "© Hunch — архитектурное соответствие для ИИ-кода.", home: "Главная", githubReleases: "Релизы на GitHub"
     },
     titles: [
+      "Холодное обновление графа укладывается в строгий бюджет",
       "Project DNA учится на разрешённых данных совместной работы",
       "Агент говорит на языке репозитория",
       "Удаления снимка сохраняются без риска для исходного кода",
@@ -78,6 +80,7 @@ export const changelogLocales = {
       footer: "© Hunch — التوافق المعماري لكود الذكاء الاصطناعي.", home: "الرئيسية", githubReleases: "الإصدارات على GitHub"
     },
     titles: [
+      "تحديث الرسم البياني البارد يلتزم بالميزانية الصارمة",
       "يتعلم Project DNA من أدلة التعاون المصرح بها",
       "الوكيل يتحدث بلغة المستودع",
       "تُحفظ عمليات حذف اللقطة دون تعريض الشفرة المصدرية للخطر",
@@ -113,6 +116,7 @@ export const changelogLocales = {
       footer: "© Hunch — conformidad arquitectónica para código de IA.", home: "Inicio", githubReleases: "Versiones en GitHub"
     },
     titles: [
+      "La actualización fría del grafo cabe en el presupuesto estricto",
       "Project DNA aprende de evidencia de colaboración autorizada",
       "El agente habla el idioma del repositorio",
       "Las eliminaciones de instantáneas persisten sin poner en riesgo el código fuente",

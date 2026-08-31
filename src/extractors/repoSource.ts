@@ -11,6 +11,8 @@ import { languageFor } from "./languages.js";
 const SKIP_DIRS = new Set(["node_modules", ".git", "dist", "build", ".hunch", "coverage", ".next", "out"]);
 const ORDINARY_BLOB_MODES = new Set(["100644", "100755"]);
 const GIT_MAX_LISTING_BYTES = 64 * 1024 * 1024;
+const GIT_MAX_BLOB_BATCH_BYTES = 64 * 1024 * 1024;
+const GIT_MAX_BLOB_BATCH_ITEMS = 128;
 
 export type RepoScanSource =
   | { kind: "checkout" }
@@ -106,6 +108,17 @@ function gitBuffer(root: string, args: string[], maxBuffer = GIT_MAX_LISTING_BYT
     env: gitEnv(preserveInvocationIndex),
     maxBuffer,
     stdio: ["ignore", "pipe", "ignore"],
+    timeout: 15_000,
+  });
+}
+
+function gitBufferInput(root: string, args: string[], input: string, maxBuffer: number): Buffer {
+  return execFileSync("git", ["-C", root, ...args], {
+    encoding: "buffer",
+    env: gitEnv(),
+    input: Buffer.from(input, "ascii"),
+    maxBuffer,
+    stdio: ["pipe", "pipe", "ignore"],
     timeout: 15_000,
   });
 }
@@ -240,6 +253,149 @@ function gitBlobEntry(root: string, path: string, mode: string, oid: string): Re
   };
 }
 
+interface GitBlobCandidate {
+  path: string;
+  mode: string;
+  oid: string;
+}
+
+interface CheckedGitBlob extends GitBlobCandidate {
+  size: number;
+}
+
+/** Resolve blob type/size for a complete immutable tree in one Git process.
+ * Oversized blobs are rejected before hydration, preserving the source byte
+ * limit without paying one `cat-file -t` and `cat-file -s` spawn per path. */
+function checkedGitBlobs(
+  root: string,
+  candidates: GitBlobCandidate[],
+): { readable: CheckedGitBlob[]; rejected: RepoSourceEntry[] } {
+  if (candidates.length === 0) return { readable: [], rejected: [] };
+  const raw = gitBufferInput(
+    root,
+    ["cat-file", "--batch-check=%(objectname) %(objecttype) %(objectsize)"],
+    `${candidates.map((candidate) => candidate.oid).join("\n")}\n`,
+    GIT_MAX_LISTING_BYTES,
+  ).toString("ascii");
+  const lines = raw.endsWith("\n") ? raw.slice(0, -1).split("\n") : raw.split("\n");
+  if (lines.length !== candidates.length) throw new Error("Git blob batch check returned an incomplete result");
+
+  const readable: CheckedGitBlob[] = [];
+  const rejected: RepoSourceEntry[] = [];
+  for (const [index, candidate] of candidates.entries()) {
+    const line = lines[index] ?? "";
+    const match = line.match(/^([0-9a-f]{40,64}) ([a-z]+) ([0-9]+)$/i);
+    const size = match ? Number(match[3]) : Number.NaN;
+    if (!match || match[1]!.toLowerCase() !== candidate.oid || match[2] !== "blob"
+      || !Number.isSafeInteger(size) || size < 0) {
+      rejected.push(issueEntry(
+        candidate.path,
+        candidate.mode,
+        "read_failed",
+        `${candidate.path} does not resolve to an ordinary blob`,
+      ));
+    } else if (size > MAX_REPO_SOURCE_FILE_BYTES) {
+      rejected.push(issueEntry(
+        candidate.path,
+        candidate.mode,
+        "oversized",
+        `${candidate.path} exceeds the ${MAX_REPO_SOURCE_FILE_BYTES}-byte source limit`,
+      ));
+    } else {
+      readable.push({ ...candidate, size });
+    }
+  }
+  return { readable, rejected };
+}
+
+function readGitBlobBatch(root: string, batch: CheckedGitBlob[]): RepoSourceRead[] {
+  try {
+    const expectedBytes = batch.reduce((total, candidate) => total + candidate.size + 160, 0);
+    const raw = gitBufferInput(
+      root,
+      ["cat-file", "--batch"],
+      `${batch.map((candidate) => candidate.oid).join("\n")}\n`,
+      Math.max(1024 * 1024, expectedBytes),
+    );
+    const results: RepoSourceRead[] = [];
+    let cursor = 0;
+    for (const candidate of batch) {
+      const headerEnd = raw.indexOf(0x0a, cursor);
+      if (headerEnd < 0) throw new Error("Git blob batch omitted an object header");
+      const header = raw.subarray(cursor, headerEnd).toString("ascii");
+      const match = header.match(/^([0-9a-f]{40,64}) blob ([0-9]+)$/i);
+      const size = match ? Number(match[2]) : Number.NaN;
+      if (!match || match[1]!.toLowerCase() !== candidate.oid || size !== candidate.size) {
+        throw new Error("Git blob batch returned a different object than requested");
+      }
+      const contentStart = headerEnd + 1;
+      const contentEnd = contentStart + size;
+      if (contentEnd >= raw.length || raw[contentEnd] !== 0x0a) {
+        throw new Error("Git blob batch returned a truncated object");
+      }
+      results.push(decodedSource(candidate.path, candidate.mode, raw.subarray(contentStart, contentEnd)));
+      cursor = contentEnd + 1;
+    }
+    if (cursor !== raw.length) throw new Error("Git blob batch returned trailing bytes");
+    return results;
+  } catch {
+    return batch.map((candidate) => ({
+      source: null,
+      mode: candidate.mode,
+      issue: {
+        path: candidate.path,
+        code: "read_failed",
+        detail: `${candidate.path} blob could not be read`,
+      },
+    }));
+  }
+}
+
+/** Hydrate exact-tree blobs through bounded `git cat-file --batch` groups.
+ * Normal scan consumers read each entry once; a repeated read retains the old
+ * entry contract by falling back to the single-blob path. Completed batches
+ * release their decoded payloads so a large repo never accumulates every source
+ * body in memory at once. */
+function batchedGitBlobEntries(root: string, candidates: CheckedGitBlob[]): RepoSourceEntry[] {
+  const groups: CheckedGitBlob[][] = [];
+  let group: CheckedGitBlob[] = [];
+  let groupBytes = 0;
+  for (const candidate of candidates) {
+    if (group.length > 0 && (group.length >= GIT_MAX_BLOB_BATCH_ITEMS
+      || groupBytes + candidate.size > GIT_MAX_BLOB_BATCH_BYTES)) {
+      groups.push(group);
+      group = [];
+      groupBytes = 0;
+    }
+    group.push(candidate);
+    groupBytes += candidate.size;
+  }
+  if (group.length > 0) groups.push(group);
+
+  return groups.flatMap((batch) => {
+    let loaded: Array<RepoSourceRead | undefined> | null = null;
+    let unread = batch.length;
+    return batch.map((candidate, index) => {
+      let firstRead = true;
+      return {
+        path: candidate.path,
+        mode: candidate.mode,
+        read: () => {
+          if (!firstRead) return gitBlobEntry(root, candidate.path, candidate.mode, candidate.oid).read();
+          firstRead = false;
+          loaded ??= readGitBlobBatch(root, batch);
+          const result = loaded[index];
+          if (!result) throw new Error(`Git blob batch lost ${candidate.path}`);
+          loaded[index] = undefined;
+          unread--;
+          if (unread === 0) loaded = null;
+          return result;
+        },
+      };
+    });
+  });
+}
+
 interface IndexRow {
   path: string;
   mode: string;
@@ -323,6 +479,7 @@ function treeInventory(root: string, kind: "commit" | "base", ref: string): Repo
   const revision = exactCommit(root, ref);
   const raw = gitBuffer(root, ["ls-tree", "--full-tree", "-r", "-z", revision]);
   const entries: RepoSourceEntry[] = [];
+  const blobCandidates: GitBlobCandidate[] = [];
   for (const record of nulRecords(raw)) {
     const tab = record.indexOf(0x09);
     if (tab < 0) throw new Error(`could not parse exact ${kind} tree ${revision}`);
@@ -345,9 +502,11 @@ function treeInventory(root: string, kind: "commit" | "base", ref: string): Repo
     } else if (type !== "blob" || !ORDINARY_BLOB_MODES.has(mode)) {
       entries.push(issueEntry(path, mode, "unsafe_mode", `${path} uses unsupported Git ${type} mode ${mode}`));
     } else {
-      entries.push(gitBlobEntry(root, path, mode, oid));
+      blobCandidates.push({ path, mode, oid });
     }
   }
+  const checked = checkedGitBlobs(root, blobCandidates);
+  entries.push(...checked.rejected, ...batchedGitBlobEntries(root, checked.readable));
   entries.sort((left, right) => compareCodeUnits(left.path, right.path));
   return { identity: { kind, revision }, entries };
 }

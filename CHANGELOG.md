@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+## 1.22.1 — 2026-08-31
+
+### Cold graph refresh fits the strict budget
+
+Exact-commit scans now validate immutable Git blobs once, then hydrate them through bounded
+`git cat-file --batch` processes. Per-file type, size, UTF-8, content-hash and repeat-read guarantees
+remain intact, while a 1,009-file ORC scan fell from 41.0 seconds to 3.0 seconds. The complete cold
+path through a separate Hunch Memory server took 5.0 seconds, and ORC retrieval completed in 6.27
+seconds—inside its strict 10-second budget.
+
+The repository integration also includes native Windsurf lifecycle hooks so Hunch context and
+learning follow the same install, prompt, failure and shutdown moments as the other supported
+agents.
+
 ## 1.22.0 — 2026-08-31
 
 ### Project DNA learns from authorized collaboration evidence
