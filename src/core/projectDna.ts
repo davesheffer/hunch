@@ -1,6 +1,10 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { compareCodeUnits } from "./canonicalOrder.js";
+import {
+  assertProjectDnaHostEvidence,
+  type ProjectDnaHostEvidence,
+} from "./projectDnaHostEvidence.js";
 
 export const PROJECT_DNA_SCHEMA_VERSION = "hunch.project-dna/1" as const;
 export const PROJECT_DNA_MATCH_SCHEMA_VERSION = "hunch.project-dna-match/1" as const;
@@ -19,7 +23,7 @@ const MAX_FILE_BYTES = 256 * 1024;
 
 export const PROJECT_DNA_CATEGORIES = ["communication", "engineering", "review", "culture", "vocabulary"] as const;
 export type ProjectDnaCategory = (typeof PROJECT_DNA_CATEGORIES)[number];
-export type ProjectDnaEvidenceKind = "git-history" | "committed-file";
+export type ProjectDnaEvidenceKind = "git-history" | "committed-file" | "host-evidence";
 
 export interface ProjectDnaEvidence {
   kind: ProjectDnaEvidenceKind;
@@ -27,7 +31,7 @@ export interface ProjectDnaEvidence {
   revision: string;
   content_hash: string;
   sample_count: number;
-  provenance: "committed-repository";
+  provenance: "committed-repository" | "host-provided";
   visibility: "repository";
 }
 
@@ -53,6 +57,11 @@ export interface ProjectDnaProfile {
   source_files: string[];
   traits: ProjectDnaTrait[];
   content_hash: string;
+}
+
+export interface ProjectDnaDiscoveryOptions {
+  /** A sealed batch selected and authorized by the host for this exact revision. */
+  hostEvidence?: ProjectDnaHostEvidence;
 }
 
 export interface ProjectDnaArtifact {
@@ -234,6 +243,22 @@ function fileEvidence(revision: string, path: string, bytes: Buffer): ProjectDna
   };
 }
 
+function hostEvidenceEvidence(
+  revision: string,
+  hostEvidence: ProjectDnaHostEvidence,
+  sampleCount: number,
+): ProjectDnaEvidence {
+  return {
+    kind: "host-evidence",
+    ref: `host:${hostEvidence.evidence_set_id}`,
+    revision,
+    content_hash: hostEvidence.content_hash,
+    sample_count: sampleCount,
+    provenance: "host-provided",
+    visibility: "repository",
+  };
+}
+
 function repositoryId(root: string, revision: string): string {
   const roots = gitText(root, ["rev-list", "--max-parents=0", revision, "--"])
     .split("\n")
@@ -367,6 +392,95 @@ function collectFileTraits(revision: string, files: Array<{ path: string; bytes:
   ));
 }
 
+function collectHostEvidenceTraits(
+  revision: string,
+  hostEvidence: ProjectDnaHostEvidence | undefined,
+): ProjectDnaTrait[] {
+  if (!hostEvidence) return [];
+  assertProjectDnaHostEvidence(hostEvidence);
+  if (hostEvidence.repository_revision !== revision) {
+    throw new Error("Project DNA host evidence revision does not match the repository revision");
+  }
+
+  const traits: ProjectDnaTrait[] = [];
+  const pullRequests = hostEvidence.items.filter((item) => item.kind === "pull_request" && item.disposition === "merged");
+  if (pullRequests.length >= MIN_HISTORY) {
+    const titles = pullRequests.map((item) => item.title!);
+    const evidence = [hostEvidenceEvidence(revision, hostEvidence, pullRequests.length)];
+    const count = titles.length;
+    const conventional = titles.filter(conventionalSubject).length;
+    const noTerminalPeriod = titles.filter((title) => !/[.!?]$/.test(title.trim())).length;
+    const lowercase = titles.filter((title) => {
+      const first = firstAlphabetic(title.replace(/^(?:build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(?:\([^)]+\))?!?:\s*/, ""));
+      return first !== null && first === first.toLowerCase();
+    }).length;
+    const issueRefs = titles.filter((title) => /(?:^|\s)#\d+\b/.test(title)).length;
+
+    if (conventional / count >= 0.7) {
+      traits.push(makeTrait("communication", "pull_request.conventional_title", "Pull-request titles usually use Conventional Commit prefixes.", confidence(conventional / count, count), evidence));
+    }
+    if (noTerminalPeriod / count >= 0.8) {
+      traits.push(makeTrait("communication", "pull_request.no_terminal_punctuation", "Pull-request titles usually omit terminal punctuation.", confidence(noTerminalPeriod / count, count), evidence));
+    }
+    if (lowercase / count >= 0.7) {
+      traits.push(makeTrait("communication", "pull_request.lowercase_lead", "Pull-request titles usually begin their descriptive phrase with lowercase wording.", confidence(lowercase / count, count), evidence));
+    }
+    if (issueRefs / count >= 0.45) {
+      traits.push(makeTrait("communication", "pull_request.issue_reference", "Pull-request titles frequently reference an issue number.", confidence(issueRefs / count, count), evidence));
+    }
+
+    const words = new Map<string, number>();
+    for (const title of titles) {
+      const seen = new Set((title
+        .replace(/^(?:build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(?:\([^)]+\))?!?:\s*/, "")
+        .toLowerCase()
+        .match(/[a-z][a-z0-9_-]{2,30}/g) ?? [])
+        .filter((token) => !STOP_WORDS.has(token) && !/^\d+$/.test(token)));
+      for (const token of seen) words.set(token, (words.get(token) ?? 0) + 1);
+    }
+    const vocabulary = [...words.entries()]
+      .filter(([, occurrences]) => occurrences >= Math.max(3, Math.ceil(count * 0.2)))
+      .sort((left, right) => right[1] - left[1] || compareCodeUnits(left[0], right[0]))
+      .slice(0, 8);
+    for (const [word, occurrences] of vocabulary) {
+      traits.push(makeTrait(
+        "vocabulary",
+        `term.${word}`,
+        `The repository repeatedly uses the term “${word}” in merged pull-request titles.`,
+        confidence(occurrences / count, count, 0.55),
+        evidence,
+      ));
+    }
+
+    const bodies = pullRequests.map((item) => item.body).filter((body): body is string => body !== null);
+    const rationaleCount = bodies.filter((body) => FILE_RULES.find((rule) => rule.key === "pr.explain_why")!.pattern.test(body)).length;
+    if (rationaleCount >= 2 && rationaleCount / Math.max(1, bodies.length) >= 0.6) {
+      traits.push(makeTrait(
+        "communication",
+        "pr.explain_why",
+        "Pull requests are expected to explain motivation or rationale, not only the code change.",
+        confidence(rationaleCount / bodies.length, bodies.length),
+        [hostEvidenceEvidence(revision, hostEvidence, rationaleCount)],
+      ));
+    }
+  }
+
+  const maintainerReviews = hostEvidence.items.filter((item) =>
+    item.kind === "review_comment" && item.author_role === "maintainer");
+  for (const rule of FILE_RULES) {
+    const matching = maintainerReviews.filter((item) => rule.pattern.test(item.body!));
+    if (matching.length < 2) continue;
+    traits.push(makeTrait(
+      rule.category,
+      rule.key,
+      rule.claim,
+      confidence(matching.length / maintainerReviews.length, matching.length, 0.65),
+      [hostEvidenceEvidence(revision, hostEvidence, matching.length)],
+    ));
+  }
+  return traits;
+}
+
 function dedupeTraits(traits: ProjectDnaTrait[]): ProjectDnaTrait[] {
   const byKey = new Map<string, ProjectDnaTrait>();
   for (const trait of traits) {
@@ -382,11 +496,17 @@ function dedupeTraits(traits: ProjectDnaTrait[]): ProjectDnaTrait[] {
  * Derive a deterministic repository DNA profile from one exact Git revision.
  *
  * This is intentionally observation, not authority: it reads bounded committed
- * history and bounded committed convention files. It does not read the worktree,
- * network, GitHub reviews, model output, or private user state, and it never writes
- * into the durable Hunch graph by itself.
+ * history and bounded committed convention files. A host may additionally pass a
+ * sealed, revision-bound evidence batch that it already authorized; discovery
+ * never fetches a provider itself. It does not read the worktree, network, model
+ * output, credentials, or private user state, and it never writes into the durable
+ * Hunch graph by itself.
  */
-export function discoverProjectDna(root: string, ref = "HEAD"): ProjectDnaProfile {
+export function discoverProjectDna(
+  root: string,
+  ref = "HEAD",
+  options: ProjectDnaDiscoveryOptions = {},
+): ProjectDnaProfile {
   const repositoryRevision = exactCommit(root, ref);
   const repositoryIdentity = repositoryId(root, repositoryRevision);
   const historyRaw = gitText(root, [
@@ -402,6 +522,7 @@ export function discoverProjectDna(root: string, ref = "HEAD"): ProjectDnaProfil
   const traits = dedupeTraits([
     ...collectHistoryTraits(repositoryRevision, subjects),
     ...collectFileTraits(repositoryRevision, files),
+    ...collectHostEvidenceTraits(repositoryRevision, options.hostEvidence),
   ]);
   const unsigned = {
     schema: PROJECT_DNA_SCHEMA_VERSION,
@@ -462,10 +583,14 @@ export function assertProjectDnaProfile(value: unknown): asserts value is Projec
       assertExactFields(evidence as unknown as Record<string, unknown>, [
         "kind", "ref", "revision", "content_hash", "sample_count", "provenance", "visibility",
       ], "project DNA evidence");
-      if (!(["git-history", "committed-file"] as const).includes(evidence.kind) || !evidence.ref.trim() || evidence.ref.length > 512
+      const committedEvidence = evidence.kind === "git-history" || evidence.kind === "committed-file";
+      const hostEvidence = evidence.kind === "host-evidence";
+      if ((!committedEvidence && !hostEvidence) || !evidence.ref.trim() || evidence.ref.length > 512
         || evidence.revision !== profile.repository_revision || !SHA256.test(evidence.content_hash)
         || !Number.isSafeInteger(evidence.sample_count) || evidence.sample_count < 1 || evidence.sample_count > MAX_HISTORY
-        || evidence.provenance !== "committed-repository" || evidence.visibility !== "repository") {
+        || (committedEvidence && evidence.provenance !== "committed-repository")
+        || (hostEvidence && (evidence.provenance !== "host-provided" || !/^host:pdnah_[a-f0-9]{24}$/.test(evidence.ref)))
+        || evidence.visibility !== "repository") {
         throw new Error("project DNA evidence fields are invalid");
       }
     }
@@ -493,6 +618,22 @@ function artifactCheck(trait: ProjectDnaTrait, artifact: ProjectDnaArtifact): Pr
       return { trait_id: trait.id, key: trait.key, applicable: first !== null, passed: first === null ? null : first === first.toLowerCase(), weight, detail: "Descriptive title wording begins lowercase." };
     case "subject.issue_reference":
       return { trait_id: trait.id, key: trait.key, applicable: true, passed: /(?:^|\s)#\d+\b/.test(title), weight, detail: "Title carries an issue reference." };
+    case "pull_request.conventional_title":
+      return artifact.kind === "pull_request"
+        ? { trait_id: trait.id, key: trait.key, applicable: true, passed: conventionalSubject(title), weight, detail: "PR title follows the repository's observed Conventional Commit pattern." }
+        : { trait_id: trait.id, key: trait.key, applicable: false, passed: null, weight, detail: "This trait applies only to pull-request titles." };
+    case "pull_request.no_terminal_punctuation":
+      return artifact.kind === "pull_request"
+        ? { trait_id: trait.id, key: trait.key, applicable: true, passed: !/[.!?]$/.test(title), weight, detail: "PR title omits terminal punctuation." }
+        : { trait_id: trait.id, key: trait.key, applicable: false, passed: null, weight, detail: "This trait applies only to pull-request titles." };
+    case "pull_request.lowercase_lead":
+      return artifact.kind === "pull_request"
+        ? { trait_id: trait.id, key: trait.key, applicable: first !== null, passed: first === null ? null : first === first.toLowerCase(), weight, detail: "Descriptive PR-title wording begins lowercase." }
+        : { trait_id: trait.id, key: trait.key, applicable: false, passed: null, weight, detail: "This trait applies only to pull-request titles." };
+    case "pull_request.issue_reference":
+      return artifact.kind === "pull_request"
+        ? { trait_id: trait.id, key: trait.key, applicable: true, passed: /(?:^|\s)#\d+\b/.test(title), weight, detail: "PR title carries an issue reference." }
+        : { trait_id: trait.id, key: trait.key, applicable: false, passed: null, weight, detail: "This trait applies only to pull-request titles." };
     case "pr.explain_why": {
       const body = artifact.body?.trim() ?? "";
       const applicable = artifact.kind === "pull_request";

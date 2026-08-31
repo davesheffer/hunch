@@ -1,0 +1,155 @@
+{
+  "schema": "hunch.project-dna-acceptance/1",
+  "repository": "https://github.com/infection/infection",
+  "revision": "49a4923cc01da30d165b100d6270b77c0a54429e",
+  "profile": {
+    "schema": "hunch.project-dna/1",
+    "repository_id": "pdnar_463c531a58c219faf82a2936",
+    "repository_revision": "49a4923cc01da30d165b100d6270b77c0a54429e",
+    "history_sample_count": 200,
+    "source_files": [
+      ".github/CONTRIBUTING.md",
+      ".github/PULL_REQUEST_TEMPLATE.md",
+      "AGENTS.md"
+    ],
+    "traits": [
+      {
+        "id": "pdnat_d8b133f3680b087b424a",
+        "category": "communication",
+        "key": "subject.no_terminal_punctuation",
+        "claim": "Change titles usually omit terminal punctuation.",
+        "confidence": 1,
+        "observation_state": "observed",
+        "freshness": "current",
+        "contradiction": "none",
+        "evidence": [
+          {
+            "kind": "git-history",
+            "ref": "git:subjects:200",
+            "revision": "49a4923cc01da30d165b100d6270b77c0a54429e",
+            "content_hash": "sha256:898b3d5847e1215926ceb65f165dc36fec0f18e3849a589464f8421f46eec701",
+            "sample_count": 200,
+            "provenance": "committed-repository",
+            "visibility": "repository"
+          }
+        ]
+      },
+      {
+        "id": "pdnat_0c399b5431244055f354",
+        "category": "review",
+        "key": "review.focused_changes",
+        "claim": "Contributions are expected to stay focused and avoid unrelated changes.",
+        "confidence": 0.85,
+        "observation_state": "observed",
+        "freshness": "current",
+        "contradiction": "none",
+        "evidence": [
+          {
+            "kind": "committed-file",
+            "ref": "AGENTS.md",
+            "revision": "49a4923cc01da30d165b100d6270b77c0a54429e",
+            "content_hash": "sha256:cde808855182c87baed7b28200f17b9db7a95a8ca74ae531168f8c1704d34181",
+            "sample_count": 1,
+            "provenance": "committed-repository",
+            "visibility": "repository"
+          }
+        ]
+      },
+      {
+        "id": "pdnat_77d692270c284eaa73f1",
+        "category": "review",
+        "key": "review.tests_expected",
+        "claim": "Contributions are expected to include or update tests when behavior changes.",
+        "confidence": 0.9,
+        "observation_state": "observed",
+        "freshness": "current",
+        "contradiction": "none",
+        "evidence": [
+          {
+            "kind": "committed-file",
+            "ref": ".github/CONTRIBUTING.md",
+            "revision": "49a4923cc01da30d165b100d6270b77c0a54429e",
+            "content_hash": "sha256:33044a1c9a047d837f814cc4f6e7870256659ff4cead00bd547f019e931e1448",
+            "sample_count": 1,
+            "provenance": "committed-repository",
+            "visibility": "repository"
+          },
+          {
+            "kind": "committed-file",
+            "ref": "AGENTS.md",
+            "revision": "49a4923cc01da30d165b100d6270b77c0a54429e",
+            "content_hash": "sha256:cde808855182c87baed7b28200f17b9db7a95a8ca74ae531168f8c1704d34181",
+            "sample_count": 1,
+            "provenance": "committed-repository",
+            "visibility": "repository"
+          }
+        ]
+      },
+      {
+        "id": "pdnat_db544ad6450693b62596",
+        "category": "vocabulary",
+        "key": "term.conductor",
+        "claim": "The repository repeatedly uses the term “conductor” in change titles.",
+        "confidence": 0.55,
+        "observation_state": "observed",
+        "freshness": "current",
+        "contradiction": "none",
+        "evidence": [
+          {
+            "kind": "git-history",
+            "ref": "git:subjects:200",
+            "revision": "49a4923cc01da30d165b100d6270b77c0a54429e",
+            "content_hash": "sha256:898b3d5847e1215926ceb65f165dc36fec0f18e3849a589464f8421f46eec701",
+            "sample_count": 200,
+            "provenance": "committed-repository",
+            "visibility": "repository"
+          }
+        ]
+      },
+      {
+        "id": "pdnat_151029b18903a8f781a3",
+        "category": "vocabulary",
+        "key": "term.phpstan",
+        "claim": "The repository repeatedly uses the term “phpstan” in change titles.",
+        "confidence": 0.55,
+        "observation_state": "observed",
+        "freshness": "current",
+        "contradiction": "none",
+        "evidence": [
+          {
+            "kind": "git-history",
+            "ref": "git:subjects:200",
+            "revision": "49a4923cc01da30d165b100d6270b77c0a54429e",
+            "content_hash": "sha256:898b3d5847e1215926ceb65f165dc36fec0f18e3849a589464f8421f46eec701",
+            "sample_count": 200,
+            "provenance": "committed-repository",
+            "visibility": "repository"
+          }
+        ]
+      },
+      {
+        "id": "pdnat_6f8192c108ade4d0e736",
+        "category": "vocabulary",
+        "key": "term.phpunit",
+        "claim": "The repository repeatedly uses the term “phpunit” in change titles.",
+        "confidence": 0.55,
+        "observation_state": "observed",
+        "freshness": "current",
+        "contradiction": "none",
+        "evidence": [
+          {
+            "kind": "git-history",
+            "ref": "git:subjects:200",
+            "revision": "49a4923cc01da30d165b100d6270b77c0a54429e",
+            "content_hash": "sha256:898b3d5847e1215926ceb65f165dc36fec0f18e3849a589464f8421f46eec701",
+            "sample_count": 200,
+            "provenance": "committed-repository",
+            "visibility": "repository"
+          }
+        ]
+      }
+    ],
+    "profile_id": "pdna_ee999ca1e1ee45e9fd4883e9",
+    "content_hash": "sha256:714f34d7b090223b540e726e6632efad372e29536e904ace6c84d4586a512e24"
+  }
+}

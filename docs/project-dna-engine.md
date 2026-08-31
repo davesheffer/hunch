@@ -8,6 +8,15 @@ Hunch should learn and adopt the engineering DNA of a repository so an agent ent
 
 Project DNA is not a prompt persona and is not limited to code style. It is an evidence-backed, revision-aware model of how a repository's maintainers communicate, reason, review, and build software.
 
+The initial cross-product production roadmap is complete as of 2026-08-31. Hunch provides sealed
+baseline discovery, explicit host-authorized PR/review intake, explainable matching and deltas;
+Hunch Memory provides isolated immutable transport; and ORC provides authorized, role-shaped
+consumption with exact receipts. The frozen Infection acceptance profile and the three-repository
+harness cover repository scale, delta propagation, isolation, malformed input and service fallback.
+The milestone list below remains the long-horizon product model, not a claim that speculative
+persona cloning, automatic policy learning or a public profile marketplace is required for the
+production contract.
+
 The capability should extend Hunch's existing graph, provenance, currentness, delivery, and memory contracts rather than create a parallel source of truth.
 
 ## What Project DNA captures

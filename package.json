@@ -27,6 +27,8 @@
   },
   "files": [
     "dist/**/*.js",
+    "dist/projectDna.d.ts",
+    "dist/core/projectDna*.d.ts",
     "server.json",
     "bench/constitution-exp03-v1.json",
     "tooling/competitive-watch.mjs",

@@ -14,6 +14,7 @@ export {
   evaluateProjectDnaMatch,
   type ProjectDnaArtifact,
   type ProjectDnaCategory,
+  type ProjectDnaDiscoveryOptions,
   type ProjectDnaEvidence,
   type ProjectDnaEvidenceKind,
   type ProjectDnaMatch,
@@ -21,6 +22,20 @@ export {
   type ProjectDnaProfile,
   type ProjectDnaTrait,
 } from "./core/projectDna.js";
+export {
+  PROJECT_DNA_HOST_EVIDENCE_AUTHOR_ROLES,
+  PROJECT_DNA_HOST_EVIDENCE_DISPOSITIONS,
+  PROJECT_DNA_HOST_EVIDENCE_KINDS,
+  PROJECT_DNA_HOST_EVIDENCE_SCHEMA_VERSION,
+  assertProjectDnaHostEvidence,
+  sealProjectDnaHostEvidence,
+  type ProjectDnaHostEvidence,
+  type ProjectDnaHostEvidenceAuthorRole,
+  type ProjectDnaHostEvidenceCandidate,
+  type ProjectDnaHostEvidenceDisposition,
+  type ProjectDnaHostEvidenceItem,
+  type ProjectDnaHostEvidenceKind,
+} from "./core/projectDnaHostEvidence.js";
 export {
   PROJECT_DNA_DELTA_SCHEMA_VERSION,
   assertProjectDnaDelta,
