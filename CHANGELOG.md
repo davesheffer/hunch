@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## 1.22.2 — 2026-09-01
+
+### Cold graph refresh stays inside the budget
+
+Private/shared memory publication no longer repeats the same repository-publication and remote-contract
+proofs twice after a successful merge when no mutation boundary exists between them. The push helper still
+re-proves both boundaries immediately at the actual push seam, so source isolation, remote identity and
+honest durability reporting remain fail-closed.
+
+On the 1,011-file ORC checkout, Hunch Memory's 750-record cold pilot completed graph refresh in 8.85 seconds
+and ORC's fresh-process live Project DNA retrieval completed in 7.80 seconds, both within the strict
+10-second budget. All 45 overlay publication, sync, race, hook and ancestry guards remain green.
+
 ## 1.22.1 — 2026-08-31
 
 ### Cold graph refresh fits the strict budget

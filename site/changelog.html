@@ -107,6 +107,10 @@
 
     <div class="clog">
       <div class="clog-group">
+        <div class="clog-date">Sep 1, 2026</div>
+        <div class="clog-row"><span class="rel-tag">v1.22.2</span><span class="clog-t"><b>Cold graph refresh stays inside the budget</b> — private/shared memory publication no longer repeats identical repository-publication proofs between a completed merge and the guarded push seam. The push helper still re-proves source isolation and remote identity immediately before publishing. Hunch Memory's 750-record ORC pilot completed in 8.85 seconds and ORC's fresh-process Project DNA retrieval completed in 7.80 seconds, both inside the strict 10-second budget, while all 45 overlay and sync guards remained green.</span></div>
+      </div>
+      <div class="clog-group">
         <div class="clog-date">Aug 31, 2026</div>
         <div class="clog-row"><span class="rel-tag">v1.22.1</span><span class="clog-t"><b>Cold graph refresh fits the strict budget</b> — exact-commit scans now validate immutable Git blobs once and hydrate them in bounded batches without relaxing per-file safety or repeatability. On ORC, the scan fell from 41.0 seconds to 3.0 seconds, the complete cold path through a separate Hunch Memory server took 5.0 seconds, and ORC retrieval completed inside its strict 10-second budget. The repository integration also adds native Windsurf lifecycle hooks.</span></div>
         <div class="clog-row"><span class="rel-tag">v1.22.0</span><span class="clog-t"><b>Project DNA learns from authorized collaboration evidence</b> — Hunch can now derive repository-native vocabulary and contribution guidance from bounded pull-request and review evidence supplied by an authorized host. Every batch is canonical, sealed, tied to an exact Git revision, and raw collaboration text never enters the profile. The public typed library contract lets cross-repository consumers transport and verify that evidence without changing the deterministic fallback.</span></div>
