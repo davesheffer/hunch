@@ -49,3 +49,14 @@ export {
   projectDnaDeliverySupplement,
   type ProjectDnaDeliverySupplement,
 } from "./core/projectDnaDelivery.js";
+export {
+  PROJECT_DNA_USEFULNESS_EVIDENCE_KINDS,
+  PROJECT_DNA_USEFULNESS_OBSERVATION_SCHEMA_VERSION,
+  PROJECT_DNA_USEFULNESS_SIGNALS,
+  ProjectDnaUsefulnessObservationSchema,
+  assertProjectDnaUsefulnessObservation,
+  createProjectDnaUsefulnessObservation,
+  projectDnaUsefulnessObservationFinding,
+  type CreateProjectDnaUsefulnessObservationInput,
+  type ProjectDnaUsefulnessObservation,
+} from "./core/projectDnaOutcomeExperience.js";

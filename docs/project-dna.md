@@ -145,6 +145,17 @@ This is the anti-drift foundation. Continuous refresh supplies a new exact-revis
 Host outcome evidence follows the same rule: a new authorized evidence batch creates a new profile,
 not an in-place mutation or an automatic graph write.
 
+## Usefulness observations
+
+`hunch.project-dna-usefulness-observation/1` is a separate Project DNA outcome contract; it does
+not broaden the record-bound `hunch.usefulness-observation/1` schema. It seals the exact Memory
+delivery receipt, profile/snapshot/retrieval hashes, role-shaped trait projection, downstream
+artifact and Project Match assessment. Project Match remains explicitly non-causal. A terminal run
+can therefore produce only `unknown`; every classified signal requires a content-free reference to
+an explicit human observation or independent review. Contradiction and staleness may create an open
+advisory Finding, but no observation changes ranking, mutates a profile, promotes knowledge or
+grants authority.
+
 ## Relationship to Repository Intelligence
 
 Project DNA answers:
