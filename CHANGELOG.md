@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## 1.22.3 — 2026-09-01
+
+### Project DNA feedback keeps receipts
+
+Project DNA now has a distinct, content-addressed usefulness-observation contract that binds the
+exact Hunch Memory delivery receipt, profile and snapshot hashes, role-shaped trait projection,
+downstream artifact and Project Match assessment. Project Match remains explicitly non-causal:
+automatic outcomes can report only `unknown`, while every classified signal requires an exact
+explicit-human or independent-review evidence reference.
+
+Contradiction and staleness can create open advisory review work, but observations cannot mutate a
+profile, change ranking, promote knowledge or grant authority.
+
 ## 1.22.2 — 2026-09-01
 
 ### Cold graph refresh stays inside the budget

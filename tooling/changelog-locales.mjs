@@ -8,6 +8,7 @@ export const changelogLocales = {
       footer: "© Hunch — התאמה ארכיטקטונית לקוד AI.", home: "בית", githubReleases: "גרסאות ב-GitHub"
     },
     titles: [
+      "Project DNA מקבלת משוב עם קבלות",
       "רענון גרף קר נשאר בתוך התקציב",
       "רענון גרף קר עומד בתקציב המחמיר",
       "Project DNA לומדת מראיות שיתוף פעולה מורשות",
@@ -45,6 +46,7 @@ export const changelogLocales = {
       footer: "© Hunch — архитектурное соответствие для ИИ-кода.", home: "Главная", githubReleases: "Релизы на GitHub"
     },
     titles: [
+      "Project DNA получает обратную связь с квитанциями",
       "Холодное обновление графа снова укладывается в бюджет",
       "Холодное обновление графа укладывается в строгий бюджет",
       "Project DNA учится на разрешённых данных совместной работы",
@@ -82,6 +84,7 @@ export const changelogLocales = {
       footer: "© Hunch — التوافق المعماري لكود الذكاء الاصطناعي.", home: "الرئيسية", githubReleases: "الإصدارات على GitHub"
     },
     titles: [
+      "يتلقى Project DNA ملاحظات موثقة بالإيصالات",
       "عاد تحديث الرسم البياني البارد إلى حدود الميزانية",
       "تحديث الرسم البياني البارد يلتزم بالميزانية الصارمة",
       "يتعلم Project DNA من أدلة التعاون المصرح بها",
@@ -119,6 +122,7 @@ export const changelogLocales = {
       footer: "© Hunch — conformidad arquitectónica para código de IA.", home: "Inicio", githubReleases: "Versiones en GitHub"
     },
     titles: [
+      "Project DNA recibe feedback con recibos",
       "La actualización fría del grafo vuelve a cumplir el presupuesto",
       "La actualización fría del grafo cabe en el presupuesto estricto",
       "Project DNA aprende de evidencia de colaboración autorizada",
