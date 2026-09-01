@@ -706,16 +706,12 @@ export function commitAndPushHunch(hunchDir: string, message: string, opts: Hunc
       }
       if (!contractReady(opts.remote)
         || mergeRemote(hunchDir, env, CAPTURE_REMOTE_TIMEOUT_MS, opts.remote) === "failed") return "committed";
-      // Hooks are disabled in the merge seam, but another process can still
-      // rewrite Git configuration. Check once after merge and once at the
-      // actual push seam; either refusal leaves the private commit local.
-      if (unsafeOverlayPublication(hunchDir, opts.protectedRepoRoot) || !contractReady(opts.remote)) {
-        console.error(`hunch: private memory was committed locally, but the overlay publication boundary changed during sync. Nothing was pushed.`);
-        return "committed";
-      }
       // Push tracked (not via run): a no-upstream/offline/rejected push must report
       // "committed", not overclaim "pushed" — the next flush's merge+push retries.
-      if (unsafeOverlayPublication(hunchDir, opts.protectedRepoRoot) || !contractReady(opts.remote)) return "committed";
+      // pushWithOneRemoteAdvanceRetry performs the publication and remote-contract
+      // proof immediately before its push seam. Repeating the same expensive proof
+      // twice here adds no intervening mutation boundary and materially slows large
+      // graph refreshes on process-spawn-sensitive platforms such as Windows.
       if (pushWithOneRemoteAdvanceRetry(hunchDir, env, opts.protectedRepoRoot, CAPTURE_REMOTE_TIMEOUT_MS, opts.remote)) return "pushed";
     }
     return "committed";
