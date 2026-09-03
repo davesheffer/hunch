@@ -18,7 +18,7 @@
   "violates_constraint": null,
   "spawned_decision": null,
   "observed_at": "2026-09-03T10:41:09.654Z",
-  "resolved_commit": "a8d1cf6bd714252e12b6c19b0a30968cd946294a",
+  "resolved_commit": "dcc1171",
   "provenance": {
     "source": "human_confirmed",
     "confidence": 0.95,
@@ -26,6 +26,6 @@
       "Release run 33743914680 on tag v1.23.0: validate failed with: Error: npm package contains forbidden paths: contracts/change-proof/hunch.change-proof.v1.example.json, contracts/change-proof/hunch.change-proof.v1.schema.json, dist/changeProof.d.ts, dist/core/changeProofContract.d.ts; publish skipped",
       "test/package-paths.test.ts against the pre-fix workflow reports the same four paths; against the fixed workflow it passes"
     ],
-    "last_verified": "2026-09-03T10:41:09.654Z"
+    "last_verified": "2026-09-03T10:41:56.562Z"
   }
 }
