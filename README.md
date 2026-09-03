@@ -181,7 +181,7 @@ does not host that repository. Give teammates and CI normal Git access, keep cre
 the Git credential helper, and have one maintainer connect it:
 
 ```bash
-npm i -g @davesheffer/hunch@1.22.3
+npm i -g @davesheffer/hunch@1.23.0
 hunch shared --repo git@github.com:acme/project-hunch-memory.git
 git add .gitignore .hunch/team.json
 git commit -m "chore: connect shared Hunch memory"
@@ -191,7 +191,7 @@ git push
 Teammates then install the same version and run:
 
 ```bash
-npm i -g @davesheffer/hunch@1.22.3
+npm i -g @davesheffer/hunch@1.23.0
 git pull
 hunch init
 hunch doctor

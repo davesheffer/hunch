@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.23.0 — 2026-09-03
+
 ### Exact changes now carry native semantic proof
 
 `hunch prove` and `hunch_change_proof` now emit the same canonical
