@@ -1,0 +1,47 @@
+{
+  "id": "dec_6bc679265c",
+  "title": "chore(release): cut 1.23.1",
+  "topic": null,
+  "status": "accepted",
+  "context": "The v1.23.0 tag never published: release.yml refused the candidate tarball with \"npm package\ncontains forbidden paths\" because both inline package-path allowlists predated the\ncontracts/change-proof/*.json fixtures and the change-proof .d.ts entries that 1.23.0 added to\npackage.json \"files\". Nothing local ran that allowlist, so the mismatch surfaced only after the tag.\n\nAdmit exactly those paths in both allowlists, and add test/package-paths.test.ts, which extracts the\nworkflow's own allowedPath",
+  "decision": "Changed .github/workflows, test/package-paths.test.ts, tooling/changelog-locales.mjs: added predicate; new dep(s): node:assert/strict, node:child_process, node:fs, node:test; 1 new file(s).",
+  "consequences": [
+    "Adds dependency: node:assert/strict, node:child_process, node:fs, node:test."
+  ],
+  "alternatives_rejected": [],
+  "rejected_tripwires": [],
+  "related_components": [
+    "cmp_04c6efb58b",
+    "cmp_4c40eab00f",
+    "cmp_a94a8fe5cc"
+  ],
+  "related_files": [
+    ".github/workflows/release.yml",
+    "test/package-paths.test.ts",
+    "tooling/changelog-locales.mjs"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "dcc1171",
+  "valid_from": "2026-09-03T13:39:42+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "inferred",
+    "confidence": 0.45,
+    "evidence": [
+      "commit:dcc1171",
+      "synth:provider=deterministic",
+      "branch:chore/release-1.23.1",
+      ".github/workflows/release.yml",
+      "test/package-paths.test.ts",
+      "tooling/changelog-locales.mjs"
+    ],
+    "last_verified": "2026-09-03T10:40:38.764Z"
+  },
+  "date": "2026-09-03T13:39:42+03:00"
+}
