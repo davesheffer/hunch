@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 1.23.1 — 2026-09-03
+
+### The change-proof contracts actually ship
+
+The 1.23.0 tag never reached npm: the trusted release workflow refused the candidate tarball because
+its package-path allowlist predated the `contracts/change-proof/*.json` fixtures and the change-proof
+`.d.ts` entries that 1.23.0 added to `files`. The allowlist now admits exactly those paths, and
+`npm test` executes the workflow's own allowlist against `npm pack --dry-run` so a `files`/allowlist
+mismatch fails before a tag exists. No runtime code changed since 1.23.0.
+
 ## 1.23.0 — 2026-09-03
 
 ### Exact changes now carry native semantic proof

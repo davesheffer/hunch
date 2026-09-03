@@ -135,7 +135,8 @@ jobs:
             || path === "bench/constitution-exp03-v1.json"
             || path === "tooling/competitive-watch.mjs"
             || path === "tooling/md1-benchmark.mjs"
-            || /^dist\/(?:projectDna|core\/projectDna[^/]*)\.d\.ts$/.test(path)
+            || /^contracts\/change-proof\/hunch\.change-proof\.v1\.(?:example|schema)\.json$/.test(path)
+            || /^dist\/(?:changeProof|projectDna|core\/changeProofContract|core\/projectDna[^/]*)\.d\.ts$/.test(path)
             || /^dist\/.+\.js$/.test(path);
           const sensitivePath = (path) => /(^|\/)\.hunch(?:-cache)?(?:\/|$)/i.test(path)
             || /^wiki(?:\/|$)/i.test(path)
@@ -678,7 +679,8 @@ jobs:
             || path === "bench/constitution-exp03-v1.json"
             || path === "tooling/competitive-watch.mjs"
             || path === "tooling/md1-benchmark.mjs"
-            || /^dist\/(?:projectDna|core\/projectDna[^/]*)\.d\.ts$/.test(path)
+            || /^contracts\/change-proof\/hunch\.change-proof\.v1\.(?:example|schema)\.json$/.test(path)
+            || /^dist\/(?:changeProof|projectDna|core\/changeProofContract|core\/projectDna[^/]*)\.d\.ts$/.test(path)
             || /^dist\/.+\.js$/.test(path);
           const sensitivePackagePath = (path) => /(^|\/)\.hunch(?:-cache)?(?:\/|$)/i.test(path)
             || /^wiki(?:\/|$)/i.test(path)
