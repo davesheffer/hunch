@@ -1,0 +1,31 @@
+{
+  "id": "fnd_2d08d28a80",
+  "title": "Release workflow package-path allowlist is not executed by any local gate",
+  "observation": "release.yml carries two inline copies of a package-path allowlist (allowedPath/sensitivePath in validate, allowedPackagePath/sensitivePackagePath in publish). Neither tooling/release-gate.mjs nor the test suite executed them, so adding new entries to package.json \"files\" (the change-proof contracts and .d.ts files in 1.23.0) passed every local and PR gate and failed only after the v1.23.0 tag was pushed, with \"npm package contains forbidden paths\". test/package-paths.test.ts now extracts the workflow's predicates and runs them against npm pack --dry-run; the two allowlist copies still have to be edited by hand and in step.",
+  "evidence": [
+    "Release run 33743914680 on tag v1.23.0: validate failed with: Error: npm package contains forbidden paths: contracts/change-proof/hunch.change-proof.v1.example.json, contracts/change-proof/hunch.change-proof.v1.schema.json, dist/changeProof.d.ts, dist/core/changeProofContract.d.ts; publish skipped",
+    "test/package-paths.test.ts against the pre-fix workflow reports the same four paths; against the fixed workflow it passes"
+  ],
+  "method": null,
+  "severity": "medium",
+  "triage": "resolved",
+  "affected_files": [
+    ".github/workflows/release.yml",
+    "test/package-paths.test.ts",
+    "package.json"
+  ],
+  "affected_symbols": [],
+  "violates_constraint": null,
+  "spawned_decision": null,
+  "observed_at": "2026-09-03T10:41:09.654Z",
+  "resolved_commit": "a8d1cf6bd714252e12b6c19b0a30968cd946294a",
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 0.95,
+    "evidence": [
+      "Release run 33743914680 on tag v1.23.0: validate failed with: Error: npm package contains forbidden paths: contracts/change-proof/hunch.change-proof.v1.example.json, contracts/change-proof/hunch.change-proof.v1.schema.json, dist/changeProof.d.ts, dist/core/changeProofContract.d.ts; publish skipped",
+      "test/package-paths.test.ts against the pre-fix workflow reports the same four paths; against the fixed workflow it passes"
+    ],
+    "last_verified": "2026-09-03T10:41:09.654Z"
+  }
+}
