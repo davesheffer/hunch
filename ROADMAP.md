@@ -1,6 +1,6 @@
 # Hunch roadmap
 
-Updated 2026-09-05.
+Updated 2026-09-06.
 
 Hunch is building the validated delivery layer for engineering intent: record why the code is the
 way it is, deliver the right evidence at the moment an agent needs it, and deterministically check
@@ -9,22 +9,31 @@ other integrations are derived delivery surfaces.
 
 This file is the public execution view. `hunch now` remains the detailed live decision ledger.
 
-## Trio synchronization checkpoint — 2026-09-05
+## Trio synchronization checkpoint — 2026-09-06
 
-Hunch's current published version is **1.23.3**. ORC adopted it in
-[PR #372](https://github.com/davesheffer/orc/pull/372); Hunch Memory must use the same exact
-package version and repair its existing assistant pins as part of the companion synchronization.
-Release bumps now reuse the native integration-pin writer and stage the committed hook changes;
-the version test catches a stale committed hook before publication. Other local assistant settings
-remain local; reconnect running MCP sessions after pin repair.
+Hunch **1.23.3** is published and is the exact package pin in both ORC and Hunch Memory.
+Hunch [PR #124](https://github.com/davesheffer/hunch/pull/124) keeps committed release hooks
+aligned; Memory [PR #53](https://github.com/davesheffer/hunch-memory/pull/53) and ORC
+[PR #372](https://github.com/davesheffer/orc/pull/372) repaired their integrations.
 
-PCC-2 native proof production, Memory's isolated transport, ORC Passport composition and the
-internal trio dogfood have shipped. ORC's portable protocol is published in
-[PR #368](https://github.com/davesheffer/orc/pull/368). Independent external producers/consumers,
-repository pilots and blind maintainer outcomes remain open. They are not implied by internal CI.
-The current operational priority is ORC's unattended startup/recovery, with crash-safe launches
-and exact CI observations shipped in PRs #370–#371; child completion wiring and the live restart/HCL
-gate remain. Hunch supplies semantic evidence, not workflow authority.
+PCC-0 through PCC-5 are complete: native Hunch proof, isolated Memory transport, ORC Passport
+assembly/inspection, exact PR projection and internal trio dogfood. PCC-6's portable kit shipped
+in ORC [PR #368](https://github.com/davesheffer/orc/pull/368); independent maintainers,
+external producers/consumers and repository pilots remain open. Internal CI does not satisfy them.
+
+Exact curated synchronization is deployed through Memory PR #54 and ORC PR #374. The three stores'
+configured source, curated snapshot and graph revisions agree, with zero skipped source files and
+local/bare-origin Git parity at the recorded checkpoint. Reviewed landscape currentness is checked
+separately. See the [shared evidence and milestone table](https://github.com/davesheffer/orc/blob/main/docs/TRIO-ROADMAP-SYNC.md).
+
+The selected shared priority is ORC unattended startup/recovery. Child completion, configured startup,
+exact result/CI handoff and materialized-source readiness have shipped through ORC PR #379.
+The v2 live workflow reached terminal implementation/review after restart, but needed an in-flight
+code deployment and a manual CI rerun; it is recovery evidence, not the clean unattended gate.
+The v3 run is active at the checkpoint. Next: finish that gate, address measured startup/verification/
+deployment delays, then resume external validation when independent participants are available.
+Hunch owns semantic proof and evidence quality; its blind Infection outcome and evidence-gated
+usefulness experiment remain open. It does not acquire workflow authority.
 
 ## Ecosystem boundary
 
@@ -62,7 +71,7 @@ ORC's adaptive-evolution work remains an ORC evaluation/control-plane concern. I
 
 Hunch may receive a procedural finding from that loop only as a reviewable evidence-bearing candidate after ORC has independently verified it and shown reproducible applicability/transfer. Promotion into durable Hunch knowledge still requires Hunch's normal provenance, contradiction/currentness and review rules. Raw generated challenges, speculative scaffold variants, reward/score history and a single winning Run remain outside Hunch. Conversely, Hunch may supply revision-current decisions, constraints, failure lineage and structural features to ORC as evidence/context, but it never selects the winning scaffold or grants execution authority.
 
-The next shared Hunch/ORC contract is the [Engineering Landscape Graph](docs/engineering-landscape.md).
+The initial shared Hunch/ORC [Engineering Landscape Graph](docs/engineering-landscape.md) production path is complete.
 Hunch publishes durable, repository-evidenced landscape fragments; ORC's reciprocal
 [`ENGINEERING-LANDSCAPE.md`](https://github.com/davesheffer/orc/blob/main/docs/ENGINEERING-LANDSCAPE.md)
 owns authorized cross-repository traversal, live discovery and task-scoped assembly. Hunch Memory's
@@ -81,11 +90,11 @@ health and passing tests did not supply the labels.
 ```text
 Project DNA usefulness proof — complete
   -> freeze ORC Change Passport contract/evidence matrix — complete
-  -> Hunch native change proof
-  -> Hunch Memory isolated proof transport
-  -> ORC cross-repository assembly and PR projection
-  -> trio dogfood
-  -> open protocol and external pilots
+  -> Hunch native change proof — complete
+  -> Hunch Memory isolated proof transport — complete
+  -> ORC cross-repository assembly and PR projection — complete
+  -> trio dogfood — complete
+  -> open protocol — portable kit complete; independent external validation open
 ```
 
 See ORC's [`PROOF-CARRYING-CHANGES.md`](https://github.com/davesheffer/orc/blob/main/docs/PROOF-CARRYING-CHANGES.md).
@@ -426,7 +435,7 @@ gate—known, unknown, evidence-backed and per-signal counts must establish a me
 before usefulness can influence ranking. Until then, retained observations have zero ranking,
 promotion or authority effect.
 
-### In progress — PCC-2 native Hunch change proof
+### PCC-2 native Hunch change proof — SHIPPED; external validation open
 
 Hunch's contribution is semantic and independently usable; it does not become execution, CI,
 deployment or merge authority.
