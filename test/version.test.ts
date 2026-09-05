@@ -38,3 +38,10 @@ test("distributed MCP launchers pin the exact npm package version", () => {
     args: ["-y", `--package=${expectedNpxPackage}`, "hunch", "mcp"],
   });
 });
+
+test("committed assistant hook pins match the release version", () => {
+  const hooks = readFileSync(new URL("../.windsurf/hooks.json", import.meta.url), "utf8");
+  const pins = [...hooks.matchAll(/hunch-exact@npm:@davesheffer\/hunch@([^\s"']+)/g)];
+  assert.ok(pins.length > 0);
+  for (const [, version] of pins) assert.equal(version, HUNCH_VERSION);
+});

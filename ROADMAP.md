@@ -1,6 +1,6 @@
 # Hunch roadmap
 
-Updated 2026-09-02.
+Updated 2026-09-05.
 
 Hunch is building the validated delivery layer for engineering intent: record why the code is the
 way it is, deliver the right evidence at the moment an agent needs it, and deterministically check
@@ -8,6 +8,23 @@ the resulting change. The graph is the source of truth; assistant rules, prompts
 other integrations are derived delivery surfaces.
 
 This file is the public execution view. `hunch now` remains the detailed live decision ledger.
+
+## Trio synchronization checkpoint — 2026-09-05
+
+Hunch's current published version is **1.23.3**. ORC adopted it in
+[PR #372](https://github.com/davesheffer/orc/pull/372); Hunch Memory must use the same exact
+package version and repair its existing assistant pins as part of the companion synchronization.
+Release bumps now reuse the native integration-pin writer and stage the committed hook changes;
+the version test catches a stale committed hook before publication. Other local assistant settings
+remain local; reconnect running MCP sessions after pin repair.
+
+PCC-2 native proof production, Memory's isolated transport, ORC Passport composition and the
+internal trio dogfood have shipped. ORC's portable protocol is published in
+[PR #368](https://github.com/davesheffer/orc/pull/368). Independent external producers/consumers,
+repository pilots and blind maintainer outcomes remain open. They are not implied by internal CI.
+The current operational priority is ORC's unattended startup/recovery, with crash-safe launches
+and exact CI observations shipped in PRs #370–#371; child completion wiring and the live restart/HCL
+gate remain. Hunch supplies semantic evidence, not workflow authority.
 
 ## Ecosystem boundary
 
@@ -242,7 +259,7 @@ and additional discovery families stay demand-triggered rather than implying thi
 unfinished. HLG-1 is closed by accepted decision `dec_a6d088f409`; the historical discovery anchor
 is `roadmap.engineering-landscape-hlg-2` (`dec_9130451387`).
 
-## Current baseline — v1.20.2
+## Historical baseline — v1.20.2
 
 - Reviewed Engineering Landscape records can advance to a newer exact revision only after immutable
   history proves the prior complete review; partial, edited, foreign and forged refreshes fail
@@ -417,8 +434,8 @@ deployment or merge authority.
 1. **PCC-2.1 — shipped: freeze `hunch.change-proof/1`.** The canonical sealed contract binds exact change identity, repository/base/result revisions, current DNA seals, decisions/constraints, two-tree blast radius, result conformance, strict guard evidence, omissions and unknowns.
 2. **PCC-2.2 — shipped: expose `hunch prove` through CLI/MCP.** `hunch prove` and `hunch_change_proof` use one deterministic derivation; external execution/reviewer/CI/deployment claims remain explicitly false.
 3. **PCC-2.3 — shipped: support exact transport.** The public package exports the authoritative validator and ships a versioned JSON Schema plus sealed fixture. Hunch still owns schema and semantic derivation; no service-side ranking logic was added.
-4. **PCC-2.4 — next: support Passport composition.** ORC references the untouched native proof; it may derive Passport completeness but cannot rewrite Hunch's verdict.
-5. **PCC-2.5 — open: validate publicly.** Dogfood the trio, then publish blind maintainer outcomes, including failures and unknowns.
+4. **PCC-2.4 — shipped: support Passport composition.** ORC references the untouched native proof; it may derive Passport completeness but cannot rewrite Hunch's verdict.
+5. **PCC-2.5 — internal trio dogfood complete; external validation open.** Publish blind maintainer outcomes, including failures and unknowns.
 
 **Done means:** the same exact change yields the same native proof locally and through an independent
 consumer, every claim has exact evidence or a gap, drift invalidates reuse, and proof grants no
