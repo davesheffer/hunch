@@ -30,8 +30,10 @@ The selected shared priority is ORC unattended startup/recovery. Child completio
 exact result/CI handoff and materialized-source readiness have shipped through ORC PR #379.
 The v2 live workflow reached terminal implementation/review after restart, but needed an in-flight
 code deployment and a manual CI rerun; it is recovery evidence, not the clean unattended gate.
-The v3 run is active at the checkpoint. Next: finish that gate, address measured startup/verification/
-deployment delays, then resume external validation when independent participants are available.
+V3 then completed editing but stalled before verified publication: command execution produced no
+test/typecheck result and publication rejected credential-generation drift. The workflow has not
+reached native terminal state. Next: resolve those waits, rerun the clean gate, address measured
+startup/deployment delays, then resume external validation when independent participants are available.
 Hunch owns semantic proof and evidence quality; its blind Infection outcome and evidence-gated
 usefulness experiment remain open. It does not acquire workflow authority.
 
