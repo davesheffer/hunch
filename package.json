@@ -69,7 +69,7 @@
     "node": ">=22.13.0"
   },
   "scripts": {
-    "version": "node tooling/sync-version-pins.mjs && git add plugin/.mcp.json server.json",
+    "version": "node tooling/sync-version-pins.mjs && git add plugin/.mcp.json server.json .windsurf/hooks.json",
     "sync-version-pins": "node tooling/sync-version-pins.mjs",
     "clean": "node --input-type=commonjs -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
     "build": "npm run clean && tsc -p tsconfig.json",

@@ -8,12 +8,19 @@
  * test — but only ~25 minutes into a full run (con_d56f17a941). Wired into the
  * npm "version" lifecycle so the bump itself keeps the pins true.
  */
+import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (rel) => readFileSync(join(projectRoot, rel), "utf8");
+
+// Use the same bounded config writer as `hunch integrations repair-pins`.
+// Source loading works before dist exists during a fresh checkout's npm version.
+execFileSync(process.execPath, ["--import", "tsx", "--input-type=module", "--eval",
+  "import { repairIntegrationPins } from './src/integrations/health.ts'; repairIntegrationPins(process.cwd());"],
+  { cwd: projectRoot, stdio: "inherit" });
 
 const { name, version } = JSON.parse(read("package.json"));
 const changed = [];
