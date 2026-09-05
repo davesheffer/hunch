@@ -255,6 +255,8 @@ test("doctor reports the unified overlay schema instead of the public routing sh
     assert.equal(existsSync(join(fixture.root, ".hunch/manifest.json")), false,
       "the code repository intentionally has no public memory manifest");
     const doctor = expectCli(fixture, ["doctor"], 0);
+    assert.match(doctor, /No repository integrations found/,
+      "CLI-only shared checkouts report absent integrations without failing doctor");
     assert.match(doctor, new RegExp(`schema:\\s+v${SCHEMA_VERSION} \\(hunch v${SCHEMA_VERSION}\\)`));
     assert.doesNotMatch(doctor, /run `hunch migrate`/);
   } finally {

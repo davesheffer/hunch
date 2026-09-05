@@ -5607,7 +5607,9 @@ program
   .action(async () => {
     const integrations = inspectIntegrations(findRoot());
     console.log(formatIntegrationHealth(integrations));
-    if (integrationHealthFails(integrations)) process.exitCode = 1;
+    // A shared-memory or CLI-only checkout may intentionally have no local
+    // assistant config. The explicit integrations check still fails that case.
+    if (integrations.harnesses.length > 0 && integrationHealthFails(integrations)) process.exitCode = 1;
     const { store, root } = storeFor();
     console.log(`Hunch root: ${root}`);
     console.log(`git repo:   ${isGitRepo(root) ? "yes" : "no"}  ${isGitRepo(root) ? `(HEAD ${headSha(root).slice(0, 8)})` : ""}`);
