@@ -24,6 +24,8 @@ import { hunchPaths, hunchPathsForDir, findRoot, toPosixTarget } from "../core/p
 import { writeFileAtomic } from "../core/io.js";
 import { looksLikeCorrection, CORRECTION_NUDGE } from "../core/correction.js";
 import { HUNCH_VERSION } from "../core/version.js";
+import { registerIntegrationCommands } from "./integrations.js";
+import { inspectIntegrations, formatIntegrationHealth, integrationHealthFails, integrationSessionWarning } from "../integrations/health.js";
 import { HunchStore } from "../store/hunchStore.js";
 import { JsonStore } from "../store/jsonStore.js";
 import { selectEmbedder } from "../store/embedder.js";
@@ -145,6 +147,7 @@ import { resolveInvocation, dim, synthesisStatusLines, maybeWarnOllamaContext } 
 
 const program = new Command();
 program.name("hunch").description("Hunch — engineering memory and a deterministic Change Gate for AI-assisted codebases.").version(HUNCH_VERSION);
+registerIntegrationCommands(program);
 
 let openStore: HunchStore | null = null;
 type TeamStoreOptions = { requireFreshTeamMemory?: boolean };
@@ -388,6 +391,7 @@ program
     }
 
     store.close();
+    console.log("\n" + formatIntegrationHealth(inspectIntegrations(root)));
     console.log("\nNext: make a commit (the hook captures a decision), then ask your coding assistant \"why is X built this way?\"");
     console.log("Cold start? Seed from history:  hunch backfill --since 90d");
     console.log("\n⭐ If Hunch earns its keep, a star helps others find it → https://github.com/davesheffer/hunch");
@@ -5601,6 +5605,9 @@ program
   .command("doctor")
   .description("Diagnose the environment (git, synthesis provider, index freshness).")
   .action(async () => {
+    const integrations = inspectIntegrations(findRoot());
+    console.log(formatIntegrationHealth(integrations));
+    if (integrationHealthFails(integrations)) process.exitCode = 1;
     const { store, root } = storeFor();
     console.log(`Hunch root: ${root}`);
     console.log(`git repo:   ${isGitRepo(root) ? "yes" : "no"}  ${isGitRepo(root) ? `(HEAD ${headSha(root).slice(0, 8)})` : ""}`);
@@ -5768,6 +5775,10 @@ function emitContext(
   event: "PreToolUse" | "PostToolUse" | "PostToolUseFailure" | "UserPromptSubmit" | "SessionStart" | "SubagentStart",
   text: string,
 ): void {
+  if (event === "SessionStart") {
+    const warning = integrationSessionWarning(findRoot(), provider);
+    if (warning) text = `${warning}\n\n${text}`;
+  }
   const output = contextHookOutput(provider, event, text);
   if (output) process.stdout.write(JSON.stringify(output));
 }

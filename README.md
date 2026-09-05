@@ -46,7 +46,37 @@ Reload your coding assistant, then ask a normal question:
 
 `hunch init` indexes the repository, installs local lifecycle hooks, and connects supported
 assistants without replacing their existing configuration. The next session receives the relevant
-story with its sources, not a giant transcript or a generic prompt wall.
+story with its sources, not a giant transcript or a generic prompt wall. Lifecycle coverage
+depends on the harness; MCP connectivity alone does not establish automatic grounding or enforcement.
+
+Check the repository's integrations after upgrading Hunch or switching assistants:
+
+```sh
+hunch integrations check
+hunch integrations repair-pins
+hunch integrations check --harness claude --probe --require mcp
+hunch integrations check --harness codex --require context,edit-blocking
+```
+
+`check` exits nonzero on stale pins, malformed configuration, or missing expected hooks.
+`repair-pins` aligns existing exact npm pins with the exact Hunch dependency in `package.json`
+(or the running Hunch version when no dependency is declared). It preserves other settings,
+refuses ambiguous/custom TOML and malformed files, and does not enable enforcement.
+Reconnect active MCP sessions after repairing pins.
+
+Capabilities are reported as **verified**, **advisory-only**, **unsupported**, or **untested**.
+`--require` fails unless every named capability is verified. The Codex example currently fails:
+Hunch's Codex integration supplies MCP and instructions, with no native lifecycle adapter.
+The opt-in `--probe` starts the selected generated npm launcher, checks the server version,
+and reads memory; it may download the pinned package. It verifies a fresh MCP process only,
+not the existing host session, hook delivery, or whether a model follows the memory.
+Custom launchers and environment overrides require host-side verification.
+
+`doctor` includes this report, and session hooks with a context channel surface configuration
+problems. Checks cover repository-local configurations; global/managed overrides remain
+outside this inspection. Use `hunch integrations check` in CI to prevent pin drift; add
+`--require` for capabilities your workflow cannot operate without. Hook failure remains
+non-blocking; this explicit CI/preflight gate fails closed on unmet requirements.
 
 ## One evidence loop, not another model
 
