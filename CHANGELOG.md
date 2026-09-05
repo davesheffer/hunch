@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+## 1.23.3 — 2026-09-05
+
+### Harness coverage and version drift become visible
+
+`hunch integrations check` reports repository-local MCP and lifecycle coverage for Claude,
+Codex, Cursor, VS Code, Windsurf, and Antigravity. Configuration alone never counts as
+verified delivery. Explicit capability requirements fail when support is advisory, missing,
+or untested; an opt-in fresh-process MCP probe verifies version identity and a memory read.
+
+`hunch integrations repair-pins` aligns existing exact npm launchers with the consuming
+repository's Hunch dependency while preserving other settings. Setup, doctor, and supported
+session hooks surface integration problems. This release does not add lifecycle support to
+harnesses whose Hunch adapters lack it, or certify existing host sessions or model compliance.
+
 ## 1.23.2 — 2026-09-03
 
 ### The public site moves to hunchmemory.com
