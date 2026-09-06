@@ -219,6 +219,7 @@ if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElem
       <a href="#overview">Overview</a>
       <a href="#install">Install</a>
       <a href="#initialize">Initialize a repo</a>
+      <a href="#update">Update Hunch</a>
       <a href="#first-query">Your first query</a>
     </div>
     <div class="nav-group">
@@ -310,6 +311,13 @@ if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElem
         <li>Wires up every detected assistant — Claude Code, Cursor, VS&nbsp;Code (Copilot), Windsurf, Codex — to the same <code>.hunch/</code> graph.</li>
       </ul>
       <div class="note"><span class="ic">ℹ</span><code>init</code> writes a <code>.mcp.json</code> pointing at <em>this machine’s</em> Node + Hunch, so each teammate runs it once. In Matrix mode it also validates the committed <code>.hunch/team.json</code>, clones the dedicated memory repo into ignored local storage, and writes this machine’s ignored pointer.</div>
+    </section>
+
+    <section id="update">
+      <h2>Update Hunch<a class="anchor" href="#update">#</a></h2>
+      <p>Ask an agent to <strong>“update Hunch”</strong>, or run <code>hunch update</code> from the repository root. It installs the latest release and aligns all configured harness pins while preserving existing settings.</p>
+      <p>For standalone npm projects, the command keeps Hunch in its current dependency section and saves an exact version. Without a repository dependency it updates the global CLI. Add <code>--global</code> to update both, or <code>--dry-run</code> to preview the commands. Other package managers and workspaces should update their dependency explicitly, then run <code>hunch integrations repair-pins</code>.</p>
+      <p>Restart or reconnect active assistant sessions afterward. Each invocation updates the current repository; repeat it in other repositories as needed.</p>
     </section>
 
     <section id="first-query">
@@ -596,6 +604,7 @@ Agent: hunch_record_correction({ rule: "never import lodash; use src/utils",
         <thead><tr><th>Command</th><th>What it does</th></tr></thead>
         <tbody>
           <tr><td><code>init</code></td><td>Scaffold <code>.hunch/</code>, index, install hooks, wire up assistants.</td></tr>
+          <tr><td><code>update [--global] [--dry-run]</code></td><td>Install the latest Hunch release and repair every configured harness pin in the current repository.</td></tr>
           <tr><td><code>index</code></td><td>Parse the repo into a symbol/dependency graph (deterministic, no LLM).</td></tr>
           <tr><td><code>backfill</code></td><td>Replay git history to seed decisions (cold-start fix). <code>--since 90d</code></td></tr>
           <tr><td><code>sync</code></td><td>Capture a decision from a commit (run by the post-commit hook).</td></tr>

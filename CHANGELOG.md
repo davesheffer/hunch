@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+## 1.24.0 — 2026-09-06
+
+### Update Hunch and every configured harness in one command
+
+`hunch update` resolves the latest npm release, updates a standalone npm project's
+Hunch dependency to an exact version in its existing dependency section, and repairs
+all configured harness pins using the newly installed version. Without a repository
+dependency it updates the global CLI. `--global` also updates the global CLI alongside
+a local dependency; `--dry-run` previews the commands without changing files.
+Generated agent instructions map “update Hunch” to this command. Existing hook settings
+are preserved, failures stop the update, and active MCP sessions must reconnect afterward.
+
+The newer DNA hero and its floating particles are now committed with the matching styles
+and all five localized homepages. Automatic site deployments from `main` retain the
+design that was previously present only in a manual Vercel deployment.
+
 ## 1.23.3 — 2026-09-05
 
 ### Harness coverage and version drift become visible
