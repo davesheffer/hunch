@@ -49,6 +49,24 @@ assistants without replacing their existing configuration. The next session rece
 story with its sources, not a giant transcript or a generic prompt wall. Lifecycle coverage
 depends on the harness; MCP connectivity alone does not establish automatic grounding or enforcement.
 
+To update Hunch and all configured harness pins for the current repository:
+
+```sh
+hunch update
+```
+
+Agents receive an instruction to run this when you ask **“update Hunch”** in the generated
+Hunch guidance. The command resolves npm's latest release, updates an existing dependency
+to an exact version in its current dependency section, then runs the new version's pin
+repair and integration check. Without a repository dependency it updates the global CLI.
+Use `--global` to also update the global CLI when a local dependency exists, or `--dry-run`
+to preview the commands. Restart active harnesses afterward. This applies to the current
+repository, not every project on your machine. Automatic dependency installation currently
+supports standalone npm projects; other package managers should update their dependency
+explicitly and then use `hunch integrations repair-pins`. Existing hook settings are preserved.
+An installation or check failure stops the command with a nonzero exit; completed npm
+changes are not rolled back. Fix the reported issue and rerun the command.
+
 Check the repository's integrations after upgrading Hunch or switching assistants:
 
 ```sh

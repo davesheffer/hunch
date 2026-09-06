@@ -52,6 +52,7 @@ export function renderHunchSection(store: HunchStore, root?: string): string {
   lines.push("**Consult Hunch via the `hunch_*` MCP tools — pick by MOMENT, not from memory:**");
   lines.push("");
   lines.push("**Orient (session/task start):**");
+  lines.push("- When the user asks to **update Hunch**, run `hunch update` from this repository root. It updates to the latest release and repairs all configured harness pins. Use `hunch update --global` to also update a global CLI alongside a repository dependency; reconnect active MCP sessions afterward.");
   lines.push("- `hunch_context(target)` — the minimal relevant slice for what you're about to do; a task phrase falls back to the closest graph matches. **Call FIRST.**");
   lines.push("- `hunch_structure(target?)` — the indexed shape of the repo/dir/file/symbol — orient from the graph, not grep rounds.");
   lines.push("- `hunch_runbook(task)` — the proven steps for a recurring task, before re-deriving them.");

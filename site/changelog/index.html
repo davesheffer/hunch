@@ -107,6 +107,10 @@
 
     <div class="clog">
       <div class="clog-group">
+        <div class="clog-date">Sep 6, 2026</div>
+        <div class="clog-row"><span class="rel-tag">v1.24.0</span><span class="clog-t"><b>One command keeps Hunch and its harnesses up to date</b> — ask an agent to update Hunch, or run <span class="mono">hunch update</span>, to install the latest release and align every configured harness in the current repository. Preview with <span class="mono">--dry-run</span> and reconnect active sessions afterward. The restored DNA hero is now saved in the repository so future site deployments preserve its design.</span></div>
+      </div>
+      <div class="clog-group">
         <div class="clog-date">Sep 1, 2026</div>
         <div class="clog-row"><span class="rel-tag">v1.23.2</span><span class="clog-t"><b>The public site moves to hunchmemory.com</b> — the package, plugin and MCP registry manifests now point at <span class="mono">www.hunchmemory.com</span>, titles use the two-word “Hunch Memory” form, and the site ships a generated sitemap and robots.txt. No runtime change since 1.23.1.</span></div>
         <div class="clog-row"><span class="rel-tag">v1.23.1</span><span class="clog-t"><b>The change-proof contracts actually ship</b> — the trusted release workflow refused the 1.23.0 tarball because its package-path allowlist predated the change-proof schema, fixture and type entries. The allowlist now admits exactly those paths, and the test suite executes the workflow's own allowlist against <span class="mono">npm pack --dry-run</span> so the mismatch fails before a tag exists. No runtime code changed.</span></div>

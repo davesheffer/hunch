@@ -25,6 +25,7 @@ import { writeFileAtomic } from "../core/io.js";
 import { looksLikeCorrection, CORRECTION_NUDGE } from "../core/correction.js";
 import { HUNCH_VERSION } from "../core/version.js";
 import { registerIntegrationCommands } from "./integrations.js";
+import { registerUpdateCommand } from "./update.js";
 import { inspectIntegrations, formatIntegrationHealth, integrationHealthFails, integrationSessionWarning } from "../integrations/health.js";
 import { HunchStore } from "../store/hunchStore.js";
 import { JsonStore } from "../store/jsonStore.js";
@@ -148,6 +149,7 @@ import { resolveInvocation, dim, synthesisStatusLines, maybeWarnOllamaContext } 
 const program = new Command();
 program.name("hunch").description("Hunch — engineering memory and a deterministic Change Gate for AI-assisted codebases.").version(HUNCH_VERSION);
 registerIntegrationCommands(program);
+registerUpdateCommand(program);
 
 let openStore: HunchStore | null = null;
 type TeamStoreOptions = { requireFreshTeamMemory?: boolean };

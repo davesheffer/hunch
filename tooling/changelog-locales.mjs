@@ -8,6 +8,7 @@ export const changelogLocales = {
       footer: "© Hunch — התאמה ארכיטקטונית לקוד AI.", home: "בית", githubReleases: "גרסאות ב-GitHub"
     },
     titles: [
+      "פקודה אחת מעדכנת את Hunch ואת כלי העבודה המחוברים",
       "האתר הציבורי עובר ל-hunchmemory.com",
       "חוזי הוכחת השינוי באמת נשלחים",
       "שינויים מדויקים נושאים הוכחה סמנטית מקורית",
@@ -49,6 +50,7 @@ export const changelogLocales = {
       footer: "© Hunch — архитектурное соответствие для ИИ-кода.", home: "Главная", githubReleases: "Релизы на GitHub"
     },
     titles: [
+      "Одна команда обновляет Hunch и подключённые инструменты",
       "Публичный сайт переезжает на hunchmemory.com",
       "Контракты доказательства изменений действительно поставляются",
       "Точные изменения несут собственное семантическое доказательство",
@@ -90,6 +92,7 @@ export const changelogLocales = {
       footer: "© Hunch — التوافق المعماري لكود الذكاء الاصطناعي.", home: "الرئيسية", githubReleases: "الإصدارات على GitHub"
     },
     titles: [
+      "أمر واحد لتحديث Hunch والأدوات المتصلة",
       "الموقع العام ينتقل إلى hunchmemory.com",
       "عقود إثبات التغيير تُشحن فعلًا",
       "التغييرات الدقيقة تحمل إثباتًا دلاليًا أصليًا",
@@ -131,6 +134,7 @@ export const changelogLocales = {
       footer: "© Hunch — conformidad arquitectónica para código de IA.", home: "Inicio", githubReleases: "Versiones en GitHub"
     },
     titles: [
+      "Un comando actualiza Hunch y las herramientas conectadas",
       "El sitio público se muda a hunchmemory.com",
       "Los contratos de prueba de cambio realmente se publican",
       "Los cambios exactos llevan prueba semántica nativa",
