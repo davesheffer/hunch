@@ -153,8 +153,10 @@
     pointer-events:none;user-select:none;
   }
   .hero-art canvas{position:sticky;top:0;width:100%;height:100vh;height:100svh;display:block}
+  .hero-signals{position:absolute;inset:-60px 0 0;z-index:2;pointer-events:none;user-select:none}
+  .hero-signals canvas{position:sticky;top:0;width:100%;height:100vh;height:100svh;display:block}
   .hero-art::after{ /* readability wash over the text column */
-    content:"";position:absolute;inset:0;
+    content:"";position:absolute;inset:0;opacity:.55;
     background:
       radial-gradient(680px 520px at 24% 50%,var(--bg) 38%,color-mix(in srgb,var(--bg) 55%,transparent) 68%,transparent 88%),
       linear-gradient(to bottom,color-mix(in srgb,var(--bg) 65%,transparent),transparent 22%,transparent 78%,var(--bg));
@@ -559,7 +561,7 @@
   </div>
 </footer>
 
-<script type="module" src="/dna-hero.js?v=scroll-fast-1"></script>
+<script type="module" src="/dna-hero.js?v=floating-space-2"></script>
 <script>
   // Canvas fallback for browsers that cannot load the Three.js module or
   // create a WebGL context. It preserves the evidence-graph story without
