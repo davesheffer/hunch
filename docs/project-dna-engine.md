@@ -1,48 +1,44 @@
 # Project DNA Engine
 
-Status: **P1 strategic initiative — production implementation in progress across Hunch, Hunch Memory and ORC**
+Status: **repository capability shipped; organizational DNA extension planned under the deterministic-state roadmap**
 
 ## Vision
 
-Hunch should learn and adopt the engineering DNA of a repository so an agent entering an unfamiliar project behaves and communicates like a contributor who already understands that project, rather than sounding like a generic Claude-, Codex-, or model-generated contributor.
+Project DNA lets an agent entering an unfamiliar repository work and communicate with evidence-backed awareness of that project's established conventions instead of behaving like a generic model-generated contributor.
 
-Project DNA is not a prompt persona and is not limited to code style. It is an evidence-backed, revision-aware model of how a repository's maintainers communicate, reason, review, and build software.
+It is not a prompt persona and is not limited to code style. It is a revision-aware model of how a repository's maintainers communicate, reason, review and build software.
 
-The initial cross-product production roadmap is complete as of 2026-08-31. Hunch provides sealed
-baseline discovery, explicit host-authorized PR/review intake, explainable matching and deltas;
-Hunch Memory provides isolated immutable transport; and ORC provides authorized, role-shaped
-consumption with exact receipts. The frozen Infection acceptance profile and the three-repository
-harness cover repository scale, delta propagation, isolation, malformed input and service fallback.
-The milestone list below remains the long-horizon product model, not a claim that speculative
-persona cloning, automatic policy learning or a public profile marketplace is required for the
-production contract.
+The initial repository production path is complete. Hunch provides sealed baseline discovery, explicit host-authorized PR/review intake, explainable matching and deltas, bounded delivery and receipt-bound usefulness observations.
 
-The capability should extend Hunch's existing graph, provenance, currentness, delivery, and memory contracts rather than create a parallel source of truth.
+Previous Hunch Memory transport and ORC consumption proved the contract could survive process boundaries and another orchestrator. They are historical production evidence, not the future product topology.
+
+The current roadmap keeps Project DNA as an engine primitive and extends the same deterministic-state ideas upward to **user, team and organization DNA** through one Hunch state graph and one shared state contract.
+
+Read [Deterministic organizational state](deterministic-state.md) for the active architecture.
 
 ## What Project DNA captures
 
 A repository DNA profile may contain bounded, evidence-backed traits across these layers:
 
-1. **Communication DNA** — terminology, tone, preferred level of detail, issue/PR language, commit conventions, recurring phrases and project-specific vocabulary.
-2. **Engineering DNA** — architectural preferences, abstraction boundaries, naming and organization patterns, testing philosophy, dependency preferences, error-handling conventions, and recurring implementation patterns.
-3. **Review DNA** — what maintainers repeatedly request, reject, question, or approve; expected evidence; review strictness; common objections; and preferred change scope.
-4. **Culture DNA** — contribution norms, backwards-compatibility posture, documentation expectations, appetite for refactors, stability versus experimentation bias, and other durable repository-specific conventions.
+1. **Communication DNA** — terminology, preferred level of detail, issue/PR language, commit conventions, recurring phrases and project-specific vocabulary.
+2. **Engineering DNA** — architectural preferences, abstraction boundaries, naming/organization patterns, testing philosophy, dependency preferences and recurring implementation patterns.
+3. **Review DNA** — what maintainers repeatedly request, reject, question or approve; expected evidence; common objections; preferred change scope.
+4. **Culture DNA** — contribution norms, backwards-compatibility posture, documentation expectations, stability versus experimentation bias and other durable repository conventions.
 
 Traits must distinguish observed evidence from inference. No inferred trait becomes durable authority merely because a model generated it.
 
 ## Evidence sources
 
-Discovery should use only authorized, bounded repository evidence, for example:
+Discovery uses only authorized, bounded evidence, for example:
 
-- accepted and rejected pull requests;
-- review comments and review outcomes;
-- issues and maintainer discussions;
+- accepted/rejected pull requests supplied through an explicit host boundary;
+- review comments/outcomes supplied through that boundary;
 - commit messages and change history;
 - CONTRIBUTING, AGENTS, ADR/MADR and project documentation;
 - code, tests, configuration and repository structure;
 - existing Hunch decisions, constraints, findings and Engineering Landscape records.
 
-Every durable DNA trait must retain provenance, revision/currentness information, confidence, and the evidence that supports it. Sensitive/private sources must preserve the existing Hunch public/private-store boundary.
+Every durable trait retains provenance, revision/currentness information, confidence and evidence identity. Sensitive/private sources preserve Hunch's existing public/private boundaries.
 
 ## Runtime flow
 
@@ -53,7 +49,7 @@ DNA discovery / candidate extraction
       ↓
 evidence + provenance + confidence
       ↓
-reviewed Project DNA profile
+revision-bound Project DNA profile
       ↓
 Hunch ranking / bounded delivery
       ↓
@@ -63,124 +59,170 @@ code + PR + issue + review output
       ↓
 Project Match evaluation
       ↓
-new evidence / candidate updates
+explicit outcome evidence / candidate updates
 ```
 
-Project DNA should be loaded automatically when Hunch serves context for that repository. It should shape presentation and task-relevant guidance without weakening universal constraints, provenance checks, currentness checks, or deterministic conformance gates.
+Project DNA may be loaded automatically when Hunch serves repository context. It should shape presentation and task-relevant guidance without weakening universal constraints, provenance/currentness checks or deterministic gates.
 
-## Project Match Score
+## Project Match
 
-Introduce an explainable **Project Match Score** for generated contributions. It estimates how well an output matches the repository's known DNA across relevant dimensions such as communication, engineering conventions, review expectations, and contribution culture.
+Project Match is an explainable advisory evaluation of how well an artifact matches evidence-backed repository conventions.
 
-The score is advisory unless a future reviewed policy explicitly promotes a specific dimension to enforcement. It must expose the traits/evidence responsible for the result rather than returning an opaque model score.
+It may evaluate dimensions such as:
 
-The goal is not imitation for its own sake. The goal is to catch contributions that are technically plausible but obviously foreign to the repository's established way of working.
+- commit-title conventions;
+- recurring repository vocabulary;
+- explicit rationale expectations;
+- issue-reference expectations;
+- other bounded deterministic checks tied to observed traits.
+
+The score is advisory unless a separate reviewed policy explicitly promotes a precise rule into deterministic enforcement.
+
+Project Match must expose the traits/evidence responsible for the result. It is not proof of maintainer acceptance and is not itself causal evidence of a good change.
 
 ## Continuous learning and drift resistance
 
-Repository DNA changes over time. Hunch must therefore treat DNA as revision-aware and self-correcting:
+Repository DNA changes over time. Hunch therefore treats profiles as revision-specific and evidence-bound:
 
-- traits have evidence, confidence and freshness;
-- contradictory evidence creates reviewable findings/candidates rather than silently rewriting history;
-- old evidence can decay in relevance without being deleted;
-- maintainer-reviewed evidence outranks weak behavioural inference;
-- multiple competing hypotheses may coexist until evidence resolves them;
-- no single PR, reviewer, agent run or generated output should redefine project culture.
+- traits have evidence, confidence and freshness/currentness;
+- contradictory evidence creates visible reviewable state rather than silently rewriting history;
+- old evidence may become stale without being deleted;
+- maintainer-reviewed evidence outranks weak behavioral inference;
+- no single PR, reviewer, agent run or generated output redefines project culture;
+- a new exact revision produces a new sealed profile rather than mutating the old one.
 
-This prevents Project DNA from becoming a self-reinforcing style drift loop.
+This prevents a self-reinforcing style-drift loop.
 
-## Relationship to Hunch Memory
+## Relationship to deterministic organizational state
 
-Project DNA is a Hunch semantic capability, not a second memory product. Hunch's graph remains authoritative. Hunch Memory may transport/store the profile and its evidence under existing isolation contracts, but it must not invent, rank, promote, or rewrite DNA independently.
+Project DNA is the repository-scoped DNA primitive.
+
+The broader roadmap adds:
+
+```text
+repository DNA  -> how this repository demonstrably works
+user DNA        -> explicit durable preferences/rules for one principal
+team DNA        -> reviewed team working conventions
+organization DNA-> reviewed organization-wide conventions/boundaries
+```
+
+All four should share core properties:
+
+- stable identity;
+- explicit scope;
+- provenance;
+- confidence/currentness;
+- contradiction/supersession history;
+- bounded delivery;
+- explicit authority.
+
+A higher scope must not silently overwrite evidence-bound repository observations. If an organization rule is authoritative, it should be represented as its own reviewed state/policy and delivered alongside repository DNA with the conflict visible.
+
+## One-product boundary
+
+The earlier architecture described three product roles:
+
+```text
+Hunch -> Hunch Memory -> ORC -> agent
+```
+
+That is no longer the forward architecture.
+
+The target is:
+
+```text
+Hunch state graph
+  repository/team/user/org partitions
+        │
+        ▼
+one versioned state/delivery contract
+        │
+        ▼
+Sofia / Codex / Claude Code / future agent
+```
+
+No separate Hunch Memory product is required to transport Project DNA, and no ORC-specific ContextAssembler owns the future consumption model.
+
+Each agent/host remains responsible for source authorization, final prompt/context assembly and execution. Hunch supplies deterministic state and evidence through a provider-neutral contract.
 
 ## Relationship to Repository Intelligence
 
 Project DNA answers:
 
-> **How does this repository think, communicate, review, and build?**
+> **How does this repository demonstrably communicate and work?**
 
-Repository Intelligence is the higher reasoning layer that can use DNA plus Hunch's existing evidence to ask:
+A higher reasoning layer may ask:
 
 > **Why is the repository this way, what is changing, what is risky, and what is likely to matter next?**
 
-The intended stack is:
+Those hypotheses are probabilistic. They must remain traceable and must not contaminate the evidence-bound DNA profile.
 
-```text
-Hunch evidence + memory
-        ↓
-Project DNA
-        ↓
-Repository Intelligence / evidence-backed hypotheses
-        ↓
-validated, repository-native agent behaviour
-```
+## Original milestone status
 
-Repository Intelligence must not contaminate Project DNA with unsupported hypotheses. DNA remains evidence-grounded; higher-order inference remains explicitly probabilistic and traceable.
+The repository capability delivered the useful first production sequence:
 
-## Milestones
+### DNA-1 — Contract and evidence model — complete
 
-### DNA-1 — Contract and evidence model
+Versioned profile/trait identity, repository/revision scope, provenance, confidence/currentness and contradiction-safe state are implemented.
 
-Define a versioned Project DNA trait/profile contract with stable identity, repository/revision scope, provenance, confidence, freshness, contradiction state, and public/private-store semantics. Reuse existing Hunch graph primitives wherever possible.
+### DNA-2 — Deterministic discovery baseline — complete
 
-### DNA-2 — Deterministic discovery baseline
+Bounded discovery from committed repository evidence exists without ambient network/model dependence.
 
-Build bounded candidate extraction from high-signal committed sources first: contribution docs, ADRs, repository structure, tests, commit conventions, and existing Hunch records. Add GitHub discussion/review evidence only through an explicit authorized intake boundary.
+### DNA-3 — Communication and review DNA — initial production slice complete
 
-### DNA-3 — Communication and review DNA
+Repository vocabulary, contribution/title conventions, rationale practice and authorized recurring maintainer expectations can be represented when bounded evidence supports them.
 
-Extract repository vocabulary, contribution tone, PR conventions, review expectations, recurring maintainer objections, and evidence expectations. Keep observations traceable to exact source evidence.
+### DNA-4 — Engineering DNA — bounded observations only
 
-### DNA-4 — Engineering DNA
+Engineering conventions may be represented when deterministic evidence supports them. Statistical frequency is not architectural authority.
 
-Add architectural and implementation conventions derived from code/history plus accepted Hunch knowledge. Avoid turning statistical frequency into architectural authority without evidence.
+### DNA-5 — Bounded agent delivery — complete
 
-### DNA-5 — Bounded agent delivery
+Task-relevant DNA can be delivered through Hunch's existing budgeted context machinery.
 
-Deliver task-relevant DNA through Hunch's existing role-shaped, currentness-checked, hard-budgeted context envelope. Agents should receive only DNA relevant to the current task and role.
+### DNA-6 — Project Match evaluation — complete as advisory primitive
 
-### DNA-6 — Project Match evaluation
+Explainable deterministic artifact checks exist without granting authority.
 
-Create an explainable evaluator for code/PR/issue/review output. Benchmark whether it predicts maintainer objections and reduces obviously foreign contributions without forcing superficial stylistic mimicry.
+### DNA-7 — Continuous learning — evidence-gated only
 
-### DNA-7 — Continuous learning
+Later outcomes may become candidates/usefulness observations; they do not automatically rewrite trusted DNA.
 
-Use later maintainer outcomes as evidence-bearing candidates. Add contradiction handling, confidence/freshness updates, and protection against self-generated feedback loops.
+### DNA-8 — reusable public-profile catalog — deferred
 
-### DNA-8 — Reusable DNA cache/library
-
-Only after the repository-local model is validated, explore reusable/cached DNA profiles for public repositories. Cached DNA must remain revision-bound and refreshable; it never overrides local/current evidence.
+A public/reusable cache is not required by the deterministic organizational-state pilot. Exact-revision local/current evidence remains primary.
 
 ## Post-DNA handoff
 
-The initial cross-product implementation is complete. The genuine receipt-bound production gate
-passed on 2026-09-02 with two accountable `repo/voice` classifications and the same-store aggregate
-change (`retained=2`, `classified=2`, `evidenceBacked=2`, `used=2`). Project Match, conformance,
-tests and deployment health did not supply those labels; silence remains a tested `unknown`.
+Project DNA now feeds two important directions:
 
-After that completed gate, DNA remains an observational input to Proof-Carrying Changes. Native Hunch proof
-may reference the exact profile/snapshot/retrieval and role projection, but neither it nor ORC's
-Passport may mutate DNA, infer a label, rank/promote knowledge or grant execution/merge authority.
-Order is owned by ORC's [`PROOF-CARRYING-CHANGES.md`](https://github.com/davesheffer/orc/blob/main/docs/PROOF-CARRYING-CHANGES.md)
-and mirrored in `ROADMAP.md`.
+1. **Native Change Proof / deterministic enforcement** — exact DNA identity may be part of the proof/context around a change without granting merge/deploy authority.
+2. **Deterministic organizational state** — the same DNA principles are generalized to user/team/org scope so heterogeneous agents can act from stable reviewed conventions.
+
+The active cross-domain pilot is Sofia, not a new ORC roadmap. Sofia should read shared state before re-deriving known organizational facts and write verified action receipts/commitments after external operations complete.
 
 ## Acceptance criteria
 
-Project DNA is successful when, on a repository unfamiliar to the agent:
+Repository Project DNA remains successful when:
 
-- Hunch can produce a compact, evidence-backed DNA profile;
-- another agent can consume it without needing a giant transcript or prompt wall;
-- generated PR descriptions, implementation choices and review responses measurably match repository norms better than the same agent without DNA;
+- Hunch produces a compact, evidence-backed exact-revision profile;
+- another agent consumes it without a giant transcript/prompt wall;
+- relevant output better matches repository norms without superficial impersonation;
 - maintainers can inspect why Hunch believes each important trait;
-- stale or contradictory traits are visible rather than silently reinforced; and
-- the feature works across Claude, Codex and future agents without becoming model-specific.
+- stale/contradictory traits remain visible;
+- the feature remains model/provider neutral; and
+- no profile observation silently becomes permission or blocking policy.
+
+The organizational DNA extension will add a separate acceptance question: can multiple agents consume the same user/team/org conventions without independently reconstructing contradictory working rules?
 
 ## Non-goals
 
 - Generic persona cloning.
 - Pretending an agent is a specific human maintainer.
-- Blindly copying slang or superficial writing quirks.
+- Blindly copying slang or superficial quirks.
 - Treating frequency as truth.
-- Letting generated agent output train the repository profile without an evidence/authority boundary.
-- Creating another source of truth beside the Hunch graph.
-- Moving agent routing or orchestration ownership from ORC into Hunch.
+- Letting generated agent output train the profile without an evidence/authority boundary.
+- Creating another source of truth beside the Hunch state graph.
+- Moving connector access or general orchestration into Hunch.
+- Requiring ORC or a separate Hunch Memory product.
