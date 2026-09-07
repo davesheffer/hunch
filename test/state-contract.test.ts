@@ -4,7 +4,7 @@ import {
   ActionReceiptSchema, CommitmentSchema, DerivedStateSchema, ExternalEntitySchema, StateRelationshipSchema,
   ReadRequestSchema, ReadResponseSchema, WriteRequestSchema, WriteResultSchema, SubscribeRequestSchema, ChangeEventSchema,
   PrincipalSchema, ExternalRefSchema, STATE_CAPABILITIES, STATE_INVARIANTS,
-  canonicalize, stateHash, receiptId, commitmentId, derivedId, entityId, relationshipId, negotiate,
+  canonicalize, stateHash, actionReceiptId, commitmentId, derivedId, entityId, relationshipId, negotiate,
   assertReadWithinGrants, assertWriteWellFormed, assertDerivedState, assertChangeSequence,
 } from "../src/core/stateContract.js";
 
@@ -22,11 +22,11 @@ const gmailThread = ExternalRefSchema.parse({ system: "gmail", object_type: "thr
 
 test("a Sofia approval becomes an action receipt whose id is the action, not the row", () => {
   const base = { scope: user, actor: "sofia@david", action_kind: "add_comment", target: crmEvent, request_fingerprint: stateHash({ eventId: 26879, comment: "הלוגו לא הוסר והכול תקין." }) };
-  const id = receiptId(base);
+  const id = actionReceiptId(base);
   const receipt = ActionReceiptSchema.parse({ schema: "nuryel.receipt/1", id, ...base, state: "verified", occurred_at: "2026-09-07T08:55:22Z", verified_at: "2026-09-07T08:55:40Z", provenance: prov });
   assert.equal(receipt.state, "verified");
-  assert.equal(receiptId({ ...base, target: { ...crmEvent, observed_at: "2026-09-08T00:00:00Z" } }), id, "observation time does not change the action's identity");
-  assert.notEqual(receiptId({ ...base, request_fingerprint: stateHash({ eventId: 26879, comment: "אחר" }) }), id, "a different request is a different action");
+  assert.equal(actionReceiptId({ ...base, target: { ...crmEvent, observed_at: "2026-09-08T00:00:00Z" } }), id, "observation time does not change the action's identity");
+  assert.notEqual(actionReceiptId({ ...base, request_fingerprint: stateHash({ eventId: 26879, comment: "אחר" }) }), id, "a different request is a different action");
 });
 
 test("a Sofia follow-up becomes a commitment with an in-force window", () => {

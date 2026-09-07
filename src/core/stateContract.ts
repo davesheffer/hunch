@@ -350,7 +350,7 @@ const idFrom = (prefix: string, seed: unknown): string => `${prefix}_${createHas
 
 /** Identity = what makes two receipts the same action: who did what to which object, with which
  *  request. Re-sending the same action replays the same receipt instead of minting a second one. */
-export function receiptId(r: Pick<ActionReceipt, "scope" | "actor" | "action_kind" | "target" | "request_fingerprint"> & { idempotency_key?: string }): string {
+export function actionReceiptId(r: Pick<ActionReceipt, "scope" | "actor" | "action_kind" | "target" | "request_fingerprint"> & { idempotency_key?: string }): string {
   return idFrom("nrc", { scope: r.scope, actor: r.actor, action_kind: r.action_kind, target: { system: r.target.system, object_type: r.target.object_type, object_key: r.target.object_key }, request_fingerprint: r.request_fingerprint, idempotency_key: r.idempotency_key ?? null });
 }
 export function commitmentId(c: Pick<Commitment, "scope" | "subject" | "title" | "owner" | "due">): string {

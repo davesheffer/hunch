@@ -67,7 +67,7 @@ Each new facet is lifted from a record Sofia already keeps:
 
 `canonicalize` sorts keys by code unit at every level, drops `undefined`, rejects non-finite
 numbers; `stateHash` is `sha256:` over that form. Ids derive from *what makes two records the
-same fact*: `receiptId` (action, not row), `commitmentId` (scope, subject, title, owner, due),
+same fact*: `actionReceiptId` (action, not row), `commitmentId` (scope, subject, title, owner, due),
 `derivedId` (scope, subject, transform, dependency hashes — order-independent), `entityId`
 (kind-qualified, same rule as Landscape resources), `relationshipId` (same rule as graph edges).
 
