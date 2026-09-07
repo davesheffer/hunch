@@ -6,12 +6,11 @@ description: Hunch engineering memory — consult the hunch_* MCP tools before e
 <!-- HUNCH:START — auto-generated, do not edit by hand -->
 ## 🧠 Hunch (Engineering Memory)
 
-This repo has **Hunch** — a curated graph of *why* the code is the way it is (decisions, bug history, invariants). It currently holds **206 decisions, 2 bugs, 28 constraints, 19 components, 3 policies, 1 open findings**.
+This repo has **Hunch** — a curated graph of *why* the code is the way it is (decisions, bug history, invariants). It currently holds **207 decisions, 2 bugs, 28 constraints, 19 components, 3 policies, 1 open findings**.
 
 **Consult Hunch via the `hunch_*` MCP tools — pick by MOMENT, not from memory:**
 
 **Orient (session/task start):**
-- When the user asks to **update Hunch**, run `hunch update` from this repository root. It updates to the latest release and repairs all configured harness pins. Use `hunch update --global` to also update a global CLI alongside a repository dependency; reconnect active MCP sessions afterward.
 - `hunch_context(target)` — the minimal relevant slice for what you're about to do; a task phrase falls back to the closest graph matches. **Call FIRST.**
 - `hunch_structure(target?)` — the indexed shape of the repo/dir/file/symbol — orient from the graph, not grep rounds.
 - `hunch_runbook(task)` — the proven steps for a recurring task, before re-deriving them.
