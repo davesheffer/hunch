@@ -1,0 +1,46 @@
+{
+  "id": "dec_dc948d95dd",
+  "title": "refactor(state): actionReceiptId — avoid a second receiptId symbol in the graph",
+  "topic": null,
+  "status": "accepted",
+  "context": "Hunch's redundancy guard flagged the name collision with\ncorrectionStage.ts's receiptId (a different receipt).\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n What changed: added actionReceiptId; removed receiptId.",
+  "decision": "Refactored src/core, test/state-contract.test.ts: added actionReceiptId; removed receiptId.",
+  "consequences": [
+    "Removes receiptId — potential breaking change for callers."
+  ],
+  "alternatives_rejected": [],
+  "rejected_tripwires": [],
+  "related_components": [
+    "cmp_a94a8fe5cc",
+    "cmp_b256a6aed0"
+  ],
+  "related_files": [
+    "src/core/stateContract.ts",
+    "test/state-contract.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "18de3d8",
+  "valid_from": "2026-09-07T16:19:25+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [
+      "receiptId"
+    ],
+    "deps": []
+  },
+  "provenance": {
+    "source": "inferred",
+    "confidence": 0.45,
+    "evidence": [
+      "commit:18de3d8",
+      "synth:provider=deterministic",
+      "branch:nuryel/state-contract",
+      "src/core/stateContract.ts",
+      "test/state-contract.test.ts"
+    ],
+    "last_verified": "2026-09-07T13:20:24.385Z"
+  },
+  "date": "2026-09-07T16:19:25+03:00"
+}
