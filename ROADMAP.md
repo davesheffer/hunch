@@ -23,13 +23,15 @@ Gate status against the plan below:
 | 1 — additive state contracts | done, 1.25.0 | `nuryel.state/1`: read / write / subscribe, five facets, invariants as tests; `records` verb added in 1.27.0 |
 | 2 — fold the state service | done, 1.26.0–1.27.0 | `hunch serve`: served partitions, bearer → principal, cross-process write lock, typed client; Hunch Memory marked folded; `hunch mcp --root` for stdio agents |
 | 3 — integrate Sofia | done except UI provenance | receipts, commitments, cited summaries written through the contract; drawer read before summarizing; reuse 50 s → 4.5 s; deterministic action gate preserved; receipts not yet shown in Sofia's UI |
-| 4 — second heterogeneous agent | partial | Claude Code, opened on a code repository, read the drawer and wrote a commitment through the contract; the cross-domain incident → engineering decision → change proof → closure chain is not yet exercised |
+| 4 — second heterogeneous agent | partial; many-agents proven on an emulated organization | Claude Code, opened on a code repository, read the drawer and wrote a commitment through the contract. Three emulated Sofias over ten clinics and a generated year (mail, chat, CRM), one organization drawer: 96 cited summaries, 24 verified receipts, 24 commitments with same-subject duplicates replayed, ledger contiguous, zero contradictions (1.28.0: union read, supersede target must be open, subjects keyed by CRM site). The cross-domain incident → engineering decision → change proof → closure chain is not yet exercised |
 | 5 — re-measure, kill criterion | pending | after-measurement runs the week of 2026-09-08 with the second agent writing |
 | 6 — naming | deferred | on purpose; a product name is not a category |
 
-Defects found by the first live writers and fixed the same day (1.26.1–1.27.0): served writes
+Defects found by the first live writers and fixed the same day (1.26.1–1.28.0): served writes
 not committing, MCP roots re-homing a served partition, reads without record bodies, a stable
-idempotency key with a varying payload. Each became a test, a refusal message, or a verb.
+idempotency key with a varying payload, an action kind in the CRM's casing refused by the
+contract, two racing writers leaving two current summaries for one subject. Each became a test,
+a refusal message, or a verb.
 
 ## What stays true
 
