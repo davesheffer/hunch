@@ -159,3 +159,31 @@ test("CLI: `hunch serve init --config <file>` honors the path from any cwd (1.26
     assert.equal(readServeConfig(join(dir, "cfg.json")).port, 27780, "--port after init reaches init, not the parent");
   } finally { rmSync(dir, { recursive: true, force: true }); rmSync(elsewhere, { recursive: true, force: true }); }
 });
+
+test("a served partition that is a git repository commits every write: durability is committed, not local", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "hunch-serve-durable-"));
+  try {
+    const file = join(dir, "hunch-serve.json");
+    const root = join(dir, "david");
+    const init = initServeConfig({ file, scope: david, root, principal: { id: "sofia@david", kind: "agent" } });
+    execFileSync("git", ["init", "-q", root]);
+    execFileSync("git", ["-C", root, "config", "user.email", "test@example.invalid"]);
+    execFileSync("git", ["-C", root, "config", "user.name", "test"]);
+    const app = createServeApp(readServeConfig(file), { version: "test" });
+    try {
+      const base = await listen(app);
+      const sofia = createStateClient({ baseUrl: base, token: init.token! });
+      const receipt = { schema: "nuryel.receipt/1", scope: david, actor: "sofia@david", action_kind: "add_comment", target: crmEvent, request_fingerprint: stateHash({ d: 1 }), state: "verified", occurred_at: "2026-09-08T10:00:00Z", provenance: prov, invalidates: [] };
+      const created = await sofia.write({ scope: david, facet: "receipts", record: receipt, idempotency_key: "durable-1" });
+      assert.equal(created.outcome, "created");
+      assert.equal(created.durability, "committed", "the flush ran under the write lock and still committed");
+      const log = execFileSync("git", ["-C", root, "log", "--format=%s", "--name-only"], { encoding: "utf8" });
+      assert.match(log, /nuryel: write nrc_/);
+      assert.match(log, /\.hunch\/receipts\/nrc_[a-f0-9]{24}\.json/, "the record is in the commit");
+      assert.match(log, /\.hunch\/changes\/user-david-[a-f0-9]{8}\.json/, "the ledger rides the same commit");
+      assert.match(log, /\.hunch\/partition\.json/, "the partition declaration is committed");
+      assert.doesNotMatch(log, /write\.lock|hunch\.sqlite/, "derived artifacts never enter a commit");
+      assert.ok(!existsSync(writeLockPath(join(root, ".hunch"))));
+    } finally { await new Promise<void>((r) => app.close(() => r())); app.closeStores(); }
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
