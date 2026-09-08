@@ -43,6 +43,12 @@ export const ServeConfigSchema = z.object({
 }).strict();
 export type ServeConfig = z.infer<typeof ServeConfigSchema>;
 
+export const PARTITION_GITIGNORE = [
+  "# hunch serve partition — derived runtime artifacts (regenerable from .hunch/*.json)",
+  ".hunch/*.sqlite", ".hunch/*.sqlite-shm", ".hunch/*.sqlite-wal", ".hunch/*.sqlite-journal",
+  ".hunch/**/*.tmp*", ".hunch/write.lock", ".hunch/.hunch-commit.lock", ".hunch/local.json", ".hunch/events.log", "",
+].join("\n");
+
 export function hashToken(token: string): string {
   return createHash("sha256").update(token, "utf8").digest("hex");
 }
@@ -111,6 +117,10 @@ export function initServeConfig(opts: { file: string; scope: Scope; root: string
   }
   const manifest = resolve(hunchDir, "manifest.json");
   if (!existsSync(manifest)) writeFileAtomic(manifest, JSON.stringify({ schema_version: 3 }, null, 2) + "\n");
+  // A served partition is meant to be its own git repository: keep the derived index, temp
+  // files and locks out of it so every auto-commit is records + ledger only.
+  const ignore = resolve(root, ".gitignore");
+  if (!existsSync(ignore)) writeFileAtomic(ignore, PARTITION_GITIGNORE);
   const partitions = existing ? existing.partitions.filter((p) => scopePath(p.scope) !== scopePath(opts.scope)) : [];
   const partition: PartitionConfig = { scope: opts.scope, root };
   partitions.push(partition);

@@ -46,6 +46,7 @@ test("serve init declares the partition, mints a token once, stores only its has
   try {
     assert.deepEqual(JSON.parse(readFileSync(join(dir, "david", ".hunch", "partition.json"), "utf8")), david);
     assert.ok(existsSync(join(dir, "david", ".hunch", "manifest.json")));
+    assert.match(readFileSync(join(dir, "david", ".gitignore"), "utf8"), /\.hunch\/\*\.sqlite/, "the partition ignores its derived index");
     assert.equal(config.partitions.length, 2);
     const sofia = config.principals.find((p) => p.id === "sofia@david")!;
     assert.equal(sofia.token_sha256, hashToken(sofiaToken));
