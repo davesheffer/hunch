@@ -15,7 +15,9 @@ partition and ignores the client's workspace roots and per-call `cwd` hints, so 
 opened on any repository reads the same drawer. A read carries the referenced records
 (`ReadResponse.records`, additive) and `nuryel_read` renders the state of record — current
 derived content, commitments with due and owner, receipts with action, target and verification —
-so a consumer answers from the drawer without a second lookup.
+so a consumer answers from the drawer without a second lookup. `nuryel_write` over MCP takes
+the same partition write lock as `hunch serve`, so a second agent writing over stdio cannot race
+the server.
 
 ## 1.26.1 — 2026-09-08
 
