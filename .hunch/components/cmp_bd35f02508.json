@@ -1,0 +1,21 @@
+{
+  "id": "cmp_bd35f02508",
+  "kind": "module",
+  "name": "Serve",
+  "responsibility": "",
+  "paths": [
+    "src/serve/**"
+  ],
+  "status": "active",
+  "owners": [],
+  "fragility": 0,
+  "provenance": {
+    "source": "inferred",
+    "confidence": 0.5,
+    "evidence": [
+      "src/serve"
+    ]
+  },
+  "created_at": "2026-09-08T11:08:44.111Z",
+  "updated_at": "2026-09-08T11:08:44.111Z"
+}

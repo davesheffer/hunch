@@ -1,0 +1,39 @@
+{
+  "id": "dec_e0d0c86fb9",
+  "title": "chore(release): cut 1.26.0 with hunch serve and the Hunch Memory fold",
+  "topic": null,
+  "status": "accepted",
+  "context": "Touched 1 file(s) across tooling/changelog-locales.mjs.",
+  "decision": "Changed code in tooling/changelog-locales.mjs (1 file(s)).",
+  "consequences": [],
+  "alternatives_rejected": [],
+  "rejected_tripwires": [],
+  "related_components": [
+    "cmp_04c6efb58b"
+  ],
+  "related_files": [
+    "tooling/changelog-locales.mjs"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "29e1848",
+  "valid_from": "2026-09-08T14:07:10+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "inferred",
+    "confidence": 0.3,
+    "evidence": [
+      "commit:29e1848",
+      "synth:provider=deterministic",
+      "branch:release/1.26.0",
+      "tooling/changelog-locales.mjs"
+    ],
+    "last_verified": "2026-09-08T11:08:39.295Z"
+  },
+  "date": "2026-09-08T14:07:10+03:00"
+}
