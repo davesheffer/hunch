@@ -113,7 +113,10 @@ key + same payload = `replayed`; same key + other payload = `idempotency` refusa
 incumbent; same content under a new key = `replayed`, the key is remembered) → `expected_version`
 (a record hash or the record's latest seq; mismatch = `conflict`) → one-live-decision-per-topic
 (`conflict` naming the incumbent; explicit `supersedes` closes it and yields `superseded`) →
-put → ledger → reindex → durability from the flush (`local` when nothing committed). Every
+supersede target still open (a `supersedes` that names an already-closed commitment or derived
+record is a `conflict` naming the record that is current now — two writers racing to replace
+the same incumbent can never leave two current records for one subject; the writer that closed
+it itself, same id under a new key, is exempt) → put → ledger → reindex → durability from the flush (`local` when nothing committed). Every
 refusal is a typed `StateRefusal { code, conflict? }`; MCP renders it as
 `nuryel.state/1 refused [code]: …`.
 

@@ -414,6 +414,24 @@ export function writeState(store: HunchStore, input: unknown, opts: WriteOptions
     throw new StateRefusal("conflict", `supersedes ${supersedes} is not a ${facet} record in this partition`, { incumbent_id: supersedes, reason: "supersede target absent" });
   }
   if (supersedes === id) supersedes = null;
+  // A supersede target must still be open. Two writers racing to replace the same incumbent
+  // would otherwise both succeed and leave two current records for one subject (fnd_eeb8bf3cb8);
+  // the loser is told which record is current now, so it can re-read and supersede that one.
+  // The writer that closed the incumbent itself (same id, new key) is not a loser.
+  if (supersedes && facet !== "decisions") {
+    const incumbent = store.getRec(facet as EntityKind, supersedes) as Record<string, unknown> | undefined;
+    if (incumbent && "valid_to" in incumbent && incumbent.valid_to !== null) {
+      const subject = subjectOf(facet, incumbent);
+      const open = store.recsInHome(facet as EntityKind, home)
+        .filter((r) => subjectOf(facet, r) === subject && (r as { valid_to?: string | null }).valid_to === null)
+        .map((r) => (r as { id: string }).id).sort();
+      if (!open.includes(id)) {
+        const current = open.length ? `the current ${facet} record for ${subject ?? "that subject"} is ${open.join(", ")}` : `no ${facet} record for ${subject ?? "that subject"} is open now`;
+        throw new StateRefusal("conflict", `supersedes ${supersedes} was already superseded (window closed ${String(incumbent.valid_to)}); ${current}: re-read and supersede that one`, { incumbent_id: open[0] ?? supersedes, reason: "supersede target already closed" });
+      }
+      supersedes = null; // already closed by this record: nothing to close again, no second "superseded" event
+    }
+  }
 
   store.putCapture(facet as EntityKind, record, isPrivate);
   const changes: PendingChange[] = [];

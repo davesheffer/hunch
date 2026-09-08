@@ -161,6 +161,17 @@ test("write + read: derived state must carry dependencies; superseding it closes
     const old = store.json.get("derived", v1.record_id)!;
     assert.equal(old.state, "stale");
     assert.ok(old.valid_to, "the superseded window is closed, not deleted");
+    // Race: a second writer that still holds v1 as the incumbent must not leave two current records.
+    const v3Deps = [{ kind: "external", ref: { ...crmEvent, version: "4" } }];
+    const race = refusal(() => write(store, "derived", derived("סיכום 3", v3Deps), "d-3", { supersedes: v1.record_id }), "conflict");
+    assert.equal(race.conflict?.reason, "supersede target already closed");
+    assert.equal(race.conflict?.incumbent_id, v2.record_id, "the refusal names the record that is current now");
+    assert.match(race.message, /re-read and supersede/);
+    assert.equal(readState(store, { schema: "nuryel.state.read/1", principal: principalFor(store), scope: repo, subject: customer, facets: ["derived"] }).response.state_of_record!.current.length, 1, "still exactly one current summary");
+    // The writer that closed v1 itself may re-send under a new key without being called a loser.
+    const again = write(store, "derived", derived("סיכום 2 (ניסוח אחר)", v2Deps), "d-2-again", { supersedes: v1.record_id });
+    assert.equal(again.record_id, v2.record_id, "same evidence, same identity");
+    assert.equal(again.outcome, "updated");
 
     const cBase = { scope: repo, subject: customer, title: "לחזור ללקוח", owner: "david", due: "2026-09-10" };
     write(store, "commitments", { schema: "nuryel.commitment/1", ...cBase, status: "open", valid_from: "2026-09-07T08:00:00Z", valid_to: null, provenance: prov }, "c-1");
@@ -177,7 +188,7 @@ test("write + read: derived state must carry dependencies; superseding it closes
     assert.deepEqual(sor.invalidated_by, [sor.done[0]!.id]);
     assert.deepEqual(response.denied_scopes, []);
     for (const ref of [...sor.current, ...sor.in_force, ...sor.done]) assert.equal(ref.record_hash, stateHash(store.getRec(ref.facet as never, ref.id)), "refs hash the stored record");
-    assert.equal((response.records?.[v2.record_id] as { content?: string })?.content, "סיכום 2", "the read carries the current record itself, not only its ref");
+    assert.equal((response.records?.[v2.record_id] as { content?: string })?.content, "סיכום 2 (ניסוח אחר)", "the read carries the current record itself (as last updated in place), not only its ref");
     assert.equal((response.records?.[commitmentId(cBase)] as { title?: string })?.title, "לחזור ללקוח");
     assert.equal(Object.keys(response.records ?? {}).length, 3, "exactly the referenced records travel");
   } finally { cleanup(); }
