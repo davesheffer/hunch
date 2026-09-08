@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+## 1.25.0 — 2026-09-08
+
+### The state contract ships: nuryel.state/1 over the store and MCP
+
+Hunch now exposes ONE contract every orchestrator and agent speaks to organizational state.
+`nuryel.state/1` freezes three verbs — `read` (under the delivery envelope's receipt), `write`
+(provenance and an idempotency key in, durability out) and `subscribe` (a strictly ordered change
+stream after a cursor) — plus five new record facets: action receipts (what was done),
+commitments (what someone owes by when), derived state that names what it rests on, external
+entities and their relationships. Ids are derived from a record's facts, never chosen; a replay
+returns the original; a second live decision on a topic is refused with the incumbent named;
+derived state without dependencies is not state. The store registers the facets additively and
+keeps a per-scope, git-native change ledger under `.hunch/changes/`. Organization, team and user
+partitions never ride a repository: they are homed in an overlay only. Four client-agnostic MCP
+tools bind the contract: `nuryel_capabilities`, `nuryel_read`, `nuryel_write`, `nuryel_subscribe`.
+Legacy stores load unchanged; the JSON schema version is untouched. HTTP and CLI bindings, and
+search or delivery ranking of the new kinds, are not in this release.
+
 ## 1.24.0 — 2026-09-06
 
 ### Update Hunch and every configured harness in one command

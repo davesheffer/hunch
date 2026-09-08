@@ -8,6 +8,7 @@ export const changelogLocales = {
       footer: "© Hunch — התאמה ארכיטקטונית לקוד AI.", home: "בית", githubReleases: "גרסאות ב-GitHub"
     },
     titles: [
+      "חוזה המצב יוצא לדרך: nuryel.state/1 מעל המאגר ו-MCP",
       "פקודה אחת מעדכנת את Hunch ואת כלי העבודה המחוברים",
       "האתר הציבורי עובר ל-hunchmemory.com",
       "חוזי הוכחת השינוי באמת נשלחים",
@@ -50,6 +51,7 @@ export const changelogLocales = {
       footer: "© Hunch — архитектурное соответствие для ИИ-кода.", home: "Главная", githubReleases: "Релизы на GitHub"
     },
     titles: [
+      "Контракт состояния выходит: nuryel.state/1 поверх хранилища и MCP",
       "Одна команда обновляет Hunch и подключённые инструменты",
       "Публичный сайт переезжает на hunchmemory.com",
       "Контракты доказательства изменений действительно поставляются",
@@ -92,6 +94,7 @@ export const changelogLocales = {
       footer: "© Hunch — التوافق المعماري لكود الذكاء الاصطناعي.", home: "الرئيسية", githubReleases: "الإصدارات على GitHub"
     },
     titles: [
+      "عقد الحالة يصدر: nuryel.state/1 فوق المخزن وMCP",
       "أمر واحد لتحديث Hunch والأدوات المتصلة",
       "الموقع العام ينتقل إلى hunchmemory.com",
       "عقود إثبات التغيير تُشحن فعلًا",
@@ -134,6 +137,7 @@ export const changelogLocales = {
       footer: "© Hunch — conformidad arquitectónica para código de IA.", home: "Inicio", githubReleases: "Versiones en GitHub"
     },
     titles: [
+      "El contrato de estado se publica: nuryel.state/1 sobre el almacén y MCP",
       "Un comando actualiza Hunch y las herramientas conectadas",
       "El sitio público se muda a hunchmemory.com",
       "Los contratos de prueba de cambio realmente se publican",
