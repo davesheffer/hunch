@@ -1,0 +1,42 @@
+{
+  "id": "dec_689e422f09",
+  "title": "feat(serve): serve init writes a .gitignore for the partition's derived artifacts",
+  "topic": null,
+  "status": "accepted",
+  "context": "Touched 2 file(s) across src/serve, test/serve.test.ts.",
+  "decision": "Introduced code in src/serve, test/serve.test.ts (2 file(s)).",
+  "consequences": [],
+  "alternatives_rejected": [],
+  "rejected_tripwires": [],
+  "related_components": [
+    "cmp_a94a8fe5cc",
+    "cmp_bd35f02508"
+  ],
+  "related_files": [
+    "src/serve/config.ts",
+    "test/serve.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "3b75b28",
+  "valid_from": "2026-09-08T16:05:15+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "inferred",
+    "confidence": 0.3,
+    "evidence": [
+      "commit:3b75b28",
+      "synth:provider=deterministic",
+      "branch:fix/serve-durability",
+      "src/serve/config.ts",
+      "test/serve.test.ts"
+    ],
+    "last_verified": "2026-09-08T13:06:13.430Z"
+  },
+  "date": "2026-09-08T16:05:15+03:00"
+}
