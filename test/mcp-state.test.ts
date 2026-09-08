@@ -5,7 +5,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -56,6 +56,7 @@ test("nuryel_* tools bind read / write / subscribe / capabilities over MCP with 
   assert.match(result.record_id, /^nrc_[a-f0-9]{24}$/);
   assert.ok(["local", "committed", "pushed"].includes(result.durability));
 
+  assert.ok(!existsSync(join(root, ".hunch", "write.lock")), "the MCP write took and released the partition write lock");
   const replay = await client.callTool({ name: "nuryel_write", arguments: { principal, scope: repo, facet: "receipts", record, idempotency_key: "mcp-approval-a1" } });
   assert.equal((replay.structuredContent as { outcome: string }).outcome, "replayed");
 

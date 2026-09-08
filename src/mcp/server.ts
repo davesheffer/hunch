@@ -22,6 +22,7 @@ import { knownRepoDeps } from "../synthesis/tripwires.js";
 import { refreshExistingGrounding } from "../integrations/providers.js";
 import { revParse, asOfDate, revExists, lastChangeDate, rangeFiles, rangeDiff, commitFiles, commitDiff, stagedFiles, stagedDiff, workingFiles, workingDiff, pullHunchStatus, sameRemoteUrl, currentBranch, type HunchPullStatus } from "../extractors/git.js";
 import { flushCapture, flushMemoryHome, pinSharedRemote } from "../integrations/sync.js";
+import { withWriteLock } from "../serve/writelock.js";
 import { advertisedTeamRemoteContract, ensureTeamOverlay, overlayMatchesTeamRemote, readTeamConfig, teamRemoteContract, teamSharedRef } from "../integrations/team.js";
 import { formatStructure } from "../core/format.js";
 import { diagnoseIssueCorrectionStage, formatCorrectionStageDiagnostic } from "../core/correctionStage.js";
@@ -1993,9 +1994,11 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
     },
     async ({ cwd: _cwd, ...input }): Promise<ToolResult> => {
       try {
-        const result = writeState(store, { schema: STATE_WRITE_VERSION, ...input }, {
+        // Same cross-process lock `hunch serve` takes: a second agent writing over stdio must
+        // not race the HTTP server between the ledger read and the record write.
+        const result = await withWriteLock(hunchPaths(root).hunch, () => writeState(store, { schema: STATE_WRITE_VERSION, ...input }, {
           flush: (isPrivate, message) => flushCapture(store, hunchPaths(root).hunch, isPrivate, message, startupTeamRoute ?? undefined),
-        });
+        }));
         return stateResult(`${result.outcome} ${result.record_id} (${result.durability}) ${result.record_hash}`, result);
       } catch (e) {
         return stateRefusal(e);
