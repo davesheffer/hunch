@@ -1,0 +1,42 @@
+{
+  "id": "dec_d1d207ff5f",
+  "title": "fix(mcp): nuryel_write takes the partition write lock, like hunch serve",
+  "topic": null,
+  "status": "accepted",
+  "context": "Touched 2 file(s) across src/mcp, test/mcp-state.test.ts. Touches invariant(s): con_e04226bd05 (The MCP server must stay client-agnostic: all assistants point to the same .hunch/ graph; no Claude-only behavior in the server).",
+  "decision": "Changed code in src/mcp, test/mcp-state.test.ts (2 file(s)).",
+  "consequences": [],
+  "alternatives_rejected": [],
+  "rejected_tripwires": [],
+  "related_components": [
+    "cmp_a94a8fe5cc",
+    "cmp_dfa5b5acde"
+  ],
+  "related_files": [
+    "src/mcp/server.ts",
+    "test/mcp-state.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "3a2b760",
+  "valid_from": "2026-09-08T16:41:33+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "inferred",
+    "confidence": 0.3,
+    "evidence": [
+      "commit:3a2b760",
+      "synth:provider=deterministic",
+      "branch:fix/mcp-write-lock",
+      "src/mcp/server.ts",
+      "test/mcp-state.test.ts"
+    ],
+    "last_verified": "2026-09-08T13:42:40.530Z"
+  },
+  "date": "2026-09-08T16:41:33+03:00"
+}
