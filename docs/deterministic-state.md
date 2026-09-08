@@ -98,8 +98,8 @@ The organizational state graph may reference CRM records, Gmail threads, WhatsAp
 Prefer credential-free provenance pointers and bounded evidence:
 
 ```text
-entity: customer/cleanor
-relationship: customer/cleanor -> crm-event/25964
+entity: customer/example-customer
+relationship: customer/example-customer -> crm-event/10017
 commitment: obtain-site-budget-tables
 receipt: reply-sent
 source pointer: gmail-thread/<opaque-id>

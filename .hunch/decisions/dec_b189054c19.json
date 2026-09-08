@@ -1,0 +1,50 @@
+{
+  "id": "dec_b189054c19",
+  "title": "chore: fictional names in public fixtures and docs — no pilot company, customer, or CRM ids",
+  "topic": null,
+  "status": "accepted",
+  "context": "Tests, CLI help and the contract docs used the pilot's organization id, a\nreal-looking customer name and real CRM event ids as fixtures. Replaced\nwith neutral ones (organization acme, customer דוגמה, event 10042). No\nbehavior change; the union-read and state tests stay green (36/36).\n\nCo-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>\n",
+  "decision": "Changed code in src/cli, test/mcp-state.test.ts, test/serve.test.ts, test/state-binding.test.ts, test/state-contract.test.ts, test/state-kinds.test.ts (6 file(s)).",
+  "consequences": [],
+  "alternatives_rejected": [],
+  "rejected_tripwires": [],
+  "related_components": [
+    "cmp_50037f41a9",
+    "cmp_a94a8fe5cc"
+  ],
+  "related_files": [
+    "src/cli/serve.ts",
+    "test/mcp-state.test.ts",
+    "test/serve.test.ts",
+    "test/state-binding.test.ts",
+    "test/state-contract.test.ts",
+    "test/state-kinds.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "be16357",
+  "valid_from": "2026-09-08T22:13:20+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "inferred",
+    "confidence": 0.3,
+    "evidence": [
+      "commit:be16357",
+      "synth:provider=deterministic",
+      "branch:feat/union-read",
+      "src/cli/serve.ts",
+      "test/mcp-state.test.ts",
+      "test/serve.test.ts",
+      "test/state-binding.test.ts",
+      "test/state-contract.test.ts",
+      "test/state-kinds.test.ts"
+    ],
+    "last_verified": "2026-09-08T19:14:16.601Z"
+  },
+  "date": "2026-09-08T22:13:20+03:00"
+}

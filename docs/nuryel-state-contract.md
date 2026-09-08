@@ -62,11 +62,20 @@ Each new facet is lifted from a record Sofia already keeps:
 
 ## Verbs
 
-- **read** — `ReadRequest { principal, scope, subject?, task?, profile?, budget?, facets? }` →
-  `ReadResponse { receipt_id, scope, state_of_record, denied_scopes }`. The receipt is the
-  existing delivery envelope's `hdr_…` id, unchanged. `state_of_record` is the system-of-record
-  answer for a subject: `current`, `in_force`, `done`, `depends_on`, `invalidated_by`. Scopes the
-  principal asked about but is not granted are named in `denied_scopes`, never silently dropped.
+- **read** — `ReadRequest { principal, scope, scopes?, subject?, task?, profile?, budget?, facets? }` →
+  `ReadResponse { receipt_id, scope, state_of_record, denied_scopes, records?, scopes?, receipts? }`.
+  The receipt is the existing delivery envelope's `hdr_…` id, unchanged. `state_of_record` is the
+  system-of-record answer for a subject: `current`, `in_force`, `done`, `depends_on`,
+  `invalidated_by`. Scopes the principal asked about but is not granted are named in
+  `denied_scopes`, never silently dropped. **Union read:** `scopes` (1..64) asks for ONE
+  `state_of_record` across several partitions in one call; `scope` stays required and is the
+  primary — its envelope and `receipt_id` lead — and every entry is either read from its own
+  partition or named in `denied_scopes` (an ungranted extra never refuses the call; only an
+  ungranted primary does, as before). The response then names the partitions actually read in
+  `scopes` and carries one delivery receipt per partition in `receipts`; every ref already carries
+  its partition, so `current` / `in_force` / `done` concatenate, `depends_on` concatenates,
+  `invalidated_by` and `denied_scopes` are unions, `records` merge by id. Both fields are absent on
+  a single-partition read.
 - **write** — `WriteRequest { principal, scope, facet, record, idempotency_key, expected_version?,
   supersedes? }` → `WriteResult { record_id, record_hash, durability: pushed | committed | local,
   outcome: created | updated | replayed | superseded, conflict? }`. Provenance is mandatory on the
@@ -104,7 +113,10 @@ key + same payload = `replayed`; same key + other payload = `idempotency` refusa
 incumbent; same content under a new key = `replayed`, the key is remembered) → `expected_version`
 (a record hash or the record's latest seq; mismatch = `conflict`) → one-live-decision-per-topic
 (`conflict` naming the incumbent; explicit `supersedes` closes it and yields `superseded`) →
-put → ledger → reindex → durability from the flush (`local` when nothing committed). Every
+supersede target still open (a `supersedes` that names an already-closed commitment or derived
+record is a `conflict` naming the record that is current now — two writers racing to replace
+the same incumbent can never leave two current records for one subject; the writer that closed
+it itself, same id under a new key, is exempt) → put → ledger → reindex → durability from the flush (`local` when nothing committed). Every
 refusal is a typed `StateRefusal { code, conflict? }`; MCP renders it as
 `nuryel.state/1 refused [code]: …`.
 
@@ -142,8 +154,18 @@ is stored). Writes run under a **cross-process write lock** per partition (folde
 Memory) so a stdio MCP process on the same store cannot race the HTTP server between the ledger
 read and the record write.
 
+**Union read over HTTP.** `POST /nuryel/v1/read` with `scopes` runs `readState` against each
+granted partition's own store (the primary first) and merges them with `mergeReadResponses`
+(`src/store/stateBinding.ts`, pure and reusable by any host fronting several roots). A requested
+scope that is granted but not served by this server is a 404 `no-partition`, like any other
+route; an ungranted one is named in `denied_scopes` with status 200. ORC, granted `user/david`
+and `organization/acme`, gets Sofia's receipts and the organization's commitments on a customer in
+one answer instead of one read per drawer. `hunch mcp` fronts a single root, so over MCP a
+`scopes` request answers from that partition and declares it in `scopes` — never a silent union.
+
 The typed client — `import { createStateClient } from "@davesheffer/hunch/state"` — wraps the
-four routes and turns problem+json into a `StateClientError { status, code, problem }`.
+four routes and turns problem+json into a `StateClientError { status, code, problem }`;
+`ClientReadRequest` carries `scopes` unchanged.
 
 Tests: `test/serve.test.ts` — init + token hashing, bearer → principal, grants on every route, a
 smuggled body principal ignored, typed refusals, ORC reading a user partition and writing the
@@ -164,7 +186,7 @@ returns the record as stored so a writer verifies what landed. The `records` ver
 because subscribe events name records and reads only returned refs.
 
 Amendments made while binding (all additive, called out for the review): `ChangeEvent.subject`
-(optional); `SubscribeResponse`; `ReadResponse.records` (optional, the records behind the refs); `WriteResult.record`; the `records` verb (`nuryel.state.records/1`, in the capability list); the token grammar is written as explicit character classes
+(optional); `SubscribeResponse`; `ReadResponse.records` (optional, the records behind the refs); `WriteResult.record`; the `records` verb (`nuryel.state.records/1`, in the capability list); the union read — `ReadRequest.scopes` (optional, 1..64) with `ReadResponse.scopes` and `ReadResponse.receipts` (optional; the partitions read and one receipt each; `assertReadWithinGrants` checks both against the grants) and `mergeReadResponses` in the binding; the token grammar is written as explicit character classes
 instead of an `i` flag so it survives zod → JSON schema in MCP output validation;
 `assertWriteWellFormed` compares the record's scope only when it is a partition scope (a legacy
 constraint carries path globs under the same key).

@@ -146,6 +146,10 @@ export function readState(store: HunchStore, input: unknown): { response: ReadRe
   let stateOfRecord: ReadResponse["state_of_record"] = null;
   const records: Record<string, Record<string, unknown>> = {};
   const denied = new Map<string, Scope>();
+  // Union read against ONE store: every requested scope the principal lacks is named up front;
+  // the partitions actually read are declared so a caller never mistakes this for the union
+  // (a multi-partition host merges per-store answers with mergeReadResponses).
+  for (const s of request.scopes ?? []) if (!granted(request.principal, s)) denied.set(scopePath(s), s);
   if (request.subject !== undefined) {
     const subject = request.subject;
     const current: StateRef[] = [];
@@ -209,9 +213,66 @@ export function readState(store: HunchStore, input: unknown): { response: ReadRe
     state_of_record: stateOfRecord,
     denied_scopes: [...denied.values()],
     ...(stateOfRecord ? { records } : {}),
+    ...(request.scopes ? { scopes: [request.scope], receipts: [{ scope: request.scope, receipt_id: envelope.receipt_id }] } : {}),
   });
   assertReadWithinGrants(request.principal, response);
   return { response, envelope };
+}
+
+/** Union read — one state_of_record across several partitions, each read by `readState` against
+ *  its own store. Pure: no store, no grants decided here (every input already passed its own
+ *  grant check). The primary's receipt, scope and envelope lead; refs concatenate (each already
+ *  carries its partition), `depends_on` concatenates, `invalidated_by` is a sorted union, `records`
+ *  merge by id (first writer wins — ids are identity, two copies are the same record),
+ *  `denied_scopes` is the union of every partition's denied plus `extraDenied` (requested-but-
+ *  ungranted scopes the host refused to open), `scopes` names the partitions read and `receipts`
+ *  carries one delivery receipt per partition. Reusable by any host (HTTP today; MCP or CLI
+ *  fronting several roots later). */
+export function mergeReadResponses(primary: ReadResponse, others: readonly ReadResponse[], extraDenied: readonly Scope[] = []): ReadResponse {
+  const all = [primary, ...others];
+  const scopes = new Map<string, Scope>();
+  const receipts = new Map<string, { scope: Scope; receipt_id: string }>();
+  for (const r of all) {
+    for (const s of r.scopes ?? [r.scope]) if (!scopes.has(scopePath(s))) scopes.set(scopePath(s), s);
+    for (const x of r.receipts ?? [{ scope: r.scope, receipt_id: r.receipt_id }]) if (!receipts.has(scopePath(x.scope))) receipts.set(scopePath(x.scope), x);
+  }
+  const denied = new Map<string, Scope>();
+  for (const s of [...all.flatMap((r) => r.denied_scopes), ...extraDenied]) if (!scopes.has(scopePath(s)) && !denied.has(scopePath(s))) denied.set(scopePath(s), s);
+
+  const sors = all.map((r) => r.state_of_record).filter((s): s is NonNullable<ReadResponse["state_of_record"]> => s !== null);
+  let stateOfRecord: ReadResponse["state_of_record"] = null;
+  const records: Record<string, Record<string, unknown>> = {};
+  if (sors.length) {
+    const refKey = (ref: StateRef): string => `${ref.facet}|${scopePath(ref.scope)}|${ref.id}`;
+    const dedupeRefs = (pick: (s: NonNullable<ReadResponse["state_of_record"]>) => StateRef[]): StateRef[] => {
+      const seen = new Set<string>();
+      const out: StateRef[] = [];
+      for (const ref of sors.flatMap(pick)) { const k = refKey(ref); if (!seen.has(k)) { seen.add(k); out.push(ref); } }
+      return out;
+    };
+    const seenDeps = new Set<string>();
+    const dependsOn: DependencyRef[] = [];
+    for (const dep of sors.flatMap((s) => s.depends_on)) { const k = stateHash(dep); if (!seenDeps.has(k)) { seenDeps.add(k); dependsOn.push(dep); } }
+    stateOfRecord = {
+      subject: sors[0]!.subject,
+      current: dedupeRefs((s) => s.current),
+      in_force: dedupeRefs((s) => s.in_force),
+      done: dedupeRefs((s) => s.done),
+      depends_on: dependsOn,
+      invalidated_by: [...new Set(sors.flatMap((s) => s.invalidated_by))].sort(),
+    };
+    for (const r of all) for (const [id, record] of Object.entries(r.records ?? {})) if (!(id in records)) records[id] = record;
+  }
+  return ReadResponseSchema.parse({
+    schema: STATE_READ_VERSION,
+    receipt_id: primary.receipt_id,
+    scope: primary.scope,
+    state_of_record: stateOfRecord,
+    denied_scopes: [...denied.values()],
+    ...(stateOfRecord ? { records } : {}),
+    scopes: [...scopes.values()],
+    receipts: [...receipts.values()],
+  });
 }
 
 // ---- write ---------------------------------------------------------------------------------
@@ -353,6 +414,24 @@ export function writeState(store: HunchStore, input: unknown, opts: WriteOptions
     throw new StateRefusal("conflict", `supersedes ${supersedes} is not a ${facet} record in this partition`, { incumbent_id: supersedes, reason: "supersede target absent" });
   }
   if (supersedes === id) supersedes = null;
+  // A supersede target must still be open. Two writers racing to replace the same incumbent
+  // would otherwise both succeed and leave two current records for one subject (fnd_eeb8bf3cb8);
+  // the loser is told which record is current now, so it can re-read and supersede that one.
+  // The writer that closed the incumbent itself (same id, new key) is not a loser.
+  if (supersedes && facet !== "decisions") {
+    const incumbent = store.getRec(facet as EntityKind, supersedes) as Record<string, unknown> | undefined;
+    if (incumbent && "valid_to" in incumbent && incumbent.valid_to !== null) {
+      const subject = subjectOf(facet, incumbent);
+      const open = store.recsInHome(facet as EntityKind, home)
+        .filter((r) => subjectOf(facet, r) === subject && (r as { valid_to?: string | null }).valid_to === null)
+        .map((r) => (r as { id: string }).id).sort();
+      if (!open.includes(id)) {
+        const current = open.length ? `the current ${facet} record for ${subject ?? "that subject"} is ${open.join(", ")}` : `no ${facet} record for ${subject ?? "that subject"} is open now`;
+        throw new StateRefusal("conflict", `supersedes ${supersedes} was already superseded (window closed ${String(incumbent.valid_to)}); ${current}: re-read and supersede that one`, { incumbent_id: open[0] ?? supersedes, reason: "supersede target already closed" });
+      }
+      supersedes = null; // already closed by this record: nothing to close again, no second "superseded" event
+    }
+  }
 
   store.putCapture(facet as EntityKind, record, isPrivate);
   const changes: PendingChange[] = [];

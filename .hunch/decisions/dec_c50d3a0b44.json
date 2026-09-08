@@ -1,0 +1,50 @@
+{
+  "id": "dec_c50d3a0b44",
+  "title": "feat(state): union read across a principal's granted partitions",
+  "topic": null,
+  "status": "accepted",
+  "context": "A key that opens two drawers had to read them one at a time\n(fnd_a16aee3105). ReadRequest gains an optional `scopes` list; the\nserved read resolves every granted entry, reads each partition with the\nsame subject/task/facets, and merges into one state_of_record: refs and\ndepends_on concatenated (each ref carries its scope), invalidated_by and\ndenied_scopes unioned, records merged by id. ReadResponse gains `scopes`\n(partitions actually read, primary first) and `receipts` (one delivery\nreceipt per  Touches invariant(s): con_902759b3dc (All JSON writes to .hunch/ must be atomic (temp-file + rename) so an interrupted write can never truncate the index); con_a87360128b (Semantic vectors are a derived layer in SQLite, never the source of truth; reconcile by content hash on reindex).",
+  "decision": "Introduced src/core, src/serve, src/store, test/serve.test.ts, test/state-binding.test.ts: added mergeReadResponses, dedupeRefs, hdr, ref.",
+  "consequences": [],
+  "alternatives_rejected": [],
+  "rejected_tripwires": [],
+  "related_components": [
+    "cmp_a94a8fe5cc",
+    "cmp_b256a6aed0",
+    "cmp_bd35f02508",
+    "cmp_cdfb395bb7"
+  ],
+  "related_files": [
+    "src/core/stateContract.ts",
+    "src/serve/app.ts",
+    "src/store/stateBinding.ts",
+    "test/serve.test.ts",
+    "test/state-binding.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "b9586f9",
+  "valid_from": "2026-09-08T21:55:57+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "inferred",
+    "confidence": 0.45,
+    "evidence": [
+      "commit:b9586f9",
+      "synth:provider=deterministic",
+      "branch:feat/union-read",
+      "src/core/stateContract.ts",
+      "src/serve/app.ts",
+      "src/store/stateBinding.ts",
+      "test/serve.test.ts",
+      "test/state-binding.test.ts"
+    ],
+    "last_verified": "2026-09-08T18:56:53.478Z"
+  },
+  "date": "2026-09-08T21:55:57+03:00"
+}

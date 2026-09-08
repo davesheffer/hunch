@@ -20,15 +20,15 @@ import { HunchStore } from "../src/store/hunchStore.js";
 import { hunchPaths } from "../src/core/paths.js";
 
 const david = { kind: "user" as const, id: "david" };
-const ylm = { kind: "organization" as const, id: "ylm" };
+const acme = { kind: "organization" as const, id: "acme" };
 const prov = { source: "imported:sofia", confidence: 0.9, evidence: ["sofia approvals row a1"] };
-const crmEvent = { system: "crm", object_type: "event", object_key: "26879", observed_at: "2026-09-08T10:00:00Z" };
+const crmEvent = { system: "crm", object_type: "event", object_key: "10042", observed_at: "2026-09-08T10:00:00Z" };
 
 function served() {
   const dir = mkdtempSync(join(tmpdir(), "hunch-serve-"));
   const file = join(dir, "hunch-serve.json");
   const userInit = initServeConfig({ file, scope: david, root: join(dir, "david"), principal: { id: "sofia@david", kind: "agent" } });
-  const orgInit = initServeConfig({ file, scope: ylm, root: join(dir, "ylm"), principal: { id: "orc", kind: "service", grants: [ylm, david] } });
+  const orgInit = initServeConfig({ file, scope: acme, root: join(dir, "acme"), principal: { id: "orc", kind: "service", grants: [acme, david] } });
   const config = readServeConfig(file);
   const app = createServeApp(config, { version: "test" });
   const cleanup = async () => { await new Promise<void>((r) => app.close(() => r())); app.closeStores(); rmSync(dir, { recursive: true, force: true }); };
@@ -53,7 +53,7 @@ test("serve init declares the partition, mints a token once, stores only its has
     assert.ok(!readFileSync(file, "utf8").includes(sofiaToken), "the plaintext token is never written");
     assert.deepEqual(resolvePrincipal(config, sofiaToken)?.grants, [david]);
     assert.equal(resolvePrincipal(config, "nope"), undefined);
-    assert.throws(() => initServeConfig({ file, scope: ylm, root: join(dir, "david") }), /already declares partition user\/david/);
+    assert.throws(() => initServeConfig({ file, scope: acme, root: join(dir, "david") }), /already declares partition user\/david/);
     const store = new HunchStore(hunchPaths(join(dir, "david")));
     try { assert.deepEqual(partitionOf(store), david, "the store knows the partition it IS"); } finally { store.close(); }
   } finally { void cleanup(); }
@@ -83,10 +83,10 @@ test("HTTP: bearer resolves the principal, grants gate every route, refusals are
     assert.equal((await sofia.write({ scope: david, facet: "receipts", record: receipt, idempotency_key: "sofia-approval-http-1" })).outcome, "replayed");
 
     // The body may not name a principal; the token did. Grants are decided from the config.
-    await assert.rejects(sofia.write({ scope: ylm, facet: "receipts", record: receipt, idempotency_key: "sofia-into-org-1" }), (e: StateClientError) => {
+    await assert.rejects(sofia.write({ scope: acme, facet: "receipts", record: receipt, idempotency_key: "sofia-into-org-1" }), (e: StateClientError) => {
       assert.equal(e.status, 403); assert.equal(e.code, "outside-grants"); return true;
     });
-    const smuggled = await fetch(`${base}/nuryel/v1/read`, { method: "POST", headers: { authorization: `Bearer ${sofiaToken}`, "content-type": "application/json" }, body: JSON.stringify({ scope: ylm, principal: { id: "orc", kind: "service", grants: [ylm] } }) });
+    const smuggled = await fetch(`${base}/nuryel/v1/read`, { method: "POST", headers: { authorization: `Bearer ${sofiaToken}`, "content-type": "application/json" }, body: JSON.stringify({ scope: acme, principal: { id: "orc", kind: "service", grants: [acme] } }) });
     assert.equal(smuggled.status, 403, "a principal in the body is ignored");
 
     // Typed refusals carry the binding's code and the incumbent.
@@ -101,10 +101,10 @@ test("HTTP: bearer resolves the principal, grants gate every route, refusals are
     assert.match(read.receipt_id, /^hdr_[a-f0-9]{24}$/);
     assert.deepEqual(read.state_of_record?.invalidated_by, [created.record_id]);
     assert.equal(read.envelope.receipt_id, read.receipt_id, "the envelope rides along over HTTP");
-    const orgWrite = await orc.write({ scope: ylm, facet: "commitments", record: { schema: "nuryel.commitment/1", scope: ylm, subject: "customer:c1", title: "quarterly review", owner: "david", due: "2026-09-30", status: "open", valid_from: "2026-09-08T10:00:00Z", valid_to: null, provenance: prov }, idempotency_key: "orc-commitment-1" });
+    const orgWrite = await orc.write({ scope: acme, facet: "commitments", record: { schema: "nuryel.commitment/1", scope: acme, subject: "customer:c1", title: "quarterly review", owner: "david", due: "2026-09-30", status: "open", valid_from: "2026-09-08T10:00:00Z", valid_to: null, provenance: prov }, idempotency_key: "orc-commitment-1" });
     assert.equal(orgWrite.outcome, "created");
-    assert.ok(existsSync(join(dir, "ylm", ".hunch", "commitments", `${orgWrite.record_id}.json`)));
-    await assert.rejects(sofia.subscribe({ scope: ylm, after_seq: 0 }), (e: StateClientError) => e.status === 403);
+    assert.ok(existsSync(join(dir, "acme", ".hunch", "commitments", `${orgWrite.record_id}.json`)));
+    await assert.rejects(sofia.subscribe({ scope: acme, after_seq: 0 }), (e: StateClientError) => e.status === 403);
     const byId = await orc.records({ scope: david, ids: [created.record_id, "nrc_000000000000000000000000"] });
     assert.equal((byId.records[created.record_id] as { state?: string })?.state, "verified", "records by id over HTTP");
     assert.deepEqual(byId.missing, ["nrc_000000000000000000000000"]);
@@ -116,6 +116,53 @@ test("HTTP: bearer resolves the principal, grants gate every route, refusals are
 
     const big = await fetch(`${base}/nuryel/v1/write`, { method: "POST", headers: { authorization: `Bearer ${sofiaToken}`, "content-type": "application/json", "content-length": String(2 * 1024 * 1024) }, body: "{}" }).catch(() => null);
     if (big) assert.equal(big.status, 413);
+  } finally { await cleanup(); }
+});
+
+test("union read: `scopes` gives a principal granted several partitions ONE state_of_record; an ungranted extra is named in denied_scopes, not refused", async () => {
+  const { app, sofiaToken, orcToken, cleanup } = served();
+  try {
+    const base = await listen(app);
+    const sofia = createStateClient({ baseUrl: base, token: sofiaToken });
+    const orc = createStateClient({ baseUrl: base, token: orcToken });
+    const receipt = { schema: "nuryel.receipt/1", scope: david, actor: "sofia@david", action_kind: "add_comment", target: crmEvent, request_fingerprint: stateHash({ u: 1 }), state: "verified", occurred_at: "2026-09-08T10:00:00Z", provenance: prov, invalidates: ["customer:c1"] };
+    const done = await sofia.write({ scope: david, facet: "receipts", record: receipt, idempotency_key: "union-receipt-1" });
+    const open = await orc.write({ scope: acme, facet: "commitments", record: { schema: "nuryel.commitment/1", scope: acme, subject: "customer:c1", title: "quarterly review", owner: "david", due: "2026-09-30", status: "open", valid_from: "2026-09-08T10:00:00Z", valid_to: null, provenance: prov }, idempotency_key: "union-commitment-1" });
+
+    // ORC holds both drawers: one call, both partitions, every ref tagged with its own scope.
+    const union = await orc.read({ scope: david, scopes: [david, acme], subject: "customer:c1" });
+    assert.match(union.receipt_id, /^hdr_[a-f0-9]{24}$/);
+    assert.deepEqual(union.scope, david, "the primary scope leads");
+    assert.deepEqual(union.scopes, [david, acme]);
+    assert.equal(union.receipts?.length, 2);
+    assert.equal(union.receipts?.[0]?.receipt_id, union.receipt_id, "receipt_id stays the primary's");
+    assert.deepEqual(union.receipts?.map((r) => r.scope), [david, acme]);
+    assert.ok(union.receipts?.every((r) => /^hdr_[a-f0-9]{24}$/.test(r.receipt_id)));
+    assert.deepEqual(union.denied_scopes, []);
+    assert.deepEqual(union.state_of_record?.done.map((r) => [r.id, r.scope]), [[done.record_id, david]]);
+    assert.deepEqual(union.state_of_record?.in_force.map((r) => [r.id, r.scope]), [[open.record_id, acme]]);
+    assert.deepEqual(union.state_of_record?.invalidated_by, [done.record_id]);
+    assert.deepEqual(Object.keys(union.records ?? {}).sort(), [done.record_id, open.record_id].sort(), "records from both partitions ride along");
+    assert.equal(union.envelope.receipt_id, union.receipt_id, "the envelope is the primary's");
+
+    // Sofia holds only user/david: the same request answers from david and NAMES acme — 200, not 403.
+    const partial = await sofia.read({ scope: david, scopes: [david, acme], subject: "customer:c1" });
+    assert.deepEqual(partial.scopes, [david]);
+    assert.deepEqual(partial.denied_scopes, [acme]);
+    assert.equal(partial.receipts?.length, 1);
+    assert.deepEqual(partial.state_of_record?.done.map((r) => r.id), [done.record_id]);
+    assert.deepEqual(partial.state_of_record?.in_force, []);
+    assert.ok(!(open.record_id in (partial.records ?? {})), "nothing from the ungranted partition is described");
+
+    // Without `scopes` nothing changes: a single-partition read carries neither `scopes` nor `receipts`.
+    const single = await orc.read({ scope: acme, subject: "customer:c1" });
+    assert.equal(single.scopes, undefined);
+    assert.equal(single.receipts, undefined);
+    assert.deepEqual(single.state_of_record?.in_force.map((r) => r.id), [open.record_id]);
+
+    // The primary scope is still gated as before; a malformed `scopes` is a typed 400.
+    await assert.rejects(sofia.read({ scope: acme, scopes: [david], subject: "customer:c1" }), (e: StateClientError) => e.status === 403 && e.code === "outside-grants");
+    await assert.rejects(orc.read({ scope: david, scopes: [], subject: "customer:c1" }), (e: StateClientError) => e.status === 400 && e.code === "invalid-scope");
   } finally { await cleanup(); }
 });
 

@@ -1,0 +1,42 @@
+{
+  "id": "dec_5f885165c5",
+  "title": "fix(state): a supersede target must still be open — two racing writers can no longer leave two current records",
+  "topic": null,
+  "status": "accepted",
+  "context": "Two Sofias serving one clinic each held the same summary as the incumbent\nand both superseded it; the contract closed the incumbent twice and left\nboth successors current (fnd_eeb8bf3cb8). A `supersedes` that names an\nalready-closed commitment or derived record is now a `conflict` naming\nthe record that is current for that subject, so the loser re-reads and\nsupersedes that one. The writer that closed the incumbent itself (same\nderived id under a new key) is exempt and is an in-place update with  Touches invariant(s): con_902759b3dc (All JSON writes to .hunch/ must be atomic (temp-file + rename) so an interrupted write can never truncate the index); con_a87360128b (Semantic vectors are a derived layer in SQLite, never the source of truth; reconcile by content hash on reindex).",
+  "decision": "Changed code in src/store, test/state-binding.test.ts (2 file(s)).",
+  "consequences": [],
+  "alternatives_rejected": [],
+  "rejected_tripwires": [],
+  "related_components": [
+    "cmp_a94a8fe5cc",
+    "cmp_cdfb395bb7"
+  ],
+  "related_files": [
+    "src/store/stateBinding.ts",
+    "test/state-binding.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "2292146",
+  "valid_from": "2026-09-08T22:05:33+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "inferred",
+    "confidence": 0.3,
+    "evidence": [
+      "commit:2292146",
+      "synth:provider=deterministic",
+      "branch:feat/union-read",
+      "src/store/stateBinding.ts",
+      "test/state-binding.test.ts"
+    ],
+    "last_verified": "2026-09-08T19:06:27.754Z"
+  },
+  "date": "2026-09-08T22:05:33+03:00"
+}

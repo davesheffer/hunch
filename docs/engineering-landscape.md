@@ -124,12 +124,12 @@ The earlier boundary said Hunch did not ingest CRM/messages and was not an organ
 For example, Hunch may hold:
 
 ```text
-entity: customer/cleanor
-entity: crm-event/25964
-relationship: customer/cleanor -> crm-event/25964
+entity: customer/example-customer
+entity: crm-event/10017
+relationship: customer/example-customer -> crm-event/10017
 commitment: obtain-site-budget-tables
 changed: repository/change-proof/<id>
-relationship: crm-event/25964 -> change-proof/<id>
+relationship: crm-event/10017 -> change-proof/<id>
 source pointer: gmail-thread/<opaque-id>
 ```
 

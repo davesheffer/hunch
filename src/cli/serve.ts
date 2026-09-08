@@ -55,7 +55,7 @@ export function registerServeCommands(program: Command): void {
 
   serve.command("init")
     .description("Declare a partition directory and mint a principal token (printed once; only its hash is stored)")
-    .requiredOption("--partition <kind:id>", "the scope this directory IS, e.g. user:david or organization:ylm")
+    .requiredOption("--partition <kind:id>", "the scope this directory IS, e.g. user:david or organization:acme")
     .requiredOption("--root <dir>", "directory whose .hunch/ holds the partition (created if missing)")
     .option("--config <file>", `serve config to create or extend; default ${DEFAULT_CONFIG}`)
     .option("--principal <id>", "principal to add or rotate, granted this partition")

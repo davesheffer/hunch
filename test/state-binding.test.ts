@@ -11,13 +11,13 @@ import { basename, join } from "node:path";
 import { tempStore } from "./helpers.js";
 import { hunchPaths } from "../src/core/paths.js";
 import { HunchStore } from "../src/store/hunchStore.js";
-import { StateRefusal, capabilities, readState, recordsState, repositoryScope, subscribeState, writeState } from "../src/store/stateBinding.js";
+import { StateRefusal, capabilities, mergeReadResponses, readState, recordsState, repositoryScope, subscribeState, writeState } from "../src/store/stateBinding.js";
 import { readLedger } from "../src/store/changeLedger.js";
 import { actionReceiptId, assertChangeSequence, commitmentId, derivedId, entityId, stateHash } from "../src/core/stateContract.js";
 
 const prov = { source: "imported:sofia", confidence: 0.9, evidence: ["sofia approvals row a1"] };
-const crmEvent = { system: "crm", object_type: "event", object_key: "26879", version: "2", observed_at: "2026-09-07T12:00:00Z" };
-const customer = entityId("customer", "קלינור");
+const crmEvent = { system: "crm", object_type: "event", object_key: "10042", version: "2", observed_at: "2026-09-07T12:00:00Z" };
+const customer = entityId("customer", "דוגמה");
 const user = { kind: "user" as const, id: "david" };
 
 function principalFor(store: HunchStore, kind: "human" | "agent" = "agent", extra: Array<{ kind: "organization" | "team" | "user" | "repository"; id: string }> = []) {
@@ -25,7 +25,7 @@ function principalFor(store: HunchStore, kind: "human" | "agent" = "agent", extr
 }
 
 function receiptRecord(store: HunchStore, over: Record<string, unknown> = {}) {
-  const base = { scope: repositoryScope(store), actor: "sofia@david", action_kind: "add_comment", target: crmEvent, request_fingerprint: stateHash({ eventId: 26879, comment: "ok" }) };
+  const base = { scope: repositoryScope(store), actor: "sofia@david", action_kind: "add_comment", target: crmEvent, request_fingerprint: stateHash({ eventId: 10042, comment: "ok" }) };
   return { schema: "nuryel.receipt/1", id: actionReceiptId(base), ...base, state: "verified", occurred_at: "2026-09-07T08:55:22Z", provenance: prov, invalidates: [customer], ...over };
 }
 
@@ -161,6 +161,17 @@ test("write + read: derived state must carry dependencies; superseding it closes
     const old = store.json.get("derived", v1.record_id)!;
     assert.equal(old.state, "stale");
     assert.ok(old.valid_to, "the superseded window is closed, not deleted");
+    // Race: a second writer that still holds v1 as the incumbent must not leave two current records.
+    const v3Deps = [{ kind: "external", ref: { ...crmEvent, version: "4" } }];
+    const race = refusal(() => write(store, "derived", derived("סיכום 3", v3Deps), "d-3", { supersedes: v1.record_id }), "conflict");
+    assert.equal(race.conflict?.reason, "supersede target already closed");
+    assert.equal(race.conflict?.incumbent_id, v2.record_id, "the refusal names the record that is current now");
+    assert.match(race.message, /re-read and supersede/);
+    assert.equal(readState(store, { schema: "nuryel.state.read/1", principal: principalFor(store), scope: repo, subject: customer, facets: ["derived"] }).response.state_of_record!.current.length, 1, "still exactly one current summary");
+    // The writer that closed v1 itself may re-send under a new key without being called a loser.
+    const again = write(store, "derived", derived("סיכום 2 (ניסוח אחר)", v2Deps), "d-2-again", { supersedes: v1.record_id });
+    assert.equal(again.record_id, v2.record_id, "same evidence, same identity");
+    assert.equal(again.outcome, "updated");
 
     const cBase = { scope: repo, subject: customer, title: "לחזור ללקוח", owner: "david", due: "2026-09-10" };
     write(store, "commitments", { schema: "nuryel.commitment/1", ...cBase, status: "open", valid_from: "2026-09-07T08:00:00Z", valid_to: null, provenance: prov }, "c-1");
@@ -177,7 +188,7 @@ test("write + read: derived state must carry dependencies; superseding it closes
     assert.deepEqual(sor.invalidated_by, [sor.done[0]!.id]);
     assert.deepEqual(response.denied_scopes, []);
     for (const ref of [...sor.current, ...sor.in_force, ...sor.done]) assert.equal(ref.record_hash, stateHash(store.getRec(ref.facet as never, ref.id)), "refs hash the stored record");
-    assert.equal((response.records?.[v2.record_id] as { content?: string })?.content, "סיכום 2", "the read carries the current record itself, not only its ref");
+    assert.equal((response.records?.[v2.record_id] as { content?: string })?.content, "סיכום 2 (ניסוח אחר)", "the read carries the current record itself (as last updated in place), not only its ref");
     assert.equal((response.records?.[commitmentId(cBase)] as { title?: string })?.title, "לחזור ללקוח");
     assert.equal(Object.keys(response.records ?? {}).length, 3, "exactly the referenced records travel");
   } finally { cleanup(); }
@@ -283,4 +294,42 @@ test("records: fetch by id, grants first — found with facet, denied by scope, 
     assert.deepEqual(viaUser.denied, [r.record_id], "a repository-scope record is denied to a user-only principal, by id only");
     assert.deepEqual(Object.keys(viaUser.records), []);
   } finally { cleanup(); }
+});
+
+test("mergeReadResponses: a union read concatenates refs per partition, unions invalidated_by and denied, merges records by id, and keeps the primary's receipt", () => {
+  const org = { kind: "organization" as const, id: "acme" };
+  const team = { kind: "team" as const, id: "ops" };
+  const hdr = (c: string) => `hdr_${c.repeat(24)}`;
+  const ref = (facet: "receipts" | "commitments" | "derived", id: string, scope: typeof user | typeof org) => ({ facet, id, record_hash: stateHash({ id }), scope });
+  const dep = { kind: "record" as const, id: "nrc_" + "d".repeat(24), record_hash: stateHash("dep") };
+  const primary = {
+    schema: "nuryel.state.read/1" as const, receipt_id: hdr("a"), scope: user,
+    state_of_record: { subject: customer, current: [ref("derived", "nds_1", user)], in_force: [], done: [ref("receipts", "nrc_1", user)], depends_on: [dep], invalidated_by: ["nrc_1"] },
+    denied_scopes: [team], records: { nds_1: { id: "nds_1" }, nrc_1: { id: "nrc_1", from: "primary" } },
+  };
+  const other = {
+    schema: "nuryel.state.read/1" as const, receipt_id: hdr("b"), scope: org,
+    state_of_record: { subject: customer, current: [], in_force: [ref("commitments", "ncm_1", org)], done: [ref("receipts", "nrc_1", user)], depends_on: [dep, { kind: "schema" as const, name: "s", fingerprint: stateHash("s") }], invalidated_by: ["nrc_1", "nrc_2"] },
+    denied_scopes: [team], records: { ncm_1: { id: "ncm_1" }, nrc_1: { id: "nrc_1", from: "other" } },
+  };
+  const merged = mergeReadResponses(primary, [other], [team, { kind: "user", id: "someone-else" }]);
+  assert.equal(merged.receipt_id, hdr("a"), "the primary's receipt leads");
+  assert.deepEqual(merged.scope, user);
+  assert.deepEqual(merged.scopes, [user, org]);
+  assert.deepEqual(merged.receipts, [{ scope: user, receipt_id: hdr("a") }, { scope: org, receipt_id: hdr("b") }]);
+  assert.deepEqual(merged.denied_scopes, [team, { kind: "user", id: "someone-else" }], "denied is a union, each scope once");
+  assert.deepEqual(merged.state_of_record?.current.map((r) => r.id), ["nds_1"]);
+  assert.deepEqual(merged.state_of_record?.in_force.map((r) => [r.id, r.scope]), [["ncm_1", org]]);
+  assert.deepEqual(merged.state_of_record?.done.map((r) => r.id), ["nrc_1"], "the same ref seen from two partitions is one ref");
+  assert.equal(merged.state_of_record?.depends_on.length, 2, "dependencies dedupe by content hash");
+  assert.deepEqual(merged.state_of_record?.invalidated_by, ["nrc_1", "nrc_2"]);
+  assert.deepEqual(Object.keys(merged.records ?? {}).sort(), ["ncm_1", "nds_1", "nrc_1"]);
+  assert.equal((merged.records?.nrc_1 as { from: string }).from, "primary", "records merge by id, first writer wins");
+
+  // No subject anywhere: no state_of_record and no records, but the partitions read are still named.
+  const bare = mergeReadResponses({ ...primary, state_of_record: null, records: undefined }, [{ ...other, state_of_record: null, records: undefined }]);
+  assert.equal(bare.state_of_record, null);
+  assert.equal(bare.records, undefined);
+  assert.deepEqual(bare.scopes, [user, org]);
+  assert.deepEqual(bare.denied_scopes, [team]);
 });

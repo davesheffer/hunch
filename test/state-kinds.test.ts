@@ -7,9 +7,9 @@ import { ENTITY_KINDS } from "../src/core/types.js";
 import { actionReceiptId, commitmentId, derivedId, entityId, relationshipId, stateHash } from "../src/core/stateContract.js";
 
 const user = { kind: "user" as const, id: "david" };
-const org = { kind: "organization" as const, id: "ylm" };
+const org = { kind: "organization" as const, id: "acme" };
 const prov = { source: "imported:sofia", confidence: 0.9, evidence: ["sofia approvals row a1"] };
-const crmEvent = { system: "crm", object_type: "event", object_key: "26879", version: "2", observed_at: "2026-09-07T12:00:00Z" };
+const crmEvent = { system: "crm", object_type: "event", object_key: "10042", version: "2", observed_at: "2026-09-07T12:00:00Z" };
 
 test("the five nuryel.state/1 facets are registered store kinds, additively after the legacy kinds", () => {
   assert.deepEqual(ENTITY_KINDS.slice(-5), ["receipts", "commitments", "derived", "entities", "relationships"]);
@@ -22,7 +22,7 @@ test("receipts, commitments and derived state round-trip through the JSON store 
     store.json.ensureDirs();
     const rBase = { scope: user, actor: "sofia@david", action_kind: "add_comment", target: crmEvent, request_fingerprint: stateHash({ c: 1 }) };
     const receipt = store.json.put("receipts", { schema: "nuryel.receipt/1", id: actionReceiptId(rBase), ...rBase, state: "verified", occurred_at: "2026-09-07T08:55:22Z", provenance: prov, invalidates: [] });
-    const cBase = { scope: user, subject: entityId("customer", "קלינור"), title: "לחזור ללקוח", owner: "david", due: "2026-09-10" };
+    const cBase = { scope: user, subject: entityId("customer", "דוגמה"), title: "לחזור ללקוח", owner: "david", due: "2026-09-10" };
     const commitment = store.json.put("commitments", { schema: "nuryel.commitment/1", id: commitmentId(cBase), ...cBase, status: "open", valid_from: "2026-09-07T08:00:00Z", valid_to: null, provenance: prov });
     const dBase = { scope: user, subject: cBase.subject, transform_version: "sofia-summary/3", dependencies: [{ kind: "external" as const, ref: crmEvent }] };
     const derived = store.json.put("derived", { schema: "nuryel.derived/1", id: derivedId(dBase), ...dBase, content: "סיכום", content_hash: stateHash("סיכום"), computed_at: "2026-09-07T12:05:00Z", valid_to: null, state: "current", provenance: prov });
@@ -43,12 +43,12 @@ test("entities and relationships live in an index file, so kind-qualified and no
   const { store, root, cleanup } = tempStore();
   try {
     store.json.ensureDirs();
-    const id = entityId("customer", "קלינור");
-    store.json.put("entities", { schema: "nuryel.entity/1", id, kind: "customer", name: "קלינור", scope: org, refs: [crmEvent], attributes: { tier: "key" }, lifecycle: "active", provenance: prov, created_at: "2026-09-07T12:00:00Z", updated_at: "2026-09-07T12:00:00Z" });
-    store.json.put("relationships", { schema: "nuryel.relationship/1", id: relationshipId(id, "event:26879", "has_incident"), from: id, to: "event:26879", type: "has_incident", scope: org, reason: "", provenance: prov });
+    const id = entityId("customer", "דוגמה");
+    store.json.put("entities", { schema: "nuryel.entity/1", id, kind: "customer", name: "דוגמה", scope: org, refs: [crmEvent], attributes: { tier: "key" }, lifecycle: "active", provenance: prov, created_at: "2026-09-07T12:00:00Z", updated_at: "2026-09-07T12:00:00Z" });
+    store.json.put("relationships", { schema: "nuryel.relationship/1", id: relationshipId(id, "event:10042", "has_incident"), from: id, to: "event:10042", type: "has_incident", scope: org, reason: "", provenance: prov });
     assert.deepEqual(readdirSync(join(root, ".hunch", "entities")), ["index.json"]);
     assert.deepEqual(readdirSync(join(root, ".hunch", "relationships")), ["index.json"]);
-    assert.equal(store.json.get("entities", id)?.name, "קלינור");
+    assert.equal(store.json.get("entities", id)?.name, "דוגמה");
     assert.equal(store.json.loadAll("relationships")[0]?.type, "has_incident");
     assert.throws(() => store.json.put("receipts", { schema: "nuryel.receipt/1", id: "nrc_../etc", scope: user, actor: "x", action_kind: "y", target: crmEvent, request_fingerprint: stateHash(1), state: "unknown", occurred_at: "2026-09-07T12:00:00Z", provenance: prov, invalidates: [] } as never), "per-file kinds still refuse unsafe ids");
   } finally { cleanup(); }

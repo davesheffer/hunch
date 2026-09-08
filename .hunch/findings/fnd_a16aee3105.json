@@ -1,15 +1,14 @@
 {
   "id": "fnd_a16aee3105",
   "title": "Served partitions are read one at a time: no authorized union across a principal's grants yet",
-  "observation": "Live test 2026-09-08 with two partitions (user/david, organization/ylm) and two principals (sofia@david granted user only; orc granted organization only): cross-drawer reads refused with 403 outside-grants both ways; orc's organization commitment created and committed; each principal sees its own drawer. But a read is scoped to ONE partition: a principal granted both drawers would have to call read per partition, and denied_scopes only names scopes of records found in the queried partition's store. The roadmap's 'served graph is the authorized union of partitions' is therefore not yet true at the read verb: hunch serve resolves one store per request scope. Needed next: a union read (or a `scopes` list on ReadRequest) that assembles state_of_record across every granted partition the server hosts, with per-ref scope already carried by the contract.",
+  "observation": "A served read was scoped to ONE partition: a principal granted several drawers had to call read once per partition, and denied_scopes only named scopes of records found in the queried partition's store. The roadmap's 'served graph is the authorized union of partitions' was therefore not true at the read verb. Resolved by the union read: ReadRequest.scopes reads every granted partition the server hosts in one call and merges the state of record, with per-ref scope, per-partition receipts and ungranted scopes named in denied_scopes.",
   "evidence": [
-    "live 2026-09-08 ~17:35: orc reads user/david → 403 outside-grants; sofia reads organization/ylm → 403; orc writes organization/ylm → 201 created committed ncm_9039ee55cdef; orc reads org → in_force 1; sofia reads user/david → in_force 1, denied_scopes []",
-    "src/serve/app.ts storeFor(scope) resolves a single partition per request",
-    "docs/nuryel-state-contract.md: 'Not decided here' does not list union reads"
+    "test/serve.test.ts: a service principal granted two partitions reads both in one call (receipts 2, scopes 2, denied_scopes []); an agent granted one gets that one with the other named in denied_scopes, status 200",
+    "src/serve/app.ts /nuryel/v1/read merges via mergeReadResponses in src/store/stateBinding.ts"
   ],
   "method": null,
   "severity": "medium",
-  "triage": "scheduled",
+  "triage": "resolved",
   "affected_files": [
     "src/serve/app.ts",
     "src/store/stateBinding.ts",
@@ -19,15 +18,14 @@
   "violates_constraint": null,
   "spawned_decision": null,
   "observed_at": "2026-09-08T17:11:54.178Z",
-  "resolved_commit": null,
+  "resolved_commit": "2292146",
   "provenance": {
     "source": "human_confirmed",
     "confidence": 0.95,
     "evidence": [
-      "live 2026-09-08 ~17:35: orc reads user/david → 403 outside-grants; sofia reads organization/ylm → 403; orc writes organization/ylm → 201 created committed ncm_9039ee55cdef; orc reads org → in_force 1; sofia reads user/david → in_force 1, denied_scopes []",
-      "src/serve/app.ts storeFor(scope) resolves a single partition per request",
-      "docs/nuryel-state-contract.md: 'Not decided here' does not list union reads"
+      "test/serve.test.ts: a service principal granted two partitions reads both in one call (receipts 2, scopes 2, denied_scopes []); an agent granted one gets that one with the other named in denied_scopes, status 200",
+      "src/serve/app.ts /nuryel/v1/read merges via mergeReadResponses in src/store/stateBinding.ts"
     ],
-    "last_verified": "2026-09-08T17:11:54.178Z"
+    "last_verified": "2026-09-08T19:12:22.555Z"
   }
 }
