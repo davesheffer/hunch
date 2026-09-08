@@ -1,0 +1,44 @@
+{
+  "id": "dec_2baf436017",
+  "title": "site: second Deterministic State post — knowledge is what's true, state is what happened",
+  "topic": null,
+  "status": "accepted",
+  "context": "Draws the line between a knowledge layer (what is true about the world,\noptimized for recall) and a state layer (what the organization decided,\ndid, owes and currently believes, optimized for refusal), with the\nnumbers from the emulated ten-clinic year: three Sofias, five days, 96\ncited summaries, 24 receipts, 24 commitments, a gap-free ledger, zero\nundelivered writes and zero contradictions; plus what the first, unclean\nreplay found. Five locales, sitemap regenerated. Not pinned; the\ncategory p",
+  "decision": "Changed code in site/blog, tooling/blog-locales.mjs (3 file(s)).",
+  "consequences": [],
+  "alternatives_rejected": [],
+  "rejected_tripwires": [],
+  "related_components": [
+    "cmp_04c6efb58b",
+    "cmp_c099a42a55"
+  ],
+  "related_files": [
+    "site/blog/i18n.js",
+    "site/blog/posts.js",
+    "tooling/blog-locales.mjs"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "23d141f",
+  "valid_from": "2026-09-08T21:57:08+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "inferred",
+    "confidence": 0.3,
+    "evidence": [
+      "commit:23d141f",
+      "synth:provider=deterministic",
+      "branch:site/knowledge-vs-state",
+      "site/blog/i18n.js",
+      "site/blog/posts.js",
+      "tooling/blog-locales.mjs"
+    ],
+    "last_verified": "2026-09-08T18:58:13.165Z"
+  },
+  "date": "2026-09-08T21:57:08+03:00"
+}
