@@ -7,6 +7,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServeApp } from "../src/serve/app.js";
@@ -141,4 +142,20 @@ test("the write lock is held across a sync section and released on throw", async
     await assert.rejects(withWriteLock(dir, () => { throw new Error("boom"); }), /boom/);
     assert.ok(!existsSync(writeLockPath(dir)));
   } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("CLI: `hunch serve init --config <file>` honors the path from any cwd (1.26.0 handed it to the parent command)", () => {
+  const dir = mkdtempSync(join(tmpdir(), "hunch-serve-cli-"));
+  const elsewhere = mkdtempSync(join(tmpdir(), "hunch-serve-cli-cwd-"));
+  try {
+    const cli = join(process.cwd(), "src", "cli", "index.ts");
+    const tsx = join(process.cwd(), "node_modules", "tsx", "dist", "cli.mjs");
+    const out = execFileSync(process.execPath, [tsx, cli, "serve", "init", "--config", join(dir, "cfg.json"), "--partition", "user:cli", "--root", join(dir, "cli"), "--principal", "p", "--port", "27780", "--json"], { cwd: elsewhere, encoding: "utf8", env: { ...process.env, HUNCH_SYNTH_PROVIDER: "deterministic" } });
+    const parsed = JSON.parse(out.trim().split(/\r?\n/).at(-1)!) as { config: string; token: string | null };
+    assert.equal(parsed.config, join(dir, "cfg.json"));
+    assert.ok(existsSync(join(dir, "cfg.json")), "written where asked");
+    assert.ok(!existsSync(join(elsewhere, "hunch-serve.json")), "and not into the cwd");
+    assert.ok(parsed.token && !readFileSync(join(dir, "cfg.json"), "utf8").includes(parsed.token));
+    assert.equal(readServeConfig(join(dir, "cfg.json")).port, 27780, "--port after init reaches init, not the parent");
+  } finally { rmSync(dir, { recursive: true, force: true }); rmSync(elsewhere, { recursive: true, force: true }); }
 });
