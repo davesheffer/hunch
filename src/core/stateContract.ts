@@ -110,6 +110,9 @@ export const ReadResponseSchema = z.object({
   state_of_record: StateOfRecordSchema.nullable(),
   /** Scopes the principal asked about but is not granted — named, never silently dropped. */
   denied_scopes: z.array(ScopeSchema).max(64).default([]),
+  /** The records behind every ref in `state_of_record`, by id, so a consumer can answer from
+   *  the drawer without a second lookup. Additive; absent when there is no subject. */
+  records: z.record(z.string(), z.record(z.string(), z.unknown())).optional(),
 }).strict();
 export type ReadResponse = z.infer<typeof ReadResponseSchema>;
 

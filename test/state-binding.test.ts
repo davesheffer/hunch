@@ -174,6 +174,9 @@ test("write + read: derived state must carry dependencies; superseding it closes
     assert.deepEqual(sor.invalidated_by, [sor.done[0]!.id]);
     assert.deepEqual(response.denied_scopes, []);
     for (const ref of [...sor.current, ...sor.in_force, ...sor.done]) assert.equal(ref.record_hash, stateHash(store.getRec(ref.facet as never, ref.id)), "refs hash the stored record");
+    assert.equal((response.records?.[v2.record_id] as { content?: string })?.content, "סיכום 2", "the read carries the current record itself, not only its ref");
+    assert.equal((response.records?.[commitmentId(cBase)] as { title?: string })?.title, "לחזור ללקוח");
+    assert.equal(Object.keys(response.records ?? {}).length, 3, "exactly the referenced records travel");
   } finally { cleanup(); }
 });
 

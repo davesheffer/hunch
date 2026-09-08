@@ -1959,7 +1959,23 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
           ? `subject ${sor.subject}: current ${sor.current.length} · in force ${sor.in_force.length} · done ${sor.done.length} · depends on ${sor.depends_on.length} · invalidated by ${sor.invalidated_by.length}`
           : "no subject — delivery envelope only";
         const deniedNote = response.denied_scopes.length ? `\ndenied scopes: ${response.denied_scopes.map((s) => `${s.kind}/${s.id}`).join(", ")}` : "";
-        return stateResult(`${response.receipt_id} · ${summary}${deniedNote}\n\n${envelope.text}`, response);
+        // Render the state of record itself, not only its refs: a consumer answers from this text.
+        const line = (label: string, ref: { facet: string; id: string }): string => {
+          const r = (response.records ?? {})[ref.id] ?? {};
+          const g = (k: string): string => { const v = r[k]; return typeof v === "string" ? v : v == null ? "" : JSON.stringify(v); };
+          if (ref.facet === "derived") return `- ${label} derived ${ref.id} · computed ${g("computed_at")} · ${(r.dependencies as unknown[] | undefined)?.length ?? 0} dependencies\n    ${g("content").slice(0, 1200)}`;
+          if (ref.facet === "commitments") return `- ${label} commitment ${ref.id} · ${g("status")} · due ${g("due")} · owner ${g("owner")}: ${g("title")}`;
+          if (ref.facet === "receipts") { const t = (r.target ?? {}) as Record<string, unknown>; return `- ${label} receipt ${ref.id} · ${g("action_kind")} on ${String(t.system ?? "")} ${String(t.object_type ?? "")}:${String(t.object_key ?? "")} · ${g("state")} at ${g("occurred_at")} by ${g("actor")}`; }
+          if (ref.facet === "decisions") return `- ${label} decision ${ref.id} · ${g("status")}: ${g("title")}`;
+          if (ref.facet === "constraints") return `- ${label} constraint ${ref.id} · ${g("severity")}: ${g("statement")}`;
+          if (ref.facet === "entities") return `- ${label} entity ${ref.id} · ${g("kind")} ${g("name")} · ${g("lifecycle")}`;
+          return `- ${label} ${ref.facet} ${ref.id}`;
+        };
+        const stateText = sor
+          ? [...sor.current.map((r) => line("current", r)), ...sor.in_force.map((r) => line("in force", r)), ...sor.done.map((r) => line("done", r)),
+             ...(sor.invalidated_by.length ? [`- invalidated by: ${sor.invalidated_by.join(", ")}`] : [])].join("\n") || "(nothing on record for this subject)"
+          : "";
+        return stateResult(`${response.receipt_id} · ${summary}${deniedNote}${stateText ? `\n\nState of record:\n${stateText}` : ""}\n\n${envelope.text}`, response);
       } catch (e) {
         return stateRefusal(e);
       }

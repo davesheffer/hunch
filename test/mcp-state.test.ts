@@ -66,6 +66,8 @@ test("nuryel_* tools bind read / write / subscribe / capabilities over MCP with 
   assert.deepEqual(response.state_of_record.done.map((r) => r.id), [result.record_id]);
   assert.deepEqual(response.state_of_record.invalidated_by, [result.record_id]);
   assert.deepEqual(response.denied_scopes, []);
+  assert.equal((response as { records?: Record<string, { state?: string }> }).records?.[result.record_id]?.state, "verified", "the record rides the read");
+  assert.match((read.content as Array<{ text: string }>)[0]!.text, /State of record:\n- done receipt nrc_[a-f0-9]{24} · add_comment on crm event:26879 · verified/);
 
   const stream = await client.callTool({ name: "nuryel_subscribe", arguments: { principal, scope: repo, after_seq: 0 } });
   const changes = stream.structuredContent as { head_seq: number; events: Array<{ seq: number; change: string; record_id: string; cause: unknown }> };
