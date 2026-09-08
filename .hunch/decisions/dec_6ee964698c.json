@@ -1,0 +1,39 @@
+{
+  "id": "dec_6ee964698c",
+  "title": "chore(release): cut 1.26.2 — served partitions commit, pin, and answer",
+  "topic": null,
+  "status": "accepted",
+  "context": "Touched 1 file(s) across tooling/changelog-locales.mjs.",
+  "decision": "Changed code in tooling/changelog-locales.mjs (1 file(s)).",
+  "consequences": [],
+  "alternatives_rejected": [],
+  "rejected_tripwires": [],
+  "related_components": [
+    "cmp_04c6efb58b"
+  ],
+  "related_files": [
+    "tooling/changelog-locales.mjs"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "238879a",
+  "valid_from": "2026-09-08T16:35:44+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "inferred",
+    "confidence": 0.3,
+    "evidence": [
+      "commit:238879a",
+      "synth:provider=deterministic",
+      "branch:release/1.26.2",
+      "tooling/changelog-locales.mjs"
+    ],
+    "last_verified": "2026-09-08T13:36:57.453Z"
+  },
+  "date": "2026-09-08T16:35:44+03:00"
+}
