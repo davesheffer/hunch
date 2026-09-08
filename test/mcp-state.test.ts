@@ -36,7 +36,7 @@ test("nuryel_* tools bind read / write / subscribe / capabilities over MCP with 
   });
 
   const listed = await client.listTools();
-  for (const name of ["nuryel_capabilities", "nuryel_read", "nuryel_write", "nuryel_subscribe"]) {
+  for (const name of ["nuryel_capabilities", "nuryel_read", "nuryel_write", "nuryel_subscribe", "nuryel_records"]) {
     assert.ok(listed.tools.some((tool) => tool.name === name), `${name} is registered`);
   }
 
@@ -57,6 +57,12 @@ test("nuryel_* tools bind read / write / subscribe / capabilities over MCP with 
   assert.ok(["local", "committed", "pushed"].includes(result.durability));
 
   assert.ok(!existsSync(join(root, ".hunch", "write.lock")), "the MCP write took and released the partition write lock");
+  assert.equal((result as { record?: { state?: string } }).record?.state, "verified", "the write result carries the stored record");
+  const fetched = await client.callTool({ name: "nuryel_records", arguments: { principal, scope: repo, ids: [result.record_id, "nrc_000000000000000000000000"] } });
+  const recs = fetched.structuredContent as { records: Record<string, { state?: string }>; facets: Record<string, string>; missing: string[] };
+  assert.equal(recs.records[result.record_id]?.state, "verified");
+  assert.equal(recs.facets[result.record_id], "receipts");
+  assert.deepEqual(recs.missing, ["nrc_000000000000000000000000"]);
   const replay = await client.callTool({ name: "nuryel_write", arguments: { principal, scope: repo, facet: "receipts", record, idempotency_key: "mcp-approval-a1" } });
   assert.equal((replay.structuredContent as { outcome: string }).outcome, "replayed");
 

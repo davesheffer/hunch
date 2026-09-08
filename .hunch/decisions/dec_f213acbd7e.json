@@ -1,0 +1,58 @@
+{
+  "id": "dec_f213acbd7e",
+  "title": "feat(state): contract hardening from the first writers — records verb, write result record, teaching refusals",
+  "topic": null,
+  "status": "accepted",
+  "context": "Three additive changes, each from a defect a real writer hit on the live pilot:\n\n- A refused idempotency key now names the differing fields and the way out (re-send the\n  original payload to replay, or use a new key; the record keeps its derived id and is\n  updated in place). Sofia's summaries hit exactly this: same evidence, same identity,\n  new wording, same key, permanent refusal.\n- WriteResult.record returns the record as stored, so a writer verifies what landed.\n- A `records` verb (nuryel.s Touches invariant(s): con_902759b3dc (All JSON writes to .hunch/ must be atomic (temp-file + rename) so an interrupted write can never truncate the index); con_a87360128b (Semantic vectors are a derived layer in SQLite, never the source of truth; reconcile by content hash on reindex); con_e04226bd05 (The MCP server must stay client-agnostic: all assistants point to the same .hunch/ graph; no Claude-only behavior in the server).",
+  "decision": "Introduced src/client, src/core, src/mcp, src/serve, src/store, test/mcp-state.test.ts: added RecordsRequest, RecordsResponse, differingFields, recordsState.",
+  "consequences": [],
+  "alternatives_rejected": [],
+  "rejected_tripwires": [],
+  "related_components": [
+    "cmp_7b57579bd2",
+    "cmp_a94a8fe5cc",
+    "cmp_b256a6aed0",
+    "cmp_bd35f02508",
+    "cmp_cdfb395bb7",
+    "cmp_dfa5b5acde"
+  ],
+  "related_files": [
+    "src/client/state.ts",
+    "src/core/stateContract.ts",
+    "src/mcp/server.ts",
+    "src/serve/app.ts",
+    "src/store/stateBinding.ts",
+    "test/mcp-state.test.ts",
+    "test/serve.test.ts",
+    "test/state-binding.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "d6578eb",
+  "valid_from": "2026-09-08T19:48:29+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "inferred",
+    "confidence": 0.45,
+    "evidence": [
+      "commit:d6578eb",
+      "synth:provider=deterministic",
+      "branch:feat/contract-hardening",
+      "src/client/state.ts",
+      "src/core/stateContract.ts",
+      "src/mcp/server.ts",
+      "src/serve/app.ts",
+      "src/store/stateBinding.ts",
+      "test/mcp-state.test.ts",
+      "test/serve.test.ts",
+      "test/state-binding.test.ts"
+    ],
+    "last_verified": "2026-09-08T16:49:26.431Z"
+  },
+  "date": "2026-09-08T19:48:29+03:00"
+}

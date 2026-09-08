@@ -74,6 +74,11 @@ Each new facet is lifted from a record Sofia already keeps:
 - **subscribe** — `SubscribeRequest { principal, scope, after_seq, subjects?, facets? }` → a
   strictly ordered stream of `ChangeEvent { seq, facet, record_id, record_hash, change, invalidates,
   cause }`. A gap or regression means resynchronize; `assertChangeSequence` enforces it.
+- **records** — `RecordsRequest { principal, scope, ids }` → `RecordsResponse { records, facets,
+  missing, denied }`. Fetch by id (from a subscribe event, a read ref, a write result). Grants
+  first: an id whose scope is outside the grants is named in `denied`, never described; an
+  unknown id in `missing`. Added after the first live writers: a subscribe event names a record
+  and a consumer needs its body without a subject read.
 - **capabilities** — `negotiate(offered)` returns `{ supported, unsupported }`; an unsupported
   capability is a typed refusal, never a compatible-looking degraded answer.
 
@@ -151,8 +156,15 @@ referenced **records** beside the refs (`ReadResponse.records`), and the MCP tex
 of record (current derived content, commitments with due and owner, receipts with action, target
 and verification), so a consumer answers from the drawer without a second lookup or a file hunt.
 
+**Lessons from the first writers, enforced.** A write refused for a reused idempotency key
+names the differing fields and the way out (re-send the original payload to replay, or use a new
+key; the record keeps its derived id and is updated in place) — Sofia's summaries hit exactly
+this: same evidence, same identity, new wording, same key, permanent refusal. `WriteResult.record`
+returns the record as stored so a writer verifies what landed. The `records` verb above exists
+because subscribe events name records and reads only returned refs.
+
 Amendments made while binding (all additive, called out for the review): `ChangeEvent.subject`
-(optional); `SubscribeResponse`; `ReadResponse.records` (optional, the records behind the refs); the token grammar is written as explicit character classes
+(optional); `SubscribeResponse`; `ReadResponse.records` (optional, the records behind the refs); `WriteResult.record`; the `records` verb (`nuryel.state.records/1`, in the capability list); the token grammar is written as explicit character classes
 instead of an `i` flag so it survives zod → JSON schema in MCP output validation;
 `assertWriteWellFormed` compares the record's scope only when it is a partition scope (a legacy
 constraint carries path globs under the same key).

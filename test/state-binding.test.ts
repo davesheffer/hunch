@@ -11,7 +11,7 @@ import { basename, join } from "node:path";
 import { tempStore } from "./helpers.js";
 import { hunchPaths } from "../src/core/paths.js";
 import { HunchStore } from "../src/store/hunchStore.js";
-import { StateRefusal, capabilities, readState, repositoryScope, subscribeState, writeState } from "../src/store/stateBinding.js";
+import { StateRefusal, capabilities, readState, recordsState, repositoryScope, subscribeState, writeState } from "../src/store/stateBinding.js";
 import { readLedger } from "../src/store/changeLedger.js";
 import { actionReceiptId, assertChangeSequence, commitmentId, derivedId, entityId, stateHash } from "../src/core/stateContract.js";
 
@@ -91,6 +91,9 @@ test("write: created → replayed on the same key; a reused key with another pay
 
     const reused = refusal(() => write(store, "receipts", receiptRecord(store, { state: "failed" }), "sofia-approval-a1"), "idempotency");
     assert.equal(reused.conflict?.incumbent_id, first.record_id);
+    assert.match(reused.message, /differs in: state\./, "the refusal names exactly the differing fields");
+    assert.match(reused.message, /use a new key/, "and the way out");
+    assert.equal((first.record as { state?: string } | undefined)?.state, "verified", "a write result carries the stored record");
 
     refusal(() => write(store, "receipts", receiptRecord(store, { id: "nrc_000000000000000000000000" }), "sofia-approval-a2"), "identity");
     refusal(() => write(store, "receipts", { ...receiptRecord(store), provenance: undefined }, "sofia-approval-a3"), "malformed");
@@ -258,5 +261,26 @@ test("partitions: a user-scope write lands in the overlay with its own ledger, n
     const stream = subscribeState(store, { schema: "nuryel.state.subscribe/1", principal: p, scope: user, after_seq: 0 });
     assert.equal(stream.head_seq, 1);
     assert.equal(subscribeState(store, { schema: "nuryel.state.subscribe/1", principal: p, scope: repositoryScope(store), after_seq: 0 }).head_seq, 0);
+  } finally { cleanup(); }
+});
+
+test("records: fetch by id, grants first — found with facet, denied by scope, missing by name", () => {
+  const { store, cleanup } = tempStore();
+  try {
+    const repo = repositoryScope(store);
+    const r = write(store, "receipts", receiptRecord(store), "rec-1");
+    const cBase = { scope: repo, subject: customer, title: "t", owner: "david", due: "2026-09-10" };
+    const c = write(store, "commitments", { schema: "nuryel.commitment/1", ...cBase, status: "open", valid_from: "2026-09-07T08:00:00Z", valid_to: null, provenance: prov }, "rec-2");
+    const got = recordsState(store, { schema: "nuryel.state.records/1", principal: principalFor(store), scope: repo, ids: [r.record_id, c.record_id, "nrc_000000000000000000000000"] });
+    assert.deepEqual(Object.keys(got.records).sort(), [c.record_id, r.record_id].sort());
+    assert.equal(got.facets[r.record_id], "receipts");
+    assert.equal(got.facets[c.record_id], "commitments");
+    assert.deepEqual(got.missing, ["nrc_000000000000000000000000"]);
+    assert.deepEqual(got.denied, []);
+    const userOnly = { id: "x", kind: "agent" as const, grants: [user] };
+    refusal(() => recordsState(store, { schema: "nuryel.state.records/1", principal: userOnly, scope: repo, ids: [r.record_id] }), "outside-grants");
+    const viaUser = recordsState(store, { schema: "nuryel.state.records/1", principal: userOnly, scope: user, ids: [r.record_id] });
+    assert.deepEqual(viaUser.denied, [r.record_id], "a repository-scope record is denied to a user-only principal, by id only");
+    assert.deepEqual(Object.keys(viaUser.records), []);
   } finally { cleanup(); }
 });

@@ -40,11 +40,12 @@ export const STATE_CONTRACT_VERSION = "nuryel.state/1" as const;
 export const STATE_READ_VERSION = "nuryel.state.read/1" as const;
 export const STATE_WRITE_VERSION = "nuryel.state.write/1" as const;
 export const STATE_SUBSCRIBE_VERSION = "nuryel.state.subscribe/1" as const;
+export const STATE_RECORDS_VERSION = "nuryel.state.records/1" as const;
 
 /** Capabilities a server advertises; a client that needs one the server lacks gets a typed
  *  `unsupported`, never a compatible-looking degraded answer. */
 export const STATE_CAPABILITIES = [
-  STATE_READ_VERSION, STATE_WRITE_VERSION, STATE_SUBSCRIBE_VERSION,
+  STATE_READ_VERSION, STATE_WRITE_VERSION, STATE_SUBSCRIBE_VERSION, STATE_RECORDS_VERSION,
   RECEIPT_SCHEMA_VERSION, COMMITMENT_SCHEMA_VERSION, DERIVED_SCHEMA_VERSION, ENTITY_SCHEMA_VERSION, RELATIONSHIP_SCHEMA_VERSION,
 ] as const;
 export type StateCapability = (typeof STATE_CAPABILITIES)[number];
@@ -136,6 +137,9 @@ export const WriteResultSchema = z.object({
   durability: z.enum(DURABILITY),
   outcome: z.enum(["created", "updated", "replayed", "superseded"]),
   conflict: z.object({ incumbent_id: z.string().max(2048), reason: z.string().max(512) }).strict().nullable().default(null),
+  /** The record as stored (after normalization and identity derivation), so a writer can verify
+   *  what landed without a second lookup. Additive. */
+  record: z.record(z.string(), z.unknown()).optional(),
 }).strict();
 export type WriteResult = z.infer<typeof WriteResultSchema>;
 
@@ -169,6 +173,27 @@ export const ChangeEventSchema = z.object({
   ]).optional(),
 }).strict();
 export type ChangeEvent = z.infer<typeof ChangeEventSchema>;
+
+/** records — fetch records by id, grants first. A subscribe event names a record; this is how
+ *  a consumer gets its body without a subject read. Ids outside the grants are named in
+ *  `denied`, unknown ids in `missing`; neither is silently dropped. */
+export const RecordsRequestSchema = z.object({
+  schema: z.literal(STATE_RECORDS_VERSION),
+  principal: PrincipalSchema,
+  scope: ScopeSchema,
+  ids: z.array(z.string().min(1).max(2048)).min(1).max(256),
+}).strict();
+export type RecordsRequest = z.infer<typeof RecordsRequestSchema>;
+
+export const RecordsResponseSchema = z.object({
+  schema: z.literal(STATE_RECORDS_VERSION),
+  scope: ScopeSchema,
+  records: z.record(z.string(), z.record(z.string(), z.unknown())),
+  facets: z.record(z.string(), z.enum(STATE_FACETS)),
+  missing: z.array(z.string().max(2048)).default([]),
+  denied: z.array(z.string().max(2048)).default([]),
+}).strict();
+export type RecordsResponse = z.infer<typeof RecordsResponseSchema>;
 
 export const CapabilityNegotiationSchema = z.object({
   protocol: z.literal(STATE_CONTRACT_VERSION),

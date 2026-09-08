@@ -30,10 +30,11 @@ import { buildDeliveryEnvelope, type DeliveryEnvelope } from "../core/delivery.j
 import {
   STATE_CAPABILITIES, STATE_CONTRACT_VERSION, STATE_FACETS, STATE_READ_VERSION, STATE_SUBSCRIBE_VERSION, STATE_WRITE_VERSION,
   ReadRequestSchema, ReadResponseSchema, WriteRequestSchema, WriteResultSchema, SubscribeRequestSchema, ChangeEventSchema,
+  RecordsRequestSchema, RecordsResponseSchema, STATE_RECORDS_VERSION,
   ScopeSchema, scopePath, stateHash, actionReceiptId, commitmentId, derivedId,
   assertReadWithinGrants, assertWriteWellFormed, assertDerivedState,
   type Principal, type Scope, type StateFacet, type ReadRequest, type ReadResponse, type WriteRequest, type WriteResult,
-  type SubscribeRequest, type ChangeEvent, type StateRef, type DependencyRef,
+  type SubscribeRequest, type ChangeEvent, type StateRef, type DependencyRef, type RecordsRequest, type RecordsResponse,
 } from "../core/stateContract.js";
 
 /** A typed refusal. `code` is stable for bindings; `conflict` names the incumbent when one exists. */
@@ -229,6 +230,12 @@ function subjectOf(facet: StateFacet, record: unknown): string | undefined {
   }
 }
 
+/** Top-level fields whose canonical hash differs between two records, sorted. */
+function differingFields(a: Record<string, unknown>, b: Record<string, unknown>): string[] {
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+  return [...keys].filter((k) => stateHash(a[k] ?? null) !== stateHash(b[k] ?? null)).sort();
+}
+
 /** Records the store can close a valid-time window on when superseded. */
 function closeWindow(store: HunchStore, facet: StateFacet, incumbentId: string, byId: string, at: string, isPrivate: boolean): boolean {
   if (facet === "decisions") {
@@ -298,14 +305,19 @@ export function writeState(store: HunchStore, input: unknown, opts: WriteOptions
   const ledger = readLedger(hunchDir, request.scope);
   const durability = () => opts.flush?.(isPrivate, `nuryel: write ${id}`) ?? "local";
   const result = (outcome: WriteResult["outcome"], conflict: WriteResult["conflict"] = null, rid = id, rhash = hash): WriteResult =>
-    WriteResultSchema.parse({ schema: STATE_WRITE_VERSION, record_id: rid, record_hash: rhash, durability: durability(), outcome, conflict });
+    WriteResultSchema.parse({ schema: STATE_WRITE_VERSION, record_id: rid, record_hash: rhash, durability: durability(), outcome, conflict, record: store.getRec(facet as EntityKind, rid) ?? record });
 
   // Idempotency: the same key replays the original; the same key with a different payload
   // is a refusal, never a second record.
   const seen = ledger.idempotency[request.idempotency_key];
   if (seen) {
     if (seen.record_hash === hash && seen.record_id === id) return result("replayed");
-    throw new StateRefusal("idempotency", `idempotency key was already used for ${seen.record_id} with a different payload`, { incumbent_id: seen.record_id, reason: "idempotency key reused with a different payload" });
+    // Say WHAT differs and what to do: a stable key with a varying payload (a timestamp, new
+    // wording) is the trap every writer falls into once; the refusal must teach the way out.
+    const stored = store.getRec(facet as EntityKind, seen.record_id) as Record<string, unknown> | undefined;
+    const differing = stored ? differingFields(stored, record as Record<string, unknown>) : [];
+    const where = differing.length ? ` — this payload differs in: ${differing.join(", ")}` : (seen.record_id !== id ? ` — this payload derives a different identity (${id})` : "");
+    throw new StateRefusal("idempotency", `idempotency key "${request.idempotency_key}" was already used for ${seen.record_id}${where}. A key names ONE request payload: re-send the original payload to replay it, or use a new key to write this payload (the record keeps its derived id and is updated in place).`, { incumbent_id: seen.record_id, reason: "idempotency key reused with a different payload" });
   }
 
   const existing = store.recsInHome(facet as EntityKind, home).find((r) => (r as { id: string }).id === id) as Record<string, unknown> | undefined;
@@ -372,4 +384,31 @@ export function subscribeState(store: HunchStore, input: unknown): SubscribeResp
     && (!facets || facets.has(e.facet))
     && (!subjects || subjects.has(e.record_id) || (e.subject !== undefined && subjects.has(e.subject)) || e.invalidates.some((s) => subjects.has(s))));
   return SubscribeResponseSchema.parse({ schema: STATE_SUBSCRIBE_VERSION, scope: request.scope, head_seq: ledger.head_seq, events, filtered });
+}
+
+// ---- records ------------------------------------------------------------------------------
+
+/** records — fetch by id, grants first. Every id is accounted for: found, denied (its scope is
+ *  outside the grants — named, never described) or missing. */
+export function recordsState(store: HunchStore, input: unknown): RecordsResponse {
+  const request: RecordsRequest = RecordsRequestSchema.parse(input);
+  if (!granted(request.principal, request.scope)) throw new StateRefusal("outside-grants", `scope ${scopePath(request.scope)} is outside the principal's grants`);
+  const repo = partitionOf(store);
+  const records: Record<string, Record<string, unknown>> = {};
+  const facets: Record<string, StateFacet> = {};
+  const denied: string[] = [];
+  const missing: string[] = [];
+  for (const id of new Set(request.ids)) {
+    let found: { facet: StateFacet; record: Record<string, unknown> } | null = null;
+    for (const facet of STATE_FACETS) {
+      const record = store.getRec(facet as EntityKind, id) as Record<string, unknown> | undefined;
+      if (record) { found = { facet, record }; break; }
+    }
+    if (!found) { missing.push(id); continue; }
+    const scope = recordScope(found.record, repo);
+    if (!granted(request.principal, scope)) { denied.push(id); continue; }
+    records[id] = found.record;
+    facets[id] = found.facet;
+  }
+  return RecordsResponseSchema.parse({ schema: STATE_RECORDS_VERSION, scope: request.scope, records, facets, missing, denied });
 }
