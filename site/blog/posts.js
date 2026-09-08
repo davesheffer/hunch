@@ -3,10 +3,49 @@
    global so it works on a static host with no build step. */
 window.POSTS = [
   {
+    slug: "the-state-layer",
+    title: "Agents are probabilistic. Organizations need deterministic state.",
+    dek: "Every employee is getting an agent. Each one reconstructs what was decided, what was done and what is still owed — and each one gets it slightly differently. Hunch is becoming the state layer between the agents and the organization. Here is what that means, in plain words, and what shipped this week.",
+    date: "2026-09-08", tag: "Deterministic State", read: "6 min", pinned: true,
+    body: `
+<p class="lead"><strong>Agents are probabilistic. Organizations need deterministic state.</strong> We call the category <strong>Deterministic State</strong>, and Hunch is the layer that holds it between the agents and the organization. That sentence is the whole roadmap. The rest of this post explains it without jargon, and says exactly what exists today versus what is still a promise.</p>
+
+<h2>The problem shows up the moment you have two agents</h2>
+<p>One agent is a convenience. Two agents working on the same organization are a problem. Sofia answers a customer question by reading the CRM, the mail thread and the WhatsApp chat, and forms an opinion. A second agent, asked something nearby an hour later, reads the same sources and forms a slightly different opinion. Neither is wrong. Both are guesses, made fresh, from raw material. Nobody wrote down what was <em>decided</em>, what was <em>actually done</em>, or what is still <em>owed</em> in a form the next agent can trust without re-deriving it.</p>
+<p>Models are probabilistic by nature; that is what makes them useful. An organization cannot run on probabilities. It runs on state: this was decided, this rule is in force, this action happened and was verified, this promise is due Thursday, this summary is current and rests on these three sources. Today that state lives in people's heads and in scattered tools. Agents reconstruct it, every time, differently.</p>
+
+<h2>What "deterministic state" means</h2>
+<p>Think of a shared filing cabinet with drawers: one for the company, one per team, one per person, one per code repository. Each drawer holds a small set of plain facts:</p>
+<ul>
+  <li><strong>Decided</strong> — the one live decision on a topic. A second one is refused until the first is explicitly replaced.</li>
+  <li><strong>In force</strong> — rules and commitments with a start and, when it ends, an end.</li>
+  <li><strong>Done</strong> — a receipt for an action that actually happened in an external system, and whether it was verified.</li>
+  <li><strong>Owed</strong> — who promised what, to whom, by when.</li>
+  <li><strong>Current, and why</strong> — a derived statement (a customer summary, say) together with exactly what it rests on, so it can be invalidated the moment a source changes.</li>
+</ul>
+<p>Every fact carries where it came from. Nothing is deleted; superseded facts stay readable. And the cabinet never goes to fetch anything: it holds pointers and fingerprints to the CRM or the mailbox, never copies of their contents. Agents keep their own hands on the live systems. The cabinet only remembers what they did and concluded, in a shape the next agent can check instead of guess.</p>
+
+<h2>Keys, not names</h2>
+<p>Every agent, person or service gets a key. The key says who you are and which drawers you may open. An agent cannot claim to be someone else by writing a different name on its request; the key decides, before anything is looked up. Two agents that share a drawer see the same facts and cannot create contradicting ones. That is the entire trick, and it is deliberately boring.</p>
+
+<h2>What shipped this week</h2>
+<p><strong>1.25.0 — the contract.</strong> Three verbs any agent can speak: <em>read</em> (you get a receipt for what you were shown), <em>write</em> (you must say where the fact came from and give it a key so re-sending it never duplicates it), <em>subscribe</em> (a strictly ordered stream of what changed, so an agent can tell whether what it holds is still current). The five new kinds of fact above, stored the same git-native way Hunch has always stored decisions. Older stores load unchanged.</p>
+<p><strong>1.26.0 — the service.</strong> <code>hunch serve</code> hosts the drawers as one process on your machine or server, with keys, and a small client library any program can use. The separate service we had been building for this was folded in; its good decisions came along.</p>
+<p>The first agent on it is <strong>Sofia</strong>, a working operations agent over a CRM, Gmail and WhatsApp. Her approved actions become receipts, her follow-ups become commitments, her cited summaries become derived state that rests on its citations. Before she summarizes a customer again, she asks the cabinet whether her last summary is still current. If it is, no model call.</p>
+
+<h2>The analogy we use internally</h2>
+<p>Git is an engine: a precise, local, content-addressed store with no opinions about teams. GitHub is the platform that made the engine social: identity, permissions, a shared place. Hunch is the engine for organizational state. The platform around it — the drawers served, the keys, the shared place — is what <code>hunch serve</code> starts to be. Whether it keeps the name Hunch or gets its own is deferred on purpose; a product name is not a category, and the category is <em>Deterministic State</em>: the facts an organization runs on, held in a form agents can check instead of guess.</p>
+
+<h2>What we do not know yet</h2>
+<p>We measured Sofia for a week before any of this: two of three replies had no observable source, and she re-summarized the same customer from the same evidence again and again. The claim is that a state layer drives both numbers toward zero. That claim is unproven until the next measurement, with Sofia and a second, different agent writing through the same contract. We will publish the numbers either way.</p>
+<p>Until then: the contract is frozen as code and documented in the repository, the service is on npm, and the thesis is public. If you are building agents that share an organization, this is the layer we think you will need, and we would rather be corrected in public than be right in private.</p>
+`,
+  },
+  {
     slug: "testing-hunch-memory-safety",
     title: "We tested whether Hunch memory degrades. Here is what passed — and what did not.",
     dek: "A new research paper showed that continuously rewritten LLM memory can become harmful. We audited Hunch against that failure mode, ran 312 direct-memory model calls, followed a suspicious result into a preregistered replication, and wrote down the production boundary we can actually defend.",
-    date: "2026-08-27", tag: "Research", read: "8 min", pinned: true,
+    date: "2026-08-27", tag: "Research", read: "8 min", pinned: false,
     cover: {
       src: "/assets/research/hunch-memory-safety-assurance-cover.png",
       alt: "Cover of the Hunch Memory Safety production readiness assurance report",

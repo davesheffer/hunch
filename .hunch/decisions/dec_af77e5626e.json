@@ -1,0 +1,61 @@
+{
+  "id": "dec_af77e5626e",
+  "title": "Coin the category Deterministic State; the thesis line is the public positioning",
+  "topic": "positioning.deterministic-state-category",
+  "status": "accepted",
+  "context": "David wants to plant a flag fast. The homepage still sells the developer tool (Project DNA hero); the README and changelog carried the thesis but nothing public and dated named the category. Evidence from the Sofia pilot (baseline: 2 of 3 replies unsourced, repeated re-summaries) is not yet re-measured, so a full repositioning would be a promise, not a result.",
+  "decision": "The category is named Deterministic State (two words, capitalized as a category). The public thesis line is: Agents are probabilistic. Organizations need deterministic state. Hunch is the layer that holds it between agents and the organization. Coined by a dated, pinned blog post in all five site locales (slug the-state-layer, 2026-09-08) plus a thin band above the homepage navigation linking to it in every locale. The DNA hero stays until the Sofia re-measurement lands; then the hero swaps to the thesis and the DNA story becomes section two. Product name stays Hunch; Nuryel remains deferred (a product name is not a category).",
+  "consequences": [
+    "Every locale has a dated URL for the thesis; the sitemap lists five.",
+    "The previously pinned research post is unpinned (one pinned post by convention).",
+    "The hero swap is gated on a measured number from Sofia plus a second agent.",
+    "External copy (LinkedIn, WhatsApp) uses the exact thesis line and the category name verbatim."
+  ],
+  "alternatives_rejected": [
+    "Coin 'the state layer' as the category — rejected by David: the category is Deterministic State; 'state layer' describes Hunch's role, not the category.",
+    "Replace the homepage hero with the thesis now — rejected: trades a working developer pitch for an unproven claim; revisit when the pilot number exists.",
+    "Add a standalone /state page and a nav item — deferred: nav parity spans 26 templates across five locales (constraints con_7405203f23, con_e3cc8bb530); the pinned post is the dated flag and costs a fraction.",
+    "Announce on Hacker News now — rejected: one shot there, and it punishes claims without numbers; LinkedIn + WhatsApp group now, HN after the measurement."
+  ],
+  "rejected_tripwires": [],
+  "related_components": [],
+  "related_files": [
+    "site/blog/posts.js",
+    "site/index.html",
+    "tooling/blog-locales.mjs",
+    "tooling/generate-site-locales.mjs",
+    "README.md"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-09-08T12:21:40.652Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "premises": [
+    {
+      "claim": "The thesis post exists on the site in the source blog data",
+      "path_exists": "site/blog/posts.js"
+    },
+    {
+      "claim": "The pilot re-measurement is due after Monday's baseline compare; re-attest this positioning once the number is public",
+      "review_by": "2026-09-30"
+    }
+  ],
+  "provenance": {
+    "source": "agent_recorded",
+    "confidence": 0.75,
+    "evidence": [
+      "site/blog/posts.js",
+      "site/index.html",
+      "tooling/blog-locales.mjs",
+      "tooling/generate-site-locales.mjs",
+      "README.md"
+    ]
+  },
+  "date": "2026-09-08T12:21:40.652Z"
+}

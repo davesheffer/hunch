@@ -17,6 +17,7 @@ const locales = {
     description: "למאגר שלכם יש DNA. Hunch נותן לעוזרי קוד מבוססי AI הבנה מבוססת ראיות של הדרך שבה הפרויקט מתקשר ועובד, לפני שהם משנים את הקוד.",
     ogDescription: "כל סוכן קוד מגיע כזר מבריק. Hunch מלמד אותו את השפה, ההחלטות, התיקונים שנלמדו בדרך והגבולות שמאחורי הקוד.",
     mainNav: "ניווט ראשי", language: "שפה",
+    thesisTag: "מצב דטרמיניסטי", thesisText: "סוכנים הם הסתברותיים. ארגונים צריכים מצב דטרמיניסטי.", thesisCta: "לקריאת התזה ←",
     navHow: "כך זה עובד", navInside: "מאחורי הקלעים", docs: "תיעוד", blog: "בלוג", changelog: "יומן שינויים",
     getStarted: "מתחילים", seeHow: "כך זה עובד", readDocs: "קריאת התיעוד", benchmark: "מדד ביצועים",
     releaseEyebrow: "Project DNA לעוזרי קוד מבוססי AI", heroTitle: "למאגר שלכם יש DNA.<br /><b>Hunch מלמד כל סוכן קוד איך המאגר עובד.</b>",
@@ -66,6 +67,7 @@ const locales = {
     description: "У вашего репозитория есть ДНК. Hunch даёт ИИ-агентам доказательное понимание того, как проект общается и работает, до того, как они изменят код.",
     ogDescription: "Каждый агент по коду приходит блестящим незнакомцем. Hunch знакомит его с языком, решениями, выстраданными исправлениями и границами вашего кода.",
     mainNav: "Основная навигация", language: "Язык",
+    thesisTag: "Детерминированное состояние", thesisText: "Агенты вероятностны. Организациям нужно детерминированное состояние.", thesisCta: "Читать тезис →",
     navHow: "Как это работает", navInside: "Что внутри", docs: "Документация", blog: "Блог", changelog: "История изменений",
     getStarted: "Начать", seeHow: "Посмотреть, как это работает", readDocs: "Читать документацию", benchmark: "Бенчмарк",
     releaseEyebrow: "ДНК проекта для ИИ-агентов по коду", heroTitle: "У вашего репозитория есть ДНК.<br /><b>Hunch знакомит с ней каждого агента по коду.</b>",
@@ -115,6 +117,7 @@ const locales = {
     description: "لمستودعك حمض نووي. يمنح Hunch وكلاء البرمجة فهمًا قائمًا على الأدلة لكيفية تواصل المشروع وعمله قبل أن يغيّروا الشيفرة.",
     ogDescription: "يصل كل وكيل برمجي غريبًا لامعًا. يعرّفه Hunch على لغة شيفرتك وقراراتها وإصلاحاتها الصعبة وحدودها.",
     mainNav: "التنقّل الرئيسي", language: "اللغة",
+    thesisTag: "الحالة الحتمية", thesisText: "الوكلاء احتماليون. المؤسسات تحتاج حالة حتمية.", thesisCta: "اقرأ الأطروحة ←",
     navHow: "كيف يعمل", navInside: "ما وراء الواجهة", docs: "الوثائق", blog: "المدوّنة", changelog: "سجل التغييرات",
     getStarted: "ابدأ الآن", seeHow: "شاهد كيف يعمل", readDocs: "اقرأ الوثائق", benchmark: "اختبار الأداء",
     releaseEyebrow: "الحمض النووي للمشروع لوكلاء البرمجة بالذكاء الاصطناعي", heroTitle: "لمستودعك حمض نووي.<br /><b>ويمنح Hunch كل وكيل برمجي فهمًا له.</b>",
@@ -164,6 +167,7 @@ const locales = {
     description: "Tu repositorio tiene ADN. Hunch ofrece a los agentes de programación una comprensión basada en evidencia de cómo se comunica y trabaja el proyecto antes de que cambien el código.",
     ogDescription: "Cada agente de programación llega como un extraño brillante. Hunch le enseña el lenguaje, las decisiones, las correcciones difíciles y los límites que hay detrás de tu código.",
     mainNav: "Navegación principal", language: "Idioma",
+    thesisTag: "Estado determinista", thesisText: "Los agentes son probabilísticos. Las organizaciones necesitan estado determinista.", thesisCta: "Leer la tesis →",
     navHow: "Cómo funciona", navInside: "Cómo está hecho", docs: "Documentación", blog: "Blog", changelog: "Cambios",
     getStarted: "Empezar", seeHow: "Ver cómo funciona", readDocs: "Leer la documentación", benchmark: "Benchmark",
     releaseEyebrow: "ADN del proyecto para agentes de programación con IA", heroTitle: "Tu repositorio tiene ADN.<br /><b>Hunch se lo enseña a cada agente de programación.</b>",
@@ -219,6 +223,9 @@ function fragments(c) {
     ['content="Your code has DNA. Hunch activates the right Strand for each task—lean context, live guidance, and trusted boundaries before AI changes your code."', `content="${escAttr(c.description)}"`],
     ['<meta property="og:title" content="Hunch Memory — Help AI understand your code" />', `<meta property="og:title" content="${escAttr(c.title)}" />`],
     ['content="Hunch activates the right DNA Strand for every task, giving AI the context, tools, and boundaries it needs."', `content="${escAttr(c.ogDescription)}"`],
+    ['<span class="thesis-tag">Deterministic State</span>', `<span class="thesis-tag">${c.thesisTag}</span>`],
+    ['<span class="thesis-text">Agents are probabilistic. Organizations need deterministic state.</span>', `<span class="thesis-text">${c.thesisText}</span>`],
+    ['<b class="thesis-cta">Read the thesis →</b>', `<b class="thesis-cta">${c.thesisCta}</b>`],
     ['<nav class="nav" aria-label="Main">', `<nav class="nav" aria-label="${escAttr(c.mainNav)}">`],
     ['<span class="sr-only">Language</span>', `<span class="sr-only">${c.language}</span>`],
     ['aria-label="Language"', `aria-label="${escAttr(c.language)}"`],
@@ -316,11 +323,12 @@ for (const [locale, copy] of Object.entries(locales)) {
   html = replaceRequired(html, '<option value="/" selected>EN</option>', '<option value="/">EN</option>', locale);
   html = replaceRequired(html, `<option value="/${locale}">${locale.toUpperCase()}</option>`, `<option value="/${locale}" selected>${locale.toUpperCase()}</option>`, locale);
   for (const [from, to] of fragments(copy)) html = replaceRequired(html, from, to, locale);
+  html = html.replaceAll('href="/blog/post?slug=the-state-layer"', `href="/${locale}/blog/post?slug=the-state-layer"`);
   html = html.replaceAll('href="/blog/"', `href="/${locale}/blog"`);
   html = html.replaceAll('href="/changelog"', `href="/${locale}/changelog"`);
   html = html.replace("<!DOCTYPE html>", `<!DOCTYPE html>\n<!-- Generated by tooling/generate-site-locales.mjs. Edit site/index.html or the locale dictionary, then regenerate. -->`);
 
-  const banned = ["Help AI understand your code", "Your code has DNA", "Hunch learns how your project works", "the missing context", "AI can read your code", "Your team fixes a logout bug", "AI sees complex code", "The right DNA Strand activates first", "how hunch works", "Every task activates the right DNA Strand", "lean by design", "Less context. Better understanding", "right task", "more than context", "A set of tools guides the agent", "Understands why", "Install Hunch", "Install once. Work normally", "Learn the Project DNA", "Hunch gives advice by default", "One project. One DNA"];
+  const banned = ["Read the thesis", "Agents are probabilistic. Organizations need deterministic state.", "Help AI understand your code", "Your code has DNA", "Hunch learns how your project works", "the missing context", "AI can read your code", "Your team fixes a logout bug", "AI sees complex code", "The right DNA Strand activates first", "how hunch works", "Every task activates the right DNA Strand", "lean by design", "Less context. Better understanding", "right task", "more than context", "A set of tools guides the agent", "Understands why", "Install Hunch", "Install once. Work normally", "Learn the Project DNA", "Hunch gives advice by default", "One project. One DNA"];
   const visibleHtml = html.replace(/<script\b[\s\S]*?<\/script>/gi, "").replace(/<style\b[\s\S]*?<\/style>/gi, "").replace(/<!--[\s\S]*?-->/g, "");
   for (const phrase of banned) if (visibleHtml.includes(phrase)) throw new Error(`[${locale}] untranslated visible phrase: ${phrase}`);
 
