@@ -32,6 +32,9 @@ export const LedgerSchema = z.object({
   schema: z.literal(LEDGER_SCHEMA_VERSION),
   scope: ScopeSchema,
   head_seq: z.number().int().nonnegative(),
+  /** Events below this seq were compacted away. `events` starts at floor_seq + 1. A subscriber
+   *  whose cursor is below the floor must resynchronize (the contract's gap rule, made explicit). */
+  floor_seq: z.number().int().nonnegative().default(0),
   events: z.array(ChangeEventSchema),
   idempotency: z.record(z.string(), IdempotencyEntrySchema).default({}),
 }).strict();
@@ -47,7 +50,7 @@ export function ledgerFile(hunchDir: string, scope: Scope): string {
 }
 
 export function emptyLedger(scope: Scope): Ledger {
-  return { schema: LEDGER_SCHEMA_VERSION, scope, head_seq: 0, events: [], idempotency: {} };
+  return { schema: LEDGER_SCHEMA_VERSION, scope, head_seq: 0, floor_seq: 0, events: [], idempotency: {} };
 }
 
 /** Read the ledger for a scope; a missing file is an empty ledger, a corrupt one is an
@@ -58,12 +61,12 @@ export function readLedger(hunchDir: string, scope: Scope): Ledger {
   const raw = JSON.parse(readFileSync(file, "utf8")) as unknown;
   const ledger = LedgerSchema.parse(raw);
   if (scopePath(ledger.scope) !== scopePath(scope)) throw new Error(`ledger ${file} belongs to scope ${scopePath(ledger.scope)}, not ${scopePath(scope)}`);
-  let expected = 1;
+  let expected = ledger.floor_seq + 1;
   for (const event of ledger.events) {
     if (event.seq !== expected) throw new Error(`ledger ${file} is not contiguous at seq ${event.seq} (expected ${expected})`);
     expected += 1;
   }
-  if (ledger.head_seq !== ledger.events.length) throw new Error(`ledger ${file} head_seq ${ledger.head_seq} disagrees with ${ledger.events.length} events`);
+  if (ledger.head_seq !== ledger.floor_seq + ledger.events.length) throw new Error(`ledger ${file} head_seq ${ledger.head_seq} disagrees with floor ${ledger.floor_seq} + ${ledger.events.length} events`);
   return ledger;
 }
 
@@ -106,4 +109,52 @@ export function latestSeqFor(ledger: Ledger, recordId: string): number {
     if (ledger.events[i]!.record_id === recordId) return ledger.events[i]!.seq;
   }
   return 0;
+}
+
+/** Keep the newest `keep` events; everything older is dropped and the floor moves up. The
+ *  idempotency table is kept whole (it is what makes replays exact); the records themselves are
+ *  untouched. Returns how many events were dropped. */
+export function compactLedger(hunchDir: string, scope: Scope, opts: { keep?: number } = {}): { dropped: number; floor_seq: number; head_seq: number } {
+  const keep = Math.max(0, Math.floor(opts.keep ?? 1000));
+  const ledger = readLedger(hunchDir, scope);
+  const dropped = Math.max(0, ledger.events.length - keep);
+  if (dropped === 0) return { dropped: 0, floor_seq: ledger.floor_seq, head_seq: ledger.head_seq };
+  ledger.events = ledger.events.slice(dropped);
+  ledger.floor_seq = ledger.head_seq - ledger.events.length;
+  writeLedger(hunchDir, ledger);
+  return { dropped, floor_seq: ledger.floor_seq, head_seq: ledger.head_seq };
+}
+
+const eventIdentity = (e: ChangeEvent): string => [e.change, e.facet, e.record_id, e.record_hash, e.at, e.cause ? JSON.stringify(e.cause) : ""].join("|");
+
+/** Three-way merge of one scope's ledger, for the git merge driver: two clones that both
+ *  appended to the same partition. The union of events is kept (identity = what changed, to
+ *  which hash, when, by whom), ordered by time then ours-before-theirs, and RE-SEQUENCED from
+ *  the higher floor; every subscriber's cursor is therefore invalid after a merge and the gap
+ *  rule makes it resynchronize. Idempotency entries are unioned; a key both sides used for
+ *  different records is a conflict the caller must surface (ours is kept). */
+export function mergeLedgers(base: Ledger | null, ours: Ledger, theirs: Ledger): { ledger: Ledger; conflicts: string[] } {
+  if (scopePath(ours.scope) !== scopePath(theirs.scope)) throw new Error("ledgers for different scopes cannot be merged");
+  const seen = new Map<string, ChangeEvent>();
+  const order: ChangeEvent[] = [];
+  const add = (e: ChangeEvent): void => { const k = eventIdentity(e); if (!seen.has(k)) { seen.set(k, e); order.push(e); } };
+  for (const e of base?.events ?? []) add(e);
+  for (const e of ours.events) add(e);
+  for (const e of theirs.events) add(e);
+  const ranked = order.map((e, i) => ({ e, i, side: (ours.events.includes(e) ? 0 : 1) }));
+  ranked.sort((a, b) => a.e.at.localeCompare(b.e.at) || a.side - b.side || a.i - b.i);
+  const floor = Math.max(base?.floor_seq ?? 0, ours.floor_seq, theirs.floor_seq);
+  const events = ranked.map(({ e }, i) => ({ ...e, seq: floor + i + 1 }));
+  const conflicts: string[] = [];
+  const idempotency: Ledger["idempotency"] = { ...(base?.idempotency ?? {}), ...theirs.idempotency, ...ours.idempotency };
+  for (const [key, entry] of Object.entries(theirs.idempotency)) {
+    const mine = ours.idempotency[key];
+    if (mine && mine.record_id !== entry.record_id) conflicts.push(`idempotency key ${key}: ours ${mine.record_id}, theirs ${entry.record_id} (kept ours)`);
+  }
+  for (const key of Object.keys(idempotency)) {
+    const entry = idempotency[key]!;
+    const at = events.find((e) => e.record_id === entry.record_id && e.record_hash === entry.record_hash);
+    idempotency[key] = { ...entry, seq: at ? at.seq : Math.min(entry.seq, floor + events.length) };
+  }
+  return { ledger: { schema: LEDGER_SCHEMA_VERSION, scope: ours.scope, floor_seq: floor, head_seq: floor + events.length, events, idempotency }, conflicts };
 }

@@ -18,6 +18,8 @@
  * are pure data here — no filesystem access; the CLI reads/writes the files.
  */
 
+import { LEDGER_SCHEMA_VERSION, LedgerSchema, mergeLedgers, type Ledger } from "./changeLedger.js";
+
 type Rec = Record<string, unknown>;
 
 export interface MergeResult {
@@ -30,6 +32,10 @@ export interface MergeResult {
 /** Merge three versions of one `.hunch` JSON file (an index array OR a single
  *  record object). Returns the merged text, or conflict=true to fall back. */
 export function mergeHunchJson(baseText: string, oursText: string, theirsText: string): MergeResult {
+  // A per-scope change ledger is not a record array: two clones that both appended get the
+  // union of their events, re-sequenced, and unioned idempotency tables (see mergeLedgers).
+  const ledger = mergeLedgerText(baseText, oursText, theirsText);
+  if (ledger) return ledger;
   const ours = parseSide(oursText);
   const theirs = parseSide(theirsText);
   const base = parseSide(baseText);
@@ -48,6 +54,24 @@ export function mergeHunchJson(baseText: string, oursText: string, theirsText: s
   // (a logical rename). Don't silently drop one — fall back so git surfaces it.
   if (merged.length > 1) return { text: oursText, conflict: true };
   return { text: serialize(merged[0]!), conflict: false };
+}
+
+function mergeLedgerText(baseText: string, oursText: string, theirsText: string): MergeResult | null {
+  const parse = (text: string): Ledger | null => {
+    if (!text.trim()) return null;
+    try { const raw = JSON.parse(text) as { schema?: unknown }; return raw && raw.schema === LEDGER_SCHEMA_VERSION ? LedgerSchema.parse(raw) : null; } catch { return null; }
+  };
+  const ours = parse(oursText);
+  const theirs = parse(theirsText);
+  if (!ours && !theirs) return null;
+  if (!ours || !theirs) return null; // one side is not a ledger (or deleted it): let git surface it
+  try {
+    const { ledger, conflicts } = mergeLedgers(parse(baseText), ours, theirs);
+    if (conflicts.length) return { text: oursText, conflict: true };
+    return { text: JSON.stringify(ledger, null, 2) + "\n", conflict: false };
+  } catch {
+    return { text: oursText, conflict: true };
+  }
 }
 
 /** Three-way merge of record arrays keyed by `id`. Additions on either side are
