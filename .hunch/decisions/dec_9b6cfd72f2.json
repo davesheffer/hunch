@@ -1,0 +1,39 @@
+{
+  "id": "dec_9b6cfd72f2",
+  "title": "chore(release): cut 1.27.0 — the contract learns from its first writers; roadmap status",
+  "topic": null,
+  "status": "accepted",
+  "context": "Touched 1 file(s) across tooling/changelog-locales.mjs.",
+  "decision": "Changed code in tooling/changelog-locales.mjs (1 file(s)).",
+  "consequences": [],
+  "alternatives_rejected": [],
+  "rejected_tripwires": [],
+  "related_components": [
+    "cmp_04c6efb58b"
+  ],
+  "related_files": [
+    "tooling/changelog-locales.mjs"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "ce6be21",
+  "valid_from": "2026-09-08T20:04:52+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "inferred",
+    "confidence": 0.3,
+    "evidence": [
+      "commit:ce6be21",
+      "synth:provider=deterministic",
+      "branch:release/1.27.0",
+      "tooling/changelog-locales.mjs"
+    ],
+    "last_verified": "2026-09-08T17:05:47.663Z"
+  },
+  "date": "2026-09-08T20:04:52+03:00"
+}
