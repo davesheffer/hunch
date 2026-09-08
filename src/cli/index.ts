@@ -64,7 +64,8 @@ import { updateClaudeMd } from "../integrations/claudemd.js";
 import { writeMcpJson, writeSlashCommands, installClaudeHooks } from "../integrations/scaffold.js";
 import { scaffoldProviders, regenerateGrounding, refreshExistingGrounding, refreshCommittableGrounding } from "../integrations/providers.js";
 import { healClaudeConfigCaseSplit } from "../integrations/claudeConfig.js";
-import { formatContext, formatStructure } from "../core/format.js";
+import { formatContext, formatSearchHit, formatStructure } from "../core/format.js";
+import { isStateKind, renderStateLine, stateSupplements, type StateRecord } from "../core/stateDelivery.js";
 import { diagnoseIssueCorrectionStage, formatCorrectionStageDiagnostic } from "../core/correctionStage.js";
 import { compileVerifiedEvidenceMap, formatVerifiedEvidenceMap } from "../core/evidenceMap.js";
 import { collectCorrectionStageSources } from "../extractors/correctionSources.js";
@@ -1347,7 +1348,7 @@ program
       console.log(`No matches for "${q}".`);
     } else {
       console.log(`Top matches for "${q}"${how}:\n`);
-      for (const h of hits) console.log(`• [${h.kind}] ${h.ref} — ${h.title}\n    ${h.snippet}`);
+      for (const h of hits) console.log(formatSearchHit(h, isStateKind(h.kind) ? store.resolve(h.ref)?.record : undefined));
     }
     store.close();
   });
@@ -3892,11 +3893,22 @@ program
       !ctx.findings.length &&
       !ctx.landscape?.resources.length &&
       !ctx.landscape?.relationships.length;
+    // The "State" section (nuryel.state/1): current derived, in-force commitments, latest
+    // receipts matching the target — the same slice and render as hunch_context.
+    const slice = asOf ? null : store.stateSlice(target);
+    const stateGrounding = slice ? stateSupplements(slice, target) : [];
     if (empty && !asOf) {
-      const hits = store.rankedSearch(target, 8);
-      if (hits.length) {
+      const hits = store.rankedSearch(target, 8).filter((h) => !isStateKind(h.kind));
+      if (hits.length || stateGrounding.length) {
         console.log(`No file/symbol resolves for "${target}" — closest graph matches instead:\n`);
         for (const h of hits) console.log(`• ${h.ref} — ${h.title}\n    ${h.snippet}`);
+        if (slice) {
+          const stateHits = [...slice.derived, ...slice.commitments, ...slice.receipts];
+          if (stateHits.length) {
+            console.log(`${hits.length ? "\n" : ""}State (nuryel.state/1):`);
+            for (const hit of stateHits) console.log(`• ${renderStateLine(hit.kind, hit.record as StateRecord)}`);
+          }
+        }
         console.log(`\n(For a file/symbol brief use a concrete target; for free-text this is what \`hunch query\` returns.)`);
         store.close();
         return;
@@ -3909,6 +3921,7 @@ program
       decisionCorpus: store.recs("decisions"),
       historical: !!asOf,
       profile: opts.profile as DeliveryProfile,
+      supplements: stateGrounding,
     }));
     store.close();
   });

@@ -134,6 +134,20 @@ around the contract's events. Unfiltered, `events` are contiguous after `after_s
 `filtered` is true, and `head_seq` is still the caller's next cursor. Subject matching uses the
 record id, the event's `subject`, and what the event invalidates.
 
+**Delivery** (`src/core/stateDelivery.ts`): state records are indexed and delivered by subject,
+like decisions. Reindex writes every receipt, commitment, derived state, entity and relationship
+into the store's `search` index under its own kind — title = the subject key (`customer:Site:7`,
+`event:10042`), body = the summary/title + actor/owner + status label + dates — so
+`hunch_query` answers a subject id, an action kind, a principal or a phrase from a summary with
+one line per kind (`[commitment/in_force] customer:Site:7 — "send report" due 2026-09-11 (owner
+sofia)`). History is indexed too and ranks below the state of record: a superseded summary, a
+done commitment, a failed receipt or a retired entity is demoted on every search path (bm25
+scaled toward zero raw; the bounded liveness prior ranked), never dropped. `hunch_context` and
+`hunch context` carry a bounded State section — at most 3 current derived, 5 in-force
+commitments, 3 latest receipts whose subject or text matches every token of the target,
+ordered by score, then observed_at descending, then id — as supplements inside the same budget
+and receipt. `read` remains the full, grant-checked view of a subject.
+
 ## Served partitions: `hunch serve`
 
 The served product is the fold of Hunch Memory into Hunch. `hunch serve --config <file>` binds
@@ -229,8 +243,9 @@ not modified by the registration — the store change is the index-file layout m
 - **Per-record visibility** inside a scope. Partition-level grants are the v1 permission model
   (GitHub's repo-level model); finer visibility is the first security primitive to add before a
   second team shares an organization partition.
-- **Search and delivery of the new kinds.** They are stored and counted; FTS indexing, ranking
-  into the delivery envelope and the `state_of_record` query are binding work, not registry work.
+- **Semantic (embedding) recall over state records.** They ride the FTS index and the bounded
+  liveness prior (see Delivery above); the optional embedding stream indexes them like any other
+  search doc, but no state-specific recall has been measured.
 - **What else of Hunch Memory folds in.** `serve` carries its bind-loopback, bearer, problem+json,
   body-limit and write-lock decisions. Its per-store concurrency gate, context-consistency
   watermarks and the usefulness / Project DNA intake routes are not ported; they return only if a

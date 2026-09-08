@@ -36,6 +36,20 @@ import {
   selectReviewedLandscape,
   type ReviewedLandscapeSelection,
 } from "../core/landscapeDelivery.js";
+import {
+  STATE_KINDS,
+  STATE_SLICE_CAPS,
+  compareStateHits,
+  isStateKind,
+  stateLiveness,
+  stateObservedAt,
+  stateSearchDoc,
+  stateSubject,
+  type StateHit,
+  type StateKind,
+  type StateRecord,
+  type StateSlice,
+} from "../core/stateDelivery.js";
 
 export interface SearchHit {
   ref: string;
@@ -576,6 +590,21 @@ export class HunchStore {
           `${f.observation} ${f.evidence.join(" ")} ${f.affected_files.join(" ")} ${f.affected_symbols.join(" ")} ${f.triage}`);
       }
       counts.findings = fnds.length;
+
+      // nuryel.state/1 kinds (receipts, commitments, derived, entities, relationships):
+      // advisory records on the same FTS-only ride as runbooks/findings — no dedicated
+      // SQL table. kind = the store kind; title = the subject key; body = the human words
+      // + actor/owner + status label (stateSearchDoc), so a subject id and a phrase both
+      // hit. History (superseded/done/failed/retired) is indexed too and demoted at
+      // query time (demoteHistoricalState / priorMeta), never dropped.
+      for (const kind of STATE_KINDS) {
+        const records = this.recs(kind) as StateRecord[];
+        for (const record of records) {
+          const doc = stateSearchDoc(kind, record);
+          fts((record as { id: string }).id, kind, doc.title, doc.body);
+        }
+        counts[kind] = records.length;
+      }
       void j;
     });
     // Reconcile embeddings AFTER the FTS rebuild (model-free): drop vectors whose
@@ -601,10 +630,95 @@ export class HunchStore {
         `SELECT ref, kind, title, snippet(search, 3, '[', ']', '…', 12) AS snip, bm25(search) AS score
          FROM search WHERE search MATCH ? ORDER BY score LIMIT ?`,
       ).all(match, limit) as Array<{ ref: string; kind: string; title: string; snip: string; score: number }>;
-      return rows.map((r) => ({ ref: r.ref, kind: r.kind, title: r.title, snippet: r.snip, score: r.score }));
+      return this.demoteHistoricalState(rows.map((r) => ({ ref: r.ref, kind: r.kind, title: r.title, snippet: r.snip, score: r.score })));
     } catch {
       // Malformed FTS expression — degrade to a LIKE scan over titles/bodies.
       return this.likeSearch(query, limit);
+    }
+  }
+
+  /** State-of-record ordering for nuryel.state/1 hits (superseded derived, done/cancelled
+   *  commitments, failed receipts, retired entities): indexed and findable, but ranked BELOW
+   *  the live record of the same subject. bm25 is negative (lower = better), so a history
+   *  hit's score is scaled toward 0 by STATE_HISTORY_SCORE_FACTOR and the pool is re-sorted
+   *  STABLY by score — a store with no state history returns the exact SQL order, and a
+   *  LIKE-fallback pool (all scores 0) is partitioned live-first in its existing order.
+   *  Bounded (a dimmer, not an exclusion) so the previous summary stays reachable one query
+   *  away; hybridSearch/rankedSearch additionally apply the liveness prior via priorMeta. */
+  private demoteHistoricalState(hits: SearchHit[]): SearchHit[] {
+    if (!hits.some((h) => isStateKind(h.kind))) return hits;
+    const scored = hits.map((h) => {
+      const meta = this.stateMeta(h.ref, h.kind);
+      if (!meta || meta.live) return h;
+      return { ...h, score: h.score * STATE_HISTORY_SCORE_FACTOR };
+    });
+    const allZero = scored.every((h) => h.score === 0);
+    if (allZero) {
+      const live = scored.filter((h) => { const m = this.stateMeta(h.ref, h.kind); return !m || m.live; });
+      const history = scored.filter((h) => !live.includes(h));
+      return [...live, ...history];
+    }
+    return scored.sort((a, b) => a.score - b.score);
+  }
+
+  /** Liveness + clock for a state hit (null for every non-state kind). */
+  private stateMeta(ref: string, kind: string): { live: boolean; label: string; at: string; provenance: string } | null {
+    if (!isStateKind(kind)) return null;
+    const record = (this.recs(kind) as StateRecord[]).find((r) => (r as { id: string }).id === ref);
+    if (!record) return null;
+    const { live, label } = stateLiveness(kind, record);
+    return { live, label, at: stateObservedAt(kind, record), provenance: (record as { provenance: { source: string } }).provenance.source };
+  }
+
+  /** The bounded "State" slice for a context brief (hunch_context / `hunch context`): the
+   *  current derived summaries, in-force commitments and latest verified receipts whose
+   *  subject or text matches `target`. Matching is AND over the target's tokens (every token
+   *  must appear, prefix-tolerant) so a file path such as src/store/x.ts never drags in a
+   *  summary that merely mentions "store"; an exact subject match always qualifies. Order is
+   *  deterministic: score (best first), then observed_at DESC, then id. Caps per kind are
+   *  STATE_SLICE_CAPS. A store with no state records returns three empty lists. */
+  stateSlice(target: string): StateSlice {
+    const empty: StateSlice = { derived: [], commitments: [], receipts: [] };
+    const needle = toPosixTarget(target).trim();
+    if (!needle) return empty;
+    const tokens = needle.toLowerCase().match(/[\p{L}\p{N}_]+/gu) ?? [];
+    const pick = <K extends "derived" | "commitments" | "receipts">(kind: K): StateHit<K>[] => {
+      const records = this.recs(kind) as StateRecord[];
+      if (!records.length) return [];
+      const scoreByRef = new Map<string, number>();
+      for (const hit of this.stateFts(tokens, kind, Math.max(STATE_SLICE_CAPS[kind] * 8, 24))) scoreByRef.set(hit.ref, hit.score);
+      const hits: StateHit<K>[] = [];
+      for (const record of records) {
+        if (!stateLiveness(kind, record).live) continue;
+        const id = (record as { id: string }).id;
+        const exact = stateSubject(kind, record) === needle || id === needle;
+        let score = scoreByRef.get(id);
+        if (score === undefined) {
+          if (!exact) continue;
+          score = 0;
+        } else if (!exact && !allTokensPresent(tokens, stateSearchDoc(kind, record))) {
+          continue; // the LIKE fallback is OR-shaped; keep the AND contract on every runtime
+        }
+        hits.push({ kind, record, score: exact ? Math.min(score, STATE_EXACT_SUBJECT_SCORE) : score });
+      }
+      return hits.sort(compareStateHits).slice(0, STATE_SLICE_CAPS[kind]);
+    };
+    return { derived: pick("derived"), commitments: pick("commitments"), receipts: pick("receipts") };
+  }
+
+  /** AND-shaped FTS over one state kind (every token required, prefix-tolerant); degrades to
+   *  the kind-scoped LIKE scan (OR-shaped — the caller re-checks AND) without FTS5. */
+  private stateFts(tokens: string[], kind: StateKind, limit: number): SearchHit[] {
+    if (!tokens.length) return [];
+    const match = tokens.map((t) => `"${t}"*`).join(" ");
+    try {
+      const rows = this.db.prepare(
+        `SELECT ref, kind, title, '' AS snip, bm25(search) AS score
+         FROM search WHERE search MATCH ? AND kind = ? ORDER BY score, ref LIMIT ?`,
+      ).all(match, kind, limit) as Array<{ ref: string; kind: string; title: string; snip: string; score: number }>;
+      return rows.map((r) => ({ ref: r.ref, kind: r.kind, title: r.title, snippet: r.snip, score: r.score }));
+    } catch {
+      return this.likeSearch(tokens.join(" "), limit, kind);
     }
   }
 
@@ -642,7 +756,7 @@ export class HunchStore {
        ORDER BY CASE WHEN ${titleLikes} THEN 0 ELSE 1 END, length(title), ref
        LIMIT ?`,
     ).all(...(kind ? [kind, ...likes, ...titleParams, limit] : [...likes, ...titleParams, limit])) as Array<{ ref: string; kind: string; title: string; snip: string }>;
-    return rows.map((r) => ({ ref: r.ref, kind: r.kind, title: r.title, snippet: r.snip, score: 0 }));
+    return this.demoteHistoricalState(rows.map((r) => ({ ref: r.ref, kind: r.kind, title: r.title, snippet: r.snip, score: 0 })));
   }
 
   // ---- semantic search (opt-in embeddings) --------------------------------
@@ -915,6 +1029,11 @@ export class HunchStore {
       // A fixed bug is not "dead" — lineage is the point of keeping it findable.
       return { dead: false, provenance: b.provenance.source };
     }
+    // nuryel.state/1 kinds: history (superseded / done / failed / retired) dims exactly like a
+    // superseded decision; the record's own clock (computed_at, valid_from, verified_at …)
+    // drives recency so the latest summary of a subject outranks last month's.
+    const state = this.stateMeta(ref, kind);
+    if (state) return { dead: !state.live, provenance: state.provenance, at: state.at || undefined };
     return null;
   }
 
@@ -998,7 +1117,7 @@ export class HunchStore {
         `SELECT ref, kind, title, snippet(search, 3, '[', ']', '…', 12) AS snip, bm25(search) AS score
          FROM search WHERE search MATCH ? AND kind = ? ORDER BY score LIMIT ?`,
       ).all(match, kind, limit) as Array<{ ref: string; kind: string; title: string; snip: string; score: number }>;
-      return rows.map((r) => ({ ref: r.ref, kind: r.kind, title: r.title, snippet: r.snip, score: r.score }));
+      return this.demoteHistoricalState(rows.map((r) => ({ ref: r.ref, kind: r.kind, title: r.title, snippet: r.snip, score: r.score })));
     } catch {
       return this.likeSearch(query, limit, kind);
     }
@@ -2041,7 +2160,21 @@ const DECISION_FRESHNESS_PATH_CACHE_CAP = 4_096;
  *  intent. Measured on bench/golden-retrieval.json: Recall@10 70% -> 90%, MRR
  *  0.402 -> 0.575. Set HUNCH_MEMORY_PRIOR_SHIFT=0 to disable. */
 const MEMORY_PRIOR_SHIFT = numEnv("HUNCH_MEMORY_PRIOR_SHIFT", 12);
-const MEMORY_KINDS = new Set(["decisions", "constraints", "bugs", "runbooks", "policies"]);
+const MEMORY_KINDS = new Set(["decisions", "constraints", "bugs", "runbooks", "policies", ...STATE_KINDS]);
+/** State-of-record ordering in the RAW search path: a nuryel.state/1 history hit (superseded
+ *  derived, done/cancelled commitment, failed receipt, retired entity) keeps this fraction of
+ *  its bm25 score (bm25 is negative, so scaling toward 0 demotes). 0.5 keeps the previous
+ *  summary of a subject one query away while the current one leads; hybridSearch adds the
+ *  bounded liveness prior on top. Set HUNCH_STATE_HISTORY_SCORE_FACTOR=1 to disable. */
+const STATE_HISTORY_SCORE_FACTOR = Math.max(0, Math.min(1, numEnv("HUNCH_STATE_HISTORY_SCORE_FACTOR", 0.5)));
+/** An exact subject match in stateSlice() leads regardless of bm25 (which is never below this). */
+const STATE_EXACT_SUBJECT_SCORE = -1_000_000;
+/** AND contract for stateSlice(): every query token appears (as a prefix) in the record's doc. */
+function allTokensPresent(tokens: readonly string[], doc: { title: string; body: string }): boolean {
+  if (!tokens.length) return false;
+  const words = `${doc.title} ${doc.body}`.toLowerCase().match(/[\p{L}\p{N}_]+/gu) ?? [];
+  return tokens.every((t) => words.some((w) => w.startsWith(t)));
+}
 function safeFreshnessScope(value: string): string | null {
   const normalized = toPosixTarget(value.trim());
   if (!normalized || normalized.length > 1_024 || normalized.includes("\0")
