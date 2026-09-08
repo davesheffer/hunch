@@ -17,7 +17,8 @@
  * dependencies, external-truth-stays-external (schema refinements), never-in-request-path
  * (there is no proxy verb — this module never fetches anything).
  */
-import { basename } from "node:path";
+import { basename, join } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
 import { z } from "zod";
 import type { HunchStore } from "./hunchStore.js";
 import { appendChanges, latestSeqFor, readLedger, type PendingChange } from "./changeLedger.js";
@@ -51,14 +52,23 @@ const LEGACY_FACETS = new Set<StateFacet>(["decisions", "constraints", "bugs", "
 // Explicit classes, no `i` flag: the pattern must survive zod → JSON schema for MCP output validation.
 const TOKEN = /^[A-Za-z0-9][A-Za-z0-9._:@+-]{0,199}$/;
 
-/** The repository partition this store serves. The id is the checkout's directory name,
- *  sanitized to the contract's token grammar — stable per clone, discoverable through
- *  `capabilities`, and the scope every legacy record defaults to. */
-export function repositoryScope(store: HunchStore): Scope {
+/** The partition this store IS. A served partition declares itself in `.hunch/partition.json`
+ *  (`{ kind, id }`, committed with the store); a plain checkout is the repository partition
+ *  named after its directory, sanitized to the contract's token grammar — stable per clone,
+ *  discoverable through `capabilities`, and the scope every legacy record defaults to. */
+export function partitionOf(store: HunchStore): Scope {
+  const declared = join(hunchPaths(store.publicRoot).hunch, "partition.json");
+  if (existsSync(declared)) {
+    const parsed = ScopeSchema.safeParse(JSON.parse(readFileSync(declared, "utf8")));
+    if (!parsed.success) throw new StateRefusal("unsupported", `${declared} does not declare a valid partition scope`);
+    return parsed.data;
+  }
   const raw = basename(store.publicRoot).replace(/[^A-Za-z0-9._:@+-]/g, "-").replace(/^[^A-Za-z0-9]+/, "");
   const id = TOKEN.test(raw) ? raw : "repository";
   return { kind: "repository", id };
 }
+/** @deprecated name kept for callers written before served partitions; same value as partitionOf. */
+export const repositoryScope = partitionOf;
 
 export const SubscribeResponseSchema = z.object({
   schema: z.literal(STATE_SUBSCRIBE_VERSION),
@@ -73,8 +83,9 @@ export const SubscribeResponseSchema = z.object({
 export type SubscribeResponse = z.infer<typeof SubscribeResponseSchema>;
 
 export function capabilities(store: HunchStore): { protocol: typeof STATE_CONTRACT_VERSION; capabilities: string[]; repository: Scope; partitions: Scope["kind"][] } {
-  const partitions: Scope["kind"][] = store.hasPrivate ? ["organization", "team", "user", "repository"] : ["repository"];
-  return { protocol: STATE_CONTRACT_VERSION, capabilities: [...STATE_CAPABILITIES], repository: repositoryScope(store), partitions };
+  const own = partitionOf(store);
+  const partitions: Scope["kind"][] = store.hasPrivate ? ["organization", "team", "user", "repository"] : [own.kind];
+  return { protocol: STATE_CONTRACT_VERSION, capabilities: [...STATE_CAPABILITIES], repository: own, partitions };
 }
 
 // ---- homing --------------------------------------------------------------------------------
@@ -82,12 +93,13 @@ export function capabilities(store: HunchStore): { protocol: typeof STATE_CONTRA
 const granted = (principal: Principal, scope: Scope): boolean => principal.grants.some((g) => scopePath(g) === scopePath(scope));
 
 function homeFor(store: HunchStore, scope: Scope): { home: "public" | "private"; hunchDir: string; isPrivate: boolean } {
-  const repo = repositoryScope(store);
-  if (scope.kind === "repository") {
-    if (scope.id !== repo.id) throw new StateRefusal("unsupported", `this store serves repository ${repo.id}, not ${scope.id}`);
+  const own = partitionOf(store);
+  if (scopePath(scope) === scopePath(own)) {
+    // The store IS this partition: its capture home (public `.hunch/`, or the overlay in shared mode).
     const home = store.captureHome(false);
     return { home, hunchDir: home === "private" ? store.privateDir! : hunchPaths(store.publicRoot).hunch, isPrivate: false };
   }
+  if (scope.kind === "repository") throw new StateRefusal("unsupported", `this store serves ${scopePath(own)}, not ${scopePath(scope)}`);
   if (!store.hasPrivate || !store.privateDir) {
     throw new StateRefusal("no-partition-home", `${scope.kind} partitions never ride a repository; configure an overlay (hunch private / hunch shared) to hold ${scopePath(scope)}`);
   }
@@ -112,7 +124,7 @@ function refOf(facet: StateFacet, record: { id: string }, scope: Scope): StateRe
 export function readState(store: HunchStore, input: unknown): { response: ReadResponse; envelope: DeliveryEnvelope } {
   const request: ReadRequest = ReadRequestSchema.parse(input);
   if (!granted(request.principal, request.scope)) throw new StateRefusal("outside-grants", `scope ${scopePath(request.scope)} is outside the principal's grants`);
-  const repo = repositoryScope(store);
+  const repo = partitionOf(store);
   const facets = new Set<StateFacet>(request.facets ?? STATE_FACETS);
   const target = request.task ?? request.subject ?? scopePath(request.scope);
   const ctx = store.assembleContext(target, request.budget_tokens ?? 1500);

@@ -1,6 +1,6 @@
 # nuryel.state/1 — the state contract
 
-Status: **proposed, frozen as code, bound to the store and to MCP.** Verbs, canonical hashing,
+Status: **proposed, frozen as code, bound to the store, MCP and HTTP (`hunch serve`).** Verbs, canonical hashing,
 id derivation and invariants live in `src/core/stateContract.ts`; the record schemas (facets) in
 `src/core/stateRecords.ts`, a leaf module so the store's kind registry can reference them without
 an import cycle (`stateContract` re-exports them — one module to import). The ONE implementation
@@ -14,10 +14,10 @@ The five new facets **are registered store kinds** (`receipts`, `commitments`, `
 path (store, overlay safety, private migrate, reindex, `dropAll`) picks them up unchanged,
 entities and relationships are index-file stored like resources because their ids are not safe
 file names, and the gitignore writer whitelists the new directories. The verbs **are** wired
-into the store (`readState` / `writeState` / `subscribeState`) and exposed over MCP
-(`nuryel_capabilities`, `nuryel_read`, `nuryel_write`, `nuryel_subscribe`). HTTP, CLI and the typed
-client are the next bindings and call the same three functions — a transport that re-implements a
-rule is a bug.
+into the store (`readState` / `writeState` / `subscribeState`), exposed over MCP
+(`nuryel_capabilities`, `nuryel_read`, `nuryel_write`, `nuryel_subscribe`) and over HTTP by
+`hunch serve` with a typed client. Every transport calls the same three functions — a transport
+that re-implements a rule is a bug.
 
 > Agents are probabilistic. Organizations need deterministic state. Nuryel is the state layer
 > between them.
@@ -117,6 +117,33 @@ around the contract's events. Unfiltered, `events` are contiguous after `after_s
 `filtered` is true, and `head_seq` is still the caller's next cursor. Subject matching uses the
 record id, the event's `subject`, and what the event invalidates.
 
+## Served partitions: `hunch serve`
+
+The served product is the fold of Hunch Memory into Hunch. `hunch serve --config <file>` binds
+`127.0.0.1` (put it behind SSH or a reverse proxy; never expose the port) and hosts partitions
+over HTTP with the same three verbs: `GET /nuryel/v1/capabilities`, `POST /nuryel/v1/read`,
+`POST /nuryel/v1/write`, `POST /nuryel/v1/subscribe` (request bodies are the contract's request
+schemas minus `schema` and `principal`), plus `GET /nuryel/v1/health`. Errors are problem+json;
+a `StateRefusal` maps to 403 outside-grants, 409 conflict / idempotency, 422 identity, 400
+malformed / unsupported, 404 no-partition-home.
+
+A **served partition is a directory whose `.hunch/partition.json` names the scope it IS** — so
+user, team and organization state need no overlay: the partition is the store, and
+`partitionOf(store)` (formerly `repositoryScope`) tells the binding to home writes there. The
+bearer token resolves the **principal**; the body never names one, and grants come from the
+config, never from the caller. `hunch serve init --partition user:david --root <dir>
+--principal sofia@david` declares the partition and mints a token (printed once; only its sha256
+is stored). Writes run under a **cross-process write lock** per partition (folded in from Hunch
+Memory) so a stdio MCP process on the same store cannot race the HTTP server between the ledger
+read and the record write.
+
+The typed client — `import { createStateClient } from "@davesheffer/hunch/state"` — wraps the
+four routes and turns problem+json into a `StateClientError { status, code, problem }`.
+
+Tests: `test/serve.test.ts` — init + token hashing, bearer → principal, grants on every route, a
+smuggled body principal ignored, typed refusals, ORC reading a user partition and writing the
+organization one, six concurrent writes leaving a contiguous ledger, lock release on throw.
+
 Amendments made while binding (all additive, called out for the review): `ChangeEvent.subject`
 (optional); `SubscribeResponse`; the token grammar is written as explicit character classes
 instead of an `i` flag so it survives zod → JSON schema in MCP output validation;
@@ -163,7 +190,10 @@ not modified by the registration — the store change is the index-file layout m
   second team shares an organization partition.
 - **Search and delivery of the new kinds.** They are stored and counted; FTS indexing, ranking
   into the delivery envelope and the `state_of_record` query are binding work, not registry work.
-- **The organization partition mode** in the served product (the fold of Hunch Memory).
+- **What else of Hunch Memory folds in.** `serve` carries its bind-loopback, bearer, problem+json,
+  body-limit and write-lock decisions. Its per-store concurrency gate, context-consistency
+  watermarks and the usefulness / Project DNA intake routes are not ported; they return only if a
+  served partition needs them.
 - **Ledger merge.** A scope's ledger has one sequence because it has one home; two clones
   writing the same repository partition on different branches will collide on merge exactly
   as two live decisions on a topic do. `reconcile-topics` is the model; the ledger equivalent
@@ -173,5 +203,5 @@ not modified by the registration — the store change is the index-file layout m
 - **Repository-scope private content.** The contract has no `private` flag: scope decides the
   home. Sensitive repository-scope state goes through the existing `hunch_record_*` tools
   with `private:true`, or into a user/team partition.
-- **HTTP, CLI and typed-client bindings**, and FTS / delivery ranking of the new kinds.
+- **A CLI binding** for the verbs, and FTS / delivery ranking of the new kinds.
 - **Naming** — engine `hunch` / platform Nuryel, or one name for both.
