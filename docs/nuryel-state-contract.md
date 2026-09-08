@@ -159,7 +159,7 @@ granted partition's own store (the primary first) and merges them with `mergeRea
 (`src/store/stateBinding.ts`, pure and reusable by any host fronting several roots). A requested
 scope that is granted but not served by this server is a 404 `no-partition`, like any other
 route; an ungranted one is named in `denied_scopes` with status 200. ORC, granted `user/david`
-and `organization/ylm`, gets Sofia's receipts and the organization's commitments on a customer in
+and `organization/acme`, gets Sofia's receipts and the organization's commitments on a customer in
 one answer instead of one read per drawer. `hunch mcp` fronts a single root, so over MCP a
 `scopes` request answers from that partition and declares it in `scopes` — never a silent union.
 

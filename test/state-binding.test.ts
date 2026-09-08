@@ -16,8 +16,8 @@ import { readLedger } from "../src/store/changeLedger.js";
 import { actionReceiptId, assertChangeSequence, commitmentId, derivedId, entityId, stateHash } from "../src/core/stateContract.js";
 
 const prov = { source: "imported:sofia", confidence: 0.9, evidence: ["sofia approvals row a1"] };
-const crmEvent = { system: "crm", object_type: "event", object_key: "26879", version: "2", observed_at: "2026-09-07T12:00:00Z" };
-const customer = entityId("customer", "קלינור");
+const crmEvent = { system: "crm", object_type: "event", object_key: "10042", version: "2", observed_at: "2026-09-07T12:00:00Z" };
+const customer = entityId("customer", "דוגמה");
 const user = { kind: "user" as const, id: "david" };
 
 function principalFor(store: HunchStore, kind: "human" | "agent" = "agent", extra: Array<{ kind: "organization" | "team" | "user" | "repository"; id: string }> = []) {
@@ -25,7 +25,7 @@ function principalFor(store: HunchStore, kind: "human" | "agent" = "agent", extr
 }
 
 function receiptRecord(store: HunchStore, over: Record<string, unknown> = {}) {
-  const base = { scope: repositoryScope(store), actor: "sofia@david", action_kind: "add_comment", target: crmEvent, request_fingerprint: stateHash({ eventId: 26879, comment: "ok" }) };
+  const base = { scope: repositoryScope(store), actor: "sofia@david", action_kind: "add_comment", target: crmEvent, request_fingerprint: stateHash({ eventId: 10042, comment: "ok" }) };
   return { schema: "nuryel.receipt/1", id: actionReceiptId(base), ...base, state: "verified", occurred_at: "2026-09-07T08:55:22Z", provenance: prov, invalidates: [customer], ...over };
 }
 
@@ -297,7 +297,7 @@ test("records: fetch by id, grants first — found with facet, denied by scope, 
 });
 
 test("mergeReadResponses: a union read concatenates refs per partition, unions invalidated_by and denied, merges records by id, and keeps the primary's receipt", () => {
-  const org = { kind: "organization" as const, id: "ylm" };
+  const org = { kind: "organization" as const, id: "acme" };
   const team = { kind: "team" as const, id: "ops" };
   const hdr = (c: string) => `hdr_${c.repeat(24)}`;
   const ref = (facet: "receipts" | "commitments" | "derived", id: string, scope: typeof user | typeof org) => ({ facet, id, record_hash: stateHash({ id }), scope });

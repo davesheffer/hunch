@@ -16,8 +16,8 @@ import { HunchStore } from "../src/store/hunchStore.js";
 import { entityId, stateHash } from "../src/core/stateContract.js";
 
 const prov = { source: "imported:sofia", confidence: 0.9, evidence: ["sofia approvals row a1"] };
-const crmEvent = { system: "crm", object_type: "event", object_key: "26879", version: "2", observed_at: "2026-09-07T12:00:00Z" };
-const customer = entityId("customer", "קלינור");
+const crmEvent = { system: "crm", object_type: "event", object_key: "10042", version: "2", observed_at: "2026-09-07T12:00:00Z" };
+const customer = entityId("customer", "דוגמה");
 
 test("nuryel_* tools bind read / write / subscribe / capabilities over MCP with typed refusals", async (t) => {
   const root = mkdtempSync(join(tmpdir(), "hunch-mcp-state-"));
@@ -47,7 +47,7 @@ test("nuryel_* tools bind read / write / subscribe / capabilities over MCP with 
   const repo = capabilities.repository;
   const principal = { id: "sofia@david", kind: "agent", grants: [repo] };
 
-  const base = { scope: repo, actor: "sofia@david", action_kind: "add_comment", target: crmEvent, request_fingerprint: stateHash({ eventId: 26879 }) };
+  const base = { scope: repo, actor: "sofia@david", action_kind: "add_comment", target: crmEvent, request_fingerprint: stateHash({ eventId: 10042 }) };
   const record = { schema: "nuryel.receipt/1", ...base, state: "verified", occurred_at: "2026-09-07T08:55:22Z", provenance: prov, invalidates: [customer] };
   const written = await client.callTool({ name: "nuryel_write", arguments: { principal, scope: repo, facet: "receipts", record, idempotency_key: "mcp-approval-a1" } });
   assert.ok(!written.isError, JSON.stringify(written.content));
@@ -74,7 +74,7 @@ test("nuryel_* tools bind read / write / subscribe / capabilities over MCP with 
   assert.deepEqual(response.state_of_record.invalidated_by, [result.record_id]);
   assert.deepEqual(response.denied_scopes, []);
   assert.equal((response as { records?: Record<string, { state?: string }> }).records?.[result.record_id]?.state, "verified", "the record rides the read");
-  assert.match((read.content as Array<{ text: string }>)[0]!.text, /State of record:\n- done receipt nrc_[a-f0-9]{24} · add_comment on crm event:26879 · verified/);
+  assert.match((read.content as Array<{ text: string }>)[0]!.text, /State of record:\n- done receipt nrc_[a-f0-9]{24} · add_comment on crm event:10042 · verified/);
 
   const stream = await client.callTool({ name: "nuryel_subscribe", arguments: { principal, scope: repo, after_seq: 0 } });
   const changes = stream.structuredContent as { head_seq: number; events: Array<{ seq: number; change: string; record_id: string; cause: unknown }> };

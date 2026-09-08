@@ -8,7 +8,7 @@ import {
   assertReadWithinGrants, assertWriteWellFormed, assertDerivedState, assertChangeSequence,
 } from "../src/core/stateContract.js";
 
-const org = { kind: "organization" as const, id: "ylm" };
+const org = { kind: "organization" as const, id: "acme" };
 const user = { kind: "user" as const, id: "david" };
 const repo = { kind: "repository" as const, id: "hunch" };
 const prov = { source: "imported:sofia", confidence: 0.9, evidence: ["sofia approvals row a1"] };
@@ -17,20 +17,20 @@ const sofiaAgent = PrincipalSchema.parse({ id: "sofia@david", kind: "agent", gra
 
 // ---- Sofia-shaped fixtures: every record Sofia keeps today, expressed as a state facet ----
 
-const crmEvent = ExternalRefSchema.parse({ system: "crm", object_type: "event", object_key: "26879", version: "2", observed_at: "2026-09-07T12:00:00Z" });
+const crmEvent = ExternalRefSchema.parse({ system: "crm", object_type: "event", object_key: "10042", version: "2", observed_at: "2026-09-07T12:00:00Z" });
 const gmailThread = ExternalRefSchema.parse({ system: "gmail", object_type: "thread", object_key: "thread1", observed_at: "2026-09-07T12:00:00Z" });
 
 test("a Sofia approval becomes an action receipt whose id is the action, not the row", () => {
-  const base = { scope: user, actor: "sofia@david", action_kind: "add_comment", target: crmEvent, request_fingerprint: stateHash({ eventId: 26879, comment: "הלוגו לא הוסר והכול תקין." }) };
+  const base = { scope: user, actor: "sofia@david", action_kind: "add_comment", target: crmEvent, request_fingerprint: stateHash({ eventId: 10042, comment: "הלוגו לא הוסר והכול תקין." }) };
   const id = actionReceiptId(base);
   const receipt = ActionReceiptSchema.parse({ schema: "nuryel.receipt/1", id, ...base, state: "verified", occurred_at: "2026-09-07T08:55:22Z", verified_at: "2026-09-07T08:55:40Z", provenance: prov });
   assert.equal(receipt.state, "verified");
   assert.equal(actionReceiptId({ ...base, target: { ...crmEvent, observed_at: "2026-09-08T00:00:00Z" } }), id, "observation time does not change the action's identity");
-  assert.notEqual(actionReceiptId({ ...base, request_fingerprint: stateHash({ eventId: 26879, comment: "אחר" }) }), id, "a different request is a different action");
+  assert.notEqual(actionReceiptId({ ...base, request_fingerprint: stateHash({ eventId: 10042, comment: "אחר" }) }), id, "a different request is a different action");
 });
 
 test("a Sofia follow-up becomes a commitment with an in-force window", () => {
-  const base = { scope: user, subject: entityId("customer", "קלינור"), title: "לחזור ללקוח עם תוצאות בדיקת הדוח", owner: "david", due: "2026-09-10" };
+  const base = { scope: user, subject: entityId("customer", "דוגמה"), title: "לחזור ללקוח עם תוצאות בדיקת הדוח", owner: "david", due: "2026-09-10" };
   const c = CommitmentSchema.parse({ schema: "nuryel.commitment/1", id: commitmentId(base), ...base, status: "open", source: crmEvent, evidence_excerpt: "הלקוח ביקש לעדכן אותו לאחר בדיקת הדוח.", valid_from: "2026-09-07T08:00:00Z", provenance: prov });
   assert.equal(c.valid_to, null, "open commitment is in force");
   assert.equal(commitmentId({ ...base, title: "  לחזור ללקוח עם תוצאות בדיקת הדוח " }), c.id, "title whitespace does not fork identity");
@@ -39,7 +39,7 @@ test("a Sofia follow-up becomes a commitment with an in-force window", () => {
 test("a cited customer summary becomes derived state that names what it rests on", () => {
   const content = "הלקוח ביקש עדכון; יש לעיין במקורות לפני קביעת המשך הטיפול.";
   const deps = [{ kind: "external" as const, ref: crmEvent }, { kind: "external" as const, ref: gmailThread }];
-  const base = { scope: user, subject: entityId("customer", "קלינור"), transform_version: "sofia-summary/3", dependencies: deps };
+  const base = { scope: user, subject: entityId("customer", "דוגמה"), transform_version: "sofia-summary/3", dependencies: deps };
   const d = DerivedStateSchema.parse({ schema: "nuryel.derived/1", id: derivedId(base), ...base, content, content_hash: stateHash(content), computed_at: "2026-09-07T12:05:00Z", state: "current", provenance: prov });
   assertDerivedState(d);
   assert.equal(derivedId({ ...base, dependencies: [deps[1]!, deps[0]!] }), d.id, "dependency order does not fork identity");
@@ -49,14 +49,14 @@ test("a cited customer summary becomes derived state that names what it rests on
 });
 
 test("a Sofia dossier becomes an entity with provenance pointers, linked by relationships", () => {
-  const id = entityId("customer", "קלינור");
-  const e = ExternalEntitySchema.parse({ schema: "nuryel.entity/1", id, kind: "customer", name: "קלינור", scope: org, refs: [crmEvent, gmailThread], attributes: { tier: "key", open_events: 18 }, provenance: prov, created_at: "2026-09-07T12:00:00Z", updated_at: "2026-09-07T12:00:00Z" });
+  const id = entityId("customer", "דוגמה");
+  const e = ExternalEntitySchema.parse({ schema: "nuryel.entity/1", id, kind: "customer", name: "דוגמה", scope: org, refs: [crmEvent, gmailThread], attributes: { tier: "key", open_events: 18 }, provenance: prov, created_at: "2026-09-07T12:00:00Z", updated_at: "2026-09-07T12:00:00Z" });
   assert.equal(e.lifecycle, "active");
-  const rel = StateRelationshipSchema.parse({ schema: "nuryel.relationship/1", id: relationshipId(id, "event:26879", "has_incident"), from: id, to: "event:26879", type: "has_incident", scope: org, provenance: prov });
+  const rel = StateRelationshipSchema.parse({ schema: "nuryel.relationship/1", id: relationshipId(id, "event:10042", "has_incident"), from: id, to: "event:10042", type: "has_incident", scope: org, provenance: prov });
   assert.ok(rel.id.startsWith("edge_"));
   assert.throws(() => StateRelationshipSchema.parse({ ...rel, id: "edge_deadbeef" }), /derive from its endpoints/);
   assert.throws(() => ExternalEntitySchema.parse({ ...e, id: "other" }), /canonical kind-qualified/);
-  assert.throws(() => ExternalEntitySchema.parse({ ...e, id: "Customer:קלינור" }), /canonical kind-qualified/);
+  assert.throws(() => ExternalEntitySchema.parse({ ...e, id: "Customer:דוגמה" }), /canonical kind-qualified/);
 });
 
 test("credential material is refused in provenance pointers", () => {
@@ -77,8 +77,8 @@ test("canonical hashing is key-order independent and rejects non-finite numbers"
 // ---- verbs ----
 
 test("read: the response is bound to a delivery receipt and never leaks outside the grants", () => {
-  ReadRequestSchema.parse({ schema: "nuryel.state.read/1", principal: sofiaAgent, scope: user, subject: "event:26879", profile: "builder", facets: ["decisions", "receipts", "commitments"] });
-  const ok = ReadResponseSchema.parse({ schema: "nuryel.state.read/1", receipt_id: "hdr_" + "a".repeat(24), scope: user, state_of_record: { subject: "event:26879", current: [{ facet: "derived", id: "nds_" + "b".repeat(24), record_hash: stateHash("x"), scope: user }], in_force: [], done: [], depends_on: [], invalidated_by: [] } });
+  ReadRequestSchema.parse({ schema: "nuryel.state.read/1", principal: sofiaAgent, scope: user, subject: "event:10042", profile: "builder", facets: ["decisions", "receipts", "commitments"] });
+  const ok = ReadResponseSchema.parse({ schema: "nuryel.state.read/1", receipt_id: "hdr_" + "a".repeat(24), scope: user, state_of_record: { subject: "event:10042", current: [{ facet: "derived", id: "nds_" + "b".repeat(24), record_hash: stateHash("x"), scope: user }], in_force: [], done: [], depends_on: [], invalidated_by: [] } });
   assertReadWithinGrants(sofiaAgent, ok);
   const leaked = { ...ok, state_of_record: { ...ok.state_of_record!, done: [{ facet: "receipts" as const, id: "nrc_" + "c".repeat(24), record_hash: stateHash("y"), scope: repo }] } };
   assert.throws(() => assertReadWithinGrants(sofiaAgent, leaked), /leaked outside/);
