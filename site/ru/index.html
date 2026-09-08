@@ -76,6 +76,12 @@
   .nav{position:sticky;top:0;z-index:50;background:color-mix(in srgb,var(--bg) 92%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--line-2)}
   .nav-in{display:flex;align-items:center;gap:26px;height:60px}
   .brand{font-family:var(--mono);font-weight:500;font-size:15px;letter-spacing:-.01em;display:flex;align-items:center;gap:9px}
+  .thesis-band{display:flex;gap:12px;align-items:center;justify-content:center;flex-wrap:wrap;padding:9px 16px;font-size:13.5px;color:var(--ink);background:var(--moss-wash);border-bottom:1px solid rgba(58,107,88,.22);text-decoration:none;transition:background .15s var(--ease)}
+  .thesis-band:hover{background:rgba(58,107,88,.11)}
+  .thesis-tag{font-family:var(--mono);font-size:12px;letter-spacing:.02em;color:var(--moss-ink)}
+  .thesis-text{color:var(--mut)}
+  .thesis-cta{font-weight:500;color:var(--ink)}
+  @media (max-width:520px){.thesis-text{display:none}}
   .nav-links{display:flex;gap:22px;margin-inline-start:auto;align-items:center}
   .nav-links a{font-size:14px;color:var(--mut);transition:color .15s var(--ease)}
   .nav-links a:hover{color:var(--ink)}
@@ -325,6 +331,7 @@
 </head>
 <body>
 
+<a class="thesis-band" href="/ru/blog/post?slug=the-state-layer"><span class="thesis-tag">Детерминированное состояние</span><span class="thesis-text">Агенты вероятностны. Организациям нужно детерминированное состояние.</span><b class="thesis-cta">Читать тезис →</b></a>
 <nav class="nav" aria-label="Основная навигация">
   <div class="wrap nav-in">
     <a class="brand" href="/ru"><span class="brand-mark" aria-hidden="true"></span>hunch</a>

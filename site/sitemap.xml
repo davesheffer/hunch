@@ -2,12 +2,12 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://www.hunchmemory.com/</loc>
-    <lastmod>2026-09-03</lastmod>
+    <lastmod>2026-09-06</lastmod>
     <priority>1.0</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/ar</loc>
-    <lastmod>2026-09-03</lastmod>
+    <lastmod>2026-09-06</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
@@ -116,13 +116,18 @@
     <priority>0.6</priority>
   </url>
   <url>
+    <loc>https://www.hunchmemory.com/ar/blog/post?slug=the-state-layer</loc>
+    <lastmod>2026-08-27</lastmod>
+    <priority>0.6</priority>
+  </url>
+  <url>
     <loc>https://www.hunchmemory.com/ar/blog/post?slug=the-violation-your-linter-cant-see</loc>
     <lastmod>2026-08-27</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/ar/changelog</loc>
-    <lastmod>2026-09-03</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
@@ -231,13 +236,18 @@
     <priority>0.6</priority>
   </url>
   <url>
+    <loc>https://www.hunchmemory.com/blog/post?slug=the-state-layer</loc>
+    <lastmod>2026-08-27</lastmod>
+    <priority>0.6</priority>
+  </url>
+  <url>
     <loc>https://www.hunchmemory.com/blog/post?slug=the-violation-your-linter-cant-see</loc>
     <lastmod>2026-08-27</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/changelog</loc>
-    <lastmod>2026-09-03</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
@@ -252,12 +262,12 @@
   </url>
   <url>
     <loc>https://www.hunchmemory.com/docs</loc>
-    <lastmod>2026-09-03</lastmod>
+    <lastmod>2026-09-06</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/es</loc>
-    <lastmod>2026-09-03</lastmod>
+    <lastmod>2026-09-06</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
@@ -366,18 +376,23 @@
     <priority>0.6</priority>
   </url>
   <url>
+    <loc>https://www.hunchmemory.com/es/blog/post?slug=the-state-layer</loc>
+    <lastmod>2026-08-27</lastmod>
+    <priority>0.6</priority>
+  </url>
+  <url>
     <loc>https://www.hunchmemory.com/es/blog/post?slug=the-violation-your-linter-cant-see</loc>
     <lastmod>2026-08-27</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/es/changelog</loc>
-    <lastmod>2026-09-03</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/he</loc>
-    <lastmod>2026-09-03</lastmod>
+    <lastmod>2026-09-06</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
@@ -486,18 +501,23 @@
     <priority>0.6</priority>
   </url>
   <url>
+    <loc>https://www.hunchmemory.com/he/blog/post?slug=the-state-layer</loc>
+    <lastmod>2026-08-27</lastmod>
+    <priority>0.6</priority>
+  </url>
+  <url>
     <loc>https://www.hunchmemory.com/he/blog/post?slug=the-violation-your-linter-cant-see</loc>
     <lastmod>2026-08-27</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/he/changelog</loc>
-    <lastmod>2026-09-03</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/ru</loc>
-    <lastmod>2026-09-03</lastmod>
+    <lastmod>2026-09-06</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
@@ -606,13 +626,18 @@
     <priority>0.6</priority>
   </url>
   <url>
+    <loc>https://www.hunchmemory.com/ru/blog/post?slug=the-state-layer</loc>
+    <lastmod>2026-08-27</lastmod>
+    <priority>0.6</priority>
+  </url>
+  <url>
     <loc>https://www.hunchmemory.com/ru/blog/post?slug=the-violation-your-linter-cant-see</loc>
     <lastmod>2026-08-27</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/ru/changelog</loc>
-    <lastmod>2026-09-03</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
 </urlset>
