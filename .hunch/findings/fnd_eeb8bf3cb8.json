@@ -1,14 +1,14 @@
 {
   "id": "fnd_eeb8bf3cb8",
   "title": "Derived state has no auto-supersede: two concurrent fresh summaries of one shared subject both stay current",
-  "observation": "With subjects keyed by CRM site (Sofia PR #2, fc79aaf), two Sofias serving the same clinic supersede each other's summaries (a handoff, not a contradiction). But the contract does not auto-supersede `derived` records: two CONCURRENT fresh summaries of one subject each name the same incumbent in `supersedes`, so after both land the subject has two current derived records. The emulation conductor hides this by serializing writes per subject; real Sofias do not coordinate. Candidate fix in the binding: when a derived write names a record that is already superseded, either refuse with `conflict` (teach the writer to re-read) or auto-supersede the newer current one — the first keeps the contract dull and matches expected_version semantics.",
+  "observation": "Two writers racing to replace the same incumbent derived record (or commitment) could both succeed and leave two current records for one subject; the emulation conductor hid it by serializing writes per subject. Resolved in 1.28.0: a `supersedes` that names an already-closed commitment or derived record is refused with `conflict` (reason `supersede target already closed`) naming the record that is current for that subject, so the loser re-reads and supersedes that one; the writer that closed the incumbent itself (same derived id under a new key) is exempt and becomes an in-place update with no second superseded event.",
   "evidence": [
-    "Sofia emulation conductor (emulation/replay.mjs) added per-subject serialization (onSubject) so the replay stays deterministic; without it two fresh summaries of customer:Site:502 would both be current",
-    "Sofia npm test 168/168 green; conductor verdict OK with shared-subject handoffs 3, dedup replayed 1, contradictions 0 (2026-09-08)"
+    "test/state-binding.test.ts: race write with the stale incumbent → conflict naming v2; read shows exactly one current summary; same-id re-send under a new key → updated",
+    "emulation replay on 1.28 code: 3 Sofias, 36 shared-subject handoffs, 1 current summary per subject, contradictions 0"
   ],
   "method": null,
   "severity": "medium",
-  "triage": "open",
+  "triage": "resolved",
   "affected_files": [
     "src/store/stateBinding.ts",
     "src/core/stateContract.ts",
@@ -18,14 +18,14 @@
   "violates_constraint": null,
   "spawned_decision": null,
   "observed_at": "2026-09-08T18:55:25.314Z",
-  "resolved_commit": null,
+  "resolved_commit": "2292146",
   "provenance": {
     "source": "human_confirmed",
     "confidence": 0.95,
     "evidence": [
-      "Sofia emulation conductor (emulation/replay.mjs) added per-subject serialization (onSubject) so the replay stays deterministic; without it two fresh summaries of customer:Site:502 would both be current",
-      "Sofia npm test 168/168 green; conductor verdict OK with shared-subject handoffs 3, dedup replayed 1, contradictions 0 (2026-09-08)"
+      "test/state-binding.test.ts: race write with the stale incumbent → conflict naming v2; read shows exactly one current summary; same-id re-send under a new key → updated",
+      "emulation replay on 1.28 code: 3 Sofias, 36 shared-subject handoffs, 1 current summary per subject, contradictions 0"
     ],
-    "last_verified": "2026-09-08T18:55:25.314Z"
+    "last_verified": "2026-09-08T20:18:23.428Z"
   }
 }
