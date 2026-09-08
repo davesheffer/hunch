@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+## 1.26.2 — 2026-09-08
+
+### Served partitions commit, pin, and answer
+
+Three defects found on the first live pilot after a real receipt, each fixed with a test.
+Served writes now commit: `hunch serve` flushes inside its cross-process write lock, the lock
+file was staged with the record, and the staged-memory backstop refused the commit quietly, so
+every write reported durability `local`; `write.lock` is a derived artifact now and `serve init`
+writes the partition's `.gitignore`. `hunch mcp --root <dir>` pins the MCP server to a served
+partition and ignores the client's workspace roots and per-call `cwd` hints, so a second agent
+opened on any repository reads the same drawer. A read carries the referenced records
+(`ReadResponse.records`, additive) and `nuryel_read` renders the state of record — current
+derived content, commitments with due and owner, receipts with action, target and verification —
+so a consumer answers from the drawer without a second lookup. `nuryel_write` over MCP takes
+the same partition write lock as `hunch serve`, so a second agent writing over stdio cannot race
+the server.
+
 ## 1.26.1 — 2026-09-08
 
 ### `serve init` honors its own options

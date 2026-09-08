@@ -8,6 +8,7 @@ export const changelogLocales = {
       footer: "© Hunch — התאמה ארכיטקטונית לקוד AI.", home: "בית", githubReleases: "גרסאות ב-GitHub"
     },
     titles: [
+      "מחיצות מוגשות: שומרות, מוצמדות ועונות",
       "serve init מכבד את האפשרויות שלו",
       "שכבת המצב מוגשת: hunch serve ו-Hunch Memory מתמזג פנימה",
       "חוזה המצב יוצא לדרך: nuryel.state/1 מעל המאגר ו-MCP",
@@ -53,6 +54,7 @@ export const changelogLocales = {
       footer: "© Hunch — архитектурное соответствие для ИИ-кода.", home: "Главная", githubReleases: "Релизы на GitHub"
     },
     titles: [
+      "Обслуживаемые разделы: коммитят, закрепляются и отвечают",
       "serve init учитывает собственные параметры",
       "Слой состояния как сервис: hunch serve, Hunch Memory влит внутрь",
       "Контракт состояния выходит: nuryel.state/1 поверх хранилища и MCP",
@@ -98,6 +100,7 @@ export const changelogLocales = {
       footer: "© Hunch — التوافق المعماري لكود الذكاء الاصطناعي.", home: "الرئيسية", githubReleases: "الإصدارات على GitHub"
     },
     titles: [
+      "الأقسام المخدومة: تلتزم وتُثبَّت وتجيب",
       "serve init يحترم خياراته",
       "طبقة الحالة كخدمة: hunch serve ودمج Hunch Memory",
       "عقد الحالة يصدر: nuryel.state/1 فوق المخزن وMCP",
@@ -143,6 +146,7 @@ export const changelogLocales = {
       footer: "© Hunch — conformidad arquitectónica para código de IA.", home: "Inicio", githubReleases: "Versiones en GitHub"
     },
     titles: [
+      "Particiones servidas: confirman, se fijan y responden",
       "serve init respeta sus propias opciones",
       "La capa de estado, servida: hunch serve y Hunch Memory integrado",
       "El contrato de estado se publica: nuryel.state/1 sobre el almacén y MCP",
