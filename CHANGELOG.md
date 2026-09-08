@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+## 1.26.0 — 2026-09-08
+
+### `hunch serve`: the state layer served, and Hunch Memory folded in
+
+`hunch serve --config <file>` hosts organization, team, user and repository partitions over
+HTTP on `127.0.0.1` with the contract's three verbs (`/nuryel/v1/read`, `/write`, `/subscribe`)
+plus `/capabilities` and `/health`. A served partition is a directory whose
+`.hunch/partition.json` names the scope it is, so user and organization state needs no overlay.
+The bearer token resolves the principal; the request body never names one, and grants come from
+the config only. `hunch serve init --partition user:david --root <dir> --principal sofia@david`
+declares a partition and mints a token (printed once; only its sha256 is stored). Writes run
+under a cross-process write lock per partition so a stdio MCP process on the same store cannot
+race the server. A typed client ships as `@davesheffer/hunch/state`. This is the fold of the
+separate Hunch Memory service into Hunch: its loopback-bind, bearer, problem+json, body-limit and
+write-lock decisions carry over; its concurrency gate, consistency watermarks and intake routes
+do not. Every rule still lives in the store binding; the transport only maps HTTP to it.
+
 ## 1.25.0 — 2026-09-08
 
 ### The state contract ships: nuryel.state/1 over the store and MCP

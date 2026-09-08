@@ -195,6 +195,14 @@ are homed in an overlay, never in a repository. The MCP server binds it as `nury
 `nuryel_read`, `nuryel_write` and `nuryel_subscribe`; every other transport will call the same
 store binding. Contract and evidence: [docs/nuryel-state-contract.md](docs/nuryel-state-contract.md).
 
+As of 1.26.0 the state layer is also **served**: `hunch serve --config <file>` hosts organization,
+team, user and repository partitions over HTTP on loopback with the same three verbs. A served
+partition is a directory whose `.hunch/partition.json` names the scope it is; the bearer token
+resolves the principal and grants come from the config only. `hunch serve init --partition
+user:david --root <dir> --principal sofia@david` declares a partition and mints a token. The typed
+client is `import { createStateClient } from "@davesheffer/hunch/state"`. This folds the separate
+Hunch Memory service into Hunch.
+
 Read [Deterministic organizational state](docs/deterministic-state.md) and the [roadmap](ROADMAP.md).
 
 ### Naming
