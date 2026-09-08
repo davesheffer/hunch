@@ -8,6 +8,7 @@ export const changelogLocales = {
       footer: "© Hunch — התאמה ארכיטקטונית לקוד AI.", home: "בית", githubReleases: "גרסאות ב-GitHub"
     },
     titles: [
+      "סוכנים רבים, נושא אחד",
       "החוזה לומד מהכותבים הראשונים שלו",
       "מחיצות מוגשות: שומרות, מוצמדות ועונות",
       "serve init מכבד את האפשרויות שלו",
@@ -55,6 +56,7 @@ export const changelogLocales = {
       footer: "© Hunch — архитектурное соответствие для ИИ-кода.", home: "Главная", githubReleases: "Релизы на GitHub"
     },
     titles: [
+      "Много агентов, один субъект",
       "Контракт учится у своих первых писателей",
       "Обслуживаемые разделы: коммитят, закрепляются и отвечают",
       "serve init учитывает собственные параметры",
@@ -102,6 +104,7 @@ export const changelogLocales = {
       footer: "© Hunch — التوافق المعماري لكود الذكاء الاصطناعي.", home: "الرئيسية", githubReleases: "الإصدارات على GitHub"
     },
     titles: [
+      "وكلاء كثيرون، موضوع واحد",
       "العقد يتعلم من كتّابه الأوائل",
       "الأقسام المخدومة: تلتزم وتُثبَّت وتجيب",
       "serve init يحترم خياراته",
@@ -149,6 +152,7 @@ export const changelogLocales = {
       footer: "© Hunch — conformidad arquitectónica para código de IA.", home: "Inicio", githubReleases: "Versiones en GitHub"
     },
     titles: [
+      "Muchos agentes, un sujeto",
       "El contrato aprende de sus primeros escritores",
       "Particiones servidas: confirman, se fijan y responden",
       "serve init respeta sus propias opciones",
