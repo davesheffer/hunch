@@ -1,11 +1,23 @@
 /** Render an AssembledContext as a compact, agent-ready brief: invariants first
  *  (what must not break), then the why, blast radius, and bug history — each with
  *  provenance so the agent can weight it. Shared by the CLI and the MCP tool. */
-import type { AssembledContext, StructureView } from "../store/hunchStore.js";
+import type { AssembledContext, SearchHit, StructureView } from "../store/hunchStore.js";
 import { buildDeliveryEnvelope, type DeliveryOptions } from "./delivery.js";
+import { isStateKind, renderStateLine, type StateRecord } from "./stateDelivery.js";
 
 export function formatContext(ctx: AssembledContext, options: DeliveryOptions = {}): string {
   return buildDeliveryEnvelope(ctx, options).text;
+}
+
+/** One search hit as `hunch query` / hunch_query print it (headline + indented detail line).
+ *  Graph records keep their `[kind] id — title` shape; a nuryel.state/1 hit renders through
+ *  renderStateLine (`[commitment/in_force] customer:Site:7 — "send report" due … (owner …)`)
+ *  with the record id on the detail line, so both readers say the same thing. */
+export function formatSearchHit(hit: SearchHit, record: unknown): string {
+  if (isStateKind(hit.kind) && record) {
+    return `• ${renderStateLine(hit.kind, record as StateRecord)}\n    ${hit.ref}`;
+  }
+  return `• [${hit.kind}] ${hit.ref} — ${hit.title}\n    ${hit.snippet}`;
 }
 
 /** Render a StructureView as a compact orientation brief (hunch_structure). */

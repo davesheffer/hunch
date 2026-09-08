@@ -116,6 +116,7 @@ export const FTS_SEARCH_SCHEMA_SQL = /* sql */ `
 CREATE VIRTUAL TABLE IF NOT EXISTS search USING fts5(
   ref UNINDEXED,   -- entity id
   kind UNINDEXED,  -- components | resources | edges | symbols | decisions | bugs | constraints | runbooks | findings
+                   -- | receipts | commitments | derived | entities | relationships (nuryel.state/1; title = subject key)
   title,
   body,
   tokenize = 'porter unicode61'

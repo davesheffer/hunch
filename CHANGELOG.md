@@ -2,6 +2,33 @@
 
 ## Unreleased
 
+### State records are searchable and delivered by subject
+
+The five `nuryel.state/1` kinds registered in 1.25 — receipts, commitments, derived, entities,
+relationships — were stored and counted but neither indexed nor delivered: `hunch_query
+("customer:Site:7")` could not surface a current summary, an open commitment or a verified
+receipt, and `hunch_context("clinic elevator")` had nothing to say about state. Reindex now adds
+every state record to the `search` index under its own kind (same FTS shape, no schema bump):
+title = the subject key, body = the summary/title + actor/owner + status label + dates, so a
+subject id, an action kind, a principal and a phrase from a summary all hit. History stays
+indexed and findable but ranks below the state of record: a superseded summary, a done or
+cancelled commitment, a failed receipt or a retired entity has its bm25 score scaled toward
+zero (`HUNCH_STATE_HISTORY_SCORE_FACTOR`, default 0.5) on the raw path, and carries the same
+bounded liveness prior a superseded decision does on the ranked/hybrid path; state kinds join
+the memory-record prior so a subject query is answered by state, not by symbols that share its
+words. `hunch_query` and `hunch query` render one line per kind — `[commitment/in_force]
+customer:Site:7 — "send report" due 2026-09-11 (owner sofia)`, `[derived/current] customer:Site:7
+— <first 120 chars>`, `[receipt/verified] event:10042 — events_add_actions by sofia@david
+2026-09-08` — with the record id on the detail line. `hunch_context` and `hunch context` carry a
+bounded **State** section when the target's tokens all match a subject or a record's text
+(AND, prefix-tolerant, so a file path never drags in a summary that merely mentions "store"):
+at most 3 current derived, 5 in-force commitments and 3 latest receipts, ordered by score, then
+observed_at descending, then id, delivered as supplements that share the brief's budget and
+receipt; state hits are no longer echoed as raw `search-*` lines. Time-travel briefs withhold the
+section (state records have no as-of view). A store with zero state records is byte-identical.
+New: `src/core/stateDelivery.ts` (liveness, search doc, one-line render, slice ordering,
+supplements), `HunchStore.stateSlice(target)`, `formatSearchHit`; `test/state-kinds-search.test.ts`.
+
 ## 1.27.0 — 2026-09-08
 
 ### The contract learns from its first writers

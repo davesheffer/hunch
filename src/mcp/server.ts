@@ -24,7 +24,8 @@ import { revParse, asOfDate, revExists, lastChangeDate, rangeFiles, rangeDiff, c
 import { flushCapture, flushMemoryHome, pinSharedRemote } from "../integrations/sync.js";
 import { withWriteLock } from "../serve/writelock.js";
 import { advertisedTeamRemoteContract, ensureTeamOverlay, overlayMatchesTeamRemote, readTeamConfig, teamRemoteContract, teamSharedRef } from "../integrations/team.js";
-import { formatStructure } from "../core/format.js";
+import { formatSearchHit, formatStructure } from "../core/format.js";
+import { isStateKind, stateSupplements } from "../core/stateDelivery.js";
 import { diagnoseIssueCorrectionStage, formatCorrectionStageDiagnostic } from "../core/correctionStage.js";
 import {
   compileVerifiedEvidenceMap,
@@ -867,7 +868,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
       if (!hits.length) return ok(`No matches for "${query}".`);
       const lines = hits.map((h) => {
         const r = store.resolve(h.ref);
-        return `• [${h.kind}] ${h.ref} — ${h.title}\n    ${h.snippet}${provLine(r?.record)}`;
+        return `${formatSearchHit(h, r?.record)}${provLine(r?.record)}`;
       });
       return ok(`Top matches for "${query}":\n\n${lines.join("\n")}`);
     },
@@ -1209,6 +1210,10 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
         // Git checkout cannot provide DNA; the dedicated DNA tool reports the
         // exact derivation error when a caller needs diagnostics.
       }
+      // The "State" section (nuryel.state/1): current derived, in-force commitments and the
+      // latest receipts whose subject/text matches the target — bounded, ordered, sharing the
+      // brief's budget as supplements. Withheld on time-travel: state records carry no as-of view.
+      const stateGrounding = asOf ? [] : stateSupplements(store.stateSlice(target), target);
       const options = {
         root,
         symbols: store.recs("symbols"),
@@ -1216,7 +1221,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
         decisionCorpus: store.recs("decisions"),
         historical: !!asOf,
         profile: profile ?? "builder",
-        supplements: dnaSupplement ? [dnaSupplement] : [],
+        supplements: [...(dnaSupplement ? [dnaSupplement] : []), ...stateGrounding],
       };
       // Task-phrase input ("improve retrieval ranking") resolves no file/symbol and
       // used to return an empty brief while the graph held the answer — fall back to
@@ -1244,8 +1249,10 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
             ...options,
             supplements: [
               ...(dnaSupplement ? [dnaSupplement] : []),
+              ...stateGrounding,
               ...hits
-              .filter((hit) => !["constraints", "decisions", "bugs", "findings"].includes(hit.kind))
+              // State hits are delivered through the State section above, not as raw search lines.
+              .filter((hit) => !["constraints", "decisions", "bugs", "findings"].includes(hit.kind) && !isStateKind(hit.kind))
               .map((hit, index) => ({
                 id: hit.ref,
                 kind: `search-${hit.kind}`,
