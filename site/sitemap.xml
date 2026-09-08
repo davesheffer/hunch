@@ -2,12 +2,12 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://www.hunchmemory.com/</loc>
-    <lastmod>2026-09-06</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>1.0</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/ar</loc>
-    <lastmod>2026-09-06</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
@@ -17,112 +17,117 @@
   </url>
   <url>
     <loc>https://www.hunchmemory.com/ar/blog/post?slug=agent-audits-its-own-memory</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/ar/blog/post?slug=agents-md-is-lying-to-your-agent</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/ar/blog/post?slug=ai-code-review-is-not-enough</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/ar/blog/post?slug=ai-ignores-your-architecture</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/ar/blog/post?slug=architectural-conformance-explained</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/ar/blog/post?slug=change-gate-private-workflows</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/ar/blog/post?slug=configuration-joins-the-graph</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/ar/blog/post?slug=conformance-in-ci-in-5-minutes</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/ar/blog/post?slug=exports-that-notice-when-they-rot</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/ar/blog/post?slug=just-put-it-in-the-prompt</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://www.hunchmemory.com/ar/blog/post?slug=knowledge-vs-state</loc>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/ar/blog/post?slug=memory-that-travels-with-your-code</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/ar/blog/post?slug=memory-you-never-babysit</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/ar/blog/post?slug=never-twice</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/ar/blog/post?slug=one-memory-for-the-whole-team</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/ar/blog/post?slug=only-blocks-if-you-signed</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/ar/blog/post?slug=prevent-and-catch</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/ar/blog/post?slug=python-joins-the-graph</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/ar/blog/post?slug=skills-are-never-read</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/ar/blog/post?slug=testing-hunch-memory-safety</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/ar/blog/post?slug=the-receipt</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/ar/blog/post?slug=the-state-layer</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/ar/blog/post?slug=the-violation-your-linter-cant-see</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
@@ -137,112 +142,117 @@
   </url>
   <url>
     <loc>https://www.hunchmemory.com/blog/post?slug=agent-audits-its-own-memory</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/blog/post?slug=agents-md-is-lying-to-your-agent</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/blog/post?slug=ai-code-review-is-not-enough</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/blog/post?slug=ai-ignores-your-architecture</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/blog/post?slug=architectural-conformance-explained</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/blog/post?slug=change-gate-private-workflows</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/blog/post?slug=configuration-joins-the-graph</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/blog/post?slug=conformance-in-ci-in-5-minutes</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/blog/post?slug=exports-that-notice-when-they-rot</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/blog/post?slug=just-put-it-in-the-prompt</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://www.hunchmemory.com/blog/post?slug=knowledge-vs-state</loc>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/blog/post?slug=memory-that-travels-with-your-code</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/blog/post?slug=memory-you-never-babysit</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/blog/post?slug=never-twice</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/blog/post?slug=one-memory-for-the-whole-team</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/blog/post?slug=only-blocks-if-you-signed</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/blog/post?slug=prevent-and-catch</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/blog/post?slug=python-joins-the-graph</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/blog/post?slug=skills-are-never-read</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/blog/post?slug=testing-hunch-memory-safety</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/blog/post?slug=the-receipt</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/blog/post?slug=the-state-layer</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/blog/post?slug=the-violation-your-linter-cant-see</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
@@ -267,7 +277,7 @@
   </url>
   <url>
     <loc>https://www.hunchmemory.com/es</loc>
-    <lastmod>2026-09-06</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
@@ -277,112 +287,117 @@
   </url>
   <url>
     <loc>https://www.hunchmemory.com/es/blog/post?slug=agent-audits-its-own-memory</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/es/blog/post?slug=agents-md-is-lying-to-your-agent</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/es/blog/post?slug=ai-code-review-is-not-enough</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/es/blog/post?slug=ai-ignores-your-architecture</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/es/blog/post?slug=architectural-conformance-explained</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/es/blog/post?slug=change-gate-private-workflows</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/es/blog/post?slug=configuration-joins-the-graph</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/es/blog/post?slug=conformance-in-ci-in-5-minutes</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/es/blog/post?slug=exports-that-notice-when-they-rot</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/es/blog/post?slug=just-put-it-in-the-prompt</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://www.hunchmemory.com/es/blog/post?slug=knowledge-vs-state</loc>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/es/blog/post?slug=memory-that-travels-with-your-code</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/es/blog/post?slug=memory-you-never-babysit</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/es/blog/post?slug=never-twice</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/es/blog/post?slug=one-memory-for-the-whole-team</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/es/blog/post?slug=only-blocks-if-you-signed</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/es/blog/post?slug=prevent-and-catch</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/es/blog/post?slug=python-joins-the-graph</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/es/blog/post?slug=skills-are-never-read</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/es/blog/post?slug=testing-hunch-memory-safety</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/es/blog/post?slug=the-receipt</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/es/blog/post?slug=the-state-layer</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/es/blog/post?slug=the-violation-your-linter-cant-see</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
@@ -392,7 +407,7 @@
   </url>
   <url>
     <loc>https://www.hunchmemory.com/he</loc>
-    <lastmod>2026-09-06</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
@@ -402,112 +417,117 @@
   </url>
   <url>
     <loc>https://www.hunchmemory.com/he/blog/post?slug=agent-audits-its-own-memory</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/he/blog/post?slug=agents-md-is-lying-to-your-agent</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/he/blog/post?slug=ai-code-review-is-not-enough</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/he/blog/post?slug=ai-ignores-your-architecture</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/he/blog/post?slug=architectural-conformance-explained</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/he/blog/post?slug=change-gate-private-workflows</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/he/blog/post?slug=configuration-joins-the-graph</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/he/blog/post?slug=conformance-in-ci-in-5-minutes</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/he/blog/post?slug=exports-that-notice-when-they-rot</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/he/blog/post?slug=just-put-it-in-the-prompt</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://www.hunchmemory.com/he/blog/post?slug=knowledge-vs-state</loc>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/he/blog/post?slug=memory-that-travels-with-your-code</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/he/blog/post?slug=memory-you-never-babysit</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/he/blog/post?slug=never-twice</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/he/blog/post?slug=one-memory-for-the-whole-team</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/he/blog/post?slug=only-blocks-if-you-signed</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/he/blog/post?slug=prevent-and-catch</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/he/blog/post?slug=python-joins-the-graph</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/he/blog/post?slug=skills-are-never-read</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/he/blog/post?slug=testing-hunch-memory-safety</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/he/blog/post?slug=the-receipt</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/he/blog/post?slug=the-state-layer</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/he/blog/post?slug=the-violation-your-linter-cant-see</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
@@ -517,7 +537,7 @@
   </url>
   <url>
     <loc>https://www.hunchmemory.com/ru</loc>
-    <lastmod>2026-09-06</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
@@ -527,112 +547,117 @@
   </url>
   <url>
     <loc>https://www.hunchmemory.com/ru/blog/post?slug=agent-audits-its-own-memory</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/ru/blog/post?slug=agents-md-is-lying-to-your-agent</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/ru/blog/post?slug=ai-code-review-is-not-enough</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/ru/blog/post?slug=ai-ignores-your-architecture</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/ru/blog/post?slug=architectural-conformance-explained</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/ru/blog/post?slug=change-gate-private-workflows</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/ru/blog/post?slug=configuration-joins-the-graph</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/ru/blog/post?slug=conformance-in-ci-in-5-minutes</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/ru/blog/post?slug=exports-that-notice-when-they-rot</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/ru/blog/post?slug=just-put-it-in-the-prompt</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://www.hunchmemory.com/ru/blog/post?slug=knowledge-vs-state</loc>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/ru/blog/post?slug=memory-that-travels-with-your-code</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/ru/blog/post?slug=memory-you-never-babysit</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/ru/blog/post?slug=never-twice</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/ru/blog/post?slug=one-memory-for-the-whole-team</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/ru/blog/post?slug=only-blocks-if-you-signed</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/ru/blog/post?slug=prevent-and-catch</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/ru/blog/post?slug=python-joins-the-graph</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/ru/blog/post?slug=skills-are-never-read</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/ru/blog/post?slug=testing-hunch-memory-safety</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/ru/blog/post?slug=the-receipt</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/ru/blog/post?slug=the-state-layer</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.hunchmemory.com/ru/blog/post?slug=the-violation-your-linter-cant-see</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
