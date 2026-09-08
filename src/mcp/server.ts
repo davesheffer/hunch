@@ -597,13 +597,23 @@ export type RootControlledServer = {
   server: McpServer;
   getRoot: () => string;
   setRoot: (next: string) => void;
+  /** True when the root was pinned at launch (`hunch mcp --root`): client roots and per-call
+   *  `cwd` hints are ignored, so a served partition stays the partition whatever workspace
+   *  the client opened. */
+  pinned: boolean;
   /** Drop a swap parked by `setRoot` while a request was in flight. The roots
    *  wiring calls this when a LATER resolution is ambiguous, so a stale parked
    *  swap can never apply after the client stopped unambiguously advertising it. */
   cancelPendingRoot: () => void;
 };
 
-export function buildServerWithRootControl(initialRoot: string): RootControlledServer {
+export interface RootControlOptions {
+  /** Serve exactly `initialRoot`; never re-home to client roots or `cwd` hints. */
+  pinned?: boolean;
+}
+
+export function buildServerWithRootControl(initialRoot: string, options: RootControlOptions = {}): RootControlledServer {
+  const pinned = options.pinned === true;
   const explicitOverlay = !!process.env.HUNCH_PRIVATE_DIR?.trim();
   const initial = prepareRoot(initialRoot, explicitOverlay, false);
   let root = initial.root;
@@ -772,7 +782,9 @@ export function buildServerWithRootControl(initialRoot: string): RootControlledS
       // sole in-flight request — re-homing under a concurrent request would tear its
       // root/store out from under it, so that case is refused rather than risked.
       const cwdHint = extractCwdHint(args[0]);
-      if (cwdHint !== undefined) {
+      // A pinned root is the whole point of `hunch mcp --root`: a served partition must not
+      // follow the caller's working directory into some other checkout.
+      if (cwdHint !== undefined && !pinned) {
         const target = canonicalRootPath(findRoot(cwdHint));
         if (target !== canonicalRootPath(root)) {
           if (activeRequests) {
@@ -2647,7 +2659,8 @@ export function buildServerWithRootControl(initialRoot: string): RootControlledS
   return {
     server,
     getRoot: () => root,
-    setRoot,
+    setRoot: (next: string) => { if (!pinned) setRoot(next); },
+    pinned,
     cancelPendingRoot: () => { pendingRoot = null; },
   };
 }
@@ -2668,6 +2681,7 @@ function provLine(record: unknown): string {
 /** Query client roots after initialization and follow later list changes.
  *  Generation ordering prevents a slow stale roots/list response from winning. */
 export function wireClientRoots(control: RootControlledServer, fallback: string): void {
+  if (control.pinned) return; // `hunch mcp --root`: the client's workspace is not this server's store
   let generation = 0;
   const syncRoots = async (): Promise<void> => {
     const mine = ++generation;
@@ -2706,11 +2720,13 @@ export function wireClientRoots(control: RootControlledServer, fallback: string)
 }
 
 /** Start the stdio server (called by `hunch mcp`). */
-export async function startServer(cwd: string = process.cwd()): Promise<void> {
-  const fallback = findRoot(cwd);
-  const control = buildServerWithRootControl(fallback);
+export async function startServer(cwd: string = process.cwd(), options: RootControlOptions = {}): Promise<void> {
+  const fallback = options.pinned ? cwd : findRoot(cwd);
+  const control = buildServerWithRootControl(fallback, options);
   wireClientRoots(control, fallback);
   const transport = new StdioServerTransport();
   await control.server.connect(transport);
-  console.error(`[hunch-mcp] serving Hunch over stdio (spawn root ${control.getRoot()}; resolving client roots…)`);
+  console.error(control.pinned
+    ? `[hunch-mcp] serving Hunch over stdio (pinned root ${control.getRoot()}; client roots ignored)`
+    : `[hunch-mcp] serving Hunch over stdio (spawn root ${control.getRoot()}; resolving client roots…)`);
 }

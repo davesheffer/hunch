@@ -443,3 +443,27 @@ test("a cwd hint that fails to activate (invalid team.json) reports the error an
   assert.ok(/team\.json is invalid or unsafe/.test(text), `should surface the underlying activation error: ${text}`);
   assert.equal(control.getRoot(), fixture.root, "a failed cwd-hint activation leaves the previous root active");
 });
+
+test("a pinned root (hunch mcp --root) ignores setRoot from client roots and per-call cwd hints", async (t) => {
+  const fixture = repoWithWorktree();
+  const control = buildServerWithRootControl(fixture.root, { pinned: true });
+  t.after(async () => {
+    await control.server.close().catch(() => {});
+    fixture.cleanup();
+  });
+  assert.equal(control.pinned, true);
+  control.setRoot(fixture.worktree);
+  assert.equal(control.getRoot(), fixture.root, "client roots cannot re-home a pinned server");
+
+  const { Client } = await import("@modelcontextprotocol/sdk/client/index.js");
+  const { InMemoryTransport } = await import("@modelcontextprotocol/sdk/inMemory.js");
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  const client = new Client({ name: "pinned-test", version: "1.0.0" });
+  await Promise.all([control.server.connect(serverTransport), client.connect(clientTransport)]);
+  t.after(async () => { await client.close().catch(() => {}); });
+  const result = await client.callTool({ name: "nuryel_capabilities", arguments: {} });
+  assert.ok(!result.isError);
+  // A cwd hint naming the worktree would normally re-home a non-pinned server.
+  await client.callTool({ name: "hunch_record_finding", arguments: { finding: { title: "pinned probe", observation: "cwd hint must be ignored" }, cwd: fixture.worktree } });
+  assert.equal(control.getRoot(), fixture.root, "the cwd hint is ignored on a pinned server");
+});
