@@ -1,0 +1,39 @@
+{
+  "id": "dec_f82aa1ceed",
+  "title": "chore(release): cut 1.26.1 — serve init honors its own options",
+  "topic": null,
+  "status": "accepted",
+  "context": "Touched 1 file(s) across tooling/changelog-locales.mjs.",
+  "decision": "Changed code in tooling/changelog-locales.mjs (1 file(s)).",
+  "consequences": [],
+  "alternatives_rejected": [],
+  "rejected_tripwires": [],
+  "related_components": [
+    "cmp_04c6efb58b"
+  ],
+  "related_files": [
+    "tooling/changelog-locales.mjs"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "6fa979b",
+  "valid_from": "2026-09-08T14:51:24+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "inferred",
+    "confidence": 0.3,
+    "evidence": [
+      "commit:6fa979b",
+      "synth:provider=deterministic",
+      "branch:release/1.26.1",
+      "tooling/changelog-locales.mjs"
+    ],
+    "last_verified": "2026-09-08T11:52:29.723Z"
+  },
+  "date": "2026-09-08T14:51:24+03:00"
+}

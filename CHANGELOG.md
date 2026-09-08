@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 1.26.1 — 2026-09-08
+
+### `serve init` honors its own options
+
+In 1.26.0, `hunch serve init --config <file> --port <n>` silently wrote the default
+`hunch-serve.json` into the current directory with the default port: `serve` and `serve init`
+both declare those options and the parent command claimed the values. `init` now reads both
+levels; a regression test spawns the CLI from another directory and checks the file location and
+the recorded port. No runtime code of the server, the store binding or the contract changed.
+
 ## 1.26.0 — 2026-09-08
 
 ### `hunch serve`: the state layer served, and Hunch Memory folded in
