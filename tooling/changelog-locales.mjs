@@ -8,6 +8,7 @@ export const changelogLocales = {
       footer: "© Hunch — התאמה ארכיטקטונית לקוד AI.", home: "בית", githubReleases: "גרסאות ב-GitHub"
     },
     titles: [
+      "החוזה לומד מהכותבים הראשונים שלו",
       "מחיצות מוגשות: שומרות, מוצמדות ועונות",
       "serve init מכבד את האפשרויות שלו",
       "שכבת המצב מוגשת: hunch serve ו-Hunch Memory מתמזג פנימה",
@@ -54,6 +55,7 @@ export const changelogLocales = {
       footer: "© Hunch — архитектурное соответствие для ИИ-кода.", home: "Главная", githubReleases: "Релизы на GitHub"
     },
     titles: [
+      "Контракт учится у своих первых писателей",
       "Обслуживаемые разделы: коммитят, закрепляются и отвечают",
       "serve init учитывает собственные параметры",
       "Слой состояния как сервис: hunch serve, Hunch Memory влит внутрь",
@@ -100,6 +102,7 @@ export const changelogLocales = {
       footer: "© Hunch — التوافق المعماري لكود الذكاء الاصطناعي.", home: "الرئيسية", githubReleases: "الإصدارات على GitHub"
     },
     titles: [
+      "العقد يتعلم من كتّابه الأوائل",
       "الأقسام المخدومة: تلتزم وتُثبَّت وتجيب",
       "serve init يحترم خياراته",
       "طبقة الحالة كخدمة: hunch serve ودمج Hunch Memory",
@@ -146,6 +149,7 @@ export const changelogLocales = {
       footer: "© Hunch — conformidad arquitectónica para código de IA.", home: "Inicio", githubReleases: "Versiones en GitHub"
     },
     titles: [
+      "El contrato aprende de sus primeros escritores",
       "Particiones servidas: confirman, se fijan y responden",
       "serve init respeta sus propias opciones",
       "La capa de estado, servida: hunch serve y Hunch Memory integrado",
