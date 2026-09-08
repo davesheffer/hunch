@@ -33,6 +33,11 @@ const SINGLE_FILE: Partial<Record<EntityKind, string>> = {
   // so the canonical array avoids lossy filename encoding while keeping Git diffs
   // deterministic through id sorting.
   resources: "index.json",
+  // nuryel.state/1 entities carry the same kind-qualified ids (customer:<name>), and
+  // relationships share edge identity; both are index-file stored for the same reason.
+  // Layout only: migration-before-validation (con_947c578b2c) is untouched.
+  entities: "index.json",
+  relationships: "index.json",
 };
 
 const encode = (v: unknown): string => JSON.stringify(v, null, 2) + "\n";

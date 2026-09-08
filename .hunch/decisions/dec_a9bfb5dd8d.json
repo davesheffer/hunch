@@ -1,0 +1,56 @@
+{
+  "id": "dec_a9bfb5dd8d",
+  "title": "nuryel.state/1 frozen as code: scope model, seven facets, three verbs, canonical ids, seven asserted invariants — additive, unwired",
+  "topic": "nuryel.state-contract",
+  "status": "proposed",
+  "context": "Step 3 of the deterministic-state plan (private topics vision.deterministic-state-layer, architecture.single-integration-surface, roadmap.sofia-state-pilot). The fold spike (fnd_3066259a35) retired the only risk ahead of it. The Sofia baseline is running (fnd_a02076f480, fnd_9c863eaa82). Branch nuryel/state-contract: src/core/stateContract.ts, test/state-contract.test.ts, docs/nuryel-state-contract.md. Proposed until the maintainer reads and accepts the contract; nothing depends on it yet.",
+  "decision": "Freeze the one contract every orchestrator speaks to the state layer as schemas, not prose, with no behaviour change: nothing is wired into the store, CLI or MCP. Scope model: organization › team › user › repository as partitions of one graph; principals carry grants and authorization is decided against grants before retrieval and asserted again on the way out. Facets: decided (Decision, exists), in force (Constraint / valid_to, exists), done (nuryel.receipt/1 ActionReceipt — identity is the action, so a re-sent action replays the same receipt), committed (nuryel.commitment/1 with an in-force window), changed (credential-free ExternalRef version pointer), current (nuryel.derived/1 DerivedState with MANDATORY dependencies; identity ignores dependency order), entity/relationship (nuryel.entity/1 kind-qualified like Landscape resources, nuryel.relationship/1 with edge identity), DNA (hunch.project-dna/1 keyed by scope, no new schema). Verbs: read bound to the existing delivery envelope receipt with a state_of_record block (current, in_force, done, depends_on, invalidated_by) and named denied_scopes; write with mandatory provenance + idempotency key returning durability pushed|committed|local and outcome created|updated|replayed|superseded with an explicit conflict; subscribe as a strictly ordered change stream where a gap forces resynchronization; capability negotiation that names unsupported capabilities. Canonical form: keys sorted by code unit at every level, undefined dropped, non-finite numbers rejected; stateHash over it; ids derived from what makes two records the same fact. Seven invariants exported as data and enforced by assertions or schema rules: authorization-before-retrieval, similarity-never-authorizes, never-in-request-path, provenance-on-every-write, one-live-decision-per-topic, external-truth-stays-external, derived-state-carries-dependencies.",
+  "consequences": [
+    "Every facet was lifted from a record Sofia already keeps (approvals, follow-ups, cited summaries, dossiers + links, user rules), so the pilot's adapter is a mapping, not an invention.",
+    "Backward compatibility by construction: no existing record changes shape, scope defaults to repository, new facets are new kinds an older reader ignores, JSON schema version untouched; delivery envelope, change proof and Project DNA keep their ids as sub-schemas.",
+    "Not decided here and listed as such in the doc: per-record visibility inside a scope (v1 permission model is partition-level grants, GitHub's repo model), store registration of the new kinds (blast radius: kind registry, jsonStore, overlay-safety, private-migrate, MCP surface, gitignore whitelist), the served organization partition mode, naming.",
+    "The credential detector gained a bare-secret check (ghp_, github_pat_, sk-, xox*, AKIA, JWT shapes) because the general detector only sees assignments, bearer values, key blocks and URL userinfo.",
+    "Bindings (HTTP, MCP, CLI, typed client) are the next step and must be generated from these schemas, never hand-maintained beside them — or the single surface becomes four."
+  ],
+  "alternatives_rejected": [
+    "Freezing the contract as a document only: prose cannot be round-trip tested, hashed or asserted; the dossier's own 120-task program shows where prose contracts drift.",
+    "Registering the new record kinds in the store in the same step: touches the kind registry, jsonStore, overlay-safety, private-migrate and the MCP surface at once — the contract should be rejectable before that blast radius is spent.",
+    "Reusing the Landscape ResourceSchema directly for external entities: its currentness fields are repository-revision-shaped; entities keep the kind-qualified identity rule and lifecycle but carry provenance pointers instead.",
+    "Storing derived content by reference only (hash without text): the state layer must be able to deliver the statement; the hash guards integrity, the text is the state.",
+    "A similarity or score field anywhere in the verbs: would let a binding treat similarity as validity; the invariant test asserts no verb schema admits one."
+  ],
+  "rejected_tripwires": [],
+  "related_components": [],
+  "related_files": [
+    "src/core/stateContract.ts",
+    "test/state-contract.test.ts",
+    "docs/nuryel-state-contract.md",
+    "src/core/delivery.ts",
+    "src/core/types.ts",
+    "src/core/ids.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-09-07T13:21:02.656Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "premises": [],
+  "provenance": {
+    "source": "agent_recorded",
+    "confidence": 0.75,
+    "evidence": [
+      "src/core/stateContract.ts",
+      "test/state-contract.test.ts",
+      "docs/nuryel-state-contract.md",
+      "src/core/delivery.ts",
+      "src/core/types.ts",
+      "src/core/ids.ts"
+    ]
+  },
+  "date": "2026-09-07T13:21:02.656Z"
+}

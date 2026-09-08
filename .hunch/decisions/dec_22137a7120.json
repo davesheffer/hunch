@@ -1,0 +1,44 @@
+{
+  "id": "dec_22137a7120",
+  "title": "feat(state): freeze nuryel.state/1 as code — facets, verbs, invariants, canonical ids",
+  "topic": null,
+  "status": "accepted",
+  "context": "The one contract every orchestrator speaks to the state layer, frozen\nas schemas with no behaviour change and nothing wired into the store,\nCLI or MCP: scope model (organization › team › user › repository) and\nprincipals with grants; facets lifted from records Sofia already keeps\n(action receipt, commitment, derived state with mandatory dependencies,\nexternal entity + relationship, credential-free external refs, DNA by\nscope); the three verbs (read bound to the delivery receipt, write with\nprove",
+  "decision": "Introduced src/core, test/state-contract.test.ts: added StateCapability, credentialFree, Scope, Principal, ExternalRef, DependencyRef, ActionReceipt, Commitment; new dep(s): node:crypto, zod, node:test, node:assert/strict; 2 new file(s).",
+  "consequences": [
+    "Adds dependency: node:crypto, zod, node:test, node:assert/strict."
+  ],
+  "alternatives_rejected": [],
+  "rejected_tripwires": [],
+  "related_components": [
+    "cmp_a94a8fe5cc",
+    "cmp_b256a6aed0"
+  ],
+  "related_files": [
+    "src/core/stateContract.ts",
+    "test/state-contract.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "37070a8",
+  "valid_from": "2026-09-07T16:17:40+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "inferred",
+    "confidence": 0.45,
+    "evidence": [
+      "commit:37070a8",
+      "synth:provider=deterministic",
+      "branch:nuryel/state-contract",
+      "src/core/stateContract.ts",
+      "test/state-contract.test.ts"
+    ],
+    "last_verified": "2026-09-07T13:18:41.644Z"
+  },
+  "date": "2026-09-07T16:17:40+03:00"
+}

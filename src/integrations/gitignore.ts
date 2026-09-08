@@ -56,6 +56,12 @@ const MEM_ENTRIES = [
   ".hunch/edges/",
   ".hunch/runbooks/",
   ".hunch/findings/",
+  // nuryel.state/1 record kinds (state facets)
+  ".hunch/receipts/",
+  ".hunch/commitments/",
+  ".hunch/derived/",
+  ".hunch/entities/",
+  ".hunch/relationships/",
 ];
 
 export interface GitignoreResult {

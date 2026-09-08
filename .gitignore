@@ -77,6 +77,13 @@ docs/superpowers/
 !.hunch/runbooks/
 !.hunch/bugs/
 !.hunch/findings/
+# nuryel.state/1 record kinds — repository scope only; organization/team/user
+# partitions are served by the product and never ride a repository.
+!.hunch/receipts/
+!.hunch/commitments/
+!.hunch/derived/
+!.hunch/entities/
+!.hunch/relationships/
 # THIS repo's generated wiki stays out of the public repo (we use the PRIVATE
 # overlay wiki via `hunch wiki --private`). Other repos may commit theirs —
 # committing wiki/ + .hunch/wiki-manifest.json is what enables the CI drift gate.

@@ -1,0 +1,69 @@
+{
+  "id": "dec_15f2672330",
+  "title": "feat(state): register the nuryel.state/1 facets as additive store kinds",
+  "topic": null,
+  "status": "accepted",
+  "context": "receipts, commitments, derived, entities, relationships join ENTITY_KINDS\nat the end; every registry-driven path (JSON store, overlay safety,\nprivate migrate, reindex, dropAll) picks them up unchanged. Entities and\nrelationships are index-file stored like resources because kind-qualified\nids are not safe file names. The gitignore writer whitelists the new\ndirectories; this repo's own whitelist too.\n\nThe record schemas move to src/core/stateRecords.ts and provenance +\ncredential-free text to src/ Touches invariant(s): con_902759b3dc (All JSON writes to .hunch/ must be atomic (temp-file + rename) so an interrupted write can never truncate the index); con_947c578b2c (Forward-migrate raw JSON to the current schema BEFORE Zod validation; never silently drop unmigratable records); con_a87360128b (Semantic vectors are a derived layer in SQLite, never the source of truth; reconcile by content hash on reindex).",
+  "decision": "Introduced src/core, src/integrations, src/store, test/state-kinds.test.ts: added Provenance, isCredentialFreeText, isCredentialFreeValue, credentialFree, Scope, ExternalRef, DependencyRef, ActionReceipt; removed credentialFree, Scope, ExternalRef, DependencyRef, ActionReceipt, Commitment, DerivedState, ExternalEntity; new dep(s): zod, node:test, node:assert/strict, node:fs, node:path; 3 new file(s).",
+  "consequences": [
+    "Adds dependency: zod, node:test, node:assert/strict, node:fs, node:path.",
+    "Removes credentialFree, Scope, ExternalRef, DependencyRef, ActionReceipt, Commitment, DerivedState, ExternalEntity, StateRelationship, Provenance, isCredentialFreeText — potential breaking change for callers."
+  ],
+  "alternatives_rejected": [],
+  "rejected_tripwires": [],
+  "related_components": [
+    "cmp_863ac67d4a",
+    "cmp_a94a8fe5cc",
+    "cmp_b256a6aed0",
+    "cmp_cdfb395bb7"
+  ],
+  "related_files": [
+    "src/core/provenance.ts",
+    "src/core/stateContract.ts",
+    "src/core/stateRecords.ts",
+    "src/core/types.ts",
+    "src/integrations/gitignore.ts",
+    "src/store/jsonStore.ts",
+    "test/state-kinds.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "0994675",
+  "valid_from": "2026-09-08T08:14:12+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [
+      "credentialFree",
+      "Scope",
+      "ExternalRef",
+      "DependencyRef",
+      "ActionReceipt",
+      "Commitment",
+      "DerivedState",
+      "ExternalEntity",
+      "StateRelationship",
+      "Provenance",
+      "isCredentialFreeText"
+    ],
+    "deps": []
+  },
+  "provenance": {
+    "source": "inferred",
+    "confidence": 0.45,
+    "evidence": [
+      "commit:0994675",
+      "synth:provider=deterministic",
+      "branch:nuryel/state-kinds",
+      "src/core/provenance.ts",
+      "src/core/stateContract.ts",
+      "src/core/stateRecords.ts",
+      "src/core/types.ts",
+      "src/integrations/gitignore.ts",
+      "src/store/jsonStore.ts",
+      "test/state-kinds.test.ts"
+    ],
+    "last_verified": "2026-09-08T05:15:29.390Z"
+  },
+  "date": "2026-09-08T08:14:12+03:00"
+}
