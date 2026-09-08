@@ -105,6 +105,10 @@ test("HTTP: bearer resolves the principal, grants gate every route, refusals are
     assert.equal(orgWrite.outcome, "created");
     assert.ok(existsSync(join(dir, "ylm", ".hunch", "commitments", `${orgWrite.record_id}.json`)));
     await assert.rejects(sofia.subscribe({ scope: ylm, after_seq: 0 }), (e: StateClientError) => e.status === 403);
+    const byId = await orc.records({ scope: david, ids: [created.record_id, "nrc_000000000000000000000000"] });
+    assert.equal((byId.records[created.record_id] as { state?: string })?.state, "verified", "records by id over HTTP");
+    assert.deepEqual(byId.missing, ["nrc_000000000000000000000000"]);
+    assert.equal((created as { record?: { state?: string } }).record?.state, "verified", "the write result carries the stored record over HTTP");
     const stream = await orc.subscribe({ scope: david, after_seq: 0 });
     assert.equal(stream.head_seq, 1);
     assert.doesNotThrow(() => assertChangeSequence(stream.events, 0));

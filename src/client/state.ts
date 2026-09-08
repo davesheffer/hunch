@@ -3,7 +3,7 @@
  * Import from `@davesheffer/hunch/state`. The principal is the bearer token's; the request
  * shapes are the contract's minus `schema` and `principal`.
  */
-import type { ReadRequest, ReadResponse, SubscribeRequest, WriteRequest, WriteResult, ChangeEvent, Scope } from "../core/stateContract.js";
+import type { ReadRequest, ReadResponse, SubscribeRequest, WriteRequest, WriteResult, ChangeEvent, Scope, RecordsResponse } from "../core/stateContract.js";
 import type { DeliveryEnvelope } from "../core/delivery.js";
 
 export type ClientReadRequest = Omit<ReadRequest, "schema" | "principal">;
@@ -58,6 +58,7 @@ export function createStateClient(opts: StateClientOptions) {
     read: (request: ClientReadRequest) => call<ReadResponse & { envelope: DeliveryEnvelope }>("POST", "/nuryel/v1/read", request),
     write: (request: ClientWriteRequest) => call<WriteResult>("POST", "/nuryel/v1/write", request),
     subscribe: (request: ClientSubscribeRequest) => call<ClientSubscribeResponse>("POST", "/nuryel/v1/subscribe", request),
+    records: (request: { scope: Scope; ids: string[] }) => call<RecordsResponse>("POST", "/nuryel/v1/records", request),
     health: () => call<{ ok: boolean; version: string; protocol: string; partitions: string[] }>("GET", "/nuryel/v1/health"),
   };
 }

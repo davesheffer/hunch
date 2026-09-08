@@ -13,8 +13,8 @@ import { z } from "zod";
 import { hunchPaths, findRoot, toPosixTarget } from "../core/paths.js";
 import { canonicalRootPath, resolveActiveRoot } from "./roots.js";
 import { HunchStore } from "../store/hunchStore.js";
-import { StateRefusal, SubscribeResponseSchema, capabilities, readState, subscribeState, writeState } from "../store/stateBinding.js";
-import { ReadRequestSchema, ReadResponseSchema, WriteRequestSchema, WriteResultSchema, SubscribeRequestSchema, STATE_READ_VERSION, STATE_WRITE_VERSION, STATE_SUBSCRIBE_VERSION } from "../core/stateContract.js";
+import { StateRefusal, SubscribeResponseSchema, capabilities, readState, recordsState, subscribeState, writeState } from "../store/stateBinding.js";
+import { ReadRequestSchema, ReadResponseSchema, WriteRequestSchema, WriteResultSchema, SubscribeRequestSchema, RecordsRequestSchema, RecordsResponseSchema, STATE_READ_VERSION, STATE_WRITE_VERSION, STATE_SUBSCRIBE_VERSION, STATE_RECORDS_VERSION } from "../core/stateContract.js";
 import { selectEmbedder } from "../store/embedder.js";
 import { decisionId, findingId } from "../core/ids.js";
 import { buildCorrectionConstraint } from "../core/correction.js";
@@ -2020,6 +2020,27 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
         const response = subscribeState(store, { schema: STATE_SUBSCRIBE_VERSION, ...input });
         const lines = response.events.map((e) => `${e.seq} ${e.at} ${e.change} ${e.facet}/${e.record_id}${e.invalidates.length ? ` invalidates ${e.invalidates.join(", ")}` : ""}`);
         return stateResult(`${response.scope.kind}/${response.scope.id} head_seq ${response.head_seq} · ${response.events.length} event(s)${response.filtered ? " (filtered)" : ""}\n${lines.join("\n")}`, response);
+      } catch (e) {
+        return stateRefusal(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    "nuryel_records",
+    {
+      title: "nuryel.state/1 records — fetch records by id, grants first",
+      description:
+        "Fetch state records by id (from a subscribe event, a read ref, or a write result). Every id is accounted for: found (with its facet), denied (its scope is outside your grants — named, never described) or missing.",
+      inputSchema: RecordsRequestSchema.omit({ schema: true }).shape,
+      outputSchema: RecordsResponseSchema.shape,
+    },
+    async (input): Promise<ToolResult> => {
+      try {
+        const response = recordsState(store, { schema: STATE_RECORDS_VERSION, ...input });
+        const lines = Object.entries(response.records).map(([id, r]) => `- ${response.facets[id]} ${id}: ${JSON.stringify(r).slice(0, 600)}`);
+        const tail = [...(response.missing.length ? [`missing: ${response.missing.join(", ")}`] : []), ...(response.denied.length ? [`denied: ${response.denied.join(", ")}`] : [])];
+        return stateResult(`${Object.keys(response.records).length} record(s)\n${lines.join("\n")}${tail.length ? `\n${tail.join("\n")}` : ""}`, response);
       } catch (e) {
         return stateRefusal(e);
       }

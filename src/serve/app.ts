@@ -11,14 +11,15 @@
  *   POST /nuryel/v1/read              → readState
  *   POST /nuryel/v1/write             → writeState (under the partition's write lock)
  *   POST /nuryel/v1/subscribe         → subscribeState
+ *   POST /nuryel/v1/records           → recordsState (by id, grants first)
  * Request bodies are the contract's request schemas minus `schema` and `principal`.
  */
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { HunchStore } from "../store/hunchStore.js";
 import { hunchPaths } from "../core/paths.js";
 import { flushCapture } from "../integrations/sync.js";
-import { StateRefusal, capabilities, readState, subscribeState, writeState } from "../store/stateBinding.js";
-import { STATE_READ_VERSION, STATE_SUBSCRIBE_VERSION, STATE_WRITE_VERSION, ScopeSchema, scopePath, type Principal, type Scope } from "../core/stateContract.js";
+import { StateRefusal, capabilities, readState, recordsState, subscribeState, writeState } from "../store/stateBinding.js";
+import { STATE_READ_VERSION, STATE_RECORDS_VERSION, STATE_SUBSCRIBE_VERSION, STATE_WRITE_VERSION, ScopeSchema, scopePath, type Principal, type Scope } from "../core/stateContract.js";
 import { partitionFor, resolvePrincipal, type ServeConfig } from "./config.js";
 import { WriteLockTimeout, withWriteLock } from "./writelock.js";
 import { HUNCH_VERSION } from "../core/version.js";
@@ -157,6 +158,11 @@ export function createServeApp(config: ServeConfig, opts: ServeOptions = {}): Se
         const scope = requireScope(principal, body);
         const { store } = storeFor(scope);
         return send(res, 200, subscribeState(store, { schema: STATE_SUBSCRIBE_VERSION, principal, ...body }));
+      }
+      if (url.pathname === "/nuryel/v1/records") {
+        const scope = requireScope(principal, body);
+        const { store } = storeFor(scope);
+        return send(res, 200, recordsState(store, { schema: STATE_RECORDS_VERSION, principal, ...body }));
       }
       throw problem(404, "not-found", `${url.pathname} is not a nuryel.state/1 route`);
     } catch (error) {
