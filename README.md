@@ -182,6 +182,19 @@ The first real-world pilot is **Sofia**, a working operations agent over CRM, Gm
 
 The pilot measures whether Sofia and a second, different agent stop re-deriving contradictory state when the deterministic state is delivered before they answer or act.
 
+### The state contract, shipped
+
+As of 1.25.0 the contract exists as code: `nuryel.state/1` — three verbs (`read` under the
+delivery envelope's receipt, `write` with provenance and an idempotency key, `subscribe` to a
+strictly ordered change stream) over five new record facets: action receipts, commitments,
+derived state that names what it rests on, external entities and their relationships. Ids are
+derived from a record's facts, a replay returns the original, a second live decision on a topic is
+refused with the incumbent named, and derived state without dependencies is not state. Each scope
+keeps a git-native change ledger under `.hunch/changes/`; organization, team and user partitions
+are homed in an overlay, never in a repository. The MCP server binds it as `nuryel_capabilities`,
+`nuryel_read`, `nuryel_write` and `nuryel_subscribe`; every other transport will call the same
+store binding. Contract and evidence: [docs/nuryel-state-contract.md](docs/nuryel-state-contract.md).
+
 Read [Deterministic organizational state](docs/deterministic-state.md) and the [roadmap](ROADMAP.md).
 
 ### Naming

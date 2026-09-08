@@ -107,6 +107,10 @@
 
     <div class="clog">
       <div class="clog-group">
+        <div class="clog-date">Sep 8, 2026</div>
+        <div class="clog-row"><span class="rel-tag">v1.25.0</span><span class="clog-t"><b>The state contract ships</b> — <span class="mono">nuryel.state/1</span> is the one contract every orchestrator and agent speaks to organizational state: <span class="mono">read</span> under a delivery receipt, <span class="mono">write</span> with provenance and an idempotency key, <span class="mono">subscribe</span> to an ordered change stream. Five new facets — action receipts, commitments, derived state with dependencies, entities, relationships — are registered additively, with a git-native per-scope change ledger, and bound over MCP as <span class="mono">nuryel_read</span>, <span class="mono">nuryel_write</span>, <span class="mono">nuryel_subscribe</span> and <span class="mono">nuryel_capabilities</span>. Ids are derived, replays return the original, a second live decision per topic is refused. Legacy stores load unchanged.</span></div>
+      </div>
+      <div class="clog-group">
         <div class="clog-date">Sep 6, 2026</div>
         <div class="clog-row"><span class="rel-tag">v1.24.0</span><span class="clog-t"><b>One command keeps Hunch and its harnesses up to date</b> — ask an agent to update Hunch, or run <span class="mono">hunch update</span>, to install the latest release and align every configured harness in the current repository. Preview with <span class="mono">--dry-run</span> and reconnect active sessions afterward. The restored DNA hero is now saved in the repository so future site deployments preserve its design.</span></div>
       </div>
