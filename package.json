@@ -26,6 +26,7 @@
       "types": "./dist/projectDna.d.ts",
       "default": "./dist/projectDna.js"
     },
+    "./state": "./dist/client/state.js",
     "./dist/*": "./dist/*",
     "./package.json": "./package.json"
   },
