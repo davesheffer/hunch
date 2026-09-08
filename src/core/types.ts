@@ -8,16 +8,16 @@
 import { z } from "zod";
 import { createHash } from "node:crypto";
 import { findingId, resourceId, resourceRelationshipId } from "./ids.js";
+import { ProvenanceSchema, SENSITIVE_METADATA_KEY, isCredentialFreeText, type Provenance } from "./provenance.js";
+import {
+  ActionReceiptSchema, CommitmentSchema, DerivedStateSchema, ExternalEntitySchema, StateRelationshipSchema,
+  type ActionReceipt, type Commitment, type DerivedState, type ExternalEntity, type StateRelationship,
+} from "./stateRecords.js";
 
-/** Where a fact came from and how much to trust it. Confidence tiers (DESIGN §4):
- *  inferred < extracted < llm_draft < llm_draft+human_confirmed/derived. */
-export const ProvenanceSchema = z.object({
-  source: z.string().describe("e.g. extracted | inferred | llm_draft | human_confirmed | test_failure+llm | derived"),
-  confidence: z.number().min(0).max(1),
-  evidence: z.array(z.string()).default([]).describe("file paths, commit ids, test ids backing the claim"),
-  last_verified: z.string().optional().describe("ISO timestamp of last re-validation"),
-});
-export type Provenance = z.infer<typeof ProvenanceSchema>;
+// Provenance and the credential-free text check live in the leaf module ./provenance.js so
+// record schemas registered below can import them without a cycle; re-exported unchanged.
+export { ProvenanceSchema, isCredentialFreeText };
+export type { Provenance };
 
 export const ComponentKind = z.enum(["service", "module", "layer", "external"]);
 
@@ -71,23 +71,6 @@ const MetadataValueSchema = z.union([
   z.null(),
   z.array(z.union([z.string().max(1024), z.number().finite(), z.boolean(), z.null()])).max(32),
 ]);
-
-const SENSITIVE_METADATA_KEY = /(^|[_-])(authorization|bearer|credential|password|passwd|private[_-]?key|secret|token|api[_-]?key)($|[_-])/i;
-const SENSITIVE_ASSIGNMENT = /\b(authorization|password|passwd|private[_-]?key|secret|access[_-]?token|refresh[_-]?token|api[_-]?key)\s*[:=]\s*[^\s,;]{4,}/i;
-const PRIVATE_KEY_BLOCK = /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----/i;
-const BEARER_VALUE = /\bBearer\s+[A-Za-z0-9._~+\/-]{12,}/i;
-
-/** Reject credential material while allowing ordinary architecture prose such as
- * "authentication service" or "secrets are managed externally". */
-export function isCredentialFreeText(value: string): boolean {
-  if (PRIVATE_KEY_BLOCK.test(value) || BEARER_VALUE.test(value) || SENSITIVE_ASSIGNMENT.test(value)) return false;
-  try {
-    const url = new URL(value);
-    if (url.username || url.password) return false;
-    for (const [key] of url.searchParams) if (SENSITIVE_METADATA_KEY.test(key)) return false;
-  } catch { /* credential-free canonical locators need not be absolute URLs */ }
-  return true;
-}
 
 function isCanonicalResourceIdentity(value: string): boolean {
   const separator = value.indexOf(":");
@@ -665,7 +648,12 @@ export function landscapeDriftCandidateFinding(value: unknown): Finding {
 }
 
 /** The entity collections, keyed by their on-disk directory name. */
-export const ENTITY_KINDS = ["components", "resources", "edges", "symbols", "decisions", "bugs", "constraints", "runbooks", "findings"] as const;
+// nuryel.state/1 facets are ADDITIVE record kinds: a store without their directories
+// loads exactly as before, and an older build ignores directories it does not know.
+export const ENTITY_KINDS = [
+  "components", "resources", "edges", "symbols", "decisions", "bugs", "constraints", "runbooks", "findings",
+  "receipts", "commitments", "derived", "entities", "relationships",
+] as const;
 export type EntityKind = (typeof ENTITY_KINDS)[number];
 
 export const SCHEMAS = {
@@ -678,6 +666,11 @@ export const SCHEMAS = {
   constraints: ConstraintSchema,
   runbooks: RunbookSchema,
   findings: FindingSchema,
+  receipts: ActionReceiptSchema,
+  commitments: CommitmentSchema,
+  derived: DerivedStateSchema,
+  entities: ExternalEntitySchema,
+  relationships: StateRelationshipSchema,
 } as const;
 
 export type EntityFor = {
@@ -690,6 +683,11 @@ export type EntityFor = {
   constraints: Constraint;
   runbooks: Runbook;
   findings: Finding;
+  receipts: ActionReceipt;
+  commitments: Commitment;
+  derived: DerivedState;
+  entities: ExternalEntity;
+  relationships: StateRelationship;
 };
 
 /** Default provenance helper for deterministic (extracted) records. */

@@ -1,9 +1,19 @@
 # nuryel.state/1 — the state contract
 
-Status: **proposed, frozen as code** in `src/core/stateContract.ts` (schemas, canonical hashing,
-id derivation, invariants) with `test/state-contract.test.ts`. Nothing is wired into the store,
-CLI or MCP yet. Bindings — HTTP, MCP, CLI, typed client — are generated from these schemas in
-the next step; the contract is the thing to read and reject before anything depends on it.
+Status: **proposed, frozen as code.** Verbs, canonical hashing, id derivation and invariants
+live in `src/core/stateContract.ts`; the record schemas (facets) in `src/core/stateRecords.ts`,
+a leaf module so the store's kind registry can reference them without an import cycle
+(`stateContract` re-exports them — one module to import). Tests: `test/state-contract.test.ts`,
+`test/state-kinds.test.ts`.
+
+The five new facets **are registered store kinds** (`receipts`, `commitments`, `derived`,
+`entities`, `relationships`) — additively: `ENTITY_KINDS` grows at the end, every registry-driven
+path (store, overlay safety, private migrate, reindex, `dropAll`) picks them up unchanged,
+entities and relationships are index-file stored like resources because their ids are not safe
+file names, and the gitignore writer whitelists the new directories. The verbs are **not** wired
+into the store, CLI or MCP yet. Bindings — HTTP, MCP, CLI, typed client — are generated from
+these schemas in the next step; the contract is the thing to read and reject before anything
+depends on it.
 
 > Agents are probabilistic. Organizations need deterministic state. Nuryel is the state layer
 > between them.
@@ -90,13 +100,18 @@ scope. New facets are new record kinds; an older reader ignores directories it d
 JSON store's schema version is untouched. The delivery envelope, change proof and Project DNA
 contracts keep their ids and become sub-schemas referenced here.
 
+Evidence, not assertion (`test/state-kinds.test.ts`): a store holding only legacy records loads
+unchanged with the new kinds registered and empty; `reindex` counts them; a directory this build
+does not know (simulating a newer writer) is left exactly as written and never read as a kind;
+the migration suite passes untouched. Forward-migration-before-validation (`con_947c578b2c`) is
+not modified by the registration — the store change is the index-file layout map only.
+
 ## Not decided here
 
 - **Per-record visibility** inside a scope. Partition-level grants are the v1 permission model
   (GitHub's repo-level model); finer visibility is the first security primitive to add before a
   second team shares an organization partition.
-- **Store registration** of the new kinds (`receipts`, `commitments`, `derived`, `entities`,
-  `relationships`) — the next step; the blast radius is the kind registry, `jsonStore`, the
-  overlay-safety and private-migrate paths, the MCP tool surface and the gitignore whitelist.
+- **Search and delivery of the new kinds.** They are stored and counted; FTS indexing, ranking
+  into the delivery envelope and the `state_of_record` query are binding work, not registry work.
 - **The organization partition mode** in the served product (the fold of Hunch Memory).
 - **Naming** — engine `hunch` / platform Nuryel, or one name for both.
