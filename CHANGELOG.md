@@ -16,6 +16,15 @@ missing. It is bound on the store, over MCP as `nuryel_records`, over HTTP as
 `POST /nuryel/v1/records`, and in the typed client. Reads already carried the records behind
 their refs; subscribe events only named them, and consumers had no way to the body.
 
+The per-scope change ledger gains compaction (`hunch serve compact --partition kind:id --keep N`:
+newest events kept, floor moved up, idempotency table kept whole), an explicit `resync` on
+subscribe when a cursor is below the floor, and a three-way merge through the existing git merge
+driver so two clones that appended to one partition merge to one re-sequenced ledger; a key used
+for two records is a conflict the driver refuses to resolve silently. `tooling/agent-farm` runs
+K sofia-like agents, an orc and an engineer against an in-process `hunch serve` on loopback and
+reports writes, replays, refusals, reuse and contradictions (which must be zero) — a demo and a
+benchmark for "many agents, one truth".
+
 ## 1.26.2 — 2026-09-08
 
 ### Served partitions commit, pin, and answer
