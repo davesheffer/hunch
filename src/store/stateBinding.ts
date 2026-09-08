@@ -80,6 +80,11 @@ export const SubscribeResponseSchema = z.object({
   /** True when facet / subject filters were applied: `events` is then a subsequence and
    *  assertChangeSequence does not apply; `head_seq` remains the cursor. */
   filtered: z.boolean(),
+  /** Events below this seq were compacted away. */
+  floor_seq: z.number().int().nonnegative().default(0),
+  /** True when `after_seq` was below the floor: the caller's cursor is stale, the events returned
+   *  start at the floor, and the caller must rebuild what it holds from a read. */
+  resync: z.boolean().default(false),
 }).strict();
 export type SubscribeResponse = z.infer<typeof SubscribeResponseSchema>;
 
@@ -379,11 +384,13 @@ export function subscribeState(store: HunchStore, input: unknown): SubscribeResp
   const facets = request.facets ? new Set<string>(request.facets) : null;
   const subjects = request.subjects ? new Set(request.subjects) : null;
   const filtered = !!(facets || subjects);
+  const resync = request.after_seq < ledger.floor_seq;
+  const after = resync ? ledger.floor_seq : request.after_seq;
   const events: ChangeEvent[] = ledger.events.filter((e) =>
-    e.seq > request.after_seq
+    e.seq > after
     && (!facets || facets.has(e.facet))
     && (!subjects || subjects.has(e.record_id) || (e.subject !== undefined && subjects.has(e.subject)) || e.invalidates.some((s) => subjects.has(s))));
-  return SubscribeResponseSchema.parse({ schema: STATE_SUBSCRIBE_VERSION, scope: request.scope, head_seq: ledger.head_seq, events, filtered });
+  return SubscribeResponseSchema.parse({ schema: STATE_SUBSCRIBE_VERSION, scope: request.scope, head_seq: ledger.head_seq, events, filtered, floor_seq: ledger.floor_seq, resync });
 }
 
 // ---- records ------------------------------------------------------------------------------

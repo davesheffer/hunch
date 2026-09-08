@@ -1,7 +1,9 @@
 import type { Command } from "commander";
 import { resolve } from "node:path";
 import { createServeApp } from "../serve/app.js";
-import { initServeConfig, readServeConfig } from "../serve/config.js";
+import { initServeConfig, partitionFor, readServeConfig } from "../serve/config.js";
+import { compactLedger } from "../store/changeLedger.js";
+import { join } from "node:path";
 import { ScopeSchema, scopePath } from "../core/stateContract.js";
 import { HUNCH_VERSION } from "../core/version.js";
 
@@ -31,6 +33,24 @@ export function registerServeCommands(program: Command): void {
       const stop = (): void => { app.close(() => { app.closeStores(); process.exit(0); }); };
       process.on("SIGINT", stop);
       process.on("SIGTERM", stop);
+    });
+
+  serve.command("compact")
+    .description("Compact a served partition's change ledger: keep the newest N events, move the floor up; subscribers below the floor resynchronize")
+    .requiredOption("--partition <kind:id>", "the partition whose ledger to compact")
+    .option("--keep <n>", "events to keep", "1000")
+    .option("--json", "machine-readable output")
+    .action((opts: { partition: string; keep: string; json?: boolean }) => {
+      const parent = serve.opts() as { config?: string };
+      const config = readServeConfig(resolve(parent.config ?? DEFAULT_CONFIG));
+      const scope = parseScopeArg(opts.partition);
+      const partition = partitionFor(config, scope);
+      if (!partition) throw new Error(`this config does not serve ${scopePath(scope)}`);
+      const keep = Number(opts.keep);
+      if (!Number.isInteger(keep) || keep < 0) throw new Error("--keep must be a non-negative integer");
+      const result = compactLedger(join(partition.root, ".hunch"), scope, { keep });
+      if (opts.json) { console.log(JSON.stringify({ partition: scopePath(scope), ...result })); return; }
+      console.log(result.dropped ? `${scopePath(scope)}: dropped ${result.dropped} event(s); floor ${result.floor_seq}, head ${result.head_seq}` : `${scopePath(scope)}: nothing to compact (${result.head_seq - result.floor_seq} events retained)`);
     });
 
   serve.command("init")
