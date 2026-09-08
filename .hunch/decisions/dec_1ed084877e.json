@@ -1,0 +1,46 @@
+{
+  "id": "dec_1ed084877e",
+  "title": "site: coin Deterministic State — thesis post in five locales and a homepage band",
+  "topic": null,
+  "status": "accepted",
+  "context": "\"Agents are probabilistic. Organizations need deterministic state.\" The category is\nnamed Deterministic State. A pinned blog post explains it in plain words (drawers and\nkeys), says exactly what shipped in 1.25 and 1.26, names Sofia as the first agent on\nit, and states what is still unproven. Translated titles, deks, key ideas and takeaways\nin Hebrew, Russian, Arabic and Spanish; one URL per locale in the sitemap. A thin band\nabove the homepage navigation carries the thesis and links to the post",
+  "decision": "Changed code in site/blog, tooling/blog-locales.mjs, tooling/generate-site-locales.mjs (4 file(s)).",
+  "consequences": [],
+  "alternatives_rejected": [],
+  "rejected_tripwires": [],
+  "related_components": [
+    "cmp_04c6efb58b",
+    "cmp_c099a42a55"
+  ],
+  "related_files": [
+    "site/blog/i18n.js",
+    "site/blog/posts.js",
+    "tooling/blog-locales.mjs",
+    "tooling/generate-site-locales.mjs"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "9552cfe",
+  "valid_from": "2026-09-08T15:20:28+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "inferred",
+    "confidence": 0.3,
+    "evidence": [
+      "commit:9552cfe",
+      "synth:provider=deterministic",
+      "branch:site/the-state-layer",
+      "site/blog/i18n.js",
+      "site/blog/posts.js",
+      "tooling/blog-locales.mjs",
+      "tooling/generate-site-locales.mjs"
+    ],
+    "last_verified": "2026-09-08T12:21:32.881Z"
+  },
+  "date": "2026-09-08T15:20:28+03:00"
+}
