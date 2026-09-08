@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+## 1.28.0 — 2026-09-08
+
+### Many agents, one subject
+
+Three changes from running three Sofias over one emulated organization (ten clinics, a year of
+mail, chat and CRM) and from the first two-drawer principal on the live pilot.
+
+**Union read.** A key that opens several drawers reads them in one call: `ReadRequest.scopes`
+(1..64) resolves every granted partition the server hosts and merges one `state_of_record` —
+refs concatenate (each already carries its partition), `depends_on` concatenates,
+`invalidated_by` and `denied_scopes` union, `records` merge by id. `ReadResponse.scopes` names
+the partitions actually read and `ReadResponse.receipts` carries one delivery receipt per
+partition; the primary's envelope and `receipt_id` lead. An ungranted extra scope is named in
+`denied_scopes`, never described and never a refusal; only an ungranted primary refuses, as
+before. Single-partition reads are byte-identical. Over MCP a single-root host declares
+`scopes: [primary]` so it is never a silent union. Closes `fnd_a16aee3105`.
+
+**A supersede target must still be open.** Two writers racing to replace the same incumbent
+could both succeed and leave two current records for one subject (`fnd_eeb8bf3cb8`, found when
+subjects became shared across Sofias). A `supersedes` that names an already-closed commitment or
+derived record is now a `conflict` naming the record that is current for that subject, so the
+loser re-reads and supersedes that one. The writer that closed the incumbent itself (same
+derived id under a new key) is exempt and is an in-place update.
+
 ### State records are searchable and delivered by subject
 
 The five `nuryel.state/1` kinds registered in 1.25 — receipts, commitments, derived, entities,
@@ -28,6 +52,9 @@ receipt; state hits are no longer echoed as raw `search-*` lines. Time-travel br
 section (state records have no as-of view). A store with zero state records is byte-identical.
 New: `src/core/stateDelivery.ts` (liveness, search doc, one-line render, slice ordering,
 supplements), `HunchStore.stateSlice(target)`, `formatSearchHit`; `test/state-kinds-search.test.ts`.
+
+Also: public fixtures and docs use fictional organization, customer and CRM ids; a second
+category post, *Knowledge is what's true. State is what happened.*, in five locales.
 
 ## 1.27.0 — 2026-09-08
 
