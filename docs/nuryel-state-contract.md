@@ -1,19 +1,23 @@
 # nuryel.state/1 — the state contract
 
-Status: **proposed, frozen as code.** Verbs, canonical hashing, id derivation and invariants
-live in `src/core/stateContract.ts`; the record schemas (facets) in `src/core/stateRecords.ts`,
-a leaf module so the store's kind registry can reference them without an import cycle
-(`stateContract` re-exports them — one module to import). Tests: `test/state-contract.test.ts`,
-`test/state-kinds.test.ts`.
+Status: **proposed, frozen as code, bound to the store and to MCP.** Verbs, canonical hashing,
+id derivation and invariants live in `src/core/stateContract.ts`; the record schemas (facets) in
+`src/core/stateRecords.ts`, a leaf module so the store's kind registry can reference them without
+an import cycle (`stateContract` re-exports them — one module to import). The ONE implementation
+of the verbs over a store is `src/store/stateBinding.ts`; the per-scope change ledger is
+`src/store/changeLedger.ts`; the MCP binding is the four `nuryel_*` tools in `src/mcp/server.ts`.
+Tests: `test/state-contract.test.ts`, `test/state-kinds.test.ts`, `test/state-binding.test.ts`,
+`test/mcp-state.test.ts`.
 
 The five new facets **are registered store kinds** (`receipts`, `commitments`, `derived`,
 `entities`, `relationships`) — additively: `ENTITY_KINDS` grows at the end, every registry-driven
 path (store, overlay safety, private migrate, reindex, `dropAll`) picks them up unchanged,
 entities and relationships are index-file stored like resources because their ids are not safe
-file names, and the gitignore writer whitelists the new directories. The verbs are **not** wired
-into the store, CLI or MCP yet. Bindings — HTTP, MCP, CLI, typed client — are generated from
-these schemas in the next step; the contract is the thing to read and reject before anything
-depends on it.
+file names, and the gitignore writer whitelists the new directories. The verbs **are** wired
+into the store (`readState` / `writeState` / `subscribeState`) and exposed over MCP
+(`nuryel_capabilities`, `nuryel_read`, `nuryel_write`, `nuryel_subscribe`). HTTP, CLI and the typed
+client are the next bindings and call the same three functions — a transport that re-implements a
+rule is a bug.
 
 > Agents are probabilistic. Organizations need deterministic state. Nuryel is the state layer
 > between them.
@@ -73,6 +77,52 @@ Each new facet is lifted from a record Sofia already keeps:
 - **capabilities** — `negotiate(offered)` returns `{ supported, unsupported }`; an unsupported
   capability is a typed refusal, never a compatible-looking degraded answer.
 
+## Binding: how the verbs meet the store
+
+**Homing is decided by scope, never by a flag.** The repository scope (`capabilities` names its
+id — the checkout's directory name, sanitized to the token grammar) is homed exactly where the
+store homes any capture today: the public `.hunch/`, or the overlay in shared mode. Organization,
+team and user scopes are homed in the overlay ONLY; without one the write is refused
+(`no-partition-home`). That is the privacy rule executed, not documented.
+
+**One ledger per scope** (`nuryel.ledger/1`, `.hunch/changes/<kind>-<id>-<hash>.json`, in the
+scope's home, appended atomically): the strictly ordered `ChangeEvent` stream (seq 1, 2, 3 …)
+plus the idempotency table. A record write and its event land in one atomic ledger write after
+the record; a ledger that is not contiguous is an error, never silently restarted.
+
+**write** in order: grants → provenance → home → normalize (partition scope stamped on new
+facets, dropped from legacy ones; an agent principal cannot sign `human_confirmed` — it is
+rewritten to `agent_recorded`, a human principal can) → identity (a supplied id must equal the
+derived one, `identity` refusal otherwise; receipts, commitments and derived state derive their
+ids, entities and relationships are checked by their schemas) → facet schema → idempotency (same
+key + same payload = `replayed`; same key + other payload = `idempotency` refusal naming the
+incumbent; same content under a new key = `replayed`, the key is remembered) → `expected_version`
+(a record hash or the record's latest seq; mismatch = `conflict`) → one-live-decision-per-topic
+(`conflict` naming the incumbent; explicit `supersedes` closes it and yields `superseded`) →
+put → ledger → reindex → durability from the flush (`local` when nothing committed). Every
+refusal is a typed `StateRefusal { code, conflict? }`; MCP renders it as
+`nuryel.state/1 refused [code]: …`.
+
+**read** builds the delivery envelope for `task ?? subject` (its `hdr_` id IS the receipt), then
+assembles `state_of_record` for the subject: live decisions whose topic is the subject and
+current derived state (`current`, with the union of their dependencies as `depends_on`); active
+constraints and open/waiting commitments (`in_force`); succeeded/verified receipts targeting the
+subject (`done`, and `invalidated_by` when the receipt lists the subject). The grant check is the
+first predicate on every candidate; a matching record in an ungranted scope goes into
+`denied_scopes` by scope only.
+
+**subscribe** returns `{ scope, head_seq, events, filtered }` — an additive response envelope
+around the contract's events. Unfiltered, `events` are contiguous after `after_seq` and
+`assertChangeSequence` holds; with `facets` / `subjects` filters, `events` is a subsequence,
+`filtered` is true, and `head_seq` is still the caller's next cursor. Subject matching uses the
+record id, the event's `subject`, and what the event invalidates.
+
+Amendments made while binding (all additive, called out for the review): `ChangeEvent.subject`
+(optional); `SubscribeResponse`; the token grammar is written as explicit character classes
+instead of an `i` flag so it survives zod → JSON schema in MCP output validation;
+`assertWriteWellFormed` compares the record's scope only when it is a partition scope (a legacy
+constraint carries path globs under the same key).
+
 ## Canonical form and identity
 
 `canonicalize` sorts keys by code unit at every level, drops `undefined`, rejects non-finite
@@ -114,4 +164,14 @@ not modified by the registration — the store change is the index-file layout m
 - **Search and delivery of the new kinds.** They are stored and counted; FTS indexing, ranking
   into the delivery envelope and the `state_of_record` query are binding work, not registry work.
 - **The organization partition mode** in the served product (the fold of Hunch Memory).
+- **Ledger merge.** A scope's ledger has one sequence because it has one home; two clones
+  writing the same repository partition on different branches will collide on merge exactly
+  as two live decisions on a topic do. `reconcile-topics` is the model; the ledger equivalent
+  is not written.
+- **Ledger compaction.** Ledgers grow without bound; a `compact` step that keeps the head and
+  the idempotency table is future work.
+- **Repository-scope private content.** The contract has no `private` flag: scope decides the
+  home. Sensitive repository-scope state goes through the existing `hunch_record_*` tools
+  with `private:true`, or into a user/team partition.
+- **HTTP, CLI and typed-client bindings**, and FTS / delivery ranking of the new kinds.
 - **Naming** — engine `hunch` / platform Nuryel, or one name for both.

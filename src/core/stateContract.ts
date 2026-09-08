@@ -50,7 +50,8 @@ export const STATE_CAPABILITIES = [
 export type StateCapability = (typeof STATE_CAPABILITIES)[number];
 
 const SHA256 = /^sha256:[a-f0-9]{64}$/;
-const TOKEN = /^[a-z0-9][a-z0-9._:@+-]{0,199}$/i;
+// Explicit classes, no `i` flag: the pattern must survive zod → JSON schema for MCP output validation.
+const TOKEN = /^[A-Za-z0-9][A-Za-z0-9._:@+-]{0,199}$/;
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/;
 
 // ---- principal --------------------------------------------------------------------------
@@ -154,6 +155,9 @@ export const ChangeEventSchema = z.object({
   record_id: z.string().min(1).max(2048),
   record_hash: z.string().regex(SHA256),
   change: z.enum(["created", "updated", "superseded", "retired", "invalidated"]),
+  /** The record's subject (entity id / topic / external object key), so a subscriber can
+   *  filter by what it holds without reading every record. Optional: legacy facets may lack one. */
+  subject: z.string().max(512).optional(),
   invalidates: z.array(z.string().max(512)).max(256).default([]),
   cause: z.union([
     z.object({ kind: z.literal("receipt"), receipt_id: z.string().regex(/^nrc_[a-f0-9]{24}$/) }).strict(),
@@ -250,7 +254,9 @@ export function assertWriteWellFormed(request: WriteRequest): void {
   if (!request.principal.grants.some((g) => grantKey(g) === grantKey(request.scope))) throw new Error("write scope is outside the principal's grants");
   const record = request.record as { provenance?: unknown; scope?: unknown };
   if (!record.provenance || typeof record.provenance !== "object") throw new Error("write record lacks provenance");
-  if (record.scope !== undefined && stateHash(record.scope) !== stateHash(request.scope)) throw new Error("write record scope disagrees with the request scope");
+  // Only a PARTITION scope on the record is compared: legacy constraints carry path globs
+  // under the same key, and those are not a partition claim.
+  if (ScopeSchema.safeParse(record.scope).success && stateHash(record.scope) !== stateHash(request.scope)) throw new Error("write record scope disagrees with the request scope");
 }
 
 /** derived-state-carries-dependencies + content integrity. */

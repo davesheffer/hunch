@@ -13,6 +13,8 @@ import { z } from "zod";
 import { hunchPaths, findRoot, toPosixTarget } from "../core/paths.js";
 import { canonicalRootPath, resolveActiveRoot } from "./roots.js";
 import { HunchStore } from "../store/hunchStore.js";
+import { StateRefusal, SubscribeResponseSchema, capabilities, readState, subscribeState, writeState } from "../store/stateBinding.js";
+import { ReadRequestSchema, ReadResponseSchema, WriteRequestSchema, WriteResultSchema, SubscribeRequestSchema, STATE_READ_VERSION, STATE_WRITE_VERSION, STATE_SUBSCRIBE_VERSION } from "../core/stateContract.js";
 import { selectEmbedder } from "../store/embedder.js";
 import { decisionId, findingId } from "../core/ids.js";
 import { buildCorrectionConstraint } from "../core/correction.js";
@@ -1895,6 +1897,100 @@ export function buildServerWithRootControl(initialRoot: string): RootControlledS
         return ok(`${existing ? "Updated" : "Recorded"} finding ${id}: "${rec.title}" (${rec.triage}/${rec.severity}, observed ${rec.observed_at.slice(0, 10)}).${where}${dest} It now grounds edits to: ${[...rec.affected_files, ...rec.affected_symbols].join(", ") || "(nothing — add affected_files/symbols so it surfaces at edit time)"}.${danglingCon}${noEvidence}`);
       } catch (e) {
         return err(`Failed to record finding: ${(e as Error).message}`);
+      }
+    },
+  );
+
+  // -- nuryel.state/1 — the ONE contract, bound over MCP -------------------------
+  // These four tools are a BINDING of src/store/stateBinding.ts, never a second
+  // implementation: every rule (grants first, provenance + idempotency, one live
+  // decision per topic, derived state carries dependencies, partition homing) lives
+  // there and is shared with every other transport. Client-agnostic (con_e04226bd05).
+  const stateRefusal = (e: unknown): ToolResult => {
+    if (e instanceof StateRefusal) {
+      const conflict = e.conflict ? ` incumbent=${e.conflict.incumbent_id} (${e.conflict.reason})` : "";
+      return err(`nuryel.state/1 refused [${e.code}]: ${e.message}.${conflict}`);
+    }
+    if (e instanceof z.ZodError) return err(`nuryel.state/1 malformed request: ${e.issues.map((i) => `${i.path.join(".") || "request"}: ${i.message}`).join("; ")}`);
+    return err(`nuryel.state/1 failed: ${(e as Error).message}`);
+  };
+  const stateResult = (text: string, structured: Record<string, unknown>): ToolResult => ({ content: [{ type: "text", text }], structuredContent: structured });
+
+  server.registerTool(
+    "nuryel_capabilities",
+    {
+      title: "nuryel.state/1 — what this state layer supports",
+      description:
+        "Negotiate before depending on anything: returns the contract version, the capability list (verbs + record schemas), the repository partition this store serves, and which partition kinds it can hold. A capability you need that is missing here is a typed refusal on use, never a degraded answer.",
+      inputSchema: {},
+    },
+    async (): Promise<ToolResult> => {
+      const caps = capabilities(store);
+      return stateResult(`${caps.protocol} · repository ${caps.repository.id} · partitions ${caps.partitions.join(", ")} · ${caps.capabilities.length} capabilities`, caps);
+    },
+  );
+
+  server.registerTool(
+    "nuryel_read",
+    {
+      title: "nuryel.state/1 read — the system-of-record answer for a subject",
+      description:
+        "Read organizational state under a delivery receipt. Pass the principal (id, kind, grants) and the scope; optionally a subject (an entity id, a decision topic, an external `object_type:object_key`) to get state_of_record — what is current, in force, done, what it depends on and what invalidates it — plus a task phrase for the ranked delivery envelope. Scopes the principal is not granted are named in denied_scopes, never silently dropped.",
+      inputSchema: ReadRequestSchema.omit({ schema: true }).shape,
+      outputSchema: ReadResponseSchema.shape,
+    },
+    async (input): Promise<ToolResult> => {
+      try {
+        const { response, envelope } = readState(store, { schema: STATE_READ_VERSION, ...input });
+        const sor = response.state_of_record;
+        const summary = sor
+          ? `subject ${sor.subject}: current ${sor.current.length} · in force ${sor.in_force.length} · done ${sor.done.length} · depends on ${sor.depends_on.length} · invalidated by ${sor.invalidated_by.length}`
+          : "no subject — delivery envelope only";
+        const deniedNote = response.denied_scopes.length ? `\ndenied scopes: ${response.denied_scopes.map((s) => `${s.kind}/${s.id}`).join(", ")}` : "";
+        return stateResult(`${response.receipt_id} · ${summary}${deniedNote}\n\n${envelope.text}`, response);
+      } catch (e) {
+        return stateRefusal(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    "nuryel_write",
+    {
+      title: "nuryel.state/1 write — provenance + idempotency in, durability out",
+      description:
+        "Write one record into a facet (receipts, commitments, derived, entities, relationships, or the legacy decisions/constraints/bugs/findings). The record must carry provenance; the request must carry an idempotency_key — a replay returns the original, a reused key with a different payload is refused. Ids are derived from the record's facts, never chosen. A second live decision on a topic is refused with the incumbent named; pass supersedes to replace it explicitly. organization/team/user partitions never ride a repository: they require an overlay.",
+      inputSchema: { ...WriteRequestSchema.omit({ schema: true }).shape, cwd: cwdHintField },
+      outputSchema: WriteResultSchema.shape,
+    },
+    async ({ cwd: _cwd, ...input }): Promise<ToolResult> => {
+      try {
+        const result = writeState(store, { schema: STATE_WRITE_VERSION, ...input }, {
+          flush: (isPrivate, message) => flushCapture(store, hunchPaths(root).hunch, isPrivate, message, startupTeamRoute ?? undefined),
+        });
+        return stateResult(`${result.outcome} ${result.record_id} (${result.durability}) ${result.record_hash}`, result);
+      } catch (e) {
+        return stateRefusal(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    "nuryel_subscribe",
+    {
+      title: "nuryel.state/1 subscribe — the scope's ordered change stream after a cursor",
+      description:
+        "Return the change events for a scope with seq > after_seq, strictly ordered. Unfiltered, the events are contiguous (a gap means resynchronize); with facets/subjects filters the response is a subsequence and head_seq is still your next cursor. Each event names the record, its hash, what changed, what it invalidates, and the cause.",
+      inputSchema: SubscribeRequestSchema.omit({ schema: true }).shape,
+      outputSchema: SubscribeResponseSchema.shape,
+    },
+    async (input): Promise<ToolResult> => {
+      try {
+        const response = subscribeState(store, { schema: STATE_SUBSCRIBE_VERSION, ...input });
+        const lines = response.events.map((e) => `${e.seq} ${e.at} ${e.change} ${e.facet}/${e.record_id}${e.invalidates.length ? ` invalidates ${e.invalidates.join(", ")}` : ""}`);
+        return stateResult(`${response.scope.kind}/${response.scope.id} head_seq ${response.head_seq} · ${response.events.length} event(s)${response.filtered ? " (filtered)" : ""}\n${lines.join("\n")}`, response);
+      } catch (e) {
+        return stateRefusal(e);
       }
     },
   );
