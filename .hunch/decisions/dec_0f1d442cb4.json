@@ -1,0 +1,57 @@
+{
+  "id": "dec_0f1d442cb4",
+  "title": "feat(state): state records are searchable and delivered by subject",
+  "topic": null,
+  "status": "accepted",
+  "context": "The five nuryel.state/1 kinds (receipts, commitments, derived, entities,\nrelationships) were stored and counted but neither indexed nor delivered.\nReindex now writes every state record into the search index under its own\nkind, same FTS shape, no schema bump: title = the subject key, body = the\nsummary/title + actor/owner + status label + dates. History stays indexed\nand ranks below the state of record (superseded, done, cancelled, failed,\nretired records are demoted on every search path, never d Touches invariant(s): con_902759b3dc (All JSON writes to .hunch/ must be atomic (temp-file + rename) so an interrupted write can never truncate the index); con_a87360128b (Semantic vectors are a derived layer in SQLite, never the source of truth; reconcile by content hash on reindex); con_e04226bd05 (The MCP server must stay client-agnostic: all assistants point to the same .hunch/ graph; no Claude-only behavior in the server).",
+  "decision": "Introduced src/cli, src/core, src/mcp, src/store, test/state-kinds-search.test.ts: added formatSearchHit, StateKind, isStateKind, StateRecord, StateLiveness, stateLiveness, stateSubject, stateObservedAt; new dep(s): node:test, node:assert/strict, node:fs, node:os, node:path, @modelcontextprotocol/sdk/client/index.js; 2 new file(s).",
+  "consequences": [
+    "Adds dependency: node:test, node:assert/strict, node:fs, node:os, node:path, @modelcontextprotocol/sdk/client/index.js, @modelcontextprotocol/sdk/inMemory.js."
+  ],
+  "alternatives_rejected": [],
+  "rejected_tripwires": [],
+  "related_components": [
+    "cmp_50037f41a9",
+    "cmp_a94a8fe5cc",
+    "cmp_b256a6aed0",
+    "cmp_cdfb395bb7",
+    "cmp_dfa5b5acde"
+  ],
+  "related_files": [
+    "src/cli/index.ts",
+    "src/core/format.ts",
+    "src/core/stateDelivery.ts",
+    "src/mcp/server.ts",
+    "src/store/hunchStore.ts",
+    "src/store/schema.ts",
+    "test/state-kinds-search.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "408e36f",
+  "valid_from": "2026-09-08T22:22:36+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "inferred",
+    "confidence": 0.45,
+    "evidence": [
+      "commit:408e36f",
+      "synth:provider=deterministic",
+      "branch:feat/state-kinds-ranking",
+      "src/cli/index.ts",
+      "src/core/format.ts",
+      "src/core/stateDelivery.ts",
+      "src/mcp/server.ts",
+      "src/store/hunchStore.ts",
+      "src/store/schema.ts",
+      "test/state-kinds-search.test.ts"
+    ],
+    "last_verified": "2026-09-08T19:24:01.421Z"
+  },
+  "date": "2026-09-08T22:22:36+03:00"
+}
