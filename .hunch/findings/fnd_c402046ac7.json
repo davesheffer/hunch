@@ -1,0 +1,33 @@
+{
+  "id": "fnd_c402046ac7",
+  "title": "Release gate count drift: a capture merged behind the release branch stales the grounding block",
+  "observation": "v1.26.2's first release run failed at the tagged gate: test/grounding-freshness asserted the committed CLAUDE.md decision count (219) against the public store (220). The release branch was cut from main, then PR #138 merged with a post-commit auto-captured decision, then the release PR merged on top; the grounding surfaces in the release commit predate that capture. Same class as the 2026-09-07/08 CI reds on the contract and site PRs. Nothing was published (publish skipped), so the fix was to regenerate grounding on main (1be6bef) and move the tag. Pattern: any merge that carries a `hunch: capture` commit after a release branch is cut will fail the gate unless grounding is regenerated on main immediately before tagging.",
+  "evidence": [
+    "release run 34234886577: validate failure, publish skipped; log: 'decision count is the PUBLIC store's 219 !== 220' at test/grounding-freshness.test.ts:101",
+    "fix: 1be6bef chore(grounding): regenerate; tag v1.26.2 moved; run 34235896523",
+    "earlier instances: PR #128 (d3f1322) and PR #135 first CI reds, same test"
+  ],
+  "method": "npx tsx --test test/grounding-freshness.test.ts on the tagged commit",
+  "severity": "medium",
+  "triage": "open",
+  "affected_files": [
+    "tooling/release-gate.mjs",
+    "test/grounding-freshness.test.ts",
+    ".github/workflows/release.yml"
+  ],
+  "affected_symbols": [],
+  "violates_constraint": null,
+  "spawned_decision": null,
+  "observed_at": "2026-09-08T14:05:24.696Z",
+  "resolved_commit": null,
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 0.95,
+    "evidence": [
+      "release run 34234886577: validate failure, publish skipped; log: 'decision count is the PUBLIC store's 219 !== 220' at test/grounding-freshness.test.ts:101",
+      "fix: 1be6bef chore(grounding): regenerate; tag v1.26.2 moved; run 34235896523",
+      "earlier instances: PR #128 (d3f1322) and PR #135 first CI reds, same test"
+    ],
+    "last_verified": "2026-09-08T14:05:24.696Z"
+  }
+}
