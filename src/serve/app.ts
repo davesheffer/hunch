@@ -8,7 +8,8 @@
  *
  * Every rule lives in src/store/stateBinding.ts; this file only maps HTTP to it:
  *   GET  /nuryel/v1/capabilities      → capabilities of the partition named by ?scope=kind:id (default: first granted)
- *   POST /nuryel/v1/read              → readState
+ *   POST /nuryel/v1/read              → readState; with `scopes` a UNION read: readState per granted
+ *                                       served partition, merged by mergeReadResponses (primary's envelope)
  *   POST /nuryel/v1/write             → writeState (under the partition's write lock)
  *   POST /nuryel/v1/subscribe         → subscribeState
  *   POST /nuryel/v1/records           → recordsState (by id, grants first)
@@ -18,8 +19,8 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { HunchStore } from "../store/hunchStore.js";
 import { hunchPaths } from "../core/paths.js";
 import { flushCapture } from "../integrations/sync.js";
-import { StateRefusal, capabilities, readState, recordsState, subscribeState, writeState } from "../store/stateBinding.js";
-import { STATE_READ_VERSION, STATE_RECORDS_VERSION, STATE_SUBSCRIBE_VERSION, STATE_WRITE_VERSION, ScopeSchema, scopePath, type Principal, type Scope } from "../core/stateContract.js";
+import { StateRefusal, capabilities, mergeReadResponses, readState, recordsState, subscribeState, writeState } from "../store/stateBinding.js";
+import { STATE_READ_VERSION, STATE_RECORDS_VERSION, STATE_SUBSCRIBE_VERSION, STATE_WRITE_VERSION, ReadScopesSchema, ScopeSchema, scopePath, type Principal, type Scope } from "../core/stateContract.js";
 import { partitionFor, resolvePrincipal, type ServeConfig } from "./config.js";
 import { WriteLockTimeout, withWriteLock } from "./writelock.js";
 import { HUNCH_VERSION } from "../core/version.js";
@@ -143,8 +144,23 @@ export function createServeApp(config: ServeConfig, opts: ServeOptions = {}): Se
       if (url.pathname === "/nuryel/v1/read") {
         const scope = requireScope(principal, body);
         const { store } = storeFor(scope);
-        const { response, envelope } = readState(store, { schema: STATE_READ_VERSION, principal, ...body });
-        return send(res, 200, { ...response, envelope });
+        if (body.scopes === undefined) {
+          const { response, envelope } = readState(store, { schema: STATE_READ_VERSION, principal, ...body });
+          return send(res, 200, { ...response, envelope });
+        }
+        // Union read. The primary `scope` was gated above as always; every extra scope is
+        // either granted (read from ITS partition — 404 no-partition if this server lacks it)
+        // or named in denied_scopes. One ungranted extra never refuses the whole call.
+        const requested = ReadScopesSchema.safeParse(body.scopes);
+        if (!requested.success) throw problem(400, "invalid-scope", "scopes must be 1..64 entries of { kind, id }");
+        const { scopes: _scopes, ...rest } = body;
+        const isGranted = (s: Scope): boolean => principal.grants.some((g) => scopePath(g) === scopePath(s));
+        const ungranted = requested.data.filter((s) => !isGranted(s));
+        const others = new Map<string, Scope>();
+        for (const s of requested.data) if (isGranted(s) && scopePath(s) !== scopePath(scope) && !others.has(scopePath(s))) others.set(scopePath(s), s);
+        const primary = readState(store, { schema: STATE_READ_VERSION, principal, ...rest, scope });
+        const merged = mergeReadResponses(primary.response, [...others.values()].map((other) => readState(storeFor(other).store, { schema: STATE_READ_VERSION, principal, ...rest, scope: other }).response), ungranted);
+        return send(res, 200, { ...merged, envelope: primary.envelope });
       }
       if (url.pathname === "/nuryel/v1/write") {
         const scope = requireScope(principal, body);

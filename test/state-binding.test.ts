@@ -11,7 +11,7 @@ import { basename, join } from "node:path";
 import { tempStore } from "./helpers.js";
 import { hunchPaths } from "../src/core/paths.js";
 import { HunchStore } from "../src/store/hunchStore.js";
-import { StateRefusal, capabilities, readState, recordsState, repositoryScope, subscribeState, writeState } from "../src/store/stateBinding.js";
+import { StateRefusal, capabilities, mergeReadResponses, readState, recordsState, repositoryScope, subscribeState, writeState } from "../src/store/stateBinding.js";
 import { readLedger } from "../src/store/changeLedger.js";
 import { actionReceiptId, assertChangeSequence, commitmentId, derivedId, entityId, stateHash } from "../src/core/stateContract.js";
 
@@ -283,4 +283,42 @@ test("records: fetch by id, grants first — found with facet, denied by scope, 
     assert.deepEqual(viaUser.denied, [r.record_id], "a repository-scope record is denied to a user-only principal, by id only");
     assert.deepEqual(Object.keys(viaUser.records), []);
   } finally { cleanup(); }
+});
+
+test("mergeReadResponses: a union read concatenates refs per partition, unions invalidated_by and denied, merges records by id, and keeps the primary's receipt", () => {
+  const org = { kind: "organization" as const, id: "ylm" };
+  const team = { kind: "team" as const, id: "ops" };
+  const hdr = (c: string) => `hdr_${c.repeat(24)}`;
+  const ref = (facet: "receipts" | "commitments" | "derived", id: string, scope: typeof user | typeof org) => ({ facet, id, record_hash: stateHash({ id }), scope });
+  const dep = { kind: "record" as const, id: "nrc_" + "d".repeat(24), record_hash: stateHash("dep") };
+  const primary = {
+    schema: "nuryel.state.read/1" as const, receipt_id: hdr("a"), scope: user,
+    state_of_record: { subject: customer, current: [ref("derived", "nds_1", user)], in_force: [], done: [ref("receipts", "nrc_1", user)], depends_on: [dep], invalidated_by: ["nrc_1"] },
+    denied_scopes: [team], records: { nds_1: { id: "nds_1" }, nrc_1: { id: "nrc_1", from: "primary" } },
+  };
+  const other = {
+    schema: "nuryel.state.read/1" as const, receipt_id: hdr("b"), scope: org,
+    state_of_record: { subject: customer, current: [], in_force: [ref("commitments", "ncm_1", org)], done: [ref("receipts", "nrc_1", user)], depends_on: [dep, { kind: "schema" as const, name: "s", fingerprint: stateHash("s") }], invalidated_by: ["nrc_1", "nrc_2"] },
+    denied_scopes: [team], records: { ncm_1: { id: "ncm_1" }, nrc_1: { id: "nrc_1", from: "other" } },
+  };
+  const merged = mergeReadResponses(primary, [other], [team, { kind: "user", id: "someone-else" }]);
+  assert.equal(merged.receipt_id, hdr("a"), "the primary's receipt leads");
+  assert.deepEqual(merged.scope, user);
+  assert.deepEqual(merged.scopes, [user, org]);
+  assert.deepEqual(merged.receipts, [{ scope: user, receipt_id: hdr("a") }, { scope: org, receipt_id: hdr("b") }]);
+  assert.deepEqual(merged.denied_scopes, [team, { kind: "user", id: "someone-else" }], "denied is a union, each scope once");
+  assert.deepEqual(merged.state_of_record?.current.map((r) => r.id), ["nds_1"]);
+  assert.deepEqual(merged.state_of_record?.in_force.map((r) => [r.id, r.scope]), [["ncm_1", org]]);
+  assert.deepEqual(merged.state_of_record?.done.map((r) => r.id), ["nrc_1"], "the same ref seen from two partitions is one ref");
+  assert.equal(merged.state_of_record?.depends_on.length, 2, "dependencies dedupe by content hash");
+  assert.deepEqual(merged.state_of_record?.invalidated_by, ["nrc_1", "nrc_2"]);
+  assert.deepEqual(Object.keys(merged.records ?? {}).sort(), ["ncm_1", "nds_1", "nrc_1"]);
+  assert.equal((merged.records?.nrc_1 as { from: string }).from, "primary", "records merge by id, first writer wins");
+
+  // No subject anywhere: no state_of_record and no records, but the partitions read are still named.
+  const bare = mergeReadResponses({ ...primary, state_of_record: null, records: undefined }, [{ ...other, state_of_record: null, records: undefined }]);
+  assert.equal(bare.state_of_record, null);
+  assert.equal(bare.records, undefined);
+  assert.deepEqual(bare.scopes, [user, org]);
+  assert.deepEqual(bare.denied_scopes, [team]);
 });

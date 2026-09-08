@@ -72,10 +72,16 @@ export type StateFacet = (typeof STATE_FACETS)[number];
 
 // ---- verbs ------------------------------------------------------------------------------
 
+/** Union read: the partitions a principal wants in ONE answer. `scope` stays required (it is the
+ *  primary partition; its envelope and receipt lead the response). An entry the principal is not
+ *  granted is NAMED in `denied_scopes` — it never refuses the whole call, and is never described. */
+export const ReadScopesSchema = z.array(ScopeSchema).min(1).max(64);
+
 export const ReadRequestSchema = z.object({
   schema: z.literal(STATE_READ_VERSION),
   principal: PrincipalSchema,
   scope: ScopeSchema,
+  scopes: ReadScopesSchema.optional(),
   subject: z.string().max(512).optional(),
   task: z.string().max(4096).optional(),
   profile: z.enum(DELIVERY_PROFILES).optional(),
@@ -114,6 +120,12 @@ export const ReadResponseSchema = z.object({
   /** The records behind every ref in `state_of_record`, by id, so a consumer can answer from
    *  the drawer without a second lookup. Additive; absent when there is no subject. */
   records: z.record(z.string(), z.record(z.string(), z.unknown())).optional(),
+  /** Union read (additive): the partitions actually read, primary first. Absent on a
+   *  single-partition read. */
+  scopes: z.array(ScopeSchema).max(64).optional(),
+  /** Union read (additive): one delivery receipt per partition read; `receipt_id` above stays
+   *  the primary's. */
+  receipts: z.array(z.object({ scope: ScopeSchema, receipt_id: z.string().regex(/^hdr_[a-f0-9]{24}$/) }).strict()).max(64).optional(),
 }).strict();
 export type ReadResponse = z.infer<typeof ReadResponseSchema>;
 
@@ -273,6 +285,12 @@ export function assertReadWithinGrants(principal: Principal, response: ReadRespo
   }
   for (const denied of response.denied_scopes) {
     if (granted.has(grantKey(denied))) throw new Error(`denied scope ${grantKey(denied)} is actually granted — the response is inconsistent`);
+  }
+  for (const read of response.scopes ?? []) {
+    if (!granted.has(grantKey(read))) throw new Error(`read scope ${grantKey(read)} is outside the principal's grants`);
+  }
+  for (const receipt of response.receipts ?? []) {
+    if (!granted.has(grantKey(receipt.scope))) throw new Error(`receipt for scope ${grantKey(receipt.scope)} is outside the principal's grants`);
   }
 }
 
