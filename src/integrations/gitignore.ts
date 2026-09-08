@@ -62,6 +62,8 @@ const MEM_ENTRIES = [
   ".hunch/derived/",
   ".hunch/entities/",
   ".hunch/relationships/",
+  // nuryel.state/1 per-scope change ledgers (subscribe stream + idempotency table)
+  ".hunch/changes/",
 ];
 
 export interface GitignoreResult {

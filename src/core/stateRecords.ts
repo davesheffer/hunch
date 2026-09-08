@@ -21,7 +21,8 @@ export const ENTITY_SCHEMA_VERSION = "nuryel.entity/1" as const;
 export const RELATIONSHIP_SCHEMA_VERSION = "nuryel.relationship/1" as const;
 
 const SHA256 = /^sha256:[a-f0-9]{64}$/;
-const TOKEN = /^[a-z0-9][a-z0-9._:@+-]{0,199}$/i;
+// Explicit classes, no `i` flag: the pattern must survive zod → JSON schema for MCP output validation.
+const TOKEN = /^[A-Za-z0-9][A-Za-z0-9._:@+-]{0,199}$/;
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/;
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 

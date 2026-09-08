@@ -1,0 +1,59 @@
+{
+  "id": "dec_55918cfc0d",
+  "title": "feat(state): bind nuryel.state/1 read/write/subscribe to the store and expose it over MCP",
+  "topic": null,
+  "status": "accepted",
+  "context": "One implementation of the three verbs over a HunchStore (src/store/stateBinding.ts),\na per-scope git-native change ledger (src/store/changeLedger.ts, .hunch/changes/),\nand four MCP tools (nuryel_capabilities, nuryel_read, nuryel_write, nuryel_subscribe)\nthat are a thin transport over it.\n\nHoming is decided by scope: the repository partition lands where captures land today;\norganization/team/user partitions land in the overlay only and are refused without one.\nWrites run grants -> provenance -> i Touches invariant(s): con_902759b3dc (All JSON writes to .hunch/ must be atomic (temp-file + rename) so an interrupted write can never truncate the index); con_a87360128b (Semantic vectors are a derived layer in SQLite, never the source of truth; reconcile by content hash on reindex); con_e04226bd05 (The MCP server must stay client-agnostic: all assistants point to the same .hunch/ graph; no Claude-only behavior in the server).",
+  "decision": "Introduced src/core, src/integrations, src/mcp, src/store, test/mcp-state.test.ts, test/state-binding.test.ts: added IdempotencyEntry, Ledger, ledgerFile, emptyLedger, readLedger, writeLedger, PendingChange, appendChanges; new dep(s): node:fs, node:path, node:crypto, zod, node:test, node:assert/strict; 4 new file(s).",
+  "consequences": [
+    "Adds dependency: node:fs, node:path, node:crypto, zod, node:test, node:assert/strict, node:os, @modelcontextprotocol/sdk/client/index.js, @modelcontextprotocol/sdk/inMemory.js, node:child_process."
+  ],
+  "alternatives_rejected": [],
+  "rejected_tripwires": [],
+  "related_components": [
+    "cmp_863ac67d4a",
+    "cmp_a94a8fe5cc",
+    "cmp_b256a6aed0",
+    "cmp_cdfb395bb7",
+    "cmp_dfa5b5acde"
+  ],
+  "related_files": [
+    "src/core/stateContract.ts",
+    "src/core/stateRecords.ts",
+    "src/integrations/gitignore.ts",
+    "src/mcp/server.ts",
+    "src/store/changeLedger.ts",
+    "src/store/stateBinding.ts",
+    "test/mcp-state.test.ts",
+    "test/state-binding.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "7548c09",
+  "valid_from": "2026-09-08T10:27:22+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "inferred",
+    "confidence": 0.45,
+    "evidence": [
+      "commit:7548c09",
+      "synth:provider=deterministic",
+      "branch:nuryel/state-bindings",
+      "src/core/stateContract.ts",
+      "src/core/stateRecords.ts",
+      "src/integrations/gitignore.ts",
+      "src/mcp/server.ts",
+      "src/store/changeLedger.ts",
+      "src/store/stateBinding.ts",
+      "test/mcp-state.test.ts",
+      "test/state-binding.test.ts"
+    ],
+    "last_verified": "2026-09-08T07:28:24.252Z"
+  },
+  "date": "2026-09-08T10:27:22+03:00"
+}
