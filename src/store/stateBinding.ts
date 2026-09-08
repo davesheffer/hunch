@@ -118,6 +118,7 @@ function refOf(facet: StateFacet, record: { id: string }, scope: Scope): StateRe
   return { facet, id: record.id, record_hash: stateHash(record), scope };
 }
 
+
 /** read — the system-of-record answer for a subject, under the delivery envelope's receipt.
  *  Grants are the first predicate on every candidate; a matching record in a scope the
  *  principal lacks is NAMED in denied_scopes and never described. */
@@ -137,6 +138,7 @@ export function readState(store: HunchStore, input: unknown): { response: ReadRe
   });
 
   let stateOfRecord: ReadResponse["state_of_record"] = null;
+  const records: Record<string, Record<string, unknown>> = {};
   const denied = new Map<string, Scope>();
   if (request.subject !== undefined) {
     const subject = request.subject;
@@ -151,42 +153,46 @@ export function readState(store: HunchStore, input: unknown): { response: ReadRe
       if (!granted(request.principal, scope)) { denied.set(scopePath(scope), scope); return null; }
       return scope;
     };
+    const keep = (facet: StateFacet, record: { id: string }, scope: Scope): StateRef => {
+      records[record.id] = record as unknown as Record<string, unknown>;
+      return refOf(facet, record, scope);
+    };
     if (facets.has("decisions")) for (const d of store.recs("decisions")) {
       if (d.topic !== subject && d.id !== subject) continue;
       const scope = admit("decisions", d); if (!scope) continue;
-      if (isLive(d)) current.push(refOf("decisions", d, scope));
+      if (isLive(d)) current.push(keep("decisions", d, scope));
     }
     if (facets.has("constraints")) for (const c of store.recs("constraints")) {
       if (c.id !== subject && !c.scope.includes(subject)) continue;
       const scope = admit("constraints", c); if (!scope) continue;
-      if (c.status === "active" && c.valid_to == null) inForce.push(refOf("constraints", c, scope));
+      if (c.status === "active" && c.valid_to == null) inForce.push(keep("constraints", c, scope));
     }
     if (facets.has("receipts")) for (const r of store.recs("receipts")) {
       const targets = r.id === subject || r.invalidates.includes(subject) || `${r.target.object_type}:${r.target.object_key}` === subject;
       if (!targets) continue;
       const scope = admit("receipts", r); if (!scope) continue;
-      if (r.state === "succeeded" || r.state === "verified") done.push(refOf("receipts", r, scope));
+      if (r.state === "succeeded" || r.state === "verified") done.push(keep("receipts", r, scope));
       if (r.invalidates.includes(subject)) invalidatedBy.add(r.id);
     }
     if (facets.has("commitments")) for (const c of store.recs("commitments")) {
       if (c.subject !== subject && c.id !== subject) continue;
       const scope = admit("commitments", c); if (!scope) continue;
-      if ((c.status === "open" || c.status === "waiting") && c.valid_to == null) inForce.push(refOf("commitments", c, scope));
+      if ((c.status === "open" || c.status === "waiting") && c.valid_to == null) inForce.push(keep("commitments", c, scope));
     }
     if (facets.has("derived")) for (const d of store.recs("derived")) {
       if (d.subject !== subject && d.id !== subject) continue;
       const scope = admit("derived", d); if (!scope) continue;
-      if (d.state === "current" && d.valid_to == null) { current.push(refOf("derived", d, scope)); dependsOn.push(...d.dependencies); }
+      if (d.state === "current" && d.valid_to == null) { current.push(keep("derived", d, scope)); dependsOn.push(...d.dependencies); }
     }
     if (facets.has("entities")) for (const e of store.recs("entities")) {
       if (e.id !== subject) continue;
       const scope = admit("entities", e); if (!scope) continue;
-      if (e.lifecycle === "active") current.push(refOf("entities", e, scope));
+      if (e.lifecycle === "active") current.push(keep("entities", e, scope));
     }
     if (facets.has("relationships")) for (const r of store.recs("relationships")) {
       if (r.from !== subject && r.to !== subject) continue;
       const scope = admit("relationships", r); if (!scope) continue;
-      current.push(refOf("relationships", r, scope));
+      current.push(keep("relationships", r, scope));
     }
     stateOfRecord = { subject, current, in_force: inForce, done, depends_on: dependsOn, invalidated_by: [...invalidatedBy].sort() };
   }
@@ -196,6 +202,7 @@ export function readState(store: HunchStore, input: unknown): { response: ReadRe
     scope: request.scope,
     state_of_record: stateOfRecord,
     denied_scopes: [...denied.values()],
+    ...(stateOfRecord ? { records } : {}),
   });
   assertReadWithinGrants(request.principal, response);
   return { response, envelope };

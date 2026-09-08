@@ -20,7 +20,7 @@ import { join, relative, dirname, basename, resolve, isAbsolute } from "node:pat
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { Command } from "commander";
-import { hunchPaths, hunchPathsForDir, findRoot, toPosixTarget } from "../core/paths.js";
+import { hunchPaths, hunchPathsForDir, findRoot, toPosixTarget, isDir } from "../core/paths.js";
 import { writeFileAtomic } from "../core/io.js";
 import { looksLikeCorrection, CORRECTION_NUDGE } from "../core/correction.js";
 import { HUNCH_VERSION } from "../core/version.js";
@@ -4914,8 +4914,15 @@ function printAutoReviewPlan(plan: AutoReviewPlan): void {
 program
   .command("mcp")
   .description("Start the MCP server over stdio (Claude Code connects here).")
-  .action(async () => {
+  .option("--root <dir>", "serve exactly this store or served partition and ignore the client's workspace roots and cwd hints")
+  .action(async (opts: { root?: string }) => {
     const { startServer } = await import("../mcp/server.js");
+    if (opts.root) {
+      const pinned = resolve(opts.root);
+      if (!isDir(join(pinned, ".hunch"))) throw new Error(`--root ${pinned} has no .hunch/ store`);
+      await startServer(pinned, { pinned: true });
+      return;
+    }
     await startServer(process.cwd());
   });
 

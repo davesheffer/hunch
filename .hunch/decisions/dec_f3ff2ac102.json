@@ -1,0 +1,42 @@
+{
+  "id": "dec_f3ff2ac102",
+  "title": "fix(serve): served writes commit — the write lock is a derived artifact, not a topology violation",
+  "topic": null,
+  "status": "accepted",
+  "context": "`hunch serve` flushes inside its cross-process write lock, so `.hunch/write.lock` is always\npresent when `git add .` stages the record. The staged-memory backstop treated a non-JSON,\nnon-derived file as a violation and, on the public-store path, skipped the commit quietly:\nevery served write reported durability \"local\" and the partition repository never gained a\ncommit (1.26.0, 1.26.1). The lock file is now classified as a derived artifact alongside the\nSQLite index and temp files. Test: a git-i",
+  "decision": "Changed code in src/extractors, test/serve.test.ts (2 file(s)).",
+  "consequences": [],
+  "alternatives_rejected": [],
+  "rejected_tripwires": [],
+  "related_components": [
+    "cmp_a94a8fe5cc",
+    "cmp_e0ccfe26fe"
+  ],
+  "related_files": [
+    "src/extractors/git.ts",
+    "test/serve.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "9fcbd20",
+  "valid_from": "2026-09-08T16:02:10+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "inferred",
+    "confidence": 0.3,
+    "evidence": [
+      "commit:9fcbd20",
+      "synth:provider=deterministic",
+      "branch:fix/serve-durability",
+      "src/extractors/git.ts",
+      "test/serve.test.ts"
+    ],
+    "last_verified": "2026-09-08T13:03:09.493Z"
+  },
+  "date": "2026-09-08T16:02:10+03:00"
+}

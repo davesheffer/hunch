@@ -813,7 +813,11 @@ function stagedMemoryPaths(
 function isDerivedStoreArtifact(relativeName: string): boolean {
   return /^[^/]+\.sqlite[^/]*$/i.test(relativeName)
     || relativeName.split("/").some((segment) => segment.includes(".tmp"))
-    || relativeName === "events.log";
+    || relativeName === "events.log"
+    // `hunch serve` flushes INSIDE its cross-process write lock, so the lock file is always
+    // staged alongside the record; treating it as a violation made every served write skip
+    // the commit quietly and report durability "local" forever (1.26.0/1.26.1).
+    || relativeName === "write.lock";
 }
 
 /** Enumerate ordinary JSON files already contained under an overlay. Push-capable

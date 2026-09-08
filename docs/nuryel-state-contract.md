@@ -144,8 +144,15 @@ Tests: `test/serve.test.ts` — init + token hashing, bearer → principal, gran
 smuggled body principal ignored, typed refusals, ORC reading a user partition and writing the
 organization one, six concurrent writes leaving a contiguous ledger, lock release on throw.
 
+**A second agent over stdio.** `hunch mcp --root <partition dir>` pins the MCP server to a served
+partition and ignores the client's workspace roots and per-call `cwd` hints, so Codex or Claude
+Code opened on any repository read the same drawer `hunch serve` hosts. A read returns the
+referenced **records** beside the refs (`ReadResponse.records`), and the MCP text renders the state
+of record (current derived content, commitments with due and owner, receipts with action, target
+and verification), so a consumer answers from the drawer without a second lookup or a file hunt.
+
 Amendments made while binding (all additive, called out for the review): `ChangeEvent.subject`
-(optional); `SubscribeResponse`; the token grammar is written as explicit character classes
+(optional); `SubscribeResponse`; `ReadResponse.records` (optional, the records behind the refs); the token grammar is written as explicit character classes
 instead of an `i` flag so it survives zod → JSON schema in MCP output validation;
 `assertWriteWellFormed` compares the record's scope only when it is a partition scope (a legacy
 constraint carries path globs under the same key).
