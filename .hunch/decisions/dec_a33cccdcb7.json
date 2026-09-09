@@ -1,0 +1,53 @@
+{
+  "id": "dec_a33cccdcb7",
+  "title": "Subject identity by external reference: one active entity per external record per partition, a subject written as an entity's external key refused with the entity id named, reads resolve one explicit hop",
+  "topic": "state.entity-identity",
+  "status": "accepted",
+  "context": "The emulation (fnd_db82c62bef, fnd_d7159b1008) showed per-agent customer ids make one shared clinic N subjects; 1.28.0 keyed Sofia's subjects by CRM site as a first step, and dec_b4d64d643a (proposed, private) asked for the general rule frozen in the contract. Neotoma resolves entities deterministically from hash-derived ids; Hunch must get the same cross-agent identity without similarity or read-time merging. Shipped on branch feat/entity-identity (stacked on feat/replay-determinism).",
+  "decision": "Freeze three functions in stateRecords: `canonicalObjectKey` (Unicode NFC, trim, collapse internal whitespace, case PRESERVED — the key belongs to the external system and folding it could merge two of its records), `externalKey(ref)` = `system/object_type/key` (identity of an external record across writers) and `subjectOfRef(ref)` = `object_type:key` (the receipt read's existing convention; Sofia's `customer:Site:7` is this rule with the CRM's own type in the key). Enforce at write time (`assertExternalIdentity`, invariant `one-entity-per-external-ref`): a second ACTIVE entity in a partition carrying an external key an incumbent carries is refused `conflict` with the incumbent named (write under it, or retire it first); a commitment or derived statement whose subject is the external key of a record an active entity carries is refused `identity` naming the entity id (ids derive from the subject, so the writer re-derives; nothing is rewritten under it). A subject no entity claims stays a free-form key (unbound customers keep working). On read, `subjectAliases` resolves one explicit hop: the entity that carries the key and every key it carries, grants first.",
+  "consequences": [
+    "Sofia can write ONE customer entity per CRM site with the site ref; every Sofia then lands on that entity's id, and a Sofia that still writes `site:<id>` as subject is told the entity id.",
+    "Audited merge/split for cases a ref cannot settle (one customer under two sites) stays future work; today the way out is retire-and-rewrite, both on the ledger.",
+    "A read for any key an entity carries (CRM site, Gmail thread, WhatsApp chat) returns the same state of record."
+  ],
+  "alternatives_rejected": [
+    "Rewrite the subject to the entity id silently on write — REJECTED: the writer's derived id would no longer match what landed; the contract's rule is ids derive, never chosen, and a mismatch is an `identity` refusal that names the way out.",
+    "Lowercase object keys like Neotoma — REJECTED: case is the external system's; folding could merge two distinct records in a case-sensitive system, and agents copy the key from the same system anyway.",
+    "Merge at read time (dedupe N subjects into one answer) — REJECTED: hides the contradiction and leaves N subjects on the ledger (dec_b4d64d643a).",
+    "Probabilistic entity resolution by name similarity — REJECTED: explicit refs only in the deterministic layer (same rule as drift.ts)."
+  ],
+  "rejected_tripwires": [],
+  "related_components": [
+    "Store"
+  ],
+  "related_files": [
+    "src/core/stateRecords.ts",
+    "src/core/stateContract.ts",
+    "src/store/stateBinding.ts",
+    "docs/nuryel-state-contract.md",
+    "test/state-entity-identity.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-09-09T12:57:53.417Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "premises": [],
+  "provenance": {
+    "source": "agent_recorded",
+    "confidence": 0.75,
+    "evidence": [
+      "src/core/stateRecords.ts",
+      "src/core/stateContract.ts",
+      "src/store/stateBinding.ts",
+      "docs/nuryel-state-contract.md",
+      "test/state-entity-identity.test.ts"
+    ]
+  },
+  "date": "2026-09-09T12:57:53.417Z"
+}

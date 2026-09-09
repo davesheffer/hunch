@@ -1,0 +1,51 @@
+{
+  "id": "dec_5946fd8c28",
+  "title": "feat(state): subject identity by external reference — one entity per external record, refused not guessed",
+  "topic": null,
+  "status": "accepted",
+  "context": "The contract freezes canonicalObjectKey (NFC, trim, collapse whitespace, case preserved),\nexternalKey(ref) = system/object_type/key and subjectOfRef(ref) = object_type:key. writeState\nrefuses a second active entity in a partition that carries an external key an incumbent\nalready carries (409 conflict, incumbent named) and a commitment or derived statement whose\nsubject is the external key of a record an active entity carries (422 identity, entity id\nnamed). A subject no entity claims stays free- Touches invariant(s): con_902759b3dc (All JSON writes to .hunch/ must be atomic (temp-file + rename) so an interrupted write can never truncate the index); con_a87360128b (Semantic vectors are a derived layer in SQLite, never the source of truth; reconcile by content hash on reindex).",
+  "decision": "Introduced src/core, src/store, test/state-contract.test.ts, test/state-entity-identity.test.ts: added canonicalObjectKey, externalKey, subjectOfRef, entityIndex, subjectAliases, assertExternalIdentity, prov, principal; new dep(s): node:test, node:assert/strict; 1 new file(s).",
+  "consequences": [
+    "Adds dependency: node:test, node:assert/strict."
+  ],
+  "alternatives_rejected": [],
+  "rejected_tripwires": [],
+  "related_components": [
+    "cmp_a94a8fe5cc",
+    "cmp_b256a6aed0",
+    "cmp_cdfb395bb7"
+  ],
+  "related_files": [
+    "src/core/stateContract.ts",
+    "src/core/stateRecords.ts",
+    "src/store/stateBinding.ts",
+    "test/state-contract.test.ts",
+    "test/state-entity-identity.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "150f490",
+  "valid_from": "2026-09-09T15:56:51+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "inferred",
+    "confidence": 0.45,
+    "evidence": [
+      "commit:150f490",
+      "synth:provider=deterministic",
+      "branch:feat/entity-identity",
+      "src/core/stateContract.ts",
+      "src/core/stateRecords.ts",
+      "src/store/stateBinding.ts",
+      "test/state-contract.test.ts",
+      "test/state-entity-identity.test.ts"
+    ],
+    "last_verified": "2026-09-09T12:57:48.464Z"
+  },
+  "date": "2026-09-09T15:56:51+03:00"
+}

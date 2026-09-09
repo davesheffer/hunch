@@ -31,7 +31,7 @@ import {
   STATE_CAPABILITIES, STATE_CONTRACT_VERSION, STATE_FACETS, STATE_READ_VERSION, STATE_SUBSCRIBE_VERSION, STATE_WRITE_VERSION,
   ReadRequestSchema, ReadResponseSchema, WriteRequestSchema, WriteResultSchema, SubscribeRequestSchema, ChangeEventSchema,
   RecordsRequestSchema, RecordsResponseSchema, STATE_RECORDS_VERSION,
-  ScopeSchema, scopePath, stateHash, actionReceiptId, commitmentId, derivedId,
+  ScopeSchema, scopePath, stateHash, actionReceiptId, commitmentId, derivedId, externalKey, subjectOfRef,
   assertReadWithinGrants, assertWriteWellFormed, assertDerivedState, isHumanConfirmed,
   type Principal, type Scope, type StateFacet, type ReadRequest, type ReadResponse, type WriteRequest, type WriteResult,
   type SubscribeRequest, type ChangeEvent, type StateRef, type DependencyRef, type RecordsRequest, type RecordsResponse,
@@ -127,6 +127,55 @@ function refOf(facet: StateFacet, record: { id: string }, scope: Scope): StateRe
 }
 
 
+/** Follow `merged_into` to the entity that stands for this one now (cycle-safe, bounded). */
+function survivorOf(byId: Map<string, EntityFor["entities"]>, entity: EntityFor["entities"]): EntityFor["entities"] {
+  let current = entity;
+  const seen = new Set<string>([current.id]);
+  while (current.lifecycle === "retired" && current.merged_into) {
+    const next = byId.get(current.merged_into);
+    if (!next || seen.has(next.id)) break;
+    seen.add(next.id);
+    current = next;
+  }
+  return current;
+}
+
+/** The entities in the principal's grants that stand for an external key or an entity id — active
+ *  ones directly, retired-and-merged ones through the survivor they name. */
+function entityIndex(store: HunchStore, principal: Principal, repo: Scope): { byKey: Map<string, EntityFor["entities"]>; bySubject: Map<string, EntityFor["entities"]>; byId: Map<string, EntityFor["entities"]>; survivor: (e: EntityFor["entities"]) => EntityFor["entities"] } {
+  const byId = new Map<string, EntityFor["entities"]>();
+  for (const e of store.recs("entities")) if (granted(principal, recordScope(e, repo))) byId.set(e.id, e);
+  const survivor = (e: EntityFor["entities"]): EntityFor["entities"] => survivorOf(byId, e);
+  const byKey = new Map<string, EntityFor["entities"]>();
+  const bySubject = new Map<string, EntityFor["entities"]>();
+  for (const e of byId.values()) {
+    const stands = e.lifecycle === "active" ? e : (e.lifecycle === "retired" && e.merged_into ? survivor(e) : null);
+    if (!stands || stands.lifecycle !== "active") continue;
+    for (const ref of e.refs) {
+      if (!byKey.has(externalKey(ref)) || e.lifecycle === "active") byKey.set(externalKey(ref), stands);
+      if (!bySubject.has(subjectOfRef(ref)) || e.lifecycle === "active") bySubject.set(subjectOfRef(ref), stands);
+    }
+  }
+  return { byKey, bySubject, byId, survivor };
+}
+
+/** The names one subject is filed under: itself, the entity that stands for it (through merges),
+ *  every entity merged into that one, and every key any of them carries. Explicit refs only. */
+function subjectAliases(store: HunchStore, principal: Principal, repo: Scope, subject: string): Set<string> {
+  const aliases = new Set([subject]);
+  const { bySubject, byId, survivor } = entityIndex(store, principal, repo);
+  const named = bySubject.get(subject) ?? byId.get(subject);
+  if (!named) return aliases;
+  const stands = survivor(named);
+  if (stands.lifecycle !== "active") return aliases;
+  for (const e of byId.values()) {
+    if (e.id !== stands.id && survivor(e).id !== stands.id) continue;
+    aliases.add(e.id);
+    for (const ref of e.refs) aliases.add(subjectOfRef(ref));
+  }
+  return aliases;
+}
+
 /** read — the system-of-record answer for a subject, under the delivery envelope's receipt.
  *  Grants are the first predicate on every candidate; a matching record in a scope the
  *  principal lacks is NAMED in denied_scopes and never described. */
@@ -154,6 +203,11 @@ export function readState(store: HunchStore, input: unknown): { response: ReadRe
   for (const s of request.scopes ?? []) if (!granted(request.principal, s)) denied.set(scopePath(s), s);
   if (request.subject !== undefined) {
     const subject = request.subject;
+    // Subject identity by external reference: a read for an external record's key (`event:26904`,
+    // `customer:Site:7`) also finds what is filed under the entity that carries that ref, and a
+    // read for the entity id finds what was filed under its keys — one explicit hop, grants first.
+    const aliases = subjectAliases(store, request.principal, repo, subject);
+    const isSubject = (s: string | undefined): boolean => s !== undefined && aliases.has(s);
     const current: StateRef[] = [];
     const inForce: StateRef[] = [];
     const done: StateRef[] = [];
@@ -180,14 +234,14 @@ export function readState(store: HunchStore, input: unknown): { response: ReadRe
       if (c.status === "active" && c.valid_to == null) inForce.push(keep("constraints", c, scope));
     }
     if (facets.has("receipts")) for (const r of store.recs("receipts")) {
-      const targets = r.id === subject || r.invalidates.includes(subject) || `${r.target.object_type}:${r.target.object_key}` === subject;
+      const targets = r.id === subject || r.invalidates.some(isSubject) || isSubject(subjectOfRef(r.target));
       if (!targets) continue;
       const scope = admit("receipts", r); if (!scope) continue;
       if (r.state === "succeeded" || r.state === "verified") { done.push(keep("receipts", r, scope)); dependsOn.push(...(r.rests_on ?? [])); }
-      if (r.invalidates.includes(subject)) invalidatedBy.add(r.id);
+      if (r.invalidates.some(isSubject)) invalidatedBy.add(r.id);
     }
     if (facets.has("commitments")) for (const c of store.recs("commitments")) {
-      if (c.subject !== subject && c.id !== subject) continue;
+      if (!isSubject(c.subject) && c.id !== subject) continue;
       const scope = admit("commitments", c); if (!scope) continue;
       if ((c.status === "open" || c.status === "waiting") && c.valid_to == null) inForce.push(keep("commitments", c, scope));
       // A commitment fulfilled by a receipt is part of what HAPPENED for the subject: it
@@ -195,17 +249,17 @@ export function readState(store: HunchStore, input: unknown): { response: ReadRe
       else if (c.status === "done" && c.closed_by) done.push(keep("commitments", c, scope));
     }
     if (facets.has("derived")) for (const d of store.recs("derived")) {
-      if (d.subject !== subject && d.id !== subject) continue;
+      if (!isSubject(d.subject) && d.id !== subject) continue;
       const scope = admit("derived", d); if (!scope) continue;
       if (d.state === "current" && d.valid_to == null) { current.push(keep("derived", d, scope)); dependsOn.push(...d.dependencies); }
     }
     if (facets.has("entities")) for (const e of store.recs("entities")) {
-      if (e.id !== subject) continue;
+      if (!isSubject(e.id)) continue;
       const scope = admit("entities", e); if (!scope) continue;
       if (e.lifecycle === "active") current.push(keep("entities", e, scope));
     }
     if (facets.has("relationships")) for (const r of store.recs("relationships")) {
-      if (r.from !== subject && r.to !== subject) continue;
+      if (!isSubject(r.from) && !isSubject(r.to)) continue;
       const scope = admit("relationships", r); if (!scope) continue;
       current.push(keep("relationships", r, scope));
     }
@@ -368,6 +422,48 @@ function assertClosedBy(store: HunchStore, principal: Principal, commitment: Ent
   return commitment.closed_by;
 }
 
+/** one-entity-per-external-ref. An entity: no other active entity in the partition may carry one
+ *  of its external keys (the incumbent is named; merge/split are explicit, later). A commitment or
+ *  derived statement: its subject may not be the external key of a record an entity already
+ *  carries — the entity's id is the subject, and the refusal names it (the writer re-derives;
+ *  ids derive from the subject, so nothing is rewritten under it). A subject no entity claims
+ *  stays a free-form key: explicit refs only, no guessing. */
+function assertExternalIdentity(store: HunchStore, principal: Principal, scope: Scope, facet: StateFacet, record: EntityFor[EntityKind]): void {
+  const repo = partitionOf(store);
+  const inPartition = (e: EntityFor["entities"]): boolean => scopePath(recordScope(e, repo)) === scopePath(scope);
+  if (facet === "entities") {
+    const entity = record as EntityFor["entities"];
+    if (entity.merged_into !== undefined) {
+      const target = store.recs("entities").find((e) => e.id === entity.merged_into);
+      if (!target || !inPartition(target)) throw new StateRefusal("conflict", `merged_into ${entity.merged_into} is not an entity on record in ${scopePath(scope)}: a merge names a survivor that exists — write it first`, { incumbent_id: entity.merged_into, reason: "merge survivor absent" });
+      if (!granted(principal, recordScope(target, repo))) throw new StateRefusal("outside-grants", `merged_into ${entity.merged_into} is outside the principal's grants`);
+      if (target.lifecycle !== "active") throw new StateRefusal("conflict", `merged_into ${entity.merged_into} is ${target.lifecycle}${target.merged_into ? ` (merged into ${target.merged_into})` : ""}: the survivor of a merge is an active entity — merge into the one that stands now`, { incumbent_id: target.merged_into ?? target.id, reason: "merge survivor not active" });
+    }
+    if (entity.lifecycle !== "active") return;
+    const keys = new Set(entity.refs.map(externalKey));
+    for (const other of store.recs("entities")) {
+      if (other.id === entity.id || other.lifecycle !== "active" || !inPartition(other)) continue;
+      const shared = other.refs.map(externalKey).find((k) => keys.has(k));
+      if (shared) throw new StateRefusal("conflict", `${shared} is already carried by entity ${other.id} in ${scopePath(scope)}: one external record is one entity — write under ${other.id}, or retire it first (merge and split are explicit)`, { incumbent_id: other.id, reason: "one-entity-per-external-ref" });
+    }
+    return;
+  }
+  if (facet !== "commitments" && facet !== "derived") return;
+  const subject = (record as { subject: string }).subject;
+  const { bySubject, byId, survivor } = entityIndex(store, principal, repo);
+  const byKey = bySubject.get(subject);
+  if (byKey && byKey.id !== subject && inPartition(byKey)) {
+    throw new StateRefusal("identity", `subject ${subject} is the external key of entity ${byKey.id} in ${scopePath(scope)}: the entity's id is the subject — re-derive with subject ${byKey.id}`, { incumbent_id: byKey.id, reason: "subject is an entity's external key" });
+  }
+  const named = byId.get(subject);
+  if (named && named.lifecycle === "retired" && named.merged_into && inPartition(named)) {
+    const stands = survivor(named);
+    if (stands.id !== named.id && stands.lifecycle === "active") {
+      throw new StateRefusal("identity", `subject ${subject} was merged into ${stands.id}: new state goes under the survivor — re-derive with subject ${stands.id}`, { incumbent_id: stands.id, reason: "subject was merged" });
+    }
+  }
+}
+
 /** Top-level fields whose canonical hash differs between two records, sorted. */
 function differingFields(a: Record<string, unknown>, b: Record<string, unknown>): string[] {
   const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
@@ -439,6 +535,7 @@ export function writeState(store: HunchStore, input: unknown, opts: WriteOptions
   if (!(ENTITY_KINDS as readonly string[]).includes(facet)) throw new StateRefusal("unsupported", `facet ${facet} is not a store kind`);
   const record = normalizeRecord(facet, request.scope, request.record, request.principal);
   const id = (record as { id: string }).id;
+  assertExternalIdentity(store, request.principal, request.scope, facet, record);
   /** The normalized PAYLOAD hash: what idempotency recognizes on a re-send. */
   const hash = stateHash(record);
   const ledger = readLedger(hunchDir, request.scope);
@@ -555,6 +652,8 @@ export function writeState(store: HunchStore, input: unknown, opts: WriteOptions
   // ledger says so, and names the external pointer that moved when the writer gives one.
   const invalidated = facet === "derived" && !!existing && existing.state === "current" && (record as EntityFor["derived"]).state === "stale";
   const invalidates = facet === "receipts" ? (record as EntityFor["receipts"]).invalidates : [];
+  // An entity leaving service is a `retired` change (a merge names the survivor in the record).
+  const retired = facet === "entities" && (record as EntityFor["entities"]).lifecycle === "retired" && (!existing || existing.lifecycle !== "retired");
   const subject = subjectOf(facet, record);
   if (supersedes) {
     const closed = closeWindow(store, facet, supersedes, id, now, isPrivate);
@@ -563,7 +662,7 @@ export function writeState(store: HunchStore, input: unknown, opts: WriteOptions
       changes.push({ facet, record_id: supersedes, record_hash: stateHash(old), change: "superseded", subject: subjectOf(facet, old), invalidates: [], cause });
     }
   }
-  changes.push({ facet, record_id: id, record_hash: onFileHash, change: invalidated ? "invalidated" : existing ? "updated" : "created", subject, invalidates: invalidated && subject ? [subject] : invalidates, cause });
+  changes.push({ facet, record_id: id, record_hash: onFileHash, change: invalidated ? "invalidated" : retired ? "retired" : existing ? "updated" : "created", subject, invalidates: invalidated && subject ? [subject] : invalidates, cause });
   appendChanges(hunchDir, request.scope, changes, { key: request.idempotency_key, entry: { record_id: id, record_hash: onFileHash, payload_hash: hash, facet } }, now);
   store.reindex();
   return result(supersedes ? "superseded" : existing ? "updated" : "created");
