@@ -1,0 +1,42 @@
+{
+  "id": "dec_b4c8543113",
+  "title": "feat(drift): hunch drift runs the replay check when the partition has a change ledger",
+  "topic": null,
+  "status": "accepted",
+  "context": "A replay-* finding (missing-record, hash-drift, orphan-record, idempotency-drift, or a\nfingerprint mismatch) fails the gate beside anchor-stale and topic collisions, so the\nexisting CI gate covers ledger≠records without a separate step.\n\nCo-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>\n What changed: added drift.",
+  "decision": "Introduced src/cli, test/state-replay.test.ts: added drift.",
+  "consequences": [],
+  "alternatives_rejected": [],
+  "rejected_tripwires": [],
+  "related_components": [
+    "cmp_50037f41a9",
+    "cmp_a94a8fe5cc"
+  ],
+  "related_files": [
+    "src/cli/index.ts",
+    "test/state-replay.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "9dc0d0b",
+  "valid_from": "2026-09-09T16:12:28+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "inferred",
+    "confidence": 0.45,
+    "evidence": [
+      "commit:9dc0d0b",
+      "synth:provider=deterministic",
+      "branch:feat/replay-determinism",
+      "src/cli/index.ts",
+      "test/state-replay.test.ts"
+    ],
+    "last_verified": "2026-09-09T13:13:20.830Z"
+  },
+  "date": "2026-09-09T16:12:28+03:00"
+}
