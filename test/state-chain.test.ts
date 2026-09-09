@@ -208,3 +208,35 @@ test("older records are untouched: a receipt without rests_on and a commitment w
     assert.deepEqual(response.state_of_record?.done.map((x) => x.id), [r.record_id]);
   } finally { cleanup(); }
 });
+
+test("the changed facet, written: a current summary written back as stale with an external cause is an INVALIDATION naming the pointer", () => {
+  const { store, cleanup } = overlayStore();
+  try {
+    const p = { id: "sofia@david", kind: "agent" as const, grants: [org] };
+    const w = (record: Record<string, unknown>, key: string, extra: Record<string, unknown> = {}) =>
+      writeState(store, { schema: "nuryel.state.write/1", principal: p, scope: org, facet: "derived", record, idempotency_key: key, ...extra });
+    const dep = { kind: "external" as const, ref: { ...crmEvent, content_hash: stateHash("v3") } };
+    const content = "Site:7: export failing";
+    const base = { schema: "nuryel.derived/1", scope: org, subject: CUSTOMER, content, content_hash: stateHash(content), dependencies: [dep], transform_version: "summary/v1", computed_at: "2026-09-09T09:00:00Z", provenance: sofiaProv };
+    const current = w({ ...base, valid_to: null, state: "current" }, "sofia:summary:1");
+    assert.equal(current.outcome, "created");
+    // The source moved: the writer re-stamped the CRM event and the hash it rests on is gone.
+    const moved = { ...crmEvent, version: "4", content_hash: stateHash("v4"), observed_at: "2026-09-09T12:00:00Z" };
+    const stale = w({ ...base, valid_to: "2026-09-09T12:00:00Z", state: "stale" }, "sofia:summary:1:stale", { cause: { kind: "external", ref: moved } });
+    assert.equal(stale.outcome, "updated");
+    assert.equal(stale.record_id, current.record_id, "same identity: the dependencies did not change, their truth did");
+    const { response } = readState(store, { schema: "nuryel.state.read/1", principal: p, scope: org, subject: CUSTOMER });
+    assert.deepEqual(response.state_of_record?.current, [], "no longer current for any reader");
+    const stream = subscribeState(store, { schema: "nuryel.state.subscribe/1", principal: p, scope: org, after_seq: 0 });
+    assert.deepEqual(stream.events.map((e) => e.change), ["created", "invalidated"]);
+    assert.deepEqual(stream.events[1]?.cause, { kind: "external", ref: moved }, "the ledger names what moved");
+    assert.deepEqual(stream.events[1]?.invalidates, [CUSTOMER]);
+    // Written back stale WITHOUT a cause is still an invalidation, caused by the writer.
+    const again = w({ ...base, content: "x", content_hash: stateHash("x"), valid_to: null, state: "current", dependencies: [{ kind: "external", ref: moved }] }, "sofia:summary:2");
+    const staleAgain = w({ ...base, content: "x", content_hash: stateHash("x"), valid_to: "2026-09-09T13:00:00Z", state: "stale", dependencies: [{ kind: "external", ref: moved }] }, "sofia:summary:2:stale");
+    assert.equal(staleAgain.record_id, again.record_id);
+    const last = subscribeState(store, { schema: "nuryel.state.subscribe/1", principal: p, scope: org, after_seq: 0 }).events.at(-1);
+    assert.equal(last?.change, "invalidated");
+    assert.deepEqual(last?.cause, { kind: "write", principal: "sofia@david" });
+  } finally { cleanup(); }
+});

@@ -44,6 +44,12 @@ first too: a status question about an event is answered from held state (receipt
 commitments in force, the current summary) under the read's receipt, marked as such when no
 source was read — 12 of 12 in the emulation, 0 unsourced replies.
 
+**The `changed` facet, written.** `WriteRequest.cause` (additive): `{ kind: "external", ref }` says why
+a write happened when it is not the writer's doing. A current derived record written back as
+`stale` is an `invalidated` change (`invalidates: [subject]`, the pointer as cause), never an
+`updated` one. Sofia's source sweep is the first writer: it re-stamps what a current summary rests
+on and invalidates it when a source moved, so the drawer is trustworthy between reads.
+
 ### Merge lag is not a release blocker
 
 Two branches that each capture one record both regenerate the very same "N+1 decisions"

@@ -518,7 +518,10 @@ export function writeState(store: HunchStore, input: unknown, opts: WriteOptions
   /** What is on file now — the hash every event, ref and result carries. */
   const onFileHash = stateHash(store.getRec(facet as EntityKind, id) ?? record);
   const changes: PendingChange[] = [];
-  const cause = closedBy ? { kind: "receipt" as const, receipt_id: closedBy } : { kind: "write" as const, principal: request.principal.id };
+  const cause = closedBy ? { kind: "receipt" as const, receipt_id: closedBy } : request.cause ?? { kind: "write" as const, principal: request.principal.id };
+  // A current derived statement written back as stale is an INVALIDATION, not an update: the
+  // ledger says so, and names the external pointer that moved when the writer gives one.
+  const invalidated = facet === "derived" && !!existing && existing.state === "current" && (record as EntityFor["derived"]).state === "stale";
   const invalidates = facet === "receipts" ? (record as EntityFor["receipts"]).invalidates : [];
   const subject = subjectOf(facet, record);
   if (supersedes) {
@@ -528,7 +531,7 @@ export function writeState(store: HunchStore, input: unknown, opts: WriteOptions
       changes.push({ facet, record_id: supersedes, record_hash: stateHash(old), change: "superseded", subject: subjectOf(facet, old), invalidates: [], cause });
     }
   }
-  changes.push({ facet, record_id: id, record_hash: onFileHash, change: existing ? "updated" : "created", subject, invalidates, cause });
+  changes.push({ facet, record_id: id, record_hash: onFileHash, change: invalidated ? "invalidated" : existing ? "updated" : "created", subject, invalidates: invalidated && subject ? [subject] : invalidates, cause });
   appendChanges(hunchDir, request.scope, changes, { key: request.idempotency_key, entry: { record_id: id, record_hash: onFileHash, payload_hash: hash, facet } }, now);
   store.reindex();
   return result(supersedes ? "superseded" : existing ? "updated" : "created");

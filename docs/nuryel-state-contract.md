@@ -147,6 +147,16 @@ chain as refs, never as prose:
 The next reader of the subject sees the receipt and the closed commitment in `done`, the
 decision and proof in `depends_on`, and the old summary named in `invalidated_by`.
 
+**The `changed` facet, written.** No source writes the drawer (Hunch is never in the request path
+and never mirrors a source), so a source change reaches the drawer only through an agent that
+re-reads it. `WriteRequest.cause` (additive) lets that agent say why: `{ kind: "external", ref }`.
+A current derived statement written back as `stale` (same identity, `valid_to` set) is an
+**invalidation**, not an update: the ledger emits `change: "invalidated"` with `invalidates:
+[subject]` and the external pointer as cause, so every reader sees the summary leave `current`
+and what moved. Sofia's source sweep is the first writer (re-stamp what a current summary rests
+on; when a stamp differs from the hash the summary depends on, write it back stale with that
+pointer), so the drawer is trustworthy between an agent's reads, not only at them.
+
 Records written before these fields existed are untouched: nothing is materialized on them, they
 hash and read exactly as before. `test/state-chain.test.ts` runs the whole chain through the one
 binding with three principals over one store.

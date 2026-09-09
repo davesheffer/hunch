@@ -138,6 +138,10 @@ export const WriteRequestSchema = z.object({
   idempotency_key: z.string().min(8).max(256),
   expected_version: z.union([z.string().max(256), z.number().int().nonnegative()]).nullable().default(null),
   supersedes: z.string().max(2048).optional(),
+  /** Why this write happened, when it is not the writer's own doing (additive): an external
+   *  source moved. A derived record written back as `stale` with this cause emits an
+   *  `invalidated` change naming the pointer — the `changed` facet, finally written by someone. */
+  cause: z.object({ kind: z.literal("external"), ref: ExternalRefSchema }).strict().optional(),
 }).strict();
 export type WriteRequest = z.infer<typeof WriteRequestSchema>;
 
