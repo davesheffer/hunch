@@ -26,6 +26,15 @@ content hash), so an engineering agent never rests a receipt on a pre-store hash
 doc carries the five-step recipe for closing an incident from a repository.
 `test/state-chain.test.ts`: three principals, one store, the whole chain and every refusal.
 
+**The farm runs the chain.** `tooling/agent-farm` now serves a repository partition beside the
+organization drawer; every other customer raises an incident and an escalation engineering owes
+(shared keys, replayed by the second sofia), and the engineer closes each one through the chain —
+union read, decision in the repository partition, proof pointer, `shipped` receipt resting on all
+three, escalation closed by it — with the two chain refusals provoked once. Every sofia must see
+the closure, the orc verifies all five links per incident and is refused the repository partition,
+and the ledger replay finds each closure caused by its receipt; a missing link is a contradiction.
+3 sofias × 5 customers: 3 incidents, 9 closures seen, 0 contradictions, 3.3 s.
+
 ### Merge lag is not a release blocker
 
 Two branches that each capture one record both regenerate the very same "N+1 decisions"
