@@ -56,7 +56,9 @@ export type ExternalRef = z.infer<typeof ExternalRefSchema>;
 
 /** What a derived statement rests on. Exactly what a currentness check re-validates. */
 export const DependencyRefSchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("record"), id: z.string().regex(TOKEN), record_hash: z.string().regex(SHA256) }).strict(),
+  /** `scope` (additive) points into ANOTHER partition — the repository decision an
+   *  organization-drawer receipt rests on. Absent, the ref is in the record's own partition. */
+  z.object({ kind: z.literal("record"), id: z.string().regex(TOKEN), record_hash: z.string().regex(SHA256), scope: ScopeSchema.optional() }).strict(),
   z.object({ kind: z.literal("external"), ref: ExternalRefSchema }).strict(),
   z.object({ kind: z.literal("schema"), name: z.string().max(256), fingerprint: z.string().regex(SHA256) }).strict(),
 ]);
@@ -79,6 +81,12 @@ export const ActionReceiptSchema = z.object({
   verified_at: z.string().regex(ISO).optional(),
   result_fingerprint: z.string().regex(SHA256).optional(),
   invalidates: z.array(z.string().max(512)).max(64).default([]),
+  /** What the action rested on (additive): the decision it implements, the change proof for
+   *  the shipped revision, the commitment or incident it answers. Same shape as a derived
+   *  statement's dependencies, so "what does this closure rest on" is one read. A record ref
+   *  in the receipt's own partition is verified by hash on write; a ref into another partition
+   *  is a pointer the reader resolves with `records`, grants first. */
+  rests_on: z.array(DependencyRefSchema).max(64).optional(),
   provenance: ProvenanceSchema,
 }).strict();
 export type ActionReceipt = z.infer<typeof ActionReceiptSchema>;
@@ -95,6 +103,9 @@ export const CommitmentSchema = z.object({
   status: z.enum(["open", "waiting", "done", "cancelled"]),
   source: ExternalRefSchema.optional(),
   evidence_excerpt: z.string().max(900).optional(),
+  /** The receipt that fulfilled this commitment (additive). A closure names what happened:
+   *  the binding refuses a `closed_by` that is not a succeeded/verified receipt on record. */
+  closed_by: z.string().regex(/^nrc_[a-f0-9]{24}$/).optional(),
   valid_from: z.string().regex(ISO),
   valid_to: z.string().regex(ISO).nullable().default(null),
   provenance: ProvenanceSchema,

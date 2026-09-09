@@ -16,6 +16,7 @@ interface FarmReport {
   reads: number;
   reuse_rate: number;
   contradictions: number;
+  chain: { incidents: number; escalations_seen_by_engineer: number; decisions: number; shipped: number; closed: number; closures_seen_by_sofias: number; links_verified_by_orc: number; denied_to_orc: number; closure_causes: number };
   ledger: { head_seq: number; contiguous: boolean };
   durations_ms: { total: number; per_agent_avg: number };
   problems: string[];
@@ -41,6 +42,21 @@ test("agent farm: 3 sofias x 4 customers end the day with zero contradictions an
     assert.ok(report.writes.created > 0);
     assert.ok(report.writes.replayed > 0, "the shared commitment replayed for the second writer");
     assert.ok(report.reuse_rate > 0, "at least one sofia reused another's current summary");
+    // The chain (roadmap Gate 4), counted like everything else: every incident a sofia raised was
+    // read by the engineer, decided in the repository partition, shipped with a receipt resting on
+    // the decision + proof + escalation, closed BY that receipt, seen closed by every sofia,
+    // verified link by link by the orc, and replayed from the ledger with the receipt as cause.
+    const c = report.chain;
+    assert.ok(c.incidents >= 1, "at least one incident was raised");
+    assert.equal(c.escalations_seen_by_engineer, c.incidents, "the engineer found every escalation in force before acting");
+    assert.equal(c.decisions, c.incidents);
+    assert.equal(c.shipped, c.incidents);
+    assert.equal(c.closed, c.incidents, "every escalation was closed in place by its receipt");
+    assert.equal(c.closures_seen_by_sofias, c.incidents * 3, "every sofia saw every closure");
+    assert.equal(c.links_verified_by_orc, c.incidents, "the orc verified decision, proof, escalation, closed_by and the receipt for every incident");
+    assert.equal(c.closure_causes, c.incidents, "every closure event is caused by its receipt");
+    assert.equal(c.denied_to_orc, 1, "the orc was refused the repository partition — named, never described");
+    assert.ok((report.refusals["conflict"] ?? 0) >= 2, "a stale rests_on hash and a phantom closed_by were refused");
     assert.ok(existsSync(report.out), "farm-report.json was written");
   } finally { rmSync(outDir, { recursive: true, force: true }); }
 });

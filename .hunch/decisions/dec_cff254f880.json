@@ -1,0 +1,65 @@
+{
+  "id": "dec_cff254f880",
+  "title": "fix(grounding): merge lag is not a release blocker — direction-aware freshness, hunch grounding, post-merge hook",
+  "topic": null,
+  "status": "accepted",
+  "context": "Two branches that each capture one record both regenerate the very same \"N+1\"\ncounts line in the grounding docs; the forge merges identical lines with no\nconflict, the merged store holds N+2, and the committed CLAUDE.md is one behind\nwith no hook run and no human error. Every release-gate red of that class\n(PR #128, #135, v1.26.2's first tagged run — fnd_c402046ac7) was this lag.\n\n- src/core/groundingLag.ts: classify the committed block against the generated\n  one. fresh (byte-equal) · lagging ( Touches invariant(s): con_8460b6770f (Config/provider writers must merge idempotently into existing user files and refuse to clobber an unparseable file).",
+  "decision": "The committed grounding block is checked direction-aware (src/core/groundingLag.ts): byte-equal is fresh; a difference confined to the counts sentence where no append-only count (decisions, bugs, constraints, components, policies) exceeds the store is LAG — records merged in behind the doc — reported as a diagnostic, never red; an append-only count ahead of the store (a record never committed) or any prose difference fails. `hunch grounding [--refresh|--json|--quiet]` gives the per-doc verdict and delta and regenerates from the PUBLIC store (HUNCH_PRIVATE_DIR pinned to an empty overlay); `hunch init` installs a post-merge hook that refreshes after a merge/pull that brought .hunch/ in, leaving the docs for the developer's next commit.",
+  "consequences": [
+    "Adds dependency: node:test, node:assert/strict, node:fs, node:os, node:path, node:child_process."
+  ],
+  "alternatives_rejected": [
+    "Regenerate grounding on main from CI and push a bot commit after every merge — rejected: a bot commit on the default branch behind a human's tag push still races the release, and it needs write permission the guard workflow deliberately lacks.",
+    "Drop the record counts from the grounding block so merges cannot drift it — rejected: the counts are the block's cheapest signal to an assistant, and the never-committed-record defect (fnd_6391b4242f) was only ever caught by them.",
+    "Tolerate any counts-only difference — rejected: a doc AHEAD of the store on an append-only kind means a record exists on a developer's machine and not in the repository; that must stay red.",
+    "Fix it only in the release gate (regenerate before `test`) — rejected: ordinary CI runs the same gate, so the freshness test would never fire anywhere and a genuinely stale doc would live forever."
+  ],
+  "rejected_tripwires": [],
+  "related_components": [
+    "cmp_04c6efb58b",
+    "cmp_50037f41a9",
+    "cmp_863ac67d4a",
+    "cmp_a94a8fe5cc",
+    "cmp_b256a6aed0"
+  ],
+  "related_files": [
+    "src/cli/index.ts",
+    "src/core/groundingLag.ts",
+    "src/integrations/hooks.ts",
+    "src/integrations/providers.ts",
+    "test/grounding-freshness.test.ts",
+    "test/grounding-lag.test.ts",
+    "test/grounding-merge-lag.test.ts",
+    "test/hooks.test.ts",
+    "tooling/release-gate.mjs"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "01084b1",
+  "valid_from": "2026-09-09T02:26:34+00:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "agent_recorded",
+    "confidence": 0.7,
+    "evidence": [
+      "commit:01084b1",
+      "branch:claude/hunch-development-j9qps2",
+      "src/cli/index.ts",
+      "src/core/groundingLag.ts",
+      "src/integrations/hooks.ts",
+      "src/integrations/providers.ts",
+      "test/grounding-freshness.test.ts",
+      "test/grounding-lag.test.ts",
+      "test/grounding-merge-lag.test.ts",
+      "test/hooks.test.ts",
+      "synth:provider=deterministic, substance written by the agent that made the change"
+    ],
+    "last_verified": "2026-09-09T02:44:14.058Z"
+  },
+  "date": "2026-09-09T02:26:34+00:00"
+}

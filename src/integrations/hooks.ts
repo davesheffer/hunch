@@ -110,3 +110,46 @@ export function installPreCommitHook(root: string, invocation: string, strict = 
   chmodSync(hookPath, 0o755);
   return { path: hookPath, action: "appended" };
 }
+
+const MERGE_MARK = "# >>> hunch post-merge >>>";
+const MERGE_END = "# <<< hunch post-merge <<<";
+
+/** Install a post-merge hook that re-syncs the committed grounding docs when a merge
+ *  brought memory in behind them (fnd_c402046ac7). Two branches that each captured a
+ *  record regenerate the same "N+1" counts line; git merges identical lines silently
+ *  and the doc ends up one behind the store. The hook regenerates the existing docs
+ *  from the PUBLIC store right after a local merge/pull that touched .hunch/, so the
+ *  next commit carries them. Foreground (it rewrites five files), loop-guarded via
+ *  HUNCH_SYNC, and it can never fail the merge. Preserves any existing hook. */
+export function installPostMergeHook(root: string, invocation: string): HookInstall {
+  const dir = hooksDir(root);
+  const abs = isAbsolute(dir) ? dir : join(root, dir);
+  mkdirSync(abs, { recursive: true });
+  const hookPath = join(abs, "post-merge");
+  const blk = [
+    MERGE_MARK,
+    'if [ -z "$HUNCH_SYNC" ]; then',
+    "  if ! git diff --quiet ORIG_HEAD HEAD -- .hunch 2>/dev/null; then",
+    `    ( HUNCH_SYNC=1 ${invocation} grounding --refresh 2>/dev/null || true )`,
+    "  fi",
+    "fi",
+    MERGE_END,
+  ].join("\n");
+
+  if (!existsSync(hookPath)) {
+    writeFileSync(hookPath, `#!/bin/sh\n${blk}\n`);
+    chmodSync(hookPath, 0o755);
+    return { path: hookPath, action: "created" };
+  }
+  const cur = readFileSync(hookPath, "utf8");
+  if (cur.includes(MERGE_MARK)) {
+    const updated = cur.replace(new RegExp(`${escapeRe(MERGE_MARK)}[\\s\\S]*?${escapeRe(MERGE_END)}`), blk);
+    if (updated === cur) return { path: hookPath, action: "unchanged" };
+    writeFileSync(hookPath, updated);
+    chmodSync(hookPath, 0o755);
+    return { path: hookPath, action: "updated" };
+  }
+  writeFileSync(hookPath, cur.endsWith("\n") ? `${cur}${blk}\n` : `${cur}\n${blk}\n`);
+  chmodSync(hookPath, 0o755);
+  return { path: hookPath, action: "appended" };
+}

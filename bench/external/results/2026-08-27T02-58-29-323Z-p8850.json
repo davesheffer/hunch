@@ -1,8 +1,8 @@
 {
   "model": "claude-sonnet-5",
-  "zodRepo": "/Users/nofarkulishevski/Documents/GitHub/zod-bench",
+  "zodRepo": "/Users/contributor/Documents/GitHub/zod-bench",
   "zodHead": "e516c3baf22615e20934116abebfed6c000222c2\n",
-  "hunchRepo": "/Users/nofarkulishevski/Documents/GitHub/hunch-latest",
+  "hunchRepo": "/Users/contributor/Documents/GitHub/hunch-latest",
   "hunchHead": "db459fba6c01e4f2e0d04df606f6e88efae23b6b\n",
   "memorySource": null,
   "memoryHead": null,

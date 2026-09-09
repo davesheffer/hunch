@@ -254,6 +254,9 @@ test("MCP exposes exact change identity and semantic proof contracts without mut
   const proofResult = await client.callTool({ name: "hunch_change_proof", arguments: { base_ref: base } });
   const proof = proofResult.structuredContent as Record<string, unknown>;
   assert.equal(proof.schema, "hunch.change-proof/1");
+  // The chain: the text hands an engineering agent the ready-made rests_on pointer to this proof.
+  const proofText = (proofResult.content as Array<{ text?: string }>).map((c) => c.text ?? "").join("\n");
+  assert.match(proofText, new RegExp(`rests_on ref .*\\{"kind":"external","ref":\\{"system":"hunch","object_type":"change_proof","object_key":"${String(proof.proof_id)}","content_hash":"${String(proof.content_hash)}","observed_at":"\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z"\\}\\}`));
   assert.match(String(proof.proof_id), /^hproof_[a-f0-9]{24}$/);
   assert.match(String(proof.content_hash), /^sha256:[a-f0-9]{64}$/);
   assert.equal((proof.repository as { base_revision: string }).base_revision, base);
