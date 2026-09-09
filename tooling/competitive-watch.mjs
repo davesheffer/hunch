@@ -9,6 +9,7 @@ const repos = [
   "riponcm/projectmem",
   "Cranot/roam-code",
   "blackwell-systems/knowing",
+  "markmhendrickson/neotoma",
 ];
 
 const distinctivePhrases = [

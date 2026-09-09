@@ -1,6 +1,56 @@
 # Competitive landscape
 
-**Evidence snapshot: 2026-07-16, updated 2026-08-22 (see dated updates below). Re-verify every third-party fact before quoting or publishing an update.**
+**Evidence snapshot: 2026-07-16, updated 2026-09-09 (see dated updates below). Re-verify every third-party fact before quoting or publishing an update.**
+
+## Update — 2026-09-09
+
+### Neotoma already occupies the "deterministic state layer" phrase
+
+Neotoma ([neotoma.io](https://neotoma.io), [repository](https://github.com/markmhendrickson/neotoma),
+MIT, single author, 32 stars, npm `neotoma` first published 2026-02-04, v0.22.1 on 2026-09-08)
+describes itself as **"a deterministic state layer for AI agents"** and has carried that phrase on its
+site since 2026-03-10 (repository history: commit `6a5007aff`). Its GitHub topics include
+`deterministic-state`. Hunch coined its own **Deterministic State** category on 2026-09-08
+(`dec_af77e5626e`). The phrase is therefore shared and Neotoma used it first; Hunch's public copy
+must not claim to have named the category.
+
+The engine is real and overlaps Hunch's state spoke almost verb for verb: append-only observations
+with SHA-256 content hashes, hash-derived entity ids, a deterministic reducer with field-level
+provenance, corrections as priority-1000 observations, `SUPERSEDES` relationships, idempotency
+keys with an `ERR_IDEMPOTENCY_MISMATCH` refusal, per-agent attributed writes, one OpenAPI contract
+behind MCP (64 tools), REST (108 operations), a ~170-command CLI, and a bundled Inspector UI.
+Local SQLite is the source of truth; an optional Markdown mirror is derived and git-trackable.
+A sibling project, Ateles, is positioned as "who was authorized" against Neotoma's "what was true",
+which mirrors Hunch's Constitution split. Velocity: 472 commits in May 2026, 26 so far in September.
+
+Verified locally on 2026-09-09 by importing the published package's reducer and entity-id functions
+(no server): entity ids are stable under whitespace and case; a snapshot is identical regardless of
+observation order; ties on `observed_at` resolve by id. Two behaviours worth knowing when comparing
+claims: a correction wins because the correction path stamps `observed_at = now` and most fields use
+`last_write`, so a later ordinary write (including an LLM summary) overrides a human correction on
+such a field; and a field absent from the type's schema is kept in the observation log but silently
+omitted from the current snapshot.
+
+Where Neotoma is ahead: entity resolution, duplicate merge/split, file ingestion (PDF, CSV, Parquet),
+schema inference, an operator UI, hosted multi-user mode with hardware-attested agent identity, peer
+federation, TypeScript and Python SDKs, and integrations for eight editors and hosts. Where it has
+written down as future what Hunch ships now: organizations and workspaces ("not yet"), authority
+semantics over who may correct what (P2, "mechanisms exist"), and multi-principal dispute semantics
+(P3, "planned"); its own determinism doctrine names "bounded convergence" — divergent agent writes
+accumulate and are repaired by later merge — where Hunch refuses a second live decision per topic and
+requires a supersede target to still be open. Neotoma is not aimed at codebases at all; Hunch's
+engineering-memory and conformance spoke has no counterpart there. Its stated primary ICP is one
+person running a personal memory across Claude, Cursor and ChatGPT; small teams are a "future ICP".
+
+### Actions
+
+- Add `markmhendrickson/neotoma` to the automated watch.
+- Stop leading with the category name. Lead with what Neotoma lists as future: organization and
+  team partitions with a key per agent, refused contradictions across many writers, receipts and
+  commitments as first-class kinds, and the git-native source of truth. Keep the code-conformance
+  spoke as the property no state-layer peer has.
+- Position by verified properties only (`dec_94b4b7880e`): the two behaviours above are observed on
+  v0.22.1 and must be re-run before being quoted.
 
 ## Update — 2026-08-22
 
