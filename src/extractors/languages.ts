@@ -363,3 +363,13 @@ export function languageFor(file: string): LanguageSpec | null {
   }
   return null;
 }
+
+/** Prose formats worth drafting a decision from even though no LanguageSpec parses
+ *  them — no grammar, no symbols/edges, just eligible input to synthesis (issue #12). */
+export const PROSE_EXTENSIONS: string[] = [".md"];
+
+/** Broader than languageFor: "is this worth reasoning about" (synthesis input)
+ *  rather than "can tree-sitter parse this" (symbol/dependency extraction). */
+export function isSubstantive(file: string): boolean {
+  return languageFor(file) !== null || PROSE_EXTENSIONS.some((ext) => file.endsWith(ext));
+}
