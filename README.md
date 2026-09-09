@@ -271,6 +271,7 @@ See the [changelog](CHANGELOG.md) for release detail and the [roadmap](ROADMAP.m
 - [Deterministic organizational state](docs/deterministic-state.md)
 - [Project DNA](docs/project-dna.md)
 - [Native change proof](docs/change-proof.md)
+- [The autonomy ladder](docs/autonomy-ladder.md)
 - [Engineering Landscape Graph](docs/engineering-landscape.md)
 - [Hunch roadmap](ROADMAP.md)
 - [VS Code extension](vscode-extension/README.md)
