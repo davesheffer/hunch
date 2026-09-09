@@ -1,0 +1,55 @@
+# Hunch — repository maintenance run by the maintainer on demand. Deletes the remote
+# branches named in the input with the repository's own token (a GITHUB_TOKEN push never
+# triggers other workflows). Refuses the default branch and the ref it runs from. Dry run
+# by default: lists what it would delete and exits.
+name: Repo maintenance
+
+on:
+  workflow_dispatch:
+    inputs:
+      branches:
+        description: "Space-separated remote branch names to delete"
+        required: true
+        type: string
+      dry_run:
+        description: "Only list what would be deleted"
+        required: true
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: repo-maintenance
+  cancel-in-progress: false
+
+jobs:
+  branches:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 1
+
+      - name: Delete (or list) the named branches
+        shell: bash
+        env:
+          BRANCHES: ${{ inputs.branches }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          RUNNING_REF: ${{ github.ref_name }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          deleted=0; skipped=0; missing=0
+          for b in $BRANCHES; do
+            case "$b" in
+              "$DEFAULT_BRANCH"|"$RUNNING_REF"|main|master) echo "skip $b (protected: default branch or the ref this run uses)"; skipped=$((skipped+1)); continue;;
+            esac
+            if ! git ls-remote --exit-code --heads origin "$b" >/dev/null 2>&1; then echo "missing $b (already gone)"; missing=$((missing+1)); continue; fi
+            if [ "$DRY_RUN" = "true" ]; then echo "would delete $b"; else git push origin --delete "$b" && echo "deleted $b"; fi
+            deleted=$((deleted+1))
+          done
+          echo "---"
+          echo "$( [ "$DRY_RUN" = "true" ] && echo 'would delete' || echo 'deleted' ): $deleted · skipped: $skipped · already gone: $missing"
+          echo "remaining remote branches: $(git ls-remote --heads origin | wc -l)"
