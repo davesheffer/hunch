@@ -54,6 +54,27 @@ export const ExternalRefSchema = z.object({
 }).strict();
 export type ExternalRef = z.infer<typeof ExternalRefSchema>;
 
+/** The external system's own key, canonicalized so two writers that copied it from the same
+ *  system agree byte for byte: Unicode NFC, trimmed, internal whitespace collapsed. Case is
+ *  preserved — the key belongs to the external system, and folding it could merge two of its
+ *  records. No other guessing: identity here is explicit refs, never similarity. */
+export function canonicalObjectKey(key: string): string {
+  return key.normalize("NFC").trim().replace(/\s+/g, " ");
+}
+
+/** The identity of an external record across writers: system, type and canonical key. Two
+ *  entities in one partition that carry the same external key are the same thing. */
+export function externalKey(ref: Pick<ExternalRef, "system" | "object_type" | "object_key">): string {
+  return `${ref.system}/${ref.object_type}/${canonicalObjectKey(ref.object_key)}`;
+}
+
+/** The subject an external record is known by, the convention the read verb already uses for
+ *  receipts (`event:26904`): the object type and the canonical key. When an entity in the
+ *  partition carries the ref, that entity's id is the subject and this form resolves to it. */
+export function subjectOfRef(ref: Pick<ExternalRef, "object_type" | "object_key">): string {
+  return `${ref.object_type}:${canonicalObjectKey(ref.object_key)}`;
+}
+
 /** What a derived statement rests on. Exactly what a currentness check re-validates. */
 export const DependencyRefSchema = z.discriminatedUnion("kind", [
   /** `scope` (additive) points into ANOTHER partition — the repository decision an

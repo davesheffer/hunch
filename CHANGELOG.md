@@ -22,6 +22,19 @@ into CI beside `hunch drift`. `verifyReplay` / `foldLedger` / `formatReplayRepor
 reports `replay` beside `contradictions`. `stateHomeFor` is exported from the binding so the check
 reads exactly the home the write verb wrote.
 
+**Subject identity by external reference** (`one-entity-per-external-ref`). Two agents over one
+CRM record, thread or chat land on one subject, by explicit refs only. The contract freezes
+`canonicalObjectKey` (NFC, trim, collapse whitespace, case preserved), `externalKey(ref)`
+(`system/object_type/key`) and `subjectOfRef(ref)` (`object_type:key`, the receipt read's
+convention). `writeState` refuses a second active entity in a partition that carries an external
+key an incumbent already carries (`409 conflict`, incumbent named — write under it or retire it
+first; merge and split stay explicit) and a commitment or derived statement whose subject is the
+external key of a record an active entity carries (`422 identity`, entity id named — ids derive
+from the subject, so the writer re-derives). A subject no entity claims stays a free-form key. On
+read a subject resolves one explicit hop — the entity that carries the key and every key it
+carries — so `site:7`, `customer:clinic-7` and the entity's thread key return the same state of
+record. `test/state-entity-identity.test.ts`.
+
 **`human-correction-outranks-agent-writes`** — a new contract invariant, enforced at write time.
 A record a human confirmed (`provenance.source` carries `human_confirmed`) is never overwritten or
 superseded by an agent or service principal: the write is refused `409 conflict`, reason

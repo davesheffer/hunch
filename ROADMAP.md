@@ -54,8 +54,8 @@ copied claims:
 
 | Item | Why | Status |
 | --- | --- | --- |
-| Subject identity by external reference | two agents over one CRM record, thread or chat must land on one subject; 1.28.0 keyed subjects by CRM site, the general rule is not frozen yet | proposed (`state.entity-identity`) |
-| Audited entity merge and split | the cases an external reference cannot settle; recorded as ledger events with provenance, never silent rewrites | proposed, follows the item above |
+| Subject identity by external reference | two agents over one CRM record, thread or chat must land on one subject; 1.28.0 keyed subjects by CRM site | done, 1.30.0 — `externalKey` / `subjectOfRef` frozen in the contract; one active entity per external key per partition (`409`, incumbent named), a subject written as an entity's key refused with the entity id (`422`), reads resolve one explicit hop (`state.entity-identity`) |
+| Audited entity merge and split | the cases an external reference cannot settle; recorded as ledger events with provenance, never silent rewrites | proposed; today's way out is explicit (retire one, write under the other), both on the ledger |
 | Replay determinism as a check | fold a partition's ledger into the state it implies and compare it hash for hash (canonical bytes) to the stored records; publish the command, not the claim | done, 1.30.0 — `hunch serve replay`, typed divergences, exit 1; every farm run replays every partition (`state.replay-determinism`) |
 | Field-level provenance on derived state | a summary today cites its sources as a whole; per-field citation lets a reader see which source a sentence rests on | later, after the second-user measurement |
 | Correction outranks later agent writes | prove, with a test, that a human correction on a record is not overridden by a subsequent agent write on the same field; a peer's reducer was observed to lose this | done, 1.30.0 — invariant `human-correction-outranks-agent-writes`, enforced at write time (`409 conflict`, `human-confirmed incumbent`), tested in `test/state-replay.test.ts`; per record, not per field (per-field provenance stays later) |
