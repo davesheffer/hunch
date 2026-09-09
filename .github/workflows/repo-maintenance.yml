@@ -1,18 +1,38 @@
-# Hunch — repository maintenance run by the maintainer on demand. Deletes the remote
-# branches named in the input with the repository's own token (a GITHUB_TOKEN push never
-# triggers other workflows). Refuses the default branch and the ref it runs from. Dry run
-# by default: lists what it would delete and exits.
+# Hunch — repository maintenance run by the maintainer on demand, with the repository's own
+# token (a GITHUB_TOKEN push never triggers other workflows). Two tasks:
+#   branches — delete the remote branches named in `branches`; refuses the default branch and
+#              the ref it runs from.
+#   tags     — scrub machine-specific home-directory paths (/Users/<name>/…) out of the history
+#              the release tags reach, with git-filter-repo, and force-push the rewritten tags.
+#              scope `old-tags` rewrites only tags that are not ancestors of the default branch
+#              (the pre-re-root history); scope `all` also rewrites the default branch and every
+#              tag on it — which breaks clones, release provenance SHAs and commit-cited memory
+#              records, so only on an explicit decision.
+# Dry run by default: both tasks report what they would change and push nothing.
 name: Repo maintenance
 
 on:
   workflow_dispatch:
     inputs:
-      branches:
-        description: "Space-separated remote branch names to delete"
+      task:
+        description: "branches | tags"
         required: true
+        type: choice
+        options: [branches, tags]
+        default: branches
+      branches:
+        description: "task=branches: space-separated remote branch names to delete"
+        required: false
         type: string
+        default: ""
+      scope:
+        description: "task=tags: old-tags (not on the default branch) | all (default branch and every tag too)"
+        required: false
+        type: choice
+        options: [old-tags, all]
+        default: old-tags
       dry_run:
-        description: "Only list what would be deleted"
+        description: "Only report what would change"
         required: true
         type: boolean
         default: true
@@ -26,6 +46,7 @@ concurrency:
 
 jobs:
   branches:
+    if: inputs.task == 'branches'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -53,3 +74,55 @@ jobs:
           echo "---"
           echo "$( [ "$DRY_RUN" = "true" ] && echo 'would delete' || echo 'deleted' ): $deleted · skipped: $skipped · already gone: $missing"
           echo "remaining remote branches: $(git ls-remote --heads origin | wc -l)"
+
+  tags:
+    if: inputs.task == 'tags'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 0
+
+      - name: Install git-filter-repo
+        run: pip install --quiet git-filter-repo && git filter-repo --version
+
+      - name: Rewrite (or report) the history the release tags reach
+        shell: bash
+        env:
+          SCOPE: ${{ inputs.scope }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          git fetch --tags --force --quiet origin
+          # The rule never names anyone: every /Users/<name>/ becomes /Users/contributor/,
+          # in file contents and in commit messages.
+          printf 'regex:/Users/[A-Za-z0-9._-]+/==>/Users/contributor/\n' > "$RUNNER_TEMP/rules.txt"
+          old_tags=$(for t in $(git tag); do git merge-base --is-ancestor "$(git rev-list -n1 "$t")" "origin/$DEFAULT_BRANCH" || echo "refs/tags/$t"; done)
+          echo "tags: $(git tag | wc -l) total, $(echo "$old_tags" | grep -c . || true) not on $DEFAULT_BRANCH"
+          echo "commits touching a /Users/<name>/ path (all refs): $(git log --all --format=%H -G'/Users/[A-Za-z0-9._-]+/' | wc -l)"
+          # Rewrite a mirror, never the checkout: the checkout keeps the token for the push.
+          git clone --quiet --mirror . "$RUNNER_TEMP/mirror"
+          git -C "$RUNNER_TEMP/mirror" for-each-ref --format='%(refname) %(objectname)' | grep -E 'refs/(heads|tags)/' | sort > "$RUNNER_TEMP/before.txt"
+          if [ "$SCOPE" = "all" ]; then
+            git -C "$RUNNER_TEMP/mirror" filter-repo --force --replace-text "$RUNNER_TEMP/rules.txt" --replace-message "$RUNNER_TEMP/rules.txt"
+          else
+            [ -n "$old_tags" ] || { echo "no old tags: nothing to rewrite"; exit 0; }
+            # shellcheck disable=SC2086
+            git -C "$RUNNER_TEMP/mirror" filter-repo --force --replace-text "$RUNNER_TEMP/rules.txt" --replace-message "$RUNNER_TEMP/rules.txt" --refs $old_tags
+          fi
+          git -C "$RUNNER_TEMP/mirror" for-each-ref --format='%(refname) %(objectname)' | grep -E 'refs/(heads|tags)/' | sort > "$RUNNER_TEMP/after.txt"
+          moved=$(join -j1 <(cut -d' ' -f1,2 "$RUNNER_TEMP/before.txt") <(cut -d' ' -f1,2 "$RUNNER_TEMP/after.txt") | awk '$2 != $3 {print $1}')
+          echo "---"
+          echo "refs that would move: $(echo "$moved" | grep -c . || true)"
+          echo "$moved" | sed 's/^/  /'
+          echo "default branch moves: $(echo "$moved" | grep -c "refs/heads/$DEFAULT_BRANCH$" || true)"
+          echo "commits still touching a /Users/<name>/ path other than contributor, after the rewrite: $(git -C "$RUNNER_TEMP/mirror" log --all --format=%H --perl-regexp -G'/Users/(?!contributor/)[A-Za-z0-9._-]+/' | wc -l)"
+          if [ "$DRY_RUN" = "true" ]; then echo "dry run: nothing pushed"; exit 0; fi
+          pushed=0
+          for ref in $moved; do
+            sha=$(git -C "$RUNNER_TEMP/mirror" rev-parse "$ref")
+            git fetch --quiet "$RUNNER_TEMP/mirror" "+$ref:$ref" || true
+            git push --force origin "$sha:$ref" && pushed=$((pushed+1))
+          done
+          echo "pushed: $pushed rewritten ref(s). The old objects stay on GitHub until support runs a garbage collection — ask for one, citing this run."
