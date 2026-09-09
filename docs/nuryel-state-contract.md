@@ -353,8 +353,10 @@ below the floor is verified against its newest idempotency entry; the one change
 without an entry — closing a window on supersession — leaves a closed record below the floor
 `unverifiable` (counted, not failed), while an open record that differs is drift. The git-tracked
 JSON records stay the source of truth (`con_a87360128b` family); the ledger proves them, it does
-not replace them. The check exits 1 on any divergence — wire it into CI beside `hunch drift`. The
-agent farm replays every served partition at the end of every run.
+not replace them. The check exits 1 on any divergence, and `hunch drift` runs it whenever the
+partition it stands in has a change ledger (a `replay-*` finding fails the gate), so the existing
+CI gate covers ledger≠records beside doc≠graph. The agent farm replays every served partition at
+the end of every run.
 
 ## Backward compatibility
 
