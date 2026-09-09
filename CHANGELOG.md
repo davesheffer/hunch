@@ -33,6 +33,11 @@ docs re-synced for the developer's next commit (never auto-committed, loop-guard
 `test/grounding-merge-lag.test.ts`: the silent merge, the lag verdict, the ahead refusal,
 the refresh, the hook.
 
+Also: `hono` (transitive, via the MCP SDK's optional HTTP transport) 4.13.0 → 4.13.7 in the
+lockfile — `npm audit --omit=dev` reported three moderate advisories (GHSA-gqvv-2mrq-wpjv,
+GHSA-g6gw-c38x-mqfc, GHSA-crvj-82cr-hjcx) fixed in 4.13.5, in range for both dependents, so
+the production dependency audit passes again without a reviewed exception.
+
 ## 1.28.0 — 2026-09-08
 
 ### Many agents, one subject
