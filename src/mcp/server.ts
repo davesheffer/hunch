@@ -13,8 +13,8 @@ import { z } from "zod";
 import { hunchPaths, findRoot, toPosixTarget } from "../core/paths.js";
 import { canonicalRootPath, resolveActiveRoot } from "./roots.js";
 import { HunchStore } from "../store/hunchStore.js";
-import { StateRefusal, SubscribeResponseSchema, capabilities, readState, recordsState, subscribeState, writeState } from "../store/stateBinding.js";
-import { ReadRequestSchema, ReadResponseSchema, WriteRequestSchema, WriteResultSchema, SubscribeRequestSchema, RecordsRequestSchema, RecordsResponseSchema, STATE_READ_VERSION, STATE_WRITE_VERSION, STATE_SUBSCRIBE_VERSION, STATE_RECORDS_VERSION } from "../core/stateContract.js";
+import { StateRefusal, SubscribeResponseSchema, capabilities, partitionOf, readState, recordsState, subscribeState, writeState } from "../store/stateBinding.js";
+import { ReadRequestSchema, ReadResponseSchema, WriteRequestSchema, WriteResultSchema, SubscribeRequestSchema, RecordsRequestSchema, RecordsResponseSchema, STATE_READ_VERSION, STATE_WRITE_VERSION, STATE_SUBSCRIBE_VERSION, STATE_RECORDS_VERSION, stateHash } from "../core/stateContract.js";
 import { selectEmbedder } from "../store/embedder.js";
 import { decisionId, findingId } from "../core/ids.js";
 import { buildCorrectionConstraint } from "../core/correction.js";
@@ -1085,7 +1085,9 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
         return {
           content: [{
             type: "text",
-            text: `${proof.proof_id} — ${proof.verdict.toUpperCase()}; ${proof.changed_file_count} exact file delta(s), ${proof.blast_radius_count} dependent path(s), ${proof.omissions.length + proof.unknowns.length} explicit gap(s); sealed ${proof.content_hash}. Evidence only; no execution or merge authority.`,
+            text: `${proof.proof_id} — ${proof.verdict.toUpperCase()}; ${proof.changed_file_count} exact file delta(s), ${proof.blast_radius_count} dependent path(s), ${proof.omissions.length + proof.unknowns.length} explicit gap(s); sealed ${proof.content_hash}. Evidence only; no execution or merge authority.`
+              // The chain: a `shipped` receipt rests on this proof as a credential-free pointer.
+              + `\n\nrests_on ref (for a nuryel receipt that shipped this change): ${JSON.stringify({ kind: "external", ref: { system: "hunch", object_type: "change_proof", object_key: proof.proof_id, content_hash: proof.content_hash, observed_at: new Date().toISOString().replace(/\.\d{3}Z$/, "Z") } })}`,
           }],
           structuredContent: proof,
         };
@@ -1761,7 +1763,13 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
           ? ` [PRIVATE overlay — not committed to this repo]${flushed}`
           : home === "private" ? ` [SHARED store — one source of truth for the whole team]${flushed}` : flushed;
         const dest = destinationNote(resolveDestRoot(home, store, root));
-        return ok(`Recorded decision ${id}: "${rec.title}" (status ${rec.status}, ${source}).${where}${dest}${supNote}${note}${captureNote}${quality}`);
+        // The chain (nuryel.state/1): a `shipped` receipt in an organization drawer rests on
+        // this decision by id + the hash ON FILE + this repository's partition. Hand the ref
+        // over now so the agent never rests on a pre-store hash or re-derives the scope.
+        const onFile = store.getRec("decisions", id) ?? rec;
+        const restsOn = JSON.stringify({ kind: "record", id, record_hash: stateHash(onFile), scope: partitionOf(store) });
+        const chainNote = `\n\nrests_on ref (for a nuryel receipt that implements this decision): ${restsOn}`;
+        return ok(`Recorded decision ${id}: "${rec.title}" (status ${rec.status}, ${source}).${where}${dest}${supNote}${note}${chainNote}${captureNote}${quality}`);
       } catch (e) {
         return err(`Failed to record decision: ${(e as Error).message}`);
       }

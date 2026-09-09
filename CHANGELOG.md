@@ -20,8 +20,11 @@ closed them, `depends_on` concatenates every done receipt's `rests_on`, and `nur
 renders `rests on record dec_… in repository/…` / `rests on hunch change_proof:hproof_…` and
 `closed by nrc_…`. Write results and change events now hash the record ON FILE (a private-mode
 decision is enriched on put), with the payload hash kept in the ledger journal for replay.
-Older receipts and commitments are untouched. `test/state-chain.test.ts`: three principals, one
-store, the whole chain and every refusal.
+Older receipts and commitments are untouched. `hunch_record_decision` and `hunch_change_proof`
+now hand back the ready-made `rests_on` ref (id + hash on file + repository partition; proof id +
+content hash), so an engineering agent never rests a receipt on a pre-store hash; the contract
+doc carries the five-step recipe for closing an incident from a repository.
+`test/state-chain.test.ts`: three principals, one store, the whole chain and every refusal.
 
 ### Merge lag is not a release blocker
 

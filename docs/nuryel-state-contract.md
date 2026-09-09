@@ -128,6 +128,25 @@ chain as refs, never as prose:
   that record must hold the hash a reader will verify. Idempotency still recognizes the payload
   the writer re-sends (`payload_hash` in the ledger's journal, additive).
 
+**For an engineering agent closing an incident from a repository** (Claude Code or Codex over
+`hunch mcp`, granted the organization drawer and the repository):
+
+1. `nuryel_read` the incident's subject (union read over both partitions): the commitment is
+   in `in_force`, the incident entity and the current summary in `current`.
+2. Decide and record: `hunch_capture_decision` → `hunch_record_decision`. The result carries a
+   ready-made `rests_on` ref (id, hash on file, repository partition).
+3. Ship, then seal: `hunch_change_proof(base_ref, result_ref)`. The result carries the proof's
+   `rests_on` ref (`external`, system `hunch`, object type `change_proof`).
+4. `nuryel_write` a receipt into the drawer: `action_kind: "shipped"`, `target` the merged pull
+   request or revision, `invalidates: [<subject>]`, `rests_on: [<decision ref>, <proof ref>,
+   { kind: "record", id: <commitment id>, record_hash: <its hash from step 1> }]`,
+   `state: "verified"` once the merge is observed.
+5. Close: `nuryel_write` the commitment again with `status: "done"`, `valid_to`, and
+   `closed_by: <receipt id>` under a new idempotency key.
+
+The next reader of the subject sees the receipt and the closed commitment in `done`, the
+decision and proof in `depends_on`, and the old summary named in `invalidated_by`.
+
 Records written before these fields existed are untouched: nothing is materialized on them, they
 hash and read exactly as before. `test/state-chain.test.ts` runs the whole chain through the one
 binding with three principals over one store.
