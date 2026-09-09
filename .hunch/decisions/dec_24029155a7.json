@@ -1,32 +1,31 @@
 {
   "id": "dec_24029155a7",
-  "title": "feat(state): replay determinism as a check, and a human correction outranks later agent writes",
-  "topic": null,
+  "title": "Replay determinism is a check (`hunch serve replay`), not a claim: the ledger folded into the state it implies must match the records on file hash for hash",
+  "topic": "state.replay-determinism",
   "status": "accepted",
-  "context": "`hunch serve replay --partition <kind:id>` / `--root <dir>` folds a partition's change ledger\ninto the state it implies and compares it hash for hash (canonical bytes) to the records on\nfile: replay_hash vs stored_hash, typed divergences (missing-record, hash-drift, orphan-record,\nidempotency-drift, legacy-drift), exit 1 on any failure. Compaction keeps the property through\nthe idempotency table. The agent farm replays every served partition on every run.\n\nNew contract invariant human-correction Touches invariant(s): con_902759b3dc (All JSON writes to .hunch/ must be atomic (temp-file + rename) so an interrupted write can never truncate the index); con_a87360128b (Semantic vectors are a derived layer in SQLite, never the source of truth; reconcile by content hash on reindex).",
-  "decision": "Introduced src/cli, src/core, src/store, test/agent-farm.test.ts, test/state-contract.test.ts, test/state-replay.test.ts: added isHumanConfirmed, ReplayDivergenceKind, ReplayDivergence, ReplaySnapshotEntry, ReplayReport, foldLedger, verifyReplay, formatReplayReport; removed homeFor; new dep(s): node:test, node:assert/strict, node:child_process, node:fs, node:os, node:path; 2 new file(s).",
+  "context": "The ROADMAP landscape table and dec_a80438754d (proposed, private) asked for a published command proving that a partition's current state is a pure function of its change ledger — Neotoma's strongest verifiable claim (fnd_f670868a8c) — rather than copy asserting it. The ledger (nuryel.ledger/1) carries per-event record hashes and a whole idempotency table, but no record bodies; git-tracked JSON stays the source of truth (con_a87360128b family).",
+  "decision": "Add `verifyReplay` (src/store/replay.ts, nuryel.replay/1) and `hunch serve replay --partition <kind:id> | --root <dir>`: fold the ledger to the last event per record, compare each record's stateHash (sha256 over canonical form, so equal hashes are byte-equal canonical records) to the record on file, and fingerprint both sides (replay_hash / stored_hash over the facets the contract owns). Divergences are typed — missing-record, hash-drift, orphan-record (a state record the ledger never saw: the crash-between-put-and-append the ledger promised the next writer could detect), idempotency-drift — plus legacy-drift for decisions/constraints/bugs/findings moved by pre-contract paths (reported, never a failure). Exit 1 on any failing divergence. Compaction keeps the property through the idempotency table (kept whole); a closed record whose supersession fell below the floor is `unverifiable` (counted, not failed), an open record that differs is drift. The agent farm replays every served partition at the end of every run and reports `replay`. Run read-only on 2026-09-09 against the live user/david partition and both emulation organization drawers: all three equal, 0 divergences.",
   "consequences": [
-    "Adds dependency: node:test, node:assert/strict, node:child_process, node:fs, node:os, node:path.",
-    "Removes homeFor — potential breaking change for callers."
+    "A one-command proof for docs, CI and the investor: same ledger, same state, exit code.",
+    "Any future write path that touches a state-kind record must append to the ledger, or the replay check names it as an orphan.",
+    "Compaction and merge must preserve replay equivalence; the farm run enforces it every test run."
   ],
-  "alternatives_rejected": [],
+  "alternatives_rejected": [
+    "Store record bodies in the ledger so a partition can be rebuilt byte-for-byte without the files — REJECTED: doubles the git-tracked footprint of every derived summary (up to 20k chars each) and makes the ledger a second source of truth; the hash over canonical bytes gives the same guarantee against the files that already exist.",
+    "Treat every below-floor mismatch as drift — REJECTED: closing a window on supersession is the one contract change without an idempotency entry, so a closed record below the floor is legitimately unverifiable; failing it would make compaction unsafe.",
+    "Fail on legacy-facet drift — REJECTED: decisions are also moved by `hunch supersede`, adopt-drafts and captures in a repository partition; those are not contract writes, so their drift is reported, not failed."
+  ],
   "rejected_tripwires": [],
   "related_components": [
-    "cmp_04c6efb58b",
-    "cmp_50037f41a9",
-    "cmp_a94a8fe5cc",
-    "cmp_b256a6aed0",
-    "cmp_cdfb395bb7"
+    "Store"
   ],
   "related_files": [
-    "src/cli/serve.ts",
-    "src/core/stateContract.ts",
     "src/store/replay.ts",
+    "src/store/changeLedger.ts",
     "src/store/stateBinding.ts",
-    "test/agent-farm.test.ts",
-    "test/state-contract.test.ts",
-    "test/state-replay.test.ts",
-    "tooling/agent-farm/lib.mjs"
+    "src/cli/serve.ts",
+    "tooling/agent-farm/lib.mjs",
+    "test/state-replay.test.ts"
   ],
   "supersedes": null,
   "superseded_by": null,
@@ -40,23 +39,18 @@
     ],
     "deps": []
   },
+  "premises": [],
   "provenance": {
-    "source": "inferred",
-    "confidence": 0.45,
+    "source": "agent_recorded",
+    "confidence": 0.75,
     "evidence": [
-      "commit:9646200",
-      "synth:provider=deterministic",
-      "branch:feat/replay-determinism",
-      "src/cli/serve.ts",
-      "src/core/stateContract.ts",
       "src/store/replay.ts",
+      "src/store/changeLedger.ts",
       "src/store/stateBinding.ts",
-      "test/agent-farm.test.ts",
-      "test/state-contract.test.ts",
-      "test/state-replay.test.ts",
-      "tooling/agent-farm/lib.mjs"
-    ],
-    "last_verified": "2026-09-09T12:44:53.775Z"
+      "src/cli/serve.ts",
+      "tooling/agent-farm/lib.mjs",
+      "test/state-replay.test.ts"
+    ]
   },
-  "date": "2026-09-09T15:43:40+03:00"
+  "date": "2026-09-09T12:45:21.355Z"
 }
