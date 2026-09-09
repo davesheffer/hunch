@@ -16,8 +16,9 @@ crash-between-put-and-append the ledger promised the next writer could detect, n
 `idempotency-drift`, and `legacy-drift` (a decision / constraint / bug / finding moved by a path
 older than the contract — reported, never a failure). Compaction keeps the property through the
 idempotency table, which is kept whole; a closed record whose supersession fell below the floor is
-`unverifiable` (counted), an open record that differs is drift. Exit 1 on any divergence — wire it
-into CI beside `hunch drift`. `verifyReplay` / `foldLedger` / `formatReplayReport` in
+`unverifiable` (counted), an open record that differs is drift. Exit 1 on any divergence, and
+`hunch drift` runs the same check whenever its partition has a change ledger (`replay-*` findings
+fail the gate), so the existing CI gate covers ledger≠records beside doc≠graph. `verifyReplay` / `foldLedger` / `formatReplayReport` in
 `src/store/replay.ts`; the agent farm replays every served partition at the end of every run and
 reports `replay` beside `contradictions`. `stateHomeFor` is exported from the binding so the check
 reads exactly the home the write verb wrote.

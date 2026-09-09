@@ -174,6 +174,14 @@ test("replay: `hunch serve replay --root` prints the report and exits 1 on diver
     const bad = run();
     assert.equal(bad.status, 1);
     assert.equal((JSON.parse(bad.out.trim().split(/\r?\n/).at(-1)!) as { ok: boolean }).ok, false);
+    // `hunch drift` is the CI gate: the same divergence fails it as ledger≠records.
+    const drift = (() => {
+      try { return { status: 0, out: execFileSync(process.execPath, [tsx, cli, "drift"], { cwd: root, encoding: "utf8", env: { ...process.env, HUNCH_SYNTH_PROVIDER: "deterministic" } }) }; }
+      catch (e) { const err = e as { status: number; stdout: string }; return { status: err.status, out: err.stdout }; }
+    })();
+    assert.equal(drift.status, 1, drift.out);
+    assert.match(drift.out, /\[replay-hash-drift\]/);
+    assert.match(drift.out, /ledger≠records/);
   } finally { cleanup(); }
 });
 

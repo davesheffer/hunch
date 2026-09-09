@@ -143,6 +143,10 @@ import { constraintId } from "../core/ids.js";
 import type { Constraint, Decision, Finding } from "../core/types.js";
 import { readManifest, writeManifest, SCHEMA_VERSION } from "../core/migrate.js";
 import { mergeHunchJson } from "../store/merge.js";
+import { ledgerFile } from "../store/changeLedger.js";
+import { verifyReplay } from "../store/replay.js";
+import { partitionOf, stateHomeFor } from "../store/stateBinding.js";
+import { scopePath } from "../core/stateContract.js";
 import { movePublicMemoryToPrivate } from "../store/privateMigrate.js";
 import { ENTITY_KINDS } from "../core/types.js";
 import { planCompaction } from "../store/compact.js";
@@ -5178,21 +5182,29 @@ program
 // ---- drift (doc≠graph detector; advisory + CI-gateable) -------------------
 program
   .command("drift")
-  .description("Detect memory drift: dead refs, dangling supersedes, stale 'proposed' docs, doc≠graph anchor-stale (a file still anchored to a superseded decision), and markdown sections whose <!-- hunch:topic … dec_id --> pin points at a superseded or missing decision (AGENTS.md/CLAUDE.md as a drift surface). Exits non-zero on any anchor-stale drift or topic collision — the doc≠graph gate.")
+  .description("Detect memory drift: dead refs, dangling supersedes, stale 'proposed' docs, doc≠graph anchor-stale (a file still anchored to a superseded decision), markdown sections whose <!-- hunch:topic … dec_id --> pin points at a superseded or missing decision (AGENTS.md/CLAUDE.md as a drift surface), and ledger≠records replay divergence when this partition has a change ledger. Exits non-zero on any anchor-stale drift, topic collision or replay divergence — the doc≠graph and ledger≠records gate.")
   .action(() => {
     const { store, root } = storeFor();
     try {
       const { findings } = computeDrift(store, root);
       const collisions = topicCollisions(store.recs("decisions"));
-      if (!findings.length && collisions.size === 0) {
-        console.log("✓ No drift — memory is in sync with the code/docs.");
+      // ledger≠records: when the partition this store IS has a change ledger, its records must be
+      // exactly what the ledger implies (nuryel.replay/1). No ledger, nothing to check.
+      const own = partitionOf(store);
+      const replay = existsSync(ledgerFile(stateHomeFor(store, own).hunchDir, own)) ? verifyReplay(store, own) : null;
+      const replayFailing = replay ? replay.divergences.filter((d) => d.kind !== "legacy-drift") : [];
+      const replayCount = replay && !replay.ok ? Math.max(1, replayFailing.length) : 0;
+      if (!findings.length && collisions.size === 0 && !replayCount) {
+        console.log(`✓ No drift — memory is in sync with the code/docs.${replay ? ` Replay OK: ${scopePath(own)} ledger head ${replay.ledger.head_seq}, ${replay.records.verified + replay.records.verified_by_idempotency} record(s) verified.` : ""}`);
         return;
       }
       for (const f of findings.slice(0, 50)) console.log(`· [${f.kind}] ${f.id} — ${f.detail}`);
       for (const [topic, decs] of collisions) console.log(`· [topic-collision] "${topic}" has ${decs.length} live decisions: ${decs.map((d) => d.id).join(", ")} — run \`hunch reconcile-topics\``);
+      for (const d of replay?.divergences ?? []) console.log(`· [replay-${d.kind}] ${d.record_id} — ${d.detail}`);
+      if (replayCount && !replayFailing.length) console.log(`· [replay-fingerprint] ${scopePath(own)}: ledger fold ${replay!.replay_hash} ≠ stored ${replay!.stored_hash}`);
       const anchor = findings.filter((f) => f.kind === "anchor-stale" || f.kind === "doc-anchor-stale").length;
-      console.log(`\n${findings.length} finding(s)${anchor ? `, ${anchor} doc≠graph (anchor-stale)` : ""}${collisions.size ? `, ${collisions.size} topic-collision(s)` : ""}.`);
-      if (anchor || collisions.size) process.exitCode = 1;
+      console.log(`\n${findings.length + replayCount} finding(s)${anchor ? `, ${anchor} doc≠graph (anchor-stale)` : ""}${collisions.size ? `, ${collisions.size} topic-collision(s)` : ""}${replayCount ? `, ${replayCount} ledger≠records (replay: hunch serve replay --root .)` : ""}.`);
+      if (anchor || collisions.size || replayCount) process.exitCode = 1;
     } finally {
       store.close();
     }
