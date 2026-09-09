@@ -165,10 +165,20 @@ export const ExternalEntitySchema = z.object({
   refs: z.array(ExternalRefSchema).min(1).max(64),
   attributes: z.record(z.string().max(128), AttributeValue).default({}),
   lifecycle: z.enum(["active", "deprecated", "retired"]).default("active"),
+  /** Audited merge (additive): this entity was folded into another. Set only on a retired
+   *  entity; the survivor must be an active entity on record. Nothing under the retired id is
+   *  rewritten — reads resolve the old id and its keys to the survivor, and the ledger holds
+   *  the `retired` event with its provenance. A split is the explicit reverse: retire or
+   *  re-key the survivor, then write the entity active again without `merged_into`. */
+  merged_into: z.string().min(3).max(2048).optional(),
   provenance: ProvenanceSchema,
   created_at: z.string().regex(ISO),
   updated_at: z.string().regex(ISO),
 }).strict().superRefine((entity, ctx) => {
+  if (entity.merged_into !== undefined) {
+    if (entity.lifecycle !== "retired") ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["merged_into"], message: "a merged entity is retired; the survivor stays active" });
+    if (entity.merged_into === entity.id) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["merged_into"], message: "an entity cannot merge into itself" });
+  }
   const prefix = `${entity.kind}:`;
   const key = entity.id.startsWith(prefix) ? entity.id.slice(prefix.length) : "";
   if (!key.trim() || entity.id !== resourceId(entity.kind, key)) {

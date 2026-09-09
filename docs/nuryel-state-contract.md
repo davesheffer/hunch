@@ -301,6 +301,19 @@ customer's records stay valid. On read, a subject resolves one explicit hop: the
 the key, and every key that entity carries, so `site:7`, `customer:clinic-7` and the entity's Gmail
 thread key return the same state of record.
 
+**Audited merge and split.** For the cases an external reference cannot settle (one clinic under two
+CRM sites), a merge is a write, not a rewrite: the entity that goes is written `lifecycle: retired`
+with `merged_into: <survivor id>` (additive field); the survivor must be an active entity on record
+in the partition (`409 conflict` otherwise, and merging into an entity that was itself merged names
+the one that stands now); the ledger holds the `retired` event with the writer's provenance. Nothing
+filed under the retired id is touched: reads resolve the old id and its keys — through a chain of
+merges, cycle-safe — to the survivor and return both histories as one state of record, with only
+the survivor `current`; new state under the old id or its keys is refused `422 identity` naming the
+survivor. Once retired, its keys are free, so the survivor may carry them. A split is the explicit
+reverse — re-key or retire the survivor, then write the entity active again without `merged_into`
+(refused while any active entity still carries its keys) — and the ledger shows `retired` then
+`updated`. `test/state-entity-merge.test.ts`.
+
 ## Invariants (exported, asserted, tested)
 
 | Id | Statement | Enforced by |
@@ -368,9 +381,6 @@ not modified by the registration — the store change is the index-file layout m
   body-limit and write-lock decisions. Its per-store concurrency gate, context-consistency
   watermarks and the usefulness / Project DNA intake routes are not ported; they return only if a
   served partition needs them.
-- **Audited entity merge and split** for the cases an external reference cannot settle (one
-  customer under two CRM sites): ledger events with provenance, never silent rewrites. Today the
-  way out is explicit — retire one entity, write under the other — and the ledger records both.
 - **Per-field provenance on derived state.** A summary cites its sources as a whole; the
   human-correction guard therefore works per record, not per field.
 - **Repository-scope private content.** The contract has no `private` flag: scope decides the

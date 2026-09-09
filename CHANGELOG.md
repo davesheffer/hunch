@@ -35,6 +35,17 @@ read a subject resolves one explicit hop — the entity that carries the key and
 carries — so `site:7`, `customer:clinic-7` and the entity's thread key return the same state of
 record. `test/state-entity-identity.test.ts`.
 
+**Audited entity merge and split.** A merge is a write, not a rewrite: the entity that goes is
+written `lifecycle: retired` with `merged_into: <survivor>` (additive field on `nuryel.entity/1`);
+the survivor must be an active entity on record (`409 conflict` otherwise; merging into an entity
+that was itself merged names the one that stands now); the ledger holds a `retired` change (the
+enum's first writer) with the writer's provenance. Nothing filed under the retired id is touched —
+reads resolve the old id and every key it carried, through chains of merges, to the survivor and
+return both histories as one state of record with only the survivor `current`; new state under the
+old name is refused `422 identity` naming the survivor; the survivor may then carry the retired
+entity's keys. Split is the explicit reverse (re-key the survivor, write the entity active again),
+refused while any active entity still carries its keys. `test/state-entity-merge.test.ts`.
+
 **`human-correction-outranks-agent-writes`** — a new contract invariant, enforced at write time.
 A record a human confirmed (`provenance.source` carries `human_confirmed`) is never overwritten or
 superseded by an agent or service principal: the write is refused `409 conflict`, reason
