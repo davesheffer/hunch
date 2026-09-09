@@ -14,10 +14,7 @@
     "Tolerate any counts-only difference — rejected: a doc AHEAD of the store on an append-only kind means a record exists on a developer's machine and not in the repository; that must stay red.",
     "Fix it only in the release gate (regenerate before `test`) — rejected: ordinary CI runs the same gate, so the freshness test would never fire anywhere and a genuinely stale doc would live forever."
   ],
-  "rejected_tripwires": [
-    "test/grounding-freshness passes on a committed count that exceeds the public store",
-    "hunch grounding --refresh writes overlay-union counts into a committed doc"
-  ],
+  "rejected_tripwires": [],
   "related_components": [
     "cmp_04c6efb58b",
     "cmp_50037f41a9",

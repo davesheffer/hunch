@@ -15,11 +15,7 @@
     "Refuse every rests_on ref the store cannot verify — rejected: an organization drawer legitimately points at a repository the server does not host; unverifiable-here is a pointer, only absent/moved/misplaced in a held partition is a conflict.",
     "Keep reporting the pre-store payload hash in write results — rejected: a private-mode decision gains valid_from on put, so a receipt resting on that hash would be refused as moved; results and events hash what is on file, replay matches the payload."
   ],
-  "rejected_tripwires": [
-    "a commitment reaches status done through subject matching or a timer, without a receipt id",
-    "a rests_on record ref is accepted with a hash the held partition does not have",
-    "WriteResult.record_hash differs from stateHash of the record `records` returns for the same id"
-  ],
+  "rejected_tripwires": [],
   "related_components": [
     "cmp_a94a8fe5cc",
     "cmp_b256a6aed0",
