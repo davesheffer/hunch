@@ -37,7 +37,9 @@ and the ledger replay finds each closure caused by its receipt; a missing link i
 (real Sofia code, 3 Sofias, 10-clinic year) runs the same chain against a served organization +
 repository partition: Sofia's `summary()` now reads the drawer's state of record first and rests
 on its receipts and fulfilled commitments as record dependencies, so every Sofia serving a closed
-clinic re-derived and cited the engineer's receipt — 5 of 5, 0 contradictions.
+clinic re-derived and cited the engineer's receipt — 5 of 5, 0 contradictions — and the receipt
+rests on a real `hunch prove` proof sealed from the engineer's commit, re-verified by the ORC
+against its pointer and binding the decision hash for hash.
 
 ### Merge lag is not a release blocker
 
