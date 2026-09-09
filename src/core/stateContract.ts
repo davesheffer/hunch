@@ -28,6 +28,7 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import { compareCodeUnits } from "./canonicalOrder.js";
 import { DELIVERY_PROFILES, type DeliveryEnvelope } from "./delivery.js";
+import { isHumanConfirmed as sourceIsHumanConfirmed } from "./strictgate.js";
 import {
   ScopeSchema, scopePath, DependencyRefSchema, ExternalRefSchema,
   RECEIPT_SCHEMA_VERSION, COMMITMENT_SCHEMA_VERSION, DERIVED_SCHEMA_VERSION, ENTITY_SCHEMA_VERSION, RELATIONSHIP_SCHEMA_VERSION,
@@ -280,10 +281,11 @@ export const STATE_INVARIANTS = [
 
 const grantKey = (scope: Scope): string => scopePath(scope);
 
-/** The memory supply chain's top tier: a record whose provenance a human signed. */
+/** The memory supply chain's top tier: a record whose provenance a human signed. Same tier rule
+ *  as the strict gate's (strictgate.isHumanConfirmed), applied to a record instead of a source. */
 export function isHumanConfirmed(record: unknown): boolean {
   const source = (record as { provenance?: { source?: unknown } } | null)?.provenance?.source;
-  return typeof source === "string" && source.split("+").includes("human_confirmed");
+  return typeof source === "string" && sourceIsHumanConfirmed(source);
 }
 
 /** authorization-before-retrieval, checked on the way OUT as well: nothing in a read response
