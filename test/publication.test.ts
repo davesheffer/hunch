@@ -15,7 +15,7 @@ test("machine paths are caught on both platforms", () => {
   const win = scanRecord({ title: "t", context: String.raw`ran C:\Users\davids\github\hunch\dist\cli\index.js` });
   assert.ok(has(win, "machine-path"), "Windows home directory should be flagged");
 
-  const mac = scanRecord({ title: "t", context: "node at /Users/nofarkulishevski/.hermes/node/bin/node" });
+  const mac = scanRecord({ title: "t", context: "node at /Users/contributor/.hermes/node/bin/node" });
   assert.ok(has(mac, "machine-path"), "macOS home directory should be flagged");
 
   const linux = scanRecord({ title: "t", context: "binary at /home/buildbot/.local/bin/hunch" });
