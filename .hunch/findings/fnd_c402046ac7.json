@@ -1,15 +1,15 @@
 {
   "id": "fnd_c402046ac7",
   "title": "Release gate count drift: a capture merged behind the release branch stales the grounding block",
-  "observation": "v1.26.2's first release run failed at the tagged gate: test/grounding-freshness asserted the committed CLAUDE.md decision count (219) against the public store (220). The release branch was cut from main, then PR #138 merged with a post-commit auto-captured decision, then the release PR merged on top; the grounding surfaces in the release commit predate that capture. Same class as the 2026-09-07/08 CI reds on the contract and site PRs. Nothing was published (publish skipped), so the fix was to regenerate grounding on main (1be6bef) and move the tag. Pattern: any merge that carries a `hunch: capture` commit after a release branch is cut will fail the gate unless grounding is regenerated on main immediately before tagging.",
+  "observation": "Two branches that each capture one record regenerate the very same \"N+1\" counts line in the grounding docs; the forge merges identical lines with no conflict, the merged store holds N+2, and the committed CLAUDE.md is one behind — no hook ran, nobody erred. v1.26.2's first tagged run (219 !== 220), PR #128 and PR #135 were all this lag, each fixed by a manual regenerate + retag. Resolved in 01084b1: the freshness test is direction-aware (src/core/groundingLag.ts) — a difference confined to the counts sentence where no append-only count exceeds the store is LAG, reported as a diagnostic and never red; an append-only count AHEAD of the store (a record never committed, fnd_6391b4242f) or divergent prose still fails. `hunch grounding` names the per-doc verdict and delta and `--refresh` regenerates from the PUBLIC store; `hunch init` installs a post-merge hook that refreshes after a local merge/pull that brought .hunch/ in.",
   "evidence": [
-    "release run 34234886577: validate failure, publish skipped; log: 'decision count is the PUBLIC store's 219 !== 220' at test/grounding-freshness.test.ts:101",
-    "fix: 1be6bef chore(grounding): regenerate; tag v1.26.2 moved; run 34235896523",
-    "earlier instances: PR #128 (d3f1322) and PR #135 first CI reds, same test"
+    "test/grounding-merge-lag.test.ts: two branches each capture, identical count lines merge silently, hunch grounding reports `counts lag the store (decisions 2 → 3)` at exit 0, a doc AHEAD (4 → 3) exits 1, --refresh heals, the post-merge hook re-syncs a local merge",
+    "test/grounding-freshness.test.ts: lagging → t.diagnostic, ahead/diverged → assertion with the doc, delta and remedy",
+    "release run 34234886577 (the original red): validate failure at test/grounding-freshness.test.ts:101, 'decision count is the PUBLIC store's 219 !== 220'"
   ],
   "method": "npx tsx --test test/grounding-freshness.test.ts on the tagged commit",
   "severity": "medium",
-  "triage": "open",
+  "triage": "resolved",
   "affected_files": [
     "tooling/release-gate.mjs",
     "test/grounding-freshness.test.ts",
@@ -19,15 +19,15 @@
   "violates_constraint": null,
   "spawned_decision": null,
   "observed_at": "2026-09-08T14:05:24.696Z",
-  "resolved_commit": null,
+  "resolved_commit": "01084b1",
   "provenance": {
     "source": "human_confirmed",
     "confidence": 0.95,
     "evidence": [
-      "release run 34234886577: validate failure, publish skipped; log: 'decision count is the PUBLIC store's 219 !== 220' at test/grounding-freshness.test.ts:101",
-      "fix: 1be6bef chore(grounding): regenerate; tag v1.26.2 moved; run 34235896523",
-      "earlier instances: PR #128 (d3f1322) and PR #135 first CI reds, same test"
+      "test/grounding-merge-lag.test.ts: two branches each capture, identical count lines merge silently, hunch grounding reports `counts lag the store (decisions 2 → 3)` at exit 0, a doc AHEAD (4 → 3) exits 1, --refresh heals, the post-merge hook re-syncs a local merge",
+      "test/grounding-freshness.test.ts: lagging → t.diagnostic, ahead/diverged → assertion with the doc, delta and remedy",
+      "release run 34234886577 (the original red): validate failure at test/grounding-freshness.test.ts:101, 'decision count is the PUBLIC store's 219 !== 220'"
     ],
-    "last_verified": "2026-09-08T14:05:24.696Z"
+    "last_verified": "2026-09-09T00:00:00.000Z"
   }
 }

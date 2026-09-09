@@ -181,13 +181,16 @@ export function readState(store: HunchStore, input: unknown): { response: ReadRe
       const targets = r.id === subject || r.invalidates.includes(subject) || `${r.target.object_type}:${r.target.object_key}` === subject;
       if (!targets) continue;
       const scope = admit("receipts", r); if (!scope) continue;
-      if (r.state === "succeeded" || r.state === "verified") done.push(keep("receipts", r, scope));
+      if (r.state === "succeeded" || r.state === "verified") { done.push(keep("receipts", r, scope)); dependsOn.push(...(r.rests_on ?? [])); }
       if (r.invalidates.includes(subject)) invalidatedBy.add(r.id);
     }
     if (facets.has("commitments")) for (const c of store.recs("commitments")) {
       if (c.subject !== subject && c.id !== subject) continue;
       const scope = admit("commitments", c); if (!scope) continue;
       if ((c.status === "open" || c.status === "waiting") && c.valid_to == null) inForce.push(keep("commitments", c, scope));
+      // A commitment fulfilled by a receipt is part of what HAPPENED for the subject: it
+      // leaves in_force and joins done beside the receipt that closed it (the chain's last link).
+      else if (c.status === "done" && c.closed_by) done.push(keep("commitments", c, scope));
     }
     if (facets.has("derived")) for (const d of store.recs("derived")) {
       if (d.subject !== subject && d.id !== subject) continue;
@@ -296,6 +299,73 @@ function subjectOf(facet: StateFacet, record: unknown): string | undefined {
   }
 }
 
+/** Which facet a record id belongs to, from its prefix; `null` for a kind-qualified entity id
+ *  or an unknown shape (those are looked up across every facet). */
+function facetOfId(id: string): StateFacet | null {
+  const prefix = /^([a-z]+)_/.exec(id)?.[1];
+  switch (prefix) {
+    case "dec": return "decisions";
+    case "con": return "constraints";
+    case "bug": return "bugs";
+    case "fnd": return "findings";
+    case "nrc": return "receipts";
+    case "ncm": return "commitments";
+    case "nds": return "derived";
+    case "edge": return "relationships";
+    default: return null;
+  }
+}
+
+/** Find a record by id in this store, with the facet it lives in. */
+function findRecord(store: HunchStore, id: string): { facet: StateFacet; record: Record<string, unknown> } | null {
+  const facets: StateFacet[] = facetOfId(id) ? [facetOfId(id)!] : [...STATE_FACETS];
+  for (const facet of facets) {
+    const record = store.getRec(facet as EntityKind, id) as Record<string, unknown> | undefined;
+    if (record) return { facet, record };
+  }
+  return null;
+}
+
+/** A receipt's `rests_on` record refs: one in a partition this store holds must exist there
+ *  with the hash the writer saw (a stale hash means the decision moved — re-read); one in a
+ *  partition the store does not hold is a pointer for the reader to resolve. Grants first: a
+ *  ref into a partition the principal is not granted is refused by scope, never by content. */
+function assertRestsOn(store: HunchStore, principal: Principal, scope: Scope, restsOn: readonly DependencyRef[]): void {
+  const repo = partitionOf(store);
+  for (const dep of restsOn) {
+    if (dep.kind !== "record") continue;
+    const refScope = dep.scope ?? scope;
+    if (!granted(principal, refScope)) throw new StateRefusal("outside-grants", `rests_on ${dep.id} points into ${scopePath(refScope)}, which is outside the principal's grants`);
+    const found = findRecord(store, dep.id);
+    if (!found) {
+      const held = scopePath(refScope) === scopePath(scope) || scopePath(refScope) === scopePath(repo) || (store.hasPrivate && refScope.kind !== "repository");
+      if (held) throw new StateRefusal("conflict", `rests_on ${dep.id} is not on record in ${scopePath(refScope)}: a receipt rests on state that exists; write or re-read it first`, { incumbent_id: dep.id, reason: "rests_on target absent" });
+      continue; // a partition this store does not hold: a pointer, resolved by the reader
+    }
+    const actualScope = recordScope(found.record, repo);
+    if (scopePath(actualScope) !== scopePath(refScope)) throw new StateRefusal("conflict", `rests_on ${dep.id} lives in ${scopePath(actualScope)}, not ${scopePath(refScope)}`, { incumbent_id: dep.id, reason: "rests_on scope mismatch" });
+    const actualHash = stateHash(found.record);
+    if (actualHash !== dep.record_hash) throw new StateRefusal("conflict", `rests_on ${dep.id} has moved: the record on file hashes ${actualHash}, not ${dep.record_hash} — re-read it and rest on what is current`, { incumbent_id: dep.id, reason: "rests_on hash mismatch" });
+  }
+}
+
+/** A commitment closed by a receipt: `closed_by` must name a succeeded/verified receipt the
+ *  principal can see, and the status must be done — a closure is a fact that happened, never
+ *  an opinion. Returns the receipt id when the closure is well-formed. */
+function assertClosedBy(store: HunchStore, principal: Principal, commitment: EntityFor["commitments"]): string | null {
+  if (!commitment.closed_by) return null;
+  if (commitment.status !== "done") throw new StateRefusal("malformed", `closed_by names a receipt but status is ${commitment.status}: a commitment closed by a receipt is done`);
+  const receipt = store.getRec("receipts", commitment.closed_by) as EntityFor["receipts"] | undefined;
+  const scope = receipt ? recordScope(receipt, partitionOf(store)) : null;
+  if (!receipt || !scope || !granted(principal, scope)) {
+    throw new StateRefusal("conflict", `closed_by ${commitment.closed_by} is not a receipt on record within the principal's grants: a commitment is closed by an action that happened — write the receipt first, then close with its id`, { incumbent_id: commitment.closed_by, reason: "closed_by receipt absent" });
+  }
+  if (receipt.state !== "succeeded" && receipt.state !== "verified") {
+    throw new StateRefusal("conflict", `closed_by ${commitment.closed_by} is ${receipt.state}, not succeeded or verified: only an action that happened closes a commitment`, { incumbent_id: commitment.closed_by, reason: `closed_by receipt ${receipt.state}` });
+  }
+  return commitment.closed_by;
+}
+
 /** Top-level fields whose canonical hash differs between two records, sorted. */
 function differingFields(a: Record<string, unknown>, b: Record<string, unknown>): string[] {
   const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
@@ -367,17 +437,23 @@ export function writeState(store: HunchStore, input: unknown, opts: WriteOptions
   if (!(ENTITY_KINDS as readonly string[]).includes(facet)) throw new StateRefusal("unsupported", `facet ${facet} is not a store kind`);
   const record = normalizeRecord(facet, request.scope, request.record, request.principal);
   const id = (record as { id: string }).id;
+  /** The normalized PAYLOAD hash: what idempotency recognizes on a re-send. */
   const hash = stateHash(record);
   const ledger = readLedger(hunchDir, request.scope);
   const durability = () => opts.flush?.(isPrivate, `nuryel: write ${id}`) ?? "local";
-  const result = (outcome: WriteResult["outcome"], conflict: WriteResult["conflict"] = null, rid = id, rhash = hash): WriteResult =>
-    WriteResultSchema.parse({ schema: STATE_WRITE_VERSION, record_id: rid, record_hash: rhash, durability: durability(), outcome, conflict, record: store.getRec(facet as EntityKind, rid) ?? record });
+  /** The result reports the record ON FILE and its hash — the store may enrich a record on put
+   *  (a private-mode decision gains `valid_from`), and a writer that goes on to rest a receipt
+   *  on this record must hold the hash a reader will verify, never a pre-store one. */
+  const result = (outcome: WriteResult["outcome"], conflict: WriteResult["conflict"] = null, rid = id): WriteResult => {
+    const onFile = store.getRec(facet as EntityKind, rid) ?? record;
+    return WriteResultSchema.parse({ schema: STATE_WRITE_VERSION, record_id: rid, record_hash: stateHash(onFile), durability: durability(), outcome, conflict, record: onFile });
+  };
 
   // Idempotency: the same key replays the original; the same key with a different payload
   // is a refusal, never a second record.
   const seen = ledger.idempotency[request.idempotency_key];
   if (seen) {
-    if (seen.record_hash === hash && seen.record_id === id) return result("replayed");
+    if (seen.record_id === id && (seen.record_hash === hash || seen.payload_hash === hash)) return result("replayed");
     // Say WHAT differs and what to do: a stable key with a varying payload (a timestamp, new
     // wording) is the trap every writer falls into once; the refusal must teach the way out.
     const stored = store.getRec(facet as EntityKind, seen.record_id) as Record<string, unknown> | undefined;
@@ -388,7 +464,7 @@ export function writeState(store: HunchStore, input: unknown, opts: WriteOptions
 
   const existing = store.recsInHome(facet as EntityKind, home).find((r) => (r as { id: string }).id === id) as Record<string, unknown> | undefined;
   if (existing && stateHash(existing) === hash) {
-    appendChanges(hunchDir, request.scope, [], { key: request.idempotency_key, entry: { record_id: id, record_hash: hash, facet } }, now);
+    appendChanges(hunchDir, request.scope, [], { key: request.idempotency_key, entry: { record_id: id, record_hash: hash, payload_hash: hash, facet } }, now);
     return result("replayed");
   }
   if (existing && request.expected_version !== null) {
@@ -433,9 +509,19 @@ export function writeState(store: HunchStore, input: unknown, opts: WriteOptions
     }
   }
 
+  // The chain (Gate 4): a receipt names what it rested on, a closure names the receipt.
+  // Both are checked against the drawer, grants first, before anything lands.
+  if (facet === "receipts") assertRestsOn(store, request.principal, request.scope, (record as EntityFor["receipts"]).rests_on ?? []);
+  const closedBy = facet === "commitments" ? assertClosedBy(store, request.principal, record as EntityFor["commitments"]) : null;
+
   store.putCapture(facet as EntityKind, record, isPrivate);
+  /** What is on file now — the hash every event, ref and result carries. */
+  const onFileHash = stateHash(store.getRec(facet as EntityKind, id) ?? record);
   const changes: PendingChange[] = [];
-  const cause = { kind: "write" as const, principal: request.principal.id };
+  const cause = closedBy ? { kind: "receipt" as const, receipt_id: closedBy } : request.cause ?? { kind: "write" as const, principal: request.principal.id };
+  // A current derived statement written back as stale is an INVALIDATION, not an update: the
+  // ledger says so, and names the external pointer that moved when the writer gives one.
+  const invalidated = facet === "derived" && !!existing && existing.state === "current" && (record as EntityFor["derived"]).state === "stale";
   const invalidates = facet === "receipts" ? (record as EntityFor["receipts"]).invalidates : [];
   const subject = subjectOf(facet, record);
   if (supersedes) {
@@ -445,8 +531,8 @@ export function writeState(store: HunchStore, input: unknown, opts: WriteOptions
       changes.push({ facet, record_id: supersedes, record_hash: stateHash(old), change: "superseded", subject: subjectOf(facet, old), invalidates: [], cause });
     }
   }
-  changes.push({ facet, record_id: id, record_hash: hash, change: existing ? "updated" : "created", subject, invalidates, cause });
-  appendChanges(hunchDir, request.scope, changes, { key: request.idempotency_key, entry: { record_id: id, record_hash: hash, facet } }, now);
+  changes.push({ facet, record_id: id, record_hash: onFileHash, change: invalidated ? "invalidated" : existing ? "updated" : "created", subject, invalidates: invalidated && subject ? [subject] : invalidates, cause });
+  appendChanges(hunchDir, request.scope, changes, { key: request.idempotency_key, entry: { record_id: id, record_hash: onFileHash, payload_hash: hash, facet } }, now);
   store.reindex();
   return result(supersedes ? "superseded" : existing ? "updated" : "created");
 }

@@ -1,0 +1,60 @@
+{
+  "id": "dec_9d0e63ba79",
+  "title": "feat(state): the chain — a receipt rests on the decision and change proof, a closure names the receipt",
+  "topic": null,
+  "status": "accepted",
+  "context": "Gate 4's cross-domain chain (incident → engineering decision → change proof →\nclosure) becomes a contract feature, run end to end through the one binding by\nthree principals over one store (repository partition + organization drawer).\n\n- ActionReceipt.rests_on (additive, optional): DependencyRefs — the decision the\n  action implements, the change proof for the shipped revision (external ref,\n  system hunch / change_proof keyed by proof_id + content_hash), the commitment or\n  incident it answers. Touches invariant(s): con_902759b3dc (All JSON writes to .hunch/ must be atomic (temp-file + rename) so an interrupted write can never truncate the index); con_a87360128b (Semantic vectors are a derived layer in SQLite, never the source of truth; reconcile by content hash on reindex); con_e04226bd05 (The MCP server must stay client-agnostic: all assistants point to the same .hunch/ graph; no Claude-only behavior in the server).",
+  "decision": "A receipt carries `rests_on` (DependencyRefs, additive): the decision it implements, the change proof (external ref, system hunch / change_proof keyed by proof_id + content_hash), the commitment or incident it answers; a record ref may carry a partition `scope`. A commitment carries `closed_by` (additive): the receipt that fulfilled it. The binding verifies grants first, then what it holds (absent / hash-moved / wrong-partition refs are typed conflicts naming the way out; a ref into a partition the store does not hold is a pointer); a closure must name a succeeded/verified receipt on a done commitment and its change event's cause is that receipt. Reads put fulfilled commitments in `done` beside their receipts and concatenate every done receipt's rests_on into depends_on. Write results and change events hash the record ON FILE (the store enriches on put); the ledger journal keeps the payload hash for replay.",
+  "consequences": [
+    "Adds dependency: node:test, node:assert/strict, node:child_process, node:fs, node:os, node:path."
+  ],
+  "alternatives_rejected": [
+    "Auto-close a commitment when a receipt with the same subject lands — rejected: subject overlap is not fulfilment; two commitments on one customer would both close, and nobody named the receipt.",
+    "A new `incident` facet with its own lifecycle — rejected: an incident is an entity with a CRM pointer; the chain needs links between existing facets, not a fourth kind of thing to keep current.",
+    "Have the state layer fetch and verify the change proof from the repository on write — rejected: never-in-request-path; the proof is a credential-free pointer (id + content hash) the reader resolves with `records`, grants first.",
+    "Refuse every rests_on ref the store cannot verify — rejected: an organization drawer legitimately points at a repository the server does not host; unverifiable-here is a pointer, only absent/moved/misplaced in a held partition is a conflict.",
+    "Keep reporting the pre-store payload hash in write results — rejected: a private-mode decision gains valid_from on put, so a receipt resting on that hash would be refused as moved; results and events hash what is on file, replay matches the payload."
+  ],
+  "rejected_tripwires": [],
+  "related_components": [
+    "cmp_a94a8fe5cc",
+    "cmp_b256a6aed0",
+    "cmp_cdfb395bb7",
+    "cmp_dfa5b5acde"
+  ],
+  "related_files": [
+    "src/core/stateRecords.ts",
+    "src/mcp/server.ts",
+    "src/store/changeLedger.ts",
+    "src/store/stateBinding.ts",
+    "test/mcp-state.test.ts",
+    "test/state-chain.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "0748249",
+  "valid_from": "2026-09-09T02:43:18+00:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "agent_recorded",
+    "confidence": 0.7,
+    "evidence": [
+      "commit:0748249",
+      "branch:claude/hunch-development-j9qps2",
+      "src/core/stateRecords.ts",
+      "src/mcp/server.ts",
+      "src/store/changeLedger.ts",
+      "src/store/stateBinding.ts",
+      "test/mcp-state.test.ts",
+      "test/state-chain.test.ts",
+      "synth:provider=deterministic, substance written by the agent that made the change"
+    ],
+    "last_verified": "2026-09-09T02:44:19.420Z"
+  },
+  "date": "2026-09-09T02:43:18+00:00"
+}

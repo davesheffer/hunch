@@ -113,7 +113,14 @@ Then:
 hunch drift              # CI-gateable: stale anchors fail
 hunch heal               # guided reconciliation — never rewrites prose silently
 hunch reconcile-topics   # after merges: enforce one live decision per topic
+hunch grounding          # the committed grounding docs vs the public graph; --refresh regenerates
 ```
+
+A merge that brings memory in behind the grounding docs (two branches each captured one
+record; both regenerated the same counts line) is reported as *lag*, not failure — the next
+capture heals it, `hunch grounding --refresh` heals it now, and the `post-merge` hook that
+`hunch init` installs heals it after a local merge or pull. Only a doc whose counts run
+*ahead* of the store (a record never committed) or whose prose diverged fails.
 
 ---
 
@@ -123,6 +130,7 @@ hunch reconcile-topics   # after merges: enforce one live decision per topic
 hunch ci                 # constraint guard on the diff
 hunch drift              # doc anchors still current
 hunch reconcile-topics   # merge didn't create two live decisions on one topic
+hunch grounding          # grounding docs not ahead of / diverged from the graph (merge lag passes)
 ```
 
 All exit non-zero on violation.

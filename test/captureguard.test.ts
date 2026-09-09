@@ -96,6 +96,9 @@ test("shared mode: supersede of an OVERLAY incumbent with private:false SUCCEEDS
 
   const r = await record(client, { title: "successor", topic: "guard.ovl", status: "accepted", decision: "new", supersedes: "dec_privbbbbbb" });
   assert.equal(r.isError, false, `write must be accepted, got: ${r.text}`);
+  // The chain: the result hands an engineering agent the ready-made rests_on ref — the id, the
+  // hash ON FILE and the repository partition — so a receipt never rests on a pre-store hash.
+  assert.match(r.text, /rests_on ref \(for a nuryel receipt that implements this decision\): \{"kind":"record","id":"dec_[A-Za-z0-9_.-]+","record_hash":"sha256:[a-f0-9]{64}","scope":\{"kind":"repository","id":"[^"]+"\}\}/);
   assert.match(r.text, /Superseded dec_privbbbbbb/);
 
   const store = new HunchStore(hunchPaths(s.root));

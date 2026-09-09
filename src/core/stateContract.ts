@@ -138,6 +138,10 @@ export const WriteRequestSchema = z.object({
   idempotency_key: z.string().min(8).max(256),
   expected_version: z.union([z.string().max(256), z.number().int().nonnegative()]).nullable().default(null),
   supersedes: z.string().max(2048).optional(),
+  /** Why this write happened, when it is not the writer's own doing (additive): an external
+   *  source moved. A derived record written back as `stale` with this cause emits an
+   *  `invalidated` change naming the pointer — the `changed` facet, finally written by someone. */
+  cause: z.object({ kind: z.literal("external"), ref: ExternalRefSchema }).strict().optional(),
 }).strict();
 export type WriteRequest = z.infer<typeof WriteRequestSchema>;
 
@@ -270,6 +274,7 @@ export const STATE_INVARIANTS = [
   { id: "one-live-decision-per-topic", statement: "A second live decision on a topic is refused with the incumbent named; supersession is explicit." },
   { id: "external-truth-stays-external", statement: "External systems remain authoritative for their own content; Nuryel holds credential-free pointers, versions and hashes, never mirrored bodies." },
   { id: "derived-state-carries-dependencies", statement: "A derived statement without dependencies cannot be invalidated and is therefore not state." },
+  { id: "derived-state-writer-owns-currentness", statement: "No source writes the drawer. The writer of a derived statement owns keeping its dependencies true: re-validate them on a schedule or on a source event, and write the statement back stale with the moved pointer as cause when one no longer holds. An agent that will not do this must not write derived state." },
 ] as const;
 
 const grantKey = (scope: Scope): string => scopePath(scope);

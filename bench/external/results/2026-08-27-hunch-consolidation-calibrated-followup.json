@@ -25,7 +25,10 @@
         "sourcePasses": 0,
         "sessions": 2,
         "issueContractPasses": null,
-        "turns": [40, 51],
+        "turns": [
+          40,
+          51
+        ],
         "meanDurationMs": 314687
       },
       {
@@ -33,7 +36,10 @@
         "sourcePasses": 0,
         "sessions": 2,
         "issueContractPasses": null,
-        "turns": [24, 21],
+        "turns": [
+          24,
+          21
+        ],
         "meanDurationMs": 213978
       },
       {
@@ -41,7 +47,10 @@
         "sourcePasses": 0,
         "sessions": 2,
         "issueContractPasses": null,
-        "turns": [30, 18],
+        "turns": [
+          30,
+          18
+        ],
         "meanDurationMs": 157245
       },
       {
@@ -49,7 +58,10 @@
         "sourcePasses": 0,
         "sessions": 2,
         "issueContractPasses": 2,
-        "turns": [49, 48],
+        "turns": [
+          49,
+          48
+        ],
         "meanDurationMs": 298278
       },
       {
@@ -57,7 +69,10 @@
         "sourcePasses": 0,
         "sessions": 2,
         "issueContractPasses": null,
-        "turns": [25, 20],
+        "turns": [
+          25,
+          20
+        ],
         "meanDurationMs": 113174
       },
       {
@@ -65,7 +80,10 @@
         "sourcePasses": 0,
         "sessions": 2,
         "issueContractPasses": 0,
-        "turns": [51, 34],
+        "turns": [
+          51,
+          34
+        ],
         "meanDurationMs": 422139
       }
     ],
@@ -97,15 +115,21 @@
   "rawResults": [
     {
       "file": "2026-08-27T02-58-29-323Z-p8849.json",
-      "sha256": "30c072062ac983f81bf11013a45078da44145c66fd37d72d1d8e7f7f18848cbf"
+      "sha256": "af318be73f2d7038ce11c7b90a3a53241647d39a38bca7f0a388c5a759c772c8"
     },
     {
       "file": "2026-08-27T02-58-29-323Z-p8850.json",
-      "sha256": "16b8d283cc1001bbcdfa0f4322e1c9030632da5c47181bde7fde9525a5712b3d"
+      "sha256": "202fc76cd656887f8254e12b0d7d01dd75817a2311566b93c9cbeb49f0b21124"
     },
     {
       "file": "2026-08-27T02-58-29-324Z-p8851.json",
-      "sha256": "5f76e9ca88e1ec5dd6b497f7f45c2295da8883907da4abf7290322f673cfe6bb"
+      "sha256": "ebdc3a4b339cee46a6855607e5ece344c58e85aebe69e3e99581d7f7d51ef579"
+    }
+  ],
+  "redactions": [
+    {
+      "date": "2026-09-09",
+      "what": "machine-specific home-directory paths (/Users/<name>/…) replaced with /Users/contributor/… inside the raw shard files listed in rawResults; their sha256 values above were recomputed over the redacted bytes. No result, rank, id or measurement changed."
     }
   ]
 }

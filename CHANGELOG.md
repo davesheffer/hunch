@@ -2,6 +2,92 @@
 
 ## Unreleased
 
+### The chain: incident → decision → change proof → closure
+
+Gate 4's cross-domain chain is a contract feature, not a demo script. A receipt names what it
+rested on — `ActionReceipt.rests_on` (additive): the decision it implements, the change proof
+for the shipped revision (`external` ref, system `hunch`, object type `change_proof`, keyed by
+`proof_id` + `content_hash`), the commitment or incident it answers; a `record` ref may carry a
+`scope` to point into another partition (the repository decision from an organization drawer).
+The binding verifies what it can see, grants first: a ref outside the grants is refused by
+scope; a ref into a held partition must exist with the hash the writer saw (`rests_on target
+absent` / `hash mismatch` / `scope mismatch`, each naming the way out); a ref into a partition
+the store does not hold is a pointer for the reader. A closure names the receipt —
+`Commitment.closed_by` (additive) must be a succeeded/verified receipt on record within the
+grants, on a `done` commitment; the closure's change event has `cause: { kind: "receipt" }`.
+The read answers the chain: `done` carries fulfilled commitments beside the receipts that
+closed them, `depends_on` concatenates every done receipt's `rests_on`, and `nuryel_read`
+renders `rests on record dec_… in repository/…` / `rests on hunch change_proof:hproof_…` and
+`closed by nrc_…`. Write results and change events now hash the record ON FILE (a private-mode
+decision is enriched on put), with the payload hash kept in the ledger journal for replay.
+Older receipts and commitments are untouched. `hunch_record_decision` and `hunch_change_proof`
+now hand back the ready-made `rests_on` ref (id + hash on file + repository partition; proof id +
+content hash), so an engineering agent never rests a receipt on a pre-store hash; the contract
+doc carries the five-step recipe for closing an incident from a repository.
+`test/state-chain.test.ts`: three principals, one store, the whole chain and every refusal.
+
+**The farm runs the chain.** `tooling/agent-farm` now serves a repository partition beside the
+organization drawer; every other customer raises an incident and an escalation engineering owes
+(shared keys, replayed by the second sofia), and the engineer closes each one through the chain —
+union read, decision in the repository partition, proof pointer, `shipped` receipt resting on all
+three, escalation closed by it — with the two chain refusals provoked once. Every sofia must see
+the closure, the orc verifies all five links per incident and is refused the repository partition,
+and the ledger replay finds each closure caused by its receipt; a missing link is a contradiction.
+3 sofias × 5 customers: 3 incidents, 9 closures seen, 0 contradictions, 3.3 s. The Sofia emulation
+(real Sofia code, 3 Sofias, 10-clinic year) runs the same chain against a served organization +
+repository partition: Sofia's `summary()` now reads the drawer's state of record first and rests
+on its receipts and fulfilled commitments as record dependencies, so every Sofia serving a closed
+clinic re-derived and cited the engineer's receipt — 5 of 5, 0 contradictions — and the receipt
+rests on a real `hunch prove` proof sealed from the engineer's commit, re-verified by the ORC
+against its pointer and binding the decision hash for hash. Sofia's chat now reads the drawer
+first too: a status question about an event is answered from held state (receipts done,
+commitments in force, the current summary) under the read's receipt, marked as such when no
+source was read — 12 of 12 in the emulation, 0 unsourced replies.
+
+**The `changed` facet, written.** `WriteRequest.cause` (additive): `{ kind: "external", ref }` says why
+a write happened when it is not the writer's doing. A current derived record written back as
+`stale` is an `invalidated` change (`invalidates: [subject]`, the pointer as cause), never an
+`updated` one. Sofia's source sweep is the first writer: it re-stamps what a current summary rests
+on and invalidates it when a source moved, so the drawer is trustworthy between reads. New invariant
+`derived-state-writer-owns-currentness`: the writer of a derived statement owns keeping its
+dependencies true; an agent that will not do this must not write derived state.
+
+### Merge lag is not a release blocker
+
+Two branches that each capture one record both regenerate the very same "N+1 decisions"
+counts line in the grounding docs; the forge merges identical lines with no conflict, the
+merged store holds N+2, and the committed CLAUDE.md is one behind — no hook ran, nobody
+erred, and the next capture heals it. Every red of that class (PR #128, #135, v1.26.2's first
+tagged run, `fnd_c402046ac7`) was this lag, and each cost a manual regenerate-and-retag.
+
+**Direction-aware freshness.** `test/grounding-freshness` now classifies the committed block
+against the generated one (`src/core/groundingLag.ts`): byte-equal is `fresh`; a difference
+confined to the counts sentence where no append-only count (decisions, bugs, constraints,
+components, policies) exceeds the store is `lagging` — reported as a diagnostic, never red;
+an append-only count AHEAD of the store is the never-committed-record defect
+(`fnd_6391b4242f`, the only defect the counts ever caught) and still fails, as does any
+difference outside the counts sentence. Open findings move both ways (resolved on one
+branch, recorded on another), so a differing findings count alone is lag.
+
+**`hunch grounding`.** One command for the five grounding docs: the verdict per doc, the
+exact delta (`CLAUDE.md: counts lag the store (decisions 228 → 229)`), exit 1 only on
+`ahead`/`diverged`; `--refresh` regenerates every existing doc from the PUBLIC store
+(`HUNCH_PRIVATE_DIR` pinned to an empty overlay, so a dev machine with an overlay attached
+can never write union counts into a committed public doc) and never scaffolds a doc the
+project lacks; `--json` for scripts.
+
+**Post-merge hook.** `hunch init` installs a `post-merge` hook that runs `hunch grounding
+--refresh` when the merge or pull brought `.hunch/` changes in, so a local merge leaves the
+docs re-synced for the developer's next commit (never auto-committed, loop-guarded via
+`HUNCH_SYNC`, never fatal, existing hooks preserved). End-to-end in
+`test/grounding-merge-lag.test.ts`: the silent merge, the lag verdict, the ahead refusal,
+the refresh, the hook.
+
+Also: `hono` (transitive, via the MCP SDK's optional HTTP transport) 4.13.0 → 4.13.7 in the
+lockfile — `npm audit --omit=dev` reported three moderate advisories (GHSA-gqvv-2mrq-wpjv,
+GHSA-g6gw-c38x-mqfc, GHSA-crvj-82cr-hjcx) fixed in 4.13.5, in range for both dependents, so
+the production dependency audit passes again without a reviewed exception.
+
 ## 1.28.0 — 2026-09-08
 
 ### Many agents, one subject

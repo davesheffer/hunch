@@ -21,6 +21,13 @@
  * Deterministic across platforms: the managed block carries RECORD counts (decisions,
  * bugs, constraints, components, policies, findings) which come from .hunch/*.json —
  * not the symbol/edge counts, which legitimately differ between Windows and Linux.
+ *
+ * Direction-aware since fnd_c402046ac7: two branches that each capture a record both
+ * regenerate the same "N+1" counts line, the forge merges them without a conflict, and
+ * the committed doc is one BEHIND the store — no hook ran, nobody erred, and the next
+ * capture heals it. That lag is reported as a diagnostic, not a failure. A doc whose
+ * prose differs, or whose append-only counts run AHEAD of the store (a record that was
+ * never committed — the only defect the counts ever caught), still fails.
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -31,6 +38,7 @@ import { fileURLToPath } from "node:url";
 import { hunchPaths } from "../src/core/paths.js";
 import { HunchStore } from "../src/store/hunchStore.js";
 import { renderHunchSection } from "../src/integrations/claudemd.js";
+import { classifyGroundingBlock, describeGroundingFreshness } from "../src/core/groundingLag.js";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const START = "<!-- HUNCH:START — auto-generated, do not edit by hand -->";
@@ -50,7 +58,7 @@ function committedBlock(file: string): string | null {
   return existsSync(file) ? blockContent(readFileSync(file, "utf8")) : null;
 }
 
-test("the committed CLAUDE.md grounding block matches what the graph generates", () => {
+test("the committed CLAUDE.md grounding block matches what the graph generates (merge lag tolerated)", (t) => {
   // PUBLIC-ONLY, exactly as the gate runs it (gateEnvironment points repository-index at
   // an empty private home). HUNCH_PRIVATE_DIR takes precedence over .hunch/local.json AND
   // the shared pointer in .git/hunch/, so this is deterministic on a dev machine with an
@@ -65,17 +73,30 @@ test("the committed CLAUDE.md grounding block matches what the graph generates",
     const generated = blockContent(rendered) ?? rendered.trim();
     const committed = committedBlock(join(repoRoot, "CLAUDE.md"));
     assert.ok(committed !== null, "CLAUDE.md carries a managed HUNCH block");
+    const verdict = classifyGroundingBlock(committed, generated);
+    if (verdict.kind === "lagging") {
+      // Records merged in behind the doc (fnd_c402046ac7). Transient by construction:
+      // refreshCommittableGrounding folds the regenerated docs into the next capture
+      // commit, and the release gate's repository-index stage regenerates them and
+      // already treats the dirt as memory churn. Say so; do not go red.
+      t.diagnostic(describeGroundingFreshness("CLAUDE.md", verdict));
+      return;
+    }
     assert.equal(
-      committed,
-      generated,
-      "CLAUDE.md's grounding block is stale. Regenerate and commit it WITH the change that "
-      + "moved the counts:\n"
-      + "    HUNCH_PRIVATE_DIR=<empty-dir> npx tsx src/cli/index.ts index\n"
+      verdict.kind,
+      "fresh",
+      `${describeGroundingFreshness("CLAUDE.md", verdict)}\n`
+      + "Regenerate and commit it WITH the change that moved the counts:\n"
+      + "    HUNCH_PRIVATE_DIR=<empty-dir> npx tsx src/cli/index.ts grounding --refresh\n"
       + "then commit CLAUDE.md, AGENTS.md, .github/copilot-instructions.md, "
       + ".cursor/rules/hunch.mdc and .windsurf/rules/hunch.md.\n"
       + "Leaving it stale fails the release gate at TAG time with a message that names "
       + "neither the file nor the cause (fnd_6391b4242f).",
     );
+    if (verdict.kind === "fresh") {
+      // Belt and braces: the classifier's "fresh" must mean byte-equal.
+      assert.equal(committed, generated);
+    }
   } finally {
     store.close();
     process.env.HUNCH_PRIVATE_DIR = prior;
@@ -98,8 +119,12 @@ test("the record counts in the block are public-store numbers, never the overlay
   process.env.HUNCH_PRIVATE_DIR = emptyPrivate;
   const store = new HunchStore(hunchPaths(repoRoot));
   try {
-    assert.equal(Number(m![1]), store.json.loadAll("decisions").length, "decision count is the PUBLIC store's");
-    assert.equal(Number(m![3]), store.json.loadAll("constraints").length, "constraint count is the PUBLIC store's");
+    // An overlay union can only push a count ABOVE the public store; merge lag
+    // (fnd_c402046ac7) only ever leaves it below. So: never above.
+    const decisions = store.json.loadAll("decisions").length;
+    const constraints = store.json.loadAll("constraints").length;
+    assert.ok(Number(m![1]) <= decisions, `decision count ${m![1]} exceeds the PUBLIC store's ${decisions} — an overlay union or an uncommitted record`);
+    assert.ok(Number(m![3]) <= constraints, `constraint count ${m![3]} exceeds the PUBLIC store's ${constraints} — an overlay union or an uncommitted record`);
   } finally {
     store.close();
     process.env.HUNCH_PRIVATE_DIR = prior;

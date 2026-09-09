@@ -91,6 +91,76 @@ Each new facet is lifted from a record Sofia already keeps:
 - **capabilities** — `negotiate(offered)` returns `{ supported, unsupported }`; an unsupported
   capability is a typed refusal, never a compatible-looking degraded answer.
 
+## The chain: incident → decision → change proof → closure
+
+One subject's state crosses domains: a customer incident is recorded by a customer-facing agent,
+the fix is decided and shipped by an engineering agent in a repository, and the closure has to be
+visible to the first agent and to anyone who reads the drawer later. The contract carries that
+chain as refs, never as prose:
+
+- **A receipt names what it rested on.** `ActionReceipt.rests_on` (additive, optional) is a list of
+  `DependencyRef`s — the same shape a derived statement's dependencies use: the decision it
+  implements (`record`), the change proof for the shipped revision (`external`, system `hunch`,
+  object type `change_proof`, keyed by `proof_id` with its `content_hash`), the commitment or
+  incident it answers. A `record` ref may carry a `scope` (additive) to point into another
+  partition — the repository decision from an organization drawer.
+- **The binding verifies what it can see.** On write, a `rests_on` record ref into a partition the
+  principal is not granted is refused by scope, before the record is looked at. A ref into a
+  partition this store holds must exist there with the hash the writer saw — an absent target is
+  `conflict` (`rests_on target absent`: write or re-read it first); a hash that no longer matches
+  is `conflict` (`rests_on hash mismatch`: the record moved, re-read and rest on what is current);
+  a ref that claims the wrong partition is `conflict` (`rests_on scope mismatch`). A ref into a
+  partition this store does not hold is a pointer the reader resolves with `records`, grants first.
+- **A closure names the receipt.** `Commitment.closed_by` (additive, optional) is the id of the
+  receipt that fulfilled it. The binding refuses a `closed_by` that is not a succeeded or verified
+  receipt on record within the principal's grants (`closed_by receipt absent`, `closed_by receipt
+  failed`), and a `closed_by` on a commitment whose status is not `done` (`malformed`). The change
+  event for the closure carries `cause: { kind: "receipt", receipt_id }`.
+- **The read answers the chain.** For a subject, `done` holds the receipts that happened and the
+  commitments fulfilled by one (they leave `in_force`); `depends_on` concatenates every done
+  receipt's `rests_on` beside the current derived statements' dependencies, so "what does this
+  closure rest on" is one read; `invalidated_by` names the receipt, so a stale summary is flagged.
+  The decision and the proof are resolved by id through `records`: a principal without the
+  repository grant sees the id named in `denied`, never described.
+- **The write result carries the record on file.** `WriteResult.record_hash` and every change
+  event hash the record as stored, not the payload as sent — the store may enrich a record on put
+  (a private-mode decision gains `valid_from`), and a writer that goes on to rest a receipt on
+  that record must hold the hash a reader will verify. Idempotency still recognizes the payload
+  the writer re-sends (`payload_hash` in the ledger's journal, additive).
+
+**For an engineering agent closing an incident from a repository** (Claude Code or Codex over
+`hunch mcp`, granted the organization drawer and the repository):
+
+1. `nuryel_read` the incident's subject (union read over both partitions): the commitment is
+   in `in_force`, the incident entity and the current summary in `current`.
+2. Decide and record: `hunch_capture_decision` → `hunch_record_decision`. The result carries a
+   ready-made `rests_on` ref (id, hash on file, repository partition).
+3. Ship, then seal: `hunch_change_proof(base_ref, result_ref)`. The result carries the proof's
+   `rests_on` ref (`external`, system `hunch`, object type `change_proof`).
+4. `nuryel_write` a receipt into the drawer: `action_kind: "shipped"`, `target` the merged pull
+   request or revision, `invalidates: [<subject>]`, `rests_on: [<decision ref>, <proof ref>,
+   { kind: "record", id: <commitment id>, record_hash: <its hash from step 1> }]`,
+   `state: "verified"` once the merge is observed.
+5. Close: `nuryel_write` the commitment again with `status: "done"`, `valid_to`, and
+   `closed_by: <receipt id>` under a new idempotency key.
+
+The next reader of the subject sees the receipt and the closed commitment in `done`, the
+decision and proof in `depends_on`, and the old summary named in `invalidated_by`.
+
+**The `changed` facet, written.** No source writes the drawer (Hunch is never in the request path
+and never mirrors a source), so a source change reaches the drawer only through an agent that
+re-reads it. `WriteRequest.cause` (additive) lets that agent say why: `{ kind: "external", ref }`.
+A current derived statement written back as `stale` (same identity, `valid_to` set) is an
+**invalidation**, not an update: the ledger emits `change: "invalidated"` with `invalidates:
+[subject]` and the external pointer as cause, so every reader sees the summary leave `current`
+and what moved. Sofia's source sweep is the first writer (re-stamp what a current summary rests
+on; when a stamp differs from the hash the summary depends on, write it back stale with that
+pointer), so the drawer is trustworthy between an agent's reads, not only at them.
+
+Records written before these fields existed are untouched: nothing is materialized on them, they
+hash and read exactly as before. `test/state-chain.test.ts` runs the whole chain through the one
+binding with three principals over one store.
+
 ## Binding: how the verbs meet the store
 
 **Homing is decided by scope, never by a flag.** The repository scope (`capabilities` names its
@@ -224,6 +294,7 @@ same fact*: `actionReceiptId` (action, not row), `commitmentId` (scope, subject,
 | `one-live-decision-per-topic` | a second live decision is refused with the incumbent named | existing topic guard; `WriteResult.conflict` |
 | `external-truth-stays-external` | pointers, versions, hashes — never mirrored bodies | `ExternalRefSchema` credential-free refinements; entity attributes capped |
 | `derived-state-carries-dependencies` | no dependencies, not state | `assertDerivedState`, schema `min(1)` |
+| `derived-state-writer-owns-currentness` | no source writes the drawer: the writer of a derived statement re-validates what it rests on and writes it back `stale` with the moved pointer as cause, or does not write derived state | `WriteRequest.cause`, the `invalidated` change (Sofia's source sweep is the reference writer) |
 
 ## Backward compatibility
 
