@@ -48,7 +48,9 @@ source was read — 12 of 12 in the emulation, 0 unsourced replies.
 a write happened when it is not the writer's doing. A current derived record written back as
 `stale` is an `invalidated` change (`invalidates: [subject]`, the pointer as cause), never an
 `updated` one. Sofia's source sweep is the first writer: it re-stamps what a current summary rests
-on and invalidates it when a source moved, so the drawer is trustworthy between reads.
+on and invalidates it when a source moved, so the drawer is trustworthy between reads. New invariant
+`derived-state-writer-owns-currentness`: the writer of a derived statement owns keeping its
+dependencies true; an agent that will not do this must not write derived state.
 
 ### Merge lag is not a release blocker
 

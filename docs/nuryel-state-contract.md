@@ -294,6 +294,7 @@ same fact*: `actionReceiptId` (action, not row), `commitmentId` (scope, subject,
 | `one-live-decision-per-topic` | a second live decision is refused with the incumbent named | existing topic guard; `WriteResult.conflict` |
 | `external-truth-stays-external` | pointers, versions, hashes — never mirrored bodies | `ExternalRefSchema` credential-free refinements; entity attributes capped |
 | `derived-state-carries-dependencies` | no dependencies, not state | `assertDerivedState`, schema `min(1)` |
+| `derived-state-writer-owns-currentness` | no source writes the drawer: the writer of a derived statement re-validates what it rests on and writes it back `stale` with the moved pointer as cause, or does not write derived state | `WriteRequest.cause`, the `invalidated` change (Sofia's source sweep is the reference writer) |
 
 ## Backward compatibility
 
