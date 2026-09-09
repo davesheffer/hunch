@@ -91,6 +91,47 @@ Each new facet is lifted from a record Sofia already keeps:
 - **capabilities** — `negotiate(offered)` returns `{ supported, unsupported }`; an unsupported
   capability is a typed refusal, never a compatible-looking degraded answer.
 
+## The chain: incident → decision → change proof → closure
+
+One subject's state crosses domains: a customer incident is recorded by a customer-facing agent,
+the fix is decided and shipped by an engineering agent in a repository, and the closure has to be
+visible to the first agent and to anyone who reads the drawer later. The contract carries that
+chain as refs, never as prose:
+
+- **A receipt names what it rested on.** `ActionReceipt.rests_on` (additive, optional) is a list of
+  `DependencyRef`s — the same shape a derived statement's dependencies use: the decision it
+  implements (`record`), the change proof for the shipped revision (`external`, system `hunch`,
+  object type `change_proof`, keyed by `proof_id` with its `content_hash`), the commitment or
+  incident it answers. A `record` ref may carry a `scope` (additive) to point into another
+  partition — the repository decision from an organization drawer.
+- **The binding verifies what it can see.** On write, a `rests_on` record ref into a partition the
+  principal is not granted is refused by scope, before the record is looked at. A ref into a
+  partition this store holds must exist there with the hash the writer saw — an absent target is
+  `conflict` (`rests_on target absent`: write or re-read it first); a hash that no longer matches
+  is `conflict` (`rests_on hash mismatch`: the record moved, re-read and rest on what is current);
+  a ref that claims the wrong partition is `conflict` (`rests_on scope mismatch`). A ref into a
+  partition this store does not hold is a pointer the reader resolves with `records`, grants first.
+- **A closure names the receipt.** `Commitment.closed_by` (additive, optional) is the id of the
+  receipt that fulfilled it. The binding refuses a `closed_by` that is not a succeeded or verified
+  receipt on record within the principal's grants (`closed_by receipt absent`, `closed_by receipt
+  failed`), and a `closed_by` on a commitment whose status is not `done` (`malformed`). The change
+  event for the closure carries `cause: { kind: "receipt", receipt_id }`.
+- **The read answers the chain.** For a subject, `done` holds the receipts that happened and the
+  commitments fulfilled by one (they leave `in_force`); `depends_on` concatenates every done
+  receipt's `rests_on` beside the current derived statements' dependencies, so "what does this
+  closure rest on" is one read; `invalidated_by` names the receipt, so a stale summary is flagged.
+  The decision and the proof are resolved by id through `records`: a principal without the
+  repository grant sees the id named in `denied`, never described.
+- **The write result carries the record on file.** `WriteResult.record_hash` and every change
+  event hash the record as stored, not the payload as sent — the store may enrich a record on put
+  (a private-mode decision gains `valid_from`), and a writer that goes on to rest a receipt on
+  that record must hold the hash a reader will verify. Idempotency still recognizes the payload
+  the writer re-sends (`payload_hash` in the ledger's journal, additive).
+
+Records written before these fields existed are untouched: nothing is materialized on them, they
+hash and read exactly as before. `test/state-chain.test.ts` runs the whole chain through the one
+binding with three principals over one store.
+
 ## Binding: how the verbs meet the store
 
 **Homing is decided by scope, never by a flag.** The repository scope (`capabilities` names its

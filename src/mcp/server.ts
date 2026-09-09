@@ -1972,8 +1972,19 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
           const r = (response.records ?? {})[ref.id] ?? {};
           const g = (k: string): string => { const v = r[k]; return typeof v === "string" ? v : v == null ? "" : JSON.stringify(v); };
           if (ref.facet === "derived") return `- ${label} derived ${ref.id} · computed ${g("computed_at")} · ${(r.dependencies as unknown[] | undefined)?.length ?? 0} dependencies\n    ${g("content").slice(0, 1200)}`;
-          if (ref.facet === "commitments") return `- ${label} commitment ${ref.id} · ${g("status")} · due ${g("due")} · owner ${g("owner")}: ${g("title")}`;
-          if (ref.facet === "receipts") { const t = (r.target ?? {}) as Record<string, unknown>; return `- ${label} receipt ${ref.id} · ${g("action_kind")} on ${String(t.system ?? "")} ${String(t.object_type ?? "")}:${String(t.object_key ?? "")} · ${g("state")} at ${g("occurred_at")} by ${g("actor")}`; }
+          if (ref.facet === "commitments") return `- ${label} commitment ${ref.id} · ${g("status")} · due ${g("due")} · owner ${g("owner")}: ${g("title")}${r.closed_by ? ` · closed by ${g("closed_by")}` : ""}`;
+          if (ref.facet === "receipts") {
+            const t = (r.target ?? {}) as Record<string, unknown>;
+            // The chain: what the action rested on, one pointer per line, so a reader follows
+            // incident → decision → change proof → closure without a second call.
+            const rests = (Array.isArray(r.rests_on) ? r.rests_on : []) as Array<Record<string, unknown>>;
+            const restLines = rests.map((d) => {
+              if (d.kind === "record") { const sc = d.scope as { kind?: string; id?: string } | undefined; return `\n    rests on record ${String(d.id)}${sc ? ` in ${String(sc.kind)}/${String(sc.id)}` : ""}`; }
+              if (d.kind === "external") { const x = (d.ref ?? {}) as Record<string, unknown>; return `\n    rests on ${String(x.system ?? "")} ${String(x.object_type ?? "")}:${String(x.object_key ?? "")}`; }
+              return `\n    rests on ${String(d.kind)} ${String((d as { name?: unknown }).name ?? "")}`;
+            }).join("");
+            return `- ${label} receipt ${ref.id} · ${g("action_kind")} on ${String(t.system ?? "")} ${String(t.object_type ?? "")}:${String(t.object_key ?? "")} · ${g("state")} at ${g("occurred_at")} by ${g("actor")}${restLines}`;
+          }
           if (ref.facet === "decisions") return `- ${label} decision ${ref.id} · ${g("status")}: ${g("title")}`;
           if (ref.facet === "constraints") return `- ${label} constraint ${ref.id} · ${g("severity")}: ${g("statement")}`;
           if (ref.facet === "entities") return `- ${label} entity ${ref.id} · ${g("kind")} ${g("name")} · ${g("lifecycle")}`;

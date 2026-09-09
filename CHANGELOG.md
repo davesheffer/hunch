@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+### The chain: incident → decision → change proof → closure
+
+Gate 4's cross-domain chain is a contract feature, not a demo script. A receipt names what it
+rested on — `ActionReceipt.rests_on` (additive): the decision it implements, the change proof
+for the shipped revision (`external` ref, system `hunch`, object type `change_proof`, keyed by
+`proof_id` + `content_hash`), the commitment or incident it answers; a `record` ref may carry a
+`scope` to point into another partition (the repository decision from an organization drawer).
+The binding verifies what it can see, grants first: a ref outside the grants is refused by
+scope; a ref into a held partition must exist with the hash the writer saw (`rests_on target
+absent` / `hash mismatch` / `scope mismatch`, each naming the way out); a ref into a partition
+the store does not hold is a pointer for the reader. A closure names the receipt —
+`Commitment.closed_by` (additive) must be a succeeded/verified receipt on record within the
+grants, on a `done` commitment; the closure's change event has `cause: { kind: "receipt" }`.
+The read answers the chain: `done` carries fulfilled commitments beside the receipts that
+closed them, `depends_on` concatenates every done receipt's `rests_on`, and `nuryel_read`
+renders `rests on record dec_… in repository/…` / `rests on hunch change_proof:hproof_…` and
+`closed by nrc_…`. Write results and change events now hash the record ON FILE (a private-mode
+decision is enriched on put), with the payload hash kept in the ledger journal for replay.
+Older receipts and commitments are untouched. `test/state-chain.test.ts`: three principals, one
+store, the whole chain and every refusal.
+
 ### Merge lag is not a release blocker
 
 Two branches that each capture one record both regenerate the very same "N+1 decisions"

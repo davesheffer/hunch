@@ -21,7 +21,12 @@ export const CHANGES_DIR = "changes";
 
 const IdempotencyEntrySchema = z.object({
   record_id: z.string().min(1),
+  /** Hash of the record ON FILE (what reads, events and refs see). */
   record_hash: z.string(),
+  /** Hash of the normalized payload as the writer sent it (additive). The store may enrich a
+   *  record on put (a private-mode decision gains `valid_from`), so a replay is recognized by
+   *  the payload it re-sends, while `record_hash` stays the truth a reader can verify. */
+  payload_hash: z.string().optional(),
   facet: z.string(),
   seq: z.number().int().nonnegative(),
   at: z.string(),

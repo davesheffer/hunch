@@ -94,4 +94,28 @@ test("nuryel_* tools bind read / write / subscribe / capabilities over MCP with 
   const noHome = await client.callTool({ name: "nuryel_write", arguments: { principal: { ...principal, grants: [{ kind: "user", id: "david" }] }, scope: { kind: "user", id: "david" }, facet: "commitments", record: { provenance: prov }, idempotency_key: "mcp-no-home" } });
   assert.equal(noHome.isError, true);
   assert.match((noHome.content as Array<{ text: string }>)[0]!.text, /refused \[no-partition-home\]/);
+
+  // The chain, rendered: a shipped receipt that rests on the first receipt and a change proof,
+  // and a commitment closed by it — a reader follows the links from the text alone.
+  const shippedBase = { scope: repo, actor: "claude-code@david", action_kind: "shipped", target: { system: "github", object_type: "pull_request", object_key: "acme/x#1", observed_at: "2026-09-09T11:00:00Z" }, request_fingerprint: stateHash({ pr: 1 }) };
+  const restsOn = [
+    { kind: "record", id: result.record_id, record_hash: result.record_hash },
+    { kind: "external", ref: { system: "hunch", object_type: "change_proof", object_key: "hproof_813af1d712c7e16334c573e3", content_hash: stateHash({ proof: 1 }), observed_at: "2026-09-09T11:00:00Z" } },
+  ];
+  const shipped = await client.callTool({ name: "nuryel_write", arguments: { principal, scope: repo, facet: "receipts", record: { schema: "nuryel.receipt/1", ...shippedBase, state: "verified", occurred_at: "2026-09-09T11:00:00Z", invalidates: [customer], rests_on: restsOn, provenance: prov }, idempotency_key: "mcp-shipped-1" } });
+  assert.ok(!shipped.isError, JSON.stringify(shipped.content));
+  const shippedId = (shipped.structuredContent as { record_id: string }).record_id;
+  const cBase = { scope: repo, subject: customer, title: "fix it", owner: "engineering", due: "2026-09-12" };
+  const closed = await client.callTool({ name: "nuryel_write", arguments: { principal, scope: repo, facet: "commitments", record: { schema: "nuryel.commitment/1", ...cBase, status: "done", closed_by: shippedId, valid_from: "2026-09-08T09:05:00Z", valid_to: "2026-09-09T11:10:00Z", provenance: prov }, idempotency_key: "mcp-closed-1" } });
+  assert.ok(!closed.isError, JSON.stringify(closed.content));
+  const chain = await client.callTool({ name: "nuryel_read", arguments: { principal, scope: repo, subject: customer } });
+  const chainText = (chain.content as Array<{ text: string }>)[0]!.text;
+  assert.match(chainText, new RegExp(`- done receipt ${shippedId} · shipped on github pull_request:acme/x#1 · verified[^\\n]*\\n    rests on record ${result.record_id}\\n    rests on hunch change_proof:hproof_813af1d712c7e16334c573e3`));
+  assert.match(chainText, new RegExp(`- done commitment ncm_[a-f0-9]{24} · done · due 2026-09-12 · owner engineering: fix it · closed by ${shippedId}`));
+  const chainSor = (chain.structuredContent as { state_of_record: { depends_on: unknown[]; in_force: unknown[] } }).state_of_record;
+  assert.equal(chainSor.depends_on.length, 2, "what the closure rests on rides the read");
+  assert.deepEqual(chainSor.in_force, []);
+  const badClose = await client.callTool({ name: "nuryel_write", arguments: { principal, scope: repo, facet: "commitments", record: { schema: "nuryel.commitment/1", ...cBase, title: "other", status: "done", closed_by: "nrc_000000000000000000000000", valid_from: "2026-09-08T09:05:00Z", valid_to: "2026-09-09T11:10:00Z", provenance: prov }, idempotency_key: "mcp-closed-bad" } });
+  assert.equal(badClose.isError, true);
+  assert.match((badClose.content as Array<{ text: string }>)[0]!.text, /refused \[conflict\].*write the receipt first/s);
 });
