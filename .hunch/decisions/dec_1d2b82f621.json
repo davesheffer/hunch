@@ -1,0 +1,99 @@
+{
+  "id": "dec_1d2b82f621",
+  "title": "Restructure hero particles: topology-aware base pairs + precomputed mapping",
+  "topic": null,
+  "status": "accepted",
+  "context": "Original hero used generic scattered particle fields for surroundings; rendering was expensive and lacked spatial structure. Visualizing DNA topology required explicit strand geometry and lighting. Touches invariant(s): con_009f720549 (Replace the blue-violet palette in the homepage particle helicoid with the prior green Hunch palette; convey gene mapping through structured loci, paired bands, quiet gaps, and moving mapped regions woven into the surface, without external labels or geometry/background changes.); con_0b231a5a00 (Mouse interaction on the homepage particle helicoid should create a small, localized, ASMR-like scatter: nearby points separate subtly with a soft tangential drift, respond to pointer velocity, and ease back into the weave. Avoid large repulsion, explosive movement, or mobile/touch activation.); con_0b511e426b (The embedded homepage thinking path must feel alive: multiple decision pulses should continuously travel through it with short luminous tails and a subtle breathing rhythm, visibly intensifying when they cross mapped gene loci. It should read as decisions running through repository DNA, not as a static dotted line or single marker.); con_12d7eda99a (Decision-pulse travel through the homepage DNA must feel smooth and ASMR-like: interpolate through neighboring DNA points instead of snapping, use a slower steady current, soften tail falloff, and keep scroll influence on pulse speed restrained.); con_17245bc2b7 (The homepage particle helicoid must remain one continuously visible sculpture throughout the hero scroll. Do not fade it out, move it fully away, or re-introduce it as a second element; use continuous rotation, translation, and depth movement instead.); con_1bde2775cb (The homepage hero must express Hunch as remembered engineering judgment: revisions pair with decisions through provenance, and scroll traces a current change back to why; avoid generic code-glyph, code-rain, scanner, or developer-tool motifs.); con_2781fad15d (The homepage hero must use a continuous sculptural 3D DNA form with cinematic mass and surface treatment, in the spirit of the DNA Capital reference; do not depict the DNA as beaded nodes, wire strands, or a graph lattice.); con_5255703cc9 (Do not use a different opening pose for the homepage particle helicoid. The initial hero must use the exact approved second/re-formed pose and composition; on scroll it may leave, dissolve, and re-enter, but it must settle back into that same approved pose.); con_59d0e01d60 (Remove the homepage eyebrow 'Project DNA for AI coding assistants'. Do not draw a separate straight or continuous line for the thinking path. Decision pulses must move through and activate the existing DNA particles dot-to-dot, while mapped gene bands briefly respond as rule checks before the pulse continues.); con_5bf9211096 (Keep the approved homepage DNA composition as the canonical visual language: an oversized broad woven particle fold, deeply cropped at the viewport edges, with sparse dark and bright green gene-mapping bands and controlled overlap behind the copy. Both scroll endpoints should read as this same sculptural family.); con_7c3b8267c0 (The closing homepage CTA headed 'Teach every coding agent how your repository works' must also carry the living Project DNA element. Reuse the same mapped particle sculpture and decision pulses, cropped into the open side of the section with a readability wash; do not substitute a static image or a separate generic DNA illustration.); con_cc04976048 (The homepage DNA hero must visibly communicate code and repository context; keep the headline fully opaque while scrolling and do not use floating label cards or scattered scroll effects.); con_cd6c602f44 (Remove the homepage hero note beginning 'Not a persona'. Express the missing idea visually with one embedded moving thought trace: a dotted green path whose brighter sequence continuously travels through the particle DNA as evidence moving through repository memory, without labels or literal code text.); con_d0e08ded6c (Color the homepage particle helicoid with structured DNA-like bands of cobalt, ultraviolet, cyan, and restrained magenta highlights, following the surface grid and depth; keep the existing light background, geometry, copy, and layout unchanged.); con_e09c985bb4 (The homepage cursor scatter must be clearly noticeable, not barely perceptible: use a wider localized influence, stronger but smooth point separation, and a restrained center bloom while keeping the effect calm, bounded, and non-explosive.); con_fa56cc5f5c (Make the homepage particle helicoid folds wider and its scroll motion much larger. During the extended hero scroll, the sculpture should drift out and fade into ambient particles, then re-form lower and closer in a new position. Keep the hero copy fully opaque and preserve the light background, green palette, and gene-mapping pattern.); con_fc5b5cb899 (Keep the homepage's existing light background and reproduce the DNA Capital reference element itself as a dense continuous particle helicoid, large and cropped at the right edge; do not change the hero background, add a dark space section, or reinterpret the element as a graph/core reveal.).",
+  "decision": "Replace makeParticleField (simple scattered points) with makeDeepSpaceParticles + makeBasePairs; add surface normals and per-vertex grain; precompute gene membership weights (locusWeight, pairedWeight) once at init instead of per-frame; tune material depth and transparency (depthWrite true, alphaTest 0.28).",
+  "consequences": [
+    "Visual: colored palette shift (e.g., 0x6fa58b→0x518c6d), defined DNA strand structure instead of random dust",
+    "Performance: gene membership no longer recalculated each frame; surface lighting now per-vertex",
+    "Interaction: material opacity and depth-sorting behavior changed; broadBand exposure replaces lane-only culling",
+    "Code: two new functions (makeCodeSignals, makeBasePairs) assume higher complexity in hero rendering"
+  ],
+  "alternatives_rejected": [
+    "Keep makeParticleField; accept visual/structural limitations",
+    "Defer weight precomputation to animation loop; accept frame-time cost",
+    "Omit surface lighting; render as flat textured points"
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Keep makeParticleField; accept visual/structural limitations",
+      "scope": [
+        "site/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Defer weight precomputation to animation loop; accept frame-time cost",
+      "scope": [
+        "site/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Omit surface lighting; render as flat textured points",
+      "scope": [
+        "site/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_c099a42a55"
+  ],
+  "related_files": [
+    "site/dna-hero.js"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "164dc84",
+  "valid_from": "2026-09-09T22:07:01+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [
+      "makeParticleField"
+    ],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft+summary",
+    "confidence": 0.5,
+    "evidence": [
+      "commit:164dc84",
+      "synth:provider=claude-cli",
+      "branch:main",
+      "site/dna-hero.js"
+    ],
+    "last_verified": "2026-09-09T19:07:37.005Z"
+  },
+  "date": "2026-09-09T22:07:01+03:00"
+}
