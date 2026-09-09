@@ -1,0 +1,50 @@
+{
+  "id": "dec_ea00d463f0",
+  "title": "feat(state): audited entity merge and split — retired + merged_into, reads resolve to the survivor, nothing rewritten",
+  "topic": null,
+  "status": "accepted",
+  "context": "A merge is a write, not a rewrite: the entity that goes is written lifecycle retired with\nmerged_into naming an active survivor on record (409 conflict otherwise; merging into an\nentity that was itself merged names the one that stands). The ledger holds the `retired`\nchange. Reads resolve the old id and every key it carried, through chains, to the survivor\nand return both histories as one state of record; new state under the old name is refused\n422 identity naming the survivor. Split is the expl Touches invariant(s): con_902759b3dc (All JSON writes to .hunch/ must be atomic (temp-file + rename) so an interrupted write can never truncate the index); con_a87360128b (Semantic vectors are a derived layer in SQLite, never the source of truth; reconcile by content hash on reindex).",
+  "decision": "Introduced src/core, src/store, test/state-entity-merge.test.ts: added survivorOf, principal, write, entity, commitment, inForce, refusal; changed entityIndex; new dep(s): node:test, node:assert/strict; 1 new file(s).",
+  "consequences": [
+    "Adds dependency: node:test, node:assert/strict.",
+    "Changes entityIndex (signature/behavior)."
+  ],
+  "alternatives_rejected": [],
+  "rejected_tripwires": [],
+  "related_components": [
+    "cmp_a94a8fe5cc",
+    "cmp_b256a6aed0",
+    "cmp_cdfb395bb7"
+  ],
+  "related_files": [
+    "src/core/stateContract.ts",
+    "src/core/stateRecords.ts",
+    "src/store/stateBinding.ts",
+    "test/state-entity-merge.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "c7a5706",
+  "valid_from": "2026-09-09T16:06:00+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "inferred",
+    "confidence": 0.45,
+    "evidence": [
+      "commit:c7a5706",
+      "synth:provider=deterministic",
+      "branch:feat/entity-merge",
+      "src/core/stateContract.ts",
+      "src/core/stateRecords.ts",
+      "src/store/stateBinding.ts",
+      "test/state-entity-merge.test.ts"
+    ],
+    "last_verified": "2026-09-09T13:06:53.815Z"
+  },
+  "date": "2026-09-09T16:06:00+03:00"
+}
