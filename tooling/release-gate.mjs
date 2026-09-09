@@ -75,7 +75,7 @@ export const RELEASE_TEST_COVERAGE = Object.freeze({
     ".github/workflows/vscode-open-vsx.yml",
     "test/grounding-capture-commit.test.ts",
     "test/grounding-freshness.test.ts",
-    "test/grounding-merge-lag.test.ts",
+    "test/grounding-lag.test.ts",
     "src/core/groundingLag.ts",
     "test/release-gate.test.ts",
     "test/vscode-open-vsx-workflow.test.ts",

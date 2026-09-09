@@ -643,9 +643,11 @@ export function commitAndPushHunch(hunchDir: string, message: string, opts: Hunc
     if (staged.derived.length) run(["reset", "-q", "--", ...staged.derived]);
     const memoryPaths = staged.memory;
     if (memoryPaths.length === 0) return null;
-    // Grounding docs refreshed by this capture ride the same memory commit, so committed record
-    // counts can never go stale (the refresh-counts treadmill: every capture commit bumped the
-    // count and re-staled the docs for the next release-gate clean-tree check). Staged AFTER the
+    // Grounding docs refreshed by this capture ride the same memory commit, so committed
+    // grounding content can never go stale (the refresh-counts treadmill: record counts used to
+    // bump on every capture and re-stale the docs for the next release-gate clean-tree check;
+    // a capture that changes a constraint or the wiki manifest still does the same today).
+    // Staged AFTER the
     // memory-only backstop on purpose: alsoStage is a code-controlled list of generated grounding
     // docs the caller verified git-clean BEFORE rewriting, so it can neither weaken the
     // bug_overlay_clobber detection above nor sweep user edits.
@@ -1798,7 +1800,7 @@ function blobBytes(oid: string, root: string, env: NodeJS.ProcessEnv): Buffer | 
 
 /** Preserve every byte outside Hunch's one well-formed managed region. These
  * documents contain user/team instructions too; reverting a capture must never
- * roll those bytes back merely because the same commit refreshed Hunch counts. */
+ * roll those bytes back merely because the same commit refreshed the grounding block. */
 function groundingEnvelope(blob: Buffer): Buffer | null {
   const start = blob.indexOf(HUNCH_GROUNDING_START);
   if (start < 0 || blob.indexOf(HUNCH_GROUNDING_START, start + HUNCH_GROUNDING_START.length) >= 0) return null;
