@@ -1,0 +1,50 @@
+{
+  "id": "dec_01103a971d",
+  "title": "A human correction outranks later agent writes: a human-confirmed state record is never overwritten or superseded by an agent or service principal",
+  "topic": "state.human-correction-precedence",
+  "status": "accepted",
+  "context": "The ROADMAP asked for a test proving a human correction is not overridden by a subsequent agent write; a peer's reducer was observed to lose this (fnd_f670868a8c: correction wins only by timestamp, so a later LLM write overrides it). Before this change writeState let any principal update a record in place under a new idempotency key, so an agent re-sending its old payload after a human corrected the record would silently clobber the correction. Shipped in commit 9646200 on branch feat/replay-determinism.",
+  "decision": "New contract invariant `human-correction-outranks-agent-writes` (STATE_INVARIANTS, `isHumanConfirmed` exported from stateContract) enforced in writeState before the topic guard: when the principal is not human and the incumbent (same id, or the `supersedes` target) carries `human_confirmed` provenance, the write is refused `conflict` with reason `human-confirmed incumbent` and the differing fields named. Exactly three agent moves stay open, each keeping the human's provenance on the record: (1) re-sending the human's facts — nothing differs but the tier downgrade — is a `replayed`; (2) a current derived statement written back `stale` with an external `cause` (the writer's currentness duty); (3) a commitment closed by a receipt on record (status done + closed_by). The guard is per record, not per field.",
+  "consequences": [
+    "Sofia and any other agent writer must expect `409 conflict / human-confirmed incumbent` on a record a human corrected, and leave it alone or hand the change to a human principal.",
+    "Per-field provenance (a summary citing its sources per sentence) stays later; until then the guard is coarse: any non-allowed field difference refuses.",
+    "hunch_record_correction (constraints) is unaffected; this covers the state facets written through nuryel.state/1."
+  ],
+  "alternatives_rejected": [
+    "Let `expected_version` matching the human's hash authorize the overwrite — REJECTED: it proves the agent read the correction, not that it may change it; a read-then-rewrite loop still clobbers.",
+    "Priority by provenance tier resolved at read time (correction outranks by rank, both records kept) — REJECTED: read-time merging hides the contradiction; Hunch refuses at write time.",
+    "Refuse every agent write on a human-confirmed record including stale-with-cause and closure — REJECTED: those are facts about the world the human's record does not contradict; blocking them would leave human-confirmed summaries current after their source moved."
+  ],
+  "rejected_tripwires": [],
+  "related_components": [
+    "Store"
+  ],
+  "related_files": [
+    "src/core/stateContract.ts",
+    "src/store/stateBinding.ts",
+    "docs/nuryel-state-contract.md",
+    "test/state-replay.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-09-09T12:45:52.805Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "premises": [],
+  "provenance": {
+    "source": "agent_recorded",
+    "confidence": 0.75,
+    "evidence": [
+      "src/core/stateContract.ts",
+      "src/store/stateBinding.ts",
+      "docs/nuryel-state-contract.md",
+      "test/state-replay.test.ts"
+    ]
+  },
+  "date": "2026-09-09T12:45:52.805Z"
+}

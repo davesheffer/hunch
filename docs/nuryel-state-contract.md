@@ -294,7 +294,37 @@ same fact*: `actionReceiptId` (action, not row), `commitmentId` (scope, subject,
 | `one-live-decision-per-topic` | a second live decision is refused with the incumbent named | existing topic guard; `WriteResult.conflict` |
 | `external-truth-stays-external` | pointers, versions, hashes — never mirrored bodies | `ExternalRefSchema` credential-free refinements; entity attributes capped |
 | `derived-state-carries-dependencies` | no dependencies, not state | `assertDerivedState`, schema `min(1)` |
+| `human-correction-outranks-agent-writes` | what a human confirmed, an agent or service principal never overwrites or supersedes: it may replay it, write derived state back `stale` with the external cause that moved, or close a commitment with a receipt on record — each keeping the human's provenance; changing what the human said takes a human | `writeState` guard (`409 conflict`, reason `human-confirmed incumbent`, the differing fields named); `test/state-replay.test.ts` |
 | `derived-state-writer-owns-currentness` | no source writes the drawer: the writer of a derived statement re-validates what it rests on and writes it back `stale` with the moved pointer as cause, or does not write derived state | `WriteRequest.cause`, the `invalidated` change (Sofia's source sweep is the reference writer) |
+
+## Replay determinism (`nuryel.replay/1`)
+
+A partition's current state is a pure function of its change ledger, and that is a check, not a
+claim: `hunch serve replay --partition <kind:id>` (with a serve config) or `hunch serve replay
+--root <dir>` (the partition a directory is) folds `.hunch/changes/<scope>.json` into the state it
+implies — the hash of every record after its last event — and compares it, hash for hash, to the
+records on file. `stateHash` is sha256 over the canonical form, so equal hashes are byte-equal
+canonical records. The report (`--json`) carries `replay_hash` (the fold) and `stored_hash` (the
+files, same ids), both over the facets the contract owns; they must be equal. Divergences are
+typed and each names the record, the seq and both hashes:
+
+| Kind | Meaning |
+| --- | --- |
+| `missing-record` | the ledger says the record exists; no file holds it |
+| `hash-drift` | the record on file is not the record the ledger's last event wrote (a hand edit, a non-contract writer) |
+| `orphan-record` | a state record the ledger never saw — a write that bypassed the contract, or a crash between "record written" and "event appended" |
+| `idempotency-drift` | an idempotency entry whose hash disagrees with the ledger at its seq |
+| `legacy-drift` | a decision / constraint / bug / finding moved by a path older than the contract (`hunch supersede`, adopt-drafts); reported, never a failure |
+
+Compaction keeps the property: the idempotency table is kept whole, so a record whose events fell
+below the floor is verified against its newest idempotency entry; the one change the contract makes
+without an entry — closing a window on supersession — leaves a closed record below the floor
+`unverifiable` (counted, not failed), while an open record that differs is drift. The git-tracked
+JSON records stay the source of truth (`con_a87360128b` family); the ledger proves them, it does
+not replace them. The check exits 1 on any divergence, and `hunch drift` runs it whenever the
+partition it stands in has a change ledger (a `replay-*` finding fails the gate), so the existing
+CI gate covers ledger≠records beside doc≠graph. The agent farm replays every served partition at
+the end of every run.
 
 ## Backward compatibility
 
@@ -321,12 +351,11 @@ not modified by the registration — the store change is the index-file layout m
   body-limit and write-lock decisions. Its per-store concurrency gate, context-consistency
   watermarks and the usefulness / Project DNA intake routes are not ported; they return only if a
   served partition needs them.
-- **Ledger merge.** A scope's ledger has one sequence because it has one home; two clones
-  writing the same repository partition on different branches will collide on merge exactly
-  as two live decisions on a topic do. `reconcile-topics` is the model; the ledger equivalent
-  is not written.
-- **Ledger compaction.** Ledgers grow without bound; a `compact` step that keeps the head and
-  the idempotency table is future work.
+- **Audited entity merge and split** for the cases an external reference cannot settle (one
+  customer under two CRM sites): ledger events with provenance, never silent rewrites. The
+  subject-identity rule itself (`state.entity-identity`) is proposed, not frozen.
+- **Per-field provenance on derived state.** A summary cites its sources as a whole; the
+  human-correction guard therefore works per record, not per field.
 - **Repository-scope private content.** The contract has no `private` flag: scope decides the
   home. Sensitive repository-scope state goes through the existing `hunch_record_*` tools
   with `private:true`, or into a user/team partition.

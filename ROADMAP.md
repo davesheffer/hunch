@@ -56,9 +56,9 @@ copied claims:
 | --- | --- | --- |
 | Subject identity by external reference | two agents over one CRM record, thread or chat must land on one subject; 1.28.0 keyed subjects by CRM site, the general rule is not frozen yet | proposed (`state.entity-identity`) |
 | Audited entity merge and split | the cases an external reference cannot settle; recorded as ledger events with provenance, never silent rewrites | proposed, follows the item above |
-| Replay determinism as a check | rebuild a partition from its ledger and compare byte-for-byte to the stored records; publish the command, not the claim | proposed (`state.replay-determinism`) |
+| Replay determinism as a check | fold a partition's ledger into the state it implies and compare it hash for hash (canonical bytes) to the stored records; publish the command, not the claim | done, 1.30.0 — `hunch serve replay`, typed divergences, exit 1; every farm run replays every partition (`state.replay-determinism`) |
 | Field-level provenance on derived state | a summary today cites its sources as a whole; per-field citation lets a reader see which source a sentence rests on | later, after the second-user measurement |
-| Correction outranks later agent writes | prove, with a test, that a human correction on a record is not overridden by a subsequent agent write on the same field; a peer's reducer was observed to lose this | test to add |
+| Correction outranks later agent writes | prove, with a test, that a human correction on a record is not overridden by a subsequent agent write on the same field; a peer's reducer was observed to lose this | done, 1.30.0 — invariant `human-correction-outranks-agent-writes`, enforced at write time (`409 conflict`, `human-confirmed incumbent`), tested in `test/state-replay.test.ts`; per record, not per field (per-field provenance stays later) |
 | Attested principal identity | bearer keys today; key-thumbprint or hardware-attested principals for the organization partition when a second person holds a key | after Gate 5 |
 | Read-only operator view | a page over a served partition: current records, ledger, who wrote what; no editing | after Gate 5 |
 | Typed clients beyond TypeScript | a Python client for the three verbs, generated from the contract | when a non-TypeScript orchestrator asks for it |

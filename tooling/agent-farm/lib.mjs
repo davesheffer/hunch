@@ -21,6 +21,9 @@ import { createServeApp } from "../../dist/serve/app.js";
 import { initServeConfig, readServeConfig } from "../../dist/serve/config.js";
 import { createStateClient, StateClientError } from "../../dist/client/state.js";
 import { assertChangeSequence, derivedId, stateHash } from "../../dist/core/stateContract.js";
+import { HunchStore } from "../../dist/store/hunchStore.js";
+import { hunchPaths } from "../../dist/core/paths.js";
+import { verifyReplay } from "../../dist/store/replay.js";
 
 const DAY = "2026-09-08";
 const AT = `${DAY}T09:00:00Z`;
@@ -305,12 +308,25 @@ export async function runFarm({ agents = 3, customers = 5, outDir, org: orgName 
     }
     if (fetched !== ids.length) problems.push(`fetched ${fetched} of ${ids.length} ledger records`);
 
+    // 7. Replay determinism: every partition's records are exactly what its ledger implies.
+    const replay = { partitions: 0, ok: true, verified: 0, divergences: [] };
+    for (const partition of readServeConfig(file).partitions) {
+      const store = new HunchStore(hunchPaths(partition.root));
+      try {
+        const r = verifyReplay(store, partition.scope);
+        replay.partitions++;
+        replay.verified += r.records.verified + r.records.verified_by_idempotency;
+        for (const d of r.divergences.filter((d) => d.kind !== "legacy-drift")) { replay.ok = false; replay.divergences.push(`${partition.scope.kind}/${partition.scope.id} ${d.kind} ${d.record_id}`); problems.push(`replay ${partition.scope.kind}/${partition.scope.id}: ${d.detail}`); }
+        if (r.replay_hash !== r.stored_hash) { replay.ok = false; problems.push(`replay ${partition.scope.kind}/${partition.scope.id}: ledger fold ${r.replay_hash} != stored ${r.stored_hash}`); }
+      } finally { store.close(); }
+    }
+
     const total = Date.now() - started;
     const report = {
       agents: { sofia: agents, orc: 1, engineer: 1 }, customers,
       writes: tally.writes, durability: tally.durability, refusals: tally.refusals, reads: tally.reads, retries: tally.retries,
       reuse: tally.reuse, recompute: tally.recompute, reuse_rate: tally.reuse / Math.max(1, tally.reuse + tally.recompute),
-      contradictions, chain, ledger: { head_seq: stream.head_seq, events: stream.events.length, records_fetched: fetched, contiguous },
+      contradictions, chain, ledger: { head_seq: stream.head_seq, events: stream.events.length, records_fetched: fetched, contiguous }, replay,
       durations_ms: { total, per_agent_avg: Math.round(agentDurations.reduce((a, b) => a + b, 0) / Math.max(1, agentDurations.length)) },
       problems, out: join(out, "farm-report.json"), work,
     };
@@ -338,6 +354,7 @@ export function formatReport(r) {
     row("contradictions", r.contradictions),
     row("chain", `incidents=${r.chain.incidents} decisions=${r.chain.decisions} shipped=${r.chain.shipped} closed=${r.chain.closed} seen_by_sofias=${r.chain.closures_seen_by_sofias} links_verified=${r.chain.links_verified_by_orc} closure_causes=${r.chain.closure_causes} denied_to_orc=${r.chain.denied_to_orc}`),
     row("ledger", `head_seq=${r.ledger.head_seq} contiguous=${r.ledger.contiguous} records_fetched=${r.ledger.records_fetched}`),
+    row("replay", `partitions=${r.replay.partitions} ok=${r.replay.ok} records_verified=${r.replay.verified}${r.replay.divergences.length ? ` divergences=${r.replay.divergences.join(",")}` : ""}`),
     row("duration", `${r.durations_ms.total} ms total, ${r.durations_ms.per_agent_avg} ms per sofia`),
     row("report", r.out),
     ...(r.problems.length ? ["problems:", ...r.problems.map((p) => `  - ${p}`)] : []),
