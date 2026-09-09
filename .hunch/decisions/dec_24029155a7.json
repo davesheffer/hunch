@@ -1,0 +1,62 @@
+{
+  "id": "dec_24029155a7",
+  "title": "feat(state): replay determinism as a check, and a human correction outranks later agent writes",
+  "topic": null,
+  "status": "accepted",
+  "context": "`hunch serve replay --partition <kind:id>` / `--root <dir>` folds a partition's change ledger\ninto the state it implies and compares it hash for hash (canonical bytes) to the records on\nfile: replay_hash vs stored_hash, typed divergences (missing-record, hash-drift, orphan-record,\nidempotency-drift, legacy-drift), exit 1 on any failure. Compaction keeps the property through\nthe idempotency table. The agent farm replays every served partition on every run.\n\nNew contract invariant human-correction Touches invariant(s): con_902759b3dc (All JSON writes to .hunch/ must be atomic (temp-file + rename) so an interrupted write can never truncate the index); con_a87360128b (Semantic vectors are a derived layer in SQLite, never the source of truth; reconcile by content hash on reindex).",
+  "decision": "Introduced src/cli, src/core, src/store, test/agent-farm.test.ts, test/state-contract.test.ts, test/state-replay.test.ts: added isHumanConfirmed, ReplayDivergenceKind, ReplayDivergence, ReplaySnapshotEntry, ReplayReport, foldLedger, verifyReplay, formatReplayReport; removed homeFor; new dep(s): node:test, node:assert/strict, node:child_process, node:fs, node:os, node:path; 2 new file(s).",
+  "consequences": [
+    "Adds dependency: node:test, node:assert/strict, node:child_process, node:fs, node:os, node:path.",
+    "Removes homeFor — potential breaking change for callers."
+  ],
+  "alternatives_rejected": [],
+  "rejected_tripwires": [],
+  "related_components": [
+    "cmp_04c6efb58b",
+    "cmp_50037f41a9",
+    "cmp_a94a8fe5cc",
+    "cmp_b256a6aed0",
+    "cmp_cdfb395bb7"
+  ],
+  "related_files": [
+    "src/cli/serve.ts",
+    "src/core/stateContract.ts",
+    "src/store/replay.ts",
+    "src/store/stateBinding.ts",
+    "test/agent-farm.test.ts",
+    "test/state-contract.test.ts",
+    "test/state-replay.test.ts",
+    "tooling/agent-farm/lib.mjs"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "9646200",
+  "valid_from": "2026-09-09T15:43:40+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [
+      "homeFor"
+    ],
+    "deps": []
+  },
+  "provenance": {
+    "source": "inferred",
+    "confidence": 0.45,
+    "evidence": [
+      "commit:9646200",
+      "synth:provider=deterministic",
+      "branch:feat/replay-determinism",
+      "src/cli/serve.ts",
+      "src/core/stateContract.ts",
+      "src/store/replay.ts",
+      "src/store/stateBinding.ts",
+      "test/agent-farm.test.ts",
+      "test/state-contract.test.ts",
+      "test/state-replay.test.ts",
+      "tooling/agent-farm/lib.mjs"
+    ],
+    "last_verified": "2026-09-09T12:44:53.775Z"
+  },
+  "date": "2026-09-09T15:43:40+03:00"
+}
