@@ -32,7 +32,7 @@ import {
   ReadRequestSchema, ReadResponseSchema, WriteRequestSchema, WriteResultSchema, SubscribeRequestSchema, ChangeEventSchema,
   RecordsRequestSchema, RecordsResponseSchema, STATE_RECORDS_VERSION,
   ScopeSchema, scopePath, stateHash, actionReceiptId, commitmentId, derivedId,
-  assertReadWithinGrants, assertWriteWellFormed, assertDerivedState,
+  assertReadWithinGrants, assertWriteWellFormed, assertDerivedState, isHumanConfirmed,
   type Principal, type Scope, type StateFacet, type ReadRequest, type ReadResponse, type WriteRequest, type WriteResult,
   type SubscribeRequest, type ChangeEvent, type StateRef, type DependencyRef, type RecordsRequest, type RecordsResponse,
 } from "../core/stateContract.js";
@@ -98,7 +98,9 @@ export function capabilities(store: HunchStore): { protocol: typeof STATE_CONTRA
 
 const granted = (principal: Principal, scope: Scope): boolean => principal.grants.some((g) => scopePath(g) === scopePath(scope));
 
-function homeFor(store: HunchStore, scope: Scope): { home: "public" | "private"; hunchDir: string; isPrivate: boolean } {
+/** Where a scope's records and ledger live in this store (exported for the replay check, which
+ *  must read the SAME home the write verb wrote — never a second routing rule). */
+export function stateHomeFor(store: HunchStore, scope: Scope): { home: "public" | "private"; hunchDir: string; isPrivate: boolean } {
   const own = partitionOf(store);
   if (scopePath(scope) === scopePath(own)) {
     // The store IS this partition: its capture home (public `.hunch/`, or the overlay in shared mode).
@@ -431,7 +433,7 @@ export function writeState(store: HunchStore, input: unknown, opts: WriteOptions
   try { assertWriteWellFormed(request); } catch (e) {
     throw new StateRefusal(/grants/.test((e as Error).message) ? "outside-grants" : "malformed", (e as Error).message);
   }
-  const { home, hunchDir, isPrivate } = homeFor(store, request.scope);
+  const { home, hunchDir, isPrivate } = stateHomeFor(store, request.scope);
   const now = (opts.now ?? (() => new Date()))().toISOString();
   const facet = request.facet;
   if (!(ENTITY_KINDS as readonly string[]).includes(facet)) throw new StateRefusal("unsupported", `facet ${facet} is not a store kind`);
@@ -474,8 +476,38 @@ export function writeState(store: HunchStore, input: unknown, opts: WriteOptions
     if (!ok) throw new StateRefusal("conflict", `expected_version does not match the incumbent ${id}`, { incumbent_id: id, reason: "expected_version mismatch" });
   }
 
-  // one-live-decision-per-topic — refuse with the incumbent named; supersession is explicit.
+  // human-correction-outranks-agent-writes: what a human confirmed, an agent does not rewrite.
+  // Allowed for an agent: a replay (the same facts, the tier downgrade aside), a derived statement
+  // written back stale with the external cause that moved (the writer's currentness duty), a
+  // commitment closed by a receipt on record (a fact that happened) — both keep the human's
+  // provenance on the record. Everything else on a human-confirmed incumbent — in place or by
+  // supersession — is refused with the incumbent named.
   let supersedes: string | null = request.supersedes ?? null;
+  if (request.principal.kind !== "human") {
+    const guard = (incumbent: Record<string, unknown> | undefined, how: "overwrite" | "supersede"): "replay" | "keep-provenance" | null => {
+      if (!incumbent || !isHumanConfirmed(incumbent)) return null;
+      const incumbentId = String(incumbent.id);
+      const changed = how === "overwrite" ? differingFields(incumbent, record as Record<string, unknown>).filter((f) => f !== "provenance") : ["a new record"];
+      if (how === "overwrite") {
+        if (changed.length === 0) return "replay";
+        const staleWithCause = facet === "derived" && incumbent.state === "current" && (record as EntityFor["derived"]).state === "stale" && request.cause?.kind === "external"
+          && changed.every((f) => f === "state" || f === "valid_to");
+        const closedByReceipt = facet === "commitments" && !!(record as EntityFor["commitments"]).closed_by && (record as EntityFor["commitments"]).status === "done"
+          && changed.every((f) => f === "status" || f === "closed_by" || f === "valid_to");
+        if (staleWithCause || closedByReceipt) return "keep-provenance";
+      }
+      throw new StateRefusal("conflict", `${incumbentId} was confirmed by a human; ${request.principal.kind === "agent" ? "an agent" : "a service"} principal may not ${how} it (differs in: ${changed.join(", ")}). A human writes the change, or the agent leaves the record as the human left it.`, { incumbent_id: incumbentId, reason: "human-confirmed incumbent" });
+    };
+    const verdict = guard(existing, "overwrite");
+    if (verdict === "replay") {
+      appendChanges(hunchDir, request.scope, [], { key: request.idempotency_key, entry: { record_id: id, record_hash: stateHash(existing!), payload_hash: hash, facet } }, now);
+      return result("replayed");
+    }
+    if (verdict === "keep-provenance") (record as { provenance: unknown }).provenance = existing!.provenance;
+    if (supersedes && supersedes !== id) guard(store.getRec(facet as EntityKind, supersedes) as Record<string, unknown> | undefined, "supersede");
+  }
+
+  // one-live-decision-per-topic — refuse with the incumbent named; supersession is explicit.
   if (facet === "decisions") {
     const d = record as EntityFor["decisions"];
     if (d.topic && d.status === "accepted") {
@@ -544,7 +576,7 @@ export function writeState(store: HunchStore, input: unknown, opts: WriteOptions
 export function subscribeState(store: HunchStore, input: unknown): SubscribeResponse {
   const request: SubscribeRequest = SubscribeRequestSchema.parse(input);
   if (!granted(request.principal, request.scope)) throw new StateRefusal("outside-grants", `scope ${scopePath(request.scope)} is outside the principal's grants`);
-  const { hunchDir } = homeFor(store, request.scope);
+  const { hunchDir } = stateHomeFor(store, request.scope);
   const ledger = readLedger(hunchDir, request.scope);
   const facets = request.facets ? new Set<string>(request.facets) : null;
   const subjects = request.subjects ? new Set(request.subjects) : null;

@@ -274,10 +274,17 @@ export const STATE_INVARIANTS = [
   { id: "one-live-decision-per-topic", statement: "A second live decision on a topic is refused with the incumbent named; supersession is explicit." },
   { id: "external-truth-stays-external", statement: "External systems remain authoritative for their own content; Nuryel holds credential-free pointers, versions and hashes, never mirrored bodies." },
   { id: "derived-state-carries-dependencies", statement: "A derived statement without dependencies cannot be invalidated and is therefore not state." },
+  { id: "human-correction-outranks-agent-writes", statement: "A record a human confirmed is never overwritten or superseded by an agent or service principal: the agent may replay it, write derived state back stale with the external cause that moved, or close a commitment with a receipt on record. Changing what the human said takes a human." },
   { id: "derived-state-writer-owns-currentness", statement: "No source writes the drawer. The writer of a derived statement owns keeping its dependencies true: re-validate them on a schedule or on a source event, and write the statement back stale with the moved pointer as cause when one no longer holds. An agent that will not do this must not write derived state." },
 ] as const;
 
 const grantKey = (scope: Scope): string => scopePath(scope);
+
+/** The memory supply chain's top tier: a record whose provenance a human signed. */
+export function isHumanConfirmed(record: unknown): boolean {
+  const source = (record as { provenance?: { source?: unknown } } | null)?.provenance?.source;
+  return typeof source === "string" && source.split("+").includes("human_confirmed");
+}
 
 /** authorization-before-retrieval, checked on the way OUT as well: nothing in a read response
  *  may sit outside the principal's grants. Bindings must also filter on the way in. */

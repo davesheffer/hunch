@@ -77,6 +77,9 @@ fields), and choosing a receipt id (`422 identity`).
 - `contradictions` — more than one current derived summary per subject in the org drawer, two
   agents with the same grants seeing different in-force commitments, or a chain link the orc
   could not verify; must be 0
+- `replay` — `partitions`, `ok`, `records_verified`, `divergences`: every served partition is
+  replayed at the end (`verifyReplay`, the same check as `hunch serve replay`): the ledger folded
+  into the state it implies must match the records on file hash for hash; a divergence is a problem
 - `chain` — `incidents`, `escalations_seen_by_engineer`, `decisions`, `shipped`, `closed`,
   `closures_seen_by_sofias` (incidents × sofias), `links_verified_by_orc` (decision ref with its
   repository partition, proof ref, escalation ref, `closed_by`, receipt in `done` — all five per

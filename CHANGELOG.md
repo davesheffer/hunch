@@ -1,5 +1,38 @@
 # Changelog
 
+## Unreleased
+
+### Replay determinism is a check, and a human correction outranks the agents
+
+**`hunch serve replay`** (`nuryel.replay/1`). A partition's current state is a pure function of
+its change ledger — and now that is a command, not copy. `hunch serve replay --partition
+<kind:id>` (with a serve config) or `--root <dir>` (the partition a directory is) folds
+`.hunch/changes/` into the state it implies (every record's hash after its last event) and
+compares it, hash for hash, to the records on file; `stateHash` is sha256 over the canonical form,
+so equal hashes are byte-equal canonical records. The report carries `replay_hash` and
+`stored_hash` (they must agree) and typed divergences, each naming the record, the seq and both
+hashes: `missing-record`, `hash-drift`, `orphan-record` (a state record the ledger never saw — the
+crash-between-put-and-append the ledger promised the next writer could detect, now detected),
+`idempotency-drift`, and `legacy-drift` (a decision / constraint / bug / finding moved by a path
+older than the contract — reported, never a failure). Compaction keeps the property through the
+idempotency table, which is kept whole; a closed record whose supersession fell below the floor is
+`unverifiable` (counted), an open record that differs is drift. Exit 1 on any divergence — wire it
+into CI beside `hunch drift`. `verifyReplay` / `foldLedger` / `formatReplayReport` in
+`src/store/replay.ts`; the agent farm replays every served partition at the end of every run and
+reports `replay` beside `contradictions`. `stateHomeFor` is exported from the binding so the check
+reads exactly the home the write verb wrote.
+
+**`human-correction-outranks-agent-writes`** — a new contract invariant, enforced at write time.
+A record a human confirmed (`provenance.source` carries `human_confirmed`) is never overwritten or
+superseded by an agent or service principal: the write is refused `409 conflict`, reason
+`human-confirmed incumbent`, the differing fields named. Three agent moves stay open, each keeping
+the human's provenance on the record: re-sending the human's facts is a `replayed` (the tier
+downgrade aside, nothing differs), writing a derived statement back `stale` with the external
+cause that moved (the writer's currentness duty), and closing a commitment with a receipt on
+record (a fact that happened). A peer's reducer was observed to let a later LLM write override a
+human correction (`fnd_f670868a8c`); this is the test that Hunch does not.
+`test/state-replay.test.ts` covers both features, including the CLI's exit code.
+
 ## 1.29.0 — 2026-09-09
 
 ### The chain: incident → decision → change proof → closure

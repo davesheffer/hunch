@@ -18,6 +18,7 @@ interface FarmReport {
   contradictions: number;
   chain: { incidents: number; escalations_seen_by_engineer: number; decisions: number; shipped: number; closed: number; closures_seen_by_sofias: number; links_verified_by_orc: number; denied_to_orc: number; closure_causes: number };
   ledger: { head_seq: number; contiguous: boolean };
+  replay: { partitions: number; ok: boolean; verified: number; divergences: string[] };
   durations_ms: { total: number; per_agent_avg: number };
   problems: string[];
   out: string;
@@ -57,6 +58,9 @@ test("agent farm: 3 sofias x 4 customers end the day with zero contradictions an
     assert.equal(c.closure_causes, c.incidents, "every closure event is caused by its receipt");
     assert.equal(c.denied_to_orc, 1, "the orc was refused the repository partition — named, never described");
     assert.ok((report.refusals["conflict"] ?? 0) >= 2, "a stale rests_on hash and a phantom closed_by were refused");
+    assert.ok(report.replay.partitions >= 5, "every served partition (org, 3 sofias, the app repository) was replayed");
+    assert.equal(report.replay.ok, true, `every partition's records are exactly what its ledger implies: ${report.replay.divergences.join(", ")}`);
+    assert.ok(report.replay.verified > 0);
     assert.ok(existsSync(report.out), "farm-report.json was written");
   } finally { rmSync(outDir, { recursive: true, force: true }); }
 });
