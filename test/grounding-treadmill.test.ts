@@ -8,7 +8,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -78,6 +78,34 @@ test("an untracked grounding doc stays the user's to stage", () => {
     writeFileSync(join(root, "AGENTS.md"), "# AGENTS\n\nuser draft, never committed\n");
     const changed = refreshCommittableGrounding(root, store);
     assert.ok(!changed.some((p) => p.endsWith("AGENTS.md")), "untracked doc is not refreshed or staged");
+  } finally {
+    cleanup();
+  }
+});
+
+/** An untracked-at-HEAD path is headFileContent's expected, silently-handled case
+ *  (the same probe generatedDirtOnly runs for every grounding target on `hunch
+ *  sync`/the post-commit flush). git's stderr is INHERITED unless stdio is set, so
+ *  the probe used to print `fatal: path '…' exists on disk, but not in 'HEAD'` onto
+ *  the caller's terminal — once per untracked doc — even though nothing failed. Only
+ *  a child process can observe that leak; an in-process spy on process.stderr.write
+ *  never sees a child's inherited write, which is why this needs a spawn. */
+test("headFileContent stays silent for an untracked path", () => {
+  const { root, cleanup } = fixture();
+  try {
+    writeFileSync(join(root, "AGENTS.md"), "# AGENTS\n\nuser draft, never committed\n");
+    const script = [
+      'import { headFileContent } from "./src/extractors/git.ts";',
+      `const root = ${JSON.stringify(root)};`,
+      'if (headFileContent(root, "AGENTS.md") !== null) throw new Error("expected null for untracked path");',
+      'if (typeof headFileContent(root, "CLAUDE.md") !== "string") throw new Error("expected tracked content");',
+    ].join("\n");
+    const run = spawnSync(process.execPath, ["--import", "tsx", "--input-type=module", "--eval", script], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    assert.equal(run.status, 0, run.stderr);
+    assert.equal(run.stderr, "", "git's expected untracked-at-HEAD fatal must not reach the caller's stderr");
   } finally {
     cleanup();
   }

@@ -743,6 +743,10 @@ export function headFileContent(root: string, rel: string): string | null {
       encoding: "utf8",
       env: foreignRepoEnv(process.env),
       maxBuffer: 16 * 1024 * 1024,
+      // An untracked/absent-at-HEAD path is an expected, silently-handled case
+      // (falls through to the catch below) — don't let git's "fatal: path ...
+      // does not exist in 'HEAD'" leak onto the caller's stderr for it.
+      stdio: ["ignore", "pipe", "ignore"],
     });
   } catch {
     return null;
