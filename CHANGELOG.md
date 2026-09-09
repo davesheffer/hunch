@@ -33,7 +33,11 @@ union read, decision in the repository partition, proof pointer, `shipped` recei
 three, escalation closed by it — with the two chain refusals provoked once. Every sofia must see
 the closure, the orc verifies all five links per incident and is refused the repository partition,
 and the ledger replay finds each closure caused by its receipt; a missing link is a contradiction.
-3 sofias × 5 customers: 3 incidents, 9 closures seen, 0 contradictions, 3.3 s.
+3 sofias × 5 customers: 3 incidents, 9 closures seen, 0 contradictions, 3.3 s. The Sofia emulation
+(real Sofia code, 3 Sofias, 10-clinic year) runs the same chain against a served organization +
+repository partition: Sofia's `summary()` now reads the drawer's state of record first and rests
+on its receipts and fulfilled commitments as record dependencies, so every Sofia serving a closed
+clinic re-derived and cited the engineer's receipt — 5 of 5, 0 contradictions.
 
 ### Merge lag is not a release blocker
 
