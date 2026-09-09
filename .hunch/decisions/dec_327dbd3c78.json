@@ -1,0 +1,54 @@
+{
+  "id": "dec_327dbd3c78",
+  "title": "Compete for the deterministic state layer position from the organizational angle; never claim to have named it",
+  "topic": "positioning.state-layer-competition",
+  "status": "accepted",
+  "context": "Neotoma has used 'a deterministic state layer for AI agents' since 2026-03-10 (fnd_f670868a8c); a same-day sweep found no vendor owning organizational deterministic state (fnd_9b70499539). David, 2026-09-09: 'i still want to show that im a compete for the deterministic state layer position but with my angle', and asked that GitHub README, the npm description and the site all speak the same language and show the moat.",
+  "decision": "Hunch keeps competing for the deterministic state layer position. Public copy (site hero and moat section in five locales, README top and 'Why Hunch, not another memory layer', npm description, ROADMAP landscape section) leads with the organizational angle and only verifiable properties: git as the source of truth, refusal at write time instead of later convergence, organization/team/person drawers with a key per agent, receipts and commitments as facts, Never Twice corrections, and the code-conformance spoke. Copy says 'the category is Deterministic State' and never 'we named it'. Peers are named only in dated docs (docs/competitive-landscape.md, ROADMAP.md), never in marketing copy.",
+  "consequences": [
+    "Site, README and npm description carry one sentence set; the thesis band now points to the post with 'in plain words' instead of repeating the hero.",
+    "Any new state-layer claim must be a property verifiable in this repository before it ships in copy.",
+    "Worthy peer material is tracked as roadmap items (ROADMAP.md landscape table), not copied as claims."
+  ],
+  "alternatives_rejected": [
+    "Retreat from the phrase because Neotoma used it first — REJECTED by David: the position is worth competing for and the angle differs (one person's agents vs an organization).",
+    "Claim to have coined the category — REJECTED: false as of 2026-03-10 and a credibility risk (dec_94b4b7880e).",
+    "Name competitors in homepage copy — REJECTED: dated comparisons belong in docs where they can be re-verified; marketing copy ages badly."
+  ],
+  "rejected_tripwires": [],
+  "related_components": [],
+  "related_files": [
+    "site/index.html",
+    "tooling/generate-site-locales.mjs",
+    "README.md",
+    "package.json",
+    "ROADMAP.md",
+    "docs/competitive-landscape.md",
+    "site/blog/posts.js"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-09-09T06:13:45.312Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "premises": [],
+  "provenance": {
+    "source": "agent_recorded",
+    "confidence": 0.75,
+    "evidence": [
+      "site/index.html",
+      "tooling/generate-site-locales.mjs",
+      "README.md",
+      "package.json",
+      "ROADMAP.md",
+      "docs/competitive-landscape.md",
+      "site/blog/posts.js"
+    ]
+  },
+  "date": "2026-09-09T06:13:45.312Z"
+}

@@ -4,10 +4,10 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Hunch Memory — Project DNA לעוזרי קוד מבוססי AI</title>
-  <meta name="description" content="למאגר שלכם יש DNA. Hunch נותן לעוזרי קוד מבוססי AI הבנה מבוססת ראיות של הדרך שבה הפרויקט מתקשר ועובד, לפני שהם משנים את הקוד." />
-  <meta property="og:title" content="Hunch Memory — Project DNA לעוזרי קוד מבוססי AI" />
-  <meta property="og:description" content="כל סוכן קוד מגיע כזר מבריק. Hunch מלמד אותו את השפה, ההחלטות, התיקונים שנלמדו בדרך והגבולות שמאחורי הקוד." />
+  <title>Hunch — מצב דטרמיניסטי לארגונים שמפעילים סוכנים</title>
+  <meta name="description" content="סוכנים הם הסתברותיים. ארגונים צריכים מצב דטרמיניסטי. Hunch שומר ב-git מה הוחלט, מה נעשה ומה עדיין חייבים, מסרב לסתירות ומוסר את זה לכל סוכן לפני שהוא עונה או עורך קוד." />
+  <meta property="og:title" content="Hunch — מצב דטרמיניסטי לארגונים שמפעילים סוכנים" />
+  <meta property="og:description" content="שכבת המצב הדטרמיניסטי בין סוכנים הסתברותיים לארגון: החלטות, קבלות, התחייבויות ואילוצי קוד — שמורים ב-git, עם סירוב לסתירות." />
 <meta property="og:image" content="https://www.hunchmemory.com/hunch-og.png" />
 <meta property="og:url" content="https://www.hunchmemory.com/he" />
 <meta property="og:locale" content="he_IL" />
@@ -331,7 +331,7 @@
 </head>
 <body>
 
-<a class="thesis-band" href="/he/blog/post?slug=the-state-layer"><span class="thesis-tag">מצב דטרמיניסטי</span><span class="thesis-text">סוכנים הם הסתברותיים. ארגונים צריכים מצב דטרמיניסטי.</span><b class="thesis-cta">לקריאת התזה ←</b></a>
+<a class="thesis-band" href="/he/blog/post?slug=the-state-layer"><span class="thesis-tag">מצב דטרמיניסטי</span><span class="thesis-text">מה זה מצב דטרמיניסטי, במילים פשוטות.</span><b class="thesis-cta">לקריאת התזה ←</b></a>
 <nav class="nav" aria-label="ניווט ראשי">
   <div class="wrap nav-in">
     <a class="brand" href="/he"><span class="brand-mark" aria-hidden="true"></span>hunch</a>
@@ -364,14 +364,35 @@
        Decorative: aria-hidden, pointer-events none, reduced-motion aware. -->
   <div class="hero-art" aria-hidden="true"><canvas id="holdline"></canvas></div>
   <div class="hero-copy">
-    <h1 class="rise d1">למאגר שלכם יש DNA.<br /><b>Hunch מלמד כל סוכן קוד איך המאגר עובד.</b></h1>
-    <p class="lede rise d2">כל סוכן קוד מגיע כשהוא שולט בתחביר, אבל הוא חדש בצוות שלכם. Hunch נותן לו את השפה, ההחלטות, התיקונים שנלמדו בדרך והגבולות שמאחורי הקוד — לפני שהוא משנה אותו.</p>
+    <h1 class="rise d1">סוכנים הם הסתברותיים.<br /><b>ארגונים צריכים מצב דטרמיניסטי.</b></h1>
+    <p class="lede rise d2">Hunch הוא שכבת המצב שביניהם. מה הוחלט, מה נעשה, מה עדיין חייבים ומה אסור לשינוי לשבור — שמור ב-git, נדחה כשהוא סותר, ונמסר לכל סוכן לפני שהוא עונה או עורך את הקוד שלכם.</p>
     <div class="hero-cta rise d3">
       <a class="btn" href="#start">מתחילים</a>
       <a class="btn ghost" href="#story">כך זה עובד</a>
     </div>
   </div>
 </header>
+
+<!-- ─────────────────────────── moat ─────────────────────────── -->
+<section id="moat" class="panel">
+  <div class="wrap">
+    <div class="tech-intro">
+      <div class="sec-head">
+        <span class="eyebrow">החפיר</span>
+        <h2>למה Hunch, ולא עוד שכבת זיכרון.</h2>
+      </div>
+      <p>זיכרון ממטב שליפה. מצב ממטב סירוב. כל תכונה כאן ניתנת לאימות במאגר.</p>
+    </div>
+    <div class="tech-grid">
+      <article class="tech-item"><code>git</code><h3>Git הוא מקור האמת</h3><p>כל עובדה היא קובץ JSON, כל שינוי הוא commit: ניתן לסקירה, לביטול ולמיזוג, ולעולם לא נעול במסד נתונים של ספק.</p></article>
+      <article class="tech-item"><code>סירוב</code><h3>סירוב, לא התכנסות</h3><p>החלטה חיה אחת לכל נושא. רשומה שנייה שסותרת נדחית בזמן הכתיבה, לא ממוזגת אחר כך.</p></article>
+      <article class="tech-item"><code>מגירות</code><h3>מגירה לכל ארגון, צוות ואדם</h3><p>מפתח לכל סוכן קובע מה מותר לו לראות עוד לפני שמחפשים משהו.</p></article>
+      <article class="tech-item"><code>קבלות</code><h3>נעשה וחייבים הן עובדות</h3><p>קבלה מאומתת לכל פעולה חיצונית והתחייבות עם תאריך יעד, קריאות לכל סוכן שמחזיק במפתח.</p></article>
+      <article class="tech-item"><code>לא פעמיים</code><h3>תיקונים הופכים לכללים</h3><p>תיקון של אדם נאכף מאותו רגע, ולא נזכר לסשן אחד בלבד.</p></article>
+      <article class="tech-item"><code>התאמה</code><h3>הצלע של הקוד</h3><p>החלטות, אילוצים ושושלת באגים נבדקים מול הקוד באופן דטרמיניסטי, בלי מודל בנתיב החסימה.</p></article>
+    </div>
+  </div>
+</section>
 
 <!-- ─────────────────────────── story ─────────────────────────── -->
 <section id="story">
@@ -529,8 +550,8 @@
 <section class="cta">
   <div class="cta-art" aria-hidden="true"><canvas id="cta-dna"></canvas></div>
   <div class="wrap">
-    <h2>למדו כל סוכן קוד איך המאגר שלכם עובד.</h2>
-    <p>תנו לו את השפה, ההחלטות, הלקחים שנלמדו בדרך והגבולות שמאחורי הקוד לפני שהוא משנה אותו — והשאירו כל טענה ניתנת למעקב.</p>
+    <h2>ארגון אחד. מצב אחד. כל סוכן בודק במקום לנחש.</h2>
+    <p>פחות סתירות, החלטות טובות יותר, שינויים בטוחים יותר.</p>
     <div class="hero-cta">
       <a class="btn" href="#start">מתחילים</a>
       <a class="btn ghost" href="/docs">קריאת התיעוד</a>
@@ -543,7 +564,7 @@
   <div class="wrap foot">
     <div>
       <a class="brand" href="/he"><span class="brand-mark" aria-hidden="true"></span>hunch</a>
-      <p class="about">Git שומר את הקוד. Hunch נותן לסוכני קוד את ה-DNA מבוסס הראיות שמסביר איך המאגר עובד ולמה הקוד בנוי כך.</p>
+      <p class="about">Git שומר את הקוד. Hunch שומר את המצב שעליו הסוכנים שלכם רצים.</p>
     </div>
     <div>
       <h4>מוצר</h4>

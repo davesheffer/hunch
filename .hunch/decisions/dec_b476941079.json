@@ -1,0 +1,39 @@
+{
+  "id": "dec_b476941079",
+  "title": "docs(landscape): Neotoma occupies \"deterministic state layer\"; add to watch",
+  "topic": null,
+  "status": "accepted",
+  "context": "Neotoma (neotoma.io, MIT) has used \"a deterministic state layer for AI\nagents\" since 2026-03-10, six months before Hunch coined Deterministic\nState. Record the dated comparison: overlapping engine mechanics,\nlocally verified reducer determinism, two observed correction/schema\nbehaviours, where it is ahead, and what it lists as future that Hunch\nships (org partitions, refused contradictions, code conformance).\nAdd the repository to the automated watch.\n\nCo-Authored-By: Claude Fable 5.1 <noreply@a",
+  "decision": "Changed code in tooling/competitive-watch.mjs (1 file(s)).",
+  "consequences": [],
+  "alternatives_rejected": [],
+  "rejected_tripwires": [],
+  "related_components": [
+    "cmp_04c6efb58b"
+  ],
+  "related_files": [
+    "tooling/competitive-watch.mjs"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "bb764ce",
+  "valid_from": "2026-09-09T08:58:48+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "inferred",
+    "confidence": 0.3,
+    "evidence": [
+      "commit:bb764ce",
+      "synth:provider=deterministic",
+      "branch:docs/landscape-neotoma",
+      "tooling/competitive-watch.mjs"
+    ],
+    "last_verified": "2026-09-09T05:59:40.130Z"
+  },
+  "date": "2026-09-09T08:58:48+03:00"
+}

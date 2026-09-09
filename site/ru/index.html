@@ -4,10 +4,10 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Hunch Memory — ДНК проекта для ИИ-агентов по коду</title>
-  <meta name="description" content="У вашего репозитория есть ДНК. Hunch даёт ИИ-агентам доказательное понимание того, как проект общается и работает, до того, как они изменят код." />
-  <meta property="og:title" content="Hunch Memory — ДНК проекта для ИИ-агентов по коду" />
-  <meta property="og:description" content="Каждый агент по коду приходит блестящим незнакомцем. Hunch знакомит его с языком, решениями, выстраданными исправлениями и границами вашего кода." />
+  <title>Hunch — детерминированное состояние для организаций, где работают агенты</title>
+  <meta name="description" content="Агенты вероятностны. Организациям нужно детерминированное состояние. Hunch хранит в git, что решено, что сделано и что ещё должны, отказывает противоречиям и выдаёт это каждому агенту до того, как он ответит или изменит код." />
+  <meta property="og:title" content="Hunch — детерминированное состояние для организаций, где работают агенты" />
+  <meta property="og:description" content="Слой детерминированного состояния между вероятностными агентами и организацией: решения, квитанции, обязательства и ограничения кода — в git, с отказом противоречиям." />
 <meta property="og:image" content="https://www.hunchmemory.com/hunch-og.png" />
 <meta property="og:url" content="https://www.hunchmemory.com/ru" />
 <meta property="og:locale" content="ru_RU" />
@@ -331,7 +331,7 @@
 </head>
 <body>
 
-<a class="thesis-band" href="/ru/blog/post?slug=the-state-layer"><span class="thesis-tag">Детерминированное состояние</span><span class="thesis-text">Агенты вероятностны. Организациям нужно детерминированное состояние.</span><b class="thesis-cta">Читать тезис →</b></a>
+<a class="thesis-band" href="/ru/blog/post?slug=the-state-layer"><span class="thesis-tag">Детерминированное состояние</span><span class="thesis-text">Что такое детерминированное состояние, простыми словами.</span><b class="thesis-cta">Читать тезис →</b></a>
 <nav class="nav" aria-label="Основная навигация">
   <div class="wrap nav-in">
     <a class="brand" href="/ru"><span class="brand-mark" aria-hidden="true"></span>hunch</a>
@@ -364,14 +364,35 @@
        Decorative: aria-hidden, pointer-events none, reduced-motion aware. -->
   <div class="hero-art" aria-hidden="true"><canvas id="holdline"></canvas></div>
   <div class="hero-copy">
-    <h1 class="rise d1">У вашего репозитория есть ДНК.<br /><b>Hunch знакомит с ней каждого агента по коду.</b></h1>
-    <p class="lede rise d2">Каждый агент по коду свободно владеет синтаксисом, но ничего не знает о вашей команде. Hunch даёт ему язык, решения, выстраданные исправления и границы кода до того, как он внесёт изменение.</p>
+    <h1 class="rise d1">Агенты вероятностны.<br /><b>Организациям нужно детерминированное состояние.</b></h1>
+    <p class="lede rise d2">Hunch — слой состояния между ними. Что решено, что сделано, что ещё должны и что изменение не должно сломать — хранится в git, отклоняется при противоречии и выдаётся каждому агенту до того, как он ответит или изменит ваш код.</p>
     <div class="hero-cta rise d3">
       <a class="btn" href="#start">Начать</a>
       <a class="btn ghost" href="#story">Посмотреть, как это работает</a>
     </div>
   </div>
 </header>
+
+<!-- ─────────────────────────── moat ─────────────────────────── -->
+<section id="moat" class="panel">
+  <div class="wrap">
+    <div class="tech-intro">
+      <div class="sec-head">
+        <span class="eyebrow">ров</span>
+        <h2>Почему Hunch, а не ещё один слой памяти.</h2>
+      </div>
+      <p>Память оптимизирует припоминание. Состояние оптимизирует отказ. Каждое свойство ниже можно проверить в репозитории.</p>
+    </div>
+    <div class="tech-grid">
+      <article class="tech-item"><code>git</code><h3>Git — источник истины</h3><p>Каждый факт — JSON-файл, каждое изменение — коммит: можно проверить, откатить, слить, и он никогда не заперт в базе вендора.</p></article>
+      <article class="tech-item"><code>отказ</code><h3>Отказ, а не сходимость</h3><p>Одно живое решение на тему. Вторая противоречащая запись отклоняется при записи, а не сливается потом.</p></article>
+      <article class="tech-item"><code>ящики</code><h3>Ящик для организации, команды и человека</h3><p>Ключ каждого агента решает, что ему видно, до любого поиска.</p></article>
+      <article class="tech-item"><code>квитанции</code><h3>Сделано и должны — это факты</h3><p>Проверенная квитанция на каждое внешнее действие и обязательство со сроком, доступные любому агенту с ключом.</p></article>
+      <article class="tech-item"><code>не дважды</code><h3>Исправления становятся правилами</h3><p>Исправление человека действует с этого момента, а не запоминается на одну сессию.</p></article>
+      <article class="tech-item"><code>соответствие</code><h3>Сторона кода</h3><p>Решения, ограничения и история багов детерминированно сверяются с кодом, без модели на пути блокировки.</p></article>
+    </div>
+  </div>
+</section>
 
 <!-- ─────────────────────────── story ─────────────────────────── -->
 <section id="story">
@@ -529,8 +550,8 @@
 <section class="cta">
   <div class="cta-art" aria-hidden="true"><canvas id="cta-dna"></canvas></div>
   <div class="wrap">
-    <h2>Научите каждого агента тому, как работает ваш репозиторий.</h2>
-    <p>Передайте ему язык, решения, выстраданные уроки и границы кода до изменения — и сохраните каждое утверждение прослеживаемым.</p>
+    <h2>Одна организация. Одно состояние. Каждый агент проверяет, а не гадает.</h2>
+    <p>Меньше противоречий, лучше решения, безопаснее изменения.</p>
     <div class="hero-cta">
       <a class="btn" href="#start">Начать</a>
       <a class="btn ghost" href="/docs">Читать документацию</a>
@@ -543,7 +564,7 @@
   <div class="wrap foot">
     <div>
       <a class="brand" href="/ru"><span class="brand-mark" aria-hidden="true"></span>hunch</a>
-      <p class="about">Git хранит код. Hunch даёт агентам доказательную ДНК, которая объясняет, как работает репозиторий и почему код устроен именно так.</p>
+      <p class="about">Git хранит ваш код. Hunch хранит состояние, на котором работают ваши агенты.</p>
     </div>
     <div>
       <h4>продукт</h4>

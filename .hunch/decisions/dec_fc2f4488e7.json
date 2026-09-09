@@ -1,0 +1,42 @@
+{
+  "id": "dec_fc2f4488e7",
+  "title": "docs(positioning): compete for the deterministic state layer from the organizational angle",
+  "topic": null,
+  "status": "accepted",
+  "context": "Site: hero becomes the thesis line, new \"the moat\" section (git as source\nof truth, refusal not convergence, drawers with a key per agent, receipts\nand commitments as facts, Never Twice, code conformance), head/CTA/footer\ncopy, thesis band now points to the post; regenerated he/ru/ar/es.\nBlog: state-layer post lead claims the category from the organizational\nside and no longer says \"we call\".\nREADME: new top and \"Why Hunch, not another memory layer\"; the state\nsection reflects 1.25.0-1.28.0 as s",
+  "decision": "Changed code in site/blog, tooling/generate-site-locales.mjs (2 file(s)).",
+  "consequences": [],
+  "alternatives_rejected": [],
+  "rejected_tripwires": [],
+  "related_components": [
+    "cmp_04c6efb58b",
+    "cmp_c099a42a55"
+  ],
+  "related_files": [
+    "site/blog/posts.js",
+    "tooling/generate-site-locales.mjs"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "64798b2",
+  "valid_from": "2026-09-09T09:18:14+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "inferred",
+    "confidence": 0.3,
+    "evidence": [
+      "commit:64798b2",
+      "synth:provider=deterministic",
+      "branch:docs/landscape-neotoma",
+      "site/blog/posts.js",
+      "tooling/generate-site-locales.mjs"
+    ],
+    "last_verified": "2026-09-09T06:19:18.916Z"
+  },
+  "date": "2026-09-09T09:18:14+03:00"
+}

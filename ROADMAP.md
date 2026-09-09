@@ -33,6 +33,39 @@ idempotency key with a varying payload, an action kind in the CRM's casing refus
 contract, two racing writers leaving two current summaries for one subject. Each became a test,
 a refusal message, or a verb.
 
+## Landscape — 2026-09-09: competing for the deterministic state layer
+
+Hunch competes for the **deterministic state layer** position. It is not alone on the phrase:
+Neotoma (MIT, single author) has described itself as "a deterministic state layer for AI agents"
+since March 2026, and the dated comparison lives in
+[docs/competitive-landscape.md](docs/competitive-landscape.md). The angle Hunch takes is the
+organizational one, which every peer lists as future or does not attempt:
+
+- partitions per organization, team, person and repository, with a key per agent that decides
+  visibility before lookup;
+- a second contradicting live record refused at write time (one live decision per topic, supersede
+  target must still be open), not diverging writes repaired by a later merge;
+- receipts for verified external actions and commitments with due dates as first-class facts;
+- git-tracked JSON as the source of truth, so every fact is reviewable, revertable and mergeable;
+- the engineering-memory and code-conformance spoke, which no state-layer peer has.
+
+Material from the same comparison that is worth building here, kept as roadmap items rather than
+copied claims:
+
+| Item | Why | Status |
+| --- | --- | --- |
+| Subject identity by external reference | two agents over one CRM record, thread or chat must land on one subject; 1.28.0 keyed subjects by CRM site, the general rule is not frozen yet | proposed (`state.entity-identity`) |
+| Audited entity merge and split | the cases an external reference cannot settle; recorded as ledger events with provenance, never silent rewrites | proposed, follows the item above |
+| Replay determinism as a check | rebuild a partition from its ledger and compare byte-for-byte to the stored records; publish the command, not the claim | proposed (`state.replay-determinism`) |
+| Field-level provenance on derived state | a summary today cites its sources as a whole; per-field citation lets a reader see which source a sentence rests on | later, after the second-user measurement |
+| Correction outranks later agent writes | prove, with a test, that a human correction on a record is not overridden by a subsequent agent write on the same field; a peer's reducer was observed to lose this | test to add |
+| Attested principal identity | bearer keys today; key-thumbprint or hardware-attested principals for the organization partition when a second person holds a key | after Gate 5 |
+| Read-only operator view | a page over a served partition: current records, ledger, who wrote what; no editing | after Gate 5 |
+| Typed clients beyond TypeScript | a Python client for the three verbs, generated from the contract | when a non-TypeScript orchestrator asks for it |
+
+Deliberately not borrowed: file ingestion and copies of external content. Hunch holds pointers and
+fingerprints to the systems of record and never fetches into the drawer (see Boundary below).
+
 ## What stays true
 
 The new direction does not discard the engine that already exists.

@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Hunch Memory — Help AI understand your code</title>
-  <meta name="description" content="Your code has DNA. Hunch activates the right Strand for each task—lean context, live guidance, and trusted boundaries before AI changes your code." />
-  <meta property="og:title" content="Hunch Memory — Help AI understand your code" />
-  <meta property="og:description" content="Hunch activates the right DNA Strand for every task, giving AI the context, tools, and boundaries it needs." />
+  <title>Hunch — Deterministic state for organizations that run agents</title>
+  <meta name="description" content="Agents are probabilistic. Organizations need deterministic state. Hunch holds what was decided, done and owed in git, refuses contradictions, and delivers it to every agent before it answers or edits code." />
+  <meta property="og:title" content="Hunch — Deterministic state for organizations that run agents" />
+  <meta property="og:description" content="The deterministic state layer between probabilistic agents and the organization: decisions, receipts, commitments and code constraints, git-native and refused when they contradict." />
 <meta property="og:image" content="https://www.hunchmemory.com/hunch-og.png" />
 <meta property="og:url" content="https://www.hunchmemory.com/" />
 <meta property="og:locale" content="en_US" />
@@ -330,7 +330,7 @@
 </head>
 <body>
 
-<a class="thesis-band" href="/blog/post?slug=the-state-layer"><span class="thesis-tag">Deterministic State</span><span class="thesis-text">Agents are probabilistic. Organizations need deterministic state.</span><b class="thesis-cta">Read the thesis →</b></a>
+<a class="thesis-band" href="/blog/post?slug=the-state-layer"><span class="thesis-tag">Deterministic State</span><span class="thesis-text">What deterministic state means, in plain words.</span><b class="thesis-cta">Read the thesis →</b></a>
 <nav class="nav" aria-label="Main">
   <div class="wrap nav-in">
     <a class="brand" href="/"><span class="brand-mark" aria-hidden="true"></span>hunch</a>
@@ -363,14 +363,35 @@
        Decorative: aria-hidden, pointer-events none, reduced-motion aware. -->
   <div class="hero-art" aria-hidden="true"><canvas id="holdline"></canvas></div>
   <div class="hero-copy">
-    <h1 class="rise d1">Your code has DNA.<br /><b>Hunch helps AI get it.</b></h1>
-    <p class="lede rise d2">Hunch learns how your project works, then activates the right DNA Strand for every task—giving AI the context, tools, and boundaries it needs before changing your code.</p>
+    <h1 class="rise d1">Agents are probabilistic.<br /><b>Organizations need deterministic state.</b></h1>
+    <p class="lede rise d2">Hunch is the state layer between them. What was decided, what was done, what is still owed and what a change must not break, held in git, refused when it contradicts, and delivered to every agent before it answers or edits your code.</p>
     <div class="hero-cta rise d3">
       <a class="btn" href="#start">Get started</a>
       <a class="btn ghost" href="#story">See how it works</a>
     </div>
   </div>
 </header>
+
+<!-- ─────────────────────────── moat ─────────────────────────── -->
+<section id="moat" class="panel">
+  <div class="wrap">
+    <div class="tech-intro">
+      <div class="sec-head">
+        <span class="eyebrow">the moat</span>
+        <h2>Why Hunch, not another memory layer.</h2>
+      </div>
+      <p>Memory optimizes recall. State optimizes refusal. Every property below is one you can verify in the repository.</p>
+    </div>
+    <div class="tech-grid">
+      <article class="tech-item"><code>git</code><h3>Git is the source of truth</h3><p>Every fact is a JSON file, every change a commit: reviewable, revertable, mergeable, never locked in a vendor’s database.</p></article>
+      <article class="tech-item"><code>refuse</code><h3>Refusal, not convergence</h3><p>One live decision per topic. A second contradicting record is refused at write time, not merged later.</p></article>
+      <article class="tech-item"><code>drawers</code><h3>A drawer per organization, team and person</h3><p>A key per agent decides what it may see before anything is looked up.</p></article>
+      <article class="tech-item"><code>receipts</code><h3>Done and owed are facts</h3><p>A verified receipt for every external action and a commitment with a due date, readable by any agent with the key.</p></article>
+      <article class="tech-item"><code>never twice</code><h3>Corrections become rules</h3><p>A human correction is enforced from then on, not remembered for one session.</p></article>
+      <article class="tech-item"><code>conform</code><h3>The code spoke</h3><p>Decisions, constraints and bug lineage are checked against the code deterministically, with no model in the block path.</p></article>
+    </div>
+  </div>
+</section>
 
 <!-- ─────────────────────────── story ─────────────────────────── -->
 <section id="story">
@@ -528,8 +549,8 @@
 <section class="cta">
   <div class="cta-art" aria-hidden="true"><canvas id="cta-dna"></canvas></div>
   <div class="wrap">
-    <h2>One project. One DNA. The right Strand for every task.</h2>
-    <p>Less noise, better decisions, safer changes.</p>
+    <h2>One organization. One state. Every agent checks instead of guesses.</h2>
+    <p>Fewer contradictions, better decisions, safer changes.</p>
     <div class="hero-cta">
       <a class="btn" href="#start">Get started</a>
       <a class="btn ghost" href="/docs">Read the docs</a>
@@ -542,7 +563,7 @@
   <div class="wrap foot">
     <div>
       <a class="brand" href="/"><span class="brand-mark" aria-hidden="true"></span>hunch</a>
-      <p class="about">Git stores your code. Hunch activates the right DNA Strand for every AI task.</p>
+      <p class="about">Git stores your code. Hunch holds the state your agents run on.</p>
     </div>
     <div>
       <h4>product</h4>

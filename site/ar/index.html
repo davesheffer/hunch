@@ -4,10 +4,10 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Hunch Memory — الحمض النووي للمشروع لوكلاء البرمجة بالذكاء الاصطناعي</title>
-  <meta name="description" content="لمستودعك حمض نووي. يمنح Hunch وكلاء البرمجة فهمًا قائمًا على الأدلة لكيفية تواصل المشروع وعمله قبل أن يغيّروا الشيفرة." />
-  <meta property="og:title" content="Hunch Memory — الحمض النووي للمشروع لوكلاء البرمجة بالذكاء الاصطناعي" />
-  <meta property="og:description" content="يصل كل وكيل برمجي غريبًا لامعًا. يعرّفه Hunch على لغة شيفرتك وقراراتها وإصلاحاتها الصعبة وحدودها." />
+  <title>Hunch — حالة حتمية للمؤسسات التي تشغّل وكلاء</title>
+  <meta name="description" content="الوكلاء احتماليون. المؤسسات تحتاج حالة حتمية. يحفظ Hunch في git ما تقرّر وما أُنجز وما لا يزال مستحقًا، ويرفض التناقضات، ويسلّمها لكل وكيل قبل أن يجيب أو يعدّل الكود." />
+  <meta property="og:title" content="Hunch — حالة حتمية للمؤسسات التي تشغّل وكلاء" />
+  <meta property="og:description" content="طبقة الحالة الحتمية بين الوكلاء الاحتماليين والمؤسسة: قرارات وإيصالات والتزامات وقيود كود، محفوظة في git ومع رفض التناقضات." />
 <meta property="og:image" content="https://www.hunchmemory.com/hunch-og.png" />
 <meta property="og:url" content="https://www.hunchmemory.com/ar" />
 <meta property="og:locale" content="ar" />
@@ -331,7 +331,7 @@
 </head>
 <body>
 
-<a class="thesis-band" href="/ar/blog/post?slug=the-state-layer"><span class="thesis-tag">الحالة الحتمية</span><span class="thesis-text">الوكلاء احتماليون. المؤسسات تحتاج حالة حتمية.</span><b class="thesis-cta">اقرأ الأطروحة ←</b></a>
+<a class="thesis-band" href="/ar/blog/post?slug=the-state-layer"><span class="thesis-tag">الحالة الحتمية</span><span class="thesis-text">ما معنى الحالة الحتمية، بكلمات بسيطة.</span><b class="thesis-cta">اقرأ الأطروحة ←</b></a>
 <nav class="nav" aria-label="التنقّل الرئيسي">
   <div class="wrap nav-in">
     <a class="brand" href="/ar"><span class="brand-mark" aria-hidden="true"></span>hunch</a>
@@ -364,14 +364,35 @@
        Decorative: aria-hidden, pointer-events none, reduced-motion aware. -->
   <div class="hero-art" aria-hidden="true"><canvas id="holdline"></canvas></div>
   <div class="hero-copy">
-    <h1 class="rise d1">لمستودعك حمض نووي.<br /><b>ويمنح Hunch كل وكيل برمجي فهمًا له.</b></h1>
-    <p class="lede rise d2">يصل كل وكيل برمجي متقنًا لبناء الجملة لكنه جديد على فريقك. يمنحه Hunch اللغة والقرارات والإصلاحات الصعبة والحدود الكامنة خلف الشيفرة قبل أن يغيّرها.</p>
+    <h1 class="rise d1">الوكلاء احتماليون.<br /><b>المؤسسات تحتاج حالة حتمية.</b></h1>
+    <p class="lede rise d2">Hunch هو طبقة الحالة بينهما. ما تقرّر، وما أُنجز، وما لا يزال مستحقًا، وما لا يجوز لتغيير أن يكسره — محفوظ في git، مرفوض عند التناقض، ومسلَّم لكل وكيل قبل أن يجيب أو يعدّل كودكم.</p>
     <div class="hero-cta rise d3">
       <a class="btn" href="#start">ابدأ الآن</a>
       <a class="btn ghost" href="#story">شاهد كيف يعمل</a>
     </div>
   </div>
 </header>
+
+<!-- ─────────────────────────── moat ─────────────────────────── -->
+<section id="moat" class="panel">
+  <div class="wrap">
+    <div class="tech-intro">
+      <div class="sec-head">
+        <span class="eyebrow">الخندق</span>
+        <h2>لماذا Hunch وليس طبقة ذاكرة أخرى.</h2>
+      </div>
+      <p>الذاكرة تحسّن الاسترجاع. الحالة تحسّن الرفض. كل خاصية أدناه يمكن التحقق منها في المستودع.</p>
+    </div>
+    <div class="tech-grid">
+      <article class="tech-item"><code>git</code><h3>Git هو مصدر الحقيقة</h3><p>كل حقيقة ملف JSON، وكل تغيير commit: قابل للمراجعة والتراجع والدمج، ولا يُحبس أبدًا في قاعدة بيانات مورّد.</p></article>
+      <article class="tech-item"><code>رفض</code><h3>رفض، لا تقارب</h3><p>قرار حي واحد لكل موضوع. السجل الثاني المتناقض يُرفض عند الكتابة، لا يُدمج لاحقًا.</p></article>
+      <article class="tech-item"><code>أدراج</code><h3>درج لكل مؤسسة وفريق وشخص</h3><p>مفتاح لكل وكيل يحدد ما يجوز له رؤيته قبل أي بحث.</p></article>
+      <article class="tech-item"><code>إيصالات</code><h3>المُنجز والمستحق حقائق</h3><p>إيصال متحقَّق منه لكل إجراء خارجي والتزام بموعد استحقاق، يقرؤهما أي وكيل يملك المفتاح.</p></article>
+      <article class="tech-item"><code>لا مرتين</code><h3>التصحيحات تصبح قواعد</h3><p>تصحيح الإنسان يُفرض من تلك اللحظة، ولا يُتذكر لجلسة واحدة فقط.</p></article>
+      <article class="tech-item"><code>مطابقة</code><h3>جانب الكود</h3><p>تُفحص القرارات والقيود وسلالة الأخطاء مقابل الكود حتميًا، بلا نموذج في مسار الحظر.</p></article>
+    </div>
+  </div>
+</section>
 
 <!-- ─────────────────────────── story ─────────────────────────── -->
 <section id="story">
@@ -529,8 +550,8 @@
 <section class="cta">
   <div class="cta-art" aria-hidden="true"><canvas id="cta-dna"></canvas></div>
   <div class="wrap">
-    <h2>علّم كل وكيل برمجي كيف يعمل مستودعك.</h2>
-    <p>امنحه اللغة والقرارات والدروس الصعبة والحدود الكامنة خلف الشيفرة قبل أن يغيّرها، واجعل كل ادعاء قابلًا للتتبّع.</p>
+    <h2>مؤسسة واحدة. حالة واحدة. كل وكيل يتحقق بدل أن يخمّن.</h2>
+    <p>تناقضات أقل، قرارات أفضل، تغييرات أكثر أمانًا.</p>
     <div class="hero-cta">
       <a class="btn" href="#start">ابدأ الآن</a>
       <a class="btn ghost" href="/docs">اقرأ الوثائق</a>
@@ -543,7 +564,7 @@
   <div class="wrap foot">
     <div>
       <a class="brand" href="/ar"><span class="brand-mark" aria-hidden="true"></span>hunch</a>
-      <p class="about">يحفظ Git الشيفرة. ويمنح Hunch وكلاء البرمجة الحمض النووي القائم على الأدلة الذي يشرح كيف يعمل المستودع ولماذا بُنيت الشيفرة بهذه الطريقة.</p>
+      <p class="about">Git يحفظ كودكم. Hunch يحفظ الحالة التي يعمل عليها وكلاؤكم.</p>
     </div>
     <div>
       <h4>المنتج</h4>
