@@ -21,7 +21,7 @@ on:
         options: [branches, tags]
         default: branches
       branches:
-        description: "task=branches: space-separated remote branch names to delete"
+        description: "task=branches: space-separated remote refs to delete — branch names, or refs/tags/<name> for a tag"
         required: false
         type: string
         default: ""
@@ -67,13 +67,17 @@ jobs:
             case "$b" in
               "$DEFAULT_BRANCH"|"$RUNNING_REF"|main|master) echo "skip $b (protected: default branch or the ref this run uses)"; skipped=$((skipped+1)); continue;;
             esac
-            if ! git ls-remote --exit-code --heads origin "$b" >/dev/null 2>&1; then echo "missing $b (already gone)"; missing=$((missing+1)); continue; fi
-            if [ "$DRY_RUN" = "true" ]; then echo "would delete $b"; else git push origin --delete "$b" && echo "deleted $b"; fi
+            case "$b" in
+              refs/tags/*) ref="$b"; kind=tag; exists=$(git ls-remote --exit-code --tags origin "${b#refs/tags/}" >/dev/null 2>&1 && echo yes || echo no);;
+              *) ref="refs/heads/$b"; kind=branch; exists=$(git ls-remote --exit-code --heads origin "$b" >/dev/null 2>&1 && echo yes || echo no);;
+            esac
+            if [ "$exists" = "no" ]; then echo "missing $kind $b (already gone)"; missing=$((missing+1)); continue; fi
+            if [ "$DRY_RUN" = "true" ]; then echo "would delete $kind $b"; else git push origin --delete "$ref" && echo "deleted $kind $b"; fi
             deleted=$((deleted+1))
           done
           echo "---"
           echo "$( [ "$DRY_RUN" = "true" ] && echo 'would delete' || echo 'deleted' ): $deleted · skipped: $skipped · already gone: $missing"
-          echo "remaining remote branches: $(git ls-remote --heads origin | wc -l)"
+          echo "remaining remote branches: $(git ls-remote --heads origin | wc -l) · tags: $(git ls-remote --tags origin | grep -vc '\^{}')"
 
   tags:
     if: inputs.task == 'tags'
@@ -117,7 +121,9 @@ jobs:
           echo "refs that would move: $(echo "$moved" | grep -c . || true)"
           echo "$moved" | sed 's/^/  /'
           echo "default branch moves: $(echo "$moved" | grep -c "refs/heads/$DEFAULT_BRANCH$" || true)"
-          echo "commits still touching a /Users/<name>/ path other than contributor, after the rewrite: $(git -C "$RUNNER_TEMP/mirror" log --all --format=%H --perl-regexp -G'/Users/(?!contributor/)[A-Za-z0-9._-]+/' | wc -l)"
+          # Verification without PCRE (the runner's git may lack it): every added or removed line in the
+          # rewritten history that still carries a /Users/<name>/ path other than contributor.
+          echo "changed lines still carrying a /Users/<name>/ path other than contributor, after the rewrite: $(git -C "$RUNNER_TEMP/mirror" log --all -p --format= -G'/Users/[A-Za-z0-9._-]+/' | grep -E '^[-+].*/Users/[A-Za-z0-9._-]+/' | grep -vc '/Users/contributor/' || true)"
           if [ "$DRY_RUN" = "true" ]; then echo "dry run: nothing pushed"; exit 0; fi
           pushed=0
           for ref in $moved; do
