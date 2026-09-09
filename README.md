@@ -1,25 +1,27 @@
 # Hunch
 
-## Your repo remembers why — and teaches every coding agent how the project works.
+## Agents are probabilistic. Organizations need deterministic state. Hunch is the state layer between them.
 
 [![npm version](https://img.shields.io/npm/v/@davesheffer/hunch?color=2742ff&label=npm)](https://www.npmjs.com/package/@davesheffer/hunch)
 [![GitHub stars](https://img.shields.io/github/stars/davesheffer/hunch?color=2742ff&label=%E2%98%85%20star)](https://github.com/davesheffer/hunch)
 [![license](https://img.shields.io/npm/l/@davesheffer/hunch?color=2742ff)](LICENSE)
 
-Every new AI coding session can read your code. It cannot automatically see why your team chose this design, which alternative already failed, what an odd-looking line protects, or how this repository expects work to be explained and reviewed.
+Every employee is getting an agent. Each one reads the code, the CRM, the mail thread, the chat, and forms its own opinion about what was decided, what was done and what is still owed. Two agents, two slightly different realities. Neither is wrong. Both are guesses, made fresh, from raw material.
 
-That is how settled decisions get reopened, fixed bugs return, and technically plausible changes arrive feeling foreign to the project.
+An organization cannot run on guesses. It runs on state: this was decided, this rule is in force, this action happened and was verified, this promise is due Thursday, this summary is current and rests on these sources. Hunch holds that state in git, refuses it when it contradicts, and delivers it to Claude, Codex, Cursor, Copilot, Windsurf, Antigravity and any other MCP client before the agent answers or edits.
 
-**Hunch is evidence-backed deterministic project intelligence for the AI coding tools you already use.** It gives Claude, Codex, Cursor, Copilot, Windsurf, Antigravity and other MCP clients the same durable understanding of your codebase:
+**Hunch started as engineering memory for coding agents** and still is: why the code is shaped this way, which alternative already failed, what an odd-looking line protects, what depends on the code about to change, and which trusted decisions, fixes and architectural boundaries a change must preserve. The same graph now holds organizational state for operations agents too (see [Deterministic organizational state](#deterministic-organizational-state)).
 
-- why the code is shaped this way;
-- how the repository communicates, reviews and builds;
-- what depends on the code about to change; and
-- which trusted decisions, fixes and architectural boundaries the result must preserve.
+## Why Hunch, not another memory layer
 
-For precise rules your team has explicitly trusted, the promise is **Never Twice**: an agent may propose a different direction, but it cannot quietly re-make a decided decision or re-introduce a fixed failure without Hunch surfacing the conflict and its evidence.
+Memory optimizes recall. State optimizes refusal. Hunch competes for the deterministic state layer from the organizational side, and every point below is a property you can verify in this repository rather than a claim:
 
-Memory starts advisory. Nothing blocks until a human deliberately trusts a precise rule and opts into strict enforcement.
+- **Git is the source of truth.** Every fact is a JSON file under `.hunch/`, every change a commit: diffable, PR-reviewable, revertable, mergeable, never locked in a vendor database. SQLite is only a derived index.
+- **Refusal, not convergence.** One live decision per topic. A second contradicting record is refused at write time with the incumbent named, and a supersede target must still be open. Diverging writes are not merged later.
+- **Organization drawers with a key per agent.** Repository, user, team and organization partitions; the bearer key resolves the principal and decides visibility before anything is looked up.
+- **Receipts and commitments are facts.** What was actually done in an external system, verified or not, and who owes what by when, readable by any agent with the key.
+- **Never Twice.** A human correction becomes an enforced rule, not a one-session memory. Nothing blocks until a human deliberately trusts a precise rule and opts into strict enforcement.
+- **The code spoke.** Decisions, constraints and bug lineage are checked against the code deterministically, with no model in the block path. No state-layer peer has it.
 
 ## Start in five minutes
 
@@ -144,19 +146,19 @@ hunch check --staged --strict
 
 Captured memory cannot silently hard-block on its own.
 
-## Deterministic organizational state — next product direction
+## Deterministic organizational state
 
-Repository memory solves one version of a larger problem.
+Repository memory solves one version of a larger problem, and since 1.25.0 Hunch ships the larger one.
 
 As organizations give every employee an agent that can work across CRM, email, messaging, repositories and other tools, the agents become probabilistic writers/readers of the same organization. If each one independently reconstructs what was decided, what was already done or what is still owed, the organization gets multiple conflicting realities.
 
-The active roadmap asks whether Hunch can become the deterministic state layer between those agents and the organization:
+Hunch is the deterministic state layer between those agents and the organization:
 
 > **Agents are probabilistic. Organizations need deterministic state. Hunch is the state layer between them.**
 
 The target is **one product, one authorized state graph and one versioned state contract** across repository, user, team and organization scopes.
 
-Planned state includes:
+The state it holds:
 
 - decisions currently in force;
 - verified action receipts / what was done;
@@ -203,7 +205,9 @@ user:david --root <dir> --principal sofia@david` declares a partition and mints 
 client is `import { createStateClient } from "@davesheffer/hunch/state"`. This folds the separate
 Hunch Memory service into Hunch.
 
-Read [Deterministic organizational state](docs/deterministic-state.md) and the [roadmap](ROADMAP.md).
+As of 1.27.0 a fourth verb, `records`, lists a subject's records for the first writers, and the per-scope ledger compacts and merges across clones. As of 1.28.0 reads are a union across writers, a supersede target must still be open (two racing writers can no longer leave two current records), state records are searchable and delivered by subject, and subjects are keyed by the external record rather than by the agent. Proven on an emulated organization: three agents over ten clinics and a generated year of mail, chat and CRM, one organization drawer, 96 cited summaries, 24 verified receipts, 24 commitments, zero contradictions.
+
+Read [Deterministic organizational state](docs/deterministic-state.md), the [roadmap](ROADMAP.md) and the dated [competitive landscape](docs/competitive-landscape.md).
 
 ### Naming
 
@@ -216,7 +220,7 @@ The current release can keep a team's **repository-scoped** memory in a dedicate
 Today Hunch does not host that shared Git repository; teammates/CI use normal Git access and one maintainer connects it:
 
 ```bash
-npm i -g @davesheffer/hunch@1.23.3
+npm i -g @davesheffer/hunch@1.28.0
 hunch shared --repo git@github.com:acme/project-hunch-memory.git
 git add .gitignore .hunch/team.json
 git commit -m "chore: connect shared Hunch memory"
@@ -226,7 +230,7 @@ git push
 Teammates then install the same version and run:
 
 ```bash
-npm i -g @davesheffer/hunch@1.23.3
+npm i -g @davesheffer/hunch@1.28.0
 git pull
 hunch init
 hunch doctor

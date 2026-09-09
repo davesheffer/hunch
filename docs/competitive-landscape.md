@@ -52,6 +52,43 @@ person running a personal memory across Claude, Cursor and ChatGPT; small teams 
 - Position by verified properties only (`dec_94b4b7880e`): the two behaviours above are observed on
   v0.22.1 and must be re-run before being quoted.
 
+### State-layer sweep — who else is near "deterministic state" (2026-09-09)
+
+Web sweep for peers of the state spoke, done the same day as the Neotoma entry. Every fact below
+comes from search-result snippets or a single vendor page fetched on 2026-09-09; none was verified
+against a repository or a registry the way Neotoma was. Re-verify before quoting any of it.
+
+- **Nobody sells "organizational deterministic state" as a category.** Memory vendors own recall,
+  durable-execution vendors own resume, Neotoma owns the phrase for one person's agents. The gap
+  Hunch fills (many agents, one organization, refused contradictions, receipts, git-native) is unclaimed.
+- **Jaybase** (announced July 2026, one source: a prefactor.tech post) — an append-only fact store for
+  auditable agent workflows: every asserted fact an immutable record, revisions as new entries, replay
+  to any timestamp. Closest shape to Hunch's ledger after Neotoma. No site or repository located;
+  add to the watch once one exists.
+- **Zep / Graphiti** — bi-temporal knowledge graph (valid-from/valid-to plus created/expired), ~20k
+  stars per Neo4j's write-up, self-hosted Community Edition retired in 2025. Owns "what was true, and
+  when" as memory, not as a system of record with refusals.
+- **Mem0 / Letta / Supermemory / ByteRover** — recall products (Mem0 ~48k stars and $24M raised, Letta
+  $10M seed, ByteRover a versioned context tree for coding agents, all per aggregator blogs). None
+  enforces one live record per topic; that distinction is the wedge.
+- **Cognee** — coding-agent memory over MCP that now markets "audit the provenance of architectural
+  decisions stored as nodes" ($7.5M seed per aggregator). Direct overlap with the engineering-memory
+  spoke. Earlier research killed several Cognee sub-claims (dec_94b4b7880e); re-verify before use.
+- **Durable execution** (Temporal, Restate, Inngest, DBOS, plus AWS Durable Functions, Cloudflare
+  Workflows, Vercel Workflow DevKit) — state of the *process*, not of the *world*. Complement, not
+  competitor; compose rather than fight.
+- **Receipts research** — "Notarized Agents" (arXiv 2606.04193), LEDGER claim-to-evidence graphs
+  (arXiv 2608.18398), PROV-AGENT. Papers, not products; they validate the receipt kind as on-trend.
+- **Adjacent framings** — Atlan's "context layer" (semantic + ontology + lineage + decision memory,
+  data-team buyer); Microsoft's Agent Governance Toolkit (deterministic policy before the wire,
+  adjacent to the Constitution, not to state). A Q1 2026 survey cited by Datapace claims only 17% of
+  420 organizations could reconstruct an agent task after the fact — unverified, useful if it holds.
+
+### Actions
+
+- No copy change beyond the Neotoma actions above; the sweep confirms the organizational lead.
+- Watch list: Jaybase once a repository or site is located; re-verify Cognee before any public mention.
+
 ## Update — 2026-08-22
 
 ### ADRKit moves directly into the decision-memory lane
