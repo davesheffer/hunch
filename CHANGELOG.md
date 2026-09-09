@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.29.0 — 2026-09-09
 
 ### The chain: incident → decision → change proof → closure
 
@@ -87,6 +87,19 @@ Also: `hono` (transitive, via the MCP SDK's optional HTTP transport) 4.13.0 → 
 lockfile — `npm audit --omit=dev` reported three moderate advisories (GHSA-gqvv-2mrq-wpjv,
 GHSA-g6gw-c38x-mqfc, GHSA-crvj-82cr-hjcx) fixed in 4.13.5, in range for both dependents, so
 the production dependency audit passes again without a reviewed exception.
+
+### Positioning: competing for the deterministic state layer, from the organizational side
+
+Neotoma has called itself "a deterministic state layer for AI agents" since March 2026; the
+dated comparison, a same-day sweep of the nearer peers (Jaybase, Zep/Graphiti, the memory
+layers, durable execution, the receipts papers), and the peer material worth building are in
+`docs/competitive-landscape.md` and the ROADMAP's landscape table. Hunch keeps competing for the
+position and never claims to have named it (`dec_327dbd3c78`). The site hero is now the thesis
+line with a "the moat" section (git as the source of truth, refusal not convergence, drawers with
+a key per agent, receipts and commitments as facts, Never Twice, the code-conformance spoke) in
+all five locales; the README top, its "Why Hunch, not another memory layer" section, the
+state section (1.25.0–1.28.0 as shipped, install pins current) and the npm package description
+speak the same language. No engine change.
 
 ## 1.28.0 — 2026-09-08
 
