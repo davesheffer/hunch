@@ -2,6 +2,37 @@
 
 ## Unreleased
 
+### Merge lag is not a release blocker
+
+Two branches that each capture one record both regenerate the very same "N+1 decisions"
+counts line in the grounding docs; the forge merges identical lines with no conflict, the
+merged store holds N+2, and the committed CLAUDE.md is one behind — no hook ran, nobody
+erred, and the next capture heals it. Every red of that class (PR #128, #135, v1.26.2's first
+tagged run, `fnd_c402046ac7`) was this lag, and each cost a manual regenerate-and-retag.
+
+**Direction-aware freshness.** `test/grounding-freshness` now classifies the committed block
+against the generated one (`src/core/groundingLag.ts`): byte-equal is `fresh`; a difference
+confined to the counts sentence where no append-only count (decisions, bugs, constraints,
+components, policies) exceeds the store is `lagging` — reported as a diagnostic, never red;
+an append-only count AHEAD of the store is the never-committed-record defect
+(`fnd_6391b4242f`, the only defect the counts ever caught) and still fails, as does any
+difference outside the counts sentence. Open findings move both ways (resolved on one
+branch, recorded on another), so a differing findings count alone is lag.
+
+**`hunch grounding`.** One command for the five grounding docs: the verdict per doc, the
+exact delta (`CLAUDE.md: counts lag the store (decisions 228 → 229)`), exit 1 only on
+`ahead`/`diverged`; `--refresh` regenerates every existing doc from the PUBLIC store
+(`HUNCH_PRIVATE_DIR` pinned to an empty overlay, so a dev machine with an overlay attached
+can never write union counts into a committed public doc) and never scaffolds a doc the
+project lacks; `--json` for scripts.
+
+**Post-merge hook.** `hunch init` installs a `post-merge` hook that runs `hunch grounding
+--refresh` when the merge or pull brought `.hunch/` changes in, so a local merge leaves the
+docs re-synced for the developer's next commit (never auto-committed, loop-guarded via
+`HUNCH_SYNC`, never fatal, existing hooks preserved). End-to-end in
+`test/grounding-merge-lag.test.ts`: the silent merge, the lag verdict, the ahead refusal,
+the refresh, the hook.
+
 ## 1.28.0 — 2026-09-08
 
 ### Many agents, one subject
