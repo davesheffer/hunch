@@ -31,7 +31,7 @@ import {
   STATE_CAPABILITIES, STATE_CONTRACT_VERSION, STATE_FACETS, STATE_READ_VERSION, STATE_SUBSCRIBE_VERSION, STATE_WRITE_VERSION,
   ReadRequestSchema, ReadResponseSchema, WriteRequestSchema, WriteResultSchema, SubscribeRequestSchema, ChangeEventSchema,
   RecordsRequestSchema, RecordsResponseSchema, STATE_RECORDS_VERSION,
-  ScopeSchema, scopePath, stateHash, actionReceiptId, commitmentId, derivedId, externalKey, subjectOfRef,
+  ScopeSchema, scopePath, stateHash, actionReceiptId, commitmentId, derivedId, relationshipId, externalKey, subjectOfRef,
   assertReadWithinGrants, assertWriteWellFormed, assertDerivedState, isHumanConfirmed,
   type Principal, type Scope, type StateFacet, type ReadRequest, type ReadResponse, type WriteRequest, type WriteResult,
   type SubscribeRequest, type ChangeEvent, type StateRef, type DependencyRef, type RecordsRequest, type RecordsResponse,
@@ -208,10 +208,20 @@ export function readState(store: HunchStore, input: unknown): { response: ReadRe
     // read for the entity id finds what was filed under its keys — one explicit hop, grants first.
     const aliases = subjectAliases(store, request.principal, repo, subject);
     const isSubject = (s: string | undefined): boolean => s !== undefined && aliases.has(s);
+    // One hop only. Do not broaden aliases: a linked observation does not merge subjects,
+    // bring unrelated facts, receipts or commitments, or traverse another relationship.
+    const linkedObservations = new Map<string, Set<string>>();
+    for (const r of store.recs("relationships")) {
+      if (!granted(request.principal, r.scope) || scopePath(r.scope) !== scopePath(request.scope)) continue;
+      if (r.type !== "observation_about" || r.lifecycle === "retired" || !isSubject(r.to) || !r.observation_hash) continue;
+      const hashes = linkedObservations.get(r.from) ?? new Set<string>();
+      hashes.add(r.observation_hash); linkedObservations.set(r.from, hashes);
+    }
     const current: StateRef[] = [];
     const inForce: StateRef[] = [];
     const done: StateRef[] = [];
     const observations: EntityFor["derived"][] = [];
+    let relationshipsTruncated = false;
     const dependsOn: DependencyRef[] = [];
     const invalidatedBy = new Set<string>();
     /** authorization-before-retrieval: the grant check runs before the record is examined. */
@@ -250,8 +260,11 @@ export function readState(store: HunchStore, input: unknown): { response: ReadRe
       else if (c.status === "done" && c.closed_by) done.push(keep("commitments", c, scope));
     }
     if (facets.has("derived")) for (const d of store.recs("derived")) {
-      if (!isSubject(d.subject) && d.id !== subject) continue;
       const scope = admit("derived", d); if (!scope) continue;
+      const direct = isSubject(d.subject) || d.id === subject;
+      const linked = scopePath(scope) === scopePath(request.scope) && linkedObservations.get(d.id)?.has(stateHash(d));
+      if (!direct && !linked) continue;
+      if (!direct) { if (d.state === "unknown" && d.valid_to == null) observations.push(d); continue; }
       if (d.state === "current" && d.valid_to == null) { current.push(keep("derived", d, scope)); dependsOn.push(...d.dependencies); }
       else if (d.state === "unknown" && d.valid_to == null) observations.push(d);
     }
@@ -261,13 +274,16 @@ export function readState(store: HunchStore, input: unknown): { response: ReadRe
       if (e.lifecycle === "active") current.push(keep("entities", e, scope));
     }
     if (facets.has("relationships")) for (const r of store.recs("relationships")) {
+      if (r.lifecycle === "retired") continue;
       if (!isSubject(r.from) && !isSubject(r.to)) continue;
       const scope = admit("relationships", r); if (!scope) continue;
+      if (current.length >= 256) { relationshipsTruncated = true; continue; }
       current.push(keep("relationships", r, scope));
     }
     observations.sort((a, b) => Date.parse(b.computed_at) - Date.parse(a.computed_at) || a.id.localeCompare(b.id));
     const observed = observations.slice(0, 64).map(d => keep("derived", d, recordScope(d, repo)));
     stateOfRecord = { subject, current, in_force: inForce, done, depends_on: dependsOn, invalidated_by: [...invalidatedBy].sort(),
+      ...(relationshipsTruncated ? { relationships_truncated: true } : {}),
       ...(observed.length ? { observed, observed_truncated: observations.length > observed.length } : {}) };
   }
   const response = ReadResponseSchema.parse({
@@ -322,6 +338,7 @@ export function mergeReadResponses(primary: ReadResponse, others: readonly ReadR
       current: dedupeRefs((s) => s.current),
       in_force: dedupeRefs((s) => s.in_force),
       done: dedupeRefs((s) => s.done),
+      ...(sors.some(s => s.relationships_truncated) ? { relationships_truncated: true } : {}),
       ...(sors.some(s => s.observed?.length) ? { observed: dedupeRefs(s => s.observed ?? []).slice(0, 64),
         observed_truncated: sors.some(s => s.observed_truncated) || dedupeRefs(s => s.observed ?? []).length > 64 } : {}),
       depends_on: dependsOn,
@@ -359,7 +376,7 @@ function subjectOf(facet: StateFacet, record: unknown): string | undefined {
   switch (facet) {
     case "commitments": case "derived": return typeof r.subject === "string" ? r.subject : undefined;
     case "entities": return typeof r.id === "string" ? r.id : undefined;
-    case "relationships": return typeof r.from === "string" ? r.from : undefined;
+    case "relationships": return r.type === "observation_about" && typeof r.to === "string" ? r.to : typeof r.from === "string" ? r.from : undefined;
     case "receipts": { const t = r.target as { object_type?: string; object_key?: string } | undefined; return t?.object_type && t.object_key ? `${t.object_type}:${t.object_key}` : undefined; }
     case "decisions": return typeof r.topic === "string" ? r.topic : undefined;
     default: return undefined;
@@ -517,6 +534,7 @@ function normalizeRecord(facet: StateFacet, scope: Scope, raw: Record<string, un
     if (facet === "receipts") expectedId = actionReceiptId(record as never);
     else if (facet === "commitments") expectedId = commitmentId(record as never);
     else if (facet === "derived") expectedId = derivedId(record as never);
+    else if (facet === "relationships") expectedId = relationshipId(String(record.from), String(record.to), String(record.type));
     else if (facet === "decisions" && typeof record.id !== "string") expectedId = decisionId(String(record.topic ?? record.title ?? ""));
   } catch (e) {
     throw new StateRefusal("malformed", `cannot derive ${facet} identity: ${(e as Error).message}`);
@@ -548,6 +566,23 @@ export function writeState(store: HunchStore, input: unknown, opts: WriteOptions
     : home === "private" ? store.getPrivateRec(facet as EntityKind, id) : store.json.get(facet as EntityKind, id);
   if (!(ENTITY_KINDS as readonly string[]).includes(facet)) throw new StateRefusal("unsupported", `facet ${facet} is not a store kind`);
   const record = normalizeRecord(facet, request.scope, request.record, request.principal);
+  let replayLink: EntityFor["relationships"] | undefined;
+  if (facet === "relationships" && (record as EntityFor["relationships"]).type === "observation_about") {
+    const link = record as EntityFor["relationships"];
+    const observation = store.getStateDirect("derived", link.from, home);
+    if (!observation || scopePath(observation.scope) !== scopePath(request.scope) || !granted(request.principal, observation.scope)) throw new StateRefusal("conflict", "observation is absent from the granted partition");
+    if (!observation.transform_version.startsWith("agent-capture/1:")) throw new StateRefusal("malformed", "only captured observations can be linked");
+    if (link.lifecycle !== "retired" && (observation.state !== "unknown" || observation.valid_to != null || stateHash(observation) !== link.observation_hash)) throw new StateRefusal("conflict", "observation changed or is no longer eligible; re-read before linking");
+    const prior = getHere(link.id) as EntityFor["relationships"] | undefined;
+    if (prior?.lifecycle === "retired" && link.lifecycle !== "retired" && request.expected_version === null) throw new StateRefusal("conflict", "retired observation link requires an explicit expected_version to reactivate");
+    // Repeated reads and different agents do not rewrite an identical association.
+    // Preserve its first author/evidence time and avoid index/Git work on replay.
+    if (prior && prior.from === link.from && prior.to === link.to && prior.type === link.type && prior.reason === link.reason
+      && prior.observation_hash === link.observation_hash && prior.lifecycle === link.lifecycle
+      && prior.evidence && link.evidence && externalKey(prior.evidence) === externalKey(link.evidence) && prior.evidence.content_hash === link.evidence.content_hash) {
+      replayLink = prior;
+    }
+  }
   const id = (record as { id: string }).id;
   assertExternalIdentity(store, request.principal, request.scope, facet, record);
   /** The normalized PAYLOAD hash: what idempotency recognizes on a re-send. */
@@ -586,6 +621,12 @@ export function writeState(store: HunchStore, input: unknown, opts: WriteOptions
       ? latestSeqFor(ledger, id) === request.expected_version
       : stateHash(existing) === request.expected_version;
     if (!ok) throw new StateRefusal("conflict", `expected_version does not match the incumbent ${id}`, { incumbent_id: id, reason: "expected_version mismatch" });
+  }
+
+  if (replayLink) {
+    const recordHash = stateHash(replayLink);
+    appendChanges(hunchDir, request.scope, [], { key: request.idempotency_key, entry: { record_id: replayLink.id, record_hash: recordHash, payload_hash: hash, facet } }, now, opts.ledgerCache?.ledger);
+    return WriteResultSchema.parse({ schema: STATE_WRITE_VERSION, record_id: replayLink.id, record_hash: recordHash, record: replayLink, outcome: "replayed", conflict: null, durability: "local" });
   }
 
   // human-correction-outranks-agent-writes: what a human confirmed, an agent does not rewrite.
@@ -668,7 +709,7 @@ export function writeState(store: HunchStore, input: unknown, opts: WriteOptions
   const invalidated = facet === "derived" && !!existing && existing.state === "current" && (record as EntityFor["derived"]).state === "stale";
   const invalidates = facet === "receipts" ? (record as EntityFor["receipts"]).invalidates : [];
   // An entity leaving service is a `retired` change (a merge names the survivor in the record).
-  const retired = facet === "entities" && (record as EntityFor["entities"]).lifecycle === "retired" && (!existing || existing.lifecycle !== "retired");
+  const retired = (facet === "entities" || facet === "relationships") && (record as EntityFor["entities"]).lifecycle === "retired" && (!existing || existing.lifecycle !== "retired");
   const subject = subjectOf(facet, record);
   if (supersedes) {
     const closed = closeWindow(store, facet, supersedes, id, now, isPrivate);
