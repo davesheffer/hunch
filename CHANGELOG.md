@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.31.0 — 2026-09-10
 
 Agent launches now follow the initiating agent across synthesis, verification,
 deep sampling, MCP requests and Git child processes. A Codex event stays with
