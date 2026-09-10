@@ -76,9 +76,13 @@ export function readLedger(hunchDir: string, scope: Scope): Ledger {
 }
 
 export function writeLedger(hunchDir: string, ledger: Ledger): void {
+  writeValidatedLedger(hunchDir, LedgerSchema.parse(ledger));
+}
+
+function writeValidatedLedger(hunchDir: string, ledger: Ledger): void {
   const file = ledgerFile(hunchDir, ledger.scope);
   mkdirSync(join(hunchDir, CHANGES_DIR), { recursive: true });
-  writeFileAtomic(file, JSON.stringify(LedgerSchema.parse(ledger), null, 2) + "\n");
+  writeFileAtomic(file, JSON.stringify(ledger, null, 2) + "\n");
 }
 
 export type PendingChange = Omit<ChangeEvent, "schema" | "seq" | "at" | "scope">;
@@ -92,8 +96,11 @@ export function appendChanges(
   changes: readonly PendingChange[],
   idempotency: { key: string; entry: Omit<IdempotencyEntry, "seq" | "at"> } | null,
   at: string = new Date().toISOString(),
+  /** Already validated under the same uninterrupted partition lock; batch-local only. */
+  current?: Ledger,
 ): ChangeEvent[] {
-  const ledger = readLedger(hunchDir, scope);
+  const ledger = current ?? readLedger(hunchDir, scope);
+  if (scopePath(ledger.scope) !== scopePath(scope)) throw new Error("cached ledger belongs to another scope");
   const appended: ChangeEvent[] = [];
   for (const change of changes) {
     const event: ChangeEvent = ChangeEventSchema.parse({ schema: "nuryel.state.subscribe/1", seq: ledger.head_seq + 1, at, scope, ...change });
@@ -102,9 +109,11 @@ export function appendChanges(
     appended.push(event);
   }
   if (idempotency) {
-    ledger.idempotency[idempotency.key] = { ...idempotency.entry, seq: ledger.head_seq, at };
+    ledger.idempotency[idempotency.key] = IdempotencyEntrySchema.parse({ ...idempotency.entry, seq: ledger.head_seq, at });
   }
-  writeLedger(hunchDir, ledger);
+  // The initial ledger and each new event/entry are validated; don't re-validate the
+  // full history per assertion. Each append still reaches disk atomically before return.
+  writeValidatedLedger(hunchDir, ledger);
   return appended;
 }
 

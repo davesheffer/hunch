@@ -14,6 +14,8 @@ import { hunchPaths, findRoot, toPosixTarget } from "../core/paths.js";
 import { canonicalRootPath, resolveActiveRoot } from "./roots.js";
 import { HunchStore } from "../store/hunchStore.js";
 import { StateRefusal, SubscribeResponseSchema, capabilities, partitionOf, readState, recordsState, subscribeState, writeState } from "../store/stateBinding.js";
+import { captureState, captureBatchState } from "../store/stateCapture.js";
+import { CaptureRequestSchema, CaptureBatchRequestSchema, CaptureBatchResultSchema, STATE_CAPTURE_VERSION, STATE_CAPTURE_BATCH_VERSION } from "../core/stateContract.js";
 import { ReadRequestSchema, ReadResponseSchema, WriteRequestSchema, WriteResultSchema, SubscribeRequestSchema, RecordsRequestSchema, RecordsResponseSchema, STATE_READ_VERSION, STATE_WRITE_VERSION, STATE_SUBSCRIBE_VERSION, STATE_RECORDS_VERSION, stateHash } from "../core/stateContract.js";
 import { selectEmbedder } from "../store/embedder.js";
 import { decisionId, findingId } from "../core/ids.js";
@@ -1981,7 +1983,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
         const { response, envelope } = readState(store, { schema: STATE_READ_VERSION, ...input });
         const sor = response.state_of_record;
         const summary = sor
-          ? `subject ${sor.subject}: current ${sor.current.length} · in force ${sor.in_force.length} · done ${sor.done.length} · depends on ${sor.depends_on.length} · invalidated by ${sor.invalidated_by.length}`
+          ? `subject ${sor.subject}: current ${sor.current.length} · in force ${sor.in_force.length} · done ${sor.done.length} · observed ${sor.observed?.length ?? 0} · depends on ${sor.depends_on.length} · invalidated by ${sor.invalidated_by.length}`
           : "no subject — delivery envelope only";
         const deniedNote = response.denied_scopes.length ? `\ndenied scopes: ${response.denied_scopes.map((s) => `${s.kind}/${s.id}`).join(", ")}` : "";
         // Render the state of record itself, not only its refs: a consumer answers from this text.
@@ -2009,6 +2011,8 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
         };
         const stateText = sor
           ? [...sor.current.map((r) => line("current", r)), ...sor.in_force.map((r) => line("in force", r)), ...sor.done.map((r) => line("done", r)),
+             ...(sor.observed ?? []).map(r => line("observed; verify currentness before relying on it", r)),
+             ...(sor.observed_truncated ? ["- More observations exist; narrow the subject or query the state history."] : []),
              ...(sor.invalidated_by.length ? [`- invalidated by: ${sor.invalidated_by.join(", ")}`] : [])].join("\n") || "(nothing on record for this subject)"
           : "";
         return stateResult(`${response.receipt_id} · ${summary}${deniedNote}${stateText ? `\n\nState of record:\n${stateText}` : ""}\n\n${envelope.text}`, response);
@@ -2038,6 +2042,42 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
       } catch (e) {
         return stateRefusal(e);
       }
+    },
+  );
+
+  server.registerTool(
+    "nuryel_capture",
+    {
+      title: "nuryel.state/1 capture — one relevant assertion with exact source excerpts",
+      description: "Save ONE relevant atomic assertion learned during the task. First split mixed source material into independent assertions; check each one, retaining new relevant details inside otherwise known passages. Exclude chatter, speculation, unsupported conclusions and transient tool output. Supply a concrete future-use reason and exact excerpts from the source text. Whole source text is transient and is never stored. Deduplication is per assertion + subject + source excerpt, independent of agent and read time; never skip a whole document because some of it is known. Records are observations, not verified current summaries or execution receipts. Call after substantive learning without waiting for the user to say remember. Read back the returned record before claiming it was saved.",
+      inputSchema: { ...CaptureRequestSchema.omit({ schema: true }).shape, cwd: cwdHintField },
+      outputSchema: WriteResultSchema.shape,
+    },
+    async ({ cwd: _cwd, ...input }): Promise<ToolResult> => {
+      try {
+        const result = await withWriteLock(hunchPaths(root).hunch, () => captureState(store, { schema: STATE_CAPTURE_VERSION, ...input }, {
+          flush: (isPrivate, message) => flushCapture(store, hunchPaths(root).hunch, isPrivate, message, startupTeamRoute ?? undefined),
+        }));
+        return stateResult(`${result.outcome} observation ${result.record_id} (${result.durability}); this does not assert currentness. ${result.record_hash}`, result);
+      } catch (e) { return stateRefusal(e); }
+    },
+  );
+
+  server.registerTool(
+    "nuryel_capture_batch",
+    {
+      title: "nuryel.state/1 capture batch — save relevant atomic observations",
+      description: "Preferred capture for multiple facts learned during the task. Split source material into independent relevant assertions, select exact supporting excerpts and give each a concrete future-use reason. Exclude chatter, unsupported inference and transient output. Check every assertion even in a known paragraph: deduplication never discards a whole passage. Send each source once and reference its zero-based index. At most 32 observations and 8 sources; split larger work into batches. One partition lock and index update, no extra model call. Results preserve input indexes; inspect every refusal and stored record. Saved observations have unknown currentness, not verified receipts or current summaries. Use your own initiating agent identity automatically after substantive learning.",
+      inputSchema: { ...CaptureBatchRequestSchema.omit({ schema: true }).shape, cwd: cwdHintField },
+      outputSchema: CaptureBatchResultSchema.shape,
+    },
+    async ({ cwd: _cwd, ...input }): Promise<ToolResult> => {
+      try {
+        const result = await withWriteLock(hunchPaths(root).hunch, () => captureBatchState(store, { schema: STATE_CAPTURE_BATCH_VERSION, ...input }, {
+          flush: (isPrivate, message) => flushCapture(store, hunchPaths(root).hunch, isPrivate, message, startupTeamRoute ?? undefined),
+        }));
+        return stateResult(`Capture batch: ${result.results.filter(r => r.status === "saved").length} saved/replayed, ${result.results.filter(r => r.status === "refused").length} refused. Inspect each indexed result.`, result);
+      } catch (e) { return stateRefusal(e); }
     },
   );
 

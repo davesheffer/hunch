@@ -211,6 +211,7 @@ export function readState(store: HunchStore, input: unknown): { response: ReadRe
     const current: StateRef[] = [];
     const inForce: StateRef[] = [];
     const done: StateRef[] = [];
+    const observations: EntityFor["derived"][] = [];
     const dependsOn: DependencyRef[] = [];
     const invalidatedBy = new Set<string>();
     /** authorization-before-retrieval: the grant check runs before the record is examined. */
@@ -252,6 +253,7 @@ export function readState(store: HunchStore, input: unknown): { response: ReadRe
       if (!isSubject(d.subject) && d.id !== subject) continue;
       const scope = admit("derived", d); if (!scope) continue;
       if (d.state === "current" && d.valid_to == null) { current.push(keep("derived", d, scope)); dependsOn.push(...d.dependencies); }
+      else if (d.state === "unknown" && d.valid_to == null) observations.push(d);
     }
     if (facets.has("entities")) for (const e of store.recs("entities")) {
       if (!isSubject(e.id)) continue;
@@ -263,7 +265,10 @@ export function readState(store: HunchStore, input: unknown): { response: ReadRe
       const scope = admit("relationships", r); if (!scope) continue;
       current.push(keep("relationships", r, scope));
     }
-    stateOfRecord = { subject, current, in_force: inForce, done, depends_on: dependsOn, invalidated_by: [...invalidatedBy].sort() };
+    observations.sort((a, b) => Date.parse(b.computed_at) - Date.parse(a.computed_at) || a.id.localeCompare(b.id));
+    const observed = observations.slice(0, 64).map(d => keep("derived", d, recordScope(d, repo)));
+    stateOfRecord = { subject, current, in_force: inForce, done, depends_on: dependsOn, invalidated_by: [...invalidatedBy].sort(),
+      ...(observed.length ? { observed, observed_truncated: observations.length > observed.length } : {}) };
   }
   const response = ReadResponseSchema.parse({
     schema: STATE_READ_VERSION,
@@ -317,6 +322,8 @@ export function mergeReadResponses(primary: ReadResponse, others: readonly ReadR
       current: dedupeRefs((s) => s.current),
       in_force: dedupeRefs((s) => s.in_force),
       done: dedupeRefs((s) => s.done),
+      ...(sors.some(s => s.observed?.length) ? { observed: dedupeRefs(s => s.observed ?? []).slice(0, 64),
+        observed_truncated: sors.some(s => s.observed_truncated) || dedupeRefs(s => s.observed ?? []).length > 64 } : {}),
       depends_on: dependsOn,
       invalidated_by: [...new Set(sors.flatMap((s) => s.invalidated_by))].sort(),
     };
@@ -337,6 +344,10 @@ export function mergeReadResponses(primary: ReadResponse, others: readonly ReadR
 // ---- write ---------------------------------------------------------------------------------
 
 export interface WriteOptions {
+  /** Internal batch owner rebuilds once in finally while holding the write lock. */
+  deferReindex?: boolean;
+  /** Internal cache scoped to one uninterrupted partition write lock. Never retained. */
+  ledgerCache?: { ledger?: ReturnType<typeof readLedger> };
   /** Durability step after the record is on disk (auto-commit / push). Absent = "local". */
   flush?: (isPrivate: boolean, message: string) => "pushed" | "committed" | null;
   now?: () => Date;
@@ -532,19 +543,23 @@ export function writeState(store: HunchStore, input: unknown, opts: WriteOptions
   const { home, hunchDir, isPrivate } = stateHomeFor(store, request.scope);
   const now = (opts.now ?? (() => new Date()))().toISOString();
   const facet = request.facet;
+  const getHere = (id: string) => facet === "derived" || facet === "receipts" || facet === "commitments"
+    ? store.getStateDirect(facet, id, home)
+    : home === "private" ? store.getPrivateRec(facet as EntityKind, id) : store.json.get(facet as EntityKind, id);
   if (!(ENTITY_KINDS as readonly string[]).includes(facet)) throw new StateRefusal("unsupported", `facet ${facet} is not a store kind`);
   const record = normalizeRecord(facet, request.scope, request.record, request.principal);
   const id = (record as { id: string }).id;
   assertExternalIdentity(store, request.principal, request.scope, facet, record);
   /** The normalized PAYLOAD hash: what idempotency recognizes on a re-send. */
   const hash = stateHash(record);
-  const ledger = readLedger(hunchDir, request.scope);
+  const ledger = opts.ledgerCache?.ledger ?? readLedger(hunchDir, request.scope);
+  if (opts.ledgerCache) opts.ledgerCache.ledger = ledger;
   const durability = () => opts.flush?.(isPrivate, `nuryel: write ${id}`) ?? "local";
   /** The result reports the record ON FILE and its hash — the store may enrich a record on put
    *  (a private-mode decision gains `valid_from`), and a writer that goes on to rest a receipt
    *  on this record must hold the hash a reader will verify, never a pre-store one. */
   const result = (outcome: WriteResult["outcome"], conflict: WriteResult["conflict"] = null, rid = id): WriteResult => {
-    const onFile = store.getRec(facet as EntityKind, rid) ?? record;
+    const onFile = getHere(rid) ?? record;
     return WriteResultSchema.parse({ schema: STATE_WRITE_VERSION, record_id: rid, record_hash: stateHash(onFile), durability: durability(), outcome, conflict, record: onFile });
   };
 
@@ -561,9 +576,9 @@ export function writeState(store: HunchStore, input: unknown, opts: WriteOptions
     throw new StateRefusal("idempotency", `idempotency key "${request.idempotency_key}" was already used for ${seen.record_id}${where}. A key names ONE request payload: re-send the original payload to replay it, or use a new key to write this payload (the record keeps its derived id and is updated in place).`, { incumbent_id: seen.record_id, reason: "idempotency key reused with a different payload" });
   }
 
-  const existing = store.recsInHome(facet as EntityKind, home).find((r) => (r as { id: string }).id === id) as Record<string, unknown> | undefined;
+  const existing = getHere(id) as Record<string, unknown> | undefined;
   if (existing && stateHash(existing) === hash) {
-    appendChanges(hunchDir, request.scope, [], { key: request.idempotency_key, entry: { record_id: id, record_hash: hash, payload_hash: hash, facet } }, now);
+    appendChanges(hunchDir, request.scope, [], { key: request.idempotency_key, entry: { record_id: id, record_hash: hash, payload_hash: hash, facet } }, now, opts.ledgerCache?.ledger);
     return result("replayed");
   }
   if (existing && request.expected_version !== null) {
@@ -597,7 +612,7 @@ export function writeState(store: HunchStore, input: unknown, opts: WriteOptions
     };
     const verdict = guard(existing, "overwrite");
     if (verdict === "replay") {
-      appendChanges(hunchDir, request.scope, [], { key: request.idempotency_key, entry: { record_id: id, record_hash: stateHash(existing!), payload_hash: hash, facet } }, now);
+      appendChanges(hunchDir, request.scope, [], { key: request.idempotency_key, entry: { record_id: id, record_hash: stateHash(existing!), payload_hash: hash, facet } }, now, opts.ledgerCache?.ledger);
       return result("replayed");
     }
     if (verdict === "keep-provenance") (record as { provenance: unknown }).provenance = existing!.provenance;
@@ -645,7 +660,7 @@ export function writeState(store: HunchStore, input: unknown, opts: WriteOptions
 
   store.putCapture(facet as EntityKind, record, isPrivate);
   /** What is on file now — the hash every event, ref and result carries. */
-  const onFileHash = stateHash(store.getRec(facet as EntityKind, id) ?? record);
+  const onFileHash = stateHash(getHere(id) ?? record);
   const changes: PendingChange[] = [];
   const cause = closedBy ? { kind: "receipt" as const, receipt_id: closedBy } : request.cause ?? { kind: "write" as const, principal: request.principal.id };
   // A current derived statement written back as stale is an INVALIDATION, not an update: the
@@ -663,8 +678,8 @@ export function writeState(store: HunchStore, input: unknown, opts: WriteOptions
     }
   }
   changes.push({ facet, record_id: id, record_hash: onFileHash, change: invalidated ? "invalidated" : retired ? "retired" : existing ? "updated" : "created", subject, invalidates: invalidated && subject ? [subject] : invalidates, cause });
-  appendChanges(hunchDir, request.scope, changes, { key: request.idempotency_key, entry: { record_id: id, record_hash: onFileHash, payload_hash: hash, facet } }, now);
-  store.reindex();
+  appendChanges(hunchDir, request.scope, changes, { key: request.idempotency_key, entry: { record_id: id, record_hash: onFileHash, payload_hash: hash, facet } }, now, opts.ledgerCache?.ledger);
+  if (!opts.deferReindex) store.reindex();
   return result(supersedes ? "superseded" : existing ? "updated" : "created");
 }
 
