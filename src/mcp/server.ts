@@ -72,7 +72,8 @@ import { HUNCH_VERSION } from "../core/version.js";
 import { assertCompleteRepoScan, indexRepo, scanRepo } from "../extractors/indexer.js";
 import type { Decision, Finding, Symbol } from "../core/types.js";
 import { liveForTopic, historyForTopic, rejectedForTopic, captureConflicts } from "../core/topics.js";
-import { pendingEscalations, policyEscalations, type Escalation } from "../core/escalations.js";
+import { pendingEscalations, policyEscalations, commitRepairEscalations, actionableEscalations, escalationHeadline, type Escalation } from "../core/escalations.js";
+import { readActivePendingRepairs, withheldRewrites } from "../core/repairqueue.js";
 import { scanRecord, publicationWarning, loadVocabulary } from "../core/publication.js";
 import { premiseEscalations } from "../core/premises.js";
 import { applyImportedAdrReview, pendingImportedAdrReviews } from "../core/importReview.js";
@@ -1331,13 +1332,16 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
   // -- hunch_now (the hot view: recent activity + roadmap) --------------------
   // PUBLIC store only, per dec_29eff08c69's jurisdiction rule: an assistant may
   // paste this anywhere, so it must be publishable by construction. Union view
-  // stays behind `hunch now --private` on the local terminal.
+  // stays behind `hunch now --private` on the local terminal. EXCEPTION: a
+  // queued commit-repair's liveness is checked against the full store (see
+  // below), so a private-overlay decision's id and commit shas — never its
+  // title — can surface in the escalation line.
   server.registerTool(
     "hunch_now",
     {
       title: "Recent activity + the roadmap (the hot view)",
       description:
-        "What just happened and what's next, straight from the graph: the last N decisions, the ROADMAP, and any inline human question such as an imported ADR awaiting explicit approve/decline. Call at session start to orient, or before planning what to work on. Same data as the wiki's now.md. Public store only.",
+        "What just happened and what's next, straight from the graph: the last N decisions, the ROADMAP, and any inline human question such as an imported ADR awaiting explicit approve/decline. Call at session start to orient, or before planning what to work on. Same data as the wiki's now.md. Public store only, EXCEPT a queued commit-repair's liveness is checked against the full store (so a private-overlay decision's fully-answerable repair doesn't go silently unanswerable); only its id and the commit shas ever surface, never its title.",
       inputSchema: {
         recent_limit: z.number().optional().describe("How many recent decisions to include (default 10)."),
       },
@@ -1352,8 +1356,18 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
       if (pendingReview > 0) L.push("", `${pendingReview} legacy un-vouched draft(s) — \`hunch adopt-drafts\` auto-trusts them as advisory (new captures land trusted automatically).`);
       const escalations = pendingEscalations(store.advisoryRecs("decisions"));
       escalations.push(...premiseEscalations(store.advisoryRecs("decisions"), { now: new Date().toISOString(), exists: (p) => existsSync(join(root, p)) }));
-      if (escalations.length) {
-        L.push("", `⚖ ${escalations.length} decision(s) need the human's call — ASK inline (never queue): ${escalations.map((e) => e.question).join(" · ")}`);
+      // liveness checked against the full store (repair-provenance reads the
+      // full store too) even though the title stays scoped to advisoryRecs —
+      // an overlay decision's repair is fully answerable, so it must not go
+      // silent here just because its title is private.
+      const hunchNowQueue = readActivePendingRepairs(root);
+      escalations.push(...commitRepairEscalations(hunchNowQueue, store.advisoryRecs("decisions"), store.recs("decisions"), withheldRewrites(root, hunchNowQueue)));
+      // Only ACTIONABLE entries are a question the assistant can put to the human
+      // directly — a duplicate-id commit-repair follower whose own resolution
+      // says "act on a different entry first" isn't one (#61).
+      const actionableNow = actionableEscalations(escalations);
+      if (actionableNow.length) {
+        L.push("", `⚖ ${actionableNow.length} decision(s) need the human's call — ASK inline (never queue): ${actionableNow.map((e) => e.question).join(" · ")}`);
       }
       return ok(L.join("\n"));
     },
@@ -1371,7 +1385,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
     {
       title: "Decisions the human must make now (ask inline, not a queue)",
       description:
-        "The rare decisions the graph cannot resolve on its own — surfaced so you ASK THE USER in the prompt at the moment, then act. This includes one exact imported ADR at a time awaiting approve/decline, topic conflicts, premise-stale decisions, and Constitution human moments. Normally empty. Raise each question with the user; do NOT decide it for them — an entry is a question, silence is never approval. Reads the public store, or the unified overlay when the repo is in shared mode (where the overlay IS the store) — never private-mode overlay records.",
+        "The rare decisions the graph cannot resolve on its own — surfaced so you ASK THE USER in the prompt at the moment, then act. Auto-captured memory is trusted automatically and never appears here; this returns topic conflicts (>1 live decision for one topic), premise-stale decisions (a live decision whose recorded REASON no longer holds — its authority is unchanged until the human re-attests, supersedes, or retires), one exact imported ADR at a time awaiting approve/decline, a queued commit-provenance repair (the post-merge hook detected a decision's commit was squash-merged away but never applies the fix unattended — apply with `hunch repair-provenance --apply` or leave it queued), and Constitution human moments (candidate policies awaiting review, proposed policies awaiting an activation decision). Normally empty. Raise each question with the user; do NOT decide it for them — an entry is a question, silence is never approval. Reads the public store, or the unified overlay when the repo is in shared mode — never private-mode overlay records, EXCEPT a queued commit-repair, whose liveness is checked against the full store; only its id and commit shas ever surface, never its title.",
       inputSchema: {},
     },
     async (): Promise<ToolResult> => {
@@ -1379,13 +1393,23 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
       // Premise decay: a live decision whose recorded reason died. Question-framed
       // like every entry here — authority never changes until the human answers.
       items.push(...premiseEscalations(store.advisoryRecs("decisions"), { now: new Date().toISOString(), exists: (p) => existsSync(join(root, p)) }));
+      // See the sibling hunch_now handler above for why `live` is the full store.
+      const hunchEscalationsQueue = readActivePendingRepairs(root);
+      items.push(...commitRepairEscalations(hunchEscalationsQueue, store.advisoryRecs("decisions"), store.recs("decisions"), withheldRewrites(root, hunchEscalationsQueue)));
       try {
         items.push(...policyEscalations(new ConstitutionService(store, root).list({ publicOnly: true }).map((p) => ({ ...p, last_action: p.audit.at(-1)?.action ?? null }))));
       } catch { /* constitution unavailable — memory escalations still surface */ }
       if (!items.length) return ok("✓ Nothing needs a human decision — memory is auto-trusted and self-consistent.");
-      const L = [`${items.length} decision(s) need the human's call — ask each inline, don't decide it for them:`, ""];
+      // Only ACTIONABLE entries are a question to ask the human directly — a
+      // duplicate-id commit-repair follower whose own resolution says "act on
+      // a different entry first" still surfaces below for transparency, but
+      // isn't itself something to raise as a decision (#61).
+      const L = [escalationHeadline(items, "mcp"), ""];
       for (const e of items) {
-        L.push(`⚖ ${e.question}`);
+        // Marked distinctly (never the "⚖ question" glyph) when it isn't
+        // itself something to raise — an entry whose own answer is "act on a
+        // different entry first" reads as informational, not as a question.
+        L.push(`${e.actionable === false ? "·" : "⚖"} ${e.question}`);
         L.push(`   ${e.detail}`);
         L.push(`   → ${e.resolution}`, "");
       }
