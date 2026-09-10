@@ -2067,7 +2067,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
     "nuryel_capture_batch",
     {
       title: "nuryel.state/1 capture batch — save relevant atomic observations",
-      description: "Preferred capture for multiple facts learned during the task. Split source material into independent relevant assertions, select exact supporting excerpts and give each a concrete future-use reason. Exclude chatter, unsupported inference and transient output. Check every assertion even in a known paragraph: deduplication never discards a whole passage. Send each source once and reference its zero-based index. At most 32 observations and 8 sources; split larger work into batches. One partition lock and index update, no extra model call. Results preserve input indexes; inspect every refusal and stored record. Saved observations have unknown currentness, not verified receipts or current summaries. Use your own initiating agent identity automatically after substantive learning.",
+      description: "Preferred capture for multiple facts learned during the task. Split source material into independent relevant assertions, select exact supporting excerpts and give each a concrete future-use reason. Exclude chatter, unsupported inference and transient output. Check every assertion even in a known paragraph: deduplication never discards a whole passage. Send each source once and reference its zero-based index. At most 32 observations and 8 sources; split larger work into batches. One partition lock and index update, no extra model call. Results preserve input indexes; inspect every refusal and stored record. Saved observations have unknown currentness, not verified receipts or current summaries. Use your own initiating agent identity automatically after substantive learning. Optional reviews withdraw specific prior observations: supply record_id, expected_hash, a reason, and exact excerpts from a changed source that observation depends on. Mere hash changes, missing text or uncertain interpretation never suffice; the initiating agent must identify explicit contradiction or withdrawal. Original facts remain in history with the review author and evidence. Review results are separately indexed; inspect every refusal.",
       inputSchema: { ...CaptureBatchRequestSchema.omit({ schema: true }).shape, cwd: cwdHintField },
       outputSchema: CaptureBatchResultSchema.shape,
     },
@@ -2076,7 +2076,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
         const result = await withWriteLock(hunchPaths(root).hunch, () => captureBatchState(store, { schema: STATE_CAPTURE_BATCH_VERSION, ...input }, {
           flush: (isPrivate, message) => flushCapture(store, hunchPaths(root).hunch, isPrivate, message, startupTeamRoute ?? undefined),
         }));
-        return stateResult(`Capture batch: ${result.results.filter(r => r.status === "saved").length} saved/replayed, ${result.results.filter(r => r.status === "refused").length} refused. Inspect each indexed result.`, result);
+        return stateResult(`Capture batch: ${result.results.filter(r => r.status === "saved").length} saved/replayed, ${result.results.filter(r => r.status === "refused").length} refused.${result.reviews ? ` Reviews: ${result.reviews.filter(r => r.status === "saved").length} withdrawn/replayed, ${result.reviews.filter(r => r.status === "refused").length} refused.` : ''} Inspect each indexed result.`, result);
       } catch (e) { return stateRefusal(e); }
     },
   );
