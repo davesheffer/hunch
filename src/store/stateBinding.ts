@@ -612,6 +612,10 @@ export function writeState(store: HunchStore, input: unknown, opts: WriteOptions
   }
 
   const existing = getHere(id) as Record<string, unknown> | undefined;
+  if (facet === 'derived') {
+    const review = (record as EntityFor['derived']).review;
+    if (review && stateHash(review) !== stateHash(existing?.review ?? null) && review.by !== request.principal.id) throw new StateRefusal('malformed', 'reviewer must be the initiating principal');
+  }
   if (existing && stateHash(existing) === hash) {
     appendChanges(hunchDir, request.scope, [], { key: request.idempotency_key, entry: { record_id: id, record_hash: hash, payload_hash: hash, facet } }, now, opts.ledgerCache?.ledger);
     return result("replayed");
@@ -706,7 +710,7 @@ export function writeState(store: HunchStore, input: unknown, opts: WriteOptions
   const cause = closedBy ? { kind: "receipt" as const, receipt_id: closedBy } : request.cause ?? { kind: "write" as const, principal: request.principal.id };
   // A current derived statement written back as stale is an INVALIDATION, not an update: the
   // ledger says so, and names the external pointer that moved when the writer gives one.
-  const invalidated = facet === "derived" && !!existing && existing.state === "current" && (record as EntityFor["derived"]).state === "stale";
+  const invalidated = facet === "derived" && !!existing && (existing.state === "current" || existing.state === "unknown") && (record as EntityFor["derived"]).state === "stale";
   const invalidates = facet === "receipts" ? (record as EntityFor["receipts"]).invalidates : [];
   // An entity leaving service is a `retired` change (a merge names the survivor in the record).
   const retired = (facet === "entities" || facet === "relationships") && (record as EntityFor["entities"]).lifecycle === "retired" && (!existing || existing.lifecycle !== "retired");

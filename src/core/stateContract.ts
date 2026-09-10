@@ -45,11 +45,12 @@ export const STATE_RECORDS_VERSION = "nuryel.state.records/1" as const;
 export const STATE_CAPTURE_VERSION = "nuryel.state.capture/1" as const;
 export const STATE_CAPTURE_BATCH_VERSION = "nuryel.state.capture-batch/1" as const;
 export const STATE_OBSERVATION_LINKS_VERSION = "nuryel.observation-links/1" as const;
+export const STATE_OBSERVATION_REVIEW_VERSION = "nuryel.observation-review/1" as const;
 
 /** Capabilities a server advertises; a client that needs one the server lacks gets a typed
  *  `unsupported`, never a compatible-looking degraded answer. */
 export const STATE_CAPABILITIES = [
-  STATE_READ_VERSION, STATE_WRITE_VERSION, STATE_SUBSCRIBE_VERSION, STATE_RECORDS_VERSION, STATE_CAPTURE_VERSION, STATE_CAPTURE_BATCH_VERSION, STATE_OBSERVATION_LINKS_VERSION,
+  STATE_READ_VERSION, STATE_WRITE_VERSION, STATE_SUBSCRIBE_VERSION, STATE_RECORDS_VERSION, STATE_CAPTURE_VERSION, STATE_CAPTURE_BATCH_VERSION, STATE_OBSERVATION_LINKS_VERSION, STATE_OBSERVATION_REVIEW_VERSION,
   RECEIPT_SCHEMA_VERSION, COMMITMENT_SCHEMA_VERSION, DERIVED_SCHEMA_VERSION, ENTITY_SCHEMA_VERSION, RELATIONSHIP_SCHEMA_VERSION,
 ] as const;
 export type StateCapability = (typeof STATE_CAPABILITIES)[number];
@@ -97,7 +98,12 @@ export const CaptureBatchRequestSchema = z.object({
   sources: z.array(CaptureRequestSchema.shape.evidence.element.omit({ excerpt: true })).min(1).max(8),
   observations: z.array(CaptureRequestSchema.pick({ subject: true, statement: true, relevance: true }).extend({
     evidence: z.array(z.object({ source: z.number().int().min(0).max(7), excerpt: z.string().trim().min(1).max(1200) }).strict()).min(1).max(8),
-  })).min(1).max(32),
+  })).min(0).max(32),
+  reviews: z.array(z.object({
+    record_id: z.string().regex(/^nds_[a-f0-9]{24}$/), expected_hash: z.string().regex(SHA256),
+    reason: z.string().trim().min(1).max(600),
+    evidence: z.array(z.object({ source: z.number().int().min(0).max(7), excerpt: z.string().trim().min(1).max(1200) }).strict()).min(1).max(8),
+  }).strict()).min(1).max(32).optional(),
 }).strict();
 export type CaptureBatchRequest = z.infer<typeof CaptureBatchRequestSchema>;
 
@@ -210,6 +216,10 @@ export const CaptureBatchResultSchema = z.object({
     z.object({ index: z.number().int(), status: z.literal("saved"), result: WriteResultSchema }).strict(),
     z.object({ index: z.number().int(), status: z.literal("refused"), code: z.string(), message: z.string() }).strict(),
   ])).max(32),
+  reviews: z.array(z.discriminatedUnion("status", [
+    z.object({ index: z.number().int(), status: z.literal("saved"), result: WriteResultSchema }).strict(),
+    z.object({ index: z.number().int(), status: z.literal("refused"), code: z.string(), message: z.string() }).strict(),
+  ])).max(32).optional(),
 }).strict();
 export type CaptureBatchResult = z.infer<typeof CaptureBatchResultSchema>;
 

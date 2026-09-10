@@ -147,8 +147,15 @@ export const DerivedStateSchema = z.object({
   computed_at: z.string().regex(ISO),
   valid_to: z.string().regex(ISO).nullable().default(null),
   state: z.enum(["current", "stale", "unknown"]),
+  /** Per-observation withdrawal. Original assertion, author and dependencies stay intact. */
+  review: z.object({
+    by: z.string().regex(TOKEN), at: z.string().regex(ISO), previous_hash: z.string().regex(SHA256), reason: z.string().trim().min(1).max(600),
+    evidence: z.array(z.object({ ref: ExternalRefSchema, excerpt: z.string().trim().min(1).max(1200) }).strict()).min(1).max(8),
+  }).strict().optional(),
   provenance: ProvenanceSchema,
-}).strict();
+}).strict().superRefine((record, ctx) => {
+  if (record.review && record.state !== 'stale') ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['review'], message: 'withdrawal review belongs only to a stale observation' });
+});
 export type DerivedState = z.infer<typeof DerivedStateSchema>;
 
 const AttributeValue = z.union([z.string().max(2048), z.number().finite(), z.boolean(), z.null()]);

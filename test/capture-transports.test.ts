@@ -60,6 +60,12 @@ test("MCP and HTTP share capture identity, lock, readback and per-item refusals"
     const newRecord = batch.results[1]!;
     assert.match(String(newRecord.status === "saved" && newRecord.result.record?.content), /codex@david/, "HTTP uses its authenticated principal");
     await assert.rejects(() => http.captureBatch({ ...request, scope: { kind: "user", id: "stranger" } }), /grant|scope|denied/i);
+    const reviewed = await mcp.callTool({ name: 'nuryel_capture_batch', arguments: { principal, scope, observations: [],
+      sources: [{ ref: source.ref, source_text: 'Use the east entrance now. Call Dana on Thursday.' }],
+      reviews: [{ record_id: single.record_id, expected_hash: single.record_hash, reason: 'The source explicitly changes the entrance to east.', evidence: [{ source: 0, excerpt: 'Use the east entrance now.' }] }] } });
+    assert.ok(!reviewed.isError, JSON.stringify(reviewed));
+    assert.equal((reviewed.structuredContent as CaptureBatchResult).reviews?.[0]?.status, 'saved');
+    assert.equal((await http.read({ scope, subject: 'project:visits', facets: ['derived'] })).state_of_record?.observed, undefined);
   } finally {
     await mcp.close(); await server.close();
     await new Promise<void>(r => app.close(() => r())); app.closeStores();

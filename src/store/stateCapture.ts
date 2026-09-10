@@ -51,12 +51,47 @@ export function captureState(store: HunchStore, input: unknown, opts: CaptureOpt
 export function captureBatchState(store: HunchStore, input: unknown, opts: WriteOptions = {}): CaptureBatchResult {
   const request = CaptureBatchRequestSchema.parse(input);
   if (!request.principal.grants.some(s => scopePath(s) === scopePath(request.scope))) throw new StateRefusal("outside-grants", "capture scope is outside the principal's grants");
-  const { isPrivate } = stateHomeFor(store, request.scope);
+  if (!request.observations.length && !request.reviews?.length) throw new StateRefusal("malformed", "capture batch must contain observations or reviews");
+  const { home, isPrivate } = stateHomeFor(store, request.scope);
   const sourceHashes = new Map<string, string>();
   const ledgerCache: NonNullable<WriteOptions["ledgerCache"]> = {};
   const results: CaptureBatchResult["results"] = [];
+  const reviews: NonNullable<CaptureBatchResult["reviews"]> = [];
   let changed = false;
   try {
+    // Review before capture: a replay in the same batch must see the withdrawn state.
+    for (const [index, review] of (request.reviews ?? []).entries()) {
+      try {
+        const record = store.getStateDirect("derived", review.record_id, home);
+        if (!record || scopePath(record.scope) !== scopePath(request.scope) || !record.transform_version.startsWith('agent-capture/1:')) throw new StateRefusal('conflict', 'captured observation is absent from this partition');
+        if (!isCredentialFreeValue(review.reason)) throw new StateRefusal('malformed', 'review reason contains credential material');
+        const evidence = review.evidence.map(e => {
+          const source = request.sources[e.source];
+          if (!source || !source.source_text.includes(e.excerpt) || !isCredentialFreeValue(e.excerpt)) throw new StateRefusal('malformed', 'review excerpt must occur exactly in the supplied source');
+          const hash = sourceHashes.get(source.source_text) ?? stateHash(source.source_text); sourceHashes.set(source.source_text, hash);
+          if (source.ref.content_hash && source.ref.content_hash !== hash) throw new StateRefusal('malformed', 'review source hash mismatch');
+          const ref = { ...source.ref, object_key: canonicalObjectKey(source.ref.object_key), content_hash: hash };
+          const original = record.dependencies.find(d => d.kind === 'external' && externalKey(d.ref) === externalKey(ref));
+          if (!original || original.kind !== 'external' || original.ref.content_hash === hash) throw new StateRefusal('conflict', 'review must cite a changed source the observation actually depends on');
+          return { ref, excerpt: e.excerpt };
+        });
+        const identity = stateHash({ record_id: record.id, expected_hash: review.expected_hash, reason: review.reason, evidence: evidence.map(e => ({ source: externalKey(e.ref), hash: e.ref.content_hash, excerpt: e.excerpt })) });
+        // A safe retry returns the same withdrawal without changing its reviewer/time.
+        const old = record.review;
+        if (record.state === 'stale' && old && old.previous_hash === review.expected_hash && old.reason === review.reason && stateHash(old.evidence.map(e => ({ source: externalKey(e.ref), hash: e.ref.content_hash, excerpt: e.excerpt }))) === stateHash(evidence.map(e => ({ source: externalKey(e.ref), hash: e.ref.content_hash, excerpt: e.excerpt })))) {
+          reviews.push({ index, status: 'saved', result: { schema: STATE_WRITE_VERSION, record_id: record.id, record_hash: stateHash(record), record: record as unknown as Record<string, unknown>, durability: 'local', outcome: 'replayed', conflict: null } }); continue;
+        }
+        if (record.state !== 'unknown' || record.valid_to != null || stateHash(record) !== review.expected_hash) throw new StateRefusal('conflict', 'observation changed since review; read it again');
+        const at = (opts.now ?? (() => new Date()))().toISOString();
+        const result = writeState(store, { schema: STATE_WRITE_VERSION, principal: request.principal, scope: request.scope, facet: 'derived',
+          record: { ...record, state: 'stale', review: { by: request.principal.id, at, previous_hash: review.expected_hash, reason: review.reason, evidence } },
+          expected_version: review.expected_hash, idempotency_key: `observation-review:${identity}`, cause: { kind: 'external', ref: evidence[0]!.ref } }, { now: opts.now, ledgerCache, deferReindex: true });
+        changed ||= result.outcome !== 'replayed'; reviews.push({ index, status: 'saved', result });
+      } catch (error) {
+        if (!(error instanceof StateRefusal)) throw error;
+        reviews.push({ index, status: 'refused', code: error.code, message: error.message });
+      }
+    }
     for (const [index, observation] of request.observations.entries()) {
       try {
         const evidence = observation.evidence.map(e => {
@@ -82,7 +117,7 @@ export function captureBatchState(store: HunchStore, input: unknown, opts: Write
   }
   if (changed) {
     const durability = opts.flush?.(isPrivate, `nuryel: capture ${results.filter(r => r.status === "saved" && r.result.outcome === "created").length} observations`) ?? "local";
-    for (const item of results) if (item.status === "saved") item.result.durability = durability;
+    for (const item of [...results, ...reviews]) if (item.status === "saved") item.result.durability = durability;
   }
-  return { schema: STATE_CAPTURE_BATCH_VERSION, results };
+  return { schema: STATE_CAPTURE_BATCH_VERSION, results, ...(request.reviews ? { reviews } : {}) };
 }
