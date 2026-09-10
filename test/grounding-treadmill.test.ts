@@ -42,10 +42,10 @@ test("a doc dirty ONLY inside the managed block is refreshed and staged (treadmi
   const { root, store, cleanup } = fixture();
   try {
     // Simulate the stranding: a stale generated block left dirty in the worktree
-    // (an earlier flush missed the refresh).
+    // (counts drifted after an earlier flush missed the refresh).
     const file = join(root, "CLAUDE.md");
     const committed = readFileSync(file, "utf8");
-    writeFileSync(file, committed.replace("## 🧠 Hunch (Engineering Memory)", "## 🧠 Hunch (STALE)"));
+    writeFileSync(file, committed.replace("## 🧠 Hunch (Engineering Memory)", "## 🧠 Hunch (STALE COUNTS)"));
 
     const changed = refreshCommittableGrounding(root, store);
     assert.ok(changed.some((p) => p.endsWith("CLAUDE.md")), "the stale-dirty doc is refreshed and returned for staging");

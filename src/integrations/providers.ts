@@ -401,8 +401,8 @@ function groundingTargets(root: string, store: HunchStore): Array<[string, () =>
  *  and report which ones actually changed. Unlike regenerateGrounding it NEVER creates
  *  a file (so it can't scaffold grounding into a project that opted out of an
  *  assistant). Run by `hunch index` and non-hook `hunch sync` so a project silently
- *  picks up generator fixes (e.g. corrected MCP tool param names) and fresh graph content
- *  (constraints, wiki summary) on the next refresh — no manual `hunch init`. */
+ *  picks up generator fixes (e.g. corrected MCP tool param names) and fresh record
+ *  counts on the next refresh — no manual `hunch init`. */
 export function refreshExistingGrounding(root: string, store: HunchStore): string[] {
   const changed: string[] = [];
   for (const [rel, write] of groundingTargets(root, store)) {
@@ -437,13 +437,11 @@ function generatedDirtOnly(root: string, rel: string, current: string): boolean 
 }
 
 /** Capture-commit refresh: rewrite grounding docs that are git-clean OR whose only
- *  divergence from HEAD is generated content, and return the absolute paths to fold into the
- *  memory commit (commitAndPushHunch alsoStage). This keeps committed grounding content
- *  permanently true — record counts used to bump on every capture and re-stale the committed
- *  docs, failing the release gate's clean-tree check on the next CI index (the refresh-counts
- *  treadmill; the counts are gone now, but a capture that touches a constraint or the wiki
- *  manifest still dirties the block the same way). The generated-dirt branch closes the
- *  second half
+ *  divergence from HEAD is generated content, and return the absolute paths to fold
+ *  into the memory commit (commitAndPushHunch alsoStage). This keeps committed record
+ *  counts permanently true — every capture used to bump the count and re-stale the
+ *  committed docs, failing the release gate's clean-tree check on the next CI index
+ *  (the refresh-counts treadmill). The generated-dirt branch closes the second half
  *  (fnd_b269d5c422): once a doc went stale-dirty, the clean-only rule skipped it on
  *  every later flush FOREVER, and each release needed a manual chore commit. A doc
  *  whose USER PROSE differs from HEAD is still left completely untouched. */

@@ -8,6 +8,7 @@ import { writeFileAtomic } from "../core/io.js";
 import { basename, join, dirname } from "node:path";
 import type { HunchStore } from "../store/hunchStore.js";
 import { wikiSummary } from "../wiki/wiki.js";
+import { PolicyRepository } from "../constitution/repository.js";
 
 const START = "<!-- HUNCH:START — auto-generated, do not edit by hand -->";
 const END = "<!-- HUNCH:END -->";
@@ -29,6 +30,14 @@ export function renderHunchSection(store: HunchStore, root?: string): string {
     .filter((c) => c.status === "active" && !c.valid_to)
     .sort((a, b) => sev(b.severity) - sev(a.severity))
     .slice(0, 8);
+  const counts = {
+    decisions: store.json.loadAll("decisions").length,
+    bugs: store.json.loadAll("bugs").length,
+    constraints: store.json.loadAll("constraints").length,
+    components: store.json.loadAll("components").length,
+    policies: root ? new PolicyRepository(root, store).listPolicies({ publicOnly: true }).length : 0,
+    findings: store.json.loadAll("findings").filter((f) => f.triage === "open" || f.triage === "accepted-risk" || f.triage === "scheduled").length,
+  };
 
   const lines: string[] = [];
   lines.push(START);
@@ -36,7 +45,8 @@ export function renderHunchSection(store: HunchStore, root?: string): string {
   lines.push("");
   lines.push(
     "This repo has **Hunch** — a curated graph of *why* the code is the way it is " +
-      "(decisions, bug history, invariants).",
+      "(decisions, bug history, invariants). It currently holds " +
+      `**${counts.decisions} decisions, ${counts.bugs} bugs, ${counts.constraints} constraints, ${counts.components} components, ${counts.policies} policies${counts.findings ? `, ${counts.findings} open findings` : ""}**.`,
   );
   lines.push("");
   lines.push("**Consult Hunch via the `hunch_*` MCP tools — pick by MOMENT, not from memory:**");

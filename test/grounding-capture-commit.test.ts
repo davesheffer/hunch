@@ -1,11 +1,9 @@
 /**
- * Kills the refresh-counts treadmill: every public capture used to bump record counts baked
- * into the generated grounding blocks (CLAUDE.md, AGENTS.md, …), which went stale on the very
- * commit that captured a decision — and the release gate's clean-tree check failed on the next
- * CI `hunch index`. Those counts are gone now (a decision capture alone no longer changes the
- * block at all), but a capture that DOES change the block's content — e.g. one that also adds a
- * constraint — must still refresh git-CLEAN grounding docs and fold them into the SAME memory
- * commit, while a user-dirty doc is never touched and never swept.
+ * Kills the refresh-counts treadmill: every public capture bumps record counts, so the
+ * generated grounding blocks (CLAUDE.md, AGENTS.md, …) went stale on the very commit that
+ * captured a decision — and the release gate's clean-tree check failed on the next CI
+ * `hunch index`. A capture flush must now refresh git-CLEAN grounding docs and fold them
+ * into the SAME memory commit, while a user-dirty doc is never touched and never swept.
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -21,7 +19,6 @@ import type { Decision } from "../src/core/types.js";
 import { HunchStore } from "../src/store/hunchStore.js";
 import { indexRepo } from "../src/extractors/indexer.js";
 import { ensureGitignore } from "../src/integrations/gitignore.js";
-import { mkConstraint } from "./helpers.js";
 
 const PROJECT_ROOT = process.cwd();
 const TSX = join(PROJECT_ROOT, "node_modules/tsx/dist/cli.mjs");
@@ -36,10 +33,6 @@ function repo(prefix: string): { root: string; git: (...a: string[]) => string; 
   git("config", "commit.gpgsign", "false");
   return { root, git, cleanup: () => rmSync(root, { recursive: true, force: true }) };
 }
-
-const CONTENT_CHANGING_CONSTRAINT = Object.freeze({
-  id: "con_one", statement: "never do the thing", severity: "blocking" as const, scope: [] as string[],
-});
 
 function decision(id: string, title: string): Decision {
   return {
@@ -109,21 +102,18 @@ test("flushCapture refreshes a git-clean grounding doc and commits it with the c
     const store = new HunchStore(hunchPaths(root));
     store.json.ensureDirs();
     store.json.put("decisions", decision("dec_one", "first choice"));
-    updateClaudeMd(root, store); // grounding block reflects the baseline (no constraints yet)
+    updateClaudeMd(root, store); // grounding block reflects 1 decision
     git("add", "-A");
     git("commit", "-qm", "baseline");
-    const baseline = readFileSync(join(root, "CLAUDE.md"), "utf8");
-    assert.match(baseline, /hunch_context\(target\)/, "baseline block was rendered");
-    assert.doesNotMatch(baseline, /Top invariants/, "but carries no invariants yet");
+    assert.match(readFileSync(join(root, "CLAUDE.md"), "utf8"), /\b1 decisions\b/);
 
     store.json.put("decisions", decision("dec_two", "second choice"));
-    store.json.put("constraints", mkConstraint(CONTENT_CHANGING_CONSTRAINT));
     const r = flushCapture(store, hunchPaths(root).hunch, false, "hunch: capture dec_two");
     store.close();
 
     assert.equal(r, "committed");
-    assert.equal(git("status", "--porcelain"), "", "grounding refresh rides the capture commit — tree stays clean");
-    assert.match(git("show", "HEAD:CLAUDE.md"), /never do the thing/, "the COMMITTED block holds the fresh constraint");
+    assert.equal(git("status", "--porcelain"), "", "counts refresh rides the capture commit — tree stays clean");
+    assert.match(git("show", "HEAD:CLAUDE.md"), /\b2 decisions\b/, "the COMMITTED block holds the fresh count");
   } finally { cleanup(); }
 });
 
@@ -168,14 +158,10 @@ test("hunch index commits refreshed grounding atomically with an auto-pumped gra
     git("add", "-A");
     git("commit", "-qm", "fixture: indexed graph and grounding");
 
-    const baseline = readFileSync(join(root, "CLAUDE.md"), "utf8");
-    assert.match(baseline, /hunch_context\(target\)/, "baseline block was rendered");
-    assert.doesNotMatch(baseline, /Top invariants/, "but carries no invariants yet");
-
     const changed = new HunchStore(hunchPaths(root));
     changed.json.put("decisions", decision("dec_two", "second choice"));
-    changed.json.put("constraints", mkConstraint(CONTENT_CHANGING_CONSTRAINT));
     changed.close();
+    assert.match(readFileSync(join(root, "CLAUDE.md"), "utf8"), /\b1 decisions\b/);
 
     const run = spawnSync(process.execPath, [TSX, CLI, "index"], {
       cwd: root,
@@ -186,8 +172,8 @@ test("hunch index commits refreshed grounding atomically with an auto-pumped gra
     assert.equal(git("status", "--porcelain"), "", "index must leave graph and generated grounding clean");
     const committed = git("show", "HEAD", "--name-only", "--format=");
     assert.match(committed, /\.hunch\/decisions\/dec_two\.json/);
-    assert.match(committed, /^CLAUDE\.md$/m, "fresh grounding belongs to the same memory commit");
-    assert.match(git("show", "HEAD:CLAUDE.md"), /never do the thing/);
+    assert.match(committed, /^CLAUDE\.md$/m, "fresh counts belong to the same memory commit");
+    assert.match(git("show", "HEAD:CLAUDE.md"), /\b2 decisions\b/);
   } finally { cleanup(); }
 });
 

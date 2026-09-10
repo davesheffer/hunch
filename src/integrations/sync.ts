@@ -111,10 +111,9 @@ export function flushCapture(
     return null;
   }
   if (!store.autoCommit) return null;
-  // A public capture can change grounding content (e.g. a new/retired constraint, or a
-  // wiki-manifest change), so refresh git-clean grounding docs and fold them into the SAME
-  // memory commit — otherwise a capture that touches the block re-stales the committed docs
-  // and the release gate's clean-tree check fails on the next CI index.
+  // A public capture changes record counts, so refresh git-clean grounding docs and fold
+  // them into the SAME memory commit — otherwise every capture re-stales the committed
+  // counts and the release gate's clean-tree check fails on the next CI index.
   const grounding = refreshCommittableGrounding(dirname(publicHunchDir), store);
   return commitAndPushHunch(publicHunchDir, message, { push: false, alsoStage: grounding });
 }
