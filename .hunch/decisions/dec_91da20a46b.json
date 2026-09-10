@@ -2,7 +2,7 @@
   "id": "dec_91da20a46b",
   "title": "Move entity counts from committed grounding to live tools",
   "topic": null,
-  "status": "accepted",
+  "status": "superseded",
   "context": "Grounding blocks in 5 committed files auto-regenerate with volatile entity counts (decisions, bugs, constraints, etc.) on every branch. When parallel branches capture different counts, this creates real merge conflicts across all 5 files. The counts serve no programmatic purpose—tooling recomputes them on demand. Touches invariant(s): con_8460b6770f (Config/provider writers must merge idempotently into existing user files and refuse to clobber an unparseable file).",
   "decision": "Removed auto-generated counts sentences from committed grounding blocks (.cursor/rules, .github, CLAUDE.md, etc.). Redirected readers to `hunch doctor` and `hunch now` for live, accurate counts computed at read time instead of cached snapshots.",
   "consequences": [
@@ -105,11 +105,11 @@
     "tooling/release-gate.mjs"
   ],
   "supersedes": null,
-  "superseded_by": null,
+  "superseded_by": "dec_1cd85276ad",
   "caused_by_bug": null,
   "commit": "a18b80f",
   "valid_from": "2026-09-09T14:30:31+02:00",
-  "valid_to": null,
+  "valid_to": "2026-09-10T10:51:15+02:00",
   "retired": {
     "symbols": [
       "decision",
