@@ -1,0 +1,61 @@
+{
+  "id": "dec_833f2633b6",
+  "title": "Bind observation pagination cursors to an authorized snapshot",
+  "topic": null,
+  "status": "accepted",
+  "context": "Subject reads expose at most 64 observations. Reading older observations requires pagination that detects changes between pages while preserving existing response limits and access checks. Touches invariant(s): con_902759b3dc (All JSON writes to .hunch/ must be atomic (temp-file + rename) so an interrupted write can never truncate the index); con_a87360128b (Semantic vectors are a derived layer in SQLite, never the source of truth; reconcile by content hash on reindex); con_e04226bd05 (The MCP server must stay client-agnostic: all assistants point to the same .hunch/ graph; no Claude-only behavior in the server).",
+  "decision": "Add opt-in, single-partition observation pages using a cursor containing an offset and a hash of the scope, subject, eligible authorized observations, and complete records. Recompute the hash on each page and reject mismatches with a conflict requiring a restart.",
+  "consequences": [
+    "Default reads remain capped at 64 observations; explicit pages return total and next_cursor metadata.",
+    "Changes to snapshot membership or record contents force pagination to restart.",
+    "Grants are checked before pagination; cursors do not grant access, and paginated scope unions are refused.",
+    "Explicit page reads scan eligible observations to fingerprint the snapshot without retaining server-side pagination sessions.",
+    "A remaining cursor indicates incomplete coverage; observations still require currentness verification."
+  ],
+  "alternatives_rejected": [],
+  "rejected_tripwires": [],
+  "related_components": [
+    "cmp_a94a8fe5cc",
+    "cmp_b256a6aed0",
+    "cmp_bd35f02508",
+    "cmp_cdfb395bb7",
+    "cmp_dfa5b5acde"
+  ],
+  "related_files": [
+    "docs/observation-pages.md",
+    "src/core/stateContract.ts",
+    "src/mcp/server.ts",
+    "src/serve/app.ts",
+    "src/store/stateBinding.ts",
+    "test/capture-transports.test.ts",
+    "test/state-observation-pages.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "c09dffe",
+  "valid_from": "2026-09-10T14:58:45+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft",
+    "confidence": 0.65,
+    "evidence": [
+      "commit:c09dffe",
+      "synth:provider=codex-cli",
+      "branch:feat/observation-pages",
+      "docs/observation-pages.md",
+      "src/core/stateContract.ts",
+      "src/mcp/server.ts",
+      "src/serve/app.ts",
+      "src/store/stateBinding.ts",
+      "test/capture-transports.test.ts",
+      "test/state-observation-pages.test.ts"
+    ],
+    "last_verified": "2026-09-10T11:59:41.419Z"
+  },
+  "date": "2026-09-10T14:58:45+03:00"
+}
