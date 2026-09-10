@@ -80,6 +80,7 @@ import { issueCaptureToken as issueToken, consumeCaptureToken as consumeToken } 
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { initiatorFromClient, withInitiator } from "../synthesis/initiator.js";
 
 type ToolResult = {
   content: Array<{ type: "text"; text: string }>;
@@ -851,7 +852,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
         try {
           if (store.sourceStamp() !== indexedSourceStamp) refreshIndex();
         } catch { /* corrupt/churning local source — serve the last durable indexed view */ }
-        const result = await callback(...args);
+        const result = await withInitiator(initiatorFromClient(server.server.getClientVersion()?.name), () => callback(...args));
         if (teamAdvertised && !matchesStartupTeamRoute()) {
           return refused("The team-memory route changed while the tool was running. Its startup destination was not published; reconnect Hunch before retrying.");
         }

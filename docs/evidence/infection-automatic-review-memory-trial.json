@@ -1,0 +1,182 @@
+{
+  "schema": "hunch.automatic-review-memory-trial/1",
+  "repository": "infection/infection",
+  "revision": "1d7057762a4e337319d8a58f3097f428e080b8d9",
+  "selection": "Three preselected complete historical threads: two previous manual trial cases plus one deferred proposal. Not a random sample.",
+  "initiating_provider": "codex-cli",
+  "report": {
+    "schema": "hunch.automatic-review-memory/1",
+    "repository": "infection/infection",
+    "provider": "codex-cli",
+    "providers_used": [
+      "codex-cli"
+    ],
+    "authority": "advisory",
+    "applied": true,
+    "analyzed": 3,
+    "entries": [
+      {
+        "candidate_id": "review_3968982116",
+        "evidence_hash": "sha1:d934bfc41727bd5135278c23334984dde2026f49",
+        "file": "src/TestFramework/Contracts/TestFrameworkFactory.php",
+        "status": "skipped",
+        "reason": "The constructor-injected builder proposal was explicitly deferred while the API evolves, and current code retains a static factory method. The discussion establishes no durable engineering rule.",
+        "code_hash": "sha1:3fee3ae1bc3add172cd4132f976a37a6fabf38ae"
+      },
+      {
+        "candidate_id": "review_3943485828",
+        "evidence_hash": "sha1:037052646cebcb525639d50074f0b3af9b955094",
+        "file": "src/Command/InitialTest/InitialTestRunCommand.php",
+        "status": "saved",
+        "reason": "The discussion explicitly accepts lost command output as a regression. Current code registers a suite-start subscriber before execution and prints 'Command executed:' followed by the event's commandLine. The check establishes output at suite start without waiting for completion. This preserves durable diagnostic behavior without requiring the temporary subscriber implementation; no existing rules conflict or duplicate it.",
+        "code_hash": "sha1:711e72516357608a5ca22b0c1b29c754f92b365f",
+        "rule_id": "con_b5302402df"
+      },
+      {
+        "candidate_id": "review_3903730977",
+        "evidence_hash": "sha1:398af3906824ae5547734c0f2ff337474d3cb050",
+        "file": "src/Config/ValueProvider/PhpUnitCustomExecutablePathProvider.php",
+        "status": "saved",
+        "reason": "The discussion supports mandatory filesystem injection despite a scope objection, and current code requires FileSystem, uses that instance for path existence validation, and constructs no fallback. The rule stays within the supplied file without asserting shared Container wiring. Its checks establish the stated behavior, and no existing rules conflict or duplicate it.",
+        "code_hash": "sha1:649e75c11468d5661ee1e67e28e36de4d17d0f36",
+        "rule_id": "con_8fd6c7e7f2"
+      }
+    ],
+    "rules": [
+      {
+        "id": "con_b5302402df",
+        "type": "correctness",
+        "statement": "In src/Command/InitialTest/InitialTestRunCommand.php, preserve the initial test command line output at suite start so it remains available if the suite hangs or crashes.",
+        "scope": [
+          "src/Command/InitialTest/InitialTestRunCommand.php"
+        ],
+        "severity": "warning",
+        "enforcement": "advisory_v1",
+        "match": null,
+        "forbids": null,
+        "rationale": "Review check: When the initial test suite starts, output includes 'Command executed:' followed by the start event's commandLine, without waiting for suite completion.\nAutomatically proposed and model-checked; not human approved. The discussion explicitly accepts lost command output as a regression. Current code registers a suite-start subscriber before execution and prints 'Command executed:' followed by the event's commandLine. The check establishes output at suite start without waiting for completion. This preserves durable diagnostic behavior without requiring the temporary subscriber implementation; no existing rules conflict or duplicate it.",
+        "source_decision": null,
+        "violations": [],
+        "status": "active",
+        "valid_from": "2026-09-10T06:34:08.063Z",
+        "valid_to": null,
+        "provenance": {
+          "source": "agent_recorded",
+          "confidence": 0.65,
+          "evidence": [
+            "infection/infection",
+            "review_3943485828",
+            "sha1:037052646cebcb525639d50074f0b3af9b955094",
+            "https://github.com/infection/infection/pull/3525#discussion_r3943485828",
+            "git:b739ed0c580a0849c87abf48400b1b17edcf4e30",
+            "https://github.com/infection/infection/pull/3525#discussion_r3955508170",
+            "git:b739ed0c580a0849c87abf48400b1b17edcf4e30",
+            "https://github.com/infection/infection/pull/3525#discussion_r3955951540",
+            "git:b739ed0c580a0849c87abf48400b1b17edcf4e30",
+            "review-memory:auto/1",
+            "provider:codex-cli",
+            "code:sha1:711e72516357608a5ca22b0c1b29c754f92b365f",
+            "provider-used:codex-cli"
+          ],
+          "last_verified": "2026-09-10T06:34:08.063Z"
+        }
+      },
+      {
+        "id": "con_8fd6c7e7f2",
+        "type": "correctness",
+        "statement": "PhpUnitCustomExecutablePathProvider must require an injected FileSystem and use it to validate custom executable paths, without constructing a fallback filesystem.",
+        "scope": [
+          "src/Config/ValueProvider/PhpUnitCustomExecutablePathProvider.php"
+        ],
+        "severity": "warning",
+        "enforcement": "advisory_v1",
+        "match": null,
+        "forbids": null,
+        "rationale": "Review check: The constructor requires FileSystem without a default, path validation calls exists() on that injected instance, and the class constructs no filesystem instance.\nAutomatically proposed and model-checked; not human approved. The discussion supports mandatory filesystem injection despite a scope objection, and current code requires FileSystem, uses that instance for path existence validation, and constructs no fallback. The rule stays within the supplied file without asserting shared Container wiring. Its checks establish the stated behavior, and no existing rules conflict or duplicate it.",
+        "source_decision": null,
+        "violations": [],
+        "status": "active",
+        "valid_from": "2026-09-10T06:34:08.063Z",
+        "valid_to": null,
+        "provenance": {
+          "source": "agent_recorded",
+          "confidence": 0.65,
+          "evidence": [
+            "infection/infection",
+            "review_3903730977",
+            "sha1:398af3906824ae5547734c0f2ff337474d3cb050",
+            "https://github.com/infection/infection/pull/3538#discussion_r3903730977",
+            "git:e7e5bf63838b057a9055a316aa023c6696652d13",
+            "https://github.com/infection/infection/pull/3538#discussion_r3911999214",
+            "git:e7e5bf63838b057a9055a316aa023c6696652d13",
+            "https://github.com/infection/infection/pull/3538#discussion_r3912751165",
+            "git:e7e5bf63838b057a9055a316aa023c6696652d13",
+            "review-memory:auto/1",
+            "provider:codex-cli",
+            "code:sha1:649e75c11468d5661ee1e67e28e36de4d17d0f36",
+            "provider-used:codex-cli"
+          ],
+          "last_verified": "2026-09-10T06:34:08.063Z"
+        }
+      }
+    ]
+  },
+  "replay": {
+    "schema": "hunch.automatic-review-memory/1",
+    "repository": "infection/infection",
+    "provider": "codex-cli",
+    "providers_used": [],
+    "authority": "advisory",
+    "applied": true,
+    "analyzed": 0,
+    "entries": [
+      {
+        "candidate_id": "review_3968982116",
+        "evidence_hash": "sha1:d934bfc41727bd5135278c23334984dde2026f49",
+        "file": "src/TestFramework/Contracts/TestFrameworkFactory.php",
+        "status": "skipped",
+        "reason": "The constructor-injected builder proposal was explicitly deferred while the API evolves, and current code retains a static factory method. The discussion establishes no durable engineering rule.",
+        "code_hash": "sha1:3fee3ae1bc3add172cd4132f976a37a6fabf38ae",
+        "cached": true
+      },
+      {
+        "candidate_id": "review_3943485828",
+        "evidence_hash": "sha1:037052646cebcb525639d50074f0b3af9b955094",
+        "file": "src/Command/InitialTest/InitialTestRunCommand.php",
+        "status": "skipped",
+        "reason": "Thread already recorded; existing or retired rules are preserved."
+      },
+      {
+        "candidate_id": "review_3903730977",
+        "evidence_hash": "sha1:398af3906824ae5547734c0f2ff337474d3cb050",
+        "file": "src/Config/ValueProvider/PhpUnitCustomExecutablePathProvider.php",
+        "status": "skipped",
+        "reason": "Thread already recorded; existing or retired rules are preserved."
+      }
+    ],
+    "rules": []
+  },
+  "checks": {
+    "automatic_selection_and_wording": "passed",
+    "automatic_advisory_capture": "passed",
+    "scoped_delivery": "passed",
+    "unrelated_file_empty": "passed",
+    "replay_without_model_calls": "passed",
+    "no_duplicate_rules": "passed"
+  },
+  "delivered": [
+    {
+      "id": "con_b5302402df",
+      "file": "src/Command/InitialTest/InitialTestRunCommand.php"
+    },
+    {
+      "id": "con_8fd6c7e7f2",
+      "file": "src/Config/ValueProvider/PhpUnitCustomExecutablePathProvider.php"
+    }
+  ],
+  "limits": [
+    "Small preselected sample, not a precision/recall benchmark.",
+    "No PHP tests or bug-reduction measurement.",
+    "Kimi transport tested with a protocol fixture, not a logged-in Kimi installation."
+  ]
+}

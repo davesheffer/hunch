@@ -52,14 +52,14 @@ test("auto mode never guesses between multiple subscription CLIs", async () => {
   }
 });
 
-test("auto mode uses the only available subscription CLI", async () => {
+test("auto mode does not infer an initiator from the only installed CLI", async () => {
   const root = tempRoot();
   try {
     const providers = registry({ "codex-cli": true });
     const result = await resolveSynthesisProvider({ root, providers, env: {} });
-    assert.equal(result.provider.name, "codex-cli");
-    assert.equal(result.source, "single-available");
-    assert.equal((await selectVerifier({ root, providers, env: {} }))?.name, "codex-cli");
+    assert.equal(result.provider.name, "deterministic");
+    assert.equal(result.source, "unknown-initiator");
+    assert.equal(await selectVerifier({ root, providers, env: {} }), null);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
