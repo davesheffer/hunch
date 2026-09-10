@@ -28,6 +28,7 @@ import { registerIntegrationCommands } from "./integrations.js";
 import { registerServeCommands } from "./serve.js";
 import { registerUpdateCommand } from "./update.js";
 import { registerReviewMemoryCommands } from "./reviewMemory.js";
+import { detectInitiator, normalizeInitiator } from "../synthesis/initiator.js";
 import { inspectIntegrations, formatIntegrationHealth, integrationHealthFails, integrationSessionWarning } from "../integrations/health.js";
 import { HunchStore } from "../store/hunchStore.js";
 import { JsonStore } from "../store/jsonStore.js";
@@ -156,6 +157,23 @@ import { resolveInvocation, dim, synthesisStatusLines, maybeWarnOllamaContext } 
 
 const program = new Command();
 program.name("hunch").description("Hunch — engineering memory and a deterministic Change Gate for AI-assisted codebases.").version(HUNCH_VERSION);
+program.option("--initiator <name>", "bind agent launches to the originating CLI (Claude, Codex, Kimi, or a configured adapter)")
+  .option("--cli-config <file>", "explicit local CLI adapter configuration")
+  .hook("preAction", (_rootCommand, actionCommand) => {
+    const options = actionCommand.optsWithGlobals();
+    // One CLI invocation has one origin. MCP uses request-local AsyncLocalStorage instead.
+    if (options.initiator) process.env.HUNCH_INITIATOR = normalizeInitiator(options.initiator);
+    else if (actionCommand.name() === "hook") {
+      process.env.HUNCH_INITIATOR = ["claude", "cursor"].includes(options.provider)
+        ? normalizeInitiator(options.provider) : "unknown";
+    }
+    else {
+      const origin = detectInitiator();
+      if (origin.provider) process.env.HUNCH_INITIATOR = origin.provider;
+      else if (origin.source === "ambiguous") process.env.HUNCH_INITIATOR = "unknown";
+    }
+    if (options.cliConfig) process.env.HUNCH_CLI_CONFIG = options.cliConfig;
+  });
 registerIntegrationCommands(program);
 registerServeCommands(program);
 registerUpdateCommand(program);
@@ -176,6 +194,17 @@ registerReviewMemoryCommands(program, (records, repository, privateOnly) => {
   store.reindex();
   if (home === "public" && !store.autoCommit) refreshExistingGrounding(root, store);
   pumpMemoryHome(store, root, home, `hunch: capture ${records.length} sourced review rule(s)`);
+}, (repository, privateOnly) => {
+  const { store, root } = storeFor();
+  if (!repositoryUsesRemote(root, `https://github.com/${repository}.git`)) {
+    throw new Error("review repository does not match this checkout's remotes");
+  }
+  if (privateOnly !== undefined && store.captureHome(privateOnly) === "private" && !store.privateDir) {
+    throw new Error("--private requires a configured private overlay");
+  }
+  // A public artifact must never be model-derived from private overlay statements.
+  return { root, existing: store.captureHome(privateOnly) === "private"
+    ? store.recs("constraints") : store.json.loadAll("constraints") };
 });
 
 let openStore: HunchStore | null = null;
@@ -493,9 +522,9 @@ program
   .option("--since <spec>", "how far back, e.g. 90d", "90d")
   .option("--max <n>", "max commits to process", "40")
   .option("--concurrency <n>", "commits to synthesize in parallel (the LLM call is the bottleneck)", "4")
-  .option("--deep", "Deep Synthesis: ensemble every available LLM provider per commit and reconcile their drafts (slower, higher-quality; advisory)")
+  .option("--deep", "Deep Synthesis: sample the initiating provider repeatedly and reconcile advisory drafts")
   .option("--verify", "Critic pass: audit each draft against its commit, prune unsupported alternatives/consequences, down-weight weak grounding (extra provider call; advisory)")
-  .option("--samples <n>", "self-consistency depth when only one CLI is installed: sample it n times per commit and reconcile (default 2 under --deep)")
+  .option("--samples <n>", "sample the initiating provider n times per commit and reconcile (default 2 under --deep)")
   .action(async (opts: { since: string; max: string; concurrency: string; deep?: boolean; verify?: boolean; samples?: string }) => {
     const { store, root } = storeFor();
     if (!isGitRepo(root)) return fail("backfill needs a git repo");
@@ -552,9 +581,9 @@ program
   .option("--overlay", "alias of --private")
   .option("--commit", "after a capture, also git add+commit the repo the decision landed in (default: follows auto-commit, ON unless opted out) — the overlay is also pushed; the public .hunch/ rides your next push")
   .option("--no-commit", "skip the auto-commit for this capture even when auto-commit is on")
-  .option("--deep", "Deep Synthesis: ensemble every available LLM provider and reconcile their drafts (agreement-weighted, advisory). Slower; uses configured subscriptions/local endpoint")
+  .option("--deep", "Deep Synthesis: sample the initiating provider repeatedly; never switch accounts")
   .option("--verify", "Critic pass: audit the draft against its commit, prune unsupported alternatives/consequences, down-weight weak grounding (extra provider call; advisory)")
-  .option("--samples <n>", "self-consistency depth when only one CLI is installed: sample it n times and reconcile (default 2 under --deep)")
+  .option("--samples <n>", "sample the initiating provider n times and reconcile (default 2 under --deep)")
   .action(async (sha: string | undefined, opts: { fromHook?: boolean; quiet?: boolean; force?: boolean; private?: boolean; overlay?: boolean; commit?: boolean; deep?: boolean; verify?: boolean; samples?: string }) => {
     const { store, root } = storeFor();
     if (!isGitRepo(root)) return opts.quiet ? undefined : fail("sync needs a git repo");

@@ -2,6 +2,7 @@ import type { Command } from "commander";
 import { readFileSync, statSync } from "node:fs";
 import { prepareReviewMemory, compileReviewRules, validateReviewPacket } from "../core/reviewMemory.js";
 import type { Constraint } from "../core/types.js";
+import { registerAutomaticReviewMemory, type ReviewMemoryContext } from "./automaticReviewMemory.js";
 
 function readJson(file: string): unknown {
   if (statSync(file).size > 16 * 1024 * 1024) throw new Error("review input exceeds 16 MiB");
@@ -9,8 +10,10 @@ function readJson(file: string): unknown {
 }
 
 export function registerReviewMemoryCommands(program: Command,
-  capture: (records: Constraint[], repository: string, privateOnly: boolean) => void): void {
+  capture: (records: Constraint[], repository: string, privateOnly: boolean) => void,
+  context: (repository: string, privateOnly?: boolean) => ReviewMemoryContext): void {
   const command = program.command("review-memory").description("Turn sourced PR review threads into scoped review rules");
+  registerAutomaticReviewMemory(command, context, capture);
   command.command("prepare").requiredOption("--from <file>", "GitHub REST review comments JSON")
     .requiredOption("--repository <owner/repo>", "repository that owns every comment")
     .description("Print a deterministic evidence packet; no rules are activated")

@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+Agent launches now follow the initiating agent across synthesis, verification,
+deep sampling, MCP requests and Git child processes. A Codex event stays with
+Codex; Claude stays with Claude; Kimi uses its ACP adapter. Unknown or unavailable
+origins never select another installed account. Additional CLIs can be configured
+through explicit local stdin/ACP adapters. `--deep` samples one provider repeatedly.
+
+`hunch review-memory auto` fetches complete GitHub review threads (or reads a local
+export), proposes and verifies rules against current tracked code and existing
+constraints, then saves advisory rules without a handwritten `rules.json`.
+Uncertain cases remain in a JSON report. Local checkpoints avoid reanalyzing
+unchanged dispositions; changed evidence/code and retired rules are never silently
+overwritten or revived. `--dry-run` previews and `--retry` rechecks queued cases.
+
 ## 1.30.0 — 2026-09-10
 
 ### Scoped review memory from PR threads

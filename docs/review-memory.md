@@ -2,10 +2,56 @@
 
 Turn historical GitHub inline review threads into file-scoped checks for future
 coding agents. Importing comments does not make them rules. You select a thread,
-write the reusable invariant and describe how to verify it, then preview the
-constraint before applying it.
+write the reusable invariant and describe how to verify it, or let the automatic
+flow propose, verify and save advisory rules for you.
 
-This first version uses local GitHub REST exports. It does not fetch reviews,
+## Automatic flow
+
+From the matching repository checkout, the initiating agent runs:
+
+```sh
+hunch review-memory auto --repository OWNER/REPO --initiator codex --private --output /local/review-report.json
+```
+
+Use the actual initiating agent (`claude`, `codex`, `kimi`, or a configured CLI).
+Recognized live harness metadata can supply it automatically. The command follows
+Hunch's [general origin routing policy](agent-origin.md); it never switches accounts
+if that provider fails. `--public` explicitly allows repository-visible rules instead
+of private storage. Private storage does not mean model-free analysis: the chosen
+initiating CLI processes the supplied review/code context.
+
+The command fetches complete GitHub review comments through authenticated `gh`.
+Use `--from comments.json` or `--from review-packet.json` to use a local export.
+No `rules.json` or per-rule approval is needed. `--dry-run` analyzes without saving
+rules or the local analysis checkpoint. `--limit 20` is the default model-analysis
+bound, with a maximum of 100; newest updated threads are considered first.
+
+For each new thread, Hunch reads the current tracked file, asks the initiating
+provider for a reusable rule and an observable check, validates exact supporting
+quotes, and performs a separate skeptical model pass against the full thread,
+current file, and relevant existing constraints. It saves only proposals that pass
+every check, through the same advisory Constraint store used by manual capture.
+The check is a description for future verification, not a command Hunch executes.
+
+The JSON report contains `saved` (or `ready` for dry runs), `skipped`, `review`, and
+`deferred` entries with reasons, evidence/code hashes, provider identity, and saved
+rules. A local derived checkpoint in Git's worktree administration directory avoids
+repeating unchanged skipped/review outcomes; `--retry` requests another analysis.
+Changed context invalidates cached analysis. Existing captured rules are never
+overwritten or revived, even with `--retry`; changes require explicit rule review.
+Failed analyses remain retryable. The report can contain sensitive derived text;
+keep it outside version control for private repositories.
+
+Limits: model judgments are fallible, semantic conflict detection is not a proof,
+and two passes may share the same model's mistakes. A matching quote proves provenance,
+not correctness. Files over 64 KiB, unavailable/untracked files, and evidence over
+120 KiB are withheld rather than truncated. The importer still caps the full export
+at 10,000 comments / 16 MiB. This command runs when invoked; it does not install a
+scheduler or a background GitHub watcher.
+
+## Manual flow
+
+The manual flow uses local GitHub REST exports. It does not fetch reviews,
 infer a reviewer's seniority, or treat a resolved thread as proof that its advice
 is still correct. It excludes bot comments and refuses incomplete human threads.
 
