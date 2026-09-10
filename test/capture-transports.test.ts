@@ -9,7 +9,7 @@ import { buildServer } from "../src/mcp/server.js";
 import { createServeApp } from "../src/serve/app.js";
 import { initServeConfig, readServeConfig } from "../src/serve/config.js";
 import { createStateClient } from "../src/client/state.js";
-import type { CaptureBatchResult } from "../src/core/stateContract.js";
+import { stateHash, type CaptureBatchResult } from "../src/core/stateContract.js";
 
 test("MCP and HTTP share capture identity, lock, readback and per-item refusals", async () => {
   const sandbox = mkdtempSync(join(tmpdir(), "hunch-capture-bindings-"));
@@ -43,6 +43,15 @@ test("MCP and HTTP share capture identity, lock, readback and per-item refusals"
     const held = read.structuredContent as { state_of_record: { observed: { id: string }[]; current: unknown[] } };
     assert.equal(held.state_of_record.observed[0]?.id, single.record_id);
     assert.equal(held.state_of_record.current.length, 0);
+    const linkRecord = { schema: 'nuryel.relationship/1', from: single.record_id, to: 'project:visits', type: 'observation_about', scope,
+      observation_hash: single.record_hash, lifecycle: 'active', reason: 'User explicitly assigned this observation to visit planning.',
+      evidence: { ...source.ref, content_hash: stateHash(source.source_text) }, provenance: { source: 'agent_recorded', confidence: 1, evidence: ['explicit assignment'] } };
+    const link = await mcp.callTool({ name: 'nuryel_write', arguments: { principal, scope, facet: 'relationships', record: linkRecord, idempotency_key: 'test:observation-link' } });
+    assert.ok(!link.isError, JSON.stringify(link));
+    const projection = await http.read({ scope, subject: 'project:visits', facets: ['derived'] });
+    assert.equal(projection.state_of_record?.observed?.[0]?.id, single.record_id);
+    const replayLink = await http.write({ scope, facet: 'relationships', record: { ...linkRecord, evidence: { ...linkRecord.evidence, observed_at: '2026-09-11T12:00:00Z' } }, idempotency_key: 'test:observation-link-next' });
+    assert.equal(replayLink.outcome, 'replayed');
     const batch = await http.captureBatch({ ...request, observations: [
       { ...observation, evidence: [{ source: 0, excerpt: "Not in source." }] },
       { ...observation, statement: "Call Dana on Thursday.", evidence: [{ source: 0, excerpt: "Call Dana on Thursday." }] },
