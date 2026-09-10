@@ -27,6 +27,7 @@ import { HUNCH_VERSION } from "../core/version.js";
 import { registerIntegrationCommands } from "./integrations.js";
 import { registerServeCommands } from "./serve.js";
 import { registerUpdateCommand } from "./update.js";
+import { registerReviewMemoryCommands } from "./reviewMemory.js";
 import { inspectIntegrations, formatIntegrationHealth, integrationHealthFails, integrationSessionWarning } from "../integrations/health.js";
 import { HunchStore } from "../store/hunchStore.js";
 import { JsonStore } from "../store/jsonStore.js";
@@ -158,6 +159,24 @@ program.name("hunch").description("Hunch — engineering memory and a determinis
 registerIntegrationCommands(program);
 registerServeCommands(program);
 registerUpdateCommand(program);
+registerReviewMemoryCommands(program, (records, repository, privateOnly) => {
+  const { store, root } = storeFor();
+  if (!repositoryUsesRemote(root, `https://github.com/${repository}.git`)) {
+    throw new Error("review packet repository does not match this checkout's remotes");
+  }
+  const home = store.captureHome(privateOnly);
+  // Preflight the whole batch. A repeated import must never revive a retired rule,
+  // replace a countersigned constraint, or change its scope/evidence silently.
+  for (const record of records) {
+    if (!existsSync(join(root, record.scope[0]!))) throw new Error(`review scope ${record.scope[0]} no longer exists; review the current code before capturing this rule`);
+    const existing = store.recs("constraints").find(r => r.id === record.id);
+    if (existing) throw new Error(`constraint ${record.id} already exists; use the existing correction review flow to change it`);
+  }
+  for (const record of records) store.putCapture("constraints", record, privateOnly);
+  store.reindex();
+  if (home === "public" && !store.autoCommit) refreshExistingGrounding(root, store);
+  pumpMemoryHome(store, root, home, `hunch: capture ${records.length} sourced review rule(s)`);
+});
 
 let openStore: HunchStore | null = null;
 type TeamStoreOptions = { requireFreshTeamMemory?: boolean };

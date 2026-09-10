@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+## 1.30.0 — 2026-09-10
+
+### Scoped review memory from PR threads
+
+`hunch review-memory prepare` imports local GitHub inline review-comment exports
+into deterministic, source-linked thread packets. `capture` previews explicitly
+selected rule wording and verification checks; `--apply --private|--public` stores
+them through the existing Constraint and grounding pipeline. Imported prose never
+activates a rule or gains blocking authority. Captures remain `agent_recorded`
+warnings, with exact file scopes and review evidence, until the existing human
+countersign flow is used.
+
+Incomplete threads, mismatched repositories, stale selections, missing current
+files and existing rule IDs are refused. A real-data trial on `infection/infection`
+covered 102 comments from 11 PRs and exercised capture and delivery for two selected
+rules in an isolated clone. See `docs/review-memory.md` and the inspectable JSON
+trial report under `docs/evidence/`. Rule selection is manual; this release does
+not claim automatic extraction or measured bug reduction.
+
 ### Replay determinism is a check, and a human correction outranks the agents
 
 **`hunch serve replay`** (`nuryel.replay/1`). A partition's current state is a pure function of

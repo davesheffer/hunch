@@ -274,6 +274,7 @@ See the [changelog](CHANGELOG.md) for release detail and the [roadmap](ROADMAP.m
 
 - [Full documentation](https://www.hunchmemory.com/docs)
 - [Copy-paste cookbook](https://www.hunchmemory.com/cookbook)
+- [Turn PR review threads into scoped review rules](docs/review-memory.md)
 - [Deterministic organizational state](docs/deterministic-state.md)
 - [Project DNA](docs/project-dna.md)
 - [Native change proof](docs/change-proof.md)
