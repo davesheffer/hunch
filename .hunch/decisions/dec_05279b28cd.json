@@ -1,0 +1,42 @@
+{
+  "id": "dec_05279b28cd",
+  "title": "fix: refuse direct launches for unidentified background events",
+  "topic": null,
+  "status": "accepted",
+  "context": "Touched 2 file(s) across src/synthesis, test/initiator.test.ts. Touches invariant(s): con_2ce3f2a547 (Synthesis must use an explicitly selected coding-assistant subscription CLI or the deterministic local fallback; never call a pay-per-token API).",
+  "decision": "Changed code in src/synthesis, test/initiator.test.ts (2 file(s)).",
+  "consequences": [],
+  "alternatives_rejected": [],
+  "rejected_tripwires": [],
+  "related_components": [
+    "cmp_a94a8fe5cc",
+    "cmp_ba75dfc94f"
+  ],
+  "related_files": [
+    "src/synthesis/initiator.ts",
+    "test/initiator.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "132757f",
+  "valid_from": "2026-09-10T09:46:52+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "inferred",
+    "confidence": 0.3,
+    "evidence": [
+      "commit:132757f",
+      "synth:provider=deterministic",
+      "branch:feat/automatic-review-memory",
+      "src/synthesis/initiator.ts",
+      "test/initiator.test.ts"
+    ],
+    "last_verified": "2026-09-10T06:48:03.557Z"
+  },
+  "date": "2026-09-10T09:46:52+03:00"
+}
