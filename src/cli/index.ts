@@ -62,6 +62,7 @@ import { ensureGitignore, ignoreHunchMemory, HUNCH_MEMORY_DIRS } from "../integr
 import { writeCiWorkflow } from "../integrations/ciAction.js";
 import { updateClaudeMd, renderHunchSection } from "../integrations/claudemd.js";
 import { classifyGroundingBlock, describeGroundingFreshness } from "../core/groundingLag.js";
+import { resolveGroundingConflicts } from "../core/groundingMerge.js";
 import { writeMcpJson, writeSlashCommands, installClaudeHooks } from "../integrations/scaffold.js";
 import { scaffoldProviders, regenerateGrounding, refreshExistingGrounding, refreshCommittableGrounding, GROUNDING_DOC_PATHS } from "../integrations/providers.js";
 import { healClaudeConfigCaseSplit } from "../integrations/claudeConfig.js";
@@ -5688,6 +5689,27 @@ program
       const out = typeof err.stdout === "string" ? err.stdout : err.stdout?.toString();
       if (out != null) writeFileSync(ours, lf(out)); // marked result; else leave ours
       process.exitCode = 1; // conflict markers remain → block the commit for review
+    }
+  });
+
+// ---- merge-driver-grounding (internal; git invokes this) ------------------
+program
+  .command("merge-driver-grounding")
+  .description("(internal) git merge driver for the generated grounding docs — auto-resolves a hard conflict confined to the record-counts sentence.")
+  .argument("<base>", "%O — common ancestor")
+  .argument("<ours>", "%A — current branch (also the OUTPUT file)")
+  .argument("<theirs>", "%B — other branch")
+  .argument("[path]", "%P — pathname being merged")
+  .action((base: string, ours: string, theirs: string) => {
+    try {
+      const merged = execFileSync("git", ["merge-file", "-p", "--diff3", "-L", "ours", "-L", "base", "-L", "theirs", ours, base, theirs], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+      writeFileSync(ours, merged); // clean text merge → resolved, nothing to do
+    } catch (e) {
+      const err = e as { stdout?: string | Buffer; status?: number };
+      const out = typeof err.stdout === "string" ? err.stdout : (err.stdout?.toString() ?? "");
+      const res = resolveGroundingConflicts(out);
+      writeFileSync(ours, res.text);
+      if (res.conflict) process.exitCode = 1; // real conflict outside the counts sentence → leave for a human
     }
   });
 
