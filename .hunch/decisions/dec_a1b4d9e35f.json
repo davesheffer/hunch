@@ -1,0 +1,103 @@
+{
+  "id": "dec_a1b4d9e35f",
+  "title": "Restore volatile entity counts to auto-generated grounding block",
+  "topic": null,
+  "status": "accepted",
+  "context": "A prior commit attempted to drop volatile entity counts (232 decisions, 2 bugs, etc.) from the auto-generated grounding documentation to prevent the counts' frequent changes from causing document staleness. That approach was found to be incorrect. Touches invariant(s): con_8460b6770f (Config/provider writers must merge idempotently into existing user files and refuse to clobber an unparseable file).",
+  "decision": "Keep volatile entity counts in the auto-generated grounding block. The counts and the Hunch records they describe are committed atomically in the same capture, so the generated documentation cannot go stale — there is no temporal gap between them.",
+  "consequences": [
+    "Entity counts in grounding docs (CLAUDE.md, .cursor/rules/, etc.) now reflect the actual Hunch state at each capture",
+    "Frequent count changes no longer pose a staleness risk because they arrive in the same commit as the record changes",
+    "The grounding block serves as a live inventory of the Hunch graph without requiring separate sync logic"
+  ],
+  "alternatives_rejected": [
+    "Drop volatile counts from grounding block to minimize document churn (reverted; this commit undoes that choice)",
+    "Prevent count changes from triggering grounding doc regeneration (would leave stale counts)"
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Drop volatile counts from grounding block to minimize document churn (reverted; this commit undoes that choice)",
+      "scope": [
+        "src/extractors/**",
+        "src/integrations/**",
+        "test/**",
+        "tooling/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Prevent count changes from triggering grounding doc regeneration (would leave stale counts)",
+      "scope": [
+        "src/extractors/**",
+        "src/integrations/**",
+        "test/**",
+        "tooling/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_04c6efb58b",
+    "cmp_863ac67d4a",
+    "cmp_a94a8fe5cc",
+    "cmp_e0ccfe26fe"
+  ],
+  "related_files": [
+    "src/extractors/git.ts",
+    "src/integrations/claudemd.ts",
+    "src/integrations/providers.ts",
+    "src/integrations/sync.ts",
+    "test/grounding-capture-commit.test.ts",
+    "test/grounding-freshness.test.ts",
+    "test/grounding-merge-lag.test.ts",
+    "test/grounding-treadmill.test.ts",
+    "tooling/release-gate.mjs"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "670ea57",
+  "valid_from": "2026-09-10T10:27:14+02:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft+summary",
+    "confidence": 0.5,
+    "evidence": [
+      "commit:670ea57",
+      "synth:provider=claude-cli",
+      "branch:drop-grounding-counts-upstream",
+      "src/extractors/git.ts",
+      "src/integrations/claudemd.ts",
+      "src/integrations/providers.ts",
+      "src/integrations/sync.ts",
+      "test/grounding-capture-commit.test.ts",
+      "test/grounding-freshness.test.ts",
+      "test/grounding-merge-lag.test.ts",
+      "test/grounding-treadmill.test.ts"
+    ],
+    "last_verified": "2026-09-10T08:27:29.911Z"
+  },
+  "date": "2026-09-10T10:27:14+02:00"
+}
