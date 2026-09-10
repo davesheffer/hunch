@@ -1,0 +1,115 @@
+{
+  "id": "dec_1cd85276ad",
+  "title": "Auto-resolve grounding-doc conflicts confined to counts line",
+  "topic": null,
+  "status": "accepted",
+  "context": "PR #152 proposed dropping the counts sentence from generated docs to avoid a 'doc-ahead' defect (fnd_6391b4242f), but this would lose the helpful 'doc lagging' signal that tripwires the issue when the doc is out of sync with the committed store.",
+  "decision": "Keep the counts sentence. Implement a specialized git merge driver (merge=hunch-grounding) for the five generated docs that auto-resolves hard conflicts when they are confined solely to the counts line (by keeping 'ours' as a placeholder), while leaving any conflict touching other content untouched for human resolution.",
+  "consequences": [
+    "Preserves the 'doc lagging' signal needed to detect doc/store divergence (self-healed by post-merge hook)",
+    "Eliminates manual conflict resolution for append-only counts disagreements (the safe, common case)",
+    "Two independent merge drivers now coexist: merge=hunch (JSON records) and merge=hunch-grounding (generated docs)",
+    "Merge safety depends on detecting whether a conflict is counts-only; any mistake reverts to human intervention"
+  ],
+  "alternatives_rejected": [
+    "Drop the counts sentence entirely (would lose the doc-lagging signal that prevents the doc-ahead defect)",
+    "Accept all merge conflicts in these docs as requiring manual resolution",
+    "Implement a looser merge driver that might auto-resolve real content conflicts and obscure issues"
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Drop the counts sentence entirely (would lose the doc-lagging signal that prevents the doc-ahead defect)",
+      "scope": [
+        "src/cli/**",
+        "src/core/**",
+        "src/integrations/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Accept all merge conflicts in these docs as requiring manual resolution",
+      "scope": [
+        "src/cli/**",
+        "src/core/**",
+        "src/integrations/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Implement a looser merge driver that might auto-resolve real content conflicts and obscure issues",
+      "scope": [
+        "src/cli/**",
+        "src/core/**",
+        "src/integrations/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_50037f41a9",
+    "cmp_863ac67d4a",
+    "cmp_a94a8fe5cc",
+    "cmp_b256a6aed0"
+  ],
+  "related_files": [
+    "src/cli/index.ts",
+    "src/core/groundingMerge.ts",
+    "src/integrations/mergeDriver.ts",
+    "test/grounding-merge-driver.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "2330592",
+  "valid_from": "2026-09-10T10:51:15+02:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft",
+    "confidence": 0.65,
+    "evidence": [
+      "commit:2330592",
+      "synth:provider=claude-cli",
+      "branch:drop-grounding-counts-upstream",
+      "src/cli/index.ts",
+      "src/core/groundingMerge.ts",
+      "src/integrations/mergeDriver.ts",
+      "test/grounding-merge-driver.test.ts"
+    ],
+    "last_verified": "2026-09-10T08:51:29.606Z"
+  },
+  "date": "2026-09-10T10:51:15+02:00"
+}
