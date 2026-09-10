@@ -49,4 +49,7 @@ export function assertInitiatorProvider(provider: string): void {
   if (origin.provider && origin.provider !== provider) throw new Error(`Initiator ${origin.provider} cannot launch ${provider}; refusing an account switch.`);
   if (origin.source === "ambiguous") throw new Error("Ambiguous initiating agent; refusing to launch another provider.");
   if (origin.source === "client" && !origin.provider) throw new Error("Unknown initiating MCP client; refusing to launch another provider.");
+  if (!origin.provider && (context.getStore() || process.env.HUNCH_INITIATOR === "unknown")) {
+    throw new Error("Unknown initiating event; refusing to launch another provider.");
+  }
 }

@@ -63,3 +63,9 @@ test("unknown MCP clients cannot inherit the account of the server's launching s
     assert.equal(initiatorChildEnv({}).HUNCH_INITIATOR, "unknown");
   });
 });
+
+test("an explicitly unknown background origin cannot bypass selection with a direct launch", () => {
+  withInitiator({ provider: null, source: "unknown" }, () => {
+    assert.throws(() => assertInitiatorProvider("codex-cli"), /Unknown initiating event/);
+  });
+});
