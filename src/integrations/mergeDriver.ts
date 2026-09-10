@@ -13,6 +13,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync, existsSync } from "node:fs";
 import { writeFileAtomic } from "../core/io.js";
 import { assertSafeTopLevelConfigFile } from "./gitignore.js";
+import { GROUNDING_DOC_PATHS } from "./providers.js";
 
 // Route the .hunch JSON records through the structured driver — but NOT the
 // manifest (an id-less `{schema_version}` object the driver can't merge by id; a
@@ -20,11 +21,10 @@ import { assertSafeTopLevelConfigFile } from "./gitignore.js";
 //
 // The five generated grounding docs get the OTHER driver — narrower in scope
 // (it only ever touches a hard conflict confined to the counts sentence).
-const GROUNDING_DOCS = ["CLAUDE.md", "AGENTS.md", ".github/copilot-instructions.md", ".cursor/rules/hunch.mdc", ".windsurf/rules/hunch.md"];
 const ATTR_LINES = [
   ".hunch/**/*.json merge=hunch",
   ".hunch/manifest.json merge=text",
-  ...GROUNDING_DOCS.map((f) => `${f} merge=hunch-grounding`),
+  ...GROUNDING_DOC_PATHS.map((f) => `${f} merge=hunch-grounding`),
 ];
 
 function targetRepositoryEnv(): NodeJS.ProcessEnv {

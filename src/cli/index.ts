@@ -62,7 +62,7 @@ import { ensureGitignore, ignoreHunchMemory, HUNCH_MEMORY_DIRS } from "../integr
 import { writeCiWorkflow } from "../integrations/ciAction.js";
 import { updateClaudeMd, renderHunchSection } from "../integrations/claudemd.js";
 import { classifyGroundingBlock, describeGroundingFreshness } from "../core/groundingLag.js";
-import { resolveGroundingConflicts } from "../core/groundingMerge.js";
+import { mergeGroundingFile } from "../core/groundingMerge.js";
 import { writeMcpJson, writeSlashCommands, installClaudeHooks } from "../integrations/scaffold.js";
 import { scaffoldProviders, regenerateGrounding, refreshExistingGrounding, refreshCommittableGrounding, GROUNDING_DOC_PATHS } from "../integrations/providers.js";
 import { healClaudeConfigCaseSplit } from "../integrations/claudeConfig.js";
@@ -5701,16 +5701,9 @@ program
   .argument("<theirs>", "%B — other branch")
   .argument("[path]", "%P — pathname being merged")
   .action((base: string, ours: string, theirs: string) => {
-    try {
-      const merged = execFileSync("git", ["merge-file", "-p", "--diff3", "-L", "ours", "-L", "base", "-L", "theirs", ours, base, theirs], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
-      writeFileSync(ours, merged); // clean text merge → resolved, nothing to do
-    } catch (e) {
-      const err = e as { stdout?: string | Buffer; status?: number };
-      const out = typeof err.stdout === "string" ? err.stdout : (err.stdout?.toString() ?? "");
-      const res = resolveGroundingConflicts(out);
-      writeFileSync(ours, res.text);
-      if (res.conflict) process.exitCode = 1; // real conflict outside the counts sentence → leave for a human
-    }
+    const res = mergeGroundingFile(base, ours, theirs);
+    if (res.write !== null) writeFileSync(ours, res.write);
+    if (res.conflict) process.exitCode = 1; // real conflict, or git itself errored → leave for a human
   });
 
 // ---- doctor ---------------------------------------------------------------

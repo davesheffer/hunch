@@ -10,15 +10,24 @@
  * doesn't carry). Any conflict outside the counts sentence, anywhere in the
  * file, is left untouched with standard diff3 markers for a human to resolve.
  */
-import { parseGroundingCounts } from "./groundingLag.js";
+import { execFileSync } from "node:child_process";
+import { parseGroundingCounts, stripCountsMatch } from "./groundingLag.js";
 
-const CONFLICT_RE = /^<<<<<<< ours\n([\s\S]*?)\n\|\|\|\|\|\|\| base\n[\s\S]*?\n=======\n([\s\S]*?)\n>>>>>>> theirs$/gm;
+// `\r?\n` (not a bare `\n`) throughout: on a CRLF worktree every diff3 marker
+// line is itself `\r\n`-terminated, and a bare `\n` fails to match ANY of
+// them. `^...$` with /m anchor each marker at its own line start rather than
+// requiring a specific preceding/following literal newline, so a hunk whose
+// ours or theirs side is EMPTY (one side deleted the line, the other edited
+// it) still matches — with a literal `\n` requirement there, git's real
+// output for that shape has no such newline to match, so the whole hunk
+// silently fails to match at all.
+const CONFLICT_RE = /^<<<<<<< ours\r?\n([\s\S]*?)^\|\|\|\|\|\|\| base\r?\n[\s\S]*?^=======\r?\n([\s\S]*?)^>>>>>>> theirs[^\n]*\r?\n?/gm;
 
 function isCountsOnlyHunk(ours: string, theirs: string): boolean {
   const o = parseGroundingCounts(ours);
   const t = parseGroundingCounts(theirs);
   if (!o || !t) return false;
-  return ours.replace(o.match, "<counts>") === theirs.replace(t.match, "<counts>");
+  return stripCountsMatch(ours, o.match) === stripCountsMatch(theirs, t.match);
 }
 
 /** Given `git merge-file --diff3 -L ours -L base -L theirs` output for a
@@ -34,5 +43,32 @@ export function resolveGroundingConflicts(diff3Text: string): { conflict: boolea
     }
     return ours;
   });
-  return allResolved ? { conflict: false, text: resolved } : { conflict: true, text: diff3Text };
+  // Defense in depth: a hunk shape CONFLICT_RE fails to recognize must never
+  // read as resolved just because the callback never ran on it — if any
+  // marker survives, this is a real conflict, full stop.
+  if (!allResolved || resolved.includes("<<<<<<< ours")) return { conflict: true, text: diff3Text };
+  return { conflict: false, text: resolved };
+}
+
+/** Run `git merge-file --diff3` on real files and resolve the result.
+ *  `write: null` means git itself errored (e.g. one side is binary) — never
+ *  guess content in that case; leave the file exactly as git already
+ *  populated it before invoking this driver. */
+export function mergeGroundingFile(basePath: string, oursPath: string, theirsPath: string): { conflict: boolean; write: string | null } {
+  try {
+    const merged = execFileSync("git", ["merge-file", "-p", "--diff3", "-L", "ours", "-L", "base", "-L", "theirs", oursPath, basePath, theirsPath], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+    return { conflict: false, write: merged };
+  } catch (e) {
+    const err = e as { stdout?: string | Buffer; status?: number | null };
+    const status = typeof err.status === "number" ? err.status : -1;
+    // `git merge-file`'s exit status is the number of conflicting hunks
+    // (1-127) on a genuine 3-way merge attempt. Anything else (a negative
+    // status, or >127) means git itself errored — e.g. "Cannot merge binary
+    // files" exits 255 with EMPTY stdout — and treating that as diff3 output
+    // silently truncates the file to nothing.
+    if (status < 1 || status > 127) return { conflict: true, write: null };
+    const out = typeof err.stdout === "string" ? err.stdout : (err.stdout?.toString() ?? "");
+    const res = resolveGroundingConflicts(out);
+    return { conflict: res.conflict, write: res.text };
+  }
 }
