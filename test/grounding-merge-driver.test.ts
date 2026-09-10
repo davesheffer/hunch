@@ -8,6 +8,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { resolveGroundingConflicts, mergeGroundingFile } from "../src/core/groundingMerge.js";
 import { installMergeDriver } from "../src/integrations/mergeDriver.js";
+import { classifyGroundingBlock } from "../src/core/groundingLag.js";
 
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 // Invoke THIS checkout's source directly (not whatever `hunch` happens to be
@@ -36,7 +37,7 @@ function diff3(base: string, ours: string, theirs: string): string {
   try {
     const write = (name: string, text: string) => {
       const p = join(dir, name);
-      execFileSync("sh", ["-c", `cat > ${JSON.stringify(p)}`], { input: text });
+      writeFileSync(p, text);
       return p;
     };
     const o = write("ours.txt", ours);
@@ -61,7 +62,10 @@ test("resolveGroundingConflicts: a clean 3-way merge (no conflict markers) passe
   assert.equal(res.text, text);
 });
 
-test("resolveGroundingConflicts: a hard conflict confined to the counts sentence resolves to ours, silently", () => {
+test("resolveGroundingConflicts: a hard conflict confined to the counts sentence resolves to the HIGHER count, silently", () => {
+  // Not "ours" unconditionally: whichever side is higher is preserved, so a
+  // discarded higher count (potentially a real ahead-of-store signal on the
+  // side we'd otherwise throw away) is never silently lost.
   const base = `intro\n${COUNTS_LINE(240)}\noutro\n`;
   const ours = `intro\n${COUNTS_LINE(241)}\noutro\n`;
   const theirs = `intro\n${COUNTS_LINE(243)}\noutro\n`;
@@ -69,7 +73,39 @@ test("resolveGroundingConflicts: a hard conflict confined to the counts sentence
   assert.match(text, /<<<<<<< ours/, "sanity: git actually conflicted here");
   const res = resolveGroundingConflicts(text);
   assert.equal(res.conflict, false);
-  assert.equal(res.text, `intro\n${COUNTS_LINE(241)}\noutro\n`);
+  assert.equal(res.text, `intro\n${COUNTS_LINE(243)}\noutro\n`);
+});
+
+test("resolveGroundingConflicts: the resolution takes the max PER FIELD, not just from whichever whole line is bigger", () => {
+  const sentence = (decisions: number, bugs: number) =>
+    `This repo has **Hunch** — a curated graph. It currently holds **${decisions} decisions, ${bugs} bugs, 28 constraints, 21 components, 3 policies**.`;
+  const base = `intro\n${sentence(240, 2)}\noutro\n`;
+  const ours = `intro\n${sentence(241, 5)}\noutro\n`; // higher bugs, lower decisions
+  const theirs = `intro\n${sentence(243, 2)}\noutro\n`; // higher decisions, lower bugs
+  const text = diff3(base, ours, theirs);
+  assert.match(text, /<<<<<<< ours/, "sanity: git actually conflicted here");
+  const res = resolveGroundingConflicts(text);
+  assert.equal(res.conflict, false);
+  assert.equal(res.text, `intro\n${sentence(243, 5)}\noutro\n`, "each field independently takes the higher of the two sides");
+});
+
+test("resolveGroundingConflicts + classifyGroundingBlock: an incoming (theirs) phantom/uncommitted-record count is never silently downgraded to lag", () => {
+  // davesheffer's reproduction: base=240, ours=241, theirs=243, but the real
+  // merged store only ends up with 242 records (theirs' 243 was never fully
+  // committed — a phantom count, the exact fnd_6391b4242f shape). Unconditionally
+  // keeping `ours` would discard the 243 and read as "lagging" (safe, wrong);
+  // the resolution must preserve enough of theirs' claim that classifying the
+  // resolved doc against the TRUE merged store still reports "ahead".
+  const base = `intro\n${COUNTS_LINE(240)}\noutro\n`;
+  const ours = `intro\n${COUNTS_LINE(241)}\noutro\n`;
+  const theirs = `intro\n${COUNTS_LINE(243)}\noutro\n`;
+  const text = diff3(base, ours, theirs);
+  const res = resolveGroundingConflicts(text);
+  assert.equal(res.conflict, false);
+  const resolvedBlock = res.text.split("\n")[1]!; // strip the intro/outro test scaffolding
+  const trueMergedStoreBlock = COUNTS_LINE(242); // theirs' claimed 3rd decision never actually landed
+  const verdict = classifyGroundingBlock(resolvedBlock, trueMergedStoreBlock);
+  assert.equal(verdict.kind, "ahead", "the discarded higher count must still surface as ahead-of-store, not silently become lag");
 });
 
 test("resolveGroundingConflicts: a conflict outside the counts sentence is left as a real conflict", () => {

@@ -2,16 +2,24 @@
  * Merge driver for the generated grounding block's record-counts sentence
  * (dec_ba5b0dfa22, superseding dec_91da20a46b's "drop the counts sentence"):
  * resolves a HARD git conflict when it is confined to that one line by
- * keeping `ours`'s sentence as a placeholder. The merged store's counts can
- * only be >= ours's (decisions/bugs/constraints/components/policies are
- * append-only), so the doc then reads as "lagging" — which the post-merge
- * hook's `hunch grounding --refresh` already self-heals — never as "ahead",
- * the one signal fnd_6391b4242f depends on (a doc counting a record the repo
- * doesn't carry). Any conflict outside the counts sentence, anywhere in the
- * file, is left untouched with standard diff3 markers for a human to resolve.
+ * taking the ELEMENT-WISE MAX of ours's and theirs's counts, per field, as a
+ * placeholder. Picking `ours` unconditionally would discard whichever side
+ * carried the HIGHER count — and a higher count can itself be the
+ * ahead-of-store signal fnd_6391b4242f depends on (a branch whose doc claims
+ * a record its own committed store never received). Taking the max instead:
+ * when neither side already carries that defect, the merged store's counts
+ * can only be >= max(ours, theirs) (decisions/bugs/constraints/components/
+ * policies are append-only, and the merged store is the union of both
+ * sides' committed records), so the doc reads as "lagging" — self-healed by
+ * the post-merge hook's `hunch grounding --refresh` — never falsely "ahead".
+ * But when one side DOES already carry the defect, its inflated count
+ * survives into the resolution and correctly still reads as "ahead" against
+ * the true merged store, instead of being silently discarded. Any conflict
+ * outside the counts sentence, anywhere in the file, is left untouched with
+ * standard diff3 markers for a human to resolve.
  */
 import { execFileSync } from "node:child_process";
-import { parseGroundingCounts, stripCountsMatch } from "./groundingLag.js";
+import { parseGroundingCounts, stripCountsMatch, renderCountsMatch, type GroundingCounts } from "./groundingLag.js";
 
 // `\r?\n` (not a bare `\n`) throughout: on a CRLF worktree every diff3 marker
 // line is itself `\r\n`-terminated, and a bare `\n` fails to match ANY of
@@ -23,11 +31,18 @@ import { parseGroundingCounts, stripCountsMatch } from "./groundingLag.js";
 // silently fails to match at all.
 const CONFLICT_RE = /^<<<<<<< ours\r?\n([\s\S]*?)^\|\|\|\|\|\|\| base\r?\n[\s\S]*?^=======\r?\n([\s\S]*?)^>>>>>>> theirs[^\n]*\r?\n?/gm;
 
-function isCountsOnlyHunk(ours: string, theirs: string): boolean {
+/** `null` when the hunk isn't confined to the counts sentence; otherwise the
+ *  resolved sentence text, with each field taken as max(ours, theirs). */
+function resolveCountsOnlyHunk(ours: string, theirs: string): string | null {
   const o = parseGroundingCounts(ours);
   const t = parseGroundingCounts(theirs);
-  if (!o || !t) return false;
-  return stripCountsMatch(ours, o.match) === stripCountsMatch(theirs, t.match);
+  if (!o || !t) return null;
+  if (stripCountsMatch(ours, o.match) !== stripCountsMatch(theirs, t.match)) return null;
+  const keys = Object.keys(o.counts) as (keyof GroundingCounts)[];
+  if (keys.every((k) => o.counts[k] >= t.counts[k])) return ours; // ours already dominates every field verbatim
+  const combined = { ...o.counts };
+  for (const k of keys) combined[k] = Math.max(o.counts[k], t.counts[k]);
+  return ours.replace(o.match, renderCountsMatch(combined));
 }
 
 /** Given `git merge-file --diff3 -L ours -L base -L theirs` output for a
@@ -37,11 +52,12 @@ export function resolveGroundingConflicts(diff3Text: string): { conflict: boolea
   if (!diff3Text.includes("<<<<<<< ours")) return { conflict: false, text: diff3Text };
   let allResolved = true;
   const resolved = diff3Text.replace(CONFLICT_RE, (whole: string, ours: string, theirs: string) => {
-    if (!isCountsOnlyHunk(ours, theirs)) {
+    const merged = resolveCountsOnlyHunk(ours, theirs);
+    if (merged === null) {
       allResolved = false;
       return whole;
     }
-    return ours;
+    return merged;
   });
   // Defense in depth: a hunk shape CONFLICT_RE fails to recognize must never
   // read as resolved just because the callback never ran on it — if any

@@ -40,6 +40,14 @@ export interface GroundingCounts {
 /** Record kinds whose committed count may only ever lag behind the store. */
 export const APPEND_ONLY_COUNT_KINDS = ["decisions", "bugs", "constraints", "components", "policies"] as const;
 
+/** Render the counts sentence's bold `**N decisions, ...**` segment — the
+ *  exact text parseGroundingCounts looks for. The single source of truth for
+ *  the format, shared by the doc generator (claudemd.ts) and the grounding
+ *  merge driver (groundingMerge.ts) so they can never drift out of sync. */
+export function renderCountsMatch(counts: GroundingCounts): string {
+  return `**${counts.decisions} decisions, ${counts.bugs} bugs, ${counts.constraints} constraints, ${counts.components} components, ${counts.policies} policies${counts.findings ? `, ${counts.findings} open findings` : ""}**`;
+}
+
 /** Replace a counts-sentence match with a neutral placeholder, so the rest of
  *  two texts can be compared for equality regardless of their counts. Shared
  *  by classifyGroundingBlock (committed doc vs computed) and the grounding
