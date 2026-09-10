@@ -1,0 +1,114 @@
+{
+  "id": "dec_706067732d",
+  "title": "Resolve counts-only conflicts via element-wise MAX, not unconditional ours",
+  "topic": null,
+  "status": "accepted",
+  "context": "When a hard merge conflict is confined to the grounding counts sentence, the old strategy (keep ours unconditionally) silently discarded whichever side carried a higher count. A higher count can be the ahead-of-store signal that fnd_6391b4242f depends on — a branch claiming a record its store never received. Unconditionally discarding it masked the signal and misclassified the merged doc as 'lagging' instead of 'ahead'. Touches invariant(s): con_8460b6770f (Config/provider writers must merge idempotently into existing user files and refuse to clobber an unparseable file).",
+  "decision": "Resolve counts-only conflicts by taking the element-wise MAX of ours and theirs per field (decisions, bugs, constraints, components, policies), rather than picking the whole line from one side. If one side carries a phantom/uncommitted count, it survives into the resolution and the merged doc correctly classifies as 'ahead' against the true store.",
+  "consequences": [
+    "Phantom counts (ahead-of-store signals) are now preserved across merges instead of silently discarded",
+    "Each count field is independently maximized, not just whichever whole line is numerically bigger",
+    "Requires element-wise max computation and unified rendering via renderCountsMatch() to keep generator and merge driver in sync",
+    "Post-merge healing by hunch grounding --refresh still works; merged state is guaranteed >= max(ours, theirs) per field",
+    "Adds regression test coverage for per-field max and the phantom-count scenario from davesheffer's reproduction"
+  ],
+  "alternatives_rejected": [
+    "Unconditionally keep ours (old approach) — silently loses higher counts and ahead-of-store signals",
+    "Pick whichever whole line is numerically higher — misses cases where different fields are higher on different sides",
+    "Leave conflicts unresolved for humans to decide — burdens users with deciding every counts-only conflict"
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Unconditionally keep ours (old approach) — silently loses higher counts and ahead-of-store signals",
+      "scope": [
+        "src/core/**",
+        "src/integrations/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Pick whichever whole line is numerically higher — misses cases where different fields are higher on different sides",
+      "scope": [
+        "src/core/**",
+        "src/integrations/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Leave conflicts unresolved for humans to decide — burdens users with deciding every counts-only conflict",
+      "scope": [
+        "src/core/**",
+        "src/integrations/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_863ac67d4a",
+    "cmp_a94a8fe5cc",
+    "cmp_b256a6aed0"
+  ],
+  "related_files": [
+    "src/core/groundingLag.ts",
+    "src/core/groundingMerge.ts",
+    "src/integrations/claudemd.ts",
+    "test/grounding-merge-driver.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "90b2f92",
+  "valid_from": "2026-09-10T13:41:22+02:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [
+      "isCountsOnlyHunk"
+    ],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft",
+    "confidence": 0.65,
+    "evidence": [
+      "commit:90b2f92",
+      "synth:provider=claude-cli",
+      "branch:drop-grounding-counts-upstream",
+      "src/core/groundingLag.ts",
+      "src/core/groundingMerge.ts",
+      "src/integrations/claudemd.ts",
+      "test/grounding-merge-driver.test.ts"
+    ],
+    "last_verified": "2026-09-10T11:41:39.536Z"
+  },
+  "date": "2026-09-10T13:41:22+02:00"
+}
