@@ -5,6 +5,7 @@
  */
 import type { ReadRequest, ReadResponse, SubscribeRequest, WriteRequest, WriteResult, ChangeEvent, Scope, RecordsResponse } from "../core/stateContract.js";
 import type { DeliveryEnvelope } from "../core/delivery.js";
+import type { CaptureRequest, CaptureBatchRequest, CaptureBatchResult } from "../core/stateContract.js";
 
 export type ClientReadRequest = Omit<ReadRequest, "schema" | "principal">;
 export type ClientWriteRequest = Omit<WriteRequest, "schema" | "principal" | "expected_version"> & { expected_version?: string | number | null };
@@ -57,6 +58,8 @@ export function createStateClient(opts: StateClientOptions) {
     capabilities: (scope?: Scope) => call<{ protocol: string; capabilities: string[]; repository: Scope; partitions: Scope["kind"][]; principal: { id: string; kind: string; grants: Scope[] } }>("GET", `/nuryel/v1/capabilities${scope ? `?scope=${encodeURIComponent(`${scope.kind}:${scope.id}`)}` : ""}`),
     read: (request: ClientReadRequest) => call<ReadResponse & { envelope: DeliveryEnvelope }>("POST", "/nuryel/v1/read", request),
     write: (request: ClientWriteRequest) => call<WriteResult>("POST", "/nuryel/v1/write", request),
+    capture: (request: Omit<CaptureRequest, "schema" | "principal">) => call<WriteResult>("POST", "/nuryel/v1/capture", request),
+    captureBatch: (request: Omit<CaptureBatchRequest, "schema" | "principal">) => call<CaptureBatchResult>("POST", "/nuryel/v1/capture-batch", request),
     subscribe: (request: ClientSubscribeRequest) => call<ClientSubscribeResponse>("POST", "/nuryel/v1/subscribe", request),
     records: (request: { scope: Scope; ids: string[] }) => call<RecordsResponse>("POST", "/nuryel/v1/records", request),
     health: () => call<{ ok: boolean; version: string; protocol: string; partitions: string[] }>("GET", "/nuryel/v1/health"),

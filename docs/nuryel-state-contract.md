@@ -327,7 +327,7 @@ reverse — re-key or retire the survivor, then write the entity active again wi
 | `derived-state-carries-dependencies` | no dependencies, not state | `assertDerivedState`, schema `min(1)` |
 | `one-entity-per-external-ref` | one external record is one entity per partition; a subject written as an entity's external key is refused with the entity id named; merge/split are ledger events, never silent rewrites | `assertExternalIdentity` in `writeState` (`409 conflict` / `422 identity`), `subjectAliases` on read; `test/state-entity-identity.test.ts` |
 | `human-correction-outranks-agent-writes` | what a human confirmed, an agent or service principal never overwrites or supersedes: it may replay it, write derived state back `stale` with the external cause that moved, or close a commitment with a receipt on record — each keeping the human's provenance; changing what the human said takes a human | `writeState` guard (`409 conflict`, reason `human-confirmed incumbent`, the differing fields named); `test/state-replay.test.ts` |
-| `derived-state-writer-owns-currentness` | no source writes the drawer: the writer of a derived statement re-validates what it rests on and writes it back `stale` with the moved pointer as cause, or does not write derived state | `WriteRequest.cause`, the `invalidated` change (Sofia's source sweep is the reference writer) |
+| `derived-state-writer-owns-currentness` | the writer of a current derived statement revalidates its sources and writes it back `stale` when they move; other agents may save [source-backed observations](agent-observations.md) as `unknown`, never as current facts | `WriteRequest.cause`, the `invalidated` change, `nuryel_capture`, `state_of_record.observed` |
 
 ## Replay determinism (`nuryel.replay/1`)
 

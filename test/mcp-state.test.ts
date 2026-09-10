@@ -36,7 +36,7 @@ test("nuryel_* tools bind read / write / subscribe / capabilities over MCP with 
   });
 
   const listed = await client.listTools();
-  for (const name of ["nuryel_capabilities", "nuryel_read", "nuryel_write", "nuryel_subscribe", "nuryel_records"]) {
+  for (const name of ["nuryel_capabilities", "nuryel_read", "nuryel_write", "nuryel_subscribe", "nuryel_records", "nuryel_capture", "nuryel_capture_batch"]) {
     assert.ok(listed.tools.some((tool) => tool.name === name), `${name} is registered`);
   }
 

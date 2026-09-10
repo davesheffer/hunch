@@ -1,0 +1,59 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { buildServer } from "../src/mcp/server.js";
+import { createServeApp } from "../src/serve/app.js";
+import { initServeConfig, readServeConfig } from "../src/serve/config.js";
+import { createStateClient } from "../src/client/state.js";
+import type { CaptureBatchResult } from "../src/core/stateContract.js";
+
+test("MCP and HTTP share capture identity, lock, readback and per-item refusals", async () => {
+  const sandbox = mkdtempSync(join(tmpdir(), "hunch-capture-bindings-"));
+  const root = join(sandbox, "drawer"), file = join(sandbox, "serve.json");
+  const scope = { kind: "user" as const, id: "david" };
+  const init = initServeConfig({ file, scope, root, principal: { id: "codex@david", kind: "agent" } });
+  const app = createServeApp(readServeConfig(file));
+  const server = buildServer(root);
+  const [ct, st] = InMemoryTransport.createLinkedPair();
+  const mcp = new Client({ name: "capture-test", version: "1" });
+  try {
+    await Promise.all([mcp.connect(ct), server.connect(st), new Promise<void>(r => app.listen(0, "127.0.0.1", r))]);
+    const address = app.address(); assert.ok(address && typeof address === "object");
+    const http = createStateClient({ baseUrl: `http://127.0.0.1:${address.port}`, token: init.token! });
+    const principal = { id: "kimi@david", kind: "agent", grants: [scope] };
+    const source = { ref: { system: "crm", object_type: "note", object_key: "shared-note", observed_at: "2026-09-10T12:00:00Z" }, source_text: "Use the west entrance. Call Dana on Thursday." };
+    const observation = { subject: "customer:test", statement: "Use the west entrance.", relevance: { use: "operational_fact" as const, reason: "Choose the correct entrance for visits." }, evidence: [{ source: 0, excerpt: "Use the west entrance." }] };
+    const request = { scope, sources: [source], observations: [observation] };
+    const concurrent = await Promise.all([
+      http.captureBatch(request),
+      mcp.callTool({ name: "nuryel_capture_batch", arguments: { principal, ...request } }).then(r => { assert.ok(!r.isError, JSON.stringify(r)); return r.structuredContent as CaptureBatchResult; }),
+      http.captureBatch(request),
+    ]);
+    const writes = concurrent.flatMap(r => r.results).map(r => { assert.equal(r.status, "saved"); if (r.status !== "saved") throw new Error("refused"); return r.result; });
+    assert.equal(writes.filter(r => r.outcome === "created").length, 1);
+    assert.equal(new Set(writes.map(r => r.record_id)).size, 1);
+    const single = await http.capture({ scope, subject: observation.subject, statement: observation.statement, relevance: observation.relevance, evidence: [{ ...source, excerpt: observation.evidence[0]!.excerpt }] });
+    assert.equal(single.outcome, "replayed");
+    const read = await mcp.callTool({ name: "nuryel_read", arguments: { principal: { ...principal, id: "claude@david" }, scope, subject: observation.subject } });
+    assert.ok(!read.isError, JSON.stringify(read));
+    const held = read.structuredContent as { state_of_record: { observed: { id: string }[]; current: unknown[] } };
+    assert.equal(held.state_of_record.observed[0]?.id, single.record_id);
+    assert.equal(held.state_of_record.current.length, 0);
+    const batch = await http.captureBatch({ ...request, observations: [
+      { ...observation, evidence: [{ source: 0, excerpt: "Not in source." }] },
+      { ...observation, statement: "Call Dana on Thursday.", evidence: [{ source: 0, excerpt: "Call Dana on Thursday." }] },
+    ] });
+    assert.deepEqual(batch.results.map(r => r.status), ["refused", "saved"]);
+    const newRecord = batch.results[1]!;
+    assert.match(String(newRecord.status === "saved" && newRecord.result.record?.content), /codex@david/, "HTTP uses its authenticated principal");
+    await assert.rejects(() => http.captureBatch({ ...request, scope: { kind: "user", id: "stranger" } }), /grant|scope|denied/i);
+  } finally {
+    await mcp.close(); await server.close();
+    await new Promise<void>(r => app.close(() => r())); app.closeStores();
+    rmSync(sandbox, { recursive: true, force: true });
+  }
+});

@@ -578,6 +578,19 @@ export class JsonStore {
     return this.loadAll(kind).find((r) => (r as { id: string }).id === id);
   }
 
+  /** Direct authoritative state lookup. No directory enumeration or stale cache;
+   * migration precedes validation and corrupt files fail closed. */
+  getDirect<K extends "derived" | "receipts" | "commitments">(kind: K, id: string): EntityFor[K] | undefined {
+    const file = this.fileFor(kind, id);
+    const directory = this.safeKindDirectory(kind, false);
+    if (!directory) return undefined;
+    const text = this.readContainedFile(directory, file, this.maxBytes(kind));
+    if (text === null || text.trim() === "") return undefined;
+    const record = SCHEMAS[kind].parse(this.migrate(kind, JSON.parse(text), this.schemaVersion())) as EntityFor[K];
+    if (record.id !== id) throw new Error(`record identity does not match ${kind} file name`);
+    return record;
+  }
+
   /** On-disk record count, independent of validation: per-record kinds count
    *  every non-tombstone .json file (a 0-byte merge tombstone is an intentional
    *  absence), single-file kinds count raw array entries (a corrupt index file
