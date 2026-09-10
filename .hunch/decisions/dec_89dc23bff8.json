@@ -1,24 +1,24 @@
 {
   "id": "dec_89dc23bff8",
-  "title": "Distinguish git-level errors from diff3 conflicts; fail safe without guessing content",
+  "title": "Preserve git's original file state when conflict detection is uncertain or git errors",
   "topic": null,
   "status": "accepted",
-  "context": "The grounding merge driver silently corrupted files in two ways: (1) regex matching was too brittle, leaving conflict markers in place but reporting success; (2) git errors like binary-file detection (exit 255, empty stdout) were misinterpreted as 'clean merge', truncating files to zero bytes.",
-  "decision": "When git merge-file exits outside 1-127 (the valid conflict-count range), treat it as a git-level error and return write: null instead of attempting to parse stdout. This signals that the file should not be modified, leaving it for human resolution. Additionally, added post-replacement marker scanning: if any diff3 marker survives after resolution logic runs, unconditionally treat it as unresolved.",
+  "context": "Two reproducible data-loss bugs: (1) the conflict regex failed silently on EMPTY hunks and CRLF systems, leaving markers while reporting success; (2) git's binary-file errors (exit 255) were treated as resolved output, truncating files to zero bytes.",
+  "decision": "Introduced a write=null sentinel: when git's exit status indicates error (outside 1-127 range) or when any conflict marker survives the resolution pass, return write=null and conflict=true, forcing the CLI to exit 1 and write nothing, leaving the file exactly as git populated it.",
   "consequences": [
-    "Binary files and git-level errors now fail safely; the file remains untouched instead of being truncated",
-    "No more silent data loss when git detects unmergeable content",
-    "Genuine conflicts are reliably detected even in edge cases (empty hunks, CRLF line endings, unforeseen hunk shapes)",
-    "Two independent defenses: regex anchoring (prevent missed hunks) and marker scan (catch unrecognized hunk shapes)"
+    "Unrecognized conflicts and git-level errors now fail safely instead of silently corrupting the file",
+    "The driver's contract is explicit: write=null means 'I couldn't safely handle this, human must resolve'",
+    "Callers must handle the null case, preventing accidental data loss from coercing to empty string",
+    "Binary files, CRLF systems, and future unrecognized hunk shapes all degrade gracefully"
   ],
   "alternatives_rejected": [
-    "Attempt to parse and recover from all git errors—too fragile; git's error modes are not guaranteed to have parseable stdout",
-    "Rely on regex pattern matching alone—fails silently on future hunk shapes",
-    "Coerce all git output to empty string and assume clean merge—loses information about why git failed"
+    "Continue treating all errors as resolved output by coercing to empty string (silent truncation)",
+    "Attempt to reconstruct or guess at merged content when detection fails (more guessing, more risk)",
+    "Leave the marker-survival defense out and rely only on regex strictness (regression risk)"
   ],
   "rejected_tripwires": [
     {
-      "alternative": "Attempt to parse and recover from all git errors—too fragile; git's error modes are not guaranteed to have parseable stdout",
+      "alternative": "Continue treating all errors as resolved output by coercing to empty string (silent truncation)",
       "scope": [
         "src/cli/**",
         "src/core/**",
@@ -37,7 +37,7 @@
       }
     },
     {
-      "alternative": "Rely on regex pattern matching alone—fails silently on future hunk shapes",
+      "alternative": "Attempt to reconstruct or guess at merged content when detection fails (more guessing, more risk)",
       "scope": [
         "src/cli/**",
         "src/core/**",
@@ -56,7 +56,7 @@
       }
     },
     {
-      "alternative": "Coerce all git output to empty string and assume clean merge—loses information about why git failed",
+      "alternative": "Leave the marker-survival defense out and rely only on regex strictness (regression risk)",
       "scope": [
         "src/cli/**",
         "src/core/**",
@@ -111,7 +111,7 @@
       "src/integrations/mergeDriver.ts",
       "test/grounding-merge-driver.test.ts"
     ],
-    "last_verified": "2026-09-10T09:32:43.078Z"
+    "last_verified": "2026-09-10T09:33:14.491Z"
   },
   "date": "2026-09-10T11:32:21+02:00"
 }
