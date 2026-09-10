@@ -145,6 +145,7 @@ export function createServeApp(config: ServeConfig, opts: ServeOptions = {}): Se
 
       if (url.pathname === "/nuryel/v1/read") {
         const scope = requireScope(principal, body);
+        if (body.observed_page !== undefined && body.scopes !== undefined) throw problem(400, 'malformed', 'observation pages require a single partition without scopes');
         const { store } = storeFor(scope);
         if (body.scopes === undefined) {
           const { response, envelope } = readState(store, { schema: STATE_READ_VERSION, principal, ...body });

@@ -182,6 +182,9 @@ function subjectAliases(store: HunchStore, principal: Principal, repo: Scope, su
 export function readState(store: HunchStore, input: unknown): { response: ReadResponse; envelope: DeliveryEnvelope } {
   const request: ReadRequest = ReadRequestSchema.parse(input);
   if (!granted(request.principal, request.scope)) throw new StateRefusal("outside-grants", `scope ${scopePath(request.scope)} is outside the principal's grants`);
+  if (request.observed_page && (request.subject === undefined || request.scopes !== undefined || (request.facets && !request.facets.includes('derived')))) {
+    throw new StateRefusal('malformed', 'observation pages require a subject, the derived facet and a single partition without scopes');
+  }
   const repo = partitionOf(store);
   const facets = new Set<StateFacet>(request.facets ?? STATE_FACETS);
   const target = request.task ?? request.subject ?? scopePath(request.scope);
@@ -261,6 +264,7 @@ export function readState(store: HunchStore, input: unknown): { response: ReadRe
     }
     if (facets.has("derived")) for (const d of store.recs("derived")) {
       const scope = admit("derived", d); if (!scope) continue;
+      if (request.observed_page && scopePath(scope) !== scopePath(request.scope)) continue;
       const direct = isSubject(d.subject) || d.id === subject;
       const linked = scopePath(scope) === scopePath(request.scope) && linkedObservations.get(d.id)?.has(stateHash(d));
       if (!direct && !linked) continue;
@@ -281,10 +285,23 @@ export function readState(store: HunchStore, input: unknown): { response: ReadRe
       current.push(keep("relationships", r, scope));
     }
     observations.sort((a, b) => Date.parse(b.computed_at) - Date.parse(a.computed_at) || a.id.localeCompare(b.id));
-    const observed = observations.slice(0, 64).map(d => keep("derived", d, recordScope(d, repo)));
+    let offset = 0;
+    let page: NonNullable<ReadResponse['state_of_record']>['observed_page'];
+    if (request.observed_page) {
+      // Fingerprint the authorized membership AND record contents. A change between
+      // pages is a conflict, never a silently skipped or duplicated observation.
+      const snapshot_hash = stateHash({ scope: request.scope, subject, observations });
+      const cursor = request.observed_page.cursor;
+      if (cursor && cursor.snapshot_hash !== snapshot_hash) throw new StateRefusal('conflict', 'observations changed between pages; restart from the first page');
+      offset = cursor?.offset ?? 0;
+      if (offset > observations.length) throw new StateRefusal('malformed', 'observation cursor is outside this snapshot');
+      page = { snapshot_hash, total: observations.length, next_cursor: offset + 64 < observations.length ? { snapshot_hash, offset: offset + 64 } : null };
+    }
+    const observed = observations.slice(offset, offset + 64).map(d => keep("derived", d, recordScope(d, repo)));
     stateOfRecord = { subject, current, in_force: inForce, done, depends_on: dependsOn, invalidated_by: [...invalidatedBy].sort(),
       ...(relationshipsTruncated ? { relationships_truncated: true } : {}),
-      ...(observed.length ? { observed, observed_truncated: observations.length > observed.length } : {}) };
+      ...(observed.length || page ? { observed, observed_truncated: observations.length > offset + observed.length } : {}),
+      ...(page ? { observed_page: page } : {}) };
   }
   const response = ReadResponseSchema.parse({
     schema: STATE_READ_VERSION,

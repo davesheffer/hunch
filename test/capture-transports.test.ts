@@ -66,6 +66,24 @@ test("MCP and HTTP share capture identity, lock, readback and per-item refusals"
     assert.ok(!reviewed.isError, JSON.stringify(reviewed));
     assert.equal((reviewed.structuredContent as CaptureBatchResult).reviews?.[0]?.status, 'saved');
     assert.equal((await http.read({ scope, subject: 'project:visits', facets: ['derived'] })).state_of_record?.observed, undefined);
+    const sentences = Array.from({ length: 65 }, (_, i) => `Planning fact ${i}.`);
+    for (let i = 0; i < sentences.length; i += 32) {
+      const result = await http.captureBatch({ scope, sources: [{ ...source, source_text: sentences.join(' ') }],
+        observations: sentences.slice(i, i + 32).map(statement => ({ ...observation, subject: 'project:many', statement, evidence: [{ source: 0, excerpt: statement }] })) });
+      assert.ok(result.results.every(r => r.status === 'saved'));
+    }
+    assert.ok((await http.capabilities(scope)).capabilities.includes('nuryel.observation-pages/1'));
+    const pageOne = await http.read({ scope, subject: 'project:many', facets: ['derived'], observed_page: {} });
+    assert.equal(pageOne.state_of_record?.observed?.length, 64);
+    const pageTwo = await mcp.callTool({ name: 'nuryel_read', arguments: { principal, scope, subject: 'project:many', facets: ['derived'], observed_page: { cursor: pageOne.state_of_record!.observed_page!.next_cursor! } } });
+    assert.ok(!pageTwo.isError, JSON.stringify(pageTwo));
+    const finalPage = pageTwo.structuredContent as typeof pageOne;
+    assert.equal(finalPage.state_of_record?.observed?.length, 1);
+    assert.equal(finalPage.state_of_record?.observed_page?.next_cursor, null);
+    assert.equal(new Set([...pageOne.state_of_record!.observed!, ...finalPage.state_of_record!.observed!].map(r => r.id)).size, 65);
+    await assert.rejects(() => http.read({ scope, scopes: [scope], subject: 'project:many', observed_page: {} }), /single partition/);
+    const union = await mcp.callTool({ name: 'nuryel_read', arguments: { principal, scope, scopes: [scope], subject: 'project:many', observed_page: {} } });
+    assert.ok(union.isError);
   } finally {
     await mcp.close(); await server.close();
     await new Promise<void>(r => app.close(() => r())); app.closeStores();
