@@ -10,7 +10,7 @@
  * here (see docs/nuryel-state-contract.md, "Not decided here").
  */
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { writeFileAtomic } from "../core/io.js";
@@ -45,6 +45,13 @@ export const LedgerSchema = z.object({
 }).strict();
 export type Ledger = z.infer<typeof LedgerSchema>;
 
+// Process-local acceleration only: compare the actual bytes on EVERY read, never
+// timestamps or a TTL. Separate processes and same-size replacements stay visible.
+// Keep only four small snapshots; oversized ledgers follow the uncached path.
+const validatedSnapshots = new Map<string, { text: string; normalized: string; scope: string }>();
+const MAX_CACHED_LEDGERS = 4;
+const MAX_CACHED_CHARACTERS = 1024 * 1024;
+
 /** Scope ids may carry `:` `@` `+` (safe in the contract, not in every file system), so
  *  the file name is the sanitized id plus a short hash of the exact id — readable AND
  *  collision-free. The scope inside the file is authoritative, the name is a locator. */
@@ -61,9 +68,18 @@ export function emptyLedger(scope: Scope): Ledger {
 /** Read the ledger for a scope; a missing file is an empty ledger, a corrupt one is an
  *  error (never silently treated as empty — that would restart the sequence). */
 export function readLedger(hunchDir: string, scope: Scope): Ledger {
-  const file = ledgerFile(hunchDir, scope);
-  if (!existsSync(file)) return emptyLedger(scope);
-  const raw = JSON.parse(readFileSync(file, "utf8")) as unknown;
+  const file = resolve(ledgerFile(hunchDir, scope));
+  if (!existsSync(file)) { validatedSnapshots.delete(file); return emptyLedger(scope); }
+  const text = readFileSync(file, "utf8");
+  const cached = validatedSnapshots.get(file);
+  if (cached?.text === text && cached.scope === scopePath(scope)) {
+    validatedSnapshots.delete(file);
+    validatedSnapshots.set(file, cached);
+    // append/compaction callers mutate their copy. Never expose the cached object.
+    return JSON.parse(cached.normalized) as Ledger;
+  }
+  validatedSnapshots.delete(file);
+  const raw = JSON.parse(text) as unknown;
   const ledger = LedgerSchema.parse(raw);
   if (scopePath(ledger.scope) !== scopePath(scope)) throw new Error(`ledger ${file} belongs to scope ${scopePath(ledger.scope)}, not ${scopePath(scope)}`);
   let expected = ledger.floor_seq + 1;
@@ -72,6 +88,10 @@ export function readLedger(hunchDir: string, scope: Scope): Ledger {
     expected += 1;
   }
   if (ledger.head_seq !== ledger.floor_seq + ledger.events.length) throw new Error(`ledger ${file} head_seq ${ledger.head_seq} disagrees with floor ${ledger.floor_seq} + ${ledger.events.length} events`);
+  if (text.length <= MAX_CACHED_CHARACTERS) {
+    while (validatedSnapshots.size >= MAX_CACHED_LEDGERS) validatedSnapshots.delete(validatedSnapshots.keys().next().value!);
+    validatedSnapshots.set(file, { text, normalized: JSON.stringify(ledger), scope: scopePath(scope) });
+  }
   return ledger;
 }
 
