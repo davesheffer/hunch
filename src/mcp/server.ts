@@ -1974,7 +1974,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
     {
       title: "nuryel.state/1 read — the system-of-record answer for a subject",
       description:
-        "Read organizational state under a delivery receipt. Pass the principal (id, kind, grants) and the scope; optionally a subject (an entity id, a decision topic, an external `object_type:object_key`) to get state_of_record — what is current, in force, done, what it depends on and what invalidates it — plus a task phrase for the ranked delivery envelope. Scopes the principal is not granted are named in denied_scopes, never silently dropped.",
+        "Read organizational state under a delivery receipt. Pass the principal (id, kind, grants) and the scope; optionally a subject (an entity id, a decision topic, an external `object_type:object_key`) to get state_of_record — what is current, in force, done, what it depends on and what invalidates it — plus a task phrase for the ranked delivery envelope. Scopes the principal is not granted are named in denied_scopes, never silently dropped. To read observations beyond the default 64, use observed_page:{} with one scope and a subject, then pass state_of_record.observed_page.next_cursor as observed_page.cursor until null. A conflict means the observations changed: restart from the first page. Never claim complete coverage while a next cursor remains.",
       inputSchema: ReadRequestSchema.omit({ schema: true }).shape,
       outputSchema: ReadResponseSchema.shape,
     },
@@ -2012,7 +2012,8 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
         const stateText = sor
           ? [...sor.current.map((r) => line("current", r)), ...sor.in_force.map((r) => line("in force", r)), ...sor.done.map((r) => line("done", r)),
              ...(sor.observed ?? []).map(r => line("observed; verify currentness before relying on it", r)),
-             ...(sor.observed_truncated ? ["- More observations exist; narrow the subject or query the state history."] : []),
+             ...(sor.observed_page ? [`- Observation page: ${sor.observed_page.total} total; next_cursor: ${JSON.stringify(sor.observed_page.next_cursor)}`]
+               : sor.observed_truncated ? ['- More observations exist; read this subject with observed_page:{} in one partition, then follow next_cursor.'] : []),
              ...(sor.invalidated_by.length ? [`- invalidated by: ${sor.invalidated_by.join(", ")}`] : [])].join("\n") || "(nothing on record for this subject)"
           : "";
         return stateResult(`${response.receipt_id} · ${summary}${deniedNote}${stateText ? `\n\nState of record:\n${stateText}` : ""}\n\n${envelope.text}`, response);

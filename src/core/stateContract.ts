@@ -46,11 +46,12 @@ export const STATE_CAPTURE_VERSION = "nuryel.state.capture/1" as const;
 export const STATE_CAPTURE_BATCH_VERSION = "nuryel.state.capture-batch/1" as const;
 export const STATE_OBSERVATION_LINKS_VERSION = "nuryel.observation-links/1" as const;
 export const STATE_OBSERVATION_REVIEW_VERSION = "nuryel.observation-review/1" as const;
+export const STATE_OBSERVATION_PAGES_VERSION = "nuryel.observation-pages/1" as const;
 
 /** Capabilities a server advertises; a client that needs one the server lacks gets a typed
  *  `unsupported`, never a compatible-looking degraded answer. */
 export const STATE_CAPABILITIES = [
-  STATE_READ_VERSION, STATE_WRITE_VERSION, STATE_SUBSCRIBE_VERSION, STATE_RECORDS_VERSION, STATE_CAPTURE_VERSION, STATE_CAPTURE_BATCH_VERSION, STATE_OBSERVATION_LINKS_VERSION, STATE_OBSERVATION_REVIEW_VERSION,
+  STATE_READ_VERSION, STATE_WRITE_VERSION, STATE_SUBSCRIBE_VERSION, STATE_RECORDS_VERSION, STATE_CAPTURE_VERSION, STATE_CAPTURE_BATCH_VERSION, STATE_OBSERVATION_LINKS_VERSION, STATE_OBSERVATION_REVIEW_VERSION, STATE_OBSERVATION_PAGES_VERSION,
   RECEIPT_SCHEMA_VERSION, COMMITMENT_SCHEMA_VERSION, DERIVED_SCHEMA_VERSION, ENTITY_SCHEMA_VERSION, RELATIONSHIP_SCHEMA_VERSION,
 ] as const;
 export type StateCapability = (typeof STATE_CAPABILITIES)[number];
@@ -124,6 +125,10 @@ export type StateFacet = (typeof STATE_FACETS)[number];
  *  granted is NAMED in `denied_scopes` — it never refuses the whole call, and is never described. */
 export const ReadScopesSchema = z.array(ScopeSchema).min(1).max(64);
 
+export const ObservationCursorSchema = z.object({
+  snapshot_hash: z.string().regex(SHA256), offset: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+}).strict();
+
 export const ReadRequestSchema = z.object({
   schema: z.literal(STATE_READ_VERSION),
   principal: PrincipalSchema,
@@ -134,6 +139,8 @@ export const ReadRequestSchema = z.object({
   profile: z.enum(DELIVERY_PROFILES).optional(),
   budget_tokens: z.number().int().min(200).max(200_000).optional(),
   facets: z.array(z.enum(STATE_FACETS)).max(STATE_FACETS.length).optional(),
+  /** Explicit single-partition pagination; default subject reads keep their existing bound. */
+  observed_page: z.object({ cursor: ObservationCursorSchema.optional() }).strict().optional(),
 }).strict();
 export type ReadRequest = z.infer<typeof ReadRequestSchema>;
 
@@ -155,6 +162,7 @@ export const StateOfRecordSchema = z.object({
   /** Source-backed observations, not a claim of currentness. Additive; absent on old hosts. */
   observed: z.array(StateRefSchema).max(64).optional(),
   observed_truncated: z.boolean().optional(),
+  observed_page: z.object({ snapshot_hash: z.string().regex(SHA256), total: z.number().int().nonnegative(), next_cursor: ObservationCursorSchema.nullable() }).strict().optional(),
   relationships_truncated: z.boolean().optional(),
   depends_on: z.array(DependencyRefSchema).max(1024),
   invalidated_by: z.array(z.string().max(512)).max(256),
