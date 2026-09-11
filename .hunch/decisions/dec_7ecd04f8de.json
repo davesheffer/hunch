@@ -1,0 +1,156 @@
+{
+  "id": "dec_7ecd04f8de",
+  "title": "Queue-based human gate for squash-merge commit provenance repair",
+  "topic": null,
+  "status": "accepted",
+  "context": "Squash-merges produce a new commit whose parent is the pre-merge tip, orphaning the original per-commit SHAs that decision provenance links cite. These orphaned links need repair, but matching orphaned decisions to newly-merged commits via file-set overlap is not reliable enough to trust an unattended write into shared team memory. Touches invariant(s): con_7217ab24ab (Regression guard: \"Flaky test failure under parallelism: native tree-sitter module resolution race on Windows\" must not recur.); con_e04226bd05 (The MCP server must stay client-agnostic: all assistants point to the same .hunch/ graph; no Claude-only behavior in the server).",
+  "decision": "Implement a human-gatekeeping queue system for commit provenance repair. Orphaned decisions are matched to merged commits based on file-set overlap, queued in `.hunch/pending-commit-repairs.json`, and require explicit `--apply` approval. Rejected matches are durably tombstoned in `.hunch/dropped-commit-repairs.json` to prevent re-queuing identical rejections. Repairs surface as escalations prompting human confirmation.",
+  "consequences": [
+    "Shared team memory is never auto-modified in response to squash-merges; all repairs require explicit human confirmation",
+    "Introduces new queue files and CLI commands (`--apply`, `--drop`) to manage repairs",
+    "Requires robust handling of corrupted queue files: duplicate-id entries keyed by object identity, withhold-not-drop semantics for unresolvable commits, non-actionable entries marked transparently",
+    "Post-merge hook opportunistically detects orphaning and queues repairs, surfacing them as inline escalations",
+    "Durable tombstones prevent resurrection of previously rejected matches across multiple detection runs"
+  ],
+  "alternatives_rejected": [
+    "Automatic repair without human approval — file-set overlap matching is insufficient to trust an unattended write into shared team memory",
+    "Using git's rename detection as the match signal — too weak for this use case",
+    "Volatile queue clearing on `--drop` — durable tombstones required to prevent re-queuing of identical rejections"
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Automatic repair without human approval — file-set overlap matching is insufficient to trust an unattended write into shared team memory",
+      "scope": [
+        "src/cli/**",
+        "src/core/**",
+        "src/extractors/**",
+        "src/integrations/**",
+        "src/mcp/**",
+        "test/**",
+        "tooling/**",
+        "vscode-extension/src/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Using git's rename detection as the match signal — too weak for this use case",
+      "scope": [
+        "src/cli/**",
+        "src/core/**",
+        "src/extractors/**",
+        "src/integrations/**",
+        "src/mcp/**",
+        "test/**",
+        "tooling/**",
+        "vscode-extension/src/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Volatile queue clearing on `--drop` — durable tombstones required to prevent re-queuing of identical rejections",
+      "scope": [
+        "src/cli/**",
+        "src/core/**",
+        "src/extractors/**",
+        "src/integrations/**",
+        "src/mcp/**",
+        "test/**",
+        "tooling/**",
+        "vscode-extension/src/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_04c6efb58b",
+    "cmp_50037f41a9",
+    "cmp_555e43ab1a",
+    "cmp_863ac67d4a",
+    "cmp_a94a8fe5cc",
+    "cmp_b256a6aed0",
+    "cmp_dfa5b5acde",
+    "cmp_e0ccfe26fe"
+  ],
+  "related_files": [
+    "CLAUDE.md",
+    "src/cli/index.ts",
+    "src/core/commitrepair.ts",
+    "src/core/drift.ts",
+    "src/core/escalations.ts",
+    "src/core/refrepair.ts",
+    "src/core/repairqueue.ts",
+    "src/extractors/git.ts",
+    "src/integrations/gitignore.ts",
+    "src/integrations/hooks.ts",
+    "src/mcp/server.ts",
+    "test/commitrepair.test.ts",
+    "test/drift.test.ts",
+    "test/escalations.test.ts",
+    "test/eventslog-pump.test.ts",
+    "test/git-merge-range.test.ts",
+    "test/gitignore.test.ts",
+    "test/hooks.test.ts",
+    "test/overlay-commit-guard.test.ts",
+    "test/repair-provenance.test.ts",
+    "test/repairqueue.test.ts",
+    "test/team-shared-setup-clone-safety.test.ts",
+    "tooling/matrix-release-verification.mjs",
+    "vscode-extension/src/memoryView.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "8844790",
+  "valid_from": "2026-09-10T08:32:36+02:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft+summary",
+    "confidence": 0.5,
+    "evidence": [
+      "commit:8844790",
+      "synth:provider=claude-cli",
+      "branch:upstream-pr/commit-provenance-repair",
+      "CLAUDE.md",
+      "src/cli/index.ts",
+      "src/core/commitrepair.ts",
+      "src/core/drift.ts",
+      "src/core/escalations.ts",
+      "src/core/refrepair.ts",
+      "src/core/repairqueue.ts",
+      "src/extractors/git.ts"
+    ],
+    "last_verified": "2026-09-10T06:32:55.395Z"
+  },
+  "date": "2026-09-10T08:32:36+02:00"
+}
