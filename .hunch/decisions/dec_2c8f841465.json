@@ -1,0 +1,197 @@
+{
+  "id": "dec_2c8f841465",
+  "title": "Evidence tiers: only rule-verified claims upgrade to ground truth",
+  "topic": null,
+  "status": "accepted",
+  "context": "Hunch records what lessons agents apply to tasks, but agent claims alone are unreliable — they may be false positives, or miss subtle bugs. No way existed to verify lessons were actually applied correctly or to expose trustworthy evidence to external systems. Touches invariant(s): con_7217ab24ab (Regression guard: \"Flaky test failure under parallelism: native tree-sitter module resolution race on Windows\" must not recur.); con_8460b6770f (Config/provider writers must merge idempotently into existing user files and refuse to clobber an unparseable file); con_902759b3dc (All JSON writes to .hunch/ must be atomic (temp-file + rename) so an interrupted write can never truncate the index); con_a87360128b (Semantic vectors are a derived layer in SQLite, never the source of truth; reconcile by content hash on reindex); con_e04226bd05 (The MCP server must stay client-agnostic: all assistants point to the same .hunch/ graph; no Claude-only behavior in the server).",
+  "decision": "Separate evidence into distinct grades: delivered, agent-reported application, rule-supported application (from automatic `hunch task conform`), observed command result, save/commit/push proofs. Only deterministic rule verification — matching a lesson's declared constraint or conformance predicate against the task's actual changed files — upgrades a claim to ground truth. Agent prose, file overlap, or unrelated passing commands alone never upgrade a claim.",
+  "consequences": [
+    "Verifiable audit trail: each evidence grade is labeled with its proof source and confidence level",
+    "Prevents false-positive claims from polluting downstream tools (no MCP tool accepts unverified verdicts)",
+    "Lessons must declare their own verification rules (constraint forbids matcher, decision conformance predicate) to become ground truth",
+    "Automatic verification (`hunch task conform`) runs on finish; violations are shown to the user",
+    "Public export can safely omit implementation details while retaining validated evidence"
+  ],
+  "alternatives_rejected": [
+    "Trust agent-reported applications as ground truth without verification",
+    "Single monolithic evidence grade (loses auditability and confidence levels)",
+    "Upgrade claims on any agent claim plus a passing unrelated command (false positives)",
+    "Expose evidence only internally; keep all details private (limits transparency and reuse)"
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Trust agent-reported applications as ground truth without verification",
+      "scope": [
+        ".github/workflows/**",
+        "src/cli/**",
+        "src/core/**",
+        "src/extractors/**",
+        "src/integrations/**",
+        "src/mcp/**",
+        "src/store/**",
+        "src/**",
+        "test/**",
+        "tooling/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Single monolithic evidence grade (loses auditability and confidence levels)",
+      "scope": [
+        ".github/workflows/**",
+        "src/cli/**",
+        "src/core/**",
+        "src/extractors/**",
+        "src/integrations/**",
+        "src/mcp/**",
+        "src/store/**",
+        "src/**",
+        "test/**",
+        "tooling/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Upgrade claims on any agent claim plus a passing unrelated command (false positives)",
+      "scope": [
+        ".github/workflows/**",
+        "src/cli/**",
+        "src/core/**",
+        "src/extractors/**",
+        "src/integrations/**",
+        "src/mcp/**",
+        "src/store/**",
+        "src/**",
+        "test/**",
+        "tooling/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Expose evidence only internally; keep all details private (limits transparency and reuse)",
+      "scope": [
+        ".github/workflows/**",
+        "src/cli/**",
+        "src/core/**",
+        "src/extractors/**",
+        "src/integrations/**",
+        "src/mcp/**",
+        "src/store/**",
+        "src/**",
+        "test/**",
+        "tooling/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_04c6efb58b",
+    "cmp_4c40eab00f",
+    "cmp_50037f41a9",
+    "cmp_863ac67d4a",
+    "cmp_a94a8fe5cc",
+    "cmp_b256a6aed0",
+    "cmp_cdfb395bb7",
+    "cmp_dfa5b5acde",
+    "cmp_e0ccfe26fe"
+  ],
+  "related_files": [
+    ".github/workflows/release.yml",
+    "src/cli/index.ts",
+    "src/cli/integrations.ts",
+    "src/cli/taskReport.ts",
+    "src/core/agenthook.ts",
+    "src/core/served.ts",
+    "src/core/taskReport.ts",
+    "src/core/taskReportCapture.ts",
+    "src/core/taskReportEvidence.ts",
+    "src/core/taskReportHook.ts",
+    "src/core/taskReportPaths.ts",
+    "src/core/taskReportPublic.ts",
+    "src/core/taskReportRender.ts",
+    "src/extractors/git.ts",
+    "src/integrations/claudemd.ts",
+    "src/integrations/sync.ts",
+    "src/mcp/server.ts",
+    "src/mcp/taskReportTools.ts",
+    "src/store/hunchStore.ts",
+    "src/taskReports.ts",
+    "test/grounding.test.ts",
+    "test/mcp-delivery.test.ts",
+    "test/package-paths.test.ts",
+    "test/providers.test.ts",
+    "test/rankpriors.test.ts",
+    "test/selfheal.test.ts",
+    "test/sync.test.ts",
+    "test/task-report-capture.test.ts",
+    "test/task-report-hook.test.ts",
+    "test/task-report.test.ts",
+    "test/task-reporter.test.ts",
+    "tooling/changelog-locales.mjs"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "c8200fc",
+  "valid_from": "2026-09-11T16:09:15+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft+summary",
+    "confidence": 0.5,
+    "evidence": [
+      "commit:c8200fc",
+      "synth:provider=claude-cli",
+      "branch:release/v1.32.0-task-reports",
+      ".github/workflows/release.yml",
+      "src/cli/index.ts",
+      "src/cli/integrations.ts",
+      "src/cli/taskReport.ts",
+      "src/core/agenthook.ts",
+      "src/core/served.ts",
+      "src/core/taskReport.ts",
+      "src/core/taskReportCapture.ts"
+    ],
+    "last_verified": "2026-09-11T13:09:47.007Z"
+  },
+  "date": "2026-09-11T16:09:15+03:00"
+}
