@@ -22,7 +22,7 @@ import { decisionId, findingId } from "../core/ids.js";
 import { buildCorrectionConstraint } from "../core/correction.js";
 import { knownRepoDeps } from "../synthesis/tripwires.js";
 import { refreshExistingGrounding } from "../integrations/providers.js";
-import { revParse, asOfDate, revExists, lastChangeDate, rangeFiles, rangeDiff, commitFiles, commitDiff, stagedFiles, stagedDiff, workingFiles, workingDiff, pullHunchStatus, sameRemoteUrl, currentBranch, type HunchPullStatus } from "../extractors/git.js";
+import { revParse, asOfDate, revExists, lastChangeDate, rangeFiles, rangeDiff, commitFiles, commitDiff, stagedFiles, stagedDiff, workingFiles, workingDiff, pullHunchStatus, sameRemoteUrl, currentBranch, worktreePaths, pathKnownToHistory, type HunchPullStatus } from "../extractors/git.js";
 import { flushCapture, flushMemoryHome, pinSharedRemote } from "../integrations/sync.js";
 import { withWriteLock } from "../serve/writelock.js";
 import { advertisedTeamRemoteContract, ensureTeamOverlay, overlayMatchesTeamRemote, readTeamConfig, teamRemoteContract, teamSharedRef } from "../integrations/team.js";
@@ -85,8 +85,8 @@ import { premiseEscalations } from "../core/premises.js";
 import { applyImportedAdrReview, pendingImportedAdrReviews } from "../core/importReview.js";
 import { issueCaptureToken as issueToken, consumeCaptureToken as consumeToken } from "../core/capturetoken.js";
 import { randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, lstatSync, statSync } from "node:fs";
+import { dirname, isAbsolute, join, parse, relative, resolve, sep } from "node:path";
 import { initiatorFromClient, withInitiator } from "../synthesis/initiator.js";
 
 type ToolResult = {
@@ -182,6 +182,344 @@ const destinationNote = (destRoot: string): string => {
   const branch = currentBranch(destRoot);
   return ` [captured${branch ? ` on branch ${branch}` : ""} in ${destRoot}]`;
 };
+
+/** The `cwd`-hint fallback above only helps when the CALLER remembers to pass
+ *  it — a subagent spawned straight into its own linked worktree has no reason
+ *  to think of the session's "starting directory" as different from its own,
+ *  so the hint is silently omitted and the write lands wherever `root` last
+ *  was (often the primary checkout, on its default branch). This is a
+ *  backstop, NOT a complete fix: it only catches a related file that's
+ *  new/untracked at the resolved root but already exists in a sibling
+ *  worktree — the "edited an existing tracked file" case is invisible to a
+ *  pure existence check (the file exists at every worktree, just with
+ *  different content) and is a known, documented gap, not silently uncaught.
+ *  `hunch_record_decision`'s `related_files`, `hunch_record_correction`'s
+ *  `scope_hint_file`, and `hunch_record_finding`'s `affected_files` are the
+ *  same structured file-list evidence and share this guard via
+ *  `misrouteGuard` below. `nuryel_write` (state-binding writes) carries the
+ *  identical exposure and is NOT covered here.
+ *
+ *  Every matching sibling is named as a candidate `cwd` and the write is
+ *  refused rather than risked; it returns every match rather than the first,
+ *  since confidently naming just one would let a caller that blindly retries
+ *  as instructed land in the WRONG worktree — the same failure mode one level
+ *  removed.
+ *
+ *  Two false-positive guards, both required, not optional hardening:
+ *  - Empty related_files, or no sibling worktree doing any better, is silent
+ *    — a decision that legitimately precedes its code (no files yet) is
+ *    unaffected.
+ *  - A related_files entry ABSENT at the root is not automatically
+ *    suspicious: an ordinary delete/rename recorded correctly at the
+ *    resolved root produces the exact same shape (file gone here, still
+ *    present in whichever sibling worktree branched before the change) as a
+ *    genuine misroute. `pathKnownToHistory` distinguishes them — a path this
+ *    checkout's own HEAD has ever tracked explains its absence without
+ *    invoking a worktree guess.
+ *
+ *  Coverage boundary: only checks the file evidence passed in THIS call
+ *  (`related_files` / `scope_hint_file` / `affected_files`), not values
+ *  inherited from an existing record on re-record/supersede — a call that
+ *  omits its file field to rely on inheritance won't trip this guard even if
+ *  it's happening in the wrong worktree. That's a deliberate tradeoff against
+ *  false positives on stale evidence, not full coverage of every misrouted
+ *  write.
+ *
+ *  Absolute paths: agents naturally send them (edit-tool payloads and MCP
+ *  roots are absolute), and a NAIVE `join(dir, "/abs/path")` produces a
+ *  nonsense concatenated path that exists nowhere — the guard would find
+ *  nothing to compare against ANY directory and stay silent, reproducing the
+ *  exact misroute through the "fix" meant to catch it. `existsUnder` checks
+ *  an absolute entry AS ITSELF, scoped to whichever directory is under test
+ *  (root, or each candidate worktree in turn) via `deepestContainer`, not
+ *  `join()` — so an absolute path naming a file that exists only under a
+ *  worktree's own tree is direct positive evidence for that worktree
+ *  specifically, no existence heuristic required. Relativizing it against
+ *  `root` alone (an approach considered and rejected) can't represent a
+ *  SIBLING worktree's absolute path at all: it's never under root's tree, so
+ *  it relativizes to "../…" and gets dropped — silently reintroducing the
+ *  bypass one level removed. A NESTED worktree (`root/.worktrees/x`, what
+ *  `hunch worktree` itself creates) is the opposite trap: it IS lexically
+ *  under root's own tree, so a plain "is this path under root" check wrongly
+ *  attributes it to root — `deepestContainer` picks the MOST SPECIFIC
+ *  (longest-path) containing worktree, not just any containing ancestor, so
+ *  root never swallows a worktree nested inside it. An absolute path outside
+ *  every known worktree matches none and correctly contributes nothing: not
+ *  "absent here, check the siblings", just nothing to compare. Canonicalized
+ *  (`canonicalRootPath`, the same symlink/case resolution `resolveActiveRoot`
+ *  uses) on both sides before comparing, so a worktree reached through a
+ *  symlink or a case-different spelling isn't silently missed, and compared
+ *  by exact path SEGMENT, not string prefix, so a real sibling `foo-other`
+ *  doesn't false-match `foo` and a file genuinely named `..odd.ts` isn't
+ *  mistaken for a `..` traversal. A DIRECTORY entry (or the empty-string/"."
+ *  an agent might send meaning "the repo itself") contributes nothing
+ *  either: `existsUnder` checks `isFile`, never mere existence, since a
+ *  directory match would silently disable the guard for every OTHER entry in
+ *  the same call — and `pathKnownToHistory` (below) confirms a git pathspec
+ *  matched the EXACT entry, not merely something under/matching it, for the
+ *  identical reason.
+ *
+ *  A RELATIVE entry containing a ".." segment that escapes root's own tree
+ *  when resolved against root is the SAME class of misroute as a
+ *  worktree-rooted absolute path, merely spelled relatively — resolved
+ *  against ROOT specifically (the only base the server actually has; never
+ *  re-resolved per candidate in the loop below, which would answer a
+ *  different, meaningless question) and then run through the identical
+ *  absolute-path containment logic. A relative entry that does NOT escape
+ *  root's tree keeps the original, intentional multi-location check instead:
+ *  the SAME relative suffix tried against every candidate directory in turn
+ *  — that's how a plain "this file's name" evidence has always found a
+ *  sibling worktree holding a file by that name, and it must keep doing so
+ *  for a NESTED worktree reached by a non-escaping relative path, whose
+ *  containing worktree this fix does not (yet) distinguish from root itself
+ *  — that residual gap fails OPEN (silently uncaught), never toward a false
+ *  positive.
+ *
+ *  Exported for direct unit testing — the candidate logic is otherwise
+ *  reachable only through a full MCP client/server integration test. */
+export const misroutedWorktreeCandidates = (root: string, relatedFiles: readonly string[]): string[] => {
+  if (!relatedFiles.length) return [];
+  const worktrees = worktreePaths(root);
+  const canonRoot = canonicalRootPath(root);
+  // Resolve against the CANONICAL root, not the raw `root` string. `f` almost
+  // always does NOT exist yet (that's the whole point of checking it) --
+  // canonicalRootPath's realpath then throws and falls back to the raw,
+  // un-resolved path (src/mcp/roots.ts). Resolving against raw `root` first and
+  // canonicalizing second means that fallback returns a path still spelled
+  // however `root` was spelled -- if `root` itself reaches the repo through a
+  // symlink (reachable in production via `hunch mcp --root <path through a
+  // symlink>`, which pins the root and skips the client-root canonicalization
+  // path entirely), an ORDINARY relative filename that never escapes root's own
+  // tree gets compared against the CANONICAL root and reads as escaping,
+  // silently disabling the guard for the exact misroute shape it exists to
+  // catch. Resolving against the already-canonical root first means the
+  // common non-existent-file case is correctly rooted even when realpath's
+  // later canonicalization attempt on the (still nonexistent) resolved path
+  // has nothing to resolve and simply returns it unchanged.
+  //
+  // The escape check below is deliberately LEXICAL (plain resolve(), never
+  // canonicalRootPath) on the resolved path: whether a relative entry escapes
+  // root is a question about ".." SEGMENTS, answered by pure string math, not
+  // about where a SYMLINK at that location happens to point. Canonicalizing
+  // (following symlinks) here is a trap: a symlink that physically lives
+  // inside root but targets a sibling worktree (e.g. a shared cache file)
+  // resolves to a target outside canonRoot, misclassifying an entry that
+  // legitimately exists at root as "escaping", and promoting it to an
+  // absolute path that deepestContainer then wrongly attributes to the
+  // sibling -- a false positive, refusing a write that was already correctly
+  // homed. Symlink-following still happens, and is still needed, one step
+  // later in deepestContainer/existsUnder, whose job (does this path's
+  // CONTENT belong to this specific worktree) is a genuinely different
+  // question from whether a relative STRING escapes root.
+  const evidence = relatedFiles.filter(Boolean).map((f) => {
+    if (isAbsolute(f)) return f;
+    const resolved = resolve(canonRoot, f);
+    return isWithin(canonRoot, resolved) ? f : resolved;
+  });
+  if (!evidence.length) return [];
+  if (evidence.some((f) => existsUnder(root, f, worktrees))) return [];
+  if (relatedFiles.some((f) => f && !isAbsolute(f) && pathKnownToHistory(root, f))) return [];
+  const here = canonRoot;
+  const candidates: string[] = [];
+  for (const candidate of worktrees) {
+    if (canonicalRootPath(candidate) === here) continue;
+    if (evidence.some((f) => existsUnder(candidate, f, worktrees))) candidates.push(candidate);
+  }
+  return candidates;
+};
+
+/** True when path segment `child` (canonical) lies inside directory `parent`
+ *  (canonical) — an exact segment boundary, not a string prefix, so a sibling
+ *  `foo-other` never false-matches `foo` and `parent` itself counts as inside. */
+function isWithin(parent: string, child: string): boolean {
+  const rel = relative(parent, child);
+  return rel === "" || (rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
+}
+
+/** The worktree (from `worktrees`, which always includes root itself — see
+ *  `worktreePaths`) whose OWN directory tree most SPECIFICALLY contains ABSOLUTE
+ *  path `f` — the deepest/longest match, not merely any containing ancestor. Null
+ *  when `f` is under none of the known worktrees. `canonicalRootPath` resolves the
+ *  WHOLE path including `f`'s own final component, so a symlink reached from
+ *  OUTSIDE a worktree that happens to point INSIDE one is still found (a symlink
+ *  ALIAS to a whole worktree). This is the CANONICAL (symlink-resolved) ownership
+ *  lens; `existsUnder` also checks a LEXICAL lens via `lexicalDeepestContainer`
+ *  below, for the opposite symlink shape this lens alone cannot see. */
+function deepestContainer(f: string, worktrees: readonly string[]): string | null {
+  const canonF = canonicalRootPath(f);
+  let best: string | null = null;
+  let bestLen = -1;
+  for (const wt of worktrees) {
+    const canonWt = canonicalRootPath(wt);
+    if (!isWithin(canonWt, canonF)) continue;
+    if (canonWt.length > bestLen) {
+      best = wt;
+      bestLen = canonWt.length;
+    }
+  }
+  return best;
+}
+
+/** Walks ABSOLUTE path `f` component by component to find its PHYSICAL
+ *  location: a plain component is appended lexically and never resolved; a
+ *  ".." only consults the kernel (fully resolving whatever symlink chain led
+ *  there, via `canonicalRootPath`) when the component it's popping is ITSELF
+ *  a symlink -- the one case where the kernel's ".."-cancellation point (the
+ *  symlink's TARGET's parent) differs from the lexical parent. POSIX
+ *  pathname resolution cancels ".." against the parent of the CURRENT LOOKUP
+ *  DIRECTORY, which after traversing a symlink component is the symlink's
+ *  TARGET's parent, NOT the symlink's own lexical location (`path_resolution(7)`)
+ *  — a real `open()`/`readFile()` identity check confirms this; plain
+ *  `path.resolve()`/`path.relative()` disagree with the kernel here. A ".."
+ *  popping a plain directory stays a lexical `dirname()`, since lexical and
+ *  kernel resolution already agree there.
+ *
+ *  Resolving through the kernel unconditionally whenever `f` merely CONTAINS
+ *  a ".." (rather than deciding per component) is stronger than the problem
+ *  requires: it follows every symlink in the directory chain even when the
+ *  ".." has nothing to do with that symlink, which resolves straight through
+ *  the plain symlinked-DIRECTORY shape this function exists to serve — a
+ *  symlink physically sitting inside a worktree, whose target lives
+ *  elsewhere (e.g. a shared cache file), is still legitimately "at" that
+ *  worktree, and a file reached through it should stay attributed there
+ *  unless a ".." specifically pops THAT symlink. Deciding per component is
+ *  the narrowest discriminator that is still correct: any symlink NOT
+ *  immediately followed by a ".." is never resolved, and every ".." that
+ *  actually needs the kernel gets it, regardless of how many harmless ".."s
+ *  or plain directories surround it.
+ *
+ *  `usedKernel` tells the caller whether any kernel call actually happened, so
+ *  it knows whether `path` is canonical (and therefore whether a worktree
+ *  path must be canonicalized too before comparing) or still purely lexical.
+ *  Splits on `\` as well as `/` ONLY when the platform separator is itself
+ *  `\` (win32) -- on POSIX, `\` is an ordinary, legal filename byte, not a
+ *  separator; unconditionally treating it as one chops a single real
+ *  directory entry into two synthetic components, which can misattribute a
+ *  file whose name happens to contain a literal backslash to whichever
+ *  worktree the FIRST synthetic component's name matches. A win32 path may
+ *  legitimately use either separator, so both are split there. */
+function walkPhysicalLocation(f: string): { path: string; usedKernel: boolean } {
+  const root = parse(f).root;
+  const splitter = sep === "\\" ? /[\\/]/ : "/";
+  const segments = f.slice(root.length).split(splitter).filter(Boolean);
+  let phys = root || sep;
+  let usedKernel = false;
+  for (const seg of segments) {
+    if (seg === ".") continue;
+    if (seg !== "..") {
+      phys = join(phys, seg);
+      continue;
+    }
+    let base = phys;
+    try {
+      if (lstatSync(phys).isSymbolicLink()) {
+        base = canonicalRootPath(phys);
+        usedKernel = true;
+      }
+    } catch {
+      // unreadable or nonexistent -- fall through to a plain lexical pop
+    }
+    phys = dirname(base);
+  }
+  return { path: phys, usedKernel };
+}
+
+/** The worktree whose own directory tree most specifically contains ABSOLUTE path
+ *  `f` AS PHYSICALLY PLACED — its own final path component is never resolved
+ *  through a symlink, unlike `deepestContainer`. A symlink physically sitting
+ *  INSIDE a worktree, whose target lives elsewhere (e.g. a shared cache file), is
+ *  still legitimately "at" that worktree: `deepestContainer` alone resolves such
+ *  an `f` to whichever worktree the symlink's TARGET lives in, misattributing a
+ *  file that genuinely exists where it's spelled and refusing an
+ *  already-correctly-homed write. Ranked by the SAME "deepest/longest match" rule
+ *  as the canonical lens, so a NESTED worktree still correctly out-ranks its own
+ *  physically-containing parent root here too — this lens does not, on its own,
+ *  relax that boundary. Delegates to `walkPhysicalLocation` (above), which
+ *  decides PER PATH COMPONENT whether the kernel needs consulting at all: a
+ *  ".." only triggers a kernel call when the specific component it pops is
+ *  itself a symlink, never merely because `f` happens to contain a ".."
+ *  somewhere. */
+function lexicalDeepestContainer(f: string, worktrees: readonly string[]): string | null {
+  const { path: spelled, usedKernel } = walkPhysicalLocation(f);
+  let best: string | null = null;
+  let bestLen = -1;
+  for (const wt of worktrees) {
+    // `wt` must be canonicalized too, but ONLY to match a canonical `spelled`
+    // -- comparing a canonical spelled path against a raw wt string would
+    // spuriously fail to match even a worktree with no symlinks in its own
+    // path, on any platform where the canonical form differs cosmetically
+    // (e.g. a case-preserving vs case-folding mount).
+    const compareWt = usedKernel ? canonicalRootPath(wt) : wt;
+    if (!isWithin(compareWt, spelled)) continue;
+    if (compareWt.length > bestLen) {
+      best = wt;
+      bestLen = compareWt.length;
+    }
+  }
+  return best;
+}
+
+/** True when `p` names an existing FILE — never a directory. `existsSync` alone
+ *  would be true for a directory too; since a match here short-circuits the whole
+ *  misroute check (`misroutedWorktreeCandidates`'s early `.some()`), a single
+ *  DIRECTORY entry among a call's file evidence would silently disable the guard
+ *  for every other entry in the same call — including the natural "." / "" an
+ *  agent might send meaning "the repo". */
+function isFile(p: string): boolean {
+  try {
+    return statSync(p).isFile();
+  } catch {
+    return false;
+  }
+}
+
+function existsUnder(dir: string, f: string, worktrees: readonly string[]): boolean {
+  if (!f) return false; // "" / "./" normalize to "" — nothing to compare, never `dir` itself
+  if (isAbsolute(f)) {
+    if (!isFile(f)) return false;
+    // `dir` owns `f` if EITHER lens says so, checked independently -- not a single
+    // merged ranking across both, which would let a longer-named sibling
+    // out-rank root's own genuine lexical claim by string length alone. Each
+    // lens resolves nested-vs-parent ambiguity within itself (see each
+    // function's own doc comment), so this OR never lets root reclaim a file
+    // that legitimately belongs to a worktree nested inside it.
+    const canonicalOwner = deepestContainer(f, worktrees);
+    if (canonicalOwner && canonicalRootPath(canonicalOwner) === canonicalRootPath(dir)) return true;
+    const lexicalOwner = lexicalDeepestContainer(f, worktrees);
+    return !!lexicalOwner && canonicalRootPath(lexicalOwner) === canonicalRootPath(dir);
+  }
+  return isFile(join(dir, f));
+}
+
+/** Shared misroute-guard refusal for the three auto-committing write tools that
+ *  name files: `hunch_record_decision`, `hunch_record_correction`, and
+ *  `hunch_record_finding` — one message so the three call sites stay in
+ *  lockstep instead of drifting. Returns the refusal ToolResult when
+ *  `misroutedWorktreeCandidates` finds a better home, else null (proceed as
+ *  normal). `subject` names what's being recorded, e.g. `"Foo"` or
+ *  `finding "Foo"`, for the refusal text. Callers pass file evidence RAW
+ *  (posix-normalized only) — `misroutedWorktreeCandidates` itself understands
+ *  both relative and absolute entries, so no pre-relativization step is
+ *  needed or correct here (see its doc comment on why relativizing against
+ *  `root` alone would drop the exact sibling-worktree case this guard exists
+ *  to catch). */
+function misrouteGuard(root: string, subject: string, relatedFiles: readonly string[]): ToolResult | null {
+  const misroutes = misroutedWorktreeCandidates(root, relatedFiles);
+  if (!misroutes.length) return null;
+  const branch = currentBranch(root);
+  const plural = misroutes.length > 1;
+  const where = plural
+    ? `they do in these linked worktrees: ${misroutes.join(", ")}`
+    : `they do in the linked worktree ${misroutes[0]}`;
+  const retry = plural
+    ? `retry with cwd pointing at whichever of those is actually correct`
+    : `retry with cwd:"${misroutes[0]}"`;
+  return err(
+    `Refusing to record ${subject} in ${root}${branch ? ` (branch ${branch})` : ""}: ` +
+    `none of the files it names exist there, but ${where}. This call is very likely running in the ` +
+    `wrong git worktree — ${retry}, or wherever this work actually happened.`,
+  );
+}
 
 /** Where a capture keyed to `home` actually lands: the private overlay directory when
  *  one is configured, else the public repo root. Centralizes the branch used at every
@@ -1645,6 +1983,8 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
     },
     async ({ decision, capture_token, task_id }): Promise<ToolResult> => {
       try {
+        const misroute = misrouteGuard(root, `"${decision.title.slice(0, 60)}"`, (decision.related_files ?? []).map(toPosixTarget));
+        if (misroute) return misroute;
         // Commit-keyed on the CANONICAL full sha (resolved via git rev-parse), so a
         // human passing the short sha they see in `commit` produces the SAME id as
         // the auto-sync path (which keys on the full sha) — UPGRADING the auto-draft
@@ -1859,6 +2199,21 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
     async (input): Promise<ToolResult> => {
       try {
         if (!input.rule || !input.rule.trim()) return invalid("rule is required — state the invariant in plain words.");
+        // Same misroute guard as hunch_record_decision: a scope_hint_file that exists in a
+        // sibling linked worktree but not here is very likely a subagent that forgot cwd,
+        // about to silently scope-and-commit a constraint against the wrong checkout.
+        // Passed RAW (posix-normalized only) — misroutedWorktreeCandidates understands
+        // absolute paths itself (see its doc comment). The constraint's own scope glob
+        // below is a DIFFERENT job, still relativized against root by
+        // buildCorrectionConstraint internally — a sibling worktree's absolute path could
+        // never become a usable scope glob against root either way, only this guard's job
+        // of naming WHICH worktree it belongs to.
+        const correctionMisroute = misrouteGuard(
+          root,
+          `correction "${input.rule.slice(0, 60)}"`,
+          input.scope_hint_file ? [toPosixTarget(input.scope_hint_file)] : [],
+        );
+        if (correctionMisroute) return correctionMisroute;
         // root: relativizes an ABSOLUTE scope_hint_file. Agents naturally send absolute
         // paths (edit-tool payloads and MCP roots are absolute) and every consumer matches
         // repo-relative — without this the rule would be blocking-but-inert and would leak
@@ -1946,6 +2301,9 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
       try {
         if (!finding.title.trim()) return invalid("title is required.");
         if (!finding.observation.trim()) return invalid("observation is required — state what you saw.");
+        // Same misroute guard as hunch_record_decision.
+        const findingMisroute = misrouteGuard(root, `finding "${finding.title.slice(0, 60)}"`, (finding.affected_files ?? []).map(toPosixTarget));
+        if (findingMisroute) return findingMisroute;
         const id = findingId(finding.title);
         const home = store.captureHome(!!finding.private);
         const existing = home === "private" ? store.getPrivateRec("findings", id) : store.json.get("findings", id);
