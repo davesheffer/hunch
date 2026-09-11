@@ -8,6 +8,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { resolveGroundingConflicts, mergeGroundingFile } from "../src/core/groundingMerge.js";
 import { installMergeDriver } from "../src/integrations/mergeDriver.js";
+import { hunchAttributesAreSafe } from "../src/core/overlaySafety.js";
 import { classifyGroundingBlock } from "../src/core/groundingLag.js";
 
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
@@ -245,4 +246,20 @@ test("end-to-end: a real `git merge` with the driver installed leaves a genuine 
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+
+test("installed grounding attributes permit private capture without permitting arbitrary transforms", () => {
+  const root = mkdtempSync(join(tmpdir(), "hunch-grounding-attribute-safety-"));
+  try {
+    git(root, "init", "-q");
+    installMergeDriver(root, "hunch");
+    const attrs = readFileSync(join(root, ".gitattributes"), "utf8");
+    assert.equal(hunchAttributesAreSafe(attrs), true, "the installer's exact rules must allow private capture");
+    for (const unsafe of [
+      "*.json merge=hunch-grounding", "AGENTS.md filter=evil", "AGENTS.md merge=evil",
+      "AGENTS.md merge=hunch-grounding filter=evil", "*.json text eol=crlf",
+      "AGENTS.md working-tree-encoding=UTF-16", "*.md merge=hunch-grounding",
+    ]) assert.equal(hunchAttributesAreSafe(attrs + unsafe + "\n"), false, unsafe);
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });
