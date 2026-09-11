@@ -823,7 +823,13 @@ function isDerivedStoreArtifact(relativeName: string): boolean {
     // `hunch serve` flushes INSIDE its cross-process write lock, so the lock file is always
     // staged alongside the record; treating it as a violation made every served write skip
     // the commit quietly and report durability "local" forever (1.26.0/1.26.1).
-    || relativeName === "write.lock";
+    || relativeName === "write.lock"
+    // The post-merge hook's detected-but-unconfirmed repair queue and its
+    // rejected-match tombstones (repairqueue.ts): clone-local scratch, never a
+    // memory record — must never ride a public flush's `git add .` or an
+    // overlay's force-add allowlist into shared/pushed memory.
+    || relativeName === "pending-commit-repairs.json"
+    || relativeName === "dropped-commit-repairs.json";
 }
 
 /** Enumerate ordinary JSON files already contained under an overlay. Push-capable
@@ -2014,6 +2020,93 @@ export function commitChanges(sha: string, cwd: string): CommitFileChange[] {
     else out.push({ status: "modified", before: file, after: file });
   }
   return out;
+}
+
+export interface CommitCandidate {
+  sha: string;
+  files: string[];
+}
+
+/** Default cap on how many commits mergeRangeChanges will inspect. A `git
+ *  pull` bringing in an unusually large number of commits (hundreds) would
+ *  otherwise spawn one `diff-tree` per commit with no bound — cheap insurance
+ *  against an unbounded background hook run, not a hard product limit. */
+const DEFAULT_MERGE_RANGE_CAP = 500;
+
+/** Every commit newly reachable in `oldRef..newRef` (capped to the most
+ *  recent `maxCount`), with the files each one changed (rename-aware, via
+ *  commitChanges). Used to find the commit a squash-merge produced from a
+ *  set of now-orphaned source-branch commits. */
+export function mergeRangeChanges(oldRef: string, newRef: string, cwd: string, maxCount = DEFAULT_MERGE_RANGE_CAP): CommitCandidate[] {
+  const shas = gitSafe(["rev-list", "--abbrev-commit", `--max-count=${maxCount}`, `${oldRef}..${newRef}`], cwd).split("\n").filter(Boolean).reverse();
+  return shas.map((sha) => ({
+    sha,
+    // A deletion is never a sensible repair target — a decision's provenance
+    // should never resolve to the commit that removed the file it's about.
+    files: commitChanges(sha, cwd).filter((c) => c.status !== "deleted").map((c) => c.after ?? c.before).filter((f): f is string => !!f),
+  }));
+}
+
+/** Batched existence check for many commit shas at once — one `git cat-file
+ *  --batch-check` process instead of one `rev-parse --verify` per sha. Used
+ *  by drift.ts's default commitResolvable so hunch drift/heal/doctor spawn a
+ *  single git process regardless of how many decisions carry a commit, not
+ *  one per decision. Returns the subset of `shas` that resolve to a real
+ *  commit object, or `null` if the check itself failed to run (not a git
+ *  repo, git missing, timeout) — distinct from an empty set, which means
+ *  "checked, and none of them resolve." A caller that collapsed those two
+ *  would flag every commit as unresolvable on a transient environment error
+ *  instead of failing open. */
+export function commitsExist(shas: readonly string[], cwd: string): Set<string> | null {
+  const resolvable = new Set<string>();
+  if (!shas.length) return resolvable;
+  // Same shape guard as commitRepairStatus. Without it, a malformed value
+  // embedding its own newline would count as more input lines than entries
+  // in `shas`, shifting every later sha's output line and misclassifying it.
+  const valid = shas.filter((sha) => /^[0-9a-f]{7,64}$/i.test(sha));
+  if (!valid.length) return resolvable;
+  let raw: string;
+  try {
+    raw = execFileSync("git", ["-C", cwd, "cat-file", "--batch-check"], {
+      encoding: "utf8",
+      input: valid.map((sha) => `${sha}^{commit}\n`).join(""),
+      stdio: ["pipe", "pipe", "ignore"],
+      timeout: 10_000,
+    });
+  } catch {
+    return null;
+  }
+  const lines = raw.split("\n").filter(Boolean);
+  for (let i = 0; i < valid.length && i < lines.length; i++) {
+    if (!lines[i]!.endsWith(" missing")) resolvable.add(valid[i]!);
+  }
+  return resolvable;
+}
+
+export type CommitRepairStatus = "orphaned" | "current" | "unresolvable" | "unknown";
+
+/** Classifies `commit` relative to `ref` for squash-merge repair eligibility.
+ *  "orphaned" (exists in this repo, but is not an ancestor of `ref`) is the
+ *  ONLY status planCommitRepair should ever act on. "unresolvable" (the
+ *  commit doesn't exist here at all) is explicitly out of repair scope —
+ *  drift.ts's commit-unresolvable kind is what flags that case, because
+ *  there's no reliable signal left to match a replacement against. "unknown"
+ *  (the git command itself failed to run — timeout, git missing) must never
+ *  be treated as repair-eligible; collapsing "false" and "error" into one
+ *  boolean is exactly the bug this type exists to prevent. */
+export function commitRepairStatus(commit: string, ref: string, cwd: string): CommitRepairStatus {
+  if (!/^[0-9a-f]{7,64}$/i.test(commit)) return "unresolvable";
+  try {
+    execFileSync("git", ["-C", cwd, "rev-parse", "--verify", "--quiet", `${commit}^{commit}`], { stdio: "ignore", timeout: 5_000 });
+  } catch (e) {
+    return typeof (e as { status?: number }).status === "number" ? "unresolvable" : "unknown";
+  }
+  try {
+    execFileSync("git", ["-C", cwd, "merge-base", "--is-ancestor", commit, ref], { stdio: "ignore", timeout: 5_000 });
+    return "current";
+  } catch (e) {
+    return (e as { status?: number }).status === 1 ? "orphaned" : "unknown";
+  }
 }
 
 /** Machine-generated paths that carry no design "why" — lockfiles, build output,

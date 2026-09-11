@@ -77,6 +77,8 @@ export const OVERLAY_IGNORE = [
   ".hunch-cache/",
   ".hunch/local.json",
   ".hunch/events.log",
+  ".hunch/pending-commit-repairs.json",
+  ".hunch/dropped-commit-repairs.json",
   ".hunch-private/",
   "# <<< hunch <<<",
   "",

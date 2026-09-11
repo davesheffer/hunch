@@ -37,7 +37,17 @@ export interface HookInstall {
   action: "created" | "appended" | "updated" | "unchanged";
 }
 
-export function installPostCommitHook(root: string, invocation: string, opts: { private?: boolean; commit?: boolean; localOnly?: boolean } = {}): HookInstall {
+function escapeRe(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Shared idempotent create/append/update-in-place logic for every hunch git
+ *  hook: write a fresh hook file, replace our own managed block in place if the
+ *  invocation changed, or append after any pre-existing (non-hunch) hook body
+ *  without clobbering it. Used by all three hook installers below — the three
+ *  copies had already drifted (installPreCommitHook was missing the chmodSync
+ *  on its "updated" path) before this was unified. */
+function installManagedBlock(root: string, hookName: string, mark: string, end: string, blk: string): HookInstall {
   const dir = hooksDir(root);
   // `git rev-parse --git-path hooks` returns a path relative to the repo in a
   // normal checkout, but an ABSOLUTE one inside a linked worktree (the shared
@@ -45,8 +55,7 @@ export function installPostCommitHook(root: string, invocation: string, opts: { 
   // a bare startsWith("/") misfired on Windows worktrees → a doubled junk path.
   const abs = isAbsolute(dir) ? dir : join(root, dir);
   mkdirSync(abs, { recursive: true });
-  const hookPath = join(abs, "post-commit");
-  const blk = block(invocation, opts);
+  const hookPath = join(abs, hookName);
 
   if (!existsSync(hookPath)) {
     writeFileSync(hookPath, `#!/bin/sh\n${blk}\n`);
@@ -55,9 +64,8 @@ export function installPostCommitHook(root: string, invocation: string, opts: { 
   }
 
   const cur = readFileSync(hookPath, "utf8");
-  if (cur.includes(MARK)) {
-    // replace our managed block (invocation may have changed)
-    const updated = cur.replace(new RegExp(`${escapeRe(MARK)}[\\s\\S]*?${escapeRe(ENDMARK)}`), blk);
+  if (cur.includes(mark)) {
+    const updated = cur.replace(new RegExp(`${escapeRe(mark)}[\\s\\S]*?${escapeRe(end)}`), blk);
     if (updated === cur) return { path: hookPath, action: "unchanged" };
     writeFileSync(hookPath, updated);
     chmodSync(hookPath, 0o755);
@@ -70,8 +78,8 @@ export function installPostCommitHook(root: string, invocation: string, opts: { 
   return { path: hookPath, action: "appended" };
 }
 
-function escapeRe(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+export function installPostCommitHook(root: string, invocation: string, opts: { private?: boolean; commit?: boolean; localOnly?: boolean } = {}): HookInstall {
+  return installManagedBlock(root, "post-commit", MARK, ENDMARK, block(invocation, opts));
 }
 
 const PRE_MARK = "# >>> hunch pre-commit (constraint guard) >>>";
@@ -83,73 +91,91 @@ const PRE_END = "# <<< hunch pre-commit <<<";
  *  blocking invariant (see strictgate.ts), so it's safe on a shared repo.
  *  Preserves any existing pre-commit hook. */
 export function installPreCommitHook(root: string, invocation: string, strict = false): HookInstall {
-  const dir = hooksDir(root);
-  // `git rev-parse --git-path hooks` returns a path relative to the repo in a
-  // normal checkout, but an ABSOLUTE one inside a linked worktree (the shared
-  // hooks dir). isAbsolute() handles both POSIX (/…) and Windows (C:\… / C:/…);
-  // a bare startsWith("/") misfired on Windows worktrees → a doubled junk path.
-  const abs = isAbsolute(dir) ? dir : join(root, dir);
-  mkdirSync(abs, { recursive: true });
-  const hookPath = join(abs, "pre-commit");
   const cmd = `${invocation} check --staged${strict ? " --strict" : ""}`;
   const blk = [PRE_MARK, strict ? cmd : `${cmd} || true`, PRE_END].join("\n");
-
-  if (!existsSync(hookPath)) {
-    writeFileSync(hookPath, `#!/bin/sh\n${blk}\n`);
-    chmodSync(hookPath, 0o755);
-    return { path: hookPath, action: "created" };
-  }
-  const cur = readFileSync(hookPath, "utf8");
-  if (cur.includes(PRE_MARK)) {
-    const updated = cur.replace(new RegExp(`${escapeRe(PRE_MARK)}[\\s\\S]*?${escapeRe(PRE_END)}`), blk);
-    if (updated === cur) return { path: hookPath, action: "unchanged" };
-    writeFileSync(hookPath, updated);
-    return { path: hookPath, action: "updated" };
-  }
-  writeFileSync(hookPath, cur.endsWith("\n") ? `${cur}${blk}\n` : `${cur}\n${blk}\n`);
-  chmodSync(hookPath, 0o755);
-  return { path: hookPath, action: "appended" };
+  return installManagedBlock(root, "pre-commit", PRE_MARK, PRE_END, blk);
 }
 
-const MERGE_MARK = "# >>> hunch post-merge >>>";
-const MERGE_END = "# <<< hunch post-merge <<<";
+// Original marker, kept byte-for-byte for backward compat: an existing install's
+// grounding-refresh block must still be found and updated in place by its own
+// exact marker text (fnd_c402046ac7).
+const GROUNDING_MERGE_MARK = "# >>> hunch post-merge >>>";
+const GROUNDING_MERGE_END = "# <<< hunch post-merge <<<";
+// Distinct marker for the (newer) repair-provenance half, so the two blocks
+// never collide inside the same post-merge hook file and each can be
+// independently created/updated/removed without touching the other.
+const REPAIR_MERGE_MARK = "# >>> hunch post-merge (repair-provenance) >>>";
+const REPAIR_MERGE_END = "# <<< hunch post-merge (repair-provenance) <<<";
 
-/** Install a post-merge hook that re-syncs the committed grounding docs when a merge
- *  brought memory in behind them (fnd_c402046ac7). Two branches that each captured a
- *  record regenerate the same "N+1" counts line; git merges identical lines silently
- *  and the doc ends up one behind the store. The hook regenerates the existing docs
- *  from the PUBLIC store right after a local merge/pull that touched .hunch/, so the
- *  next commit carries them. Foreground (it rewrites five files), loop-guarded via
- *  HUNCH_SYNC, and it can never fail the merge. Preserves any existing hook. */
-export function installPostMergeHook(root: string, invocation: string): HookInstall {
-  const dir = hooksDir(root);
-  const abs = isAbsolute(dir) ? dir : join(root, dir);
-  mkdirSync(abs, { recursive: true });
-  const hookPath = join(abs, "post-merge");
-  const blk = [
-    MERGE_MARK,
+function groundingMergeBlock(invocation: string): string {
+  return [
+    GROUNDING_MERGE_MARK,
     'if [ -z "$HUNCH_SYNC" ]; then',
     "  if ! git diff --quiet ORIG_HEAD HEAD -- .hunch 2>/dev/null; then",
     `    ( HUNCH_SYNC=1 ${invocation} grounding --refresh 2>/dev/null || true )`,
     "  fi",
     "fi",
-    MERGE_END,
+    GROUNDING_MERGE_END,
   ].join("\n");
+}
 
-  if (!existsSync(hookPath)) {
-    writeFileSync(hookPath, `#!/bin/sh\n${blk}\n`);
-    chmodSync(hookPath, 0o755);
-    return { path: hookPath, action: "created" };
-  }
-  const cur = readFileSync(hookPath, "utf8");
-  if (cur.includes(MERGE_MARK)) {
-    const updated = cur.replace(new RegExp(`${escapeRe(MERGE_MARK)}[\\s\\S]*?${escapeRe(MERGE_END)}`), blk);
-    if (updated === cur) return { path: hookPath, action: "unchanged" };
-    writeFileSync(hookPath, updated);
-    chmodSync(hookPath, 0o755);
-    return { path: hookPath, action: "updated" };
-  }
-  writeFileSync(hookPath, cur.endsWith("\n") ? `${cur}${blk}\n` : `${cur}\n${blk}\n`);
-  chmodSync(hookPath, 0o755);
-  return { path: hookPath, action: "appended" };
+function repairProvenanceMergeBlock(invocation: string): string {
+  return [
+    REPAIR_MERGE_MARK,
+    'if [ -z "$HUNCH_MERGE_SYNC" ]; then',
+    "  export HUNCH_MERGE_SYNC=1",
+    // No --apply: this only detects a squash-merge orphaning a decision's commit
+    // and queues the match (.hunch/pending-commit-repairs.json, local-only) for a
+    // human to confirm via `hunch repair-provenance --apply` — the match signal
+    // (file-set overlap, not git's own rename detection) isn't strong enough to
+    // trust an unattended, backgrounded write into shared team memory.
+    `  ( ${invocation} repair-provenance --from-hook --quiet >/dev/null 2>&1 || true ) &`,
+    "fi",
+    REPAIR_MERGE_END,
+  ].join("\n");
+}
+
+/** How significant a combined install result is, for picking one HookInstall
+ *  action out of two independent sub-installs into the same file — "created"
+ *  (the file itself is new) outranks "appended"/"updated" (an existing file
+ *  changed), which outrank "unchanged". */
+const ACTION_RANK: Record<HookInstall["action"], number> = { created: 3, appended: 2, updated: 2, unchanged: 1 };
+
+/** Install a post-merge hook carrying TWO independently-managed blocks:
+ *  re-sync the committed grounding docs when a merge brought memory in behind
+ *  them (fnd_c402046ac7, HUNCH_SYNC-guarded, foreground — it rewrites five
+ *  files and can never fail the merge), and opportunistically DETECT a
+ *  decision's commit provenance going orphaned right after a squash-merged
+ *  branch lands locally (including a fast-forward from `git pull`) — while
+ *  the original commits are still fully intact and matchable — queuing the
+ *  match for a human to confirm via `hunch repair-provenance --apply`
+ *  (HUNCH_MERGE_SYNC-guarded, backgrounded; own env var since this hook makes
+ *  no commit of its own and so can't reuse HUNCH_SYNC's re-trigger guard).
+ *  Each block is keyed by its own marker pair (installManagedBlock), so
+ *  re-running updates only its own block, preserves the other untouched, and
+ *  a repo carrying only one half (an older install, or a hand-edited hook)
+ *  gets the other appended rather than clobbered. */
+export function installPostMergeHook(root: string, invocation: string): HookInstall {
+  const grounding = installManagedBlock(root, "post-merge", GROUNDING_MERGE_MARK, GROUNDING_MERGE_END, groundingMergeBlock(invocation));
+  const repair = installManagedBlock(root, "post-merge", REPAIR_MERGE_MARK, REPAIR_MERGE_END, repairProvenanceMergeBlock(invocation));
+  return ACTION_RANK[repair.action] >= ACTION_RANK[grounding.action] ? repair : grounding;
+}
+
+/** Read-only diagnostic (used by `hunch doctor`): which of the three managed
+ *  hooks are currently present. Never writes anything — a hook counts as
+ *  installed if its managed marker is present, regardless of whether the
+ *  invocation inside it happens to be stale. postMerge requires BOTH halves
+ *  (grounding-refresh and repair-provenance) present — a repo carrying only
+ *  one is a partial install, same as `installPostMergeHook` self-healing it. */
+export function hookStatus(root: string): { postCommit: boolean; preCommit: boolean; postMerge: boolean } {
+  const dir = hooksDir(root);
+  const abs = isAbsolute(dir) ? dir : join(root, dir);
+  const has = (name: string, mark: string): boolean => {
+    try { return readFileSync(join(abs, name), "utf8").includes(mark); } catch { return false; }
+  };
+  return {
+    postCommit: has("post-commit", MARK),
+    preCommit: has("pre-commit", PRE_MARK),
+    postMerge: has("post-merge", GROUNDING_MERGE_MARK) && has("post-merge", REPAIR_MERGE_MARK),
+  };
 }
