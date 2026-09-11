@@ -1,0 +1,54 @@
+{
+  "id": "dec_d928ec4b2c",
+  "title": "Task-report application support comes only from Hunch's own rule evaluation, never from agent claims or passing commands",
+  "topic": "task-report-application-support",
+  "status": "accepted",
+  "context": "The release plan for task contribution reports requires a 'supported application' grade with independent evidence linking a delivered lesson to the action, checked against a declared validation rule; file overlap alone is insufficient. Codex's implementation left this pending: claims were agent-reported and checks were command results with no link to the lesson.",
+  "decision": "runReportConformance (src/core/taskReportEvidence.ts) evaluates each delivered constraint/decision revision's OWN declared rule against the working tree's changes vs HEAD: a constraint's forbids matcher over the added lines of its scoped changed files; a decision's conformance predicates over the current working graph, only when a predicate subject is defined in a changed file. Outcomes: satisfied | violated | not-exercised | unavailable, bound to a bounded source snapshot and stored as a 'conformance' report event. A claim becomes rule-supported only while a satisfied evaluation of the same record revision matches the current source; the attribution stays agent-reported. Violations are always shown on the card. Scope-only constraints and changed stored revisions are 'unavailable', never evaluated in place. It runs automatically on a completed finish (CLI, MCP hunch_task, engine API) and via `hunch task conform`; no MCP tool accepts a submitted verdict.",
+  "consequences": [
+    "Support exists only for lessons with a machine-checkable rule; most prose-only decisions stay agent-reported",
+    "Finish now performs a git diff and, for decisions with predicates, a working-tree repo scan; failures are disclosed as unknowns and never block finish",
+    "Public export omits rule evaluations"
+  ],
+  "alternatives_rejected": [
+    "Agent-declared `validated_by: check_id` linking a claim to a passing command: the linkage is still the agent's choice, so a passing unrelated command could upgrade an application",
+    "Upgrading attribution when a claim's record scope overlaps changed files: file overlap alone is explicitly insufficient in the plan's evidence rules",
+    "Treating any passing local check as support for all claims in the task: the HTML/card must not upgrade agent wording on the strength of an unrelated pass"
+  ],
+  "rejected_tripwires": [],
+  "related_components": [],
+  "related_files": [
+    "src/core/taskReport.ts",
+    "src/core/taskReportEvidence.ts",
+    "src/core/taskReportRender.ts",
+    "src/cli/taskReport.ts",
+    "src/mcp/taskReportTools.ts",
+    "src/taskReports.ts",
+    "docs/task-reports.md"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-09-11T12:43:20.178Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "premises": [],
+  "provenance": {
+    "source": "agent_recorded",
+    "confidence": 0.75,
+    "evidence": [
+      "src/core/taskReport.ts",
+      "src/core/taskReportEvidence.ts",
+      "src/core/taskReportRender.ts",
+      "src/cli/taskReport.ts",
+      "src/mcp/taskReportTools.ts",
+      "src/taskReports.ts",
+      "docs/task-reports.md"
+    ]
+  },
+  "date": "2026-09-11T12:43:20.178Z"
+}

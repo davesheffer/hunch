@@ -133,6 +133,7 @@ Read the [Project DNA contract](docs/project-dna.md) and broader [Project DNA vi
 | `hunch compare branch-a branch-b` | Rank candidate changes by invariant/decision conflicts |
 | `hunch prove origin/main --public-only` | Produce a publication-safe `hunch.change-proof/1` artifact for an exact committed change |
 | `hunch landscape review` | Inspect a hash-bound repository landscape without writing authority |
+| `hunch task start "<title>"` · `hunch report <id> --html` | See what Hunch contributed to a task: the lesson recalled, the agent's stated application, whether the lesson's own rule held on the changed files, and the command Hunch observed — separate evidence grades, in a local evidence view |
 | `hunch now` | See recent memory and live decision-backed roadmap |
 | `hunch escalations` | See questions that genuinely require a human answer |
 | `hunch doctor` | Diagnose setup, provider, index or overlay problems |

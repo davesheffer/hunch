@@ -1,5 +1,41 @@
 # Changelog
 
+## 1.32.0 — 2026-09-11
+
+### See what Hunch contributed
+
+Every task can now carry an inspectable contribution report. `hunch_task` over
+MCP (or `hunch task start`) opens a report; `hunch_context` deliveries are retained
+per task with exact record revisions; `hunch task verify <id> -- <command>` observes
+a real local check bound to source snapshots; decision, correction and finding
+captures record their save, commit and push proofs; the native edit gate's denials
+are linked; and finishing prints a concise card with a link to a self-contained
+local HTML evidence view (`hunch report <id> --html`). A public-only export omits
+task prose and private memory. `hunch report --lesson` follows one lesson revision
+across tasks.
+
+Evidence grades stay separate: delivered, agent-reported application,
+rule-supported application, observed command result, saved locally / committed /
+pushed, and explicit unknowns. Rule support comes only from Hunch's own
+deterministic evaluation of a delivered lesson's declared rule (a constraint's
+forbids matcher or a decision's conformance predicate) on the files the task
+changed (`hunch task conform`, automatic on finish). File overlap, agent prose and
+a passing unrelated command never upgrade a claim; a tripped rule is shown.
+
+Claude Code 2.1.196+ prompt hooks create the report natively and a nonblocking
+Stop notice shows the card; Codex and other hosts use the managed MCP
+instructions. A provider-neutral engine API (`createTaskReporter` from
+`@davesheffer/hunch/reports`) lets any harness own lifecycle and presentation.
+`hunch task presentation off` silences cards; observations expire after 90 days;
+`hunch update` refreshes existing instructions through `integrations repair-pins`.
+Automatic display is advertised only for the hosts exercised in
+`docs/task-report-qualification.md`; interactive-terminal display and the user
+acceptance sessions listed there remain open.
+
+Also: the memory retrieval prior is recalibrated from 12 to 16 positions to repair
+measured dilution, the served ledger gains a busy timeout, and the release
+allowlists accept the packaged declaration closure.
+
 ## 1.31.0 — 2026-09-10
 
 Agent launches now follow the initiating agent across synthesis, verification,

@@ -62,6 +62,10 @@ import { PROJECT_DNA_DELTA_SCHEMA_VERSION, diffProjectDna } from "../core/projec
 import { projectDnaDeliverySupplement } from "../core/projectDnaDelivery.js";
 import { armExecutionObligations, loadPipelineState, savePipelineState } from "../core/pipeline.js";
 import { recordServed } from "../core/served.js";
+import { TaskIdSchema, recordTaskDelivery } from "../core/taskReport.js";
+import { observeReportCapture } from "../core/taskReportCapture.js";
+import { snapshotDeliveredRecords } from "../core/taskReportEvidence.js";
+import { registerTaskReportTools } from "./taskReportTools.js";
 import { EdgeSchema, ResourceSchema, type Runbook } from "../core/types.js";
 import { compareCandidates } from "../core/compare.js";
 import { checkConformance } from "../core/conformance.js";
@@ -886,6 +890,8 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
     },
   );
 
+  registerTaskReportTools(server, () => root, () => store);
+
   // -- hunch_runbook --------------------------------------------------------
   server.registerTool(
     "hunch_runbook",
@@ -1209,10 +1215,26 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
         budget_tokens: z.number().optional().describe("Rough token budget for the brief (default 1500)."),
         profile: z.enum(DELIVERY_PROFILES).optional().describe("Delivery role: builder (default), reviewer, or architect. Changes non-blocking order only."),
         as_of: z.string().optional().describe("Time-travel ref (commit/tag/branch): assemble the slice as it stood then."),
+        task_id: TaskIdSchema.optional().describe("Exact task ID from hunch_task; records this delivery for the task's contribution report."),
+        cwd: cwdHintField,
       },
       outputSchema: DELIVERY_OUTPUT_SCHEMA,
     },
-    async ({ target, budget_tokens, profile, as_of }, extra): Promise<ToolResult> => {
+    async ({ target, budget_tokens, profile, as_of, task_id }, extra): Promise<ToolResult> => {
+      const deliver = (envelope: DeliveryEnvelope): ToolResult => {
+        const result = deliveredContext(root, as_of ? `${target} (as_of:${as_of})` : target, envelope, extra.sessionId);
+        if (task_id) {
+          try {
+            // Historical contexts must not borrow today's record text/revision.
+            const records = as_of ? [] : snapshotDeliveredRecords(store, envelope);
+            const occurrence = recordTaskDelivery(root, task_id, envelope, records);
+            result.content.push({ type: "text", text: `Task evidence: ${task_id} · occurrence ${occurrence}.\n${records.slice(0, 20).map(r => `${r.record_id} @ ${r.content_hash}`).join("\n")}${records.length > 20 ? "\nMore record identities: hunch_report(task_id)." : ""}` });
+          } catch {
+            result.content.push({ type: "text", text: `Task evidence could not be recorded for ${task_id}. Context remains available; this delivery's report attribution is unverified. Check the task ID, working directory, and local ledger.` });
+          }
+        }
+        return result;
+      };
       const asOf = as_of ? asOfDate(as_of, root) : undefined;
       if (as_of && !asOf) return invalid(`Could not resolve as_of "${as_of}" to a commit.`);
       const ctx = store.assembleContext(target, budget_tokens ?? 1500, { asOf });
@@ -1275,11 +1297,11 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
               })),
             ],
           });
-          return deliveredContext(root, target, envelope, extra.sessionId);
+          return deliver(envelope);
         }
       }
       const envelope = buildDeliveryEnvelope(ctx, options);
-      return deliveredContext(root, as_of ? `${target} (as_of:${as_of})` : target, envelope, extra.sessionId);
+      return deliver(envelope);
     },
   );
 
@@ -1617,10 +1639,11 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
           private: z.boolean().optional().describe("write into the PRIVATE overlay store (HUNCH_PRIVATE_DIR) instead of the committed repo — for sensitive decisions kept out of a public repo. Errors if no private store is configured."),
         }),
         capture_token: z.string().optional().describe("token from hunch_capture_decision — proves this write is the tail of a grilling interview. Omit only for a quick manual record (a deprecation nudge is returned)."),
+        task_id: TaskIdSchema.optional().describe("Exact task ID for observing this successful save; reporting never changes capture authority."),
         cwd: cwdHintField,
       },
     },
-    async ({ decision, capture_token }): Promise<ToolResult> => {
+    async ({ decision, capture_token, task_id }): Promise<ToolResult> => {
       try {
         // Commit-keyed on the CANONICAL full sha (resolved via git rev-parse), so a
         // human passing the short sha they see in `commit` produces the SAME id as
@@ -1763,7 +1786,8 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
         // closes the other, leaving two live decisions on one topic and grounding
         // silently injecting nothing for it. The guard throws; the surrounding catch
         // turns that into a clean tool error instead of a silent twin.
-        store.putCapture("decisions", rec, !!decision.private);
+        const stored = store.putCapture("decisions", rec, !!decision.private);
+        const observed = observeReportCapture(root, task_id, "decisions", stored, home, !!existing, home === "private" ? store.privateDir ?? undefined : hunchPaths(root).hunch);
         // Invalidate, don't delete: closing the superseded decision's valid-time window
         // (+ a supersedes edge) preserves the why-it-changed trail. Route the close to the
         // same store the new record landed in — a private decision supersedes within the
@@ -1776,8 +1800,8 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
         // Auto-flush the store the record landed in (on by default in every mode): a private
         // record commits+pushes its overlay repo; a public one commits .hunch/ in THIS repo
         // (commit only — it rides the user's next push, never auto-pushing their code branch).
-        const flush = flushCapture(store, hunchPaths(root).hunch, !!decision.private, `hunch: capture ${id}`, startupTeamRoute ?? undefined);
-        const flushed = flushNote(flush, home, store.mode) + publicHomeNote(home, store.hasPrivate, rec, hunchPaths(root).hunch);
+        const flush = flushCapture(store, hunchPaths(root).hunch, !!decision.private, `hunch: capture ${id}`, startupTeamRoute ?? undefined, observed.observe);
+        const flushed = flushNote(flush, home, store.mode) + publicHomeNote(home, store.hasPrivate, rec, hunchPaths(root).hunch) + observed.note;
         // Capture-session gate (staged deprecation, §9.3): the token was consumed
         // above (it also decides the provenance tier). No token still writes
         // (non-breaking) but lands as agent_recorded with a nudge toward /capture.
@@ -1828,6 +1852,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
         source_decision: z.string().optional().describe("id of a decision this correction derives from."),
         private: z.boolean().optional().describe("write into the PRIVATE overlay store (HUNCH_PRIVATE_DIR) instead of the committed repo — a sensitive rule enforced locally (pre-edit hook + local check) but never exposed in a public PR comment. Errors if no private store is configured."),
         capture_token: z.string().optional().describe("token from hunch_capture_decision. The rule is recorded and enforced either way — the token only decides whether it may DENY: without one it lands as advisory testimony capped at severity 'warning'."),
+        task_id: TaskIdSchema.optional().describe("Exact task ID for observing this successful save; reporting never changes capture authority."),
         cwd: cwdHintField,
       },
     },
@@ -1853,7 +1878,8 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
         }
         const existing = home === "private" ? store.getPrivateRec("constraints", rec.id) : store.json.get("constraints", rec.id);
         // Same cross-home twin guard as the decision path above.
-        store.putCapture("constraints", rec, !!input.private);
+        const stored = store.putCapture("constraints", rec, !!input.private);
+        const observed = observeReportCapture(root, input.task_id, "constraints", stored, home, !!existing, home === "private" ? store.privateDir ?? undefined : hunchPaths(root).hunch);
         store.reindex();
         // Propagate the new rule to EVERY assistant's ambient grounding (Cursor/Copilot/
         // Windsurf/AGENTS.md/CLAUDE.md), so a correction captured in one assistant is held
@@ -1864,8 +1890,8 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
         // selector to skip them and leave successful captures with stale HEAD plus
         // dirty AGENTS/assistant docs. Manual mode still refreshes in place.
         if (home === "public" && !store.autoCommit) refreshExistingGrounding(root, store); // overlay rules never render into committed grounding
-        const flush = flushCapture(store, hunchPaths(root).hunch, !!input.private, `hunch: capture ${rec.id}`, startupTeamRoute ?? undefined);
-        const flushed = flushNote(flush, home, store.mode) + publicHomeNote(home, store.hasPrivate, rec, hunchPaths(root).hunch);
+        const flush = flushCapture(store, hunchPaths(root).hunch, !!input.private, `hunch: capture ${rec.id}`, startupTeamRoute ?? undefined, observed.observe);
+        const flushed = flushNote(flush, home, store.mode) + publicHomeNote(home, store.hasPrivate, rec, hunchPaths(root).hunch) + observed.note;
         const enforce = rec.severity === "blocking"
           ? "blocks a DIRECT edit to its scope at strict firmness, and fails a PR whose diff touches that scope (CI guard); blast-radius hits and lower firmness stay advisory"
           : "flags violating edits and PRs (advisory)";
@@ -1912,10 +1938,11 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
           resolved_commit: z.string().optional().describe("the commit that fixed it (with triage:'resolved')"),
           private: z.boolean().optional().describe("write into the PRIVATE overlay store instead of the committed repo. Errors if no private store is configured."),
         }),
+        task_id: TaskIdSchema.optional().describe("Exact task ID for observing this successful save; reporting never changes capture authority."),
         cwd: cwdHintField,
       },
     },
-    async ({ finding }): Promise<ToolResult> => {
+    async ({ finding, task_id }): Promise<ToolResult> => {
       try {
         if (!finding.title.trim()) return invalid("title is required.");
         if (!finding.observation.trim()) return invalid("observation is required — state what you saw.");
@@ -1943,10 +1970,11 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
           resolved_commit: finding.resolved_commit ?? existing?.resolved_commit ?? null,
           provenance: { source: "human_confirmed", confidence: 0.95, evidence: finding.evidence ?? existing?.provenance.evidence ?? [], last_verified: now },
         };
-        store.putCapture("findings", rec, !!finding.private);
+        const stored = store.putCapture("findings", rec, !!finding.private);
+        const observed = observeReportCapture(root, task_id, "findings", stored, home, !!existing, home === "private" ? store.privateDir ?? undefined : hunchPaths(root).hunch);
         store.reindex();
-        const flush = flushCapture(store, hunchPaths(root).hunch, !!finding.private, `hunch: capture ${id}`, startupTeamRoute ?? undefined);
-        const flushed = flushNote(flush, home, store.mode) + publicHomeNote(home, store.hasPrivate, rec, hunchPaths(root).hunch);
+        const flush = flushCapture(store, hunchPaths(root).hunch, !!finding.private, `hunch: capture ${id}`, startupTeamRoute ?? undefined, observed.observe);
+        const flushed = flushNote(flush, home, store.mode) + publicHomeNote(home, store.hasPrivate, rec, hunchPaths(root).hunch) + observed.note;
         const where = finding.private
           ? ` [PRIVATE overlay — not committed to this repo]${flushed}`
           : home === "private" ? ` [SHARED store — one source of truth for the whole team]${flushed}` : flushed;

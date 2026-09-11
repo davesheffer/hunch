@@ -12,7 +12,7 @@ test("grounding tool signatures match the real MCP param names (no agent-mislead
   t.after(cleanup);
   const md = renderHunchSection(store);
 
-  assert.match(md, /hunch_context\(target\)/, "hunch_context param is `target`, not `target_or_task`");
+  assert.match(md, /hunch_context\(target, task_id\)/, "context retains its target and carries explicit task correlation");
   assert.match(md, /hunch_query\(query\)/, "hunch_query param is `query`, not `question`");
   assert.match(md, /hunch_bug_lineage\(symptom_or_symbol\)/, "hunch_bug_lineage param is `symptom_or_symbol`");
   assert.match(md, /hunch_runbook\(task\)/, "hunch_runbook is advertised so agents can discover it");

@@ -570,3 +570,64 @@ test("two-way sync: a same-file conflict aborts to a CLEAN tree (no corruption);
     cleanup();
   }
 });
+
+test("memory Git observations identify exact commits for empty and existing remotes without owning publication", () => {
+  const { overlay, hunchDir, protectedRoot, remote, cleanup } = setupEmptyRemote();
+  try {
+    const observations: Array<{ kind: string; commitSha: string }> = [];
+    const opts = { push: true as const, protectedRepoRoot: protectedRoot, observe: (e: { kind: string; commitSha: string }) => observations.push(e) };
+    writeDec(overlay, "dec_observed", '{"revision":1}');
+    assert.equal(commitAndPushHunch(hunchDir, "first", opts), "pushed");
+    const remoteHead = () => execFileSync("git", ["--git-dir", remote, "rev-parse", "refs/heads/main"], { encoding: "utf8" }).trim();
+    assert.ok(observations.some(e => e.kind === "committed"), "observe an actual immutable commit");
+    assert.ok(observations.some(e => e.kind === "published" && e.commitSha === remoteHead()), "empty-remote publication must identify the actual remote revision");
+    observations.length = 0;
+    writeDec(overlay, "dec_observed", '{"revision":2}');
+    assert.equal(commitAndPushHunch(hunchDir, "second", opts), "pushed");
+    assert.ok(observations.some(e => e.kind === "published" && e.commitSha === remoteHead()));
+    observations.length = 0;
+    assert.equal(commitAndPushHunch(hunchDir, "nothing", opts), null);
+    assert.equal(observations.length, 0, "a skipped flush is not a new commit or push");
+    writeDec(overlay, "dec_observed", '{"revision":3}');
+    assert.equal(commitAndPushHunch(hunchDir, "observer failure", { ...opts, observe: () => { throw new Error("report unavailable"); } }), "pushed");
+    assert.match(execFileSync("git", ["--git-dir", remote, "show", "refs/heads/main:.hunch/decisions/dec_observed.json"], { encoding: "utf8" }), /revision.*3/);
+  } finally { cleanup(); }
+});
+
+test("publication observer does not substitute local HEAD advanced after the remote accepted a push", () => {
+  const { A, cleanup } = setup();
+  try {
+    const remote = gitText(A, "remote", "get-url", "origin");
+    const hook = join(remote, "hooks", "post-receive");
+    writeFileSync(hook, ["#!/bin/sh", "unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE", `git -C '${shPath(A)}' -c core.hooksPath=/dev/null -c commit.gpgsign=false commit --allow-empty -qm 'concurrent local commit'`, ""].join("\n"));
+    chmodSync(hook, 0o755);
+    const observations: Array<{ kind: string; commitSha: string }> = [];
+    writeDec(A, "dec_exact_push");
+    assert.equal(commitAndPushHunch(join(A, ".hunch"), "capture", { push: true, protectedRepoRoot: join(A, ".."), observe: e => observations.push(e) }), "pushed");
+    const accepted = gitText(remote, "rev-parse", "refs/heads/main");
+    const local = gitText(A, "rev-parse", "HEAD");
+    assert.notEqual(local, accepted, "the fixture must advance local HEAD after publication");
+    assert.ok(observations.some(e => e.kind === "published" && e.commitSha === accepted));
+    assert.ok(!observations.some(e => e.kind === "published" && e.commitSha === local));
+  } finally { cleanup(); }
+});
+function gitText(root: string, ...args: string[]): string {
+  return execFileSync("git", ["-C", root, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+}
+
+test("large legacy multi-ref push keeps its successful outcome when observation output is oversized", () => {
+  const { A, cleanup } = setup();
+  try {
+    const oid = gitText(A, "rev-parse", "HEAD");
+    const refs = Array.from({ length: 3000 }, (_, i) => `refs/heads/probe_${String(i).padStart(4, "0")}_${"x".repeat(180)}`);
+    execFileSync("git", ["-C", A, "update-ref", "--stdin"], { input: refs.map(ref => `create ${ref} ${oid}\n`).join(""), stdio: ["pipe", "ignore", "ignore"] });
+    g(A, "config", "remote.origin.push", "refs/heads/*:refs/heads/*");
+    writeDec(A, "dec_large_push");
+    const observations: Array<{ kind: string }> = [];
+    assert.equal(commitAndPushHunch(join(A, ".hunch"), "large observed push", { push: true, protectedRepoRoot: join(A, ".."), observe: e => observations.push(e) }), "pushed");
+    const remote = gitText(A, "remote", "get-url", "origin");
+    assert.equal(gitText(remote, "rev-parse", "refs/heads/main"), gitText(A, "rev-parse", "HEAD"));
+    assert.equal(gitText(remote, "for-each-ref", "--format=%(objectname)", "refs/heads").split("\n").length, 3001);
+    assert.deepEqual(observations.map(e => e.kind), ["committed"], "oversized observation remains absent rather than changing publication");
+  } finally { cleanup(); }
+});

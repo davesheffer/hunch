@@ -25,6 +25,7 @@ import { writeFileAtomic } from "../core/io.js";
 import { looksLikeCorrection, CORRECTION_NUDGE } from "../core/correction.js";
 import { HUNCH_VERSION } from "../core/version.js";
 import { registerIntegrationCommands } from "./integrations.js";
+import { registerTaskReportCommands } from "./taskReport.js";
 import { registerServeCommands } from "./serve.js";
 import { registerUpdateCommand } from "./update.js";
 import { registerReviewMemoryCommands } from "./reviewMemory.js";
@@ -88,6 +89,9 @@ import { appendEvent, readEvents } from "../core/events.js";
 import { computeStats, formatStats } from "../core/stats.js";
 import { injectionMode, resetSessionInjections } from "../core/hookcache.js";
 import { recordServed, servedSummary } from "../core/served.js";
+import { recordTaskDelivery, reportActivity } from "../core/taskReport.js";
+import { snapshotDeliveredRecords } from "../core/taskReportEvidence.js";
+import { hookReportTaskId, startHookReport, stopHookReport, observeHookDenial } from "../core/taskReportHook.js";
 import { contextHookOutput, denyHookOutput, hookProvider, normalizeHookEvent, stopHookOutput, type HookProvider } from "../core/agenthook.js";
 import {
   PIPELINE_LOOP,
@@ -177,7 +181,11 @@ program.option("--initiator <name>", "bind agent launches to the originating CLI
     }
     if (options.cliConfig) process.env.HUNCH_CLI_CONFIG = options.cliConfig;
   });
-registerIntegrationCommands(program);
+registerIntegrationCommands(program, () => {
+  const { store, root } = storeFor();
+  try { return refreshExistingGrounding(root, store); } finally { store.close(); }
+});
+registerTaskReportCommands(program, () => { const { store, root } = storeFor(); return { store, root }; });
 registerServeCommands(program);
 registerUpdateCommand(program);
 registerReviewMemoryCommands(program, (records, repository, privateOnly) => {
@@ -455,7 +463,8 @@ program
 
     store.close();
     console.log("\n" + formatIntegrationHealth(inspectIntegrations(root)));
-    console.log("\nNext: make a commit (the hook captures a decision), then ask your coding assistant \"why is X built this way?\"");
+    console.log("\nTask reporting is configured through Hunch's agent instructions; actual agent activity has not been verified by setup. Reconnect the agent, then work normally. Completed task reports are available with `hunch report`.");
+    console.log(reportActivity(root));
     console.log("Cold start? Seed from history:  hunch backfill --since 90d");
     console.log("\n⭐ If Hunch earns its keep, a star helps others find it → https://github.com/davesheffer/hunch");
   });
@@ -3943,7 +3952,8 @@ program
   .option("--budget <n>", "rough token budget", "1500")
   .option("--profile <profile>", "delivery role: builder, reviewer, or architect", "builder")
   .option("--as-of <ref>", "time-travel: assemble the slice as it stood at a commit/tag/branch")
-  .action(async (target: string, opts: { budget: string; profile: string; asOf?: string }) => {
+  .option("--task <id>", "retain the exact context delivery for this task's contribution report")
+  .action(async (target: string, opts: { budget: string; profile: string; asOf?: string; task?: string }) => {
     if (!DELIVERY_PROFILES.includes(opts.profile as DeliveryProfile)) {
       return fail(`--profile must be one of: ${DELIVERY_PROFILES.join(", ")}`);
     }
@@ -3951,7 +3961,7 @@ program
     const asOf = opts.asOf ? asOfDate(opts.asOf, root) : undefined;
     if (opts.asOf && !asOf) return fail(`could not resolve --as-of "${opts.asOf}" to a commit`);
     store.reindex(); // reflect any out-of-band JSON edits before assembling
-    const ctx = store.assembleContext(target, Number(opts.budget), { asOf });
+    let ctx = store.assembleContext(target, Number(opts.budget), { asOf });
     // A task PHRASE ("improve retrieval ranking") resolves no file/symbol target and
     // used to come back empty while the graph held the answer one FTS query away —
     // the task-shaped entry point must not whiff on task-shaped input. Fall back to
@@ -3968,7 +3978,16 @@ program
     // receipts matching the target — the same slice and render as hunch_context.
     const slice = asOf ? null : store.stateSlice(target);
     const stateGrounding = slice ? stateSupplements(slice, target) : [];
-    if (empty && !asOf) {
+    if (empty && !asOf && opts.task) {
+      const resolved = store.rankedSearch(target, 8).map(hit => ({ hit, record: store.resolve(hit.ref)?.record }));
+      ctx = { ...ctx,
+        constraints: resolved.filter(x => x.hit.kind === "constraints" && x.record).map(x => x.record) as typeof ctx.constraints,
+        decisions: resolved.filter(x => x.hit.kind === "decisions" && x.record).map(x => x.record) as typeof ctx.decisions,
+        bugs: resolved.filter(x => x.hit.kind === "bugs" && x.record).map(x => x.record) as typeof ctx.bugs,
+        findings: resolved.filter(x => x.hit.kind === "findings" && x.record).map(x => x.record) as typeof ctx.findings,
+      };
+    }
+    if (empty && !asOf && !opts.task) {
       const hits = store.rankedSearch(target, 8).filter((h) => !isStateKind(h.kind));
       if (hits.length || stateGrounding.length) {
         console.log(`No file/symbol resolves for "${target}" — closest graph matches instead:\n`);
@@ -3985,7 +4004,7 @@ program
         return;
       }
     }
-    process.stdout.write(formatContext(ctx, {
+    const envelope = buildDeliveryEnvelope(ctx, {
       root,
       symbols: store.recs("symbols"),
       components: store.recs("components"),
@@ -3993,7 +4012,17 @@ program
       historical: !!asOf,
       profile: opts.profile as DeliveryProfile,
       supplements: stateGrounding,
-    }));
+    });
+    process.stdout.write(envelope.text);
+    if (opts.task) {
+      try {
+        const records = asOf ? [] : snapshotDeliveredRecords(store, envelope);
+        const occurrence = recordTaskDelivery(root, opts.task, envelope, records);
+        console.log(`\nTask evidence: ${opts.task} · occurrence ${occurrence}`);
+      } catch {
+        console.error(`Task evidence could not be recorded for ${opts.task}; context remains available but report attribution is unverified.`);
+      }
+    }
     store.close();
   });
 
@@ -4122,6 +4151,7 @@ program
       strict: "edit-time DENY + CI guard — the teeth are on",
     };
     console.log(`\nHunch — enforcement status (${basename(root)})\n`);
+    console.log(`  ${reportActivity(root)}\n`);
     console.log(`  firmness: ${firmness}   ← ${fnote[firmness] ?? ""}\n`);
     console.log(`  ✓ ARMED        ${blocking.length} confirmed blocking invariant(s) — held against every assistant`);
     if (blocking.length) {
@@ -4279,13 +4309,18 @@ program
         savePipelineState(evt.session_id, st);
         return;
       }
-      if (evt.hook_event_name === "Stop" && evt.session_id && pipelineEnabled()) {
-        const st = loadPipelineState(evt.session_id);
-        const verdict = stopVerdict(st, firmness);
-        if (verdict.block) {
-          savePipelineState(evt.session_id, verdict.state);
-          emitStop(provider, verdict.reason);
+      if (evt.hook_event_name === "Stop") {
+        if (evt.session_id && pipelineEnabled()) {
+          const st = loadPipelineState(evt.session_id);
+          const verdict = stopVerdict(st, firmness);
+          if (verdict.block) {
+            savePipelineState(evt.session_id, verdict.state);
+            emitStop(provider, verdict.reason);
+            return;
+          }
         }
+        const report = stopHookReport(root, provider, evt);
+        if (report) console.log(JSON.stringify(report));
         return;
       }
 
@@ -4302,6 +4337,11 @@ program
         // nag, which is documented as the one nag that must repeat but rode the same
         // deduped payload and so fired once per streak.
         let mustDeliver = isCorrection;
+        // Reporting failure must not suppress the existing correction/policy reminder.
+        try {
+          const report = startHookReport(root, provider, evt);
+          if (report) { text += `\n\n${report}`; mustDeliver = true; }
+        } catch { /* passive reporting remains fail-open */ }
         // Pipeline turn bookkeeping (fresh block budget) + the one nag that must
         // repeat: edits from an earlier turn still unverified.
         if (evt.session_id && pipelineEnabled()) {
@@ -4546,6 +4586,7 @@ program
         if (deny) {
           appendEvent(paths, { at: new Date().toISOString(), file: target, ...deny.event });
           emitDeny(provider, deny.reason);
+          observeHookDenial(root, provider, evt, target, deny);
           return;
         }
         // Veto Guard (live): the proposed edit text re-introduces an approach an
@@ -4555,6 +4596,7 @@ program
         if (vetoDeny) {
           appendEvent(paths, { at: new Date().toISOString(), file: target, ...vetoDeny.event });
           emitDeny(provider, vetoDeny.reason);
+          observeHookDenial(root, provider, evt, target, vetoDeny);
           return;
         }
       }
@@ -4621,7 +4663,10 @@ program
         delivery_profile: envelope.profile,
         ranking_policy: envelope.ranking_policy,
       })));
-      if (injectionMode(evt.session_id, `pre:${target}`, text) === "delta") {
+      const reportTaskId = hookReportTaskId(root, provider, evt);
+      // A new authoritative prompt gets its own full delivery. An earlier
+      // prompt's session-level delta cannot establish this task's receipt.
+      if (injectionMode(evt.session_id, `pre:${target}${reportTaskId ? `:${reportTaskId}` : ""}`, text) === "delta") {
         receipts("refreshed");
         emitContext(
           provider,
@@ -4631,7 +4676,14 @@ program
         return;
       }
       receipts("served");
-      emitContext(provider, "PreToolUse", text);
+      let reportNotice = "";
+      if (reportTaskId) {
+        try {
+          const occurrence = recordTaskDelivery(root, reportTaskId, envelope, snapshotDeliveredRecords(store, envelope));
+          reportNotice = `\n\nHunch task ${reportTaskId} · delivery ${occurrence}. Inspect exact application references with hunch_report(task_id).`;
+        } catch { reportNotice = "\n\nTask report observation unavailable; this delivery's task contribution remains unverified."; }
+      }
+      emitContext(provider, "PreToolUse", text + reportNotice);
     } catch {
       // swallow — never block an edit on a hook failure
     } finally {

@@ -3,7 +3,7 @@ import { findRoot } from "../core/paths.js";
 import { CAPABILITIES, HARNESSES, inspectIntegrations, integrationHealthFails, formatIntegrationHealth, repairIntegrationPins, type Capability, type Harness } from "../integrations/health.js";
 import { probeIntegration } from "../integrations/probe.js";
 
-export function registerIntegrationCommands(program: Command): void {
+export function registerIntegrationCommands(program: Command, refreshGrounding: () => string[]): void {
   const integrations = program.command("integrations").description("Check harness coverage and repair stale repository Hunch pins");
   integrations.command("check")
     .description("Fail on configuration drift; optionally require verified capabilities for CI")
@@ -23,11 +23,13 @@ export function registerIntegrationCommands(program: Command): void {
       if (integrationHealthFails(report, required as Capability[])) process.exitCode = 1;
     });
   integrations.command("repair-pins")
-    .description("Align existing exact-version integration pins with package.json; preserves other settings and does not enable hooks")
+    .description("Align existing exact-version pins and refresh existing Hunch instructions; preserves other settings and does not enable hooks")
     .action(() => {
       const root = findRoot();
       const files = repairIntegrationPins(root);
       console.log(files.length ? `Updated ${files.length} integration file(s): ${files.join(", ")}. Reconnect active MCP sessions.` : "Integration pins already aligned.");
+      const grounding = refreshGrounding();
+      if (grounding.length) console.log(`Updated Hunch instructions: ${grounding.join(", ")}. Reconnect the agent to load task reporting instructions.`);
       const report = inspectIntegrations(root);
       console.log(formatIntegrationHealth(report));
       if (integrationHealthFails(report)) process.exitCode = 1;

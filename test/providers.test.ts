@@ -30,6 +30,10 @@ test("scaffoldProviders writes MCP config + grounding for every assistant", () =
     const agents = readFileSync(join(root, "AGENTS.md"), "utf8");
     assert.match(agents, /Hunch/);
     assert.match(agents, /hunch_check_constraints/);
+    assert.match(agents, /hunch_task\(action: "start"/);
+    assert.match(agents, /hunch_context\(target, task_id\)/);
+    assert.match(agents, /include the returned contribution_card in your final response without the user asking/);
+    assert.match(agents, /agent-reported label/);
 
     const copilot = readFileSync(join(root, ".github/copilot-instructions.md"), "utf8");
     assert.match(copilot, /hunch_why/);

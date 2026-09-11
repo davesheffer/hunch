@@ -1,0 +1,50 @@
+{
+  "id": "dec_a7b4a23b69",
+  "title": "Next roadmap item: provider-neutral task contribution reports",
+  "topic": "roadmap.task-contribution-reports",
+  "status": "proposed",
+  "context": "The user asked for a clear, production-grade next-release answer to the installed-but-is-it-helping problem and explicitly placed it next on the roadmap. They clarified that Kimi, Codex, Claude, CCC and Watchtower are providers/harnesses: Hunch must remain agnostic.",
+  "decision": "Make task-scoped contribution evidence the next new roadmap implementation item. Provide one validated report engine and CLI/MCP/typed harness contract, distinguishing exact memory delivery, agent-reported application, independently observed checks and unknowns. A harness can drive lifecycle and deterministic presentation without model compliance. Preserve existing protections, project isolation, private memory boundaries, bounded retention and failure-open reporting. Qualify supported automatic presentation paths and the exact package before release; implementation/test progress does not itself constitute production sign-off.",
+  "consequences": [
+    "Existing live-pilot measurements continue alongside this priority; this does not claim their gates have passed.",
+    "The normal experience shows concise evidence and uncertainty without requiring the user to inspect raw tool logs.",
+    "No external harness is assumed supported merely because its provider name is mentioned."
+  ],
+  "alternatives_rejected": [
+    "Provider- or harness-specific product forks: the user explicitly clarified that Hunch is agnostic.",
+    "A tool-call counter or generic agent praise as proof of usefulness: neither establishes a specific contribution and neither answers the original installed-but-is-it-helping question.",
+    "Declaring production readiness from unit tests alone: the user requires a production-grade experience, so package, failure-path and real integration evidence remain necessary."
+  ],
+  "rejected_tripwires": [],
+  "related_components": [],
+  "related_files": [
+    "ROADMAP.md",
+    "docs/next-release-memory-impact.md",
+    "docs/task-reports.md",
+    "src/core/taskReport.ts",
+    "src/taskReports.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-09-11T10:39:12.954Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "premises": [],
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 0.95,
+    "evidence": [
+      "ROADMAP.md",
+      "docs/next-release-memory-impact.md",
+      "docs/task-reports.md",
+      "src/core/taskReport.ts",
+      "src/taskReports.ts"
+    ]
+  },
+  "date": "2026-09-11T10:39:12.954Z"
+}
