@@ -10,6 +10,7 @@ import { resolveGroundingConflicts, mergeGroundingFile } from "../src/core/groun
 import { installMergeDriver } from "../src/integrations/mergeDriver.js";
 import { hunchAttributesAreSafe } from "../src/core/overlaySafety.js";
 import { classifyGroundingBlock } from "../src/core/groundingLag.js";
+import { OVERLAY_ATTRIBUTES } from "../tooling/matrix-release-verification.mjs";
 
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 // Invoke THIS checkout's source directly (not whatever `hunch` happens to be
@@ -138,6 +139,8 @@ test("installMergeDriver: routes the five generated grounding docs through merge
     execFileSync("git", ["init", "-q", "-b", "main", root]);
     installMergeDriver(root, "hunch");
     const attrs = readFileSync(join(root, ".gitattributes"), "utf8");
+    assert.equal(attrs, OVERLAY_ATTRIBUTES,
+      "Matrix release verification must recognize the exact installed attributes; update its expectation when routing changes");
     for (const f of ["CLAUDE.md", "AGENTS.md", ".github/copilot-instructions.md", ".cursor/rules/hunch.mdc", ".windsurf/rules/hunch.md"]) {
       assert.match(attrs, new RegExp(`^${f.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} merge=hunch-grounding$`, "m"));
     }
