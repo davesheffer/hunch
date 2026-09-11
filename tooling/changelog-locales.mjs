@@ -8,6 +8,7 @@ export const changelogLocales = {
       footer: "© Hunch — התאמה ארכיטקטונית לקוד AI.", home: "בית", githubReleases: "גרסאות ב-GitHub"
     },
     titles: [
+      "רואים מה Hunch תרם",
       "זיכרון אוטומטי מדיוני סקירה, עם הסוכן היוזם",
       "לקחי הסקירה מגיעים לעריכה הבאה",
       "השרשרת נסגרת",
@@ -59,6 +60,7 @@ export const changelogLocales = {
       footer: "© Hunch — архитектурное соответствие для ИИ-кода.", home: "Главная", githubReleases: "Релизы на GitHub"
     },
     titles: [
+      "Видно, что внёс Hunch",
       "Автоматическая память ревью с исходным агентом",
       "Уроки ревью доходят до следующей правки",
       "Цепочка замкнута",
@@ -110,6 +112,7 @@ export const changelogLocales = {
       footer: "© Hunch — التوافق المعماري لكود الذكاء الاصطناعي.", home: "الرئيسية", githubReleases: "الإصدارات على GitHub"
     },
     titles: [
+      "انظر ما ساهم به Hunch",
       "ذاكرة مراجعة تلقائية مع الوكيل الذي بدأ العمل",
       "دروس المراجعة تصل إلى التعديل التالي",
       "السلسلة مغلقة",
@@ -161,6 +164,7 @@ export const changelogLocales = {
       footer: "© Hunch — conformidad arquitectónica para código de IA.", home: "Inicio", githubReleases: "Versiones en GitHub"
     },
     titles: [
+      "Ver qué aportó Hunch",
       "Memoria automática de revisiones con el agente de origen",
       "Las lecciones de revisión llegan al siguiente cambio",
       "La cadena, cerrada",

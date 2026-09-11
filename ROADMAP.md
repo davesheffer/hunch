@@ -1,6 +1,6 @@
 # Hunch roadmap
 
-Updated 2026-09-09.
+Updated 2026-09-11.
 
 Hunch is moving from repository-only engineering memory toward a broader deterministic state layer for organizations that use many probabilistic agents.
 
@@ -11,6 +11,14 @@ The current product remains **Hunch**. Naming is deliberately deferred until the
 This file is the public execution view. Historical releases and completed implementation details remain in the changelog and dedicated design documents. `hunch now` remains the detailed live decision ledger for the repository.
 
 Read [Deterministic organizational state](docs/deterministic-state.md) for the current architecture.
+
+## Next release — see what Hunch contributed
+
+**Next implementation priority, requested 2026-09-11:** make Hunch's contribution visible to repository users in their normal agent workflow. Ship a clear connection check, task-linked memory delivery, a concise contribution card, and an inspectable local evidence view. The defining demonstration is a lesson recorded in one task, received by a fresh agent in the next, and linked to an observed action and verification result without the developer repeating it.
+
+The release must distinguish delivered context, agent-reported application, verified checks, and unsupported attribution. Production acceptance requires the completion card to appear during normal work without the user asking about Hunch or running a report command, plus a real-host rehearsal of the original user's setup. Hunch remains provider- and harness-agnostic: Kimi, Codex, Claude, CCC, and Watchtower are consumers of one task/evidence contract, not required product-specific forks. A harness can own task lifecycle and deterministic presentation; standalone integrations receive the same data. Advertise automatic display only where it has been verified. Shipped in 1.32.0 (2026-09-11).
+
+1.32.0 ships task-scoped reports, command verification, rule-supported applications, local HTML, and managed completion instructions. [Development qualification](docs/task-report-qualification.md) records the flow in real hosts, the original Claude lifecycle failure and its latest-host regression, and the acceptance items still open after publication: interactive-terminal display, the two user acceptance sessions, and a live task showing a rule-supported application. The shared harness contract and verified capability boundaries are the shipped surface; individual external integrations are not assumed qualified. The [release execution plan](docs/next-release-memory-impact.md) remains the reference for the experience, evidence rules, and remaining gates. Existing live-pilot measurement continues; the organizational-state direction and gates below remain in force.
 
 ## Status — 2026-09-09
 

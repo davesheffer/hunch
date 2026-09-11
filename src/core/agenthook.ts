@@ -29,6 +29,10 @@ export interface HunchToolOutcome {
 export interface HunchHookInput {
   hook_event_name: HunchHookEvent;
   session_id?: string;
+  /** Native Claude correlation; never synthesize these from prompt text/time. */
+  prompt_id?: string;
+  cwd?: string;
+  agent_id?: string;
   tool_name?: string;
   tool_input?: HunchToolInput;
   tool_outcome?: HunchToolOutcome;
@@ -217,6 +221,7 @@ export function normalizeHookEvent(raw: unknown, provider: HookProvider): HunchH
   return {
     hook_event_name: event,
     session_id: stringAt(input, "session_id", "sessionId", "conversation_id", "conversationId"),
+    ...(provider === "claude" ? Object.fromEntries(["prompt_id", "cwd", "agent_id"].filter(key => input[key] !== undefined).map(key => [key, typeof input[key] === "string" ? input[key] : ""])) : {}),
     tool_name: hunchToolName(stringAt(input, "tool_name", "toolName"), toolInput ?? {}),
     tool_input: toolInput,
     ...(toolOutcome ? { tool_outcome: toolOutcome } : {}),

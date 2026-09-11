@@ -106,6 +106,30 @@ test("rank priors: the memory prior re-ranks WITHOUT excluding code symbols", as
   assert.ok(refs.includes("sym_only"), `symbols stay reachable, got ${refs.join(",")}`);
 });
 
+test("rank priors: a small addition of sibling functions does not bury already-retrievable intent", async (t) => {
+  const { store, cleanup } = tempStore();
+  t.after(cleanup);
+  const symbol = (i: number) => ({
+    id: `sym_growth_${i}`, file: `src/q${i}.ts`, name: `quibbleflange${i}`, kind: "function",
+    signature_hash: "sha1:test", calls: [], called_by: [],
+    metrics: { loc: 1, churn_90d: 0, bug_count: 0, fan_in: 0, fan_out: 0 }, last_changed: "commit:test",
+  });
+  for (let i = 0; i < 16; i++) store.json.put("symbols", symbol(i) as never);
+  store.json.put("decisions", DEC({
+    id: "dec_growth_intent", title: "Quibbleflange batching is deliberate",
+    decision: "Quibbleflange batches writes to survive an interrupted run.",
+    date: "2000-01-01T00:00:00Z", valid_from: "2000-01-01T00:00:00Z",
+    provenance: { source: "human_confirmed", confidence: 1, evidence: [] },
+  }) as never);
+  store.reindex();
+  assert.ok((await store.hybridSearch("quibbleflange", 10)).some(h => h.ref === "dec_growth_intent"));
+  for (let i = 16; i < 20; i++) store.json.put("symbols", symbol(i) as never);
+  store.reindex();
+  const refs = (await store.hybridSearch("quibbleflange", 10)).map(h => h.ref);
+  assert.ok(refs.includes("dec_growth_intent"), `intent survives four sibling additions: ${refs.join(",")}`);
+  assert.ok((await store.hybridSearch("quibbleflange19", 10)).some(h => h.ref === "sym_growth_19"), "exact symbol remains reachable");
+});
+
 test("rank priors: a changed decision anchor dims after HEAD advances while the exact record stays visible", (t) => {
   const { store, cleanup } = tempStore();
   const codeRoot = mkdtempSync(join(tmpdir(), "hunch-freshness-code-"));

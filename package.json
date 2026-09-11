@@ -1,6 +1,6 @@
 {
   "name": "@davesheffer/hunch",
-  "version": "1.31.1",
+  "version": "1.32.0",
   "mcpName": "io.github.davesheffer/hunch",
   "license": "Apache-2.0",
   "author": "Dave Sheffer <dave.sheffer1@gmail.com>",
@@ -27,15 +27,16 @@
       "default": "./dist/projectDna.js"
     },
     "./state": "./dist/client/state.js",
+    "./reports": {
+      "types": "./dist/taskReports.d.ts",
+      "default": "./dist/taskReports.js"
+    },
     "./dist/*": "./dist/*",
     "./package.json": "./package.json"
   },
   "files": [
     "dist/**/*.js",
-    "dist/changeProof.d.ts",
-    "dist/core/changeProofContract.d.ts",
-    "dist/projectDna.d.ts",
-    "dist/core/projectDna*.d.ts",
+    "dist/**/*.d.ts",
     "contracts/change-proof/*.json",
     "server.json",
     "bench/constitution-exp03-v1.json",

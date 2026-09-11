@@ -9,7 +9,7 @@
  */
 import { dirname } from "node:path";
 import type { HunchStore } from "../store/hunchStore.js";
-import { commitAndPushHunch, type HunchRemoteContract } from "../extractors/git.js";
+import { commitAndPushHunch, type HunchRemoteContract, type GitMemoryObserver } from "../extractors/git.js";
 import { refreshCommittableGrounding } from "./providers.js";
 import { advertisedTeamRemoteContract } from "./team.js";
 
@@ -97,6 +97,7 @@ export function flushCapture(
   message: string,
   /** Long-lived callers can pin the route snapshot that admitted the write. */
   remoteOverride?: HunchRemoteContract,
+  observe?: GitMemoryObserver,
 ): "pushed" | "committed" | null {
   // Follow the same routing as HunchStore.captureHome: unified ("shared") mode homes
   // EVERY capture in the overlay, so the flush must go there too — one source of truth.
@@ -104,6 +105,7 @@ export function flushCapture(
     if (store.privateAutoCommit && store.privateDir) {
       return commitAndPushHunch(store.privateDir, message, {
         push: true,
+        observe,
         protectedRepoRoot: store.publicRoot,
         remote: remoteOverride ?? sharedRemoteFor(store),
       });
@@ -115,5 +117,5 @@ export function flushCapture(
   // them into the SAME memory commit — otherwise every capture re-stales the committed
   // counts and the release gate's clean-tree check fails on the next CI index.
   const grounding = refreshCommittableGrounding(dirname(publicHunchDir), store);
-  return commitAndPushHunch(publicHunchDir, message, { push: false, alsoStage: grounding });
+  return commitAndPushHunch(publicHunchDir, message, { push: false, alsoStage: grounding, observe });
 }

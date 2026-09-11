@@ -12,6 +12,8 @@ import { servedSummary } from "../src/core/served.js";
 import { EdgeSchema, ResourceSchema } from "../src/core/types.js";
 import { buildServer } from "../src/mcp/server.js";
 import { HunchStore } from "../src/store/hunchStore.js";
+import { readTaskReport, type TaskReport } from "../src/core/taskReport.js";
+import { runReportCheck } from "../src/core/taskReportEvidence.js";
 
 function mcpDeliveryFixture(): string {
   const root = mkdtempSync(join(tmpdir(), "hunch-mcp-delivery-"));
@@ -51,6 +53,54 @@ function mcpDeliveryFixture(): string {
   store.close();
   return root;
 }
+
+test("MCP task lifecycle retains exact delivery, rejects borrowed evidence, and returns an honest completion card", async t => {
+  const root = mcpDeliveryFixture();
+  execFileSync("git", ["init", "-q", root]);
+  writeFileSync(join(root, ".gitignore"), ".hunch/\n.hunch-cache/\n");
+  const server = buildServer(root);
+  const [ct, st] = InMemoryTransport.createLinkedPair();
+  const client = new Client({ name: "task-report-test", version: "1" });
+  await Promise.all([server.connect(st), client.connect(ct)]);
+  t.after(async () => { await client.close(); await server.close(); rmSync(root, { recursive: true, force: true }); });
+  const call = (name: string, args: Record<string, unknown>) => client.callTool({ name, arguments: args });
+  const started = await call("hunch_task", { action: "start", title: "Keep delivery machine-readable" });
+  assert.ok(!started.isError);
+  const taskId = (started.structuredContent as { task: { task_id: string } }).task.task_id;
+  const delivered = await call("hunch_context", { target: "src/context.ts", task_id: taskId });
+  assert.ok(!delivered.isError);
+  assert.match(JSON.stringify(delivered.content), /Task evidence:/);
+  const read = await call("hunch_report", { task_id: taskId });
+  const report = read.structuredContent as unknown as TaskReport;
+  assert.equal(report.deliveries.length, 1);
+  assert.equal(report.deliveries[0]!.envelope.receipt_id, delivered.structuredContent?.receipt_id);
+  const record = report.deliveries[0]!.records[0]!;
+  assert.equal(record.record_id, "con_mcp_receipt");
+  const references = read.structuredContent?.application_references as Array<{ occurrence_id: string; record_id: string; content_hash: string }>;
+  assert.equal(references[0]!.occurrence_id, report.deliveries[0]!.occurrence_id);
+  assert.equal(references[0]!.content_hash, record.content_hash);
+  const bad = await call("hunch_task", { action: "finish", task_id: taskId, applications: [{ occurrence_id: report.deliveries[0]!.occurrence_id, record_id: "wrong", content_hash: record.content_hash, action: "Claimed use" }] });
+  assert.ok(bad.isError);
+  assert.deepEqual(bad.structuredContent?.application_references, references, "structured-only hosts can recover exact references");
+  assert.equal(readTaskReport(root, taskId).task.state, "open");
+  await runReportCheck(root, taskId, [process.execPath, "-e", "process.exit(0)"], "Fixture command");
+  const finished = await call("hunch_task", { action: "finish", task_id: taskId, applications: [{ occurrence_id: report.deliveries[0]!.occurrence_id, record_id: record.record_id, content_hash: record.content_hash, action: "Kept the response structured" }] });
+  assert.ok(!finished.isError, JSON.stringify(finished));
+  assert.match(JSON.stringify(finished.content), /agent-reported/);
+  assert.match(JSON.stringify(finished.content), /passed/);
+  assert.match(String(finished.structuredContent?.contribution_card), /agent-reported/);
+  assert.match(String(finished.structuredContent?.contribution_card), /Open local report/);
+  const next = await call("hunch_task", { action: "start", title: "A fresh task" });
+  const nextId = (next.structuredContent as { task: { task_id: string } }).task.task_id;
+  assert.notEqual(nextId, taskId);
+  await call("hunch_context", { target: "src/context.ts", task_id: nextId });
+  assert.equal(readTaskReport(root, nextId).claims.length, 0, "new task never inherits attribution");
+  const lesson = await call("hunch_report", { lesson: { kind: record.kind, record_id: record.record_id, content_hash: record.content_hash } });
+  assert.ok(!lesson.isError);
+  assert.deepEqual(new Set((lesson.structuredContent?.entries as Array<{ task: { task_id: string } }>).map(e => e.task.task_id)), new Set([taskId, nextId]));
+  assert.ok((await call("hunch_report", { task_id: nextId, lesson: { kind: record.kind, record_id: record.record_id } })).isError);
+  assert.equal(readTaskReport(root, nextId).deliveries[0]!.records[0]!.record_id, record.record_id, "the lesson survives between tasks");
+});
 
 function installReviewedLandscape(root: string): void {
   const store = new HunchStore(hunchPaths(root));
@@ -426,4 +476,31 @@ test("hunch_evidence_map compiles supplied observations without claiming ownersh
   assert.match(text, /Behavior-sensitive files:\n  - src\/to-json-schema\.ts/);
   assert.match(text, /Exact-owner claim: disabled/);
   assert.match(text, /did not run code or mutate/);
+});
+
+test("MCP captures retain exact local saves and the next task can trace their origin", async t => {
+  const root = mcpDeliveryFixture();
+  writeFileSync(join(root, ".hunch", "local.json"), JSON.stringify({ autoCommit: false }));
+  const server = buildServer(root);
+  const [ct, st] = InMemoryTransport.createLinkedPair();
+  const client = new Client({ name: "task-save-test", version: "1" });
+  await Promise.all([server.connect(st), client.connect(ct)]);
+  t.after(async () => { await client.close(); await server.close(); rmSync(root, { recursive: true, force: true }); });
+  const call = (name: string, args: Record<string, unknown>) => client.callTool({ name, arguments: args });
+  const started = await call("hunch_task", { action: "start", title: "Learn from this task" });
+  const taskId = (started.structuredContent as { task: { task_id: string } }).task.task_id;
+  const captured = await call("hunch_record_decision", { task_id: taskId, decision: { title: "Retain structured capture evidence", decision: "Preserve exact save revisions", related_files: ["src/context.ts"] } });
+  assert.ok(!captured.isError, JSON.stringify(captured));
+  const report = readTaskReport(root, taskId) as unknown as { saves?: Array<{ record: { kind: string; record_id: string; content_hash: string }; home: string; durability: string }> };
+  assert.equal(report.saves?.length, 1, "a real successful capture must be visible without a separate agent claim");
+  assert.equal(report.saves[0]!.home, "public");
+  assert.equal(report.saves[0]!.durability, "local");
+  const saved = report.saves[0]!.record;
+  const lesson = await call("hunch_report", { lesson: { kind: saved.kind, record_id: saved.record_id, content_hash: saved.content_hash } });
+  assert.ok(!lesson.isError);
+  assert.equal((lesson.structuredContent?.entries as Array<{ event: string }>)[0]!.event, "save");
+  // Report correlation failure must not turn a successful primary save into an error.
+  const unlinked = await call("hunch_record_decision", { task_id: "htask_000000000000000000000000", decision: { title: "Unlinked real capture", decision: "Keep saved memory if reporting is unavailable" } });
+  assert.ok(!unlinked.isError, JSON.stringify(unlinked));
+  assert.match(JSON.stringify(unlinked.content), /report.*unavailable/i);
 });

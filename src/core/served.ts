@@ -15,6 +15,7 @@
 import { createRequire } from "node:module";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
+import { assertReportPath } from "./taskReportPaths.js";
 
 /** Load node:sqlite while swallowing ONLY its ExperimentalWarning — the same
  *  discipline as src/store/db.ts: this module rides the hook into every CLI
@@ -127,6 +128,7 @@ function openServedDb(root: string): DatabaseSync {
   const dir = join(root, ".hunch-cache");
   mkdirSync(dir, { recursive: true });
   const db = new sqlite.DatabaseSync(join(dir, "served.db"));
+  db.exec("PRAGMA busy_timeout = 100");
   db.exec(`CREATE TABLE IF NOT EXISTS served (
     at TEXT NOT NULL,
     session TEXT,
@@ -138,6 +140,14 @@ function openServedDb(root: string): DatabaseSync {
   CREATE INDEX IF NOT EXISTS served_record ON served (record_id);`);
   ensureReceiptColumns(db);
   return db;
+}
+
+/** Shared observation ledger. Explicit report operations surface failures; only
+ * passive delivery/hook callers may degrade to best-effort recording. */
+export function withServedDatabase<T>(root: string, run: (db: DatabaseSync) => T): T {
+  assertReportPath(root, ".hunch-cache", "served.db");
+  const db = openServedDb(root);
+  try { return run(db); } finally { db.close(); }
 }
 
 /** Append delivery receipts. Never throws — a receipt must never cost a delivery. */

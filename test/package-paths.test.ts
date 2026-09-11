@@ -37,3 +37,15 @@ test("every path npm would pack is accepted by both release.yml package allowlis
     assert.deepEqual(forbidden, [], "release.yml would refuse these packed paths");
   }
 });
+
+test("declaration exports do not admit source maps, private reports, credentials or traversal", () => {
+  for (const [allowed, sensitive] of [
+    [predicate("allowedPath"), predicate("sensitivePath")],
+    [predicate("allowedPackagePath"), predicate("sensitivePackagePath")],
+  ] as const) {
+    assert.ok(allowed("dist/taskReports.d.ts") && !sensitive("dist/taskReports.d.ts"));
+    for (const path of ["dist/core/taskReport.d.ts.map", ".hunch-cache/reports/task.html", "dist/.hunch/private.d.ts", "dist/core/credentials.d.ts", "dist/../outside.d.ts"]) {
+      assert.ok(!allowed(path) || sensitive(path), `refuse ${path}`);
+    }
+  }
+});

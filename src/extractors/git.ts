@@ -2,9 +2,9 @@
  *  No LLM here — just parsing what git already knows. */
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { devNull } from "node:os";
+import { devNull, tmpdir } from "node:os";
 import { isAbsolute, resolve, join, basename, dirname, relative, sep } from "node:path";
-import { mkdirSync, rmSync, statSync, lstatSync, realpathSync, readFileSync, renameSync, readdirSync } from "node:fs";
+import { mkdtempSync, openSync, closeSync, readSync, mkdirSync, rmSync, statSync, lstatSync, realpathSync, readFileSync, renameSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { MEMLOG_FORMAT } from "../core/memorylog.js";
 import { hunchAttributesAreSafe, hunchTreeAttributesAreSafe, safeOverlayGitTreeListing, safeOverlayTree } from "../core/overlaySafety.js";
@@ -494,9 +494,18 @@ export function stableRepositoryName(root: string): string {
  *  "pushed" (commit created and pushed), "committed" (commit created; push not requested,
  *  or the merge/push failed — retry rides the next flush), null (nothing committed: lock
  *  held, backstop refusal, nothing staged, or not a repo). */
-export type HunchCommitOptions =
+export type GitMemoryObservation =
+  | { kind: "committed"; commitSha: string }
+  | { kind: "published"; commitSha: string; ref: string; basis: "push-status" | "remote-ref-confirmed" };
+export type GitMemoryObserver = (event: GitMemoryObservation) => void;
+export type HunchCommitOptions = (
   | { push: false; alsoStage?: string[] }
-  | { push?: true; protectedRepoRoot: string; alsoStage?: string[]; remote?: HunchRemoteContract };
+  | { push?: true; protectedRepoRoot: string; alsoStage?: string[]; remote?: HunchRemoteContract }
+) & { observe?: GitMemoryObserver };
+
+function observeGit(observer: GitMemoryObserver | undefined, event: GitMemoryObservation): void {
+  try { observer?.(event); } catch { /* observation cannot change a Git outcome */ }
+}
 
 /** A team sync never delegates destination or ref selection to ambient Git
  * configuration. The committed team pointer supplies one fetch URL, one push
@@ -698,6 +707,10 @@ export function commitAndPushHunch(hunchDir: string, message: string, opts: Hunc
       }
     }
     if (!committed) return null;
+    if (opts.observe) {
+      const commitSha = headShaWithEnv(hunchDir, env);
+      if (/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(commitSha)) observeGit(opts.observe, { kind: "committed", commitSha });
+    }
     if (opts.push !== false) {
       // The overlay remote is mutable process state. Re-prove the publication
       // boundary after the local commit and BEFORE pull: hooks or another
@@ -714,7 +727,7 @@ export function commitAndPushHunch(hunchDir: string, message: string, opts: Hunc
       // proof immediately before its push seam. Repeating the same expensive proof
       // twice here adds no intervening mutation boundary and materially slows large
       // graph refreshes on process-spawn-sensitive platforms such as Windows.
-      if (pushWithOneRemoteAdvanceRetry(hunchDir, env, opts.protectedRepoRoot, CAPTURE_REMOTE_TIMEOUT_MS, opts.remote)) return "pushed";
+      if (pushWithOneRemoteAdvanceRetry(hunchDir, env, opts.protectedRepoRoot, CAPTURE_REMOTE_TIMEOUT_MS, opts.remote, opts.observe)) return "pushed";
     }
     return "committed";
   } finally {
@@ -1292,17 +1305,75 @@ function upstreamSha(hunchDir: string, env: NodeJS.ProcessEnv): string {
   }
 }
 
-function tryPush(hunchDir: string, env: NodeJS.ProcessEnv, timeoutMs: number, contract?: HunchRemoteContract): boolean {
+/** Keep observation output limits out of the primary Git process. A bounded
+ * exec pipe can terminate an otherwise successful multi-ref push on overflow.
+ * Spool privately for the duration of the command, read at most 1 MB afterward,
+ * and discard oversized/unavailable output without changing its exit result. */
+function runObservedPush(args: string[], env: NodeJS.ProcessEnv, timeoutMs: number, observe: boolean): string | null {
+  if (!observe) { execFileSync("git", args, { stdio: "ignore", env, timeout: timeoutMs }); return null; }
+  let directory: string | undefined, descriptor: number | undefined;
+  try {
+    directory = mkdtempSync(join(tmpdir(), "hunch-push-observation-"));
+    descriptor = openSync(join(directory, "stdout"), "wx+", 0o600);
+  } catch {
+    if (directory) { try { rmSync(directory, { recursive: true, force: true }); } catch {} }
+    execFileSync("git", args, { stdio: "ignore", env, timeout: timeoutMs });
+    return null;
+  }
+  try {
+    execFileSync("git", args, { stdio: ["ignore", descriptor, "ignore"], env, timeout: timeoutMs });
+    try {
+      const buffer = Buffer.alloc(1_000_001);
+      const bytes = readSync(descriptor, buffer, 0, buffer.length, 0);
+      return bytes <= 1_000_000 ? buffer.subarray(0, bytes).toString("utf8") : null;
+    } catch { return null; }
+  } finally {
+    if (descriptor !== undefined) { try { closeSync(descriptor); } catch {} }
+    try { rmSync(directory, { recursive: true, force: true }); } catch { /* no effect on the Git outcome */ }
+  }
+}
+
+/** Porcelain identifies the destination Git actually used, preserving legacy
+ * push refspecs. New/up-to-date refs lack an OID, so confirm that exact remote
+ * ref with a bounded read. Never infer publication from a post-push local HEAD. */
+function observePushResult(hunchDir: string, env: NodeJS.ProcessEnv, output: string, observer: GitMemoryObserver): void {
+  let destination = "", count = 0;
+  const deadline = Date.now() + 2_000;
+  for (const line of output.split("\n")) {
+    if (line.startsWith("To ")) { destination = line.slice(3); continue; }
+    const status = /^([ *+=])\t[^\t]+:(refs\/[^\t]+)\t(.+)$/.exec(line);
+    if (!status || ++count > 32) continue;
+    const ref = status[2]!;
+    if (/[\x00-\x20\x7f]/.test(ref)) continue;
+    const range = /^(?:[a-f0-9]{40}|[a-f0-9]{64})\.{2,3}([a-f0-9]{40}|[a-f0-9]{64})(?: |$)/.exec(status[3]!);
+    if (range) { observeGit(observer, { kind: "published", commitSha: range[1]!, ref, basis: "push-status" }); continue; }
+    if (!destination || /[\x00-\x1f\x7f]/.test(destination) || Date.now() >= deadline) continue;
+    try {
+      const result = execFileSync("git", ["-C", hunchDir, "ls-remote", "--refs", "--exit-code", "--", destination, ref], {
+        env, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: Math.max(1, deadline - Date.now()), maxBuffer: 16_384,
+      }).trim();
+      const rows = result.split("\n").filter(row => row.split("\t")[1] === ref);
+      const commitSha = rows.length === 1 ? rows[0]!.split("\t")[0]! : "";
+      if (/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(commitSha)) observeGit(observer, { kind: "published", commitSha, ref, basis: "remote-ref-confirmed" });
+    } catch { /* no exact publication proof; the original push outcome stands */ }
+  }
+}
+
+function tryPush(hunchDir: string, env: NodeJS.ProcessEnv, timeoutMs: number, contract?: HunchRemoteContract, observe?: GitMemoryObserver): boolean {
   if (!contractReady(contract)) return false;
   const hooksDir = disabledHooksDir(hunchDir);
   if (!hooksDir) return false;
   try {
     if (contract && !setContractUpstream(hunchDir, contract, env)) return false;
+    const observeArgs = observe ? ["-c", "core.abbrev=no"] : [];
+    const porcelain = observe ? ["--porcelain"] : [];
     const args = contract
-      ? ["-C", hunchDir, "-c", `core.hooksPath=${hooksDir}`, "push", "--receive-pack=git-receive-pack", contract.pushUrl, `HEAD:${contract.ref}`]
-      : ["-C", hunchDir, "-c", `core.hooksPath=${hooksDir}`, "push"];
-    execFileSync("git", args, { stdio: "ignore", env: contract ? boundedTeamEnv(env) : env, timeout: timeoutMs });
-    return contractReady(contract);
+      ? ["-C", hunchDir, "-c", `core.hooksPath=${hooksDir}`, ...observeArgs, "push", ...porcelain, "--receive-pack=git-receive-pack", contract.pushUrl, `HEAD:${contract.ref}`]
+      : ["-C", hunchDir, "-c", `core.hooksPath=${hooksDir}`, ...observeArgs, "push", ...porcelain];
+    const output = runObservedPush(args, contract ? boundedTeamEnv(env) : env, timeoutMs, !!observe);
+    if (!contractReady(contract)) return false;
+    if (observe && output !== null) observePushResult(hunchDir, contract ? boundedTeamEnv(env) : env, output, observe);
+    return true;
   } catch {
     return false;
   }
@@ -1320,6 +1391,7 @@ function establishEmptyRemoteUpstream(
   protectedRepoRoot: string,
   timeoutMs: number,
   contract?: HunchRemoteContract,
+  observe?: GitMemoryObserver,
 ): boolean {
   if (unsafeOverlayPublication(hunchDir, protectedRepoRoot)
     || !hunchWorktreeClean(hunchDir, env)
@@ -1330,7 +1402,7 @@ function establishEmptyRemoteUpstream(
     // Exact URL + exact canonical ref + non-force push. If another teammate wins
     // the first-writer race after the empty proof, Git rejects this safely and the
     // bounded retry path fetches/merges that winner.
-    return tryPush(hunchDir, env, timeoutMs, contract);
+    return tryPush(hunchDir, env, timeoutMs, contract, observe);
   }
   let branch = "";
   let remotes: string[] = [];
@@ -1382,11 +1454,8 @@ function establishEmptyRemoteUpstream(
   try {
     const hooksDir = disabledHooksDir(hunchDir);
     if (!hooksDir) return false;
-    execFileSync("git", ["-C", hunchDir, "-c", `core.hooksPath=${hooksDir}`, "push", "--set-upstream", remote, `HEAD:refs/heads/${branch}`], {
-      stdio: "ignore",
-      env,
-      timeout: timeoutMs,
-    });
+    const output = runObservedPush(["-C", hunchDir, "-c", `core.hooksPath=${hooksDir}`, ...(observe ? ["-c", "core.abbrev=no"] : []), "push", ...(observe ? ["--porcelain"] : []), "--set-upstream", remote, `HEAD:refs/heads/${branch}`], env, timeoutMs, !!observe);
+    if (observe && output !== null) observePushResult(hunchDir, env, output, observe);
     return true;
   } catch {
     return false;
@@ -1402,13 +1471,14 @@ function pushWithOneRemoteAdvanceRetry(
   protectedRepoRoot: string,
   timeoutMs: number,
   contract?: HunchRemoteContract,
+  observe?: GitMemoryObserver,
 ): boolean {
   if (unsafeOverlayPublication(hunchDir, protectedRepoRoot) || !contractReady(contract)) return false;
   const before = contract
     ? gitSafeWithEnv(["rev-parse", "--verify", TEAM_FETCH_REF], hunchDir, env)
     : upstreamSha(hunchDir, env);
-  if (!before) return establishEmptyRemoteUpstream(hunchDir, env, protectedRepoRoot, timeoutMs, contract);
-  if (tryPush(hunchDir, env, timeoutMs, contract)) return true;
+  if (!before) return establishEmptyRemoteUpstream(hunchDir, env, protectedRepoRoot, timeoutMs, contract, observe);
+  if (tryPush(hunchDir, env, timeoutMs, contract, observe)) return true;
   if (unsafeOverlayPublication(hunchDir, protectedRepoRoot) || !contractReady(contract)) return false;
   const merged = mergeRemote(hunchDir, env, timeoutMs, contract);
   const after = contract
@@ -1416,7 +1486,7 @@ function pushWithOneRemoteAdvanceRetry(
     : upstreamSha(hunchDir, env);
   if (merged !== "merged" || !before || !after || before === after) return false;
   if (unsafeOverlayPublication(hunchDir, protectedRepoRoot) || !contractReady(contract)) return false;
-  return tryPush(hunchDir, env, timeoutMs, contract);
+  return tryPush(hunchDir, env, timeoutMs, contract, observe);
 }
 
 /** Best-effort READ-side sync: merge the overlay's remote into the local branch (e.g. on MCP
