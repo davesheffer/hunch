@@ -283,6 +283,37 @@ same fact*: `actionReceiptId` (action, not row), `commitmentId` (scope, subject,
 `derivedId` (scope, subject, transform, dependency hashes — order-independent), `entityId`
 (kind-qualified, same rule as Landscape resources), `relationshipId` (same rule as graph edges).
 
+### Subject identity by external reference
+
+Two agents over one CRM record, thread or chat must land on one subject, and the rule is explicit
+refs, never similarity. `canonicalObjectKey` normalizes the external system's own key (Unicode NFC,
+trimmed, internal whitespace collapsed, case preserved — the key is the system's, folding it could
+merge two of its records); `externalKey(ref)` is `system/object_type/key`, the identity of an
+external record across writers; `subjectOfRef(ref)` is `object_type:key`, the subject form the read
+verb already used for receipts (`event:26904`; Sofia's `customer:Site:7` is this rule with the CRM's
+own type in the key). At write time (`one-entity-per-external-ref`): a second active entity in a
+partition carrying an external key an incumbent carries is refused `409 conflict` with the
+incumbent named (write under it, or retire it first — merge and split stay explicit); a commitment
+or derived statement whose subject is the external key of a record an active entity carries is
+refused `422 identity` naming the entity id (ids derive from the subject, so the writer re-derives;
+nothing is rewritten under it). A subject no entity claims stays a free-form key, so an unbound
+customer's records stay valid. On read, a subject resolves one explicit hop: the entity that carries
+the key, and every key that entity carries, so `site:7`, `customer:clinic-7` and the entity's Gmail
+thread key return the same state of record.
+
+**Audited merge and split.** For the cases an external reference cannot settle (one clinic under two
+CRM sites), a merge is a write, not a rewrite: the entity that goes is written `lifecycle: retired`
+with `merged_into: <survivor id>` (additive field); the survivor must be an active entity on record
+in the partition (`409 conflict` otherwise, and merging into an entity that was itself merged names
+the one that stands now); the ledger holds the `retired` event with the writer's provenance. Nothing
+filed under the retired id is touched: reads resolve the old id and its keys — through a chain of
+merges, cycle-safe — to the survivor and return both histories as one state of record, with only
+the survivor `current`; new state under the old id or its keys is refused `422 identity` naming the
+survivor. Once retired, its keys are free, so the survivor may carry them. A split is the explicit
+reverse — re-key or retire the survivor, then write the entity active again without `merged_into`
+(refused while any active entity still carries its keys) — and the ledger shows `retired` then
+`updated`. `test/state-entity-merge.test.ts`.
+
 ## Invariants (exported, asserted, tested)
 
 | Id | Statement | Enforced by |
@@ -294,7 +325,38 @@ same fact*: `actionReceiptId` (action, not row), `commitmentId` (scope, subject,
 | `one-live-decision-per-topic` | a second live decision is refused with the incumbent named | existing topic guard; `WriteResult.conflict` |
 | `external-truth-stays-external` | pointers, versions, hashes — never mirrored bodies | `ExternalRefSchema` credential-free refinements; entity attributes capped |
 | `derived-state-carries-dependencies` | no dependencies, not state | `assertDerivedState`, schema `min(1)` |
-| `derived-state-writer-owns-currentness` | no source writes the drawer: the writer of a derived statement re-validates what it rests on and writes it back `stale` with the moved pointer as cause, or does not write derived state | `WriteRequest.cause`, the `invalidated` change (Sofia's source sweep is the reference writer) |
+| `one-entity-per-external-ref` | one external record is one entity per partition; a subject written as an entity's external key is refused with the entity id named; merge/split are ledger events, never silent rewrites | `assertExternalIdentity` in `writeState` (`409 conflict` / `422 identity`), `subjectAliases` on read; `test/state-entity-identity.test.ts` |
+| `human-correction-outranks-agent-writes` | what a human confirmed, an agent or service principal never overwrites or supersedes: it may replay it, write derived state back `stale` with the external cause that moved, or close a commitment with a receipt on record — each keeping the human's provenance; changing what the human said takes a human | `writeState` guard (`409 conflict`, reason `human-confirmed incumbent`, the differing fields named); `test/state-replay.test.ts` |
+| `derived-state-writer-owns-currentness` | the writer of a current derived statement revalidates its sources and writes it back `stale` when they move; other agents may save [source-backed observations](agent-observations.md) as `unknown`, never as current facts | `WriteRequest.cause`, the `invalidated` change, `nuryel_capture`, `state_of_record.observed` |
+
+## Replay determinism (`nuryel.replay/1`)
+
+A partition's current state is a pure function of its change ledger, and that is a check, not a
+claim: `hunch serve replay --partition <kind:id>` (with a serve config) or `hunch serve replay
+--root <dir>` (the partition a directory is) folds `.hunch/changes/<scope>.json` into the state it
+implies — the hash of every record after its last event — and compares it, hash for hash, to the
+records on file. `stateHash` is sha256 over the canonical form, so equal hashes are byte-equal
+canonical records. The report (`--json`) carries `replay_hash` (the fold) and `stored_hash` (the
+files, same ids), both over the facets the contract owns; they must be equal. Divergences are
+typed and each names the record, the seq and both hashes:
+
+| Kind | Meaning |
+| --- | --- |
+| `missing-record` | the ledger says the record exists; no file holds it |
+| `hash-drift` | the record on file is not the record the ledger's last event wrote (a hand edit, a non-contract writer) |
+| `orphan-record` | a state record the ledger never saw — a write that bypassed the contract, or a crash between "record written" and "event appended" |
+| `idempotency-drift` | an idempotency entry whose hash disagrees with the ledger at its seq |
+| `legacy-drift` | a decision / constraint / bug / finding moved by a path older than the contract (`hunch supersede`, adopt-drafts); reported, never a failure |
+
+Compaction keeps the property: the idempotency table is kept whole, so a record whose events fell
+below the floor is verified against its newest idempotency entry; the one change the contract makes
+without an entry — closing a window on supersession — leaves a closed record below the floor
+`unverifiable` (counted, not failed), while an open record that differs is drift. The git-tracked
+JSON records stay the source of truth (`con_a87360128b` family); the ledger proves them, it does
+not replace them. The check exits 1 on any divergence, and `hunch drift` runs it whenever the
+partition it stands in has a change ledger (a `replay-*` finding fails the gate), so the existing
+CI gate covers ledger≠records beside doc≠graph. The agent farm replays every served partition at
+the end of every run.
 
 ## Backward compatibility
 
@@ -321,12 +383,8 @@ not modified by the registration — the store change is the index-file layout m
   body-limit and write-lock decisions. Its per-store concurrency gate, context-consistency
   watermarks and the usefulness / Project DNA intake routes are not ported; they return only if a
   served partition needs them.
-- **Ledger merge.** A scope's ledger has one sequence because it has one home; two clones
-  writing the same repository partition on different branches will collide on merge exactly
-  as two live decisions on a topic do. `reconcile-topics` is the model; the ledger equivalent
-  is not written.
-- **Ledger compaction.** Ledgers grow without bound; a `compact` step that keeps the head and
-  the idempotency table is future work.
+- **Per-field provenance on derived state.** A summary cites its sources as a whole; the
+  human-correction guard therefore works per record, not per field.
 - **Repository-scope private content.** The contract has no `private` flag: scope decides the
   home. Sensitive repository-scope state goes through the existing `hunch_record_*` tools
   with `private:true`, or into a user/team partition.

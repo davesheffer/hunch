@@ -499,13 +499,13 @@ test("HUNCH_SYNTH_PROVIDER=ollama is accepted as an alias for openai-compat", as
   }
 });
 
-test("selectWorkers includes openai-compat once available — deep-synthesis and the Critic pass participate for free", async () => {
+test("selectWorkers stays with the explicitly selected local endpoint", async () => {
   __resetAvailabilityCacheForTests();
   process.env.HUNCH_SYNTH_BASE_URL = "http://127.0.0.1:1/v1";
   process.env.HUNCH_SYNTH_MODEL = "m";
   try {
-    const workers = await selectWorkers();
-    assert.ok(workers.some((w) => w.name === "openai-compat"));
+    const workers = await selectWorkers({ env: { HUNCH_SYNTH_PROVIDER: "openai-compat" } });
+    assert.deepEqual(workers.map(w => w.name), ["openai-compat"]);
   } finally {
     delete process.env.HUNCH_SYNTH_BASE_URL;
     delete process.env.HUNCH_SYNTH_MODEL;

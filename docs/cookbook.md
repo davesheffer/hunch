@@ -42,6 +42,9 @@ hunch firmness firm
 
 No restart needed — the hook reads firmness at run time.
 
+What each level may and may not do, and the human act that arms blocking, is spelled out in
+[the autonomy ladder](autonomy-ladder.md).
+
 ---
 
 ## 3. The verification pipeline (v1.4.0+)
@@ -96,6 +99,7 @@ hunch policy card <policy-id>
 mechanically blocked, so even a human cannot activate this correction policy yet. The original
 correction guard remains available throughout. Other proved policy types still require explicit,
 audited human acceptance before they can become advisory or blocking.
+The full state machine and the gate at each promotion are in [the autonomy ladder](autonomy-ladder.md).
 
 ---
 

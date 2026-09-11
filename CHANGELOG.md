@@ -1,5 +1,95 @@
 # Changelog
 
+## 1.31.0 — 2026-09-10
+
+Agent launches now follow the initiating agent across synthesis, verification,
+deep sampling, MCP requests and Git child processes. A Codex event stays with
+Codex; Claude stays with Claude; Kimi uses its ACP adapter. Unknown or unavailable
+origins never select another installed account. Additional CLIs can be configured
+through explicit local stdin/ACP adapters. `--deep` samples one provider repeatedly.
+
+`hunch review-memory auto` fetches complete GitHub review threads (or reads a local
+export), proposes and verifies rules against current tracked code and existing
+constraints, then saves advisory rules without a handwritten `rules.json`.
+Uncertain cases remain in a JSON report. Local checkpoints avoid reanalyzing
+unchanged dispositions; changed evidence/code and retired rules are never silently
+overwritten or revived. `--dry-run` previews and `--retry` rechecks queued cases.
+
+## 1.30.0 — 2026-09-10
+
+### Scoped review memory from PR threads
+
+`hunch review-memory prepare` imports local GitHub inline review-comment exports
+into deterministic, source-linked thread packets. `capture` previews explicitly
+selected rule wording and verification checks; `--apply --private|--public` stores
+them through the existing Constraint and grounding pipeline. Imported prose never
+activates a rule or gains blocking authority. Captures remain `agent_recorded`
+warnings, with exact file scopes and review evidence, until the existing human
+countersign flow is used.
+
+Incomplete threads, mismatched repositories, stale selections, missing current
+files and existing rule IDs are refused. A real-data trial on `infection/infection`
+covered 102 comments from 11 PRs and exercised capture and delivery for two selected
+rules in an isolated clone. See `docs/review-memory.md` and the inspectable JSON
+trial report under `docs/evidence/`. Rule selection is manual; this release does
+not claim automatic extraction or measured bug reduction.
+
+### Replay determinism is a check, and a human correction outranks the agents
+
+**`hunch serve replay`** (`nuryel.replay/1`). A partition's current state is a pure function of
+its change ledger — and now that is a command, not copy. `hunch serve replay --partition
+<kind:id>` (with a serve config) or `--root <dir>` (the partition a directory is) folds
+`.hunch/changes/` into the state it implies (every record's hash after its last event) and
+compares it, hash for hash, to the records on file; `stateHash` is sha256 over the canonical form,
+so equal hashes are byte-equal canonical records. The report carries `replay_hash` and
+`stored_hash` (they must agree) and typed divergences, each naming the record, the seq and both
+hashes: `missing-record`, `hash-drift`, `orphan-record` (a state record the ledger never saw — the
+crash-between-put-and-append the ledger promised the next writer could detect, now detected),
+`idempotency-drift`, and `legacy-drift` (a decision / constraint / bug / finding moved by a path
+older than the contract — reported, never a failure). Compaction keeps the property through the
+idempotency table, which is kept whole; a closed record whose supersession fell below the floor is
+`unverifiable` (counted), an open record that differs is drift. Exit 1 on any divergence, and
+`hunch drift` runs the same check whenever its partition has a change ledger (`replay-*` findings
+fail the gate), so the existing CI gate covers ledger≠records beside doc≠graph. `verifyReplay` / `foldLedger` / `formatReplayReport` in
+`src/store/replay.ts`; the agent farm replays every served partition at the end of every run and
+reports `replay` beside `contradictions`. `stateHomeFor` is exported from the binding so the check
+reads exactly the home the write verb wrote.
+
+**Subject identity by external reference** (`one-entity-per-external-ref`). Two agents over one
+CRM record, thread or chat land on one subject, by explicit refs only. The contract freezes
+`canonicalObjectKey` (NFC, trim, collapse whitespace, case preserved), `externalKey(ref)`
+(`system/object_type/key`) and `subjectOfRef(ref)` (`object_type:key`, the receipt read's
+convention). `writeState` refuses a second active entity in a partition that carries an external
+key an incumbent already carries (`409 conflict`, incumbent named — write under it or retire it
+first; merge and split stay explicit) and a commitment or derived statement whose subject is the
+external key of a record an active entity carries (`422 identity`, entity id named — ids derive
+from the subject, so the writer re-derives). A subject no entity claims stays a free-form key. On
+read a subject resolves one explicit hop — the entity that carries the key and every key it
+carries — so `site:7`, `customer:clinic-7` and the entity's thread key return the same state of
+record. `test/state-entity-identity.test.ts`.
+
+**Audited entity merge and split.** A merge is a write, not a rewrite: the entity that goes is
+written `lifecycle: retired` with `merged_into: <survivor>` (additive field on `nuryel.entity/1`);
+the survivor must be an active entity on record (`409 conflict` otherwise; merging into an entity
+that was itself merged names the one that stands now); the ledger holds a `retired` change (the
+enum's first writer) with the writer's provenance. Nothing filed under the retired id is touched —
+reads resolve the old id and every key it carried, through chains of merges, to the survivor and
+return both histories as one state of record with only the survivor `current`; new state under the
+old name is refused `422 identity` naming the survivor; the survivor may then carry the retired
+entity's keys. Split is the explicit reverse (re-key the survivor, write the entity active again),
+refused while any active entity still carries its keys. `test/state-entity-merge.test.ts`.
+
+**`human-correction-outranks-agent-writes`** — a new contract invariant, enforced at write time.
+A record a human confirmed (`provenance.source` carries `human_confirmed`) is never overwritten or
+superseded by an agent or service principal: the write is refused `409 conflict`, reason
+`human-confirmed incumbent`, the differing fields named. Three agent moves stay open, each keeping
+the human's provenance on the record: re-sending the human's facts is a `replayed` (the tier
+downgrade aside, nothing differs), writing a derived statement back `stale` with the external
+cause that moved (the writer's currentness duty), and closing a commitment with a receipt on
+record (a fact that happened). A peer's reducer was observed to let a later LLM write override a
+human correction (`fnd_f670868a8c`); this is the test that Hunch does not.
+`test/state-replay.test.ts` covers both features, including the CLI's exit code.
+
 ## 1.29.0 — 2026-09-09
 
 ### The chain: incident → decision → change proof → closure

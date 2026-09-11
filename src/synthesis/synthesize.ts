@@ -17,7 +17,7 @@ import { pathMatchesGlob } from "../core/glob.js";
 import { draftTripwires, knownRepoDeps } from "./tripwires.js";
 import type { Decision, Bug, Constraint, Component, Symbol } from "../core/types.js";
 import type { TestReport } from "../extractors/testreport.js";
-import { languageFor } from "../extractors/languages.js";
+import { isSubstantive } from "../extractors/languages.js";
 
 // "chore(deps):" is anchored separately (not via \b) because \b requires a
 // word/non-word transition, and the character after the closing ")" is ":" or a
@@ -49,13 +49,15 @@ export function isTrivialSubject(meta: { subject: string; body: string }): boole
  *  deterministic. Any structural change (symbol/dependency delta), non-trivial
  *  churn, several files, OR an explanatory commit body signals a real decision
  *  worth the model. Everything below (typo/tweak/one-liner with no message) falls
- *  to the free deterministic draft — shallower but honestly low-confidence. */
-export function isSignificant(meta: { body: string }, a: DiffAnalysis, codeFiles: string[]): boolean {
+ *  to the free deterministic draft — shallower but honestly low-confidence.
+ *  `files` is whatever the caller is synthesizing from (code and/or markdown, per
+ *  isSubstantive) — the line/file-count checks are format-agnostic. */
+export function isSignificant(meta: { body: string }, a: DiffAnalysis, files: string[]): boolean {
   const structural =
     a.addedSymbols.length + a.removedSymbols.length + a.changedSymbols.length + a.addedDeps.length + a.removedDeps.length;
   if (structural > 0) return true;
   if (a.addedLines + a.removedLines >= SIG_MIN_LINES) return true;
-  if (codeFiles.length >= 3) return true;
+  if (files.length >= 3) return true;
   if (meta.body.trim().length >= SIG_MIN_BODY) return true;
   return false;
 }
@@ -74,8 +76,27 @@ export async function syncCommit(
   if (!meta) return { status: "skipped", reason: "commit not found" };
 
   if (isTrivialSubject(meta)) return { status: "skipped", reason: `trivial subject: ${meta.subject}` };
-  const codeFiles = meta.files.filter((f) => languageFor(f) !== null);
-  if (codeFiles.length === 0) return { status: "skipped", reason: "no code files changed" };
+  // .hunch/** is Hunch's OWN store — commitDiff already excludes it from the diff
+  // CONTENT via DIFF_NOISE ("circular noise": re-synthesizing a commit that wrote
+  // it would draft a decision about Hunch's own bookkeeping). That guard never
+  // covered this file-LIST gate, and before #12 it didn't need to: languageFor()
+  // already returned null for .hunch/**'s JSON and for the .md grounding docs
+  // flushCapture regenerates alongside it (AGENTS.md/CLAUDE.md/copilot-instructions.md),
+  // so such a commit failed "no code files changed" by coincidence. Once markdown
+  // became substantive input those grounding docs alone made the commit eligible.
+  // Checked by PATH, not commit-message convention (flushCapture's exact subject
+  // wording lives as separate literals in mcp/server.ts/cli/index.ts and could
+  // drift independently of any subject regex here) — a human editing AGENTS.md on
+  // its own, with no .hunch/** change alongside it, stays fully synthesis-eligible.
+  if (meta.files.some((f) => pathMatchesGlob(f, "**/.hunch/**"))) {
+    return { status: "skipped", reason: "touches Hunch's own store (.hunch/**) — circular, never synthesis input" };
+  }
+  // Substantive, not just parseable: markdown carries the *why* in a docs/ADR repo
+  // just as legitimately as a .ts diff does, even though it has no symbol graph
+  // (issue #12). languageFor() stays the parseability question for the symbol/dep
+  // extraction inside analyzeDiff below.
+  const substantiveFiles = meta.files.filter((f) => isSubstantive(f));
+  if (substantiveFiles.length === 0) return { status: "skipped", reason: "no code or markdown files changed" };
 
   // Seed the id from the COMMIT (stable across runs), not the LLM-generated title
   // (which varies) — so re-syncing a commit updates rather than dupes.
@@ -108,7 +129,7 @@ export async function syncCommit(
   // review triage measured 7 of 14 queued drafts as exactly this. A recent
   // human-confirmed decision claiming this commit's files → skip the draft (and
   // the subscription call). Recency-windowed; --force overrides.
-  const covered = commitCoveredBy(codeFiles, meta.subject, store.recs("decisions"), Date.now());
+  const covered = commitCoveredBy(substantiveFiles, meta.subject, store.recs("decisions"), Date.now());
   if (covered && !opts.force) {
     return {
       status: "skipped",
@@ -136,11 +157,11 @@ export async function syncCommit(
   const provider = localOnly
     ? new DeterministicProvider()
     : opts.deep
-    ? (await selectEnsemble({ samples: opts.samples })) ?? await selectProvider({ root })
-    : opts.force || opts.verify || isSignificant(meta, analysis, codeFiles)
+    ? (await selectEnsemble({ root, samples: opts.samples })) ?? await selectProvider({ root })
+    : opts.force || opts.verify || isSignificant(meta, analysis, substantiveFiles)
       ? await selectProvider({ root })
       : new DeterministicProvider();
-  const input: CommitInput = { subject: meta.subject, body: meta.body, files: codeFiles, diff, analysis };
+  const input: CommitInput = { subject: meta.subject, body: meta.body, files: substantiveFiles, diff, analysis };
   let draft = await draftDecisionSafe(provider, input);
   // The Critic pass: audit the draft against the commit, PRUNE unsupported alternatives
   // (BEFORE they scaffold tripwires below) and consequences, and lower confidence on weak
@@ -173,14 +194,14 @@ export async function syncCommit(
 
   const components = store.json.loadAll("components");
   const relatedComponents = components
-    .filter((c: Component) => codeFiles.some((f) => c.paths.some((g) => pathMatchesGlob(f, g))))
+    .filter((c: Component) => substantiveFiles.some((f) => c.paths.some((g) => pathMatchesGlob(f, g))))
     .map((c) => c.id);
 
   // Surface any do-not-break constraints this commit's files touch (DESIGN §4
   // "constraint touched" flag) right in the decision context, with evidence.
   const touchedConstraints = store.json
     .loadAll("constraints")
-    .filter((c) => codeFiles.some((f) => c.scope.some((g) => pathMatchesGlob(f, g))));
+    .filter((c) => substantiveFiles.some((f) => c.scope.some((g) => pathMatchesGlob(f, g))));
   const constraintNote = touchedConstraints.length
     ? ` Touches invariant(s): ${touchedConstraints.map((c) => `${c.id} (${c.statement})`).join("; ")}.`
     : "";
@@ -208,9 +229,9 @@ export async function syncCommit(
     // → never block until confirmed via `hunch review --accept` (dec_a466655539).
     rejected_tripwires: existing?.rejected_tripwires?.length
       ? existing.rejected_tripwires
-      : draftTripwires(draft.alternatives_rejected, codeFiles, knownRepoDeps(root)),
+      : draftTripwires(draft.alternatives_rejected, substantiveFiles, knownRepoDeps(root)),
     related_components: relatedComponents,
-    related_files: codeFiles,
+    related_files: substantiveFiles,
     supersedes: existing?.supersedes ?? null,
     superseded_by: existing?.superseded_by ?? null,
     caused_by_bug: existing?.caused_by_bug ?? null,
@@ -226,7 +247,7 @@ export async function syncCommit(
     provenance: {
       source: draft.source,
       confidence: draft.confidence,
-      evidence: [`commit:${meta.shortSha}`, synthEvidence, ...branchTag, ...codeFiles.slice(0, 8)],
+      evidence: [`commit:${meta.shortSha}`, synthEvidence, ...branchTag, ...substantiveFiles.slice(0, 8)],
       last_verified: new Date().toISOString(), // when the Hunch last re-derived this
     },
     date: meta.date, // the commit date

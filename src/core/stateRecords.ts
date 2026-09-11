@@ -54,6 +54,27 @@ export const ExternalRefSchema = z.object({
 }).strict();
 export type ExternalRef = z.infer<typeof ExternalRefSchema>;
 
+/** The external system's own key, canonicalized so two writers that copied it from the same
+ *  system agree byte for byte: Unicode NFC, trimmed, internal whitespace collapsed. Case is
+ *  preserved — the key belongs to the external system, and folding it could merge two of its
+ *  records. No other guessing: identity here is explicit refs, never similarity. */
+export function canonicalObjectKey(key: string): string {
+  return key.normalize("NFC").trim().replace(/\s+/g, " ");
+}
+
+/** The identity of an external record across writers: system, type and canonical key. Two
+ *  entities in one partition that carry the same external key are the same thing. */
+export function externalKey(ref: Pick<ExternalRef, "system" | "object_type" | "object_key">): string {
+  return `${ref.system}/${ref.object_type}/${canonicalObjectKey(ref.object_key)}`;
+}
+
+/** The subject an external record is known by, the convention the read verb already uses for
+ *  receipts (`event:26904`): the object type and the canonical key. When an entity in the
+ *  partition carries the ref, that entity's id is the subject and this form resolves to it. */
+export function subjectOfRef(ref: Pick<ExternalRef, "object_type" | "object_key">): string {
+  return `${ref.object_type}:${canonicalObjectKey(ref.object_key)}`;
+}
+
 /** What a derived statement rests on. Exactly what a currentness check re-validates. */
 export const DependencyRefSchema = z.discriminatedUnion("kind", [
   /** `scope` (additive) points into ANOTHER partition — the repository decision an
@@ -126,8 +147,15 @@ export const DerivedStateSchema = z.object({
   computed_at: z.string().regex(ISO),
   valid_to: z.string().regex(ISO).nullable().default(null),
   state: z.enum(["current", "stale", "unknown"]),
+  /** Per-observation withdrawal. Original assertion, author and dependencies stay intact. */
+  review: z.object({
+    by: z.string().regex(TOKEN), at: z.string().regex(ISO), previous_hash: z.string().regex(SHA256), reason: z.string().trim().min(1).max(600),
+    evidence: z.array(z.object({ ref: ExternalRefSchema, excerpt: z.string().trim().min(1).max(1200) }).strict()).min(1).max(8),
+  }).strict().optional(),
   provenance: ProvenanceSchema,
-}).strict();
+}).strict().superRefine((record, ctx) => {
+  if (record.review && record.state !== 'stale') ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['review'], message: 'withdrawal review belongs only to a stale observation' });
+});
 export type DerivedState = z.infer<typeof DerivedStateSchema>;
 
 const AttributeValue = z.union([z.string().max(2048), z.number().finite(), z.boolean(), z.null()]);
@@ -144,10 +172,20 @@ export const ExternalEntitySchema = z.object({
   refs: z.array(ExternalRefSchema).min(1).max(64),
   attributes: z.record(z.string().max(128), AttributeValue).default({}),
   lifecycle: z.enum(["active", "deprecated", "retired"]).default("active"),
+  /** Audited merge (additive): this entity was folded into another. Set only on a retired
+   *  entity; the survivor must be an active entity on record. Nothing under the retired id is
+   *  rewritten — reads resolve the old id and its keys to the survivor, and the ledger holds
+   *  the `retired` event with its provenance. A split is the explicit reverse: retire or
+   *  re-key the survivor, then write the entity active again without `merged_into`. */
+  merged_into: z.string().min(3).max(2048).optional(),
   provenance: ProvenanceSchema,
   created_at: z.string().regex(ISO),
   updated_at: z.string().regex(ISO),
 }).strict().superRefine((entity, ctx) => {
+  if (entity.merged_into !== undefined) {
+    if (entity.lifecycle !== "retired") ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["merged_into"], message: "a merged entity is retired; the survivor stays active" });
+    if (entity.merged_into === entity.id) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["merged_into"], message: "an entity cannot merge into itself" });
+  }
   const prefix = `${entity.kind}:`;
   const key = entity.id.startsWith(prefix) ? entity.id.slice(prefix.length) : "";
   if (!key.trim() || entity.id !== resourceId(entity.kind, key)) {
@@ -166,9 +204,16 @@ export const StateRelationshipSchema = z.object({
   type: z.string().regex(/^[a-z][a-z0-9_]{0,63}$/),
   scope: ScopeSchema,
   reason: z.string().max(1024).default(""),
+  /** observation_about is a one-hop projection, never an entity merge or a copied fact. */
+  observation_hash: z.string().regex(SHA256).optional(),
+  evidence: ExternalRefSchema.optional(),
+  lifecycle: z.enum(["active", "retired"]).optional(),
   provenance: ProvenanceSchema,
 }).strict().superRefine((rel, ctx) => {
   if (rel.id !== edgeId(rel.from, rel.to, rel.type)) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["id"], message: "relationship id must derive from its endpoints and type" });
+  if (rel.type === "observation_about" && (!/^nds_[a-f0-9]{24}$/.test(rel.from) || !rel.observation_hash || !rel.evidence?.content_hash || !rel.reason.trim() || rel.to.length > 512 || rel.to === rel.from)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "observation_about requires an observation id/hash, a subject, reason and hashed external evidence of the explicit association" });
+  }
 });
 export type StateRelationship = z.infer<typeof StateRelationshipSchema>;
 

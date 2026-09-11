@@ -120,7 +120,11 @@ test("private sync preserves a human-confirmed overlay decision even under --for
     git("config", "user.name", "Test");
     mkdirSync(join(root, "src"), { recursive: true });
     writeFileSync(join(root, "src", "billing.ts"), "export const total = (n: number) => n * 1.2;\n");
-    git("add", ".");
+    // Scoped, not "git add ." — privateStore() already wrote .hunch/local.json +
+    // manifest.json into root BEFORE `git init` ran above, so an unscoped add
+    // would sweep that scaffold into this commit and trip the .hunch/** guard
+    // (issue #12 follow-up) before this test's own human-confirmed check runs.
+    git("add", "src/billing.ts");
     git("commit", "-qm", "feat: add billing");
     const sha = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
     const now = new Date().toISOString();

@@ -1,0 +1,96 @@
+{
+  "schema": "hunch.project-dna.field-trial.v1",
+  "trial_id": "mcp-typescript-sdk-001",
+  "date": "2026-08-31",
+  "status": "candidate-proven-upstream-write-blocked",
+  "target": {
+    "repository": "modelcontextprotocol/typescript-sdk",
+    "branch": "main",
+    "revision": "70de0c8b569b0d664a56b90be2f141d1d1645880"
+  },
+  "goal": "Measure whether repository context and history let an agent avoid duplicate work, detect stale issue state, and derive a high-value follow-up that a fresh issue-only workflow would miss.",
+  "observed_repo_dna": [
+    {
+      "trait": "Check issue comments and active PR references before starting, even when an issue is unassigned.",
+      "kind": "review-culture",
+      "confidence": "high",
+      "evidence": [
+        "CONTRIBUTING.md",
+        "https://github.com/modelcontextprotocol/typescript-sdk/issues/2739",
+        "https://github.com/modelcontextprotocol/typescript-sdk/issues/2730"
+      ]
+    },
+    {
+      "trait": "Small focused fixes with targeted regression tests are preferred over broad changes.",
+      "kind": "contribution-culture",
+      "confidence": "high",
+      "evidence": [
+        "CONTRIBUTING.md",
+        "https://github.com/modelcontextprotocol/typescript-sdk/pull/2724"
+      ]
+    },
+    {
+      "trait": "An open issue is not sufficient evidence that work remains; current source must be checked.",
+      "kind": "currentness",
+      "confidence": "high",
+      "evidence": [
+        "https://github.com/modelcontextprotocol/typescript-sdk/issues/579",
+        "packages/client/src/client/stdio.ts@70de0c8b569b0d664a56b90be2f141d1d1645880"
+      ]
+    },
+    {
+      "trait": "main/v2 and v1.x frequently require separate implementations or backports.",
+      "kind": "engineering-culture",
+      "confidence": "medium",
+      "evidence": [
+        "https://github.com/modelcontextprotocol/typescript-sdk/pull/2738",
+        "https://github.com/modelcontextprotocol/typescript-sdk/pull/2720"
+      ]
+    }
+  ],
+  "screening": {
+    "candidates_checked": 17,
+    "active_pr_overlap_avoided": 14,
+    "comment_claims_respected": 2,
+    "stale_issue_detected_by_source_verification": 1,
+    "duplicate_work_started": 0
+  },
+  "derived_candidate": {
+    "id": "registry-handle-resurrection-after-remove",
+    "title": "Removed registration handles can be resurrected by update() after remove()",
+    "origin": "Explicit out-of-scope note in PR #2724, then verified against current registry-handle implementation and searched for existing tracking.",
+    "credit": "PR #2724 author @YatsukBogdan1 identified the pre-existing tool-path behavior; this trial treats that note as evidence, not as a novel discovery by Hunch.",
+    "existing_issue_or_pr_found": false,
+    "affected_primitives": [
+      "RegisteredTool",
+      "RegisteredPrompt",
+      "RegisteredResourceTemplate",
+      "RegisteredResource"
+    ],
+    "expected_invariant": "remove() is terminal for the registration represented by the handle; later mutations must not reinsert it or emit misleading list_changed signals.",
+    "sources": [
+      "https://github.com/modelcontextprotocol/typescript-sdk/pull/2724",
+      "packages/server/src/server/mcp.ts@70de0c8b569b0d664a56b90be2f141d1d1645880"
+    ]
+  },
+  "execution": {
+    "upstream_issue_write_attempted": true,
+    "upstream_issue_write_result": "403 Resource not accessible by integration",
+    "authenticated_fork_available": false,
+    "patch_or_pr_published": false
+  },
+  "benchmark": {
+    "time_to_first_correct_edit": null,
+    "files_inspected": null,
+    "tokens": null,
+    "failed_approaches": 0,
+    "test_failures": null,
+    "human_interventions": 0,
+    "note": "This first run establishes the repository-screening and currentness baseline. Code-edit metrics start once a writable fork is available."
+  },
+  "dna_learning_boundary": {
+    "observations_promoted_from_external_evidence_only": true,
+    "agent_generated_output_used_as_authority": false,
+    "inferences_marked_as_inferences": true
+  }
+}

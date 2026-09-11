@@ -1,0 +1,50 @@
+{
+  "id": "dec_6c4a50ebf3",
+  "title": "Audited entity merge and split: a merge is a write (retired + merged_into), reads resolve the old id and keys to the survivor, nothing under the old id is rewritten, split is the explicit reverse",
+  "topic": "state.entity-merge",
+  "status": "accepted",
+  "context": "Follow-on to state.entity-identity (dec_a33cccdcb7): one active entity per external key settles the common case, but one clinic under two CRM sites cannot be settled by a ref. dec_b4d64d643a asked for merge/split recorded as ledger events with provenance, never silent rewrites. Shipped on branch feat/entity-merge (stacked on feat/entity-identity).",
+  "decision": "Add optional `merged_into` to nuryel.entity/1 (schema refinement: only on a retired entity, never itself). writeState validates the survivor (on record in the partition, within grants, active — merging into an entity that was itself merged is refused naming the one that stands now) and emits the ledger's `retired` change (the enum's first writer) for an entity leaving service. The entity index follows `merged_into` chains (cycle-safe) so a read for the old id, or any key it carried, resolves to the survivor and returns both histories as one state of record with only the survivor current; a commitment or derived statement written under the retired id or its keys is refused `identity` naming the survivor. Records filed under the retired id are never rewritten. Once retired, the entity's keys are free and the survivor may carry them. Split = re-key or retire the survivor, then write the entity active again without merged_into; refused while any active entity carries its keys.",
+  "consequences": [
+    "Subscribers see `retired` for the first time; a consumer filtering on created/updated/superseded only will miss merges — the enum existed since 1.25.0.",
+    "A chain A→B→C resolves on read; a long chain costs one entity scan per read (fine at drawer scale).",
+    "Per-record re-homing of history is never done; if David wants a merged clinic's old commitments to carry the survivor's subject, that is a new decision."
+  ],
+  "alternatives_rejected": [
+    "Re-key the retired entity's commitments and summaries to the survivor's subject on merge — REJECTED: ids derive from the subject, so every re-keyed record would be a new identity and the old ones a second copy; history must stay where it was written and be read through the alias.",
+    "Merge by absorbing the retired entity's refs into the survivor automatically — REJECTED: a silent rewrite of the survivor; the writer adds the refs in its own write, which the uniqueness guard now allows because the keys are free.",
+    "A dedicated `merge` verb — REJECTED: one more surface to bind on MCP/HTTP/CLI; a merge is a write of the entity with two fields, idempotent and replayable like every other write."
+  ],
+  "rejected_tripwires": [],
+  "related_components": [
+    "Store"
+  ],
+  "related_files": [
+    "src/core/stateRecords.ts",
+    "src/store/stateBinding.ts",
+    "docs/nuryel-state-contract.md",
+    "test/state-entity-merge.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-09-09T13:05:41.921Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "premises": [],
+  "provenance": {
+    "source": "agent_recorded",
+    "confidence": 0.75,
+    "evidence": [
+      "src/core/stateRecords.ts",
+      "src/store/stateBinding.ts",
+      "docs/nuryel-state-contract.md",
+      "test/state-entity-merge.test.ts"
+    ]
+  },
+  "date": "2026-09-09T13:05:41.921Z"
+}

@@ -27,6 +27,8 @@ import { HUNCH_VERSION } from "../core/version.js";
 import { registerIntegrationCommands } from "./integrations.js";
 import { registerServeCommands } from "./serve.js";
 import { registerUpdateCommand } from "./update.js";
+import { registerReviewMemoryCommands } from "./reviewMemory.js";
+import { detectInitiator, normalizeInitiator } from "../synthesis/initiator.js";
 import { inspectIntegrations, formatIntegrationHealth, integrationHealthFails, integrationSessionWarning } from "../integrations/health.js";
 import { HunchStore } from "../store/hunchStore.js";
 import { JsonStore } from "../store/jsonStore.js";
@@ -144,6 +146,10 @@ import { constraintId } from "../core/ids.js";
 import type { Constraint, Decision, Finding } from "../core/types.js";
 import { readManifest, writeManifest, SCHEMA_VERSION } from "../core/migrate.js";
 import { mergeHunchJson } from "../store/merge.js";
+import { ledgerFile } from "../store/changeLedger.js";
+import { verifyReplay } from "../store/replay.js";
+import { partitionOf, stateHomeFor } from "../store/stateBinding.js";
+import { scopePath } from "../core/stateContract.js";
 import { movePublicMemoryToPrivate } from "../store/privateMigrate.js";
 import { ENTITY_KINDS } from "../core/types.js";
 import { planCompaction } from "../store/compact.js";
@@ -152,9 +158,55 @@ import { resolveInvocation, dim, synthesisStatusLines, maybeWarnOllamaContext } 
 
 const program = new Command();
 program.name("hunch").description("Hunch — engineering memory and a deterministic Change Gate for AI-assisted codebases.").version(HUNCH_VERSION);
+program.option("--initiator <name>", "bind agent launches to the originating CLI (Claude, Codex, Kimi, or a configured adapter)")
+  .option("--cli-config <file>", "explicit local CLI adapter configuration")
+  .hook("preAction", (_rootCommand, actionCommand) => {
+    const options = actionCommand.optsWithGlobals();
+    // One CLI invocation has one origin. MCP uses request-local AsyncLocalStorage instead.
+    if (options.initiator) process.env.HUNCH_INITIATOR = normalizeInitiator(options.initiator);
+    else if (actionCommand.name() === "hook") {
+      process.env.HUNCH_INITIATOR = ["claude", "cursor"].includes(options.provider)
+        ? normalizeInitiator(options.provider) : "unknown";
+    }
+    else {
+      const origin = detectInitiator();
+      if (origin.provider) process.env.HUNCH_INITIATOR = origin.provider;
+      else if (origin.source === "ambiguous") process.env.HUNCH_INITIATOR = "unknown";
+    }
+    if (options.cliConfig) process.env.HUNCH_CLI_CONFIG = options.cliConfig;
+  });
 registerIntegrationCommands(program);
 registerServeCommands(program);
 registerUpdateCommand(program);
+registerReviewMemoryCommands(program, (records, repository, privateOnly) => {
+  const { store, root } = storeFor();
+  if (!repositoryUsesRemote(root, `https://github.com/${repository}.git`)) {
+    throw new Error("review packet repository does not match this checkout's remotes");
+  }
+  const home = store.captureHome(privateOnly);
+  // Preflight the whole batch. A repeated import must never revive a retired rule,
+  // replace a countersigned constraint, or change its scope/evidence silently.
+  for (const record of records) {
+    if (!existsSync(join(root, record.scope[0]!))) throw new Error(`review scope ${record.scope[0]} no longer exists; review the current code before capturing this rule`);
+    const existing = store.recs("constraints").find(r => r.id === record.id);
+    if (existing) throw new Error(`constraint ${record.id} already exists; use the existing correction review flow to change it`);
+  }
+  for (const record of records) store.putCapture("constraints", record, privateOnly);
+  store.reindex();
+  if (home === "public" && !store.autoCommit) refreshExistingGrounding(root, store);
+  pumpMemoryHome(store, root, home, `hunch: capture ${records.length} sourced review rule(s)`);
+}, (repository, privateOnly) => {
+  const { store, root } = storeFor();
+  if (!repositoryUsesRemote(root, `https://github.com/${repository}.git`)) {
+    throw new Error("review repository does not match this checkout's remotes");
+  }
+  if (privateOnly !== undefined && store.captureHome(privateOnly) === "private" && !store.privateDir) {
+    throw new Error("--private requires a configured private overlay");
+  }
+  // A public artifact must never be model-derived from private overlay statements.
+  return { root, existing: store.captureHome(privateOnly) === "private"
+    ? store.recs("constraints") : store.json.loadAll("constraints") };
+});
 
 let openStore: HunchStore | null = null;
 type TeamStoreOptions = { requireFreshTeamMemory?: boolean };
@@ -471,9 +523,9 @@ program
   .option("--since <spec>", "how far back, e.g. 90d", "90d")
   .option("--max <n>", "max commits to process", "40")
   .option("--concurrency <n>", "commits to synthesize in parallel (the LLM call is the bottleneck)", "4")
-  .option("--deep", "Deep Synthesis: ensemble every available LLM provider per commit and reconcile their drafts (slower, higher-quality; advisory)")
+  .option("--deep", "Deep Synthesis: sample the initiating provider repeatedly and reconcile advisory drafts")
   .option("--verify", "Critic pass: audit each draft against its commit, prune unsupported alternatives/consequences, down-weight weak grounding (extra provider call; advisory)")
-  .option("--samples <n>", "self-consistency depth when only one CLI is installed: sample it n times per commit and reconcile (default 2 under --deep)")
+  .option("--samples <n>", "sample the initiating provider n times per commit and reconcile (default 2 under --deep)")
   .action(async (opts: { since: string; max: string; concurrency: string; deep?: boolean; verify?: boolean; samples?: string }) => {
     const { store, root } = storeFor();
     if (!isGitRepo(root)) return fail("backfill needs a git repo");
@@ -514,7 +566,7 @@ program
     if (written) pumpMemoryHome(store, root, home, `hunch: backfill ${written} decision(s)`);
     // Honest tally of where the tokens went: trivial commits are seeded by the
     // free deterministic heuristic, only substantive ones spend the LLM.
-    console.log(`Done: ${written} decision(s) seeded (${llm} via LLM, ${heuristic} heuristic), ${skipped} skipped (trivial/non-code/already-captured).`);
+    console.log(`Done: ${written} decision(s) seeded (${llm} via LLM, ${heuristic} heuristic), ${skipped} skipped (trivial/not substantive/already-captured).`);
     store.close();
   });
 
@@ -530,9 +582,9 @@ program
   .option("--overlay", "alias of --private")
   .option("--commit", "after a capture, also git add+commit the repo the decision landed in (default: follows auto-commit, ON unless opted out) — the overlay is also pushed; the public .hunch/ rides your next push")
   .option("--no-commit", "skip the auto-commit for this capture even when auto-commit is on")
-  .option("--deep", "Deep Synthesis: ensemble every available LLM provider and reconcile their drafts (agreement-weighted, advisory). Slower; uses configured subscriptions/local endpoint")
+  .option("--deep", "Deep Synthesis: sample the initiating provider repeatedly; never switch accounts")
   .option("--verify", "Critic pass: audit the draft against its commit, prune unsupported alternatives/consequences, down-weight weak grounding (extra provider call; advisory)")
-  .option("--samples <n>", "self-consistency depth when only one CLI is installed: sample it n times and reconcile (default 2 under --deep)")
+  .option("--samples <n>", "sample the initiating provider n times and reconcile (default 2 under --deep)")
   .action(async (sha: string | undefined, opts: { fromHook?: boolean; quiet?: boolean; force?: boolean; private?: boolean; overlay?: boolean; commit?: boolean; deep?: boolean; verify?: boolean; samples?: string }) => {
     const { store, root } = storeFor();
     if (!isGitRepo(root)) return opts.quiet ? undefined : fail("sync needs a git repo");
@@ -5179,21 +5231,29 @@ program
 // ---- drift (doc≠graph detector; advisory + CI-gateable) -------------------
 program
   .command("drift")
-  .description("Detect memory drift: dead refs, dangling supersedes, stale 'proposed' docs, doc≠graph anchor-stale (a file still anchored to a superseded decision), and markdown sections whose <!-- hunch:topic … dec_id --> pin points at a superseded or missing decision (AGENTS.md/CLAUDE.md as a drift surface). Exits non-zero on any anchor-stale drift or topic collision — the doc≠graph gate.")
+  .description("Detect memory drift: dead refs, dangling supersedes, stale 'proposed' docs, doc≠graph anchor-stale (a file still anchored to a superseded decision), markdown sections whose <!-- hunch:topic … dec_id --> pin points at a superseded or missing decision (AGENTS.md/CLAUDE.md as a drift surface), and ledger≠records replay divergence when this partition has a change ledger. Exits non-zero on any anchor-stale drift, topic collision or replay divergence — the doc≠graph and ledger≠records gate.")
   .action(() => {
     const { store, root } = storeFor();
     try {
       const { findings } = computeDrift(store, root);
       const collisions = topicCollisions(store.recs("decisions"));
-      if (!findings.length && collisions.size === 0) {
-        console.log("✓ No drift — memory is in sync with the code/docs.");
+      // ledger≠records: when the partition this store IS has a change ledger, its records must be
+      // exactly what the ledger implies (nuryel.replay/1). No ledger, nothing to check.
+      const own = partitionOf(store);
+      const replay = existsSync(ledgerFile(stateHomeFor(store, own).hunchDir, own)) ? verifyReplay(store, own) : null;
+      const replayFailing = replay ? replay.divergences.filter((d) => d.kind !== "legacy-drift") : [];
+      const replayCount = replay && !replay.ok ? Math.max(1, replayFailing.length) : 0;
+      if (!findings.length && collisions.size === 0 && !replayCount) {
+        console.log(`✓ No drift — memory is in sync with the code/docs.${replay ? ` Replay OK: ${scopePath(own)} ledger head ${replay.ledger.head_seq}, ${replay.records.verified + replay.records.verified_by_idempotency} record(s) verified.` : ""}`);
         return;
       }
       for (const f of findings.slice(0, 50)) console.log(`· [${f.kind}] ${f.id} — ${f.detail}`);
       for (const [topic, decs] of collisions) console.log(`· [topic-collision] "${topic}" has ${decs.length} live decisions: ${decs.map((d) => d.id).join(", ")} — run \`hunch reconcile-topics\``);
+      for (const d of replay?.divergences ?? []) console.log(`· [replay-${d.kind}] ${d.record_id} — ${d.detail}`);
+      if (replayCount && !replayFailing.length) console.log(`· [replay-fingerprint] ${scopePath(own)}: ledger fold ${replay!.replay_hash} ≠ stored ${replay!.stored_hash}`);
       const anchor = findings.filter((f) => f.kind === "anchor-stale" || f.kind === "doc-anchor-stale").length;
-      console.log(`\n${findings.length} finding(s)${anchor ? `, ${anchor} doc≠graph (anchor-stale)` : ""}${collisions.size ? `, ${collisions.size} topic-collision(s)` : ""}.`);
-      if (anchor || collisions.size) process.exitCode = 1;
+      console.log(`\n${findings.length + replayCount} finding(s)${anchor ? `, ${anchor} doc≠graph (anchor-stale)` : ""}${collisions.size ? `, ${collisions.size} topic-collision(s)` : ""}${replayCount ? `, ${replayCount} ledger≠records (replay: hunch serve replay --root .)` : ""}.`);
+      if (anchor || collisions.size || replayCount) process.exitCode = 1;
     } finally {
       store.close();
     }

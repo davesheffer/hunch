@@ -28,8 +28,9 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import { compareCodeUnits } from "./canonicalOrder.js";
 import { DELIVERY_PROFILES, type DeliveryEnvelope } from "./delivery.js";
+import { isHumanConfirmed as sourceIsHumanConfirmed } from "./strictgate.js";
 import {
-  ScopeSchema, scopePath, DependencyRefSchema, ExternalRefSchema,
+  ScopeSchema, scopePath, externalKey, DependencyRefSchema, ExternalRefSchema,
   RECEIPT_SCHEMA_VERSION, COMMITMENT_SCHEMA_VERSION, DERIVED_SCHEMA_VERSION, ENTITY_SCHEMA_VERSION, RELATIONSHIP_SCHEMA_VERSION,
   type Scope, type ActionReceipt, type Commitment, type DerivedState,
 } from "./stateRecords.js";
@@ -41,11 +42,16 @@ export const STATE_READ_VERSION = "nuryel.state.read/1" as const;
 export const STATE_WRITE_VERSION = "nuryel.state.write/1" as const;
 export const STATE_SUBSCRIBE_VERSION = "nuryel.state.subscribe/1" as const;
 export const STATE_RECORDS_VERSION = "nuryel.state.records/1" as const;
+export const STATE_CAPTURE_VERSION = "nuryel.state.capture/1" as const;
+export const STATE_CAPTURE_BATCH_VERSION = "nuryel.state.capture-batch/1" as const;
+export const STATE_OBSERVATION_LINKS_VERSION = "nuryel.observation-links/1" as const;
+export const STATE_OBSERVATION_REVIEW_VERSION = "nuryel.observation-review/1" as const;
+export const STATE_OBSERVATION_PAGES_VERSION = "nuryel.observation-pages/1" as const;
 
 /** Capabilities a server advertises; a client that needs one the server lacks gets a typed
  *  `unsupported`, never a compatible-looking degraded answer. */
 export const STATE_CAPABILITIES = [
-  STATE_READ_VERSION, STATE_WRITE_VERSION, STATE_SUBSCRIBE_VERSION, STATE_RECORDS_VERSION,
+  STATE_READ_VERSION, STATE_WRITE_VERSION, STATE_SUBSCRIBE_VERSION, STATE_RECORDS_VERSION, STATE_CAPTURE_VERSION, STATE_CAPTURE_BATCH_VERSION, STATE_OBSERVATION_LINKS_VERSION, STATE_OBSERVATION_REVIEW_VERSION, STATE_OBSERVATION_PAGES_VERSION,
   RECEIPT_SCHEMA_VERSION, COMMITMENT_SCHEMA_VERSION, DERIVED_SCHEMA_VERSION, ENTITY_SCHEMA_VERSION, RELATIONSHIP_SCHEMA_VERSION,
 ] as const;
 export type StateCapability = (typeof STATE_CAPABILITIES)[number];
@@ -67,6 +73,48 @@ export const PrincipalSchema = z.object({
 }).strict();
 export type Principal = z.infer<typeof PrincipalSchema>;
 
+/** One relevant assertion, never a whole conversation. Source text is transient input:
+ * only its exact supporting excerpt and a hashed external pointer may reach the store. */
+export const CaptureRequestSchema = z.object({
+  schema: z.literal(STATE_CAPTURE_VERSION),
+  principal: PrincipalSchema,
+  scope: ScopeSchema,
+  subject: z.string().min(1).max(512),
+  statement: z.string().trim().min(1).max(1200),
+  relevance: z.object({
+    use: z.enum(["decision", "constraint", "preference", "operational_fact", "ongoing_issue"]),
+    reason: z.string().trim().min(1).max(600),
+  }).strict(),
+  evidence: z.array(z.object({
+    ref: ExternalRefSchema,
+    source_text: z.string().min(1).max(64000),
+    excerpt: z.string().trim().min(1).max(1200),
+  }).strict()).min(1).max(8),
+}).strict();
+export type CaptureRequest = z.infer<typeof CaptureRequestSchema>;
+
+/** Sources cross the transport once; assertions name only their supporting excerpts. */
+export const CaptureBatchRequestSchema = z.object({
+  schema: z.literal(STATE_CAPTURE_BATCH_VERSION), principal: PrincipalSchema, scope: ScopeSchema,
+  sources: z.array(CaptureRequestSchema.shape.evidence.element.omit({ excerpt: true })).min(1).max(8),
+  observations: z.array(CaptureRequestSchema.pick({ subject: true, statement: true, relevance: true }).extend({
+    evidence: z.array(z.object({ source: z.number().int().min(0).max(7), excerpt: z.string().trim().min(1).max(1200) }).strict()).min(1).max(8),
+  })).min(0).max(32),
+  reviews: z.array(z.object({
+    record_id: z.string().regex(/^nds_[a-f0-9]{24}$/), expected_hash: z.string().regex(SHA256),
+    reason: z.string().trim().min(1).max(600),
+    evidence: z.array(z.object({ source: z.number().int().min(0).max(7), excerpt: z.string().trim().min(1).max(1200) }).strict()).min(1).max(8),
+  }).strict()).min(1).max(32).optional(),
+}).strict();
+export type CaptureBatchRequest = z.infer<typeof CaptureBatchRequestSchema>;
+
+export const CAPTURE_TRANSFORM = "agent-capture/1:";
+export const normalizeAssertion = (text: string): string => text.normalize("NFC").replace(/\r\n?/g, "\n").trim();
+export function captureTransform(scope: Scope, subject: string, statement: string, evidence: { source: string; excerpt: string }[]): string {
+  const identities = [...new Set(evidence.map(e => stateHash({ source: e.source, excerpt: normalizeAssertion(e.excerpt) })))].sort();
+  return CAPTURE_TRANSFORM + stateHash({ scope, subject, statement: normalizeAssertion(statement), evidence: identities }).slice(7);
+}
+
 export const STATE_FACETS = ["decisions", "constraints", "bugs", "findings", "receipts", "commitments", "derived", "entities", "relationships"] as const;
 export type StateFacet = (typeof STATE_FACETS)[number];
 
@@ -76,6 +124,10 @@ export type StateFacet = (typeof STATE_FACETS)[number];
  *  primary partition; its envelope and receipt lead the response). An entry the principal is not
  *  granted is NAMED in `denied_scopes` — it never refuses the whole call, and is never described. */
 export const ReadScopesSchema = z.array(ScopeSchema).min(1).max(64);
+
+export const ObservationCursorSchema = z.object({
+  snapshot_hash: z.string().regex(SHA256), offset: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+}).strict();
 
 export const ReadRequestSchema = z.object({
   schema: z.literal(STATE_READ_VERSION),
@@ -87,6 +139,8 @@ export const ReadRequestSchema = z.object({
   profile: z.enum(DELIVERY_PROFILES).optional(),
   budget_tokens: z.number().int().min(200).max(200_000).optional(),
   facets: z.array(z.enum(STATE_FACETS)).max(STATE_FACETS.length).optional(),
+  /** Explicit single-partition pagination; default subject reads keep their existing bound. */
+  observed_page: z.object({ cursor: ObservationCursorSchema.optional() }).strict().optional(),
 }).strict();
 export type ReadRequest = z.infer<typeof ReadRequestSchema>;
 
@@ -105,6 +159,11 @@ export const StateOfRecordSchema = z.object({
   current: z.array(StateRefSchema).max(256),
   in_force: z.array(StateRefSchema).max(256),
   done: z.array(StateRefSchema).max(256),
+  /** Source-backed observations, not a claim of currentness. Additive; absent on old hosts. */
+  observed: z.array(StateRefSchema).max(64).optional(),
+  observed_truncated: z.boolean().optional(),
+  observed_page: z.object({ snapshot_hash: z.string().regex(SHA256), total: z.number().int().nonnegative(), next_cursor: ObservationCursorSchema.nullable() }).strict().optional(),
+  relationships_truncated: z.boolean().optional(),
   depends_on: z.array(DependencyRefSchema).max(1024),
   invalidated_by: z.array(z.string().max(512)).max(256),
 }).strict();
@@ -158,6 +217,19 @@ export const WriteResultSchema = z.object({
   record: z.record(z.string(), z.unknown()).optional(),
 }).strict();
 export type WriteResult = z.infer<typeof WriteResultSchema>;
+
+export const CaptureBatchResultSchema = z.object({
+  schema: z.literal(STATE_CAPTURE_BATCH_VERSION),
+  results: z.array(z.discriminatedUnion("status", [
+    z.object({ index: z.number().int(), status: z.literal("saved"), result: WriteResultSchema }).strict(),
+    z.object({ index: z.number().int(), status: z.literal("refused"), code: z.string(), message: z.string() }).strict(),
+  ])).max(32),
+  reviews: z.array(z.discriminatedUnion("status", [
+    z.object({ index: z.number().int(), status: z.literal("saved"), result: WriteResultSchema }).strict(),
+    z.object({ index: z.number().int(), status: z.literal("refused"), code: z.string(), message: z.string() }).strict(),
+  ])).max(32).optional(),
+}).strict();
+export type CaptureBatchResult = z.infer<typeof CaptureBatchResultSchema>;
 
 export const SubscribeRequestSchema = z.object({
   schema: z.literal(STATE_SUBSCRIBE_VERSION),
@@ -261,6 +333,11 @@ export function commitmentId(c: Pick<Commitment, "scope" | "subject" | "title" |
   return idFrom("ncm", { scope: c.scope, subject: c.subject, title: c.title.trim(), owner: c.owner, due: c.due });
 }
 export function derivedId(d: Pick<DerivedState, "scope" | "subject" | "transform_version" | "dependencies">): string {
+  // Capture's reserved transform includes assertion/evidence identity, independent of
+  // read time and unrelated source edits. Ordinary summary identity is unchanged.
+  if (/^agent-capture\/1:[a-f0-9]{64}$/.test(d.transform_version)) {
+    return idFrom("nds", { scope: d.scope, subject: d.subject, transform_version: d.transform_version });
+  }
   return idFrom("nds", { scope: d.scope, subject: d.subject, transform_version: d.transform_version, dependencies: d.dependencies.map((dep) => stateHash(dep)).sort(compareCodeUnits) });
 }
 
@@ -274,17 +351,26 @@ export const STATE_INVARIANTS = [
   { id: "one-live-decision-per-topic", statement: "A second live decision on a topic is refused with the incumbent named; supersession is explicit." },
   { id: "external-truth-stays-external", statement: "External systems remain authoritative for their own content; Nuryel holds credential-free pointers, versions and hashes, never mirrored bodies." },
   { id: "derived-state-carries-dependencies", statement: "A derived statement without dependencies cannot be invalidated and is therefore not state." },
-  { id: "derived-state-writer-owns-currentness", statement: "No source writes the drawer. The writer of a derived statement owns keeping its dependencies true: re-validate them on a schedule or on a source event, and write the statement back stale with the moved pointer as cause when one no longer holds. An agent that will not do this must not write derived state." },
+  { id: "one-entity-per-external-ref", statement: "One external record is one entity in a partition: a second active entity carrying an external key an incumbent already carries is refused with the incumbent named, and a subject written as that record's external key is refused with the entity's id named. Identity is explicit refs, never similarity; merge is explicit — a retired entity names the survivor in `merged_into`, the ledger holds the `retired` event, nothing under the old id is rewritten and reads resolve to the survivor — and split is the explicit reverse; never a silent rewrite." },
+  { id: "human-correction-outranks-agent-writes", statement: "A record a human confirmed is never overwritten or superseded by an agent or service principal: the agent may replay it, write derived state back stale with the external cause that moved, or close a commitment with a receipt on record. Changing what the human said takes a human." },
+  { id: "derived-state-writer-owns-currentness", statement: "No source writes the drawer. The writer of a current derived statement owns keeping its dependencies true: re-validate them on a schedule or on a source event, and write the statement back stale with the moved pointer as cause when one no longer holds. Without this duty an agent may capture source-backed observations only as unknown; observations never assert currentness." },
 ] as const;
 
 const grantKey = (scope: Scope): string => scopePath(scope);
+
+/** The memory supply chain's top tier: a record whose provenance a human signed. Same tier rule
+ *  as the strict gate's (strictgate.isHumanConfirmed), applied to a record instead of a source. */
+export function isHumanConfirmed(record: unknown): boolean {
+  const source = (record as { provenance?: { source?: unknown } } | null)?.provenance?.source;
+  return typeof source === "string" && sourceIsHumanConfirmed(source);
+}
 
 /** authorization-before-retrieval, checked on the way OUT as well: nothing in a read response
  *  may sit outside the principal's grants. Bindings must also filter on the way in. */
 export function assertReadWithinGrants(principal: Principal, response: ReadResponse): void {
   const granted = new Set(principal.grants.map(grantKey));
   if (!granted.has(grantKey(response.scope))) throw new Error(`read response scope ${grantKey(response.scope)} is outside the principal's grants`);
-  const refs = response.state_of_record ? [...response.state_of_record.current, ...response.state_of_record.in_force, ...response.state_of_record.done] : [];
+  const refs = response.state_of_record ? [...response.state_of_record.current, ...response.state_of_record.in_force, ...response.state_of_record.done, ...(response.state_of_record.observed ?? [])] : [];
   for (const ref of refs) {
     if (!granted.has(grantKey(ref.scope))) throw new Error(`state ref ${ref.id} in scope ${grantKey(ref.scope)} leaked outside the principal's grants`);
   }
@@ -314,6 +400,18 @@ export function assertWriteWellFormed(request: WriteRequest): void {
 export function assertDerivedState(d: DerivedState): void {
   if (d.dependencies.length === 0) throw new Error("derived state without dependencies is not state");
   if (stateHash(d.content) !== d.content_hash) throw new Error("derived state content hash does not match its content");
+  if (d.transform_version.startsWith(CAPTURE_TRANSFORM)) {
+    const content = z.object({
+      schema: z.literal("nuryel.observation-content/1"),
+      statement: CaptureRequestSchema.shape.statement, relevance: CaptureRequestSchema.shape.relevance,
+      evidence: z.array(z.object({ source: z.string(), excerpt: z.string().min(1).max(1200) }).strict()).min(1).max(8),
+      captured_by: PrincipalSchema.shape.id,
+    }).strict().parse(JSON.parse(d.content));
+    if (d.state === "current") throw new Error("capture observations cannot assert currentness; publish a separately revalidated summary");
+    if (captureTransform(d.scope, d.subject, content.statement, content.evidence) !== d.transform_version) throw new Error("capture identity does not match its assertion and evidence");
+    const pointers = new Set(d.dependencies.filter(dep => dep.kind === "external").map(dep => externalKey(dep.ref)));
+    if (content.evidence.some(e => !pointers.has(e.source))) throw new Error("capture evidence lacks its external dependency");
+  }
 }
 
 /** Subscribe streams are strictly ordered per scope; a gap or regression means the caller must

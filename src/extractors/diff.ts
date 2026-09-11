@@ -30,11 +30,12 @@ export interface DiffAnalysis {
   changedSymbols: SymbolChange[]; // appeared on both sides of the SAME file
   addedDeps: string[]; // new external (non-relative) imports
   removedDeps: string[];
-  addedLines: number; // code lines only
+  addedLines: number; // substantive lines only (code + prose, per isSubstantive)
   removedLines: number;
-  /** Added line bodies (the "+" content, marker stripped) per code file. The text
-   *  veto's symbol/pattern tiers match against — call sites, not just declarations,
-   *  which addedSymbols can't see. Keyed by the same (new-path) key as perFile. */
+  /** Added line bodies (the "+" content, marker stripped) per file — every file,
+   *  not just substantive ones. The text veto's symbol/pattern tiers match against
+   *  — call sites, not just declarations, which addedSymbols can't see. Keyed by
+   *  the same (new-path) key as perFile. */
   addedLinesByFile: Map<string, string[]>;
 }
 
@@ -55,7 +56,7 @@ const DECL_PATTERNS: Array<{ kind: SymbolChange["kind"]; re: RegExp }> = [
   // `class Foo(Bar):` header too, and — since declOf() returns on the first match —
   // always wins for Python class lines before any Python-specific pattern would run.
 ];
-import { languageFor } from "./languages.js";
+import { languageFor, isSubstantive } from "./languages.js";
 
 const IMPORT_RE = /^\s*import\s+(?:[^'"]*from\s+)?['"]([^'"]+)['"]/;
 const CONT_IMPORT_RE = /^\s*\}?\s*from\s+['"]([^'"]+)['"]/; // multi-line: "} from 'x'"
@@ -151,14 +152,14 @@ export function analyzeDiff(diff: string): DiffAnalysis {
       } else if (raw.startsWith("rename to ") || raw.startsWith("copy to ")) {
         const to = raw.slice(raw.indexOf(" to ") + 4).trim();
         curFile = to;
-        if (isCode(to)) filesRenamed.push({ from: renameFrom, to });
+        if (isSubstantive(to)) filesRenamed.push({ from: renameFrom, to });
       } else if (raw.startsWith("--- ")) {
         const p = raw.slice(4).trim();
         if (p !== "/dev/null") curFile = stripAB(p); // old path (may be replaced by +++)
       } else if (raw.startsWith("+++ ")) {
         const p = raw.slice(4).trim();
         if (p !== "/dev/null") curFile = stripAB(p); // new path preferred
-        if (isCode(curFile)) {
+        if (isSubstantive(curFile)) {
           if (curAdded) filesAdded.add(curFile);
           else if (curDeleted) filesDeleted.add(curFile);
         }
@@ -169,33 +170,38 @@ export function analyzeDiff(diff: string): DiffAnalysis {
     // ---- inside a hunk: content lines ----
     if (raw.startsWith("+")) {
       const body = raw.slice(1);
-      // Raw added lines are captured for EVERY file, before the code-only gate:
+      // Raw added lines are captured for EVERY file, before the substantive gate:
       // content-matched constraints and Veto tripwires are not code-only rules
       // (a blocking invariant legitimately scopes .github/workflows/**, *.sql,
       // Dockerfile). Skipping them here left `scopedAdded` empty, which
       // buildCheckReport reads as "cannot prove a violation ⇒ complies" — so the
       // pre-edit hook denied the edit while `hunch check --strict` passed the
-      // very commit that landed it. Symbol/import extraction and the churn
-      // counters below stay code-only, unchanged.
+      // very commit that landed it. The churn counters below now also include
+      // prose (isSubstantive, issue #12); symbol/import extraction stays
+      // code-only (isCode/languageFor) since declarations are a code concept.
       let lines = addedLinesBy.get(curFile);
       if (!lines) { lines = []; addedLinesBy.set(curFile, lines); }
       lines.push(body);
-      if (!isCode(curFile)) continue;
+      if (!isSubstantive(curFile)) continue;
       addedLines++;
       if (!curAdded && !curDeleted) filesModified.add(curFile);
-      const d = declOf(body);
-      if (d) declsFor(curFile)?.added.set(d.name, d);
-      const imp = importOf(body);
-      if (imp && !imp.startsWith(".")) addedImports.add(imp);
+      if (isCode(curFile)) {
+        const d = declOf(body);
+        if (d) declsFor(curFile)?.added.set(d.name, d);
+        const imp = importOf(body);
+        if (imp && !imp.startsWith(".")) addedImports.add(imp);
+      }
     } else if (raw.startsWith("-")) {
-      if (!isCode(curFile)) continue;
+      if (!isSubstantive(curFile)) continue;
       removedLines++;
       if (!curAdded && !curDeleted) filesModified.add(curFile);
-      const body = raw.slice(1);
-      const d = declOf(body);
-      if (d) declsFor(curFile)?.removed.set(d.name, d);
-      const imp = importOf(body);
-      if (imp && !imp.startsWith(".")) removedImports.add(imp);
+      if (isCode(curFile)) {
+        const body = raw.slice(1);
+        const d = declOf(body);
+        if (d) declsFor(curFile)?.removed.set(d.name, d);
+        const imp = importOf(body);
+        if (imp && !imp.startsWith(".")) removedImports.add(imp);
+      }
     }
   }
 

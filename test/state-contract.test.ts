@@ -115,7 +115,7 @@ test("capability negotiation names what is unsupported instead of degrading sile
 
 test("the invariants are enumerated, stable and each backed by an assertion or a schema rule", () => {
   const ids = STATE_INVARIANTS.map((i) => i.id);
-  assert.deepEqual(ids, ["authorization-before-retrieval", "similarity-never-authorizes", "never-in-request-path", "provenance-on-every-write", "one-live-decision-per-topic", "external-truth-stays-external", "derived-state-carries-dependencies", "derived-state-writer-owns-currentness"]);
+  assert.deepEqual(ids, ["authorization-before-retrieval", "similarity-never-authorizes", "never-in-request-path", "provenance-on-every-write", "one-live-decision-per-topic", "external-truth-stays-external", "derived-state-carries-dependencies", "one-entity-per-external-ref", "human-correction-outranks-agent-writes", "derived-state-writer-owns-currentness"]);
   // derived-state-writer-owns-currentness: the write verb admits the external cause a sweep names,
   // and a stale write is an invalidation (test/state-chain.test.ts exercises the binding).
   assert.ok("cause" in WriteRequestSchema.shape, "WriteRequest carries the external cause");

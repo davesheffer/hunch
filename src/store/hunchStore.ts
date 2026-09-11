@@ -263,8 +263,10 @@ export class HunchStore {
   putCapture<K extends EntityKind>(kind: K, record: EntityFor[K], isPrivate = false): EntityFor[K] {
     const home = this.captureHome(isPrivate);
     const id = (record as { id: string }).id;
-    const targetHasRecord = home === "private" ? !!this.privateJson?.get(kind, id) : !!this.json.get(kind, id);
-    const otherHasRecord = home === "private" ? !!this.json.get(kind, id) : !!this.privateJson?.get(kind, id);
+    const lookup = (json: JsonStore | undefined) => kind === "derived" || kind === "receipts" || kind === "commitments"
+      ? json?.getDirect(kind, id) : json?.get(kind, id);
+    const targetHasRecord = !!lookup(home === "private" ? this.privateJson : this.json);
+    const otherHasRecord = !!lookup(home === "private" ? this.json : this.privateJson);
     // Legacy repositories can already contain twins, so an idempotent update in
     // the selected home remains possible. A new capture must never CREATE that
     // ambiguous state: merged/private-first reads would make later writers and
@@ -318,6 +320,10 @@ export class HunchStore {
    *  should use this instead of overlay-first `getRec`. */
   getPrivateRec<K extends EntityKind>(kind: K, id: string): EntityFor[K] | undefined {
     return this.privateJson?.get(kind, id);
+  }
+
+  getStateDirect<K extends "derived" | "receipts" | "commitments">(kind: K, id: string, home: "public" | "private"): EntityFor[K] | undefined {
+    return (home === "private" ? this.privateJson : this.json)?.getDirect(kind, id);
   }
 
   /** Update an EXISTING record in the store that holds it — an overlay record must never

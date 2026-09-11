@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import { MEMLOG_FORMAT } from "../core/memorylog.js";
 import { hunchAttributesAreSafe, hunchTreeAttributesAreSafe, safeOverlayGitTreeListing, safeOverlayTree } from "../core/overlaySafety.js";
 import { createRepoFileReader } from "../core/safeRepoFile.js";
+import { initiatorChildEnv } from "../synthesis/initiator.js";
 
 export interface CommitMeta {
   sha: string;
@@ -33,7 +34,7 @@ const LOCAL_GIT_ENV_VARS = [
 ] as const;
 
 export function foreignRepoEnv(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-  const env = { ...source };
+  const env = initiatorChildEnv(source);
   for (const key of LOCAL_GIT_ENV_VARS) delete env[key];
   for (const key of Object.keys(env)) {
     if (/^GIT_CONFIG_(?:KEY|VALUE)_\d+$/.test(key)) delete env[key];
@@ -63,6 +64,7 @@ function git(args: string[], cwd: string, maxBuffer = 64 * 1024 * 1024): string 
   // stdio: capture stdout, silence stderr (so "no commits yet" etc. don't leak).
   return execFileSync("git", args, {
     cwd, encoding: "utf8", maxBuffer,
+    env: initiatorChildEnv(),
     stdio: ["ignore", "pipe", "ignore"],
   }).trim();
 }
@@ -743,6 +745,10 @@ export function headFileContent(root: string, rel: string): string | null {
       encoding: "utf8",
       env: foreignRepoEnv(process.env),
       maxBuffer: 16 * 1024 * 1024,
+      // An untracked/absent-at-HEAD path is an expected, silently-handled case
+      // (falls through to the catch below) — don't let git's "fatal: path ...
+      // does not exist in 'HEAD'" leak onto the caller's stderr for it.
+      stdio: ["ignore", "pipe", "ignore"],
     });
   } catch {
     return null;

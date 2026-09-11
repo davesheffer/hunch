@@ -3,6 +3,10 @@ import { resolve } from "node:path";
 import { createServeApp } from "../serve/app.js";
 import { initServeConfig, partitionFor, readServeConfig } from "../serve/config.js";
 import { compactLedger } from "../store/changeLedger.js";
+import { HunchStore } from "../store/hunchStore.js";
+import { hunchPaths } from "../core/paths.js";
+import { partitionOf } from "../store/stateBinding.js";
+import { formatReplayReport, verifyReplay } from "../store/replay.js";
 import { join } from "node:path";
 import { ScopeSchema, scopePath } from "../core/stateContract.js";
 import { HUNCH_VERSION } from "../core/version.js";
@@ -51,6 +55,35 @@ export function registerServeCommands(program: Command): void {
       const result = compactLedger(join(partition.root, ".hunch"), scope, { keep });
       if (opts.json) { console.log(JSON.stringify({ partition: scopePath(scope), ...result })); return; }
       console.log(result.dropped ? `${scopePath(scope)}: dropped ${result.dropped} event(s); floor ${result.floor_seq}, head ${result.head_seq}` : `${scopePath(scope)}: nothing to compact (${result.head_seq - result.floor_seq} events retained)`);
+    });
+
+  serve.command("replay")
+    .description("Replay determinism check: fold a partition's change ledger into the state it implies and compare it, hash for hash, to the records on file. Exits 1 on any divergence — wire into CI.")
+    .option("--partition <kind:id>", "the served partition to verify (from --config); omit with --root")
+    .option("--root <dir>", "verify the partition a directory IS (its .hunch/partition.json, or the repository) without a serve config")
+    .option("--json", "machine-readable report (nuryel.replay/1)")
+    .action((opts: { partition?: string; root?: string; json?: boolean }) => {
+      let root: string;
+      let scope: { kind: "organization" | "team" | "user" | "repository"; id: string };
+      if (opts.root) {
+        root = resolve(opts.root);
+        const probe = new HunchStore(hunchPaths(root));
+        try { scope = opts.partition ? parseScopeArg(opts.partition) : partitionOf(probe); } finally { probe.close(); }
+      } else {
+        if (!opts.partition) throw new Error("pass --partition kind:id (with a serve config) or --root <dir>");
+        const parent = serve.opts() as { config?: string };
+        const config = readServeConfig(resolve(parent.config ?? DEFAULT_CONFIG));
+        scope = parseScopeArg(opts.partition);
+        const partition = partitionFor(config, scope);
+        if (!partition) throw new Error(`this config does not serve ${scopePath(scope)}`);
+        root = partition.root;
+      }
+      const store = new HunchStore(hunchPaths(root));
+      try {
+        const report = verifyReplay(store, scope);
+        console.log(opts.json ? JSON.stringify(report) : formatReplayReport(report));
+        if (!report.ok) process.exitCode = 1;
+      } finally { store.close(); }
     });
 
   serve.command("init")

@@ -4,11 +4,10 @@
  * LLM synthesis is driven by the user's chosen coding-assistant subscription
  * CLI or an explicitly configured OpenAI-compatible endpoint. Claude Code,
  * Codex, and Cursor use different auth surfaces, but every provider returns the
- * same shape. When more than one non-deterministic provider is available, Hunch
- * deliberately does NOT guess which one to use: the user chooses once with
- * `hunch provider <name>` (stored locally)
- * or overrides per shell with HUNCH_SYNTH_PROVIDER. Ambiguous auto mode stays
- * deterministic and free.
+ * same shape. An agent-initiated operation stays with its initiating provider,
+ * including verification and deep sampling. CLI availability never establishes
+ * origin. Explicit env/local preferences remain for human terminal invocations;
+ * unknown/ambiguous agent origins stay deterministic and free.
  *
  * Subscription, not API: provider-specific API credentials are removed from the
  * child env wherever the CLI would otherwise prefer them. There is intentionally
@@ -31,7 +30,10 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { writeFileAtomic } from "../core/io.js";
 import { summarizeDiff, type DiffAnalysis } from "../extractors/diff.js";
+import { languageFor } from "../extractors/languages.js";
 import type { Decision } from "../core/types.js";
+import { assertInitiatorProvider, currentInitiator, initiatorChildEnv } from "./initiator.js";
+import { discoverAgentClis, readAgentCliConfig, type AgentCliAdapter } from "./cliAdapter.js";
 
 const IS_WIN = process.platform === "win32";
 
@@ -65,12 +67,12 @@ export function pexecIn(
     const child = IS_WIN
       ? spawn([cmd, ...args].join(" "), {
           shell: true,
-          env: opts.env,
+          env: initiatorChildEnv(opts.env ?? process.env),
           cwd: opts.cwd,
           windowsHide: true,
         })
       : spawn(cmd, args, {
-          env: opts.env,
+          env: initiatorChildEnv(opts.env ?? process.env),
           cwd: opts.cwd,
           windowsHide: true,
         });
@@ -244,10 +246,10 @@ export interface SynthProvider {
 }
 
 /** Every selectable synthesis mode. `auto` is a preference value rather than a
- * provider: it uses a subscription only when exactly one usable CLI is found.
+ * provider: it resolves the invocation's origin without choosing by availability.
  * "openai-compat" is the opt-in local/self-hosted HTTP provider (Ollama, vLLM,
  * LM Studio, ...) — not a subscription, but explicitly selectable like one. */
-export const SYNTH_PROVIDER_NAMES = ["claude-cli", "codex-cli", "cursor-agent", "openai-compat", "deterministic"] as const;
+export const SYNTH_PROVIDER_NAMES = ["claude-cli", "codex-cli", "cursor-agent", "kimi-cli", "openai-compat", "deterministic"] as const;
 export const SYNTH_PREFERENCES = ["auto", ...SYNTH_PROVIDER_NAMES] as const;
 export type SynthProviderName = (typeof SYNTH_PROVIDER_NAMES)[number];
 export type SynthPreference = (typeof SYNTH_PREFERENCES)[number];
@@ -262,7 +264,8 @@ export interface ProviderStatus {
 export interface ProviderResolution {
   provider: SynthProvider;
   /** Why this provider was chosen. `ambiguous` is intentionally deterministic. */
-  source: "environment" | "local" | "single-available" | "ambiguous" | "none" | "unavailable-preference";
+  source: "environment" | "local" | "single-available" | "ambiguous" | "none" | "unavailable-preference" | "initiator" | "unavailable-initiator" | "unknown-initiator";
+  initiator?: string | null;
   preference: SynthPreference;
   statuses: ProviderStatus[];
 }
@@ -274,12 +277,15 @@ export interface ProviderSelectionOptions {
   env?: NodeJS.ProcessEnv;
   /** Injectable for tests; normal callers use the built-in CLI registry. */
   providers?: readonly SynthProvider[];
+  /** Explicit local CLI adapter config; never loaded automatically from repository content. */
+  cliConfig?: string;
 }
 
 const PROVIDER_INFO: Record<SynthProviderName, { label: string; subscription: string | null }> = {
   "claude-cli": { label: "Claude Code", subscription: "Claude subscription" },
   "codex-cli": { label: "Codex", subscription: "ChatGPT subscription" },
   "cursor-agent": { label: "Cursor Agent", subscription: "Cursor subscription" },
+  "kimi-cli": { label: "Kimi CLI", subscription: null },
   "openai-compat": { label: "Self-hosted / local model (Ollama, vLLM, LM Studio, ...)", subscription: null },
   deterministic: { label: "Deterministic local fallback", subscription: null },
 };
@@ -380,7 +386,8 @@ abstract class PromptSynthProvider implements SynthProvider {
   /** Run a CLI with the prompt on stdin, stripping API-key env vars so the tool
    *  falls through to its SUBSCRIPTION credentials. Shared by codex/cursor. */
   protected async runCli(bin: string, args: string[], stripEnv: string[], prompt: string, timeoutMs = 120_000): Promise<string> {
-    const env = { ...process.env };
+    assertInitiatorProvider(this.name);
+    const env = initiatorChildEnv();
     for (const k of stripEnv) delete env[k];
     const { stdout } = await pexecIn(bin, args, {
       input: prompt,
@@ -393,6 +400,7 @@ abstract class PromptSynthProvider implements SynthProvider {
   }
 
   async draftDecision(input: CommitInput): Promise<DecisionDraft> {
+    assertInitiatorProvider(this.name);
     const text = await this.run(`${SYSTEM}\n\n${commitPrompt(input)}\n\n${jsonInstruction(DECISION_TOOL.input_schema)}`, "json");
     const draft = decisionDraftFromText(text, input.subject);
     // No usable LLM JSON (truncation, refusal, prose-only, or a CLI whose output
@@ -408,6 +416,7 @@ abstract class PromptSynthProvider implements SynthProvider {
   }
 
   async draftBug(input: FailureInput): Promise<BugDraft> {
+    assertInitiatorProvider(this.name);
     const text = await this.run(`${SYSTEM}\n\n${failurePrompt(input)}\n\n${jsonInstruction(BUG_TOOL.input_schema)}`, "json");
     const draft = bugDraftFromText(text, input.test, input.message);
     if (!draft) throw new Error(`${this.name}: no usable bug JSON in output`);
@@ -418,6 +427,7 @@ abstract class PromptSynthProvider implements SynthProvider {
    *  mode required by the record mappers. Throws on empty output so the caller
    *  falls back to its deterministic template page. */
   async draftProse(prompt: string): Promise<string> {
+    assertInitiatorProvider(this.name);
     const text = (await this.run(prompt, "text")).trim();
     if (!text) throw new Error(`${this.name}: empty prose output`);
     return text;
@@ -428,6 +438,7 @@ abstract class PromptSynthProvider implements SynthProvider {
    *  Throws on unusable output so verifyDecisionSafe degrades to the un-audited
    *  draft (a verifier failure must never lose the draft — dec_18a81c8291). */
   async verifyDecision(input: CommitInput, draft: DecisionDraft): Promise<VerifyVerdict> {
+    assertInitiatorProvider(this.name);
     const text = await this.run(`${VERIFY_SYSTEM}\n\n${verifyPrompt(input, draft)}\n\n${jsonInstruction(VERIFY_TOOL.input_schema)}`, "json");
     const verdict = verdictFromText(text);
     if (!verdict) throw new Error(`${this.name}: no usable verdict JSON in output`);
@@ -438,6 +449,7 @@ abstract class PromptSynthProvider implements SynthProvider {
    *  Uses the provider's guarded transport. Throws on unusable
    *  output so the caller can degrade to a keep-for-human verdict. */
   async judgeDraft(draft: Decision, existing: ExistingDecisionRef[]): Promise<RelevanceVerdict> {
+    assertInitiatorProvider(this.name);
     const text = await this.run(`${RELEVANCE_SYSTEM}\n\n${relevancePrompt(draft, existing)}\n\n${jsonInstruction(RELEVANCE_TOOL.input_schema)}`, "json");
     const verdict = relevanceFromText(text);
     if (!verdict) throw new Error(`${this.name}: no usable relevance JSON in output`);
@@ -798,6 +810,9 @@ export class DeterministicProvider implements SynthProvider {
     const dirs = topDirs(input.files);
     const a = input.analysis;
     const summary = a ? summarizeDiff(a) : "";
+    // input.files can be markdown-only (issue #12) — don't claim "code" for a
+    // commit that touched none.
+    const noun = input.files.some((f) => languageFor(f) !== null) ? "code" : "content";
     const verb = /^(add|introduce|create|feat)/i.test(input.subject) ? "introduced"
       : /^(remove|delete|drop)/i.test(input.subject) ? "removed"
       : /^(refactor|rework|restructure)/i.test(input.subject) ? "refactored"
@@ -813,12 +828,12 @@ export class DeterministicProvider implements SynthProvider {
     const informative = !!(a && (a.addedSymbols.length || a.removedSymbols.length || a.changedSymbols.length || a.addedDeps.length || a.removedDeps.length));
 
     return {
-      title: input.subject || "Code change",
+      title: input.subject || `${cap(noun)} change`,
       context: [input.body, summary && `What changed: ${summary}.`].filter(Boolean).join(" ").slice(0, 500)
         || `Touched ${input.files.length} file(s) across ${dirs.join(", ") || "the repo"}.`,
       decision: summary
         ? `${cap(verb)} ${dirs.join(", ") || "the repo"}: ${summary}.`
-        : `${cap(verb)} code in ${dirs.join(", ") || "the repo"} (${input.files.length} file(s)).`,
+        : `${cap(verb)} ${noun} in ${dirs.join(", ") || "the repo"} (${input.files.length} file(s)).`,
       consequences,
       alternatives_rejected: [],
       // advisory either way, but real extraction earns a touch more confidence
@@ -868,13 +883,25 @@ export function extractCodexText(out: string): string {
   return texts.length ? texts[texts.length - 1]! : out;
 }
 
-// This registry is deliberately NOT a priority order. Auto mode only spends a
-// subscription when it can identify exactly one usable CLI; see
-// resolveSynthesisProvider below.
+// This registry is not a priority order: invocation origin selects the provider.
+class AdapterCliProvider extends PromptSynthProvider {
+  private worker: ReturnType<typeof discoverAgentClis>[number] | undefined;
+  constructor(readonly name: string, private adapters: AgentCliAdapter[] = []) { super(); }
+  async available(): Promise<boolean> {
+    this.worker = discoverAgentClis(this.adapters, this.name).find(p => p.name === this.name);
+    return !!this.worker;
+  }
+  protected async run(prompt: string): Promise<string> {
+    if (!this.worker?.draftProse) throw new Error(`Initiating CLI ${this.name} is unavailable`);
+    return this.worker.draftProse(prompt);
+  }
+}
+
 const PROVIDERS: SynthProvider[] = [
   new ClaudeCliProvider(),
   new CodexCliProvider(),
   new CursorCliProvider(),
+  new AdapterCliProvider("kimi-cli"),
   new OpenAICompatProvider(),
   new DeterministicProvider(),
 ];
@@ -977,9 +1004,8 @@ async function statusesFor(providers: readonly SynthProvider[]): Promise<Provide
   return statuses;
 }
 
-/** Resolve the provider without ever inferring which of several installed products is
- * the one the user intends to spend. Precedence is deliberate: a one-shell override,
- * then a per-user local preference, then safe auto-detection. */
+/** Respect offline mode, then bind to invocation origin. Explicit terminal preferences
+ * apply only without an agent origin; installed executables never select an account. */
 export async function resolveSynthesisProvider(opts: ProviderSelectionOptions = {}): Promise<ProviderResolution> {
   const providers = opts.providers ?? PROVIDERS;
   const env = opts.env ?? process.env;
@@ -991,6 +1017,28 @@ export async function resolveSynthesisProvider(opts: ProviderSelectionOptions = 
     return provider && await isAvailable(provider) ? provider : undefined;
   };
   const environment = normalizeProviderName(env.HUNCH_SYNTH_PROVIDER?.trim());
+  // Explicit offline/privacy mode always wins: origin binding must never turn it into a model call.
+  if (environment === "deterministic") return { provider: fallback, source: "environment", preference: "deterministic", statuses };
+  if ((!environment || environment === "auto") && opts.root && readSynthesisPreference(opts.root) === "deterministic") {
+    return { provider: fallback, source: "local", preference: "deterministic", statuses };
+  }
+  const origin = currentInitiator(env);
+  if (origin.provider) {
+    let provider = providers.find(p => p.name === origin.provider);
+    const config = opts.cliConfig ?? env.HUNCH_CLI_CONFIG ?? env.HUNCH_REVIEW_CLI_CONFIG;
+    if (!provider && !opts.providers && config) {
+      const adapters = readAgentCliConfig(config);
+      if (adapters.some(a => a.name === origin.provider)) provider = new AdapterCliProvider(origin.provider, adapters);
+    }
+    if (provider && await isAvailable(provider)) {
+      return { provider, source: "initiator", preference: "auto", statuses, initiator: origin.provider };
+    }
+    return { provider: fallback, source: "unavailable-initiator", preference: "auto", statuses, initiator: origin.provider };
+  }
+  // An MCP request with unknown identity must not inherit the launching terminal's preferences.
+  if (origin.source === "ambiguous" || origin.source === "client" || env.HUNCH_INITIATOR === "unknown") {
+    return { provider: fallback, source: "unknown-initiator", preference: "auto", statuses, initiator: null };
+  }
   if (environment && isSynthPreference(environment) && environment !== "auto") {
     const selected = await usable(environment);
     if (selected) return { provider: selected, source: "environment", preference: environment, statuses };
@@ -1009,13 +1057,9 @@ export async function resolveSynthesisProvider(opts: ProviderSelectionOptions = 
   }
 
   const available = statuses.filter((status) => status.name !== "deterministic" && status.available);
-  if (available.length === 1) {
-    const selected = await usable(available[0]!.name);
-    if (selected) return { provider: selected, source: "single-available", preference, statuses };
-  }
   return {
     provider: fallback,
-    source: available.length > 1 ? "ambiguous" : "none",
+    source: available.length > 1 ? "ambiguous" : available.length ? "unknown-initiator" : "none",
     preference,
     statuses,
   };
@@ -1027,25 +1071,15 @@ export async function selectProvider(opts: ProviderSelectionOptions = {}): Promi
   return (await resolveSynthesisProvider(opts)).provider;
 }
 
-// ---- Deep Synthesis: ensemble of subscription CLIs (+ opt-in openai-compat) ----
-// Opt-in (backfill/sync --deep): fan a commit out to EVERY available worker —
-// the subscription CLIs (ANTHROPIC_API_KEY stripping inherited from them) plus the
-// opt-in openai-compat HTTP provider when configured, which is outside that
-// stripping scope entirely (con_2ce3f2a547 governs the Anthropic API specifically,
-// not a user-configured self-hosted endpoint) — drop failures, reconcile the
-// drafts. NEVER used on the guard path; confidence is capped below the strict gate
-// so output stays advisory.
+// ---- Deep Synthesis: repeated samples from the same initiating provider ----
+// Opt-in (backfill/sync --deep): sample the initiating provider repeatedly, drop
+// failures and reconcile drafts. Never used on the guard path; confidence remains
+// capped below the strict gate so output stays advisory.
 
-/** All available subscription-CLI workers (claude/codex/cursor, plus the opt-in
- *  openai-compat), excluding the deterministic fallback — the pool Deep Synthesis
- *  fans a commit out to. */
-export async function selectWorkers(opts: Pick<ProviderSelectionOptions, "providers"> = {}): Promise<SynthProvider[]> {
-  const out: SynthProvider[] = [];
-  for (const p of opts.providers ?? PROVIDERS) {
-    if (p.name === "deterministic") continue; // workers are real LLM providers only
-    if (await isAvailable(p)) out.push(p);
-  }
-  return out;
+/** Only the resolved origin-bound worker. No cross-account fan-out. */
+export async function selectWorkers(opts: ProviderSelectionOptions = {}): Promise<SynthProvider[]> {
+  const { provider } = await resolveSynthesisProvider(opts);
+  return provider.name === "deterministic" ? [] : [provider];
 }
 
 const tokens = (d: DecisionDraft): Set<string> =>
@@ -1089,15 +1123,14 @@ export function mergeDecisionDrafts(drafts: DecisionDraft[]): DecisionDraft {
   };
 }
 
-// Default self-consistency depth when only ONE LLM provider is available (the
-// common case): sample it this many times and reconcile, so single-provider users get
-// ensemble-like robustness. Tunable per-call via `--samples`.
+// Sample the initiating provider this many times and reconcile. Tunable via --samples.
 const DEFAULT_SAMPLES = 2;
 
 export class EnsembleProvider implements SynthProvider {
   readonly name = "ensemble";
   private readonly samples: number;
   constructor(private readonly workers: SynthProvider[], opts: { samples?: number } = {}) {
+    for (const worker of workers) assertInitiatorProvider(worker.name);
     // Default 1 (single worker → passthrough); the self-consistency policy default
     // lives at the selection layer (selectEnsemble). Coerce to a finite integer in a
     // sane 1..5 band — a NaN here would make decisionTasks build ZERO tasks and throw,
@@ -1107,8 +1140,8 @@ export class EnsembleProvider implements SynthProvider {
   }
   async available(): Promise<boolean> { return this.workers.length > 0; }
 
-  /** The draft tasks to fan out: one per distinct CLI when several are installed
-   *  (cross-model ensemble), else N self-consistency samples of the single CLI. */
+  /** Production selection supplies one origin-bound worker with N samples.
+   * Direct callers can also supply multiple workers subject to origin checks. */
   private decisionTasks(input: CommitInput): Array<() => Promise<DecisionDraft>> {
     if (this.workers.length >= 2) return this.workers.map((w) => () => w.draftDecision(input));
     const w = this.workers[0]!;
@@ -1135,7 +1168,7 @@ export class EnsembleProvider implements SynthProvider {
 /** Build the Deep-Synthesis provider, or null if no LLM provider is available
  *  (the caller then falls back to the normal single-provider path). `samples` sets
  *  the self-consistency depth for the single-provider case. */
-export async function selectEnsemble(opts: { samples?: number; providers?: readonly SynthProvider[] } = {}): Promise<EnsembleProvider | null> {
+export async function selectEnsemble(opts: ProviderSelectionOptions & { samples?: number } = {}): Promise<EnsembleProvider | null> {
   const workers = await selectWorkers(opts);
   // The self-consistency policy default (DEFAULT_SAMPLES) is applied HERE, not in the
   // provider — so a single CLI under --deep is sampled N times, while direct

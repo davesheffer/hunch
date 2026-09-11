@@ -1,0 +1,39 @@
+{
+  "id": "dec_9c1e4c8cd0",
+  "title": "refactor(state): isHumanConfirmed delegates to the strict gate's tier rule",
+  "topic": null,
+  "status": "accepted",
+  "context": "Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>\n",
+  "decision": "Refactored code in src/core (1 file(s)).",
+  "consequences": [],
+  "alternatives_rejected": [],
+  "rejected_tripwires": [],
+  "related_components": [
+    "cmp_b256a6aed0"
+  ],
+  "related_files": [
+    "src/core/stateContract.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "4eb8901",
+  "valid_from": "2026-09-09T15:46:57+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "inferred",
+    "confidence": 0.3,
+    "evidence": [
+      "commit:4eb8901",
+      "synth:provider=deterministic",
+      "branch:feat/replay-determinism",
+      "src/core/stateContract.ts"
+    ],
+    "last_verified": "2026-09-09T12:48:06.995Z"
+  },
+  "date": "2026-09-09T15:46:57+03:00"
+}
