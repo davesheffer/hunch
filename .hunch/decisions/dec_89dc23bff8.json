@@ -1,0 +1,117 @@
+{
+  "id": "dec_89dc23bff8",
+  "title": "Preserve git's original file state when conflict detection is uncertain or git errors",
+  "topic": null,
+  "status": "accepted",
+  "context": "Two reproducible data-loss bugs: (1) the conflict regex failed silently on EMPTY hunks and CRLF systems, leaving markers while reporting success; (2) git's binary-file errors (exit 255) were treated as resolved output, truncating files to zero bytes.",
+  "decision": "Introduced a write=null sentinel: when git's exit status indicates error (outside 1-127 range) or when any conflict marker survives the resolution pass, return write=null and conflict=true, forcing the CLI to exit 1 and write nothing, leaving the file exactly as git populated it.",
+  "consequences": [
+    "Unrecognized conflicts and git-level errors now fail safely instead of silently corrupting the file",
+    "The driver's contract is explicit: write=null means 'I couldn't safely handle this, human must resolve'",
+    "Callers must handle the null case, preventing accidental data loss from coercing to empty string",
+    "Binary files, CRLF systems, and future unrecognized hunk shapes all degrade gracefully"
+  ],
+  "alternatives_rejected": [
+    "Continue treating all errors as resolved output by coercing to empty string (silent truncation)",
+    "Attempt to reconstruct or guess at merged content when detection fails (more guessing, more risk)",
+    "Leave the marker-survival defense out and rely only on regex strictness (regression risk)"
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Continue treating all errors as resolved output by coercing to empty string (silent truncation)",
+      "scope": [
+        "src/cli/**",
+        "src/core/**",
+        "src/integrations/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Attempt to reconstruct or guess at merged content when detection fails (more guessing, more risk)",
+      "scope": [
+        "src/cli/**",
+        "src/core/**",
+        "src/integrations/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Leave the marker-survival defense out and rely only on regex strictness (regression risk)",
+      "scope": [
+        "src/cli/**",
+        "src/core/**",
+        "src/integrations/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_50037f41a9",
+    "cmp_863ac67d4a",
+    "cmp_a94a8fe5cc",
+    "cmp_b256a6aed0"
+  ],
+  "related_files": [
+    "src/cli/index.ts",
+    "src/core/groundingLag.ts",
+    "src/core/groundingMerge.ts",
+    "src/integrations/mergeDriver.ts",
+    "test/grounding-merge-driver.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "f8e8333",
+  "valid_from": "2026-09-10T11:32:21+02:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft",
+    "confidence": 0.65,
+    "evidence": [
+      "commit:f8e8333",
+      "synth:provider=claude-cli",
+      "branch:drop-grounding-counts-upstream",
+      "src/cli/index.ts",
+      "src/core/groundingLag.ts",
+      "src/core/groundingMerge.ts",
+      "src/integrations/mergeDriver.ts",
+      "test/grounding-merge-driver.test.ts"
+    ],
+    "last_verified": "2026-09-10T09:33:14.491Z"
+  },
+  "date": "2026-09-10T11:32:21+02:00"
+}

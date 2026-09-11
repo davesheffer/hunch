@@ -9,6 +9,7 @@ import { basename, join, dirname } from "node:path";
 import type { HunchStore } from "../store/hunchStore.js";
 import { wikiSummary } from "../wiki/wiki.js";
 import { PolicyRepository } from "../constitution/repository.js";
+import { renderCountsMatch } from "../core/groundingLag.js";
 
 const START = "<!-- HUNCH:START — auto-generated, do not edit by hand -->";
 const END = "<!-- HUNCH:END -->";
@@ -46,7 +47,7 @@ export function renderHunchSection(store: HunchStore, root?: string): string {
   lines.push(
     "This repo has **Hunch** — a curated graph of *why* the code is the way it is " +
       "(decisions, bug history, invariants). It currently holds " +
-      `**${counts.decisions} decisions, ${counts.bugs} bugs, ${counts.constraints} constraints, ${counts.components} components, ${counts.policies} policies${counts.findings ? `, ${counts.findings} open findings` : ""}**.`,
+      `${renderCountsMatch(counts)}.`,
   );
   lines.push("");
   lines.push("**Consult Hunch via the `hunch_*` MCP tools — pick by MOMENT, not from memory:**");

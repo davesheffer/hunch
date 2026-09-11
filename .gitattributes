@@ -5,3 +5,8 @@
 # fresh Windows clone inherits system core.autocrlf=true, checks out CRLF, and
 # fails a cluster of byte-identity tests that Linux CI never sees (fnd_5a7a683920).
 * text=auto eol=lf
+CLAUDE.md merge=hunch-grounding
+AGENTS.md merge=hunch-grounding
+.github/copilot-instructions.md merge=hunch-grounding
+.cursor/rules/hunch.mdc merge=hunch-grounding
+.windsurf/rules/hunch.md merge=hunch-grounding

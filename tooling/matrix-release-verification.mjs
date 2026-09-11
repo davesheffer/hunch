@@ -57,9 +57,15 @@ const COMPAT_POLICY = `${SENTINEL_PREFIX}POLICY: never import axios in src/servi
 const CRASH_INTERRUPTED = `${SENTINEL_PREFIX}CRASH_INTERRUPTED: a process death before commit must not lose this durable record`;
 const CRASH_RECOVERY = `${SENTINEL_PREFIX}CRASH_RECOVERY: the next process must reclaim and publish the interrupted record`;
 const COLLISION_RULE = `${SENTINEL_PREFIX}COLLISION: concurrent writers of one record must converge to one record`;
-const OVERLAY_ATTRIBUTES = [
+// Byte-exact installed routing; grounding-merge-driver.test.ts catches drift.
+export const OVERLAY_ATTRIBUTES = [
   ".hunch/**/*.json merge=hunch",
   ".hunch/manifest.json merge=text",
+  "CLAUDE.md merge=hunch-grounding",
+  "AGENTS.md merge=hunch-grounding",
+  ".github/copilot-instructions.md merge=hunch-grounding",
+  ".cursor/rules/hunch.mdc merge=hunch-grounding",
+  ".windsurf/rules/hunch.md merge=hunch-grounding",
   "",
 ].join("\n");
 /** Byte-exact expected content of a clone's .gitignore — the soak lane refuses any

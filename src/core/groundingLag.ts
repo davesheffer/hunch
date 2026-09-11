@@ -40,6 +40,23 @@ export interface GroundingCounts {
 /** Record kinds whose committed count may only ever lag behind the store. */
 export const APPEND_ONLY_COUNT_KINDS = ["decisions", "bugs", "constraints", "components", "policies"] as const;
 
+/** Render the counts sentence's bold `**N decisions, ...**` segment — the
+ *  exact text parseGroundingCounts looks for. The single source of truth for
+ *  the format, shared by the doc generator (claudemd.ts) and the grounding
+ *  merge driver (groundingMerge.ts) so they can never drift out of sync. */
+export function renderCountsMatch(counts: GroundingCounts): string {
+  return `**${counts.decisions} decisions, ${counts.bugs} bugs, ${counts.constraints} constraints, ${counts.components} components, ${counts.policies} policies${counts.findings ? `, ${counts.findings} open findings` : ""}**`;
+}
+
+/** Replace a counts-sentence match with a neutral placeholder, so the rest of
+ *  two texts can be compared for equality regardless of their counts. Shared
+ *  by classifyGroundingBlock (committed doc vs computed) and the grounding
+ *  merge driver (ours vs theirs) — both ask "do these two texts differ ONLY
+ *  in the counts sentence?" */
+export function stripCountsMatch(text: string, match: string): string {
+  return text.replace(match, "<counts>");
+}
+
 export function parseGroundingCounts(block: string): { counts: GroundingCounts; match: string } | null {
   const m = COUNTS_RE.exec(block);
   if (!m) return null;
@@ -77,8 +94,7 @@ export function classifyGroundingBlock(committed: string, generated: string): Gr
   const g = parseGroundingCounts(generated);
   if (!c) return { kind: "diverged", reason: "the committed block carries no record-counts sentence" };
   if (!g) return { kind: "diverged", reason: "the generated block carries no record-counts sentence" };
-  const withoutCounts = (text: string, match: string): string => text.replace(match, "<counts>");
-  if (withoutCounts(committed, c.match) !== withoutCounts(generated, g.match)) {
+  if (stripCountsMatch(committed, c.match) !== stripCountsMatch(generated, g.match)) {
     return { kind: "diverged", reason: "the block differs outside the record-counts sentence" };
   }
   const ahead = APPEND_ONLY_COUNT_KINDS.filter((k) => c.counts[k] > g.counts[k]);

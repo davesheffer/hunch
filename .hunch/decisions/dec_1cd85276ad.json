@@ -1,0 +1,115 @@
+{
+  "id": "dec_1cd85276ad",
+  "title": "Auto-resolve merge conflicts in grounding docs, but only for counts-sentence changes",
+  "topic": null,
+  "status": "accepted",
+  "context": "Generated docs (CLAUDE.md, etc.) carry a counts sentence that signals whether the doc is ahead of or lagging behind the stored data. A prior PR wanted to drop this to avoid a doc-ahead defect, but losing the signal removes the only tripwire for fnd_6391b4242f. Developers repeatedly merge conflicting changes to these auto-generated files, making manual resolution expensive.",
+  "decision": "Implement `merge=hunch-grounding` driver that auto-resolves a hard conflict if and only if every conflicting hunk is confined to the counts sentence (both sides parse valid, nothing else differs). Keep `ours` as placeholder. Leave any conflict outside the counts sentence untouched with diff3 markers. Post-merge hook's `hunch grounding --refresh` self-heals the placeholder counts, reading as 'lagging' (safe) never 'ahead' (dangerous).",
+  "consequences": [
+    "Merge conflicts in the five grounding docs are reduced to the counts sentence and auto-resolved, eliminating manual intervention for the common case.",
+    "The doc remains 'lagging' after merge (counts are placeholder), triggering the self-healing refresh hook, preserving the invariant that fnd_6391b4242f depends on.",
+    "Any conflict outside the counts sentence (prose, structure, metadata) stays a real conflict, surfaced to the human — safety is not sacrificed for automation.",
+    "The signal that the doc lags behind the store is preserved, keeping observability that the prior approach would have removed."
+  ],
+  "alternatives_rejected": [
+    "Drop the counts sentence entirely — loses the 'doc ahead' signal that fnd_6391b4242f depends on for detection.",
+    "Leave all conflicts to manual resolution — expensive and error-prone for a predictable, append-only sentence.",
+    "Do a full text merge of grounding docs — would hide real content conflicts in diff3 markers, making them easy to miss."
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Drop the counts sentence entirely (would lose the doc-lagging signal that prevents the doc-ahead defect)",
+      "scope": [
+        "src/cli/**",
+        "src/core/**",
+        "src/integrations/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Accept all merge conflicts in these docs as requiring manual resolution",
+      "scope": [
+        "src/cli/**",
+        "src/core/**",
+        "src/integrations/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Implement a looser merge driver that might auto-resolve real content conflicts and obscure issues",
+      "scope": [
+        "src/cli/**",
+        "src/core/**",
+        "src/integrations/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_50037f41a9",
+    "cmp_863ac67d4a",
+    "cmp_a94a8fe5cc",
+    "cmp_b256a6aed0"
+  ],
+  "related_files": [
+    "src/cli/index.ts",
+    "src/core/groundingMerge.ts",
+    "src/integrations/mergeDriver.ts",
+    "test/grounding-merge-driver.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "2330592",
+  "valid_from": "2026-09-10T10:51:15+02:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft",
+    "confidence": 0.65,
+    "evidence": [
+      "commit:2330592",
+      "synth:provider=claude-cli",
+      "branch:drop-grounding-counts-upstream",
+      "src/cli/index.ts",
+      "src/core/groundingMerge.ts",
+      "src/integrations/mergeDriver.ts",
+      "test/grounding-merge-driver.test.ts"
+    ],
+    "last_verified": "2026-09-10T08:52:12.339Z"
+  },
+  "date": "2026-09-10T10:51:15+02:00"
+}

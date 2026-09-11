@@ -66,6 +66,7 @@ import { ensureGitignore, ignoreHunchMemory, HUNCH_MEMORY_DIRS } from "../integr
 import { writeCiWorkflow } from "../integrations/ciAction.js";
 import { updateClaudeMd, renderHunchSection } from "../integrations/claudemd.js";
 import { classifyGroundingBlock, describeGroundingFreshness } from "../core/groundingLag.js";
+import { mergeGroundingFile } from "../core/groundingMerge.js";
 import { writeMcpJson, writeSlashCommands, installClaudeHooks } from "../integrations/scaffold.js";
 import { scaffoldProviders, regenerateGrounding, refreshExistingGrounding, refreshCommittableGrounding, GROUNDING_DOC_PATHS } from "../integrations/providers.js";
 import { healClaudeConfigCaseSplit } from "../integrations/claudeConfig.js";
@@ -6201,6 +6202,20 @@ program
       if (out != null) writeFileSync(ours, lf(out)); // marked result; else leave ours
       process.exitCode = 1; // conflict markers remain → block the commit for review
     }
+  });
+
+// ---- merge-driver-grounding (internal; git invokes this) ------------------
+program
+  .command("merge-driver-grounding")
+  .description("(internal) git merge driver for the generated grounding docs — auto-resolves a hard conflict confined to the record-counts sentence.")
+  .argument("<base>", "%O — common ancestor")
+  .argument("<ours>", "%A — current branch (also the OUTPUT file)")
+  .argument("<theirs>", "%B — other branch")
+  .argument("[path]", "%P — pathname being merged")
+  .action((base: string, ours: string, theirs: string) => {
+    const res = mergeGroundingFile(base, ours, theirs);
+    if (res.write !== null) writeFileSync(ours, res.write);
+    if (res.conflict) process.exitCode = 1; // real conflict, or git itself errored → leave for a human
   });
 
 // ---- doctor ---------------------------------------------------------------

@@ -1,0 +1,146 @@
+{
+  "id": "dec_91da20a46b",
+  "title": "Move entity counts from committed grounding to live tools",
+  "topic": null,
+  "status": "superseded",
+  "context": "Grounding blocks in 5 committed files auto-regenerate with volatile entity counts (decisions, bugs, constraints, etc.) on every branch. When parallel branches capture different counts, this creates real merge conflicts across all 5 files. The counts serve no programmatic purpose—tooling recomputes them on demand. Touches invariant(s): con_8460b6770f (Config/provider writers must merge idempotently into existing user files and refuse to clobber an unparseable file).",
+  "decision": "Removed auto-generated counts sentences from committed grounding blocks (.cursor/rules, .github, CLAUDE.md, etc.). Redirected readers to `hunch doctor` and `hunch now` for live, accurate counts computed at read time instead of cached snapshots.",
+  "consequences": [
+    "Eliminates recurring merge conflicts on grounding block files across all 5 committed locations when branches diverge",
+    "Grounding blocks become stable and content-addressed—safe to cache, diff, and re-merge cleanly",
+    "Readers always see accurate, up-to-date counts from tooling rather than stale committed snapshots",
+    "Test signals shifted from 'counts line changes' to 'constraints list changes' for detecting content updates",
+    "Removed end-to-end test scenario (grounding-merge-lag.test.ts) that relied on counts line regeneration"
+  ],
+  "alternatives_rejected": [
+    "Keep counts but suppress them during capture (masks the problem; adds coordinator friction)",
+    "Implement smarter merge resolution for the counts line (conflicts remain real, just resolved automatically)",
+    "Make counts deterministic per-branch (parallel branches genuinely have different entity counts—no way to avoid divergence)"
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Keep counts but suppress them during capture (masks the problem; adds coordinator friction)",
+      "scope": [
+        ".github/**",
+        ".windsurf/rules/**",
+        "src/extractors/**",
+        "src/integrations/**",
+        "test/**",
+        "tooling/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Implement smarter merge resolution for the counts line (conflicts remain real, just resolved automatically)",
+      "scope": [
+        ".github/**",
+        ".windsurf/rules/**",
+        "src/extractors/**",
+        "src/integrations/**",
+        "test/**",
+        "tooling/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Make counts deterministic per-branch (parallel branches genuinely have different entity counts—no way to avoid divergence)",
+      "scope": [
+        ".github/**",
+        ".windsurf/rules/**",
+        "src/extractors/**",
+        "src/integrations/**",
+        "test/**",
+        "tooling/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_04c6efb58b",
+    "cmp_4c40eab00f",
+    "cmp_863ac67d4a",
+    "cmp_a94a8fe5cc",
+    "cmp_e0ccfe26fe"
+  ],
+  "related_files": [
+    ".github/copilot-instructions.md",
+    ".windsurf/rules/hunch.md",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "src/extractors/git.ts",
+    "src/integrations/claudemd.ts",
+    "src/integrations/providers.ts",
+    "src/integrations/sync.ts",
+    "test/grounding-capture-commit.test.ts",
+    "test/grounding-freshness.test.ts",
+    "test/grounding-merge-lag.test.ts",
+    "test/grounding-treadmill.test.ts",
+    "tooling/release-gate.mjs"
+  ],
+  "supersedes": null,
+  "superseded_by": "dec_1cd85276ad",
+  "caused_by_bug": null,
+  "commit": "a18b80f",
+  "valid_from": "2026-09-09T14:30:31+02:00",
+  "valid_to": "2026-09-10T10:51:15+02:00",
+  "retired": {
+    "symbols": [
+      "decision",
+      "hunch"
+    ],
+    "deps": [
+      "node:test",
+      "node:assert/strict",
+      "node:fs",
+      "node:os",
+      "node:path",
+      "node:child_process"
+    ]
+  },
+  "provenance": {
+    "source": "llm_draft+summary",
+    "confidence": 0.5,
+    "evidence": [
+      "commit:a18b80f",
+      "synth:provider=claude-cli",
+      "branch:drop-grounding-counts-upstream",
+      ".github/copilot-instructions.md",
+      ".windsurf/rules/hunch.md",
+      "AGENTS.md",
+      "CLAUDE.md",
+      "src/extractors/git.ts",
+      "src/integrations/claudemd.ts",
+      "src/integrations/providers.ts",
+      "src/integrations/sync.ts"
+    ],
+    "last_verified": "2026-09-09T12:30:50.544Z"
+  },
+  "date": "2026-09-09T14:30:31+02:00"
+}

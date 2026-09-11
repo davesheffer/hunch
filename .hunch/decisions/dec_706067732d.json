@@ -1,0 +1,137 @@
+{
+  "id": "dec_706067732d",
+  "title": "Resolve grounding conflicts via per-field max, not `ours` unconditionally",
+  "topic": null,
+  "status": "accepted",
+  "context": "Hard git conflicts confined to the counts sentence in Hunch grounding files were being resolved by always keeping `ours`. But if `theirs` carries a higher count (e.g., 243 decisions vs 241), that higher count may be the ahead-of-store signal fnd_6391b4242f depends on — a phantom record the branch claimed but the store never received. Unconditionally discarding it loses that signal. Touches invariant(s): con_8460b6770f (Config/provider writers must merge idempotently into existing user files and refuse to clobber an unparseable file).",
+  "decision": "When a counts-only conflict is detected, resolve it to the element-wise max of each field (decisions, bugs, constraints, etc.) across both sides, rather than picking `ours` outright. If ours has `241 decisions, 5 bugs` and theirs has `243 decisions, 2 bugs`, the resolution becomes `243 decisions, 5 bugs`. Extracted a shared `renderCountsMatch()` function (used by both doc generator and merge driver) to prevent drift.",
+  "consequences": [
+    "Higher counts from either side survive the merge instead of being silently discarded",
+    "Ahead-of-store signals are preserved when one side carries a phantom count",
+    "Post-merge refresh hooks still function as a safety net for further refinement",
+    "Code now has a single source of truth for counts sentence formatting, eliminating divergence risk",
+    "Test coverage expanded to verify per-field max behavior and phantom-record scenarios"
+  ],
+  "alternatives_rejected": [
+    "Keep `ours` unconditionally (prior approach; loses higher count signal)",
+    "Keep `theirs` unconditionally (loses information from ours)",
+    "Use heuristic averaging or other logic (semantically wrong for append-only counts)",
+    "Require manual resolution (conflicts in automated merge drivers should be minimal)"
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Keep `ours` unconditionally (prior approach; loses higher count signal)",
+      "scope": [
+        "src/core/**",
+        "src/integrations/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [
+          "ours"
+        ],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Keep `theirs` unconditionally (loses information from ours)",
+      "scope": [
+        "src/core/**",
+        "src/integrations/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [
+          "theirs"
+        ],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Use heuristic averaging or other logic (semantically wrong for append-only counts)",
+      "scope": [
+        "src/core/**",
+        "src/integrations/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Require manual resolution (conflicts in automated merge drivers should be minimal)",
+      "scope": [
+        "src/core/**",
+        "src/integrations/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_863ac67d4a",
+    "cmp_a94a8fe5cc",
+    "cmp_b256a6aed0"
+  ],
+  "related_files": [
+    "src/core/groundingLag.ts",
+    "src/core/groundingMerge.ts",
+    "src/integrations/claudemd.ts",
+    "test/grounding-merge-driver.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "90b2f92",
+  "valid_from": "2026-09-10T13:41:22+02:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [
+      "isCountsOnlyHunk"
+    ],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft",
+    "confidence": 0.65,
+    "evidence": [
+      "commit:90b2f92",
+      "synth:provider=claude-cli",
+      "branch:drop-grounding-counts-upstream",
+      "src/core/groundingLag.ts",
+      "src/core/groundingMerge.ts",
+      "src/integrations/claudemd.ts",
+      "test/grounding-merge-driver.test.ts"
+    ],
+    "last_verified": "2026-09-10T11:41:50.102Z"
+  },
+  "date": "2026-09-10T13:41:22+02:00"
+}

@@ -115,7 +115,8 @@ export function safeOverlayGitTreeListing(listing: string): boolean {
 /** A dedicated Hunch overlay needs exactly one attribute capability: selecting
  * the locally installed `merge=hunch` JSON merge driver, plus Hunch's exact
  * `.hunch/manifest.json merge=text` override (the manifest has no record id and
- * must use Git's built-in text merge). Reject every other token/pattern pair,
+ * must use Git's built-in text merge), and the five exact generated-doc rules
+ * installed with the grounding merge driver. Reject every other token/pattern pair,
  * including byte-transforming built-ins such as `ident` and
  * `working-tree-encoding`, rather than maintaining a command-key blacklist.
  * Blank lines and comments remain harmless. */
@@ -127,6 +128,10 @@ export function hunchAttributesAreSafe(content: string): boolean {
     if (fields.length < 2) return false;
     const attributes = fields.slice(1);
     if (attributes.every((attribute) => attribute === "merge=hunch")) continue;
+    // These exact document paths are the only grounding-driver routes installed
+    // by Hunch. Never accept a wildcard or allow it to target JSON memory.
+    if (["CLAUDE.md", "AGENTS.md", ".github/copilot-instructions.md", ".cursor/rules/hunch.mdc", ".windsurf/rules/hunch.md"].includes(fields[0]!)
+      && attributes.every((attribute) => attribute === "merge=hunch-grounding")) continue;
     if (fields[0] === ".hunch/manifest.json"
       && attributes.every((attribute) => attribute === "merge=text")) continue;
     return false;
