@@ -147,8 +147,15 @@ export const DerivedStateSchema = z.object({
   computed_at: z.string().regex(ISO),
   valid_to: z.string().regex(ISO).nullable().default(null),
   state: z.enum(["current", "stale", "unknown"]),
+  /** Per-observation withdrawal. Original assertion, author and dependencies stay intact. */
+  review: z.object({
+    by: z.string().regex(TOKEN), at: z.string().regex(ISO), previous_hash: z.string().regex(SHA256), reason: z.string().trim().min(1).max(600),
+    evidence: z.array(z.object({ ref: ExternalRefSchema, excerpt: z.string().trim().min(1).max(1200) }).strict()).min(1).max(8),
+  }).strict().optional(),
   provenance: ProvenanceSchema,
-}).strict();
+}).strict().superRefine((record, ctx) => {
+  if (record.review && record.state !== 'stale') ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['review'], message: 'withdrawal review belongs only to a stale observation' });
+});
 export type DerivedState = z.infer<typeof DerivedStateSchema>;
 
 const AttributeValue = z.union([z.string().max(2048), z.number().finite(), z.boolean(), z.null()]);
@@ -197,9 +204,16 @@ export const StateRelationshipSchema = z.object({
   type: z.string().regex(/^[a-z][a-z0-9_]{0,63}$/),
   scope: ScopeSchema,
   reason: z.string().max(1024).default(""),
+  /** observation_about is a one-hop projection, never an entity merge or a copied fact. */
+  observation_hash: z.string().regex(SHA256).optional(),
+  evidence: ExternalRefSchema.optional(),
+  lifecycle: z.enum(["active", "retired"]).optional(),
   provenance: ProvenanceSchema,
 }).strict().superRefine((rel, ctx) => {
   if (rel.id !== edgeId(rel.from, rel.to, rel.type)) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["id"], message: "relationship id must derive from its endpoints and type" });
+  if (rel.type === "observation_about" && (!/^nds_[a-f0-9]{24}$/.test(rel.from) || !rel.observation_hash || !rel.evidence?.content_hash || !rel.reason.trim() || rel.to.length > 512 || rel.to === rel.from)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "observation_about requires an observation id/hash, a subject, reason and hashed external evidence of the explicit association" });
+  }
 });
 export type StateRelationship = z.infer<typeof StateRelationshipSchema>;
 

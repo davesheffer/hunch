@@ -1,0 +1,36 @@
+{
+  "schema": "hunch.capture-benchmark/1",
+  "at": "2026-09-10T09:18:30.962Z",
+  "node": "v24.13.0",
+  "platform": "win32",
+  "method": "Real temporary JSON drawer + SQLite index + change ledger. Local durability. 32 assertions per batch. Seven warm replay/read samples; creation one sample per size. Git/network, MCP startup and model selection excluded. Timings are measurements, not service guarantees.",
+  "rows": [
+    {
+      "existing_records": 0,
+      "batch_size": 32,
+      "create_ms": 217.29,
+      "replay_median_ms": 36,
+      "replay_max_ms": 40.433,
+      "subject_read_median_ms": 5.471,
+      "subject_read_max_ms": 17.756
+    },
+    {
+      "existing_records": 256,
+      "batch_size": 32,
+      "create_ms": 280.494,
+      "replay_median_ms": 33.739,
+      "replay_max_ms": 35.941,
+      "subject_read_median_ms": 5.49,
+      "subject_read_max_ms": 6.953
+    },
+    {
+      "existing_records": 1024,
+      "batch_size": 32,
+      "create_ms": 643.564,
+      "replay_median_ms": 27.919,
+      "replay_max_ms": 31.207,
+      "subject_read_median_ms": 4.867,
+      "subject_read_max_ms": 5.211
+    }
+  ]
+}

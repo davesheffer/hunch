@@ -1,4 +1,5 @@
 import { execFileSync, spawnSync } from "node:child_process";
+import { assertInitiatorProvider, initiatorChildEnv } from "../synthesis/initiator.js";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -64,7 +65,7 @@ export interface Exp01ExecutionOptions {
 }
 
 function childEnv(provider: "claude-cli" | "codex-cli"): NodeJS.ProcessEnv {
-  const env = { ...process.env };
+  const env = initiatorChildEnv();
   for (const key of [
     "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL",
     "OPENAI_API_KEY", "OPENAI_BASE_URL", "AZURE_OPENAI_API_KEY",
@@ -145,6 +146,7 @@ function invokeAgent(run: ExperimentRun, cwd: string, prompt: string, timeoutMs:
   const model = run.runner.model_version;
   const maxTurns = run.runner.max_turns;
   if (!provider || !model || !maxTurns) throw new Error("EXP-01 run has no exact provider/model binding");
+  assertInitiatorProvider(provider);
   const started = Date.now();
   const bin = provider === "claude-cli" ? "claude" : "codex";
   const claudeSettings = JSON.stringify({

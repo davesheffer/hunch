@@ -1,6 +1,38 @@
 # Changelog
 
-## Unreleased
+## 1.31.0 — 2026-09-10
+
+Agent launches now follow the initiating agent across synthesis, verification,
+deep sampling, MCP requests and Git child processes. A Codex event stays with
+Codex; Claude stays with Claude; Kimi uses its ACP adapter. Unknown or unavailable
+origins never select another installed account. Additional CLIs can be configured
+through explicit local stdin/ACP adapters. `--deep` samples one provider repeatedly.
+
+`hunch review-memory auto` fetches complete GitHub review threads (or reads a local
+export), proposes and verifies rules against current tracked code and existing
+constraints, then saves advisory rules without a handwritten `rules.json`.
+Uncertain cases remain in a JSON report. Local checkpoints avoid reanalyzing
+unchanged dispositions; changed evidence/code and retired rules are never silently
+overwritten or revived. `--dry-run` previews and `--retry` rechecks queued cases.
+
+## 1.30.0 — 2026-09-10
+
+### Scoped review memory from PR threads
+
+`hunch review-memory prepare` imports local GitHub inline review-comment exports
+into deterministic, source-linked thread packets. `capture` previews explicitly
+selected rule wording and verification checks; `--apply --private|--public` stores
+them through the existing Constraint and grounding pipeline. Imported prose never
+activates a rule or gains blocking authority. Captures remain `agent_recorded`
+warnings, with exact file scopes and review evidence, until the existing human
+countersign flow is used.
+
+Incomplete threads, mismatched repositories, stale selections, missing current
+files and existing rule IDs are refused. A real-data trial on `infection/infection`
+covered 102 comments from 11 PRs and exercised capture and delivery for two selected
+rules in an isolated clone. See `docs/review-memory.md` and the inspectable JSON
+trial report under `docs/evidence/`. Rule selection is manual; this release does
+not claim automatic extraction or measured bug reduction.
 
 ### Replay determinism is a check, and a human correction outranks the agents
 

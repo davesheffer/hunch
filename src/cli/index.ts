@@ -27,6 +27,8 @@ import { HUNCH_VERSION } from "../core/version.js";
 import { registerIntegrationCommands } from "./integrations.js";
 import { registerServeCommands } from "./serve.js";
 import { registerUpdateCommand } from "./update.js";
+import { registerReviewMemoryCommands } from "./reviewMemory.js";
+import { detectInitiator, normalizeInitiator } from "../synthesis/initiator.js";
 import { inspectIntegrations, formatIntegrationHealth, integrationHealthFails, integrationSessionWarning } from "../integrations/health.js";
 import { HunchStore } from "../store/hunchStore.js";
 import { JsonStore } from "../store/jsonStore.js";
@@ -46,7 +48,7 @@ import {
 import { isGitRepo, isGitRepoRoot, sameGitPublication, sameRemoteUrl, canonicalRemoteUrl, repositoryUsesRemote, headSha, isolatedHeadSha, logSince, lastChangeDate, firstCommitForFile, stagedFiles, workingFiles, commitFiles, asOfDate, stagedDiff, workingDiff, commitDiff, rangeFiles, rangeDiff, rangeSubjects, revExists, revParse, commitAndPushHunch, pullHunchStatus, syncExistingHunch, gitUntrackCached, gitCommonDir, hooksDir, isLinkedWorktree, mainWorktreeRoot, gitMemoryLog, memoryMoveDiff, revertMemoryMove, pushCurrentBranch, commitChanges, commitRepairStatus, mergeRangeChanges, commitsExist, type HunchPullStatus } from "../extractors/git.js";
 import { parseMemoryLog, type MemoryMove } from "../core/memorylog.js";
 import { renamesOf, planRepair, repairDecision, repairConstraint, type RepairPlan } from "../core/repair.js";
-import { orphanedCommitDecisions, planCommitRepair, repairDecisionCommit, pickRewrite, mergeRewrites, firstFor, deadRewrites, resolvedRewriteIds, withoutDropped, addDropped, withheldForUnresolvableTo, type CommitRewrite, type DroppedRewrite } from "../core/commitrepair.js";
+import { orphanedCommitDecisions, planCommitRepair, repairDecisionCommit, pickRewrite, commitRepairReviewHash, mergeRewrites, firstFor, deadRewrites, resolvedRewriteIds, withoutDropped, addDropped, withheldForUnresolvableTo, type CommitRewrite, type DroppedRewrite } from "../core/commitrepair.js";
 import { readPendingRepairs, writePendingRepairs, readDroppedRepairs, writeDroppedRepairs, readActivePendingRepairs, withheldRewrites } from "../core/repairqueue.js";
 import { planPolicyRepair, repairPolicySpec, type PolicyBindingRewrite } from "../constitution/repairPolicies.js";
 import { writeTeamConfig, ensureTeamOverlay, readTeamConfig, safeGitUrl, safeTeamRef, overlayMatchesTeamRemote, advertisedTeamRemoteContract, boundedTeamGitEnv, cloneValidatedTeamOverlay, explicitTeamRemoteContract, teamRemoteContract } from "../integrations/team.js";
@@ -157,9 +159,55 @@ import { resolveInvocation, dim, synthesisStatusLines, maybeWarnOllamaContext } 
 
 const program = new Command();
 program.name("hunch").description("Hunch — engineering memory and a deterministic Change Gate for AI-assisted codebases.").version(HUNCH_VERSION);
+program.option("--initiator <name>", "bind agent launches to the originating CLI (Claude, Codex, Kimi, or a configured adapter)")
+  .option("--cli-config <file>", "explicit local CLI adapter configuration")
+  .hook("preAction", (_rootCommand, actionCommand) => {
+    const options = actionCommand.optsWithGlobals();
+    // One CLI invocation has one origin. MCP uses request-local AsyncLocalStorage instead.
+    if (options.initiator) process.env.HUNCH_INITIATOR = normalizeInitiator(options.initiator);
+    else if (actionCommand.name() === "hook") {
+      process.env.HUNCH_INITIATOR = ["claude", "cursor"].includes(options.provider)
+        ? normalizeInitiator(options.provider) : "unknown";
+    }
+    else {
+      const origin = detectInitiator();
+      if (origin.provider) process.env.HUNCH_INITIATOR = origin.provider;
+      else if (origin.source === "ambiguous") process.env.HUNCH_INITIATOR = "unknown";
+    }
+    if (options.cliConfig) process.env.HUNCH_CLI_CONFIG = options.cliConfig;
+  });
 registerIntegrationCommands(program);
 registerServeCommands(program);
 registerUpdateCommand(program);
+registerReviewMemoryCommands(program, (records, repository, privateOnly) => {
+  const { store, root } = storeFor();
+  if (!repositoryUsesRemote(root, `https://github.com/${repository}.git`)) {
+    throw new Error("review packet repository does not match this checkout's remotes");
+  }
+  const home = store.captureHome(privateOnly);
+  // Preflight the whole batch. A repeated import must never revive a retired rule,
+  // replace a countersigned constraint, or change its scope/evidence silently.
+  for (const record of records) {
+    if (!existsSync(join(root, record.scope[0]!))) throw new Error(`review scope ${record.scope[0]} no longer exists; review the current code before capturing this rule`);
+    const existing = store.recs("constraints").find(r => r.id === record.id);
+    if (existing) throw new Error(`constraint ${record.id} already exists; use the existing correction review flow to change it`);
+  }
+  for (const record of records) store.putCapture("constraints", record, privateOnly);
+  store.reindex();
+  if (home === "public" && !store.autoCommit) refreshExistingGrounding(root, store);
+  pumpMemoryHome(store, root, home, `hunch: capture ${records.length} sourced review rule(s)`);
+}, (repository, privateOnly) => {
+  const { store, root } = storeFor();
+  if (!repositoryUsesRemote(root, `https://github.com/${repository}.git`)) {
+    throw new Error("review repository does not match this checkout's remotes");
+  }
+  if (privateOnly !== undefined && store.captureHome(privateOnly) === "private" && !store.privateDir) {
+    throw new Error("--private requires a configured private overlay");
+  }
+  // A public artifact must never be model-derived from private overlay statements.
+  return { root, existing: store.captureHome(privateOnly) === "private"
+    ? store.recs("constraints") : store.json.loadAll("constraints") };
+});
 
 let openStore: HunchStore | null = null;
 type TeamStoreOptions = { requireFreshTeamMemory?: boolean };
@@ -484,9 +532,9 @@ program
   .option("--since <spec>", "how far back, e.g. 90d", "90d")
   .option("--max <n>", "max commits to process", "40")
   .option("--concurrency <n>", "commits to synthesize in parallel (the LLM call is the bottleneck)", "4")
-  .option("--deep", "Deep Synthesis: ensemble every available LLM provider per commit and reconcile their drafts (slower, higher-quality; advisory)")
+  .option("--deep", "Deep Synthesis: sample the initiating provider repeatedly and reconcile advisory drafts")
   .option("--verify", "Critic pass: audit each draft against its commit, prune unsupported alternatives/consequences, down-weight weak grounding (extra provider call; advisory)")
-  .option("--samples <n>", "self-consistency depth when only one CLI is installed: sample it n times per commit and reconcile (default 2 under --deep)")
+  .option("--samples <n>", "sample the initiating provider n times per commit and reconcile (default 2 under --deep)")
   .action(async (opts: { since: string; max: string; concurrency: string; deep?: boolean; verify?: boolean; samples?: string }) => {
     const { store, root } = storeFor();
     if (!isGitRepo(root)) return fail("backfill needs a git repo");
@@ -543,9 +591,9 @@ program
   .option("--overlay", "alias of --private")
   .option("--commit", "after a capture, also git add+commit the repo the decision landed in (default: follows auto-commit, ON unless opted out) — the overlay is also pushed; the public .hunch/ rides your next push")
   .option("--no-commit", "skip the auto-commit for this capture even when auto-commit is on")
-  .option("--deep", "Deep Synthesis: ensemble every available LLM provider and reconcile their drafts (agreement-weighted, advisory). Slower; uses configured subscriptions/local endpoint")
+  .option("--deep", "Deep Synthesis: sample the initiating provider repeatedly; never switch accounts")
   .option("--verify", "Critic pass: audit the draft against its commit, prune unsupported alternatives/consequences, down-weight weak grounding (extra provider call; advisory)")
-  .option("--samples <n>", "self-consistency depth when only one CLI is installed: sample it n times and reconcile (default 2 under --deep)")
+  .option("--samples <n>", "sample the initiating provider n times and reconcile (default 2 under --deep)")
   .action(async (sha: string | undefined, opts: { fromHook?: boolean; quiet?: boolean; force?: boolean; private?: boolean; overlay?: boolean; commit?: boolean; deep?: boolean; verify?: boolean; samples?: string }) => {
     const { store, root } = storeFor();
     if (!isGitRepo(root)) return opts.quiet ? undefined : fail("sync needs a git repo");
@@ -5210,14 +5258,15 @@ program
 // ---- repair-provenance (squash-merge commit provenance repair) ------------
 program
   .command("repair-provenance")
-  .description("Self-repair: detect a decision's commit provenance going orphaned by a squash-merge, matched by exact related_files overlap against the newly merged commit range — zero guessing beyond that. A fresh match not already rejected via --drop is queued (.hunch/pending-commit-repairs.json, local-only); --apply is required to actually rewrite it, or --only <dec_id>/--drop <dec_id> to act on one queued decision at a time. The post-merge hook runs detection automatically in the background but never passes --apply — the match signal isn't strong enough to trust an unattended write into shared team memory.")
-  .option("--apply", "rewrite provenance for every queued and freshly-matched candidate (auto-commits each touched store as a `repair` move)")
+  .description("Self-repair: detect a decision's commit provenance going orphaned by a squash-merge, matched by exact related_files overlap against the newly merged commit range — zero guessing beyond that. A fresh match not already rejected via --drop is queued (.hunch/pending-commit-repairs.json, local-only); --apply/--drop require the --expect hash printed by the preview or escalation; --only <dec_id> limits approval to one decision. Approval never scans for fresh matches. The post-merge hook runs detection automatically in the background but never passes --apply — the match signal isn't strong enough to trust an unattended write into shared team memory.")
+  .option("--apply", "apply the reviewed queued candidates (requires --expect; does not scan for new matches)")
+  .option("--expect <hash>", "exact queue review hash printed by the preview or escalation; required for --apply/--drop")
   .option("--only <dec_id>", "with --apply, rewrite only this decision id — everything else stays queued untouched")
   .option("--drop <dec_id>", "reject the queued match for this decision id, without applying it — tombstoned durably, so an identical future match for the same still-orphaned commit won't resurface (a genuinely different candidate still can)")
   .option("--from-hook", "invoked by the git post-merge hook")
   .option("--quiet", "minimal output")
   .option("--range <old..new>", "commit range to scan for replacement commits (default: ORIG_HEAD..HEAD)")
-  .action((opts: { apply?: boolean; only?: string; drop?: string; fromHook?: boolean; quiet?: boolean; range?: string }) => {
+  .action((opts: { apply?: boolean; only?: string; drop?: string; expect?: string; fromHook?: boolean; quiet?: boolean; range?: string }) => {
     const { store, root } = storeFor();
     try {
       if (!isGitRepo(root)) { if (!opts.fromHook) fail("repair-provenance needs a git repo."); return; }
@@ -5264,6 +5313,17 @@ program
         dropped = [...next];
         writeDroppedRepairs(root, dropped);
       };
+
+      // Review commands act only on the queue that was presented. Validate
+      // before pruning or writing either queue file; stale approval is inert.
+      if (opts.apply || opts.drop) {
+        const reviewed = withoutDropped(queue, dropped);
+        const expected = commitRepairReviewHash(reviewed, withheldRewrites(root, reviewed));
+        if (!opts.expect || opts.expect !== expected) {
+          return fail("repair review is missing or stale; run hunch repair-provenance and use its --expect hash to review the current queue.");
+        }
+        if (opts.fromHook) return fail("the post-merge hook may only detect repairs, never approve them.");
+      }
 
       // The queue file itself must never carry a tombstoned entry, regardless
       // of how it got there — the fresh-match filtering further down only
@@ -5323,7 +5383,7 @@ program
         if (!opts.quiet) console.log(`Pruned ${deadEntries.length} dead queue entr${deadEntries.length === 1 ? "y" : "ies"} (decision moved on, has no commit on record, or was superseded/rejected): ${deadEntries.map((r) => r.id).join(", ")}`);
       }
 
-      const candidates = rangeResolves ? mergeRangeChanges(oldRef, newRef, root) : [];
+      const candidates = rangeResolves && !opts.apply && !opts.drop ? mergeRangeChanges(oldRef, newRef, root) : [];
       const orphaned = candidates.length ? orphanedCommitDecisions(decisions, (sha) => commitRepairStatus(sha, newRef, root)) : [];
       const freshPlan = candidates.length ? planCommitRepair(orphaned, candidates) : { rewrites: [], records: [] };
 
@@ -5487,7 +5547,12 @@ program
               : null;
             console.log(`  ${r.id}  ${r.from} → ${r.to}${label ? `  (${label})` : ""}`);
           }
-          console.log(dim("\nDry run — no decision was rewritten. Re-run with --apply."));
+          const reviewHash = commitRepairReviewHash(queue, withheldRewrites(root, queue));
+          const only = opts.only ? ` --only ${opts.only}` : "";
+          console.log(dim(`\nDry run — no decision was rewritten. Review this queue, then run hunch repair-provenance --apply${only} --expect ${reviewHash}.`));
+          for (const id of new Set(toApply.map((r) => r.id))) {
+            console.log(dim(`Reject: hunch repair-provenance --drop ${id} --expect ${reviewHash}`));
+          }
         }
         return;
       }

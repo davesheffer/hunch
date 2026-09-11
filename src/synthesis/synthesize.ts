@@ -157,7 +157,7 @@ export async function syncCommit(
   const provider = localOnly
     ? new DeterministicProvider()
     : opts.deep
-    ? (await selectEnsemble({ samples: opts.samples })) ?? await selectProvider({ root })
+    ? (await selectEnsemble({ root, samples: opts.samples })) ?? await selectProvider({ root })
     : opts.force || opts.verify || isSignificant(meta, analysis, substantiveFiles)
       ? await selectProvider({ root })
       : new DeterministicProvider();

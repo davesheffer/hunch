@@ -8,6 +8,7 @@
  * multiple qualifying candidates means "don't guess" — same discipline as
  * repair.ts's rename-repair.
  */
+import { createHash } from "node:crypto";
 import type { Decision } from "./types.js";
 import type { CommitCandidate, CommitRepairStatus } from "../extractors/git.js";
 import { replaceExact } from "./refrepair.js";
@@ -16,6 +17,13 @@ export interface CommitRewrite {
   id: string;
   from: string;
   to: string;
+}
+
+/** Bind review to the ordered queue and which targets are currently resolvable.
+ * Queue order matters: duplicate decision ids use first-match selection. */
+export function commitRepairReviewHash(queued: readonly CommitRewrite[], withheld: ReadonlySet<CommitRewrite> = new Set()): string {
+  const snapshot = queued.map((r) => ({ id: r.id, from: r.from, to: r.to, withheld: withheld.has(r) }));
+  return `sha256:${createHash("sha256").update(JSON.stringify(snapshot)).digest("hex")}`;
 }
 
 /** A tombstone: the exact {id, from, to} rewrite a human explicitly rejected

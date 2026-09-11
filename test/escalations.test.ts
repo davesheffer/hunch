@@ -135,7 +135,7 @@ test("commitRepairEscalations: without a third argument, liveness still defaults
 test("commitRepairEscalations: without a fourth argument, no entry is treated as withheld (backward compatible)", () => {
   const decs = [D({ id: "dec_1", title: "Add the feature", commit: "sha_old" })];
   const items = commitRepairEscalations([{ id: "dec_1", from: "sha_old", to: "sha_new" }], decs);
-  assert.match(items[0]!.resolution, /--apply --only dec_1 to accept/);
+  assert.match(items[0]!.resolution, /--apply --only dec_1 --expect sha256:[a-f0-9]{64} to accept/);
 });
 
 test("commitRepairEscalations: a withheld entry (its `to` doesn't resolve here) still asks, but never advertises --apply --only as a working resolution", () => {
@@ -146,7 +146,7 @@ test("commitRepairEscalations: a withheld entry (its `to` doesn't resolve here) 
   assert.equal(items[0]!.kind, "commit-repair-pending");
   assert.match(items[0]!.question, /doesn't resolve in this repository/);
   assert.match(items[0]!.question, /reject it\?/);
-  assert.doesNotMatch(items[0]!.resolution, /--apply --only dec_1 to accept/, "must never advertise an action that's guaranteed to no-op forever");
+  assert.doesNotMatch(items[0]!.resolution, /--apply --only dec_1 --expect sha256:[a-f0-9]{64} to accept/, "must never advertise an action that's guaranteed to no-op forever");
   assert.match(items[0]!.resolution, /--drop dec_1/, "the only working resolution — --drop — must still be named");
 });
 
@@ -162,7 +162,7 @@ test("commitRepairEscalations: withheld is keyed by OBJECT, so an untouched sibl
   const forB = items.find((i) => i.decisionIds.includes("dec_b"))!;
   assert.match(forA.question, /doesn't resolve in this repository/);
   assert.doesNotMatch(forB.question, /doesn't resolve in this repository/, "dec_b was never withheld — must not inherit dec_a's wording");
-  assert.match(forB.resolution, /--apply --only dec_b to accept/);
+  assert.match(forB.resolution, /--apply --only dec_b --expect sha256:[a-f0-9]{64} to accept/);
 });
 
 test("commitRepairEscalations: a corrupted queue with two entries sharing an id — the WITHHELD one queued first, the resolvable one second — resolvable gets accurate apply-works wording, and the drop-target (ghost) keeps its ordinary withheld wording", () => {
@@ -177,15 +177,15 @@ test("commitRepairEscalations: a corrupted queue with two entries sharing an id 
   // ignores withheld status and just takes firstFor(queue, id)) — the ordinary withheld
   // wording is accurate for it, unchanged.
   assert.match(forGhost.question, /doesn't resolve in this repository/);
-  assert.doesNotMatch(forGhost.resolution, /--apply --only dec_a to accept/, "never claims --apply works for a withheld entry");
+  assert.doesNotMatch(forGhost.resolution, /--apply --only dec_a --expect sha256:[a-f0-9]{64} to accept/, "never claims --apply works for a withheld entry");
   assert.match(forGhost.resolution, /--drop dec_a/, "--drop dec_a really does target ghost here — it's the first survivor");
   // resolvable is second in the queue, but --apply --only excludes withheld entries when
   // picking the first match (src/cli/index.ts: plan.rewrites = applicable, the
   // withheld-filtered half) — so --apply --only dec_a DOES resolve to `resolvable`, even
   // though it isn't the absolute first-queued entry. --drop dec_a, however, still targets
   // ghost (--drop doesn't filter by withheld), not resolvable.
-  assert.match(forResolvable.resolution, /--apply --only dec_a to accept/, "--apply --only skips the withheld sibling ahead of it and reaches this entry");
-  assert.doesNotMatch(forResolvable.resolution, /--drop dec_a to reject it \(tombstoned durably/, "the ordinary --drop wording would be wrong here — --drop dec_a actually tombstones ghost");
+  assert.match(forResolvable.resolution, /--apply --only dec_a --expect sha256:[a-f0-9]{64} to accept/, "--apply --only skips the withheld sibling ahead of it and reaches this entry");
+  assert.doesNotMatch(forResolvable.resolution, /--drop dec_a --expect sha256:[a-f0-9]{64} to reject it \(tombstoned durably/, "the ordinary --drop wording would be wrong here — --drop dec_a actually tombstones ghost");
   assert.match(forResolvable.resolution, /--drop dec_a.*won't reject|won't reject.*--drop dec_a|earlier.*sibling/i, "must say --drop targets the earlier (withheld) sibling instead");
 });
 
@@ -199,13 +199,13 @@ test("commitRepairEscalations: a corrupted queue with two entries sharing an id 
   const forGhost = items.find((i) => i.detail === "sha_a_old → sha_ghost")!;
   // resolvable is first-queued AND not withheld — both --apply --only and --drop genuinely
   // target it, so it keeps the ordinary, unmodified wording.
-  assert.match(forResolvable.resolution, /--apply --only dec_a to accept/, "the resolvable sibling is both the drop-target and the apply-target — ordinary wording");
+  assert.match(forResolvable.resolution, /--apply --only dec_a --expect sha256:[a-f0-9]{64} to accept/, "the resolvable sibling is both the drop-target and the apply-target — ordinary wording");
   // ghost is second-queued AND withheld — neither --apply --only nor --drop reaches it: a
   // human reading its escalation must not be told either command acts on it, and must not
   // be told (falsely) that it becomes freely accept/reject-able once the sibling clears —
   // it will only ever be droppable, since it's withheld.
-  assert.doesNotMatch(forGhost.resolution, /--apply --only dec_a to accept/);
-  assert.doesNotMatch(forGhost.resolution, /^hunch repair-provenance --drop dec_a to reject it \(tombstoned durably/, "must not claim --drop dec_a targets THIS entry — resolvable is queued ahead of it");
+  assert.doesNotMatch(forGhost.resolution, /--apply --only dec_a --expect sha256:[a-f0-9]{64} to accept/);
+  assert.doesNotMatch(forGhost.resolution, /^hunch repair-provenance --drop dec_a --expect sha256:[a-f0-9]{64} to reject it \(tombstoned durably/, "must not claim --drop dec_a targets THIS entry — resolvable is queued ahead of it");
   assert.match(forGhost.resolution, /doesn't resolve here either/i, "must still surface that ghost's own `to` doesn't resolve, once information the pre-#59 code always showed");
   assert.match(forGhost.resolution, /drop-only/i, "stays drop-only — but must not claim this is forever (a fresh detection run can still supersede it)");
   assert.match(forGhost.resolution, /fresh detection run|fresh match/i, "must not contradict the ordinary withheld wording's own \"wait for a fresh match to supersede it\" — withheld isn't permanent");
@@ -220,10 +220,10 @@ test("commitRepairEscalations: a duplicate-id queue's second live entry never ad
   assert.equal(items.length, 2);
   const forFirst = items.find((i) => i.detail === "sha_a_old → sha_first")!;
   const forSecond = items.find((i) => i.detail === "sha_a_old → sha_second")!;
-  assert.match(forFirst.resolution, /--apply --only dec_a to accept/, "the first-queued match keeps the ordinary, working wording");
-  assert.match(forFirst.resolution, /--drop dec_a to reject it \(tombstoned durably/, "and the ordinary --drop wording, which IS actionable against it");
-  assert.doesNotMatch(forSecond.resolution, /--apply --only dec_a to accept/, "--apply --only would apply the FIRST entry, not this one");
-  assert.doesNotMatch(forSecond.resolution, /--drop dec_a to reject it \(tombstoned durably/, "--drop would tombstone the FIRST entry, not this one");
+  assert.match(forFirst.resolution, /--apply --only dec_a --expect sha256:[a-f0-9]{64} to accept/, "the first-queued match keeps the ordinary, working wording");
+  assert.match(forFirst.resolution, /--drop dec_a --expect sha256:[a-f0-9]{64} to reject it \(tombstoned durably/, "and the ordinary --drop wording, which IS actionable against it");
+  assert.doesNotMatch(forSecond.resolution, /--apply --only dec_a --expect sha256:[a-f0-9]{64} to accept/, "--apply --only would apply the FIRST entry, not this one");
+  assert.doesNotMatch(forSecond.resolution, /--drop dec_a --expect sha256:[a-f0-9]{64} to reject it \(tombstoned durably/, "--drop would tombstone the FIRST entry, not this one");
   assert.match(forSecond.resolution, /hunch repair-provenance --apply --only dec_a/, "gives the copy-pasteable command for the entry actually ahead of it, not just prose");
   assert.match(forSecond.resolution, /hunch repair-provenance --drop dec_a/);
   assert.match(forSecond.question, /queued replacement candidate/);
@@ -248,7 +248,7 @@ test("commitRepairEscalations: a THIRD duplicate entry gets the same non-actiona
   const items = commitRepairEscalations([e1, e2, e3], decs);
   assert.equal(items.length, 3);
   const for3 = items.find((i) => i.detail === "sha_a_old → sha_3")!;
-  assert.doesNotMatch(for3.resolution, /--apply --only dec_a to accept/);
+  assert.doesNotMatch(for3.resolution, /--apply --only dec_a --expect sha256:[a-f0-9]{64} to accept/);
   assert.doesNotMatch(for3.question, /a second queued replacement candidate/i, "there are two entries ahead of it, not one — 'second' would misdescribe its position");
 });
 
@@ -266,16 +266,16 @@ test("commitRepairEscalations: a three-way duplicate (withheld, withheld, resolv
   // so it keeps the ordinary withheld wording unchanged.
   assert.match(forGhost1.question, /doesn't resolve in this repository/);
   assert.match(forGhost1.resolution, /--drop dec_a/);
-  assert.doesNotMatch(forGhost1.resolution, /--apply --only dec_a to accept/);
+  assert.doesNotMatch(forGhost1.resolution, /--apply --only dec_a --expect sha256:[a-f0-9]{64} to accept/);
   // ghost2 is neither the drop target (ghost1 is) nor the apply target (also withheld,
   // so excluded from `applicable` too) — the "neither" branch, with the withheld caveat.
-  assert.doesNotMatch(forGhost2.resolution, /--apply --only dec_a to accept/);
-  assert.doesNotMatch(forGhost2.resolution, /^hunch repair-provenance --drop dec_a to reject it \(tombstoned durably/);
+  assert.doesNotMatch(forGhost2.resolution, /--apply --only dec_a --expect sha256:[a-f0-9]{64} to accept/);
+  assert.doesNotMatch(forGhost2.resolution, /^hunch repair-provenance --drop dec_a --expect sha256:[a-f0-9]{64} to reject it \(tombstoned durably/);
   assert.match(forGhost2.resolution, /doesn't resolve here either/i);
   // resolvable is the first NON-withheld survivor, so --apply --only genuinely reaches it,
   // even though it's third in queue order — but --drop dec_a still targets ghost1.
-  assert.match(forResolvable.resolution, /--apply --only dec_a to accept/);
-  assert.doesNotMatch(forResolvable.resolution, /--drop dec_a to reject it \(tombstoned durably/);
+  assert.match(forResolvable.resolution, /--apply --only dec_a --expect sha256:[a-f0-9]{64} to accept/);
+  assert.doesNotMatch(forResolvable.resolution, /--drop dec_a --expect sha256:[a-f0-9]{64} to reject it \(tombstoned durably/);
 });
 
 test("commitRepairEscalations: which entry is 'first' for a duplicate id follows the queue's post-prune order, not raw array order — a dead first sibling doesn't make the live survivor look like a duplicate (#59)", () => {
@@ -284,7 +284,7 @@ test("commitRepairEscalations: which entry is 'first' for a duplicate id follows
   const liveSecond = { id: "dec_a", from: "sha_a_old", to: "sha_live" };
   const items = commitRepairEscalations([deadFirst, liveSecond], decs);
   assert.equal(items.length, 1, "the dead entry never asks anything — liveRewrites excludes it");
-  assert.match(items[0]!.resolution, /--apply --only dec_a to accept/, "the CLI prunes deadFirst before --drop/--apply ever consult the queue, so liveSecond IS what they'd act on — must not read as a duplicate stuck behind a phantom sibling");
+  assert.match(items[0]!.resolution, /--apply --only dec_a --expect sha256:[a-f0-9]{64} to accept/, "the CLI prunes deadFirst before --drop/--apply ever consult the queue, so liveSecond IS what they'd act on — must not read as a duplicate stuck behind a phantom sibling");
 });
 
 test("commitRepairEscalations: which entry is 'first' for a duplicate id follows queue order, not the order liveRewrites happens to return", () => {
@@ -294,8 +294,8 @@ test("commitRepairEscalations: which entry is 'first' for a duplicate id follows
   const items = commitRepairEscalations([later, earlier], decs); // later queued first this time
   const forLater = items.find((i) => i.detail === "sha_a_old → sha_later")!;
   const forEarlier = items.find((i) => i.detail === "sha_a_old → sha_earlier")!;
-  assert.match(forLater.resolution, /--apply --only dec_a to accept/, "whichever entry is first in the queue array wins, regardless of its `to`");
-  assert.doesNotMatch(forEarlier.resolution, /--apply --only dec_a to accept/);
+  assert.match(forLater.resolution, /--apply --only dec_a --expect sha256:[a-f0-9]{64} to accept/, "whichever entry is first in the queue array wins, regardless of its `to`");
+  assert.doesNotMatch(forEarlier.resolution, /--apply --only dec_a --expect sha256:[a-f0-9]{64} to accept/);
 });
 
 test("commitRepairEscalations: a duplicate-id queue's non-actionable follower (neither drop-target nor apply-target) is flagged actionable:false (#61)", () => {

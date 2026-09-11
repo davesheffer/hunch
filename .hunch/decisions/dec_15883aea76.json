@@ -1,0 +1,159 @@
+{
+  "id": "dec_15883aea76",
+  "title": "Bind agent work to the initiating provider and its local authentication",
+  "topic": null,
+  "status": "accepted",
+  "context": "Installed CLI availability and global provider preferences do not establish which provider initiated an operation; routing by them could redirect work to another account. Touches invariant(s): con_2ce3f2a547 (Synthesis must use an explicitly selected coding-assistant subscription CLI or the deterministic local fallback; never call a pay-per-token API); con_e04226bd05 (The MCP server must stay client-agnostic: all assistants point to the same .hunch/ graph; no Claude-only behavior in the server).",
+  "decision": "Carry the initiating provider through synthesis, verification, deep sampling, automatic review memory, MCP requests, and Git child processes. Refuse conflicting provider bindings and never substitute another provider when the origin is unknown or unavailable.",
+  "consequences": [
+    "Deep sampling repeatedly uses the same provider.",
+    "Unavailable origins use deterministic synthesis fallback; model-required tasks refuse or queue failed analysis.",
+    "MCP origin is request-local, preventing concurrent clients from sharing provider preferences.",
+    "The binding preserves provider and local CLI authentication, but does not verify that the host agent and CLI use the same human account."
+  ],
+  "alternatives_rejected": [
+    "Automatically selecting a provider because its CLI is installed.",
+    "Allowing global preferences to override a known initiating provider.",
+    "Falling back or distributing deep samples across other providers."
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Automatically selecting a provider because its CLI is installed.",
+      "scope": [
+        "docs/**",
+        "docs/evidence/**",
+        "src/cli/**",
+        "src/constitution/**",
+        "src/core/**",
+        "src/extractors/**",
+        "src/mcp/**",
+        "src/synthesis/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Allowing global preferences to override a known initiating provider.",
+      "scope": [
+        "docs/**",
+        "docs/evidence/**",
+        "src/cli/**",
+        "src/constitution/**",
+        "src/core/**",
+        "src/extractors/**",
+        "src/mcp/**",
+        "src/synthesis/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Falling back or distributing deep samples across other providers.",
+      "scope": [
+        "docs/**",
+        "docs/evidence/**",
+        "src/cli/**",
+        "src/constitution/**",
+        "src/core/**",
+        "src/extractors/**",
+        "src/mcp/**",
+        "src/synthesis/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_50037f41a9",
+    "cmp_587d48fb03",
+    "cmp_a94a8fe5cc",
+    "cmp_b256a6aed0",
+    "cmp_ba75dfc94f",
+    "cmp_dfa5b5acde",
+    "cmp_e0ccfe26fe"
+  ],
+  "related_files": [
+    "CHANGELOG.md",
+    "README.md",
+    "docs/agent-origin.md",
+    "docs/evidence/infection-automatic-review-memory-trial.md",
+    "docs/review-memory.md",
+    "src/cli/automaticReviewMemory.ts",
+    "src/cli/index.ts",
+    "src/cli/invocation.ts",
+    "src/cli/reviewMemory.ts",
+    "src/cli/reviewMemoryProvider.ts",
+    "src/constitution/experimentRunner.ts",
+    "src/core/automaticReviewMemory.ts",
+    "src/extractors/git.ts",
+    "src/mcp/server.ts",
+    "src/synthesis/cliAdapter.ts",
+    "src/synthesis/initiator.ts",
+    "src/synthesis/provider.ts",
+    "src/synthesis/synthesize.ts",
+    "test/automatic-review-memory-cli.test.ts",
+    "test/automatic-review-memory.test.ts",
+    "test/cli-adapter.test.ts",
+    "test/cliproviders.test.ts",
+    "test/initiator.test.ts",
+    "test/mcp-initiator.test.ts",
+    "test/provider-selection.test.ts",
+    "test/review-memory-provider.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "a88657f",
+  "valid_from": "2026-09-10T09:45:28+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft+summary",
+    "confidence": 0.5,
+    "evidence": [
+      "commit:a88657f",
+      "synth:provider=codex-cli",
+      "branch:feat/automatic-review-memory",
+      "CHANGELOG.md",
+      "README.md",
+      "docs/agent-origin.md",
+      "docs/evidence/infection-automatic-review-memory-trial.md",
+      "docs/review-memory.md",
+      "src/cli/automaticReviewMemory.ts",
+      "src/cli/index.ts",
+      "src/cli/invocation.ts"
+    ],
+    "last_verified": "2026-09-10T06:46:51.638Z"
+  },
+  "date": "2026-09-10T09:45:28+03:00"
+}

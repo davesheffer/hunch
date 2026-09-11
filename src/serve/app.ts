@@ -24,6 +24,8 @@ import { STATE_READ_VERSION, STATE_RECORDS_VERSION, STATE_SUBSCRIBE_VERSION, STA
 import { partitionFor, resolvePrincipal, type ServeConfig } from "./config.js";
 import { WriteLockTimeout, withWriteLock } from "./writelock.js";
 import { HUNCH_VERSION } from "../core/version.js";
+import { captureState, captureBatchState } from "../store/stateCapture.js";
+import { STATE_CAPTURE_VERSION, STATE_CAPTURE_BATCH_VERSION } from "../core/stateContract.js";
 
 export const BODY_LIMIT_BYTES = 1024 * 1024;
 export const PROBLEM_TYPE = "https://www.hunchmemory.com/problems/nuryel.state/1/";
@@ -143,6 +145,7 @@ export function createServeApp(config: ServeConfig, opts: ServeOptions = {}): Se
 
       if (url.pathname === "/nuryel/v1/read") {
         const scope = requireScope(principal, body);
+        if (body.observed_page !== undefined && body.scopes !== undefined) throw problem(400, 'malformed', 'observation pages require a single partition without scopes');
         const { store } = storeFor(scope);
         if (body.scopes === undefined) {
           const { response, envelope } = readState(store, { schema: STATE_READ_VERSION, principal, ...body });
@@ -169,6 +172,22 @@ export function createServeApp(config: ServeConfig, opts: ServeOptions = {}): Se
           flush: (isPrivate, message) => flushCapture(store, hunchPaths(root).hunch, isPrivate, message),
         }));
         return send(res, result.outcome === "created" ? 201 : 200, result);
+      }
+      if (url.pathname === "/nuryel/v1/capture") {
+        const scope = requireScope(principal, body);
+        const { store } = storeFor(scope);
+        const result = await withWriteLock(hunchPaths(store.publicRoot).hunch, () => captureState(store, { schema: STATE_CAPTURE_VERSION, principal, ...body }, {
+          flush: (isPrivate, message) => flushCapture(store, hunchPaths(store.publicRoot).hunch, isPrivate, message),
+        }));
+        return send(res, result.outcome === "created" ? 201 : 200, result);
+      }
+      if (url.pathname === "/nuryel/v1/capture-batch") {
+        const scope = requireScope(principal, body);
+        const { store, root } = storeFor(scope);
+        const result = await withWriteLock(hunchPaths(root).hunch, () => captureBatchState(store, { schema: STATE_CAPTURE_BATCH_VERSION, principal, ...body }, {
+          flush: (isPrivate, message) => flushCapture(store, hunchPaths(root).hunch, isPrivate, message),
+        }));
+        return send(res, 200, result);
       }
       if (url.pathname === "/nuryel/v1/subscribe") {
         const scope = requireScope(principal, body);

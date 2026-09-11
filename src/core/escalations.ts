@@ -20,7 +20,7 @@
  */
 import type { Decision } from "./types.js";
 import { topicCollisions } from "./topics.js";
-import { liveRewrites, deadRewrites, firstFor, type CommitRewrite } from "./commitrepair.js";
+import { liveRewrites, deadRewrites, commitRepairReviewHash, firstFor, type CommitRewrite } from "./commitrepair.js";
 import { importedAdrReviewHash, importedAdrSourceHash, pendingImportedAdrReviews } from "./importReview.js";
 
 export type EscalationKind = "topic-conflict" | "imported-adr-review" | "policy-candidate" | "policy-proposal" | "policy-repaired" | "premise-stale" | "commit-repair-pending";
@@ -162,6 +162,7 @@ export function pendingEscalations(decisions: readonly Decision[]): Escalation[]
  *  caller of this function already passes the SAME `queued` array to both
  *  this function and withheldRewrites, so identity holds. */
 export function commitRepairEscalations(queued: readonly CommitRewrite[], decisions: readonly Decision[], live: readonly Decision[] = decisions, withheld: ReadonlySet<CommitRewrite> = new Set()): Escalation[] {
+  const reviewHash = commitRepairReviewHash(queued, withheld);
   const byId = new Map(decisions.map((d) => [d.id, d] as const));
   // Mirrors two of the three queue transformations --apply/--drop actually see
   // (src/cli/index.ts): dead entries (deadRewrites) are pruned via `save()`
@@ -230,7 +231,7 @@ export function commitRepairEscalations(queued: readonly CommitRewrite[], decisi
           // decision's `commit` past the `from` both entries share, so the next
           // run's deadRewrites prunes THIS entry as stale — it is never
           // reconsidered, not "resolved the normal way".
-          resolution: `not directly actionable by id right now: \`hunch repair-provenance --apply --only ${r.id}\`/\`hunch repair-provenance --drop ${r.id}\` both act on an entry queued ahead of it, never this one${alsoWithheld}. Dropping that entry brings this one back into consideration on the next run; applying it instead retires this one as stale, since the decision moves past the \`from\` both entries share.`,
+          resolution: `not directly actionable by id right now: \`hunch repair-provenance --apply --only ${r.id} --expect ${reviewHash}\`/\`hunch repair-provenance --drop ${r.id} --expect ${reviewHash}\` both act on an entry queued ahead of it, never this one${alsoWithheld}. Dropping that entry brings this one back into consideration on the next run; applying it instead retires this one as stale, since the decision moves past the \`from\` both entries share.`,
         };
       }
       if (!isDropTarget) {
@@ -240,7 +241,7 @@ export function commitRepairEscalations(queued: readonly CommitRewrite[], decisi
         return {
           ...base,
           question: applyQuestion,
-          resolution: `hunch repair-provenance --apply --only ${r.id} to accept just this one — but \`--drop ${r.id}\` won't reject THIS entry: an earlier queued sibling for the same id (whose own replacement doesn't resolve here) sits ahead of it and would be tombstoned instead.`,
+          resolution: `hunch repair-provenance --apply --only ${r.id} --expect ${reviewHash} to accept just this one — but \`--drop ${r.id}\` won't reject THIS entry: an earlier queued sibling for the same id (whose own replacement doesn't resolve here) sits ahead of it and would be tombstoned instead.`,
         };
       }
       if (!isApplyTarget) {
@@ -251,13 +252,13 @@ export function commitRepairEscalations(queued: readonly CommitRewrite[], decisi
         return {
           ...base,
           question: `${named}'s commit is no longer reachable from HEAD (likely squash-merged away), and the queued replacement commit doesn't resolve in this repository (corrupted queue entry, or the commit has since been garbage-collected) — reject it?`,
-          resolution: `this entry can never be applied as-is — \`hunch repair-provenance --apply\` will leave it queued every run; \`hunch repair-provenance --drop ${r.id}\` to reject it, or wait for a fresh match to supersede it`,
+          resolution: `this entry can never be applied as-is — \`hunch repair-provenance --apply\` will leave it queued every run; \`hunch repair-provenance --drop ${r.id} --expect ${reviewHash}\` to reject it, or wait for a fresh match to supersede it`,
         };
       }
       return {
         ...base,
         question: applyQuestion,
-        resolution: `hunch repair-provenance --apply --only ${r.id} to accept just this one, --drop ${r.id} to reject it (tombstoned durably — this same match won't resurface, though a genuinely different candidate still can), or leave it queued to decide later`,
+        resolution: `hunch repair-provenance --apply --only ${r.id} --expect ${reviewHash} to accept just this one, hunch repair-provenance --drop ${r.id} --expect ${reviewHash} to reject it (tombstoned durably — this same match won't resurface, though a genuinely different candidate still can), or leave it queued to decide later`,
       };
     });
 }

@@ -1,0 +1,1804 @@
+{
+  "schema": "hunch.review-memory-trial/1",
+  "date": "2026-09-10",
+  "repository": "infection/infection",
+  "revision": "bd7e49f8763e811e29eccf2b5cd2d09cf9de29d7",
+  "summary": {
+    "comments": 102,
+    "threads": 53,
+    "excluded_bots": 6,
+    "selected_rules": 2
+  },
+  "checks": {
+    "deterministic_reordering": "passed",
+    "stale_hash_refused": "passed",
+    "file_scoped_delivery": "passed",
+    "unrelated_file_empty": "passed",
+    "source_and_check_preserved": "passed",
+    "non_blocking_authority": "passed"
+  },
+  "expected_refusals": {
+    "incomplete_thread": {
+      "observed": true,
+      "missing_root_comment": 3890736448
+    },
+    "missing_file": {
+      "observed": true,
+      "exit_code": 1,
+      "message": "hunch: review scope tests/e2e/Source_Symbol_Selection/infection.json5 no longer exists; review the current code before capturing this rule"
+    },
+    "existing_rule": {
+      "observed": true,
+      "exit_code": 1,
+      "message": "hunch: constraint con_8582e49ce7 already exists; use the existing correction review flow to change it"
+    }
+  },
+  "scope": {
+    "isolated_clone": true,
+    "upstream_modified": false,
+    "infection_php_tests_run": false,
+    "hunch_release_gate_run": false,
+    "rule_selection": "manual",
+    "maintainer_endorsement_claimed": false
+  },
+  "review_packet": {
+    "schema": "hunch.review-memory/1",
+    "repository": "infection/infection",
+    "authority": "none",
+    "candidates": [
+      {
+        "id": "review_3881441545",
+        "evidence_hash": "sha1:c38e89463c6812121ea15fc7c8064685f97081da",
+        "file": "src/TestFramework/PhpUnit/Config/Builder/MutationConfigBuilder.php",
+        "comments": [
+          {
+            "id": 3881441545,
+            "body": "Lost comment",
+            "path": "src/TestFramework/PhpUnit/Config/Builder/MutationConfigBuilder.php",
+            "html_url": "https://github.com/infection/infection/pull/3522#discussion_r3881441545",
+            "commit_id": "b20ffeff9bfade56863c84ba59d7c182b37e6903",
+            "created_at": "2026-08-28T14:35:14Z",
+            "updated_at": "2026-08-28T14:35:24Z",
+            "user": {
+              "login": "sanmai",
+              "type": "User"
+            }
+          }
+        ]
+      },
+      {
+        "id": "review_3890736448",
+        "evidence_hash": "sha1:a2e4489d007f53fbcdd90c7f8929600cd5b1ff9f",
+        "file": "adr/0014-name-exceptions-after-domain-failures.md",
+        "comments": [
+          {
+            "id": 3890736448,
+            "body": "It looks like a leaky abstraction and if you have to click through to see what is caught, we could just as well catch the full list.",
+            "path": "adr/0014-name-exceptions-after-domain-failures.md",
+            "html_url": "https://github.com/infection/infection/pull/3536#discussion_r3890736448",
+            "commit_id": "c93a38871c41fa6c2336c77afd212bbf2a9dde91",
+            "created_at": "2026-08-30T22:38:01Z",
+            "updated_at": "2026-08-30T22:38:37Z",
+            "user": {
+              "login": "sanmai",
+              "type": "User"
+            }
+          },
+          {
+            "id": 3892519193,
+            "body": "I think that could be rephrased. The example is correct, but the conclusion is not.\n\nThe grouping of domain failures is there because for the caller it may be interesting to catch a kind of failure, but the actual details of the failure are not interesting and only relevant for, for example, reporting, communicating with the user. It has more to do with the domain modeling than a technical convenience.",
+            "path": "adr/0014-name-exceptions-after-domain-failures.md",
+            "html_url": "https://github.com/infection/infection/pull/3536#discussion_r3892519193",
+            "commit_id": "c93a38871c41fa6c2336c77afd212bbf2a9dde91",
+            "created_at": "2026-08-31T07:31:37Z",
+            "updated_at": "2026-08-31T07:31:37Z",
+            "in_reply_to_id": 3890736448,
+            "user": {
+              "login": "theofidry",
+              "type": "User"
+            }
+          }
+        ]
+      },
+      {
+        "id": "review_3890839030",
+        "evidence_hash": "sha1:4ec2c6bde9684e1b9d32f8d1b69064780b891893",
+        "file": "tests/Architecture/PHPat/Selector/Support/PHPUnitTestClassAnalysis.php",
+        "comments": [
+          {
+            "id": 3890839030,
+            "body": "The error suggested `isSubclassOfClass`",
+            "path": "tests/Architecture/PHPat/Selector/Support/PHPUnitTestClassAnalysis.php",
+            "html_url": "https://github.com/infection/infection/pull/3535#discussion_r3890839030",
+            "commit_id": "b45f2a2cb9f2d2a3f60f587b3eb5012859437afe",
+            "created_at": "2026-08-30T23:25:39Z",
+            "updated_at": "2026-08-30T23:25:39Z",
+            "user": {
+              "login": "sanmai",
+              "type": "User"
+            }
+          },
+          {
+            "id": 3893788284,
+            "body": "It does but we have:\n\n- `::getAncestorWithClassName(string $className): ?ClassReflection`\n- `::isSubclassOfClass(ClassReflection $classReflection): bool`\n\nSo the 2nd requires a `ClassReflection`, which we do not have here. We could get one, but I don't think it would be more terse or expressive.",
+            "path": "tests/Architecture/PHPat/Selector/Support/PHPUnitTestClassAnalysis.php",
+            "html_url": "https://github.com/infection/infection/pull/3535#discussion_r3893788284",
+            "commit_id": "b45f2a2cb9f2d2a3f60f587b3eb5012859437afe",
+            "created_at": "2026-08-31T10:52:30Z",
+            "updated_at": "2026-08-31T10:52:30Z",
+            "in_reply_to_id": 3890839030,
+            "user": {
+              "login": "theofidry",
+              "type": "User"
+            }
+          }
+        ]
+      },
+      {
+        "id": "review_3892710823",
+        "evidence_hash": "sha1:c989e113b82669ffce4354e805b602bad104872b",
+        "file": "adr/0014-decorator-naming.md",
+        "comments": [
+          {
+            "id": 3892710823,
+            "body": "actually changed them here, it's not many so easy enough to do, but I would do it in a separate PR.",
+            "path": "adr/0014-decorator-naming.md",
+            "html_url": "https://github.com/infection/infection/pull/3539#discussion_r3892710823",
+            "commit_id": "1be4075c604518b23b8d4eff836d6dbbd77a589e",
+            "created_at": "2026-08-31T08:04:53Z",
+            "updated_at": "2026-08-31T08:04:54Z",
+            "user": {
+              "login": "theofidry",
+              "type": "User"
+            }
+          }
+        ]
+      },
+      {
+        "id": "review_3892715658",
+        "evidence_hash": "sha1:b719c8aed8a7a9d163ccbc0fc2457a254e1a156f",
+        "file": "adr/0014-decorator-naming.md",
+        "comments": [
+          {
+            "id": 3892715658,
+            "body": "I picked `$decorated` but I'd be fine with `$inner` too, your pick.",
+            "path": "adr/0014-decorator-naming.md",
+            "html_url": "https://github.com/infection/infection/pull/3539#discussion_r3892715658",
+            "commit_id": "c09bc07f15af07ba931d762b709edaa56d13b52c",
+            "created_at": "2026-08-31T08:05:46Z",
+            "updated_at": "2026-08-31T08:05:46Z",
+            "user": {
+              "login": "theofidry",
+              "type": "User"
+            }
+          }
+        ]
+      },
+      {
+        "id": "review_3899704143",
+        "evidence_hash": "sha1:b474d0e1cb5f6d365116553102823e4ea7033e93",
+        "file": "tests/phpunit/Mutator/Number/IncrementIntegerTest.php",
+        "comments": [
+          {
+            "id": 3899704143,
+            "body": "that's what it does apparently",
+            "path": "tests/phpunit/Mutator/Number/IncrementIntegerTest.php",
+            "html_url": "https://github.com/infection/infection/pull/3542#discussion_r3899704143",
+            "commit_id": "bd50a7df13d34067bd314cf347d7eb289336ec43",
+            "created_at": "2026-09-01T00:38:29Z",
+            "updated_at": "2026-09-01T00:38:29Z",
+            "user": {
+              "login": "sanmai",
+              "type": "User"
+            }
+          }
+        ]
+      },
+      {
+        "id": "review_3903666889",
+        "evidence_hash": "sha1:30a456c1a7d61faf33329b1d705d93a8894d8cae",
+        "file": "src/Command/ConfigureCommand.php",
+        "comments": [
+          {
+            "id": 3903666889,
+            "body": "the agents like to add this exception but it's a case we do not want as we do not react on `::executeCommand()` (like we do not react on the native `::execute()`). I did not look/find a neat way to disable Mago about this case though so meanwhile we need to stay vigilant during reviews",
+            "path": "src/Command/ConfigureCommand.php",
+            "html_url": "https://github.com/infection/infection/pull/3538#discussion_r3903666889",
+            "commit_id": "e096120ffe4cd01a18f3b70afcfde5ece4d06153",
+            "created_at": "2026-09-01T11:33:27Z",
+            "updated_at": "2026-09-01T11:51:00Z",
+            "user": {
+              "login": "theofidry",
+              "type": "User"
+            }
+          }
+        ]
+      },
+      {
+        "id": "review_3903707528",
+        "evidence_hash": "sha1:ca6d1b98716a66e378f3065d2cd87bf61e646cd7",
+        "file": "src/Command/ConfigureCommand.php",
+        "comments": [
+          {
+            "id": 3903707528,
+            "body": "Whilst harmless here (I think?), it's not equivalent.\n\nI don't remember if it's something we already have (quick current lookup suggests not) but I mentioned it in #2572 so maybe it's a later plan – but a FS could have a read-only implementation.\n\nIn this case, this implementation would be registered at the container level, so the code here would bypass that configuration.\n\nI don't think it's a problem right now at least, but to keep in mind with this sort of changes",
+            "path": "src/Command/ConfigureCommand.php",
+            "html_url": "https://github.com/infection/infection/pull/3538#discussion_r3903707528",
+            "commit_id": "e7e5bf63838b057a9055a316aa023c6696652d13",
+            "created_at": "2026-09-01T11:38:50Z",
+            "updated_at": "2026-09-01T11:51:00Z",
+            "user": {
+              "login": "theofidry",
+              "type": "User"
+            }
+          },
+          {
+            "id": 3915405602,
+            "body": "That's a nice idea :100:",
+            "path": "src/Command/ConfigureCommand.php",
+            "html_url": "https://github.com/infection/infection/pull/3538#discussion_r3915405602",
+            "commit_id": "e7e5bf63838b057a9055a316aa023c6696652d13",
+            "created_at": "2026-09-02T14:50:46Z",
+            "updated_at": "2026-09-02T14:50:46Z",
+            "in_reply_to_id": 3903707528,
+            "user": {
+              "login": "sanmai",
+              "type": "User"
+            }
+          }
+        ]
+      },
+      {
+        "id": "review_3903730977",
+        "evidence_hash": "sha1:398af3906824ae5547734c0f2ff337474d3cb050",
+        "file": "src/Config/ValueProvider/PhpUnitCustomExecutablePathProvider.php",
+        "comments": [
+          {
+            "id": 3903730977,
+            "body": "For such cases where this is a service instantiated by the `Container`, it should be the injected shared filesystem instance; Otherwise we are introducing back the problem that we can configure the `Container` but there is multiple places that still need to be updated because they decided to instantiate their own services.\n\nThe statelessness of `Filesystem` does not guarantee that two implementations behave the same way (e.g. if there is a readonly one).\n\nMaking those optional values also makes it harder to guarantee that tests don't suddenly use an actual instance and end up having a side-effects whilst executing the tests.",
+            "path": "src/Config/ValueProvider/PhpUnitCustomExecutablePathProvider.php",
+            "html_url": "https://github.com/infection/infection/pull/3538#discussion_r3903730977",
+            "commit_id": "e7e5bf63838b057a9055a316aa023c6696652d13",
+            "created_at": "2026-09-01T11:42:12Z",
+            "updated_at": "2026-09-01T11:51:00Z",
+            "user": {
+              "login": "theofidry",
+              "type": "User"
+            }
+          },
+          {
+            "id": 3911999214,
+            "body": "That is correct: if the `Filesystem` changes in the future, it could bite us. OTOH this increases the scope of this work hedging against the future that may never come, and if it comes, `git grep new\\ FileSystem` will find all violations at once.",
+            "path": "src/Config/ValueProvider/PhpUnitCustomExecutablePathProvider.php",
+            "html_url": "https://github.com/infection/infection/pull/3538#discussion_r3911999214",
+            "commit_id": "e7e5bf63838b057a9055a316aa023c6696652d13",
+            "created_at": "2026-09-02T08:02:29Z",
+            "updated_at": "2026-09-02T08:24:08Z",
+            "in_reply_to_id": 3903730977,
+            "user": {
+              "login": "sanmai",
+              "type": "User"
+            }
+          },
+          {
+            "id": 3912751165,
+            "body": "is introducing this wiring such a big deal/noise though? – I did not look, but I thought it would barely affect some services in `Container` which is not much to look at and for tests you already explicitly inject it in almost all cases",
+            "path": "src/Config/ValueProvider/PhpUnitCustomExecutablePathProvider.php",
+            "html_url": "https://github.com/infection/infection/pull/3538#discussion_r3912751165",
+            "commit_id": "e7e5bf63838b057a9055a316aa023c6696652d13",
+            "created_at": "2026-09-02T09:38:43Z",
+            "updated_at": "2026-09-02T09:39:04Z",
+            "in_reply_to_id": 3903730977,
+            "user": {
+              "login": "theofidry",
+              "type": "User"
+            }
+          }
+        ]
+      },
+      {
+        "id": "review_3903759494",
+        "evidence_hash": "sha1:949eb45e54da8052e7d8aad83b59728ca36d9bf7",
+        "file": "tests/phpunit/Config/ValueProvider/PhpUnitCustomExecutablePathProviderTest.php",
+        "comments": [
+          {
+            "id": 3903759494,
+            "body": "is this still necessary now then? Likewise for the other affected tests",
+            "path": "tests/phpunit/Config/ValueProvider/PhpUnitCustomExecutablePathProviderTest.php",
+            "html_url": "https://github.com/infection/infection/pull/3538#discussion_r3903759494",
+            "commit_id": "e7e5bf63838b057a9055a316aa023c6696652d13",
+            "created_at": "2026-09-01T11:45:52Z",
+            "updated_at": "2026-09-01T11:51:00Z",
+            "user": {
+              "login": "theofidry",
+              "type": "User"
+            }
+          },
+          {
+            "id": 3912094482,
+            "body": "PHPat rejects all 7: `IoCodeDetectorVisitor` treats `new FileSystem()`  as I/O",
+            "path": "tests/phpunit/Config/ValueProvider/PhpUnitCustomExecutablePathProviderTest.php",
+            "html_url": "https://github.com/infection/infection/pull/3538#discussion_r3912094482",
+            "commit_id": "e7e5bf63838b057a9055a316aa023c6696652d13",
+            "created_at": "2026-09-02T08:15:42Z",
+            "updated_at": "2026-09-02T08:16:42Z",
+            "in_reply_to_id": 3903759494,
+            "user": {
+              "login": "sanmai",
+              "type": "User"
+            }
+          },
+          {
+            "id": 3912736934,
+            "body": "Which is legit I suppose, having it being able to trace if you override the parameter or something is probably asking too much from it.",
+            "path": "tests/phpunit/Config/ValueProvider/PhpUnitCustomExecutablePathProviderTest.php",
+            "html_url": "https://github.com/infection/infection/pull/3538#discussion_r3912736934",
+            "commit_id": "e7e5bf63838b057a9055a316aa023c6696652d13",
+            "created_at": "2026-09-02T09:36:59Z",
+            "updated_at": "2026-09-02T09:39:04Z",
+            "in_reply_to_id": 3903759494,
+            "user": {
+              "login": "theofidry",
+              "type": "User"
+            }
+          }
+        ]
+      },
+      {
+        "id": "review_3903794540",
+        "evidence_hash": "sha1:03de815b3625adeeefee776ea5d3105e3a14626f",
+        "file": "tests/phpunit/StaticAnalysis/Config/StaticAnalysisConfigLocatorTest.php",
+        "comments": [
+          {
+            "id": 3903794540,
+            "body": "not critical but I personally prefer having the actual result assigned to a variable (e.g. `$actual`). It doesn't make much difference but when you need to dig in to step debug, this avoids a few annoying steps as you don't need to go through `::assertSame()`",
+            "path": "tests/phpunit/StaticAnalysis/Config/StaticAnalysisConfigLocatorTest.php",
+            "html_url": "https://github.com/infection/infection/pull/3538#discussion_r3903794540",
+            "commit_id": "e096120ffe4cd01a18f3b70afcfde5ece4d06153",
+            "created_at": "2026-09-01T11:50:32Z",
+            "updated_at": "2026-09-01T11:51:00Z",
+            "user": {
+              "login": "theofidry",
+              "type": "User"
+            }
+          },
+          {
+            "id": 3912156932,
+            "body": "That's done",
+            "path": "tests/phpunit/StaticAnalysis/Config/StaticAnalysisConfigLocatorTest.php",
+            "html_url": "https://github.com/infection/infection/pull/3538#discussion_r3912156932",
+            "commit_id": "e096120ffe4cd01a18f3b70afcfde5ece4d06153",
+            "created_at": "2026-09-02T08:23:48Z",
+            "updated_at": "2026-09-02T08:23:48Z",
+            "in_reply_to_id": 3903794540,
+            "user": {
+              "login": "sanmai",
+              "type": "User"
+            }
+          }
+        ]
+      },
+      {
+        "id": "review_3912121917",
+        "evidence_hash": "sha1:d229d1756b4740a4f3bec682a81ebc7b484c1a54",
+        "file": "src/Command/BaseCommand.php",
+        "comments": [
+          {
+            "id": 3912121917,
+            "body": "If we tell Mago that the outermost function throws, it no longer requires inner functions to declare that they throw. So with this change we no longer going to need to care about `@throws Foo` popping elsewhere.",
+            "path": "src/Command/BaseCommand.php",
+            "html_url": "https://github.com/infection/infection/pull/3538#discussion_r3912121917",
+            "commit_id": "a5445eb1c841d0986fc790989534f6cf354b19b0",
+            "created_at": "2026-09-02T08:19:14Z",
+            "updated_at": "2026-09-02T08:19:21Z",
+            "user": {
+              "login": "sanmai",
+              "type": "User"
+            }
+          },
+          {
+            "id": 3912134744,
+            "body": "Never mind, it does not.",
+            "path": "src/Command/BaseCommand.php",
+            "html_url": "https://github.com/infection/infection/pull/3538#discussion_r3912134744",
+            "commit_id": "a5445eb1c841d0986fc790989534f6cf354b19b0",
+            "created_at": "2026-09-02T08:20:53Z",
+            "updated_at": "2026-09-02T08:20:53Z",
+            "in_reply_to_id": 3912121917,
+            "user": {
+              "login": "sanmai",
+              "type": "User"
+            }
+          }
+        ]
+      },
+      {
+        "id": "review_3912150481",
+        "evidence_hash": "sha1:a70c42736e4f960b74d70c59bb94ea96e524206a",
+        "file": "mago.toml",
+        "comments": [
+          {
+            "id": 3912150481,
+            "body": "To silence that `unhandled-thrown-type` in bulk",
+            "path": "mago.toml",
+            "html_url": "https://github.com/infection/infection/pull/3538#discussion_r3912150481",
+            "commit_id": "e7e5bf63838b057a9055a316aa023c6696652d13",
+            "created_at": "2026-09-02T08:23:01Z",
+            "updated_at": "2026-09-02T08:23:01Z",
+            "user": {
+              "login": "sanmai",
+              "type": "User"
+            }
+          }
+        ]
+      },
+      {
+        "id": "review_3912712000",
+        "evidence_hash": "sha1:19b70df35c1ec8a63bbf0f0b09484bfe3820f4c6",
+        "file": "tests/phpunit/Config/ValueProvider/TestFrameworkConfigPathProviderTest.php",
+        "comments": [
+          {
+            "id": 3912712000,
+            "body": "```suggestion\n\n        $this->provider = new TestFrameworkConfigPathProvider(\n```",
+            "path": "tests/phpunit/Config/ValueProvider/TestFrameworkConfigPathProviderTest.php",
+            "html_url": "https://github.com/infection/infection/pull/3538#discussion_r3912712000",
+            "commit_id": "e7e5bf63838b057a9055a316aa023c6696652d13",
+            "created_at": "2026-09-02T09:33:46Z",
+            "updated_at": "2026-09-02T09:39:04Z",
+            "user": {
+              "login": "theofidry",
+              "type": "User"
+            }
+          }
+        ]
+      },
+      {
+        "id": "review_3912729963",
+        "evidence_hash": "sha1:32e11e9761ae8e38a5f36a411264ca41b28a45d3",
+        "file": "tests/phpunit/StaticAnalysis/Config/StaticAnalysisConfigLocatorTest.php",
+        "comments": [
+          {
+            "id": 3912729963,
+            "body": "This is more an FYI and is out of scope of this PR, but what I had in mind for example, to avoid having tests having potential side-effects, was here to inject a `ReadonlyFileSystem` which could either do nothing or bail out on write operations, allowing to guarantee that this test will not modify anything on the FS.",
+            "path": "tests/phpunit/StaticAnalysis/Config/StaticAnalysisConfigLocatorTest.php",
+            "html_url": "https://github.com/infection/infection/pull/3538#discussion_r3912729963",
+            "commit_id": "b2979b7992784ff2c469db4a526cc94f2e023721",
+            "created_at": "2026-09-02T09:36:06Z",
+            "updated_at": "2026-09-02T09:39:04Z",
+            "user": {
+              "login": "theofidry",
+              "type": "User"
+            }
+          }
+        ]
+      },
+      {
+        "id": "review_3912808929",
+        "evidence_hash": "sha1:d988cc4370aee6a6734a93ccde21d30feb155ad7",
+        "file": "src/TestFramework/PhpUnit/Config/XmlConfigurationManipulator.php",
+        "comments": [
+          {
+            "id": 3912808929,
+            "body": "I quite like this new method name.",
+            "path": "src/TestFramework/PhpUnit/Config/XmlConfigurationManipulator.php",
+            "html_url": "https://github.com/infection/infection/pull/3545#discussion_r3912808929",
+            "commit_id": "c94341ff827a87abe993b515c71a88611139baa5",
+            "created_at": "2026-09-02T09:46:10Z",
+            "updated_at": "2026-09-02T09:52:05Z",
+            "user": {
+              "login": "theofidry",
+              "type": "User"
+            }
+          }
+        ]
+      },
+      {
+        "id": "review_3912830820",
+        "evidence_hash": "sha1:ee6665b0480edb560c790c17a17f26aaee37e984",
+        "file": "src/TestFramework/PhpUnit/Config/XmlConfigurationManipulator.php",
+        "comments": [
+          {
+            "id": 3912830820,
+            "body": "I think this comment should rather be in `::removeExecutionOrdersRequiringTestRunHistory()`. The current comment of that method explains _why it's a safe change_, but does not explain _why we are doing this_, which this comment does.\n\nI would also phrase it in a more generic way, i.e. not PHPUnit 13.3+ specific – the problem is older after all no?",
+            "path": "src/TestFramework/PhpUnit/Config/XmlConfigurationManipulator.php",
+            "html_url": "https://github.com/infection/infection/pull/3545#discussion_r3912830820",
+            "commit_id": "c94341ff827a87abe993b515c71a88611139baa5",
+            "created_at": "2026-09-02T09:48:49Z",
+            "updated_at": "2026-09-02T09:52:05Z",
+            "user": {
+              "login": "theofidry",
+              "type": "User"
+            }
+          },
+          {
+            "id": 3913705218,
+            "body": "Good point, moved it into the docblock of `removeExecutionOrdersRequiringTestRunHistory()`, which now explains both why we strip these components and why doing so is safe.\r\n\r\nI kept the reference to PHPUnit 13.3 on purpose though: the requirement on the test run history is indeed older, but before 13.3 PHPUnit silently ignored the combination, so nothing broke.\r\n\r\nPHPUnit 13.3 turned it into a test runner warning, which `failOnWarning` promotes to an aborted initial run. That is also why the stripping is gated to PHPUnit >= 13.3, so the version is worth mentioning next to it.",
+            "path": "src/TestFramework/PhpUnit/Config/XmlConfigurationManipulator.php",
+            "html_url": "https://github.com/infection/infection/pull/3545#discussion_r3913705218",
+            "commit_id": "c94341ff827a87abe993b515c71a88611139baa5",
+            "created_at": "2026-09-02T11:43:38Z",
+            "updated_at": "2026-09-02T11:43:38Z",
+            "in_reply_to_id": 3912830820,
+            "user": {
+              "login": "sebastianbergmann",
+              "type": "User"
+            }
+          }
+        ]
+      },
+      {
+        "id": "review_3912854738",
+        "evidence_hash": "sha1:ac7d1e02a16b0b6a2ceb57fd1e67432ca45bbee5",
+        "file": "src/TestFramework/PhpUnit/Config/XmlConfigurationManipulator.php",
+        "comments": [
+          {
+            "id": 3912854738,
+            "body": "So if I understand correctly we now additionally strips `duration`, `duration-ascending` and `duration-descending`.\n\nJust to make sure, the description and comment claims this is fine in PHPUnit 13.3+, but is this the case for older versions of PHPUnit? Technically Infection can still be run with PHPUnit 9.",
+            "path": "src/TestFramework/PhpUnit/Config/XmlConfigurationManipulator.php",
+            "html_url": "https://github.com/infection/infection/pull/3545#discussion_r3912854738",
+            "commit_id": "c94341ff827a87abe993b515c71a88611139baa5",
+            "created_at": "2026-09-02T09:51:38Z",
+            "updated_at": "2026-09-02T09:52:05Z",
+            "user": {
+              "login": "theofidry",
+              "type": "User"
+            }
+          },
+          {
+            "id": 3913713259,
+            "body": "Older versions are not affected. `deactivateResultCaching()` returns early for anything below 13.3 after setting `cacheResult=\"false\"`, so on PHPUnit 9 through 13.2 `executionOrder` is copied verbatim into the initial run configuration.\r\n\r\n`InitialConfigBuilderTest::test_it_keeps_the_orders_requiring_the_test_run_history_already_set_for_phpunit_13_2()` asserts exactly that with `depends,defects,duration-ascending`. And even if it were applied there, those versions silently ignore the defects and duration orders when the result cache is disabled, so dropping the components would not change the order of the initial run.",
+            "path": "src/TestFramework/PhpUnit/Config/XmlConfigurationManipulator.php",
+            "html_url": "https://github.com/infection/infection/pull/3545#discussion_r3913713259",
+            "commit_id": "c94341ff827a87abe993b515c71a88611139baa5",
+            "created_at": "2026-09-02T11:44:42Z",
+            "updated_at": "2026-09-02T11:44:42Z",
+            "in_reply_to_id": 3912854738,
+            "user": {
+              "login": "sebastianbergmann",
+              "type": "User"
+            }
+          }
+        ]
+      },
+      {
+        "id": "review_3916705797",
+        "evidence_hash": "sha1:871773545570773ad1ba205e83b6e6114424e753",
+        "file": "src/Command/Debug/DumpAstCommand.php",
+        "comments": [
+          {
+            "id": 3916705797,
+            "body": "to review if this option is really necessary, I would otherwise think we can do like we do in the `RunCommand`",
+            "path": "src/Command/Debug/DumpAstCommand.php",
+            "html_url": "https://github.com/infection/infection/pull/3549#discussion_r3916705797",
+            "commit_id": "8c1cb651263403bedb660c1fd7e551555ca1f132",
+            "created_at": "2026-09-02T17:12:03Z",
+            "updated_at": "2026-09-02T17:45:05Z",
+            "user": {
+              "login": "theofidry",
+              "type": "User"
+            }
+          },
+          {
+            "id": 3943571575,
+            "body": "IIRC, we deprecated `--filter` in favor of positional paths. So with this logic we can do the same with this option (=it's not needed).\n\nOr what is the use case where it would be needed?",
+            "path": "src/Command/Debug/DumpAstCommand.php",
+            "html_url": "https://github.com/infection/infection/pull/3549#discussion_r3943571575",
+            "commit_id": "8c1cb651263403bedb660c1fd7e551555ca1f132",
+            "created_at": "2026-09-06T09:41:17Z",
+            "updated_at": "2026-09-08T21:39:24Z",
+            "in_reply_to_id": 3916705797,
+            "user": {
+              "login": "maks-rafalko",
+              "type": "User"
+            }
+          },
+          {
+            "id": 3962637121,
+            "body": "I'm did not verify it yet, but if we can remove it, it would be better",
+            "path": "src/Command/Debug/DumpAstCommand.php",
+            "html_url": "https://github.com/infection/infection/pull/3549#discussion_r3962637121",
+            "commit_id": "8c1cb651263403bedb660c1fd7e551555ca1f132",
+            "created_at": "2026-09-08T21:59:48Z",
+            "updated_at": "2026-09-08T21:59:48Z",
+            "in_reply_to_id": 3916705797,
+            "user": {
+              "login": "theofidry",
+              "type": "User"
+            }
+          }
+        ]
+      },
+      {
+        "id": "review_3916795846",
+        "evidence_hash": "sha1:f5af42bcac1b7b63050ab9c95c89ce3994149a24",
+        "file": "src/Command/Option/PathsArgument.php",
+        "comments": [
+          {
+            "id": 3916795846,
+            "body": "may need to revert that, depends on the DumpAstCommand",
+            "path": "src/Command/Option/PathsArgument.php",
+            "html_url": "https://github.com/infection/infection/pull/3549#discussion_r3916795846",
+            "commit_id": "8c1cb651263403bedb660c1fd7e551555ca1f132",
+            "created_at": "2026-09-02T17:22:45Z",
+            "updated_at": "2026-09-02T17:45:05Z",
+            "user": {
+              "login": "theofidry",
+              "type": "User"
+            }
+          }
+        ]
+      },
+      {
+        "id": "review_3916797260",
+        "evidence_hash": "sha1:b6d03c07778d54e00541effe52dbaddeb5b17fdc",
+        "file": "src/Command/RunCommand.php",
+        "comments": [
+          {
+            "id": 3916797260,
+            "body": "to remove",
+            "path": "src/Command/RunCommand.php",
+            "html_url": "https://github.com/infection/infection/pull/3549#discussion_r3916797260",
+            "commit_id": "8c1cb651263403bedb660c1fd7e551555ca1f132",
+            "created_at": "2026-09-02T17:22:55Z",
+            "updated_at": "2026-09-02T17:45:05Z",
+            "user": {
+              "login": "theofidry",
+              "type": "User"
+            }
+          }
+        ]
+      },
+      {
+        "id": "review_3916821411",
+        "evidence_hash": "sha1:c08cc120676270281f92dca49e146723f4112c21",
+        "file": "src/Configuration/SourceFilter/PositionalPathsFilter.php",
+        "comments": [
+          {
+            "id": 3916821411,
+            "body": "May need a refresh",
+            "path": "src/Configuration/SourceFilter/PositionalPathsFilter.php",
+            "html_url": "https://github.com/infection/infection/pull/3549#discussion_r3916821411",
+            "commit_id": "63ede5424f1208ffdeb4fd170f6419213f30866c",
+            "created_at": "2026-09-02T17:25:50Z",
+            "updated_at": "2026-09-02T17:45:05Z",
+            "user": {
+              "login": "theofidry",
+              "type": "User"
+            }
+          }
+        ]
+      },
+      {
+        "id": "review_3916833885",
+        "evidence_hash": "sha1:ee35435bef90f03fa3d04c8729bb4f581f4290c7",
+        "file": "src/Configuration/ConfigurationFactory.php",
+        "comments": [
+          {
+            "id": 3916833885,
+            "body": "line return",
+            "path": "src/Configuration/ConfigurationFactory.php",
+            "html_url": "https://github.com/infection/infection/pull/3549#discussion_r3916833885",
+            "commit_id": "8c1cb651263403bedb660c1fd7e551555ca1f132",
+            "created_at": "2026-09-02T17:27:13Z",
+            "updated_at": "2026-09-02T17:45:05Z",
+            "user": {
+              "login": "theofidry",
+              "type": "User"
+            }
+          }
+        ]
+      },
+      {
+        "id": "review_3916838095",
+        "evidence_hash": "sha1:f15cdc43b3ec7019b30f3779ed4df03c367803c6",
+        "file": "src/Configuration/PositionalArgumentsClassifier.php",
+        "comments": [
+          {
+            "id": 3916838095,
+            "body": "TODO: to extract this – maybe another PR before it",
+            "path": "src/Configuration/PositionalArgumentsClassifier.php",
+            "html_url": "https://github.com/infection/infection/pull/3549#discussion_r3916838095",
+            "commit_id": "8c1cb651263403bedb660c1fd7e551555ca1f132",
+            "created_at": "2026-09-02T17:27:41Z",
+            "updated_at": "2026-09-02T17:45:05Z",
+            "user": {
+              "login": "theofidry",
+              "type": "User"
+            }
+          }
+        ]
+      },
+      {
+        "id": "review_3916842052",
+        "evidence_hash": "sha1:7dd995be212a3308102d5690518b90beab2ec2bb",
+        "file": "src/Configuration/PositionalArgumentsClassifier.php",
+        "comments": [
+          {
+            "id": 3916842052,
+            "body": "Won't address this TODO in this story I think",
+            "path": "src/Configuration/PositionalArgumentsClassifier.php",
+            "html_url": "https://github.com/infection/infection/pull/3549#discussion_r3916842052",
+            "commit_id": "8c1cb651263403bedb660c1fd7e551555ca1f132",
+            "created_at": "2026-09-02T17:28:07Z",
+            "updated_at": "2026-09-02T17:45:05Z",
+            "user": {
+              "login": "theofidry",
+              "type": "User"
+            }
+          }
+        ]
+      },
+      {
+        "id": "review_3916845521",
+        "evidence_hash": "sha1:972fe35c64a4c5187aa1ddea40e12b5ce643a9d9",
+        "file": "src/Container/Container.php",
+        "comments": [
+          {
+            "id": 3916845521,
+            "body": "line return",
+            "path": "src/Container/Container.php",
+            "html_url": "https://github.com/infection/infection/pull/3549#discussion_r3916845521",
+            "commit_id": "8c1cb651263403bedb660c1fd7e551555ca1f132",
+            "created_at": "2026-09-02T17:28:30Z",
+            "updated_at": "2026-09-02T17:45:05Z",
+            "user": {
+              "login": "theofidry",
+              "type": "User"
+            }
+          }
+        ]
+      },
+      {
+        "id": "review_3916947034",
+        "evidence_hash": "sha1:00bd2c11d5b5df46457e73e47c18eded7defaf8e",
+        "file": "src/Mutation/MutationGenerator.php",
+        "comments": [
+          {
+            "id": 3916947034,
+            "body": "My original thought was, if the user uses a symbol which is invalid (does not select anything), then we want to fail with an exception `SourceSymbolNotFound` here.\n\nHowever, the timing is a bit awkward. Indeed, we can't do this earlier, because we did not necessarily parse all files before this point, but at the same time it also means we started the mutation evaluation process, so you get some of the output already:\n\n```\n$ bin/infection Differ::diff tests/phpunit/Git/CommandLineGitTest.php\n\n#StandWithUkraine\n\nInfection - PHP Mutation Testing Framework version 0.35.x-dev\n\n[notice] Running Infection with 7 threads.\n\nRunning initial tests with PHPUnit version 12.5.34\n\n   40 [============================]    9 s\n\nGenerate mutants...\n\nProcessing source code files: 626/626\nIn SourceSymbolNotFound.php line 54:\n\n  The following source selectors did not match any source symbol: \"Differ::diff\".\n\n$ bin/infection Differ::diff tests/phpunit/Git/CommandLineGitTest.php --no-progress\n\nInfection - PHP Mutation Testing Framework version 0.35.x-dev\n\n[notice] Running Infection with 7 threads.\n\nRunning initial tests with PHPUnit version 12.5.34\n\n.: killed by tests, A: killed by SA, M: escaped, U: uncovered\nE: fatal error, X: syntax error, T: timed out, S: skipped, I: ignored\n\n\nGenerate mutants...\n\nProcessing source code files...\n\nIn SourceSymbolNotFound.php line 54:\n\n  The following source selectors did not match any source symbol: \"Differ::diff\".\n\n\n```\n\nI would like to also point out that currently if you have something like:\n\n```shell\nbin/infection src/Differ tests/phpunit/Git/CommandLineGitTest.php\n```\n\nYou will not get any failure, despite having no mutation. This may be confusing at first glance, but those are two different scenarios: the user asked to mutate some specific files and restricted the tests. That that file has no coverage (in this case because the tests cover something else), is a legitimate outcome.\n\nOn the other hand with the symbol selection, we are validating that it _selected something_, regardless of coverage. Now part of the issue is... this is not reliable. Indeed, the selection could point to a legitimate symbol in the codebase, but it may either no be found in the current selected file subset, or, it is marked as ineligible for other reasons (e.g. not part of the git diff).\n\nSo I am really questioning if we should validate this... Maybe a better idea would be to have at debug level of verbosity a log message logging the matched symbols?",
+            "path": "src/Mutation/MutationGenerator.php",
+            "html_url": "https://github.com/infection/infection/pull/3549#discussion_r3916947034",
+            "commit_id": "8c1cb651263403bedb660c1fd7e551555ca1f132",
+            "created_at": "2026-09-02T17:40:17Z",
+            "updated_at": "2026-09-02T17:45:05Z",
+            "user": {
+              "login": "theofidry",
+              "type": "User"
+            }
+          },
+          {
+            "id": 3962641259,
+            "body": "@maks-rafalko open question",
+            "path": "src/Mutation/MutationGenerator.php",
+            "html_url": "https://github.com/infection/infection/pull/3549#discussion_r3962641259",
+            "commit_id": "8c1cb651263403bedb660c1fd7e551555ca1f132",
+            "created_at": "2026-09-08T22:00:26Z",
+            "updated_at": "2026-09-08T22:00:26Z",
+            "in_reply_to_id": 3916947034,
+            "user": {
+              "login": "theofidry",
+              "type": "User"
+            }
+          }
+        ]
+      },
+      {
+        "id": "review_3916951904",
+        "evidence_hash": "sha1:d4c72df2c16434dff74b09a80daadeb16fa4fbed",
+        "file": "src/Source/Exception/SourceSymbolNotFound.php",
+        "comments": [
+          {
+            "id": 3916951904,
+            "body": "line return",
+            "path": "src/Source/Exception/SourceSymbolNotFound.php",
+            "html_url": "https://github.com/infection/infection/pull/3549#discussion_r3916951904",
+            "commit_id": "8c1cb651263403bedb660c1fd7e551555ca1f132",
+            "created_at": "2026-09-02T17:40:47Z",
+            "updated_at": "2026-09-02T17:45:05Z",
+            "user": {
+              "login": "theofidry",
+              "type": "User"
+            }
+          }
+        ]
+      },
+      {
+        "id": "review_3916962515",
+        "evidence_hash": "sha1:1121dcc9c117c3fd306baf2aca9b2550391c6bae",
+        "file": "src/PhpParser/Visitor/ExcludeNonSelectedSourceNodesVisitor.php",
+        "comments": [
+          {
+            "id": 3916962515,
+            "body": "subtle but important part: we only match against eligible nodes. This means the information we get (checked symbols) does not match the complete list of symbols present in those files (see my previous comment as to what impact it has)",
+            "path": "src/PhpParser/Visitor/ExcludeNonSelectedSourceNodesVisitor.php",
+            "html_url": "https://github.com/infection/infection/pull/3549#discussion_r3916962515",
+            "commit_id": "8c1cb651263403bedb660c1fd7e551555ca1f132",
+            "created_at": "2026-09-02T17:41:56Z",
+            "updated_at": "2026-09-02T17:45:05Z",
+            "user": {
+              "login": "theofidry",
+              "type": "User"
+            }
+          }
+        ]
+      },
+      {
+        "id": "review_3916973470",
+        "evidence_hash": "sha1:e2d911c99ff6a5ecba2086b9b47422f7458f1ad7",
+        "file": "tests/e2e/Source_Symbol_Selection/run_tests.bash",
+        "comments": [
+          {
+            "id": 3916973470,
+            "body": "I'm not happy with this test. I would rather have a `Source_Selection` end-to-end test where we consolidate various variants but maybe I'm too demanding and it won't be pratical",
+            "path": "tests/e2e/Source_Symbol_Selection/run_tests.bash",
+            "html_url": "https://github.com/infection/infection/pull/3549#discussion_r3916973470",
+            "commit_id": "8c1cb651263403bedb660c1fd7e551555ca1f132",
+            "created_at": "2026-09-02T17:43:10Z",
+            "updated_at": "2026-09-02T17:45:05Z",
+            "user": {
+              "login": "theofidry",
+              "type": "User"
+            }
+          }
+        ]
+      },
+      {
+        "id": "review_3916983343",
+        "evidence_hash": "sha1:e3392c11b67138ba425577c56acc748502efe222",
+        "file": "tests/phpunit/Mutation/MutationGeneratorTest.php",
+        "comments": [
+          {
+            "id": 3916983343,
+            "body": "I didn't look at the tests of this file yet",
+            "path": "tests/phpunit/Mutation/MutationGeneratorTest.php",
+            "html_url": "https://github.com/infection/infection/pull/3549#discussion_r3916983343",
+            "commit_id": "8c1cb651263403bedb660c1fd7e551555ca1f132",
+            "created_at": "2026-09-02T17:44:19Z",
+            "updated_at": "2026-09-02T17:45:05Z",
+            "user": {
+              "login": "theofidry",
+              "type": "User"
+            }
+          }
+        ]
+      },
+      {
+        "id": "review_3929309367",
+        "evidence_hash": "sha1:639becec2df236074dc12be180423b09888e8ab4",
+        "file": "src/FileSystem/InMemoryFileSystem.php",
+        "comments": [
+          {
+            "id": 3929309367,
+            "body": "Look like something Claude would leave 🤔",
+            "path": "src/FileSystem/InMemoryFileSystem.php",
+            "html_url": "https://github.com/infection/infection/pull/3555#discussion_r3929309367",
+            "commit_id": "c830b5fd428f9187d7a87cef9d6bf8ccb91c139b",
+            "created_at": "2026-09-03T22:39:24Z",
+            "updated_at": "2026-09-04T09:25:32Z",
+            "user": {
+              "login": "sanmai",
+              "type": "User"
+            }
+          },
+          {
+            "id": 3932662520,
+            "body": "I was actually me because I had to pause for a second whether having a `FileSystem` within another instance of `FileSystem` was really the way (as opposed in this case to call `Path::isAbsolute()` directly in the implementation)",
+            "path": "src/FileSystem/InMemoryFileSystem.php",
+            "html_url": "https://github.com/infection/infection/pull/3555#discussion_r3932662520",
+            "commit_id": "c830b5fd428f9187d7a87cef9d6bf8ccb91c139b",
+            "created_at": "2026-09-04T09:27:52Z",
+            "updated_at": "2026-09-04T09:27:52Z",
+            "in_reply_to_id": 3929309367,
+            "user": {
+              "login": "theofidry",
+              "type": "User"
+            }
+          },
+          {
+            "id": 3932672930,
+            "body": "Ah, it was obvious that we use it like this looking at `isAbsolutePath`",
+            "path": "src/FileSystem/InMemoryFileSystem.php",
+            "html_url": "https://github.com/infection/infection/pull/3555#discussion_r3932672930",
+            "commit_id": "c830b5fd428f9187d7a87cef9d6bf8ccb91c139b",
+            "created_at": "2026-09-04T09:29:11Z",
+            "updated_at": "2026-09-04T09:29:11Z",
+            "in_reply_to_id": 3929309367,
+            "user": {
+              "login": "sanmai",
+              "type": "User"
+            }
+          }
+        ]
+      },
+      {
+        "id": "review_3932606343",
+        "evidence_hash": "sha1:2b60c924da18a635457583193fa1bb4135233e5d",
+        "file": "src/FileSystem/InMemoryFileSystem.php",
+        "comments": [
+          {
+            "id": 3932606343,
+            "body": "```suggestion\n    public function __construct(private FileSystem $fileSystem = new FileSystem())\n```",
+            "path": "src/FileSystem/InMemoryFileSystem.php",
+            "html_url": "https://github.com/infection/infection/pull/3555#discussion_r3932606343",
+            "commit_id": "c830b5fd428f9187d7a87cef9d6bf8ccb91c139b",
+            "created_at": "2026-09-04T09:20:25Z",
+            "updated_at": "2026-09-04T09:25:32Z",
+            "user": {
+              "login": "sanmai",
+              "type": "User"
+            }
+          }
+        ]
+      },
+      {
+        "id": "review_3932658528",
+        "evidence_hash": "sha1:97c56fe1c436506a088c8c80315c9c7b85737268",
+        "file": "tests/phpunit/TestFramework/PhpUnit/Config/Builder/InitialConfigBuilderTest.php",
+        "comments": [
+          {
+            "id": 3932658528,
+            "body": "what is the reason we can't let the test itself handle this?\n\nphpunit loads all data providers from the start, even before running any tests, so all file content will be in memory until at least the start of this test",
+            "path": "tests/phpunit/TestFramework/PhpUnit/Config/Builder/InitialConfigBuilderTest.php",
+            "html_url": "https://github.com/infection/infection/pull/3555#discussion_r3932658528",
+            "commit_id": "2d972adbb6be1eac1d33bcf31f2323f1f7a00053",
+            "created_at": "2026-09-04T09:27:23Z",
+            "updated_at": "2026-09-04T09:27:23Z",
+            "user": {
+              "login": "sanmai",
+              "type": "User"
+            }
+          },
+          {
+            "id": 3932690517,
+            "body": "I guess it's possible too.\r\n\r\nMy thinking is that I would like to be able to pass the XML string rather than having to add a file and then pass that file path, but then you cannot distinguish which one is which from the type, you need to do a path existence check. Doing it in the provider avoids that, at that cost. That said I couldn't observe a memory usage increase.",
+            "path": "tests/phpunit/TestFramework/PhpUnit/Config/Builder/InitialConfigBuilderTest.php",
+            "html_url": "https://github.com/infection/infection/pull/3555#discussion_r3932690517",
+            "commit_id": "2d972adbb6be1eac1d33bcf31f2323f1f7a00053",
+            "created_at": "2026-09-04T09:31:30Z",
+            "updated_at": "2026-09-04T09:31:31Z",
+            "in_reply_to_id": 3932658528,
+            "user": {
+              "login": "theofidry",
+              "type": "User"
+            }
+          }
+        ]
+      },
+      {
+        "id": "review_3943406374",
+        "evidence_hash": "sha1:a3f4bc07c566b6fc69f5e72b4aa4d6227f2ca1b6",
+        "file": "src/TestFramework/Coverage/CoverageCheckerFactory.php",
+        "comments": [
+          {
+            "id": 3943406374,
+            "body": "trying to understand why do we need this new factory?",
+            "path": "src/TestFramework/Coverage/CoverageCheckerFactory.php",
+            "html_url": "https://github.com/infection/infection/pull/3525#discussion_r3943406374",
+            "commit_id": "b739ed0c580a0849c87abf48400b1b17edcf4e30",
+            "created_at": "2026-09-06T08:21:08Z",
+            "updated_at": "2026-09-06T09:15:46Z",
+            "user": {
+              "login": "maks-rafalko",
+              "type": "User"
+            }
+          },
+          {
+            "id": 3943620430,
+            "body": "`CoverageChecker` depends on `TestFrameworkAdapter` (for its name and whether it has a JUnit support).\r\n\r\nWe can migrate it to `TestFramework` – and will, but we need to keep such a copy for the non-migrated `TestFrameworkAdapter` to preserve their behaviour.",
+            "path": "src/TestFramework/Coverage/CoverageCheckerFactory.php",
+            "html_url": "https://github.com/infection/infection/pull/3525#discussion_r3943620430",
+            "commit_id": "b739ed0c580a0849c87abf48400b1b17edcf4e30",
+            "created_at": "2026-09-06T10:05:31Z",
+            "updated_at": "2026-09-06T10:06:57Z",
+            "in_reply_to_id": 3943406374,
+            "user": {
+              "login": "theofidry",
+              "type": "User"
+            }
+          },
+          {
+            "id": 3952542945,
+            "body": "still not sure I got you. I mean, why do we need a factory class in the first place?",
+            "path": "src/TestFramework/Coverage/CoverageCheckerFactory.php",
+            "html_url": "https://github.com/infection/infection/pull/3525#discussion_r3952542945",
+            "commit_id": "b739ed0c580a0849c87abf48400b1b17edcf4e30",
+            "created_at": "2026-09-07T20:50:25Z",
+            "updated_at": "2026-09-07T21:05:15Z",
+            "in_reply_to_id": 3943406374,
+            "user": {
+              "login": "maks-rafalko",
+              "type": "User"
+            }
+          },
+          {
+            "id": 3956004320,
+            "body": "Should be answered in that thread https://github.com/infection/infection/pull/3525#discussion_r3943419953",
+            "path": "src/TestFramework/Coverage/CoverageCheckerFactory.php",
+            "html_url": "https://github.com/infection/infection/pull/3525#discussion_r3956004320",
+            "commit_id": "b739ed0c580a0849c87abf48400b1b17edcf4e30",
+            "created_at": "2026-09-08T08:43:10Z",
+            "updated_at": "2026-09-08T08:43:11Z",
+            "in_reply_to_id": 3943406374,
+            "user": {
+              "login": "theofidry",
+              "type": "User"
+            }
+          }
+        ]
+      },
+      {
+        "id": "review_3943416478",
+        "evidence_hash": "sha1:8b1712a4d69f01c629e60622f66410bac2135111",
+        "file": "src/Container/Container.php",
+        "comments": [
+          {
+            "id": 3943416478,
+            "body": "note to myself: `$container->getFactory()` is too ambiguous (it returns `TestFramework\\Factory`).",
+            "path": "src/Container/Container.php",
+            "html_url": "https://github.com/infection/infection/pull/3525#discussion_r3943416478",
+            "commit_id": "b739ed0c580a0849c87abf48400b1b17edcf4e30",
+            "created_at": "2026-09-06T08:26:03Z",
+            "updated_at": "2026-09-06T09:15:46Z",
+            "user": {
+              "login": "maks-rafalko",
+              "type": "User"
+            }
+          },
+          {
+            "id": 3943627441,
+            "body": "I'll add a todo for now. I wouldn't change it right this instant since out of scope of the PR and to avoid further conflicts, but we can do so at some point.",
+            "path": "src/Container/Container.php",
+            "html_url": "https://github.com/infection/infection/pull/3525#discussion_r3943627441",
+            "commit_id": "b739ed0c580a0849c87abf48400b1b17edcf4e30",
+            "created_at": "2026-09-06T10:08:59Z",
+            "updated_at": "2026-09-06T10:09:00Z",
+            "in_reply_to_id": 3943416478,
+            "user": {
+              "login": "theofidry",
+              "type": "User"
+            }
+          }
+        ]
+      },
+      {
+        "id": "review_3943419953",
+        "evidence_hash": "sha1:b65d72930f894615ea17c95fe0d36e5d411ba7e2",
+        "file": "src/Process/Factory/InitialTestsRunProcessFactory.php",
+        "comments": [
+          {
+            "id": 3943419953,
+            "body": "is it to be able to run it N times with different adapters, or why do we need this change?",
+            "path": "src/Process/Factory/InitialTestsRunProcessFactory.php",
+            "html_url": "https://github.com/infection/infection/pull/3525#discussion_r3943419953",
+            "commit_id": "b739ed0c580a0849c87abf48400b1b17edcf4e30",
+            "created_at": "2026-09-06T08:27:48Z",
+            "updated_at": "2026-09-06T09:15:46Z",
+            "user": {
+              "login": "maks-rafalko",
+              "type": "User"
+            }
+          },
+          {
+            "id": 3943657962,
+            "body": "No it is purely to be able to keep an implementation that depends on `TestFrameworkAdapter` around for the existing adapters.\r\n\r\nMaybe to re-explain it a bit as it's easy to loose track of the current state. We need to be able to:\r\n\r\n- Adapt the domain code to no longer use `TestFrameworkAdapter` and use `TestFramework` instead.\r\n- Migrate the adapters living in `infection/infection` to `TestFramework`.\r\n\r\nBut because we don't want to break compatibility with the existing external adapters which at the moment are Testo, PhpSpec and Codeception, we still need to keep all the code that depends on `TestFrameworkAdapter` somehow.\r\n\r\nSo if we are to keep a service such as `CoverageChecker` in the new adapter, we will also have a copy using the old adapter (which I will move to the Legacy directory in a sub-sequent PR for clarity).\r\n\r\nMaybe an un-phrased question you had is why do we need to do this. From the description:\r\n\r\n>The immediate goal is to enable the introduction of TestFrameworkFactory. This requires removing TestFrameworkAdapter from the container. Otherwise, we would need either to create another test framework instance or to bridge the new API to the old one, which is not feasible.\r\n\r\nReading it again I appreciate it does a poor job at going into the details, I can roughly try to answer this.\r\n\r\nIn the POC, I had services depending on both the legacy and new API, for the sake of the example let's take `CoverageChecker` (depending on the new API) and `LegacyCoverageChecker` (depending on the old one). If we keep things in the `Container` (which I believe is less overall changes), then you need to be able to do something like:\r\n\r\n```php\r\n            CoverageChecker::class => static function (self $container): CoverageChecker {\r\n                $config = $container->getConfiguration();\r\n\r\n                // The problematic statement\r\n                $testFrameworkAdapter = $container->getTestFrameworkAdapter();\r\n\r\n                return new CoverageChecker(...);\r\n            },\r\n```\r\n\r\n`$testFrameworkAdapter = $container->getTestFrameworkAdapter()` is a problematic statement because it means, whenever `CoverageChecker` is injected, hence instantiated, we need a `TestFrameworkAdapter` instance around. Currently, it's not a problem, but once `PHPUnitAdapter` is migrated to `TestFramework` without using the legacy bridge, there is just no `TestFrameworkAdapter` instance to have anymore.\r\n\r\nIn the POC I solved it by having another `Factory` creating the legacy adapter which mean in practice, for PHPUnit, we always had 2 adapter instances around (one legacy and one new) and whilst it was fine for the POC, I didn't really like the idea either.\r\n\r\nSo this PR is a different direction: we make the adapter injectable at runtime so that we can remove `TestFrameworkAdapter` from the `Container`. This is purely for those services though, I am not suggesting that all services using a `TestFramework` instance must have it as a method parameter instead of injected in the constructor.",
+            "path": "src/Process/Factory/InitialTestsRunProcessFactory.php",
+            "html_url": "https://github.com/infection/infection/pull/3525#discussion_r3943657962",
+            "commit_id": "b739ed0c580a0849c87abf48400b1b17edcf4e30",
+            "created_at": "2026-09-06T10:24:25Z",
+            "updated_at": "2026-09-06T10:24:25Z",
+            "in_reply_to_id": 3943419953,
+            "user": {
+              "login": "theofidry",
+              "type": "User"
+            }
+          },
+          {
+            "id": 3952581214,
+            "body": "well, it's hard to understand it, tbh\r\n\r\n> So this PR is a different direction: we make the adapter injectable at runtime so that we can remove TestFrameworkAdapter from the Container. This is purely for those services though, I am not suggesting that all services using a TestFramework instance must have it as a method parameter instead of injected in the constructor.\r\n\r\n- where we will get it from, if container won't have it?\r\n- if many places need `TestFrameworkAdapter`, does it mean we would create it multiple times? or how would/will it work?",
+            "path": "src/Process/Factory/InitialTestsRunProcessFactory.php",
+            "html_url": "https://github.com/infection/infection/pull/3525#discussion_r3952581214",
+            "commit_id": "b739ed0c580a0849c87abf48400b1b17edcf4e30",
+            "created_at": "2026-09-07T21:01:01Z",
+            "updated_at": "2026-09-07T21:05:15Z",
+            "in_reply_to_id": 3943419953,
+            "user": {
+              "login": "maks-rafalko",
+              "type": "User"
+            }
+          },
+          {
+            "id": 3953197801,
+            "body": ">where we will get it from, if container won't have it?\r\n\r\nIt is observable from this PR: in the legacy bridge we have the old adapter instance and we pass it around from there.\r\n\r\n>if many places need TestFrameworkAdapter, does it mean we would create it multiple times? or how would/will it work?\r\n\r\nNo, with this PR we create only one instance of `TestFrameworkAdapter` at most and pass it around, so we preserve the previous behaviour we had with the `Container` which was giving a shared service.\r\n\r\n<hr/>\r\n\r\nI did double check the POC just in case, so no surprise once the migration is done, `Container::getTestFrameworkAdapter()` is never called (unless you use a legacy adapter like Codeception or PhpSpec).\r\n\r\nThe trouble happens in-between: for a little while, you have services instantiated that require `TestFramework` and others `TestFrameworkAdapter`. This PR does two things:\r\n\r\n1. Use `TestFramework` for the \"domain\" code (i.e. anything that is not specific to to the test framework. Notable, `CoverageChecker` and the `Tracer` _are_, so they are left alone here).\r\n2. Find a solution so what we can have an instance of `TestFramework` and `TestFrameworkAdapter` at the same time*\r\n\r\n*: this is necessary to do the migration progressively. Otherwise, it's too much change at once.\r\n\r\nFor 2. there is several solutions that I see:\r\n\r\n- Create two test framework instances: one for the new API and one for the old. This is what I did in the POC by having another `Factory` (see the previous explanation).\r\n- Instead of having `TestFrameworkAdapter` in the Container, services that require it take it as a runtime parameter instead of a construction parameter. This way, they can still live in the Container as usual, but don't require a `TestFrameworkAdapter` to be instantiated.\r\n\r\nI want to re-iterate that it is a very artificial problem stemming from trying to migrate `PHPUnitAdapter` progressively. It is technically possible to do without, but I think it's too many changes at once.\r\n\r\nIf it's not clear I think a video call would be more appropriate because besides a demo or checking the code together I don't see much more of a written explanation",
+            "path": "src/Process/Factory/InitialTestsRunProcessFactory.php",
+            "html_url": "https://github.com/infection/infection/pull/3525#discussion_r3953197801",
+            "commit_id": "b739ed0c580a0849c87abf48400b1b17edcf4e30",
+            "created_at": "2026-09-07T23:45:39Z",
+            "updated_at": "2026-09-07T23:45:39Z",
+            "in_reply_to_id": 3943419953,
+            "user": {
+              "login": "theofidry",
+              "type": "User"
+            }
+          },
+          {
+            "id": 3955644264,
+            "body": "> Instead of having TestFrameworkAdapter in the Container, services that require it take it as a runtime parameter instead of a construction parameter. This way, they can still live in the Container as usual, but don't require a TestFrameworkAdapter to be instantiated.\r\n\r\nok, I think I got it, but let's see in the next PRs, let me resolve this one for now.\r\n\r\nPlease rebase github.com/infection/infection/pull/3526, probably it will make it a bit more clear to follow looking into the next steps.",
+            "path": "src/Process/Factory/InitialTestsRunProcessFactory.php",
+            "html_url": "https://github.com/infection/infection/pull/3525#discussion_r3955644264",
+            "commit_id": "b739ed0c580a0849c87abf48400b1b17edcf4e30",
+            "created_at": "2026-09-08T08:01:02Z",
+            "updated_at": "2026-09-08T08:01:02Z",
+            "in_reply_to_id": 3943419953,
+            "user": {
+              "login": "maks-rafalko",
+              "type": "User"
+            }
+          }
+        ]
+      },
+      {
+        "id": "review_3943423532",
+        "evidence_hash": "sha1:c1648c66a44b6ea1608ab30e9cc59ac0e2eec2e0",
+        "file": "src/Process/Factory/InitialTestsRunProcessFactory.php",
+        "comments": [
+          {
+            "id": 3943423532,
+            "body": "do I get it right that this code eventually will be rewritten since there won't be `TestFrameworkAdapter`?",
+            "path": "src/Process/Factory/InitialTestsRunProcessFactory.php",
+            "html_url": "https://github.com/infection/infection/pull/3525#discussion_r3943423532",
+            "commit_id": "b739ed0c580a0849c87abf48400b1b17edcf4e30",
+            "created_at": "2026-09-06T08:29:28Z",
+            "updated_at": "2026-09-06T09:15:46Z",
+            "user": {
+              "login": "maks-rafalko",
+              "type": "User"
+            }
+          },
+          {
+            "id": 3943658452,
+            "body": "I hope the previous replies clarified that",
+            "path": "src/Process/Factory/InitialTestsRunProcessFactory.php",
+            "html_url": "https://github.com/infection/infection/pull/3525#discussion_r3943658452",
+            "commit_id": "b739ed0c580a0849c87abf48400b1b17edcf4e30",
+            "created_at": "2026-09-06T10:24:40Z",
+            "updated_at": "2026-09-06T10:24:40Z",
+            "in_reply_to_id": 3943423532,
+            "user": {
+              "login": "theofidry",
+              "type": "User"
+            }
+          }
+        ]
+      },
+      {
+        "id": "review_3943443716",
+        "evidence_hash": "sha1:22b7225fa59b3c3f87a25a4d3bda31985712057c",
+        "file": "src/Process/Runner/InitialTestsRunner.php",
+        "comments": [
+          {
+            "id": 3943443716,
+            "body": "for understanding, will it be replaced eventually with `TestFramework`, or rewritten? what is the idea?",
+            "path": "src/Process/Runner/InitialTestsRunner.php",
+            "html_url": "https://github.com/infection/infection/pull/3525#discussion_r3943443716",
+            "commit_id": "b739ed0c580a0849c87abf48400b1b17edcf4e30",
+            "created_at": "2026-09-06T08:38:51Z",
+            "updated_at": "2026-09-06T09:15:46Z",
+            "user": {
+              "login": "maks-rafalko",
+              "type": "User"
+            }
+          }
+        ]
+      },
+      {
+        "id": "review_3943464511",
+        "evidence_hash": "sha1:f8393c4e654c37909c82999e2d6cdd80fc79aaf5",
+        "file": "src/TestFramework/LegacyTestFrameworkBridge.php",
+        "comments": [
+          {
+            "id": 3943464511,
+            "body": "> Exposes JUnit report support on the contract for coverage enrichment and progress logging. This is only to facilitate the migration.\r\n\r\nagain, just for understanding - this eventually likely will be removed, right? As it sounds like test framework (its tracer) is responsible to extend traces with JUnit info if needed.\r\n\r\n----\r\n\r\nSince `Contracts` is explicitly shaped as a future standalone package (per `AdapterExtractionBoundariesTest::testTestFrameworkContractsStayWithinFuturePackageBoundary`), a bare `hasJUnitReport(): bool` sitting at the end of the interface reads as permanent contract surface - a PHPStan or Psalm \"test framework\" has no JUnit report to speak of.\r\n\r\n`LegacyTestFrameworkBridge` carries a `@deprecated ... To be removed.` block. Could this method carry the same marker while it exists, so the next reader of the contract knows it is scaffolding rather than design?\r\n\r\nNo PHPat violation either way - the return type is a scalar, so the package boundary holds.\r\n\r\n_Generated as part of a joint review by Maks Rafalko and claude._",
+            "path": "src/TestFramework/LegacyTestFrameworkBridge.php",
+            "html_url": "https://github.com/infection/infection/pull/3525#discussion_r3943464511",
+            "commit_id": "b739ed0c580a0849c87abf48400b1b17edcf4e30",
+            "created_at": "2026-09-06T08:49:10Z",
+            "updated_at": "2026-09-06T09:15:46Z",
+            "user": {
+              "login": "maks-rafalko",
+              "type": "User"
+            }
+          },
+          {
+            "id": 3943662883,
+            "body": "Correct. It's purely to reduce the scope of the changes, to not change everything at once as it's otherwise too easily overwhelming and easy to miss things. In the POC it mattered less, but this code otherwise needs to not introduce BC breaks or undesired changes at runtime so we need to be careful about it",
+            "path": "src/TestFramework/LegacyTestFrameworkBridge.php",
+            "html_url": "https://github.com/infection/infection/pull/3525#discussion_r3943662883",
+            "commit_id": "b739ed0c580a0849c87abf48400b1b17edcf4e30",
+            "created_at": "2026-09-06T10:26:49Z",
+            "updated_at": "2026-09-06T10:26:49Z",
+            "in_reply_to_id": 3943464511,
+            "user": {
+              "login": "theofidry",
+              "type": "User"
+            }
+          },
+          {
+            "id": 3952586099,
+            "body": "so do we need to mark such methods somehow so that in the future we now they are **not** needed?",
+            "path": "src/TestFramework/LegacyTestFrameworkBridge.php",
+            "html_url": "https://github.com/infection/infection/pull/3525#discussion_r3952586099",
+            "commit_id": "b739ed0c580a0849c87abf48400b1b17edcf4e30",
+            "created_at": "2026-09-07T21:02:27Z",
+            "updated_at": "2026-09-07T21:05:15Z",
+            "in_reply_to_id": 3943464511,
+            "user": {
+              "login": "maks-rafalko",
+              "type": "User"
+            }
+          },
+          {
+            "id": 3953103962,
+            "body": "I added a note to mark it as `@deprecated`, I forgot about it",
+            "path": "src/TestFramework/LegacyTestFrameworkBridge.php",
+            "html_url": "https://github.com/infection/infection/pull/3525#discussion_r3953103962",
+            "commit_id": "b739ed0c580a0849c87abf48400b1b17edcf4e30",
+            "created_at": "2026-09-07T23:23:33Z",
+            "updated_at": "2026-09-07T23:23:33Z",
+            "in_reply_to_id": 3943464511,
+            "user": {
+              "login": "theofidry",
+              "type": "User"
+            }
+          }
+        ]
+      },
+      {
+        "id": "review_3943485791",
+        "evidence_hash": "sha1:2e5afdb922cc5d9dabbe2c66d3792f4a7917fbf2",
+        "file": "src/Command/RunCommand.php",
+        "comments": [
+          {
+            "id": 3943485791,
+            "body": "`checkRequirements()` now runs twice per invocation: here, and again in `Engine::runInitialTestSuite()` (`src/Engine.php:129`).\r\n\r\nBefore this PR the two call sites did different work - `startUp()` called `checkCoverageRequirements()`, `Engine` called `checkRequirements()`. Moving `checkCoverageRequirements()` into `checkRequirements()` (`LegacyTestFrameworkBridge.php:84`) collapsed them into the same call.\r\n\r\nThe method is not idempotent: it calls `$this->consoleOutput->logSkippingInitialTests()`, which has no dedup guard. Running `tests/e2e/Skip_Initial_Tests` on both branches:\r\n\r\n```\r\nmaster:\r\n  [notice]  Running Infection with 1 thread.\r\n  [warning] Skipping the initial test run can be very dangerous.   <- once\r\n\r\nthis branch:\r\n  [warning] Skipping the initial test run can be very dangerous.   <- before the thread notice\r\n  [notice]  Running Infection with 1 thread.\r\n  [warning] Skipping the initial test run can be very dangerous.   <- and again\r\n```\r\n\r\n`checkCoverageExists()` and `checkCoverageRequirements()` also re-run, which is wasted filesystem work but otherwise harmless.\r\n\r\nOne trade-off worth naming explicitly rather than absorbing silently: on `master` the coverage requirement check ran *here*, before `mkdir($config->tmpDir)`, subscriber registration and `ApplicationExecutionWasStarted`. Moving it wholly into `Engine` means those side effects now happen before a missing-coverage-driver error surfaces. That seems acceptable, but it is a deliberate choice.\r\n\r\nNote the e2e scenario diffs `infection.log`, not stdout, so nothing in CI catches this.\r\n\r\n_Generated as part of a joint review by Maks Rafalko and claude._",
+            "path": "src/Command/RunCommand.php",
+            "html_url": "https://github.com/infection/infection/pull/3525#discussion_r3943485791",
+            "commit_id": "dd2cddd423d2c48151695dd5dd159586eb7248f7",
+            "created_at": "2026-09-06T08:59:37Z",
+            "updated_at": "2026-09-06T09:15:46Z",
+            "user": {
+              "login": "maks-rafalko",
+              "type": "User"
+            }
+          },
+          {
+            "id": 3943691838,
+            "body": "Good catch, forgot about `RunCommand` in this PR",
+            "path": "src/Command/RunCommand.php",
+            "html_url": "https://github.com/infection/infection/pull/3525#discussion_r3943691838",
+            "commit_id": "dd2cddd423d2c48151695dd5dd159586eb7248f7",
+            "created_at": "2026-09-06T10:40:31Z",
+            "updated_at": "2026-09-06T10:40:31Z",
+            "in_reply_to_id": 3943485791,
+            "user": {
+              "login": "theofidry",
+              "type": "User"
+            }
+          }
+        ]
+      },
+      {
+        "id": "review_3943485828",
+        "evidence_hash": "sha1:037052646cebcb525639d50074f0b3af9b955094",
+        "file": "src/Command/InitialTest/InitialTestRunCommand.php",
+        "comments": [
+          {
+            "id": 3943485828,
+            "body": "This drops the `Command executed: <argv>` output. Verified against `tests/e2e/Skip_Initial_Tests` (run as `initial-test:run`):\r\n\r\n```\r\nmaster:\r\n  Command executed:\r\n  '.../vendor/bin/phpunit' '--configuration' '.../phpunitConfiguration.initial.infection.xml'\r\n    '--coverage-xml=.../coverage-xml' '--log-junit=.../junit.xml'\r\n\r\n  Running initial tests with PHPUnit version 9.6.36\r\n\r\nthis branch:\r\n  Running initial tests with PHPUnit version 9.6.36\r\n```\r\n\r\nThe test was updated to match, so I assume it is intentional - but the command's own description is *\"Executes the initial test run as orchestrated by Infection with the debug mode enabled by default\"*, and the exact argv Infection built is the single most useful thing it prints. It was also printed *before* the run, so a hanging or crashing suite still told you what had been executed; that case now prints nothing at all.\r\n\r\nCould the output be preserved on top of it? Or why it's not needed anymore? IMO it's very useful\r\n\r\n_Generated as part of a joint review by Maks Rafalko and claude._",
+            "path": "src/Command/InitialTest/InitialTestRunCommand.php",
+            "html_url": "https://github.com/infection/infection/pull/3525#discussion_r3943485828",
+            "commit_id": "b739ed0c580a0849c87abf48400b1b17edcf4e30",
+            "created_at": "2026-09-06T08:59:38Z",
+            "updated_at": "2026-09-06T09:17:01Z",
+            "user": {
+              "login": "maks-rafalko",
+              "type": "User"
+            }
+          },
+          {
+            "id": 3955508170,
+            "body": "what about this one, are we going to fix it or accept?",
+            "path": "src/Command/InitialTest/InitialTestRunCommand.php",
+            "html_url": "https://github.com/infection/infection/pull/3525#discussion_r3955508170",
+            "commit_id": "b739ed0c580a0849c87abf48400b1b17edcf4e30",
+            "created_at": "2026-09-08T07:45:03Z",
+            "updated_at": "2026-09-08T07:45:03Z",
+            "in_reply_to_id": 3943485828,
+            "user": {
+              "login": "maks-rafalko",
+              "type": "User"
+            }
+          },
+          {
+            "id": 3955951540,
+            "body": "Hm no I agree with you. Down the line it is the sort of things that I hope will be fixed by using the `Logger` that we can pass to the test frameworks, but right now it is a regression...\r\n\r\nIt's a bit ugly but I found a fix. I'm adding a TODO to make it clear this is not the final form.",
+            "path": "src/Command/InitialTest/InitialTestRunCommand.php",
+            "html_url": "https://github.com/infection/infection/pull/3525#discussion_r3955951540",
+            "commit_id": "b739ed0c580a0849c87abf48400b1b17edcf4e30",
+            "created_at": "2026-09-08T08:37:12Z",
+            "updated_at": "2026-09-08T08:37:12Z",
+            "in_reply_to_id": 3943485828,
+            "user": {
+              "login": "theofidry",
+              "type": "User"
+            }
+          }
+        ]
+      },
+      {
+        "id": "review_3943486655",
+        "evidence_hash": "sha1:c0cddcbb00ea62981a04f93b4087328b03f03f4f",
+        "file": "src/Process/Factory/MutantProcessContainerFactory.php",
+        "comments": [
+          {
+            "id": 3943486655,
+            "body": "The allocation is now per-mutant rather than per-run. It is a small readonly object, so the cost is modest - but this is the hottest path in the application and the factory is invariant for the whole run - why do we need this change?\r\n\r\n_Generated as part of a joint review by Maks Rafalko and claude._",
+            "path": "src/Process/Factory/MutantProcessContainerFactory.php",
+            "html_url": "https://github.com/infection/infection/pull/3525#discussion_r3943486655",
+            "commit_id": "b739ed0c580a0849c87abf48400b1b17edcf4e30",
+            "created_at": "2026-09-06T09:00:02Z",
+            "updated_at": "2026-09-06T09:15:46Z",
+            "user": {
+              "login": "maks-rafalko",
+              "type": "User"
+            }
+          },
+          {
+            "id": 3943697204,
+            "body": "I hope the previous answers helped.\r\n\r\nTo note that we will mitigate this tiny performance degradation for adapters within `infection/infection` very soon – so only third-party adapters will remain affected for a while.",
+            "path": "src/Process/Factory/MutantProcessContainerFactory.php",
+            "html_url": "https://github.com/infection/infection/pull/3525#discussion_r3943697204",
+            "commit_id": "b739ed0c580a0849c87abf48400b1b17edcf4e30",
+            "created_at": "2026-09-06T10:42:26Z",
+            "updated_at": "2026-09-06T10:42:26Z",
+            "in_reply_to_id": 3943486655,
+            "user": {
+              "login": "theofidry",
+              "type": "User"
+            }
+          },
+          {
+            "id": 3952592867,
+            "body": "> I hope the previous answers helped.\r\n\r\nnot in this case\r\n\r\n> To note that we will mitigate this tiny performance degradation for adapters within infection/infection very soon – so only third-party adapters will remain affected for a while.\r\n\r\nhow? what does it mean?",
+            "path": "src/Process/Factory/MutantProcessContainerFactory.php",
+            "html_url": "https://github.com/infection/infection/pull/3525#discussion_r3952592867",
+            "commit_id": "b739ed0c580a0849c87abf48400b1b17edcf4e30",
+            "created_at": "2026-09-07T21:04:24Z",
+            "updated_at": "2026-09-07T21:05:15Z",
+            "in_reply_to_id": 3943486655,
+            "user": {
+              "login": "maks-rafalko",
+              "type": "User"
+            }
+          },
+          {
+            "id": 3953125415,
+            "body": ">how? what does it mean?\n\nAs we migrate the `PHPUnitAdapter` to `TestFramework`, it won't create a such a `TestFrameworkMutantExecutionResultFactory` service for every mutant process container.\n\nI don't recall exactly the exact change done, but you can see a more final state in `PHPUnitAdapter::test()` in the POC\n\nBut for example for Codeception, which uses the legacy bridge even after we migrate PHPUnit, this (tiny) performance impact won't go away (until we migrate Codeception).",
+            "path": "src/Process/Factory/MutantProcessContainerFactory.php",
+            "html_url": "https://github.com/infection/infection/pull/3525#discussion_r3953125415",
+            "commit_id": "b739ed0c580a0849c87abf48400b1b17edcf4e30",
+            "created_at": "2026-09-07T23:29:33Z",
+            "updated_at": "2026-09-07T23:29:33Z",
+            "in_reply_to_id": 3943486655,
+            "user": {
+              "login": "theofidry",
+              "type": "User"
+            }
+          }
+        ]
+      },
+      {
+        "id": "review_3943604841",
+        "evidence_hash": "sha1:3101a18518de311d937fa302481e631dd260b4a6",
+        "file": "src/Configuration/SourceFilter/PositionalPathsFilter.php",
+        "comments": [
+          {
+            "id": 3943604841,
+            "body": "not sure I got why it's changed this way",
+            "path": "src/Configuration/SourceFilter/PositionalPathsFilter.php",
+            "html_url": "https://github.com/infection/infection/pull/3549#discussion_r3943604841",
+            "commit_id": "bf78a962a496f6747808d9c9b02c9136d1142e19",
+            "created_at": "2026-09-06T09:57:28Z",
+            "updated_at": "2026-09-08T21:39:23Z",
+            "user": {
+              "login": "maks-rafalko",
+              "type": "User"
+            }
+          },
+          {
+            "id": 3962651589,
+            "body": "can it be it's from an obsolete diff? I can't make sense of this one",
+            "path": "src/Configuration/SourceFilter/PositionalPathsFilter.php",
+            "html_url": "https://github.com/infection/infection/pull/3549#discussion_r3962651589",
+            "commit_id": "bf78a962a496f6747808d9c9b02c9136d1142e19",
+            "created_at": "2026-09-08T22:01:56Z",
+            "updated_at": "2026-09-08T22:01:56Z",
+            "in_reply_to_id": 3943604841,
+            "user": {
+              "login": "theofidry",
+              "type": "User"
+            }
+          }
+        ]
+      },
+      {
+        "id": "review_3943626345",
+        "evidence_hash": "sha1:227ac40584efa29a293e305acf05230b3e933071",
+        "file": "src/Mutation/MutationGenerator.php",
+        "comments": [
+          {
+            "id": 3943626345,
+            "body": "why is it needed here, in the beginning of `::generate()`?\n\ndon't we call it once?",
+            "path": "src/Mutation/MutationGenerator.php",
+            "html_url": "https://github.com/infection/infection/pull/3549#discussion_r3943626345",
+            "commit_id": "8c1cb651263403bedb660c1fd7e551555ca1f132",
+            "created_at": "2026-09-06T10:08:23Z",
+            "updated_at": "2026-09-08T21:39:24Z",
+            "user": {
+              "login": "maks-rafalko",
+              "type": "User"
+            }
+          },
+          {
+            "id": 3962667129,
+            "body": "In practice not, but the service is stateful atm so if feels better to reset it. I could also reset it at the end if that helps.\r\n\r\nBut the whole thing is tight to that discussion which I would aim to resolve before deciding on this reset: https://github.com/infection/infection/pull/3549#discussion_r3916947034",
+            "path": "src/Mutation/MutationGenerator.php",
+            "html_url": "https://github.com/infection/infection/pull/3549#discussion_r3962667129",
+            "commit_id": "8c1cb651263403bedb660c1fd7e551555ca1f132",
+            "created_at": "2026-09-08T22:04:14Z",
+            "updated_at": "2026-09-08T22:04:15Z",
+            "in_reply_to_id": 3943626345,
+            "user": {
+              "login": "theofidry",
+              "type": "User"
+            }
+          }
+        ]
+      },
+      {
+        "id": "review_3943662519",
+        "evidence_hash": "sha1:bc7ade2a4dce97b2c5afdeee6013485d10a008ca",
+        "file": "tests/e2e/Source_Symbol_Selection/infection.json5",
+        "comments": [
+          {
+            "id": 3943662519,
+            "body": "why do we use Infection's `src` in this e2e tests when all the other e2e tests are self-contained? Can't we just create a couple of files here, in `./src`?",
+            "path": "tests/e2e/Source_Symbol_Selection/infection.json5",
+            "html_url": "https://github.com/infection/infection/pull/3549#discussion_r3943662519",
+            "commit_id": "8c1cb651263403bedb660c1fd7e551555ca1f132",
+            "created_at": "2026-09-06T10:26:38Z",
+            "updated_at": "2026-09-08T21:39:24Z",
+            "user": {
+              "login": "maks-rafalko",
+              "type": "User"
+            }
+          },
+          {
+            "id": 3962670528,
+            "body": "Some slops which don't make sense, we should do like the others indeed",
+            "path": "tests/e2e/Source_Symbol_Selection/infection.json5",
+            "html_url": "https://github.com/infection/infection/pull/3549#discussion_r3962670528",
+            "commit_id": "8c1cb651263403bedb660c1fd7e551555ca1f132",
+            "created_at": "2026-09-08T22:04:40Z",
+            "updated_at": "2026-09-08T22:04:40Z",
+            "in_reply_to_id": 3943662519,
+            "user": {
+              "login": "theofidry",
+              "type": "User"
+            }
+          }
+        ]
+      },
+      {
+        "id": "review_3953100532",
+        "evidence_hash": "sha1:085645d7056034690453d11b9da41e493e870a1b",
+        "file": "src/TestFramework/Contracts/TestFramework.php",
+        "comments": [
+          {
+            "id": 3953100532,
+            "body": "missing `@deprecated`",
+            "path": "src/TestFramework/Contracts/TestFramework.php",
+            "html_url": "https://github.com/infection/infection/pull/3525#discussion_r3953100532",
+            "commit_id": "b739ed0c580a0849c87abf48400b1b17edcf4e30",
+            "created_at": "2026-09-07T23:22:41Z",
+            "updated_at": "2026-09-07T23:22:41Z",
+            "user": {
+              "login": "theofidry",
+              "type": "User"
+            }
+          }
+        ]
+      },
+      {
+        "id": "review_3962318043",
+        "evidence_hash": "sha1:9560f983cfcc3110e680c57895bbdbb2fa3db8af",
+        "file": "src/PhpParser/NodeTraverserFactory.php",
+        "comments": [
+          {
+            "id": 3962318043,
+            "body": "can't DumpAstCommand use constructor's `array $sourceSymbolSelectors,` to avoid this code and nullable parameter `?SourceSymbolSelector $sourceSymbolSelector = null,`?",
+            "path": "src/PhpParser/NodeTraverserFactory.php",
+            "html_url": "https://github.com/infection/infection/pull/3549#discussion_r3962318043",
+            "commit_id": "8c1cb651263403bedb660c1fd7e551555ca1f132",
+            "created_at": "2026-09-08T21:15:31Z",
+            "updated_at": "2026-09-08T21:39:24Z",
+            "user": {
+              "login": "maks-rafalko",
+              "type": "User"
+            }
+          },
+          {
+            "id": 3962689707,
+            "body": "It should, we create a container with the input so there is no reasons we can't do it in the dump:ast and can in the run command.",
+            "path": "src/PhpParser/NodeTraverserFactory.php",
+            "html_url": "https://github.com/infection/infection/pull/3549#discussion_r3962689707",
+            "commit_id": "8c1cb651263403bedb660c1fd7e551555ca1f132",
+            "created_at": "2026-09-08T22:07:43Z",
+            "updated_at": "2026-09-08T22:07:43Z",
+            "in_reply_to_id": 3962318043,
+            "user": {
+              "login": "theofidry",
+              "type": "User"
+            }
+          }
+        ]
+      },
+      {
+        "id": "review_3962450329",
+        "evidence_hash": "sha1:208305385f2b883317b56cf63acabe1a4c6ea8a0",
+        "file": "src/Command/RunCommand.php",
+        "comments": [
+          {
+            "id": 3962450329,
+            "body": "The `@throws` is accurate, and that is the problem: `SourceSymbolNotFound` is the only new user-facing failure this feature introduces, and it is the one exception here that escapes `executeCommand()` uncaught.\n\n`NoSourceFound`, `InitialTestsFailed`, `MinMsiCheckFailed` and `MaxTimeoutCountReached` all get a clean `$io->error()`. A mistyped selector — by far the most likely user error for this feature — gets a raw Symfony exception dump with a stack-trace hint instead.\n\nAdding it to the existing arm at line 416 would do it:\n\n```php\n} catch (InitialTestsFailed|MinMsiCheckFailed|MaxTimeoutCountReached|SourceSymbolNotFound $exception) {\n```\n\n_Generated as part of a joint review by Maks and claude._",
+            "path": "src/Command/RunCommand.php",
+            "html_url": "https://github.com/infection/infection/pull/3549#discussion_r3962450329",
+            "commit_id": "8c1cb651263403bedb660c1fd7e551555ca1f132",
+            "created_at": "2026-09-08T21:32:32Z",
+            "updated_at": "2026-09-08T21:39:24Z",
+            "user": {
+              "login": "maks-rafalko",
+              "type": "User"
+            }
+          },
+          {
+            "id": 3962700191,
+            "body": "it should indeed be addressed, if we throw such an exception (which is a pending point, see https://github.com/infection/infection/pull/3549#discussion_r3916947034)",
+            "path": "src/Command/RunCommand.php",
+            "html_url": "https://github.com/infection/infection/pull/3549#discussion_r3962700191",
+            "commit_id": "8c1cb651263403bedb660c1fd7e551555ca1f132",
+            "created_at": "2026-09-08T22:09:22Z",
+            "updated_at": "2026-09-08T22:09:22Z",
+            "in_reply_to_id": 3962450329,
+            "user": {
+              "login": "theofidry",
+              "type": "User"
+            }
+          }
+        ]
+      },
+      {
+        "id": "review_3962451101",
+        "evidence_hash": "sha1:49941a6406a636f2ec731fbea1520c8d772d0994",
+        "file": "src/Configuration/PositionalArgumentsClassifier.php",
+        "comments": [
+          {
+            "id": 3962451101,
+            "body": "This moves the selector parse *ahead* of `looksLikeClassOrFileName()`, which silently changes what a bare PascalCase argument means.\r\n\r\nOn `master`, `infection run SomeClass` hit the `// like SomeFile or SomeFile.php - bare values behave as --filter values` branch and became a `PlainFilter` — a file filter. After this PR it parses as a source symbol selector instead. The new tests encode it: `'short class selector' => ['Plus_']` yields `([], [], [selector])`, while `'symbolic php source token' => ['Plus_.php']` still routes to `sourcePaths`.\r\n\r\nTwo consequences for anyone relying on the bare form today:\r\n\r\n- No file filter is produced, so `SourceFilter::filtersFiles()` returns `false`, `SourceCollectorFactory::create()` gets `null`, and the whole source tree is collected and enrichment-traversed.\r\n- If the file's class name does not match the argument, or the file declares no class at all, the run now hard-fails with `SourceSymbolNotFound` where it previously mutated the file.\r\n\r\nPer `AGENTS.md` (\"Any BC risk upgrades the prefix to `feat!:`/`fix!:` and gets a `BC break` label plus an enumerated Breaking Changes section\"), this needs the title bumped to `feat!(source):` with that section — or the bare-name case kept on the old file-filter path, reserving selectors for arguments containing `::` or a namespace separator.\r\n\r\n_Generated as part of a joint review by Maks and claude._",
+            "path": "src/Configuration/PositionalArgumentsClassifier.php",
+            "html_url": "https://github.com/infection/infection/pull/3549#discussion_r3962451101",
+            "commit_id": "8c1cb651263403bedb660c1fd7e551555ca1f132",
+            "created_at": "2026-09-08T21:32:38Z",
+            "updated_at": "2026-09-08T21:39:24Z",
+            "user": {
+              "login": "maks-rafalko",
+              "type": "User"
+            }
+          },
+          {
+            "id": 3962711461,
+            "body": "It is without a doubt a BC and should be properly documented if it actually lands.\r\n\r\nI'm not quite sure about the desired behaviour in this scenario.",
+            "path": "src/Configuration/PositionalArgumentsClassifier.php",
+            "html_url": "https://github.com/infection/infection/pull/3549#discussion_r3962711461",
+            "commit_id": "8c1cb651263403bedb660c1fd7e551555ca1f132",
+            "created_at": "2026-09-08T22:11:17Z",
+            "updated_at": "2026-09-08T22:11:18Z",
+            "in_reply_to_id": 3962451101,
+            "user": {
+              "login": "theofidry",
+              "type": "User"
+            }
+          }
+        ]
+      },
+      {
+        "id": "review_3962452179",
+        "evidence_hash": "sha1:ba1eccd0d0f6c9d6ac8502677d8ce6077ac77edd",
+        "file": "src/Container/Container.php",
+        "comments": [
+          {
+            "id": 3962452179,
+            "body": "`$container->getNodeTraverserFactory()->getSourceSymbolMatcher()` reaches through one service to fetch another, and `getSourceSymbolMatcher()` exists solely to hand out a mutable object owned by a `readonly` factory.\r\n\r\nPer invariant 6 (\"Container - one registry, typed getters\"), registering `SourceSymbolMatcher::class` and injecting it into both `NodeTraverserFactory` and `MutationGenerator` would be flatter, and would drop both the accessor and the private-field construction in the factory.\r\n\r\nAlso, minor: two constructor arguments ended up on one line here, and again at line 471 where an existing line break was removed. The rest of this file is one argument per line.\r\n\r\n_Generated as part of a joint review by Maks and claude._",
+            "path": "src/Container/Container.php",
+            "html_url": "https://github.com/infection/infection/pull/3549#discussion_r3962452179",
+            "commit_id": "8c1cb651263403bedb660c1fd7e551555ca1f132",
+            "created_at": "2026-09-08T21:32:45Z",
+            "updated_at": "2026-09-08T21:39:24Z",
+            "user": {
+              "login": "maks-rafalko",
+              "type": "User"
+            }
+          }
+        ]
+      },
+      {
+        "id": "review_3962452329",
+        "evidence_hash": "sha1:d049f3e1d7a9e6256e0c7ea273b44864cd09cbc6",
+        "file": "src/PhpParser/Visitor/ExcludeNonSelectedSourceNodesVisitor.php",
+        "comments": [
+          {
+            "id": 3962452329,
+            "body": "Pushing every `ClassLike` — anonymous classes included — means `Differ::diff` skips everything inside a `new class {...}` declared in `diff()`, and `Differ::32` can never target a line inside one.\n\nThe test `'an anonymous class does not inherit the enclosing symbol context'` shows this is deliberate, but nothing in the source says why, and a user selecting a method would reasonably expect code lexically inside it to be mutated.\n\nPer the \"explain WHY\" rule, a short rationale comment here — why the enclosing context is deliberately dropped rather than inherited — would save the next reader the trip to the test.\n\n_Generated as part of a joint review by Maks and claude._",
+            "path": "src/PhpParser/Visitor/ExcludeNonSelectedSourceNodesVisitor.php",
+            "html_url": "https://github.com/infection/infection/pull/3549#discussion_r3962452329",
+            "commit_id": "8c1cb651263403bedb660c1fd7e551555ca1f132",
+            "created_at": "2026-09-08T21:32:46Z",
+            "updated_at": "2026-09-08T21:39:24Z",
+            "user": {
+              "login": "maks-rafalko",
+              "type": "User"
+            }
+          },
+          {
+            "id": 3962725312,
+            "body": "it is a limitation of the current implementation, but to verify if it is one to stay or can be fixed",
+            "path": "src/PhpParser/Visitor/ExcludeNonSelectedSourceNodesVisitor.php",
+            "html_url": "https://github.com/infection/infection/pull/3549#discussion_r3962725312",
+            "commit_id": "8c1cb651263403bedb660c1fd7e551555ca1f132",
+            "created_at": "2026-09-08T22:13:40Z",
+            "updated_at": "2026-09-08T22:13:48Z",
+            "in_reply_to_id": 3962452329,
+            "user": {
+              "login": "theofidry",
+              "type": "User"
+            }
+          }
+        ]
+      },
+      {
+        "id": "review_3968982116",
+        "evidence_hash": "sha1:d934bfc41727bd5135278c23334984dde2026f49",
+        "file": "src/TestFramework/Contracts/TestFrameworkFactory.php",
+        "comments": [
+          {
+            "id": 3968982116,
+            "body": "I wish this wasn't a static method but instead a [builder type](https://github.com/sanmai/di-container#builder-objects) that pulls the typed dependencies (Filesystem, ConsoleOutput, ...) through the constructor injection.",
+            "path": "src/TestFramework/Contracts/TestFrameworkFactory.php",
+            "html_url": "https://github.com/infection/infection/pull/3562#discussion_r3968982116",
+            "commit_id": "627c2ddd1f28a972508b1bf89709a7301fe74d87",
+            "created_at": "2026-09-09T13:28:45Z",
+            "updated_at": "2026-09-09T13:29:38Z",
+            "user": {
+              "login": "sanmai",
+              "type": "User"
+            }
+          },
+          {
+            "id": 3970699882,
+            "body": "I may be possible if we make the DI a requirement, but I would suggest we hold off onto that idea until the API is more refined. There's going to be a lot of changes to that factory method still",
+            "path": "src/TestFramework/Contracts/TestFrameworkFactory.php",
+            "html_url": "https://github.com/infection/infection/pull/3562#discussion_r3970699882",
+            "commit_id": "627c2ddd1f28a972508b1bf89709a7301fe74d87",
+            "created_at": "2026-09-09T16:23:54Z",
+            "updated_at": "2026-09-09T16:23:55Z",
+            "in_reply_to_id": 3968982116,
+            "user": {
+              "login": "theofidry",
+              "type": "User"
+            }
+          }
+        ]
+      }
+    ],
+    "excluded_bots": 6
+  },
+  "selections": [
+    {
+      "evidence_hash": "sha1:398af3906824ae5547734c0f2ff337474d3cb050",
+      "candidate_id": "review_3903730977",
+      "rule": "Container-created executable-path providers must use the injected shared filesystem, without constructing a fallback filesystem.",
+      "check": "Inject a distinct filesystem implementation and verify the provider uses it; confirm the constructor requires the filesystem dependency."
+    },
+    {
+      "evidence_hash": "sha1:037052646cebcb525639d50074f0b3af9b955094",
+      "candidate_id": "review_3943485828",
+      "rule": "The initial-test command must print the executed command line before the initial test suite runs.",
+      "check": "Capture initial-test:run output and assert Command executed and the argv appear before suite output, including a failing suite."
+    }
+  ],
+  "captured_rules": [
+    {
+      "id": "con_4e6552a374",
+      "type": "correctness",
+      "statement": "The initial-test command must print the executed command line before the initial test suite runs.",
+      "scope": [
+        "src/Command/InitialTest/InitialTestRunCommand.php"
+      ],
+      "severity": "warning",
+      "enforcement": "advisory_v1",
+      "match": null,
+      "forbids": null,
+      "rationale": "Review check: Capture initial-test:run output and assert Command executed and the argv appear before suite output, including a failing suite.",
+      "source_decision": null,
+      "violations": [],
+      "status": "active",
+      "valid_from": "2026-09-10T05:43:33.996Z",
+      "valid_to": null,
+      "provenance": {
+        "source": "agent_recorded",
+        "confidence": 0.75,
+        "evidence": [
+          "infection/infection",
+          "review_3943485828",
+          "sha1:037052646cebcb525639d50074f0b3af9b955094",
+          "https://github.com/infection/infection/pull/3525#discussion_r3943485828",
+          "git:b739ed0c580a0849c87abf48400b1b17edcf4e30",
+          "https://github.com/infection/infection/pull/3525#discussion_r3955508170",
+          "git:b739ed0c580a0849c87abf48400b1b17edcf4e30",
+          "https://github.com/infection/infection/pull/3525#discussion_r3955951540",
+          "git:b739ed0c580a0849c87abf48400b1b17edcf4e30"
+        ],
+        "last_verified": "2026-09-10T05:43:33.996Z"
+      }
+    },
+    {
+      "id": "con_8582e49ce7",
+      "type": "correctness",
+      "statement": "Container-created executable-path providers must use the injected shared filesystem, without constructing a fallback filesystem.",
+      "scope": [
+        "src/Config/ValueProvider/PhpUnitCustomExecutablePathProvider.php"
+      ],
+      "severity": "warning",
+      "enforcement": "advisory_v1",
+      "match": null,
+      "forbids": null,
+      "rationale": "Review check: Inject a distinct filesystem implementation and verify the provider uses it; confirm the constructor requires the filesystem dependency.",
+      "source_decision": null,
+      "violations": [],
+      "status": "active",
+      "valid_from": "2026-09-10T05:43:33.996Z",
+      "valid_to": null,
+      "provenance": {
+        "source": "agent_recorded",
+        "confidence": 0.75,
+        "evidence": [
+          "infection/infection",
+          "review_3903730977",
+          "sha1:398af3906824ae5547734c0f2ff337474d3cb050",
+          "https://github.com/infection/infection/pull/3538#discussion_r3903730977",
+          "git:e7e5bf63838b057a9055a316aa023c6696652d13",
+          "https://github.com/infection/infection/pull/3538#discussion_r3911999214",
+          "git:e7e5bf63838b057a9055a316aa023c6696652d13",
+          "https://github.com/infection/infection/pull/3538#discussion_r3912751165",
+          "git:e7e5bf63838b057a9055a316aa023c6696652d13"
+        ],
+        "last_verified": "2026-09-10T05:43:33.996Z"
+      }
+    }
+  ],
+  "reproduction": {
+    "packet": "Save review_packet as packet.json",
+    "rules": "Save selections as rules.json",
+    "preview": "hunch review-memory capture --from packet.json --rules rules.json",
+    "note": "Preview only. Applying requires an explicit --apply --private or --apply --public in the matching repository."
+  }
+}

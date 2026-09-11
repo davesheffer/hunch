@@ -48,6 +48,15 @@ export function shellInvocation(inv: Invocation): string {
  *  falling through to the "no assistant CLI" branch. */
 export function synthesisStatusLines(resolution: ProviderResolution, env: NodeJS.ProcessEnv): string[] {
   const provider = resolution.provider;
+  if (resolution.source === "unavailable-initiator") {
+    return [dim(`            ↳ initiating provider ${resolution.initiator} is unavailable; using local analysis, never another account.`)];
+  }
+  if (resolution.source === "unknown-initiator") {
+    return [dim("            ↳ initiating agent is unknown; local analysis only. The caller can pass --initiator <name>.")];
+  }
+  if (resolution.source === "initiator") {
+    return [`            ↳ agent calls remain with ${resolution.initiator}, using that CLI's configured authentication.`];
+  }
   const selected = resolution.statuses.find((s) => s.name === provider.name);
   if (selected?.subscription) {
     return [`            ↳ LLM synthesis uses your ${selected.subscription}; provider API credentials are not used.`];

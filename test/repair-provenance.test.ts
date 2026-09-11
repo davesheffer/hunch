@@ -9,6 +9,8 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import type { Decision } from "../src/core/types.js";
 import { hunchPaths } from "../src/core/paths.js";
 import { HunchStore } from "../src/store/hunchStore.js";
+import { commitRepairReviewHash } from "../src/core/commitrepair.js";
+import { readActivePendingRepairs, withheldRewrites } from "../src/core/repairqueue.js";
 import { ensureGitignore } from "../src/integrations/gitignore.js";
 
 const projectRoot = process.cwd();
@@ -19,12 +21,27 @@ function git(root: string, ...args: string[]): string {
   return execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
 }
 
-function runCli(root: string, ...args: string[]) {
+function runCliRaw(root: string, ...args: string[]) {
   return spawnSync(process.execPath, [tsx, cli, ...args], {
     cwd: root,
     env: { ...process.env, HUNCH_PRIVATE_DIR: "", HUNCH_SYNTH_PROVIDER: "deterministic" },
     encoding: "utf8",
   });
+}
+
+/** Simulate reviewing the existing queue for the older action-path tests. */
+function runCli(root: string, ...args: string[]) {
+  if (args[0] === "repair-provenance" && (args.includes("--apply") || args.includes("--drop")) && !args.includes("--expect")) {
+    // Explicit scan-and-apply fixtures now follow the required two-step flow.
+    const rangeIndex = args.indexOf("--range");
+    if (rangeIndex >= 0) {
+      const preview = runCliRaw(root, "repair-provenance", "--range", args[rangeIndex + 1]!, "--quiet");
+      if (preview.status !== 0) return preview;
+    }
+    const queued = readActivePendingRepairs(root);
+    args.push("--expect", commitRepairReviewHash(queued, withheldRewrites(root, queued)));
+  }
+  return runCliRaw(root, ...args);
 }
 
 /** A repo shaped like a real squash-merge: a feature-branch commit (never an
@@ -424,7 +441,7 @@ test("hunch escalations' apply-target wording for a duplicate-id queue (withheld
     const items = JSON.parse(escRun.stdout) as { detail: string; resolution: string }[];
     const forResolvable = items.find((i) => i.detail === `sha_a_old → ${fixture.shaANew}`)!;
     assert.ok(forResolvable, "the resolvable (second-queued) entry surfaces its own escalation");
-    assert.match(forResolvable.resolution, /--apply --only dec_a to accept/, "escalations says --apply --only works for the resolvable entry, despite it not being first-queued");
+    assert.match(forResolvable.resolution, /--apply --only dec_a --expect sha256:[a-f0-9]{64} to accept/, "escalations says --apply --only works for the resolvable entry, despite it not being first-queued");
 
     const run = runCli(fixture.root, "repair-provenance", "--apply", "--only", "dec_a", "--quiet");
     assert.equal(run.status, 0, run.stderr);
@@ -450,7 +467,7 @@ test("hunch escalations' drop-target wording for the same duplicate-id queue mat
     const escRun = runCli(fixture.root, "escalations", "--json");
     const items = JSON.parse(escRun.stdout) as { detail: string; resolution: string }[];
     const forResolvable = items.find((i) => i.detail === `sha_a_old → ${fixture.shaANew}`)!;
-    assert.doesNotMatch(forResolvable.resolution, /--drop dec_a to reject it \(tombstoned durably/, "escalations must not claim --drop dec_a rejects the resolvable entry — it targets the withheld one instead");
+    assert.doesNotMatch(forResolvable.resolution, /--drop dec_a --expect sha256:[a-f0-9]{64} to reject it \(tombstoned durably/, "escalations must not claim --drop dec_a rejects the resolvable entry — it targets the withheld one instead");
 
     const run = runCli(fixture.root, "repair-provenance", "--drop", "dec_a", "--quiet");
     assert.equal(run.status, 0, run.stderr);
@@ -1503,4 +1520,69 @@ test("SessionStart orientation does NOT re-surface a private-overlay commit-repa
   } finally {
     fixture.cleanup();
   }
+});
+
+
+test("reviewed repair cannot switch targets after an intervening merge", () => {
+  const fixture = squashFixture();
+  try {
+    git(fixture.root, "update-ref", "ORIG_HEAD", fixture.oldRef);
+    assert.equal(runCli(fixture.root, "repair-provenance", "--from-hook", "--quiet").status, 0);
+    const escalation = JSON.parse(runCli(fixture.root, "escalations", "--json").stdout)
+      .find((e: { kind: string }) => e.kind === "commit-repair-pending");
+    const command = /hunch (repair-provenance --apply --only \S+(?: --expect sha256:[a-f0-9]{64})?)/.exec(escalation.resolution)![1]!;
+    const before = git(fixture.root, "rev-parse", "HEAD");
+    writeFileSync(join(fixture.root, "src/feature.ts"), "export const feature = 2;\n");
+    git(fixture.root, "add", "src/feature.ts");
+    git(fixture.root, "commit", "-qm", "later unrelated change to same file");
+    git(fixture.root, "update-ref", "ORIG_HEAD", before);
+    const run = runCliRaw(fixture.root, ...command.split(" "));
+    assert.equal(run.status, 0, run.stderr);
+    const repaired = JSON.parse(readFileSync(fixture.decisionFile, "utf8")) as Decision;
+    assert.equal(repaired.commit, git(fixture.root, "rev-parse", "--short", fixture.newRef), "apply only the proposal that was reviewed");
+  } finally { fixture.cleanup(); }
+});
+
+for (const action of ["apply", "drop"] as const) {
+  test(`repair-provenance refuses stale ${action} approval after hook replaces the proposal`, () => {
+    const fixture = squashFixture();
+    try {
+      git(fixture.root, "update-ref", "ORIG_HEAD", fixture.oldRef);
+      assert.equal(runCliRaw(fixture.root, "repair-provenance", "--from-hook", "--quiet").status, 0);
+      const escalation = JSON.parse(runCliRaw(fixture.root, "escalations", "--json").stdout)
+        .find((e: { kind: string }) => e.kind === "commit-repair-pending");
+      const expected = /--expect (sha256:[a-f0-9]{64})/.exec(escalation.resolution)![1]!;
+      const before = git(fixture.root, "rev-parse", "HEAD");
+      writeFileSync(join(fixture.root, "src/feature.ts"), "export const feature = 2;\n");
+      git(fixture.root, "add", "src/feature.ts");
+      git(fixture.root, "commit", "-qm", "later change");
+      git(fixture.root, "update-ref", "ORIG_HEAD", before);
+      assert.equal(runCliRaw(fixture.root, "repair-provenance", "--from-hook", "--quiet").status, 0);
+      const queueBefore = readFileSync(queueFile(fixture.root), "utf8");
+      const decisionBefore = readFileSync(fixture.decisionFile, "utf8");
+      const args = action === "apply" ? ["--apply", "--only", "dec_squash_fixture"] : ["--drop", "dec_squash_fixture"];
+      const run = runCliRaw(fixture.root, "repair-provenance", ...args, "--expect", expected);
+      assert.equal(run.status, 1);
+      assert.match(run.stderr, /review is missing or stale/);
+      assert.equal(readFileSync(fixture.decisionFile, "utf8"), decisionBefore);
+      assert.equal(readFileSync(queueFile(fixture.root), "utf8"), queueBefore);
+      assert.equal(existsSync(join(fixture.root, ".hunch/dropped-commit-repairs.json")), false);
+    } finally { fixture.cleanup(); }
+  });
+}
+
+test("repair-provenance requires a review hash before any apply or drop", () => {
+  const fixture = squashFixture();
+  try {
+    assert.equal(runCliRaw(fixture.root, "repair-provenance", "--range", `${fixture.oldRef}..${fixture.newRef}`).status, 0);
+    const queueBefore = readFileSync(queueFile(fixture.root), "utf8");
+    const decisionBefore = readFileSync(fixture.decisionFile, "utf8");
+    for (const args of [["--apply"], ["--drop", "dec_squash_fixture"]]) {
+      const run = runCliRaw(fixture.root, "repair-provenance", ...args);
+      assert.equal(run.status, 1);
+      assert.match(run.stderr, /--expect/);
+      assert.equal(readFileSync(fixture.decisionFile, "utf8"), decisionBefore);
+      assert.equal(readFileSync(queueFile(fixture.root), "utf8"), queueBefore);
+    }
+  } finally { fixture.cleanup(); }
 });

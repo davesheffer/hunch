@@ -207,11 +207,7 @@ Hunch Memory service into Hunch.
 
 As of 1.27.0 a fourth verb, `records`, lists a subject's records for the first writers, and the per-scope ledger compacts and merges across clones. As of 1.28.0 reads are a union across writers, a supersede target must still be open (two racing writers can no longer leave two current records), state records are searchable and delivered by subject, and subjects are keyed by the external record rather than by the agent. Proven on an emulated organization: three agents over ten clinics and a generated year of mail, chat and CRM, one organization drawer, 96 cited summaries, 24 verified receipts, 24 commitments, zero contradictions.
 
-<<<<<<< HEAD
-As of 1.30.0 subject identity is by external reference: one active entity per external record per partition, a subject written as an entity's external key refused with the entity id named, reads resolving one explicit hop — so two agents over one CRM record land on one subject. Replay determinism is a check, not a claim: `hunch serve replay --partition <kind:id>` (or `--root <dir>`) folds a partition's ledger into the state it implies and compares it hash for hash to the records on file, exits 1 on any divergence, and runs on every agent-farm run; and a human correction outranks later agent writes — a record a human confirmed is never overwritten or superseded by an agent or service principal (replay, stale-with-cause and closure by receipt are the only agent moves, each keeping the human's provenance).
-=======
-As of 1.30.0 replay determinism is a check, not a claim: `hunch serve replay --partition <kind:id>` (or `--root <dir>`) folds a partition's ledger into the state it implies and compares it hash for hash to the records on file, exits 1 on any divergence, runs inside `hunch drift` when the partition has a ledger, and runs on every agent-farm run; and a human correction outranks later agent writes — a record a human confirmed is never overwritten or superseded by an agent or service principal (replay, stale-with-cause and closure by receipt are the only agent moves, each keeping the human's provenance).
->>>>>>> feat/replay-determinism
+As of 1.30.0 subject identity is by external reference: one active entity per external record per partition, a subject written as an entity's external key refused with the entity id named, reads resolving one explicit hop — so two agents over one CRM record land on one subject. Replay determinism is a check, not a claim: `hunch serve replay --partition <kind:id>` (or `--root <dir>`) folds a partition's ledger into the state it implies and compares it hash for hash to the records on file, exits 1 on any divergence, runs inside `hunch drift` when the partition has a ledger, and runs on every agent-farm run; and a human correction outranks later agent writes — a record a human confirmed is never overwritten or superseded by an agent or service principal (replay, stale-with-cause and closure by receipt are the only agent moves, each keeping the human's provenance).
 
 Read [Deterministic organizational state](docs/deterministic-state.md), the [roadmap](ROADMAP.md) and the dated [competitive landscape](docs/competitive-landscape.md).
 
@@ -274,6 +270,8 @@ See the [changelog](CHANGELOG.md) for release detail and the [roadmap](ROADMAP.m
 
 - [Full documentation](https://www.hunchmemory.com/docs)
 - [Copy-paste cookbook](https://www.hunchmemory.com/cookbook)
+- [Turn PR review threads into scoped review rules](docs/review-memory.md)
+- [Keep agent launches with the initiating provider](docs/agent-origin.md)
 - [Deterministic organizational state](docs/deterministic-state.md)
 - [Project DNA](docs/project-dna.md)
 - [Native change proof](docs/change-proof.md)
