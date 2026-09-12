@@ -1744,6 +1744,76 @@ export function isLinkedWorktree(cwd: string): boolean {
   return norm(own) !== norm(common);
 }
 
+/** Every worktree registered against `root`'s repository, `root` itself included —
+ *  the raw `git worktree list --porcelain` paths, unresolved. Used by the
+ *  worktree-misroute guard to check a piece of file evidence against every
+ *  known checkout, not just the one the MCP server currently thinks is active. */
+export function worktreePaths(root: string): string[] {
+  const out = gitSafe(["worktree", "list", "--porcelain"], root);
+  if (!out) return [];
+  const paths: string[] = [];
+  for (const line of out.split("\n")) {
+    if (line.startsWith("worktree ")) paths.push(line.slice("worktree ".length).trim());
+  }
+  return paths;
+}
+
+/** True when `root`'s OWN history has ever tracked `file` — EXACTLY `file`, not
+ *  merely something under it — at HEAD. Distinguishes an ordinary delete/rename
+ *  recorded correctly at the resolved root (the file is gone here because THIS
+ *  checkout removed it, and a sibling worktree that branched earlier simply
+ *  predates the change) from a genuine misroute: without this check, deleting or
+ *  renaming a `related_files` entry at the correct root reads as evidence the
+ *  write belongs in whichever sibling worktree still has the old path —
+ *  refusing a correct write and pointing the caller at the wrong worktree.
+ *
+ *  `git rev-list -- <file>` alone (an earlier version of this check) treats
+ *  `file` as an ordinary PATHSPEC: a directory name or a glob matches anything
+ *  under/matching it, so "src" or "*.ts" reads as "known to history" whenever
+ *  ANYTHING under that directory or matching that glob was EVER tracked,
+ *  anywhere in the repo — defeating the whole point of the check for exactly
+ *  the directory-shaped evidence it exists to handle. `:(literal)` disables
+ *  glob/magic interpretation, and checking the commit's own changed-file list
+ *  for an EXACT string match (not just "the pathspec matched something")
+ *  confirms `file` was a tracked PATH, not merely a directory or pattern
+ *  something under it happened to satisfy.
+ *
+ *  Two git default behaviors break a naive newline-separated exact-string
+ *  comparison, and both reproduce as FALSE POSITIVES for the guard — worse
+ *  than a miss, since obeying the guard's own "retry with a different cwd"
+ *  advice would then misroute an already-correct write into the wrong
+ *  worktree:
+ *   - `--name-only` prints NOTHING for a merge commit by default (diff
+ *     simplification), so a file whose most recent touch in history is a
+ *     merge (e.g. resolved by deleting it) reads as never-tracked.
+ *     `--diff-merges=first-parent` makes a merge commit report its own
+ *     changes like an ordinary commit instead of being skipped.
+ *   - Quoting: git C-quotes a path containing a byte outside plain ASCII
+ *     printable, plus `"`, `\`, and any control character (a literal
+ *     newline, tab, ...) unconditionally, regardless of `core.quotePath` —
+ *     patching one byte class at a time (quotePath, then trimming, then...)
+ *     keeps reopening this. `-z` (NUL-terminated, paired with the untrimmed
+ *     `gitRawSafe`) sidesteps quoting entirely: git emits the raw path bytes
+ *     with no escaping of any kind when `-z` is given.
+ *
+ *  `file` must be a genuine, non-empty path: `-z` NUL-TERMINATES every entry
+ *  rather than separating them, so splitting on "\0" always yields a
+ *  trailing "" element — harmless for any real filename, but `git log …
+ *  :(literal)` treats an empty pathspec as matching everything, so an empty
+ *  `file` would otherwise find that trailing "" and read as "known to
+ *  history" for any repo with history at all. The sole caller already
+ *  filters falsy entries before calling this, so the check here is defense
+ *  in depth for this function's own documented contract, not a currently
+ *  reachable bypass. */
+export function pathKnownToHistory(root: string, file: string): boolean {
+  if (!file) return false;
+  const out = gitRawSafe(
+    ["log", "-n", "1", "--format=", "--name-only", "-z", "--diff-merges=first-parent", "HEAD", "--", `:(literal)${file}`],
+    root,
+  );
+  return !!out && out.split("\0").some((entry) => entry === file);
+}
+
 /** Current branch name (e.g. "main", "feat/x"), or "" in detached HEAD / non-repo.
  *  Stamped onto auto-captured decisions so branch-scoped work stays filterable. */
 export function currentBranch(cwd: string): string {
