@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.32.3 — 2026-09-12
+
+- A subject holds one current derived statement per transform: a new current
+  statement beside one of the same transform must name it in `supersedes`, or the
+  write is refused `409 conflict` with the incumbent named
+  (`one-current-derived-per-subject-transform`). The same identity written again
+  updates or replays; a different transform is a different statement; observations
+  are untouched; the human-correction guard still decides who may supersede a human's
+  record. Found by the half-year agent farm: a writer that never named its
+  predecessor had left 58 current summaries on one subject.
+- A memory flush can no longer freeze a served write: every git call inside the
+  flush is bounded (`HUNCH_COMMIT_GIT_TIMEOUT_MS`, default 60 s; a stopped call
+  reports durability `local` and the next flush sweeps the same files up), commits
+  run with `gc.auto=0`, and any call slower than 5 s is logged. One served write per
+  long season had stalled the server for 8–15 minutes.
+- `tooling/agent-farm/season.mjs`: the season — ten agent styles, a conductor, monthly
+  compaction and restart, weekly audits, a replay of every partition; a 21-day
+  season is asserted in CI.
+
 ## 1.32.2 — 2026-09-12
 
 - The first time a lesson revision reaches a task, the delivery carries one line,
