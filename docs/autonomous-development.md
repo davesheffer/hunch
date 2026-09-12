@@ -31,7 +31,8 @@ What changed since the red team, each with where it is verified:
   qualification record holds live Claude and Codex runs.
 - Memory hygiene is a standing agent obligation, not a checklist item: `con_039cee7367`.
 - Gate 5 has a first live number: one user, scripted, 0 of 3 status replies unsourced after one
-  read (2026-09-12). The two-user week is blocked on CRM configuration on the second machine.
+  read (2026-09-12). The two-user week needs a second participant and a shared task; the CRM
+  credential was repaired on 2026-09-11.
 - The loop stands at rung 1 of the ladder below. Rung 3's condition ("Gate 5 has a number") means
   the two-user number, not the single-user one.
 
@@ -113,7 +114,7 @@ repository. Every other item below can be done by an agent; this one cannot. Sch
 
 *2026-09-12:* the single-user leg was run by an agent on the live environment (see the update
 above). What remains human-only is narrower: the CRM configuration on the second machine for the
-two-user week, and one approved CRM comment for the approval → receipt leg.
+two-user week (a second participant, not a machine), and one approved CRM comment for the approval → receipt leg.
 
 ## The promotion ladder for the development loop
 
