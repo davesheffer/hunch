@@ -1,6 +1,6 @@
 # Deterministic organizational state
 
-Status: **strategic direction / pilot architecture — not fully shipped**
+Status: **architecture in force; the contract and the served state layer are shipped (1.25.0–1.30.0); the Sofia pilot is at Gate 5** — gate status lives in the [roadmap](../ROADMAP.md), updated 2026-09-12.
 
 Hunch is evolving from repository-only engineering memory into a deterministic state layer for organizations that use many probabilistic agents.
 
@@ -10,7 +10,7 @@ The thesis is simple:
 
 The current Hunch engine remains git-native and repository-local by default. The next product step is to extend that same evidence, provenance, currentness and deterministic-gate model across organization, team and user scopes without creating a second source of truth.
 
-Naming is deliberately not the current deliverable. `Hunch` remains the product name until the state contract and Sofia pilot are validated. The working hosted-platform name in private planning is **Nuryel**, and the working contract name is `nuryel.state/1`; both remain subject to the pilot and compatibility gates.
+Naming is deliberately not the current deliverable. `Hunch` remains the product name until the state contract and Sofia pilot are validated. A possible hosted-platform name, **Nuryel**, is deferred (roadmap Gate 6); the contract name `nuryel.state/1` and the `nuryel_*` MCP tools already ship under it.
 
 ## One product, one graph, one contract
 
@@ -41,9 +41,9 @@ Repository `.hunch/` remains authoritative for repository-scoped state. Organiza
 
 The served graph is the authorized union of those partitions, not a copy in a separate database. Derived indexes may exist for performance, but git-native state remains the durable authority.
 
-## Planned state contract
+## The state contract
 
-The working `nuryel.state/1` contract is intentionally small. It exposes state facets rather than connector-specific APIs.
+The `nuryel.state/1` contract is frozen as code since 1.25.0 (`src/core/stateContract.ts`; specified in [the contract document](nuryel-state-contract.md)) and intentionally small. It exposes state facets rather than connector-specific APIs.
 
 Initial facets:
 
@@ -56,11 +56,12 @@ Initial facets:
 - `DNA` — repository, user, team or organization working conventions;
 - `current-with-dependencies` — derived state plus the exact evidence/version dependencies that keep it current.
 
-The planned verbs are:
+The verbs are:
 
 1. **read** — return current authorized state plus a delivery receipt;
 2. **write** — submit provenance-bearing state with an idempotency key and receive a durability result;
-3. **subscribe** — observe changes to state the principal is authorized to hold.
+3. **subscribe** — observe changes to state the principal is authorized to hold;
+4. **records** — a subject's records, grants-first (added 1.27.0).
 
 HTTP, MCP, CLI and typed clients are bindings of the same schema, not different integration models.
 
@@ -128,7 +129,7 @@ Sofia is the first concrete pilot because it already has the exact state the org
 
 The pilot should not start by moving every source query into Hunch. Sofia keeps reading CRM, Gmail and WhatsApp directly.
 
-The pilot sequence is:
+The pilot sequence is (status per step: the gate table in the [roadmap](../ROADMAP.md)):
 
 1. **Baseline Sofia first.** Measure state re-derived between sessions, contradictions between two users' Sofias and stale answers after real source changes.
 2. **Freeze additive contracts.** Add action receipt, commitment, external entity/relationship, user/team DNA and dependency-bound derived state without breaking repository `.hunch/` compatibility.

@@ -76,6 +76,6 @@ The package ships these feature-detectable transport resources:
 - `@davesheffer/hunch/change-proof` is the authoritative seal validator. JSON Schema validation alone
   cannot verify canonical ordering, cross-field bindings, derived verdicts, or content hashes.
 
-Hunch Memory should persist and return the accepted artifact unchanged, keyed by its `proof_id` and
-`content_hash`. ORC may reference that untouched proof and derive Passport completeness around it;
+The served state layer (`hunch serve`, which folded the former Hunch Memory service) persists and returns the accepted artifact unchanged, keyed by its `proof_id` and
+`content_hash`. An orchestrator such as ORC may reference that untouched proof and derive Passport completeness around it;
 it must not rewrite Hunch's verdict or add authority inside the native proof.

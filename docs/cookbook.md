@@ -236,7 +236,7 @@ hunch push                   # the one deliberate outward step (memory auto-comm
 ```
 
 **Observe:** after a commit that renames a file, `hunch log` shows a 🔧 repair move —
-the bindings healed themselves; nothing went stale. In VS Code, the **Hunch Memory**
+the bindings healed themselves; nothing went stale. In VS Code, the **Hunch**
 panel is the same spine with click-to-diff, one-click revert, and the inline
 activate / demote / withdraw / retire authority actions.
 
@@ -293,3 +293,17 @@ git tag --list v1.18.1 vscode-v0.17.3
 **Observe:** npm reports `1.18.1`, an integrity digest, and provenance metadata. Open VSX reports
 `0.17.3`. The GitHub Actions run for each tag shows a credential-free validation job followed by
 publication and public byte verification of the same content-addressed artifact.
+
+## 15. See what Hunch contributed to a task (v1.32.0+)
+
+```bash
+hunch task start --title "Preserve user settings on config update"   # once per task; keep the id
+hunch task verify <task-id> --timeout 600 -- npm test                 # observed exit code + source snapshot
+hunch task finish <task-id>                                           # prints the contribution card
+hunch report <task-id> --html                                         # local evidence view
+```
+
+Over MCP the same flow is `hunch_task(action: "start")`, `hunch_context(target, task_id)`,
+`hunch_task(action: "finish")` and `hunch_report(task_id)`; the card names what was delivered,
+what the agent reports it applied, what a rule verified and what a command observed. It is not a
+causal impact score. Details and host boundaries: [Task contribution reports](task-reports.md).

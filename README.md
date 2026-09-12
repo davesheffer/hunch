@@ -183,7 +183,7 @@ Hunch may hold durable state **about** external work with credential-free proven
 
 The first real-world pilot is **Sofia**, a working operations agent over CRM, Gmail and WhatsApp. Sofia's approved actions, follow-ups, customer/source relationships and cited summaries map naturally to action receipts, commitments, entities/relationships and dependency-bound state.
 
-The pilot measures whether Sofia and a second, different agent stop re-deriving contradictory state when the deterministic state is delivered before they answer or act.
+The pilot measures whether Sofia and a second, different agent stop re-deriving contradictory state when the deterministic state is delivered before they answer or act. First live number (2026-09-12, one user): after one CRM read, the next status questions were answered from held state under a receipt, 0 of 3 without a source; the [roadmap](ROADMAP.md) carries the gate table.
 
 ### The state contract, shipped
 
@@ -223,7 +223,7 @@ The current release can keep a team's **repository-scoped** memory in a dedicate
 Today Hunch does not host that shared Git repository; teammates/CI use normal Git access and one maintainer connects it:
 
 ```bash
-npm i -g @davesheffer/hunch@1.28.0
+npm i -g @davesheffer/hunch@1.32.2
 hunch shared --repo git@github.com:acme/project-hunch-memory.git
 git add .gitignore .hunch/team.json
 git commit -m "chore: connect shared Hunch memory"
@@ -233,7 +233,7 @@ git push
 Teammates then install the same version and run:
 
 ```bash
-npm i -g @davesheffer/hunch@1.28.0
+npm i -g @davesheffer/hunch@1.32.2
 git pull
 hunch init
 hunch doctor
@@ -264,6 +264,8 @@ The v1.19 correction-search benchmark remains scoped evidence, but it no longer 
 - **v1.21 — Project DNA.** Hunch gained deterministic, revision-specific repository profiles, bounded DNA context delivery, explainable Project Match checks and auditable profile deltas.
 - **v1.22 — authorized collaboration evidence.** Hosts can contribute bounded PR/review evidence to Project DNA through a typed, sealed contract without raw collaboration persistence or policy-authority change.
 - **v1.23 — native change proof and proof-carrying evidence work.** Exact Git change identity, graph before/after, decisions/constraints, blast radius and Change Gate result can be bound into a sealed evidence artifact without granting authority.
+- **v1.25 – v1.30 — the state layer.** `nuryel.state/1` as code, `hunch serve` partitions, union reads, subject identity by external reference, replay determinism, human corrections outranking agent writes.
+- **v1.32 — see what Hunch contributed.** Task contribution reports: what was delivered, what the agent reports it applied, what a rule verified, what a command observed; concise card, local evidence view.
 
 See the [changelog](CHANGELOG.md) for release detail and the [roadmap](ROADMAP.md) for active work.
 
@@ -277,6 +279,9 @@ See the [changelog](CHANGELOG.md) for release detail and the [roadmap](ROADMAP.m
 - [Project DNA](docs/project-dna.md)
 - [Native change proof](docs/change-proof.md)
 - [The autonomy ladder](docs/autonomy-ladder.md)
+- [Task contribution reports](docs/task-reports.md)
+- [Autonomous development](docs/autonomous-development.md)
+- [Local cookbook](docs/cookbook.md)
 - [Engineering Landscape Graph](docs/engineering-landscape.md)
 - [Hunch roadmap](ROADMAP.md)
 - [VS Code extension](vscode-extension/README.md)
