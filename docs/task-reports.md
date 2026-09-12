@@ -205,7 +205,11 @@ deployment must retain its existing scope/authentication boundary when adapting
 the report contract.
 
 Clients that prefer MCP `structuredContent` receive copyable application
-references from `hunch_report` and the completion card from `hunch_task`. Native
+references from `hunch_report` and the completion card from `hunch_task`.
+Both return `hunch.task-report-summary/1`: exact identities, verdicts, counts
+and the card, bounded to the host's round-trip (envelope text and lesson prose
+are omitted; `omitted` counts what fell off). The full `hunch.task-report/1`
+document is `hunch report <id> --json` or the HTML view. Native
 context envelopes remain unchanged; task occurrence IDs and record hashes must
 not be derived from the envelope receipt ID or task scope hash. The card and
 references are presentation metadata alongside the report, outside its content hash.
