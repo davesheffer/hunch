@@ -35,6 +35,11 @@ What changed since the red team, each with where it is verified:
   credential was repaired on 2026-09-11.
 - The loop stands at rung 1 of the ladder below. Rung 3's condition ("Gate 5 has a number") means
   the two-user number, not the single-user one.
+- The full suite's wall-clock time is now recorded: `npm test` on the Apple M1 in this checkout took
+  12 min 36 s (756 s) on 2026-09-12 for 1,845 tests (1,838 pass, 6 skipped, 1 fail: the
+  `matrix-release-verification` lockfile check, which fails after any `npm install` and passes
+  only from `npm ci`). The three slowest tests took 160 s, 124 s and 77 s. An unattended loop needs a
+  budget of at least 20 minutes for the suite, and `npm ci` before it.
 
 The findings below are the 2026-09-09 snapshot and are kept as written.
 
