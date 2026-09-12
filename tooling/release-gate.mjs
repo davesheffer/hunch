@@ -33,7 +33,9 @@ export const RELEASE_GATES = Object.freeze([
   // empty overlay for every gate, so this measures what a CONTRIBUTOR's clone sees —
   // the union-vs-public divergence that shipped undetected existed precisely because
   // no gate here ever ran drift (fnd_5a7a683920).
-  { id: "memory-drift", command: ["node", "dist/cli/index.js", "drift"] },
+  // finding-stale fails here too: a live finding citing a file that no longer
+  // exists is memory the next agent will act on wrongly (readiness checklist 3).
+  { id: "memory-drift", command: ["node", "dist/cli/index.js", "drift", "--fail-on", "finding-stale"] },
   { id: "clean-install-rehearsal", command: ["node", "tooling/constitution-clean-rehearsal.mjs", "--output", "$REHEARSAL_OUTPUT"] },
   { id: "production-dependency-audit", command: ["node", "tooling/production-dependency-audit.mjs"] },
 ]);

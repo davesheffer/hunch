@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { tempStore, prov } from "./helpers.js";
 import { computeDrift } from "../src/core/drift.js";
 import { hunchPaths } from "../src/core/paths.js";
@@ -226,4 +226,33 @@ test("drift commit-unresolvable: default wiring against a real git repo (smoke t
 
   const findings = computeDrift(store, root).findings.filter((f) => f.kind === "commit-unresolvable");
   assert.deepEqual(findings.map((f) => f.id), ["dec_ghost"]);
+});
+
+test("drift --fail-on turns a reported kind into a gate failure; unknown kinds are refused", (t) => {
+  const { store, root, cleanup } = tempStore();
+  t.after(cleanup);
+  execFileSync("git", ["init", "-q"], { cwd: root });
+  store.json.put("findings", {
+    id: "fnd_gate_stale", title: "cites a file that no longer exists", observation: "observed", severity: "low", triage: "open",
+    affected_files: ["src/vanished.ts"], affected_symbols: [], evidence: ["fixture"], observed_at: "2026-09-12T00:00:00.000Z",
+    provenance: prov(),
+  } as never);
+  store.close();
+  const cli = resolve("src/cli/index.ts"), tsx = resolve("node_modules/tsx/dist/loader.mjs");
+  const env = { ...process.env, HUNCH_PIPELINE: "0", HUNCH_SYNTH_PROVIDER: "deterministic" };
+  delete env.HUNCH_PRIVATE_DIR;
+  const run = (...args: string[]) => {
+    try { return { status: 0, out: execFileSync(process.execPath, ["--import", tsx, cli, "drift", ...args], { cwd: root, env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }) }; }
+    catch (error) { const e = error as { status: number; stdout: string; stderr: string }; return { status: e.status, out: `${e.stdout}${e.stderr}` }; }
+  };
+  const advisory = run();
+  assert.equal(advisory.status, 0, "finding-stale alone is advisory by default");
+  assert.match(advisory.out, /\[finding-stale\] fnd_gate_stale/);
+  const gated = run("--fail-on", "finding-stale");
+  assert.equal(gated.status, 1, "the same drift fails the gate when --fail-on names its kind");
+  assert.match(gated.out, /failing by --fail-on \(finding-stale\)/);
+  assert.equal(run("--fail-on", "dead-ref").status, 0, "an unrelated kind does not fail it");
+  const bogus = run("--fail-on", "not-a-kind");
+  assert.equal(bogus.status, 1);
+  assert.match(bogus.out, /unknown drift kind "not-a-kind"/);
 });

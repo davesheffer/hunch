@@ -119,7 +119,7 @@ import { planAutoReview, planMutations, type AutoReviewPlan, type AutoReviewEntr
 import type { RelevanceVerdict, ExistingDecisionRef } from "../synthesis/provider.js";
 import { loadGoldenSet, evaluateRetrieval, evaluateTraversalLift } from "../eval/harness.js";
 import { loadGuardCases, evalGuards, generateGuardCases } from "../eval/guards.js";
-import { computeDrift } from "../core/drift.js";
+import { DRIFT_KINDS, computeDrift } from "../core/drift.js";
 import { renderCompilerScorecard, scoreCompilerCaseBank } from "../constitution/scorecard.js";
 import { generateWiki, wikiStatus, wikiPrompt, publicHome, privateHome, readWikiManifestAt, nowData, type WikiPack } from "../wiki/wiki.js";
 import { adoptProsePrompt } from "../wiki/adopt.js";
@@ -5732,8 +5732,11 @@ program
 // ---- drift (doc≠graph detector; advisory + CI-gateable) -------------------
 program
   .command("drift")
-  .description("Detect memory drift: dead refs, dangling supersedes, stale 'proposed' docs, commit-unresolvable (a decision cites a commit that no longer resolves in this repository), doc≠graph anchor-stale (a file still anchored to a superseded decision), markdown sections whose <!-- hunch:topic … dec_id --> pin points at a superseded or missing decision (AGENTS.md/CLAUDE.md as a drift surface), and ledger≠records replay divergence when this partition has a change ledger. Exits non-zero on any anchor-stale drift, topic collision or replay divergence — the doc≠graph and ledger≠records gate.")
-  .action(() => {
+  .description("Detect memory drift: dead refs, dangling supersedes, stale 'proposed' docs, commit-unresolvable (a decision cites a commit that no longer resolves in this repository), doc≠graph anchor-stale (a file still anchored to a superseded decision), markdown sections whose <!-- hunch:topic … dec_id --> pin points at a superseded or missing decision (AGENTS.md/CLAUDE.md as a drift surface), and ledger≠records replay divergence when this partition has a change ledger. Exits non-zero on any anchor-stale drift, topic collision or replay divergence — the doc≠graph and ledger≠records gate. --fail-on adds further kinds to the gate (the release gate passes finding-stale).")
+  .option("--fail-on <kinds>", `comma-separated drift kinds that also fail the gate (${DRIFT_KINDS.join(", ")})`)
+  .action((opts: { failOn?: string }) => {
+    const failOn = new Set((opts.failOn ?? "").split(",").map((k) => k.trim()).filter(Boolean));
+    for (const kind of failOn) if (!(DRIFT_KINDS as readonly string[]).includes(kind)) return fail(`--fail-on: unknown drift kind "${kind}" (known: ${DRIFT_KINDS.join(", ")})`);
     const { store, root } = storeFor();
     try {
       const { findings } = computeDrift(store, root);
@@ -5753,8 +5756,9 @@ program
       for (const d of replay?.divergences ?? []) console.log(`· [replay-${d.kind}] ${d.record_id} — ${d.detail}`);
       if (replayCount && !replayFailing.length) console.log(`· [replay-fingerprint] ${scopePath(own)}: ledger fold ${replay!.replay_hash} ≠ stored ${replay!.stored_hash}`);
       const anchor = findings.filter((f) => f.kind === "anchor-stale" || f.kind === "doc-anchor-stale").length;
-      console.log(`\n${findings.length + replayCount} finding(s)${anchor ? `, ${anchor} doc≠graph (anchor-stale)` : ""}${collisions.size ? `, ${collisions.size} topic-collision(s)` : ""}${replayCount ? `, ${replayCount} ledger≠records (replay: hunch serve replay --root .)` : ""}.`);
-      if (anchor || collisions.size || replayCount) process.exitCode = 1;
+      const failing = findings.filter((f) => failOn.has(f.kind)).length;
+      console.log(`\n${findings.length + replayCount} finding(s)${anchor ? `, ${anchor} doc≠graph (anchor-stale)` : ""}${collisions.size ? `, ${collisions.size} topic-collision(s)` : ""}${replayCount ? `, ${replayCount} ledger≠records (replay: hunch serve replay --root .)` : ""}${failing ? `, ${failing} failing by --fail-on (${[...failOn].join(", ")})` : ""}.`);
+      if (anchor || collisions.size || replayCount || failing) process.exitCode = 1;
     } finally {
       store.close();
     }
