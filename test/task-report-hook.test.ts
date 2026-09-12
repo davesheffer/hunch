@@ -83,13 +83,16 @@ test("native pre-edit injections appear in the exact prompt report; deltas do no
   const input = { tool_name: "Edit", tool_input: { file_path: join(root, "src", "config.ts"), new_string: "merge settings" } };
   const edit = hook(root, "PreToolUse", input);
   assert.match(edit.hookSpecificOutput.additionalContext, /Preserve existing settings/);
+  assert.match(edit.systemMessage, /^Hunch recalled: Preserve existing settings$/, "the first delivery in a prompt shows the user one line");
   assert.equal(readTaskReport(root, first.task_id).deliveries.length, 1);
-  hook(root, "PreToolUse", input);
+  const repeat = hook(root, "PreToolUse", input);
+  assert.equal(repeat.systemMessage, undefined, "a repeat delivery never re-announces the lesson");
   assert.equal(readTaskReport(root, first.task_id).deliveries.length, 1);
   assert.match(hook(root, "Stop").systemMessage, /Recalled.*Preserve existing settings/);
   hook(root, "UserPromptSubmit", { prompt_id: "prompt-b" });
   const second = listReportTasks(root)[0]!;
-  hook(root, "PreToolUse", { ...input, prompt_id: "prompt-b" });
+  const fresh = hook(root, "PreToolUse", { ...input, prompt_id: "prompt-b" });
+  assert.match(fresh.systemMessage, /Hunch recalled: Preserve existing settings/, "deduplication is per task, so a new prompt hears the lesson once more");
   assert.equal(readTaskReport(root, second.task_id).deliveries.length, 1, "a previous prompt's delta cannot substitute for a full receipt");
   assert.notEqual(readTaskReport(root, first.task_id).deliveries[0]!.occurrence_id, readTaskReport(root, second.task_id).deliveries[0]!.occurrence_id);
 });

@@ -112,6 +112,22 @@ test("task reports preserve exact delivery occurrences, empty responses and hist
   assert.equal(listReportTasks(root).length, 3);
 });
 
+test("a lesson is announced on its first delivery per task and revision, never on repeats", async t => {
+  const { unseenLessons } = await import("../src/core/taskReport.js");
+  const { renderRecalledLine } = await import("../src/core/taskReportRender.js");
+  const root = fixture(t), a = startReportTask(root, "First"), b = startReportTask(root, "Second");
+  const revised = { ...record, content_hash: reportHash("revised lesson"), title: "Preserve existing settings (revised)" };
+  assert.deepEqual(unseenLessons(root, a.task_id, [record]).map(r => r.record_id), ["con_preserve"]);
+  recordTaskDelivery(root, a.task_id, envelope(), [record]);
+  assert.deepEqual(unseenLessons(root, a.task_id, [record]), [], "same revision, same task: quiet");
+  assert.equal(unseenLessons(root, a.task_id, [revised]).length, 1, "a new revision of the lesson is announced again");
+  assert.equal(unseenLessons(root, b.task_id, [record]).length, 1, "another task hears it for the first time");
+  assert.equal(renderRecalledLine([]), null);
+  assert.equal(renderRecalledLine([record]), "Hunch recalled: Preserve existing settings");
+  assert.equal(renderRecalledLine([record, revised, record]), "Hunch recalled: Preserve existing settings (+2 more lessons)");
+  assert.throws(() => unseenLessons(root, "htask_000000000000000000000000", [record]), /not found/);
+});
+
 test("claims cannot cross tasks, record revisions, worktrees, or mutated envelopes", t => {
   const root = fixture(t), other = fixture(t);
   const a = startReportTask(root, "Task A"), b = startReportTask(root, "Task B");

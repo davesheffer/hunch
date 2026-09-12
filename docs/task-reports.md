@@ -23,6 +23,13 @@ The generated Hunch instructions ask the agent to:
    the structured `contribution_card`, including its evidence link, in the final
    response unless presentation is disabled.
 
+The first time a lesson revision reaches a task, the delivery carries one
+line — `Hunch recalled: <lesson title>` — in the `hunch_context` result, the
+`hunch context --task` output, and, for Claude Code's pre-edit hook, as a
+`systemMessage` the host shows the user. Repeats of the same revision in the
+same task stay silent; deduplication is per task and record revision, so a new
+prompt hears a lesson once more. Presentation opt-out silences the hook line.
+
 This lifecycle is instruction-driven. Configuration does not prove the host
 followed it. A host must load the current MCP server and allow the tool calls;
 missing task identity or denied tools cannot produce a verified contribution.

@@ -70,10 +70,14 @@ test("MCP task lifecycle retains exact delivery, rejects borrowed evidence, and 
   const delivered = await call("hunch_context", { target: "src/context.ts", task_id: taskId });
   assert.ok(!delivered.isError);
   assert.match(JSON.stringify(delivered.content), /Task evidence:/);
+  assert.match(JSON.stringify(delivered.content), /Hunch recalled: /, "the first delivery of a lesson in a task earns one line");
+  const again = await call("hunch_context", { target: "src/context.ts", task_id: taskId });
+  assert.doesNotMatch(JSON.stringify(again.content), /Hunch recalled: /, "a repeat of the same revision in the same task stays quiet");
+  assert.match(JSON.stringify(again.content), /Task evidence:/, "the repeat is still retained as evidence");
   const read = await call("hunch_report", { task_id: taskId });
   const report = read.structuredContent as unknown as { schema: string; deliveries: Array<{ occurrence_id: string; receipt_id: string; records: Array<{ record_id: string; kind: string; content_hash: string }> }> };
   assert.equal(report.schema, "hunch.task-report-summary/1");
-  assert.equal(report.deliveries.length, 1);
+  assert.equal(report.deliveries.length, 2);
   assert.equal(report.deliveries[0]!.receipt_id, delivered.structuredContent?.receipt_id);
   assert.doesNotMatch(JSON.stringify(read.structuredContent), /Hunch context for/, "the MCP summary never carries envelope text");
   const record = report.deliveries[0]!.records[0]!;

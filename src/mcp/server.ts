@@ -62,7 +62,8 @@ import { PROJECT_DNA_DELTA_SCHEMA_VERSION, diffProjectDna } from "../core/projec
 import { projectDnaDeliverySupplement } from "../core/projectDnaDelivery.js";
 import { armExecutionObligations, loadPipelineState, savePipelineState } from "../core/pipeline.js";
 import { recordServed } from "../core/served.js";
-import { TaskIdSchema, recordTaskDelivery } from "../core/taskReport.js";
+import { TaskIdSchema, recordTaskDelivery, unseenLessons } from "../core/taskReport.js";
+import { renderRecalledLine } from "../core/taskReportRender.js";
 import { observeReportCapture } from "../core/taskReportCapture.js";
 import { snapshotDeliveredRecords } from "../core/taskReportEvidence.js";
 import { registerTaskReportTools } from "./taskReportTools.js";
@@ -1227,8 +1228,10 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
           try {
             // Historical contexts must not borrow today's record text/revision.
             const records = as_of ? [] : snapshotDeliveredRecords(store, envelope);
+            // First delivery of a revision in this task earns one line; repeats stay quiet.
+            const recalled = renderRecalledLine(unseenLessons(root, task_id, records));
             const occurrence = recordTaskDelivery(root, task_id, envelope, records);
-            result.content.push({ type: "text", text: `Task evidence: ${task_id} · occurrence ${occurrence}.\n${records.slice(0, 20).map(r => `${r.record_id} @ ${r.content_hash}`).join("\n")}${records.length > 20 ? "\nMore record identities: hunch_report(task_id)." : ""}` });
+            result.content.push({ type: "text", text: `${recalled ? `${recalled}\n` : ""}Task evidence: ${task_id} · occurrence ${occurrence}.\n${records.slice(0, 20).map(r => `${r.record_id} @ ${r.content_hash}`).join("\n")}${records.length > 20 ? "\nMore record identities: hunch_report(task_id)." : ""}` });
           } catch {
             result.content.push({ type: "text", text: `Task evidence could not be recorded for ${task_id}. Context remains available; this delivery's report attribution is unverified. Check the task ID, working directory, and local ledger.` });
           }
