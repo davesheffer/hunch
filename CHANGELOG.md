@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.32.1 — 2026-09-12
+
+Task reports, hardened by the first day of dogfooding on this repository:
+
+- `hunch task verify --timeout <seconds>` (default 120, ceiling six hours) and
+  the engine API's `verify(…, { timeoutMs })` let a full test suite be retained
+  as an observed check instead of being recorded as timed out.
+- `hunch_task(finish)` and `hunch_report` return a bounded
+  `hunch.task-report-summary/1` — exact identities, verdicts, counts and the
+  card, within a 48 KB budget with explicit omitted counts — instead of the full
+  document, which had exceeded a host's tool-result limit on an 18-delivery
+  task and hidden the card. The full report remains `hunch report <id> --json`
+  and the HTML view.
+- `hunch integrations check` now marks hook capabilities verified from lifecycle
+  events actually delivered to Hunch's hook on the expected version within 30
+  days; configuration alone stays untested, and `mcp` still needs the probe.
+
 ## 1.32.0 — 2026-09-11
 
 ### See what Hunch contributed
