@@ -6,7 +6,7 @@
     "wiki/**"
   ],
   "severity": "blocking",
-  "enforcement": "advisory_v1",
+  "enforcement": "ci",
   "match": null,
   "forbids": null,
   "rationale": "",

@@ -6,7 +6,7 @@
     "src/synthesis/**"
   ],
   "severity": "blocking",
-  "enforcement": "advisory_v1",
+  "enforcement": "ci",
   "rationale": "Avoid silent API billing and never guess which installed assistant subscription a user intends to spend. Provider-specific API credentials must be stripped from child processes where the CLI would otherwise prefer them.",
   "source_decision": "dec_65b058de66",
   "violations": [],

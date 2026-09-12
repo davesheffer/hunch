@@ -7,7 +7,7 @@
     "src/core/io.ts"
   ],
   "severity": "blocking",
-  "enforcement": "advisory_v1",
+  "enforcement": "ci",
   "rationale": "A partial write would corrupt the source of truth",
   "source_decision": null,
   "violations": [],
