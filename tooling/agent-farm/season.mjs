@@ -57,6 +57,8 @@ export async function runSeason({ days = 180, customers = 12, outDir, seed = "se
   const userScope = (name) => ({ kind: "user", id: name });
   const problems = [];
   const problem = (s) => { problems.push(s); };
+  let currentDay = "";
+  const slow = [];
   const latency = {}; // verb -> ms[]
   const tally = { writes: { created: 0, updated: 0, replayed: 0, superseded: 0 }, refusals: { expected: {}, unexpected: {} }, reads: 0, captures: { saved: 0, replayed: 0, refused: 0 }, reviews: { done: 0, refused: 0 }, unexpected_successes: 0, expected_refusals_observed: 0 };
   const count = (map, key) => { map[key] = (map[key] ?? 0) + 1; };
@@ -80,18 +82,23 @@ export async function runSeason({ days = 180, customers = 12, outDir, seed = "se
   /** One call with latency + outcome bookkeeping. `expect` names the refusal codes this persona expects here. */
   async function op(who, verb, fn, { expect = [], label = "" } = {}) {
     const t0 = Date.now();
+    label = label || `${verb} on ${currentDay}`;
     try {
       const result = await fn(clients[who]);
       (latency[verb] ??= []).push(Date.now() - t0);
+      if (Date.now() - t0 > 5000) slow.push({ who, label, ms: Date.now() - t0 });
       if (expect.length) { tally.unexpected_successes++; problem(`${who}: ${label || verb} succeeded but a ${expect.join("/")} refusal was expected`); }
       if (verb === "write" && result?.outcome) count(tally.writes, result.outcome);
       if (verb === "read") tally.reads++;
       return result;
     } catch (e) {
       (latency[verb] ??= []).push(Date.now() - t0);
+      if (Date.now() - t0 > 5000) slow.push({ who, label, ms: Date.now() - t0, error: String(e.message).slice(0, 80) });
       if (!(e instanceof StateClientError)) { problem(`${who}: ${label || verb} threw ${e.message}`); return null; }
       if (e.status === 503) { await new Promise((r) => setTimeout(r, 25)); return op(who, verb, fn, { expect, label }); }
       if (expect.includes(e.code)) { count(tally.refusals.expected, e.code); tally.expected_refusals_observed++; return { refused: e.code, detail: e.problem?.detail }; }
+      const merged = e.code === "identity" && /was merged into (customer:[a-z0-9]+)/.exec(e.problem?.detail || "");
+      if (merged && verb === "write" && !label.startsWith("[redirected]")) { tally.merge_redirects = (tally.merge_redirects ?? 0) + 1; return { refused: "identity", merged_into: merged[1], detail: e.problem?.detail }; }
       count(tally.refusals.unexpected, e.code);
       problem(`${who}: ${label || verb} refused ${e.status} ${e.code}: ${(e.problem?.detail || e.message).slice(0, 160)}`);
       return null;
@@ -100,7 +107,8 @@ export async function runSeason({ days = 180, customers = 12, outDir, seed = "se
 
   // ---- the world ----
   const roster = Array.from({ length: customers }, (_, i) => ({ id: `c${i + 1}`, name: `Customer ${i + 1}`, event: 27000 + i, site: 100 + i }));
-  const subjectOf = (c) => `customer:${c.id}`;
+  const survivorOf = new Map(); // customer id -> survivor customer id after a merge
+  const subjectOf = (c) => `customer:${survivorOf.get(c.id) ?? c.id}`;
   const eventRef = (c, day) => ({ system: "crm", object_type: "event", object_key: String(c.event), observed_at: `${day}T09:00:00Z`, content_hash: sha256(`crm-event-${c.event}-${day}`) });
   const summary = (c, day, transform = "summary/v1") => { const content = `${c.name}: state as of ${day} (event ${c.event}).`; return { schema: "nuryel.derived/1", scope: org, subject: subjectOf(c), content, content_hash: stateHash(content), dependencies: [{ kind: "external", ref: eventRef(c, day) }], transform_version: transform, computed_at: `${day}T09:00:00Z`, valid_to: null, state: "current", provenance: prov(`crm event ${c.event} ${day}`) }; };
   const commitmentFor = (c, day, owner = "ops") => ({ schema: "nuryel.commitment/1", scope: org, subject: subjectOf(c), title: `follow up with ${c.name}`, owner, due: day, status: "open", valid_from: `${day}T09:00:00Z`, valid_to: null, provenance: prov(`crm event ${c.event} ${day}`) });
@@ -127,6 +135,7 @@ export async function runSeason({ days = 180, customers = 12, outDir, seed = "se
   try {
     for (let i = 0; i < dayList.length; i++) {
       const day = dayList[i];
+      currentDay = day;
       const week = Math.floor(i / 7);
       const active = activeToday(i);
 
@@ -247,11 +256,11 @@ export async function runSeason({ days = 180, customers = 12, outDir, seed = "se
         const gone = roster[2], survivor = roster[1];
         const retired = { schema: "nuryel.entity/1", id: `customer:${gone.id}`, kind: "customer", name: gone.name, scope: org, refs: [{ system: "crm", object_type: "site", object_key: String(gone.site), observed_at: `${day}T08:00:00Z` }], attributes: {}, lifecycle: "retired", merged_into: `customer:${survivor.id}`, provenance: prov(`merged into ${survivor.id} on ${day}`), created_at: `${dayList[0]}T08:00:00Z`, updated_at: `${day}T08:00:00Z` };
         const m = await op("merger", "write", (cl) => cl.write({ scope: org, facet: "entities", record: retired, idempotency_key: `merger:merge:${gone.id}:${day}` }));
-        if (m) mergerState.merged = { gone: gone.id, survivor: survivor.id, day };
-        const view = await op("merger", "read", (cl) => cl.read({ scope: org, subject: subjectOf(gone) }));
-        const resolved = view?.state_of_record?.subject === subjectOf(survivor) || (view?.subject_aliases ?? view?.state_of_record?.aliases ?? []).some((a) => String(a).includes(survivor.id)) || JSON.stringify(view?.state_of_record ?? {}).includes(`customer:${survivor.id}`);
-        if (!resolved) problem(`merger: after the merge, reading ${subjectOf(gone)} did not resolve to ${subjectOf(survivor)}`);
-        await op("merger", "write", (cl) => cl.write({ scope: org, facet: "commitments", record: commitmentFor(gone, day), idempotency_key: `merger:under-retired:${gone.id}:${day}` }), { expect: ["identity"], label: "new state under a retired id" });
+        if (m) { mergerState.merged = { gone: gone.id, survivor: survivor.id, day }; survivorOf.set(gone.id, survivor.id); }
+        const view = await op("merger", "read", (cl) => cl.read({ scope: org, subject: `customer:${gone.id}` }));
+        const resolved = view?.state_of_record?.subject === `customer:${survivor.id}` || (view?.subject_aliases ?? view?.state_of_record?.aliases ?? []).some((a) => String(a).includes(survivor.id)) || JSON.stringify(view?.state_of_record ?? {}).includes(`customer:${survivor.id}`);
+        if (!resolved) problem(`merger: after the merge, reading customer:${gone.id} did not resolve to customer:${survivor.id}`);
+        await op("merger", "write", (cl) => cl.write({ scope: org, facet: "commitments", record: { ...commitmentFor(gone, day), subject: `customer:${gone.id}` }, idempotency_key: `merger:under-retired:${gone.id}:${day}` }), { expect: ["identity"], label: "[redirected] new state under a retired id" });
       }
 
       // engineers: close what is due; the sloppy one tries phantoms and stale hashes first.
@@ -352,7 +361,7 @@ export async function runSeason({ days = 180, customers = 12, outDir, seed = "se
       finally { store.close(); }
     }
     const lat = Object.fromEntries(Object.entries(latency).map(([k, v]) => [k, { n: v.length, p50: pct(v, 0.5), p95: pct(v, 0.95), max: Math.max(...v) }]));
-    const report = { season: { days, customers, seed, start, end: dayList.at(-1) }, cast: Object.keys(tokens), writes: tally.writes, reads: tally.reads, captures: tally.captures, reviews: tally.reviews, refusals: tally.refusals, expected_refusals_observed: tally.expected_refusals_observed, unexpected_successes: tally.unexpected_successes, chain, crowding, merger: mergerState, human_confirmed_subjects: [...humanConfirmed], observations_captured: observerCaptured, audits, compactions, restarts, replay, latency_ms: lat, durations_ms: { total: Date.now() - startedAt }, problems, out: join(out, "season-report.json"), work };
+    const report = { season: { days, customers, seed, start, end: dayList.at(-1) }, cast: Object.keys(tokens), writes: tally.writes, reads: tally.reads, captures: tally.captures, reviews: tally.reviews, refusals: tally.refusals, expected_refusals_observed: tally.expected_refusals_observed, unexpected_successes: tally.unexpected_successes, chain, crowding, merge_redirects: tally.merge_redirects ?? 0, slow_ops: slow, merger: mergerState, human_confirmed_subjects: [...humanConfirmed], observations_captured: observerCaptured, audits, compactions, restarts, replay, latency_ms: lat, durations_ms: { total: Date.now() - startedAt }, problems, out: join(out, "season-report.json"), work };
     writeFileSync(report.out, JSON.stringify(report, null, 2) + "\n");
     writeFileSync(join(out, "season-report.md"), formatSeason(report));
     return report;
@@ -368,7 +377,7 @@ export function formatSeason(r) {
     `chain: ${JSON.stringify(r.chain)}`, `crowding (current summaries per subject when a writer omits supersedes): ${JSON.stringify(r.crowding)}`, `human-confirmed subjects: ${r.human_confirmed_subjects.length}  observations captured: ${r.observations_captured}  merge: ${JSON.stringify(r.merger)}`,
     `compactions: ${r.compactions.length}  restarts: ${r.restarts.length}  replay: ${r.replay.ok ? "OK" : "DIVERGED"} (${r.replay.partitions} partitions, ${r.replay.verified} records)`,
     `latency ms: ${Object.entries(r.latency_ms).map(([k, v]) => `${k} n=${v.n} p50=${v.p50} p95=${v.p95} max=${v.max}`).join(" | ")}`,
-    `wall clock: ${Math.round(r.durations_ms.total / 1000)} s`, "", `## Problems (${r.problems.length})`, ...(r.problems.length ? r.problems.map((p) => `- ${p}`) : ["- none"])];
+    `wall clock: ${Math.round(r.durations_ms.total / 1000)} s  slow ops (>5 s): ${JSON.stringify(r.slow_ops)}`, "", `## Problems (${r.problems.length})`, ...(r.problems.length ? r.problems.map((p) => `- ${p}`) : ["- none"])];
   return lines.join("\n") + "\n";
 }
 
