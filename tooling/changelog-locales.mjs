@@ -8,6 +8,7 @@ export const changelogLocales = {
       footer: "© Hunch — התאמה ארכיטקטונית לקוד AI.", home: "בית", githubReleases: "גרסאות ב-GitHub"
     },
     titles: [
+      "הלקח מכריז על עצמו פעם אחת",
       "דוחות המשימה עומדים בשימוש אמיתי",
       "רואים מה Hunch תרם",
       "זיכרון אוטומטי מדיוני סקירה, עם הסוכן היוזם",
@@ -61,6 +62,7 @@ export const changelogLocales = {
       footer: "© Hunch — архитектурное соответствие для ИИ-кода.", home: "Главная", githubReleases: "Релизы на GitHub"
     },
     titles: [
+      "Урок объявляет о себе один раз",
       "Отчёты о задачах выдерживают реальную работу",
       "Видно, что внёс Hunch",
       "Автоматическая память ревью с исходным агентом",
@@ -114,6 +116,7 @@ export const changelogLocales = {
       footer: "© Hunch — التوافق المعماري لكود الذكاء الاصطناعي.", home: "الرئيسية", githubReleases: "الإصدارات على GitHub"
     },
     titles: [
+      "الدرس يعلن عن نفسه مرة واحدة",
       "تقارير المهام تصمد في الاستخدام الفعلي",
       "انظر ما ساهم به Hunch",
       "ذاكرة مراجعة تلقائية مع الوكيل الذي بدأ العمل",
@@ -167,6 +170,7 @@ export const changelogLocales = {
       footer: "© Hunch — conformidad arquitectónica para código de IA.", home: "Inicio", githubReleases: "Versiones en GitHub"
     },
     titles: [
+      "La lección se anuncia una sola vez",
       "Los informes de tarea resisten el uso real",
       "Ver qué aportó Hunch",
       "Memoria automática de revisiones con el agente de origen",
