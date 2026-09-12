@@ -58,6 +58,36 @@ test("configuration never certifies runtime hook delivery, enforcement, or model
   } finally { f.cleanup(); }
 });
 
+test("hooks become verified only from host-delivered events on the expected version", async () => {
+  const { recordHookObservation } = await import("../src/core/hookObservations.js");
+  const { HUNCH_VERSION } = await import("../src/core/version.js");
+  const f = fixture();
+  try {
+    f.claude();
+    f.write(".hunch/config.json", { firmness: "strict" });
+    recordHookObservation(f.root, "claude", "SessionStart");
+    recordHookObservation(f.root, "claude", "PreToolUse");
+    recordHookObservation(f.root, "cursor", "PreCompact");
+    // The observation carries the running Hunch version; the fixture expects 1.23.1.
+    let capabilities = inspectIntegrations(f.root, "claude").harnesses[0]!.capabilities;
+    assert.equal(capabilities.context.status, "untested");
+    assert.match(capabilities.context.detail, /not the expected 1\.23\.1/);
+    f.write("package.json", { dependencies: { "@davesheffer/hunch": HUNCH_VERSION } });
+    f.claude(HUNCH_VERSION);
+    const report = inspectIntegrations(f.root, "claude");
+    capabilities = report.harnesses[0]!.capabilities;
+    assert.equal(capabilities.context.status, "verified");
+    assert.equal(capabilities["edit-blocking"].status, "verified");
+    assert.match(capabilities.context.detail, /SessionStart observed from the claude host/);
+    assert.equal(capabilities.compaction.status, "untested", "another harness's event never verifies this one");
+    assert.equal(capabilities["failure-capture"].status, "untested");
+    assert.equal(integrationHealthFails(report, ["mcp"]), true, "a fresh-server probe is still required for mcp");
+    assert.equal(integrationHealthFails(report, ["context", "edit-blocking"]), false);
+    f.write(".hunch/config.json", { firmness: "advisory" });
+    assert.equal(inspectIntegrations(f.root, "claude").harnesses[0]!.capabilities["edit-blocking"].status, "advisory-only", "an observed event cannot certify blocking when firmness does not block");
+  } finally { f.cleanup(); }
+});
+
 test("Codex MCP configuration cannot imply lifecycle support", () => {
   const f = fixture();
   try {

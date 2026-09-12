@@ -8,6 +8,16 @@ import { writeFileAtomic } from "../core/io.js";
 import { HUNCH_VERSION } from "../core/version.js";
 import { readConfig } from "../core/config.js";
 import { hunchPaths } from "../core/paths.js";
+import { readHookObservations, type HookObservation } from "../core/hookObservations.js";
+
+/** Normalized hook events that prove each capability was delivered by the host. */
+const CAPABILITY_EVIDENCE: Record<Exclude<Capability, "mcp">, readonly string[]> = {
+  context: ["SessionStart", "UserPromptSubmit"],
+  "edit-blocking": ["PreToolUse"],
+  "failure-capture": ["PostToolUseFailure", "PostToolUse"],
+  compaction: ["PreCompact"],
+};
+const OBSERVATION_FRESH_MS = 30 * 86_400_000;
 
 export const CAPABILITIES = ["mcp", "context", "edit-blocking", "failure-capture", "compaction"] as const;
 export type Capability = typeof CAPABILITIES[number];
@@ -107,6 +117,9 @@ export function inspectIntegrations(root: string, selected?: Harness): Integrati
       }
     }
   };
+  // Machine-local runtime evidence; an unreadable ledger simply leaves hooks untested.
+  let observed: HookObservation[] = [];
+  try { observed = readHookObservations(root); } catch { observed = []; }
   for (const harness of selected ? [selected] : Object.keys(HARNESSES) as Harness[]) {
     const spec = HARNESSES[harness];
     if (!selected && !existsSync(join(root, spec.mcp)) && (!spec.hooks || !existsSync(join(root, spec.hooks)))) continue;
@@ -149,7 +162,18 @@ export function inspectIntegrations(root: string, selected?: Harness): Integrati
         status.status = "advisory-only";
         status.detail = `firmness=${firmness}; edits are not blocked`;
       } else {
-        status.detail = `${event} configured; host delivery, matchers, and tool coverage are not verified`;
+        // Verified only by an event the host actually delivered, on the expected
+        // version, recently. Matchers and tool coverage beyond that event stay unproven.
+        const hit = observed.find(o => o.provider === harness && CAPABILITY_EVIDENCE[capability].includes(o.event));
+        const fresh = hit !== undefined && Date.now() - Date.parse(hit.at) <= OBSERVATION_FRESH_MS;
+        if (hit && fresh && hit.version === report.expectedVersion) {
+          status.status = "verified";
+          status.detail = `${hit.event} observed from the ${harness} host at ${hit.at} on Hunch ${hit.version}; matchers and tool coverage beyond that event are not verified`;
+        } else if (hit) {
+          status.detail = `${event} configured; last observed ${hit.at} on Hunch ${hit.version}${hit.version === report.expectedVersion ? " (stale)" : `, not the expected ${report.expectedVersion}`}`;
+        } else {
+          status.detail = `${event} configured; host delivery, matchers, and tool coverage are not verified`;
+        }
       }
     }
   }
@@ -221,7 +245,7 @@ export function formatIntegrationHealth(report: IntegrationHealth): string {
     `Hunch integrations — expected ${report.expectedVersion} (repository configuration only)`,
     ...report.harnesses.map(h => `${h.harness}:\n${CAPABILITIES.map(c => `  ${c}: ${h.capabilities[c].status} — ${h.capabilities[c].detail}`).join("\n")}`),
     ...report.issues.map(i => `ERROR ${i.file}: ${i.detail}`),
-    "Configured hooks are untested until exercised inside the host. Global settings, active sessions, and model compliance are not verified.",
+    "Hooks become verified only from lifecycle events observed inside the host on the expected version within 30 days. Global settings, active sessions, and model compliance are not verified.",
   ].join("\n");
 }
 
