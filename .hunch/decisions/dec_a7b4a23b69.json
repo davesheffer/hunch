@@ -2,7 +2,7 @@
   "id": "dec_a7b4a23b69",
   "title": "Next roadmap item: provider-neutral task contribution reports",
   "topic": "roadmap.task-contribution-reports",
-  "status": "proposed",
+  "status": "accepted",
   "context": "The user asked for a clear, production-grade next-release answer to the installed-but-is-it-helping problem and explicitly placed it next on the roadmap. They clarified that Kimi, Codex, Claude, CCC and Watchtower are providers/harnesses: Hunch must remain agnostic.",
   "decision": "Make task-scoped contribution evidence the next new roadmap implementation item. Provide one validated report engine and CLI/MCP/typed harness contract, distinguishing exact memory delivery, agent-reported application, independently observed checks and unknowns. A harness can drive lifecycle and deterministic presentation without model compliance. Preserve existing protections, project isolation, private memory boundaries, bounded retention and failure-open reporting. Qualify supported automatic presentation paths and the exact package before release; implementation/test progress does not itself constitute production sign-off.",
   "consequences": [
@@ -44,7 +44,8 @@
       "docs/task-reports.md",
       "src/core/taskReport.ts",
       "src/taskReports.ts"
-    ]
+    ],
+    "last_verified": "2026-09-12T04:10:00.482Z"
   },
   "date": "2026-09-11T10:39:12.954Z"
 }
