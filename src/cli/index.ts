@@ -4559,15 +4559,16 @@ program
 
       // Pre-edit grounding must resolve the same advertised graph as every CLI
       // and MCP consumer. Any unavailable/mismatched team route falls through to
-      // the outer fail-open catch and emits nothing, preserving the hook's
-      // non-blocking invariant without false-passing against public/stale memory.
+      // the outer fail-open catch: one "grounding unavailable" line, never a deny,
+      // never grounding from public/stale memory (dec_77d99014e0).
       const opened = openTeamStore(root, { requireFreshTeamMemory: firmness === "strict" });
       store = opened.store;
       if (firmness === "strict" && opened.teamPullStatus
         && opened.teamPullStatus !== "updated" && opened.teamPullStatus !== "current") {
         // A strict deny is only trustworthy when it includes the latest team
         // rules. Offline/busy/unconfigured team memory is unavailable, so the
-        // non-blocking hook emits nothing instead of denying from stale state.
+        // non-blocking hook says so instead of denying from stale state.
+        emitContext(provider, "PreToolUse", `Hunch grounding unavailable for this edit; it proceeds ungrounded (team memory is ${opened.teamPullStatus}; strict mode never denies from stale rules). Run \`hunch doctor\`.`);
         return;
       }
 
