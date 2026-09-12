@@ -27,6 +27,9 @@ export const BOUNDED_CLASS = Object.freeze([
   // Memory captures: graph records the agent may land by itself (con_039cee7367).
   // Store configuration is excluded: it changes what the store IS, not what it holds.
   { group: "memory", test: (p) => p.startsWith(".hunch/") && !["config.json", "local.json", "team.json"].includes(p.slice(".hunch/".length)) && !p.startsWith(".hunch/pending-") },
+  // Harness grounding blocks Hunch regenerates from the graph after a capture
+  // (src/integrations/providers.ts); generated, never hand-edited.
+  { group: "memory", test: (p) => GENERATED_GROUNDING.includes(p) },
   // Generated locale copies of docs/changelog/site text.
   { group: "locales", test: (p) => /^site\/(?:[a-z]{2}(?:-[A-Z]{2})?\/)?(?:changelog|index|docs|cookbook)\.html$/.test(p) },
   { group: "locales", test: (p) => p.startsWith("site/blog/") && p.endsWith(".html") },
@@ -34,8 +37,11 @@ export const BOUNDED_CLASS = Object.freeze([
 
 /** Paths that are outside the class NO MATTER what else matches. Kept explicit so
  *  a future allowlist rule cannot widen into them by accident. */
+/** Files `hunch init` / a capture regenerate from the graph for each harness. */
+export const GENERATED_GROUNDING = Object.freeze([".github/copilot-instructions.md", ".cursor/rules/hunch.mdc", ".windsurf/rules/hunch.md"]);
+
 export const ALWAYS_OUTSIDE = Object.freeze([
-  (p) => p.startsWith(".github/"),
+  (p) => p.startsWith(".github/") && !GENERATED_GROUNDING.includes(p),
   (p) => p === "package.json" || p === "package-lock.json",
   (p) => p.startsWith("src/") || p.startsWith("tooling/") || p.startsWith("vscode-extension/"),
   (p) => p.startsWith(".hunch/config.json") || p.startsWith(".hunch/local.json") || p.startsWith(".hunch/team.json"),
