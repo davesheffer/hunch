@@ -371,6 +371,15 @@ does not know (simulating a newer writer) is left exactly as written and never r
 the migration suite passes untouched. Forward-migration-before-validation (`con_947c578b2c`) is
 not modified by the registration — the store change is the index-file layout map only.
 
+## Capability notes
+
+Additive capabilities specified beside this contract, each with its own schema name:
+[source-backed observations](agent-observations.md) (`nuryel_capture`, `nuryel_capture_batch`),
+[observation links](observation-links.md) (`nuryel.observation-links/1`),
+[observation review](observation-review.md) (`nuryel.observation-review/1`),
+[observation pages](observation-pages.md) (`nuryel.observation-pages/1`) and
+[ledger read reuse](ledger-read-reuse.md).
+
 ## Not decided here
 
 - **Per-record visibility** inside a scope. Partition-level grants are the v1 permission model
@@ -388,5 +397,5 @@ not modified by the registration — the store change is the index-file layout m
 - **Repository-scope private content.** The contract has no `private` flag: scope decides the
   home. Sensitive repository-scope state goes through the existing `hunch_record_*` tools
   with `private:true`, or into a user/team partition.
-- **A CLI binding** for the verbs, and FTS / delivery ranking of the new kinds.
+- **A CLI binding** for `read` / `write` / `subscribe` (`hunch serve init` and `hunch serve replay` exist; the verbs themselves are HTTP, MCP and the typed client), and FTS / delivery ranking of the new kinds.
 - **Naming** — engine `hunch` / platform Nuryel, or one name for both.

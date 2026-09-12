@@ -67,6 +67,8 @@ queue; popularity never makes a lead contactable. A researched record looks like
 {"schema":"hunch.outreach-lead/1","id":"acme-payments","project":"acme/payments","repository_url":"https://github.com/acme/payments","source_url":"https://github.com/acme/payments/blob/main/AGENTS.md","observed_signal":"The repository gives coding agents detailed architecture rules in AGENTS.md.","problem_hypothesis":"The rules say what to do, but a future agent cannot see the incidents and rejected designs behind them.","segment":"platform_team","proof_id":"v1.19-retrieval","status":"qualified","follow_ups":0,"discovered_at":"2026-08-26","qualified_at":"2026-08-26","contact":{"name":"Project maintainer","channel":"email","destination":"maintainers@example.invalid","permission":"published_project_contact"}}
 ```
 
+The `proof_id` names the evidence offered; since 1.32.0 that is the task contribution report ([Task contribution reports](task-reports.md)), and the two repository-user acceptance sessions the [release plan](next-release-memory-impact.md) requires are recruited through this pipeline, never by automatic contact.
+
 Before drafting, a person runs `qualify` with the researched facts and contact permission, reviews
 the result, then runs `approve`. Validation requires the cited observation, project-specific
 hypothesis, supported proof and permitted contact path. `scraped_personal` and unknown permissions

@@ -1,6 +1,6 @@
 # Next release: see what Hunch contributed
 
-Status: shipped in 1.32.0 on 2026-09-11; the acceptance gates below that were not run before publication remain open in the qualification record.  
+Status: shipped in 1.32.0 on 2026-09-11 and hardened in 1.32.1 and 1.32.2 on 2026-09-12; all five implementation slices were executed; the acceptance gates below that were not run before publication remain open in the [qualification record](task-report-qualification.md) (its 2026-09-12 update lists them). This document is kept as the plan that was executed.  
 Requested: 2026-09-11.  
 Release: 1.32.0.  
 Priority: complete this experience before starting the next new roadmap feature. Existing live-pilot measurement continues.
@@ -114,7 +114,7 @@ Unsupported evidence remains unverified. A report can show a passing check while
 
 ## Technical design
 
-Introduce a versioned task report derived by one core service. Proposed surfaces are `hunch report [task-id]`, `--json`, `--html <path>`, and a corresponding client-neutral MCP read tool. Names are new proposals; `hunch impact` retains its existing branch/dependency meaning.
+Introduce a versioned task report derived by one core service. The surfaces, shipped as proposed, are `hunch report [task-id]`, `--json`, `--html <path>`, and the client-neutral MCP read tool `hunch_report`; `hunch impact` retains its existing branch/dependency meaning.
 
 Use an explicit repository/worktree or served-partition scope, task ID, attempt ID, delivery occurrence ID, native content-addressed envelope ID, record hashes, evidence references, observation source, and report revision. A repeated envelope can have the same content ID in different tasks; an occurrence ID distinguishes delivery events. Task start/finish markers come from a supported host adapter or an explicit CLI/MCP lifecycle call. If identity cannot be established, retain unassociated activity and say why; never attach it to the most recent task by guesswork.
 
@@ -177,7 +177,7 @@ All items below must have a recorded result on the release candidate. An unrun i
 - **Scope and privacy:** repeat private-sentinel, task/worktree isolation and safe-rendering checks on the packaged candidate. The report is local by default; no automatic external upload, public export or background network dependency is introduced.
 - **Release integrity:** required CI and platform checks pass, new packaged resources are covered by the release allowlist, all generated version pins agree, and install/upgrade rehearsals use the exact packed candidate. Public copy describes only behavior observed on named supported host versions.
 
-Keep a release acceptance record containing candidate revision/package hash, host versions, case IDs, task/report IDs, evidence artifact locations, measured latencies, failures and final dispositions. Release sign-off is blocked while any original-user requirement is unmet or any required case is unknown. The current plan is not that sign-off.
+Keep a release acceptance record containing candidate revision/package hash, host versions, case IDs, task/report IDs, evidence artifact locations, measured latencies, failures and final dispositions. Release sign-off is blocked while any original-user requirement is unmet or any required case is unknown. That record is [the qualification record](task-report-qualification.md); the items it still lists as open were not waived by publication.
 
 ## Scope decisions and revisit conditions
 

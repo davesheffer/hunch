@@ -8,7 +8,7 @@ The protocol was originally implemented with ORC as the external producer and Hu
 
 Hunch remains useful without any specific orchestrator, and this protocol does not make Hunch a workflow engine, raw telemetry warehouse or model-training service.
 
-Read [Deterministic organizational state](deterministic-state.md) for the current product topology.
+Read [Deterministic organizational state](deterministic-state.md) for the current product topology. The 1.32 [task contribution reports](task-reports.md) build on this boundary: a delivery, an agent-reported application, a rule verdict and an observed command are the evidence grades the report keeps apart.
 
 ## Purpose
 

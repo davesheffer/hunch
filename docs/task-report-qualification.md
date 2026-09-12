@@ -5,6 +5,17 @@ in 1.32.0. The human acceptance items under “Remaining release acceptance” w
 not completed before publication and remain open; this record is not a claim that
 they were.
 
+## Update — 2026-09-12
+
+1.32.0 was published on 2026-09-11 and 1.32.1 and 1.32.2 on 2026-09-12 through the release
+workflow with required platform CI and the release gate on each tag, so items 1 and 4 under
+"Remaining release acceptance" are done. The dogfooding hardening those releases carry
+(`task verify --timeout`, a bounded MCP summary, hook runtime evidence, the `Hunch recalled:`
+line, `drift --fail-on`) is described in [Task contribution reports](task-reports.md). Still
+open: interactive-terminal display, the two repository-user acceptance sessions, a live task
+showing a rule-supported application, and the MCP registry publish. The text below is the record
+as written before publication and is kept unchanged.
+
 ## Current work after the qualified foundation
 
 The clean candidate and archive below qualify the foundation only. Subsequent

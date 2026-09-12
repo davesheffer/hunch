@@ -15,6 +15,28 @@ The reason is not code quality. The code is unusually clean for its size: zero r
 markers in ~60,000 lines, zero `@ts-ignore`, zero skipped tests, intent-conformance 7/7, no open
 escalations. The blockers are process state and gate configuration.
 
+## Update — 2026-09-12
+
+What changed since the red team, each with where it is verified:
+
+- Required status checks on `main`: `ci` (Node 22 and 24), `hunch-guard`,
+  `platform-matrix-safety` (macOS, Windows), with `enforce_admins` — configured 2026-09-09.
+- `npm-publish` and `vscode-publish` environments each require reviewer `davesheffer`
+  (`can_admins_bypass` is still `true`; undecided). Pushing a `v*` tag no longer publishes without
+  an approval.
+- `hunch drift --fail-on <kinds>` shipped in 1.32.2 and the release gate fails on `finding-stale`.
+  The nine findings citing deleted Sofia files were re-recorded with their true location.
+- The `.claude/pipeline/` prototype was removed in 1.32.2.
+- Hook capabilities are verified from lifecycle events actually delivered (1.32.1); the
+  qualification record holds live Claude and Codex runs.
+- Memory hygiene is a standing agent obligation, not a checklist item: `con_039cee7367`.
+- Gate 5 has a first live number: one user, scripted, 0 of 3 status replies unsourced after one
+  read (2026-09-12). The two-user week is blocked on CRM configuration on the second machine.
+- The loop stands at rung 1 of the ladder below. Rung 3's condition ("Gate 5 has a number") means
+  the two-user number, not the single-user one.
+
+The findings below are the 2026-09-09 snapshot and are kept as written.
+
 ## What the red team found (2026-09-09)
 
 Attacks that landed, each with the evidence that landed it.
@@ -89,6 +111,10 @@ Gate 5 of the pilot needs a live Sofia and a live engineering agent on David's e
 CRM, real subscription CLI). The roadmap dated it "the week of 2026-09-08". No number exists in this
 repository. Every other item below can be done by an agent; this one cannot. Schedule it first.
 
+*2026-09-12:* the single-user leg was run by an agent on the live environment (see the update
+above). What remains human-only is narrower: the CRM configuration on the second machine for the
+two-user week, and one approved CRM comment for the approval → receipt leg.
+
 ## The promotion ladder for the development loop
 
 Each rung names what the agent may do, the gate that holds it there, and the measured criterion
@@ -111,17 +137,17 @@ Human-only actions are marked. Everything else an agent can do from this checkou
    #152, #156); decide #108 and #122. Remove the `/private/tmp` release worktree, delete the five
    `archive/bench-*` branches and the three abandoned release branches, apply or drop the `site/`
    stash. Run `npm ci` before any test run and record the suite's wall-clock time in this file.
-2. **Gates (human, one hour).** Make `ci` (Node 22 and 24), `hunch-guard` and
+2. **Gates (human, one hour) — done 2026-09-09 except the second identity.** Make `ci` (Node 22 and 24), `hunch-guard` and
    `platform-matrix-safety` required status checks on `main`. Add a required reviewer to the
    `npm-publish` and `vscode-publish` environments. Create a second identity (a GitHub App or a
    bot account with minimum scope) for agent-authored PRs, so author and approver are never the
    same account and the local `repo`+`workflow` token stops being the agent's credential.
-3. **Memory hygiene (agent, two hours).** Re-record the nine findings that cite deleted files with
+3. **Memory hygiene (agent, two hours) — done 2026-09-12; now standing (`con_039cee7367`).** Re-record the nine findings that cite deleted files with
    their true location (the Sofia repository) or mark them stale. Run `hunch wiki --heal --private`
    and `hunch adopt-drafts`. Triage the twenty overlay proposals: shipped ones become accepted or
    superseded; live ones are re-recorded publicly with a topic so `hunch now` becomes the work
    queue. Make `hunch drift` fail on finding-stale in CI, not only on anchor drift.
-4. **Arm the shell on itself (agent, one hour; one human confirmation).** Run
+4. **Arm the shell on itself (agent, one hour; one human confirmation) — partly done: hook capabilities verified from runtime evidence (1.32.1), `.claude/pipeline/` removed (1.32.2); `ci` enforcement of the six constraints and semantic search remain.** Run
    `hunch integrations check --harness claude --probe --require mcp,context,edit-blocking` and fix
    until `verified`. Either wire `.claude/pipeline/` into settings or delete it. Move the six
    human-confirmed blocking constraints from `advisory_v1` to `ci` enforcement so the guard fails
