@@ -80,14 +80,14 @@ export async function runSeason({ days = 180, customers = 12, outDir, seed = "se
   bind();
 
   /** One call with latency + outcome bookkeeping. `expect` names the refusal codes this persona expects here. */
-  async function op(who, verb, fn, { expect = [], label = "" } = {}) {
+  async function op(who, verb, fn, { expect = [], label = "", optional = false } = {}) {
     const t0 = Date.now();
     label = label || `${verb} on ${currentDay}`;
     try {
       const result = await fn(clients[who]);
       (latency[verb] ??= []).push(Date.now() - t0);
       if (Date.now() - t0 > 5000) slow.push({ who, label, ms: Date.now() - t0 });
-      if (expect.length) { tally.unexpected_successes++; problem(`${who}: ${label || verb} succeeded but a ${expect.join("/")} refusal was expected`); }
+      if (expect.length && !optional) { tally.unexpected_successes++; problem(`${who}: ${label || verb} succeeded but a ${expect.join("/")} refusal was expected`); }
       if (verb === "write" && result?.outcome) count(tally.writes, result.outcome);
       if (verb === "read") tally.reads++;
       return result;
@@ -147,7 +147,7 @@ export async function runSeason({ days = 180, customers = 12, outDir, seed = "se
         if (!humanConfirmed.has(subjectOf(c))) {
           const mine = seen?.state_of_record?.current?.find((r) => r.facet === "derived" && r.id === derivedId(s));
           if (!mine) {
-            const incumbent = seen?.state_of_record?.current?.find((r) => r.facet === "derived");
+            const incumbent = seen?.state_of_record?.current?.find((r) => r.facet === "derived" && (seen.records?.[r.id]?.transform_version ?? "summary/v1") === s.transform_version);
             await op("sofia-careful", "write", (cl) => cl.write({ scope: org, facet: "derived", record: s, idempotency_key: `careful:derived:${c.id}:${day}`, ...(incumbent ? { supersedes: incumbent.id } : {}) }));
           } else tally.reuse = (tally.reuse ?? 0) + 1;
         }
@@ -171,7 +171,10 @@ export async function runSeason({ days = 180, customers = 12, outDir, seed = "se
       // subject → 409; a different transform on a subject with a current summary → superseded/409 by design.
       for (const c of active) {
         const s = summary(c, day, i % 2 ? "summary/v1" : "summary/v2");
-        const w = await op("sofia-hasty", "write", (cl) => cl.write({ scope: org, facet: "derived", record: s, idempotency_key: `hasty:derived:${c.id}:${day}:${s.transform_version}` }));
+        // Since one-current-derived-per-subject-transform: a new statement beside a current one of the
+        // same transform is refused unless it names it; hasty's very first statement per transform lands.
+        const w = await op("sofia-hasty", "write", (cl) => cl.write({ scope: org, facet: "derived", record: s, idempotency_key: `hasty:derived:${c.id}:${day}:${s.transform_version}` }), { expect: ["conflict"], optional: true, label: `hasty summary ${c.id} ${day}` });
+        if (w?.refused === "conflict") crowding.refused_without_supersedes = (crowding.refused_without_supersedes ?? 0) + 1;
         if (w?.outcome === "created" && humanConfirmed.has(subjectOf(c))) crowding.beside_human_confirmed++;
       }
 
@@ -296,11 +299,14 @@ export async function runSeason({ days = 180, customers = 12, outDir, seed = "se
       if (i % 10 === 9) {
         const c = active[0];
         const s = summary(c, day); s.provenance = prov(`david confirmed ${day}`, "human_confirmed", 1);
-        const w = await op("david", "write", (cl) => cl.write({ scope: org, facet: "derived", record: s, idempotency_key: `david:confirm:${c.id}:${day}` }));
+        // A human reads first too: his confirmation names the current statement it replaces.
+        const held = await op("david", "read", (cl) => cl.read({ scope: org, subject: subjectOf(c) }));
+        const inc = held?.state_of_record?.current?.find((r) => r.facet === "derived" && r.id !== derivedId(s) && (held.records?.[r.id]?.transform_version ?? "summary/v1") === s.transform_version);
+        const w = await op("david", "write", (cl) => cl.write({ scope: org, facet: "derived", record: s, idempotency_key: `david:confirm:${c.id}:${day}`, ...(inc ? { supersedes: inc.id } : {}) }));
         if (w) humanConfirmed.add(subjectOf(c));
         // An agent claiming human_confirmed is downgraded, never trusted: it must not overwrite david.
         const s2 = summary(c, day, "summary/v3"); s2.provenance = prov("forged", "human_confirmed", 1);
-        const forged = await op("sofia-hasty", "write", (cl) => cl.write({ scope: org, facet: "derived", record: s2, idempotency_key: `hasty:forge:${c.id}:${day}` }));
+        const forged = await op("sofia-hasty", "write", (cl) => cl.write({ scope: org, facet: "derived", record: s2, idempotency_key: `hasty:forge:${c.id}:${day}` }), { expect: ["conflict"], optional: true, label: `forged provenance ${c.id} ${day}` });
         if (forged?.record_id) {
           const page = await op("orc", "records", (cl) => cl.records({ scope: org, ids: [forged.record_id] }));
           const src = page?.records?.[forged.record_id]?.provenance?.source ?? "";

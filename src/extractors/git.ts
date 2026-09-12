@@ -526,6 +526,14 @@ const READ_REMOTE_TIMEOUT_MS = 5_000;
 // drains every already-durable JSON write itself. This removes the old "maybe a
 // third capture sweeps it later" liveness hole.
 const CAPTURE_LOCK_HANDOFF_MS = 120_000;
+/** Longest one git call inside a memory flush may take before it is stopped and the flush
+ *  reports durability "local" (HUNCH_COMMIT_GIT_TIMEOUT_MS overrides; tests use a short one). */
+const COMMIT_GIT_TIMEOUT_MS = 60_000;
+const SLOW_FLUSH_MS = 5_000;
+function commitGitTimeoutMs(): number {
+  const raw = Number(process.env.HUNCH_COMMIT_GIT_TIMEOUT_MS);
+  return Number.isFinite(raw) && raw > 0 ? raw : COMMIT_GIT_TIMEOUT_MS;
+}
 
 function unsafeOverlayPublication(hunchDir: string, protectedRepoRoot: string): boolean {
   let currentOverlayRoot = dirname(resolve(hunchDir));
@@ -581,9 +589,19 @@ export function commitAndPushHunch(hunchDir: string, message: string, opts: Hunc
       for (let attempt = 0; attempt < 2; attempt++) {
         const startedAt = Date.now();
         try {
-          execFileSync("git", ["-C", hunchDir, ...args], { stdio: "ignore", env });
+          // A served write blocks on this call: bound it, and never let a commit trigger git's
+          // automatic gc (minutes of repacking inside one write, fnd_4318727d35). A timed-out
+          // call returns false, the flush reports durability "local", and the next flush
+          // sweeps the same files up — nothing is lost, and the server is not frozen.
+          execFileSync("git", ["-C", hunchDir, "-c", "gc.auto=0", ...args], { stdio: "ignore", env, timeout: commitGitTimeoutMs() });
+          const took = Date.now() - startedAt;
+          if (took > SLOW_FLUSH_MS) console.error(`hunch: git ${args.find((a) => !a.startsWith("-") && a !== "core.autocrlf=false") ?? args[0]} in "${hunchDir}" took ${took} ms`);
           return true;
         } catch (error) {
+          if ((error as NodeJS.ErrnoException & { signal?: string }).signal === "SIGTERM" || (error as NodeJS.ErrnoException).code === "ETIMEDOUT") {
+            console.error(`hunch: git ${args.find((a) => !a.startsWith("-")) ?? args[0]} in "${hunchDir}" exceeded ${commitGitTimeoutMs()} ms and was stopped; the write stays local until the next flush`);
+            return false;
+          }
           // best-effort: nothing staged / not a repo / offline — EXCEPT a
           // stranded index.lock, which would otherwise fail every future
           // flush silently (issue #53); heal it and retry once.
@@ -634,7 +652,7 @@ export function commitAndPushHunch(hunchDir: string, message: string, opts: Hunc
     // private/shared repository above; it can never delete protected source.
     const staged = stagedMemoryPaths(hunchDir, env, opts.push !== false);
     if (staged === null) {
-      try { execFileSync("git", ["-C", hunchDir, "reset", "-q", "--", "."], { stdio: "ignore", env }); } catch { /* best-effort unstage */ }
+      try { execFileSync("git", ["-C", hunchDir, "reset", "-q", "--", "."], { stdio: "ignore", env, timeout: commitGitTimeoutMs() }); } catch { /* best-effort unstage */ }
       // Public-store commits (push:false) skip QUIETLY: a non-memory staged set there is
       // usually just the user's own staged work, not a misconfigured overlay — the record
       // stays on disk and the next flush's `git add .` sweeps it up. The overlay path
@@ -697,8 +715,9 @@ export function commitAndPushHunch(hunchDir: string, message: string, opts: Hunc
           ...(opts.push === false ? [] : ["-c", `core.attributesFile=${gitNullDevice()}`]),
           "-c", "core.autocrlf=false",
           "-c", "commit.gpgsign=false",
+          "-c", "gc.auto=0",
           "commit", "--no-gpg-sign", "--only", "-m", message, "--", ...commitPaths,
-        ], { stdio: "ignore", env, timeout: 15_000 });
+        ], { stdio: "ignore", env, timeout: commitGitTimeoutMs() });
         committed = true;
       } catch (error) {
         // Nothing staged / not a repo stays quiet, as before; only a healed
@@ -788,13 +807,13 @@ function stagedMemoryPaths(
 ): StagedMemory | null {
   let out = "";
   let prefix = "";
-  try { prefix = execFileSync("git", ["-C", hunchDir, "rev-parse", "--show-prefix"], { encoding: "utf8", env }).trim().replace(/\\/g, "/"); }
+  try { prefix = execFileSync("git", ["-C", hunchDir, "rev-parse", "--show-prefix"], { encoding: "utf8", env, timeout: commitGitTimeoutMs() }).trim().replace(/\\/g, "/"); }
   catch { return null; }
   if (!prefix) return null; // a Hunch layout is a scoped subdirectory, never the whole repository
   // Snapshot ID churn is semantically one delete plus one add. Disable Git's
   // heuristic rename presentation so the exact paths remain independently
   // auditable against the contained-memory rules below.
-  try { out = execFileSync("git", ["-C", hunchDir, "diff", "--cached", "--no-ext-diff", "--no-textconv", "--no-renames", "--name-status"], { encoding: "utf8", env }); }
+  try { out = execFileSync("git", ["-C", hunchDir, "diff", "--cached", "--no-ext-diff", "--no-textconv", "--no-renames", "--name-status"], { encoding: "utf8", env, timeout: commitGitTimeoutMs() }); }
   catch { return null; }
   const lines = out.split("\n").map((l) => l.trim()).filter(Boolean);
   if (!lines.length) return { memory: [], derived: [] };

@@ -715,6 +715,23 @@ export function writeState(store: HunchStore, input: unknown, opts: WriteOptions
     }
   }
 
+  // one-current-derived-per-subject-transform: a NEW current derived statement on a subject that
+  // already holds a current statement under the same transform must name it in `supersedes`.
+  // Otherwise a writer that never names its predecessor leaves a growing pile of "current"
+  // statements that every reader has to reconcile (season finding fnd_1939ced249: up to 58 on
+  // one subject over half a year). Writing the same identity again is an update or a replay of
+  // that record and is not affected; a different transform is a different statement.
+  if (facet === "derived" && (record as EntityFor["derived"]).state === "current") {
+    const d = record as EntityFor["derived"];
+    const incumbent = store.recsInHome("derived", home).find((r) => {
+      const x = r as EntityFor["derived"];
+      return x.id !== id && x.id !== supersedes && x.subject === d.subject && x.transform_version === d.transform_version && x.state === "current" && x.valid_to === null;
+    }) as EntityFor["derived"] | undefined;
+    if (incumbent) {
+      throw new StateRefusal("conflict", `${d.subject} already has a current ${d.transform_version} statement ${incumbent.id}; pass supersedes: "${incumbent.id}" to replace it, or write that identity to update it`, { incumbent_id: incumbent.id, reason: "one-current-derived-per-subject-transform" });
+    }
+  }
+
   // The chain (Gate 4): a receipt names what it rested on, a closure names the receipt.
   // Both are checked against the drawer, grants first, before anything lands.
   if (facet === "receipts") assertRestsOn(store, request.principal, request.scope, (record as EntityFor["receipts"]).rests_on ?? []);
