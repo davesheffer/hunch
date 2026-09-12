@@ -88,3 +88,37 @@ fields), and choosing a receipt id (`422 identity`).
 - `ledger` — `head_seq`, contiguity (`assertChangeSequence` from 0), records fetched by id
 - `durations_ms` — total and per-sofia average
 - `problems` — every mismatch the orc or engineer found (empty on a clean run)
+
+## The season (half a year, ten styles)
+
+`season.mjs` runs the same drawer for a run of simulated days under ten principals whose styles
+differ on purpose, driven by a conductor that advances one day at a time:
+
+| principal | kind | style | refusals it expects |
+| --- | --- | --- | --- |
+| `sofia-careful` | agent | reads first; reuses a current summary; supersedes the incumbent when it writes | — |
+| `sofia-hasty` | agent | writes summaries without reading and never names what it supersedes | — (its effect is the crowding metric) |
+| `sofia-stale` | agent | rests a receipt on a commitment hash it read two weeks ago | `409 conflict` when the record moved |
+| `sofia-replayer` | agent | re-sends yesterday's key: identical payload replays, a changed one is refused; chooses an id; reads another drawer | `409 idempotency`, `422 identity`, `403 outside-grants` |
+| `observer` | agent | two source-backed observations a day, a replayed batch every other day, a review weekly, a paged walk monthly | — |
+| `merger` | agent | one entity per external ref; a duplicate, a subject written as an entity's key, state under a retired id; a merge on day 41 | `409 conflict`, `422 identity` |
+| `engineer` | agent | closes every escalation through the chain, superseding its earlier decision on the same topic | — |
+| `engineer-sloppy` | agent | a phantom `closed_by` and a stale `rests_on` before every real closure | `409 conflict` |
+| `david` | human | confirms a summary every ten days; an agent's in-place overwrite is refused; a forged `human_confirmed` is downgraded | — |
+| `orc` | service | weekly audit: current summaries per subject, in-force views across agents, every closure link by link; refused the repository | `403 outside-grants` |
+
+Monthly the conductor compacts the organization ledger and restarts the server; subscribers
+below the floor must resync and the ledger above it must stay contiguous. The season ends with a
+replay of every partition and latency percentiles per verb.
+
+```bash
+npm run build
+node tooling/agent-farm/season.mjs --days 180 --customers 12 --out /tmp/season   # ~10 minutes
+npx tsx --test test/agent-farm-season.test.ts                                    # 21 days, asserted
+```
+
+Report: `<out>/season-report.json` and `season-report.md`. A **problem** is any refusal a persona did
+not expect, any success where a refusal was expected, a contradiction the orc found, a divergent
+replay, or a broken invariant. `crowding` reports what a writer that omits `supersedes` leaves
+behind: the maximum number of current summaries on one subject and how many subjects carry more
+than one — measured, because the contract leaves currentness to the writer.
