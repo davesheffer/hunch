@@ -59,7 +59,7 @@ hunch integrations check --harness claude --probe --require mcp
 hunch integrations check --harness codex --require context,edit-blocking
 ```
 
-Capabilities are reported as **verified**, **advisory-only**, **unsupported** or **untested**. `--require` fails unless every named capability is verified.
+Capabilities are reported as **verified**, **advisory-only**, **unsupported** or **untested**. `--require` fails unless every named capability is verified. `mcp` is verified by a fresh-server probe; hook capabilities become verified only from lifecycle events actually delivered to Hunch's hook on the expected version within the last 30 days (machine-local evidence, the same trust level as the served ledger), so a repository whose agent has actually run shows it, and one that only has configuration does not.
 
 The Codex integration currently supplies MCP and instructions, with no native lifecycle adapter. The opt-in `--probe` verifies a fresh MCP process, not whether an existing host session or model actually followed the memory.
 

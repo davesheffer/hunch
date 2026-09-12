@@ -92,6 +92,7 @@ import { recordServed, servedSummary } from "../core/served.js";
 import { recordTaskDelivery, reportActivity } from "../core/taskReport.js";
 import { snapshotDeliveredRecords } from "../core/taskReportEvidence.js";
 import { hookReportTaskId, startHookReport, stopHookReport, observeHookDenial } from "../core/taskReportHook.js";
+import { recordHookObservation } from "../core/hookObservations.js";
 import { contextHookOutput, denyHookOutput, hookProvider, normalizeHookEvent, stopHookOutput, type HookProvider } from "../core/agenthook.js";
 import {
   PIPELINE_LOOP,
@@ -4274,6 +4275,9 @@ program
       const evt = normalizeHookEvent(JSON.parse(await readStdin()), provider);
       if (!evt) return;
       const root = findRoot();
+      // The host delivered this event: runtime evidence for `hunch integrations check`,
+      // recorded before any policy decision so firmness never hides delivery itself.
+      recordHookObservation(root, provider, evt.hook_event_name);
       const paths = hunchPaths(root);
       const firmness = readConfig(paths).firmness;
       if (firmness === "off") return;
