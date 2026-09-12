@@ -3,7 +3,8 @@
 import { realpathSync } from "node:fs";
 import { z } from "zod";
 import { finishReportTask, listReportTasks, readTaskReport, readLessonHistory, recordReportClaim, recordTaskDelivery, reportHash, reportPresentationEnabled, startReportTask, type ReportClaim, type ReportRecord, type LessonReference } from "./core/taskReport.js";
-import { reportSourceSnapshot, runReportCheck, runReportConformance } from "./core/taskReportEvidence.js";
+import { DEFAULT_CHECK_TIMEOUT_MS, reportSourceSnapshot, runReportCheck, runReportConformance } from "./core/taskReportEvidence.js";
+export { DEFAULT_CHECK_TIMEOUT_MS, MAX_CHECK_TIMEOUT_MS } from "./core/taskReportEvidence.js";
 import { renderTaskReport, writeTaskReportHtml } from "./core/taskReportRender.js";
 import type { DeliveryEnvelope } from "./core/delivery.js";
 import { hunchPaths } from "./core/paths.js";
@@ -38,8 +39,9 @@ export function createTaskReporter(root: string) {
     applied(taskId: string, claim: ReportClaim) { return recordReportClaim(scope, taskId, claim); },
     /** Runs locally as argv, without a shell. Only use commands authorized by
      * the task owner. This API does not accept remote claimed-success receipts. */
-    verify(taskId: string, command: string[], label: string, options?: Parameters<typeof runReportCheck>[5]) {
-      return runReportCheck(scope, taskId, command, label, 120_000, options);
+    verify(taskId: string, command: string[], label: string, options?: Parameters<typeof runReportCheck>[5] & { timeoutMs?: number }) {
+      const { timeoutMs = DEFAULT_CHECK_TIMEOUT_MS, ...rest } = options ?? {};
+      return runReportCheck(scope, taskId, command, label, timeoutMs, rest);
     },
     /** Hunch evaluates each delivered lesson's declared rule against the changed
      * files. Deterministic and local; the harness supplies no verdict. */

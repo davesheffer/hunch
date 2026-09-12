@@ -135,6 +135,8 @@ export function runReportConformance(root: string, store: HunchStore, taskId: st
   });
 }
 
+export const DEFAULT_CHECK_TIMEOUT_MS = 120_000;
+export const MAX_CHECK_TIMEOUT_MS = 6 * 60 * 60_000;
 /** A deliberately explicit command wrapper. The caller chooses the command;
  * reports never execute commands automatically to validate submitted claims. */
 export async function runReportCheck(root: string, taskId: string, command: string[], label: string, timeoutMs = 120_000, options: {
@@ -142,7 +144,9 @@ export async function runReportCheck(root: string, taskId: string, command: stri
   onStdout?: (chunk: Buffer) => void;
   onStderr?: (chunk: Buffer) => void;
 } = {}): Promise<ReportCheck> {
-  if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 600_000) throw new Error("verification timeout must be between 1 and 600000 ms");
+  // A full suite can legitimately run for half an hour (fnd_70dd5c4034); the
+  // bound exists so an abandoned runner cannot hold a task open indefinitely.
+  if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > MAX_CHECK_TIMEOUT_MS) throw new Error(`verification timeout must be between 1 and ${MAX_CHECK_TIMEOUT_MS} ms`);
   options.signal?.throwIfAborted();
   const task = readTaskReport(root, taskId).task;
   if (task.state !== "open") throw new Error("cannot verify a closed task");
