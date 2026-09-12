@@ -282,6 +282,13 @@ test("behavior execution cannot mutate its shared dependency snapshot and ordina
     const evaluationAfterTamper = evaluateExecutableBehaviorPolicy(root, policy, { commit: head });
     assert.equal(evaluationAfterTamper.result, "error");
     assert.equal(evaluationAfterTamper.behavior?.error_code, "dependency-snapshot-unavailable");
+    assert.match(evaluationAfterTamper.explanation, /pinned ids/, "a present cache with no exact match names the pinned snapshots and the re-plan path");
+    // A machine that never built the cache is a different, named situation (fnd_b421b3f7ab).
+    rmSync(join(root, ".hunch-cache", "behavior-deps"), { recursive: true, force: true });
+    const evaluationWithoutCache = evaluateExecutableBehaviorPolicy(root, policy, { commit: head });
+    assert.equal(evaluationWithoutCache.result, "error", "an absent cache is never coerced into a pass");
+    assert.equal(evaluationWithoutCache.behavior?.error_code, "dependency-snapshot-cache-absent");
+    assert.match(evaluationWithoutCache.explanation, /behavior-deps/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
