@@ -1,0 +1,24 @@
+{
+  "id": "con_039cee7367",
+  "type": "architecture",
+  "statement": "Memory hygiene is the agent's job, done without waiting for the human: accept shipped roadmap proposals, settle provenance-repair escalations (apply the true commit or drop), re-anchor or stale findings, and land the resulting capture commits through a PR. Only decisions that need genuine product judgment are queued for the human.",
+  "scope": [
+    "**"
+  ],
+  "severity": "warning",
+  "enforcement": "advisory_v1",
+  "match": null,
+  "forbids": null,
+  "rationale": "David, 2026-09-12: \"these must be done automatically, not wait for me.\" Queuing routine hygiene behind a human makes `hunch now` and the escalation queue stale, which starves the autonomous loop of anything true to read. docs/autonomous-development.md step 3 already assigns memory hygiene to the agent.",
+  "source_decision": null,
+  "violations": [],
+  "status": "active",
+  "valid_from": "2026-09-12T04:12:05.496Z",
+  "valid_to": null,
+  "provenance": {
+    "source": "agent_recorded",
+    "confidence": 0.75,
+    "evidence": [],
+    "last_verified": "2026-09-12T04:12:05.496Z"
+  }
+}
