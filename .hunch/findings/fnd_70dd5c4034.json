@@ -1,14 +1,15 @@
 {
   "id": "fnd_70dd5c4034",
   "title": "task verify CLI cannot retain a check longer than two minutes",
-  "observation": "The `hunch task verify` CLI runs the wrapped command with a fixed 120 s timeout and exposes no --timeout flag; the engine API caps timeoutMs at 600 s. A repository whose full suite takes ~30 minutes (this one) cannot retain that run as an observed check: the wrapper records exit_code null / timed_out true, which the report correctly shows as not passed. Agents are then steered toward short checks only, or the long check runs outside the wrapper and stays unverified in the report.",
+  "observation": "The `hunch task verify` CLI ran the wrapped command with a fixed 120 s timeout and exposed no --timeout flag; the engine API capped timeoutMs at 600 s. A repository whose full suite takes ~30 minutes could not retain that run as an observed check: the wrapper recorded exit_code null / timed_out true. RESOLVED 2026-09-12 by PR #174 (merged 90c8057, shipped in 1.32.1): `hunch task verify <id> --timeout <seconds> -- <cmd>` up to six hours (MAX_CHECK_TIMEOUT_MS), default still two minutes; long suites are now retained as passed checks (used the same day on the Sofia suite).",
   "evidence": [
-    "hunch task verify htask_74605f1a1b4a25a44823022e --label 'Full test suite' -- npm test → {\"exit_code\": null, \"timed_out\": true, \"check_id\": \"hev_2fad8870650ce2382686dec9\"} on 2026-09-11",
-    "src/cli/taskReport.ts: runReportCheck(findRoot(), id, command, opts.label, 120_000, …) with no timeout option; src/core/taskReportEvidence.ts: timeoutMs must be ≤ 600_000"
+    "1.32.1 CHANGELOG: task verify --timeout up to six hours",
+    "src/core/taskReportEvidence.ts: MAX_CHECK_TIMEOUT_MS = 6 h",
+    "PR #174 merged 90c8057"
   ],
   "method": null,
   "severity": "medium",
-  "triage": "open",
+  "triage": "resolved",
   "affected_files": [
     "src/cli/taskReport.ts",
     "src/core/taskReportEvidence.ts",
@@ -18,14 +19,15 @@
   "violates_constraint": null,
   "spawned_decision": null,
   "observed_at": "2026-09-11T18:26:33.896Z",
-  "resolved_commit": null,
+  "resolved_commit": "90c8057",
   "provenance": {
     "source": "human_confirmed",
     "confidence": 0.95,
     "evidence": [
-      "hunch task verify htask_74605f1a1b4a25a44823022e --label 'Full test suite' -- npm test → {\"exit_code\": null, \"timed_out\": true, \"check_id\": \"hev_2fad8870650ce2382686dec9\"} on 2026-09-11",
-      "src/cli/taskReport.ts: runReportCheck(findRoot(), id, command, opts.label, 120_000, …) with no timeout option; src/core/taskReportEvidence.ts: timeoutMs must be ≤ 600_000"
+      "1.32.1 CHANGELOG: task verify --timeout up to six hours",
+      "src/core/taskReportEvidence.ts: MAX_CHECK_TIMEOUT_MS = 6 h",
+      "PR #174 merged 90c8057"
     ],
-    "last_verified": "2026-09-11T18:26:33.896Z"
+    "last_verified": "2026-09-12T10:40:15.529Z"
   }
 }
