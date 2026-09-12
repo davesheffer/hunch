@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { findRoot } from "../core/paths.js";
 import { writeFileAtomic } from "../core/io.js";
 import { finishReportTask, forgetReportTask, listReportTasks, pruneReportHistory, readTaskReport, readLessonHistory, startReportTask } from "../core/taskReport.js";
-import { reportSourceSnapshot, runReportCheck, runReportConformance } from "../core/taskReportEvidence.js";
+import { DEFAULT_CHECK_TIMEOUT_MS, MAX_CHECK_TIMEOUT_MS, reportSourceSnapshot, runReportCheck, runReportConformance } from "../core/taskReportEvidence.js";
 import { renderTaskReport, writeTaskReportHtml } from "../core/taskReportRender.js";
 import { assertReportPath } from "../core/taskReportPaths.js";
 import { publicTaskReport } from "../core/taskReportPublic.js";
@@ -46,15 +46,18 @@ export function registerTaskReportCommands(program: Command, openStore: () => { 
     });
   task.command("verify <id> <command...>").description("Explicitly run a verification command and retain its result/hash, never raw output; use -- before the command")
     .option("--label <label>", "short name of the check", "Verification command")
+    .option("--timeout <seconds>", `seconds before the command tree is stopped and recorded as timed out (max ${MAX_CHECK_TIMEOUT_MS / 1000})`, String(DEFAULT_CHECK_TIMEOUT_MS / 1000))
     .option("--json", "emit only the result JSON, suppressing live command output")
-    .action(async (id: string, command: string[], opts: { label: string; json?: boolean }) => {
+    .action(async (id: string, command: string[], opts: { label: string; timeout: string; json?: boolean }) => {
+      const seconds = Number(opts.timeout);
+      if (!Number.isInteger(seconds) || seconds < 1 || seconds * 1000 > MAX_CHECK_TIMEOUT_MS) throw new Error(`--timeout must be a whole number of seconds between 1 and ${MAX_CHECK_TIMEOUT_MS / 1000}`);
       const controller = new AbortController();
       let signalExit = 0;
       const interrupt = () => { signalExit = 130; controller.abort(); };
       const terminate = () => { signalExit = 143; controller.abort(); };
       process.on("SIGINT", interrupt); process.on("SIGTERM", terminate);
       try {
-        const result = await runReportCheck(findRoot(), id, command, opts.label, 120_000, {
+        const result = await runReportCheck(findRoot(), id, command, opts.label, seconds * 1000, {
           signal: controller.signal,
           onStdout: opts.json ? undefined : chunk => { process.stdout.write(chunk); },
           onStderr: opts.json ? undefined : chunk => { process.stderr.write(chunk); },

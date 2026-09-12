@@ -38,7 +38,7 @@ export function registerTaskReportTools(server: McpServer, getRoot: () => string
         if (!title || applications?.length || outcome) throw new Error("start requires a short task title and no completion evidence");
         const task = startReportTask(root, title, task_id);
         const launcher = verificationLauncher();
-        return { content: [{ type: "text" as const, text: `Task ${task.task_id} · ${task.state}. Pass task_id to every hunch_context and decision/correction/finding capture call. Before the final response, finish with hunch_task and include its contribution card. For checks use this exact installation (the global hunch binary may be stale): ${launcher.shell} task verify ${task.task_id} -- <command> [arguments].` }], structuredContent: { task, verification_argv: [...launcher.argv, "task", "verify", task.task_id, "--"] } };
+        return { content: [{ type: "text" as const, text: `Task ${task.task_id} · ${task.state}. Pass task_id to every hunch_context and decision/correction/finding capture call. Before the final response, finish with hunch_task and include its contribution card. For checks use this exact installation (the global hunch binary may be stale): ${launcher.shell} task verify ${task.task_id} -- <command> [arguments]. The default budget is 2 minutes; add --timeout <seconds> before -- for a long suite.` }], structuredContent: { task, verification_argv: [...launcher.argv, "task", "verify", task.task_id, "--"] } };
       }
       if (!task_id) throw new Error("finish requires the exact task_id");
       for (const claim of applications ?? []) recordReportClaim(root, task_id, claim);

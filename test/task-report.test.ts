@@ -181,6 +181,27 @@ test("verification timeout bounds descendant processes inheriting output pipes",
   assert.ok(Date.now() - start < 5_000, "timeout cannot wait for descendant pipes to close");
 });
 
+test("verification timeout is caller-bounded so a long suite can be retained, within a hard ceiling", async t => {
+  const root = fixture(t), task = startReportTask(root, "Long check budget");
+  const { MAX_CHECK_TIMEOUT_MS } = await import("../src/core/taskReportEvidence.js");
+  await assert.rejects(runReportCheck(root, task.task_id, [process.execPath, "-e", "process.exit(0)"], "Over ceiling", MAX_CHECK_TIMEOUT_MS + 1), /verification timeout/);
+  // A 30-minute budget was refused before fnd_70dd5c4034; it must be accepted now.
+  const result = await runReportCheck(root, task.task_id, [process.execPath, "-e", "process.exit(0)"], "Half-hour budget", 30 * 60_000);
+  assert.equal(result.exit_code, 0);
+  assert.equal(result.timed_out, false);
+  const cli = resolve("src/cli/index.ts"), tsx = resolve("node_modules/tsx/dist/loader.mjs");
+  const env = { ...process.env, HUNCH_PIPELINE: "0" };
+  delete env.HUNCH_PRIVATE_DIR;
+  mkdirSync(join(root, ".hunch"));
+  const run = (...args: string[]) => execFileSync(process.execPath, ["--import", tsx, cli, ...args], { cwd: root, env, encoding: "utf8", timeout: 60_000, stdio: ["ignore", "pipe", "pipe"] });
+  assert.throws(() => run("task", "verify", task.task_id, "--timeout", "0", "--", process.execPath, "-e", "process.exit(0)"), /--timeout must be/);
+  assert.throws(() => run("task", "verify", task.task_id, "--json", "--timeout", "1", "--", process.execPath, "-e", "setTimeout(()=>{},5000)"), (error: { status: number }) => error.status === 1);
+  const quick = JSON.parse(run("task", "verify", task.task_id, "--json", "--timeout", "30", "--", process.execPath, "-e", "process.exit(0)"));
+  assert.equal(quick.exit_code, 0);
+  const report = readTaskReport(root, task.task_id);
+  assert.deepEqual(report.checks.map(c => c.timed_out), [false, true, false]);
+});
+
 test("completion cannot discard an in-flight command result", async t => {
   const root = fixture(t), task = startReportTask(root, "Concurrent completion");
   const running = runReportCheck(root, task.task_id, [process.execPath, "-e", "setTimeout(()=>{},200)"], "Running check");

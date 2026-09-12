@@ -58,7 +58,9 @@ and retains no raw stdout/stderr. Output streams remain visible while the comman
 runs; `task verify --json <task_id> -- <command>` suppresses live output and emits
 only the result JSON. Commands with shell syntax must use an explicit
 shell, just as they would outside Hunch. A nonzero/unknown exit or timeout makes
-the wrapper exit unsuccessfully. The default timeout is two minutes. SIGINT and
+the wrapper exit unsuccessfully. The default timeout is two minutes;
+`--timeout <seconds>` (before `--`) raises it up to six hours for a long suite,
+and the engine API's `verify(…, { timeoutMs })` accepts the same range. SIGINT and
 SIGTERM cancel the command tree and retain a cancelled result before exit. An OS
 hard kill cannot run cleanup; a missing result remains pending/unverified, never
 a successful check. Independently detached descendants cannot be guaranteed to
