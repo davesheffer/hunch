@@ -177,8 +177,8 @@ test("Phase 2O release gate is fail-closed, content-addressed, and publish-neutr
   ]);
   assert.deepEqual(
     RELEASE_GATES.find((gate) => gate.id === "memory-drift")?.command,
-    ["node", "dist/cli/index.js", "drift"],
-    "the doc≠graph spoke must be gated on what a contributor's public-only clone sees",
+    ["node", "dist/cli/index.js", "drift", "--fail-on", "finding-stale"],
+    "the doc≠graph spoke must be gated on what a contributor's public-only clone sees, and a live finding citing a missing file fails it too",
   );
   assert.deepEqual(Object.keys(RELEASE_TEST_COVERAGE), [
     "legacy_receipt_compatibility",

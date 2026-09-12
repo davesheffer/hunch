@@ -2,7 +2,7 @@
   "id": "dec_a9bfb5dd8d",
   "title": "nuryel.state/1 frozen as code: scope model, seven facets, three verbs, canonical ids, seven asserted invariants — additive, unwired",
   "topic": "nuryel.state-contract",
-  "status": "proposed",
+  "status": "accepted",
   "context": "Step 3 of the deterministic-state plan (private topics vision.deterministic-state-layer, architecture.single-integration-surface, roadmap.sofia-state-pilot). The fold spike (fnd_3066259a35) retired the only risk ahead of it. The Sofia baseline is running (fnd_a02076f480, fnd_9c863eaa82). Branch nuryel/state-contract: src/core/stateContract.ts, test/state-contract.test.ts, docs/nuryel-state-contract.md. Proposed until the maintainer reads and accepts the contract; nothing depends on it yet.",
   "decision": "Freeze the one contract every orchestrator speaks to the state layer as schemas, not prose, with no behaviour change: nothing is wired into the store, CLI or MCP. Scope model: organization › team › user › repository as partitions of one graph; principals carry grants and authorization is decided against grants before retrieval and asserted again on the way out. Facets: decided (Decision, exists), in force (Constraint / valid_to, exists), done (nuryel.receipt/1 ActionReceipt — identity is the action, so a re-sent action replays the same receipt), committed (nuryel.commitment/1 with an in-force window), changed (credential-free ExternalRef version pointer), current (nuryel.derived/1 DerivedState with MANDATORY dependencies; identity ignores dependency order), entity/relationship (nuryel.entity/1 kind-qualified like Landscape resources, nuryel.relationship/1 with edge identity), DNA (hunch.project-dna/1 keyed by scope, no new schema). Verbs: read bound to the existing delivery envelope receipt with a state_of_record block (current, in_force, done, depends_on, invalidated_by) and named denied_scopes; write with mandatory provenance + idempotency key returning durability pushed|committed|local and outcome created|updated|replayed|superseded with an explicit conflict; subscribe as a strictly ordered change stream where a gap forces resynchronization; capability negotiation that names unsupported capabilities. Canonical form: keys sorted by code unit at every level, undefined dropped, non-finite numbers rejected; stateHash over it; ids derived from what makes two records the same fact. Seven invariants exported as data and enforced by assertions or schema rules: authorization-before-retrieval, similarity-never-authorizes, never-in-request-path, provenance-on-every-write, one-live-decision-per-topic, external-truth-stays-external, derived-state-carries-dependencies.",
   "consequences": [
@@ -50,7 +50,8 @@
       "src/core/delivery.ts",
       "src/core/types.ts",
       "src/core/ids.ts"
-    ]
+    ],
+    "last_verified": "2026-09-12T05:12:25.890Z"
   },
   "date": "2026-09-07T13:21:02.656Z"
 }

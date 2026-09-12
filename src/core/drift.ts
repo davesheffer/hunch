@@ -29,7 +29,8 @@ import { computeWikiDrift } from "../wiki/wiki.js";
 import { computeMadrDrift } from "../integrations/madrManifest.js";
 import { commitsExist, isGitRepo } from "../extractors/git.js";
 
-export type DriftKind = "dead-ref" | "supersede" | "doc-stale" | "anchor-stale" | "doc-anchor-stale" | "doc-anchor-dangling" | "wiki-stale" | "finding-stale" | "premise-stale" | "commit-unresolvable" | "madr-stale" | "madr-edited" | "madr-orphan";
+export const DRIFT_KINDS = ["dead-ref", "supersede", "doc-stale", "anchor-stale", "doc-anchor-stale", "doc-anchor-dangling", "wiki-stale", "finding-stale", "premise-stale", "commit-unresolvable", "madr-stale", "madr-edited", "madr-orphan"] as const;
+export type DriftKind = typeof DRIFT_KINDS[number];
 
 export interface DriftFinding {
   kind: DriftKind;
