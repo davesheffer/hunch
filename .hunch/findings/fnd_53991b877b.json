@@ -1,15 +1,15 @@
 {
   "id": "fnd_53991b877b",
   "title": "hunch_task finish and hunch_report return the full report inline and exceed host tool-result limits",
-  "observation": "hunch_task(action: finish) and hunch_report(task_id) return the entire hunch.task-report/1 document as structuredContent, including every delivered envelope's full context text and every record's lesson text. A task with 18 context deliveries produced a 101,623-character finish result and a 95,634-character report result; the Claude Code host refused both as exceeding the tool-result token limit and wrote them to a file, so the contribution card the agent must relay was not visible to it without a shell round-trip. The card itself is ~6 lines. The plan (docs/next-release-memory-impact.md) asks for a concise card plus references; the full report belongs to `hunch report --json` and the HTML view, not to the MCP round-trip.",
+  "observation": "hunch_task(action: finish) and hunch_report(task_id) returned the entire hunch.task-report/1 document as structuredContent, including every delivered envelope's full context text and every record's lesson text. A task with 18 context deliveries produced a 101,623-character finish result and a 95,634-character report result; the Claude Code host refused both as exceeding the tool-result token limit and wrote them to a file, so the contribution card the agent must relay was not visible to it without a shell round-trip. RESOLVED 2026-09-12 by PR #176 (merged ef292a4, shipped in 1.32.1): both tools now return the bounded hunch.task-report-summary/1 (identities and verdicts, 48 KB budget, no envelope text) with the card; the full report stays in `hunch report <id> --json` and the HTML view.",
   "evidence": [
-    "Claude Code session 2026-09-12: hunch_task finish on htask_f71003c4a9b142074b92d62e → 'result (101,623 characters) exceeds maximum allowed tokens', saved to tool-results/mcp-hunch-hunch_task-1789179646837.txt",
-    "hunch_report(task_id: htask_f71003c4a9b142074b92d62e) → 'result (95,634 characters) exceeds maximum allowed tokens'",
-    "src/mcp/taskReportTools.ts: structuredContent: { ...report, presentation_enabled, contribution_card, report_path } spreads the full report including deliveries[].envelope.text and records[].lesson"
+    "1.32.1 CHANGELOG: bounded hunch.task-report-summary/1 over MCP",
+    "src/mcp/taskReportTools.ts: boundedTaskReport / MCP_REPORT_BYTE_BUDGET = 48_000",
+    "PR #176 merged ef292a4"
   ],
   "method": null,
   "severity": "high",
-  "triage": "open",
+  "triage": "resolved",
   "affected_files": [
     "src/mcp/taskReportTools.ts",
     "src/core/taskReport.ts"
@@ -18,15 +18,15 @@
   "violates_constraint": null,
   "spawned_decision": null,
   "observed_at": "2026-09-12T02:22:03.294Z",
-  "resolved_commit": null,
+  "resolved_commit": "ef292a4",
   "provenance": {
     "source": "human_confirmed",
     "confidence": 0.95,
     "evidence": [
-      "Claude Code session 2026-09-12: hunch_task finish on htask_f71003c4a9b142074b92d62e → 'result (101,623 characters) exceeds maximum allowed tokens', saved to tool-results/mcp-hunch-hunch_task-1789179646837.txt",
-      "hunch_report(task_id: htask_f71003c4a9b142074b92d62e) → 'result (95,634 characters) exceeds maximum allowed tokens'",
-      "src/mcp/taskReportTools.ts: structuredContent: { ...report, presentation_enabled, contribution_card, report_path } spreads the full report including deliveries[].envelope.text and records[].lesson"
+      "1.32.1 CHANGELOG: bounded hunch.task-report-summary/1 over MCP",
+      "src/mcp/taskReportTools.ts: boundedTaskReport / MCP_REPORT_BYTE_BUDGET = 48_000",
+      "PR #176 merged ef292a4"
     ],
-    "last_verified": "2026-09-12T02:22:03.294Z"
+    "last_verified": "2026-09-12T10:40:09.248Z"
   }
 }
