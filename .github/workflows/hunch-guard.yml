@@ -78,3 +78,46 @@ jobs:
         # vacuous pass.
         if: always()
         run: exit ${{ steps.guard.outputs.exit || '1' }}
+
+  # Rung 2 of the development loop (docs/autonomous-development.md): a change whose
+  # every file falls inside the bounded class — docs, tests, memory captures, locale
+  # copies — is queued for auto-merge and lands when the required checks pass.
+  # Anything outside the class is left for a human (rung 1). This job is NOT a
+  # required check: an "outside" verdict must never block a human merge.
+  merge-class:
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Fetch the PR base branch
+        run: git fetch --no-tags origin "+refs/heads/${{ github.base_ref }}:refs/remotes/origin/${{ github.base_ref }}"
+
+      - name: Classify with the trusted base's classifier
+        id: classify
+        # The PR cannot widen the allowlist that judges it: the classifier is read
+        # from the target branch, never from the PR's own tree.
+        run: |
+          set +e
+          git show "origin/${{ github.base_ref }}:tooling/merge-class.mjs" > /tmp/merge-class.mjs || { echo "bounded=false" >> "$GITHUB_OUTPUT"; echo "no classifier on the base branch; nothing is auto-merged"; exit 0; }
+          node /tmp/merge-class.mjs --base "origin/${{ github.base_ref }}" --require-bounded
+          status=$?
+          set -e
+          if [ "$status" -eq 0 ]; then echo "bounded=true" >> "$GITHUB_OUTPUT"; else echo "bounded=false" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Queue auto-merge for a bounded change
+        if: steps.classify.outputs.bounded == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        # Auto-merge waits for every required status check on main; a red check
+        # leaves the PR open. The merge commit is authored by the Actions identity.
+        run: gh pr merge --auto --merge "${{ github.event.pull_request.number }}"
