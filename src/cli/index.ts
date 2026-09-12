@@ -89,8 +89,9 @@ import { appendEvent, readEvents } from "../core/events.js";
 import { computeStats, formatStats } from "../core/stats.js";
 import { injectionMode, resetSessionInjections } from "../core/hookcache.js";
 import { recordServed, servedSummary } from "../core/served.js";
-import { recordTaskDelivery, reportActivity } from "../core/taskReport.js";
+import { recordTaskDelivery, reportActivity, reportPresentationEnabled, unseenLessons } from "../core/taskReport.js";
 import { snapshotDeliveredRecords } from "../core/taskReportEvidence.js";
+import { renderRecalledLine } from "../core/taskReportRender.js";
 import { hookReportTaskId, startHookReport, stopHookReport, observeHookDenial } from "../core/taskReportHook.js";
 import { recordHookObservation } from "../core/hookObservations.js";
 import { contextHookOutput, denyHookOutput, hookProvider, normalizeHookEvent, stopHookOutput, type HookProvider } from "../core/agenthook.js";
@@ -4018,8 +4019,9 @@ program
     if (opts.task) {
       try {
         const records = asOf ? [] : snapshotDeliveredRecords(store, envelope);
+        const recalled = renderRecalledLine(unseenLessons(root, opts.task, records));
         const occurrence = recordTaskDelivery(root, opts.task, envelope, records);
-        console.log(`\nTask evidence: ${opts.task} · occurrence ${occurrence}`);
+        console.log(`\n${recalled ? `${recalled}\n` : ""}Task evidence: ${opts.task} · occurrence ${occurrence}`);
       } catch {
         console.error(`Task evidence could not be recorded for ${opts.task}; context remains available but report attribution is unverified.`);
       }
@@ -4681,13 +4683,18 @@ program
       }
       receipts("served");
       let reportNotice = "";
+      let recalled: string | null = null;
       if (reportTaskId) {
         try {
-          const occurrence = recordTaskDelivery(root, reportTaskId, envelope, snapshotDeliveredRecords(store, envelope));
+          const snapshots = snapshotDeliveredRecords(store, envelope);
+          // The first time a lesson reaches this prompt's task, tell the USER in one
+          // line (systemMessage); repeats of the same revision stay silent.
+          recalled = reportPresentationEnabled(root) ? renderRecalledLine(unseenLessons(root, reportTaskId, snapshots)) : null;
+          const occurrence = recordTaskDelivery(root, reportTaskId, envelope, snapshots);
           reportNotice = `\n\nHunch task ${reportTaskId} · delivery ${occurrence}. Inspect exact application references with hunch_report(task_id).`;
-        } catch { reportNotice = "\n\nTask report observation unavailable; this delivery's task contribution remains unverified."; }
+        } catch { reportNotice = "\n\nTask report observation unavailable; this delivery's task contribution remains unverified."; recalled = null; }
       }
-      emitContext(provider, "PreToolUse", text + reportNotice);
+      emitContext(provider, "PreToolUse", text + reportNotice, recalled ?? undefined);
     } catch {
       // swallow — never block an edit on a hook failure
     } finally {
@@ -6467,13 +6474,16 @@ function emitContext(
   provider: HookProvider,
   event: "PreToolUse" | "PostToolUse" | "PostToolUseFailure" | "UserPromptSubmit" | "SessionStart" | "SubagentStart",
   text: string,
+  /** One user-facing line where the host shows hook messages (Claude Code's
+   * `systemMessage`); never a block, never a second model turn. */
+  systemMessage?: string,
 ): void {
   if (event === "SessionStart") {
     const warning = integrationSessionWarning(findRoot(), provider);
     if (warning) text = `${warning}\n\n${text}`;
   }
   const output = contextHookOutput(provider, event, text);
-  if (output) process.stdout.write(JSON.stringify(output));
+  if (output) process.stdout.write(JSON.stringify(provider === "claude" && systemMessage ? { ...output, systemMessage } : output));
 }
 function emitDeny(provider: HookProvider, reason: string): void {
   const result = denyHookOutput(provider, reason);

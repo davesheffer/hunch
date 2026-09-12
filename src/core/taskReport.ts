@@ -295,6 +295,20 @@ function appendEvent(root: string, taskId: string, kind: string, body: unknown, 
   }));
 }
 
+/** The record revisions among `records` that this task has not received before.
+ * Powers the one-line "Hunch recalled …" indication on a lesson's FIRST delivery
+ * in a task; repeats of the same revision stay silent (deduplicated per task and
+ * revision, never per session or file). Read-only; never throws for callers
+ * that must stay silent on failure — they catch. */
+export function unseenLessons(root: string, taskId: string, records: readonly ReportRecord[]): ReportRecord[] {
+  if (!records.length) return [];
+  return taskDb(root, db => {
+    readTask(db, root, taskId);
+    const seen = db.prepare(`SELECT 1 FROM report_record_links l JOIN report_events e ON e.event_id = l.event_id
+      WHERE e.task_id = ? AND e.kind = 'delivery' AND l.kind = ? AND l.record_id = ? AND l.content_hash = ? LIMIT 1`);
+    return records.filter(r => !seen.get(taskId, r.kind, r.record_id, r.content_hash));
+  });
+}
 /** Strict operation for explicit callers. Passive integrations catch failure
  * and disclose it without blocking context delivery. Empty envelopes count. */
 export function recordTaskDelivery(root: string, taskId: string, envelope: DeliveryEnvelope, records: ReportRecord[], occurrenceId = `hocc_${randomBytes(12).toString("hex")}`): string {

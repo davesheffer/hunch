@@ -34,6 +34,13 @@ function ruleStanding(report: TaskReport) {
 function recordTitle(report: TaskReport, rule: { kind: string; record_id: string; content_hash: string }): string {
   return uniqueRecords(report).find(r => r.kind === rule.kind && r.record_id === rule.record_id && r.content_hash === rule.content_hash)?.title ?? rule.record_id;
 }
+/** One short line for the first time a lesson reaches a task; null when every
+ * delivered revision was already seen in this task. Never a banner per delivery. */
+export function renderRecalledLine(fresh: readonly { title: string }[]): string | null {
+  if (!fresh.length) return null;
+  const rest = fresh.length - 1;
+  return `Hunch recalled: ${clip(fresh[0]!.title, 90)}${rest ? ` (+${rest} more lesson${rest === 1 ? "" : "s"})` : ""}`;
+}
 export function renderTaskReport(report: TaskReport): string {
   const records = uniqueRecords(report);
   const lines = [`Hunch · ${clip(report.task.title)}`, `Task ${report.task.task_id} · ${report.task.state}`];
