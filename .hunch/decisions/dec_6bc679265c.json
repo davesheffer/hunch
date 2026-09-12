@@ -23,7 +23,7 @@
   "supersedes": null,
   "superseded_by": null,
   "caused_by_bug": null,
-  "commit": "dcc1171",
+  "commit": "285e8ea",
   "valid_from": "2026-09-03T13:39:42+03:00",
   "valid_to": null,
   "retired": {
@@ -34,7 +34,7 @@
     "source": "inferred",
     "confidence": 0.45,
     "evidence": [
-      "commit:dcc1171",
+      "commit:285e8ea",
       "synth:provider=deterministic",
       "branch:chore/release-1.23.1",
       ".github/workflows/release.yml",

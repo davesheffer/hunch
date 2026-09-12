@@ -19,7 +19,7 @@
   "supersedes": null,
   "superseded_by": null,
   "caused_by_bug": null,
-  "commit": "e5f4be9",
+  "commit": "e877b26",
   "valid_from": "2026-08-31T14:56:09+03:00",
   "valid_to": null,
   "retired": {
@@ -30,7 +30,7 @@
     "source": "inferred",
     "confidence": 0.3,
     "evidence": [
-      "commit:e5f4be9",
+      "commit:e877b26",
       "synth:provider=deterministic",
       "branch:release/1.22.0",
       ".github/workflows/release.yml",
