@@ -16,6 +16,9 @@ test("the bounded class is a path allowlist: docs, tests, memory captures, local
   assert.equal(classifyPath("site/changelog.html").group, "locales");
   assert.equal(classifyPath("site/he/changelog.html").group, "locales");
   assert.equal(classifyPath("site/blog/posts.html").group, "locales");
+  for (const path of [".github/copilot-instructions.md", ".cursor/rules/hunch.mdc", ".windsurf/rules/hunch.md"]) assert.equal(classifyPath(path).group, "memory", `${path} is a generated grounding block`);
+  assert.equal(classifyPath(".github/workflows/hunch-guard.yml").group, "outside", "workflows stay outside");
+  assert.equal(classifyPath(".github/other.md").group, "outside", "only the named grounding file under .github/ is inside");
 });
 
 test("anything the allowlist does not name is outside, and the never-rung paths are outside regardless", () => {
