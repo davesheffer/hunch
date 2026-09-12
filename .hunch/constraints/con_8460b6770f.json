@@ -9,7 +9,7 @@
     "src/integrations/scaffold.ts"
   ],
   "severity": "blocking",
-  "enforcement": "advisory_v1",
+  "enforcement": "ci",
   "rationale": "Never destroy a user's other MCP servers or prose",
   "source_decision": "dec_261e42920c",
   "violations": [],

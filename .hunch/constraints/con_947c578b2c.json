@@ -7,7 +7,7 @@
     "src/store/jsonStore.ts"
   ],
   "severity": "blocking",
-  "enforcement": "advisory_v1",
+  "enforcement": "ci",
   "rationale": "Prevents silent record loss on schema change",
   "source_decision": "dec_093de2b0bd",
   "violations": [],

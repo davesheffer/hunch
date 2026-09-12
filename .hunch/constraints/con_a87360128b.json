@@ -6,7 +6,7 @@
     "src/store/**"
   ],
   "severity": "blocking",
-  "enforcement": "advisory_v1",
+  "enforcement": "ci",
   "rationale": "JSON under .hunch/ is the source of truth; vectors are rebuildable",
   "source_decision": "dec_08a685fca2",
   "violations": [],
