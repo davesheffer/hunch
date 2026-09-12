@@ -140,6 +140,7 @@ import {
 import { discoverRepositoryLandscape } from "../extractors/landscapeDiscovery.js";
 import { checkConformance } from "../core/conformance.js";
 import { ConstitutionService, policyEvaluationEnvelope, type PolicyEvaluationSet } from "../constitution/service.js";
+import { renderPolicyEvaluations } from "../constitution/renderEvaluations.js";
 import { sourceGraphSnapshot } from "../constitution/evaluator.js";
 import { renderProofCard } from "../constitution/card.js";
 import { movePolicyArtifactsToPrivate } from "../constitution/repository.js";
@@ -2235,19 +2236,6 @@ policyCmd
       store.close();
     }
   });
-
-function renderPolicyEvaluations(results: PolicyEvaluationSet[]): string[] {
-  if (!results.length) return ["No Constitution policies matched."];
-  const icon: Record<string, string> = { satisfied: "✅", violated: "⛔", not_applicable: "·", unknown: "?", error: "‼" };
-  const out = [`Constitution policy evaluation: ${results.length} canonical receipt(s)`];
-  for (const r of results) {
-    out.push(`  ${icon[r.evaluation.result] ?? "·"} ${r.policy.id} [${r.policy.state}] ${r.evaluation.result}${r.blocks ? " — BLOCK" : ""}`);
-    out.push(`     ${r.evaluation.explanation}`);
-    if (r.gate_error) out.push(`     gate error: ${r.gate_error}`);
-    out.push(`     receipt: ${r.evaluation.deterministic_hash}`);
-  }
-  return out;
-}
 
 // ---- constitution (deterministic evidence -> candidate bootstrap) --------
 const constitutionCmd = program

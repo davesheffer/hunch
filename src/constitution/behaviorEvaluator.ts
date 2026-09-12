@@ -1,7 +1,7 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { headSha } from "../extractors/git.js";
 import { canonicalHash } from "./canonical.js";
@@ -157,7 +157,16 @@ export function evaluateExecutableBehaviorPolicy(
   }
   const dependency = dependencySnapshotForCommit(root, commit, assertion.dependency_snapshot_ids);
   if (!dependency) {
-    return evaluation(policy, commit, { ...baseExecution, commit, error_code: "dependency-snapshot-unavailable" }, "error", "no unique exact dependency snapshot is available for executable behavior evaluation");
+    // Two different situations hid behind one message (fnd_b421b3f7ab): a machine
+    // that never built the snapshot cache, and a policy whose pinned snapshots no
+    // longer match the commit's dependency inputs. Name each with its recovery;
+    // both stay `error`, never a coerced pass.
+    if (!existsSync(join(root, ".hunch-cache", "behavior-deps"))) {
+      return evaluation(policy, commit, { ...baseExecution, commit, error_code: "dependency-snapshot-cache-absent" }, "error",
+        "no dependency snapshot cache exists on this machine (.hunch-cache/behavior-deps); executable behavior is unevaluated here, not failed — provision the policy's snapshots (hunch constitution bootstrap --behavior-deps <candidate>) or evaluate where they were built");
+    }
+    return evaluation(policy, commit, { ...baseExecution, commit, error_code: "dependency-snapshot-unavailable" }, "error",
+      `no unique exact dependency snapshot matches this commit's package.json/package-lock.json among the policy's pinned ids (${assertion.dependency_snapshot_ids.join(", ")}); dependency inputs changed since compilation — re-plan and re-prove the policy (rb_g2_stale_policy_01)`);
   }
 
   const session = mkdtempSync(join(tmpdir(), "hunch-behavior-policy-"));
