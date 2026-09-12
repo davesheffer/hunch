@@ -631,6 +631,16 @@ export interface RootControlOptions {
   pinned?: boolean;
 }
 
+/** Delivered to every MCP client at initialize — the one grounding channel that
+ * needs no host hook or instruction file. Host-neutral by design (con_e04226bd05);
+ * per-host prose (CLAUDE.md, AGENTS.md) and hooks add to it, never replace it. */
+export const MCP_INSTRUCTIONS = [
+  "Hunch is this repository's engineering memory: decisions, bug history, invariants, components, with provenance.",
+  "Per user task: (1) hunch_task(action:\"start\", title) once — unless the host's prompt hook already printed a task_id, then reuse it; (2) hunch_context(target, task_id) FIRST, before reading or editing, for the file, symbol, or task phrase; (3) hunch_check_constraints(scope) before editing shared code; (4) hunch_task(action:\"finish\", task_id) before the final response and show its contribution card.",
+  "Then by moment: hunch_why(target) for rationale and rejected alternatives, hunch_bug_lineage before fixing a failure, hunch_record_decision after a non-trivial choice, hunch_record_correction when a human corrects you.",
+  "Hosts without lifecycle hooks (Codex, Windsurf) receive no automatic grounding: call these tools yourself.",
+].join("\n");
+
 export function buildServerWithRootControl(initialRoot: string, options: RootControlOptions = {}): RootControlledServer {
   const pinned = options.pinned === true;
   const explicitOverlay = !!process.env.HUNCH_PRIVATE_DIR?.trim();
@@ -692,7 +702,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
   // hunch_query and stays warm — and hybridSearch degrades to FTS until then.
   const embedderReady = selectEmbedder();
 
-  const server = new McpServer({ name: "hunch", version: HUNCH_VERSION });
+  const server = new McpServer({ name: "hunch", version: HUNCH_VERSION }, { instructions: MCP_INSTRUCTIONS });
   let activeRequests = 0;
   let pendingRoot: string | null = null;
   let pendingScheduled = false;

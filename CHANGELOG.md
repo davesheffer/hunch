@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased
+
+- Tool calls no longer die silently around a release. `npm version` keeps
+  machine-local (git-ignored) hook and MCP pins on the last release npm can serve
+  until the new one publishes — a pin ahead of publication made every `npx`
+  launcher fail with ETARGET, so hooks injected nothing and the MCP server never
+  connected, which looked like the agent forgetting to call Hunch. `hunch doctor`
+  now names such a pin explicitly (`pin … npm cannot serve`) instead of reporting
+  it clean, and a pre-edit or session hook that fails inside Hunch emits one
+  "grounding unavailable" context line rather than nothing (still exit 0, never a
+  deny).
+- The MCP server sends `instructions` at initialize: the per-task contract
+  (`hunch_task` start, `hunch_context` first, `hunch_check_constraints` before
+  shared edits, `hunch_task` finish) reaches every client, including hosts with
+  no lifecycle hooks. AGENTS.md/CLAUDE.md now say which hosts get a prompt-hook
+  task ID (Claude Code) and which must start the task themselves (Codex, Windsurf).
+- The managed Codex block sets `startup_timeout_sec = 60`: a cold `npx` install
+  exceeded Codex's 10 s default and dropped Hunch from the tool catalog.
+
 ## 1.32.3 — 2026-09-12
 
 - A subject holds one current derived statement per transform: a new current

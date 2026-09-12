@@ -195,6 +195,8 @@ export function writeCodexConfig(root: string, inv: Invocation): string {
     "[mcp_servers.hunch]",
     `command = ${tomlStr(inv.command)}`,
     `args = [${argsToml}]`,
+    "# A cold npx install can exceed Codex's 10 s default; a slow start must not drop Hunch from the tool catalog.",
+    "startup_timeout_sec = 60",
     TOML_END,
   ].join("\n");
 

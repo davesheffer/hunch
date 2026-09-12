@@ -964,7 +964,8 @@ test("strict PreToolUse is silent when fresh advertised team memory is unavailab
     const result = runCli(code, ["hook", "--provider", "claude"], strictHookInput(code.root));
     assert.equal(result.error, undefined, result.error?.message);
     assert.equal(result.status, 0, output(result));
-    assert.equal(output(result), "", "hook route failure must emit neither deny, allow, nor public grounding");
+    assert.doesNotMatch(output(result), /"deny"|"allow"|permissionDecision|con_|dec_/, "hook route failure must emit neither deny, allow, nor public grounding");
+    assert.match(output(result), /Hunch grounding unavailable for this edit/, "fail-open says so instead of passing silently");
     assert.equal(git(code.root, "rev-parse", "HEAD"), codeHeadBefore);
     assert.equal(bareRefs(code.codeRemote), codeRemoteBefore);
   } finally {
@@ -993,7 +994,8 @@ test("strict PreToolUse is silent when the local overlay route mismatches commit
     const result = runCli(fixture, ["hook", "--provider", "claude"], strictHookInput(fixture.root));
     assert.equal(result.error, undefined, result.error?.message);
     assert.equal(result.status, 0, output(result));
-    assert.equal(output(result), "", "hook route mismatch must emit neither deny, allow, nor stale grounding");
+    assert.doesNotMatch(output(result), /"deny"|"allow"|permissionDecision|con_|dec_/, "hook route mismatch must emit neither deny, allow, nor stale grounding");
+    assert.match(output(result), /Hunch grounding unavailable for this edit/, "fail-open says so instead of passing silently");
     assert.equal(git(fixture.root, "rev-parse", "HEAD"), codeHeadBefore);
     assert.equal(bareRefs(fixture.codeRemote), codeRemoteBefore);
     assert.equal(bareRefs(fixture.memoryRemote), memoryABefore);
@@ -1020,7 +1022,8 @@ test("strict PreToolUse is silent when a configured team overlay is stale and it
 
     const result = runCli(fixture, ["hook", "--provider", "claude"], strictHookInput(fixture.root));
     assert.equal(result.status, 0, output(result));
-    assert.equal(output(result), "", "strict hook fail-opens instead of denying from stale local team rules");
+    assert.doesNotMatch(output(result), /"deny"|permissionDecision/, "strict hook fail-opens instead of denying from stale local team rules");
+    assert.match(output(result), /Hunch grounding unavailable for this edit/, "fail-open says so instead of passing silently");
     assert.equal(git(fixture.overlay, "rev-parse", "HEAD"), overlayHeadBefore);
     assert.equal(git(fixture.root, "rev-parse", "HEAD"), codeHeadBefore);
     assert.equal(bareRefs(fixture.codeRemote), codeRemoteBefore);

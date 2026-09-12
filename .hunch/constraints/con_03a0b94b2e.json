@@ -1,21 +1,24 @@
 {
   "id": "con_03a0b94b2e",
   "type": "correctness",
-  "statement": "The agent hook must never block an edit on failure: any error or unrecognized input emits nothing and exits 0",
+  "statement": "The agent hook must never block an edit on failure: any error exits 0 and never denies; after the event is recognized it emits at most one 'grounding unavailable' context line, unrecognized input emits nothing",
   "scope": [
+    "src/cli/index.ts",
     "src/core/hookpolicy.ts"
   ],
   "severity": "warning",
   "enforcement": "advisory_v1",
-  "rationale": "A hook crash must not break the user's edit flow",
-  "source_decision": null,
+  "rationale": "A hook crash must not break the user's edit flow — but silence made dead wiring look like the model forgetting Hunch (2026-09-12 diagnosis); one context line keeps the edit flowing and the failure visible",
+  "source_decision": "dec_77d99014e0",
   "violations": [],
   "status": "active",
   "valid_to": null,
   "provenance": {
     "source": "human_confirmed",
     "confidence": 1,
-    "evidence": [],
-    "last_verified": "2026-06-16T10:29:10.885Z"
+    "evidence": [
+      "dec_77d99014e0: hook fail-open is loud (maintainer instruction 2026-09-12: \"says a failing hook never blocks rather than emits nothing\")"
+    ],
+    "last_verified": "2026-09-12T19:35:00.000Z"
   }
 }

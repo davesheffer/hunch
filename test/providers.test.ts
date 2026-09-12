@@ -26,6 +26,7 @@ test("scaffoldProviders writes MCP config + grounding for every assistant", () =
     assert.match(codex, /\[mcp_servers\.hunch\]/);
     assert.match(codex, /command = '.*node\.exe'/); // literal string, backslashes unescaped
     assert.match(codex, /'mcp'/);
+    assert.match(codex, /^startup_timeout_sec = 60$/m, "cold npx installs outlive Codex's 10 s default");
 
     const agents = readFileSync(join(root, "AGENTS.md"), "utf8");
     assert.match(agents, /Hunch/);

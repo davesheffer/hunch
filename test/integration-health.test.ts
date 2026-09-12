@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { inspectIntegrations, repairIntegrationPins, integrationHealthFails, integrationSessionWarning, HARNESSES, CAPABILITIES } from "../src/integrations/health.js";
+import { inspectIntegrations, repairIntegrationPins, integrationHealthFails, integrationSessionWarning, machineLocalIntegrationFiles, HARNESSES, CAPABILITIES } from "../src/integrations/health.js";
 import { probeIntegration } from "../src/integrations/probe.js";
 import { installClaudeHooks, writeMcpJson } from "../src/integrations/scaffold.js";
 import { writeCodexConfig, scaffoldProviders } from "../src/integrations/providers.js";
@@ -260,5 +260,52 @@ test("probe never executes custom commands or ignores custom environments", asyn
     await probeIntegration(f.root, "claude", report);
     assert.ok(report.issues.some(i => i.code === "mcp-probe" && i.detail.includes("environment")));
     assert.ok(!JSON.stringify(report).includes("secret"));
+  } finally { f.cleanup(); }
+});
+
+test("repair can skip machine-local files so a release cut never pins a version npm cannot serve", () => {
+  const f = fixture();
+  try {
+    f.claude("1.22.0");
+    writeCodexConfig(f.root, launcher("1.22.0"));
+    const repaired = repairIntegrationPins(f.root, { skip: (file) => file === ".mcp.json" || file === ".claude/settings.json" });
+    assert.deepEqual(repaired, [".codex/config.toml"]);
+    assert.ok(readFileSync(join(f.root, ".mcp.json"), "utf8").includes("hunch@1.22.0"), "skipped file untouched");
+    assert.ok(readFileSync(join(f.root, ".codex/config.toml"), "utf8").includes(`hunch@${version}`));
+    const report = inspectIntegrations(f.root);
+    assert.deepEqual(report.pins.filter(p => p.file === ".mcp.json"), [{ file: ".mcp.json", version: "1.22.0" }]);
+    assert.ok(report.pins.some(p => p.file === ".codex/config.toml" && p.version === version));
+    assert.equal(new Set(report.pins.map(p => `${p.file}@${p.version}`)).size, report.pins.length, "one entry per file+version");
+  } finally { f.cleanup(); }
+});
+
+test("the managed Codex block keeps its startup timeout through pin repair", () => {
+  const f = fixture();
+  try {
+    f.claude();
+    writeCodexConfig(f.root, launcher("1.22.0"));
+    const before = readFileSync(join(f.root, ".codex/config.toml"), "utf8");
+    assert.match(before, /^startup_timeout_sec = 60$/m);
+    assert.deepEqual(repairIntegrationPins(f.root), [".codex/config.toml"]);
+    const after = readFileSync(join(f.root, ".codex/config.toml"), "utf8");
+    assert.match(after, /^startup_timeout_sec = 60$/m);
+    assert.ok(after.includes(`hunch@${version}`));
+    assert.deepEqual(inspectIntegrations(f.root, "codex").issues, []);
+  } finally { f.cleanup(); }
+});
+
+test("machine-local integration files are the git-ignored ones", () => {
+  const f = fixture();
+  try {
+    f.claude();
+    writeCodexConfig(f.root, launcher());
+    assert.deepEqual(machineLocalIntegrationFiles(f.root), [], "no git repo: nothing is known to be local");
+    spawnSync("git", ["init", "-q"], { cwd: f.root });
+    f.write(".gitignore", ".mcp.json\n.codex/config.toml\n");
+    assert.deepEqual(machineLocalIntegrationFiles(f.root).sort(), [".codex/config.toml", ".mcp.json"]);
+    const kept = new Set(machineLocalIntegrationFiles(f.root));
+    f.claude("1.22.0");
+    writeCodexConfig(f.root, launcher("1.22.0"));
+    assert.deepEqual(repairIntegrationPins(f.root, { skip: (file) => kept.has(file) }), [".claude/settings.json"]);
   } finally { f.cleanup(); }
 });
