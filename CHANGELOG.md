@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.32.2 — 2026-09-12
+
+- The first time a lesson revision reaches a task, the delivery carries one line,
+  `Hunch recalled: <lesson title>`: in `hunch_context` results, in
+  `hunch context --task`, and as a `systemMessage` from Claude Code's pre-edit hook.
+  Deduplicated per task and record revision; repeats stay silent; presentation
+  opt-out silences the hook line.
+- Executable-behavior policies name their failure precisely: a machine with no
+  dependency-snapshot cache and a policy whose pinned snapshots predate the
+  lockfile get distinct error codes with recovery hints, and `hunch check` groups
+  identical non-evaluations into one block instead of one line per policy.
+- `hunch drift --fail-on <kinds>` adds drift kinds to the exit-code gate; the
+  release gate now fails on a live finding that cites a file which no longer
+  exists.
+- The unwired `.claude/pipeline/` prototype is removed.
+
 ## 1.32.1 — 2026-09-12
 
 Task reports, hardened by the first day of dogfooding on this repository:
