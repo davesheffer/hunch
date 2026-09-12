@@ -71,9 +71,11 @@ test("MCP task lifecycle retains exact delivery, rejects borrowed evidence, and 
   assert.ok(!delivered.isError);
   assert.match(JSON.stringify(delivered.content), /Task evidence:/);
   const read = await call("hunch_report", { task_id: taskId });
-  const report = read.structuredContent as unknown as TaskReport;
+  const report = read.structuredContent as unknown as { schema: string; deliveries: Array<{ occurrence_id: string; receipt_id: string; records: Array<{ record_id: string; kind: string; content_hash: string }> }> };
+  assert.equal(report.schema, "hunch.task-report-summary/1");
   assert.equal(report.deliveries.length, 1);
-  assert.equal(report.deliveries[0]!.envelope.receipt_id, delivered.structuredContent?.receipt_id);
+  assert.equal(report.deliveries[0]!.receipt_id, delivered.structuredContent?.receipt_id);
+  assert.doesNotMatch(JSON.stringify(read.structuredContent), /Hunch context for/, "the MCP summary never carries envelope text");
   const record = report.deliveries[0]!.records[0]!;
   assert.equal(record.record_id, "con_mcp_receipt");
   const references = read.structuredContent?.application_references as Array<{ occurrence_id: string; record_id: string; content_hash: string }>;
@@ -90,6 +92,7 @@ test("MCP task lifecycle retains exact delivery, rejects borrowed evidence, and 
   assert.match(JSON.stringify(finished.content), /passed/);
   assert.match(String(finished.structuredContent?.contribution_card), /agent-reported/);
   assert.match(String(finished.structuredContent?.contribution_card), /Open local report/);
+  assert.ok(JSON.stringify(finished.structuredContent).length < 20_000, "a one-delivery finish result stays small");
   const next = await call("hunch_task", { action: "start", title: "A fresh task" });
   const nextId = (next.structuredContent as { task: { task_id: string } }).task.task_id;
   assert.notEqual(nextId, taskId);
@@ -100,6 +103,21 @@ test("MCP task lifecycle retains exact delivery, rejects borrowed evidence, and 
   assert.deepEqual(new Set((lesson.structuredContent?.entries as Array<{ task: { task_id: string } }>).map(e => e.task.task_id)), new Set([taskId, nextId]));
   assert.ok((await call("hunch_report", { task_id: nextId, lesson: { kind: record.kind, record_id: record.record_id } })).isError);
   assert.equal(readTaskReport(root, nextId).deliveries[0]!.records[0]!.record_id, record.record_id, "the lesson survives between tasks");
+  // A busy task must still fit the host round-trip (fnd_53991b877b): many
+  // deliveries shrink to identities and counts, never to an unreadable blob.
+  const busy = await call("hunch_task", { action: "start", title: "Busy task" });
+  const busyId = (busy.structuredContent as { task: { task_id: string } }).task.task_id;
+  for (let i = 0; i < 40; i++) await call("hunch_context", { target: "src/context.ts", task_id: busyId });
+  const busyReport = await call("hunch_report", { task_id: busyId });
+  const busyJson = JSON.stringify(busyReport.structuredContent);
+  assert.ok(busyJson.length <= 60_000, `bounded summary is ${busyJson.length} bytes`);
+  const busySummary = busyReport.structuredContent as { deliveries: unknown[]; omitted: { deliveries: number }; application_references: unknown[] };
+  assert.equal(busySummary.deliveries.length + busySummary.omitted.deliveries, 40);
+  assert.ok(busySummary.application_references.length > 0);
+  assert.equal(readTaskReport(root, busyId).deliveries.length, 40, "the retained report keeps every delivery");
+  const busyDone = await call("hunch_task", { action: "finish", task_id: busyId });
+  assert.ok(!busyDone.isError);
+  assert.ok(JSON.stringify(busyDone.structuredContent).length <= 60_000);
 });
 
 function installReviewedLandscape(root: string): void {
