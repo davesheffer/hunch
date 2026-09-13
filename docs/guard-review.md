@@ -67,3 +67,5 @@ Run the focused verifier tests with:
 ```sh
 npx tsx --test test/hunch-guard-review.test.ts
 ```
+
+Qualification-only ordinary-pass fixture.
