@@ -375,6 +375,83 @@ export function finishReportTask(root: string, taskId: string, state: "completed
     return finished;
   }));
 }
+/** A report with no observation of any kind. Presentation surfaces may stay
+ * silent for it; the task row itself is retained so "never touched Hunch" is
+ * still countable (hunch report / the VS Code view / task list). */
+export function isEmptyTaskReport(report: Pick<TaskReport, "deliveries" | "claims" | "checks" | "conformance" | "saves" | "refusals">): boolean {
+  return !report.deliveries.length && !report.claims.length && !report.checks.length && !report.conformance.length && !report.saves.length && !report.refusals.length;
+}
+
+export interface TaskSummary {
+  task: ReportTask;
+  deliveries: number;
+  lessons: number;
+  claims: number;
+  saves: number;
+  refusals: number;
+  /** Standing of the last recorded check, or null when none ran. */
+  check: { label: string; state: "passed" | "failed" | "timed out" | "cancelled"; current: boolean } | null;
+  /** Any delivered rule evaluated as violated on the changed files. */
+  violated: boolean;
+  coverage: TaskReport["coverage"];
+  empty: boolean;
+  /** Generated evidence view, when one has been written for this task. */
+  report_html: string | null;
+  /** Set when the observation ledger could not be read for this task. */
+  error: string | null;
+}
+
+/** One bounded summary per recent task for status lines and host views; the
+ * card and evidence view remain the authoritative renderings. */
+export function summarizeTaskReport(root: string, taskId: string, currentSnapshot: string | null = null): TaskSummary {
+  const html = join(root, ".hunch-cache", "reports", `${taskId}.html`);
+  try {
+    const report = readTaskReport(root, taskId, currentSnapshot);
+    const last = report.checks.at(-1);
+    const standing = new Map(report.conformance.map(r => [`${r.kind}:${r.record_id}:${r.content_hash}`, r]));
+    return {
+      task: report.task,
+      deliveries: report.deliveries.length,
+      lessons: new Set(report.deliveries.flatMap(d => d.records).map(r => `${r.kind}:${r.record_id}`)).size,
+      claims: report.claims.length,
+      saves: report.saves.length,
+      refusals: report.refusals.length,
+      check: last ? { label: last.label, state: last.cancelled ? "cancelled" : last.timed_out ? "timed out" : last.exit_code === 0 ? "passed" : "failed", current: last.current } : null,
+      violated: [...standing.values()].some(r => r.outcome === "violated"),
+      coverage: report.coverage,
+      empty: isEmptyTaskReport(report),
+      report_html: existsSync(html) ? html : null,
+      error: null,
+    };
+  } catch (e) {
+    return taskDb(root, db => {
+      const row = db.prepare("SELECT body FROM report_tasks WHERE task_id = ?").get(taskId) as { body: string } | undefined;
+      if (!row) throw e;
+      return { task: TaskSchema.parse(JSON.parse(row.body)), deliveries: 0, lessons: 0, claims: 0, saves: 0, refusals: 0, check: null, violated: false, coverage: "no-delivery-observed" as const, empty: true, report_html: existsSync(html) ? html : null, error: (e as Error).message };
+    });
+  }
+}
+
+export function listTaskSummaries(root: string, limit = 30, currentSnapshot: string | null = null): TaskSummary[] {
+  if (!existsSync(join(root, ".hunch-cache", "served.db"))) return [];
+  return listReportTasks(root).slice(0, Math.max(1, Math.min(limit, 30))).map(task => summarizeTaskReport(root, task.task_id, currentSnapshot));
+}
+
+/** One line for a terminal status line. Empty string when nothing was observed
+ * for the task, so a bare prompt shows no Hunch noise at all. */
+export function renderTaskStatusLine(summary: TaskSummary | null): string {
+  if (!summary || summary.empty) return "";
+  const parts = [`Hunch`];
+  parts.push(summary.lessons ? `${summary.lessons} lesson${summary.lessons === 1 ? "" : "s"} recalled` : summary.deliveries ? "memory delivered" : "no delivery");
+  if (summary.violated) parts.push("rule violated");
+  else if (summary.claims) parts.push(`${summary.claims} applied`);
+  if (summary.saves) parts.push(`${summary.saves} saved`);
+  if (summary.refusals) parts.push("edit denied");
+  if (summary.check) parts.push(`${summary.check.label}: ${summary.check.state}${summary.check.current ? "" : " (source changed)"}`);
+  else parts.push("no check recorded");
+  return parts.join(" · ");
+}
+
 export function listReportTasks(root: string): ReportTask[] {
   return taskDb(root, db => (db.prepare("SELECT body FROM report_tasks WHERE scope = ? ORDER BY rowid DESC LIMIT 30").all(scopeOf(root)) as Array<{ body: string }>).map(r => TaskSchema.parse(JSON.parse(r.body))));
 }

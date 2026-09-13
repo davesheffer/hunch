@@ -2,7 +2,8 @@ import type { Command } from "commander";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { findRoot } from "../core/paths.js";
 import { writeFileAtomic } from "../core/io.js";
-import { finishReportTask, forgetReportTask, listReportTasks, pruneReportHistory, readTaskReport, readLessonHistory, startReportTask } from "../core/taskReport.js";
+import { finishReportTask, forgetReportTask, listReportTasks, listTaskSummaries, pruneReportHistory, readTaskReport, readLessonHistory, renderTaskStatusLine, startReportTask, summarizeTaskReport, type TaskSummary } from "../core/taskReport.js";
+import { promptTaskId } from "../core/taskReportHook.js";
 import { DEFAULT_CHECK_TIMEOUT_MS, MAX_CHECK_TIMEOUT_MS, reportSourceSnapshot, runReportCheck, runReportConformance } from "../core/taskReportEvidence.js";
 import { renderTaskReport, writeTaskReportHtml } from "../core/taskReportRender.js";
 import { assertReportPath } from "../core/taskReportPaths.js";
@@ -28,6 +29,37 @@ export function registerTaskReportCommands(program: Command, openStore: () => { 
       }
       finishReportTask(root, id, opts.interrupted ? "interrupted" : "completed");
       console.log(renderTaskReport(readTaskReport(root, id, reportSourceSnapshot(root).hash)));
+    });
+  task.command("list").description("Recent tasks observed in this repository with what Hunch delivered, saved, guarded, and checked")
+    .option("--limit <n>", "how many recent tasks (max 30)", "30")
+    .option("--json", "machine-readable summaries (consumed by the VS Code Contribution view)")
+    .action((opts: { limit: string; json?: boolean }) => {
+      const root = findRoot();
+      const summaries = listTaskSummaries(root, Number(opts.limit) || 30, reportSourceSnapshot(root).hash);
+      if (opts.json) { console.log(JSON.stringify(summaries, null, 2)); return; }
+      if (!summaries.length) { console.log("No task activity observed yet."); return; }
+      for (const s of summaries) console.log(`${s.task.started_at.slice(0, 16).replace("T", " ")}  ${s.task.task_id}  ${s.task.state.padEnd(11)} ${renderTaskStatusLine(s) || "nothing observed"}`);
+    });
+  task.command("status").description("One line for a terminal status line: the current prompt's task when Claude Code's status-line JSON arrives on stdin, otherwise the most recent task here")
+    .option("--json", "machine-readable summary")
+    .action(async (opts: { json?: boolean }) => {
+      const input = process.stdin.isTTY ? "" : await readStdinText();
+      let root = findRoot();
+      let taskId: string | null = null;
+      try {
+        const host = input.trim() ? JSON.parse(input) as { cwd?: string; session_id?: string; prompt_id?: string; workspace?: { current_dir?: string } } : {};
+        const dir = host.workspace?.current_dir ?? host.cwd;
+        if (dir) root = findRoot(dir);
+        if (host.session_id && host.prompt_id) taskId = promptTaskId(root, host.session_id, host.prompt_id);
+      } catch { /* a malformed host payload falls back to the most recent task */ }
+      let summary: TaskSummary | null = null;
+      try {
+        const snapshot = reportSourceSnapshot(root).hash;
+        summary = taskId ? summarizeTaskReport(root, taskId, snapshot) : listTaskSummaries(root, 1, snapshot)[0] ?? null;
+      } catch { summary = null; }
+      if (opts.json) { console.log(JSON.stringify(summary)); return; }
+      const line = renderTaskStatusLine(summary);
+      if (line) console.log(line);
     });
   task.command("forget <id>").description("Delete this closed task's local observations and generated report; retains project memory")
     .action((id: string) => { forgetReportTask(findRoot(), id); console.log("Task report history removed; project memory retained."); });
@@ -96,4 +128,17 @@ export function registerTaskReportCommands(program: Command, openStore: () => { 
       const report = readTaskReport(root, id, reportSourceSnapshot(root).hash);
       console.log(opts.json ? JSON.stringify(report, null, 2) : renderTaskReport(report));
     });
+}
+
+function readStdinText(): Promise<string> {
+  return new Promise(resolve => {
+    let data = "";
+    const done = () => resolve(data);
+    process.stdin.setEncoding("utf8");
+    process.stdin.on("data", chunk => { data += chunk; });
+    process.stdin.on("end", done);
+    process.stdin.on("error", done);
+    // A host that opened stdin but never writes must not hang the status line.
+    setTimeout(done, 1500).unref();
+  });
 }

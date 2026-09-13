@@ -18,6 +18,16 @@
   task ID (Claude Code) and which must start the task themselves (Codex, Windsurf).
 - The managed Codex block sets `startup_timeout_sec = 60`: a cold `npx` install
   exceeded Codex's 10 s default and dropped Hunch from the tool catalog.
+- The contribution card has a home outside the Stop hook. `hunch task list [--json]`
+  summarizes recent tasks (lessons, applied, saved, denied, last check) from the
+  observation ledger; `hunch task status` renders one line for a terminal status
+  line, naming the exact prompt task when Claude Code's status-line JSON arrives
+  on stdin (`{"statusLine":{"type":"command","command":"hunch task status 2>/dev/null"}}`)
+  and staying silent for a prompt with nothing observed. The VS Code extension
+  (0.18.0) adds a **Contribution** view fed by `task list --json`, with the
+  evidence view opened in a webview. Claude Code's Stop notice now prints the
+  card only when a delivery, check, save, claim, or denial was observed; empty
+  task rows stay in the ledger so "never touched Hunch" remains countable.
 
 ## 1.32.3 — 2026-09-12
 

@@ -4,7 +4,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { listReportTasks, readTaskReport } from "../src/core/taskReport.js";
+import { listReportTasks, listTaskSummaries, readTaskReport } from "../src/core/taskReport.js";
 import { HunchStore } from "../src/store/hunchStore.js";
 import { hunchPaths } from "../src/core/paths.js";
 import { mkConstraint } from "./helpers.js";
@@ -26,19 +26,31 @@ function hook(root: string, event: string, extra: Record<string, unknown> = {}) 
   return output ? JSON.parse(output) : null;
 }
 
-test("native Stop shows missing coverage even when the agent never calls Hunch", t => {
+test("native Stop stays silent for a prompt with no observation, while the empty task row remains countable", t => {
   const root = fixture(t);
   const prompt = hook(root, "UserPromptSubmit", { prompt: "PRIVATE_PROMPT_SENTINEL" });
   const [task] = listReportTasks(root);
   assert.ok(task, "host must start reporting before the model can skip its instructions");
   assert.match(prompt.hookSpecificOutput.additionalContext, new RegExp(task.task_id));
+  assert.equal(hook(root, "Stop"), null, "no delivery, check, save or denial: nothing to print (dec_77d99014e0's sibling: silence only where there is no evidence to show)");
+  assert.equal(readFileSync(join(root, ".hunch-cache", "served.db")).includes(Buffer.from("PRIVATE_PROMPT_SENTINEL")), false);
+  assert.equal(listReportTasks(root)[0]!.state, "open", "Stop alone cannot establish task completion or absence of another hook continuation");
+  const [summary] = listTaskSummaries(root);
+  assert.equal(summary?.task.task_id, task.task_id);
+  assert.equal(summary?.empty, true, "the ledger still shows the prompt never touched Hunch");
+});
+
+test("native Stop shows the card as soon as a check is observed, even when the agent never called a tool", t => {
+  const root = fixture(t);
+  hook(root, "UserPromptSubmit");
+  const [task] = listReportTasks(root);
+  execFileSync(process.execPath, ["--import", import.meta.resolve("tsx"), cli, "task", "verify", task!.task_id, "--json", "--", process.execPath, "-e", "process.exit(0)"], { cwd: root, encoding: "utf8" });
   const stop = hook(root, "Stop");
   assert.match(stop.systemMessage, /No task-linked delivery observed/);
+  assert.match(stop.systemMessage, /Checked .*passed/);
   assert.match(stop.systemMessage, /file:\/\//);
   assert.equal(stop.decision, undefined, "report presentation never blocks Stop");
   assert.equal(stop.hookSpecificOutput, undefined, "report does not ask the model to continue");
-  assert.equal(readFileSync(join(root, ".hunch-cache", "served.db")).includes(Buffer.from("PRIVATE_PROMPT_SENTINEL")), false);
-  assert.equal(listReportTasks(root)[0]!.state, "open", "Stop alone cannot establish task completion or absence of another hook continuation");
 });
 
 test("host identities separate prompts and sessions; old hosts never borrow a recent task", t => {
@@ -50,6 +62,7 @@ test("host identities separate prompts and sessions; old hosts never borrow a re
   hook(root, "UserPromptSubmit", { prompt_id: "prompt-b" });
   hook(root, "UserPromptSubmit", { session_id: "session-b" });
   assert.equal(listReportTasks(root).length, 3);
+  execFileSync(process.execPath, ["--import", import.meta.resolve("tsx"), cli, "task", "verify", first.task_id, "--json", "--", process.execPath, "-e", "process.exit(0)"], { cwd: root, encoding: "utf8" });
   assert.match(hook(root, "Stop").systemMessage, new RegExp(first.task_id));
   const legacy = hook(root, "Stop", { prompt_id: undefined });
   assert.match(legacy.systemMessage, /exact prompt identifier/);

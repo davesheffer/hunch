@@ -4,9 +4,15 @@ import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import type { HookProvider, HunchHookInput } from "./agenthook.js";
 import { findRoot } from "./paths.js";
-import { readTaskReport, recordReportRefusal, reportHash, reportPresentationEnabled, startReportTask } from "./taskReport.js";
+import { isEmptyTaskReport, readTaskReport, recordReportRefusal, reportHash, reportPresentationEnabled, startReportTask } from "./taskReport.js";
 import { reportSourceSnapshot } from "./taskReportEvidence.js";
 import { renderTaskReport, writeTaskReportHtml } from "./taskReportRender.js";
+
+/** The exact task identity a Claude Code prompt maps to. The status line receives
+ * the same session_id/prompt_id on stdin, so it can name the prompt's task too. */
+export function promptTaskId(root: string, sessionId: string, promptId: string, agentId: string | null = null): string {
+  return `htask_${reportHash([realpathSync(root), "claude", sessionId, promptId, agentId]).slice(7, 31)}`;
+}
 
 function identity(root: string, provider: HookProvider, event: HunchHookInput): string | null {
   if (provider !== "claude" || !event.cwd || realpathSync(findRoot(event.cwd)) !== realpathSync(root)) return null;
@@ -15,7 +21,7 @@ function identity(root: string, provider: HookProvider, event: HunchHookInput): 
   }
   if (!event.session_id) return null;
   if (!event.prompt_id) return "legacy";
-  return `htask_${reportHash([realpathSync(root), provider, event.session_id, event.prompt_id, event.agent_id ?? null]).slice(7, 31)}`;
+  return promptTaskId(root, event.session_id, event.prompt_id, event.agent_id ?? null);
 }
 
 export function hookReportTaskId(root: string, provider: HookProvider, event: HunchHookInput): string | null {
@@ -35,7 +41,10 @@ export function startHookReport(root: string, provider: HookProvider, event: Hun
 }
 
 /** A presentation notice never denies Stop or injects another model turn. Stop
- * can precede another hook's continuation, so it does not close an open task. */
+ * can precede another hook's continuation, so it does not close an open task.
+ * A prompt with no observation at all prints nothing: the empty task row stays
+ * in the ledger (hunch task list, the VS Code Contribution view) so "never
+ * touched Hunch" remains countable without a five-line notice per prompt. */
 export function stopHookReport(root: string, provider: HookProvider, event: HunchHookInput): { systemMessage: string } | null {
   if (!reportPresentationEnabled(root)) return null;
   const id = identity(root, provider, event);
@@ -43,6 +52,7 @@ export function stopHookReport(root: string, provider: HookProvider, event: Hunc
   if (id === "legacy") return { systemMessage: "Hunch hook active. This Claude version does not provide an exact prompt identifier, so contribution for this response is unverified. Explicit task reports remain available with hunch report." };
   try {
     const report = readTaskReport(root, id, reportSourceSnapshot(root).hash);
+    if (isEmptyTaskReport(report)) return null;
     let card = renderTaskReport(report);
     try {
       const file = writeTaskReportHtml(root, id);
