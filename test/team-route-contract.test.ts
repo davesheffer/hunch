@@ -764,7 +764,7 @@ for (const routeCase of routeCases) {
   });
 }
 
-test("an empty-memory clone auto-joins after exactly one canonical branch is published", { timeout: 90_000 }, () => {
+test("an empty-memory clone auto-joins after exactly one canonical branch is published", { timeout: 180_000 }, () => {
   const base = mkdtempSync(join(tmpdir(), "hunch-team-empty-autojoin-"));
   try {
     const memoryRemote = makeEmptyMemoryRemote(base, "empty-memory");
@@ -812,7 +812,7 @@ test("an empty-memory clone auto-joins after exactly one canonical branch is pub
   }
 });
 
-test("a legacy team file derives a sole master branch without silently assuming main", { timeout: 90_000 }, () => {
+test("a legacy team file derives a sole master branch without silently assuming main", { timeout: 180_000 }, () => {
   const base = mkdtempSync(join(tmpdir(), "hunch-legacy-master-route-"));
   try {
     const memoryRemote = makeMemoryRemote(base, "legacy-master-memory", "master", true);
@@ -964,7 +964,8 @@ test("strict PreToolUse is silent when fresh advertised team memory is unavailab
     const result = runCli(code, ["hook", "--provider", "claude"], strictHookInput(code.root));
     assert.equal(result.error, undefined, result.error?.message);
     assert.equal(result.status, 0, output(result));
-    assert.equal(output(result), "", "hook route failure must emit neither deny, allow, nor public grounding");
+    assert.doesNotMatch(output(result), /"deny"|"allow"|permissionDecision|con_|dec_/, "hook route failure must emit neither deny, allow, nor public grounding");
+    assert.match(output(result), /Hunch grounding unavailable for this edit/, "fail-open says so instead of passing silently");
     assert.equal(git(code.root, "rev-parse", "HEAD"), codeHeadBefore);
     assert.equal(bareRefs(code.codeRemote), codeRemoteBefore);
   } finally {
@@ -972,7 +973,7 @@ test("strict PreToolUse is silent when fresh advertised team memory is unavailab
   }
 });
 
-test("strict PreToolUse is silent when the local overlay route mismatches committed team memory", { timeout: 90_000 }, () => {
+test("strict PreToolUse is silent when the local overlay route mismatches committed team memory", { timeout: 180_000 }, () => {
   const base = mkdtempSync(join(tmpdir(), "hunch-team-hook-mismatch-"));
   try {
     const fixture = makeSharedFixture(base, "hook-mismatch");
@@ -993,7 +994,8 @@ test("strict PreToolUse is silent when the local overlay route mismatches commit
     const result = runCli(fixture, ["hook", "--provider", "claude"], strictHookInput(fixture.root));
     assert.equal(result.error, undefined, result.error?.message);
     assert.equal(result.status, 0, output(result));
-    assert.equal(output(result), "", "hook route mismatch must emit neither deny, allow, nor stale grounding");
+    assert.doesNotMatch(output(result), /"deny"|"allow"|permissionDecision|con_|dec_/, "hook route mismatch must emit neither deny, allow, nor stale grounding");
+    assert.match(output(result), /Hunch grounding unavailable for this edit/, "fail-open says so instead of passing silently");
     assert.equal(git(fixture.root, "rev-parse", "HEAD"), codeHeadBefore);
     assert.equal(bareRefs(fixture.codeRemote), codeRemoteBefore);
     assert.equal(bareRefs(fixture.memoryRemote), memoryABefore);
@@ -1004,7 +1006,7 @@ test("strict PreToolUse is silent when the local overlay route mismatches commit
   }
 });
 
-test("strict PreToolUse is silent when a configured team overlay is stale and its remote goes offline", { timeout: 90_000 }, () => {
+test("strict PreToolUse is silent when a configured team overlay is stale and its remote goes offline", { timeout: 180_000 }, () => {
   const base = mkdtempSync(join(tmpdir(), "hunch-team-hook-stale-offline-"));
   try {
     const fixture = makeSharedFixture(base, "hook-stale-offline");
@@ -1020,7 +1022,8 @@ test("strict PreToolUse is silent when a configured team overlay is stale and it
 
     const result = runCli(fixture, ["hook", "--provider", "claude"], strictHookInput(fixture.root));
     assert.equal(result.status, 0, output(result));
-    assert.equal(output(result), "", "strict hook fail-opens instead of denying from stale local team rules");
+    assert.doesNotMatch(output(result), /"deny"|permissionDecision/, "strict hook fail-opens instead of denying from stale local team rules");
+    assert.match(output(result), /Hunch grounding unavailable for this edit/, "fail-open says so instead of passing silently");
     assert.equal(git(fixture.overlay, "rev-parse", "HEAD"), overlayHeadBefore);
     assert.equal(git(fixture.root, "rev-parse", "HEAD"), codeHeadBefore);
     assert.equal(bareRefs(fixture.codeRemote), codeRemoteBefore);

@@ -24,6 +24,8 @@ import {
   type G3PolicyEvidence,
 } from "../src/constitution/g3.js";
 import { executeG3AdapterConformance } from "../src/constitution/g3Conformance.js";
+// These suites exercise the specialist MCP tool groups; the everyday default hides them (src/mcp/toolset.ts).
+process.env.HUNCH_MCP_TOOLS = "all";
 
 const NOW = "2026-07-11T12:00:00.000Z";
 const H = (character: string): string => `sha1:${character.repeat(40)}`;

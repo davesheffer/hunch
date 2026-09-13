@@ -31,6 +31,7 @@ import { registerUpdateCommand } from "./update.js";
 import { registerReviewMemoryCommands } from "./reviewMemory.js";
 import { detectInitiator, normalizeInitiator } from "../synthesis/initiator.js";
 import { inspectIntegrations, formatIntegrationHealth, integrationHealthFails, integrationSessionWarning } from "../integrations/health.js";
+import { publishedStatus, type PublishedStatus } from "../integrations/registry.js";
 import { HunchStore } from "../store/hunchStore.js";
 import { JsonStore } from "../store/jsonStore.js";
 import { selectEmbedder } from "../store/embedder.js";
@@ -94,7 +95,7 @@ import { snapshotDeliveredRecords } from "../core/taskReportEvidence.js";
 import { renderRecalledLine } from "../core/taskReportRender.js";
 import { hookReportTaskId, startHookReport, stopHookReport, observeHookDenial } from "../core/taskReportHook.js";
 import { recordHookObservation } from "../core/hookObservations.js";
-import { contextHookOutput, denyHookOutput, hookProvider, normalizeHookEvent, stopHookOutput, type HookProvider } from "../core/agenthook.js";
+import { contextHookOutput, denyHookOutput, hookProvider, normalizeHookEvent, stopHookOutput, type HookProvider, type HunchHookEvent } from "../core/agenthook.js";
 import {
   PIPELINE_LOOP,
   armExecutionObligations,
@@ -4257,13 +4258,19 @@ program
   .option("--provider <provider>", "hook event dialect: claude | vscode | cursor | windsurf | antigravity", "claude")
   .action(async (opts: { provider?: string }) => {
     // A hook MUST NEVER break the agent: on ANY error or unrecognized input we
-    // emit nothing and exit 0 (the action defers to Claude Code's normal flow).
+    // exit 0 and never deny (the action defers to the host's normal flow).
+    // Unrecognized input stays silent; an error after the event was recognized
+    // says "grounding unavailable" in one context line — see the catch below.
     let store: HunchStore | null = null;
+    // Hoisted so the fail-open catch below can still say which grounding was lost.
+    let provider: HookProvider | null = null;
+    let eventName: HunchHookEvent | null = null;
     try {
-      const provider = hookProvider(opts.provider);
+      provider = hookProvider(opts.provider);
       if (!provider) return;
       const evt = normalizeHookEvent(JSON.parse(await readStdin()), provider);
       if (!evt) return;
+      eventName = evt.hook_event_name;
       const root = findRoot();
       // The host delivered this event: runtime evidence for `hunch integrations check`,
       // recorded before any policy decision so firmness never hides delivery itself.
@@ -4552,15 +4559,16 @@ program
 
       // Pre-edit grounding must resolve the same advertised graph as every CLI
       // and MCP consumer. Any unavailable/mismatched team route falls through to
-      // the outer fail-open catch and emits nothing, preserving the hook's
-      // non-blocking invariant without false-passing against public/stale memory.
+      // the outer fail-open catch: one "grounding unavailable" line, never a deny,
+      // never grounding from public/stale memory (dec_77d99014e0).
       const opened = openTeamStore(root, { requireFreshTeamMemory: firmness === "strict" });
       store = opened.store;
       if (firmness === "strict" && opened.teamPullStatus
         && opened.teamPullStatus !== "updated" && opened.teamPullStatus !== "current") {
         // A strict deny is only trustworthy when it includes the latest team
         // rules. Offline/busy/unconfigured team memory is unavailable, so the
-        // non-blocking hook emits nothing instead of denying from stale state.
+        // non-blocking hook says so instead of denying from stale state.
+        emitContext(provider, "PreToolUse", `Hunch grounding unavailable for this edit; it proceeds ungrounded (team memory is ${opened.teamPullStatus}; strict mode never denies from stale rules). Run \`hunch doctor\`.`);
         return;
       }
 
@@ -4683,8 +4691,15 @@ program
         } catch { reportNotice = "\n\nTask report observation unavailable; this delivery's task contribution remains unverified."; recalled = null; }
       }
       emitContext(provider, "PreToolUse", text + reportNotice, recalled ?? undefined);
-    } catch {
-      // swallow — never block an edit on a hook failure
+    } catch (e) {
+      // Never block an edit on a hook failure — and never go silent either: an
+      // ungrounded edit that looks grounded gets diagnosed as model flakiness.
+      // One context line, exit 0 (the launcher itself failing stays out of reach).
+      const reason = e instanceof Error ? e.message.split("\n")[0] : "unknown error";
+      if (provider && (eventName === "PreToolUse" || eventName === "SessionStart" || eventName === "UserPromptSubmit")) {
+        const what = eventName === "PreToolUse" ? "for this edit; it proceeds ungrounded" : "for this session";
+        try { emitContext(provider, eventName, `Hunch grounding unavailable ${what} (${reason}). Run \`hunch doctor\`.`); } catch { /* stdout gone */ }
+      }
     } finally {
       store?.close();
     }
@@ -6280,6 +6295,19 @@ program
   .action(async () => {
     const integrations = inspectIntegrations(findRoot());
     console.log(formatIntegrationHealth(integrations));
+    // A pin npm cannot serve kills every npx launcher (hooks and MCP) before Hunch
+    // runs, and the hosts report nothing. Name it here; bounded, offline-safe.
+    const published = new Map<string, PublishedStatus>();
+    for (const v of new Set([integrations.expectedVersion, ...integrations.pins.map(p => p.version)])) published.set(v, publishedStatus(v));
+    const expectedUnpublished = published.get(integrations.expectedVersion) === "unpublished";
+    for (const pin of integrations.pins) {
+      if (published.get(pin.version) !== "unpublished") continue;
+      console.log(`ERROR ${pin.file}: pins Hunch ${pin.version}, which npm cannot serve (ETARGET) — every hook run and MCP launch from this file fails before Hunch starts, silently. Run \`hunch integrations repair-pins\`${expectedUnpublished ? " once the release publishes" : ""}.`);
+      process.exitCode = 1;
+    }
+    if (expectedUnpublished && integrations.pins.every(p => p.version !== integrations.expectedVersion)) {
+      console.log(`note: package.json says ${integrations.expectedVersion}, which is not on npm yet; machine-local pins stay on the last published release until it is (then run \`hunch integrations repair-pins\`).`);
+    }
     // A shared-memory or CLI-only checkout may intentionally have no local
     // assistant config. The explicit integrations check still fails that case.
     if (integrations.harnesses.length > 0 && integrationHealthFails(integrations)) process.exitCode = 1;

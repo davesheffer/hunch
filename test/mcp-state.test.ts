@@ -14,6 +14,8 @@ import { hunchPaths } from "../src/core/paths.js";
 import { buildServer } from "../src/mcp/server.js";
 import { HunchStore } from "../src/store/hunchStore.js";
 import { entityId, stateHash } from "../src/core/stateContract.js";
+// These suites exercise the specialist MCP tool groups; the everyday default hides them (src/mcp/toolset.ts).
+process.env.HUNCH_MCP_TOOLS = "all";
 
 const prov = { source: "imported:sofia", confidence: 0.9, evidence: ["sofia approvals row a1"] };
 const crmEvent = { system: "crm", object_type: "event", object_key: "10042", version: "2", observed_at: "2026-09-07T12:00:00Z" };

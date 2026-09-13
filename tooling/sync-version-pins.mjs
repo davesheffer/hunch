@@ -18,9 +18,21 @@ const read = (rel) => readFileSync(join(projectRoot, rel), "utf8");
 
 // Use the same bounded config writer as `hunch integrations repair-pins`.
 // Source loading works before dist exists during a fresh checkout's npm version.
-execFileSync(process.execPath, ["--import", "tsx", "--input-type=module", "--eval",
-  "import { repairIntegrationPins } from './src/integrations/health.ts'; repairIntegrationPins(process.cwd());"],
-  { cwd: projectRoot, stdio: "inherit" });
+// Committed pins (.windsurf/hooks.json) follow package.json — the release gate
+// tests them. Machine-local (git-ignored) launch config only moves once npm can
+// serve the version: a pin ahead of publication makes every hook and MCP launch
+// on this machine fail with ETARGET, silently, until the release lands.
+execFileSync(process.execPath, ["--import", "tsx", "--input-type=module", "--eval", [
+  "import { repairIntegrationPins, machineLocalIntegrationFiles } from './src/integrations/health.ts';",
+  "import { publishedStatus } from './src/integrations/registry.ts';",
+  "import { HUNCH_VERSION } from './src/core/version.ts';",
+  "const root = process.cwd();",
+  "const status = publishedStatus(HUNCH_VERSION);",
+  "const local = new Set(status === 'published' ? [] : machineLocalIntegrationFiles(root));",
+  "const repaired = repairIntegrationPins(root, { skip: (file) => local.has(file) });",
+  "if (repaired.length) console.log(`sync-version-pins: repaired ${repaired.join(', ')}`);",
+  "if (local.size) console.log(`sync-version-pins: kept machine-local pins (${[...local].join(', ')}) on their current release: ${HUNCH_VERSION} is ${status === 'unpublished' ? 'not published on npm yet' : 'not confirmed on npm'}. Run hunch integrations repair-pins once it publishes.`);",
+].join(" ")], { cwd: projectRoot, stdio: "inherit" });
 
 const { name, version } = JSON.parse(read("package.json"));
 const changed = [];
