@@ -18,8 +18,8 @@ function fixture(t: { after: (f: () => void) => void }) {
   writeFileSync(join(root, ".gitignore"), ".hunch-cache/\n");
   return root;
 }
-function hook(root: string, event: string, extra: Record<string, unknown> = {}) {
-  const output = execFileSync(process.execPath, ["--import", import.meta.resolve("tsx"), cli, "hook"], {
+function hook(root: string, event: string, extra: Record<string, unknown> = {}, provider = "claude") {
+  const output = execFileSync(process.execPath, ["--import", import.meta.resolve("tsx"), cli, "hook", "--provider", provider], {
     cwd: root, env: { ...process.env, HUNCH_PIPELINE: "0" },
     input: JSON.stringify({ hook_event_name: event, cwd: root, session_id: "session-a", prompt_id: "prompt-a", ...extra }), encoding: "utf8",
   }).trim();
@@ -132,4 +132,17 @@ test("strict denial is retained in its prompt report without claiming host compl
   // An unidentified prompt must not attach to the most recent task.
   hook(root, "PreToolUse", { ...input, prompt_id: undefined });
   assert.equal((readTaskReport(root, task.task_id) as unknown as typeof report).refusals?.length, 1);
+});
+
+test("Codex hooks open the same per-prompt report from turn_id and never share a task with Claude Code", t => {
+  const root = fixture(t);
+  const prompt = hook(root, "UserPromptSubmit", { prompt_id: undefined, turn_id: "turn-1", prompt: "codex prompt" }, "codex");
+  const [task] = listReportTasks(root);
+  assert.ok(task, "Codex's UserPromptSubmit opens the report natively");
+  assert.match(prompt.hookSpecificOutput.additionalContext, new RegExp(task.task_id));
+  assert.equal(hook(root, "Stop", { prompt_id: undefined, turn_id: "turn-1" }, "codex"), null, "nothing observed yet: silent");
+  execFileSync(process.execPath, ["--import", import.meta.resolve("tsx"), cli, "task", "verify", task.task_id, "--json", "--", process.execPath, "-e", "process.exit(0)"], { cwd: root, encoding: "utf8" });
+  assert.match(hook(root, "Stop", { prompt_id: undefined, turn_id: "turn-1" }, "codex").systemMessage, new RegExp(task.task_id));
+  hook(root, "UserPromptSubmit", { prompt_id: "turn-1" }, "claude");
+  assert.equal(listReportTasks(root).length, 2, "same session/prompt strings on another host are a different task");
 });

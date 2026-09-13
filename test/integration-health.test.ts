@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import { inspectIntegrations, repairIntegrationPins, integrationHealthFails, integrationSessionWarning, machineLocalIntegrationFiles, HARNESSES, CAPABILITIES } from "../src/integrations/health.js";
 import { probeIntegration } from "../src/integrations/probe.js";
 import { installClaudeHooks, writeMcpJson } from "../src/integrations/scaffold.js";
-import { writeCodexConfig, scaffoldProviders } from "../src/integrations/providers.js";
+import { writeCodexConfig, writeCodexHooks, scaffoldProviders } from "../src/integrations/providers.js";
 import { tempStore } from "./helpers.js";
 
 const version = "1.23.1";
@@ -30,13 +30,14 @@ test("original regression: dependency upgrades cannot leave stale MCP or hook pi
   try {
     f.claude("1.22.0");
     writeCodexConfig(f.root, launcher("1.22.0"));
+    writeCodexHooks(f.root, launcher("1.22.0"));
     const report = inspectIntegrations(f.root);
     assert.equal(report.expectedVersion, version);
     assert.equal(integrationHealthFails(report), true);
-    for (const file of [".mcp.json", ".claude/settings.json", ".codex/config.toml"]) {
+    for (const file of [".mcp.json", ".claude/settings.json", ".codex/config.toml", ".codex/hooks.json"]) {
       assert.ok(report.issues.some(i => i.file === file && i.code === "version-drift"), file);
     }
-    assert.equal(repairIntegrationPins(f.root).length, 3);
+    assert.equal(repairIntegrationPins(f.root).length, 4);
     assert.deepEqual(repairIntegrationPins(f.root), []);
     assert.equal(integrationHealthFails(inspectIntegrations(f.root)), false);
   } finally { f.cleanup(); }
@@ -88,15 +89,21 @@ test("hooks become verified only from host-delivered events on the expected vers
   } finally { f.cleanup(); }
 });
 
-test("Codex MCP configuration cannot imply lifecycle support", () => {
+test("Codex MCP configuration alone cannot imply lifecycle support; its hooks file makes the capabilities configurable but still unverified", () => {
   const f = fixture();
   try {
     writeCodexConfig(f.root, launcher());
+    const mcpOnly = inspectIntegrations(f.root, "codex");
+    assert.deepEqual(mcpOnly.issues, [], "an adapter that was never installed is a coverage gap, not drift — hunch update must keep working for MCP-only Codex users");
+    assert.match(mcpOnly.harnesses[0]!.capabilities.context.detail, /run hunch init/);
+    assert.equal(integrationHealthFails(mcpOnly, ["context"]), true, "but nothing unverified satisfies --require");
+    writeCodexHooks(f.root, launcher());
     const report = inspectIntegrations(f.root, "codex");
+    assert.deepEqual(report.issues, []);
     const capabilities = report.harnesses[0]!.capabilities;
-    assert.equal(capabilities.context.status, "advisory-only");
-    for (const c of ["edit-blocking", "failure-capture", "compaction"] as const) assert.equal(capabilities[c].status, "unsupported");
-    assert.equal(integrationHealthFails(report, ["context"]), true);
+    for (const c of ["context", "failure-capture", "compaction"] as const) assert.equal(capabilities[c].status, "untested", c);
+    assert.equal(capabilities["edit-blocking"].status, "advisory-only", "default firmness never blocks, on Codex as on Claude Code");
+    assert.equal(integrationHealthFails(report, ["context"]), true, "configured is not verified: only a codex-delivered event can prove delivery");
   } finally { f.cleanup(); }
 });
 
@@ -108,7 +115,7 @@ test("all generated adapters are inspected and repaired against the consuming de
     installClaudeHooks(root, command("1.22.0"));
     scaffoldProviders(root, launcher("1.22.0"), store, { home: root });
     assert.equal(inspectIntegrations(root).harnesses.length, Object.keys(HARNESSES).length);
-    assert.equal(repairIntegrationPins(root).length, 11);
+    assert.equal(repairIntegrationPins(root).length, 12);
     assert.deepEqual(inspectIntegrations(root).issues, []);
   } finally { cleanup(); }
 });
@@ -284,6 +291,7 @@ test("the managed Codex block keeps its startup timeout through pin repair", () 
   try {
     f.claude();
     writeCodexConfig(f.root, launcher("1.22.0"));
+    writeCodexHooks(f.root, launcher());
     const before = readFileSync(join(f.root, ".codex/config.toml"), "utf8");
     assert.match(before, /^startup_timeout_sec = 60$/m);
     assert.deepEqual(repairIntegrationPins(f.root), [".codex/config.toml"]);

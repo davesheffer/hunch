@@ -92,6 +92,9 @@ function hookCommand(inv: Invocation, provider: HookProvider): string {
 
 function isHunchProviderHook(entry: unknown): boolean {
   const e = entry && typeof entry === "object" ? entry as Record<string, unknown> : null;
+  // Codex (like Claude Code) nests commands under a matcher entry: an entry
+  // whose every nested hook is ours is ours; a mixed entry stays foreign.
+  if (e && Array.isArray(e.hooks) && e.hooks.length && typeof e.command !== "string") return e.hooks.every(isHunchProviderHook);
   const command = typeof e?.command === "string" ? e.command : "";
   // Anchored to the shapes hookCommand() writes — a Hunch launcher (the pinned
   // npm package spec, or a …/index.js|ts path for source installs) plus a tail
@@ -302,6 +305,27 @@ export function writeCursorHooks(root: string, inv: Invocation): string {
   return written;
 }
 
+/** Codex CLI hooks (0.153+): `.codex/hooks.json`, the same event names, stdin
+ * payload, and stdout contract as Claude Code, with `turn_id` as the per-prompt
+ * identity and `apply_patch` as the edit tool. Project-layer hooks load only for
+ * a trusted project and must be trusted once in Codex (`/hooks`), which the
+ * scaffold output says. Codex's PreToolUse rejects `continue:false`, so the
+ * strict gate answers with `permissionDecision` — the shape Hunch already emits. */
+export function writeCodexHooks(root: string, inv: Invocation): string {
+  const file = join(root, ".codex", "hooks.json");
+  const command = hookCommand(inv, "codex");
+  const entry = (matcher?: string) => ({ ...(matcher ? { matcher } : {}), hooks: [{ type: "command", command }] });
+  return writeHookConfig(file, {
+    SessionStart: [entry()],
+    UserPromptSubmit: [entry()],
+    PreToolUse: [entry("apply_patch")],
+    PostToolUse: [entry("apply_patch|shell|local_shell")],
+    Stop: [entry()],
+    PreCompact: [entry()],
+    SubagentStart: [entry()],
+  });
+}
+
 /** VS Code's native workspace hook location. It supports all lifecycle events
  * Hunch needs and uses the same stdout contract as Claude Code, with different
  * camelCase tool fields normalized in core/agenthook.ts. */
@@ -497,7 +521,7 @@ export function scaffoldProviders(root: string, inv: Invocation, store: HunchSto
   const tasks: Array<[string, () => Omit<ProviderScaffold, "assistant">]> = [
     ["Cursor", () => runProvider([() => writeCursorMcp(root, inv), () => writeCursorRule(root, store), ...(hooks ? [() => writeCursorHooks(root, inv)] : [])])],
     ["VS Code (Copilot)", () => runProvider([() => writeVscodeMcp(root, inv), () => writeCopilotInstructions(root, store), ...(hooks ? [() => writeVscodeHooks(root, inv)] : [])])],
-    ["Codex CLI", () => runProvider([() => writeCodexConfig(root, inv)])],
+    ["Codex CLI", () => runProvider([() => writeCodexConfig(root, inv), ...(hooks ? [() => writeCodexHooks(root, inv)] : [])])],
     ["Windsurf", () => {
       return runProvider([
         () => writeWindsurfMcp(root, inv),

@@ -61,7 +61,7 @@ hunch integrations check --harness codex --require context,edit-blocking
 
 Capabilities are reported as **verified**, **advisory-only**, **unsupported** or **untested**. `--require` fails unless every named capability is verified. `mcp` is verified by a fresh-server probe; hook capabilities become verified only from lifecycle events actually delivered to Hunch's hook on the expected version within the last 30 days (machine-local evidence, the same trust level as the served ledger), so a repository whose agent has actually run shows it, and one that only has configuration does not.
 
-The Codex integration currently supplies MCP and instructions, with no native lifecycle adapter. The opt-in `--probe` verifies a fresh MCP process, not whether an existing host session or model actually followed the memory.
+Codex CLI 0.153+ gets a native lifecycle adapter (`.codex/hooks.json`: session orientation, prompt task IDs from `turn_id`, `apply_patch` pre-edit grounding and strict denial, Stop cards); project-layer hooks load only for a trusted project and must be trusted once in Codex with `/hooks`. The opt-in `--probe` verifies a fresh MCP process, not whether an existing host session or model actually followed the memory.
 
 Use `hunch integrations check` in CI to prevent pin drift; add `--require` for capabilities your workflow cannot operate without.
 

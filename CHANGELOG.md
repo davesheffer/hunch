@@ -28,6 +28,16 @@
   evidence view opened in a webview. Claude Code's Stop notice now prints the
   card only when a delivery, check, save, claim, or denial was observed; empty
   task rows stay in the ledger so "never touched Hunch" remains countable.
+- Codex CLI has a native lifecycle adapter. `hunch init` writes `.codex/hooks.json`
+  (Codex 0.153+ hooks share Claude Code's event names, stdin payload, and stdout
+  contract): session orientation, a per-prompt task report from `turn_id`,
+  `apply_patch` pre-edit grounding with strict denial, PostToolUse observation,
+  compaction reset, and the Stop card. `hunch hook --provider codex` normalizes
+  `apply_patch` patches to their first touched file and shell argv arrays to one
+  command. Codex loads project-layer hooks only for a trusted project and asks
+  once to trust them (`/hooks`); `hunch integrations check --harness codex` now
+  reports the capabilities as configured (untested until a Codex-delivered event
+  is observed) instead of unsupported.
 - `hunch task stats [--days N] [--json]` reports adherence over a window from the
   ledger: tasks reached by memory, checked, claimed, saved, denied, or untouched.
 - The MCP server exposes the everyday tool set by default. The seven `nuryel_*`

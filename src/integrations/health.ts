@@ -25,7 +25,7 @@ export type Capability = typeof CAPABILITIES[number];
 export type HealthStatus = "verified" | "advisory-only" | "unsupported" | "untested";
 export const HARNESSES = {
   claude: { mcp: ".mcp.json", hooks: ".claude/settings.json", key: "mcpServers", events: ["SessionStart", "PreToolUse", "PostToolUseFailure", "PreCompact"] },
-  codex: { mcp: ".codex/config.toml", hooks: "", key: "", events: [] },
+  codex: { mcp: ".codex/config.toml", hooks: ".codex/hooks.json", key: "hooks", events: ["SessionStart", "PreToolUse", "PostToolUse", "PreCompact"] },
   cursor: { mcp: ".cursor/mcp.json", hooks: ".cursor/hooks.json", key: "mcpServers", events: ["sessionStart", "preToolUse", "postToolUse", ""] },
   vscode: { mcp: ".vscode/mcp.json", hooks: ".github/hooks/hunch.json", key: "servers", events: ["SessionStart", "PreToolUse", "PostToolUse", ""] },
   windsurf: { mcp: ".windsurf/mcp_config.json", hooks: ".windsurf/hooks.json", key: "mcpServers", events: ["", "pre_write_code", "post_run_command", ""] },
@@ -139,7 +139,11 @@ export function inspectIntegrations(root: string, selected?: Harness): Integrati
     }
     let events: Obj = {};
     let disabled = false;
-    if (spec.hooks) {
+    // A hooks file that was never written is a coverage gap (the adapter is
+    // not installed), not configuration drift: report it, never fail on it.
+    // `--require` still refuses, because nothing unverified counts.
+    const hooksAbsent = !!spec.hooks && !existsSync(join(root, spec.hooks));
+    if (spec.hooks && !hooksAbsent) {
       try {
         const config = object(parseJsonc(readFileSync(join(root, spec.hooks), "utf8")));
         disabled = config.disableAllHooks === true;
@@ -153,6 +157,8 @@ export function inspectIntegrations(root: string, selected?: Harness): Integrati
       if (!event) {
         status.status = capability === "context" ? "advisory-only" : "unsupported";
         status.detail = capability === "context" ? "Hunch relies on instructions and voluntary MCP calls on this adapter" : "No Hunch lifecycle adapter for this capability";
+      } else if (hooksAbsent) {
+        status.detail = `No ${spec.hooks}; run hunch init to install this host's lifecycle hooks`;
       } else if (disabled || firmness === "off" || ((capability === "failure-capture") && process.env.HUNCH_PIPELINE === "0")) {
         status.status = "unsupported";
         status.detail = "Disabled by local hook settings, firmness, or HUNCH_PIPELINE";
@@ -217,7 +223,7 @@ export function repairIntegrationPins(root: string, opts: { skip?: (file: string
         return `@davesheffer/hunch@${version}`;
       });
       let after: string;
-      if (name === "codex") {
+      if (name === "codex" && file === spec.mcp) {
         readLauncher(root, "codex");
         const block = codexBlock(before);
         const table = object(object(parseToml(block).mcp_servers).hunch);

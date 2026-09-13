@@ -640,7 +640,7 @@ export const MCP_INSTRUCTIONS = [
   "Hunch is this repository's engineering memory: decisions, bug history, invariants, components, with provenance.",
   "Per user task: (1) hunch_task(action:\"start\", title) once — unless the host's prompt hook already printed a task_id, then reuse it; (2) hunch_context(target, task_id) FIRST, before reading or editing, for the file, symbol, or task phrase; (3) hunch_check_constraints(scope) before editing shared code; (4) hunch_task(action:\"finish\", task_id) before the final response and show its contribution card.",
   "Then by moment: hunch_why(target) for rationale and rejected alternatives, hunch_bug_lineage before fixing a failure, hunch_record_decision after a non-trivial choice, hunch_record_correction when a human corrects you.",
-  "Hosts without lifecycle hooks (Codex, Windsurf) receive no automatic grounding: call these tools yourself.",
+  "Hosts without lifecycle hooks (Windsurf, Cursor, or Codex before its hooks are trusted) receive no automatic grounding: call these tools yourself.",
 ].join("\n");
 
 export function buildServerWithRootControl(initialRoot: string, options: RootControlOptions = {}): RootControlledServer {
