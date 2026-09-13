@@ -1,6 +1,7 @@
 /** Repository integration checks. Configuration is evidence of wiring, never
  * evidence that a host delivered context or enforced a decision. */
 import { existsSync, readFileSync, lstatSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { join, resolve } from "node:path";
 import { parse as parseToml } from "smol-toml";
 import { parseJsonc } from "../core/jsonc.js";
@@ -24,7 +25,7 @@ export type Capability = typeof CAPABILITIES[number];
 export type HealthStatus = "verified" | "advisory-only" | "unsupported" | "untested";
 export const HARNESSES = {
   claude: { mcp: ".mcp.json", hooks: ".claude/settings.json", key: "mcpServers", events: ["SessionStart", "PreToolUse", "PostToolUseFailure", "PreCompact"] },
-  codex: { mcp: ".codex/config.toml", hooks: "", key: "", events: [] },
+  codex: { mcp: ".codex/config.toml", hooks: ".codex/hooks.json", key: "hooks", events: ["SessionStart", "PreToolUse", "PostToolUse", "PreCompact"] },
   cursor: { mcp: ".cursor/mcp.json", hooks: ".cursor/hooks.json", key: "mcpServers", events: ["sessionStart", "preToolUse", "postToolUse", ""] },
   vscode: { mcp: ".vscode/mcp.json", hooks: ".github/hooks/hunch.json", key: "servers", events: ["SessionStart", "PreToolUse", "PostToolUse", ""] },
   windsurf: { mcp: ".windsurf/mcp_config.json", hooks: ".windsurf/hooks.json", key: "mcpServers", events: ["", "pre_write_code", "post_run_command", ""] },
@@ -43,6 +44,8 @@ export interface IntegrationHealth {
   scope: "repository-config";
   issues: HealthIssue[];
   harnesses: HarnessHealth[];
+  /** Every exact Hunch pin found in repository launch config, once per file+version. */
+  pins: Array<{ file: string; version: string }>;
 }
 const exactVersion = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
 const pinPattern = /@davesheffer\/hunch@([^\s"'\],;]+)/g;
@@ -104,7 +107,7 @@ function expectedVersion(root: string): string {
 }
 
 export function inspectIntegrations(root: string, selected?: Harness): IntegrationHealth {
-  const report: IntegrationHealth = { schema: "hunch.integration-health/1", expectedVersion: HUNCH_VERSION, scope: "repository-config", issues: [], harnesses: [] };
+  const report: IntegrationHealth = { schema: "hunch.integration-health/1", expectedVersion: HUNCH_VERSION, scope: "repository-config", issues: [], harnesses: [], pins: [] };
   try { report.expectedVersion = expectedVersion(root); }
   catch (e) { report.issues.push({ file: "package.json", code: "dependency-version", detail: (e as Error).message }); }
   const firmness = readConfig(hunchPaths(root)).firmness;
@@ -112,7 +115,8 @@ export function inspectIntegrations(root: string, selected?: Harness): Integrati
     for (const value of values) {
       const pins = [...value.matchAll(pinPattern)];
       if (value.includes("@davesheffer/hunch") && !pins.length) report.issues.push({ file, code: "unpinned-package", detail: "Hunch npm launcher has no exact version; run hunch init with the intended version" });
-      for (const [, version] of pins) {
+      for (const [, version = ""] of pins) {
+        if (!report.pins.some(p => p.file === file && p.version === version)) report.pins.push({ file, version });
         if (version !== report.expectedVersion) report.issues.push({ file, code: "version-drift", detail: `Hunch ${version} differs from expected ${report.expectedVersion}; run hunch integrations repair-pins` });
       }
     }
@@ -135,7 +139,11 @@ export function inspectIntegrations(root: string, selected?: Harness): Integrati
     }
     let events: Obj = {};
     let disabled = false;
-    if (spec.hooks) {
+    // A hooks file that was never written is a coverage gap (the adapter is
+    // not installed), not configuration drift: report it, never fail on it.
+    // `--require` still refuses, because nothing unverified counts.
+    const hooksAbsent = !!spec.hooks && !existsSync(join(root, spec.hooks));
+    if (spec.hooks && !hooksAbsent) {
       try {
         const config = object(parseJsonc(readFileSync(join(root, spec.hooks), "utf8")));
         disabled = config.disableAllHooks === true;
@@ -149,6 +157,8 @@ export function inspectIntegrations(root: string, selected?: Harness): Integrati
       if (!event) {
         status.status = capability === "context" ? "advisory-only" : "unsupported";
         status.detail = capability === "context" ? "Hunch relies on instructions and voluntary MCP calls on this adapter" : "No Hunch lifecycle adapter for this capability";
+      } else if (hooksAbsent) {
+        status.detail = `No ${spec.hooks}; run hunch init to install this host's lifecycle hooks`;
       } else if (disabled || firmness === "off" || ((capability === "failure-capture") && process.env.HUNCH_PIPELINE === "0")) {
         status.status = "unsupported";
         status.detail = "Disabled by local hook settings, firmness, or HUNCH_PIPELINE";
@@ -181,15 +191,29 @@ export function inspectIntegrations(root: string, selected?: Harness): Integrati
   return report;
 }
 
+/** Harness launch files git ignores: this machine's config, never the tag's. A
+ * release cut may keep these at the last published version (see
+ * tooling/sync-version-pins.mjs) so hooks and MCP never point at a version npm
+ * cannot serve. Unknown git state yields [] — callers then treat nothing as local. */
+export function machineLocalIntegrationFiles(root: string): string[] {
+  const files = Object.values(HARNESSES).flatMap(s => [s.mcp, s.hooks]).filter(f => f && existsSync(join(root, f)));
+  if (!files.length) return [];
+  const r = spawnSync("git", ["check-ignore", "--", ...files], { cwd: root, encoding: "utf8", windowsHide: true });
+  if (r.error || (r.status !== 0 && r.status !== 1)) return [];
+  return (r.stdout ?? "").split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+}
+
 /** Repair only exact published pins. Preserve formatting and all other values.
- * Preflight every affected file before writing any; reject malformed JSON/TOML. */
-export function repairIntegrationPins(root: string): string[] {
+ * Preflight every affected file before writing any; reject malformed JSON/TOML.
+ * `skip` leaves a file untouched (used to keep machine-local pins on a version
+ * npm can actually serve while a release is still publishing). */
+export function repairIntegrationPins(root: string, opts: { skip?: (file: string) => boolean } = {}): string[] {
   const version = expectedVersion(root);
   const pending: Array<{ file: string; before: string; after: string }> = [];
   for (const [name, spec] of Object.entries(HARNESSES)) {
     for (const file of [spec.mcp, spec.hooks].filter(Boolean)) {
       const path = join(root, file);
-      if (!existsSync(path)) continue;
+      if (!existsSync(path) || opts.skip?.(file)) continue;
       // Never follow a config symlink or symlinked parent into another project.
       let current = resolve(root);
       for (const part of file.split("/")) { current = join(current, part); if (lstatSync(current).isSymbolicLink()) throw new Error(`refusing to rewrite symlink: ${file}`); }
@@ -199,14 +223,14 @@ export function repairIntegrationPins(root: string): string[] {
         return `@davesheffer/hunch@${version}`;
       });
       let after: string;
-      if (name === "codex") {
+      if (name === "codex" && file === spec.mcp) {
         readLauncher(root, "codex");
         const block = codexBlock(before);
         const table = object(object(parseToml(block).mcp_servers).hunch);
-        if (Object.keys(table).some(key => !["command", "args"].includes(key))) throw new Error(`custom managed settings require manual pin repair: ${file}`);
+        if (Object.keys(table).some(key => !["command", "args", "startup_timeout_sec"].includes(key))) throw new Error(`custom managed settings require manual pin repair: ${file}`);
         // Replace only the canonical args line, never comments or another table.
         const lines = block.split("\n");
-        if (lines.some(line => line.trim() && !line.trim().startsWith("#") && !/^\s*(?:\[mcp_servers\.hunch\]|command\s*=|args\s*=)/.test(line))) throw new Error(`custom managed TOML requires manual pin repair: ${file}`);
+        if (lines.some(line => line.trim() && !line.trim().startsWith("#") && !/^\s*(?:\[mcp_servers\.hunch\]|command\s*=|args\s*=|startup_timeout_sec\s*=)/.test(line))) throw new Error(`custom managed TOML requires manual pin repair: ${file}`);
         const next = lines.map(line => /^\s*args\s*=/.test(line) ? replace(line.split("#")[0]!) + (line.includes("#") ? `#${line.split("#").slice(1).join("#")}` : "") : line).join("\n");
         after = before.replace(block, next);
         parseToml(after);

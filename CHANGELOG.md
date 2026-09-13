@@ -1,5 +1,53 @@
 # Changelog
 
+## 1.32.4 — 2026-09-13
+
+- Tool calls no longer die silently around a release. `npm version` keeps
+  machine-local (git-ignored) hook and MCP pins on the last release npm can serve
+  until the new one publishes — a pin ahead of publication made every `npx`
+  launcher fail with ETARGET, so hooks injected nothing and the MCP server never
+  connected, which looked like the agent forgetting to call Hunch. `hunch doctor`
+  now names such a pin explicitly (`pin … npm cannot serve`) instead of reporting
+  it clean, and a pre-edit or session hook that fails inside Hunch emits one
+  "grounding unavailable" context line rather than nothing (still exit 0, never a
+  deny).
+- The MCP server sends `instructions` at initialize: the per-task contract
+  (`hunch_task` start, `hunch_context` first, `hunch_check_constraints` before
+  shared edits, `hunch_task` finish) reaches every client, including hosts with
+  no lifecycle hooks. AGENTS.md/CLAUDE.md now say which hosts get a prompt-hook
+  task ID (Claude Code) and which must start the task themselves (Codex, Windsurf).
+- The managed Codex block sets `startup_timeout_sec = 60`: a cold `npx` install
+  exceeded Codex's 10 s default and dropped Hunch from the tool catalog.
+- The contribution card has a home outside the Stop hook. `hunch task list [--json]`
+  summarizes recent tasks (lessons, applied, saved, denied, last check) from the
+  observation ledger; `hunch task status` renders one line for a terminal status
+  line, naming the exact prompt task when Claude Code's status-line JSON arrives
+  on stdin (`{"statusLine":{"type":"command","command":"hunch task status 2>/dev/null"}}`)
+  and staying silent for a prompt with nothing observed. The VS Code extension
+  (0.18.0) adds a **Contribution** view fed by `task list --json`, with the
+  evidence view opened in a webview. Claude Code's Stop notice now prints the
+  card only when a delivery, check, save, claim, or denial was observed; empty
+  task rows stay in the ledger so "never touched Hunch" remains countable.
+- Codex CLI has a native lifecycle adapter. `hunch init` writes `.codex/hooks.json`
+  (Codex 0.153+ hooks share Claude Code's event names, stdin payload, and stdout
+  contract): session orientation, a per-prompt task report from `turn_id`,
+  `apply_patch` pre-edit grounding with strict denial, PostToolUse observation,
+  compaction reset, and the Stop card. `hunch hook --provider codex` normalizes
+  `apply_patch` patches to their first touched file and shell argv arrays to one
+  command. Codex loads project-layer hooks only for a trusted project and asks
+  once to trust them (`/hooks`); `hunch integrations check --harness codex` now
+  reports the capabilities as configured (untested until a Codex-delivered event
+  is observed) instead of unsupported.
+- `hunch task stats [--days N] [--json]` reports adherence over a window from the
+  ledger: tasks reached by memory, checked, claimed, saved, denied, or untouched.
+- The MCP server exposes the everyday tool set by default. The seven `nuryel_*`
+  state-partition tools and the nine Constitution G2/G3 experiment tools are
+  registered only when the root stores nuryel state records or is served pinned
+  (`hunch mcp --root`), when
+  `.hunch/config.json` sets `mcp_tools` (`all`, `core`, or `core,nuryel`), or when
+  `HUNCH_MCP_TOOLS` says so; the startup log names what is hidden. Fifty-seven
+  tools with ~24 KB of descriptions were diluting tool choice on every host.
+
 ## 1.32.3 — 2026-09-12
 
 - A subject holds one current derived statement per transform: a new current

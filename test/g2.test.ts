@@ -20,6 +20,8 @@ import {
   scoreG2Readiness,
   type G2PolicyEvidence,
 } from "../src/constitution/g2.js";
+// These suites exercise the specialist MCP tool groups; the everyday default hides them (src/mcp/toolset.ts).
+process.env.HUNCH_MCP_TOOLS = "all";
 
 const NOW = "2026-07-11T10:00:00.000Z";
 const POLICY_IDS = Array.from({ length: 10 }, (_, index) => `pol_${index.toString(16).padStart(10, "0")}`);

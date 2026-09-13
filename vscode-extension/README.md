@@ -35,6 +35,18 @@ A source-control-style view of everything Hunch does:
   **Approve-to-push**: memory auto-commits locally; publishing it to your remote is deliberately
   your click.
 
+### ✅ Contribution — what Hunch actually did for each agent task
+
+A second view in the same activity-bar container, one row per recent agent task in this
+repository (newest first): lessons recalled, rules held or violated, saves, denials, and the last
+independent check with its exit state. Rows come from Hunch's own observation ledger
+(`hunch task list --json`), never from what the agent claims. Click a row for the self-contained
+evidence view (local; it may contain private memory). A row that says *nothing observed* is a
+prompt that never touched Hunch — countable here instead of announced on every stop. This is the
+host-neutral home for the contribution card; Claude Code's Stop hook now prints the card only when
+there is something to show, and `hunch task status` renders the same summary as a one-line terminal
+status line.
+
 ### Read & write, one command each
 
 - **Hunch: Why is this?** — for the file (and symbol under your cursor): the invariants that must

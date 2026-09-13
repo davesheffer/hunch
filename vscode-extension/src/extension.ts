@@ -31,6 +31,7 @@ import { showJourney, resolveWikiGraph } from "./journey.js";
 import { cliCommand, runHunchWithProgress } from "./cli.js";
 import { registerLmTools } from "./lmTools.js";
 import { HunchMcp } from "./mcpClient.js";
+import { ContributionTreeProvider, openTaskEvidence, type TaskNode } from "./contributionView.js";
 import { MemoryTreeProvider, openMove, revertMove, syncNow, adoptDrafts, approveAndPush, setFirmness, openPolicyCard, openEscalation, activatePolicy, demotePolicy, withdrawPolicy, retirePolicy, type MoveNode, type PolicyNode, type EscalationNode } from "./memoryView.js";
 
 function workspaceRoot(): string | undefined {
@@ -257,6 +258,10 @@ export function activate(context: vscode.ExtensionContext): void {
   // memory move (capture/adopt/supersede/prune), each reviewable + revertable.
   const memoryTree = new MemoryTreeProvider(root);
   context.subscriptions.push(vscode.window.createTreeView("hunch.memory", { treeDataProvider: memoryTree }));
+  // The "Contribution" view: per-task evidence of what Hunch delivered, saved,
+  // guarded and checked — the host-neutral home for the Stop-hook card.
+  const contributionTree = new ContributionTreeProvider(root);
+  context.subscriptions.push(vscode.window.createTreeView("hunch.contribution", { treeDataProvider: contributionTree }));
 
   const hover = new HunchHoverProvider(() => cache.get(), relPath);
   const SELECTOR: vscode.DocumentSelector = [
@@ -271,6 +276,7 @@ export function activate(context: vscode.ExtensionContext): void {
     updateStatusBar(status, cache);
     updateJourneyStatus();
     memoryTree.refresh();
+    contributionTree.refresh();
   };
 
   const cursorSymbol = (): string | undefined => {
@@ -329,6 +335,9 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     // --- Hunch Memory view (source-control-style timeline) -----------------
     vscode.commands.registerCommand("hunch.memory.refresh", () => memoryTree.refresh()),
+    // --- Contribution view ---------------------------------------------------
+    vscode.commands.registerCommand("hunch.contribution.refresh", () => contributionTree.refresh()),
+    vscode.commands.registerCommand("hunch.contribution.open", (node?: TaskNode) => { if (root && node) void openTaskEvidence(root, node); }),
     vscode.commands.registerCommand("hunch.openMove", (node?: MoveNode) => { if (root && node) void openMove(root, node); }),
     vscode.commands.registerCommand("hunch.revertMove", (node?: MoveNode) => { if (root && node) void revertMove(root, node, refreshAll); }),
     vscode.commands.registerCommand("hunch.memory.sync", () => { if (root) void syncNow(root, refreshAll); }),
@@ -351,6 +360,12 @@ export function activate(context: vscode.ExtensionContext): void {
     watcher.onDidCreate(refreshAll);
     watcher.onDidDelete(refreshAll);
     context.subscriptions.push(watcher);
+    // The observation ledger lives outside .hunch/ and changes on every hook
+    // event; refresh only the Contribution view for it.
+    const ledger = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(root, ".hunch-cache/served.db*"));
+    ledger.onDidChange(() => contributionTree.refresh());
+    ledger.onDidCreate(() => contributionTree.refresh());
+    context.subscriptions.push(ledger);
   }
   const overlay = cache.get()?.overlay;
   if (overlay?.state === "active") {

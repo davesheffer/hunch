@@ -1,8 +1,8 @@
 {
   "name": "hunch-vscode",
   "displayName": "Hunch",
-  "description": "Your repo's engineering memory, in the editor: see WHY code is the way it is (decisions, invariants, bug history), and capture what you decide — one command each.",
-  "version": "0.17.3",
+  "description": "Your repo's engineering memory, in the editor: see WHY code is the way it is (decisions, invariants, bug history), and capture what you decide \u2014 one command each.",
+  "version": "0.18.0",
   "publisher": "davesheffer",
   "license": "MIT",
   "author": "Dave Sheffer <dave.sheffer1@gmail.com>",
@@ -51,13 +51,13 @@
       },
       {
         "command": "hunch.capture",
-        "title": "Capture…",
+        "title": "Capture\u2026",
         "category": "Hunch",
         "icon": "$(lightbulb)"
       },
       {
         "command": "hunch.journey",
-        "title": "Journey — watch your memory compound",
+        "title": "Journey \u2014 watch your memory compound",
         "category": "Hunch",
         "icon": "$(graph-line)"
       },
@@ -109,7 +109,7 @@
       },
       {
         "command": "hunch.memory.strictness",
-        "title": "Strictness…",
+        "title": "Strictness\u2026",
         "category": "Hunch",
         "icon": "$(shield)"
       },
@@ -136,27 +136,36 @@
       },
       {
         "command": "hunch.activatePolicy",
-        "title": "Activate rule (your vouch)…",
+        "title": "Activate rule (your vouch)\u2026",
         "category": "Hunch",
         "icon": "$(verified)"
       },
       {
         "command": "hunch.demotePolicy",
-        "title": "Demote to advisory…",
+        "title": "Demote to advisory\u2026",
         "category": "Hunch",
         "icon": "$(arrow-down)"
       },
       {
         "command": "hunch.withdrawPolicy",
-        "title": "Withdraw to proposed…",
+        "title": "Withdraw to proposed\u2026",
         "category": "Hunch",
         "icon": "$(debug-step-back)"
       },
       {
         "command": "hunch.retirePolicy",
-        "title": "Retire rule permanently…",
+        "title": "Retire rule permanently\u2026",
         "category": "Hunch",
         "icon": "$(archive)"
+      },
+      {
+        "command": "hunch.contribution.refresh",
+        "title": "Hunch: Refresh Contribution",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "hunch.contribution.open",
+        "title": "Hunch: Open Contribution Evidence"
       }
     ],
     "viewsContainers": {
@@ -175,6 +184,12 @@
           "name": "Memory Timeline",
           "icon": "$(book)",
           "contextualTitle": "Hunch Memory"
+        },
+        {
+          "id": "hunch.contribution",
+          "name": "Contribution",
+          "icon": "$(checklist)",
+          "contextualTitle": "Hunch Contribution"
         }
       ]
     },
@@ -246,6 +261,11 @@
           "command": "hunch.memory.refresh",
           "when": "view == hunch.memory",
           "group": "navigation@4"
+        },
+        {
+          "command": "hunch.contribution.refresh",
+          "when": "view == hunch.contribution",
+          "group": "navigation@0"
         }
       ],
       "view/item/context": [
@@ -327,7 +347,7 @@
         "toolReferenceName": "hunchWhy",
         "canBeReferencedInPrompt": true,
         "icon": "$(question)",
-        "userDescription": "Why a file or symbol is the way it is — decisions, invariants, bug history, and blast radius from the repo's Hunch engineering memory.",
+        "userDescription": "Why a file or symbol is the way it is \u2014 decisions, invariants, bug history, and blast radius from the repo's Hunch engineering memory.",
         "modelDescription": "Returns the recorded engineering memory for a file path or symbol in this repository: invariants that MUST NOT break (with severity and rationale), near-invariants reached through the dependency blast radius, the decisions that shaped the code (including rejected alternatives), bug history with root causes, and direct dependents. Call BEFORE modifying or reviewing a file to avoid breaking intentional design. Input: a workspace-relative file path (e.g. src/auth/session.ts) or a symbol name.",
         "inputSchema": {
           "type": "object",
@@ -417,12 +437,18 @@
           {
             "id": "record",
             "title": "Capture what you decide",
-            "description": "Hunch: Capture… records a decision, invariant, or bug into the repo's memory.",
+            "description": "Hunch: Capture\u2026 records a decision, invariant, or bug into the repo's memory.",
             "media": {
               "markdown": "media/walkthrough/record.md"
             }
           }
         ]
+      }
+    ],
+    "viewsWelcome": [
+      {
+        "view": "hunch.contribution",
+        "contents": "No agent task observed here yet. Each prompt a Hunch-wired assistant runs in this repository appears here with what Hunch delivered, saved, guarded, and checked.\n[Learn more](https://github.com/davesheffer/hunch#task-contribution-reports)"
       }
     ]
   },

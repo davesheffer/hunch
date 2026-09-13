@@ -115,3 +115,26 @@ test("each native dialect gets its native deny/context/stop response", () => {
   assert.deepEqual(stopHookOutput("cursor", "verify"), { followup_message: "verify" });
   assert.deepEqual(stopHookOutput("antigravity", "verify"), { decision: "continue", reason: "verify" });
 });
+
+test("normalizes Codex hooks: apply_patch targets the first patched file, turn_id is the prompt identity, shell argv joins", () => {
+  const patch = "*** Begin Patch\n*** Update File: src/app.ts\n@@\n-old\n+new\n*** End Patch\n";
+  const edit = normalizeHookEvent({
+    hook_event_name: "PreToolUse", session_id: "thread-1", turn_id: "turn-7", cwd: "/repo",
+    tool_name: "apply_patch", tool_input: { input: patch },
+  }, "codex");
+  assert.equal(edit?.hook_event_name, "PreToolUse");
+  assert.equal(edit?.tool_name, "Edit", "a patch with a file path is an edit for policy purposes");
+  assert.equal(edit?.tool_input?.file_path, "src/app.ts");
+  assert.equal(edit?.tool_input?.content, patch);
+  assert.equal(edit?.prompt_id, "turn-7");
+  assert.equal(edit?.cwd, "/repo");
+  const shell = normalizeHookEvent({ hook_event_name: "PostToolUse", session_id: "thread-1", turn_id: "turn-7", tool_name: "local_shell", tool_input: { command: ["bash", "-lc", "npm test"] }, tool_response: { output: "ok" } }, "codex");
+  assert.equal(shell?.tool_name, "Bash");
+  assert.equal(shell?.tool_input?.command, "bash -lc npm test");
+  assert.equal(shell?.tool_outcome?.status, "success");
+  const prompt = normalizeHookEvent({ hook_event_name: "UserPromptSubmit", session_id: "thread-1", turn_id: "turn-8", prompt: "fix it" }, "codex");
+  assert.equal(prompt?.prompt_id, "turn-8");
+  assert.deepEqual(contextHookOutput("codex", "PreToolUse", "ctx"), { hookSpecificOutput: { hookEventName: "PreToolUse", additionalContext: "ctx" } }, "Codex reads Claude Code's stdout contract");
+  assert.deepEqual(denyHookOutput("codex", "no").output, { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: "no" } });
+  assert.equal(normalizeHookEvent({ hook_event_name: "PreToolUse", session_id: "t", tool_name: "apply_patch", tool_input: { input: "not a patch" } }, "codex")?.tool_input, undefined, "a non-patch input is not a file edit");
+});

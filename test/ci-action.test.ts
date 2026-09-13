@@ -23,7 +23,10 @@ test("repository Hunch Guard uses the exact package release from the trusted PR 
 
   assert.ok(fetchBase >= 0, "the trusted PR base is fetched explicitly");
   assert.ok(readBaseVersion > fetchBase, "the version is read only after the trusted base is available");
+  const publishedAtOrBelowBase = yaml.indexOf('npm view "@davesheffer/hunch@<=$HUNCH_BASE_VERSION" version --json');
   assert.ok(installBaseVersion > readBaseVersion, "the exact trusted-base version is installed");
+  assert.ok(readBaseVersion < publishedAtOrBelowBase && publishedAtOrBelowBase < installBaseVersion,
+    "a base whose release is merged but not yet published falls back to the newest published release at or below it");
   assert.match(yaml, /if \(!\/\^\\d\+\\\.\\d\+\\\.\\d\+/);
   assert.ok(!yaml.includes(`npm install -g ${HUNCH_PACKAGE_SPEC}`),
     "a release PR must not try to install its own unpublished candidate version");
