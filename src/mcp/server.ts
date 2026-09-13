@@ -707,7 +707,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
   // Everyday tools by default; specialist groups by evidence, config, or env
   // (src/mcp/toolset.ts). Hidden tools are never registered, so tools/list is
   // exactly what the host can call.
-  const toolset = resolveMcpToolset(root, { configSpec: readConfig(hunchPaths(root)).mcp_tools ?? null });
+  const toolset = resolveMcpToolset(root, { configSpec: readConfig(hunchPaths(root)).mcp_tools ?? null, pinned });
   if (toolset.hidden.length) process.stderr.write(`[hunch-mcp] tool groups: ${toolset.groups.length ? toolset.groups.join(", ") : "core only"} (${toolset.source}); ${toolset.hidden.length} specialist tool(s) hidden — HUNCH_MCP_TOOLS=all or .hunch/config.json mcp_tools to expose\n`);
   const server = new McpServer({ name: "hunch", version: HUNCH_VERSION }, { instructions: MCP_INSTRUCTIONS });
   let activeRequests = 0;

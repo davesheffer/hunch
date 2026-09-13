@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.32.4 — 2026-09-13
 
 - Tool calls no longer die silently around a release. `npm version` keeps
   machine-local (git-ignored) hook and MCP pins on the last release npm can serve
@@ -42,7 +42,8 @@
   ledger: tasks reached by memory, checked, claimed, saved, denied, or untouched.
 - The MCP server exposes the everyday tool set by default. The seven `nuryel_*`
   state-partition tools and the nine Constitution G2/G3 experiment tools are
-  registered only when the root stores nuryel state records, when
+  registered only when the root stores nuryel state records or is served pinned
+  (`hunch mcp --root`), when
   `.hunch/config.json` sets `mcp_tools` (`all`, `core`, or `core,nuryel`), or when
   `HUNCH_MCP_TOOLS` says so; the startup log names what is hidden. Fifty-seven
   tools with ~24 KB of descriptions were diluting tool choice on every host.

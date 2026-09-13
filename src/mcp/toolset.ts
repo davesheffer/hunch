@@ -49,14 +49,17 @@ export function rootStoresState(root: string): boolean {
   });
 }
 
-export function resolveMcpToolset(root: string, opts: { env?: NodeJS.ProcessEnv; configSpec?: string | null } = {}): McpToolset {
+/** `pinned` is `hunch mcp --root <dir>`: a server dedicated to one root, which is
+ * how state partitions are served — including a brand-new partition that has no
+ * state records yet and could never receive its first nuryel_write otherwise. */
+export function resolveMcpToolset(root: string, opts: { env?: NodeJS.ProcessEnv; configSpec?: string | null; pinned?: boolean } = {}): McpToolset {
   const env = opts.env ?? process.env;
   let groups: McpToolGroup[] | null = null;
   let source: McpToolset["source"] = "default";
   const fromEnv = env.HUNCH_MCP_TOOLS?.trim();
   if (fromEnv) { groups = parseToolsetSpec(fromEnv); if (groups) source = "env"; }
   if (!groups && opts.configSpec?.trim()) { groups = parseToolsetSpec(opts.configSpec); if (groups) source = "config"; }
-  if (!groups) { groups = rootStoresState(root) ? ["nuryel"] : []; source = "default"; }
+  if (!groups) { groups = opts.pinned || rootStoresState(root) ? ["nuryel"] : []; source = "default"; }
   const set = new Set(groups);
   const hidden = MCP_TOOL_GROUP_NAMES.filter(g => !set.has(g)).flatMap(g => [...MCP_TOOL_GROUPS[g]]);
   return { enabled: g => set.has(g), groups: [...set], hidden, source };
