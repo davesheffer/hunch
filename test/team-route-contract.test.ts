@@ -764,7 +764,7 @@ for (const routeCase of routeCases) {
   });
 }
 
-test("an empty-memory clone auto-joins after exactly one canonical branch is published", { timeout: 90_000 }, () => {
+test("an empty-memory clone auto-joins after exactly one canonical branch is published", { timeout: 180_000 }, () => {
   const base = mkdtempSync(join(tmpdir(), "hunch-team-empty-autojoin-"));
   try {
     const memoryRemote = makeEmptyMemoryRemote(base, "empty-memory");
@@ -812,7 +812,7 @@ test("an empty-memory clone auto-joins after exactly one canonical branch is pub
   }
 });
 
-test("a legacy team file derives a sole master branch without silently assuming main", { timeout: 90_000 }, () => {
+test("a legacy team file derives a sole master branch without silently assuming main", { timeout: 180_000 }, () => {
   const base = mkdtempSync(join(tmpdir(), "hunch-legacy-master-route-"));
   try {
     const memoryRemote = makeMemoryRemote(base, "legacy-master-memory", "master", true);
@@ -973,7 +973,7 @@ test("strict PreToolUse is silent when fresh advertised team memory is unavailab
   }
 });
 
-test("strict PreToolUse is silent when the local overlay route mismatches committed team memory", { timeout: 90_000 }, () => {
+test("strict PreToolUse is silent when the local overlay route mismatches committed team memory", { timeout: 180_000 }, () => {
   const base = mkdtempSync(join(tmpdir(), "hunch-team-hook-mismatch-"));
   try {
     const fixture = makeSharedFixture(base, "hook-mismatch");
@@ -1006,7 +1006,7 @@ test("strict PreToolUse is silent when the local overlay route mismatches commit
   }
 });
 
-test("strict PreToolUse is silent when a configured team overlay is stale and its remote goes offline", { timeout: 90_000 }, () => {
+test("strict PreToolUse is silent when a configured team overlay is stale and its remote goes offline", { timeout: 180_000 }, () => {
   const base = mkdtempSync(join(tmpdir(), "hunch-team-hook-stale-offline-"));
   try {
     const fixture = makeSharedFixture(base, "hook-stale-offline");

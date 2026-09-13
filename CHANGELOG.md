@@ -28,6 +28,14 @@
   evidence view opened in a webview. Claude Code's Stop notice now prints the
   card only when a delivery, check, save, claim, or denial was observed; empty
   task rows stay in the ledger so "never touched Hunch" remains countable.
+- `hunch task stats [--days N] [--json]` reports adherence over a window from the
+  ledger: tasks reached by memory, checked, claimed, saved, denied, or untouched.
+- The MCP server exposes the everyday tool set by default. The seven `nuryel_*`
+  state-partition tools and the nine Constitution G2/G3 experiment tools are
+  registered only when the root stores nuryel state records, when
+  `.hunch/config.json` sets `mcp_tools` (`all`, `core`, or `core,nuryel`), or when
+  `HUNCH_MCP_TOOLS` says so; the startup log names what is hidden. Fifty-seven
+  tools with ~24 KB of descriptions were diluting tool choice on every host.
 
 ## 1.32.3 — 2026-09-12
 

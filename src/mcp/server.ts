@@ -11,6 +11,8 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { RootsListChangedNotificationSchema } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { hunchPaths, findRoot, toPosixTarget } from "../core/paths.js";
+import { resolveMcpToolset } from "./toolset.js";
+import { readConfig } from "../core/config.js";
 import { canonicalRootPath, resolveActiveRoot } from "./roots.js";
 import { HunchStore } from "../store/hunchStore.js";
 import { StateRefusal, SubscribeResponseSchema, capabilities, partitionOf, readState, recordsState, subscribeState, writeState } from "../store/stateBinding.js";
@@ -702,6 +704,11 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
   // hunch_query and stays warm — and hybridSearch degrades to FTS until then.
   const embedderReady = selectEmbedder();
 
+  // Everyday tools by default; specialist groups by evidence, config, or env
+  // (src/mcp/toolset.ts). Hidden tools are never registered, so tools/list is
+  // exactly what the host can call.
+  const toolset = resolveMcpToolset(root, { configSpec: readConfig(hunchPaths(root)).mcp_tools ?? null });
+  if (toolset.hidden.length) process.stderr.write(`[hunch-mcp] tool groups: ${toolset.groups.length ? toolset.groups.join(", ") : "core only"} (${toolset.source}); ${toolset.hidden.length} specialist tool(s) hidden — HUNCH_MCP_TOOLS=all or .hunch/config.json mcp_tools to expose\n`);
   const server = new McpServer({ name: "hunch", version: HUNCH_VERSION }, { instructions: MCP_INSTRUCTIONS });
   let activeRequests = 0;
   let pendingRoot: string | null = null;
@@ -2020,6 +2027,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
   };
   const stateResult = (text: string, structured: Record<string, unknown>): ToolResult => ({ content: [{ type: "text", text }], structuredContent: structured });
 
+  if (toolset.enabled("nuryel")) {
   server.registerTool(
     "nuryel_capabilities",
     {
@@ -2187,6 +2195,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
       }
     },
   );
+  } // toolset: nuryel
 
   // -- hunch_findings (read: the open-observations ledger) --------------------
   server.registerTool(
@@ -2595,6 +2604,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
     },
   );
 
+  if (toolset.enabled("constitution-experiments")) {
   server.registerTool(
     "hunch_constitution_g2_readiness",
     {
@@ -2691,6 +2701,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
       }
     },
   );
+  } // toolset: constitution-experiments
 
   // -- hunch_conformance ----------------------------------------------------
   server.registerTool(
@@ -2717,6 +2728,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
     },
   );
 
+  if (toolset.enabled("constitution-experiments")) {
   server.registerTool(
     "hunch_constitution_g2_behavior_candidates",
     {
@@ -2836,6 +2848,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
       }
     },
   );
+  } // toolset: constitution-experiments
 
   return {
     server,

@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { buildDeliveryEnvelope } from "../src/core/delivery.js";
 import type { AssembledContext } from "../src/store/hunchStore.js";
-import { isEmptyTaskReport, listTaskSummaries, readTaskReport, recordTaskDelivery, renderTaskStatusLine, reportHash, startReportTask, summarizeTaskReport } from "../src/core/taskReport.js";
+import { isEmptyTaskReport, listTaskSummaries, readTaskReport, recordTaskDelivery, renderTaskStatusLine, reportHash, startReportTask, summarizeTaskReport, taskReportStats } from "../src/core/taskReport.js";
 import { promptTaskId } from "../src/core/taskReportHook.js";
 import { reportSourceSnapshot } from "../src/core/taskReportEvidence.js";
 
@@ -72,4 +72,26 @@ test("status line JSON from Claude Code names the exact prompt task, never the m
   assert.equal(json.task.task_id, mine.task_id);
   assert.equal(run(root, ["task", "status"], "{not json"), "Hunch · 1 lesson recalled · no check recorded", "a malformed host payload falls back to the most recent task");
   assert.equal(run(root, ["task", "status", "--json"], JSON.stringify({ session_id: "s", prompt_id: "never-started", cwd: root })), "null", "an unknown prompt task is null, not an error");
+});
+
+test("task stats counts adherence from the ledger over a window", t => {
+  const root = fixture(t);
+  assert.equal(taskReportStats(root).tasks, 0, "no ledger yet");
+  const a = startReportTask(root, "Reached"), b = startReportTask(root, "Checked only");
+  startReportTask(root, "Untouched");
+  deliver(root, a.task_id);
+  run(root, ["task", "verify", b.task_id, "--json", "--", process.execPath, "-e", "process.exit(0)"]);
+  run(root, ["task", "finish", a.task_id]);
+  const stats = taskReportStats(root, 1);
+  assert.equal(stats.tasks, 3);
+  assert.equal(stats.completed, 1);
+  assert.equal(stats.with_delivery, 1);
+  assert.equal(stats.with_check, 1);
+  assert.equal(stats.empty, 1);
+  assert.equal(stats.delivery_rate, 1 / 3);
+  const text = run(root, ["task", "stats", "--days", "1"]);
+  assert.match(text, /3 task\(s\), 1 completed/);
+  assert.match(text, /reached by memory \(delivery\)\s+1\s+33%/);
+  assert.match(text, /nothing observed\s+1\s+33%/);
+  assert.equal(JSON.parse(run(root, ["task", "stats", "--json"])).with_check, 1);
 });

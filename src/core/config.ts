@@ -20,6 +20,9 @@ export const DEFAULT_FIRMNESS: Firmness = "advisory";
 
 export interface HunchConfig {
   firmness: Firmness;
+  /** MCP tool groups beyond the everyday set: `all`, `core`, or `core,nuryel`
+   *  (see src/mcp/toolset.ts). Undefined = decide from the root's contents. */
+  mcp_tools?: string;
 }
 
 function defaults(): HunchConfig {
@@ -36,7 +39,10 @@ export function readConfig(paths: HunchPaths): HunchConfig {
   if (!existsSync(paths.config)) return defaults();
   try {
     const raw = JSON.parse(readFileSync(paths.config, "utf8")) as Partial<HunchConfig>;
-    return { firmness: isFirmness(raw.firmness) ? raw.firmness : DEFAULT_FIRMNESS };
+    return {
+      firmness: isFirmness(raw.firmness) ? raw.firmness : DEFAULT_FIRMNESS,
+      ...(typeof raw.mcp_tools === "string" && raw.mcp_tools.trim() ? { mcp_tools: raw.mcp_tools.trim() } : {}),
+    };
   } catch {
     return defaults();
   }

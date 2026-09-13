@@ -33,6 +33,8 @@ import { ensureGitignore } from "../src/integrations/gitignore.js";
 import { runSourceMutation } from "../src/constitution/sourceMutation.js";
 import { SYMLINK_SKIP } from "./helpers.js";
 import { hunchCliArgs } from "./cli-invocation.js";
+// These suites exercise the specialist MCP tool groups; the everyday default hides them (src/mcp/toolset.ts).
+process.env.HUNCH_MCP_TOOLS = "all";
 
 const NOW = "2026-07-10T10:00:00.000Z";
 
@@ -1769,7 +1771,7 @@ test("Phase 2S G2 candidate attestations are exact, append-only, private, and no
     assert.notEqual(cliOutput.review.content_hash, afterRejected.content_hash, "the read receipt now binds the appended review status");
 
     const [tsx, cli] = hunchCliArgs();
-    const transport = new StdioClientTransport({ command: process.execPath, args: [tsx, cli, "mcp"], cwd: root });
+    const transport = new StdioClientTransport({ command: process.execPath, args: [tsx, cli, "mcp"], cwd: root, env: { ...process.env } });
     client = new Client({ name: "g2-candidate-attestation-test", version: "1.0.0" });
     await client.connect(transport);
     const mcpCall = await client.callTool({
@@ -2172,7 +2174,7 @@ test("Phase 2U/2V/2W/2X/2Y replays, attests, and proves exact executable behavio
     assert.equal(cliReplay.content_hash, replayWithSnapshot.content_hash);
     assert.equal(cliReplay.verdict, "behavior_confirmed");
 
-    const transport = new StdioClientTransport({ command: process.execPath, args: hunchCliArgs("mcp"), cwd: root });
+    const transport = new StdioClientTransport({ command: process.execPath, args: hunchCliArgs("mcp"), cwd: root, env: { ...process.env } });
     client = new Client({ name: "g2-behavior-candidate-test", version: "1.0.0" });
     await client.connect(transport);
     const mcpReviewCall = await client.callTool({
@@ -2370,7 +2372,7 @@ test("Phase 2U/2V/2W/2X/2Y replays, attests, and proves exact executable behavio
     assert.equal(cliMaterialization.content_hash, materialization.content_hash, "CLI exposes the exact core materialization assessment");
     assert.equal(cliMaterialization.materialized_policies, 0);
 
-    const materializationTransport = new StdioClientTransport({ command: process.execPath, args: hunchCliArgs("mcp"), cwd: root });
+    const materializationTransport = new StdioClientTransport({ command: process.execPath, args: hunchCliArgs("mcp"), cwd: root, env: { ...process.env } });
     client = new Client({ name: "g2-behavior-materialization-test", version: "1.0.0" });
     await client.connect(materializationTransport);
     const mcpMaterializationCall = await client.callTool({

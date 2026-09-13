@@ -452,6 +452,47 @@ export function renderTaskStatusLine(summary: TaskSummary | null): string {
   return parts.join(" · ");
 }
 
+export interface TaskReportStats {
+  since: string;
+  tasks: number;
+  completed: number;
+  with_delivery: number;
+  with_check: number;
+  with_claim: number;
+  with_save: number;
+  with_refusal: number;
+  empty: number;
+  /** with_delivery / tasks, the adherence number worth watching; null when no tasks. */
+  delivery_rate: number | null;
+}
+
+/** Adherence over a window: how many prompts Hunch actually reached. Counts
+ * come from the ledger, never from agent claims; a claim is counted as a claim. */
+export function taskReportStats(root: string, days = 7): TaskReportStats {
+  const since = new Date(Date.now() - Math.max(1, days) * 86_400_000).toISOString();
+  const empty: TaskReportStats = { since, tasks: 0, completed: 0, with_delivery: 0, with_check: 0, with_claim: 0, with_save: 0, with_refusal: 0, empty: 0, delivery_rate: null };
+  if (!existsSync(join(root, ".hunch-cache", "served.db"))) return empty;
+  return taskDb(root, db => {
+    const tasks = (db.prepare("SELECT body FROM report_tasks WHERE scope = ? AND json_extract(body, '$.started_at') >= ?").all(scopeOf(root), since) as Array<{ body: string }>)
+      .map(r => TaskSchema.parse(JSON.parse(r.body)));
+    if (!tasks.length) return empty;
+    const kinds = (taskId: string) => new Set((db.prepare("SELECT DISTINCT kind FROM report_events WHERE task_id = ?").all(taskId) as Array<{ kind: string }>).map(r => r.kind));
+    const stats = { ...empty, tasks: tasks.length };
+    for (const task of tasks) {
+      const k = kinds(task.task_id);
+      if (task.state === "completed") stats.completed++;
+      if (k.has("delivery")) stats.with_delivery++;
+      if (k.has("check") || k.has("check-start")) stats.with_check++;
+      if (k.has("claim")) stats.with_claim++;
+      if (k.has("save")) stats.with_save++;
+      if (k.has("refusal")) stats.with_refusal++;
+      if (!k.size) stats.empty++;
+    }
+    stats.delivery_rate = stats.with_delivery / stats.tasks;
+    return stats;
+  });
+}
+
 export function listReportTasks(root: string): ReportTask[] {
   return taskDb(root, db => (db.prepare("SELECT body FROM report_tasks WHERE scope = ? ORDER BY rowid DESC LIMIT 30").all(scopeOf(root)) as Array<{ body: string }>).map(r => TaskSchema.parse(JSON.parse(r.body))));
 }

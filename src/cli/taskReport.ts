@@ -2,7 +2,7 @@ import type { Command } from "commander";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { findRoot } from "../core/paths.js";
 import { writeFileAtomic } from "../core/io.js";
-import { finishReportTask, forgetReportTask, listReportTasks, listTaskSummaries, pruneReportHistory, readTaskReport, readLessonHistory, renderTaskStatusLine, startReportTask, summarizeTaskReport, type TaskSummary } from "../core/taskReport.js";
+import { finishReportTask, forgetReportTask, listReportTasks, listTaskSummaries, pruneReportHistory, readTaskReport, readLessonHistory, renderTaskStatusLine, startReportTask, summarizeTaskReport, taskReportStats, type TaskSummary } from "../core/taskReport.js";
 import { promptTaskId } from "../core/taskReportHook.js";
 import { DEFAULT_CHECK_TIMEOUT_MS, MAX_CHECK_TIMEOUT_MS, reportSourceSnapshot, runReportCheck, runReportConformance } from "../core/taskReportEvidence.js";
 import { renderTaskReport, writeTaskReportHtml } from "../core/taskReportRender.js";
@@ -39,6 +39,21 @@ export function registerTaskReportCommands(program: Command, openStore: () => { 
       if (opts.json) { console.log(JSON.stringify(summaries, null, 2)); return; }
       if (!summaries.length) { console.log("No task activity observed yet."); return; }
       for (const s of summaries) console.log(`${s.task.started_at.slice(0, 16).replace("T", " ")}  ${s.task.task_id}  ${s.task.state.padEnd(11)} ${renderTaskStatusLine(s) || "nothing observed"}`);
+    });
+  task.command("stats").description("Adherence over a window: how many prompts Hunch reached (delivery), checked, saved, or guarded — from the ledger, never from agent claims")
+    .option("--days <days>", "window in days", "7")
+    .option("--json", "machine-readable")
+    .action((opts: { days: string; json?: boolean }) => {
+      const stats = taskReportStats(findRoot(), Number(opts.days) || 7);
+      if (opts.json) { console.log(JSON.stringify(stats, null, 2)); return; }
+      const pct = (n: number) => stats.tasks ? `${Math.round((n / stats.tasks) * 100)}%` : "–";
+      console.log(`Hunch adherence, last ${Number(opts.days) || 7} day(s): ${stats.tasks} task(s), ${stats.completed} completed`);
+      console.log(`  reached by memory (delivery)  ${stats.with_delivery}  ${pct(stats.with_delivery)}`);
+      console.log(`  independent check recorded    ${stats.with_check}  ${pct(stats.with_check)}`);
+      console.log(`  application claimed by agent  ${stats.with_claim}  ${pct(stats.with_claim)}`);
+      console.log(`  memory saved                  ${stats.with_save}  ${pct(stats.with_save)}`);
+      console.log(`  edit denied                   ${stats.with_refusal}  ${pct(stats.with_refusal)}`);
+      console.log(`  nothing observed              ${stats.empty}  ${pct(stats.empty)}`);
     });
   task.command("status").description("One line for a terminal status line: the current prompt's task when Claude Code's status-line JSON arrives on stdin, otherwise the most recent task here")
     .option("--json", "machine-readable summary")

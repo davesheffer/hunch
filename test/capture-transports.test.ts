@@ -10,6 +10,8 @@ import { createServeApp } from "../src/serve/app.js";
 import { initServeConfig, readServeConfig } from "../src/serve/config.js";
 import { createStateClient } from "../src/client/state.js";
 import { stateHash, type CaptureBatchResult } from "../src/core/stateContract.js";
+// These suites exercise the specialist MCP tool groups; the everyday default hides them (src/mcp/toolset.ts).
+process.env.HUNCH_MCP_TOOLS = "all";
 
 test("MCP and HTTP share capture identity, lock, readback and per-item refusals", async () => {
   const sandbox = mkdtempSync(join(tmpdir(), "hunch-capture-bindings-"));
