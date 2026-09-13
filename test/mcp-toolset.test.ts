@@ -61,6 +61,14 @@ test("a root that stores nuryel state records is a state partition and exposes t
   } finally { cleanup(); }
 });
 
+test("a pinned root (hunch mcp --root) serves the nuryel tools even before its first state record", () => {
+  const { root, cleanup } = tempStore();
+  try {
+    assert.deepEqual(resolveMcpToolset(root, { env: {}, pinned: true }).groups, ["nuryel"]);
+    assert.deepEqual(resolveMcpToolset(root, { env: { HUNCH_MCP_TOOLS: "core" }, pinned: true }).groups, [], "an explicit spec still wins");
+  } finally { cleanup(); }
+});
+
 test("HUNCH_MCP_TOOLS=all and .hunch/config.json mcp_tools expose specialist groups; env wins over config", async () => {
   const { root, cleanup } = tempStore();
   try {
