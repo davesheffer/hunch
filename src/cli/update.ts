@@ -3,8 +3,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Command } from "commander";
 import { findRoot } from "../core/paths.js";
+import { HUNCH_PACKAGE_NAME } from "../core/version.js";
 
-const PACKAGE = "@davesheffer/hunch";
 type Run = (args: string[], capture?: boolean) => string;
 export interface UpdateOptions { global?: boolean; dryRun?: boolean }
 
@@ -28,20 +28,20 @@ export function updateHunch(root: string, opts: UpdateOptions = {}, run: Run = (
   const file = join(root, "package.json");
   const manifest = existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : {};
   if (!manifest || typeof manifest !== "object" || Array.isArray(manifest)) throw new Error("package.json must contain an object");
-  if (manifest.name === PACKAGE) throw new Error("Run hunch update in a consumer repository, not Hunch's own source checkout.");
+  if (manifest.name === HUNCH_PACKAGE_NAME) throw new Error("Run hunch update in a consumer repository, not Hunch's own source checkout.");
   const sections = ["dependencies", "devDependencies", "optionalDependencies"] as const;
   const declared = sections.filter(section => {
     const deps = manifest[section];
     if (deps !== undefined && (!deps || typeof deps !== "object" || Array.isArray(deps))) throw new Error(`invalid ${section} in package.json`);
-    return deps && Object.hasOwn(deps, PACKAGE);
+    return deps && Object.hasOwn(deps, HUNCH_PACKAGE_NAME);
   });
   if (declared.length > 1) throw new Error("Hunch is declared in multiple dependency sections; resolve the duplicate before updating.");
   if (declared.length && (manifest.workspaces || (manifest.packageManager && !/^npm@/.test(manifest.packageManager)) || ["pnpm-lock.yaml", "yarn.lock", "bun.lock", "bun.lockb"].some(name => existsSync(join(root, name))))) {
     throw new Error("Automatic dependency updates currently support standalone npm projects. Update Hunch to an exact version with your package manager, then run hunch integrations repair-pins.");
   }
-  const version: unknown = JSON.parse(run(["view", `${PACKAGE}@latest`, "version", "--json"], true));
+  const version: unknown = JSON.parse(run(["view", `${HUNCH_PACKAGE_NAME}@latest`, "version", "--json"], true));
   if (typeof version !== "string" || !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(version)) throw new Error("npm returned an invalid Hunch version");
-  const spec = `${PACKAGE}@${version}`;
+  const spec = `${HUNCH_PACKAGE_NAME}@${version}`;
   const commands: string[][] = [];
   if (declared.length) {
     const flag = { dependencies: "--save-prod", devDependencies: "--save-dev", optionalDependencies: "--save-optional" }[declared[0]!];

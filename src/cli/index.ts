@@ -166,6 +166,7 @@ import { ENTITY_KINDS } from "../core/types.js";
 import { planCompaction } from "../store/compact.js";
 import { repairDecisionReference } from "../core/refrepair.js";
 import { resolveInvocation, dim, synthesisStatusLines, maybeWarnOllamaContext } from "./invocation.js";
+import { formatUpdateNotice, scheduleUpdateCheck, shouldCheckForUpdate } from "../core/updatecheck.js";
 
 const program = new Command();
 program.name("hunch").description("Hunch — engineering memory and a deterministic Change Gate for AI-assisted codebases.").version(HUNCH_VERSION);
@@ -222,6 +223,26 @@ registerReviewMemoryCommands(program, (records, repository, privateOnly) => {
   // A public artifact must never be model-derived from private overlay statements.
   return { root, existing: store.captureHome(privateOnly) === "private"
     ? store.recs("constraints") : store.json.loadAll("constraints") };
+});
+
+// Read an already-known update and schedule any registry refresh in a detached
+// worker. No network handle is opened in this command's process, so the
+// advisory cannot delay command completion or process exit.
+program.hook("preAction", (_thisCommand, actionCommand) => {
+  try {
+    const path = [actionCommand.name()];
+    for (let parent = actionCommand.parent; parent && parent !== program; parent = parent.parent) path.unshift(parent.name());
+    const gate = {
+      commandName: path.join(" "),
+      isTTY: process.stderr.isTTY === true,
+      installed: resolveInvocation().installed,
+    };
+    if (!shouldCheckForUpdate(gate)) return;
+    const result = scheduleUpdateCheck();
+    if (result) console.error(dim(formatUpdateNotice(result)));
+  } catch {
+    // Never let the update-check advisory abort the command it's piggybacking on.
+  }
 });
 
 let openStore: HunchStore | null = null;
