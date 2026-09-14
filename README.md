@@ -105,7 +105,7 @@ hunch task list
 hunch report <task-id> --html
 ```
 
-A delivered lesson, an agent's claim, and a passing test are different evidence. Hunch keeps them separate. Automatic presentation depends on the host following the task lifecycle; missing evidence stays unverified. [Read the reporting guide](docs/task-reports.md).
+A delivered lesson, an agent's claim, and a passing test are different evidence. Hunch keeps them separate. Automatic presentation depends on the host following the task lifecycle; missing evidence stays unverified. [Read the reporting guide](https://github.com/davesheffer/hunch-private/blob/main/projects/hunch/docs/task-reports.md).
 
 ## Share one living repository memory with your team
 
@@ -130,13 +130,13 @@ Hunch ships `hunch serve`: a self-hosted HTTP service for organization, team, us
 
 Open `/operator` on your server to inspect current records, completed work and commitments in a read-only browser view. Writer-supplied citations can point to an exact summary field or text passage and its recorded sources. They show traceability; they do not prove that a source supports a claim.
 
-Agents can use the same contract through MCP, `hunch state read|write|records|subscribe`, the `@davesheffer/hunch/state` TypeScript client, or the [Python client](docs/python-state-client.md). The Python package is built and tested from this repository; it is not yet published to PyPI. [Scoped conventions](docs/scoped-conventions.md) let a person record sourced user, team or organization preferences. Those preferences remain advisory and do not silently become blocking rules.
+Agents can use the same contract through MCP, `hunch state read|write|records|subscribe`, the `@davesheffer/hunch/state` TypeScript client, or the [Python client](https://github.com/davesheffer/hunch-private/blob/main/projects/hunch/docs/python-state-client.md). The Python package is built and tested from this repository; it is not yet published to PyPI. [Scoped conventions](https://github.com/davesheffer/hunch-private/blob/main/projects/hunch/docs/scoped-conventions.md) let a person record sourced user, team or organization preferences. Those preferences remain advisory and do not silently become blocking rules.
 
 Records can describe decisions, action outcomes, commitments, entities, relationships, and summaries that name their dependencies. Actions retain their status, including unknown or unverified outcomes. Repeated writes have stable identities, conflicting current decisions are refused, and confirmed human records receive protections against agent overwrites. These are defined checks on structured records; Hunch cannot establish every fact in the outside world on its own.
 
 This is what **deterministic state** means here: explicit rules govern the stored record, rather than having each agent reconstruct it from scratch. Git holds the durable data; SQLite is a rebuildable index. The server binds to loopback and requires deployment and agent integration by its operator. Hunch does not provide a managed CRM or email connector service.
 
-[Set up and understand the state server](docs/deterministic-state.md) · [State contract and client reference](docs/nuryel-state-contract.md) · [Upgrade to 1.33](docs/upgrade-1.33.md)
+[Set up and understand the state server](https://github.com/davesheffer/hunch-private/blob/main/projects/hunch/docs/deterministic-state.md) · [State contract and client reference](https://github.com/davesheffer/hunch-private/blob/main/projects/hunch/docs/nuryel-state-contract.md) · [Upgrade to 1.33](https://github.com/davesheffer/hunch-private/blob/main/projects/hunch/docs/upgrade-1.33.md)
 
 ### The vision, and what is still being tested
 
@@ -156,7 +156,7 @@ hunch dna context
 hunch dna diff <older-ref> <newer-ref>
 ```
 
-Profiles retain their revision, sources, confidence, and freshness. [Project DNA contract](docs/project-dna.md) · [Broader DNA vision](docs/project-dna-engine.md)
+Profiles retain their revision, sources, confidence, and freshness. [Project DNA contract](https://github.com/davesheffer/hunch-private/blob/main/projects/hunch/docs/project-dna.md) · [Broader DNA vision](https://github.com/davesheffer/hunch-private/blob/main/projects/hunch/docs/project-dna-engine.md)
 
 ## Your data and your authority
 
@@ -170,15 +170,15 @@ Profiles retain their revision, sources, confidence, and freshness. [Project DNA
 
 - [Full documentation](https://www.hunchmemory.com/docs)
 - [Copy-paste cookbook](https://www.hunchmemory.com/cookbook)
-- [Task contribution reports](docs/task-reports.md)
-- [Deterministic organizational state](docs/deterministic-state.md)
-- [Project DNA](docs/project-dna.md)
-- [Native change proof](docs/change-proof.md)
-- [Engineering Landscape](docs/engineering-landscape.md)
-- [Review memory](docs/review-memory.md)
-- [Agent-origin handling](docs/agent-origin.md)
-- [Autonomy ladder](docs/autonomy-ladder.md)
-- [Autonomous development](docs/autonomous-development.md)
+- [Task contribution reports](https://github.com/davesheffer/hunch-private/blob/main/projects/hunch/docs/task-reports.md)
+- [Deterministic organizational state](https://github.com/davesheffer/hunch-private/blob/main/projects/hunch/docs/deterministic-state.md)
+- [Project DNA](https://github.com/davesheffer/hunch-private/blob/main/projects/hunch/docs/project-dna.md)
+- [Native change proof](https://github.com/davesheffer/hunch-private/blob/main/projects/hunch/docs/change-proof.md)
+- [Engineering Landscape](https://github.com/davesheffer/hunch-private/blob/main/projects/hunch/docs/engineering-landscape.md)
+- [Review memory](https://github.com/davesheffer/hunch-private/blob/main/projects/hunch/docs/review-memory.md)
+- [Agent-origin handling](https://github.com/davesheffer/hunch-private/blob/main/projects/hunch/docs/agent-origin.md)
+- [Autonomy ladder](https://github.com/davesheffer/hunch-private/blob/main/projects/hunch/docs/autonomy-ladder.md)
+- [Autonomous development](https://github.com/davesheffer/hunch-private/blob/main/projects/hunch/docs/autonomous-development.md)
 - [Changelog](CHANGELOG.md) · [Roadmap](ROADMAP.md)
 - [VS Code extension](vscode-extension/README.md)
 - [Architecture benchmark](bench/architectural-conformance.md)

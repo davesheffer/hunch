@@ -338,7 +338,7 @@ if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElem
 
     <section id="synthesis">
       <h2>Synthesis &amp; billing<a class="anchor" href="#synthesis">#</a></h2>
-      <p>Optional synthesis drafts memory from commits and failures. Agent-initiated work stays with that agent's provider and its CLI authentication; an unavailable or unknown origin uses the deterministic local fallback. Human terminal invocations can use an explicitly selected provider. Installing a CLI alone does not select it. See <a class="link" href="https://github.com/davesheffer/hunch/blob/main/docs/agent-origin.md">agent origin and provider routing</a>.</p>
+      <p>Optional synthesis drafts memory from commits and failures. Agent-initiated work stays with that agent's provider and its CLI authentication; an unavailable or unknown origin uses the deterministic local fallback. Human terminal invocations can use an explicitly selected provider. Installing a CLI alone does not select it. See <a class="link" href="https://github.com/davesheffer/hunch-private/blob/main/projects/hunch/docs/agent-origin.md">agent origin and provider routing</a>.</p>
       <table class="tbl">
         <thead><tr><th>CLI</th><th>Subscription</th><th>Detected by</th></tr></thead>
         <tbody>
@@ -419,9 +419,9 @@ if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElem
 <span class="k">hunch</span> serve --config ./hunch-serve.json</pre></div>
       <p>Initialization prints the agent token once; keep it private. The server listens on <code>127.0.0.1</code>. Use a Git repository for the partition when you need committed history; write results distinguish local, committed and pushed records. Read and write through HTTP, MCP, <code>hunch state</code>, or the typed TypeScript and repository-built Python clients. The Python package is not yet published to PyPI.</p>
       <p>Open <code>/operator</code> on your server to inspect current records, completed work, commitments and writer-supplied field citations. The browser view is read-only. Optional per-record audiences limit which authorized principals can read or write a record. Optional key-bound credentials add proof from the configured private key on each request. Explicit user, team and organization conventions stay advisory.</p>
-      <p>Before enabling record visibility or key-bound authentication, upgrade and restart every serving process. Protected partitions refuse older state readers. Read the <a class="link" href="https://github.com/davesheffer/hunch/blob/main/docs/upgrade-1.33.md">1.33 upgrade guide</a>, <a class="link" href="https://github.com/davesheffer/hunch/blob/main/docs/state-cli.md">state CLI reference</a> and <a class="link" href="https://github.com/davesheffer/hunch/blob/main/docs/python-state-client.md">Python client guide</a>.</p>
+      <p>Before enabling record visibility or key-bound authentication, upgrade and restart every serving process. Protected partitions refuse older state readers. Read the <a class="link" href="https://github.com/davesheffer/hunch-private/blob/main/projects/hunch/docs/upgrade-1.33.md">1.33 upgrade guide</a>, <a class="link" href="https://github.com/davesheffer/hunch-private/blob/main/projects/hunch/docs/state-cli.md">state CLI reference</a> and <a class="link" href="https://github.com/davesheffer/hunch-private/blob/main/projects/hunch/docs/python-state-client.md">Python client guide</a>.</p>
       <p>Engineering memory and this service ship today. Broader organizational results remain a pilot, with emulated runs and limited live use reported separately. Hunch is not a managed CRM, mail or chat connector service.</p>
-      <p>Read the <a class="link" href="https://github.com/davesheffer/hunch/blob/main/docs/deterministic-state.md">product direction</a>, <a class="link" href="https://github.com/davesheffer/hunch/blob/main/docs/nuryel-state-contract.md">state contract and setup reference</a>, and <a class="link" href="https://github.com/davesheffer/hunch/blob/main/ROADMAP.md">dated pilot status</a>.</p>
+      <p>Read the <a class="link" href="https://github.com/davesheffer/hunch-private/blob/main/projects/hunch/docs/deterministic-state.md">product direction</a>, <a class="link" href="https://github.com/davesheffer/hunch-private/blob/main/projects/hunch/docs/nuryel-state-contract.md">state contract and setup reference</a>, and <a class="link" href="https://github.com/davesheffer/hunch/blob/main/ROADMAP.md">dated pilot status</a>.</p>
     </section>
 
     <section id="project-dna">
@@ -431,7 +431,7 @@ if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElem
 <span class="k">hunch</span> dna inspect
 <span class="k">hunch</span> dna context</pre></div>
       <p>The code graph connects symbols and dependencies. Engineering Landscape records connect systems, services, owners and operational resources. <code>hunch prove origin/main --public-only</code> can bind an exact committed change to these records and its checks. A proof describes the evidence and gaps; it does not authorize a merge or deployment.</p>
-      <p>Read the <a class="link" href="https://github.com/davesheffer/hunch/blob/main/docs/project-dna.md">Project DNA contract</a> and <a class="link" href="https://github.com/davesheffer/hunch/blob/main/docs/change-proof.md">change-proof guide</a>.</p>
+      <p>Read the <a class="link" href="https://github.com/davesheffer/hunch-private/blob/main/projects/hunch/docs/project-dna.md">Project DNA contract</a> and <a class="link" href="https://github.com/davesheffer/hunch-private/blob/main/projects/hunch/docs/change-proof.md">change-proof guide</a>.</p>
     </section>
 
     <section id="task-reports">
@@ -440,7 +440,7 @@ if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElem
       <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">inspect a task</span><button class="copy">Copy</button></div><pre><span class="k">hunch</span> report
 <span class="k">hunch</span> report &lt;task-id&gt; --html</pre></div>
       <p>The agent reuses a task ID supplied by a trusted prompt hook, or starts one through <code>hunch_task</code>. It carries that ID through context and captures, runs relevant checks through the returned verification launcher, then finishes the task. Missing instrumentation stays unverified.</p>
-      <p>The HTML report is a saved local file and may contain private memory. Read <a class="link" href="https://github.com/davesheffer/hunch/blob/main/docs/task-reports.md">task reports</a> for evidence grades, privacy controls and the agent workflow.</p>
+      <p>The HTML report is a saved local file and may contain private memory. Read <a class="link" href="https://github.com/davesheffer/hunch-private/blob/main/projects/hunch/docs/task-reports.md">task reports</a> for evidence grades, privacy controls and the agent workflow.</p>
     </section>
 
     <section id="graph">

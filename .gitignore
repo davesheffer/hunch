@@ -112,3 +112,6 @@ bench/external/results/????-??-??T??-??-??-???Z*.json
 
 # Constitution replay: disposable worktrees and derived snapshot graphs.
 .hunch-cache/
+
+# Documentation is maintained in the private Hunch repository.
+/docs/
