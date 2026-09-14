@@ -339,6 +339,51 @@ test("repair preserves comments, foreign servers, foreign hooks and unrelated se
   } finally { f.cleanup(); }
 });
 
+test("a harness whose hooks are committed but whose MCP config simply doesn't exist here yet is untested, not a hard issue — only a malformed or broken config is a real issue", () => {
+  const f = fixture();
+  try {
+    // Only the hooks half — mirrors a harness whose hooks file is intentionally
+    // committed while its MCP config is gitignored/per-developer and hasn't
+    // been generated on this checkout yet (e.g. a fresh clone, before `hunch
+    // init`/local host setup). This must read as "not configured here", not
+    // as a repository-level misconfiguration.
+    installClaudeHooks(f.root, command());
+    const report = inspectIntegrations(f.root);
+    assert.equal(report.harnesses[0]!.capabilities.mcp.status, "untested");
+    assert.equal(report.issues.some(i => i.file === ".mcp.json"), false, "a simply-absent mcp config must not be scored as an issue");
+    assert.equal(integrationHealthFails(report), false);
+
+    const selected = inspectIntegrations(f.root, "claude");
+    assert.ok(selected.issues.some(i => i.file === ".mcp.json" && i.code === "mcp-config"), "an explicit harness check must report its missing MCP config");
+    assert.equal(integrationHealthFails(selected), true);
+    assert.match(integrationSessionWarning(f.root, "claude"), /\.mcp\.json/);
+
+    // Contrast: once the file EXISTS but is broken, that's a genuine issue —
+    // this must keep failing exactly as before.
+    f.write(".mcp.json", "{broken");
+    const broken = inspectIntegrations(f.root);
+    assert.ok(broken.issues.some(i => i.file === ".mcp.json" && i.code === "mcp-config"));
+    assert.equal(integrationHealthFails(broken), true);
+
+    if (process.platform !== "win32") {
+      rmSync(join(f.root, ".mcp.json"));
+      symlinkSync(join(f.root, "missing-mcp-target.json"), join(f.root, ".mcp.json"));
+      const dangling = inspectIntegrations(f.root);
+      assert.ok(dangling.issues.some(i => i.file === ".mcp.json" && i.code === "mcp-config"), "a dangling config symlink is broken, not absent");
+    }
+  } finally { f.cleanup(); }
+});
+
+test("an explicitly selected but entirely unconfigured harness remains a hard issue", () => {
+  const f = fixture();
+  try {
+    const report = inspectIntegrations(f.root, "claude");
+    assert.ok(report.issues.some(i => i.file === ".mcp.json" && i.code === "mcp-config"));
+    assert.equal(integrationHealthFails(report), true);
+    assert.doesNotMatch(report.harnesses[0]!.capabilities.mcp.detail, /hooks file exists/);
+  } finally { f.cleanup(); }
+});
+
 test("malformed config aborts repair before any good file is changed", () => {
   const f = fixture();
   try {
