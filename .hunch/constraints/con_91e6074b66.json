@@ -1,0 +1,24 @@
+{
+  "id": "con_91e6074b66",
+  "type": "correctness",
+  "statement": "Capability pages for functionality shipped in the current release must state that it ships today and must not retain the stale banner 'In development for the next release.'",
+  "scope": [
+    "docs/**"
+  ],
+  "severity": "warning",
+  "enforcement": "advisory_v1",
+  "match": "^In development for the next release\\.",
+  "forbids": null,
+  "rationale": "Users need the repository, docs, package copy, and website to describe the current Hunch release and its vision accurately and plainly.",
+  "source_decision": null,
+  "violations": [],
+  "status": "active",
+  "valid_from": "2026-09-14T03:10:13.781Z",
+  "valid_to": null,
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 1,
+    "evidence": [],
+    "last_verified": "2026-09-14T03:10:13.781Z"
+  }
+}
