@@ -156,13 +156,33 @@ export function inspectIntegrations(root: string, selected?: Harness): Integrati
     if (!selected && !existsSync(join(root, spec.mcp)) && (!spec.hooks || !existsSync(join(root, spec.hooks)))) continue;
     const capabilities = Object.fromEntries(CAPABILITIES.map(c => [c, { status: "untested", detail: "No runtime evidence" }])) as HarnessHealth["capabilities"];
     report.harnesses.push({ harness, capabilities });
+    const mcpPath = join(root, spec.mcp);
+    const hooksFileExists = Boolean(spec.hooks && existsSync(join(root, spec.hooks)));
+    let mcpEntryAbsent = false;
+    try { lstatSync(mcpPath); }
+    catch (e) { mcpEntryAbsent = (e as NodeJS.ErrnoException).code === "ENOENT"; }
     try {
       const launcher = readLauncher(root, harness);
       recordPins(spec.mcp, [launcher.command, ...launcher.args]);
       capabilities.mcp.detail = "Configured locally; use --probe to verify a fresh server, then reconnect the host";
     } catch (e) {
-      report.issues.push({ file: spec.mcp, code: "mcp-config", detail: (e as Error).message });
-      capabilities.mcp.detail = "MCP configuration missing, disabled, invalid, or outside supported inspection format";
+      // A harness can be detected here via its hooks file alone —
+      // some hooks files are deliberately committed while their MCP config is
+      // a per-clone, gitignored scaffold (e.g. this repo's own
+      // .windsurf/hooks.json). On a fresh checkout that config simply doesn't
+      // exist yet, which is a "not configured on this machine" state, not a
+      // repository-level misconfiguration — it must stay `untested`
+      // (informational, matching every other not-yet-evidenced capability
+      // here), not a hard `issues` entry that fails `hunch doctor` on every
+      // clone forever. A file that EXISTS but is malformed/disabled/
+      // unreadable in some other way is still a genuine issue.
+      // lstat distinguishes a truly absent per-machine file from a dangling
+      // symlink. The latter is a broken configuration and must remain loud.
+      const notConfiguredHere = !selected && hooksFileExists && mcpEntryAbsent && (e as NodeJS.ErrnoException).code === "ENOENT";
+      if (!notConfiguredHere) report.issues.push({ file: spec.mcp, code: "mcp-config", detail: (e as Error).message });
+      capabilities.mcp.detail = notConfiguredHere
+        ? "Not configured on this machine — a hooks file exists, but no local MCP config exists yet; run `hunch init` or set up this host"
+        : "MCP configuration disabled, invalid, or outside supported inspection format";
     }
     let events: Obj = {};
     let disabled = false;

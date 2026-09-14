@@ -4,8 +4,8 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Блог Hunch Memory — архитектурное соответствие для ИИ-кода</title>
-<meta name="description" content="Заметки, тесты и аргументы о том, как удерживать созданный ИИ код внутри вашей архитектуры." />
+<title>Блог Hunch — общие записи для ИИ-агентов</title>
+<meta name="description" content="Заметки, тесты и полевые отчёты об инженерной памяти, детерминированном состоянии и непрерывной работе агентов." />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Arabic:wght@400;500;600&family=IBM+Plex+Sans+Hebrew:wght@400;500;600&display=swap" rel="stylesheet" />
@@ -144,7 +144,7 @@
 
   <footer>
     <div class="wrap">
-      <span>© Hunch — архитектурное соответствие для ИИ-кода.</span>
+      <span>© Hunch — общие записи для ИИ-агентов.</span>
       <span><a href="/ru/blog">Все статьи</a> · <a href="https://github.com/davesheffer/hunch" target="_blank" rel="noopener">GitHub</a></span>
     </div>
   </footer>
@@ -154,7 +154,7 @@
   <script>
     const locale = document.documentElement.lang || "en";
     const localeData = window.BLOG_I18N?.[locale];
-    const UI = localeData?.ui || { blogName: "The Hunch Memory Blog", notFound: "Not found", notFoundBody: "That post does not exist.", backToBlog: "Back to the blog", ctaTitle: "Hold your architecture, on every AI change.", ctaBody: "One invariant, one gate, no model in it.", getStarted: "Get started", older: "← Older", newer: "Newer →" };
+    const UI = localeData?.ui || { blogName: "The Hunch Blog", notFound: "Not found", notFoundBody: "That post does not exist.", backToBlog: "Back to the blog", ctaTitle: "Give every agent a shared record.", ctaBody: "Decisions, completed work, and commitments, with sources.", getStarted: "Get started", older: "← Older", newer: "Newer →" };
     const blogBase = locale === "en" ? "/blog" : `/${locale}/blog`;
     const homeBase = locale === "en" ? "" : `/${locale}`;
     const fmt = (d) => new Date(d + "T00:00:00").toLocaleDateString(localeData?.dateLocale || "en-US", { month: "short", day: "numeric", year: "numeric" });

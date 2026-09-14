@@ -2,10 +2,10 @@ export const changelogLocales = {
   he: {
     dir: "rtl", dateLocale: "he-IL",
     ui: {
-      pageTitle: "יומן השינויים — Hunch Memory", pageDescription: "כל גרסאות Hunch — מזיכרון הנדסי שנשמר ב-Git ועד התאמה ארכיטקטונית לקוד AI.",
+      pageTitle: "יומן השינויים של Hunch — גרסאות ויכולות עדכניות", pageDescription: "כל גרסאות Hunch — זיכרון הנדסי, מצב דטרמיניסטי משותף, אינטגרציות ואימותי ייצור.",
       mainNav: "ניווט ראשי", language: "שפה", navHow: "כך זה עובד", navInside: "מאחורי הקלעים", docs: "תיעוד", blog: "בלוג", changelog: "יומן שינויים", getStarted: "מתחילים",
-      eyebrow: "יומן שינויים · החדש ביותר תחילה", heading: "כל גרסה, מאז <em>v0.1</em>.", intro: "מגרף החלטות שנשמר ב-Git ועד התאמה ארכיטקטונית דטרמיניסטית — כל הדרך, מהחדש לישן.",
-      footer: "© Hunch — התאמה ארכיטקטונית לקוד AI.", home: "בית", githubReleases: "גרסאות ב-GitHub"
+      eyebrow: "יומן שינויים · החדש ביותר תחילה", heading: "כל גרסה, מאז <em>v0.1</em>.", intro: "מזיכרון הנדסי שנשמר ב-Git ועד מצב דטרמיניסטי משותף — כל הדרך, מהחדש לישן.",
+      footer: "© Hunch — תיעוד משותף לסוכני AI.", home: "בית", githubReleases: "גרסאות ב-GitHub"
     },
     titles: [
       "מציגים ומשתפים מצב עם הרשאות ומקורות מפורשים",
@@ -63,10 +63,10 @@ export const changelogLocales = {
   ru: {
     dir: "ltr", dateLocale: "ru-RU",
     ui: {
-      pageTitle: "История изменений — Hunch Memory", pageDescription: "Все выпуски Hunch: от инженерной памяти в Git до архитектурного соответствия для ИИ-кода.",
+      pageTitle: "История изменений Hunch — выпуски и текущие возможности", pageDescription: "Все выпуски Hunch: инженерная память, общее детерминированное состояние, интеграции и производственная проверка.",
       mainNav: "Основная навигация", language: "Язык", navHow: "Как это работает", navInside: "Что внутри", docs: "Документация", blog: "Блог", changelog: "История изменений", getStarted: "Начать",
-      eyebrow: "история изменений · сначала новые", heading: "Все выпуски, начиная с <em>v0.1</em>.", intro: "От графа решений в Git до детерминированного архитектурного соответствия — вся история, от новых выпусков к старым.",
-      footer: "© Hunch — архитектурное соответствие для ИИ-кода.", home: "Главная", githubReleases: "Релизы на GitHub"
+      eyebrow: "история изменений · сначала новые", heading: "Все выпуски, начиная с <em>v0.1</em>.", intro: "От инженерной памяти в Git до общего детерминированного состояния — вся история, от новых выпусков к старым.",
+      footer: "© Hunch — общие записи для ИИ-агентов.", home: "Главная", githubReleases: "Релизы на GitHub"
     },
     titles: [
       "Просмотр и обмен состоянием с явным доступом и источниками",
@@ -124,10 +124,10 @@ export const changelogLocales = {
   ar: {
     dir: "rtl", dateLocale: "ar",
     ui: {
-      pageTitle: "سجل التغييرات — Hunch Memory", pageDescription: "كل إصدارات Hunch، من الذاكرة الهندسية المحفوظة في Git إلى التوافق المعماري لكود الذكاء الاصطناعي.",
+      pageTitle: "سجل تغييرات Hunch — الإصدارات والقدرات الحالية", pageDescription: "كل إصدارات Hunch: الذاكرة الهندسية والحالة الحتمية المشتركة والتكاملات والتحقق للإنتاج.",
       mainNav: "التنقل الرئيسي", language: "اللغة", navHow: "كيف يعمل", navInside: "ما وراء الكواليس", docs: "الوثائق", blog: "المدونة", changelog: "سجل التغييرات", getStarted: "ابدأ الآن",
-      eyebrow: "سجل التغييرات · الأحدث أولاً", heading: "كل إصدار، منذ <em>v0.1</em>.", intro: "من رسم قرارات محفوظ في Git إلى توافق معماري حتمي — الرحلة كاملة، من الأحدث إلى الأقدم.",
-      footer: "© Hunch — التوافق المعماري لكود الذكاء الاصطناعي.", home: "الرئيسية", githubReleases: "الإصدارات على GitHub"
+      eyebrow: "سجل التغييرات · الأحدث أولاً", heading: "كل إصدار، منذ <em>v0.1</em>.", intro: "من ذاكرة هندسية محفوظة في Git إلى حالة حتمية مشتركة — الرحلة كاملة، من الأحدث إلى الأقدم.",
+      footer: "© Hunch — سجل مشترك لوكلاء الذكاء الاصطناعي.", home: "الرئيسية", githubReleases: "الإصدارات على GitHub"
     },
     titles: [
       "تصفّح الحالة وشاركها بصلاحيات ومصادر واضحة",
@@ -185,10 +185,10 @@ export const changelogLocales = {
   es: {
     dir: "ltr", dateLocale: "es-ES",
     ui: {
-      pageTitle: "Registro de cambios — Hunch Memory", pageDescription: "Todas las versiones de Hunch: desde memoria de ingeniería en Git hasta conformidad arquitectónica para código de IA.",
+      pageTitle: "Registro de cambios de Hunch — versiones y capacidades actuales", pageDescription: "Todas las versiones de Hunch: memoria de ingeniería, estado determinista compartido, integraciones y validación para producción.",
       mainNav: "Navegación principal", language: "Idioma", navHow: "Cómo funciona", navInside: "Cómo está hecho", docs: "Documentación", blog: "Blog", changelog: "Cambios", getStarted: "Empezar",
-      eyebrow: "registro de cambios · lo más reciente primero", heading: "Cada versión, desde <em>v0.1</em>.", intro: "Del grafo de decisiones nativo de Git a la conformidad arquitectónica determinista: toda la historia, de lo nuevo a lo antiguo.",
-      footer: "© Hunch — conformidad arquitectónica para código de IA.", home: "Inicio", githubReleases: "Versiones en GitHub"
+      eyebrow: "registro de cambios · lo más reciente primero", heading: "Cada versión, desde <em>v0.1</em>.", intro: "De la memoria de ingeniería en Git al estado determinista compartido: toda la historia, de lo nuevo a lo antiguo.",
+      footer: "© Hunch — un registro compartido para agentes de IA.", home: "Inicio", githubReleases: "Versiones en GitHub"
     },
     titles: [
       "Consulta y comparte estado con acceso y fuentes explícitos",

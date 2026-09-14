@@ -8,8 +8,7 @@ import { isEmptyTaskReport, readTaskReport, recordReportRefusal, reportHash, rep
 import { reportSourceSnapshot } from "./taskReportEvidence.js";
 import { renderTaskReport, writeTaskReportHtml } from "./taskReportRender.js";
 
-/** The exact task identity a Claude Code prompt maps to. The status line receives
- * the same session_id/prompt_id on stdin, so it can name the prompt's task too. */
+/** The exact task identity a native host prompt maps to. */
 export function promptTaskId(root: string, sessionId: string, promptId: string, agentId: string | null = null, provider: HookProvider = "claude"): string {
   return `htask_${reportHash([realpathSync(root), provider, sessionId, promptId, agentId]).slice(7, 31)}`;
 }
@@ -17,9 +16,23 @@ export function promptTaskId(root: string, sessionId: string, promptId: string, 
 /** Hosts whose hooks deliver a native per-prompt identity (Claude Code's
  * prompt_id, Codex's turn_id). Others get no task from a hook. */
 const NATIVE_PROMPT_HOSTS: ReadonlySet<HookProvider> = new Set<HookProvider>(["claude", "codex"]);
+const NATIVE_TASK_TITLE = "Assistant task";
+
+/** Carry a hook-observed working directory into MCP only after proving it names
+ * the same physical repository as the hook process. The canonical repository
+ * root is stable across cwd subdirectories and safe to copy into a tool call. */
+export function nativeHookCwd(root: string, provider: HookProvider, event: HunchHookInput): string | null {
+  if (!NATIVE_PROMPT_HOSTS.has(provider) || !event.cwd) return null;
+  try {
+    const physicalRoot = realpathSync(root);
+    return realpathSync(findRoot(event.cwd)) === physicalRoot ? physicalRoot : null;
+  } catch {
+    return null;
+  }
+}
 
 function identity(root: string, provider: HookProvider, event: HunchHookInput): string | null {
-  if (!NATIVE_PROMPT_HOSTS.has(provider) || !event.cwd || realpathSync(findRoot(event.cwd)) !== realpathSync(root)) return null;
+  if (!nativeHookCwd(root, provider, event)) return null;
   for (const value of [event.session_id, event.prompt_id, event.agent_id]) {
     if (value !== undefined && (!value.length || value.length > 1024 || /[\u0000-\u001f\u007f]/.test(value))) return null;
   }
@@ -40,8 +53,22 @@ export function hookReportTaskId(root: string, provider: HookProvider, event: Hu
 export function startHookReport(root: string, provider: HookProvider, event: HunchHookInput): string | null {
   const id = identity(root, provider, event);
   if (!id || id === "legacy") return null;
-  const task = startReportTask(root, "Claude task", id);
-  return `Hunch has opened this prompt's report: ${task.task_id}. Reuse this exact ID for this prompt. Call hunch_task(action: "start", task_id: "${task.task_id}", title: "Claude task") to obtain verification_argv; do not create another report. Pass this task_id to hunch_context and decision/correction/finding captures, and finish with hunch_task before responding. A host Stop notice will show the evidence even if no task-linked memory was observed.`;
+  // Re-resolve after identity validation and fail closed if the filesystem
+  // changed between the two reads; never emit a task instruction with cwd:null.
+  const cwd = nativeHookCwd(root, provider, event);
+  if (!cwd) return null;
+  const cwdLiteral = JSON.stringify(cwd);
+  let task: ReturnType<typeof startReportTask>;
+  try { task = startReportTask(root, NATIVE_TASK_TITLE, id); }
+  catch (error) {
+    // A prompt may remain open while Hunch is upgraded from the release that
+    // called every native task "Claude task". Preserve that exact persisted
+    // identity/title; only newly opened tasks use the host-neutral name.
+    const legacy = readTaskReport(root, id).task;
+    if (legacy.title !== "Claude task") throw error;
+    task = legacy;
+  }
+  return `Hunch has opened this prompt's report: ${task.task_id}. Reuse this exact ID for this prompt. Call hunch_task(action: "start", task_id: "${task.task_id}", title: "${task.title}", cwd: ${cwdLiteral}) to obtain verification_argv; do not create another report. Pass this task_id and cwd: ${cwdLiteral} to hunch_context and decision/correction/finding captures, and pass the same cwd when finishing with hunch_task before responding. A host Stop notice will show the evidence even if no task-linked memory was observed.`;
 }
 
 /** A presentation notice never denies Stop or injects another model turn. Stop
