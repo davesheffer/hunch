@@ -86,6 +86,8 @@ If the shell reports that `hunch` is not found, run
 
 Or ask your agent to **“update Hunch.”** The command installs the latest release, aligns configured integration pins, repairs known legacy launch commands, and refreshes Hunch instructions. It preserves unrelated settings and intentionally disabled hooks.
 
+Installed interactive CLI commands can also show a cached update notice. At most once every 24 hours, a detached worker asks npm for the package's public `latest` version; hooks, MCP, CI, servers, the updater, non-interactive commands, and source checkouts skip that request. Set `HUNCH_NO_UPDATE_CHECK=1` or `NO_UPDATE_NOTIFIER=1` to disable it.
+
 - A standalone npm project keeps Hunch in its existing dependency section at an exact version. Without a repository dependency, the global CLI is updated. Add `--global` to update both.
 - For other package managers or workspaces, update the dependency with that package manager, then run `hunch integrations repair-pins`.
 - Restart or reconnect active assistants. In Codex, open `/hooks` to review and trust changed commands, then start a new session. A changed version pin changes the command and requires renewed trust.

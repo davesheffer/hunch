@@ -21,6 +21,8 @@ git commit --allow-empty -m "hunch: first capture"
 
 For later updates, run `hunch update` in the repository. Reconnect the assistant; in Codex, review and trust changed commands with `/hooks`, then start a new session. A version pin change changes the hook command and requires renewed trust.
 
+Installed interactive CLI commands may show a cached update notice. A detached worker checks npm's public `latest` metadata at most once every 24 hours; hooks, MCP, CI, servers, the updater, non-interactive commands, and source checkouts skip it. Set `HUNCH_NO_UPDATE_CHECK=1` or `NO_UPDATE_NOTIFIER=1` to opt out.
+
 Cold start on an old repo:
 
 ```bash
