@@ -1,6 +1,6 @@
 # Project DNA Engine
 
-Status: **repository capability shipped; organizational DNA extension planned under the deterministic-state roadmap**
+Status: **repository capability and explicit scoped conventions ship today; reliable cross-agent use of organizational conventions remains under pilot measurement**
 
 ## Vision
 
@@ -12,7 +12,7 @@ The initial repository production path is complete. Hunch provides sealed baseli
 
 Previous Hunch Memory transport and ORC consumption proved the contract could survive process boundaries and another orchestrator. They are historical production evidence, not the future product topology.
 
-The current roadmap keeps Project DNA as an engine primitive and extends the same deterministic-state ideas upward to **user, team and organization DNA** through one Hunch state graph and one shared state contract.
+Hunch 1.33 keeps Project DNA as an engine primitive and adds explicit sourced conventions for **user, team, organization and repository** scopes through one Hunch state graph and one shared state contract. The roadmap now tests whether different agents consistently consume that shared record without reconstructing contradictory working rules.
 
 Read [Deterministic organizational state](deterministic-state.md) for the active architecture.
 
@@ -97,16 +97,16 @@ This prevents a self-reinforcing style-drift loop.
 
 Project DNA is the repository-scoped DNA primitive.
 
-The broader roadmap adds:
+Hunch 1.33 adds explicit, sourced convention records at the related scopes:
 
 ```text
-repository DNA  -> how this repository demonstrably works
-user DNA        -> explicit durable preferences/rules for one principal
-team DNA        -> reviewed team working conventions
-organization DNA-> reviewed organization-wide conventions/boundaries
+repository DNA         -> how this repository demonstrably works
+user conventions       -> explicit durable preferences/rules for one principal
+team conventions       -> reviewed team working conventions
+organization conventions -> reviewed organization-wide conventions/boundaries
 ```
 
-All four should share core properties:
+All four share or preserve these core properties:
 
 - stable identity;
 - explicit scope;
@@ -214,7 +214,7 @@ Repository Project DNA remains successful when:
 - the feature remains model/provider neutral; and
 - no profile observation silently becomes permission or blocking policy.
 
-The organizational DNA extension will add a separate acceptance question: can multiple agents consume the same user/team/org conventions without independently reconstructing contradictory working rules?
+The convention record and its delivery surface now ship. The remaining acceptance question is whether multiple agents consume the same user/team/org conventions without independently reconstructing contradictory working rules.
 
 ## Non-goals
 

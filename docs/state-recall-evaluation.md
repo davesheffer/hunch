@@ -1,8 +1,9 @@
 # State recall evaluation
 
-The repeatable public benchmark separates finding a record from treating it as current or
-authorized. It uses 33 synthetic records, including 24 distractors, with 8 literal questions
-across derived state, commitments, receipts, entities and conventions, plus 4 paraphrases.
+Shipped with Hunch 1.33.0, the repeatable public benchmark separates finding a record from
+treating it as current or authorized. It uses 33 synthetic records, including 24 distractors,
+with 8 literal questions across derived state, commitments, receipts, entities and conventions,
+plus 4 paraphrases.
 It is not a production corpus or a measurement of how an agent acts after reading state.
 
 ## Measured 2026-09-13

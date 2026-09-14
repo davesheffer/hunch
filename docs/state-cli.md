@@ -1,8 +1,10 @@
 # Use shared state from a terminal
 
-In development for the next release. `hunch state` uses the same authenticated HTTP client
-and contract as other integrations. It prints complete JSON on stdout. Failures print one
-JSON problem on stderr and exit 1; successful commands exit 0.
+Shipped in Hunch 1.33.0. `hunch state` provides capabilities, read, write, records and subscribe
+commands through the same authenticated HTTP client and contract as other integrations.
+It prints complete JSON on stdout. Failures print one JSON problem on stderr and exit 1;
+successful commands exit 0. Subscriptions poll once; the CLI does not resolve conflicts or
+retry writes automatically, except for one pre-operation DPoP nonce challenge.
 
 Configure the server and token without placing the token in process arguments:
 

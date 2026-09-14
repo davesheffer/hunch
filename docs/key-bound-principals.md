@@ -1,7 +1,8 @@
 # Bind a credential to a signing key
 
-In development for the next release. A key-bound credential requires both its token and a
-fresh request proof from its registered Ed25519 key. This adds protection when a token leaks.
+Shipped in Hunch 1.33.0 as optional key binding for HTTP credentials (`nuryel.auth.dpop/1`).
+Upgrade every serving process before enabling it. A key-bound credential requires both its token
+and a fresh request proof from its registered Ed25519 key, adding protection when a token leaks.
 It does not attest a device, identify a person independently, or grant additional permissions.
 
 Hunch implements the protected-resource DPoP flow from [RFC 9449](https://www.rfc-editor.org/rfc/rfc9449.html),

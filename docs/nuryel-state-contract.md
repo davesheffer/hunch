@@ -1,6 +1,6 @@
 # nuryel.state/1 — the state contract
 
-Status: **shipped in Hunch, bound to the store, MCP and HTTP (`hunch serve`).** Reviewed 2026-09-13. Broader deployment remains a pilot; the limits at the end of this document remain open.
+Status: **shipped in Hunch 1.33.0, bound to the store, MCP and HTTP (`hunch serve`).** Reviewed 2026-09-14. The capability notes below distinguish shipped additions from remaining limits. Broader deployment remains a pilot.
 
 This is the technical contract behind Hunch's shared record: decisions, actions, commitments and the evidence they depend on. It lets authorized agents read and update that record through the same rules. A stored action record preserves the writer's verification status; writing it is not independent proof that the external action happened.
 
@@ -231,11 +231,11 @@ schemas minus `schema` and `principal`), plus `GET /nuryel/v1/health`. Errors ar
 a `StateRefusal` maps to 403 outside-grants, 409 conflict / idempotency, 422 identity, 400
 malformed / unsupported, 404 no-partition-home.
 
-**Shared state view (next release).** `/operator` serves a static browser client for the
+**Shared state view (shipped in 1.33.0).** `/operator` serves a static, read-only browser client for the
 existing capabilities, read, records and subscribe endpoints. It introduces no state verb or
 storage format. The public HTML and assets contain no workspace data; reads use the token's
 existing grants. The view retains its token only in memory and renders sources as text without
-external fetches. See the [operator walkthrough](deterministic-state.md#shared-state-view--next-release).
+external fetches. See the [operator walkthrough](deterministic-state.md#shared-state-view).
 
 A **served partition is a directory whose `.hunch/partition.json` names the scope it IS** — so
 user, team and organization state need no overlay: the partition is the store, and
@@ -388,13 +388,13 @@ Additive capabilities specified beside this contract, each with its own schema n
 [observation links](observation-links.md) (`nuryel.observation-links/1`),
 [observation review](observation-review.md) (`nuryel.observation-review/1`),
 [observation pages](observation-pages.md) (`nuryel.observation-pages/1`) and
-[ledger read reuse](ledger-read-reuse.md). The next release adds optional
+[ledger read reuse](ledger-read-reuse.md). Hunch 1.33.0 adds optional
 [field citations](field-provenance.md) (`nuryel.field-provenance/1`); upgrade every shared
 reader before writing annotated records.
 
-## Not decided here
+## Capabilities and remaining limits
 
-- **Record visibility** is in development for dedicated partitions: [owner, reader and writer
+- **Record visibility** ships in 1.33.0 for dedicated partitions: [owner, reader and writer
   permissions](record-visibility.md), with an old-reader upgrade gate. Partition grants still
   apply. Shared/private overlay support is explicitly excluded from restricted writes.
 - **Semantic (embedding) recall over state records.** They ride the FTS index and the bounded
@@ -405,13 +405,14 @@ reader before writing annotated records.
   body-limit and write-lock decisions. Its per-store concurrency gate, context-consistency
   watermarks and the usefulness / Project DNA intake routes are not ported; they return only if a
   served partition needs them.
-- **Per-field authority/currentness.** Optional field citations are in development, but
+- **Per-field authority/currentness.** Optional field citations ship in 1.33.0, but
   human-correction protection and invalidation continue to apply to the whole record.
 - **Repository-scope private content.** The contract has no `private` flag: scope decides the
   home. Sensitive repository-scope state goes through the existing `hunch_record_*` tools
   with `private:true`, or into a user/team partition.
-- **State CLI and Python client** are in development: [Python usage](python-state-client.md)
-  covers the generated contract types and complete HTTP client; [terminal bindings](state-cli.md) for `read`, `write`,
+- **State CLI and Python client** ship in 1.33.0: [Python usage](python-state-client.md)
+  covers the generated contract types and repository-installable HTTP client (not yet published
+  to PyPI; independent-consumer adoption remains unverified); [terminal bindings](state-cli.md) for `read`, `write`,
   `records` and `subscribe` use the existing authenticated HTTP client. State-specific semantic
   recall has a [repeatable fixture benchmark](state-recall-evaluation.md); production accuracy
   still needs pilot evidence.
@@ -419,8 +420,8 @@ reader before writing annotated records.
 
 ### Explicit conventions
 
-In development: `nuryel.convention/1` adds user/team/organization/repository conventions as an advisory facet with reviewable sources, explicit supersession and conflict flags. See [Scoped conventions](scoped-conventions.md). These records never activate policy authority or replace Git-derived Project DNA.
+Shipped in 1.33.0: `nuryel.convention/1` adds user/team/organization/repository conventions as an advisory facet with reviewable sources, explicit supersession and conflict flags. See [Scoped conventions](scoped-conventions.md). These records never activate policy authority or replace Git-derived Project DNA.
 
 ### Optional key-bound HTTP credentials
 
-In development: the HTTP binding advertises `nuryel.auth.dpop/1`. [Key-bound credentials](key-bound-principals.md) add a signing-key proof to the existing token-to-principal mapping. Facet schemas and grants remain the same; this is not hardware attestation or policy authority.
+Shipped in 1.33.0: the HTTP binding advertises `nuryel.auth.dpop/1`. Optional [key-bound credentials](key-bound-principals.md) add a signing-key proof to the existing token-to-principal mapping. Upgrade every serving process before enabling them. Facet schemas and grants remain the same; this is not hardware attestation or policy authority.

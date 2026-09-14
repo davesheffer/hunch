@@ -1,6 +1,6 @@
 # Deterministic organizational state
 
-Status: **engineering memory and the served state layer ship today; wider organizational impact remains a pilot.** Reviewed 2026-09-13. The [roadmap](../ROADMAP.md) separates shipped capabilities from the remaining Sofia pilot gates.
+Status: **engineering memory and the served state layer ship today, including the read-only shared state view in Hunch 1.33.0; wider organizational impact remains a pilot.** Reviewed 2026-09-14. The [roadmap](../ROADMAP.md) separates shipped capabilities from the remaining Sofia pilot gates.
 
 **A shared record for AI agents: what was decided, what happened, and what still needs doing.** Hunch keeps decisions, rules, action records and commitments with their sources, so another agent can check existing work before starting again.
 
@@ -23,9 +23,12 @@ hunch serve init --config ./hunch-serve.json --partition user:demo --root ./demo
 hunch serve --config ./hunch-serve.json
 ```
 
-Initialization prints the agent token once; keep it private. The server binds to `127.0.0.1`. Use a Git repository for the partition when you need committed history; write results distinguish local, committed and pushed records. The [state contract](nuryel-state-contract.md#served-partitions-hunch-serve) explains authenticated HTTP access, MCP and the typed client. The CLI manages the service; state reads and writes use those interfaces.
+Initialization prints the agent token once; keep it private. The server binds to `127.0.0.1`. Use a Git repository for the partition when you need committed history; write results distinguish local, committed and pushed records. The [state contract](nuryel-state-contract.md#served-partitions-hunch-serve) explains authenticated HTTP access, MCP and the typed client. The CLI manages the service; [hunch state](state-cli.md) reads and writes through the same HTTP contract.
 
-### Shared state view — next release
+### Shared state view
+
+Shipped in Hunch 1.33.0 as a read-only browser client. It displays stored state and retained
+activity; it does not independently verify claims or provide a complete historical inventory.
 
 With the server running, open `http://127.0.0.1:7474/operator` (use your configured port). Connect with a server-issued token and choose an authorized workspace. The page keeps the token in this tab’s memory; reloading or disconnecting clears it.
 

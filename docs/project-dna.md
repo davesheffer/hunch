@@ -2,7 +2,7 @@
 
 Project DNA is Hunch's evidence-bound model of **how a repository communicates and works**. It is not a model persona and it is not a second memory store.
 
-The current repository capability is shipped and remains authoritative for repository-scoped DNA. The broader deterministic-state roadmap extends the same idea to user, team and organization scopes; it does not replace repository Project DNA.
+The repository capability is shipped and remains authoritative for repository-scoped DNA. Hunch 1.33 also ships explicit sourced conventions for user, team and organization scopes through the state contract; those records do not replace repository Project DNA. Reliable cross-agent use of them remains under pilot measurement.
 
 Read [Deterministic organizational state](deterministic-state.md) for the current product direction.
 
@@ -26,7 +26,7 @@ any authorized agent / host
 
 Hunch owns the profile, evidence, seals, matching and bounded delivery. A host owns source authorization, final context assembly and execution. No separate transport product or privileged orchestrator is required by the contract.
 
-Future hosted state service work should serve the same profile through the one state graph and one versioned state contract rather than introducing a second Project DNA authority.
+The shipped state service already carries explicit scoped conventions through one state graph and one versioned state contract. If repository DNA profiles are exposed through that service later, they must not introduce a second Project DNA authority.
 
 ## Authority boundary
 
@@ -154,27 +154,27 @@ Repository Project DNA answers:
 
 > **How does this repository demonstrably communicate and work?**
 
-The organizational-state roadmap adds related but distinct scopes:
+Hunch 1.33 adds explicit convention records at related but distinct scopes:
 
-- **user DNA** — explicit durable working preferences/rules for one principal;
-- **team DNA** — reviewed team-level working conventions;
-- **organization DNA** — reviewed organization-wide conventions and boundaries.
+- **user conventions** — explicit durable working preferences/rules for one principal;
+- **team conventions** — reviewed team-level working conventions;
+- **organization conventions** — reviewed organization-wide conventions and boundaries.
 
-These scopes should use the same core properties: stable identity, provenance, confidence/currentness, contradiction visibility, reviewable history and explicit authority.
+These records use the same core properties: stable identity, provenance, confidence/currentness, contradiction visibility, reviewable history and explicit authority.
 
 Repository DNA must remain revision-bound to repository evidence. A team or organization convention must not silently rewrite an observed repository profile.
 
 ## State-service boundary
 
-The future state service may host and deliver DNA partitions, but it must not become a connector gateway or ambient scraper.
+The current state service hosts and delivers explicit convention records. It does not yet expose repository DNA profiles as a state facet, and it must not become a connector gateway or ambient scraper.
 
-For repository DNA:
+For a possible future repository-DNA state facet:
 
 ```text
 repository evidence -> Hunch DNA profile -> state/delivery contract -> agent
 ```
 
-For user/team/org DNA:
+For shipped user/team/org conventions:
 
 ```text
 explicit reviewed state -> authorized partition -> state/delivery contract -> agent

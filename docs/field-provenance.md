@@ -1,6 +1,8 @@
 # Sources for individual fields and passages
 
-In development for the next release. Negotiate `nuryel.field-provenance/1` before use.
+Shipped in Hunch 1.33.0 as optional writer-supplied citations for exact fields and passages.
+Negotiate `nuryel.field-provenance/1` and upgrade every shared reader before writing citations.
+They do not establish truth or freshness; authority and invalidation remain record-wide.
 
 A derived summary already lists its dependencies. Optional `field_provenance` entries say
 which of those sources the writer used for an exact JSON value or passage. Readers can inspect

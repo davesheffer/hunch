@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import { readdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -37,6 +37,8 @@ function routeFor(file) {
 
 function lastModified(file) {
   try {
+    const dirty = execFileSync("git", ["status", "--porcelain=v1", "--", file], { cwd: repoRoot, encoding: "utf8" }).trim();
+    if (dirty) return statSync(file).mtime.toISOString().slice(0, 10);
     const iso = execFileSync("git", ["log", "-1", "--format=%cI", "--", file], { cwd: repoRoot, encoding: "utf8" }).trim();
     if (iso) return iso.slice(0, 10);
   } catch {

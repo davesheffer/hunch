@@ -1,6 +1,8 @@
 # Restrict a record to named people and agents
 
-In development for the next release. Negotiate `nuryel.record-visibility/1` before use.
+Shipped in Hunch 1.33.0 for dedicated partitions. Negotiate `nuryel.record-visibility/1`
+and upgrade every server before enabling restrictions. Restricted writes through shared/private
+overlays remain unsupported; visibility does not restrict trusted filesystem or Git access.
 
 Partition grants still decide which workspaces a token can access. Within a dedicated partition,
 optional `visibility` restricts an individual record:

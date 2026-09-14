@@ -23,6 +23,9 @@ hunch init
 hunch backfill --since 90d   # optional: draft memory from recent history
 ```
 
+If the shell reports that `hunch` is not found, initialize without a global binary from the
+repository directory: `npx -y @davesheffer/hunch@latest init`.
+
 Reload your assistant, then ask:
 
 > Why is this built this way, and what should I preserve when changing it?
@@ -77,6 +80,9 @@ From each repository that uses Hunch:
 ```bash
 hunch update
 ```
+
+If the shell reports that `hunch` is not found, run
+`npx -y @davesheffer/hunch@latest update` from the repository instead.
 
 Or ask your agent to **“update Hunch.”** The command installs the latest release, aligns configured integration pins, repairs known legacy launch commands, and refreshes Hunch instructions. It preserves unrelated settings and intentionally disabled hooks.
 

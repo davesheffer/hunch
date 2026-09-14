@@ -1,10 +1,10 @@
 # Engineering Landscape Graph
 
-Updated 2026-09-07.
+Updated 2026-09-14.
 
 The Engineering Landscape is Hunch's durable, evidence-backed model of the resources surrounding a repository: product, capability, system, repository, service, interface, data, delivery and operations relationships.
 
-The original repository-local implementation is shipped. The forward architecture no longer assigns live traversal to ORC or transport to a separate Hunch Memory product. Those integrations remain historical evidence; the current boundary is between **durable state** and the **live agent/runtime layer**.
+The repository-local landscape implementation and Hunch's shared state service are shipped. Direct landscape-fragment delivery through the state contract remains future additive work. The forward architecture no longer assigns live traversal to ORC or transport to a separate Hunch Memory product. Those integrations remain historical evidence; the current boundary is between **durable state** and the **live agent/runtime layer**.
 
 Read [Deterministic organizational state](deterministic-state.md) for the active product direction.
 
@@ -75,7 +75,7 @@ environment       team_ref          runbook
 dashboard
 ```
 
-The organizational-state roadmap extends the same identity/relationship pattern to non-code entities such as customers, incidents, commitments and source references. Those should be separate typed entities/records rather than pretending every business object is an engineering resource.
+The shipped state contract extends the same identity/relationship pattern to non-code entities such as customers, incidents, commitments and source references. Those remain separate typed entities/records rather than pretending every business object is an engineering resource.
 
 Each resource carries at least:
 
@@ -113,7 +113,7 @@ Every relationship has stable identity, source/target IDs, provenance, currentne
 
 A relationship inferred from a manifest is not silently promoted to human-confirmed architecture.
 
-Existing Hunch decisions, constraints, bugs, findings, symbols, components, proofs and future organizational state may link to landscape resources through the normal graph.
+Existing Hunch decisions, constraints, bugs, findings, symbols, components and proofs can link to landscape resources through the normal graph. Served organizational state uses separate typed entities and relationships; linking those records directly to landscape resources remains additive work.
 
 ## State about external work
 
@@ -208,13 +208,13 @@ native delivery receipt identity
 
 The existing `hunch.delivery-envelope/1` and `hunch.landscape-fragment/1` contracts remain repository primitives.
 
-The future state contract may wrap or reference them as sub-schemas; it should not force clients to reconstruct structured landscape facts from prose.
+The current state contract does not yet wrap or reference them as sub-schemas. A future additive facet may do so; clients should not have to reconstruct structured landscape facts from prose.
 
 ## Cross-scope authorization
 
-Organization-scale landscape/state introduces a new requirement that repository-local Hunch did not need to solve fully: a principal may be allowed to see some partitions/records and not others.
+Hunch 1.33 supplies cross-scope grants and optional per-record visibility for dedicated served partitions. Organization-scale landscape delivery must preserve those boundaries: a principal may be allowed to see some partitions or records and not others.
 
-The state service must therefore support:
+The shipped state service therefore enforces:
 
 - token -> principal -> authorized scope resolution;
 - no caller-selected arbitrary filesystem path;

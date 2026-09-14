@@ -1,8 +1,9 @@
 # Python state client
 
-In development for the next release. Python services can use the same state contract as the
-TypeScript client, CLI, MCP and operator view. The client lives in `clients/python` and is
-installable from this repository; it is not yet published to PyPI.
+Shipped in the Hunch 1.33.0 repository for Python 3.11+. Python services can use the same state
+contract as the TypeScript client, CLI, MCP and operator view. The client lives in `clients/python`
+and is installable from this repository; it is not yet published to PyPI. Independent-consumer
+adoption remains unverified.
 
 See the [client README](../clients/python/README.md) for installation, typed requests,
 timeouts and errors, capability negotiation, subscriptions and optional Ed25519 key binding.

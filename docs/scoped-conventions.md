@@ -1,9 +1,10 @@
 # Explicit conventions for people and teams
 
-In development for the next release. A convention records a preference or working rule for a
-user, team, organization or repository. For example: “Use concise status updates.” Each record
-keeps its scope, sources, review status and next review date. It is advisory: accepting a
-convention records human review and does not activate a policy or override repository rules.
+Shipped in Hunch 1.33.0 as the additive `nuryel.convention/1` facet. A convention records a
+preference or working rule for a user, team, organization or repository. For example:
+“Use concise status updates.” Each record keeps its scope, sources, review status and next
+review date. It is advisory: accepting a convention records human review and does not activate
+a policy or override repository rules.
 
 Repository Project DNA remains a separate observation of a particular Git revision. Explicit
 conventions appear alongside it. No organization/team/user hierarchy silently picks a winner.

@@ -4,7 +4,7 @@ A synchronous Python 3.11+ client for a served Hunch workspace: read what is cur
 records with provenance and idempotency, capture supported observations, fetch exact records,
 and poll changes. The server owns permissions, record identity and state semantics.
 
-This package is in development in the Hunch repository. It has not been published to PyPI.
+This package ships in the Hunch 1.33.0 repository. It has not been published to PyPI.
 From a checkout containing this client:
 
 ```sh
