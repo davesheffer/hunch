@@ -94,7 +94,7 @@ import { recordServed, servedSummary } from "../core/served.js";
 import { recordTaskDelivery, reportActivity, reportPresentationEnabled, unseenLessons } from "../core/taskReport.js";
 import { snapshotDeliveredRecords } from "../core/taskReportEvidence.js";
 import { renderRecalledLine } from "../core/taskReportRender.js";
-import { hookReportTaskId, startHookReport, stopHookReport, observeHookDenial } from "../core/taskReportHook.js";
+import { hookReportTaskId, nativeHookCwd, startHookReport, stopHookReport, observeHookDenial } from "../core/taskReportHook.js";
 import { recordHookObservation } from "../core/hookObservations.js";
 import { contextHookOutput, denyHookOutput, hookProvider, normalizeHookEvent, stopHookOutput, type HookProvider, type HunchHookEvent } from "../core/agenthook.js";
 import {
@@ -4378,6 +4378,11 @@ program
         // explorers get the indexed shape, planners get live decisions + what
         // was already rejected, everyone else gets the invariant digest. Public
         // store only; cheap reads.
+        const routedCwd = nativeHookCwd(root, provider, evt);
+        // A native host that supplied cwd made an explicit scope claim. If it is
+        // malformed or names another checkout, serving this process root's memory
+        // would cross worktrees; stay silent instead of guessing which side is right.
+        if ((provider === "claude" || provider === "codex") && evt.cwd !== undefined && !routedCwd) return;
         const s = new HunchStore(paths);
         try {
           const clip1 = (text: string, max: number): string => {
@@ -4387,10 +4392,15 @@ program
           const type = (evt.agent_type ?? "").toLowerCase();
           const L: string[] = [];
           const served: Array<{ kind: string; record_id: string; token_cost: number }> = [];
+          const route = routedCwd
+            ? `Worktree routing: call hunch_context first with cwd: ${JSON.stringify(routedCwd)}, and pass the same cwd to hunch_task, hunch_report, and every Hunch capture/write call in this delegated task.`
+            : null;
+          const activeProvider = provider;
+          const emitRouteOnly = (): void => { if (route) emitContext(activeProvider, "SubagentStart", route); };
           if (/explore|search|investigat/.test(type)) {
             // Orient from the graph, not grep rounds: the component map IS the shape.
             const components = s.advisoryRecs("components").filter((c) => c.status === "active");
-            if (!components.length) return;
+            if (!components.length) { emitRouteOnly(); return; }
             L.push(`🧠 Hunch — repo shape for a delegated explorer: ${components.length} component(s).`);
             for (const c of components.slice(0, 12)) {
               const line = `- ${c.name}${c.paths.length ? ` (${c.paths.slice(0, 2).join(", ")})` : ""}${c.responsibility ? ` — ${clip1(c.responsibility, 90)}` : ""}`;
@@ -4404,7 +4414,7 @@ program
             const decisions = s.advisoryRecs("decisions")
               .filter((d) => d.status === "accepted")
               .sort((a, b) => (a.date < b.date ? 1 : -1));
-            if (!decisions.length) return;
+            if (!decisions.length) { emitRouteOnly(); return; }
             L.push(`🧠 Hunch — live decisions for a delegated planner (${decisions.length} in force; plans must not re-propose the rejected).`);
             for (const d of decisions.slice(0, 6)) {
               const line = `- ${d.title} (${d.id})${d.alternatives_rejected.length ? ` — rejected: ${clip1(d.alternatives_rejected[0]!, 80)}` : ""}`;
@@ -4417,7 +4427,7 @@ program
             const constraints = s.advisoryRecs("constraints")
               .filter((c) => c.status === "active")
               .sort((a, b) => sevRank[a.severity] - sevRank[b.severity]);
-            if (!constraints.length) return;
+            if (!constraints.length) { emitRouteOnly(); return; }
             L.push(`🧠 Hunch — delegated agent grounding: ${constraints.length} invariant(s) in force in this repo.`);
             for (const c of constraints.slice(0, 8)) {
               const line = `- [${c.severity}] ${clip1(c.statement, 140)}${c.scope.length ? ` (scope: ${c.scope.slice(0, 3).join(", ")})` : ""}`;
@@ -4427,6 +4437,7 @@ program
             if (constraints.length > 8) L.push(`…and ${constraints.length - 8} more — hunch_check_constraints(scope) for your files.`);
             L.push("Before editing: hunch_check_constraints(scope) · hunch_why(target). Orient: hunch_context(task).");
           }
+          if (route) L.push(route);
           // No dedup here: the hook event carries the PARENT session id, but each
           // spawned agent is a fresh empty context — deduping would ground the
           // first Explore and silently starve every later one.

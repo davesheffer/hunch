@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { listReportTasks, listTaskSummaries, readTaskReport } from "../src/core/taskReport.js";
@@ -145,4 +145,20 @@ test("Codex hooks open the same per-prompt report from turn_id and never share a
   assert.match(hook(root, "Stop", { prompt_id: undefined, turn_id: "turn-1" }, "codex").systemMessage, new RegExp(task.task_id));
   hook(root, "UserPromptSubmit", { prompt_id: "turn-1" }, "claude");
   assert.equal(listReportTasks(root).length, 2, "same session/prompt strings on another host are a different task");
+});
+
+test("native SubagentStart grounding carries exact cwd and fails closed on supplied invalid cwd", t => {
+  const root = fixture(t), other = fixture(t);
+  const store = new HunchStore(hunchPaths(root));
+  store.json.ensureDirs();
+  store.json.put("constraints", mkConstraint({ id: "con_subagent_cwd", statement: "PRIVATE_NONEMPTY_STORE_SENTINEL", scope: ["src/**"], severity: "blocking" }));
+  store.reindex(); store.close();
+  for (const provider of ["claude", "codex"]) {
+    const routed = hook(root, "SubagentStart", { agent_type: "general" }, provider);
+    assert.ok(routed, `${provider} delegated agents need a routing instruction`);
+    assert.match(routed.hookSpecificOutput.additionalContext, /PRIVATE_NONEMPTY_STORE_SENTINEL/);
+    assert.match(routed.hookSpecificOutput.additionalContext, new RegExp(`cwd: ${JSON.stringify(realpathSync(root)).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
+    assert.equal(hook(root, "SubagentStart", { agent_type: "general", cwd: other }, provider), null, "a foreign payload cwd must suppress current-root memory too");
+    assert.equal(hook(root, "SubagentStart", { agent_type: "general", cwd: 42 }, provider), null, "a malformed supplied cwd must suppress current-root memory too");
+  }
 });

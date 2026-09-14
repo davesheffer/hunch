@@ -12,9 +12,10 @@ The durable memory is the decision, rule, bug history or finding that future tas
 
 The generated Hunch instructions ask the agent to:
 
-1. Reuse the task ID supplied by a trusted native prompt hook. If none was supplied, start one task with `hunch_task(action: "start", title: "Short task title")`.
-2. Carry the returned `task_id` into each `hunch_context` call and each decision,
-   correction, or finding capture.
+1. Reuse the task ID and exact `cwd` supplied by a trusted native prompt hook. If none was supplied, start one task with `hunch_task(action: "start", title: "Short task title")`.
+2. Carry the returned `task_id` and hook-supplied `cwd` into each `hunch_context`
+   call and each decision, correction, or finding capture. Pass that `cwd` again
+   when reading or finishing the task report.
 3. Run a relevant verification using the exact `verification_argv` launcher from
    task start, followed by the command and arguments. This avoids stale global CLIs.
 4. Before attributing an application, read `hunch_report(task_id)` and copy its
@@ -227,7 +228,7 @@ references are presentation metadata alongside the report, outside its content h
 
 ## Native Claude lifecycle coverage
 
-Claude Code 2.1.196+ supplies an authoritative prompt identifier. Existing Hunch prompt hooks create an exact report from physical worktree, provider, session, prompt and optional agent identity; raw prompt text and host identifiers are not retained. Every prompt receives its ID even when ambient reminders are deduplicated. The model reuses it through MCP. The Stop hook emits a nonblocking `systemMessage`, including missing coverage when no linked retrieval occurred. It never adds a Stop block or another model turn. An existing verification gate still takes precedence.
+Claude Code 2.1.196+ supplies an authoritative prompt identifier. Existing Hunch prompt hooks create an exact report from physical worktree, provider, session, prompt and optional agent identity; raw prompt text and host identifiers are not retained. Every prompt receives its ID and canonical worktree `cwd` even when ambient reminders are deduplicated. The model reuses both through MCP. The Stop hook emits a nonblocking `systemMessage`, including missing coverage when no linked retrieval occurred. It never adds a Stop block or another model turn. An existing verification gate still takes precedence.
 
 Stop does not close an unfinished report: another hook may continue the turn, and Stop is not an independent assertion that all user work finished. Explicit finish/interruption records remain authoritative. Older Claude versions receive an unassociated coverage notice, never a report selected by time or recent task. Presentation opt-out silences both notices and cards; firmness off retains its existing disabled-hook semantics.
 
@@ -235,7 +236,7 @@ Live Claude 2.1.268 headless qualification observed exact prompt continuity thro
 
 ## Native Codex lifecycle coverage
 
-Codex 0.153+ has a Hunch lifecycle adapter for `.codex/hooks.json`. After the project and hook commands are trusted, the prompt hook can supply the task identity from `turn_id`; the agent reuses it through MCP. Pre-edit and post-tool events support grounding and observation, and Stop can present the contribution card. Hook command changes require renewed review through `/hooks` and a new session.
+Codex 0.153+ has a Hunch lifecycle adapter for `.codex/hooks.json`. After the project and hook commands are trusted, the prompt hook can supply the task identity from `turn_id` and its canonical worktree `cwd`; the agent reuses both through MCP. Pre-edit and post-tool events support grounding and observation, and Stop can present the contribution card. Hook command changes require renewed review through `/hooks` and a new session.
 
 Check observed delivery with `hunch integrations check`. Enabled configuration does not prove that each event ran, that a failed-tool event was delivered, or that the model used a lesson.
 
