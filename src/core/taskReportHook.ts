@@ -8,8 +8,7 @@ import { isEmptyTaskReport, readTaskReport, recordReportRefusal, reportHash, rep
 import { reportSourceSnapshot } from "./taskReportEvidence.js";
 import { renderTaskReport, writeTaskReportHtml } from "./taskReportRender.js";
 
-/** The exact task identity a Claude Code prompt maps to. The status line receives
- * the same session_id/prompt_id on stdin, so it can name the prompt's task too. */
+/** The exact task identity a native host prompt maps to. */
 export function promptTaskId(root: string, sessionId: string, promptId: string, agentId: string | null = null, provider: HookProvider = "claude"): string {
   return `htask_${reportHash([realpathSync(root), provider, sessionId, promptId, agentId]).slice(7, 31)}`;
 }
@@ -17,6 +16,7 @@ export function promptTaskId(root: string, sessionId: string, promptId: string, 
 /** Hosts whose hooks deliver a native per-prompt identity (Claude Code's
  * prompt_id, Codex's turn_id). Others get no task from a hook. */
 const NATIVE_PROMPT_HOSTS: ReadonlySet<HookProvider> = new Set<HookProvider>(["claude", "codex"]);
+const NATIVE_TASK_TITLE = "Assistant task";
 
 /** Carry a hook-observed working directory into MCP only after proving it names
  * the same physical repository as the hook process. The canonical repository
@@ -58,8 +58,17 @@ export function startHookReport(root: string, provider: HookProvider, event: Hun
   const cwd = nativeHookCwd(root, provider, event);
   if (!cwd) return null;
   const cwdLiteral = JSON.stringify(cwd);
-  const task = startReportTask(root, "Claude task", id);
-  return `Hunch has opened this prompt's report: ${task.task_id}. Reuse this exact ID for this prompt. Call hunch_task(action: "start", task_id: "${task.task_id}", title: "Claude task", cwd: ${cwdLiteral}) to obtain verification_argv; do not create another report. Pass this task_id and cwd: ${cwdLiteral} to hunch_context and decision/correction/finding captures, and pass the same cwd when finishing with hunch_task before responding. A host Stop notice will show the evidence even if no task-linked memory was observed.`;
+  let task: ReturnType<typeof startReportTask>;
+  try { task = startReportTask(root, NATIVE_TASK_TITLE, id); }
+  catch (error) {
+    // A prompt may remain open while Hunch is upgraded from the release that
+    // called every native task "Claude task". Preserve that exact persisted
+    // identity/title; only newly opened tasks use the host-neutral name.
+    const legacy = readTaskReport(root, id).task;
+    if (legacy.title !== "Claude task") throw error;
+    task = legacy;
+  }
+  return `Hunch has opened this prompt's report: ${task.task_id}. Reuse this exact ID for this prompt. Call hunch_task(action: "start", task_id: "${task.task_id}", title: "${task.title}", cwd: ${cwdLiteral}) to obtain verification_argv; do not create another report. Pass this task_id and cwd: ${cwdLiteral} to hunch_context and decision/correction/finding captures, and pass the same cwd when finishing with hunch_task before responding. A host Stop notice will show the evidence even if no task-linked memory was observed.`;
 }
 
 /** A presentation notice never denies Stop or injects another model turn. Stop

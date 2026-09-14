@@ -4,7 +4,8 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { listReportTasks, listTaskSummaries, readTaskReport } from "../src/core/taskReport.js";
+import { listReportTasks, listTaskSummaries, readTaskReport, startReportTask } from "../src/core/taskReport.js";
+import { promptTaskId } from "../src/core/taskReportHook.js";
 import { HunchStore } from "../src/store/hunchStore.js";
 import { hunchPaths } from "../src/core/paths.js";
 import { mkConstraint } from "./helpers.js";
@@ -31,6 +32,9 @@ test("native Stop stays silent for a prompt with no observation, while the empty
   const prompt = hook(root, "UserPromptSubmit", { prompt: "PRIVATE_PROMPT_SENTINEL" });
   const [task] = listReportTasks(root);
   assert.ok(task, "host must start reporting before the model can skip its instructions");
+  assert.equal(task.title, "Assistant task");
+  assert.match(prompt.hookSpecificOutput.additionalContext, /title: "Assistant task"/);
+  assert.doesNotMatch(prompt.hookSpecificOutput.additionalContext, /Claude task/);
   assert.match(prompt.hookSpecificOutput.additionalContext, new RegExp(task.task_id));
   assert.equal(hook(root, "Stop"), null, "no delivery, check, save or denial: nothing to print (dec_77d99014e0's sibling: silence only where there is no evidence to show)");
   assert.equal(readFileSync(join(root, ".hunch-cache", "served.db")).includes(Buffer.from("PRIVATE_PROMPT_SENTINEL")), false);
@@ -139,10 +143,14 @@ test("Codex hooks open the same per-prompt report from turn_id and never share a
   const prompt = hook(root, "UserPromptSubmit", { prompt_id: undefined, turn_id: "turn-1", prompt: "codex prompt" }, "codex");
   const [task] = listReportTasks(root);
   assert.ok(task, "Codex's UserPromptSubmit opens the report natively");
+  assert.equal(task.title, "Assistant task");
   assert.match(prompt.hookSpecificOutput.additionalContext, new RegExp(task.task_id));
   assert.equal(hook(root, "Stop", { prompt_id: undefined, turn_id: "turn-1" }, "codex"), null, "nothing observed yet: silent");
   execFileSync(process.execPath, ["--import", import.meta.resolve("tsx"), cli, "task", "verify", task.task_id, "--json", "--", process.execPath, "-e", "process.exit(0)"], { cwd: root, encoding: "utf8" });
-  assert.match(hook(root, "Stop", { prompt_id: undefined, turn_id: "turn-1" }, "codex").systemMessage, new RegExp(task.task_id));
+  const stop = hook(root, "Stop", { prompt_id: undefined, turn_id: "turn-1" }, "codex").systemMessage;
+  assert.match(stop, new RegExp(task.task_id));
+  assert.match(stop, /Hunch · Assistant task/);
+  assert.doesNotMatch(stop, /Claude task/);
   hook(root, "UserPromptSubmit", { prompt_id: "turn-1" }, "claude");
   assert.equal(listReportTasks(root).length, 2, "same session/prompt strings on another host are a different task");
 });
@@ -161,4 +169,14 @@ test("native SubagentStart grounding carries exact cwd and fails closed on suppl
     assert.equal(hook(root, "SubagentStart", { agent_type: "general", cwd: other }, provider), null, "a foreign payload cwd must suppress current-root memory too");
     assert.equal(hook(root, "SubagentStart", { agent_type: "general", cwd: 42 }, provider), null, "a malformed supplied cwd must suppress current-root memory too");
   }
+});
+
+test("an in-flight pre-upgrade native task keeps its legacy title and still receives its task ID", t => {
+  const root = fixture(t);
+  const id = promptTaskId(root, "session-a", "turn-legacy", null, "codex");
+  startReportTask(root, "Claude task", id);
+  const prompt = hook(root, "UserPromptSubmit", { prompt_id: undefined, turn_id: "turn-legacy" }, "codex");
+  assert.match(prompt.hookSpecificOutput.additionalContext, new RegExp(id));
+  assert.match(prompt.hookSpecificOutput.additionalContext, /title: "Claude task"/);
+  assert.equal(listReportTasks(root).length, 1);
 });
