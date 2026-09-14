@@ -12,9 +12,10 @@ Callers hashing arbitrary objects must rename the reserved key or encode their p
 
 ## Repository users
 
-After 1.33 is published, run `hunch update` in each repository. Use `hunch update --global`
-when updating a global CLI alongside a repository dependency. The updater preserves unrelated
-settings and disabled hooks and aligns configured launchers to the published version.
+Run `hunch update` in each repository to install the published 1.33 release. Use
+`hunch update --global` when updating a global CLI alongside a repository dependency. The updater
+preserves unrelated settings and disabled hooks and aligns configured launchers to the published
+version.
 
 Reconnect active MCP sessions. For Codex, review changed commands in `/hooks`, trust the
 commands you intend to use, and start a new session. `hunch integrations check` distinguishes
@@ -57,5 +58,8 @@ The [frozen recall evaluation](state-recall-evaluation.md) uses a synthetic corp
 local embedding model; its result is not a production-corpus accuracy claim. Python wheel tests
 are not evidence of an independent external consumer.
 
-The two-user pilot week, normal-work contribution-card acceptance and human policy decisions
-remain listed in the [roadmap](../ROADMAP.md). The product name remains Hunch.
+Codex CLI 0.154.0 in VS Code's integrated terminal has completed the native normal-work
+contribution-card rehearsal. Two observed repository-user sessions, the Sofia two-user pilot week
+and any explicit human policy decisions still remain in the [roadmap](../ROADMAP.md); the
+[external acceptance operator runbook](external-acceptance-runbook.md) defines the two human-run
+procedures and their evidence. The product name remains Hunch.

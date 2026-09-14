@@ -1,9 +1,53 @@
 # Task reports — release qualification
 
-Recorded 2026-09-11 and updated for the 1.32.0 release. The implementation ships
-in 1.32.0. The human acceptance items under “Remaining release acceptance” were
-not completed before publication and remain open; this record is not a claim that
-they were.
+Recorded 2026-09-11 and updated after the 1.32.0 release. The implementation ships
+in 1.32.0. Items not completed before publication remain listed under “Remaining
+release acceptance”; the 2026-09-14 update closes the live-host and Codex terminal
+checks while leaving the two repository-user sessions open.
+
+## Update — 2026-09-14
+
+A real Codex CLI 0.154.0 host session
+(`01a09de5-c07f-7080-a72f-81d257fe9f2f`) completed the live-host
+rule-supported-application acceptance. Hunch task
+`htask_58bd481703d475f797408927` received constraint `con_91e6074b66` at
+occurrence `hocc_847085485a40f7b943eaf63b`, applied the exact delivered
+revision
+`sha256:19e99f441e16b94eca99b2060a942ba91a9fb637e5a2f98d463555b2accf5cde`,
+and finished with a rule-supported application. Verification passed against
+that task's then-current source snapshot after checking 15 linked documents,
+28 local links and anchors, four JSON examples, and the documentation-only diff
+scope. The local evidence view is
+`.hunch-cache/reports/htask_58bd481703d475f797408927.html`.
+
+This run used a real Codex host and the explicit Hunch MCP task flow. Its
+worktree did not contain native `.codex` hooks, so that run did not qualify
+native prompt/Stop lifecycle behavior or visual terminal-card display.
+
+A separate Codex CLI 0.154.0 run on main
+`c069988258a13bbe118f61ad19db3c7e56642af6` completed the Codex-specific native
+interactive acceptance in a VS Code integrated terminal. `/hooks` visibly
+reported one installed and one active hook for each of `SessionStart`,
+`UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `PreCompact`, `SubagentStart`
+and `Stop`. The ordinary prompt “Inspect README.md's npm installation command
+and package.json's package name. Report whether they match. Do not edit files.”
+did not mention Hunch. It created native task `htask_b471eca7ae1d96a30c589786`
+with delivery occurrence `hocc_f0aa61f8c2bc820846b95ee3`; verification
+`hev_8e5464e5f9ea57acaba57a14` passed against the current source. The saved
+report hash was
+`sha256:2456f2838ead4be2bfa8200a6b76c47ea0d50100be592417227823e97fe797d4`.
+`integrations check --harness codex --probe --json` independently reported a
+fresh Hunch 1.33.0 MCP and observed `UserPromptSubmit` at
+`2026-09-14T03:24:03.119Z`.
+
+The terminal visibly showed the normal completion card and a separate
+`Hook · Hunch · Claude task` card carrying the local `file://` evidence URI.
+VS Code's `Terminal: Open Detected Link...` action selected that URI, and its
+integrated browser rendered the report's memory, delivery, command-check,
+conformance and unknowns sections. This qualifies interactive card display,
+link opening and native prompt/Stop presentation for Codex CLI 0.154.0 in the
+VS Code integrated terminal only. Other terminal hosts are not qualified by
+this run. The two repository-user acceptance sessions remain open.
 
 ## Update — 2026-09-12
 
@@ -216,11 +260,19 @@ Tab/Return opened delivery and verification disclosures with visible focus.
 A fresh reload produced no console errors, and the saved-snapshot wording was
 verified. This is a visual spot check, not a complete accessibility audit.
 
-An attempted rendered-terminal check was blocked by the UI tool:
+An earlier attempted rendered-terminal check was blocked by the UI tool:
 `Computer Use is not allowed to use the app 'com.apple.Terminal' for safety reasons.`
 No alternate automation route bypassed that restriction, and no onboarding,
 theme, or global preferences changed. Raw PTY output is not counted as visual
-verification. Interactive terminal cards, links, and Stop notices remain unverified.
+verification. That attempt did not verify interactive terminal cards, links or
+Stop notices.
+
+The 2026-09-14 Codex CLI 0.154.0 rehearsal above used the VS Code integrated
+terminal and visibly exercised the native prompt/Stop path. The normal completion
+card and native Stop card rendered, VS Code detected the report's `file://` URI,
+and its integrated browser opened and rendered the local evidence report. This
+qualifies that Codex/version/terminal combination only; it does not qualify other
+terminal hosts or establish the two-user usability result.
 
 ## Performance
 
@@ -245,21 +297,31 @@ exclude package download and host latency. They are not a p95 cold-start claim.
 
 ## Remaining release acceptance
 
-1. Run required platform CI and a fresh clean gate on the expanded implementation.
-   The prior foundation gate does not qualify subsequent code.
-2. Verify normal interactive display/link opening, and observe the two user
-   acceptance sessions defined in the plan. No human usability success is inferred
-   from synthetic fixtures or headless model output.
-3. Saved/committed/pushed observations, native gate-refusal linkage, lesson
-   history, and rule-based application support are now implemented and undergoing
-   expanded qualification. Support exists only for lessons with a declared
-   machine-checkable rule; agent attribution plus a passing command still does not
-   substitute for it, and a live-host task exercising a rule-supported application
-   has not yet been recorded.
-4. Reconcile that remaining product scope before release sign-off, then select the
-   release version and run the existing version-pin/publication workflow on the
-   verified candidate. The user has now explicitly requested completion through release;
-   that authorization does not waive the remaining verification and acceptance work.
+1. **Completed for 1.33.0:** the tagged release ran the required clean, contract,
+   package, platform and publication checks. The release record remains the source
+   for those results; the prior foundation gate was not reused as evidence.
+2. **Codex interactive display/link opening completed 2026-09-14; two user
+   sessions remain:** Codex CLI 0.154.0 in the VS Code integrated terminal
+   visibly rendered the normal and native Stop cards, opened the detected local
+   report URI, and rendered its evidence sections. This result is specific to
+   that host/version/terminal combination. The two repository-user acceptance
+   sessions defined in the plan have not been observed; no human usability
+   success is inferred from this rehearsal, synthetic fixtures or headless model
+   output. The [external acceptance operator runbook](external-acceptance-runbook.md)
+   fixes the questions, timer, evidence packet and no-substitution rule for those
+   sessions.
+3. **Completed 2026-09-14:** a real Codex CLI 0.154.0 task exercised a
+   rule-supported application of the exact delivered `con_91e6074b66` revision,
+   with a passing verification bound to that task's source snapshot. This closes
+   only the live-host rule-supported-application item; the run used explicit Hunch
+   MCP task calls and did not qualify native `.codex` hooks or visual terminal
+   presentation. Saved/committed/pushed observations, native gate-refusal linkage,
+   lesson history, and rule-based application support remain implemented within
+   their documented evidence boundaries.
+4. **Completed for 1.33.0:** the release candidate was reconciled, versioned,
+   published to npm and registered in the official MCP Registry. The two observed
+   repository-user sessions remain an acceptance gate after publication; release
+   publication does not stand in for their usability evidence.
 
 Local sanitized host results, the archive manifest, and an actual report example
 are retained under `.hunch-cache/release/task-report/` (ignored by Git). The source
