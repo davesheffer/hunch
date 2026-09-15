@@ -1,0 +1,37 @@
+{
+  "id": "fnd_e92a646269",
+  "title": "Two suite tests fail on a Windows checkout with core.autocrlf, before and after #257: private-draft byte count (438 vs 384) and git update-ref --stdin in the legacy multi-ref push test",
+  "observation": "Observed 2026-09-15 on Windows 11, git with 'LF will be replaced by CRLF' warnings, Node 24.13. Full `npm test` fails 3 tests locally while CI (ubuntu, Node 22/24) and platform-matrix-safety (windows-latest) are green. Bisected by running the two fast ones on the pre-#257 commit 8458255 in a separate worktree: same two failures, so they predate the task-episode work. (1) test/external-acceptance.test.ts:84 'the CLI creates a private draft and refuses to overwrite it' asserts a byte length of 384 and gets 438: 54 extra bytes, consistent with CRLF line endings on a 54-line file; the assertion should compare content or normalize newlines. (2) test/sync.test.ts:618 'large legacy multi-ref push keeps its successful outcome when observation output is oversized' fails with `git update-ref --stdin` exit 128 (stdout/stderr null), likely stdin size or newline handling on Windows git; needs the stderr captured to diagnose. (3) test/agent-farm-season.test.ts 'season: 21 simulated days' took 464 s and failed under CPU contention from parallel runs; not reproduced alone. Impact: the local verification launcher records exit 1 for the full suite on this machine, so contribution cards say 'failed' for a suite that is green in CI. Options: normalize line endings in the two tests (autocrlf-proof), or set `* text=auto eol=lf` in .gitattributes for the repo.",
+  "evidence": [
+    "npx tsx --test test/external-acceptance.test.ts test/sync.test.ts on feat/task-autofinish: 29 pass, 2 fail",
+    "same two files on worktree at 8458255 (v1.37.1): 29 pass, 2 fail",
+    "AssertionError: 438 !== 384 (external-acceptance.test.ts:84)",
+    "Error: Command failed: git -C ...\\hunch-sync-GJyYcH\\A update-ref --stdin, status 128 (sync.test.ts:618)",
+    "verify check hev_26c3c720cd8a6aa8e4f071e0 (timed out at 900 s under load) and the 962 s rerun with exit 1"
+  ],
+  "method": null,
+  "severity": "low",
+  "triage": "open",
+  "affected_files": [
+    "test/external-acceptance.test.ts",
+    "test/sync.test.ts",
+    "test/agent-farm-season.test.ts"
+  ],
+  "affected_symbols": [],
+  "violates_constraint": null,
+  "spawned_decision": null,
+  "observed_at": "2026-09-15T14:08:59.559Z",
+  "resolved_commit": null,
+  "provenance": {
+    "source": "agent_recorded",
+    "confidence": 0.75,
+    "evidence": [
+      "npx tsx --test test/external-acceptance.test.ts test/sync.test.ts on feat/task-autofinish: 29 pass, 2 fail",
+      "same two files on worktree at 8458255 (v1.37.1): 29 pass, 2 fail",
+      "AssertionError: 438 !== 384 (external-acceptance.test.ts:84)",
+      "Error: Command failed: git -C ...\\hunch-sync-GJyYcH\\A update-ref --stdin, status 128 (sync.test.ts:618)",
+      "verify check hev_26c3c720cd8a6aa8e4f071e0 (timed out at 900 s under load) and the 962 s rerun with exit 1"
+    ],
+    "last_verified": "2026-09-15T14:08:59.559Z"
+  }
+}
