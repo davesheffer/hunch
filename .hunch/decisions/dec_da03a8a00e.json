@@ -1,0 +1,86 @@
+{
+  "id": "dec_da03a8a00e",
+  "title": "Update Hunch decision count metadata after main merge",
+  "topic": null,
+  "status": "accepted",
+  "context": "Repository merged main branch; Hunch (engineering memory system) grew from 292 to 294 decisions. Metadata in configuration files must stay synchronized.",
+  "decision": "Updated decision counter from 292 → 294 in all 5 canonical locations: .cursor/rules/hunch.mdc, .github/copilot-instructions.md, .windsurf/rules/hunch.md, AGENTS.md, CLAUDE.md.",
+  "consequences": [
+    "Tooling and documentation reflect current Hunch state across all IDE/tool integrations",
+    "Synchronization burden: same number must be updated in 5 places whenever Hunch grows"
+  ],
+  "alternatives_rejected": [
+    "Leave metadata stale (creates discrepancy between actual/advertised state)",
+    "Automate the sync (commit suggests manual regeneration)"
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Leave metadata stale (creates discrepancy between actual/advertised state)",
+      "scope": [
+        ".github/**",
+        ".windsurf/rules/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Automate the sync (commit suggests manual regeneration)",
+      "scope": [
+        ".github/**",
+        ".windsurf/rules/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_4c40eab00f"
+  ],
+  "related_files": [
+    ".github/copilot-instructions.md",
+    ".windsurf/rules/hunch.md",
+    "AGENTS.md",
+    "CLAUDE.md"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "628943d",
+  "valid_from": "2026-09-15T16:32:08+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft",
+    "confidence": 0.4,
+    "evidence": [
+      "commit:628943d",
+      "synth:provider=claude-cli",
+      "branch:feat/task-autofinish",
+      ".github/copilot-instructions.md",
+      ".windsurf/rules/hunch.md",
+      "AGENTS.md",
+      "CLAUDE.md"
+    ],
+    "last_verified": "2026-09-15T13:33:31.179Z"
+  },
+  "date": "2026-09-15T16:32:08+03:00"
+}
