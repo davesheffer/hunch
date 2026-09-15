@@ -1,0 +1,32 @@
+{
+  "id": "fnd_09efaa01be",
+  "title": "Commit synthesis captures metadata-only decisions from grounding-regeneration and merge commits (e.g. dec_da03a8a00e 'Update Hunch decision count metadata after main merge')",
+  "observation": "Observed 2026-09-15 on the hunch repo. The post-commit/post-merge synthesis produced dec_da03a8a00e, titled 'Update Hunch decision count metadata after main merge', from a commit whose only content was the regenerated grounding block (decision counts in CLAUDE.md, AGENTS.md, .cursor/rules/hunch.mdc, .github/copilot-instructions.md, .windsurf/rules/hunch.md). Earlier the same day the same path produced captures from release-pin bumps and rebased merges (dec_24c099b0c7 on the 1.38.0 release commit, dec_30ddff7308 on a rebase). None of these records a choice; they restate the diff. They inflate the decision count that the grounding block advertises, add provenance-repair escalations when the underlying commits are squash-merged, and cost a review each. Candidate rule: skip synthesis when the commit's changed files are only grounding-block outputs, .hunch/** captures, version pins (package.json/server.json/plugin/.mcp.json/.windsurf/hooks.json/package-lock.json) or a merge commit; or mark such captures as drafts that never regenerate grounding counts. The noise record was not landed (PR #259 closed); it exists only on an unpushed local commit.",
+  "evidence": [
+    "ddad8de hunch: capture dec_da03a8a00e (local, unpushed) — files: .cursor/rules/hunch.mdc, .github/copilot-instructions.md, .windsurf/rules/hunch.md, .hunch/decisions/dec_da03a8a00e.json",
+    "75ca390 hunch: capture dec_24c099b0c7 on the v1.38.0 release commit",
+    "PR #259 closed 2026-09-15"
+  ],
+  "method": null,
+  "severity": "low",
+  "triage": "open",
+  "affected_files": [
+    "src/synthesis/synthesize.ts",
+    "src/integrations/hooks.ts"
+  ],
+  "affected_symbols": [],
+  "violates_constraint": null,
+  "spawned_decision": null,
+  "observed_at": "2026-09-15T13:52:49.138Z",
+  "resolved_commit": null,
+  "provenance": {
+    "source": "agent_recorded",
+    "confidence": 0.75,
+    "evidence": [
+      "ddad8de hunch: capture dec_da03a8a00e (local, unpushed) — files: .cursor/rules/hunch.mdc, .github/copilot-instructions.md, .windsurf/rules/hunch.md, .hunch/decisions/dec_da03a8a00e.json",
+      "75ca390 hunch: capture dec_24c099b0c7 on the v1.38.0 release commit",
+      "PR #259 closed 2026-09-15"
+    ],
+    "last_verified": "2026-09-15T13:52:49.138Z"
+  }
+}
