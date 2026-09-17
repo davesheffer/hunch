@@ -1,0 +1,60 @@
+{
+  "id": "dec_95dbcadacb",
+  "title": "Agent-gateway readiness: bind the state layer to managed agent runtimes in two phases, generic only — partner availability is an advisory priority signal",
+  "topic": "roadmap.agent-gateway-readiness",
+  "status": "proposed",
+  "context": "Managed agent runtimes (Amazon Bedrock AgentCore and peers) run orchestrator + specialist agents behind an MCP gateway with identity, sandbox and telemetry, but leave the record open: non-deterministic paths, verdicts only in traces, policy by retrieval, escalations as dead ends. Hunch already holds the contract and rules (decisions with one live answer per topic, commitments, receipts, entities, idempotent refusals, replay). What is missing is reachability from such a runtime and what a regulated organization requires. A conference demo (AWS Summit Tel Aviv 2026, DEM304 fraud investigation) surfaced the gap list; the 2026-09-17 red team (fnd_770d2af1e5) found no named partner or prospect behind it. David's correction the same day: that is a priority signal, not a gate.",
+  "decision": "Keep the two-phase plan unchanged. Phase A (reachable from a managed runtime): MCP over streamable HTTP in `hunch serve` at POST /nuryel/v1/mcp through one dispatcher shared with the REST routes (hunch#267); a deployable container image plus one reference cloud deployment; the Python client on PyPI with agent-framework tool wrappers; a read-or-compute helper in the clients (moved forward: it encodes the pilot's idempotency rule); a worked multi-agent sample under examples/ only (folded into the agent farm until a prospect exists). Phase B (acceptable to a regulated organization): subject-scoped erasure without giving up the git-native source of truth (design decision first); OIDC/JWT via JWKS mapped to principals; OpenTelemetry/audit export; multi-instance serving with a measured throughput number; operator write actions in the shared state view. Every item is a generic binding or packaging of the existing contract. PRIORITY (advisory): Phase A/B items rank below the red-team 'now' list (roadmap.next-order) until an outreach lead record with a named contact who agreed to a call exists; nothing here is blocked from starting when there is a reason. The premise below raises a monthly question while no such lead exists; it never blocks. Each item still flips only on its named acceptance evidence.",
+  "consequences": [
+    "hunch serve gains a second transport for the same verbs; the REST handler is refactored into a shared dispatcher so both transports cannot diverge.",
+    "New dependency surface: OIDC verification, OTel exporter and a container build enter the published artifact in Phase B.",
+    "Erasure forces a design choice about git history retention; it is the item most likely to gate a regulated deal and must be designed, not patched.",
+    "ROADMAP.md checkboxes flip only on the evidence named per item; no item is marked done on a claim.",
+    "hunch_escalations raises this decision on 2026-10-17 if the partner premise is still unattested — a question for the human, never a block."
+  ],
+  "alternatives_rejected": [
+    "An AWS-specific adapter (Lambda wrapper, AgentCore SDK integration) inside Hunch — violates the single-integration-surface direction: orchestrators map their world to the contract, Hunch ships no adapters.",
+    "Building the fraud sample into the product as a domain feature — domain samples live in examples/; core stays domain-free.",
+    "Hosted Hunch as the answer to reachability — hosting stays deferred (non-goal) until an external partner asks; a container plus reference deployment is enough.",
+    "Putting Phase B before Phase A — nothing in B can be evaluated by a partner who cannot yet reach the server.",
+    "Building Phase A now because the demo showed the gap — a conference demo is not a customer; each item is an ops surface nobody would evaluate (red team 2026-09-17).",
+    "A hard gate on a named partner — rejected by David 2026-09-17: the partner condition is advisory priority guidance; a gate would stall useful work when a reason appears before a lead does."
+  ],
+  "rejected_tripwires": [],
+  "related_components": [],
+  "related_files": [
+    "ROADMAP.md",
+    "src/serve/app.ts",
+    "src/serve/mcpHttp.ts",
+    "docs/nuryel-state-contract.md",
+    "clients/python/README.md"
+  ],
+  "supersedes": "dec_f69a16649a",
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-09-17T05:49:36.895Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "premises": [
+    {
+      "claim": "A named partner or prospect (an outreach lead with a real contact who agreed to a call) exists who needs the state layer reachable from a managed runtime or under regulated-organization requirements; until then Phase A/B ranks below the red-team 'now' list.",
+      "review_by": "2026-10-17"
+    }
+  ],
+  "provenance": {
+    "source": "agent_recorded",
+    "confidence": 0.75,
+    "evidence": [
+      "ROADMAP.md",
+      "src/serve/app.ts",
+      "src/serve/mcpHttp.ts",
+      "docs/nuryel-state-contract.md",
+      "clients/python/README.md"
+    ]
+  },
+  "date": "2026-09-17T05:49:36.895Z"
+}
