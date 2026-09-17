@@ -8,6 +8,7 @@ export const changelogLocales = {
       footer: "© Hunch — תיעוד משותף לסוכני AI.", home: "בית", githubReleases: "גרסאות ב-GitHub"
     },
     titles: [
+      "שום דבר לא נשאר פתוח",
       "כל תור נספר",
       "הדירוג שופט את עצמו",
       "העבודה הנכונה מהעבר, עם הסיבות",
@@ -75,6 +76,7 @@ export const changelogLocales = {
       footer: "© Hunch — общие записи для ИИ-агентов.", home: "Главная", githubReleases: "Релизы на GitHub"
     },
     titles: [
+      "Ничего не остаётся открытым",
       "Каждый ход идёт в счёт",
       "Ранжирование оценивает себя само",
       "Нужная прошлая работа, с причинами",
@@ -142,6 +144,7 @@ export const changelogLocales = {
       footer: "© Hunch — سجل مشترك لوكلاء الذكاء الاصطناعي.", home: "الرئيسية", githubReleases: "الإصدارات على GitHub"
     },
     titles: [
+      "لا شيء يبقى مفتوحًا",
       "كل دورة تُحتسب",
       "الترتيب يقيّم نفسه بنفسه",
       "العمل السابق المناسب، مع الأسباب",
@@ -209,6 +212,7 @@ export const changelogLocales = {
       footer: "© Hunch — un registro compartido para agentes de IA.", home: "Inicio", githubReleases: "Versiones en GitHub"
     },
     titles: [
+      "Nada queda abierto",
       "Cada turno cuenta",
       "El ranking se evalúa a sí mismo",
       "El trabajo previo correcto, con sus razones",

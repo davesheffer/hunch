@@ -1,0 +1,139 @@
+{
+  "id": "dec_bea3e0db24",
+  "title": "Session-settled host close: a new prompt or any Stop closes what the session left open; stale-id observations route to the newest task; notification turns alias, never row",
+  "topic": "task-reports.host-close",
+  "status": "accepted",
+  "context": "1.38.0 introduced the host close at Stop with a provisional reopen on any later observation. On the live ledger (2026-09-16) three triggers left tasks open forever and their evidence out of the episode record: a prompt interrupted before its Stop (#263), an agent reusing an older task id as the grounding instructs, which reopened a host-closed task no Stop would close again (#266), and background-command notification turns opening empty <task-notification> rows (#269).",
+  "decision": "Stop still closes the prompt's own task as a host close and persists its record. In addition: (1) settleSessionTasks host-closes every task of the session still open when a new prompt starts (keeping the new task, or the task a notification continues) and when any Stop fires, except tasks with a check-start still inside its timeout plus grace; the caller persists their records. (2) continuationLinks treats an OPEN previous task as the session's current work whatever its age, so the next prompt continues it. (3) appendEvent on a host-closed task routes deliveries/saves/claims/conformance/refusals to the session's newest task when one exists and is open or host-closed; check-start/check stay on the named task (a result must match its start) and reopen it; a task the agent closed is never a routing target. Reopen remains the fallback when no newer task exists. (4) A prompt whose first line is <task-notification> aliases its prompt identity to the session's latest task (report_task_aliases) unless the agent closed that task; identity() resolves aliases, so Stop and hook observations of that turn report to the continued task and no row is opened. Stop still never selects a task by recency for an unknown prompt; the alias is explicit.",
+  "consequences": [
+    "An interrupted prompt's checks and lessons reach the episode record at the next prompt or Stop; hunch task list no longer shows open rows inside a completed chain.",
+    "Verification on an old id still reopens that task; the next prompt or Stop settles it.",
+    "A new served.db table report_task_aliases (additive, CREATE IF NOT EXISTS).",
+    "A late observation from a genuinely continued turn (another hook's block) still reopens the same task when it is the session's newest, as before."
+  ],
+  "alternatives_rejected": [
+    "Keep the unconditional reopen and rely on the agent calling finish: the ledger showed agents do not, and an interrupted prompt has no Stop at all.",
+    "Have stopHookReport fall back to the session's latest task when the prompt has no task: violates the existing guarantee that Stop never borrows a recent task for an unknown prompt (test 'old hosts never borrow a recent task'); replaced by the explicit alias.",
+    "Open a ledger row for notification turns and mark it: still an empty row per background command and an instruction to start a task titled <task-notification>.",
+    "Throw on observations naming a host-closed task: would fail the agent's hunch_context mid-turn and lose the observation."
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Leave interrupted tasks open until explicit user action closes them (perpetuates orphaned state)",
+      "scope": [
+        "docs/**",
+        "src/cli/**",
+        "src/core/**",
+        "src/mcp/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Route observations to the task that created them (breaks assumption of single current work)",
+      "scope": [
+        "docs/**",
+        "src/cli/**",
+        "src/core/**",
+        "src/mcp/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Create separate rows for background notifications (orphans empty records)",
+      "scope": [
+        "docs/**",
+        "src/cli/**",
+        "src/core/**",
+        "src/mcp/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Include all commits in git anchoring (obscures user work with metadata noise)",
+      "scope": [
+        "docs/**",
+        "src/cli/**",
+        "src/core/**",
+        "src/mcp/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_50037f41a9",
+    "cmp_a94a8fe5cc",
+    "cmp_b256a6aed0",
+    "cmp_dfa5b5acde",
+    "cmp_f27fede222"
+  ],
+  "related_files": [
+    "src/core/taskReport.ts",
+    "src/core/taskReportHook.ts",
+    "src/core/taskRecord.ts",
+    "src/cli/index.ts",
+    "test/task-report-hook.test.ts"
+  ],
+  "supersedes": "dec_46128524fc",
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "5558d6d",
+  "valid_from": "2026-09-16T17:13:18+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "premises": [],
+  "provenance": {
+    "source": "llm_draft+agent_recorded",
+    "confidence": 0.75,
+    "evidence": [
+      "src/core/taskReport.ts",
+      "src/core/taskReportHook.ts",
+      "src/core/taskRecord.ts",
+      "src/cli/index.ts",
+      "test/task-report-hook.test.ts"
+    ]
+  },
+  "date": "2026-09-16T14:15:14.117Z"
+}

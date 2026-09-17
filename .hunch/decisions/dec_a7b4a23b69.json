@@ -19,7 +19,6 @@
   "related_components": [],
   "related_files": [
     "ROADMAP.md",
-    "docs/next-release-memory-impact.md",
     "docs/task-reports.md",
     "src/core/taskReport.ts",
     "src/taskReports.ts"
@@ -40,7 +39,6 @@
     "confidence": 0.95,
     "evidence": [
       "ROADMAP.md",
-      "docs/next-release-memory-impact.md",
       "docs/task-reports.md",
       "src/core/taskReport.ts",
       "src/taskReports.ts"

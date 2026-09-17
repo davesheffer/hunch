@@ -15,7 +15,7 @@ import { join } from "node:path";
 import { flushCapture } from "../integrations/sync.js";
 import type { HunchStore } from "../store/hunchStore.js";
 import { hunchPaths } from "./paths.js";
-import { episodeTasks, isEmptyTaskReport, readTaskReport, reportHash, type TaskReport, type TaskSummary } from "./taskReport.js";
+import { episodeTasks, isEmptyTaskReport, readTaskReport, reportHash, sessionsOverlap, type TaskReport, type TaskSummary } from "./taskReport.js";
 import { reportSourceSnapshot } from "./taskReportEvidence.js";
 import { ENTITY_KINDS, TaskRecordSchema, type EntityKind, type TaskRecord } from "./types.js";
 import { refreshRankEval } from "./taskRankingMode.js";
@@ -179,7 +179,10 @@ export function persistTaskRecord(root: string, store: HunchStore, taskId: strin
   const members = headId === own.task.task_id && !own.task.episode ? [own.task] : episodeTasks(root, headId);
   const reports = (members.length ? members : [own.task]).map((t) => (t.task_id === taskId ? own : readTaskReport(root, t.task_id, snapshot)));
   const window = { from: reports[0]!.task.started_at, to: reports.reduce<string | null>((max, r) => (r.task.finished_at && (!max || r.task.finished_at > max) ? r.task.finished_at : max), null) };
-  let built = taskRecordFromReports(reports, gitTouchedFiles(root, window.from, window.to));
+  // Another session working in the same checkout at the same time leaves the
+  // same mtimes: then only commits (attributable by author and time) count.
+  const workingTree = !sessionsOverlap(root, reports[0]!.task.session_key, window.from, window.to, reports.map((r) => r.task.task_id));
+  let built = taskRecordFromReports(reports, gitTouchedFiles(root, window.from, window.to, { workingTree }));
   if (!built) return null;
   let inPrivate = store.hasPrivate ? store.getPrivateRec("tasks", built.id) : undefined;
   let inPublic = store.json.get("tasks", built.id);
@@ -188,7 +191,7 @@ export function persistTaskRecord(root: string, store: HunchStore, taskId: strin
   // episode splits here: this prompt keeps its own record instead of naming
   // private memory in a public one.
   if (inPublic && !inPrivate && taskRecordHome(store, built) === "private" && built.id !== taskId) {
-    built = taskRecordFromReports([own], gitTouchedFiles(root, own.task.started_at, own.task.finished_at));
+    built = taskRecordFromReports([own], gitTouchedFiles(root, own.task.started_at, own.task.finished_at, { workingTree }));
     if (!built) return null;
     inPrivate = store.hasPrivate ? store.getPrivateRec("tasks", built.id) : undefined;
     inPublic = store.json.get("tasks", built.id);

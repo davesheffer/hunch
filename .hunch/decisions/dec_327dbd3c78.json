@@ -23,7 +23,6 @@
     "README.md",
     "package.json",
     "ROADMAP.md",
-    "docs/competitive-landscape.md",
     "site/blog/posts.js"
   ],
   "supersedes": null,
@@ -46,7 +45,6 @@
       "README.md",
       "package.json",
       "ROADMAP.md",
-      "docs/competitive-landscape.md",
       "site/blog/posts.js"
     ]
   },

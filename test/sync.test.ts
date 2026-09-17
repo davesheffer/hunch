@@ -615,7 +615,8 @@ function gitText(root: string, ...args: string[]): string {
   return execFileSync("git", ["-C", root, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
 }
 
-test("large legacy multi-ref push keeps its successful outcome when observation output is oversized", () => {
+// 3000 refs of 200-character names: the loose ref paths exceed the Windows path limit.
+test("large legacy multi-ref push keeps its successful outcome when observation output is oversized", { skip: process.platform === "win32" ? "ref paths exceed the Windows path limit" : false }, () => {
   const { A, cleanup } = setup();
   try {
     const oid = gitText(A, "rev-parse", "HEAD");

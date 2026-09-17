@@ -17,7 +17,7 @@
   "supersedes": null,
   "superseded_by": null,
   "caused_by_bug": null,
-  "commit": "3d1f37c",
+  "commit": "c477b65",
   "valid_from": "2026-07-26T13:46:16+03:00",
   "valid_to": null,
   "retired": {
@@ -28,7 +28,7 @@
     "source": "inferred",
     "confidence": 0.3,
     "evidence": [
-      "commit:3d1f37c",
+      "commit:c477b65",
       "synth:provider=deterministic",
       "branch:agent/release-v1.9.4",
       "test/ci-action.test.ts"

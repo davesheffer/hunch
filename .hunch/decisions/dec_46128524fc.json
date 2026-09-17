@@ -2,7 +2,7 @@
   "id": "dec_46128524fc",
   "title": "Stop closes the prompt's task as a provisional host close; git-side work anchors task records",
   "topic": "task-reports.host-close",
-  "status": "accepted",
+  "status": "superseded",
   "context": "hunch task stats on 2026-09-15: 107 local tasks in 7 days, 7 graph records. Causes measured from the ledger: tasks left open by the agent never became records even with saves and passed checks; edits made through Bash/python patch scripts, rebases and release commits never fired the pre-edit hook, so records had no file anchors for them; each follow-up prompt opened its own task. The earlier rule 'Stop does not close an unfinished report' protected against another hook continuing the turn; reopen-on-observation keeps that safety while making the ledger and the graph truthful without user or agent cooperation (David: 'the user doesn't have to touch anything').",
   "decision": "The lifecycle Stop hook closes the prompt's task itself (closed_by: \"host\") and persists its graph record through persistTaskRecord, so a task with observations becomes memory without the agent calling hunch_task finish. The close is provisional: appendEvent reopens a host-closed task on the next observation (a continued turn after another hook's block, or a verify/rule run after Stop), the following Stop closes it again and refreshes the record (idempotent on report hash), and an explicit agent finish with any outcome overrides a host close and is final. Pending verification keeps the task open. Verification and rule evaluation accept a host-closed task. Task records additionally anchor to files git saw change while the task was open: commits authored by the configured git user whose commit time falls in [started_at-1s, finished_at+1s] (merges excluded, 50 commits max) and working-tree changes whose mtime falls in [started_at, finished_at+1s]; .hunch, .hunch-cache and .git paths and deletions are excluded; report-derived files come first under the 64-file cap. Empty tasks remain ledger-only.",
   "consequences": [
@@ -23,11 +23,11 @@
     "src/cli/index.ts"
   ],
   "supersedes": null,
-  "superseded_by": null,
+  "superseded_by": "dec_bea3e0db24",
   "caused_by_bug": null,
   "commit": null,
   "valid_from": "2026-09-15T12:57:39.578Z",
-  "valid_to": null,
+  "valid_to": "2026-09-16T17:13:18+03:00",
   "retired": {
     "symbols": [],
     "deps": []

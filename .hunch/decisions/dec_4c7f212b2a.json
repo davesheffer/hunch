@@ -62,7 +62,7 @@
   "supersedes": null,
   "superseded_by": null,
   "caused_by_bug": null,
-  "commit": "1afe609",
+  "commit": "cd2c3c3",
   "valid_from": "2026-09-15T09:47:07+03:00",
   "valid_to": null,
   "retired": {
@@ -73,7 +73,7 @@
     "source": "llm_draft",
     "confidence": 0.65,
     "evidence": [
-      "commit:1afe609",
+      "commit:cd2c3c3",
       "synth:provider=claude-cli",
       ".github/copilot-instructions.md",
       ".windsurf/rules/hunch.md",

@@ -26,7 +26,7 @@
   "supersedes": null,
   "superseded_by": null,
   "caused_by_bug": null,
-  "commit": "cb7da0c",
+  "commit": "2772367",
   "valid_from": "2026-07-26T13:06:13+03:00",
   "valid_to": null,
   "retired": {
@@ -37,7 +37,7 @@
     "source": "inferred",
     "confidence": 0.45,
     "evidence": [
-      "commit:cb7da0c",
+      "commit:2772367",
       "synth:provider=deterministic",
       "branch:fix/sampson-issues-23-19",
       "src/cli/invocation.ts",

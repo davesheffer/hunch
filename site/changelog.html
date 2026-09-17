@@ -107,6 +107,10 @@
 
     <div class="clog">
       <div class="clog-group">
+        <div class="clog-date">Sep 16, 2026</div>
+        <div class="clog-row"><span class="rel-tag">v1.38.1</span><span class="clog-t"><b>Nothing stays open</b> — a prompt the user interrupted is closed by the session's next prompt and its evidence still reaches the record; an agent reusing an older task id no longer reopens a task nothing would close; background-command notifications stop opening empty rows; task records no longer list the grounding files a capture rewrites, and a shared checkout anchors only commits. <span class="mono">hunch task verify</span> gets a 15-minute default budget, and <span class="mono">hunch_task start</span> works again on published installs.</span></div>
+      </div>
+      <div class="clog-group">
         <div class="clog-date">Sep 15, 2026</div>
         <div class="clog-row"><span class="rel-tag">v1.38.0</span><span class="clog-t"><b>Every turn counts</b> — a task becomes memory when the turn ends, whether or not the agent reported it; follow-up prompts ("status", "next", "go") join the work they belong to as one record per episode; and work done from a shell, a rebase or a release commit anchors the record to the files git saw change. A verification whose runner died no longer freezes its task. Nothing to run, nothing to configure.</span></div>
         <div class="clog-row"><span class="rel-tag">v1.37.1</span><span class="clog-t"><b>The ranking judges itself</b> — the evaluation of which past tasks to show reruns whenever a task finishes, delivery switches back to "latest only" on its own if the ranked choice loses with a confidence interval once enough history exists, and <span class="mono">hunch now</span> prints the current verdict. Nothing to run, nothing to configure.</span></div>

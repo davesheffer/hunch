@@ -97,7 +97,7 @@ import { recordServed, servedSummary } from "../core/served.js";
 import { recordTaskDelivery, reportActivity, reportPresentationEnabled, unseenLessons } from "../core/taskReport.js";
 import { snapshotDeliveredRecords } from "../core/taskReportEvidence.js";
 import { renderRecalledLine } from "../core/taskReportRender.js";
-import { closeHookTask, hookReportTaskId, nativeHookCwd, startHookReport, stopHookReport, observeHookDenial } from "../core/taskReportHook.js";
+import { closeHookTask, hookReportTaskId, nativeHookCwd, settleHookSession, startHookReport, stopHookReport, observeHookDenial } from "../core/taskReportHook.js";
 import { persistTaskRecord } from "../core/taskRecord.js";
 import { recordHookObservation } from "../core/hookObservations.js";
 import { contextHookOutput, denyHookOutput, hookProvider, normalizeHookEvent, stopHookOutput, type HookProvider, type HunchHookEvent } from "../core/agenthook.js";
@@ -4351,7 +4351,7 @@ program
         // or not the agent called finish. Fail-open: the card below still renders.
         try {
           const closed = closeHookTask(root, provider, evt);
-          if (closed) { store ??= new HunchStore(paths); persistTaskRecord(root, store, closed); }
+          if (closed.length) { store ??= new HunchStore(paths); for (const id of closed) persistTaskRecord(root, store, id); }
         } catch { /* the ledger and the card remain authoritative; the next finish retries */ }
         const report = stopHookReport(root, provider, evt);
         if (report) console.log(JSON.stringify(report));
@@ -4376,6 +4376,12 @@ program
           const report = startHookReport(root, provider, evt);
           if (report) { text += `\n\n${report}`; mustDeliver = true; }
         } catch { /* passive reporting remains fail-open */ }
+        // A task an earlier prompt of this session left open (interrupted before
+        // its Stop) is over now: close it and keep its record.
+        try {
+          const settled = settleHookSession(root, provider, evt, { keepId: hookReportTaskId(root, provider, evt), keepNewest: true });
+          if (settled.length) { store ??= new HunchStore(paths); for (const id of settled) persistTaskRecord(root, store, id); }
+        } catch { /* the next Stop or prompt retries */ }
         // Pipeline turn bookkeeping (fresh block budget) + the one nag that must
         // repeat: edits from an earlier turn still unverified.
         if (evt.session_id && pipelineEnabled()) {
