@@ -4,8 +4,10 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { finishReportTask, listReportTasks, listTaskSummaries, readTaskReport, startReportTask } from "../src/core/taskReport.js";
+import { finishReportTask, listReportTasks, listTaskSummaries, readTaskReport, recordTaskDelivery, reportHash, startReportTask } from "../src/core/taskReport.js";
 import { promptTaskId } from "../src/core/taskReportHook.js";
+import { buildDeliveryEnvelope } from "../src/core/delivery.js";
+import type { AssembledContext } from "../src/store/hunchStore.js";
 import { HunchStore } from "../src/store/hunchStore.js";
 import { hunchPaths } from "../src/core/paths.js";
 import { mkConstraint, tsxLoaderUrl } from "./helpers.js";
@@ -114,6 +116,79 @@ test("Stop keeps the record of a task with observations, a continuation reopens 
   assert.equal(explicit.state, "interrupted");
   assert.equal(explicit.closed_by, "agent");
   assert.throws(() => finishReportTask(root, task!.task_id, "completed"), /different outcome/, "an agent close is final");
+});
+
+const verifyTask = (root: string, taskId: string) => execFileSync(process.execPath, ["--import", tsxLoaderUrl(), cli, "task", "verify", taskId, "--json", "--", process.execPath, "-e", "process.exit(0)"], { cwd: root, encoding: "utf8" });
+function deliverTo(root: string, taskId: string): string {
+  const ctx = { target: "src/config.js", constraints: [], decisions: [], bugs: [], blast_radius: [], components: [], findings: [], budget_tokens: 1500 } as unknown as AssembledContext;
+  ctx.constraints.push({ id: "con_preserve", type: "architecture", statement: "Preserve existing settings", scope: ["src/config.js"], severity: "blocking", enforcement: "advisory_v1", match: null, forbids: null, rationale: "", source_decision: null, violations: [], status: "active", valid_from: "2026-09-11T00:00:00.000Z", valid_to: null, provenance: { source: "human_confirmed", confidence: 1, evidence: [] } });
+  const record = { record_id: "con_preserve", kind: "constraints", title: "Preserve existing settings", lesson: "Merge settings.", content_hash: reportHash("fixture record revision"), recorded_at: "2026-09-11T00:00:00.000Z" };
+  return recordTaskDelivery(root, taskId, buildDeliveryEnvelope(ctx), [record], undefined, "src/config.js");
+}
+
+test("a prompt interrupted before its Stop is closed when the session's next prompt arrives, and its evidence reaches the episode record (#263)", t => {
+  const root = fixture(t);
+  writeFileSync(join(root, ".hunch", "local.json"), JSON.stringify({ taskRecordsFlush: "batch" }));
+  hook(root, "UserPromptSubmit", { prompt_id: "p1" });
+  const [first] = listReportTasks(root);
+  verifyTask(root, first!.task_id);
+  // No Stop: the user interrupted the turn. The session's next prompt arrives.
+  hook(root, "UserPromptSubmit", { prompt_id: "p2" });
+  const rows = listReportTasks(root);
+  const interrupted = rows.find(r => r.task_id === first!.task_id)!;
+  assert.equal(interrupted.state, "completed", "the interrupted prompt's task is over once the session moved on");
+  assert.equal(interrupted.closed_by, "host");
+  const second = rows.find(r => r.task_id !== first!.task_id)!;
+  assert.equal(second.state, "open", "the new prompt's own task stays open");
+  assert.equal(second.continues, first!.task_id, "an open task is the session's current work whatever its age");
+  const recordPath = join(root, ".hunch", "tasks", `${first!.task_id}.json`);
+  assert.ok(existsSync(recordPath), "the interrupted prompt's evidence became a record without any Stop");
+  assert.equal((JSON.parse(readFileSync(recordPath, "utf8")) as { checks: unknown[] }).checks.length, 1);
+  hook(root, "Stop", { prompt_id: "p2" });
+  const episode = JSON.parse(readFileSync(recordPath, "utf8")) as { provenance: { evidence: string[] } };
+  assert.deepEqual(episode.provenance.evidence, [`hunch report ${first!.task_id}`, `hunch report ${second.task_id}`]);
+});
+
+test("an observation naming an older host-closed task lands on the session's newest task; verification keeps its own task; an agent close stays closed (#266)", t => {
+  const root = fixture(t);
+  writeFileSync(join(root, ".hunch", "local.json"), JSON.stringify({ taskRecordsFlush: "batch" }));
+  hook(root, "UserPromptSubmit", { prompt_id: "p1" });
+  const [first] = listReportTasks(root);
+  hook(root, "Stop", { prompt_id: "p1" });
+  hook(root, "UserPromptSubmit", { prompt_id: "p2" });
+  const second = listReportTasks(root).find(r => r.task_id !== first!.task_id)!;
+  // The agent reuses p1's id for p2's context call, as the grounding tells it to.
+  deliverTo(root, first!.task_id);
+  assert.equal(readTaskReport(root, first!.task_id).task.state, "completed", "the old task is not reopened: no Stop would close it again");
+  assert.equal(readTaskReport(root, first!.task_id).deliveries.length, 0);
+  assert.equal(readTaskReport(root, second.task_id).deliveries.length, 1, "the observation is the current prompt's work");
+  // A verification result must match its start, so a check on the old id stays there and reopens it.
+  verifyTask(root, first!.task_id);
+  assert.equal(readTaskReport(root, first!.task_id).task.state, "open");
+  hook(root, "Stop", { prompt_id: "p2" });
+  assert.equal(listReportTasks(root).find(r => r.task_id === first!.task_id)!.state, "completed", "Stop closes what an earlier prompt left open");
+  assert.equal(readTaskReport(root, first!.task_id).checks.length, 1);
+  // The agent closed the newest task for good: a late observation naming the old one falls back to reopening it.
+  finishReportTask(root, second.task_id, "completed");
+  deliverTo(root, first!.task_id);
+  assert.equal(readTaskReport(root, second.task_id).task.closed_by, "agent");
+  assert.equal(readTaskReport(root, first!.task_id).task.state, "open");
+  assert.equal(readTaskReport(root, first!.task_id).deliveries.length, 1);
+});
+
+test("a host notification turn continues the session's latest task instead of opening a row of its own (#269)", t => {
+  const root = fixture(t);
+  hook(root, "UserPromptSubmit", { prompt_id: "p1", prompt: "do it" });
+  const [first] = listReportTasks(root);
+  hook(root, "Stop", { prompt_id: "p1" });
+  const notice = hook(root, "UserPromptSubmit", { prompt_id: "n1", prompt: "<task-notification>\n<task-id>abc</task-id>\n<status>completed</status>\n</task-notification>" });
+  assert.equal(listReportTasks(root).length, 1, "no ledger row for a notification");
+  assert.match(notice.hookSpecificOutput.additionalContext, new RegExp(first!.task_id), "the instruction names the task the notification belongs to");
+  assert.equal(hook(root, "Stop", { prompt_id: "n1" }), null);
+  assert.equal(listReportTasks(root)[0]!.state, "completed");
+  // Without a session task, a notification is just a prompt.
+  hook(root, "UserPromptSubmit", { session_id: "session-b", prompt_id: "n2", prompt: "<task-notification>\n</task-notification>" });
+  assert.equal(listReportTasks(root).length, 2);
 });
 
 test("native Stop shows the card as soon as a check is observed, even when the agent never called a tool", t => {

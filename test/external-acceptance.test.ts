@@ -86,7 +86,8 @@ test("the CLI creates a private draft and refuses to overwrite it", () => {
   try {
     const draft = join(w.dir, "draft.json");
     execFileSync(process.execPath, [tool, "init", "repository-user", draft]);
-    assert.equal(statSync(draft).mode & 0o777, 0o600);
+    // Windows has no POSIX mode bits (statSync reports 0o666 whatever was asked).
+    if (process.platform !== "win32") assert.equal(statSync(draft).mode & 0o777, 0o600);
     assert.throws(() => execFileSync(process.execPath, [tool, "init", "repository-user", draft], { stdio: "pipe" }), /Command failed/);
   } finally { w.close(); }
 });

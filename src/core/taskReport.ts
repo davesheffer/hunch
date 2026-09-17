@@ -160,9 +160,25 @@ function taskDb<T>(root: string, run: (db: Database) => T): T {
     );
     CREATE INDEX IF NOT EXISTS report_record_lookup ON report_record_links(kind, record_id, content_hash);
     CREATE TABLE IF NOT EXISTS report_history_progress (id INTEGER PRIMARY KEY CHECK(id = 1), through_rowid INTEGER NOT NULL);
-    INSERT OR IGNORE INTO report_history_progress VALUES (1, 0);`);
+    INSERT OR IGNORE INTO report_history_progress VALUES (1, 0);
+    CREATE TABLE IF NOT EXISTS report_task_aliases (alias_id TEXT PRIMARY KEY, task_id TEXT NOT NULL);`);
     return run(db);
   });
+}
+
+/** A prompt identity that reports to another prompt's task: a host notification
+ * turn continues the session's latest task instead of opening a row. Explicit,
+ * so Stop never selects a task by recency for a prompt it does not know. */
+export function aliasReportTask(root: string, aliasId: string, taskId: string): void {
+  TaskIdSchema.parse(aliasId);
+  taskDb(root, db => transaction(db, () => {
+    readTask(db, root, taskId);
+    db.prepare("INSERT OR REPLACE INTO report_task_aliases VALUES (?, ?)").run(aliasId, taskId);
+  }));
+}
+/** The task an aliased prompt identity reports to, or the identity itself. */
+export function resolveReportTask(root: string, id: string): string {
+  return taskDb(root, db => (db.prepare("SELECT task_id FROM report_task_aliases WHERE alias_id = ?").get(id) as { task_id: string } | undefined)?.task_id ?? id);
 }
 
 function deliveryRecords(kind: string, body: unknown): ReportRecord[] {
@@ -286,19 +302,64 @@ export function startReportTask(root: string, title: string, taskId?: string, li
  * same work: its task continues the previous one and shares its episode. */
 export const CONTINUATION_WINDOW_MS = 30 * 60_000;
 /** The links a new prompt's task takes from the latest task of its session, or
- * null when that task is too old (measured from its close, or its start when it
- * was never closed) to be the same work. */
+ * null when that task is too old (measured from its close) to be the same work.
+ * A task still open is the session's current work however long ago it started:
+ * the prompt was interrupted before Stop, or a late observation reopened it. */
 export function continuationLinks(previous: ReportTask | null, nowMs = Date.now()): { continues: string; episode: string } | null {
   if (!previous) return null;
+  const links = { continues: previous.task_id, episode: previous.episode ?? previous.task_id };
+  if (previous.state === "open") return links;
   const reference = Date.parse(previous.finished_at ?? previous.started_at);
   if (!Number.isFinite(reference) || nowMs - reference > CONTINUATION_WINDOW_MS) return null;
-  return { continues: previous.task_id, episode: previous.episode ?? previous.task_id };
+  return links;
+}
+function newestSessionTask(db: Database, root: string, sessionKey: string): ReportTask | null {
+  const row = db.prepare("SELECT body FROM report_tasks WHERE scope IN (?, ?, ?) AND json_extract(body, '$.session_key') = ? ORDER BY rowid DESC LIMIT 1").get(...scopePair(root), sessionKey) as { body: string } | undefined;
+  return row ? TaskSchema.parse(JSON.parse(row.body)) : null;
 }
 /** The most recent task of a session in this worktree, or null. */
 export function latestSessionTask(root: string, sessionKey: string): ReportTask | null {
+  return taskDb(root, db => newestSessionTask(db, root, sessionKey));
+}
+/** Check-starts still inside their own timeout plus the grace window, minus the
+ * results that arrived: while positive, a runner may still deliver a result. */
+function pendingChecks(db: Database, taskId: string): number {
+  const { pending } = db.prepare(`SELECT SUM(CASE WHEN kind = 'check-start' AND (julianday('now') - julianday(at)) * 86400000 < COALESCE(json_extract(body, '$.timeout_ms'), ${MAX_PENDING_CHECK_MS}) + ${CHECK_RESULT_GRACE_MS} THEN 1 WHEN kind = 'check' AND json_extract(body, '$.check_id') IS NOT NULL THEN -1 ELSE 0 END) AS pending FROM report_events WHERE task_id = ?`).get(taskId) as { pending: number | null };
+  return pending ?? 0;
+}
+/** Tasks of a session that an earlier prompt left open are over once the
+ * session moves on: the prompt was interrupted before its Stop, a notification
+ * turn reused the task, or a late observation reopened it. Close them as host
+ * closes, except `keepId` (the prompt now running), the session's newest task
+ * when `keepNewest` (a notification turn continues it), and any task whose
+ * verification may still deliver a result. Returns the ids closed here so the
+ * caller can persist their records. */
+export function settleSessionTasks(root: string, sessionKey: string, options: { keepId?: string | null; keepNewest?: boolean } = {}): string[] {
+  return taskDb(root, db => transaction(db, () => {
+    const rows = db.prepare("SELECT body FROM report_tasks WHERE scope IN (?, ?, ?) AND json_extract(body, '$.session_key') = ? AND json_extract(body, '$.state') = 'open' ORDER BY rowid").all(...scopePair(root), sessionKey) as Array<{ body: string }>;
+    const newest = options.keepNewest ? newestSessionTask(db, root, sessionKey)?.task_id : undefined;
+    const closed: string[] = [];
+    for (const row of rows) {
+      const task = TaskSchema.parse(JSON.parse(row.body));
+      if (task.task_id === options.keepId || task.task_id === newest || pendingChecks(db, task.task_id) > 0) continue;
+      db.prepare("UPDATE report_tasks SET body = ? WHERE task_id = ?").run(JSON.stringify(TaskSchema.parse({ ...task, state: "completed", finished_at: new Date().toISOString(), closed_by: "host" })), task.task_id);
+      closed.push(task.task_id);
+    }
+    return closed;
+  }));
+}
+/** Whether a task of ANOTHER session (or of no session) was open in this
+ * worktree during the window: working-tree edits made then cannot be told apart
+ * by mtime, so the caller attributes only commits. `ownIds` are the episode's
+ * own tasks; any other task without a session key counts as foreign. */
+export function sessionsOverlap(root: string, sessionKey: string | undefined, from: string, to: string | null, ownIds: readonly string[] = []): boolean {
   return taskDb(root, db => {
-    const row = db.prepare("SELECT body FROM report_tasks WHERE scope IN (?, ?, ?) AND json_extract(body, '$.session_key') = ? ORDER BY rowid DESC LIMIT 1").get(...scopePair(root), sessionKey) as { body: string } | undefined;
-    return row ? TaskSchema.parse(JSON.parse(row.body)) : null;
+    const rows = db.prepare("SELECT body FROM report_tasks WHERE scope IN (?, ?, ?) AND json_extract(body, '$.started_at') <= ? AND (json_extract(body, '$.finished_at') IS NULL OR json_extract(body, '$.finished_at') >= ?)").all(...scopePair(root), to ?? new Date().toISOString(), from) as Array<{ body: string }>;
+    return rows.some(r => {
+      const task = TaskSchema.parse(JSON.parse(r.body));
+      if (ownIds.includes(task.task_id)) return false;
+      return !sessionKey || !task.session_key || task.session_key !== sessionKey;
+    });
   });
 }
 /** Every task of an episode, oldest first: the head and the prompts that continued it. */
@@ -319,31 +380,41 @@ function appendEvent(root: string, taskId: string, kind: string, body: unknown, 
       if (prior.task_id !== taskId || prior.kind !== kind || prior.content_hash !== contentHash) throw new Error("report event identity conflicts with existing evidence");
       return id;
     }
+    // The task the observation lands on: the named one, unless the host closed
+    // it and the session has since moved on.
+    let target = task;
     if (task.state !== "open" && !(kind === "check" && task.state === "interrupted")) {
       if (task.closed_by !== "host") throw new Error("task is already closed; start a new task for new work");
-      // The host closed this task at Stop, but the turn went on (another hook's
-      // block, a resumed prompt). Reopen it for the new observation; the next
-      // Stop closes it again and the graph record is refreshed from the report.
-      db.prepare("UPDATE report_tasks SET body = ? WHERE task_id = ?").run(JSON.stringify(TaskSchema.parse({ ...task, state: "open", finished_at: null, closed_by: undefined })), taskId);
+      // The host closed this task at Stop. When a later prompt of the session
+      // exists, this is that prompt's work named by an old id (the grounding
+      // says to reuse ids): it lands on the session's newest task, which the
+      // next Stop closes, instead of reopening one no Stop would close again.
+      // Verification stays on its own task (a result must match its start), and
+      // a task the agent closed is final. Otherwise the turn went on (another
+      // hook's block, a resumed prompt): reopen; the next Stop closes it again.
+      const newest = kind === "check" || kind === "check-start" || !task.session_key ? null : newestSessionTask(db, root, task.session_key);
+      if (newest && newest.task_id !== task.task_id && (newest.state === "open" || newest.closed_by === "host")) target = newest;
+      if (target.state !== "open") {
+        target = TaskSchema.parse({ ...target, state: "open", finished_at: null, closed_by: undefined });
+        db.prepare("UPDATE report_tasks SET body = ? WHERE task_id = ?").run(JSON.stringify(target), target.task_id);
+      }
     }
+    const tid = target.task_id;
     if (kind === "check") {
       const check = ReportCheckSchema.parse(body);
-      if (!check.check_id || !db.prepare("SELECT event_id FROM report_events WHERE event_id = ? AND task_id = ? AND kind = 'check-start'").get(check.check_id, taskId)) throw new Error("verification result has no matching start in this task");
+      if (!check.check_id || !db.prepare("SELECT event_id FROM report_events WHERE event_id = ? AND task_id = ? AND kind = 'check-start'").get(check.check_id, tid)) throw new Error("verification result has no matching start in this task");
     }
-    const { total, bytes, pending } = db.prepare(`SELECT COUNT(*) AS total,
-      COALESCE(SUM(length(CAST(body AS BLOB))), 0) AS bytes,
-      SUM(CASE WHEN kind = 'check-start' AND (julianday('now') - julianday(at)) * 86400000 < COALESCE(json_extract(body, '$.timeout_ms'), ${MAX_PENDING_CHECK_MS}) + ${CHECK_RESULT_GRACE_MS} THEN 1 WHEN kind = 'check' AND json_extract(body, '$.check_id') IS NOT NULL THEN -1 ELSE 0 END) AS pending
-      FROM report_events WHERE task_id = ?`).get(taskId) as { total: number; bytes: number; pending: number | null };
-    const reserved = Math.max(0, (pending ?? 0) + (kind === "check-start" ? 1 : kind === "check" ? -1 : 0));
+    const { total, bytes } = db.prepare("SELECT COUNT(*) AS total, COALESCE(SUM(length(CAST(body AS BLOB))), 0) AS bytes FROM report_events WHERE task_id = ?").get(tid) as { total: number; bytes: number };
+    const reserved = Math.max(0, pendingChecks(db, tid) + (kind === "check-start" ? 1 : kind === "check" ? -1 : 0));
     if (total + 1 + reserved > MAX_EVENTS || bytes + Buffer.byteLength(encoded) + reserved * MAX_EVENT_BYTES > MAX_TASK_BYTES) throw new Error("task observation limit reached; start a new task");
     if (kind === "claim") {
       const claim = ReportClaimSchema.parse(body);
-      const row = db.prepare("SELECT body FROM report_events WHERE event_id = ? AND task_id = ? AND kind = 'delivery'").get(claim.occurrence_id, taskId) as { body: string } | undefined;
+      const row = db.prepare("SELECT body FROM report_events WHERE event_id = ? AND task_id = ? AND kind = 'delivery'").get(claim.occurrence_id, tid) as { body: string } | undefined;
       if (!row) throw new Error("claim does not refer to a delivery in this task");
       const delivery = JSON.parse(row.body) as { records: ReportRecord[] };
       if (!delivery.records.some(r => r.record_id === claim.record_id && r.content_hash === claim.content_hash)) throw new Error("claim record revision was not delivered in this task");
     }
-    const inserted = db.prepare("INSERT INTO report_events VALUES (?, ?, ?, ?, ?, ?)").run(id, taskId, kind, new Date().toISOString(), encoded, contentHash);
+    const inserted = db.prepare("INSERT INTO report_events VALUES (?, ?, ?, ?, ?, ?)").run(id, tid, kind, new Date().toISOString(), encoded, contentHash);
     indexDeliveryRecords(db, id, kind, body);
     // Advance only over contiguous observed inserts; an older writer may have
     // left unindexed events. Historical gaps are filled by bounded reads above.

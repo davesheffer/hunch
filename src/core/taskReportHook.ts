@@ -6,7 +6,7 @@ import type { HookProvider, HunchHookInput } from "./agenthook.js";
 import { findRoot } from "./paths.js";
 import { canonicalReportRoot } from "./taskReportPaths.js";
 import { isCredentialFreeText } from "./types.js";
-import { continuationLinks, finishReportTask, isEmptyTaskReport, latestSessionTask, readTaskReport, recordReportRefusal, reportHash, reportPresentationEnabled, startReportTask, type TaskLinks } from "./taskReport.js";
+import { aliasReportTask, continuationLinks, finishReportTask, isEmptyTaskReport, latestSessionTask, readTaskReport, recordReportRefusal, reportHash, reportPresentationEnabled, resolveReportTask, settleSessionTasks, startReportTask, type TaskLinks } from "./taskReport.js";
 import { reportSourceSnapshot } from "./taskReportEvidence.js";
 import { renderTaskReport } from "./taskReportRender.js";
 
@@ -67,7 +67,9 @@ function identity(root: string, provider: HookProvider, event: HunchHookInput): 
   }
   if (!event.session_id) return null;
   if (!event.prompt_id) return "legacy";
-  return promptTaskId(root, event.session_id, event.prompt_id, event.agent_id ?? null, provider);
+  const id = promptTaskId(root, event.session_id, event.prompt_id, event.agent_id ?? null, provider);
+  // A notification turn reports to the task it continued (an explicit alias).
+  try { return resolveReportTask(root, id); } catch { return id; }
 }
 
 export function hookReportTaskId(root: string, provider: HookProvider, event: HunchHookInput): string | null {
@@ -94,11 +96,19 @@ export function startHookReport(root: string, provider: HookProvider, event: Hun
   // the episode's graph record is written under the first task's id. The key
   // is a hash; the host session identifier itself is still never retained.
   let links: TaskLinks = {};
-  if (event.session_id) {
-    const sessionKey = reportHash([cwd, provider, event.session_id, event.agent_id ?? null]);
+  const sessionKey = hookSessionKey(cwd, provider, event);
+  if (sessionKey) {
     links = { session_key: sessionKey };
     try {
       const previous = latestSessionTask(root, sessionKey);
+      // A host notification (a background command finished) is not new work:
+      // it continues the session's latest task instead of opening an empty row,
+      // unless the agent already closed that task for good. The alias makes
+      // this prompt's Stop and hook observations report to that task.
+      if (previous && previous.task_id !== id && isNotificationPrompt(event.prompt) && previous.closed_by !== "agent") {
+        aliasReportTask(root, id, previous.task_id);
+        return taskInstruction(previous, cwdLiteral);
+      }
       const continued = previous && previous.task_id !== id ? continuationLinks(previous) : null;
       if (continued) links = { ...links, ...continued };
     } catch { /* no continuity; still a task */ }
@@ -113,7 +123,34 @@ export function startHookReport(root: string, provider: HookProvider, event: Hun
     if (existing.title !== title && !GENERIC_TASK_TITLES.has(existing.title) && !GENERIC_TASK_TITLES.has(title)) throw error;
     task = existing;
   }
+  return taskInstruction(task, cwdLiteral);
+}
+function taskInstruction(task: { task_id: string; title: string }, cwdLiteral: string): string {
   return `Hunch has opened this prompt's report: ${task.task_id}. Reuse this exact ID for this prompt. Call hunch_task(action: "start", task_id: "${task.task_id}", title: ${JSON.stringify(task.title)}, cwd: ${cwdLiteral}) to obtain verification_argv; do not create another report. Pass this task_id and cwd: ${cwdLiteral} to hunch_context and decision/correction/finding captures, and pass the same cwd when finishing with hunch_task before responding. A host Stop notice will show the evidence even if no task-linked memory was observed.`;
+}
+/** The session key a hook event maps to: a hash of (root, provider, session,
+ * agent), never the identifier itself. Null without a host session. */
+function hookSessionKey(cwd: string, provider: HookProvider, event: HunchHookInput): string | null {
+  return event.session_id ? reportHash([cwd, provider, event.session_id, event.agent_id ?? null]) : null;
+}
+/** A prompt the host generated to report a background command's completion,
+ * not something the user typed. */
+export function isNotificationPrompt(prompt: string | undefined): boolean {
+  if (typeof prompt !== "string") return false;
+  const firstLine = prompt.split(/\r?\n/).map(l => l.trim()).find(l => l.length > 0) ?? "";
+  return /^<task-notification>/i.test(firstLine);
+}
+
+/** Close, as host closes, the tasks of this session that an earlier prompt left
+ * open: the prompt was interrupted before its Stop, or a late observation
+ * reopened its task. Called when a new prompt starts (`keepNewest`: the new
+ * task, or the task a notification turn continues, stays open) and when the
+ * current prompt stops. Returns the ids closed here for the caller to persist. */
+export function settleHookSession(root: string, provider: HookProvider, event: HunchHookInput, options: { keepId?: string | null; keepNewest?: boolean } = {}): string[] {
+  const cwd = nativeHookCwd(root, provider, event);
+  const key = cwd ? hookSessionKey(cwd, provider, event) : null;
+  if (!key) return [];
+  try { return settleSessionTasks(root, key, options); } catch { return []; }
 }
 
 /** Stop ends the turn, so the prompt's task closes here as a HOST close: the
@@ -123,21 +160,23 @@ export function startHookReport(root: string, provider: HookProvider, event: Hun
  * continuation: the next observation reopens the task and the following Stop
  * closes it again (the record is refreshed from the report). An explicit agent
  * finish with any outcome overrides a host close. Pending verification keeps
- * the task open. Returns the task id when the task is closed after this call,
- * so the caller can persist its record; null when nothing is closed. */
-export function closeHookTask(root: string, provider: HookProvider, event: HunchHookInput): string | null {
+ * the task open. Tasks an earlier prompt of the session left open close here
+ * too. Returns the ids of the tasks closed after this call, so the caller can
+ * persist their records; empty when nothing is closed. */
+export function closeHookTask(root: string, provider: HookProvider, event: HunchHookInput): string[] {
   let id: string | null;
-  try { id = identity(root, provider, event); } catch { return null; }
-  if (!id || id === "legacy") return null;
+  try { id = identity(root, provider, event); } catch { return []; }
+  if (!id || id === "legacy") return [];
+  const closed: string[] = [];
   try {
     const task = readTaskReport(root, id).task;
-    if (task.state === "interrupted") return null;
     if (task.state === "open") finishReportTask(root, id, "completed", { by: "host" });
-    return id;
+    if (task.state !== "interrupted") closed.push(id);
   } catch {
-    // No task for this prompt, or verification still running: leave it as it is.
-    return null;
+    // No task for this prompt (a notification turn), or verification still running: leave it as it is.
   }
+  for (const other of settleHookSession(root, provider, event, { keepId: id })) if (!closed.includes(other)) closed.push(other);
+  return closed;
 }
 
 /** A presentation notice never denies Stop or injects another model turn.

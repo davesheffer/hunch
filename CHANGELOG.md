@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.38.1 — 2026-09-16
+
+- A prompt that ends without a Stop (the user interrupted it) no longer leaves its task open forever: the next prompt of the session, or its Stop, closes it as a host close and its evidence reaches the episode record (#263). A task still open counts as the session's current work whatever its age, so the next prompt continues it.
+- An observation that names an older, host-closed task (the grounding says to reuse ids) lands on the session's newest task instead of reopening one no Stop would close again; verification keeps its own task and a task the agent closed stays closed (#266).
+- A background-command notification turn continues the session's latest task instead of opening an empty `<task-notification>` row (#269).
+- Task records no longer list the grounding files a capture rewrites (`CLAUDE.md`, `AGENTS.md`, the host rule files) or files from Hunch's own commits as the task's work; a user commit that edits them still counts (#264). When another session was open on the same checkout during the window, only commits anchor the record, never working-tree mtimes (#265).
+- `hunch task verify` defaults to a 15-minute budget instead of two minutes, so a full suite records its real result rather than a timeout (#268). The seven-minute agent-farm season test runs in CI and under `HUNCH_SLOW_TESTS=1`, not in every local `npm test`.
+- Two tests that assumed POSIX file modes and long ref paths are skipped on Windows, so a local full-suite verification there is no longer always red (#270).
+
 ## 1.38.0 — 2026-09-15
 
 - A verification whose runner died no longer freezes its task: a check-start with no result stops blocking completion after its own timeout plus a minute of grace; no result is invented and the report still discloses that none was retained.

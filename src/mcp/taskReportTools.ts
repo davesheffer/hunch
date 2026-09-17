@@ -55,13 +55,21 @@ export function boundedTaskReportForHost(report: ReturnType<typeof readTaskRepor
 /** Reuse the MCP server's installation, not a potentially stale global binary.
  * Structured argv is authoritative; the shell hint uses literal quoting. */
 function verificationLauncher(): { argv: string[]; shell: string } {
-  const dev = import.meta.url.endsWith(".ts");
-  const entry = fileURLToPath(new URL(`../cli/index.${dev ? "ts" : "js"}`, import.meta.url));
+  return verificationLauncherFor(import.meta.url, (specifier) => import.meta.resolve(specifier));
+}
+/** `metaUrl` is the module running (a `.ts` source checkout needs the tsx
+ * loader; a published `.js` build needs nothing) and `resolve` is that
+ * module's `import.meta.resolve`. The loader is resolved ONLY on the source
+ * path: `import.meta.resolve` throws for a package that is not installed, and
+ * `tsx` is a devDependency absent from every published install (#261). */
+export function verificationLauncherFor(metaUrl: string, resolve: (specifier: string) => string): { argv: string[]; shell: string } {
+  const dev = metaUrl.endsWith(".ts");
+  const entry = fileURLToPath(new URL(`../cli/index.${dev ? "ts" : "js"}`, metaUrl));
   // `--import` takes a URL. Converting the resolved loader to a path made Node on
   // Windows reject it ("Received protocol 'c:'"), so every verification launched
   // from a source checkout there failed before running and cards showed no check.
-  const loader = import.meta.resolve("tsx");
-  const argv = [process.execPath, ...(dev ? ["--import", loader.startsWith("file:") ? loader : pathToFileURL(loader).href] : []), entry];
+  const loader = dev ? resolve("tsx") : null;
+  const argv = [process.execPath, ...(loader ? ["--import", loader.startsWith("file:") ? loader : pathToFileURL(loader).href] : []), entry];
   const quote = (s: string) => process.platform === "win32" ? `'${s.replace(/'/g, "''")}'` : `'${s.replace(/'/g, "'\\''")}'`;
   return { argv, shell: `${process.platform === "win32" ? "& " : ""}${argv.map(quote).join(" ")}` };
 }
@@ -92,7 +100,7 @@ export function registerTaskReportTools(server: McpServer, getRoot: () => string
           task = readTaskReport(root, task_id, reportSourceSnapshot(root).hash).task;
         }
         const launcher = verificationLauncher();
-        return { content: [{ type: "text" as const, text: `Task ${task.task_id} · ${task.state}. Pass task_id to every hunch_context and decision/correction/finding capture call. Before the final response, finish with hunch_task and include its contribution card. For checks use this exact installation (the global hunch binary may be stale): ${launcher.shell} task verify ${task.task_id} -- <command> [arguments]. The default budget is 2 minutes; add --timeout <seconds> before -- for a long suite.` }], structuredContent: { task, verification_argv: [...launcher.argv, "task", "verify", task.task_id, "--"] } };
+        return { content: [{ type: "text" as const, text: `Task ${task.task_id} · ${task.state}. Pass task_id to every hunch_context and decision/correction/finding capture call. Before the final response, finish with hunch_task and include its contribution card. For checks use this exact installation (the global hunch binary may be stale): ${launcher.shell} task verify ${task.task_id} -- <command> [arguments]. The default budget is 15 minutes; add --timeout <seconds> before -- for a longer suite.` }], structuredContent: { task, verification_argv: [...launcher.argv, "task", "verify", task.task_id, "--"] } };
       }
       if (!task_id) throw new Error("finish requires the exact task_id");
       for (const claim of applications ?? []) recordReportClaim(root, task_id, claim);

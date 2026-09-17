@@ -137,11 +137,14 @@ export function runReportConformance(root: string, store: HunchStore, taskId: st
   });
 }
 
-export const DEFAULT_CHECK_TIMEOUT_MS = 120_000;
+/** A full suite is the usual check; two minutes turned passing suites into
+ * recorded timeouts (#268). The bound is a safety net for an abandoned runner,
+ * not a verdict. */
+export const DEFAULT_CHECK_TIMEOUT_MS = 15 * 60_000;
 export const MAX_CHECK_TIMEOUT_MS = 6 * 60 * 60_000;
 /** A deliberately explicit command wrapper. The caller chooses the command;
  * reports never execute commands automatically to validate submitted claims. */
-export async function runReportCheck(root: string, taskId: string, command: string[], label: string, timeoutMs = 120_000, options: {
+export async function runReportCheck(root: string, taskId: string, command: string[], label: string, timeoutMs = DEFAULT_CHECK_TIMEOUT_MS, options: {
   signal?: AbortSignal;
   onStdout?: (chunk: Buffer) => void;
   onStderr?: (chunk: Buffer) => void;

@@ -26,8 +26,11 @@ interface SeasonReport {
 }
 
 const distReady = existsSync(join(process.cwd(), "dist", "serve", "app.js"));
+// Six minutes on a laptop, with a wall-clock budget of its own: CI always runs
+// it; a developer's `npm test` opts in, so the suite fits a verification budget.
+const slowTests = Boolean(process.env.CI || process.env.HUNCH_SLOW_TESTS);
 
-test("season: 21 simulated days, 10 principals, zero problems, every expected refusal observed, replay OK", { skip: distReady ? false : "dist/serve/app.js is missing — run `npm run build` first" }, async () => {
+test("season: 21 simulated days, 10 principals, zero problems, every expected refusal observed, replay OK", { skip: !distReady ? "dist/serve/app.js is missing — run `npm run build` first" : !slowTests ? "the season takes minutes — set HUNCH_SLOW_TESTS=1 (CI always runs it)" : false }, async () => {
   const { runSeason } = (await import("../tooling/agent-farm/season.mjs")) as { runSeason: (opts: { days: number; customers: number; outDir: string; seed: string }) => Promise<SeasonReport> };
   const outDir = mkdtempSync(join(tmpdir(), "hunch-season-test-"));
   try {
