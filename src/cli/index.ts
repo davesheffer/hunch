@@ -61,7 +61,7 @@ import type { Runbook } from "../core/types.js";
 import { extractInlineIntent } from "../extractors/comments.js";
 import { renderText, renderMarkdown, renderSarif, renderImpact, reportFailsStrict, type CheckReport, type SarifExtras } from "../core/checkreport.js";
 import { partitionReview, isReviewDraft, READY_MIN_GROUNDED, type ReviewItem } from "../core/reviewqueue.js";
-import { installPostCommitHook, installPreCommitHook, installPostMergeHook, installPostCheckoutHook, hookStatus, hookReport, hookInvocationLines, formatHookInstall } from "../integrations/hooks.js";
+import { installPostCommitHook, installPreCommitHook, installPostMergeHook, installPostCheckoutHook, hookStatus, hookReport, hookInvocationLines, formatHookInstall, sharedHooksNote, type HookInstall } from "../integrations/hooks.js";
 import { ensureSharedOverlayPointer } from "../integrations/worktree.js";
 import { flushCapture, flushMemoryHome, flushMemoryHomes, pinSharedRemote, sharedRemoteFor, type MemoryHome } from "../integrations/sync.js";
 import { installMergeDriver } from "../integrations/mergeDriver.js";
@@ -425,13 +425,19 @@ program
       }
     }
 
+    // Collected so the linked-worktree note below can say what actually happened
+    // to the SHARED hooks dir (issue #316) rather than assuming.
+    const installs: HookInstall[] = [];
     if (isGitRepo(root)) {
       const syncToOverlay = !!(opts.privateSync || opts.sharedSync);
       const h = installPostCommitHook(root, inv.shell, { private: syncToOverlay, commit: opts.autoCommit, localOnly: syncToOverlay });
+      installs.push(h);
       for (const line of formatHookInstall(root, "post-commit hook", h, ` (learning loop)${syncToOverlay ? " — syncs to the shared overlay" : ""}${opts.autoCommit ? " — auto-commit on" : ""}`)) console.log(line);
       const pm = installPostMergeHook(root, inv.shell);
+      installs.push(pm);
       for (const line of formatHookInstall(root, "post-merge hook", pm, " (squash-merge provenance repair + re-syncs grounding docs after a merge that brought memory in)")) console.log(line);
       const pc = installPostCheckoutHook(root, inv.shell);
+      installs.push(pc);
       for (const line of formatHookInstall(root, "post-checkout hook", pc, " (workspace ledger: records this machine's branches + worktrees on checkout)")) console.log(line);
       const m = installMergeDriver(root, inv.shell);
       console.log(`  ✓ team merge driver ${m.action}`);
@@ -441,6 +447,7 @@ program
       if (opts.enforce !== false || opts.enforceStrict) {
         const strict = !!opts.enforceStrict;
         const p = installPreCommitHook(root, inv.shell, strict);
+        installs.push(p);
         for (const line of formatHookInstall(root, "pre-commit constraint guard", p, ` (${strict ? "strict — fails only on direct, high-confidence, non-stale blocking invariants" : "advisory — flags invariants in scope or blast radius"})`)) console.log(line);
       }
     } else {
@@ -497,9 +504,7 @@ program
     if (ensureSharedOverlayPointer(root, store.privateDir, store.privateAutoCommit, store.mode === "shared" ? "shared" : "private")) {
       console.log(`  ✓ private overlay registered at the git common dir — shared by every worktree of this repo`);
     }
-    if (isLinkedWorktree(root)) {
-      console.log(`  ✓ linked worktree — sharing the repo's hooks + memory (no separate setup needed)`);
-    }
+    for (const line of sharedHooksNote(root, installs)) console.log(line);
 
     store.close();
     console.log("\n" + formatIntegrationHealth(inspectIntegrations(root)));
