@@ -1,0 +1,67 @@
+{
+  "id": "htask_ebb7daa9f38413b21384fba6",
+  "title": "Fix truncated contribution card (htask card clips titles mid-word)",
+  "state": "completed",
+  "started_at": "2026-09-21T04:13:18.639Z",
+  "finished_at": "2026-09-21T04:33:14.484Z",
+  "coverage": "delivered",
+  "lessons": [
+    {
+      "kind": "decisions",
+      "record_id": "dec_c6b0d50fbd",
+      "content_hash": "sha256:d1c8f670a7b93f3e35f2a10fc9f14d6aa0e6788b1fc79ddb901feff010512d2d",
+      "title": "Finished tasks are graph memory: .hunch/tasks/ records written through the normal capture path, ledger stays local"
+    },
+    {
+      "kind": "decisions",
+      "record_id": "dec_0bf3bda2c1",
+      "content_hash": "sha256:9652e66aa7a8c051fffd6c2f2cf56b64ee7176b07d46e99b35a44fa365545aaa",
+      "title": "Agent-side hunch_task calls are conditional: the prompt hook prints the verify command, and finish is called only when the task used Hunch"
+    }
+  ],
+  "applied": [],
+  "saved": [],
+  "checks": [
+    {
+      "label": "Verification command",
+      "state": "failed",
+      "exit_code": 1
+    },
+    {
+      "label": "Verification command",
+      "state": "passed",
+      "exit_code": 0
+    }
+  ],
+  "conformance": [
+    {
+      "kind": "decisions",
+      "record_id": "dec_c6b0d50fbd",
+      "content_hash": "sha256:d1c8f670a7b93f3e35f2a10fc9f14d6aa0e6788b1fc79ddb901feff010512d2d",
+      "outcome": "unavailable"
+    },
+    {
+      "kind": "decisions",
+      "record_id": "dec_0bf3bda2c1",
+      "content_hash": "sha256:9652e66aa7a8c051fffd6c2f2cf56b64ee7176b07d46e99b35a44fa365545aaa",
+      "outcome": "unavailable"
+    }
+  ],
+  "refusals": 0,
+  "files": [
+    "CHANGELOG.md",
+    "src/core/taskReportRender.ts",
+    "test/task-report.test.ts"
+  ],
+  "supersedes": [],
+  "source_snapshot": "sha256:f40d7237ff10d569f053df82ca18e6a320c698032db376a4ba74ba971c250e2b",
+  "report_hash": "sha256:ef35a69593a451087010b8ac5c2f40e1047b7f58abf6059de8cc2b033c508da3",
+  "provenance": {
+    "source": "task_report",
+    "confidence": 1,
+    "evidence": [
+      "hunch report htask_ebb7daa9f38413b21384fba6"
+    ],
+    "last_verified": "2026-09-21T04:33:14.484Z"
+  }
+}
