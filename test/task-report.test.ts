@@ -8,7 +8,7 @@ import { buildDeliveryEnvelope } from "../src/core/delivery.js";
 import type { AssembledContext } from "../src/store/hunchStore.js";
 import { beginReportCheck, CHECK_RESULT_GRACE_MS, finishReportTask, listReportTasks, pruneReportHistory, readLessonHistory, readTaskReport, recordReportCheck, recordReportClaim, recordTaskDelivery, reportHash, settleSessionTasks, startReportTask } from "../src/core/taskReport.js";
 import { reportSourceSnapshot, runReportCheck, snapshotDeliveredRecords } from "../src/core/taskReportEvidence.js";
-import { renderTaskReport, renderTaskReportHtml, writeTaskReportHtml } from "../src/core/taskReportRender.js";
+import { CARD_RECALLED_LIMIT, renderRecalledLine, renderTaskReport, renderTaskReportHtml, writeTaskReportHtml } from "../src/core/taskReportRender.js";
 import { recordServed, servedSummary, withServedDatabase } from "../src/core/served.js";
 import { publicTaskReport, renderPublicTaskReportHtml } from "../src/core/taskReportPublic.js";
 import { HunchStore } from "../src/store/hunchStore.js";
@@ -114,7 +114,6 @@ test("task reports preserve exact delivery occurrences, empty responses and hist
 
 test("a lesson is announced on its first delivery per task and revision, never on repeats", async t => {
   const { unseenLessons } = await import("../src/core/taskReport.js");
-  const { renderRecalledLine } = await import("../src/core/taskReportRender.js");
   const root = fixture(t), a = startReportTask(root, "First"), b = startReportTask(root, "Second");
   const revised = { ...record, content_hash: reportHash("revised lesson"), title: "Preserve existing settings (revised)" };
   assert.deepEqual(unseenLessons(root, a.task_id, [record]).map(r => r.record_id), ["con_preserve"]);
@@ -537,4 +536,40 @@ test("decision predicates are evaluated only when a subject is defined in a chan
   const drifted = outcomeOf(runReportConformance(root, store, task.task_id), "dec_pay");
   assert.equal(drifted.outcome, "violated", drifted.detail);
   assert.match(renderTaskReport(readTaskReport(root, task.task_id, reportSourceSnapshot(root).hash)), /Violated  Payments verify the session/);
+});
+
+test("the contribution card names every delivered lesson whole: no mid-word ellipsis an agent would read as a truncated result", async t => {
+  const root = fixture(t);
+  const task = startReportTask(root, "Repo-wide: keep the pre-commit hook's atomic write path intact while adding the new merge driver");
+  const standing = [
+    "Synthesis must use an explicitly selected coding-assistant subscription CLI or the deterministic local fallback; never call a pay-per-token API",
+    "Config/provider writers must merge idempotently into existing user files and refuse to clobber an unparseable file",
+    "All JSON writes to .hunch/ must be atomic (temp-file + rename) so an interrupted write can never truncate the index",
+    "Forward-migrate raw JSON to the current schema BEFORE Zod validation; never silently drop unmigratable records",
+    "Semantic vectors are a derived layer in SQLite, never the source of truth; reconcile by content hash on reindex",
+  ].map((title, i) => ({ ...record, record_id: `con_standing_${i}`, title, content_hash: reportHash(title) }));
+  const deliveryOf = (records: typeof standing) => {
+    const ctx = { target: "src/config.js", constraints: records.map(r => ({ id: r.record_id, type: "architecture", statement: r.title, scope: ["src/config.js"], severity: "blocking", enforcement: "advisory_v1", match: null, forbids: null, rationale: "", source_decision: null, violations: [], status: "active", valid_from: "2026-09-11T00:00:00.000Z", valid_to: null, provenance: { source: "human_confirmed", confidence: 1, evidence: [] } })), decisions: [], bugs: [], blast_radius: [], components: [], findings: [], budget_tokens: 6000 } as unknown as AssembledContext;
+    return buildDeliveryEnvelope(ctx);
+  };
+  recordTaskDelivery(root, task.task_id, deliveryOf(standing), standing);
+  recordReportClaim(root, task.task_id, { occurrence_id: readTaskReport(root, task.task_id).deliveries[0]!.occurrence_id, record_id: standing[2]!.record_id, content_hash: standing[2]!.content_hash, action: "Kept writeFileAtomic for the new merge-driver state file instead of a plain writeFileSync so a crash mid-write leaves the previous file intact" });
+  finishReportTask(root, task.task_id);
+  const card = renderTaskReport(readTaskReport(root, task.task_id));
+  assert.doesNotMatch(card, /…/, "nothing on the card is cut mid-word");
+  assert.ok(standing.length <= CARD_RECALLED_LIMIT);
+  for (const lesson of standing) assert.ok(card.includes(lesson.title), `card names the whole lesson: ${lesson.title}`);
+  assert.doesNotMatch(card, /more lesson\(s\)/, "every delivered lesson fits, so none is deferred to the evidence view");
+  assert.match(card, /^Hunch · Repo-wide: keep the pre-commit hook's atomic write path intact while adding the new merge driver$/m);
+  assert.match(card, /^Applied   Kept writeFileAtomic for the new merge-driver state file instead of a plain writeFileSync so a crash mid-write leaves the previous file intact · agent-reported$/m);
+  assert.equal(renderRecalledLine([standing[0]!, standing[1]!]), `Hunch recalled: ${standing[0]!.title} (+1 more lesson)`);
+
+  const many = Array.from({ length: CARD_RECALLED_LIMIT + 3 }, (_, i) => ({ ...record, record_id: `con_many_${i}`, title: `Lesson number ${i} with a title that is long enough to have been clipped before`, content_hash: reportHash(`many ${i}`) }));
+  const crowded = startReportTask(root, "Crowded task");
+  recordTaskDelivery(root, crowded.task_id, deliveryOf(many), many);
+  const crowdedCard = renderTaskReport(readTaskReport(root, crowded.task_id));
+  assert.doesNotMatch(crowdedCard, /…/);
+  for (const lesson of many.slice(0, CARD_RECALLED_LIMIT)) assert.ok(crowdedCard.includes(lesson.title));
+  assert.doesNotMatch(crowdedCard, new RegExp(many[CARD_RECALLED_LIMIT]!.title));
+  assert.match(crowdedCard, /^          3 more lesson\(s\) in the evidence view$/m, "an overflow is counted, never silently cut");
 });

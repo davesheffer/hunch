@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- The contribution card (`hunch_task` finish, `hunch task finish`, `hunch report`, the Stop hook) no longer cuts lesson titles, the task title, the applied action or the check label mid-word with an ellipsis: an agent asked to copy the card verbatim read the "…" as a truncated tool result and refused to reproduce it. Every field is shown whole (each is schema-bounded), and the Recalled line names every delivered lesson up to eight instead of one title plus a count; beyond eight the rest are counted, never silently dropped. The one-line "Hunch recalled:" notice on a lesson's first delivery shows the whole title too. Measured 2026-09-21 on this repository's own graph: 220 of 330 decision titles were longer than the old 65-character Recalled clip and 327 longer than the 34-character Conformed/Violated clip.
+
 ## 1.40.0 — 2026-09-20
 
 - The managed "Hunch" grounding block written into `CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.md`, `.cursor/rules/hunch.mdc` and `.windsurf/rules/hunch.md` changes: the prompt hook now prints the `hunch task verify` launcher inline, so the block no longer asks the agent to call `hunch_task(action: "start")` just to obtain it, and `hunch_task(action: "finish")` is now asked for only when the task actually used Hunch — otherwise the host's stop hook closes the task and renders the evidence. On a host whose config wires a prompt hook but no stop event (Windsurf), finish stays mandatory, since nothing else would close the task. Measured 2026-09-19 in this repository's own sessions: the two round trips cost about 87 main-session model calls per day, nearly all returning an empty report. Existing docs are rewritten by `hunch grounding --refresh` (also run by the post-merge hook); until then the old block keeps working (#374).
