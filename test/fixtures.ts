@@ -2,9 +2,9 @@ import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-/** A canonical fixture root, including macOS's symlinked os.tmpdir(). */
+/** A canonical fixture root, including macOS symlinks and Windows 8.3 aliases. */
 export function tempDir(prefix: string, parent = tmpdir()): string {
-  return realpathSync(mkdtempSync(join(parent, prefix)));
+  return realpathSync.native(mkdtempSync(join(parent, prefix)));
 }
 
 /** Spawned fixture CLIs must not inherit the developer's assistant identity.

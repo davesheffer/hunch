@@ -18,10 +18,11 @@ test("fixture CLI environment drops every inherited initiator and preserves expl
 test("fixture roots resolve a symlinked temporary parent before git reports their paths", () => {
   const root = tempDir("hunch-canonical-fixture-");
   try {
+    assert.equal(root, realpathSync.native(root), "expand Windows short-name aliases as Git does");
     const alias = join(root, "alias");
     symlinkSync(root, alias, process.platform === "win32" ? "junction" : "dir");
     const child = tempDir("child-", alias);
-    assert.equal(child, realpathSync(child));
+    assert.equal(child, realpathSync.native(child));
     assert.ok(child.startsWith(root));
     assert.ok(!child.includes("alias"));
   } finally { cleanupDir(root); }
