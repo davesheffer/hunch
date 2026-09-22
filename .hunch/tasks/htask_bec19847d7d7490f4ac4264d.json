@@ -1,0 +1,88 @@
+{
+  "id": "htask_bec19847d7d7490f4ac4264d",
+  "title": "Release Hunch 1.40.1 with PRs 389 391 392",
+  "state": "completed",
+  "started_at": "2026-09-22T06:24:06.146Z",
+  "finished_at": "2026-09-22T06:59:33.108Z",
+  "coverage": "delivered",
+  "lessons": [
+    {
+      "kind": "constraints",
+      "record_id": "con_d56f17a941",
+      "content_hash": "sha256:d8fc6a8e70c898327c7237fb3d5f1e34af91390f7aa516f2bf1551716700b7ec",
+      "title": "A release version bump must also update the exact-version pins in plugin/.mcp.json and server.json — package.json alone is not the version"
+    },
+    {
+      "kind": "decisions",
+      "record_id": "dec_e85952e9f7",
+      "content_hash": "sha256:8d8ae50bd2a26fbd69533a6534eaa032ce2a83ee4ba6c85a3e7b58622c6de584",
+      "title": "npm releases publish unattended: the npm-publish environment keeps no required reviewers"
+    },
+    {
+      "kind": "decisions",
+      "record_id": "dec_4e1c8d263d",
+      "content_hash": "sha256:e07c93db31658f1a9e89ae732262045b983fdb13548d2c9de38eff1d52c3846e",
+      "title": "Open VSX is the sole public registry for the VS Code extension"
+    },
+    {
+      "kind": "findings",
+      "record_id": "fnd_4d3db3286c",
+      "content_hash": "sha256:916575709cf6dde828d07fff5f0d1d174b258d813920f522144482d77d2d8a24",
+      "title": "hunch doctor exits 1 on every pre-publish release commit because the exact pins are unpublished; tests must not assert doctor exit 0 in the source checkout"
+    }
+  ],
+  "applied": [
+    {
+      "record_id": "con_d56f17a941",
+      "content_hash": "sha256:d8fc6a8e70c898327c7237fb3d5f1e34af91390f7aa516f2bf1551716700b7ec",
+      "action": "Updated package and exact integration pins to 1.40.1 and verified their values on the release tag before publishing.",
+      "supported_by": null
+    }
+  ],
+  "saved": [],
+  "checks": [
+    {
+      "label": "Verification command",
+      "state": "failed",
+      "exit_code": 1
+    },
+    {
+      "label": "Verification command",
+      "state": "passed",
+      "exit_code": 0
+    }
+  ],
+  "conformance": [
+    {
+      "kind": "constraints",
+      "record_id": "con_d56f17a941",
+      "content_hash": "sha256:d8fc6a8e70c898327c7237fb3d5f1e34af91390f7aa516f2bf1551716700b7ec",
+      "outcome": "unavailable"
+    },
+    {
+      "kind": "decisions",
+      "record_id": "dec_e85952e9f7",
+      "content_hash": "sha256:8d8ae50bd2a26fbd69533a6534eaa032ce2a83ee4ba6c85a3e7b58622c6de584",
+      "outcome": "unavailable"
+    },
+    {
+      "kind": "decisions",
+      "record_id": "dec_4e1c8d263d",
+      "content_hash": "sha256:e07c93db31658f1a9e89ae732262045b983fdb13548d2c9de38eff1d52c3846e",
+      "outcome": "unavailable"
+    }
+  ],
+  "refusals": 0,
+  "files": [],
+  "supersedes": [],
+  "source_snapshot": "sha256:ec7ecbc396cb502c652eaca3b6d04d34e618e2b5d547ad02f3b67495c6980ce1",
+  "report_hash": "sha256:ffadb6173af084c20d0491f883b557b14d40f89d4478fe359b04197a8e4b3774",
+  "provenance": {
+    "source": "task_report",
+    "confidence": 1,
+    "evidence": [
+      "hunch report htask_bec19847d7d7490f4ac4264d"
+    ],
+    "last_verified": "2026-09-22T06:59:33.108Z"
+  }
+}
