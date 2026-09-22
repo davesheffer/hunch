@@ -8,6 +8,7 @@ export const changelogLocales = {
       footer: "© Hunch — תיעוד משותף לסוכני AI.", home: "בית", githubReleases: "גרסאות ב-GitHub"
     },
     titles: [
+      "טקסט JSX נשאר ניתן לאינדוקס",
       "כרטיסי משימה ברורים יותר וסביבות עבודה בטוחות יותר",
       "הגרף נשמר גם כשניתוח הקוד נכשל",
       "קל יותר בכל הנחיה",
@@ -83,6 +84,7 @@ export const changelogLocales = {
       footer: "© Hunch — общие записи для ИИ-агентов.", home: "Главная", githubReleases: "Релизы на GitHub"
     },
     titles: [
+      "Текст JSX продолжает индексироваться",
       "Понятнее карточки задач, безопаснее рабочие деревья",
       "Граф сохраняется при сбое разбора",
       "Легче на каждом запросе",
@@ -158,6 +160,7 @@ export const changelogLocales = {
       footer: "© Hunch — سجل مشترك لوكلاء الذكاء الاصطناعي.", home: "الرئيسية", githubReleases: "الإصدارات على GitHub"
     },
     titles: [
+      "يبقى نص JSX قابلًا للفهرسة",
       "بطاقات مهام أوضح وأشجار عمل أكثر أمانًا",
       "يبقى الرسم البياني محفوظًا عند فشل التحليل",
       "أخف في كل مُطالبة",
@@ -233,6 +236,7 @@ export const changelogLocales = {
       footer: "© Hunch — un registro compartido para agentes de IA.", home: "Inicio", githubReleases: "Versiones en GitHub"
     },
     titles: [
+      "El texto JSX sigue indexándose",
       "Tarjetas de tareas más claras y árboles de trabajo más seguros",
       "El grafo se conserva si falla el análisis",
       "Más ligero en cada consulta",
