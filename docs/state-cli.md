@@ -46,8 +46,9 @@ This includes [field citations](field-provenance.md) and [record visibility](rec
 It does not fetch sources, choose authority, merge conflicts or retry writes automatically.
 
 `subscribe` polls once. Save `head_seq` as the next request's `after_seq`. When `resync` is true,
-rebuild held state because earlier events were compacted, or because a merge of two clones'
-ledgers renumbered events you had already seen. A `filtered` stream can have sequence
+rebuild held state: `after_seq` is below `floor_seq` (earlier events were compacted or a
+merge renumbered them), or above `head_seq` (for example, the ledger was restored to an
+older revision). Resume polling from the returned `head_seq`. A `filtered` stream can have sequence
 gaps; those gaps are not evidence of a lost event. Observation reads preserve their complete
 `observed_page` object: pass the next cursor in a subsequent JSON request until it is null.
 
