@@ -198,7 +198,9 @@ export async function runReportCheck(root: string, taskId: string, command: stri
       if (cleanupTimer) clearTimeout(cleanupTimer);
       if (drainTimer) clearTimeout(drainTimer);
       child.stdout.destroy(); child.stderr.destroy();
-      resolveResult({ code, timedOut, cancelled, hash: reportHash({ stdout: stdout.digest("hex"), stderr: stderr.digest("hex") }) });
+      // Windows taskkill produces exit code 1. That is the runner terminating
+      // the process, not an independently observed command result.
+      resolveResult({ code: timedOut || cancelled ? null : code, timedOut, cancelled, hash: reportHash({ stdout: stdout.digest("hex"), stderr: stderr.digest("hex") }) });
     };
     const stopTree = () => {
       if (settled || cleanupTimer) return;

@@ -4,6 +4,7 @@
 
 - `hunch retire-constraint <id> --reason <text>` closes an active constraint's validity window while retaining its history and storage home. Public grounding drops the retired invariant; missing and already-retired IDs are refused (#387).
 - Task cards retain unresolved failed, cancelled, and timed-out checks when a different command passes. Only a successful rerun of the same command clears that failure. Long report hashes wrap on narrow screens (#394, #395).
+- Timed-out or cancelled verification commands do not report Windows' forced-termination status as the command's own exit code (#397). Helper-process fixtures stop their helpers before deleting the working directory.
 - Automatic pre-edit context no longer feeds its previous delivery for the same file back into task ranking, preventing an unchanged file from receiving repeated full context blocks (#375).
 - Linked-worktree `init` preserves an installed shared hook's auto-commit default and reports when its explicit `--commit` still overrides a local opt-out (#357).
 - Hunch's own post-commit and post-merge grounding hooks use the main checkout's source build when available. Shared hook privacy, commit, and deterministic-provider options remain preserved (#386).
