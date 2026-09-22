@@ -1,0 +1,87 @@
+{
+  "id": "dec_a30f01e2dc",
+  "title": "Treat unparseable YAML lines as unresolved, not silently-dropped",
+  "topic": null,
+  "status": "accepted",
+  "context": "The scanner silently ignored any line it couldn't parse (quoted keys, merge keys, etc.), which is dangerous: a dropped constraint makes a selector/labels map MORE permissive, risking false-positive edges between non-matching resources.",
+  "decision": "Generalized the existing `blockTemplated` mechanism (renamed `unresolvedContainers`) to mark ANY container with an unparseable line as unresolved, not just those with explicit `{{ }}` template injections. 'I can't tell' now reads as 'unresolved,' the same as a real template.",
+  "consequences": [
+    "Eliminates a class of false positives where dropped quoted/merge keys silently made selectors over-match",
+    "Subsumes multiple error cases (quoted keys, merge keys, etc.) under one conservative principle",
+    "Allows removal of the parallel `pendingBlockKey` mechanism, which mutation testing showed was fully redundant with BARE_TEMPLATE_LINE handling"
+  ],
+  "alternatives_rejected": [
+    "Continue silently ignoring unparseable lines (prior behavior) — treats 'can't parse' as 'absent,' unsafe for permissive containers",
+    "Add a strict parsing mode that errors on unknown shapes — would stop the whole scan, less resilient to real-world YAML variation"
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Continue silently ignoring unparseable lines (prior behavior) — treats 'can't parse' as 'absent,' unsafe for permissive containers",
+      "scope": [
+        "src/extractors/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Add a strict parsing mode that errors on unknown shapes — would stop the whole scan, less resilient to real-world YAML variation",
+      "scope": [
+        "src/extractors/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_a94a8fe5cc",
+    "cmp_e0ccfe26fe",
+    "cmp_f27fede222"
+  ],
+  "related_files": [
+    "src/extractors/k8sManifest.ts",
+    "test/indexer.test.ts",
+    "test/k8sManifest.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "8ae8fe96",
+  "valid_from": "2026-09-14T23:05:12+02:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft",
+    "confidence": 0.65,
+    "evidence": [
+      "commit:8ae8fe96",
+      "synth:provider=claude-cli",
+      "branch:upstream-pr/k8s-manifest-refs",
+      "src/extractors/k8sManifest.ts",
+      "test/indexer.test.ts",
+      "test/k8sManifest.test.ts"
+    ],
+    "last_verified": "2026-09-16T12:13:08.297Z"
+  },
+  "date": "2026-09-14T23:05:12+02:00"
+}

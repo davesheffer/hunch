@@ -54,15 +54,41 @@ export function taskSelectionSupplements(selection: TaskSelection, target: strin
   const parts = selection.mode === "latest"
     ? `latest ${counts.latest} (ranking off: it lost its evaluation; hunch task rank-eval)`
     : [counts.latest ? "latest" : null, counts.violation ? "problem" : null, counts.relevant ? `relevant ${counts.relevant}` : null].filter(Boolean).join(" · ");
+  // `hash_text`: the IDENTITY of the records this selection picked, for the
+  // pre-edit hook's injection dedup. Every presentation field here is volatile
+  // between two back-to-back calls with no record change — the slot label and
+  // counts move with ranking warmth, and the reason text flips ("today" →
+  // "delivered today", or to a different top reason) because serving the block
+  // writes delivery receipts the next call's ranking reads back. Hashing the
+  // rendered line therefore made the block self-invalidating and re-sent the
+  // full 3-4KB grounding.
+  //
+  // What the identity KEEPS, because each is a property of the records, the
+  // repo or the evaluation state and never of a receipt:
+  //  - header: the target, the picked set of record ids (sorted, so order is
+  //    not a change), `selection.mode` (ranker vs the "latest" fallback the
+  //    kill rule imposes — resolved from .hunch/local.json or the rank-eval
+  //    report), and `selection.more` (gated candidates minus picks; the gates
+  //    read superseded ids, anchor liveness and file/rule structure — scores
+  //    only order them, so the count does not move with warmth);
+  //  - per task: its id, its own content hash, and whether its file anchors
+  //    are still all alive (`anchorsAlive < 1` — the fact behind the "files
+  //    since changed" reason), so a picked task whose anchors die mid-session
+  //    re-sends the full block instead of leaving a silently stale line.
   return [
     {
       id: "recent-tasks", kind: "recent-tasks", priority: 415,
       text: `RECENT TASKS on ${target} — ${parts} — earlier agent work here, from graph memory (advisory history, not rules): build on what was verified instead of redoing it blind.${selection.more > 0 ? ` ${selection.more} more: hunch task list ${target}.` : ""}`,
+      hash_text: `recent-tasks ${target} ${[...selection.picks.map((p) => p.ranked.record.id)].sort().join(",")} mode=${selection.mode ?? "ranked"} more=${selection.more}`,
     },
     ...selection.picks.map((p, i) => {
       const t = p.ranked.record;
       const reasons = p.ranked.reasons.slice(0, 2).join(" · ");
-      return { id: t.id, kind: "recent-task", priority: 414 - i, text: `${SLOT_LABEL[p.slot]} ${t.id} · ${t.finished_at.slice(0, 10)} · "${clip(t.title, 80)}" — ${reasons} · ${summarizeRecord(t)}` };
+      return {
+        id: t.id, kind: "recent-task", priority: 414 - i,
+        text: `${SLOT_LABEL[p.slot]} ${t.id} · ${t.finished_at.slice(0, 10)} · "${clip(t.title, 80)}" — ${reasons} · ${summarizeRecord(t)}`,
+        hash_text: `${t.id}@${t.report_hash}${p.ranked.anchorsAlive < 1 ? "!stale" : ""}`,
+      };
     }),
   ];
 }

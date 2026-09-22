@@ -437,7 +437,7 @@ HealthResponse = TypedDict("HealthResponse", {
     "ok": Required[bool],
     "version": Required[str],
     "protocol": Required[Literal["nuryel.state/1"]],
-    "partitions": Required[list[str]],
+    "partitions": list[str],
 }, total=False)
 
 StateProblemConflict = TypedDict("StateProblemConflict", {

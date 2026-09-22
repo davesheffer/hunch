@@ -123,12 +123,15 @@ function ensureReceiptColumns(db: DatabaseSync): void {
   }
 }
 
-function openServedDb(root: string): DatabaseSync {
+function openServedDb(root: string, busyTimeoutMs = 100): DatabaseSync {
   sqlite ??= loadSqlite();
   const dir = join(root, ".hunch-cache");
   mkdirSync(dir, { recursive: true });
   const db = new sqlite.DatabaseSync(join(dir, "served.db"));
-  db.exec("PRAGMA busy_timeout = 100");
+  // Rollback-journal mode is deliberate: WAL would create and delete -wal/-shm
+  // siblings on every open, which file watchers on `.hunch-cache/served.db*` see
+  // as ledger changes.
+  db.exec(`PRAGMA busy_timeout = ${Math.max(0, Math.trunc(busyTimeoutMs))}`);
   db.exec(`CREATE TABLE IF NOT EXISTS served (
     at TEXT NOT NULL,
     session TEXT,
@@ -142,11 +145,12 @@ function openServedDb(root: string): DatabaseSync {
   return db;
 }
 
-/** Shared observation ledger. Explicit report operations surface failures; only
- * passive delivery/hook callers may degrade to best-effort recording. */
-export function withServedDatabase<T>(root: string, run: (db: DatabaseSync) => T): T {
+/** Shared observation ledger. Explicit report operations surface failures and may
+ * pass a longer wait for a competing writer; passive delivery/hook callers keep the
+ * 100 ms default and may degrade to best-effort recording. */
+export function withServedDatabase<T>(root: string, run: (db: DatabaseSync) => T, options: { busyTimeoutMs?: number } = {}): T {
   assertReportPath(root, ".hunch-cache", "served.db");
-  const db = openServedDb(root);
+  const db = openServedDb(root, options.busyTimeoutMs);
   try { return run(db); } finally { db.close(); }
 }
 

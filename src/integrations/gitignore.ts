@@ -7,11 +7,15 @@
  * index is ignored.
  *
  * Idempotent + merge-safe (con_8460b6770f): appends a single marked block and
- * never rewrites the user's existing entries; re-running is a no-op.
+ * never rewrites the user's existing entries. Once the block exists, re-running
+ * brings ONLY the content between its markers up to the current entry list (so a
+ * block written by an older release gains entries added later) and is otherwise
+ * byte-identical; everything outside the markers is left untouched.
  */
 import { readFileSync, existsSync, lstatSync, realpathSync } from "node:fs";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { writeFileAtomic } from "../core/io.js";
+import { gitTrackedPaths, gitUntrackCached, isGitRepoRoot } from "../extractors/git.js";
 
 const MARK = "# >>> hunch (derived runtime index — regenerable from .hunch/*.json) >>>";
 const END = "# <<< hunch <<<";
@@ -47,11 +51,16 @@ const ENTRIES = [
 // re-touch the block above, and so the two concerns read clearly in the file.
 const MEM_MARK = "# >>> hunch private-only (engineering memory kept in a private overlay; not published here) >>>";
 const MEM_END = "# <<< hunch private-only <<<";
+// Every ENTITY_KINDS directory (src/core/types.ts) must be listed here — guarded by
+// test/gitignore.test.ts — plus the non-entity Constitution/ledger directories.
 const MEM_ENTRIES = [
   ".hunch/decisions/",
   ".hunch/bugs/",
   ".hunch/constraints/",
   ".hunch/components/",
+  ".hunch/resources/",
+  ".hunch/conventions/",
+  ".hunch/workspaces/",
   ".hunch/evidence/",
   ".hunch/corpora/",
   ".hunch/policies/",
@@ -76,7 +85,10 @@ const MEM_ENTRIES = [
 
 export interface GitignoreResult {
   path: string;
-  action: "created" | "appended" | "unchanged";
+  /** `updated` = an existing managed block was brought up to the current entry list. */
+  action: "created" | "appended" | "updated" | "unchanged";
+  /** Entries this call newly wrote into the managed block (empty when unchanged). */
+  added: string[];
 }
 
 function pathIsWithin(path: string, parent: string): boolean {
@@ -115,32 +127,72 @@ export function assertSafeTopLevelConfigFile(root: string, name: string): string
   return path;
 }
 
-/** Idempotent + merge-safe append of one marked block (con_8460b6770f): never
- *  rewrites the user's existing entries, and re-running is a no-op once the block
- *  (or an equivalent hand-written set of the same patterns) is present. */
-function appendBlock(root: string, mark: string, entries: string[], end: string): GitignoreResult {
+interface BlockSpan { start: number; end: number; inner: string[] }
+
+const cleanLine = (line: string): string => line.replace(/\r$/, "").trim();
+
+/** Locate a managed block as whole lines: the marker line and the FIRST end-marker
+ *  line after it. `null` when either is missing — a hand-damaged block is never
+ *  guessed at (con_8460b6770f). Indices are into `text.split("\n")`, whose items
+ *  keep a trailing `\r` in a CRLF file. */
+function findBlock(lines: string[], mark: string, end: string): BlockSpan | null {
+  const start = lines.findIndex((l) => cleanLine(l) === mark);
+  if (start < 0) return null;
+  const stop = lines.findIndex((l, i) => i > start && cleanLine(l) === end);
+  if (stop < 0) return null;
+  return { start, end: stop, inner: lines.slice(start + 1, stop).map(cleanLine).filter(Boolean) };
+}
+
+/** Rewrite ONLY the lines between an existing block's markers to the current entry
+ *  list, keeping the file's line-ending style and every byte outside the markers.
+ *  No write (byte-identical) when the block is already current. */
+function upgradeBlock(root: string, path: string, cur: string, mark: string, entries: string[], end: string): GitignoreResult {
+  const lines = cur.split("\n");
+  const span = findBlock(lines, mark, end);
+  if (!span) return { path, action: "unchanged", added: [] };
+  const cr = lines[span.start]!.endsWith("\r") ? "\r" : "";
+  const endCr = lines[span.end]!.endsWith("\r") ? "\r" : "";
+  const replacement = [mark + cr, ...entries.map((e) => e + cr), end + endCr];
+  const next = [...lines.slice(0, span.start), ...replacement, ...lines.slice(span.end + 1)].join("\n");
+  if (next === cur) return { path, action: "unchanged", added: [] };
+  const had = new Set(span.inner);
+  assertSafeTopLevelConfigFile(root, ".gitignore");
+  writeFileAtomic(path, next);
+  return { path, action: "updated", added: entries.filter((e) => !had.has(e)) };
+}
+
+/** Idempotent + merge-safe write of one marked block (con_8460b6770f): never
+ *  rewrites the user's entries outside the markers. A present block is upgraded in
+ *  place to the current entry list; an absent one is appended unless the user's own
+ *  lines already cover every entry. Re-running on a current file is a no-op. */
+function appendBlock(root: string, mark: string, entries: string[], end: string, upgrade = true): GitignoreResult {
   const path = assertSafeTopLevelConfigFile(root, ".gitignore");
-  const block = [mark, ...entries, end].join("\n");
   if (!existsSync(path)) {
     assertSafeTopLevelConfigFile(root, ".gitignore");
-    writeFileAtomic(path, block + "\n");
-    return { path, action: "created" };
+    writeFileAtomic(path, [mark, ...entries, end].join("\n") + "\n");
+    return { path, action: "created", added: [...entries] };
   }
   const cur = readFileSync(path, "utf8");
-  if (cur.includes(mark)) return { path, action: "unchanged" }; // already managed
+  if (cur.includes(mark)) { // already managed
+    return upgrade ? upgradeBlock(root, path, cur, mark, entries, end) : { path, action: "unchanged", added: [] };
+  }
   // Already covered by the user's OWN entries (e.g. a hand-written, commented
   // section listing the same patterns)? Don't append a redundant managed block —
   // that would leave two copies of every ignore. Keep the .gitignore clean.
-  const lines = new Set(cur.split("\n").map((l) => l.trim()));
-  if (entries.every((e) => lines.has(e))) return { path, action: "unchanged" };
-  const sep = cur.endsWith("\n") || cur.length === 0 ? "" : "\n";
+  const lines = new Set(cur.split("\n").map(cleanLine));
+  if (entries.every((e) => lines.has(e))) return { path, action: "unchanged", added: [] };
+  const eol = cur.includes("\r\n") ? "\r\n" : "\n";
+  const gap = cur.endsWith("\n") || cur.length === 0 ? "" : eol;
   assertSafeTopLevelConfigFile(root, ".gitignore");
-  writeFileAtomic(path, `${cur}${sep}${block}\n`);
-  return { path, action: "appended" };
+  writeFileAtomic(path, `${cur}${gap}${[mark, ...entries, end].join(eol)}${eol}`);
+  return { path, action: "appended", added: [...entries] };
 }
 
-export function ensureGitignore(root: string): GitignoreResult {
-  return appendBlock(root, MARK, ENTRIES, END);
+/** `upgradeExisting: false` only adds a missing block and never rewrites a present
+ *  one — for `hunch index`, which also runs in CI and release gates where rewriting
+ *  a tracked .gitignore would dirty the checkout. Setup and repair commands upgrade. */
+export function ensureGitignore(root: string, opts: { upgradeExisting?: boolean } = {}): GitignoreResult {
+  return appendBlock(root, MARK, ENTRIES, END, opts.upgradeExisting ?? true);
 }
 
 /** Ignore the engineering-memory tree so a private-migrated repo stays code-only.
@@ -153,3 +205,50 @@ export function ignoreHunchMemory(root: string): GitignoreResult {
 
 /** The .hunch memory subdirs un-published by a private migration (git pathspecs). */
 export const HUNCH_MEMORY_DIRS = MEM_ENTRIES.map((e) => e.replace(/\/$/, ""));
+
+export interface ManagedGitignoreUpgrade {
+  /** The base runtime block, when this repository already has it. */
+  base: GitignoreResult | null;
+  /** The private-only memory block, when this repository was migrated to an overlay. */
+  memory: GitignoreResult | null;
+  /** Tracked memory files removed from the git INDEX (the files stay on disk). */
+  untracked: string[];
+}
+
+/** Bring every EXISTING managed block up to the current entry lists without adding
+ *  a block the repository never had (a repair path, not setup). A private-only
+ *  block means the repository already declared its memory tree unpublished, so
+ *  memory directories that a later release added to that block are also removed
+ *  from the git index — never from disk — as `private --migrate` does for the whole
+ *  list. */
+export function upgradeManagedGitignore(root: string): ManagedGitignoreUpgrade {
+  const result: ManagedGitignoreUpgrade = { base: null, memory: null, untracked: [] };
+  const path = assertSafeTopLevelConfigFile(root, ".gitignore");
+  if (!existsSync(path)) return result;
+  if (readFileSync(path, "utf8").includes(MARK)) result.base = ensureGitignore(root);
+  if (readFileSync(path, "utf8").includes(MEM_MARK)) {
+    result.memory = ignoreHunchMemory(root);
+    const dirs = result.memory.added.map((e) => e.replace(/\/$/, ""));
+    if (dirs.length && isGitRepoRoot(root)) {
+      result.untracked = gitTrackedPaths(root, dirs);
+      if (result.untracked.length) gitUntrackCached(root, dirs);
+    }
+  }
+  return result;
+}
+
+/** Output lines describing what an upgrade changed; empty when nothing did. */
+export function describeGitignoreUpgrade(upgrade: ManagedGitignoreUpgrade): string[] {
+  const out: string[] = [];
+  if (upgrade.base?.action === "updated") {
+    out.push(`.gitignore: Hunch runtime block updated (added ${upgrade.base.added.join(", ") || "nothing; block normalized"})`);
+  }
+  if (upgrade.memory?.action === "updated") {
+    out.push(`.gitignore: private-only memory block updated (added ${upgrade.memory.added.join(", ") || "nothing; block normalized"})`);
+  }
+  if (upgrade.untracked.length) {
+    const shown = upgrade.untracked.slice(0, 5).join(", ") + (upgrade.untracked.length > 5 ? ", ..." : "");
+    out.push(`removed ${upgrade.untracked.length} newly ignored memory file(s) from the git index, kept on disk (commit the removal): ${shown}`);
+  }
+  return out;
+}

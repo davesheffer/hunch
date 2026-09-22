@@ -28,12 +28,21 @@ Two facts keep the top rung honest:
 
 **The human act that arms blocking.** `hunch review --accept <decision-id>` promotes a decision to
 human-confirmed and confirms its tripwires (`src/cli/index.ts`, `acceptDecision`). Until then the
-same records are advisory: shown, cited, never enforced. `hunch status` prints how many invariants
+same records are advisory: shown, cited, never enforced. An agent-written decision or correction,
+including one recorded at the end of a `/capture` interview, is `agent_recorded` testimony: a
+capture token proves the interview tool was called, not that a human answered. It becomes
+human-confirmed only through a human act outside the agent channel. A decision is confirmed when
+the human accepts the client prompt (MCP elicitation, where the client supports it) or runs
+`hunch review --confirm <id>`. A correction can deny edits, and hosts can auto-answer client
+prompts, so it is never elicited: only `hunch review --confirm <id> --severity blocking` grants its
+requested blocking authority. Confirming changes neither status nor content. An unconfirmed
+proposed decision still shows on the `hunch now` roadmap, marked unconfirmed with its confirm command. `hunch status` prints how many invariants
 are armed and nudges toward `hunch firmness strict` only when there is something to arm.
 
 ```bash
 hunch firmness strict          # the teeth are on for vouched invariants only
 hunch review --accept dec_…    # vouch for one decision and its tripwires
+hunch review --confirm con_… --severity blocking   # sign an agent-recorded correction
 hunch status                   # armed count, firmness, and what is still waiting on a human
 ```
 

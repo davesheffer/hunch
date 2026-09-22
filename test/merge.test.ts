@@ -93,3 +93,54 @@ test("canon is key-order independent", () => {
   assert.equal(canon({ a: 1, b: 2 }), canon({ b: 2, a: 1 }));
   assert.notEqual(canon({ a: 1 }), canon({ a: 2 }));
 });
+
+// ---- #290: a both-sides change must not undo the other side's lifecycle move ----
+
+const live = (over: Rec = {}): Rec => rec("dec_old", { status: "accepted", superseded_by: null, valid_to: null, ...over });
+const superseded = (over: Rec = {}): Rec => live({ status: "superseded", superseded_by: "dec_new", valid_to: "2026-09-01", ...over });
+const reviewed = { provenance: prov("human_confirmed", 0.95, "2026-09-10T00:00:00Z") };
+
+test("supersede on one branch + review --accept on the other: the supersession survives, in both directions (#290)", () => {
+  const base = [live()];
+  const a = [superseded()]; // hunch supersede: lifecycle only, provenance untouched
+  const b = [live(reviewed)]; // hunch review --accept: provenance only
+  for (const out of [mergeRecordsById(base, a, b), mergeRecordsById(base, b, a)]) {
+    assert.equal(out.length, 1);
+    assert.equal(out[0]!.status, "superseded");
+    assert.equal(out[0]!.superseded_by, "dec_new");
+    assert.equal(out[0]!.valid_to, "2026-09-01");
+    assert.equal((out[0]!.provenance as Rec).source, "human_confirmed", "the review is kept too — neither side's work is dropped");
+  }
+});
+
+test("a genuine reopen still wins over a provenance-only change on the other side", () => {
+  const fixed = rec("bug_1", { status: "fixed", lineage: { fixed_commit: "abc1234", spawned_decision: null, root_cause: "x" } });
+  const reopened = rec("bug_1", { status: "open", lineage: { fixed_commit: null, spawned_decision: null, root_cause: "x" } });
+  const verified = { ...fixed, ...reviewed };
+  for (const out of [mergeRecordsById([fixed], [reopened], [verified]), mergeRecordsById([fixed], [verified], [reopened])]) {
+    assert.equal(out[0]!.status, "open");
+    assert.equal((out[0]!.lineage as Rec).fixed_commit, null);
+    assert.equal((out[0]!.lineage as Rec).root_cause, "x", "non-lifecycle lineage fields come from the winner untouched");
+    assert.equal((out[0]!.provenance as Rec).source, "human_confirmed");
+  }
+});
+
+test("no merge base: nothing says which side moved, so the whole-record ranking stands unchanged", () => {
+  // A live human-confirmed copy may be a genuine reopen (merge-closure.test.ts, #8) —
+  // without a base the carry must not second-guess the provenance tiers.
+  for (const out of [mergeRecordsById([], [superseded()], [live(reviewed)]), mergeRecordsById([], [live(reviewed)], [superseded()])]) {
+    assert.equal(out[0]!.status, "accepted");
+    assert.equal((out[0]!.provenance as Rec).source, "human_confirmed");
+  }
+});
+
+test("both sides moved the lifecycle differently: the provenance winner's lifecycle stands whole, never a blend", () => {
+  const base = [live()];
+  const a = [superseded()];
+  const b = [live({ ...reviewed, status: "rejected", valid_to: "2026-09-05" })];
+  for (const out of [mergeRecordsById(base, a, b), mergeRecordsById(base, b, a)]) {
+    assert.equal(out[0]!.status, "rejected");
+    assert.equal(out[0]!.superseded_by, null);
+    assert.equal(out[0]!.valid_to, "2026-09-05");
+  }
+});

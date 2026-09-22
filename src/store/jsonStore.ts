@@ -14,8 +14,10 @@ import {
   readSync,
   realpathSync,
   rmSync,
+  rmdirSync,
   type Stats,
 } from "node:fs";
+import { randomBytes } from "node:crypto";
 import { hostname } from "node:os";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { HunchPaths } from "../core/paths.js";
@@ -23,6 +25,7 @@ import { ENTITY_KINDS, SCHEMAS, type EntityKind, type EntityFor } from "../core/
 import { BASELINE_VERSION, migrateRaw, SCHEMA_VERSION } from "../core/migrate.js";
 import { writeFileAtomic } from "../core/io.js";
 import { readStoreArtifact } from "../core/storeArtifact.js";
+import { heldLockNonces, judgeSameHostOwner, selfStartToken, startTokenOf } from "../core/procstart.js";
 
 /** High-cardinality collections (symbols, edges) are stored as a single
  *  index.json array — there can be thousands, and one file per edge would create
@@ -57,21 +60,164 @@ export const MAX_JSON_DIRECTORY_ENTRIES_PER_KIND = 100_000;
 
 type FileStat = Stats;
 type SafeDirectory = { lexical: string; canonical: string; stat: FileStat };
-type RmwOwner = { pid: number; host: string };
+type RmwOwner = { pid: number; host: string; nonce?: string; start?: string };
 
 function readRmwOwner(lock: string): RmwOwner | undefined {
-  const text = readStoreArtifact(lock, ["owner.tmp.json"], 4096);
+  let text: string | null;
+  try {
+    text = readStoreArtifact(lock, ["owner.tmp.json"], 4096);
+  } catch (error) {
+    // A NORMAL release (`rmSync` of the lock dir) can land between
+    // readStoreArtifact's lstat and its read, and the reader then reports
+    // "unsafe or unreadable" for a file that simply went away — which used to
+    // make a healthy waiter throw instead of retrying. Only an ENOENT re-check
+    // excuses it: while the file still exists, a hardlink/oversize/symlink
+    // refusal is real and must still throw, unchanged.
+    //
+    // The ENOENT of the OWNER FILE is not enough on its own: a `.rmw-lock` that
+    // is itself a SYMLINK to a directory without an owner file also has no owner
+    // file, and excusing that would turn main's permanent "unsafe store artifact
+    // path" refusal into an age-based removal of the link. So the excuse also
+    // requires the lock itself to be either gone (the release we are modelling)
+    // or a REAL directory that is not a link.
+    //
+    // Residual accepted: a release + re-acquire between the reader's failure and
+    // this re-lstat makes a REAL refusal (hardlink/oversize) throw for a file
+    // that already belongs to the next holder. That only turns a retry into an
+    // error — it never licenses a steal, so the safe direction is preserved.
+    let ownerMissing = false;
+    try { lstatSync(join(lock, "owner.tmp.json")); } catch (statError) {
+      ownerMissing = (statError as NodeJS.ErrnoException).code === "ENOENT";
+    }
+    if (ownerMissing) {
+      let lockOrdinary: boolean;
+      try {
+        const lockStat = lstatSync(lock);
+        lockOrdinary = lockStat.isDirectory() && !lockStat.isSymbolicLink();
+      } catch (statError) {
+        if ((statError as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+        lockOrdinary = true; // the whole lock went away: exactly the release above
+      }
+      if (lockOrdinary) return undefined;
+    }
+    throw error;
+  }
   if (text === null) return undefined;
   try {
     const parsed = JSON.parse(text) as Partial<RmwOwner>;
     if (typeof parsed.pid !== "number" || !Number.isInteger(parsed.pid) || parsed.pid < 1 || typeof parsed.host !== "string") return undefined;
-    return { pid: parsed.pid, host: parsed.host };
+    return {
+      pid: parsed.pid,
+      host: parsed.host,
+      ...(typeof parsed.nonce === "string" ? { nonce: parsed.nonce } : {}),
+      ...(typeof parsed.start === "string" ? { start: parsed.start } : {}),
+    };
   } catch { return undefined; }
 }
 
 function rmwPidAlive(pid: number): boolean {
   try { process.kill(pid, 0); return true; } catch (error) {
     return (error as NodeJS.ErrnoException).code === "EPERM";
+  }
+}
+
+/** Longest a `.rmw-lock.reclaim` claim may sit before another contender clears
+ *  it: the claimed section is a handful of syscalls. */
+const RMW_CLAIM_STALE_MS = 10_000;
+
+/** Is this `.rmw-lock` takeable? Same rule as before — a live same-host PID is
+ *  authoritative, everything else falls back to age — with the PID-RECYCLING
+ *  hole closed (issue #293): a restart can hand the contender the dead owner's
+ *  exact pid and host, and the orphaned lock then blocks every write forever.
+ *  The owner's recorded process-instance token settles that by string equality
+ *  (core/procstart.ts); no clock is compared, because a lock's mtime and a start
+ *  time come from different clocks and any skew would "prove" a live owner
+ *  recycled. `readRmwOwner` stays FIRST: it throws on unsafe/hardlinked or
+ *  oversized ownership metadata, and unsafe ownership never licenses removal. */
+function rmwLockIsStale(lock: string): boolean {
+  let stat: FileStat;
+  try {
+    stat = lstatSync(lock);
+  } catch (statError) {
+    if ((statError as NodeJS.ErrnoException).code === "ENOENT") return false; // already gone; nothing to take over
+    throw statError;
+  }
+  const owner = readRmwOwner(lock);
+  if (owner && owner.host === hostname()) {
+    // One shared table with src/serve/writelock.ts (core/procstart.ts), so the
+    // two locks can never drift apart; "age" means nothing was proven and the
+    // fallback below governs, exactly as for a foreign host.
+    const verdict = judgeSameHostOwner(owner, {
+      alive: rmwPidAlive,
+      self: selfStartToken(),
+      tokenOf: startTokenOf,
+      platform: process.platform,
+      selfPid: process.pid,
+      heldNonces: heldLockNonces,
+    });
+    if (verdict !== "age") return verdict === "stale";
+  }
+  return Date.now() - stat.mtimeMs > 10_000;
+}
+
+/**
+ * Remove a stale `.rmw-lock` under an exclusive sibling claim, mirroring
+ * `src/serve/writelock.ts` (issue #287). "judge stale → rm → mkdir" is not
+ * atomic: two contenders can both judge the same corpse stale, the first
+ * removes it and creates its own, and the second then removes that FRESH lock —
+ * two holders, which is exactly the record-loss race this mutex exists to
+ * prevent. The claim is a directory (invisible to git, like the commit lock in
+ * src/extractors/git.ts) created with exclusive `mkdirSync`.
+ *
+ * INVARIANT: a stale lock's path can only be vacated by a claim holder (its
+ * owner is dead and will never release), and only one contender holds the claim
+ * at a time — so nothing can replace the lock between the re-judge and the `rm`.
+ * A contender that judged stale a moment earlier re-judges under the claim, sees
+ * the winner's fresh live lock, and removes nothing. Accepted residuals: (i) an
+ * AGE-judged lock (foreign host, unprobeable owner, or unreadable owner
+ * metadata) whose owner is actually alive and releases inside the re-judge→rm
+ * window — the same class as the existing 10 s age steal;
+ * (ii) two contenders racing to clear a STRANDED claim.
+ * A claim's staleness is judged by ITS MTIME against OUR clock — the one clock
+ * comparison left in the takeover path — and there is no claim-nonce file to
+ * fall back on, so with filesystem/host clock skew beyond RMW_CLAIM_STALE_MS
+ * every LIVE claim looks stranded and exclusion among three or more simultaneous
+ * contenders degrades to the pre-fix race; without such skew it needs a stranded
+ * claim section plus simultaneous removers — and "stranded" is NOT only a crash:
+ * a STALL longer than RMW_CLAIM_STALE_MS between the re-judge and the `rm`
+ * (SIGSTOP, a VM pause or live migration, a laptop sleep) does it too, and one
+ * other contender is then enough — it clears the "stranded" claim, takes over and
+ * publishes a LIVE lock, and the resumed claimer's `rm` removes that live lock;
+ * the unconditional `rmdirSync(claim)` in the `finally` can likewise remove a
+ * SUCCESSOR's claim. Same probability class as the age steal already accepted;
+ * (iii) a stranded claim blocks any takeover for up to
+ * RMW_CLAIM_STALE_MS, needing the same crash OR over-RMW_CLAIM_STALE_MS stall,
+ * and a filesystem clock AHEAD of this host extends that block by the skew;
+ * (iv) MIXED VERSIONS: a pre-fix `hunch` ignores `.reclaim`,
+ * so the race persists until every writer on the store is upgraded. Returns true
+ * when the path may now be free.
+ */
+function takeOverRmwLock(lock: string): boolean {
+  const claim = `${lock}.reclaim`;
+  try {
+    mkdirSync(claim);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "EEXIST") {
+      // Mid-takeover elsewhere, or a claimer that crashed inside the section.
+      // Clear only a provably stranded claim; either way do not take over this
+      // round — the caller falls through to its deadline check and wait.
+      try {
+        if (Date.now() - lstatSync(claim).mtimeMs > RMW_CLAIM_STALE_MS) rmdirSync(claim);
+      } catch { /* vanished, or another contender cleared it first */ }
+    }
+    return false;
+  }
+  try {
+    if (!rmwLockIsStale(lock)) return false; // re-judged from scratch under the claim
+    rmSync(lock, { recursive: true, force: true });
+    return true;
+  } finally {
+    try { rmdirSync(claim); } catch { /* best effort; a stranded claim is cleared by age */ }
   }
 }
 
@@ -450,7 +596,17 @@ export class JsonStore {
       }
       return out;
     }
-    for (const name of this.jsonFileNames(kind)) {
+    // The canonical home of a record is `<id>.json` (see fileFor). A leftover
+    // COPY — `dec_x_BASE_1234.json` from an aborted mergetool, `dec_x.orig.json`,
+    // a cloud-sync `dec_x (1).json` — would otherwise yield a second record with
+    // the same id and blow up the SQLite rebuild on a duplicate primary key
+    // (issue #291). A misnamed file whose canonical name is ABSENT is the
+    // record's only home, so it is kept (con_947c578b2c: never silently drop).
+    // Names are sorted, so which stray wins in that case is deterministic.
+    const names = this.jsonFileNames(kind);
+    const present = new Set(names);
+    const seenMisnamed = new Set<string>();
+    for (const name of names) {
       let raw: unknown;
       try {
         const text = this.readContainedFile(directory, join(directory.lexical, name), this.maxBytes(kind));
@@ -468,8 +624,20 @@ export class JsonStore {
         continue;
       }
       const r = schema.safeParse(this.migrate(kind, raw, version));
-      if (r.success) out.push(r.data as EntityFor[K]);
-      else console.warn(`[hunch] skipping invalid ${kind}/${name}: ${r.error.issues[0]?.message}`);
+      if (!r.success) {
+        console.warn(`[hunch] skipping invalid ${kind}/${name}: ${r.error.issues[0]?.message}`);
+        continue;
+      }
+      const id = (r.data as { id?: unknown }).id;
+      if (typeof id === "string" && `${id}.json` !== name) {
+        if (present.has(`${id}.json`) || seenMisnamed.has(id)) {
+          console.warn(`[hunch] skipping stray copy ${kind}/${name}: its record id ${id} belongs in ${id}.json`);
+          continue;
+        }
+        console.warn(`[hunch] ${kind}/${name} holds record ${id}; expected file name ${id}.json`);
+        seenMisnamed.add(id);
+      }
+      out.push(r.data as EntityFor[K]);
     }
     return out;
   }
@@ -478,51 +646,64 @@ export class JsonStore {
    *  The long-lived MCP server and CLI hooks write the same `.hunch/` concurrently;
    *  two unsynchronized RMWs over index.json each read the same base array and the
    *  second rename silently erases the first's record. `mkdirSync` is the atomic
-   *  acquire (EEXIST = held). A stale lock (killed process) is taken over by age;
-   *  against a live contender we wait briefly and then refuse the write. Proceeding
-   *  without the lock would reintroduce the record-loss race this mutex exists to
-   *  prevent. */
+   *  acquire (EEXIST = held). A stale lock (killed process, or one whose pid was
+   *  RECYCLED) is taken over behind an exclusive `.reclaim` claim — see
+   *  `takeOverRmwLock`, because judging and removing are two steps and two
+   *  contenders could otherwise both "win". Against a live contender we wait
+   *  briefly and then refuse the write. Proceeding without the lock would
+   *  reintroduce the record-loss race this mutex exists to prevent. */
   private withSingleFileLock<T>(kind: EntityKind, directory: SafeDirectory, fn: () => T): T {
     const lock = join(directory.lexical, ".rmw-lock");
     const deadline = Date.now() + 2_000;
+    const nonce = randomBytes(8).toString("hex");
     for (;;) {
-      if (Date.now() >= deadline) throw new Error(`[hunch] timed out acquiring the ${kind} index lock (still held: ${lock})`);
       try {
         mkdirSync(lock);
+        // Synchronously adjacent to the successful mkdir: from here on this nonce
+        // is one WE hold, so our own later calls never read it as a predecessor's.
+        heldLockNonces.add(nonce);
         // Record ownership inside the already-exclusive directory. A live local
         // writer may exceed the stale-age heuristic while serializing a large
-        // index; its PID must prevent a second writer from taking over.
+        // index; its PID must prevent a second writer from taking over. The
+        // process-instance token (when this platform has one) is what lets a
+        // successor tell that PID apart from a recycled one.
         try {
-          writeFileAtomic(join(lock, "owner.tmp.json"), JSON.stringify({ pid: process.pid, host: hostname() }));
+          const start = selfStartToken();
+          writeFileAtomic(join(lock, "owner.tmp.json"), JSON.stringify({ pid: process.pid, host: hostname(), nonce, ...(start !== null ? { start } : {}) }));
         } catch (error) {
           try { rmSync(lock, { recursive: true, force: true }); } catch { /* report the ownership failure below */ }
+          heldLockNonces.delete(nonce);
           throw new Error(`[hunch] could not record ownership for the ${kind} index lock: ${(error as Error).message}`, { cause: error });
         }
         break;
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-        let stat: FileStat;
-        try {
-          stat = lstatSync(lock);
-        } catch (statError) {
-          if ((statError as NodeJS.ErrnoException).code === "ENOENT") continue; // vanished between mkdir and inspect
-          throw statError;
-        }
-        const owner = readRmwOwner(lock);
-        const stale = owner && owner.host === hostname()
-          ? !rmwPidAlive(owner.pid)
-          : Date.now() - stat.mtimeMs > 10_000;
-        if (stale) {
-          rmSync(lock, { recursive: true, force: true });
-          continue;
-        }
+        if (rmwLockIsStale(lock) && takeOverRmwLock(lock)) continue;
+        // The deadline is checked only AFTER an acquire has been attempted: with
+        // the check at the top of the loop, a successful takeover could still be
+        // followed immediately by a spurious timeout.
+        if (Date.now() >= deadline) throw new Error(`[hunch] timed out acquiring the ${kind} index lock (still held: ${lock})`);
         Atomics.wait(RMW_LOCK_WAITER, 0, 0, 25);
       }
     }
     try {
       return fn();
     } finally {
-      try { rmSync(lock, { recursive: true, force: true }); } catch { /* stale-takeover reclaims it */ }
+      // Only remove a lock that is still ours. If we were stolen from (age, or a
+      // recycled-pid verdict) the directory now protects another writer, and
+      // removing it would put two writers inside the mutex. A record we cannot
+      // read, or one without a nonce, tells us nothing — remove it exactly as
+      // main always did, so a failed ownership read can never strand the lock.
+      try {
+        let foreign = false;
+        try {
+          const current = readRmwOwner(lock);
+          foreign = current?.nonce !== undefined && current.nonce !== nonce;
+        } catch { /* unreadable ownership proves nothing: fall back to main's unconditional remove */ }
+        if (!foreign) rmSync(lock, { recursive: true, force: true });
+      } catch { /* stale-takeover reclaims it */ } finally {
+        heldLockNonces.delete(nonce);
+      }
     }
   }
 

@@ -7,12 +7,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
-import { execFileSync } from "node:child_process";
+import { createRequire, syncBuiltinESMExports } from "node:module";
+import { execFileSync, spawn } from "node:child_process";
 import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
 import { BODY_LIMIT_BYTES, createServeApp } from "../src/serve/app.js";
 import { hashToken, initServeConfig, readServeConfig, resolvePrincipal } from "../src/serve/config.js";
-import { withWriteLock, writeLockPath } from "../src/serve/writelock.js";
+import { STALE_AFTER_MS, withWriteLock, writeLockPath } from "../src/serve/writelock.js";
 import { createStateClient, StateClientError } from "../src/client/state.js";
 import { stateHash, assertChangeSequence } from "../src/core/stateContract.js";
 import { partitionOf } from "../src/store/stateBinding.js";
@@ -20,6 +21,12 @@ import { HunchStore } from "../src/store/hunchStore.js";
 import { hunchPaths } from "../src/core/paths.js";
 import { Client as McpClient } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+
+/** The CJS `node:fs` binding the ESM named imports are projected from: assigning
+ *  on it plus `syncBuiltinESMExports()` is what lets a test patch a syscall that
+ *  `src/` imported as a named ESM binding (same pattern as test/store.test.ts). */
+const require = createRequire(import.meta.url);
+const fs = require("node:fs") as typeof import("node:fs");
 
 const david = { kind: "user" as const, id: "david" };
 const acme = { kind: "organization" as const, id: "acme" };
@@ -67,6 +74,74 @@ test("operator view serves a public shell with no partition data and keeps reads
     const foreign = await fetch(`${base}/nuryel/v1/read`, { method: "POST", headers: { authorization: `Bearer ${sofiaToken}`, "content-type": "application/json" }, body: JSON.stringify({ scope: acme, subject: "customer:c1" }) });
     assert.equal(foreign.status, 403);
   } finally { await cleanup(); }
+});
+
+test("health answers liveness to anyone but names the served partitions only to an authenticated caller", async () => {
+  const { app, sofiaToken, cleanup } = served();
+  try {
+    const base = await listen(app);
+    const anonymous = await fetch(`${base}/nuryel/v1/health`);
+    assert.equal(anonymous.status, 200);
+    const text = await anonymous.text();
+    assert.deepEqual(JSON.parse(text), { ok: true, version: "test", protocol: "nuryel.state/1" });
+    for (const name of ["david", "acme", "partitions"]) assert.ok(!text.includes(name), `unauthenticated health must not mention ${name}`);
+
+    const sofia = createStateClient({ baseUrl: base, token: sofiaToken });
+    assert.deepEqual((await sofia.health()).partitions, ["user/david", "organization/acme"], "a token holder still discovers the served partitions");
+    const wrong = await fetch(`${base}/nuryel/v1/health`, { headers: { authorization: "Bearer nyt_wrong" } });
+    assert.equal(wrong.status, 401, "a presented credential is checked, never silently downgraded to anonymous");
+  } finally { await cleanup(); }
+});
+
+test("5xx problems carry a generic detail; the specifics go to the server log only", async () => {
+  const { dir, file, sofiaToken, cleanup } = served();
+  const logged: string[] = [];
+  const log = (line: string) => { logged.push(line); };
+  const lockDir = join(dir, "david", ".hunch");
+  const hostName = hostname();
+  // A lock held by a live same-host process we cannot disprove is never stolen,
+  // so the write times out. It must NOT name our own pid: a lock carrying our pid
+  // whose nonce we do not hold is a predecessor's and is reclaimed (issue #287).
+  // The child is spawned INSIDE the try so the finally always kills it — a throw
+  // between the spawn and the try would otherwise leak a 30 s process.
+  let holder: ReturnType<typeof spawn> | undefined;
+  let locked: ReturnType<typeof createServeApp> | undefined;
+  let broken: ReturnType<typeof createServeApp> | undefined;
+  const secretPath = join(dir, "private-internal-path");
+  try {
+    holder = spawn(process.execPath, ["-e", "setTimeout(()=>{},30000)"], { stdio: "ignore" });
+    const holderPid = holder.pid!;
+    writeFileSync(writeLockPath(lockDir), JSON.stringify({ pid: holderPid, host: hostName, nonce: "held", at: new Date().toISOString() }));
+    locked = createServeApp(readServeConfig(file), { version: "test", log, writeLockTimeoutMs: 30 });
+    broken = createServeApp(readServeConfig(file), { version: "test", log, openStore: () => { throw new Error(`EACCES: permission denied, open '${secretPath}'`); } });
+    const lockedClient = createStateClient({ baseUrl: await listen(locked), token: sofiaToken });
+    const commitment = { schema: "nuryel.commitment/1", scope: david, subject: "customer:c1", title: "locked", owner: "david", due: "2026-09-30", status: "open", valid_from: "2026-09-08T10:00:00Z", valid_to: null, provenance: prov };
+    await assert.rejects(lockedClient.write({ scope: david, facet: "commitments", record: commitment, idempotency_key: "locked-1" }), (e: StateClientError) => {
+      assert.equal(e.status, 503);
+      assert.equal(e.code, "write-lock-timeout");
+      const body = JSON.stringify(e.problem);
+      for (const leak of [lockDir, "write.lock", String(holderPid), hostName]) assert.ok(!body.includes(leak), `problem body must not include ${leak}: ${body}`);
+      return true;
+    });
+    assert.ok(logged.some((line) => line.includes("write-lock-timeout") && line.includes(String(holderPid))), "the operator still sees who holds the lock");
+
+    const brokenClient = createStateClient({ baseUrl: await listen(broken), token: sofiaToken });
+    await assert.rejects(brokenClient.read({ scope: david, subject: "customer:c1" }), (e: StateClientError) => {
+      assert.equal(e.status, 500);
+      assert.equal(e.code, "internal");
+      assert.ok(!JSON.stringify(e.problem).includes(secretPath), "an internal error message never reaches the caller");
+      return true;
+    });
+    assert.ok(logged.some((line) => line.includes(secretPath)), "the internal error is logged server-side");
+
+    // Contract refusals stay as informative as before.
+    await assert.rejects(lockedClient.write({ scope: acme, facet: "commitments", record: commitment, idempotency_key: "outside-1" }), (e: StateClientError) => e.status === 403 && /user\/david|organization\/acme/.test(e.problem.detail));
+  } finally {
+    for (const app of [locked, broken]) { if (!app) continue; await new Promise<void>((r) => app.close(() => r())); app.closeStores(); }
+    try { holder?.kill("SIGKILL"); } catch { /* already gone */ }
+    rmSync(writeLockPath(lockDir), { force: true });
+    await cleanup();
+  }
 });
 
 test("serve init declares the partition, mints a token once, stores only its hash, and refuses grants the server does not serve", () => {
@@ -227,11 +302,32 @@ test("the write lock is held across a sync section and released on throw", async
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
-test("the write lock never steals a stale-looking lock held by a live same-host process", async () => {
+/** A child that stays alive until we kill it. */
+function spawnSleeper(): { pid: number; kill: () => void } {
+  const child = spawn(process.execPath, ["-e", "setTimeout(()=>{},30000)"], { stdio: "ignore" });
+  if (typeof child.pid !== "number") throw new Error("child did not start");
+  return { pid: child.pid, kill: () => { try { child.kill("SIGKILL"); } catch { /* already gone */ } } };
+}
+
+/** A pid that is certainly dead: spawned, exited, and reaped. */
+async function deadPid(): Promise<number> {
+  const child = spawn(process.execPath, ["-e", ""], { stdio: "ignore" });
+  const pid = child.pid!;
+  await new Promise<void>((resolve) => child.on("exit", () => resolve()));
+  await new Promise<void>((resolve) => setTimeout(resolve, 100)); // let the kernel reap the zombie
+  return pid;
+}
+
+const BOOT = "1b4e28ba-2fa1-11d2-883f-0016d3cca427";
+
+test("the write lock never steals a stale-looking lock held by a live same-host process (issue #287)", async () => {
   const dir = mkdtempSync(join(tmpdir(), "hunch-writelock-live-"));
+  const child = spawnSleeper();
   try {
     const path = writeLockPath(dir);
-    writeFileSync(path, JSON.stringify({ pid: process.pid, host: hostname(), nonce: "other", at: new Date().toISOString() }));
+    // A LIVE, unrelated same-host pid and no token: nothing disproves it, so the
+    // lock stays its owner's however old the file looks.
+    writeFileSync(path, JSON.stringify({ pid: child.pid, host: hostname(), nonce: "other", at: new Date().toISOString() }));
     const old = new Date(Date.now() - 2 * 60_000);
     utimesSync(path, old, old);
     let entered = false;
@@ -241,6 +337,393 @@ test("the write lock never steals a stale-looking lock held by a live same-host 
     );
     assert.equal(entered, false, "a live same-host owner must keep the lock despite its age");
     assert.ok(existsSync(path), "the live owner's lock remains intact");
+  } finally { child.kill(); rmSync(dir, { recursive: true, force: true }); }
+});
+
+/**
+ * BEHAVIOUR CHANGE vs origin/main. An own-pid + foreign-nonce record with NO
+ * token: main NEVER stole it (the pid is alive, so the lock was authoritative
+ * forever — issue #287's deadlock). Now the AGE rule decides it, on EVERY
+ * platform: a nonce we do not hold proves only that the lock is not OURS, never
+ * that its writer is dead. "Our pid" can belong to a live neighbour in another
+ * pid space that shares our hostname and volume — two containers sharing them
+ * but not the pid namespace on linux (k8s sidecars, `--net=host`), and off linux
+ * a linux GUEST of this machine (WSL2 shares the Windows hostname and /mnt/c,
+ * Docker Desktop bind mounts). So a FRESH such lock is left alone and only an
+ * over-STALE_AFTER_MS one is taken over. The loop over all three platforms runs
+ * through the token seam and now proves that the platform no longer matters.
+ */
+for (const platform of ["darwin", "win32", "linux"] as const) {
+  test(`an own-pid lock with a foreign nonce and no token: the age rule on ${platform} (issue #287)`, async () => {
+    const dir = mkdtempSync(join(tmpdir(), "hunch-writelock-reuse-"));
+    try {
+      const path = writeLockPath(dir);
+      // The container-restart shape on a platform with no process-instance token:
+      // the record names OUR pid on OUR host, so `kill(pid, 0)` succeeds forever.
+      // The nonce says only that the lock is not one WE took.
+      writeFileSync(path, JSON.stringify({ pid: process.pid, host: hostname(), nonce: "recycled", at: new Date().toISOString() }));
+      const seam = { self: null, of: () => null, platform };
+      let entered = false;
+      // FRESH: the age rule has nothing to say yet, so the possible neighbour keeps it.
+      await assert.rejects(
+        withWriteLock(dir, () => { entered = true; }, { timeoutMs: 50, startToken: seam }),
+        /write lock .* held by pid/,
+        "a tokenless own-pid record may be a live neighbour's lock",
+      );
+      assert.equal(entered, false);
+      assert.ok(existsSync(path), "nothing is removed while only the pid says 'alive'");
+      // Past STALE_AFTER_MS the ordinary age rule takes it, as for any lock.
+      const old = new Date(Date.now() - (STALE_AFTER_MS + 30_000));
+      utimesSync(path, old, old);
+      await withWriteLock(dir, () => { entered = true; }, { timeoutMs: 2_000, startToken: seam });
+      assert.equal(entered, true, "the recycled-pid lock is taken over, not waited on forever");
+      assert.ok(!existsSync(path), "the reclaimed lock is released after the write");
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+}
+
+test("the write lock reclaims our own pid when the recorded TOKEN is a predecessor's (issue #287)", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "hunch-writelock-token-reuse-"));
+  try {
+    const path = writeLockPath(dir);
+    // Same boot, same namespace, different start ticks: a different instance of
+    // this pid wrote that lock. Fresh mtime, so only identity can settle it.
+    //
+    // NOT the container-restart story. "recycled" is SAME-namespace pid reuse —
+    // the process died and the kernel handed its number to a new one on this
+    // boot. A container restarted in a NEW pid namespace (or a lock from before
+    // a reboot) reads "unprobeable" instead and falls back to the age rule, so
+    // writes refuse for up to STALE_AFTER_MS (~60 s; 10 s for `.rmw-lock`)
+    // rather than taking over instantly the way main did on a dead pid.
+    writeFileSync(path, JSON.stringify({ pid: process.pid, host: hostname(), nonce: "recycled", at: new Date().toISOString(), start: `${BOOT}:1:9:100` }));
+    let entered = false;
+    await withWriteLock(dir, () => { entered = true; }, {
+      timeoutMs: 2_000,
+      startToken: { self: `${BOOT}:1:9:200`, of: () => `${BOOT}:1:9:200` },
+    });
+    assert.equal(entered, true, "a recycled token is proof, whatever the lock's age");
+    assert.ok(!existsSync(path), "the reclaimed lock is released after the write");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("the write lock never steals a lock whose recorded TOKEN is our own live instance (issue #287)", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "hunch-writelock-token-same-"));
+  try {
+    const path = writeLockPath(dir);
+    const self = `${BOOT}:1:9:200`;
+    writeFileSync(path, JSON.stringify({ pid: process.pid, host: hostname(), nonce: "ours", at: new Date().toISOString(), start: self }));
+    const old = new Date(Date.now() - 10 * 60_000);
+    utimesSync(path, old, old);
+    let entered = false;
+    await assert.rejects(
+      withWriteLock(dir, () => { entered = true; }, { timeoutMs: 50, startToken: { self, of: () => self } }),
+      /write lock .* held by pid/,
+      "an identical token is the genuine owner — age and mtime say nothing",
+    );
+    assert.equal(entered, false);
+    assert.ok(existsSync(path), "the live owner's lock remains intact");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("the write lock reclaims a lock whose pid now belongs to an unrelated live process (issue #287)", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "hunch-writelock-reuse-child-"));
+  const child = spawnSleeper();
+  try {
+    const path = writeLockPath(dir);
+    writeFileSync(path, JSON.stringify({ pid: child.pid, host: hostname(), nonce: "recycled", at: new Date().toISOString(), start: `${BOOT}:1:9:100` }));
+    const old = new Date(Date.now() - 2 * 60_000);
+    utimesSync(path, old, old);
+    let entered = false;
+    await withWriteLock(dir, () => { entered = true; }, {
+      timeoutMs: 2_000,
+      startToken: { self: `${BOOT}:1:9:200`, of: () => `${BOOT}:1:9:999` },
+    });
+    assert.equal(entered, true, "a live process whose token differs never owned this lock");
+    assert.ok(!existsSync(path), "the reclaimed lock is released after the write");
+  } finally { child.kill(); rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("a live unrelated pid WITHOUT a token keeps the lock — the remaining macOS/Windows gap (issue #287)", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "hunch-writelock-legacy-gap-"));
+  const child = spawnSleeper();
+  try {
+    const path = writeLockPath(dir);
+    // No `start` in the record (a legacy lock, or any lock written off linux):
+    // the pid is alive and not ours, and there is no spawn-free way to tell
+    // whether it is the same process instance. It keeps the lock. Documented,
+    // not fixed — the safe direction is never to steal on a guess.
+    writeFileSync(path, JSON.stringify({ pid: child.pid, host: hostname(), nonce: "legacy", at: new Date().toISOString() }));
+    const old = new Date(Date.now() - 5 * 60_000);
+    utimesSync(path, old, old);
+    let entered = false;
+    await assert.rejects(
+      withWriteLock(dir, () => { entered = true; }, { timeoutMs: 50 }),
+      /write lock .* held by pid/,
+    );
+    assert.equal(entered, false);
+    assert.ok(existsSync(path), "a live pid we cannot disprove keeps its lock");
+  } finally { child.kill(); rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("an UNPROBEABLE owner (another boot / namespace) falls back to the age rule (issue #287)", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "hunch-writelock-unprobeable-"));
+  try {
+    const path = writeLockPath(dir);
+    const pid = await deadPid();
+    // The token was written under a different boot id, so this pid NUMBER means
+    // nothing under ours: its death is not evidence that the owner died. Only
+    // age may steal, exactly as for a foreign host.
+    writeFileSync(path, JSON.stringify({ pid, host: hostname(), nonce: "other-boot", at: new Date().toISOString(), start: "0000ffff-0000-0000-0000-000000000000:1:9:100" }));
+    const seam = { self: `${BOOT}:1:9:200`, of: () => null };
+    let entered = false;
+    await assert.rejects(
+      withWriteLock(dir, () => { entered = true; }, { timeoutMs: 50, startToken: seam }),
+      /write lock/,
+      "a dead pid from another namespace proves nothing; the fresh lock stands",
+    );
+    assert.equal(entered, false);
+    assert.ok(existsSync(path), "the lock is not removed on meaningless pid evidence");
+    // Past STALE_AFTER_MS the age rule takes it, like any foreign-host lock.
+    const old = new Date(Date.now() - (STALE_AFTER_MS + 30_000));
+    utimesSync(path, old, old);
+    let ran = false;
+    await withWriteLock(dir, () => { ran = true; }, { timeoutMs: 5_000, startToken: seam });
+    assert.equal(ran, true, "past the stale age an unprobeable lock is taken over");
+    assert.ok(!existsSync(path), "the lock is released afterwards");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+/** The skew repro runs twice over the identity seam:
+ *  - "real probe" is whatever this platform can prove (on linux the holder's own
+ *    token matches, so the token path keeps the lock);
+ *  - "no identity" strips the token path entirely, so the ONLY thing standing
+ *    between the contender and the holder's own lock is the held-nonce row of
+ *    the decision table. On linux that row is what CI would otherwise never
+ *    exercise, because the real probe answers first. */
+const skewSeams: [string, { self: string | null; of: (pid: number) => string | null } | undefined][] = [
+  ["real probe", undefined],
+  ["no identity (held-nonce row only)", { self: null, of: () => null }],
+];
+
+for (const backMs of [30_000, 10 * 60_000]) {
+  for (const [label, startToken] of skewSeams) {
+    test(`a LIVE holder's lock back-dated ${backMs / 1000}s by clock skew is never stolen — ${label} (issue #287)`, async () => {
+      const dir = mkdtempSync(join(tmpdir(), "hunch-writelock-skew-"));
+      try {
+        const path = writeLockPath(dir);
+        const opts = startToken ? { startToken } : {};
+        let inside = 0;
+        let max = 0;
+        let stolen: unknown;
+        await withWriteLock(dir, async () => {
+          inside++;
+          max = Math.max(max, inside);
+          // Exactly the reviewer's repro: a filesystem/host clock disagreement, an
+          // NTP step or a suspend makes a HELD lock look arbitrarily old. Nothing
+          // in the decision may read a clock, so the holder keeps it.
+          const back = new Date(Date.now() - backMs);
+          utimesSync(path, back, back);
+          await assert.rejects(
+            withWriteLock(dir, async () => { inside++; max = Math.max(max, inside); inside--; }, { timeoutMs: 100, ...opts })
+              .catch((error) => { stolen = error; throw error; }),
+            /write lock .* held by pid/,
+          );
+          inside--;
+        }, { timeoutMs: 5_000, ...opts });
+        assert.equal(max, 1, "the holder count never exceeds 1");
+        assert.ok(stolen instanceof Error, "the contender timed out rather than stealing");
+        assert.ok(!existsSync(path), "the holder released its own lock");
+      } finally { rmSync(dir, { recursive: true, force: true }); }
+    });
+  }
+}
+
+test("regression guard: in-process contenders over one stale lock never overlap (issue #287)", async () => {
+  // NOTE: this does NOT demonstrate the cross-process takeover race. Node is
+  // single-threaded and `judge stale → rm → open` is one synchronous stretch
+  // here, so on origin/main it cannot fail either. It only guards against a
+  // future edit that puts an await inside that stretch. The real race is
+  // exercised by the deterministic takeover-race test below.
+  const dir = mkdtempSync(join(tmpdir(), "hunch-writelock-takeover-"));
+  try {
+    const pid = await deadPid();
+    const path = writeLockPath(dir);
+    writeFileSync(path, JSON.stringify({ pid, host: hostname(), nonce: "dead", at: new Date().toISOString() }));
+    let inside = 0;
+    let max = 0;
+    let ran = 0;
+    await Promise.all(Array.from({ length: 8 }, () => withWriteLock(dir, async () => {
+      inside++;
+      max = Math.max(max, inside);
+      await new Promise<void>((resolve) => setTimeout(resolve, 5));
+      ran++;
+      inside--;
+    }, { timeoutMs: 10_000 })));
+    assert.equal(max, 1, "the write lock is mutually exclusive across a stale-lock takeover");
+    assert.equal(ran, 8, "every contender eventually ran");
+    assert.ok(!existsSync(path), "the lock is released afterwards");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("DETERMINISTIC: a contender under the claim re-judges and never removes the winner's LIVE lock (issue #287)", async () => {
+  // The takeover race, made repeatable. On origin/main "judge stale → rm →
+  // create" is not atomic: contender B judges the corpse stale, contender A
+  // wins the whole sequence in between, and B's `rm` then deletes A's FRESH
+  // live lock and lets a second writer in. The multi-process smoke test below
+  // hits that window only by luck; here A is INJECTED into it.
+  //
+  // The injection point is B's own fs calls, patched one-shot: whichever of
+  // B's `mkdirSync(<lock>.reclaim)` (this branch) or `rmSync(<lock>)` (main,
+  // which has no claim) fires first, A's entire protocol runs before it. On
+  // this branch B then holds the claim, re-judges under it, sees A's live lock
+  // and removes nothing.
+  const dir = mkdtempSync(join(tmpdir(), "hunch-writelock-deterministic-"));
+  const child = spawnSleeper();
+  // Captured OUTSIDE the try so the finally can always undo the patch, even when
+  // an assertion (or the patch itself) throws midway.
+  const originalFs = { mkdirSync: fs.mkdirSync, rmSync: fs.rmSync };
+  try {
+    const path = writeLockPath(dir);
+    const claim = `${path}.reclaim`;
+    const corpse = await deadPid();
+    // A plain corpse: a provably dead same-host pid, so B judges it stale.
+    writeFileSync(path, JSON.stringify({ pid: corpse, host: hostname(), nonce: "corpse", at: new Date().toISOString() }));
+
+    const originalMkdirSync = fs.mkdirSync;
+    const originalRmSync = fs.rmSync;
+    const originalWriteFileSync = fs.writeFileSync;
+    let fired = 0;
+    // Contender A's whole sequence, over the ORIGINAL syscalls so it cannot
+    // re-enter the patch: claim, remove the corpse, publish a LIVE lock owned by
+    // a real running child, release the claim. Strictly one-shot: B may reach
+    // several patched calls, but A only ever runs its protocol once.
+    const simulateA = (): void => {
+      if (fired > 0) return;
+      fired++;
+      try { originalMkdirSync(claim); } catch { return; } // A loses the claim: nothing further
+      try {
+        originalRmSync(path, { force: true });
+        originalWriteFileSync(path, JSON.stringify({ pid: child.pid, host: hostname(), nonce: "winner-A", at: new Date().toISOString() }));
+      } finally {
+        try { originalRmSync(claim, { recursive: true, force: true }); } catch { /* best effort */ }
+      }
+    };
+    const isLockPath = (p: unknown): boolean => String(p).replace(/\\/g, "/") === path.replace(/\\/g, "/");
+    const isClaimPath = (p: unknown): boolean => String(p).replace(/\\/g, "/") === claim.replace(/\\/g, "/");
+    fs.mkdirSync = ((target: Parameters<typeof originalMkdirSync>[0], options?: never) => {
+      if (isClaimPath(target)) simulateA();
+      return originalMkdirSync(target, options);
+    }) as typeof fs.mkdirSync;
+    fs.rmSync = ((target: Parameters<typeof originalRmSync>[0], options?: Parameters<typeof originalRmSync>[1]) => {
+      if (isLockPath(target)) simulateA(); // origin/main's path: no claim is ever taken
+      return originalRmSync(target, options);
+    }) as typeof fs.rmSync;
+    syncBuiltinESMExports();
+
+    let entered = false;
+    let rejection: unknown;
+    try {
+      await withWriteLock(dir, () => { entered = true; }, { timeoutMs: 300 });
+    } catch (error) { rejection = error; }
+    fs.mkdirSync = originalMkdirSync;
+    fs.rmSync = originalRmSync;
+    syncBuiltinESMExports();
+
+    assert.equal(fired, 1, "contender A was injected exactly once");
+    assert.ok(rejection instanceof Error, `B must refuse, not enter the mutex behind A (entered=${entered})`);
+    assert.equal(entered, false, "two writers must never be inside the write lock");
+    assert.ok(existsSync(path), "A's live lock still exists — B removed nothing");
+    const survivor = JSON.parse(readFileSync(path, "utf8")) as { pid: number; nonce: string };
+    assert.equal(survivor.pid, child.pid, "the surviving lock is A's, owned by the live child");
+    assert.equal(survivor.nonce, "winner-A");
+    assert.ok(!existsSync(claim), "no claim directory is left behind");
+  } finally {
+    fs.mkdirSync = originalFs.mkdirSync;
+    fs.rmSync = originalFs.rmSync;
+    syncBuiltinESMExports();
+    child.kill();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("stress SMOKE: concurrent PROCESSES racing one stale write lock never overlap (issue #287)", async () => {
+  // NOT a reliable reproducer — origin/main fails only ~1–25% of runs, because
+  // the losing contender has to land its `rm` inside the winner's few-syscall
+  // window. The deterministic takeover-race test below is the regression proof;
+  // this one is kept as a stress smoke test over the real, unpatched syscalls.
+  const dir = mkdtempSync(join(tmpdir(), "hunch-writelock-procs-"));
+  try {
+    const pid = await deadPid();
+    const path = writeLockPath(dir);
+    // One corpse, N processes that all judge it stale in the same tick: without a
+    // serialized takeover the second remover deletes the FIRST winner's fresh
+    // lock and two writers run inside the mutex at once.
+    writeFileSync(path, JSON.stringify({ pid, host: hostname(), nonce: "dead", at: new Date().toISOString() }));
+    const marker = join(dir, "holder");
+    const child = [
+      `import { withWriteLock } from "${process.env.RACE_WRITELOCK ?? "./src/serve/writelock.ts"}";`,
+      'import { openSync, closeSync, rmSync, appendFileSync } from "node:fs";',
+      'const dir = process.env.RACE_DIR; const marker = process.env.RACE_MARKER; const tag = process.env.RACE_TAG;',
+      'const startAt = Number(process.env.RACE_START_AT);',
+      'while (Date.now() < startAt) { /* spin to a common start */ }',
+      'let acquired = 0;',
+      'for (let round = 0; round < 4; round++) {',
+      '  await withWriteLock(dir, async () => {',
+      // The overlap proof is a hard fact, not a timestamp comparison: only one
+      // holder can create this file with "wx".
+      '    const fd = openSync(marker, "wx");',
+      '    closeSync(fd);',
+      '    acquired++;',
+      '    await new Promise((r) => setTimeout(r, 30));',
+      '    rmSync(marker, { force: true });',
+      '  }, { timeoutMs: 30000 });',
+      '}',
+      'appendFileSync(process.env.RACE_LOG, `${tag} ${acquired}\\n`);',
+    ].join("\n");
+    const log = join(dir, "race.log");
+    const children = ["a", "b", "c", "d", "e", "f"].map((tag) => spawn(process.execPath, ["--import", "tsx", "--input-type=module", "--eval", child], {
+      cwd: process.cwd(),
+      env: { ...process.env, RACE_DIR: dir, RACE_MARKER: marker, RACE_LOG: log, RACE_TAG: tag, RACE_START_AT: String(Date.now() + 1200) },
+      stdio: ["ignore", "ignore", "pipe"],
+    }));
+    const exits = await Promise.all(children.map((c) => new Promise<{ code: number | null; stderr: string }>((resolve) => {
+      let stderr = "";
+      c.stderr!.on("data", (chunk: Buffer) => { stderr += chunk.toString(); });
+      c.on("exit", (code) => resolve({ code, stderr }));
+    })));
+    for (const exit of exits) assert.equal(exit.code, 0, `a racing writer failed (an EEXIST on the holder marker means two holders): ${exit.stderr}`);
+    const lines = readFileSync(log, "utf8").trim().split("\n").sort();
+    assert.deepEqual(lines, ["a 4", "b 4", "c 4", "d 4", "e 4", "f 4"], "every child acquired the lock in every round");
+    assert.ok(!existsSync(marker), "no holder marker is left behind");
+    assert.ok(!existsSync(writeLockPath(dir)), "the lock is released afterwards");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("a live reclaim claim blocks takeover; a stranded one is cleared (issue #287)", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "hunch-writelock-claim-"));
+  try {
+    const pid = await deadPid();
+    const path = writeLockPath(dir);
+    writeFileSync(path, JSON.stringify({ pid, host: hostname(), nonce: "dead", at: new Date().toISOString() }));
+    const claim = `${path}.reclaim`;
+    mkdirSync(claim);
+    let entered = false;
+    await assert.rejects(
+      withWriteLock(dir, () => { entered = true; }, { timeoutMs: 100 }),
+      /write lock/,
+      "another contender holds the claim: this one must not remove the lock",
+    );
+    assert.equal(entered, false);
+    assert.ok(existsSync(path), "the stale lock is only removed by the claim holder");
+    // A claimer that crashed inside the (microsecond) claimed section leaves the
+    // claim behind; age is what makes it reclaimable.
+    const stranded = new Date(Date.now() - 60_000);
+    utimesSync(claim, stranded, stranded);
+    let ran = false;
+    await withWriteLock(dir, () => { ran = true; }, { timeoutMs: 5_000 });
+    assert.equal(ran, true, "a stranded claim is cleared and the takeover proceeds");
+    assert.ok(!existsSync(claim), "no claim directory is left behind");
+    assert.ok(!existsSync(path), "the lock is released afterwards");
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 

@@ -1,0 +1,31 @@
+{
+  "id": "fnd_8bdf9841a3",
+  "title": "Windows team-matrix-e2e test 67 fails intermittently on main with a passing re-run",
+  "observation": "The Windows platform-matrix-safety job failed on 'not ok 67 - team Matrix: three isolated clones share live memory, catch a bad branch, repair it, and never leak it publicly' for the second time on main. First sighting: main 6733f6cc ('policy pol_77f20b999a not found'), later runs passed. Second sighting: main CI run 35458134882 attempt 1 on f909958e (the v1.39.3 release merge) on 2026-09-19; attempt 2 of the same run on the same commit passed with no code change. The same job passed in the tagged Release run for that commit. A failure that clears on re-run of an identical tree is a flake, most likely an ordering or timing dependence in the multi-clone policy lookup on Windows; the cause has not been investigated.",
+  "evidence": [
+    "CI run 35458134882 attempt 1 (f909958e): platform-matrix-safety (windows-latest) = failure, log line 'not ok 67 - team Matrix: three isolated clones share live memory, catch a bad branch, repair it, and never leak it publicly'",
+    "CI run 35458134882 attempt 2 (same commit, re-run failed jobs): success",
+    "Release run 35458379311 (same commit): platform-matrix-safety (windows-latest) = success on attempt 1"
+  ],
+  "method": null,
+  "severity": "low",
+  "triage": "open",
+  "affected_files": [
+    "test/team-matrix-e2e.test.ts"
+  ],
+  "affected_symbols": [],
+  "violates_constraint": null,
+  "spawned_decision": null,
+  "observed_at": "2026-09-19T19:33:42.387Z",
+  "resolved_commit": null,
+  "provenance": {
+    "source": "agent_recorded",
+    "confidence": 0.75,
+    "evidence": [
+      "CI run 35458134882 attempt 1 (f909958e): platform-matrix-safety (windows-latest) = failure, log line 'not ok 67 - team Matrix: three isolated clones share live memory, catch a bad branch, repair it, and never leak it publicly'",
+      "CI run 35458134882 attempt 2 (same commit, re-run failed jobs): success",
+      "Release run 35458379311 (same commit): platform-matrix-safety (windows-latest) = success on attempt 1"
+    ],
+    "last_verified": "2026-09-19T19:33:42.387Z"
+  }
+}

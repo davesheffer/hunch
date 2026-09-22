@@ -23,6 +23,10 @@ export interface CheckDirect {
   strictBlocks: boolean;
   /** If a blocking invariant is downgraded to advisory under strict, why. */
   downgrade?: "stale" | "low-confidence";
+  /** Set when a content-matched blocking invariant could NOT be evaluated because the
+   *  added lines of some scoped files are missing from the diff (truncated diff, git
+   *  failure, unreadable file). Reported as a hit, never as compliance: it fails closed. */
+  unevaluable?: { reason: string; files: string[] };
   /** The causal citation (the "why this guard exists") — present when the graph links it. */
   why?: CausalWhy;
 }
@@ -98,6 +102,17 @@ export function renderImpact(im: ImpactReport, scope: string): string {
   return out.join("\n");
 }
 
+/** Strict-failure reason fragments for direct invariants: proven hits and the
+ *  content-matched invariants that could not be evaluated are named separately. */
+function strictBlockerReasons(r: CheckReport): string[] {
+  const unevaluable = r.direct.filter((d) => d.strictBlocks && d.unevaluable).length;
+  const proven = r.strictBlockers - unevaluable;
+  return [
+    proven > 0 ? `${proven} high-confidence blocking invariant(s) directly in scope` : "",
+    unevaluable > 0 ? `${unevaluable} blocking invariant(s) that could not be evaluated against the complete diff` : "",
+  ];
+}
+
 /** True when --strict should FAIL the commit/PR. */
 export function reportFailsStrict(r: CheckReport): boolean {
   return r.strict && (r.strictBlockers > 0 || r.regBlocking > 0 || r.vetoBlocking > 0);
@@ -146,7 +161,10 @@ export function renderText(r: CheckReport): string {
       const note = r.strict && c.severity === "blocking" && !c.strictBlocks
         ? c.downgrade === "stale" ? "  (advisory: stale)" : "  (advisory: low confidence)"
         : "";
-      out.push(`  ${mark(c.severity)} [${c.severity}] ${c.statement}${note}\n      ${c.id} · in: ${c.files.join(", ")}\n      rationale: ${c.rationale || "—"}${whyText(c.why)}`);
+      const unevaluable = c.unevaluable
+        ? `\n      ‼ NOT EVALUATED — ${c.unevaluable.reason}; added lines unavailable for: ${c.unevaluable.files.join(", ")} (fails closed)`
+        : "";
+      out.push(`  ${mark(c.severity)} [${c.severity}] ${c.statement}${note}\n      ${c.id} · in: ${c.files.join(", ")}\n      rationale: ${c.rationale || "—"}${unevaluable}${whyText(c.why)}`);
     }
   }
   if (r.near.length) {
@@ -175,7 +193,7 @@ export function renderText(r: CheckReport): string {
   }
   if (reportFailsStrict(r)) {
     const reasons = [
-      r.strictBlockers ? `${r.strictBlockers} high-confidence blocking invariant(s) directly in scope` : "",
+      ...strictBlockerReasons(r),
       r.regBlocking ? `${r.regBlocking} blocking-linked regression(s)` : "",
       r.vetoBlocking ? `${r.vetoBlocking} reversed-decision veto(es)` : "",
     ].filter(Boolean).join(" + ");
@@ -205,6 +223,7 @@ export function renderMarkdown(r: CheckReport): string {
         : "";
       out.push(`- **[${c.severity}] ${c.statement}** — \`${c.id}\`${note}`);
       out.push(`  - in: ${c.files.map((f) => `\`${f}\``).join(", ")}`);
+      if (c.unevaluable) out.push(`  - ‼ **Not evaluated** — ${c.unevaluable.reason}; added lines unavailable for ${c.unevaluable.files.map((f) => `\`${f}\``).join(", ")} _(fails closed)_`);
       if (c.rationale) out.push(`  - _${c.rationale}_`);
       for (const line of whyMd(c.why)) out.push(line);
     }
@@ -246,7 +265,7 @@ export function renderMarkdown(r: CheckReport): string {
   out.push("---");
   if (reportFailsStrict(r)) {
     const reasons = [
-      r.strictBlockers ? `${r.strictBlockers} high-confidence blocking invariant(s) directly in scope` : "",
+      ...strictBlockerReasons(r),
       r.regBlocking ? `${r.regBlocking} blocking-linked regression(s)` : "",
       r.vetoBlocking ? `${r.vetoBlocking} reversed-decision veto(es)` : "",
     ].filter(Boolean).join(" + ");
@@ -301,6 +320,7 @@ export function renderSarif(r: CheckReport, version: string, extras: SarifExtras
     let text = `[${c.severity}] ${c.statement}`;
     if (c.rationale) text += ` — ${c.rationale}`;
     if (c.downgrade) text += ` (advisory under strict: ${c.downgrade})`;
+    if (c.unevaluable) text += `\nNOT EVALUATED (fails closed): ${c.unevaluable.reason}; added lines unavailable for ${c.unevaluable.files.join(", ")}`;
     if (c.why?.decision) text += `\nwhy: “${c.why.decision.title}” (${c.why.decision.id})`;
     if (c.why?.bug) text += `\nguards against: ${c.why.bug.title} (${c.why.bug.id})`;
     add(c.id, level, text, c.statement, c.files[0]);

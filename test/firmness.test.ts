@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { hunchPaths } from "../src/core/paths.js";
 import { readConfig, writeConfig, DEFAULT_FIRMNESS } from "../src/core/config.js";
 import { installClaudeHooks } from "../src/integrations/scaffold.js";
+import { isHunchHookCommand } from "../src/integrations/hookmatch.js";
 import { publishedMcpInvocation, shellInvocation } from "../src/cli/invocation.js";
 
 function tmpRoot(): string {
@@ -137,6 +138,126 @@ test("installClaudeHooks preserves foreign hooks and other settings", () => {
     const cmds = j.hooks.PreToolUse.map((e: { hooks: { command: string }[] }) => e.hooks[0].command);
     assert.ok(cmds.includes("/usr/local/bin/guard.sh"), "foreign Bash hook preserved");
     assert.equal(j.hooks.PreToolUse.length, 2, "Hunch entry added alongside the foreign one");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("installClaudeHooks keeps the user's command out of a MIXED entry (issue #310)", () => {
+  const root = tmpRoot();
+  try {
+    const file = join(root, ".claude", "settings.json");
+    const stale = `"node" "/old/dist/cli/index.js" hook`;
+    const mine = "/usr/local/bin/my-guard.sh";
+    mkdirSync(join(root, ".claude"), { recursive: true });
+    // One entry holding BOTH Hunch's hook and the user's own command.
+    writeFileSync(file, JSON.stringify({
+      hooks: {
+        PreToolUse: [{
+          matcher: "Edit|Write|MultiEdit",
+          hooks: [{ type: "command", command: stale }, { type: "command", command: mine }],
+        }],
+      },
+    }, null, 2));
+
+    const cmd = `"node" "/new/dist/cli/index.js" hook`;
+    installClaudeHooks(root, cmd);
+
+    const j = JSON.parse(readFileSync(file, "utf8"));
+    const all = j.hooks.PreToolUse.flatMap((e: { hooks: { command: string }[] }) => e.hooks.map((h) => h.command));
+    assert.equal(all.filter((c: string) => c === mine).length, 1, "the user's command survives exactly once");
+    assert.equal(all.filter((c: string) => c === cmd).length, 1, "Hunch's hook is present exactly once");
+    assert.ok(!all.includes(stale), "the stale Hunch command is gone");
+    const kept = j.hooks.PreToolUse.find((e: { hooks: { command: string }[] }) => e.hooks.some((h) => h.command === mine));
+    assert.equal(kept.matcher, "Edit|Write|MultiEdit", "the user's entry keeps its matcher");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("installClaudeHooks preserves a FOREIGN …/dist/cli/index.js hook (issue #310)", () => {
+  const root = tmpRoot();
+  try {
+    const file = join(root, ".claude", "settings.json");
+    const foreign = "node tools/lint/dist/cli/index.js hook";
+    mkdirSync(join(root, ".claude"), { recursive: true });
+    writeFileSync(file, JSON.stringify({
+      hooks: { PreToolUse: [{ matcher: "Edit", hooks: [{ type: "command", command: foreign }] }] },
+    }, null, 2));
+
+    installClaudeHooks(root, `"node" "/abs/dist/cli/index.js" hook`);
+
+    const j = JSON.parse(readFileSync(file, "utf8"));
+    const all = j.hooks.PreToolUse.flatMap((e: { hooks: { command: string }[] }) => e.hooks.map((h) => h.command));
+    assert.ok(all.includes(foreign), "an unrelated tool's index.js hook is not ours to delete");
+    assert.equal(j.hooks.PreToolUse.length, 2, "Hunch entry added alongside the foreign one");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("installClaudeHooks stays idempotent for the UNQUOTED source command shellInvocation writes (issue #310)", () => {
+  // Since v1.21.1 init writes `${agentHookShell} hook`, and shellInvocation leaves a
+  // safe POSIX path bare — so the real source-install command has no quotes at all.
+  for (const inv of [
+    { command: "/usr/local/bin/node", args: ["/Users/me/hunch/dist/cli/index.js"] },
+    { command: "npx", args: ["tsx", "/Users/me/hunch/src/cli/index.ts"] },
+    { command: "/usr/local/bin/node", args: ["/Users/my name/hunch/dist/cli/index.js"] },
+  ]) {
+    const root = tmpRoot();
+    try {
+      const cmd = `${shellInvocation(inv)} hook`;
+      installClaudeHooks(root, cmd);
+      assert.equal(installClaudeHooks(root, cmd).action, "unchanged", cmd);
+      // Upgrade to the published launcher: the source hook is replaced, not kept beside it.
+      installClaudeHooks(root, `${shellInvocation(publishedMcpInvocation())} hook`);
+      const j = JSON.parse(readFileSync(join(root, ".claude", "settings.json"), "utf8"));
+      for (const [event, entries] of Object.entries(j.hooks as Record<string, { hooks: unknown[] }[]>)) {
+        assert.equal(entries.flatMap((e) => e.hooks).length, 1, `${event}: exactly one Hunch command after upgrade from ${cmd}`);
+      }
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+});
+
+test("the Claude Code hook matcher covers every shape init has written and nothing chained or look-alike (issue #310)", () => {
+  const ours = [
+    `"/usr/local/bin/node" "/Users/me/hunch/dist/cli/index.js" hook`, // ≤ v1.21.0: every token quoted
+    `"/usr/local/bin/node" "/usr/local/lib/node_modules/@davesheffer/hunch/dist/cli/index.js" hook`,
+    `npx tsx "/Users/me/hunch/src/cli/index.ts" hook`,
+    `"C:\\nodejs\\node.exe" "C:\\src\\hunch\\dist\\cli\\index.js" hook`,
+    `npx -y --package=hunch-exact@npm:@davesheffer/hunch@1.39.2 hunch hook`,
+    `npx -y --package=@davesheffer/hunch hunch hook`,
+    `/usr/local/bin/node /Users/me/hunch/dist/cli/index.js hook`, // ≥ v1.21.1: safe tokens bare
+    `npx tsx /Users/me/hunch/src/cli/index.ts hook`,
+    `/usr/local/bin/node "/Users/my name/hunch/dist/cli/index.js" hook`,
+  ];
+  const foreign = [
+    `node tools/lint/dist/cli/index.js hook`,
+    `node "tools/lint/dist/cli/index.js" hook`,
+    `./mine.sh; npx -y --package=hunch-exact@npm:@davesheffer/hunch@1.22.0 hunch hook`,
+    `./mine.sh && /usr/local/bin/node /Users/me/hunch/dist/cli/index.js hook`,
+    `./scripts/notify.sh --about @davesheffer/hunch hook`,
+    `node node_modules/@davesheffer/hunch-plugin/bin.js hook`,
+    `echo @davesheffer/hunch is cool && ./my-git hook`,
+    `node ./hook/index.js`,
+  ];
+  for (const command of ours) assert.equal(isHunchHookCommand(command, false), true, `ours: ${command}`);
+  for (const command of foreign) assert.equal(isHunchHookCommand(command, false), false, `foreign: ${command}`);
+});
+
+test("installClaudeHooks keeps a user command that CHAINS the Hunch hook (issue #310)", () => {
+  const root = tmpRoot();
+  try {
+    const file = join(root, ".claude", "settings.json");
+    const chained = "./mine.sh; npx -y --package=hunch-exact@npm:@davesheffer/hunch@1.22.0 hunch hook";
+    mkdirSync(join(root, ".claude"), { recursive: true });
+    writeFileSync(file, JSON.stringify({ hooks: { Stop: [{ hooks: [{ type: "command", command: chained }] }] } }, null, 2));
+    installClaudeHooks(root, `${shellInvocation(publishedMcpInvocation())} hook`);
+    const j = JSON.parse(readFileSync(file, "utf8"));
+    const all = j.hooks.Stop.flatMap((e: { hooks: { command: string }[] }) => e.hooks.map((h) => h.command));
+    assert.ok(all.includes(chained), "a command the user wrote around ours is theirs, not ours to delete");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

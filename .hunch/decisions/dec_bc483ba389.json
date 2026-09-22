@@ -1,0 +1,87 @@
+{
+  "id": "dec_bc483ba389",
+  "title": "Detect flow-collection values as unresolved at open time, before container-stack operations lose visibility",
+  "topic": null,
+  "status": "accepted",
+  "context": "A multi-line flow-style YAML selector (`selector: {app: web,` on one line, `tier: web` on the next) was silently losing the opening-line key (`app`) — the Service's selector became overly permissive, false-matching Deployments with different apps but the same tier.",
+  "decision": "When a value opens a flow collection ({/[), immediately mark that path as unresolved before any closing-line container-pop operations remove visibility. This prevents the scanner from producing an incomplete, partially-seen map as if it were resolved.",
+  "consequences": [
+    "Flow-collection values are always detected as unresolved, never silently partial",
+    "Selector/label mismatches no longer produce false-positive edges for objects with mismatched opening-line keys",
+    "Fixes a fundamental limitation of line-oriented YAML scanning: keys on the opening line of a multi-line container are now accounted for"
+  ],
+  "alternatives_rejected": [
+    "Extract and track keys from opening lines within the line-oriented scan (adds complexity without solving the general visibility problem)",
+    "Rely on container-pop timing to detect unresolved containers (loses visibility before opening-line keys can be marked)"
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Extract and track keys from opening lines within the line-oriented scan (adds complexity without solving the general visibility problem)",
+      "scope": [
+        "src/extractors/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Rely on container-pop timing to detect unresolved containers (loses visibility before opening-line keys can be marked)",
+      "scope": [
+        "src/extractors/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_a94a8fe5cc",
+    "cmp_e0ccfe26fe",
+    "cmp_f27fede222"
+  ],
+  "related_files": [
+    "src/extractors/k8sManifest.ts",
+    "test/indexer.test.ts",
+    "test/k8sManifest.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "b68fea4d",
+  "valid_from": "2026-09-15T10:29:49+02:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft",
+    "confidence": 0.65,
+    "evidence": [
+      "commit:b68fea4d",
+      "synth:provider=claude-cli",
+      "branch:upstream-pr/k8s-manifest-refs",
+      "src/extractors/k8sManifest.ts",
+      "test/indexer.test.ts",
+      "test/k8sManifest.test.ts"
+    ],
+    "last_verified": "2026-09-16T12:14:14.919Z"
+  },
+  "date": "2026-09-15T10:29:49+02:00"
+}

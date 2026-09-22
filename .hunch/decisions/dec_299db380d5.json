@@ -1,0 +1,70 @@
+{
+  "id": "dec_299db380d5",
+  "title": "Text scan over tree-sitter for K8s manifest reference extraction",
+  "topic": null,
+  "status": "accepted",
+  "context": "Hunch needed to extract cross-resource references from Kubernetes manifests (ConfigMap/Secret/PVC/owner/Ingress refs), but tree-sitter-yaml's error recovery catastrophically fails on the most common real-world pattern: block-form `{{ include ... }}` injections in metadata.labels and spec.selector, collapsing the entire rest of the document into an unstructured ERROR node.",
+  "decision": "Implement a line-oriented indentation-tracking text scanner instead of tree-sitter AST walk. Never interprets `{{ }}` as YAML syntax — treats template expressions as opaque strings. Name matching accepts both literal equality and exact raw template-expression text equality (without evaluation).",
+  "consequences": [
+    "Immune to the template-injection error recovery collapse that breaks tree-sitter on production charts",
+    "Correctly handles the common case where resource names and references both use identical shared-helper calls like `{{ include \"chart.fullname\" . }}`",
+    "Requires explicit indentation and YAML structure tracking in code (more complex than tree-sitter would be if it worked)",
+    "Faster and simpler than complex error recovery fallbacks"
+  ],
+  "alternatives_rejected": [
+    "tree-sitter CST walk: documented failure on block-form template injections placed early in manifests, poisoning all downstream field-path extraction"
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "tree-sitter CST walk: documented failure on block-form template injections placed early in manifests, poisoning all downstream field-path extraction",
+      "scope": [
+        "src/extractors/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [
+          "tree-sitter"
+        ],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_a94a8fe5cc",
+    "cmp_e0ccfe26fe",
+    "cmp_f27fede222"
+  ],
+  "related_files": [
+    "src/extractors/k8sManifest.ts",
+    "test/k8sManifest.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "d87c7087",
+  "valid_from": "2026-09-14T16:04:10+02:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft+summary",
+    "confidence": 0.5,
+    "evidence": [
+      "commit:d87c7087",
+      "synth:provider=claude-cli",
+      "branch:upstream-pr/k8s-manifest-refs",
+      "src/extractors/k8sManifest.ts",
+      "test/k8sManifest.test.ts"
+    ],
+    "last_verified": "2026-09-16T12:08:18.740Z"
+  },
+  "date": "2026-09-14T16:04:10+02:00"
+}

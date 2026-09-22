@@ -1,0 +1,50 @@
+{
+  "id": "dec_3a3d3867fc",
+  "title": "`prune --apply` acts on this machine only, from a live snapshot, with `git branch -d` / `worktree remove` and no force flags, after confirmation; the MCP surface is read-only",
+  "topic": "workspace-ledger.prune-safety",
+  "status": "accepted",
+  "context": "Deleting somebody's unmerged work is the one irreversible action this feature could take, and stored records (a cloned .hunch/, a shared overlay) are attacker-controllable input.",
+  "decision": "The prune plan for this machine is computed from a snapshot taken moments ago, never from a stored record; other machines' commands are printed from their stored records and never executed here. Rules: proven merged, not the default branch, worktree clean, unlocked, present, not the main worktree. Execution is fixed-argv git with `--`, `-d` not `-D`, `worktree remove` without `--force` (git re-checks clean/merged as a second line of defense), after an interactive confirmation or an explicit --yes off a terminal; remotes are never touched. `hunch_workspaces` has no write or prune surface. A record collision in the other memory home is reported with the `forget` remedy, never thrown out of an apply.",
+  "consequences": [
+    "A forged 'merged' record cannot cause a delete (tested end to end).",
+    "Cross-machine cleanup is a human running printed commands on that machine, by design."
+  ],
+  "alternatives_rejected": [
+    "An MCP prune/write tool — an agent could act unattended on what a record claims.",
+    "Acting on stored verdicts (`--apply` from memory) — memory is display-only; a record carries no authority.",
+    "Deleting remote branches or executing on another machine — irreversible and out of this machine's jurisdiction.",
+    "`-D` / `--force` when git refuses — git's refusal is the safety net, not an obstacle."
+  ],
+  "rejected_tripwires": [],
+  "related_components": [],
+  "related_files": [
+    "docs/workspace-ledger.md",
+    "src/core/workspace.ts",
+    "src/core/machine.ts",
+    "src/extractors/workspaces.ts",
+    "src/integrations/workspaceLedger.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-09-17T06:49:13.570Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "premises": [],
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 0.95,
+    "evidence": [
+      "docs/workspace-ledger.md",
+      "src/core/workspace.ts",
+      "src/core/machine.ts",
+      "src/extractors/workspaces.ts",
+      "src/integrations/workspaceLedger.ts"
+    ]
+  },
+  "date": "2026-09-17T06:49:13.570Z"
+}

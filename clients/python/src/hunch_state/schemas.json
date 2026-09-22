@@ -4157,8 +4157,7 @@
       "required": [
         "ok",
         "version",
-        "protocol",
-        "partitions"
+        "protocol"
       ],
       "additionalProperties": false
     },

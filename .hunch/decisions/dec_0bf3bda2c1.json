@@ -1,0 +1,51 @@
+{
+  "id": "dec_0bf3bda2c1",
+  "title": "Agent-side hunch_task calls are conditional: the prompt hook prints the verify command, and finish is called only when the task used Hunch",
+  "topic": "task-report.agent-calls",
+  "status": "accepted",
+  "context": "Measured on 2026-09-19 sessions: hunch_task start+finish cost ~87 main-session model calls per day (~6% of the main model's context re-reads), almost all returning an empty report ('No task-linked delivery observed'). The Stop hook already closes the task unconditionally (closeHookTask) and shows the report when non-empty (stopHookReport), and the only reason the hook text demanded a start call was to obtain verification_argv. Decided by David on 2026-09-20 via an inline question (three options offered; he chose the conditional contract).",
+  "decision": "On hosts with a prompt hook, the hook's task instruction prints the exact `task verify <task_id> --` launcher inline, so the model no longer calls hunch_task start. The model calls hunch_task finish (and pastes the contribution card) only when the task used Hunch: a hunch_* call made with the task_id, a task-verify check, or an application to claim. Otherwise it skips finish; the host Stop hook closes the task as a host close and renders the evidence when the report is non-empty. Hosts without prompt hooks keep start + finish. start still works and still returns verification_argv. If the launcher cannot be computed the hook falls back to the old start-call wording (fail open).",
+  "consequences": [
+    "The contribution card appears in the final response only for tasks that used Hunch; an untouched task leaves an empty ledger row closed by the host.",
+    "The verify launcher printed by the hook is the hook's installation, which is the same exact-pinned version as the MCP server's.",
+    "Generated CLAUDE.md/AGENTS.md blocks, the MCP server instructions and the hunch_task tool description all state the same conditional contract, phrased client-agnostically."
+  ],
+  "alternatives_rejected": [
+    "Drop only the start call and keep finish mandatory: halves the calls, but every prompt that never touched Hunch still pays a model round-trip to fetch an empty card the Stop hook would not even print.",
+    "Leave both calls mandatory: keeps the visibility contract untouched but keeps paying ~87 full-context model calls a day for empty reports.",
+    "Remove the agent-side finish entirely and rely on the Stop hook alone: loses agent-reported applications and the card inside the final response, which the host-side notice cannot supply."
+  ],
+  "rejected_tripwires": [],
+  "related_components": [],
+  "related_files": [
+    "src/core/taskReportHook.ts",
+    "src/core/verifyLauncher.ts",
+    "src/mcp/taskReportTools.ts",
+    "src/mcp/server.ts",
+    "src/integrations/claudemd.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-09-19T22:41:18.579Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "premises": [],
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 0.95,
+    "evidence": [
+      "src/core/taskReportHook.ts",
+      "src/core/verifyLauncher.ts",
+      "src/mcp/taskReportTools.ts",
+      "src/mcp/server.ts",
+      "src/integrations/claudemd.ts"
+    ],
+    "last_verified": "2026-09-20T08:53:49.942Z"
+  },
+  "date": "2026-09-19T22:41:18.579Z"
+}

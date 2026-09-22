@@ -1,0 +1,37 @@
+{
+  "id": "fnd_075d29042e",
+  "title": "Release gate and CI fail when the npm registry is degraded: the live production-audit test has no offline path and hides the payload",
+  "observation": "test/production-dependency-audit.test.ts runs a live `npm audit --omit=dev --json` inside the full suite. During npm's scheduled maintenance (2026-09-19 17:00-19:00Z) the registry answered with JSON that is not an auditReportVersion 2 report, so the test failed in ~770 ms with 'npm audit returned an unsupported or malformed JSON report' on three runs in the same window: main CI for the v1.39.3 release merge f909958e, PR #356's rerun, and the tagged Release workflow (validate failed, publish skipped). The same audit run locally at 17:40Z on f909958e returned a clean, well-formed report (0 vulnerabilities). evaluateProductionAudit throws without printing the payload it rejected, so the CI log cannot distinguish a registry error object from a real format change. The hunch-agent App cannot rerun workflows (actions: 'Resource not accessible by integration'), so recovery needs a human click.",
+  "evidence": [
+    "Release run 35458379311: validate=failure, publish=skipped; only failing test: 'production dependency audit command validates the current lock and source boundary' (772 ms), AssertionError 1 !== 0",
+    "CI on main run 35458134882 (f909958e) = failure; PR #356 ci (22)/(24) = fail on 19dc036b after passing on 54a54b9e at ~14:30Z",
+    "status.npmjs.org scheduled-maintenances/active.json: 'Scheduled maintenance | in_progress | 2026-09-19T17:00Z -> 19:00Z', components: www.npmjs.com website, Package publishing",
+    "Local `npm audit --omit=dev --json` on f909958e at 2026-09-19T17:40Z: auditReportVersion 2, vulnerabilities {}, total 0, exit 0",
+    "`agent-gh run rerun <id> --failed` -> 'cannot be rerun; Resource not accessible by integration'"
+  ],
+  "method": null,
+  "severity": "medium",
+  "triage": "open",
+  "affected_files": [
+    "tooling/production-dependency-audit.mjs",
+    "test/production-dependency-audit.test.ts",
+    ".github/workflows/release.yml"
+  ],
+  "affected_symbols": [],
+  "violates_constraint": null,
+  "spawned_decision": null,
+  "observed_at": "2026-09-19T17:42:56.735Z",
+  "resolved_commit": null,
+  "provenance": {
+    "source": "agent_recorded",
+    "confidence": 0.75,
+    "evidence": [
+      "Release run 35458379311: validate=failure, publish=skipped; only failing test: 'production dependency audit command validates the current lock and source boundary' (772 ms), AssertionError 1 !== 0",
+      "CI on main run 35458134882 (f909958e) = failure; PR #356 ci (22)/(24) = fail on 19dc036b after passing on 54a54b9e at ~14:30Z",
+      "status.npmjs.org scheduled-maintenances/active.json: 'Scheduled maintenance | in_progress | 2026-09-19T17:00Z -> 19:00Z', components: www.npmjs.com website, Package publishing",
+      "Local `npm audit --omit=dev --json` on f909958e at 2026-09-19T17:40Z: auditReportVersion 2, vulnerabilities {}, total 0, exit 0",
+      "`agent-gh run rerun <id> --failed` -> 'cannot be rerun; Resource not accessible by integration'"
+    ],
+    "last_verified": "2026-09-19T17:42:56.735Z"
+  }
+}

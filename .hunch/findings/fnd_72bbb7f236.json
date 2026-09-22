@@ -1,0 +1,33 @@
+{
+  "id": "fnd_72bbb7f236",
+  "title": "Pre-edit grounding dedupe is defeated by its own delivery receipt: the recent-task reason text flips after the first full injection",
+  "observation": "injectionMode (src/core/hookcache.ts) hashes the rendered injection. Serving a full block writes a delivery receipt (receipts(\"served\") near src/cli/index.ts:4977); the next pre-edit call's task ranking reads it back through ctx.lastDelivered (src/core/taskRanking.ts ageDays/humanAge, reason text near :224) and the recent-task line changes from 'today' to 'delivered today'. The hash changes and a second full block is sent for the same agent and file. The cache key, session id and agent id were verified stable, so this is volatile content, not a key miss. RESOLVED 2026-09-20: PR #373 (merge 9e48b8d8; fix 4efb2915 'dedupe pre-edit grounding on record identity so a delivery receipt cannot re-send the full block', test a8675788) shipped in 1.40.0; test/hook-dedupe-stability.test.ts guards it.",
+  "evidence": [
+    "2026-09-19 subagent transcripts: 169 full injections (avg 3833 chars) vs 162 deltas; 63 of the fulls (37%) were repeats for the same agent+file",
+    "transcript 1bb0f7f4-.../subagents/agent-adedcf1f7826eb7ad.jsonl lines 54 and 60, two fulls 8 s apart for src/extractors/k8sManifest.ts: unified diff has exactly one differing line, the supplemental/recent-task reason '— today' vs '— delivered today'; the following 11 injections were deltas",
+    "Not individually diffed: the 6-full case on src/cli/index.ts; other volatile fields may contribute"
+  ],
+  "method": null,
+  "severity": "medium",
+  "triage": "resolved",
+  "affected_files": [
+    "src/core/hookcache.ts",
+    "src/core/taskRanking.ts",
+    "src/cli/index.ts"
+  ],
+  "affected_symbols": [],
+  "violates_constraint": null,
+  "spawned_decision": null,
+  "observed_at": "2026-09-19T22:48:31.329Z",
+  "resolved_commit": "9e48b8d8",
+  "provenance": {
+    "source": "agent_recorded",
+    "confidence": 0.75,
+    "evidence": [
+      "2026-09-19 subagent transcripts: 169 full injections (avg 3833 chars) vs 162 deltas; 63 of the fulls (37%) were repeats for the same agent+file",
+      "transcript 1bb0f7f4-.../subagents/agent-adedcf1f7826eb7ad.jsonl lines 54 and 60, two fulls 8 s apart for src/extractors/k8sManifest.ts: unified diff has exactly one differing line, the supplemental/recent-task reason '— today' vs '— delivered today'; the following 11 injections were deltas",
+      "Not individually diffed: the 6-full case on src/cli/index.ts; other volatile fields may contribute"
+    ],
+    "last_verified": "2026-09-20T08:54:32.037Z"
+  }
+}

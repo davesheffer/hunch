@@ -1,0 +1,36 @@
+{
+  "id": "fnd_4b091dd16c",
+  "title": "Every CLI process and hook pays 1.5-5 s cold start because native tree-sitter addons load at module import",
+  "observation": "loadNativeTreeSitter() is called at module top level in src/extractors/parse.ts:21 and src/constitution/g2BehaviorCandidates.ts:182. It copies six native .node addons into a fresh per-process temp dir and requires the copies, so every process that merely imports the CLI module graph (hunch --version, every Claude Code hook event) pays the copy plus a dlopen of never-before-seen binaries. The earlier belief that npx was the cost was wrong: npx vs direct node on the cached dist measured the same range. RESOLVED 2026-09-20: PR #366 (merge a9119807; fix ff017fad 'load the native tree-sitter addons on first parse, not at import', plus 23a3f1f0 so a native parser load failure aborts the run instead of wiping the graph) shipped in 1.40.0; test/cold-start.test.ts guards it.",
+  "evidence": [
+    "2026-09-20, macOS, Node 22.23.1, dist 1.39.3, /usr/bin/time -p x5: node -e 0 median 0.04 s; node dist/cli/index.js --version min 1.66 s median 3.26 s; PreToolUse hook min 2.34 s median 4.89 s; UserPromptSubmit median 4.58 s; Stop median 8.32 s (noisy machine)",
+    "node --cpu-prof: dlopen = 98.3% of sampled time on --version, 89.7% on the pre-edit hook",
+    "fresh-process await import(): dist/extractors/parse.js 4797 ms, dist/extractors/indexer.js 3701 ms, dist/mcp/server.js 2197 ms; commander 11 ms, zod 23 ms, node:sqlite 0.3 ms, each tree-sitter grammar package imported directly 5-11 ms",
+    "2026-09-19 sessions: hook wall time totalled about 37 minutes"
+  ],
+  "method": null,
+  "severity": "medium",
+  "triage": "resolved",
+  "affected_files": [
+    "src/extractors/parse.ts",
+    "src/constitution/g2BehaviorCandidates.ts",
+    "src/extractors/nativeTreeSitter.ts",
+    "src/cli/index.ts"
+  ],
+  "affected_symbols": [],
+  "violates_constraint": null,
+  "spawned_decision": null,
+  "observed_at": "2026-09-19T22:48:24.632Z",
+  "resolved_commit": "a9119807",
+  "provenance": {
+    "source": "agent_recorded",
+    "confidence": 0.75,
+    "evidence": [
+      "2026-09-20, macOS, Node 22.23.1, dist 1.39.3, /usr/bin/time -p x5: node -e 0 median 0.04 s; node dist/cli/index.js --version min 1.66 s median 3.26 s; PreToolUse hook min 2.34 s median 4.89 s; UserPromptSubmit median 4.58 s; Stop median 8.32 s (noisy machine)",
+      "node --cpu-prof: dlopen = 98.3% of sampled time on --version, 89.7% on the pre-edit hook",
+      "fresh-process await import(): dist/extractors/parse.js 4797 ms, dist/extractors/indexer.js 3701 ms, dist/mcp/server.js 2197 ms; commander 11 ms, zod 23 ms, node:sqlite 0.3 ms, each tree-sitter grammar package imported directly 5-11 ms",
+      "2026-09-19 sessions: hook wall time totalled about 37 minutes"
+    ],
+    "last_verified": "2026-09-20T08:54:27.638Z"
+  }
+}

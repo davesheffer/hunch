@@ -6,8 +6,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { hunchPaths } from "../src/core/paths.js";
 import { HunchStore } from "../src/store/hunchStore.js";
-import { indexRepo } from "../src/extractors/indexer.js";
+import { indexRepo, isExtractorEdge, mergeScannedEdges } from "../src/extractors/indexer.js";
 import { pathMatchesGlob } from "../src/core/glob.js";
+import { edgeId, resourceId, resourceRelationshipId } from "../src/core/ids.js";
+import { EdgeSchema, RESOURCE_RELATIONSHIP_SCHEMA_VERSION, extracted } from "../src/core/types.js";
 import { SYMLINK_SKIP, indexedFixtureStore, seedRootLevelFileFixture } from "./helpers.js";
 
 function fixtureRepo(): string {
@@ -690,6 +692,105 @@ metadata:
   rmSync(root, { recursive: true, force: true });
 });
 
+test("a nested subchart (charts/<sub>/Chart.yaml) resolves to its OWN chart root, not the parent's (issue #42)", () => {
+  const root = mkdtempSync(join(tmpdir(), "hunch-idx-helm-subchart-"));
+  mkdirSync(join(root, "templates"), { recursive: true });
+  writeFileSync(join(root, "Chart.yaml"), `apiVersion: v2\nname: parent\nversion: 0.1.0\n`);
+  writeFileSync(join(root, "templates/_helpers.tpl"), `
+{{- define "labels" -}}
+app: parent
+{{- end -}}
+`);
+  writeFileSync(join(root, "templates/deployment.yaml"), `
+metadata:
+  labels:
+    {{- include "labels" . | nindent 4 }}
+`);
+
+  mkdirSync(join(root, "charts/sub/templates"), { recursive: true });
+  writeFileSync(join(root, "charts/sub/Chart.yaml"), `apiVersion: v2\nname: sub\nversion: 0.1.0\n`);
+  writeFileSync(join(root, "charts/sub/templates/_helpers.tpl"), `
+{{- define "labels" -}}
+app: sub
+{{- end -}}
+`);
+  writeFileSync(join(root, "charts/sub/templates/deployment.yaml"), `
+metadata:
+  labels:
+    {{- include "labels" . | nindent 4 }}
+`);
+
+  const store = new HunchStore(hunchPaths(root));
+  store.json.ensureDirs();
+  indexRepo(store, root, { churn: false });
+  store.reindex();
+
+  const syms = store.json.loadAll("symbols");
+  const parentDefine = syms.find((s) => s.file === "templates/_helpers.tpl" && s.kind === "variable")!;
+  const subDefine = syms.find((s) => s.file === "charts/sub/templates/_helpers.tpl" && s.kind === "variable")!;
+  assert.ok(parentDefine && subDefine, "both the parent chart's and the subchart's define blocks indexed");
+
+  const edges = store.json.loadAll("edges");
+  // the subchart's own include resolves within the subchart's own scope, not the parent's
+  assert.ok(edges.some((e) => e.to === subDefine.id && e.type === "references"), "subchart's include resolves within its own chart scope");
+  assert.ok(edges.some((e) => e.to === parentDefine.id && e.type === "references"), "parent chart's include resolves within its own chart scope");
+  // no edge crosses the nested-chart boundary in either direction (nearest-ancestor
+  // scoping is a deliberate conservative approximation -- see nearestChartRoot's doc
+  // comment: it misses a legitimate parent-includes-subchart-define edge rather than
+  // ever fabricating a wrong one)
+  const fileOf = new Map(syms.map((s) => [s.id, s.file] as const));
+  const crossChart = edges.filter((e) => e.type === "references" && (
+    (e.to === subDefine.id && !(fileOf.get(e.from) ?? "").startsWith("charts/sub/")) ||
+    (e.to === parentDefine.id && (fileOf.get(e.from) ?? "").startsWith("charts/sub/"))
+  ));
+  assert.equal(crossChart.length, 0, "no edge crosses the nested subchart boundary in either direction");
+
+  store.close();
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("a parent chart including a define that exists ONLY in a subchart produces no edge (conservative miss, issue #42)", () => {
+  // Real Helm's template namespace is release-global, so this include WOULD
+  // resolve in an actual `helm template` run -- nearest-ancestor scoping
+  // deliberately doesn't model that (see nearestChartRoot's doc comment) and
+  // misses this edge rather than guessing which chart's define was meant.
+  const root = mkdtempSync(join(tmpdir(), "hunch-idx-helm-subchart-miss-"));
+  mkdirSync(join(root, "templates"), { recursive: true });
+  writeFileSync(join(root, "Chart.yaml"), `apiVersion: v2\nname: parent\nversion: 0.1.0\n`);
+  writeFileSync(join(root, "templates/deployment.yaml"), `
+metadata:
+  labels:
+    {{- include "sub.labels" . | nindent 4 }}
+`);
+
+  mkdirSync(join(root, "charts/sub/templates"), { recursive: true });
+  writeFileSync(join(root, "charts/sub/Chart.yaml"), `apiVersion: v2\nname: sub\nversion: 0.1.0\n`);
+  writeFileSync(join(root, "charts/sub/templates/_helpers.tpl"), `
+{{- define "sub.labels" -}}
+app: sub
+{{- end -}}
+`);
+
+  const store = new HunchStore(hunchPaths(root));
+  store.json.ensureDirs();
+  indexRepo(store, root, { churn: false });
+  store.reindex();
+
+  const syms = store.json.loadAll("symbols");
+  const subDefine = syms.find((s) => s.name === "sub.labels" && s.kind === "variable")!;
+  assert.ok(subDefine, "the subchart's define is still indexed as a symbol");
+
+  const edges = store.json.loadAll("edges");
+  assert.equal(
+    edges.filter((e) => e.to === subDefine.id && e.type === "references").length,
+    0,
+    "nearest-ancestor scoping misses the release-global resolution rather than fabricating an edge",
+  );
+
+  store.close();
+  rmSync(root, { recursive: true, force: true });
+});
+
 test("a plain .yaml file with no ancestor Chart.yaml is unaffected by Helm-shaped text", () => {
   const root = mkdtempSync(join(tmpdir(), "hunch-idx-helm-nochart-"));
   mkdirSync(join(root, "config"), { recursive: true });
@@ -706,6 +807,657 @@ note: |
   assert.ok(!syms.some((s) => s.name === "something"), "no Helm dialect extraction outside a chart");
   const edges = store.json.loadAll("edges");
   assert.ok(!edges.some((e) => e.type === "references"), "no references edge fabricated outside a chart");
+
+  store.close();
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("a literal ConfigMap reference from a Deployment produces a \"references\" edge and correct fan_in/fan_out", () => {
+  const root = mkdtempSync(join(tmpdir(), "hunch-idx-k8sref-"));
+  mkdirSync(join(root, "manifests"), { recursive: true });
+  writeFileSync(join(root, "Chart.yaml"), `apiVersion: v2\nname: mychart\nversion: 0.1.0\n`);
+  writeFileSync(join(root, "manifests/deployment.yaml"), `
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-app
+spec:
+  template:
+    spec:
+      containers:
+      - name: app
+        envFrom:
+        - configMapRef:
+            name: my-config
+`);
+  writeFileSync(join(root, "manifests/configmap.yaml"), `
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-config
+`);
+  const store = new HunchStore(hunchPaths(root));
+  store.json.ensureDirs();
+  indexRepo(store, root, { churn: false });
+  store.reindex();
+
+  const syms = store.json.loadAll("symbols");
+  const deployment = syms.find((s) => s.name === "Deployment/my-app");
+  const configMap = syms.find((s) => s.name === "ConfigMap/my-config");
+  assert.ok(deployment && configMap, "both resource symbols indexed");
+
+  const edges = store.json.loadAll("edges");
+  const refEdge = edges.find((e) => e.from === deployment!.id && e.to === configMap!.id && e.type === "references");
+  assert.ok(refEdge, "Deployment -> ConfigMap recorded as a \"references\" edge");
+  assert.ok(configMap!.metrics.fan_in >= 1, "the reference counts toward the ConfigMap's fan_in");
+  assert.equal(edges.some((e) => e.type === "depends_on" && (e.from === deployment!.id || e.to === deployment!.id)), false, "no component-level depends_on edge for this same-directory pair (spec Non-goals)");
+
+  store.close();
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("a Helm chart's Secret name and its Deployment's secretKeyRef.name are the identical template text -- resolves via template-text equality", () => {
+  const root = mkdtempSync(join(tmpdir(), "hunch-idx-k8sref-tpl-"));
+  mkdirSync(join(root, "templates"), { recursive: true });
+  writeFileSync(join(root, "Chart.yaml"), `apiVersion: v2\nname: mychart\nversion: 0.1.0\n`);
+  writeFileSync(join(root, "templates/secret.yaml"), `
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "mychart.secretName" . }}
+`);
+  writeFileSync(join(root, "templates/deployment.yaml"), `
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-app
+spec:
+  template:
+    spec:
+      containers:
+      - name: app
+        env:
+          - name: X
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "mychart.secretName" . }}
+`);
+  const store = new HunchStore(hunchPaths(root));
+  store.json.ensureDirs();
+  indexRepo(store, root, { churn: false });
+  store.reindex();
+
+  const syms = store.json.loadAll("symbols");
+  const secret = syms.find((s) => s.kind === "variable" && s.file === "templates/secret.yaml" && s.name.startsWith("Secret/"));
+  const deployment = syms.find((s) => s.name === "Deployment/my-app");
+  assert.ok(secret && deployment, "both resource symbols indexed");
+
+  const edges = store.json.loadAll("edges");
+  assert.ok(edges.some((e) => e.from === deployment!.id && e.to === secret!.id && e.type === "references"), "identical template-expression text resolves to a references edge");
+
+  store.close();
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("two ConfigMaps with the same name in the same chart scope are ambiguous -- no edge is fabricated", () => {
+  const root = mkdtempSync(join(tmpdir(), "hunch-idx-k8sref-ambig-"));
+  mkdirSync(join(root, "templates"), { recursive: true });
+  writeFileSync(join(root, "Chart.yaml"), `apiVersion: v2\nname: mychart\nversion: 0.1.0\n`);
+  writeFileSync(join(root, "templates/configmap-a.yaml"), `apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: shared-name\n`);
+  writeFileSync(join(root, "templates/configmap-b.yaml"), `apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: shared-name\n`);
+  writeFileSync(join(root, "templates/deployment.yaml"), `
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-app
+spec:
+  template:
+    spec:
+      containers:
+      - name: app
+        envFrom:
+        - configMapRef:
+            name: shared-name
+`);
+  const store = new HunchStore(hunchPaths(root));
+  store.json.ensureDirs();
+  indexRepo(store, root, { churn: false });
+  store.reindex();
+
+  const edges = store.json.loadAll("edges");
+  const syms = store.json.loadAll("symbols");
+  const deployment = syms.find((s) => s.name === "Deployment/my-app");
+  assert.equal(edges.filter((e) => e.type === "references" && e.from === deployment!.id).length, 0, "ambiguous (2 candidates) match produces no edge");
+
+  store.close();
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("a raw manifest (no Chart.yaml) resolves a ConfigMap reference WITHIN its own file but not to an unrelated file", () => {
+  const root = mkdtempSync(join(tmpdir(), "hunch-idx-k8sref-raw-"));
+  mkdirSync(join(root, "manifests"), { recursive: true });
+  writeFileSync(join(root, "manifests/bundle.yaml"), `
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-app
+spec:
+  template:
+    spec:
+      containers:
+      - name: app
+        envFrom:
+        - configMapRef:
+            name: my-config
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-config
+`);
+  // Deliberately the SAME name as bundle.yaml's own ConfigMap (not a
+  // different name) -- this is what actually exercises file-scope isolation.
+  // A different name would never match on any code path, silently passing
+  // regardless of whether isolation works at all.
+  writeFileSync(join(root, "manifests/unrelated.yaml"), `apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: my-config\n`);
+  const store = new HunchStore(hunchPaths(root));
+  store.json.ensureDirs();
+  indexRepo(store, root, { churn: false });
+  store.reindex();
+
+  const syms = store.json.loadAll("symbols");
+  const deployment = syms.find((s) => s.name === "Deployment/my-app");
+  const ownConfigMap = syms.find((s) => s.name === "ConfigMap/my-config" && s.file === "manifests/bundle.yaml");
+  const unrelatedConfigMap = syms.find((s) => s.name === "ConfigMap/my-config" && s.file === "manifests/unrelated.yaml");
+  assert.ok(deployment && ownConfigMap && unrelatedConfigMap, "all three resource symbols indexed, including the same-named unrelated one");
+
+  const edges = store.json.loadAll("edges");
+  assert.ok(edges.some((e) => e.from === deployment!.id && e.to === ownConfigMap!.id && e.type === "references"), "own-file (no chart root) resolution still works");
+  assert.equal(edges.some((e) => e.from === deployment!.id && e.to === unrelatedConfigMap!.id), false, "the same-named ConfigMap in a different, unrelated file (no shared chart scope) is never targeted");
+
+  store.close();
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("a Service's literal selector resolves to a workload whose pod-template labels are a superset", () => {
+  const root = mkdtempSync(join(tmpdir(), "hunch-idx-k8ssel-"));
+  mkdirSync(join(root, "manifests"), { recursive: true });
+  writeFileSync(join(root, "Chart.yaml"), `apiVersion: v2\nname: mychart\nversion: 0.1.0\n`);
+  writeFileSync(join(root, "manifests/service.yaml"), `
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-service
+spec:
+  selector:
+    app: my-app
+`);
+  writeFileSync(join(root, "manifests/deployment.yaml"), `
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-app
+spec:
+  template:
+    metadata:
+      labels:
+        app: my-app
+        tier: web
+    spec:
+      containers:
+      - name: app
+`);
+  const store = new HunchStore(hunchPaths(root));
+  store.json.ensureDirs();
+  indexRepo(store, root, { churn: false });
+  store.reindex();
+
+  const syms = store.json.loadAll("symbols");
+  const service = syms.find((s) => s.name === "Service/my-service");
+  const deployment = syms.find((s) => s.name === "Deployment/my-app");
+  assert.ok(service && deployment);
+
+  const edges = store.json.loadAll("edges");
+  assert.ok(edges.some((e) => e.from === service!.id && e.to === deployment!.id && e.type === "references"), "Service selector subset-matches the Deployment's pod-template labels");
+
+  store.close();
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("a Service's selector that is NOT a subset of a workload's labels produces no edge to it", () => {
+  const root = mkdtempSync(join(tmpdir(), "hunch-idx-k8ssel-nomatch-"));
+  mkdirSync(join(root, "manifests"), { recursive: true });
+  writeFileSync(join(root, "Chart.yaml"), `apiVersion: v2\nname: mychart\nversion: 0.1.0\n`);
+  writeFileSync(join(root, "manifests/service.yaml"), `
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-service
+spec:
+  selector:
+    app: other-app
+`);
+  writeFileSync(join(root, "manifests/deployment.yaml"), `
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-app
+spec:
+  template:
+    metadata:
+      labels:
+        app: my-app
+    spec:
+      containers:
+      - name: app
+`);
+  const store = new HunchStore(hunchPaths(root));
+  store.json.ensureDirs();
+  indexRepo(store, root, { churn: false });
+  store.reindex();
+
+  const syms = store.json.loadAll("symbols");
+  const service = syms.find((s) => s.name === "Service/my-service");
+  const edges = store.json.loadAll("edges");
+  assert.equal(edges.filter((e) => e.from === service!.id && e.type === "references").length, 0, "non-matching selector produces no edge");
+
+  store.close();
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("a Service's selector with ONE same-line templated key among literal siblings produces no edge, not a false-positive on the literal keys alone (issue #82 review)", () => {
+  const root = mkdtempSync(join(tmpdir(), "hunch-idx-k8ssel-partial-template-"));
+  mkdirSync(join(root, "manifests"), { recursive: true });
+  writeFileSync(join(root, "Chart.yaml"), `apiVersion: v2\nname: mychart\nversion: 0.1.0\n`);
+  writeFileSync(join(root, "manifests/service.yaml"), `
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-service
+spec:
+  selector:
+    app: {{ .Values.name }}
+    tier: web
+`);
+  writeFileSync(join(root, "manifests/deployment.yaml"), `
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-app
+spec:
+  template:
+    metadata:
+      labels:
+        tier: web
+    spec:
+      containers:
+      - name: app
+`);
+  const store = new HunchStore(hunchPaths(root));
+  store.json.ensureDirs();
+  indexRepo(store, root, { churn: false });
+  store.reindex();
+
+  const syms = store.json.loadAll("symbols");
+  const service = syms.find((s) => s.name === "Service/my-service");
+  const edges = store.json.loadAll("edges");
+  assert.equal(
+    edges.filter((e) => e.from === service!.id && e.type === "references").length,
+    0,
+    "a partially-templated selector must resolve to no map at all, not a subset map that happens to match on the untemplated keys",
+  );
+
+  store.close();
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("a Service's selector matching TWO workloads' labels produces edges to BOTH -- fan-out is intentional here, unlike Phase 1's ambiguity guard", () => {
+  const root = mkdtempSync(join(tmpdir(), "hunch-idx-k8ssel-fanout-"));
+  mkdirSync(join(root, "manifests"), { recursive: true });
+  writeFileSync(join(root, "Chart.yaml"), `apiVersion: v2\nname: mychart\nversion: 0.1.0\n`);
+  writeFileSync(join(root, "manifests/service.yaml"), `
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-service
+spec:
+  selector:
+    app: my-app
+`);
+  writeFileSync(join(root, "manifests/deployment-blue.yaml"), `
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-app-blue
+spec:
+  template:
+    metadata:
+      labels:
+        app: my-app
+        track: blue
+    spec:
+      containers:
+      - name: app
+`);
+  writeFileSync(join(root, "manifests/deployment-green.yaml"), `
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-app-green
+spec:
+  template:
+    metadata:
+      labels:
+        app: my-app
+        track: green
+    spec:
+      containers:
+      - name: app
+`);
+  const store = new HunchStore(hunchPaths(root));
+  store.json.ensureDirs();
+  indexRepo(store, root, { churn: false });
+  store.reindex();
+
+  const syms = store.json.loadAll("symbols");
+  const service = syms.find((s) => s.name === "Service/my-service");
+  const blue = syms.find((s) => s.name === "Deployment/my-app-blue");
+  const green = syms.find((s) => s.name === "Deployment/my-app-green");
+  assert.ok(service && blue && green);
+
+  const edges = store.json.loadAll("edges");
+  assert.ok(edges.some((e) => e.from === service!.id && e.to === blue!.id && e.type === "references"), "matches the blue deployment");
+  assert.ok(edges.some((e) => e.from === service!.id && e.to === green!.id && e.type === "references"), "AND matches the green deployment -- a real blue/green pattern, not an error to guard against");
+
+  store.close();
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("a dotted app.kubernetes.io/instance label that genuinely differs between Service selector and workload labels does NOT produce a references edge (regression: a false-positive edge on real, untemplated YAML)", () => {
+  const root = mkdtempSync(join(tmpdir(), "hunch-idx-k8ssel-dotted-"));
+  mkdirSync(join(root, "manifests"), { recursive: true });
+  writeFileSync(join(root, "Chart.yaml"), `apiVersion: v2\nname: mychart\nversion: 0.1.0\n`);
+  writeFileSync(join(root, "manifests/service.yaml"), `
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-service
+spec:
+  selector:
+    app: my-app
+    app.kubernetes.io/instance: prod
+`);
+  writeFileSync(join(root, "manifests/deployment.yaml"), `
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-app
+spec:
+  template:
+    metadata:
+      labels:
+        app: my-app
+        app.kubernetes.io/instance: staging
+    spec:
+      containers:
+      - name: app
+`);
+  const store = new HunchStore(hunchPaths(root));
+  store.json.ensureDirs();
+  indexRepo(store, root, { churn: false });
+  store.reindex();
+
+  const syms = store.json.loadAll("symbols");
+  const service = syms.find((s) => s.name === "Service/my-service");
+  assert.ok(service);
+  const edges = store.json.loadAll("edges");
+  assert.equal(edges.filter((e) => e.from === service!.id && e.type === "references").length, 0,
+    "the app label matches but app.kubernetes.io/instance genuinely differs (prod vs staging) -- must not read as a match");
+
+  store.close();
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("a quoted selector key the scanner can't parse produces NO edge, not an over-permissive false-positive one (regression)", () => {
+  const root = mkdtempSync(join(tmpdir(), "hunch-idx-k8ssel-quoted-"));
+  mkdirSync(join(root, "manifests"), { recursive: true });
+  writeFileSync(join(root, "Chart.yaml"), `apiVersion: v2\nname: mychart\nversion: 0.1.0\n`);
+  // svc-a's selector genuinely requires BOTH name=mychart AND instance=rel-a.
+  // The quoted key must not be silently dropped -- if it were, the selector
+  // would collapse to {instance: rel-a}, which dep-other-chart satisfies even
+  // though its own name label is a completely different chart's.
+  writeFileSync(join(root, "manifests/service.yaml"), `
+apiVersion: v1
+kind: Service
+metadata:
+  name: svc-a
+spec:
+  selector:
+    "app.kubernetes.io/name": mychart
+    app.kubernetes.io/instance: rel-a
+`);
+  writeFileSync(join(root, "manifests/deployment.yaml"), `
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dep-other-chart
+spec:
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: OTHERCHART
+        app.kubernetes.io/instance: rel-a
+    spec:
+      containers:
+      - name: app
+`);
+  const store = new HunchStore(hunchPaths(root));
+  store.json.ensureDirs();
+  indexRepo(store, root, { churn: false });
+  store.reindex();
+
+  const syms = store.json.loadAll("symbols");
+  const service = syms.find((s) => s.name === "Service/svc-a");
+  assert.ok(service);
+  const edges = store.json.loadAll("edges");
+  assert.equal(edges.filter((e) => e.from === service!.id && e.type === "references").length, 0,
+    "the quoted app.kubernetes.io/name key must taint the whole selector, not silently vanish and over-match on the remainder");
+
+  store.close();
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("a column-0 template conditional inside a Service's selector does not produce a false-positive edge to the wrong workload (regression)", () => {
+  const root = mkdtempSync(join(tmpdir(), "hunch-idx-k8ssel-col0-"));
+  mkdirSync(join(root, "manifests"), { recursive: true });
+  writeFileSync(join(root, "Chart.yaml"), `apiVersion: v2\nname: mychart\nversion: 0.1.0\n`);
+  // The selector's REAL intent is app=my-app AND track=stable, but the
+  // second line lives inside a column-0 {{- if }} -- the idiomatic way Helm
+  // charts guard an optional selector constraint. If the action's own column
+  // were (wrongly) treated as structure, this would either drop the
+  // conditional line's taint entirely or attach it to the wrong ancestor,
+  // leaving app=my-app as a fully literal (and over-permissive) selector.
+  writeFileSync(join(root, "manifests/service.yaml"), `
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-svc
+spec:
+  selector:
+    app: my-app
+{{- if .Values.stableOnly }}
+    track: stable
+{{- end }}
+`);
+  writeFileSync(join(root, "manifests/deployment-canary.yaml"), `
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-app-canary
+spec:
+  template:
+    metadata:
+      labels:
+        app: my-app
+        track: canary
+    spec:
+      containers:
+      - name: app
+`);
+  const store = new HunchStore(hunchPaths(root));
+  store.json.ensureDirs();
+  indexRepo(store, root, { churn: false });
+  store.reindex();
+
+  const syms = store.json.loadAll("symbols");
+  const service = syms.find((s) => s.name === "Service/my-svc");
+  assert.ok(service);
+  const edges = store.json.loadAll("edges");
+  assert.equal(edges.filter((e) => e.from === service!.id && e.type === "references").length, 0,
+    "the column-0 conditional must taint the whole selector, not leave app=my-app as a false-positive match against the canary track");
+
+  store.close();
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("a multi-line flow-style selector does not produce a false-positive edge from a dropped key (regression)", () => {
+  const root = mkdtempSync(join(tmpdir(), "hunch-idx-k8ssel-flow-"));
+  mkdirSync(join(root, "manifests"), { recursive: true });
+  writeFileSync(join(root, "Chart.yaml"), `apiVersion: v2\nname: mychart\nversion: 0.1.0\n`);
+  // The selector's real intent is app=web-frontend AND tier=web. Written as a
+  // multi-line flow mapping, `app` sits on the SAME line as `selector:` --
+  // invisible to a line-oriented scan unless that key's whole container is
+  // marked unresolved. A workload with a DIFFERENT app but the same tier
+  // must never match.
+  writeFileSync(join(root, "manifests/service.yaml"), `
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-svc
+spec:
+  selector: {app: web-frontend,
+    tier: web
+  }
+`);
+  writeFileSync(join(root, "manifests/api.yaml"), `
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-backend
+spec:
+  template:
+    metadata:
+      labels:
+        app: api-backend
+        tier: web
+    spec:
+      containers:
+      - name: app
+`);
+  const store = new HunchStore(hunchPaths(root));
+  store.json.ensureDirs();
+  indexRepo(store, root, { churn: false });
+  store.reindex();
+
+  const syms = store.json.loadAll("symbols");
+  const service = syms.find((s) => s.name === "Service/web-svc");
+  assert.ok(service);
+  const edges = store.json.loadAll("edges");
+  assert.equal(edges.filter((e) => e.from === service!.id && e.type === "references").length, 0,
+    "the multi-line flow selector's dropped app key must taint the whole map, not leave tier=web as a false-positive match against a different app");
+
+  store.close();
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("two resources whose names are both block-scalar headers do not collide into a false-positive edge (regression)", () => {
+  const root = mkdtempSync(join(tmpdir(), "hunch-idx-k8sref-blockscalar-"));
+  mkdirSync(join(root, "manifests"), { recursive: true });
+  writeFileSync(join(root, "Chart.yaml"), `apiVersion: v2\nname: mychart\nversion: 0.1.0\n`);
+  // Both this ConfigMap's name and the Deployment's reference to a
+  // COMPLETELY DIFFERENT ConfigMap use a block-scalar header -- if the
+  // header token itself were read as the value, both would collapse to the
+  // same garbage key ("|-") and collide, even though nothing about them
+  // actually matches.
+  writeFileSync(join(root, "manifests/configmap.yaml"), `
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: |-
+    real-config
+`);
+  writeFileSync(join(root, "manifests/deployment.yaml"), `
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+spec:
+  template:
+    spec:
+      containers:
+      - name: app
+        envFrom:
+        - configMapRef:
+            name: |-
+              totally-different-config
+`);
+  const store = new HunchStore(hunchPaths(root));
+  store.json.ensureDirs();
+  indexRepo(store, root, { churn: false });
+  store.reindex();
+
+  const syms = store.json.loadAll("symbols");
+  // Neither block-scalar-named resource should produce a real symbol at all
+  // (unidentifiable), let alone a symbol literally named "ConfigMap/|-".
+  assert.equal(syms.some((s) => s.name.includes("|-")), false, "no symbol should be literally named using the block-scalar header token");
+  const deployment = syms.find((s) => s.name === "Deployment/web");
+  assert.ok(deployment);
+  const edges = store.json.loadAll("edges");
+  assert.equal(edges.filter((e) => e.from === deployment!.id && e.type === "references").length, 0,
+    "two unrelated block-scalar-named resources must not collide into a references edge");
+
+  store.close();
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("a Helm-templated block-form selector/labels pair produces no Phase 2 edge and does not crash indexing", () => {
+  const root = mkdtempSync(join(tmpdir(), "hunch-idx-k8ssel-tpl-"));
+  mkdirSync(join(root, "templates"), { recursive: true });
+  writeFileSync(join(root, "Chart.yaml"), `apiVersion: v2\nname: mychart\nversion: 0.1.0\n`);
+  writeFileSync(join(root, "templates/service.yaml"), `
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-service
+spec:
+  selector:
+    {{- include "mychart.selectorLabels" . | nindent 4 }}
+`);
+  writeFileSync(join(root, "templates/deployment.yaml"), `
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-app
+spec:
+  template:
+    metadata:
+      labels:
+        {{- include "mychart.labels" . | nindent 8 }}
+    spec:
+      containers:
+      - name: app
+`);
+  const store = new HunchStore(hunchPaths(root));
+  store.json.ensureDirs();
+  const res = indexRepo(store, root, { churn: false }); // must not throw
+  store.reindex();
+
+  const syms = store.json.loadAll("symbols");
+  const service = syms.find((s) => s.name === "Service/my-service");
+  assert.ok(service, "Service resource still indexed even though its selector is unresolved");
+  const edges = store.json.loadAll("edges");
+  assert.equal(edges.filter((e) => e.from === service!.id && e.type === "references").length, 0, "templated block-form selector/labels: documented gap, not a guess");
+  assert.ok(res, "indexRepo completes without throwing");
 
   store.close();
   rmSync(root, { recursive: true, force: true });
@@ -927,4 +1679,487 @@ test("root-level indexed files get exact-match component paths, not a match-ever
     assert.ok(pathMatchesGlob("settings.ts", p) === (p === "settings.ts"));
     assert.ok(!pathMatchesGlob("src/auth/session.ts", p));
   }
+});
+
+test("reindex keeps supersedes edges and reviewed relationships (#288)", () => {
+  const root = fixtureRepo();
+  const store = new HunchStore(hunchPaths(root));
+  store.json.ensureDirs();
+  const first = indexRepo(store, root, { churn: false });
+  const extractorEdgesBefore = store.json.loadAll("edges").filter(isExtractorEdge).length;
+  assert.ok(extractorEdgesBefore > 0, "the fixture yields extractor edges");
+  assert.equal(extractorEdgesBefore, first.edges, "the scan count covers exactly the extractor edges");
+
+  // shaped exactly like supersedeIn writes it (src/store/hunchStore.ts)
+  const supersedes = EdgeSchema.parse({
+    schema: "hunch.edge/1",
+    id: edgeId("dec_new", "dec_old", "supersedes"),
+    from: "dec_new",
+    to: "dec_old",
+    type: "supersedes",
+    reason: "dec_new supersedes dec_old",
+    strength: 1,
+    provenance: { source: "derived", confidence: 1, evidence: ["dec_new", "dec_old"] },
+    environment: null,
+    metadata: {},
+  });
+  store.json.put("edges", supersedes);
+
+  // a human-reviewed Landscape relationship, as `hunch landscape adopt` writes it
+  const repositoryId = resourceId("repository", "https://github.com/acme/payments");
+  const apiId = resourceId("api", "openapi.yaml");
+  const relationship = EdgeSchema.parse({
+    schema: RESOURCE_RELATIONSHIP_SCHEMA_VERSION,
+    id: resourceRelationshipId(repositoryId, apiId, "contains"),
+    from: repositoryId,
+    to: apiId,
+    type: "contains",
+    reason: "repository declares API",
+    strength: 1,
+    provenance: { source: "extracted:api-declaration", confidence: 0.9, evidence: ["openapi.yaml"] },
+    currentness: { status: "unverified", source_revision: "deadbeef" },
+    environment: null,
+    metadata: { discovery_authority: "reviewed" },
+  });
+  store.json.put("edges", relationship);
+
+  indexRepo(store, root, { churn: false });
+
+  const after = store.json.loadAll("edges");
+  assert.deepEqual(after.find((e) => e.id === supersedes.id), supersedes, "supersedes edge survives reindex");
+  assert.deepEqual(after.find((e) => e.id === relationship.id), relationship, "reviewed relationship survives reindex");
+  assert.equal(after.filter(isExtractorEdge).length, extractorEdgesBefore, "every extractor edge is still there");
+
+  store.close();
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("reindex still drops stale extractor edges", () => {
+  const root = fixtureRepo();
+  const store = new HunchStore(hunchPaths(root));
+  store.json.ensureDirs();
+  indexRepo(store, root, { churn: false });
+
+  const stale = store.json.loadAll("edges").find((e) => isExtractorEdge(e) && e.reason.includes("charge"));
+  assert.ok(stale, "charge -> verifySession edge indexed on the first pass");
+
+  rmSync(join(root, "src/billing/charge.ts"));
+  indexRepo(store, root, { churn: false });
+
+  assert.equal(
+    store.json.loadAll("edges").find((e) => e.id === stale.id),
+    undefined,
+    "an extractor edge whose source is gone is not carried forward",
+  );
+
+  store.close();
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("mergeScannedEdges keeps the carried edge on an id collision", () => {
+  const carried = EdgeSchema.parse({
+    schema: "hunch.edge/1",
+    id: edgeId("a", "b", "supersedes"),
+    from: "a", to: "b", type: "supersedes",
+    reason: "carried", strength: 1,
+    provenance: { source: "derived", confidence: 1, evidence: [] },
+    environment: null, metadata: {},
+  });
+  const collidingScan = { ...carried, reason: "scanned", provenance: extracted(0.8, ["src/a.ts"]) };
+  const freshScan = EdgeSchema.parse({
+    schema: "hunch.edge/1",
+    id: edgeId("c", "d", "calls"),
+    from: "c", to: "d", type: "calls",
+    reason: "c calls d", strength: 0.8,
+    provenance: extracted(0.8, ["src/a.ts"]),
+    environment: null, metadata: {},
+  });
+
+  const merged = mergeScannedEdges([carried], [collidingScan, freshScan]);
+  assert.deepEqual(merged, [carried, freshScan], "the carried edge wins, the non-colliding scan is appended");
+  assert.equal(new Set(merged.map((e) => e.id)).size, merged.length, "no duplicate ids");
+});
+
+// Issue #297 gap 1: a Kubernetes reference resolves WITHIN a namespace. A
+// MISSING namespace is UNKNOWN and matches anything; two DIFFERENT literal
+// namespaces block the edge.
+
+test("same-named ConfigMaps in namespaces a and b: a Deployment in a resolves only to the one in a", () => {
+  const root = mkdtempSync(join(tmpdir(), "hunch-idx-k8sns-pick-"));
+  mkdirSync(join(root, "templates"), { recursive: true });
+  writeFileSync(join(root, "Chart.yaml"), `apiVersion: v2\nname: mychart\nversion: 0.1.0\n`);
+  writeFileSync(join(root, "templates/configmap-a.yaml"), `apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: shared-name\n  namespace: a\n`);
+  writeFileSync(join(root, "templates/configmap-b.yaml"), `apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: shared-name\n  namespace: b\n`);
+  writeFileSync(join(root, "templates/deployment.yaml"), `
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-app
+  namespace: a
+spec:
+  template:
+    spec:
+      containers:
+      - name: app
+        envFrom:
+        - configMapRef:
+            name: shared-name
+`);
+  const store = new HunchStore(hunchPaths(root));
+  store.json.ensureDirs();
+  indexRepo(store, root, { churn: false });
+  store.reindex();
+
+  const syms = store.json.loadAll("symbols");
+  const deployment = syms.find((s) => s.name === "Deployment/my-app");
+  const cmA = syms.find((s) => s.name === "ConfigMap/shared-name" && s.file === "templates/configmap-a.yaml");
+  const cmB = syms.find((s) => s.name === "ConfigMap/shared-name" && s.file === "templates/configmap-b.yaml");
+  assert.ok(deployment && cmA && cmB, "all three resource symbols indexed");
+
+  const edges = store.json.loadAll("edges");
+  assert.ok(edges.some((e) => e.from === deployment!.id && e.to === cmA!.id && e.type === "references"), "namespace a disambiguates what was previously an ambiguous 2-candidate match");
+  assert.equal(edges.some((e) => e.from === deployment!.id && e.to === cmB!.id), false, "the same-named ConfigMap in namespace b is never targeted");
+
+  store.close();
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("a Deployment with no namespace still resolves to a single ConfigMap in namespace b (unknown matches anything)", () => {
+  const root = mkdtempSync(join(tmpdir(), "hunch-idx-k8sns-unknown-"));
+  mkdirSync(join(root, "templates"), { recursive: true });
+  writeFileSync(join(root, "Chart.yaml"), `apiVersion: v2\nname: mychart\nversion: 0.1.0\n`);
+  writeFileSync(join(root, "templates/configmap.yaml"), `apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: my-config\n  namespace: b\n`);
+  writeFileSync(join(root, "templates/deployment.yaml"), `
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-app
+spec:
+  template:
+    spec:
+      containers:
+      - name: app
+        envFrom:
+        - configMapRef:
+            name: my-config
+`);
+  const store = new HunchStore(hunchPaths(root));
+  store.json.ensureDirs();
+  indexRepo(store, root, { churn: false });
+  store.reindex();
+
+  const syms = store.json.loadAll("symbols");
+  const deployment = syms.find((s) => s.name === "Deployment/my-app");
+  const configMap = syms.find((s) => s.name === "ConfigMap/my-config");
+  const edges = store.json.loadAll("edges");
+  assert.ok(edges.some((e) => e.from === deployment!.id && e.to === configMap!.id && e.type === "references"), "an unknown namespace must not start blocking edges that resolved before");
+
+  store.close();
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("a Deployment in namespace a does NOT resolve to the only ConfigMap when that ConfigMap is in namespace b", () => {
+  const root = mkdtempSync(join(tmpdir(), "hunch-idx-k8sns-cross-"));
+  mkdirSync(join(root, "templates"), { recursive: true });
+  writeFileSync(join(root, "Chart.yaml"), `apiVersion: v2\nname: mychart\nversion: 0.1.0\n`);
+  writeFileSync(join(root, "templates/configmap.yaml"), `apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: my-config\n  namespace: b\n`);
+  writeFileSync(join(root, "templates/deployment.yaml"), `
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-app
+  namespace: a
+spec:
+  template:
+    spec:
+      containers:
+      - name: app
+        envFrom:
+        - configMapRef:
+            name: my-config
+`);
+  const store = new HunchStore(hunchPaths(root));
+  store.json.ensureDirs();
+  indexRepo(store, root, { churn: false });
+  store.reindex();
+
+  const syms = store.json.loadAll("symbols");
+  const deployment = syms.find((s) => s.name === "Deployment/my-app");
+  const configMap = syms.find((s) => s.name === "ConfigMap/my-config");
+  assert.ok(deployment && configMap, "both resource symbols indexed");
+  const edges = store.json.loadAll("edges");
+  assert.equal(edges.some((e) => e.from === deployment!.id && e.to === configMap!.id), false, "two different literal namespaces block the edge");
+
+  store.close();
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("a reference in namespace a with one candidate in a and one with no namespace is ambiguous -- no edge", () => {
+  const root = mkdtempSync(join(tmpdir(), "hunch-idx-k8sns-ambig-"));
+  mkdirSync(join(root, "templates"), { recursive: true });
+  writeFileSync(join(root, "Chart.yaml"), `apiVersion: v2\nname: mychart\nversion: 0.1.0\n`);
+  writeFileSync(join(root, "templates/configmap-a.yaml"), `apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: shared-name\n  namespace: a\n`);
+  writeFileSync(join(root, "templates/configmap-unknown.yaml"), `apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: shared-name\n`);
+  writeFileSync(join(root, "templates/deployment.yaml"), `
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-app
+  namespace: a
+spec:
+  template:
+    spec:
+      containers:
+      - name: app
+        envFrom:
+        - configMapRef:
+            name: shared-name
+`);
+  const store = new HunchStore(hunchPaths(root));
+  store.json.ensureDirs();
+  indexRepo(store, root, { churn: false });
+  store.reindex();
+
+  const syms = store.json.loadAll("symbols");
+  const deployment = syms.find((s) => s.name === "Deployment/my-app");
+  const edges = store.json.loadAll("edges");
+  assert.equal(edges.filter((e) => e.type === "references" && e.from === deployment!.id).length, 0, "an unknown-namespace candidate stays compatible, so two candidates survive the filter and the existing don't-guess rule declines");
+
+  store.close();
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("a Service's selector in namespace a binds a label-matching workload with no namespace but NOT one in namespace b", () => {
+  const root = mkdtempSync(join(tmpdir(), "hunch-idx-k8sns-sel-"));
+  mkdirSync(join(root, "manifests"), { recursive: true });
+  writeFileSync(join(root, "Chart.yaml"), `apiVersion: v2\nname: mychart\nversion: 0.1.0\n`);
+  writeFileSync(join(root, "manifests/service.yaml"), `
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-service
+  namespace: a
+spec:
+  selector:
+    app: my-app
+`);
+  writeFileSync(join(root, "manifests/deployment-b.yaml"), `
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-in-b
+  namespace: b
+spec:
+  template:
+    metadata:
+      labels:
+        app: my-app
+    spec:
+      containers:
+      - name: app
+`);
+  writeFileSync(join(root, "manifests/deployment-unknown.yaml"), `
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-no-ns
+spec:
+  template:
+    metadata:
+      labels:
+        app: my-app
+    spec:
+      containers:
+      - name: app
+`);
+  const store = new HunchStore(hunchPaths(root));
+  store.json.ensureDirs();
+  indexRepo(store, root, { churn: false });
+  store.reindex();
+
+  const syms = store.json.loadAll("symbols");
+  const service = syms.find((s) => s.name === "Service/my-service");
+  const inB = syms.find((s) => s.name === "Deployment/app-in-b");
+  const noNs = syms.find((s) => s.name === "Deployment/app-no-ns");
+  assert.ok(service && inB && noNs, "all three resource symbols indexed");
+
+  const edges = store.json.loadAll("edges");
+  assert.equal(edges.some((e) => e.from === service!.id && e.to === inB!.id), false, "a Service never selects pods in another namespace, however well the labels match");
+  assert.ok(edges.some((e) => e.from === service!.id && e.to === noNs!.id && e.type === "references"), "an unknown-namespace workload still matches");
+
+  store.close();
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("a Deployment in namespace a resolves to the only ConfigMap when that ConfigMap has NO namespace", () => {
+  // The mirror of the cross-namespace block above: unknown matches anything in
+  // BOTH directions, so a literal-namespace reference still reaches a target
+  // whose namespace this scanner could not name.
+  const root = mkdtempSync(join(tmpdir(), "hunch-idx-k8sns-lit-unknown-"));
+  mkdirSync(join(root, "templates"), { recursive: true });
+  writeFileSync(join(root, "Chart.yaml"), `apiVersion: v2\nname: mychart\nversion: 0.1.0\n`);
+  writeFileSync(join(root, "templates/configmap.yaml"), `apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: my-config\n`);
+  writeFileSync(join(root, "templates/deployment.yaml"), `
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-app
+  namespace: a
+spec:
+  template:
+    spec:
+      containers:
+      - name: app
+        envFrom:
+        - configMapRef:
+            name: my-config
+`);
+  const store = new HunchStore(hunchPaths(root));
+  store.json.ensureDirs();
+  indexRepo(store, root, { churn: false });
+  store.reindex();
+
+  const syms = store.json.loadAll("symbols");
+  const deployment = syms.find((s) => s.name === "Deployment/my-app");
+  const configMap = syms.find((s) => s.name === "ConfigMap/my-config");
+  assert.ok(deployment && configMap, "both resource symbols indexed");
+  const edges = store.json.loadAll("edges");
+  assert.ok(edges.some((e) => e.from === deployment!.id && e.to === configMap!.id && e.type === "references"), "a literal-namespace reference still reaches an unknown-namespace target");
+
+  store.close();
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("a Service with NO namespace selects a label-matching workload in namespace b, and a Service in b selects the one in b", () => {
+  // The selector-side mirrors of the test above: unknown on the SELECTOR side
+  // matches anything, and two matching literals still bind.
+  const root = mkdtempSync(join(tmpdir(), "hunch-idx-k8sns-sel-unknown-"));
+  mkdirSync(join(root, "manifests"), { recursive: true });
+  writeFileSync(join(root, "Chart.yaml"), `apiVersion: v2\nname: mychart\nversion: 0.1.0\n`);
+  writeFileSync(join(root, "manifests/service-unknown.yaml"), `
+apiVersion: v1
+kind: Service
+metadata:
+  name: svc-no-ns
+spec:
+  selector:
+    app: my-app
+`);
+  writeFileSync(join(root, "manifests/service-b.yaml"), `
+apiVersion: v1
+kind: Service
+metadata:
+  name: svc-in-b
+  namespace: b
+spec:
+  selector:
+    app: my-app
+`);
+  writeFileSync(join(root, "manifests/deployment-b.yaml"), `
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-in-b
+  namespace: b
+spec:
+  template:
+    metadata:
+      labels:
+        app: my-app
+    spec:
+      containers:
+      - name: app
+`);
+  const store = new HunchStore(hunchPaths(root));
+  store.json.ensureDirs();
+  indexRepo(store, root, { churn: false });
+  store.reindex();
+
+  const syms = store.json.loadAll("symbols");
+  const svcNoNs = syms.find((s) => s.name === "Service/svc-no-ns");
+  const svcInB = syms.find((s) => s.name === "Service/svc-in-b");
+  const inB = syms.find((s) => s.name === "Deployment/app-in-b");
+  assert.ok(svcNoNs && svcInB && inB, "all three resource symbols indexed");
+
+  const edges = store.json.loadAll("edges");
+  assert.ok(edges.some((e) => e.from === svcNoNs!.id && e.to === inB!.id && e.type === "references"), "an unknown-namespace Service still selects a literal-namespace workload");
+  assert.ok(edges.some((e) => e.from === svcInB!.id && e.to === inB!.id && e.type === "references"), "two identical literal namespaces bind");
+
+  store.close();
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("a Deployment whose namespace is PARTIALLY templated still resolves to the only ConfigMap in namespace app-prod", () => {
+  // `app-{{ .Values.env }}` is not a namespace this scanner can compare, so it
+  // must read as unknown -- reading it as the literal text would block the
+  // very edge it renders to, a regression against what resolved before #297.
+  const root = mkdtempSync(join(tmpdir(), "hunch-idx-k8sns-parttpl-"));
+  mkdirSync(join(root, "templates"), { recursive: true });
+  writeFileSync(join(root, "Chart.yaml"), `apiVersion: v2\nname: mychart\nversion: 0.1.0\n`);
+  writeFileSync(join(root, "templates/configmap.yaml"), `apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cfg\n  namespace: app-prod\n`);
+  writeFileSync(join(root, "templates/deployment.yaml"), `
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-app
+  namespace: app-{{ .Values.env }}
+spec:
+  template:
+    spec:
+      containers:
+      - name: app
+        envFrom:
+        - configMapRef:
+            name: cfg
+`);
+  const store = new HunchStore(hunchPaths(root));
+  store.json.ensureDirs();
+  indexRepo(store, root, { churn: false });
+  store.reindex();
+
+  const syms = store.json.loadAll("symbols");
+  const deployment = syms.find((s) => s.name === "Deployment/my-app");
+  const configMap = syms.find((s) => s.name === "ConfigMap/cfg");
+  assert.ok(deployment && configMap, "both resource symbols indexed");
+  const edges = store.json.loadAll("edges");
+  assert.ok(edges.some((e) => e.from === deployment!.id && e.to === configMap!.id && e.type === "references"), "a partially templated namespace is unknown, and unknown never blocks an edge");
+
+  store.close();
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("a Deployment whose namespace is the YAML null word still resolves to the only ConfigMap in namespace app-prod", () => {
+  const root = mkdtempSync(join(tmpdir(), "hunch-idx-k8sns-null-"));
+  mkdirSync(join(root, "templates"), { recursive: true });
+  writeFileSync(join(root, "Chart.yaml"), `apiVersion: v2\nname: mychart\nversion: 0.1.0\n`);
+  writeFileSync(join(root, "templates/configmap.yaml"), `apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cfg\n  namespace: app-prod\n`);
+  writeFileSync(join(root, "templates/deployment.yaml"), `
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-app
+  namespace: null
+spec:
+  template:
+    spec:
+      containers:
+      - name: app
+        envFrom:
+        - configMapRef:
+            name: cfg
+`);
+  const store = new HunchStore(hunchPaths(root));
+  store.json.ensureDirs();
+  indexRepo(store, root, { churn: false });
+  store.reindex();
+
+  const syms = store.json.loadAll("symbols");
+  const deployment = syms.find((s) => s.name === "Deployment/my-app");
+  const configMap = syms.find((s) => s.name === "ConfigMap/cfg");
+  assert.ok(deployment && configMap, "both resource symbols indexed");
+  const edges = store.json.loadAll("edges");
+  assert.ok(edges.some((e) => e.from === deployment!.id && e.to === configMap!.id && e.type === "references"), "`namespace: null` is the same empty value as an absent key, so it must not block");
+
+  store.close();
+  rmSync(root, { recursive: true, force: true });
 });

@@ -1,0 +1,107 @@
+{
+  "id": "dec_ae73d8ebd9",
+  "title": "Prioritize local semantic honesty; bridge mismatch with explicit docs",
+  "topic": null,
+  "status": "accepted",
+  "context": "helm.ts's fields named *Byte were actually UTF-16 code unit indices (JS char offsets), not UTF-8 bytes. The misleading names could confuse future readers about what the values represent. The shared ParsedSymbol/ParsedCall types also have *Byte fields that are semantically char offsets in practice (issue #84), but changing those would ripple across all callers.",
+  "decision": "Rename helm.ts's fields to *Char to reflect their actual semantics. When merging into the shared ParsedSymbol/ParsedCall array in indexer.ts, map the *Char values into the array's *Byte fields with explicit documentation explaining that both are char offsets in practice—preserving the shared interface while fixing local correctness and surfacing the broader semantic bug.",
+  "consequences": [
+    "helm.ts is now locally semantically correct and self-documenting",
+    "An impedance mismatch is created at the merge point in indexer.ts that requires ongoing documentation",
+    "The bug in the shared types (ParsedSymbol/ParsedCall naming *Byte for char offsets) is now explicitly documented but unfixed",
+    "Future refactor to fix the shared types is clearly identified as issue #84",
+    "helm.ts and indexer.ts now both carry detailed comments about the semantic mismatch"
+  ],
+  "alternatives_rejected": [
+    "Rename *Byte to *Char throughout ParsedSymbol/ParsedCall to truly fix the root issue (large refactor affecting all callers, deferred to issue #84)",
+    "Keep helm.ts's misleading *Byte names to avoid a merge-point mismatch (perpetuates the lie locally)",
+    "Add a conversion layer that translates char offsets to actual UTF-8 byte offsets (wasteful, incorrect for the actual use case)"
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Rename *Byte to *Char throughout ParsedSymbol/ParsedCall to truly fix the root issue (large refactor affecting all callers, deferred to issue #84)",
+      "scope": [
+        "src/extractors/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Keep helm.ts's misleading *Byte names to avoid a merge-point mismatch (perpetuates the lie locally)",
+      "scope": [
+        "src/extractors/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Add a conversion layer that translates char offsets to actual UTF-8 byte offsets (wasteful, incorrect for the actual use case)",
+      "scope": [
+        "src/extractors/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_a94a8fe5cc",
+    "cmp_e0ccfe26fe",
+    "cmp_f27fede222"
+  ],
+  "related_files": [
+    "src/extractors/helm.ts",
+    "src/extractors/indexer.ts",
+    "test/helm.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "decfb6df",
+  "valid_from": "2026-09-16T18:09:36+02:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft",
+    "confidence": 0.65,
+    "evidence": [
+      "commit:decfb6df",
+      "synth:provider=claude-cli",
+      "branch:upstream-pr/byte-vs-char-offsets",
+      "src/extractors/helm.ts",
+      "src/extractors/indexer.ts",
+      "test/helm.test.ts"
+    ],
+    "last_verified": "2026-09-16T16:09:55.508Z"
+  },
+  "date": "2026-09-16T18:09:36+02:00"
+}

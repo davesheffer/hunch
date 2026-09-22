@@ -58,6 +58,14 @@ export interface DeliverySupplement {
   text: string;
   /** Higher values are attempted first after ranked memory. */
   priority?: number;
+  /** Stable IDENTITY of the records behind `text`, for callers that dedup
+   *  injections by hash (the pre-edit hook). Some supplements are
+   *  self-invalidating: serving them writes delivery receipts, and the next
+   *  render's wording, scores or slot order move with no record change. Set this
+   *  to what is a property of the record — never of delivery state or the clock —
+   *  and `deliveryDedupeInput` swaps it in for `text` when hashing. Omitted →
+   *  `text` is its own identity. Never shown to the agent. */
+  hash_text?: string;
 }
 
 export interface DeliveredSupplement {
@@ -168,6 +176,9 @@ const MIN_ADVISORY_CONFIDENCE = 0.5;
 const MIN_UNCONDITIONED_CONFIDENCE = 0.7;
 const MAX_ACTIONABLE_HYPOTHESES = 2;
 const MAX_PROFILE_HEADLINES = 8;
+/** How far a supplement's text is clipped in the rendered line. Shared so
+ *  `deliveryDedupeInput` can reconstruct that exact line to project over it. */
+const SUPPLEMENT_HEADLINE_CHARS = 700;
 const PROFILE_BASE_SCORE: Record<DeliveryProfile, Record<DeliveryKind, number>> = {
   builder: {
     constraints: 900,
@@ -619,6 +630,57 @@ export function assertDeliveryEnvelope(envelope: DeliveryEnvelope): void {
   }
 }
 
+/** The string a hash-based injection dedup (`injectionMode`'s `hashInput`) must
+ *  key on instead of the rendered block: a STABLE IDENTITY PROJECTION of this
+ *  envelope.
+ *
+ *  THE RULE, for every caller and every provider: nothing that depends on
+ *  delivery receipts, ranking warmth or scores, slot labels, line ORDER, or
+ *  `now` may enter the dedupe hash; a record entering, leaving, or changing
+ *  content MUST. Grounding that violates it is self-invalidating — serving the
+ *  block writes delivery receipts, the next call's ranking reads them back, the
+ *  wording moves ("today" → "delivered today"), the hash changes, and the full
+ *  block is re-sent for records the agent already has.
+ *
+ *  The projection, done line-wise over the one text the assembler produced:
+ *  - a supplement that declared `hash_text` contributes that identity (kind +
+ *    record id + the record's own content hash) instead of its rendered line —
+ *    that is where reason text, slot labels and age words live;
+ *  - every other line contributes verbatim, because it is already a property of
+ *    the records (id, statement, scope, provenance tier, validation state);
+ *  - each contiguous run of `- ` list lines is SORTED, so a pure re-ordering of
+ *    the same records is not a change while a record entering or leaving the run
+ *    still is.
+ *
+ *  Nothing is removed from what the agent SEES — this string is never emitted.
+ *  Never throws: on any surprise the caller gets `envelope.text` back, i.e. the
+ *  original hash-the-presentation behaviour (a full block, never a wrong delta). */
+export function deliveryDedupeInput(envelope: DeliveryEnvelope, supplements: readonly DeliverySupplement[] = []): string {
+  try {
+    const identity = new Map<string, string>();
+    for (const s of supplements) {
+      if (s.hash_text === undefined) continue;
+      // Key on the line exactly as the assembler rendered it, so the swap is a
+      // substitution and never a guess about the text's shape.
+      identity.set(
+        `- supplemental/${s.kind} | ${clipHeadline(s.text, SUPPLEMENT_HEADLINE_CHARS)}`,
+        `- supplemental/${s.kind} | identity\u0000${s.hash_text}`,
+      );
+    }
+    const projected: string[] = [];
+    let run: string[] = [];
+    const flush = () => { if (run.length) { projected.push(...run.sort()); run = []; } };
+    for (const line of envelope.text.split("\n")) {
+      if (!line.startsWith("- ")) { flush(); projected.push(line); continue; }
+      run.push(identity.get(line) ?? line);
+    }
+    flush();
+    return projected.join("\n");
+  } catch {
+    return envelope.text; // the projection is an optimization, never a correctness dependency
+  }
+}
+
 /** Build the one envelope used by CLI, MCP, and the edit hook. */
 export function buildDeliveryEnvelope(ctx: AssembledContext, options: DeliveryOptions = {}): DeliveryEnvelope {
   const profile = options.profile ?? "builder";
@@ -944,7 +1006,7 @@ export function buildDeliveryEnvelope(ctx: AssembledContext, options: DeliveryOp
   ].sort((left, right) => (right.priority ?? 0) - (left.priority ?? 0) || left.id.localeCompare(right.id));
 
   for (const [index, supplement] of supplementalCandidates.entries()) {
-    const content = clipHeadline(supplement.text, 700);
+    const content = clipHeadline(supplement.text, SUPPLEMENT_HEADLINE_CHARS);
     if (!content) {
       supplements.push({ id: supplement.id, kind: supplement.kind, delivered: false, reason: "empty", rank: index + 1, token_cost: 0 });
       continue;

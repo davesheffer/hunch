@@ -122,7 +122,8 @@ function exactDiff(
   resultRevision: string,
 ): { diff: string; gaps: GapEvidence[] } {
   const raw = gitBytes(root, [
-    "diff", "--no-ext-diff", "--no-textconv", "--no-color", "--no-renames", "--unified=2",
+    "-c", "core.quotePath=false",
+    "diff", "--no-ext-diff", "--no-textconv", "--no-color", "--no-renames", "--unified=2", "--src-prefix=a/", "--dst-prefix=b/",
     baseRevision, resultRevision, "--",
   ]);
   if (raw.byteLength <= MAX_DIFF_BYTES) return { diff: raw.toString("utf8"), gaps: [] };
@@ -355,6 +356,9 @@ export function deriveChangeProof(
   const guardReport = store.buildCheckReport(changed.paths, diff.diff, {
     strict: true,
     publicOnly,
+    // A diff cut at MAX_DIFF_BYTES is a prefix: content-matched blocking rules over the
+    // files it omits fail closed rather than read as compliant (dec_20db57c576).
+    diffStatus: diff.gaps.length ? { incomplete: `the guard diff exceeded ${MAX_DIFF_BYTES} bytes and was cut`, truncated: true } : undefined,
     lastChange: (path) => lastChangeAt(root, change.head_revision, path),
   });
   const allStrictBlockerIds = sortedUnique([

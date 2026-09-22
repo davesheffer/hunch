@@ -6,6 +6,7 @@ import { shortHash } from "../core/ids.js";
 import { resolveRelativeImport } from "../core/relativeImports.js";
 import type { Component, Decision, Edge, Symbol } from "../core/types.js";
 import { commitMeta, type CommitMeta } from "../extractors/git.js";
+import { isParserLoadError } from "../extractors/nativeTreeSitter.js";
 import type { HunchStore } from "../store/hunchStore.js";
 import { canonicalHash } from "./canonical.js";
 import { clampCandidateLimit, durationCutoff, type BootstrapOptions, type BootstrapReport } from "./bootstrap.js";
@@ -732,6 +733,14 @@ export function bootstrapStructuralPolicies(
       }, { private: isPrivate });
       report.compiled.push({ evidence: event, policy });
     } catch (e) {
+      // "uncompilable" is a verdict ABOUT the decision, and it is written to
+      // evidence. A dead native parser (extractStructuralDelta parses the
+      // commit's sources) says nothing about the decision — recording it would
+      // stamp every eligible decision uncompilable with a TMPDIR error as the
+      // stated reason, and a later run with a working parser would only
+      // reclassify what `canReclassify` still allows. Fail the bootstrap
+      // instead, the way the import-time load did.
+      if (isParserLoadError(e)) throw e;
       report.uncompilable++;
       const reason = (e as Error).message;
       if (canReclassify(prior) && (prior?.compiler?.status !== "uncompilable" || prior.compiler.reason !== reason)) {

@@ -5,9 +5,9 @@
  * other record, appended atomically (con_902759b3dc). It holds the strictly ordered
  * ChangeEvent stream for that scope (seq 1, 2, 3 … with no gaps) plus the idempotency
  * table the write verb replays from. Seq is per scope, assigned by the writer in the
- * home the scope lives in; a scope has exactly ONE ledger, so there is never a second
- * sequence to reconcile. Merging two clones' ledgers for the same scope is not decided
- * here (see docs/nuryel-state-contract.md, "Not decided here").
+ * home the scope lives in; a scope has exactly ONE ledger per clone, so within a clone there
+ * is never a second sequence to reconcile. Two clones that both appended to one scope are
+ * reconciled by `mergeLedgers` (below), for the git merge driver.
  */
 import { mkdirSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
@@ -38,8 +38,9 @@ export const LedgerSchema = z.object({
   schema: z.literal(LEDGER_SCHEMA_VERSION),
   scope: ScopeSchema,
   head_seq: z.number().int().nonnegative(),
-  /** Events below this seq were compacted away. `events` starts at floor_seq + 1. A subscriber
-   *  whose cursor is below the floor must resynchronize (the contract's gap rule, made explicit). */
+  /** Events below this seq were compacted away, or were invalidated by a merge that renumbered
+   *  them (see `mergeLedgers`). `events` starts at floor_seq + 1. A subscriber whose cursor is
+   *  below the floor must resynchronize (the contract's gap rule, made explicit). */
   floor_seq: z.number().int().nonnegative().default(0),
   events: z.array(ChangeEventSchema),
   idempotency: z.record(z.string(), IdempotencyEntrySchema).default({}),
@@ -165,9 +166,15 @@ const eventIdentity = (e: ChangeEvent): string => [e.change, e.facet, e.record_i
 /** Three-way merge of one scope's ledger, for the git merge driver: two clones that both
  *  appended to the same partition. The union of events is kept (identity = what changed, to
  *  which hash, when, by whom), ordered by time then ours-before-theirs, and RE-SEQUENCED from
- *  the higher floor; every subscriber's cursor is therefore invalid after a merge and the gap
- *  rule makes it resynchronize. Idempotency entries are unioned; a key both sides used for
- *  different records is a conflict the caller must surface (ours is kept). */
+ *  the higher floor. When that renumbering moves an event either side had already published,
+ *  no pre-merge cursor of EITHER side can be trusted — a cursor could otherwise sit above an
+ *  event that now holds a lower seq and never see it (issue #285). The floor is then raised
+ *  past BOTH pre-merge heads, so every such cursor satisfies subscribe's `after_seq <
+ *  floor_seq` and resynchronizes from the floor; a cursor equal to the larger head is exactly
+ *  the failing case, hence the `+ 1`. A merge that renumbers nothing keeps today's seqs (no
+ *  cursor could have seen a different numbering) and the floor stays put. Idempotency entries
+ *  are unioned; a key both sides used for different records is a conflict the caller must
+ *  surface (ours is kept). */
 export function mergeLedgers(base: Ledger | null, ours: Ledger, theirs: Ledger): { ledger: Ledger; conflicts: string[] } {
   if (scopePath(ours.scope) !== scopePath(theirs.scope)) throw new Error("ledgers for different scopes cannot be merged");
   const seen = new Map<string, ChangeEvent>();
@@ -176,9 +183,27 @@ export function mergeLedgers(base: Ledger | null, ours: Ledger, theirs: Ledger):
   for (const e of base?.events ?? []) add(e);
   for (const e of ours.events) add(e);
   for (const e of theirs.events) add(e);
-  const ranked = order.map((e, i) => ({ e, i, side: (ours.events.includes(e) ? 0 : 1) }));
+  // The tiebreak is "ours before theirs", so only an event theirs ALONE contributed sorts late:
+  // side 1 iff theirs holds it and neither ours nor base does. Deciding by object identity
+  // (`includes`) would instead put anything ours compacted away — base's object, which `add`
+  // keeps — after its same-`at` siblings and silently reorder a batch both sides already had.
+  const ourIdentities = new Set(ours.events.map(eventIdentity));
+  const baseIdentities = new Set((base?.events ?? []).map(eventIdentity));
+  const theirsOnly = (e: ChangeEvent): boolean => {
+    const k = eventIdentity(e);
+    return !ourIdentities.has(k) && !baseIdentities.has(k);
+  };
+  const ranked = order.map((e, i) => ({ e, i, side: (theirsOnly(e) ? 1 : 0) }));
   ranked.sort((a, b) => a.e.at.localeCompare(b.e.at) || a.side - b.side || a.i - b.i);
-  const floor = Math.max(base?.floor_seq ?? 0, ours.floor_seq, theirs.floor_seq);
+  const theirSeqs = new Map(theirs.events.map((e) => [eventIdentity(e), e.seq]));
+  const ourSeqs = new Map(ours.events.map((e) => [eventIdentity(e), e.seq]));
+  let floor = Math.max(base?.floor_seq ?? 0, ours.floor_seq, theirs.floor_seq);
+  const renumbers = ranked.some(({ e }, i) => {
+    const k = eventIdentity(e);
+    const merged = floor + i + 1;
+    return (ourSeqs.get(k) ?? merged) !== merged || (theirSeqs.get(k) ?? merged) !== merged;
+  });
+  if (renumbers) floor = Math.max(floor, Math.max(ours.head_seq, theirs.head_seq) + 1);
   const events = ranked.map(({ e }, i) => ({ ...e, seq: floor + i + 1 }));
   const conflicts: string[] = [];
   const idempotency: Ledger["idempotency"] = { ...(base?.idempotency ?? {}), ...theirs.idempotency, ...ours.idempotency };

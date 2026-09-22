@@ -45,6 +45,37 @@ test("hookcache: resetSessionInjections forgets a session — compaction must re
   assert.equal(injectionMode(other, "k", "X"), "delta", "resetting nothing leaves other sessions intact");
 });
 
+test("hookcache: an explicit hashInput dedups on record identity, not on presentation", () => {
+  const sid = SID();
+  // Self-invalidating content: serving it moves the wording ("today" →
+  // "delivered today") with no record change. The identity is what must decide.
+  assert.equal(injectionMode(sid, "pre:src/a.ts", "task htask_1 · today", "htask_1@rev1"), "full");
+  assert.equal(
+    injectionMode(sid, "pre:src/a.ts", "task htask_1 · delivered today", "htask_1@rev1"),
+    "delta",
+    "different content, same record identity → delta; a delivery receipt cannot re-send the full block",
+  );
+  assert.equal(
+    injectionMode(sid, "pre:src/a.ts", "task htask_1 · today", "htask_1@rev2"),
+    "full",
+    "the record's own content changed → full, even though this text was shown before",
+  );
+});
+
+test("hookcache: omitting hashInput keeps the documented content-hash contract", () => {
+  const sid = SID();
+  assert.equal(injectionMode(sid, "k", "GROUNDING v1"), "full");
+  assert.equal(injectionMode(sid, "k", "GROUNDING v1"), "delta");
+  // A caller that passes content as its own hash input is identical to omitting it.
+  assert.equal(injectionMode(sid, "k", "GROUNDING v1", "GROUNDING v1"), "delta");
+  assert.equal(injectionMode(sid, "k", "GROUNDING v2"), "full", "no hashInput → any content change is still a change");
+  // The two modes share one map per key, so a stable identity keyed the same way
+  // still dedups against what a content-hashed call recorded.
+  const other = SID();
+  assert.equal(injectionMode(other, "k", "X", "id-1"), "full");
+  assert.equal(injectionMode(other, "k", "Y", "id-1"), "delta");
+});
+
 test("hookcache: a corrupt cache file degrades to full (grounded beats deduped), then recovers", () => {
   const sid = SID();
   assert.equal(injectionMode(sid, "k", "X"), "full");

@@ -111,7 +111,8 @@ Captured rules use the existing Constraint store and remain non-blocking
 `agent_recorded` testimony. They contain the explicit invariant, a check in the
 rationale, and links/hashes of the source evidence. No raw comment body is copied
 into ambient instructions. No regex or executable matcher is inferred. Blocking
-authority still requires Hunch's existing human capture/countersign flow.
+authority still requires a human confirmation (`hunch review --confirm <id> --severity blocking`); a
+capture token alone never grants it.
 
 ## Use during bug fixes, including Sofia
 

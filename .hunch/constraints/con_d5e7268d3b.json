@@ -1,0 +1,24 @@
+{
+  "id": "con_d5e7268d3b",
+  "type": "correctness",
+  "statement": "A doc that describes SHIPPED behaviour must state what the code does, not what an earlier draft of the plan proposed: when a planning document becomes the document of record, re-verify every specific claim (thresholds, intervals, mechanisms, flags) against the implementation and rewrite the ones that drifted.",
+  "scope": [
+    "docs/workspace-ledger.md"
+  ],
+  "severity": "warning",
+  "enforcement": "advisory_v1",
+  "match": null,
+  "forbids": null,
+  "rationale": "David, 2026-09-17 (commit 3847af9): the shipped doc still claimed the hook 'skips entirely when the stored record is younger than 60 seconds'. That was a throttle proposed in the planning draft and never built; the implemented guard is `Date.now() - observed_at < 86_400_000 && sameWorkspaceContent(...)` — one day AND unchanged content. The same audit found a second survivor in the same paragraph ('detached spawn', a mechanism removed when the session-start child was dropped). A plan doc promoted to the document of record carries claims nobody re-checked, and a false claim about shipped behaviour is worse than no doc: it is doc-vs-code drift, exactly what this repository exists to prevent.",
+  "source_decision": null,
+  "violations": [],
+  "status": "active",
+  "valid_from": "2026-09-17T09:42:53.588Z",
+  "valid_to": null,
+  "provenance": {
+    "source": "agent_recorded",
+    "confidence": 0.75,
+    "evidence": [],
+    "last_verified": "2026-09-17T09:42:53.588Z"
+  }
+}

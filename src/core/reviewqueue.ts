@@ -61,7 +61,12 @@ export const READY_MIN_GROUNDED = 0.7;
  *  explicit roadmap/intent entry a human hasn't confirmed — counts as a review draft.
  *  (Enforcement authority is granted INLINE, not by draining a background queue.) */
 export function isReviewDraft(d: Decision): boolean {
-  return d.status === "proposed" && !d.provenance.source.includes("human_confirmed");
+  // Agent testimony (agent_recorded) is deliberate intent, not a machine draft: it shows
+  // on the roadmap marked unconfirmed, and a human confirms it with `hunch review
+  // --confirm`. Keeping it out of the draft queue keeps `adopt-drafts` / `auto-review`
+  // from accepting or rejecting it in bulk.
+  return d.status === "proposed" && !d.provenance.source.includes("human_confirmed")
+    && !d.provenance.source.split("+").includes("agent_recorded");
 }
 
 export interface ReviewItem {

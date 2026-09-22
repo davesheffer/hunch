@@ -46,6 +46,18 @@ export function movePublicMemoryToPrivate(pub: JsonStore, priv: JsonStore): Move
     }
     if (pubRecs.length === 0) continue;
     const privRecs = priv.loadAll(kind) as Array<Record<string, unknown>>;
+    // Same proof for the OVERLAY side: replaceAll below deletes every overlay
+    // file whose id is not in the merged set, and a record the loader skipped
+    // is never in it — so an unloadable overlay record (corrupt, or written by
+    // a newer Hunch) would be deleted as "stale" and the deletion pushed to the
+    // shared remote (issue #289).
+    const privRawCount = priv.rawRecordCount(kind);
+    if (privRawCount !== privRecs.length) {
+      throw new Error(
+        `refusing to migrate ${kind}: ${privRawCount - privRecs.length} overlay record(s) failed to load (see the warnings above) `
+        + `and would be deleted from the overlay by the merge. Fix or remove them (or update Hunch if they come from a newer version), then re-run \`hunch private --migrate\`.`,
+      );
+    }
     // base=[] so both sides' records are treated as additions; collisions resolved
     // by pickWinner. Public is "theirs", private "ours" — order is irrelevant since
     // pickWinner is symmetric for equal-provenance records.

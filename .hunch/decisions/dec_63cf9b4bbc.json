@@ -1,0 +1,51 @@
+{
+  "id": "dec_63cf9b4bbc",
+  "title": "Workspace ledger lives in the git-native memory store as one record per machine, synced through the overlay — not the state server",
+  "topic": "workspace-ledger.storage",
+  "status": "accepted",
+  "context": "Developers on several machines accumulate branches and worktrees; answering what is open where, what is merged and what can be deleted was an agent conversation per machine, every time. The user ruled the served state layer (hunch serve) out: it is for agents, and this must live in the regular code flow.",
+  "decision": "A `workspaces` record kind (hunch.workspace/1), one file per machine per repository (`ws_<machine id>`), written through the ordinary capture funnel: the private/shared overlay when one is configured, the public .hunch/ only with workspaces.publish_public, nothing otherwise. Because each machine owns exactly one file, overlay sync never conflicts and needs no merge-driver change. Machine identity is a random 128-bit id at the user level (XDG config, 0600), never hostname/hardware derived; the default label is machine-<4 hex>; publish defaults to `branches` (no paths). This machine is always read LIVE from git; stored records are display-only.",
+  "consequences": [
+    "No new server, daemon, port, token or dependency.",
+    "Nothing leaves a machine except through the overlay git remote the organization already configured.",
+    "An older Hunch ignores the new directory; no schema bump."
+  ],
+  "alternatives_rejected": [
+    "The served state layer (`hunch serve`, nuryel facets) — the user: it is for agents, not the code flow; it needs a token and a running server.",
+    "Machine id in per-repo .hunch/local.json — a fresh clone must report as the same machine, so identity is user-level.",
+    "Hostname as the default label / full paths by default — leaks personal data and directory layout into a shared store; both are explicit opt-ins.",
+    "A shared file all machines append to — last-writer-wins and merge conflicts; one file per machine cannot conflict."
+  ],
+  "rejected_tripwires": [],
+  "related_components": [],
+  "related_files": [
+    "docs/workspace-ledger.md",
+    "src/core/workspace.ts",
+    "src/core/machine.ts",
+    "src/extractors/workspaces.ts",
+    "src/integrations/workspaceLedger.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-09-17T06:49:13.049Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "premises": [],
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 0.95,
+    "evidence": [
+      "docs/workspace-ledger.md",
+      "src/core/workspace.ts",
+      "src/core/machine.ts",
+      "src/extractors/workspaces.ts",
+      "src/integrations/workspaceLedger.ts"
+    ]
+  },
+  "date": "2026-09-17T06:49:13.049Z"
+}

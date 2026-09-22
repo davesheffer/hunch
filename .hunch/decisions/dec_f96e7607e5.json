@@ -1,0 +1,49 @@
+{
+  "id": "dec_f96e7607e5",
+  "title": "Merged verdicts are deterministic (ancestry, squash by patch-id, rebase by patch-id map) and `unknown` is never collapsed into `unmerged`",
+  "topic": "workspace-ledger.merge-verdicts",
+  "status": "accepted",
+  "context": "A branch is deletable only if its work is in the default branch. Squash and rebase merges leave no ancestry, so ancestry alone would keep every squash-merged branch forever; a wrong 'merged' would delete unmerged work.",
+  "decision": "Three methods with evidence: `ancestry` (merge-base --is-ancestor), `squash` (the patch-id of the branch's whole diff since merge-base equals the patch-id of one default-branch commit, from ONE `git log -p | git patch-id --stable` pipeline over the last 2000 commits), `rebase` (every branch commit's patch-id is in that same map). A git failure or unreadable history yields `unknown` / 'search unavailable' — never `unmerged`, never `merged`. upstream_gone is its own signal, not a merged verdict. A merged branch carries the PR number only from the LOCAL merge/squash commit subject, never fetched from a forge.",
+  "consequences": [
+    "Cost is bounded by branch size plus one pass over main's recent history, not by main's history per branch.",
+    "A false 'merged' requires an identical diff already in main, so the failure mode is conservative (a stale branch kept), never a deletion."
+  ],
+  "alternatives_rejected": [
+    "`git cherry` per branch for rebase detection — its cost grows with the default branch's history for EVERY branch checked (red-team finding); the one-time patch-id map replaces it.",
+    "Treating a deleted upstream as merged — a branch can be deleted remotely without merging.",
+    "Asking GitHub for PR state — a network call and a credential in a snapshot that must stay offline and deterministic."
+  ],
+  "rejected_tripwires": [],
+  "related_components": [],
+  "related_files": [
+    "docs/workspace-ledger.md",
+    "src/core/workspace.ts",
+    "src/core/machine.ts",
+    "src/extractors/workspaces.ts",
+    "src/integrations/workspaceLedger.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-09-17T06:49:13.323Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "premises": [],
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 0.95,
+    "evidence": [
+      "docs/workspace-ledger.md",
+      "src/core/workspace.ts",
+      "src/core/machine.ts",
+      "src/extractors/workspaces.ts",
+      "src/integrations/workspaceLedger.ts"
+    ]
+  },
+  "date": "2026-09-17T06:49:13.323Z"
+}

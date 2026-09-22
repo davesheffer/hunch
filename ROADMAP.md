@@ -29,6 +29,7 @@ not a plan.
 | [Competitive landscape](https://github.com/davesheffer/hunch-private/blob/main/projects/hunch/docs/competitive-landscape.md) | dated snapshots, append-only |
 | [Engineering Landscape](docs/engineering-landscape.md), [Project DNA](docs/project-dna.md), [Project DNA Engine](docs/project-dna-engine.md), [Native change proof](docs/change-proof.md), [Outcome experience protocol](https://github.com/davesheffer/hunch-private/blob/main/projects/hunch/docs/outcome-experience-protocol.md) | shipped engine primitives the state layer builds on |
 | [Outreach pipeline](https://github.com/davesheffer/hunch-private/blob/main/projects/hunch/docs/outreach-pipeline.md), [MCP registry](docs/mcp-registry.md) | founder-led pilot recruitment; per-release registry publish |
+| [Workspace ledger](docs/workspace-ledger.md) | plan (not shipped): per-machine branch and worktree memory synced through the overlay, with deterministic merged/prunable verdicts |
 | Sofia repository: `docs/sofia-baseline.md`, `docs/sofia-state.md` | the pilot's baseline ledger and Sofia's use of the contract |
 
 A private overlay holds the plan of record, the Constitution dossier and product direction; this

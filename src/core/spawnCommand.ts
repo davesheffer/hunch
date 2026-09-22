@@ -25,14 +25,40 @@ export interface SpawnResolveOptions {
   exists?: (path: string) => boolean;
 }
 
-/** cmd.exe quoting for one argument: wrap when it has whitespace or shell
- * metacharacters; double embedded quotes. Good for test/build commands; a
- * deliberately hostile argument still cannot escape because the whole line is
- * passed as one `/s /c "..."` token. */
+/** Quote one argument for a `cmd.exe /d /v:off /s /c "<line>"` launch of a
+ * batch file whose target program parses its command line with the MSVCRT
+ * rules (Node, Python, most native tools).
+ *
+ * Two parsers read the line, and a batch shim that forwards `%*` makes cmd.exe
+ * read it again, so the quoting must mean the same thing to both on every pass:
+ *
+ * - Every non-trivial argument is wrapped in quotes. An embedded quote becomes
+ *   `""` (not `\"`): MSVCRT reads `""` inside a quoted argument as one literal
+ *   quote, and cmd.exe sees two toggles, so its quote state never drifts from
+ *   the argument boundaries and `& | < > ( ) ^` always stay inside quotes.
+ *   A `\"` would look escaped to MSVCRT but end the quoted region for cmd.exe.
+ * - Backslashes are literal except before a quote, so a run of backslashes that
+ *   precedes an embedded or closing quote is doubled.
+ * - `%` expands even inside quotes. It is emitted as `"^%"`: the quote closes,
+ *   the caret escapes the percent outside quotes (cmd.exe removes the caret),
+ *   and the quote reopens. MSVCRT joins the pieces back into one argument.
+ *   Expansion of a forwarded `%*` is not rescanned, so a shim pass is safe too.
+ *
+ * A line break cannot be carried: cmd.exe ends the command at it and silently
+ * drops the rest, so such an argument is refused rather than truncated. */
 function quoteForCmd(arg: string): string {
-  if (arg === "") return '""';
-  if (!/[\s"&|<>^()%!]/.test(arg)) return arg;
-  return `"${arg.replace(/"/g, '""')}"`;
+  if (/[\r\n]/.test(arg)) throw new Error("a .cmd/.bat launcher cannot receive an argument containing a line break");
+  if (arg !== "" && /^[A-Za-z0-9_\-.:/\\@+]+$/.test(arg)) return arg;
+  let out = '"';
+  let backslashes = 0;
+  for (const ch of arg) {
+    if (ch === "\\") { backslashes++; continue; }
+    if (ch === '"') out += "\\".repeat(backslashes * 2) + '""';
+    else if (ch === "%") out += "\\".repeat(backslashes * 2) + '"^%"';
+    else out += "\\".repeat(backslashes) + ch;
+    backslashes = 0;
+  }
+  return out + "\\".repeat(backslashes * 2) + '"';
 }
 
 export function resolveSpawnCommand(command: readonly string[], options: SpawnResolveOptions = {}): ResolvedSpawn {
@@ -62,7 +88,7 @@ export function resolveSpawnCommand(command: readonly string[], options: SpawnRe
       if (!exists(candidate)) continue;
       if (/\.(cmd|bat)$/i.test(candidate)) {
         const line = [candidate, ...args].map(quoteForCmd).join(" ");
-        return { file: env.ComSpec ?? "cmd.exe", args: ["/d", "/s", "/c", `"${line}"`], windowsVerbatimArguments: true, how: "cmd-shim" };
+        return { file: env.ComSpec ?? "cmd.exe", args: ["/d", "/v:off", "/s", "/c", `"${line}"`], windowsVerbatimArguments: true, how: "cmd-shim" };
       }
       if (ext === "" && !/\.(exe|com)$/i.test(candidate)) continue; // an extensionless file is not runnable on Windows
       return { file: candidate, args, how: "pathext" };

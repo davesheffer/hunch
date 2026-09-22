@@ -11,7 +11,7 @@
  *
  * Known bounded limitation: this is a token scan, not a full parser. A literal
  * `}}` inside a quoted argument, or an include/define-shaped string inside a
- * `{{/* comment *}}`, can misattribute a byte range or produce a phantom call.
+ * `{{/* comment *}}`, can misattribute a char range or produce a phantom call.
  * Both are bounded failure modes (a stray reference to a real symbol name, or a
  * slightly-long symbol range) — the same class of accepted limitation
  * `toleratedErrorScopes` documents for the tree-sitter grammars, not a silent gap.
@@ -23,11 +23,32 @@
  * real, disclosed side effect of the chart-scoping mechanism, not something to
  * silently rely on.
  */
-import { MAX_BODY_TEXT_CHARS, type ParsedSymbol, type ParsedCall } from "./parse.js";
+import { MAX_BODY_TEXT_CHARS } from "./parse.js";
+import type { ParsedSymbolKind } from "./languages.js";
 
+// Offsets below are JS string (UTF-16 code unit) indices, not UTF-8 byte
+// offsets — named *Char, not *Byte, to say so honestly (issue #84). Callers
+// that merge these into a ParsedSymbol/ParsedCall-shaped array (indexer.ts)
+// carry them into that array's startByte/endByte/atByte fields unchanged in
+// value; those shared fields are themselves char offsets in practice (also
+// #84), so this is not a behavior change, only a locally-honest name.
+export interface HelmSymbol {
+  name: string;
+  kind: ParsedSymbolKind;
+  startChar: number;
+  endChar: number;
+  loc: number;
+  bodyText: string;
+}
+export interface HelmCall {
+  callee: string;
+  atChar: number;
+  endChar: number;
+  member: boolean;
+}
 export interface HelmExtraction {
-  symbols: ParsedSymbol[];
-  calls: ParsedCall[];
+  symbols: HelmSymbol[];
+  calls: HelmCall[];
 }
 
 // Matches one `{{ ... }}` action, including the `{{-`/`-}}` whitespace-trim
@@ -41,43 +62,43 @@ const NAME_ARG = /^"([^"]*)"/;
 const CALL_SITE = /\b(?:include|template)\s+"([^"]+)"/g;
 
 export function extractHelmDirectives(source: string): HelmExtraction {
-  const symbols: ParsedSymbol[] = [];
-  const calls: ParsedCall[] = [];
-  const stack: Array<{ name?: string; startByte: number }> = [];
+  const symbols: HelmSymbol[] = [];
+  const calls: HelmCall[] = [];
+  const stack: Array<{ name?: string; startChar: number }> = [];
 
   for (const m of source.matchAll(ACTION)) {
     const raw = m[1]!;
-    // "{{" is 2 chars; a trim-marker "{{-" is 3 — this is the byte offset of
-    // `raw`'s first character within `source`, needed for call-site atByte math.
+    // "{{" is 2 chars; a trim-marker "{{-" is 3 — this is the char offset of
+    // `raw`'s first character within `source`, needed for call-site atChar math.
     const innerStart = m.index! + (source[m.index! + 2] === "-" ? 3 : 2);
-    const endByte = m.index! + m[0].length;
+    const endChar = m.index! + m[0].length;
     const body = raw.trim();
     const spaceIdx = body.search(/\s/);
     const keyword = spaceIdx === -1 ? body : body.slice(0, spaceIdx);
 
     if (keyword === "define") {
       const name = NAME_ARG.exec(body.slice(spaceIdx + 1).trim())?.[1];
-      stack.push({ name, startByte: m.index! });
+      stack.push({ name, startChar: m.index! });
     } else if (BLOCK_OPEN.has(keyword)) {
       // if/range/with/block: depth marker only, no symbol on its own.
-      stack.push({ startByte: m.index! });
+      stack.push({ startChar: m.index! });
     } else if (keyword === "end") {
       const open = stack.pop();
       if (open?.name) {
         symbols.push({
           name: open.name,
           kind: "variable",
-          startByte: open.startByte,
-          endByte,
-          loc: source.slice(open.startByte, endByte).split("\n").length,
-          bodyText: source.slice(open.startByte, endByte).slice(0, MAX_BODY_TEXT_CHARS),
+          startChar: open.startChar,
+          endChar,
+          loc: source.slice(open.startChar, endChar).split("\n").length,
+          bodyText: source.slice(open.startChar, endChar).slice(0, MAX_BODY_TEXT_CHARS),
         });
       }
     }
 
     for (const call of raw.matchAll(CALL_SITE)) {
-      const atByte = innerStart + call.index!;
-      calls.push({ callee: call[1]!, atByte, endByte: atByte + call[0].length, member: false });
+      const atChar = innerStart + call.index!;
+      calls.push({ callee: call[1]!, atChar, endChar: atChar + call[0].length, member: false });
     }
   }
   return { symbols, calls };

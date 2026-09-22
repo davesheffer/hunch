@@ -1,0 +1,106 @@
+{
+  "id": "dec_3e3b0a678c",
+  "title": "Template action lines must not pop frame stack; conservatively mark all containers unresolved",
+  "topic": null,
+  "status": "accepted",
+  "context": "The scanner was using template action line indentation to pop the frame stack, treating it like ordinary YAML structure. But template actions are indentation-agnostic—`{{-` chomps whitespace, and `| indent N` requires column 0 while injecting at depth N. At column 0, this annihilated the stack, reparenting all subsequent lines to root and silently losing all field-path tracking.",
+  "decision": "Template action lines no longer touch the frame stack. Instead, they conservatively mark every currently-open container (root through innermost) as unresolved, since there is no way to know which ancestor the injection targets without parsing Helm expressions—and even then, conditionals can dynamically vary.",
+  "consequences": [
+    "Stops stack annihilation that reparented all post-action lines to root",
+    "Prevents silent loss of field-path tracking and symbols after template actions",
+    "Prevents false-positive cross-resource edges from incomplete (partially-templated) selectors",
+    "Conservative correctness: taints potentially-affected containers rather than guessing or destroying tracking"
+  ],
+  "alternatives_rejected": [
+    "Parse the template action to infer which ancestor it targets (infeasible; Helm conditionals are dynamic)",
+    "Pop frame stack by action indentation (original; causes stack annihilation and data loss)",
+    "Mark only innermost container as unresolved (misses cases where action targets an ancestor)"
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Parse the template action to infer which ancestor it targets (infeasible; Helm conditionals are dynamic)",
+      "scope": [
+        "src/extractors/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Pop frame stack by action indentation (original; causes stack annihilation and data loss)",
+      "scope": [
+        "src/extractors/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Mark only innermost container as unresolved (misses cases where action targets an ancestor)",
+      "scope": [
+        "src/extractors/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_a94a8fe5cc",
+    "cmp_e0ccfe26fe",
+    "cmp_f27fede222"
+  ],
+  "related_files": [
+    "src/extractors/k8sManifest.ts",
+    "test/indexer.test.ts",
+    "test/k8sManifest.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "02458054",
+  "valid_from": "2026-09-15T00:14:55+02:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft",
+    "confidence": 0.65,
+    "evidence": [
+      "commit:02458054",
+      "synth:provider=claude-cli",
+      "branch:upstream-pr/k8s-manifest-refs",
+      "src/extractors/k8sManifest.ts",
+      "test/indexer.test.ts",
+      "test/k8sManifest.test.ts"
+    ],
+    "last_verified": "2026-09-16T12:13:33.580Z"
+  },
+  "date": "2026-09-15T00:14:55+02:00"
+}

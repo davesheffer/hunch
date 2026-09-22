@@ -14,8 +14,10 @@
  *
  * Resolution for a record changed on BOTH sides: human-confirmed beats auto, then
  * higher provenance.confidence, then the more recently verified, then a deterministic
- * content tiebreak (so both developers' merges converge on the same result). Records
- * are pure data here — no filesystem access; the CLI reads/writes the files.
+ * content tiebreak (so both developers' merges converge on the same result). A lifecycle
+ * move only the losing side made (a supersession, a fix, a reopen) is carried onto the
+ * winner, so the ranking never undoes it. Records are pure data here — no filesystem
+ * access; the CLI reads/writes the files.
  */
 
 import { LEDGER_SCHEMA_VERSION, LedgerSchema, mergeLedgers, type Ledger } from "./changeLedger.js";
@@ -92,7 +94,7 @@ export function mergeRecordsById(base: Rec[], ours: Rec[], theirs: Rec[]): Rec[]
       if (canon(ov) === canon(tv)) out.push(ov);
       else if (bv && canon(ov) === canon(bv)) out.push(tv); // only theirs changed
       else if (bv && canon(tv) === canon(bv)) out.push(ov); // only ours changed
-      else out.push(pickWinner(ov, tv)); // both changed (or both added differently)
+      else out.push(pickWinner(ov, tv, bv)); // both changed (or both added differently)
     } else if (ov && !tv) {
       // theirs lacks it: a delete (bv present & ours unchanged) loses to a keep/modify
       if (bv && canon(ov) === canon(bv)) continue; // theirs deleted, ours unchanged → drop
@@ -106,8 +108,15 @@ export function mergeRecordsById(base: Rec[], ours: Rec[], theirs: Rec[]): Rec[]
   return out;
 }
 
-/** Both sides changed the same record: pick the one to keep. */
-export function pickWinner(ours: Rec, theirs: Rec): Rec {
+/** Both sides changed the same record: pick the one to keep, then make sure the
+ *  pick did not undo a lifecycle move only the OTHER side made (see carryLifecycle). */
+export function pickWinner(ours: Rec, theirs: Rec, base?: Rec): Rec {
+  const winner = pickWhole(ours, theirs);
+  return carryLifecycle(winner, winner === ours ? theirs : ours, base);
+}
+
+/** Whole-record ranking: provenance first, lifecycle evidence, then a content tiebreak. */
+function pickWhole(ours: Rec, theirs: Rec): Rec {
   const oc = humanConfirmed(ours);
   const tc = humanConfirmed(theirs);
   if (oc !== tc) return oc ? ours : theirs; // human-confirmed beats auto
@@ -161,6 +170,53 @@ function closureEvidence(r: Rec): number {
     if (typeof r[key] === "string" && (r[key] as string).length > 0) n += 1;
   }
   return n;
+}
+
+/** The provenance ranking picks a whole record, and a lifecycle move never touches
+ *  provenance: `hunch supersede` writes only status/superseded_by/valid_to, while
+ *  `hunch review --accept` on the other branch raises provenance. The reviewed copy then
+ *  won outright and the superseded decision came back live beside its successor, with no
+ *  conflict reported (#290). Ranking closure evidence first would only move the loss: the
+ *  review would be dropped, and a genuine reopen would lose to any provenance-only edit.
+ *
+ *  So the lifecycle is merged three-way on its own. When the winner left it as the base
+ *  had it and the loser moved it, the move is carried onto the winner — a closure or a
+ *  reopen alike. It moves as ONE unit (status with its evidence), never blended: if both
+ *  sides moved it differently, the winner's stands. With no base (an add on both sides,
+ *  the overlay migrate) nothing says which side moved — a live copy may be a reopen or
+ *  simply older — so the whole-record ranking stands, as it did before. A pure function of (winner, loser, base), and the winner
+ *  is side-independent, so A-merges-B and B-merges-A still agree. */
+function carryLifecycle(winner: Rec, loser: Rec, base: Rec | undefined): Rec {
+  if (!base) return winner;
+  const was = canon(lifecycle(base));
+  if (canon(lifecycle(winner)) !== was || canon(lifecycle(loser)) === was) return winner;
+  const out: Rec = { ...winner };
+  for (const key of LIFECYCLE_KEYS) {
+    if (key in loser) out[key] = loser[key];
+    else delete out[key];
+  }
+  if (isRec(loser.lineage)) {
+    const lineage: Rec = isRec(winner.lineage) ? { ...winner.lineage } : {};
+    for (const key of LIFECYCLE_LINEAGE_KEYS) {
+      if (key in loser.lineage) lineage[key] = loser.lineage[key];
+      else delete lineage[key];
+    }
+    out.lineage = lineage;
+  }
+  return out;
+}
+
+const LIFECYCLE_KEYS = ["status", "superseded_by", "valid_to"] as const;
+const LIFECYCLE_LINEAGE_KEYS = ["fixed_commit", "spawned_decision", "spawned_constraint"] as const;
+
+/** The lifecycle unit of a record, absent and null alike normalised to null so a side
+ *  that merely materialised a default does not read as having moved it. */
+function lifecycle(r: Rec): Rec {
+  const lineage = isRec(r.lineage) ? r.lineage : {};
+  const out: Rec = {};
+  for (const key of LIFECYCLE_KEYS) out[key] = r[key] ?? null;
+  for (const key of LIFECYCLE_LINEAGE_KEYS) out[`lineage.${key}`] = lineage[key] ?? null;
+  return out;
 }
 
 // ---- helpers --------------------------------------------------------------

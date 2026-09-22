@@ -1,0 +1,82 @@
+{
+  "id": "dec_7ff92001ed",
+  "title": "Move review history out of code comments; keep only current behavior and rationale",
+  "topic": null,
+  "status": "accepted",
+  "context": "Comments and test names had accumulated review-round narration (\"found on third review pass\", etc.), creating a embedded changelog that duplicated information already in git history and Hunch decision records, making comments harder to read and prone to staleness.",
+  "decision": "Strip all review-round framing from comments and test names. Comments now state only current behavior and non-obvious WHY; review history lives exclusively in commit logs and Hunch captures.",
+  "consequences": [
+    "Comments become shorter and more readable",
+    "Single source of truth per information type: git/Hunch for history, code for current behavior",
+    "Reduced risk of stale cross-references surviving refactors",
+    "Easier to update rationale when behavior changes (no \"but we found this on pass N\" to reconcile)"
+  ],
+  "alternatives_rejected": [
+    "Keep review narration inline (accumulates clutter, rots as codebase evolves)",
+    "Strip comments entirely and rely only on Hunch/git (loses immediate context at edit time for non-Hunch readers)"
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Keep review narration inline (accumulates clutter, rots as codebase evolves)",
+      "scope": [
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Strip comments entirely and rely only on Hunch/git (loses immediate context at edit time for non-Hunch readers)",
+      "scope": [
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_a94a8fe5cc"
+  ],
+  "related_files": [
+    "test/indexer.test.ts",
+    "test/k8sManifest.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "c746780b",
+  "valid_from": "2026-09-16T09:51:32+02:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft",
+    "confidence": 0.65,
+    "evidence": [
+      "commit:c746780b",
+      "synth:provider=claude-cli",
+      "branch:upstream-pr/k8s-manifest-refs",
+      "test/indexer.test.ts",
+      "test/k8sManifest.test.ts"
+    ],
+    "last_verified": "2026-09-16T12:15:26.896Z"
+  },
+  "date": "2026-09-16T09:51:32+02:00"
+}

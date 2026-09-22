@@ -80,6 +80,33 @@ test("private --migrate REFUSES when an on-disk record failed to load — never 
   }
 });
 
+test("private --migrate REFUSES when an OVERLAY record failed to load — replaceAll would delete it as stale (issue #289)", () => {
+  const { pub, priv, roots, cleanup } = stores();
+  try {
+    pub.put("decisions", DEC("dec_pub", "public, loads fine"));
+    priv.put("decisions", DEC("dec_priv", "overlay, loads fine"));
+    // Two overlay records the validating loader SKIPS: a syntax error and a
+    // future-schema record this version cannot validate. Neither is in the merged
+    // set, so replaceAll's delete-stale step would remove both — and push it.
+    const broken = join(roots[1]!, ".hunch", "decisions", "dec_typo.json");
+    const future = join(roots[1]!, ".hunch", "decisions", "dec_future.json");
+    writeFileSync(broken, '{"id": "dec_typo",');
+    writeFileSync(future, JSON.stringify({ id: "dec_future", schema_version: 9999, shape: "unknown to this version" }));
+    priv.clearCache(); // out-of-band mutation, same reason as above
+    const warn = console.warn; console.warn = () => { /* silence the expected skip warnings */ };
+    try {
+      assert.throws(() => movePublicMemoryToPrivate(pub, priv), /refusing to migrate decisions.*2 overlay record/s);
+    } finally {
+      console.warn = warn;
+    }
+    assert.equal(existsSync(broken), true, "the unloadable overlay record is untouched");
+    assert.equal(existsSync(future), true, "the future-schema overlay record is untouched");
+    assert.equal(existsSync(join(roots[1]!, ".hunch", "decisions", "dec_pub.json")), false, "nothing was absorbed for the refused kind");
+  } finally {
+    cleanup();
+  }
+});
+
 test("private --migrate: unions public records into the overlay, preserving private-only records", () => {
   const { pub, priv, cleanup } = stores();
   try {

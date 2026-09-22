@@ -4,11 +4,12 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { devNull, tmpdir } from "node:os";
 import { isAbsolute, resolve, join, basename, dirname, relative, sep } from "node:path";
-import { mkdtempSync, openSync, closeSync, readSync, mkdirSync, rmSync, statSync, lstatSync, realpathSync, readFileSync, renameSync, readdirSync } from "node:fs";
+import { mkdtempSync, openSync, closeSync, readSync, mkdirSync, rmSync, statSync, lstatSync, realpathSync, readFileSync, renameSync, readdirSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { MEMLOG_FORMAT } from "../core/memorylog.js";
 import { hunchAttributesAreSafe, hunchTreeAttributesAreSafe, safeOverlayGitTreeListing, safeOverlayTree } from "../core/overlaySafety.js";
 import { createRepoFileReader } from "../core/safeRepoFile.js";
+import { DIFF_TRUNCATED_LINE } from "./diff.js";
 import { initiatorChildEnv } from "../synthesis/initiator.js";
 
 export interface CommitMeta {
@@ -75,6 +76,27 @@ function gitSafe(args: string[], cwd: string, maxBuffer?: number): string {
   } catch {
     return "";
   }
+}
+
+/** Untrimmed stdout with the same child environment as git(); null on ANY failure
+ *  (non-zero exit, spawn error, output over maxBuffer). For callers that must tell
+ *  "git produced nothing" apart from "git could not answer". */
+function gitOutputOrNull(args: string[], cwd: string, maxBuffer = 64 * 1024 * 1024): string | null {
+  try {
+    return execFileSync("git", args, {
+      cwd, encoding: "utf8", maxBuffer,
+      env: initiatorChildEnv(),
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+  } catch {
+    return null;
+  }
+}
+
+/** Split `-z` path output. NUL-delimited paths are never C-quoted, so a path
+ *  holding `"`, `\`, a tab or a newline enumerates as its literal spelling. */
+function nulPaths(out: string | null): string[] {
+  return out ? out.split("\0").filter(Boolean) : [];
 }
 
 /** Object-identity reads must not inherit clone-local replacement refs/grafts.
@@ -1601,6 +1623,16 @@ type CommitLockAttempt =
   | { state: "held-unknown" };
 
 const UNKNOWN_LOCK_STALE_MS = 10 * 60_000;
+// An owner-less lock directory is also a NORMAL transient state: the window
+// between the two mkdir calls in createOwnedCommitLock, the release window where
+// recursive cleanup removes owner-<pid> before the outer directory, and a lost
+// reclaim race. This bounds how long a lock may stay owner-less before it is
+// treated as stranded. At ENTRY it is compared with the directory's mtime
+// (creating the directory, or adding/removing a child entry, touches it), so an
+// old stranded lock no-ops instantly. INSIDE the wait loop it is a local
+// continuously-owner-less timer instead, so the wait depends on neither
+// filesystem mtime semantics nor clock agreement between writers.
+const OWNERLESS_LOCK_FRESH_MS = 2_000;
 
 function createOwnedCommitLock(lock: string): boolean {
   let created = false;
@@ -1608,8 +1640,9 @@ function createOwnedCommitLock(lock: string): boolean {
     // mkdir is the exclusive atomic operation here. Renaming a staged directory
     // is NOT exclusive on POSIX: it may replace an already-existing empty lock
     // directory, which would steal a fresh legacy/ownerless lock. There is a
-    // harmless ownerless window between these two mkdir calls; contenders treat
-    // it as held until the conservative legacy TTL expires.
+    // harmless ownerless window between these two mkdir calls: it reads as held,
+    // and is reclaimed only after the conservative legacy TTL expires. A capture
+    // waits it out (waitForCommitLockHandoff); other callers just report busy.
     mkdirSync(lock);
     created = true;
     // Empty directories are not Git worktree entries, so owner metadata cannot
@@ -1678,22 +1711,58 @@ function acquireCommitLock(lock: string): CommitLockAttempt {
   return createOwnedCommitLock(lock) ? { state: "acquired" } : { state: "held-unknown" };
 }
 
+/** Is an owner-less lock directory recent enough to be a transient window
+ * rather than a stranded one? Only meaningful for the FIRST snapshot, where
+ * there is no local history to measure against. An unreadable directory is not
+ * assumed transient: only ENOENT is, because the owner may have just finished
+ * releasing. `Math.abs` so a clock-skewed far-FUTURE mtime is not read as
+ * recent forever. */
+function ownerlessLockLooksTransient(lock: string): boolean {
+  try { return Math.abs(Date.now() - statSync(lock).mtimeMs) <= OWNERLESS_LOCK_FRESH_MS; }
+  catch (error) { return (error as NodeJS.ErrnoException).code === "ENOENT"; }
+}
+
 function waitForCommitLockHandoff(
   lock: string,
   first: CommitLockAttempt,
   timeoutMs: number,
 ): boolean {
-  if (first.state !== "held-live" || first.ownerPid === process.pid) return false;
+  if (first.state === "held-live" && first.ownerPid === process.pid) return false;
+  // An owner-less FIRST snapshot is either a transient window (creation,
+  // release, lost reclaim race) or a stranded/legacy lock. Only the former is
+  // worth waiting for: a stranded lock must not block the capture for the whole
+  // handoff. This is the one place the WAIT POLICY consults the directory's
+  // mtime; acquireCommitLock still stats it for the legacy reclaim TTL.
+  if (first.state === "held-unknown" && !ownerlessLockLooksTransient(lock)) return false;
   const deadline = Date.now() + timeoutMs;
   const sleeper = new Int32Array(new SharedArrayBuffer(4));
   let attempt: CommitLockAttempt = first;
+  // How long the lock has read as held-unknown CONTINUOUSLY, measured locally:
+  // a sighting of a live owner resets it, because a genuine release window lasts
+  // milliseconds. Reading it from this clock keeps the wait independent of the
+  // filesystem's mtime granularity and of other writers' clocks. Besides a truly
+  // owner-less directory this also covers a dead owner whose reclaim another
+  // process has claimed — equally not a handoff this contender can wait for.
+  let ownerlessSince: number | null = first.state === "held-unknown" ? Date.now() : null;
+  // "Held" while the directory is not even there means mkdir keeps failing for a
+  // reason that is not contention — a missing, read-only or full store — and no
+  // amount of waiting will hand anything off. Require a short streak so one
+  // sample taken mid-release is not mistaken for it.
+  let vanishedStreak = 0;
   while (Date.now() < deadline) {
     if (attempt.state === "acquired") return true;
-    // Once the first snapshot proved a live owner, an owner-less snapshot can be
-    // the normal release window: recursive cleanup removes owner-<pid> before
-    // removing the outer lock directory. Keep the bounded handoff wait through
-    // that transient state instead of reporting a false busy/no-op result.
-    if (attempt.state === "held-live" && attempt.ownerPid === process.pid) return false;
+    if (attempt.state === "held-live") {
+      if (attempt.ownerPid === process.pid) return false;
+      ownerlessSince = null;
+      vanishedStreak = 0;
+    } else if (attempt.state === "held-unknown") {
+      ownerlessSince ??= Date.now();
+      if (Date.now() - ownerlessSince > OWNERLESS_LOCK_FRESH_MS) return false;
+      if (!existsSync(lock)) {
+        vanishedStreak += 1;
+        if (vanishedStreak >= 3) return false;
+      } else vanishedStreak = 0;
+    }
     Atomics.wait(sleeper, 0, 0, Math.min(25, deadline - Date.now()));
     attempt = acquireCommitLock(lock);
   }
@@ -1726,6 +1795,14 @@ export function gitUntrackCached(cwd: string, paths: string[]): void {
   try {
     execFileSync("git", ["-C", cwd, "rm", "-r", "--cached", "--quiet", "--ignore-unmatch", "--", ...paths], { stdio: "ignore" });
   } catch { /* best-effort: not a repo / nothing tracked */ }
+}
+
+/** Tracked files under the given pathspecs (repo-relative, POSIX). Best-effort:
+ *  `[]` when not a repository or nothing is tracked there. */
+export function gitTrackedPaths(cwd: string, paths: string[]): string[] {
+  if (paths.length === 0) return [];
+  const out = gitSafe(["-c", "core.quotePath=false", "ls-files", "--", ...paths], cwd);
+  return out ? out.split("\n").filter(Boolean) : [];
 }
 
 /** Resolve any commit-ish (short sha / HEAD / branch) to a canonical full sha.
@@ -1772,11 +1849,30 @@ export function currentBranch(cwd: string): string {
   return b === "HEAD" ? "" : b; // detached HEAD reports "HEAD" — treat as no branch
 }
 
+/** The state files git writes while it is replaying history. `git rev-parse --git-path`
+ *  resolves each against THIS worktree's private git dir (a linked worktree keeps its own
+ *  rebase-merge/MERGE_HEAD), so a rebase in one worktree never reads as one in another. */
+const UNSETTLED_HEAD_PATHS = ["rebase-merge", "rebase-apply", "MERGE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD", "BISECT_LOG"] as const;
+
+/** Whether HEAD is somewhere a write must not land: mid rebase/merge/cherry-pick/revert/bisect
+ *  ("git-operation-in-progress", which wins when both hold), or detached ("detached-head").
+ *  null when HEAD is a settled branch — and also when git cannot answer at all (not a repo,
+ *  git missing), so a caller keeps its pre-existing behavior rather than failing closed. */
+export function gitHeadUnsettled(cwd: string): "git-operation-in-progress" | "detached-head" | null {
+  // One spawn: `git rev-parse --git-path a --git-path b …` prints one line per path.
+  const out = gitSafe(["rev-parse", ...UNSETTLED_HEAD_PATHS.flatMap((p) => ["--git-path", p])], cwd);
+  if (!out) return null; // git could not answer (not a repo) — fail open
+  const paths = out.split("\n").map((p) => p.trim()).filter(Boolean);
+  if (paths.length !== UNSETTLED_HEAD_PATHS.length) return null;
+  if (paths.some((p) => existsSync(isAbsolute(p) ? p : resolve(cwd, p)))) return "git-operation-in-progress";
+  // `git symbolic-ref -q HEAD` exits non-zero exactly when HEAD is detached.
+  return gitSafe(["symbolic-ref", "-q", "HEAD"], cwd) ? null : "detached-head";
+}
+
 /** Files changed in a single commit. `--root` makes the initial commit (which
  *  has no parent) report its files as additions instead of returning nothing. */
 export function commitFiles(sha: string, cwd: string): string[] {
-  const out = gitSafe(["-c", "core.quotePath=false", "diff-tree", "--no-commit-id", "--name-only", "-r", "--root", sha], cwd);
-  return out ? out.split("\n").filter(Boolean) : [];
+  return nulPaths(gitOutputOrNull(["-c", "core.quotePath=false", "diff-tree", "--no-commit-id", "--name-only", "-z", "-r", "--root", sha], cwd));
 }
 
 /** Raw `git log` over `.hunch/`, paired with parseMemoryLog — the memory-move
@@ -2230,12 +2326,71 @@ const DIFF_NOISE = [
   ":(exclude,glob)**/*.generated.*",
 ];
 
-/** The unified diff for a commit, truncated to keep synthesis prompts bounded.
+/** Byte budget for a diff embedded in a SYNTHESIS prompt. Gates never use it: a
+ *  constraint check over a prefix of a change would read every file past the
+ *  cutoff as "no added lines" and pass it. */
+export const SYNTHESIS_DIFF_BUDGET = 60_000;
+
+function capDiff(out: string, maxBytes: number): string {
+  return out.length > maxBytes ? out.slice(0, maxBytes) + `\n${DIFF_TRUNCATED_LINE}` : out;
+}
+
+/** Output ceiling for a gating diff. Past it git's output cannot be captured; the
+ *  diff is then reported incomplete and the gate fails closed (dec_20db57c576). */
+const GATE_DIFF_MAX_BUFFER = 256 * 1024 * 1024;
+
+/** Pinned so user/repo config cannot change what the diff parser sees: literal
+ *  UTF-8 paths (issue #50) and a/ b/ prefixes regardless of diff.noprefix or
+ *  diff.mnemonicPrefix. */
+const GATE_DIFF_FLAGS = ["--no-ext-diff", "--no-textconv", "--no-color", "--unified=2", "--src-prefix=a/", "--dst-prefix=b/"];
+
+/** The diff a GATE evaluates (`hunch check`, the CI Constraint Guard, merge verdict,
+ *  veto, PR impact). Complete — no byte budget and no noise exclusion — or explicitly
+ *  marked incomplete, so content-matched constraints fail closed instead of reading a
+ *  missing hunk as "nothing added". */
+export interface GateDiff {
+  diff: string;
+  /** Why the diff cannot be trusted as complete (git failed, or its output exceeded
+   *  the capture ceiling). Every file without a diff block is then unevaluable. */
+  incomplete?: string;
+  /** Files whose content could not be read into the diff; unevaluable individually. */
+  unreadFiles?: string[];
+}
+
+function gateDiff(args: string[], cwd: string, what: string): GateDiff {
+  const out = gitOutputOrNull(["-c", "core.quotePath=false", ...args], cwd, GATE_DIFF_MAX_BUFFER);
+  return out === null
+    ? { diff: "", incomplete: `git could not produce the ${what} diff (git error, or output over ${GATE_DIFF_MAX_BUFFER / (1024 * 1024)} MB)` }
+    : { diff: out };
+}
+
+/** C-quote a path the way git does when it holds `"`, `\`, or a control character,
+ *  so a synthetic diff header round-trips through analyzeDiff's unquoting. */
+function quoteDiffPath(path: string): string {
+  if (!/["\\\x00-\x1f\x7f]/.test(path)) return path;
+  const named: Record<string, string> = { '"': '\\"', "\\": "\\\\", "\t": "\\t", "\n": "\\n", "\r": "\\r" };
+  let out = "";
+  for (const ch of path) {
+    const code = ch.charCodeAt(0);
+    if (named[ch]) out += named[ch];
+    else if (code < 0x20 || code === 0x7f) out += "\\" + code.toString(8).padStart(3, "0");
+    else out += ch;
+  }
+  return `"${out}"`;
+}
+
+/** Complete gating diff of one commit (see GateDiff). */
+export function commitGateDiff(sha: string, cwd: string): GateDiff {
+  return gateDiff(["show", sha, "--format=", ...GATE_DIFF_FLAGS], cwd, `commit ${sha}`);
+}
+
+/** The unified diff for a commit, truncated to keep SYNTHESIS prompts bounded.
  *  Machine-generated noise (see DIFF_NOISE) is excluded so the model spends its
- *  budget on code that encodes intent, not on regenerated lockfiles/build output. */
-export function commitDiff(sha: string, cwd: string, maxBytes = 60_000): string {
-  const out = gitSafe(["show", sha, "--no-color", "--format=", "--unified=2", "--", ...DIFF_NOISE], cwd);
-  return out.length > maxBytes ? out.slice(0, maxBytes) + "\n…(diff truncated)…" : out;
+ *  budget on code that encodes intent, not on regenerated lockfiles/build output.
+ *  Not for gating: use commitGateDiff. */
+export function commitDiff(sha: string, cwd: string, maxBytes = SYNTHESIS_DIFF_BUDGET): string {
+  const out = gitSafe(["-c", "core.quotePath=false", "show", sha, "--no-color", "--format=", "--unified=2", "--", ...DIFF_NOISE], cwd);
+  return capDiff(out, maxBytes);
 }
 
 /** Number of commits touching a file in the last `days` (churn). */
@@ -2369,16 +2524,15 @@ export function fileGitMetrics(
  *  POSIX paths nor constraint scope globs — a blocking constraint over such a
  *  file graded as a vacuous PASS, and its churn/last-commit metrics read zero. */
 export function stagedFiles(cwd: string): string[] {
-  const out = gitSafe(["-c", "core.quotePath=false", "diff", "--cached", "--no-ext-diff", "--no-textconv", "--name-only", "--diff-filter=ACMR"], cwd);
-  return out ? out.split("\n").filter(Boolean) : [];
+  return nulPaths(gitOutputOrNull(["-c", "core.quotePath=false", "diff", "--cached", "--no-ext-diff", "--no-textconv", "--name-only", "-z", "--diff-filter=ACMR"], cwd));
 }
 
 /** Files changed anywhere in the working tree compared with HEAD: both staged
  * and unstaged tracked files, plus untracked files. This powers the local,
  * pre-commit Change Gate; it never mutates the index or asks an agent/model. */
 export function workingFiles(cwd: string): string[] {
-  const changed = gitSafe(["-c", "core.quotePath=false", "diff", "HEAD", "--no-ext-diff", "--no-textconv", "--name-only", "--diff-filter=ACMR"], cwd).split("\n").filter(Boolean);
-  const untracked = gitSafe(["-c", "core.quotePath=false", "ls-files", "--others", "--exclude-standard"], cwd).split("\n").filter(Boolean);
+  const changed = nulPaths(gitOutputOrNull(["-c", "core.quotePath=false", "diff", "HEAD", "--no-ext-diff", "--no-textconv", "--name-only", "-z", "--diff-filter=ACMR"], cwd));
+  const untracked = nulPaths(gitOutputOrNull(["-c", "core.quotePath=false", "ls-files", "-z", "--others", "--exclude-standard"], cwd));
   return [...new Set([...changed, ...untracked])].sort();
 }
 
@@ -2392,8 +2546,7 @@ export function revExists(ref: string, cwd: string): boolean {
 /** Files a PR/branch changes vs `base` (3-dot: changes on HEAD since the merge-base,
  *  i.e. exactly the PR's own commits — the CI Constraint Guard's surface). */
 export function rangeFiles(base: string, cwd: string, head = "HEAD"): string[] {
-  const out = gitSafe(["-c", "core.quotePath=false", "diff", "--no-ext-diff", "--no-textconv", "--name-only", "--diff-filter=ACMR", `${base}...${head}`], cwd);
-  return out ? out.split("\n").filter(Boolean) : [];
+  return nulPaths(gitOutputOrNull(["-c", "core.quotePath=false", "diff", "--no-ext-diff", "--no-textconv", "--name-only", "-z", "--diff-filter=ACMR", `${base}...${head}`], cwd));
 }
 
 /** Commit subjects on `head` since `base` (2-dot: commits added by the task),
@@ -2403,42 +2556,75 @@ export function rangeSubjects(base: string, cwd: string, head = "HEAD", max = 50
   return out ? out.split("\n").filter(Boolean) : [];
 }
 
-/** The PR's unified diff vs `base` (3-dot), for the Regression Guard's structural
- *  analysis. Same noise-exclusion + truncation budget as commit/staged diffs. */
-export function rangeDiff(base: string, cwd: string, head = "HEAD", maxBytes = 60_000): string {
-  const out = gitSafe(["diff", "--no-ext-diff", "--no-textconv", "--no-color", "--unified=2", `${base}...${head}`, "--", ...DIFF_NOISE], cwd);
-  return out.length > maxBytes ? out.slice(0, maxBytes) + "\n…(diff truncated)…" : out;
+/** Complete gating diff of a PR vs `base` (3-dot: the CI Constraint Guard's surface). */
+export function rangeGateDiff(base: string, cwd: string, head = "HEAD"): GateDiff {
+  return gateDiff(["diff", ...GATE_DIFF_FLAGS, `${base}...${head}`], cwd, `${base}...${head}`);
 }
 
-/** Unified diff of the staged changes (for the Regression Guard's structural
- *  analysis). Excludes machine-generated noise and truncates at the SAME budget as
- *  commitDiff, so the staged and `--commit` guard paths can't diverge on big diffs. */
-export function stagedDiff(cwd: string, maxBytes = 60_000): string {
-  const out = gitSafe(["diff", "--cached", "--no-ext-diff", "--no-textconv", "--no-color", "--unified=2", "--", ...DIFF_NOISE], cwd);
-  return out.length > maxBytes ? out.slice(0, maxBytes) + "\n…(diff truncated)…" : out;
+/** The PR's unified diff vs `base` (3-dot), noise-excluded and capped at the
+ *  synthesis budget. Bounded-prompt use only; gates use rangeGateDiff. */
+export function rangeDiff(base: string, cwd: string, head = "HEAD", maxBytes = SYNTHESIS_DIFF_BUDGET): string {
+  const out = gitSafe(["-c", "core.quotePath=false", "diff", "--no-ext-diff", "--no-textconv", "--no-color", "--unified=2", `${base}...${head}`, "--", ...DIFF_NOISE], cwd);
+  return capDiff(out, maxBytes);
 }
 
-/** Unified diff of the complete local working tree vs HEAD. Git's normal diff
+/** Complete gating diff of the staged changes (pre-commit `hunch check`). */
+export function stagedGateDiff(cwd: string): GateDiff {
+  return gateDiff(["diff", "--cached", ...GATE_DIFF_FLAGS], cwd, "staged");
+}
+
+/** Unified diff of the staged changes, noise-excluded and capped at the synthesis
+ *  budget. Bounded-prompt use only; gates use stagedGateDiff. */
+export function stagedDiff(cwd: string, maxBytes = SYNTHESIS_DIFF_BUDGET): string {
+  const out = gitSafe(["-c", "core.quotePath=false", "diff", "--cached", "--no-ext-diff", "--no-textconv", "--no-color", "--unified=2", "--", ...DIFF_NOISE], cwd);
+  return capDiff(out, maxBytes);
+}
+
+/** Complete gating diff of the local working tree vs HEAD. Git's normal diff
  * includes both staged and unstaged tracked edits; untracked text files are
- * appended as synthetic additions so guards can also see their added symbols.
- * Binary/unreadable files remain in workingFiles (scope checks still apply) but
- * intentionally contribute no synthetic content to regression analysis. */
-export function workingDiff(cwd: string, maxBytes = 60_000): string {
-  let out = gitSafe(["diff", "HEAD", "--no-ext-diff", "--no-textconv", "--no-color", "--unified=2", "--", ...DIFF_NOISE], cwd);
-  const tracked = new Set(gitSafe(["-c", "core.quotePath=false", "diff", "HEAD", "--no-ext-diff", "--no-textconv", "--name-only", "--diff-filter=ACMR"], cwd).split("\n").filter(Boolean));
-  const untracked = gitSafe(["-c", "core.quotePath=false", "ls-files", "--others", "--exclude-standard"], cwd).split("\n").filter((f) => f && !tracked.has(f));
+ * appended as synthetic additions so guards can also see their added lines.
+ * Binary files and non-regular paths (symlinks) contribute no content, as in a
+ * git diff; an untracked regular file that cannot be read is listed in
+ * `unreadFiles`, so content checks over it fail closed. */
+export function workingGateDiff(cwd: string): GateDiff {
+  // An unborn HEAD has no tracked diff (workingFiles enumerates only untracked
+  // files there); any other failure to diff makes the gate input incomplete.
+  const hasHead = revExists("HEAD", cwd);
+  const tracked: GateDiff = hasHead ? gateDiff(["diff", "HEAD", ...GATE_DIFF_FLAGS], cwd, "working-tree") : { diff: "" };
+  const trackedNames = hasHead
+    ? gitOutputOrNull(["-c", "core.quotePath=false", "diff", "HEAD", "--no-ext-diff", "--no-textconv", "--name-only", "-z", "--diff-filter=ACMR"], cwd)
+    : "";
+  const untrackedNames = gitOutputOrNull(["-c", "core.quotePath=false", "ls-files", "-z", "--others", "--exclude-standard"], cwd);
+  const incomplete = tracked.incomplete
+    ?? (trackedNames === null || untrackedNames === null ? "git could not enumerate the working-tree changes" : undefined);
+  const trackedSet = new Set(nulPaths(trackedNames));
+  const untracked = nulPaths(untrackedNames).filter((f) => !trackedSet.has(f));
   const readWorkingFile = createRepoFileReader(cwd);
+  const unreadFiles: string[] = [];
+  let out = tracked.diff;
   for (const file of untracked) {
-    try {
-      const text = readWorkingFile(file);
-      if (text === null) continue;
-      if (text.includes("\0")) continue;
-      const lines = text.split("\n");
-      const add = lines.map((line) => `+${line}`).join("\n");
-      out += `${out ? "\n" : ""}diff --git a/${file} b/${file}\nnew file mode 100644\n--- /dev/null\n+++ b/${file}\n@@ -0,0 +1,${lines.length} @@\n${add}\n`;
-    } catch { /* unreadable / directory / binary: scope-only is still safe */ }
+    let regular = false;
+    try { regular = lstatSync(join(cwd, file)).isFile(); } catch { /* vanished: nothing to inspect */ }
+    if (!regular) continue; // symlink / directory / gone: no file content to add
+    const text = readWorkingFile(file);
+    if (text === null) { unreadFiles.push(file); continue; }
+    if (text.includes("\0")) continue; // binary: git shows no text hunks for it either
+    const lines = text.split("\n");
+    const add = lines.map((line) => `+${line}`).join("\n");
+    const newPath = quoteDiffPath(`b/${file}`);
+    out += `${out && !out.endsWith("\n") ? "\n" : ""}diff --git ${quoteDiffPath(`a/${file}`)} ${newPath}\nnew file mode 100644\n--- /dev/null\n+++ ${newPath}\n@@ -0,0 +1,${lines.length} @@\n${add}\n`;
   }
-  return out.length > maxBytes ? out.slice(0, maxBytes) + "\n…(diff truncated)…" : out;
+  return {
+    diff: out,
+    ...(incomplete ? { incomplete } : {}),
+    ...(unreadFiles.length ? { unreadFiles } : {}),
+  };
+}
+
+/** Working-tree diff vs HEAD capped at the synthesis budget. Bounded-prompt use
+ *  only; gates and rule verification use workingGateDiff. */
+export function workingDiff(cwd: string, maxBytes = SYNTHESIS_DIFF_BUDGET): string {
+  return capDiff(workingGateDiff(cwd).diff, maxBytes);
 }
 
 /** Resolve a time-travel ref (commit / tag / branch / HEAD~n) to the ISO author-

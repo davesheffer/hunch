@@ -120,7 +120,7 @@ export function renderGrounding(
     // Token-aware match (mirrors strictgate.isHumanConfirmed; not imported — that
     // module imports this one).
     const testimony = d.provenance.source.split("+").includes("agent_recorded")
-      ? " — ⚠ agent-recorded testimony, no human countersign yet (/capture confirms it)"
+      ? ` — ⚠ agent-recorded testimony, no human countersign yet (a human confirms it: hunch review --confirm ${d.id})`
       : "";
     return `• "${d.topic}": ${d.decision || d.title} [${d.id}]${rej}${testimony}`;
   });

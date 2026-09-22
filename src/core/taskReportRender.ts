@@ -19,8 +19,15 @@ export function writeTaskReportHtml(root: string, taskId: string, publicOnly = f
   return file;
 }
 
+/** Card text is copied verbatim into an agent's final response, so every
+ * field is shown whole: a title cut mid-word with an ellipsis reads as a
+ * truncated tool result and the agent refuses to reproduce the card. Every
+ * rendered field is schema-bounded (task title and check label ≤ 200
+ * characters, record titles ≤ 500), so whole never means unbounded. */
 function plain(value: string): string { return value.replace(/[\u0000-\u001f\u007f-\u009f]/g, " ").replace(/\s+/g, " ").trim(); }
-function clip(value: string, size = 66): string { const chars = [...plain(value)]; return chars.length > size ? chars.slice(0, size - 1).join("") + "…" : chars.join(""); }
+/** Delivered lessons are named on the card up to this many; beyond it the
+ * count of the rest is stated, never a silent cut. */
+export const CARD_RECALLED_LIMIT = 8;
 function uniqueRecords(report: TaskReport) {
   return [...new Map(report.deliveries.flatMap(d => d.records).map(r => [`${r.kind}:${r.record_id}:${r.content_hash}`, r])).values()];
 }
@@ -39,32 +46,34 @@ function recordTitle(report: TaskReport, rule: { kind: string; record_id: string
 export function renderRecalledLine(fresh: readonly { title: string }[]): string | null {
   if (!fresh.length) return null;
   const rest = fresh.length - 1;
-  return `Hunch recalled: ${clip(fresh[0]!.title, 90)}${rest ? ` (+${rest} more lesson${rest === 1 ? "" : "s"})` : ""}`;
+  return `Hunch recalled: ${plain(fresh[0]!.title)}${rest ? ` (+${rest} more lesson${rest === 1 ? "" : "s"})` : ""}`;
 }
 export function renderTaskReport(report: TaskReport): string {
   const records = uniqueRecords(report);
-  const lines = [`Hunch · ${clip(report.task.title)}`, `Task ${report.task.task_id} · ${report.task.state}`];
+  const lines = [`Hunch · ${plain(report.task.title)}`, `Task ${report.task.task_id} · ${report.task.state}`];
   if (!report.deliveries.length) lines.push("No task-linked delivery observed; connection/use is unverified.");
   else if (!records.length) lines.push(report.coverage === "no-relevant-memory" ? "No relevant memory returned for this task." : "Memory delivered; exact record snapshots unavailable.");
   else {
-    lines.push(`Recalled  ${clip(records[0]!.title, 65)}`);
-    if (records.length > 1) lines.push(`          ${records.length - 1} more lesson(s) in the evidence view`);
+    const named = records.slice(0, CARD_RECALLED_LIMIT);
+    lines.push(`Recalled  ${plain(named[0]!.title)}`);
+    for (const record of named.slice(1)) lines.push(`          ${plain(record.title)}`);
+    if (records.length > named.length) lines.push(`          ${records.length - named.length} more lesson(s) in the evidence view`);
   }
   const standing = ruleStanding(report);
   const violated = standing.find(r => r.outcome === "violated");
   const held = standing.find(r => r.outcome === "satisfied" && r.current);
   if (report.claims.length) {
     const claim = report.claims.find(c => c.supported_by) ?? report.claims[0]!;
-    lines.push(`Applied   ${clip(claim.action, 42)} · ${claim.supported_by ? "rule-supported" : "agent-reported"}`);
-  } else if (held) lines.push(`Conformed ${clip(recordTitle(report, held), 34)} · rule held on ${held.files.length} changed file(s)`);
+    lines.push(`Applied   ${plain(claim.action)} · ${claim.supported_by ? "rule-supported" : "agent-reported"}`);
+  } else if (held) lines.push(`Conformed ${plain(recordTitle(report, held))} · rule held on ${held.files.length} changed file(s)`);
   else if (records.length) lines.push("Impact    Memory delivered; contribution unverified.");
-  if (violated) lines.push(`Violated  ${clip(recordTitle(report, violated), 34)} · rule broken on changed files`);
-  if (report.saves.length) lines.push(`Saved     ${clip(report.saves[0]!.record.title, 38)} · ${report.saves[0]!.durability}`);
-  if (report.refusals.length) lines.push(`Guarded   Denial emitted · ${clip(report.refusals[0]!.record_id, 40)}`);
+  if (violated) lines.push(`Violated  ${plain(recordTitle(report, violated))} · rule broken on changed files`);
+  if (report.saves.length) lines.push(`Saved     ${plain(report.saves[0]!.record.title)} · ${report.saves[0]!.durability}`);
+  if (report.refusals.length) lines.push(`Guarded   Denial emitted · ${plain(report.refusals[0]!.record_id)}`);
   const check = report.checks.at(-1);
   if (check) {
     const state = check.cancelled ? "cancelled" : check.timed_out ? "timed out" : check.exit_code === 0 ? "passed" : "failed";
-    lines.push(`Checked   ${clip(check.label, 28)} · ${state}${check.current ? " · current source snapshot" : " · current source unverified"}`);
+    lines.push(`Checked   ${plain(check.label)} · ${state}${check.current ? " · current source snapshot" : " · current source unverified"}`);
   } else lines.push("Checked   No independent command result recorded.");
   lines.push(`Evidence  hunch report ${report.task.task_id} --html`);
   return lines.join("\n");

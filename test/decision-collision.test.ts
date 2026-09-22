@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { ElicitRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { buildServer } from "../src/mcp/server.js";
 import { decisionId } from "../src/core/ids.js";
@@ -29,10 +30,15 @@ function decisionRepo(): { root: string; sha: string } {
   return { root, sha: git(root, "rev-parse", "HEAD") };
 }
 
-async function connect(root: string): Promise<{ client: Client; server: McpServer }> {
+/** `humanConfirms`: the client supports MCP elicitation and its human confirms the prompt —
+ *  the out-of-channel act that (unlike a capture token alone) grants human_confirmed. */
+async function connect(root: string, humanConfirms = false): Promise<{ client: Client; server: McpServer }> {
   const server = buildServer(root);
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-  const client = new Client({ name: "decision-collision-test", version: "0.0.0" });
+  const client = humanConfirms
+    ? new Client({ name: "decision-collision-test", version: "0.0.0" }, { capabilities: { elicitation: {} } })
+    : new Client({ name: "decision-collision-test", version: "0.0.0" });
+  if (humanConfirms) client.setRequestHandler(ElicitRequestSchema, async () => ({ action: "accept", content: { confirm: true } }));
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
   return { client, server };
 }
@@ -119,16 +125,16 @@ test("a human capture still upgrades the machine draft for its commit", async (t
     date: "2026-01-01T00:00:00.000Z",
   }, null, 2)}\n`);
 
-  const { client, server } = await connect(root);
+  const { client, server } = await connect(root, true);
   t.after(async () => {
     await client.close().catch(() => {});
     await server.close().catch(() => {});
     try { rmSync(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 }); } catch { /* temp only */ }
   });
 
-  // The human vouch travels via the capture token (authorship stamp): an
-  // un-token'd upgrade still lands the content, but as agent_recorded testimony —
-  // only the interview mints human_confirmed.
+  // The human vouch is the human's own in-client confirmation of the capture (authorship
+  // stamp): an un-token'd or unconfirmed upgrade still lands the content, but as
+  // agent_recorded testimony — a capture token alone never mints human_confirmed.
   const brief = (await client.callTool({ name: "hunch_capture_decision", arguments: { topic: "human-topic" } })) as ToolText;
   const token = /capture_token:"([^"]+)"/.exec(brief.content.map((c) => c.text ?? "").join("\n"))?.[1];
   assert.ok(token, "capture brief must issue a token");

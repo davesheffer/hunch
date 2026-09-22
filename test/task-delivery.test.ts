@@ -11,6 +11,7 @@ import { persistTaskRecord } from "../src/core/taskRecord.js";
 import { TaskRecordSchema, type TaskRecord } from "../src/core/types.js";
 import { HunchStore, type AssembledContext } from "../src/store/hunchStore.js";
 import { hunchPaths } from "../src/core/paths.js";
+import { mkSymbol } from "./helpers.js";
 
 function taskRecord(over: Partial<TaskRecord> & { id: string; finished_at: string }): TaskRecord {
   return TaskRecordSchema.parse({
@@ -77,4 +78,46 @@ test("a persisted task is found for its file and delivered on the next context r
   const next = buildDeliveryEnvelope(ctx, { supplements: taskSupplements(found, "src/config.js") });
   assert.match(next.text, new RegExp(`${task.task_id} · \\d{4}-\\d{2}-\\d{2} · completed · "Earlier settings work"`));
   assert.equal(store.tasksFor("src/other.js").length, 0, "unrelated files see nothing");
+});
+
+test("tasksFor rewrites an absolute target to repo-relative and never suffix-leaks an unrelated same-basename file (issue #299)", () => {
+  const root = mkdtempSync(join(tmpdir(), "hunch-task-delivery-"));
+  const store = new HunchStore(hunchPaths(root));
+  store.json.ensureDirs();
+  try {
+    // A real indexed symbol at the target file — the same "is this path known to
+    // the index" question tasksFor now answers the same way why() does.
+    store.json.put("symbols", mkSymbol("sym_auth", "src/auth/session.ts", "verifySession") as never);
+    store.json.put("tasks", taskRecord({ id: "htask_000000000000000000000010", finished_at: "2026-09-15T00:00:00.000Z", files: ["session.ts"] }));
+    store.json.put("tasks", taskRecord({ id: "htask_000000000000000000000011", finished_at: "2026-09-16T00:00:00.000Z", files: ["src/auth/session.ts"] }));
+    const abs = join(root, "src", "auth", "session.ts");
+    assert.deepEqual(
+      store.tasksFor(abs).map((r) => r.id),
+      ["htask_000000000000000000000011"],
+      "must resolve the absolute target's own task, never the unrelated root-level same-basename file",
+    );
+  } finally {
+    store.close();
+    rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+  }
+});
+
+test("tasksFor: a REAL working-tree file the index cannot see must not suffix-leak a nested same-basename file's tasks (issue #334)", () => {
+  const root = mkdtempSync(join(tmpdir(), "hunch-task-delivery-real-"));
+  const store = new HunchStore(hunchPaths(root));
+  store.json.ensureDirs();
+  try {
+    // A comment-only root file: zero tree-sitter symbols and no covering component,
+    // so graph data alone calls it unreal and the suffix tier would serve
+    // a/empty.ts's task. The working tree is the last-resort answer.
+    mkdirSync(join(root, "a"), { recursive: true });
+    writeFileSync(join(root, "empty.ts"), "// only a comment — no symbols at all\n");
+    writeFileSync(join(root, "a", "empty.ts"), "export function nestedEmpty(){ return 1; }\n");
+    store.json.put("tasks", taskRecord({ id: "htask_000000000000000000000012", finished_at: "2026-09-16T00:00:00.000Z", files: ["a/empty.ts"] }));
+    assert.deepEqual(store.tasksFor("empty.ts").map((r) => r.id), [], "the real root file inherits nothing");
+    assert.deepEqual(store.tasksFor("a/empty.ts").map((r) => r.id), ["htask_000000000000000000000012"], "the nested file still answers for itself");
+  } finally {
+    store.close();
+    rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+  }
 });

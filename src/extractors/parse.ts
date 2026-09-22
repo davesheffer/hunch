@@ -18,7 +18,11 @@ import { loadNativeTreeSitter } from "./nativeTreeSitter.js";
 
 export type { ParsedSymbolKind } from "./languages.js";
 
-const { Parser } = loadNativeTreeSitter();
+/** Resolved on first parse, not at import: loading the native addons copies six
+ *  `.node` files into a temp dir and dlopens them (~1.5s+ cold), which every CLI
+ *  command and every editor hook would otherwise pay just for importing this
+ *  module. loadNativeTreeSitter() memoizes the runtime itself. */
+const parserRuntime = (): typeof TreeSitterParser => loadNativeTreeSitter().Parser;
 
 export interface ParsedSymbol {
   name: string;
@@ -60,6 +64,7 @@ const cache = new Map<string, LangBundle>();
 function bundleFor(spec: LanguageSpec): LangBundle {
   let b = cache.get(spec.grammarKey);
   if (!b) {
+    const Parser = parserRuntime();
     const parser = new Parser();
     const grammar = spec.loadGrammar();
     parser.setLanguage(grammar as never);
@@ -75,7 +80,7 @@ const STR_QUOTES = /^['"`]|['"`]$/g;
  *  enough that a huge function/file doesn't bloat every JSON symbol record. */
 export const MAX_BODY_TEXT_CHARS = 4000;
 
-export function parseSource(file: string, source: string): ParsedFile | null {
+export function parseSource(file: string, source: string, opts: { throwOnParseError?: boolean } = {}): ParsedFile | null {
   const spec = languageFor(file);
   if (!spec) return null;
   // Templated text (Helm chart / Jinja CI config) isn't {spec.id} yet — a real
@@ -99,7 +104,10 @@ export function parseSource(file: string, source: string): ParsedFile | null {
   let tree;
   try {
     tree = parser.parse(source, undefined, { bufferSize: Math.max(32 * 1024, source.length * 2 + 1024) });
-  } catch {
+  } catch (error) {
+    // Index scans need the underlying diagnostic for whole-language failures.
+    // Other callers retain the historical best-effort null result.
+    if (opts.throwOnParseError) throw error;
     return null;
   }
   const symbols: ParsedSymbol[] = [];

@@ -47,8 +47,21 @@ function makeMemoryRemote(base: string, name: string, attributes?: string): stri
   configureRepo(seed);
   writeFileSync(join(seed, ".hunch", "manifest.json"), "{\n  \"schema_version\": 2\n}\n");
   writeFileSync(join(seed, ".hunch", "decisions", "dec_setup_safe.json"), `${JSON.stringify({
+    // A schema-VALID record: `--migrate` refuses an overlay holding a record it
+    // cannot load (issue #289), so a stub here would turn every migrate fixture
+    // into that refusal instead of the seam under test.
     id: "dec_setup_safe",
     title: "validated explicit setup",
+    status: "accepted",
+    context: "Fixture record already living in the shared memory remote.",
+    decision: "Shared setup must leave existing overlay records intact.",
+    provenance: {
+      source: "human_confirmed",
+      confidence: 1,
+      evidence: ["team-shared-setup-clone-safety"],
+      last_verified: "2026-07-19T09:00:00.000Z",
+    },
+    date: "2026-07-19T09:00:00.000Z",
   }, null, 2)}\n`);
   if (attributes !== undefined) writeFileSync(join(seed, ".gitattributes"), attributes);
   git(seed, "add", "-A");

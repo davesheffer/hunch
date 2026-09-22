@@ -1,0 +1,118 @@
+{
+  "id": "dec_9a13261073",
+  "title": "Exact-match-first with conditional suffix matching to prevent collisions",
+  "topic": null,
+  "status": "accepted",
+  "context": "Three path-matching bugs arose from conflicting strategies: bare endsWith caused substring false positives (db.ts→mongodb.ts), same-basename files pulled unrelated rules (index.ts collisions), and absolute paths never matched repo-relative stored paths. Touches invariant(s): con_902759b3dc (All JSON writes to .hunch/ must be atomic (temp-file + rename) so an interrupted write can never truncate the index); con_a87360128b (Semantic vectors are a derived layer in SQLite, never the source of truth; reconcile by content hash on reindex); con_e04226bd05 (The MCP server must stay client-agnostic: all assistants point to the same .hunch/ graph; no Claude-only behavior in the server).",
+  "decision": "Establish a three-tier matching precedence: (1) normalize absolute paths to repo-relative form before any matching, (2) exact full-path matches take priority, (3) segment-anchored suffix matching applies only when the target is not itself a real indexed file. This ensures each matching strategy has a non-overlapping scope.",
+  "consequences": [
+    "Substring false positives eliminated (endsWith→pathsRelated with segment boundaries)",
+    "Same-basename collisions prevented (suffix matching skipped for real files)",
+    "Absolute paths from agents now match their repo-relative equivalents in constraints",
+    "Suffix fallback reserved for partial/incomplete references, not full indexed paths"
+  ],
+  "alternatives_rejected": [
+    "Apply a single matching strategy uniformly (reintroduces false positives or collisions)",
+    "Use suffix matching for all targets regardless of whether they're indexed files (keeps same-basename bug)",
+    "Leave absolute paths unmapped (breaks agent edit payloads that pass absolute paths)"
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Apply a single matching strategy uniformly (reintroduces false positives or collisions)",
+      "scope": [
+        "src/core/**",
+        "src/mcp/**",
+        "src/store/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Use suffix matching for all targets regardless of whether they're indexed files (keeps same-basename bug)",
+      "scope": [
+        "src/core/**",
+        "src/mcp/**",
+        "src/store/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Leave absolute paths unmapped (breaks agent edit payloads that pass absolute paths)",
+      "scope": [
+        "src/core/**",
+        "src/mcp/**",
+        "src/store/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_a94a8fe5cc",
+    "cmp_b256a6aed0",
+    "cmp_cdfb395bb7",
+    "cmp_dfa5b5acde",
+    "cmp_f27fede222"
+  ],
+  "related_files": [
+    "src/core/paths.ts",
+    "src/mcp/server.ts",
+    "src/store/hunchStore.ts",
+    "test/mcp-resolve.test.ts",
+    "test/store.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "32c72153",
+  "valid_from": "2026-09-18T18:49:23+02:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft",
+    "confidence": 0.65,
+    "evidence": [
+      "commit:32c72153",
+      "synth:provider=claude-cli",
+      "branch:fix/mcp-absolute-and-suffix-path-matching",
+      "src/core/paths.ts",
+      "src/mcp/server.ts",
+      "src/store/hunchStore.ts",
+      "test/mcp-resolve.test.ts",
+      "test/store.test.ts"
+    ],
+    "last_verified": "2026-09-18T16:49:46.972Z"
+  },
+  "date": "2026-09-18T18:49:23+02:00"
+}

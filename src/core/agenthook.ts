@@ -10,6 +10,17 @@ export type HookProvider = (typeof HOOK_PROVIDERS)[number];
 
 export type HunchHookEvent = "PreToolUse" | "PostToolUse" | "PostToolUseFailure" | "UserPromptSubmit" | "SessionStart" | "SubagentStart" | "PreCompact" | "Stop";
 
+/** One file section of a Codex `apply_patch` payload. */
+export interface HunchPatchFile {
+  /** The path as written in the patch (may be absolute). */
+  path: string;
+  action: "update" | "add" | "delete";
+  /** `*** Move to:` destination, when the section renames the file. */
+  moved_to?: string;
+  /** Only the lines this section adds (`+` prefix stripped). */
+  added_lines: string[];
+}
+
 export interface HunchToolInput {
   file_path?: string;
   new_string?: string;
@@ -17,6 +28,9 @@ export interface HunchToolInput {
   edits?: Array<{ new_string?: string }>;
   command?: string;
   skill?: string;
+  /** Codex `apply_patch` only: every file the patch touches. `file_path` is the
+   * first entry's path and `content` the raw patch, for single-file consumers. */
+  patch_files?: HunchPatchFile[];
 }
 
 /** A provider-neutral observation of the tool result. Output is ephemeral: the
@@ -85,15 +99,55 @@ function edits(value: unknown): Array<{ new_string?: string }> | undefined {
   return normalized.length ? normalized : undefined;
 }
 
+/** Parse Codex `apply_patch` text into one entry per touched file. Only `+` lines
+ * inside a file section count as added: removed (`-`) and context (` `) lines are
+ * text the edit takes away or leaves alone, so a content-matched gate must not read
+ * them as proposed content. Paths are returned exactly as written in the patch;
+ * the CLI normalizes them against the repository root. */
+const PATCH_HEADER = /^\*\*\* (Update|Add|Delete) File: (.+?)\s*$/;
+const PATCH_MOVE = /^\*\*\* Move to: (.+?)\s*$/;
+export function parseApplyPatch(patch: string): HunchPatchFile[] {
+  const files: HunchPatchFile[] = [];
+  let current: HunchPatchFile | undefined;
+  for (const line of patch.split(/\r?\n/)) {
+    const header = PATCH_HEADER.exec(line);
+    if (header) {
+      current = { path: header[2]!, action: header[1]!.toLowerCase() as HunchPatchFile["action"], added_lines: [] };
+      files.push(current);
+      continue;
+    }
+    if (!current) continue;
+    const move = PATCH_MOVE.exec(line);
+    if (move) {
+      current.moved_to = move[1]!;
+      continue;
+    }
+    // `*** End Patch` / `*** End of File` close sections; they carry no content.
+    if (line.startsWith("*** ")) continue;
+    // A unified-diff style file header is not content; apply_patch has none, but
+    // a model can still emit one.
+    if (/^\+\+\+ (?:[ab]\/|\/dev\/null)/.test(line)) continue;
+    if (line.startsWith("+")) current.added_lines.push(line.slice(1));
+  }
+  return files;
+}
+
 /** Codex edits files through `apply_patch`, whose input is the patch text itself
- * (`*** Update File: path`). The first touched path becomes the edit target so the
- * per-file pre-edit gate applies; the whole patch stands in for the new content. */
-const PATCH_FILE = /^\*\*\* (?:Update|Add|Delete) File: (.+?)\s*$/m;
+ * (`*** Update File: path`). Every touched file is listed in `patch_files` so the
+ * pre-edit gate runs per file; the first path stays `file_path` and the whole patch
+ * stays `content` for consumers that read the single-file shape.
+ *
+ * TODO(codex-exec-patch): a Codex code-mode `exec` tool call that embeds an
+ * apply_patch does NOT reach this parser: `.codex/hooks.json` (integrations/
+ * providers.ts) matches PreToolUse on `apply_patch` only, and `normalizeHookEvent`
+ * enables patch parsing only for tool names `apply_patch`/`patch`. No captured
+ * payload of such a call exists in the repo, so its shape is not guessed here;
+ * capture a real hook payload before extending the matcher or this parser. */
 function applyPatchInput(raw: JsonObject): HunchToolInput | undefined {
   const patch = [raw.input, raw.patch, raw.content].find((v): v is string => typeof v === "string" && /\*\*\* Begin Patch/.test(v));
   if (!patch) return undefined;
-  const file = PATCH_FILE.exec(patch)?.[1];
-  return file ? { file_path: file, content: patch } : undefined;
+  const files = parseApplyPatch(patch);
+  return files.length ? { file_path: files[0]!.path, content: patch, patch_files: files } : undefined;
 }
 
 function normalizeToolInput(value: unknown, allowPatch = false): HunchToolInput | undefined {
@@ -143,7 +197,11 @@ function toolOutput(value: unknown): string {
 
 function explicitToolOutcome(response: unknown): HunchToolOutcome["status"] {
   const raw = obj(response);
-  if (!raw) return typeof response === "string" && response.trim() ? "success" : "unknown";
+  // A bare string carries no status. Codex sends a Bash call's raw output this
+  // way, without its exit code, and a failing test run prints output as readily
+  // as a passing one. Status-looking text inside it ("Exit code: 0") is output
+  // the command itself can print, so it is never parsed as a status either.
+  if (!raw) return "unknown";
   if (raw.success === false || raw.is_error === true || raw.isError === true || (raw.error !== undefined && raw.error !== null)) return "failure";
   const status = raw.status;
   if (typeof status === "string") {
@@ -160,8 +218,8 @@ function explicitToolOutcome(response: unknown): HunchToolOutcome["status"] {
   if (typeof status === "string" && /^(?:success|succeeded|ok|completed)$/i.test(status.trim())) explicitSuccess = true;
   if (explicitSuccess) return "success";
   // Common successful tool-result shapes carry output fields even when the
-  // output is empty. An unstructured empty string (Codex's native failure
-  // payload) remains unknown until the host supplies an explicit status.
+  // output is empty (Claude Code routes failed calls to PostToolUseFailure
+  // instead). An unstructured string remains unknown (see above).
   if (["stdout", "stderr", "output", "content"].some(key => Object.prototype.hasOwnProperty.call(raw, key))) return "success";
   return "unknown";
 }

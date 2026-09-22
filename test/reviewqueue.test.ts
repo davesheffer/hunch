@@ -57,3 +57,18 @@ test("partitionReview: respects a custom minGrounded threshold", () => {
   assert.equal(partitionReview([x], 0.7).ready.length, 0, "0.6 grounded fails a 0.7 bar");
   assert.equal(READY_MIN_GROUNDED, 0.7);
 });
+
+test("agent testimony (agent_recorded proposed) is roadmap intent marked unconfirmed — never a draft adopt-drafts could accept", async () => {
+  const { nowData, unconfirmedRoadmapMarker } = await import("../src/wiki/wiki.js");
+  const P = (id: string, source: string): Decision => ({ ...D({ id, source }), status: "proposed", date: "2026-09-17", context: "why" } as Decision);
+  const testimony = P("dec_testimony", "agent_recorded");
+  assert.equal(isReviewDraft(testimony), false, "kept out of the draft queue (adopt-drafts / auto-review)");
+  const { roadmap, pendingReview } = nowData([testimony, P("dec_human", "human_confirmed"), P("dec_draft", "llm_draft")]);
+  assert.deepEqual(roadmap.map((r) => r.id).sort(), ["dec_human", "dec_testimony"], "testimony shows; the machine draft does not");
+  assert.equal(pendingReview, 1, "only the machine draft counts as a legacy un-vouched draft");
+  const t = roadmap.find((r) => r.id === "dec_testimony")!;
+  assert.equal(t.unconfirmed, true);
+  assert.equal(roadmap.find((r) => r.id === "dec_human")!.unconfirmed, undefined);
+  assert.match(unconfirmedRoadmapMarker(t), /unconfirmed.*hunch review --confirm dec_testimony$/);
+  assert.match(unconfirmedRoadmapMarker(t, { private: true }), /hunch review --confirm dec_testimony --private$/);
+});

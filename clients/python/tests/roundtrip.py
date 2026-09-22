@@ -7,7 +7,7 @@ from pathlib import Path
 
 from hunch_state import StateClient, StateClientError
 
-fixture = json.loads(Path(sys.argv[1]).read_text())
+fixture = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
 scope = fixture["scope"]
 client = StateClient(fixture["url"], os.environ["HUNCH_PYTHON_TEST_TOKEN"])
 guest = StateClient(fixture["url"], os.environ["HUNCH_PYTHON_TEST_GUEST"])
@@ -43,6 +43,27 @@ output["capture"] = client.capture(fixture["capture"])
 assert output["capture"]["outcome"] == "created"
 output["batch"] = client.capture_batch(fixture["batch"])
 assert output["batch"]["results"][0]["status"] == "saved"
+# read_or_compute against the real server: the fixture statement is reused without computing;
+# a moved dependency computes once and supersedes it; the same moved set is then reused.
+from hunch_state import read_or_compute, state_hash
+derived = request["record"]
+computed: list[str] = []
+def compute(text: str):
+    def run() -> str:
+        computed.append(text)
+        return text
+    return run
+common = {"scope": scope, "subject": derived["subject"], "transform_version": derived["transform_version"],
+          "provenance": derived["provenance"]}
+reused = read_or_compute(client, dependencies=derived["dependencies"], compute=compute("must not run"), **common)
+assert reused["reused"] and reused["record"]["id"] == record_id and computed == []
+moved_deps = [{"kind": "schema", "name": "fixture", "fingerprint": state_hash("fixture-v2")}]
+moved = read_or_compute(client, dependencies=moved_deps, compute=compute("Python summary v2: שלום 🌱"), **common)
+assert not moved["reused"] and moved["superseded"] == record_id and computed == ["Python summary v2: שלום 🌱"], moved
+assert moved["record"]["content_hash"] == state_hash("Python summary v2: שלום 🌱")
+assert moved["record"].get("visibility") == derived["visibility"], "the superseded statement's audience carries forward"
+assert read_or_compute(client, dependencies=list(reversed(moved_deps)), compute=compute("must not run"), **common)["reused"]
+output["read_or_compute"] = {"reused": reused["record"]["id"], "written": moved["write"]["record_id"]}
 if "https_url" in fixture:
     from hunch_state.proof import create_proof_signer
     context = ssl.create_default_context(cafile=fixture["ca_file"])

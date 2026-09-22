@@ -7,9 +7,9 @@ import { initServeConfig, partitionFor, readServeConfig, writeServeConfig } from
 import { compactLedger } from "../store/changeLedger.js";
 import { HunchStore } from "../store/hunchStore.js";
 import { hunchPaths } from "../core/paths.js";
-import { partitionOf } from "../store/stateBinding.js";
+import { partitionOf, stateHomeFor } from "../store/stateBinding.js";
 import { formatReplayReport, verifyReplay } from "../store/replay.js";
-import { join } from "node:path";
+import { withWriteLock } from "../serve/writelock.js";
 import { ScopeSchema, scopePath } from "../core/stateContract.js";
 import { HUNCH_VERSION } from "../core/version.js";
 
@@ -18,6 +18,23 @@ function parseScopeArg(value: string): { kind: "organization" | "team" | "user" 
   const parsed = m ? ScopeSchema.safeParse({ kind: m[1], id: m[2] }) : null;
   if (!parsed?.success) throw new Error(`partition must be kind:id (organization|team|user|repository), got "${value}"`);
   return parsed.data;
+}
+
+/** Compact one served partition's ledger. Compaction is read → slice → write, so it takes the
+ *  partition write lock like every other writer (#286): without it a live server's append between
+ *  the read and the write is overwritten, regressing head_seq and reusing a seq. The ledger lives
+ *  in the store's RESOLVED state home (the overlay in shared mode), never `<root>/.hunch` blindly. */
+export async function compactPartition(
+  root: string,
+  scope: { kind: "organization" | "team" | "user" | "repository"; id: string },
+  keep: number,
+  lockOptions: { timeoutMs?: number } = {},
+): Promise<{ dropped: number; floor_seq: number; head_seq: number }> {
+  const store = new HunchStore(hunchPaths(root));
+  try {
+    const { hunchDir } = stateHomeFor(store, scope);
+    return await withWriteLock(hunchDir, () => compactLedger(hunchDir, scope, { keep }), lockOptions);
+  } finally { store.close(); }
 }
 
 export function registerServeCommands(program: Command): void {
@@ -59,7 +76,7 @@ export function registerServeCommands(program: Command): void {
     .requiredOption("--partition <kind:id>", "the partition whose ledger to compact")
     .option("--keep <n>", "events to keep", "1000")
     .option("--json", "machine-readable output")
-    .action((opts: { partition: string; keep: string; json?: boolean }) => {
+    .action(async (opts: { partition: string; keep: string; json?: boolean }) => {
       const parent = serve.opts() as { config?: string };
       const config = readServeConfig(resolve(parent.config ?? DEFAULT_CONFIG));
       const scope = parseScopeArg(opts.partition);
@@ -67,7 +84,7 @@ export function registerServeCommands(program: Command): void {
       if (!partition) throw new Error(`this config does not serve ${scopePath(scope)}`);
       const keep = Number(opts.keep);
       if (!Number.isInteger(keep) || keep < 0) throw new Error("--keep must be a non-negative integer");
-      const result = compactLedger(join(partition.root, ".hunch"), scope, { keep });
+      const result = await compactPartition(partition.root, scope, keep);
       if (opts.json) { console.log(JSON.stringify({ partition: scopePath(scope), ...result })); return; }
       console.log(result.dropped ? `${scopePath(scope)}: dropped ${result.dropped} event(s); floor ${result.floor_seq}, head ${result.head_seq}` : `${scopePath(scope)}: nothing to compact (${result.head_seq - result.floor_seq} events retained)`);
     });

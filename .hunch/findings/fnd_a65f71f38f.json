@@ -1,0 +1,40 @@
+{
+  "id": "fnd_a65f71f38f",
+  "title": "Context footprint baseline for 1.39.3: ~16k tokens upfront on hosts that load every tool schema, ~1.8k per prompt, up to ~9k per hunch_context call",
+  "observation": "Baseline measured 2026-09-20 on the published @davesheffer/hunch@1.39.3 dist in the hunch repo (328 decisions, 51 findings). Tokens = characters / 4, not a tokenizer. FIXED PER SESSION: generated grounding block 9,714 chars (~2.4k tok, 61% of CLAUDE.md; AGENTS.md carries the same 9,788 chars; five grounding files in total); SessionStart hook ~450 tok (counted from the injected text); MCP server instructions 878 chars (~220 tok); tool list — Claude Code defers schemas and pays ~320 tok for 42 names, a host that loads every schema pays 50,866 chars (~12.7k tok) for name+description+inputSchema, or 85,584 chars (~21.4k tok) if it also loads the 6 outputSchemas (30,441 chars). Largest tools: hunch_context ~4.0k, hunch_change_proof ~3.0k, hunch_record_decision ~1.1k. RECURRING: UserPromptSubmit hook ~1,130 chars (~300 tok) on every prompt (counted from the injected text; not re-run because the hook opens a task record), plus the instructed hunch_task start (~250 tok) and finish (~1.2k tok) responses — both estimated from live responses, not scripted; pre-edit hook 6,106 chars (~1.5k tok) for src/mcp/server.ts and 411 chars for src/core/io.ts. TOOL RESULTS: hunch_context(src/mcp/server.ts) at the default 1,500-token budget returns content text of exactly 6,000 chars but structuredContent of 30,348 chars (~7.6k tok): `omitted` alone is 21,047 chars (104 entries repeating one sentence) and `text` repeats the brief; whole result ~9.2k tok, and Claude Code shows the model the structured result. hunch_findings() with no scope returns 25,079 chars (~6.3k tok): 12 of 51 findings with full observation text, no budget or limit. hunch_now() 3,768 chars (~0.9k tok). No test or command measures any of these. Filed as issues #368 (tool list), #369 (grounding block), #370 (per-prompt overhead), #371 (tool results), #372 (measurement gate); roadmap proposal dec_3ca27de266. UNVERIFIED: whether Codex/Cursor/Windsurf put outputSchema into model context; whether any host reads both CLAUDE.md and AGENTS.md.",
+  "evidence": [
+    "MCP stdio: initialize + tools/list against dist/cli/index.js mcp → 42 tools, 85,584 chars; by field: outputSchema 30,441 / inputSchema 30,066 / description 18,136 / title 1,901 / execution 1,176 / name 816",
+    "awk '/^## 🧠 Hunch/{f=1} f' CLAUDE.md | wc -c → 9,714 of 15,992; wc -c AGENTS.md → 9,788",
+    "MCP stdio tools/call hunch_context {target: src/mcp/server.ts} → content text 6,000 chars; structuredContent 30,348 chars (omitted 21,047 n=104, text 6,351, delivered 1,194, supplements 1,086)",
+    "MCP stdio tools/call hunch_findings {} → 25,079 chars; hunch_now {} → 3,768 chars",
+    "PreToolUse hook on stdin (Edit src/mcp/server.ts) → 6,106 chars; (Edit src/core/io.ts) → 411 chars",
+    "per-prompt hook text source: src/core/taskReportHook.ts:139"
+  ],
+  "method": null,
+  "severity": "medium",
+  "triage": "scheduled",
+  "affected_files": [
+    "src/mcp/server.ts",
+    "src/integrations/claudemd.ts",
+    "src/core/taskReportHook.ts",
+    "src/core/hookpolicy.ts"
+  ],
+  "affected_symbols": [],
+  "violates_constraint": null,
+  "spawned_decision": "dec_3ca27de266",
+  "observed_at": "2026-09-20T04:08:29.611Z",
+  "resolved_commit": null,
+  "provenance": {
+    "source": "agent_recorded",
+    "confidence": 0.75,
+    "evidence": [
+      "MCP stdio: initialize + tools/list against dist/cli/index.js mcp → 42 tools, 85,584 chars; by field: outputSchema 30,441 / inputSchema 30,066 / description 18,136 / title 1,901 / execution 1,176 / name 816",
+      "awk '/^## 🧠 Hunch/{f=1} f' CLAUDE.md | wc -c → 9,714 of 15,992; wc -c AGENTS.md → 9,788",
+      "MCP stdio tools/call hunch_context {target: src/mcp/server.ts} → content text 6,000 chars; structuredContent 30,348 chars (omitted 21,047 n=104, text 6,351, delivered 1,194, supplements 1,086)",
+      "MCP stdio tools/call hunch_findings {} → 25,079 chars; hunch_now {} → 3,768 chars",
+      "PreToolUse hook on stdin (Edit src/mcp/server.ts) → 6,106 chars; (Edit src/core/io.ts) → 411 chars",
+      "per-prompt hook text source: src/core/taskReportHook.ts:139"
+    ],
+    "last_verified": "2026-09-20T04:08:29.611Z"
+  }
+}

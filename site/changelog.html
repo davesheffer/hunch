@@ -107,6 +107,24 @@
 
     <div class="clog">
       <div class="clog-group">
+        <div class="clog-date">Sep 22, 2026</div>
+        <div class="clog-row"><span class="rel-tag">v1.40.1</span><span class="clog-t"><b>Keeps the graph when parsing fails</b> — indexing refuses to replace a healthy graph when every eligible file of a language fails to parse, and doctor reports the same failure; subscriptions request a resync when their cursor is ahead of the ledger; task reports show the complete contribution card.</span></div>
+      </div>
+      <div class="clog-group">
+        <div class="clog-date">Sep 20, 2026</div>
+        <div class="clog-row"><span class="rel-tag">v1.40.0</span><span class="clog-t"><b>Lighter on every prompt</b> — the prompt hook prints the <span class="mono">hunch task verify</span> command inline and the task's start and finish round trips become conditional, the pre-edit hook stops re-sending a grounding block that nothing changed, and the native parsers load on first parse instead of at import, so <span class="mono">hunch --version</span> and every hook start in a fraction of the time; Kubernetes references resolve within a namespace, the grounding tools share one definition of a known path, and an install from a linked worktree keeps the repo's shared git hooks.</span></div>
+      </div>
+      <div class="clog-group">
+        <div class="clog-date">Sep 19, 2026</div>
+        <div class="clog-row"><span class="rel-tag">v1.39.3</span><span class="clog-t"><b>Keeps what you recorded</b> — reindexing, branch merges and <span class="mono">hunch private migrate</span> keep edges, lifecycle moves and overlay records they used to drop; the grounding tools stop matching the wrong file; stale-lock takeover is serialized and a recycled pid no longer vouches for a dead owner; <span class="mono">hunch task verify</span> settles on the command's own exit and ledger reads stop taking the writer lock; and <span class="mono">hunch doctor</span> reports a git hook whose command is dead instead of calling it installed.</span></div>
+      </div>
+      <div class="clog-group">
+        <div class="clog-date">Sep 17, 2026</div>
+        <div class="clog-row"><span class="rel-tag">v1.39.2</span><span class="clog-t"><b>Tighter boundaries</b> — state writes stay inside their partition, capture tokens no longer stand in for a human confirmation, <span class="mono">hunch serve</span> keeps internals out of errors and anonymous health checks, Codex output without an exit status no longer counts as a pass, and Windows batch-launcher arguments stay literal.</span></div>
+        <div class="clog-row"><span class="rel-tag">v1.39.1</span><span class="clog-t"><b>Safer checks, safer cleanup</b> — constraint checks read the whole change instead of its first 60 KB and fail closed when they cannot, Codex patches are checked file by file, git hooks are no longer installed where husky or pre-commit would never run them, older <span class="mono">.gitignore</span> blocks are brought up to date, shared-state retries replay instead of duplicating, and <span class="mono">hunch workspaces prune</span> no longer deletes relanded branches, untracked work or half a step.</span></div>
+        <div class="clog-row"><span class="rel-tag">v1.39.0</span><span class="clog-t"><b>Reach, reuse, clean up</b> — <span class="mono">hunch serve</span> speaks MCP over streamable HTTP, so a remote agent gateway can use shared state as a tool; the TypeScript and Python clients get <span class="mono">readOrCompute</span>, which reuses a statement whose sources did not move and writes a replacement with the right idempotency key when they did; <span class="mono">hunch branches</span> and <span class="mono">hunch workspaces</span> answer "what is open where, and what can I delete" across machines; and Kubernetes manifests are indexed as a graph of references.</span></div>
+      </div>
+      <div class="clog-group">
         <div class="clog-date">Sep 16, 2026</div>
         <div class="clog-row"><span class="rel-tag">v1.38.1</span><span class="clog-t"><b>Nothing stays open</b> — a prompt the user interrupted is closed by the session's next prompt and its evidence still reaches the record; an agent reusing an older task id no longer reopens a task nothing would close; background-command notifications stop opening empty rows; task records no longer list the grounding files a capture rewrites, and a shared checkout anchors only commits. <span class="mono">hunch task verify</span> gets a 15-minute default budget, and <span class="mono">hunch_task start</span> works again on published installs.</span></div>
       </div>

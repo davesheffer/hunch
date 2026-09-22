@@ -31,7 +31,8 @@ it. Create one client per worker; it is synchronous and does not provide thread 
 
 All six state operations negotiate the required capability before sending the verb:
 `read`, `write`, `records`, `subscribe`, `capture`, and `capture_batch`. Use `capabilities`
-for discovery and `health` for availability. Request dictionaries omit top-level `schema` and
+for discovery and `health` for availability (the client sends its credential, so the response
+also lists the served `partitions`; an unauthenticated probe of the route gets liveness only). Request dictionaries omit top-level `schema` and
 `principal`; the server supplies those. Records inside write requests retain their own schema.
 The return value is the complete JSON object, including durability, source hashes, conflicts,
 observation cursors and subscription resync signals.

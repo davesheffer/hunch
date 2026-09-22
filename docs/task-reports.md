@@ -12,17 +12,25 @@ The durable memory is the decision, rule, bug history or finding that future tas
 
 The generated Hunch instructions ask the agent to:
 
-1. Reuse the task ID and exact `cwd` supplied by a trusted native prompt hook. If none was supplied, start one task with `hunch_task(action: "start", title: "Short task title")`.
+1. Reuse the task ID, the exact `cwd` and the printed `task verify` command supplied
+   by a trusted native prompt hook, and do not call `hunch_task(action: "start")` for
+   that task. If none was supplied, start one task with
+   `hunch_task(action: "start", title: "Short task title")`.
 2. Carry the returned `task_id` and hook-supplied `cwd` into each `hunch_context`
    call and each decision, correction, or finding capture. Pass that `cwd` again
    when reading or finishing the task report.
-3. Run a relevant verification using the exact `verification_argv` launcher from
-   task start, followed by the command and arguments. This avoids stale global CLIs.
+3. Run a relevant verification using the exact launcher the prompt hook printed —
+   or, where none was, the `verification_argv` from task start — followed by the
+   command and arguments. This avoids stale global CLIs.
 4. Before attributing an application, read `hunch_report(task_id)` and copy its
    exact `application_references`, adding the action actually taken.
-5. Finish with `hunch_task(action: "finish", task_id, applications?)` and include
-   the structured `contribution_card`, including its Evidence line, in the final
-   response unless presentation is disabled.
+5. Finish with `hunch_task(action: "finish", task_id, applications?)` when the task
+   used Hunch — a `hunch_*` call carrying the task_id, a verified check, Hunch hook
+   context acted on, or an application to claim — and include the structured
+   `contribution_card`, including its Evidence line, in the final response unless
+   presentation is disabled. Skip the finish call only when the prompt hook's own
+   instruction said that host closes the task and the task used none of those; a
+   task the agent started itself is always finished by the agent.
 
 The first time a lesson revision reaches a task, the delivery carries one
 line — `Hunch recalled: <lesson title>` — in the `hunch_context` result, the

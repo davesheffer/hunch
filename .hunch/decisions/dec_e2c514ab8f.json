@@ -1,0 +1,59 @@
+{
+  "id": "dec_e2c514ab8f",
+  "title": "Stale-lock takeover is serialized under an exclusive reclaim claim, and a recycled pid is detected by process-identity equality, judged by one shared table",
+  "topic": "cross-process-lock.takeover",
+  "status": "accepted",
+  "context": "Issues #287 and #293: two contenders could both judge the same lock stale and both remove-and-recreate it (non-atomic takeover), so one deleted the other's freshly acquired lock; and a lock whose owner pid had been recycled by an unrelated live process was treated as held forever (or until age), while age-only takeover could steal from a slow live owner. A critic stress harness measured 24 mutual-exclusion violations on main's lock code versus 0 in 5,017 write-lock acquisitions / 231 takeovers and 507 rmw puts / 158 takeovers with this design. Identity must be compared by EQUALITY of an opaque per-process token rather than by arithmetic on clocks, because any clock comparison is breakable by skew or a clock step. Row 6 ages rather than steals because a shared hostname + shared volume does not prove a shared pid namespace: WSL2 and Docker Desktop guests, and same-pid sidecars on linux, can present our own pid number for a different live process.",
+  "decision": "Both cross-process locks (the serve write lock in src/serve/writelock.ts and the store read-modify-write lock in src/store/jsonStore.ts) take over a stale lock only while holding an exclusive `<lock>.reclaim` mkdir claim, and re-judge the owner after winning the claim before removing anything. A same-host owner is judged by ONE pure table, judgeSameHostOwner in src/core/procstart.ts: (1) a nonce this process holds => live; (2) unprobeable (token prefix mismatch, or our own token is null OFF linux) => fall back to age; (3) dead pid => stale; (4) live pid whose identity token differs from the recorded one (recycled) => stale; (5) same token => live; (6) identity unknown + the owner pid is OUR pid + a recorded nonce we do not hold => age, on EVERY platform; otherwise live. The linux token is `<boot_id>:<pid namespace>:<time namespace>:<starttime ticks>` (time namespace \"0\" on kernels < 5.6), produced only when readlink /proc/self equals our pid, and a null self token is never memoized. A null self token ON linux reads as \"unknown\" (the pre-existing pid rule), not unprobeable. Release removes only a lock that still carries our nonce. The owner-file ENOENT excuse applies only when the owner file is gone AND the lock is gone or is a real non-symlink directory. Proposed in PR #351 (Refs #287, #293); becomes accepted when that PR merges.",
+  "consequences": [
+    "Takeover costs one extra mkdir/rmdir claim; a crashed claimer's `.reclaim` dir is itself reclaimed by age",
+    "Residual gap: on macOS/Windows a recycled pid now owned by an unrelated live process is still only released by age — PR #351 says Refs, not Fixes",
+    "The linux-only real-kernel token test runs only on ubuntu CI; Windows EPERM claim paths and gVisor/sandbox boot_id + namespace-inode uniqueness are unverified",
+    "Deterministic takeover tests (fs monkey-patch) fail on main's lock code and without the re-judge, so a regression of either half is caught; the multi-process tests are stress smoke only"
+  ],
+  "alternatives_rejected": [
+    "Compare lock mtime against the owner's process start time (clock arithmetic) — rejected: a critic reproduction showed clock skew or a clock step steals a LIVE lock; only token equality is safe",
+    "Rename the stale lock to a unique name and re-check the nonce afterwards — rejected: still leaves a window where a fresh acquirer's lock is renamed away; an exclusive reclaim claim plus re-judge closes it without moving the lock",
+    "An age ceiling that lets a same-host LIVE owner be stolen after N seconds — rejected: a slow but live writer loses its lock mid-write, the exact corruption the lock exists to prevent",
+    "Spawn-based identity tokens on macOS/Windows (ps / PowerShell) — rejected: a process spawn per lock probe is too slow and fragile on the hot path; those platforms stay on the pid + age rule, leaving a known unrelated-live-pid reuse gap",
+    "Immediately steal a lock recorded under our own pid with a nonce we do not hold, on linux — rejected: critic-2 reproduction, same-pid sidecars in separate pid namespaces share the volume",
+    "Immediately steal an own-pid/foreign-nonce lock off linux — rejected: critic-3, WSL2 and Docker Desktop guests share hostname and volume, so 'our pid is ours' is false there too; age everywhere instead",
+    "Treat a null self token on linux as unprobeable (age fallback) — rejected: it would age-steal live owners that main's pid rule refused to steal; it reads as unknown instead",
+    "Separate judging logic per lock — rejected: the two locks had already drifted; one pure shared table is the only way to keep them provably identical and unit-testable"
+  ],
+  "rejected_tripwires": [],
+  "related_components": [],
+  "related_files": [
+    "src/core/procstart.ts",
+    "src/serve/writelock.ts",
+    "src/store/jsonStore.ts",
+    "test/procstart.test.ts",
+    "test/serve.test.ts",
+    "test/store.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-09-19T10:19:07.160Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "premises": [],
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 0.95,
+    "evidence": [
+      "src/core/procstart.ts",
+      "src/serve/writelock.ts",
+      "src/store/jsonStore.ts",
+      "test/procstart.test.ts",
+      "test/serve.test.ts",
+      "test/store.test.ts"
+    ],
+    "last_verified": "2026-09-19T14:06:42.700Z"
+  },
+  "date": "2026-09-19T10:19:07.160Z"
+}

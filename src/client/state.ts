@@ -79,7 +79,10 @@ export function createStateClient(opts: StateClientOptions) {
     captureBatch: (request: Omit<CaptureBatchRequest, "schema" | "principal">) => call<CaptureBatchResult>("POST", "/nuryel/v1/capture-batch", request),
     subscribe: (request: ClientSubscribeRequest) => call<ClientSubscribeResponse>("POST", "/nuryel/v1/subscribe", request),
     records: (request: { scope: Scope; ids: string[] }) => call<RecordsResponse>("POST", "/nuryel/v1/records", request),
-    health: () => call<{ ok: boolean; version: string; protocol: string; partitions: string[] }>("GET", "/nuryel/v1/health"),
+    /** Liveness; `partitions` is present because this client sends its credential. */
+    health: () => call<{ ok: boolean; version: string; protocol: string; partitions?: string[] }>("GET", "/nuryel/v1/health"),
   };
 }
 export type StateClient = ReturnType<typeof createStateClient>;
+
+export { readOrCompute, type ReadOrComputeClient, type ReadOrComputeRequest, type ReadOrComputeResult, type ComputedContent } from "./readOrCompute.js";

@@ -3,10 +3,18 @@
  *
  * hunch_capture_decision issues a short-lived token; the commit path consumes it, so a
  * decision written through the capture front door is provably the tail of an interview
- * — the identity-principle guard against a silent, un-interviewed write. In-memory (the
- * MCP server is long-lived); tokens are one-time-use and expire so an abandoned
- * interview can't leak. Absence of a token never BLOCKS a write yet (staged
+ * PROTOCOL — the identity-principle guard against a silent, un-interviewed write.
+ * In-memory (the MCP server is long-lived); tokens are one-time-use and expire so an
+ * abandoned interview can't leak. Absence of a token never BLOCKS a write yet (staged
  * deprecation §9.3) — the caller decides how to treat an un-gated write.
+ *
+ * WHAT A TOKEN DOES NOT PROVE: that a human answered. Any agent — or content steering
+ * one — can call hunch_capture_decision and consume the token it gets back, entirely
+ * inside the agent's own MCP channel. So a consumed token never confers
+ * `human_confirmed` on its own (the stamp the strict gate and the edit hook trust). It
+ * only licenses ASKING the human through a channel the agent does not control: an MCP
+ * elicitation answered in the client UI (`isHumanConfirmationAnswer`), or a human
+ * running `hunch review --confirm <id>`. Without one of those, the write is testimony.
  */
 const CAPTURE_TOKEN_TTL_MS = 30 * 60 * 1000; // 30 min
 const sessions = new Map<string, number>(); // token -> issuedAt (epoch ms)
@@ -29,6 +37,26 @@ export function consumeCaptureToken(token: string | undefined, now: number): boo
   if (at === undefined) return false;
   sessions.delete(token);
   return now - at <= CAPTURE_TOKEN_TTL_MS;
+}
+
+/** The form a human answers in the client UI (MCP `elicitation/create`, form mode). One
+ *  required boolean, so a bare "accept" (an empty submit) is never read as a yes. */
+export const HUMAN_CONFIRMATION_SCHEMA = {
+  type: "object" as const,
+  properties: {
+    confirm: {
+      type: "boolean" as const,
+      title: "I confirm this myself",
+      description: "Check only if YOU stated this. Unchecked, it is kept as agent testimony that cannot block.",
+    },
+  },
+  required: ["confirm"],
+};
+
+/** Did the human affirmatively confirm? Only an explicit accept WITH confirm === true
+ *  counts; decline, cancel, and a missing or false checkbox all mean "no signature". */
+export function isHumanConfirmationAnswer(result: { action?: string; content?: Record<string, unknown> } | null | undefined): boolean {
+  return result?.action === "accept" && result.content?.confirm === true;
 }
 
 export { CAPTURE_TOKEN_TTL_MS };

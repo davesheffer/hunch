@@ -62,6 +62,88 @@ test("resolveNodeIds resolves by symbol name, exact file, and file suffix", () =
   } finally { cleanup(); }
 });
 
+/** A root `index.ts` beside a nested `a/index.ts`: the shape that exposed
+ *  resolveNodeIds' un-tiered `file = ? OR file LIKE '%/'||?` OR (issue #335). */
+function indexedWithRootIndex() {
+  const root = fixtureRepo();
+  mkdirSync(join(root, "a"), { recursive: true });
+  writeFileSync(join(root, "index.ts"), `export function rootIndex(){ return 1; }\n`);
+  writeFileSync(join(root, "a/index.ts"), `export function nestedIndex(){ return 2; }\n`);
+  const store = new HunchStore(hunchPaths(root));
+  store.json.ensureDirs();
+  indexRepo(store, root, { churn: false });
+  store.reindex();
+  const syms = store.json.loadAll("symbols");
+  const idsIn = (file: string) => syms.filter((s) => s.file === file).map((s) => s.id).sort();
+  return { store, root, idsIn, cleanup: () => { store.close(); rmSync(root, { recursive: true, force: true }); } };
+}
+
+test("resolveNodeIds: a root file resolves to ONLY its own symbols — a same-basename nested file must not leak in (issue #335)", () => {
+  const { store, idsIn, cleanup } = indexedWithRootIndex();
+  try {
+    const rootIds = idsIn("index.ts");
+    const nestedIds = idsIn("a/index.ts");
+    assert.ok(rootIds.length && nestedIds.length, "fixture indexed both index.ts files");
+    assert.deepEqual(store.resolveNodeIds("index.ts").sort(), rootIds, "the exact-file tier wins; a/index.ts must not leak in");
+    assert.deepEqual(store.resolveNodeIds("a/index.ts").sort(), nestedIds);
+  } finally { cleanup(); }
+});
+
+test("resolveNodeIds: an absolute in-repo path resolves identically to its repo-relative form (issue #335)", () => {
+  const { store, root, idsIn, cleanup } = indexedWithRootIndex();
+  try {
+    assert.deepEqual(store.resolveNodeIds(join(root, "index.ts")).sort(), store.resolveNodeIds("index.ts").sort());
+    assert.deepEqual(store.resolveNodeIds(join(root, "index.ts")).sort(), idsIn("index.ts"), "and it is not empty");
+  } finally { cleanup(); }
+});
+
+test("resolveNodeIds: a bare basename that exists ONLY nested still suffix-resolves (issue #335 preserves the convenience)", () => {
+  const { store, idsIn, cleanup } = indexedWithRootIndex();
+  try {
+    // "session.ts" has no root-level counterpart, so it is not itself a real path
+    // and the segment-anchored suffix tier is still allowed to resolve it.
+    assert.deepEqual(store.resolveNodeIds("session.ts").sort(), idsIn("src/auth/session.ts"), "suffix resolution survives");
+  } finally { cleanup(); }
+});
+
+test("resolveNodeIds: a real on-disk file with zero indexed symbols resolves to nothing, never a same-basename nested file (issue #334)", () => {
+  const root = fixtureRepo();
+  mkdirSync(join(root, "a"), { recursive: true });
+  writeFileSync(join(root, "empty.ts"), "// only a comment — no symbols at all\n");
+  writeFileSync(join(root, "a/empty.ts"), `export function nestedEmpty(){ return 1; }\n`);
+  const store = new HunchStore(hunchPaths(root));
+  store.json.ensureDirs();
+  indexRepo(store, root, { churn: false });
+  store.reindex();
+  try {
+    const nested = store.json.loadAll("symbols").filter((s) => s.file === "a/empty.ts").map((s) => s.id).sort();
+    assert.ok(nested.length, "fixture indexed the nested file");
+    assert.deepEqual(store.resolveNodeIds("empty.ts"), [], "the real root file must not pull a/empty.ts's symbols");
+    assert.deepEqual(store.resolveNodeIds("a/empty.ts").sort(), nested, "the nested file still resolves exactly");
+  } finally { store.close(); rmSync(root, { recursive: true, force: true }); }
+});
+
+test("resolveNodeIds: a glob-covered path that no file occupies still suffix-resolves — coverage is not existence", () => {
+  // Symbols in test/a.test.ts derive a `test/**` component, so `test/util.ts` is
+  // "known" to isKnownPath although nothing is on disk there. Gating the suffix
+  // tier on coverage rather than existence made the target resolve to nothing.
+  const root = mkdtempSync(join(tmpdir(), "hunch-impact-phantom-"));
+  mkdirSync(join(root, "test"), { recursive: true });
+  mkdirSync(join(root, "src/test"), { recursive: true });
+  writeFileSync(join(root, "test/a.test.ts"), `export function aTest(){ return 1; }\n`);
+  writeFileSync(join(root, "src/test/util.ts"), `export function util(){ return 2; }\n`);
+  const store = new HunchStore(hunchPaths(root));
+  store.json.ensureDirs();
+  indexRepo(store, root, { churn: false });
+  store.reindex();
+  try {
+    assert.equal(store.isKnownPath("test/util.ts"), true, "the test/** component covers it");
+    const target = store.json.loadAll("symbols").filter((s) => s.file === "src/test/util.ts").map((s) => s.id).sort();
+    assert.ok(target.length, "fixture indexed src/test/util.ts");
+    assert.deepEqual(store.resolveNodeIds("test/util.ts").sort(), target, "the suffix tier must still run");
+  } finally { store.close(); rmSync(root, { recursive: true, force: true }); }
+});
+
 test("prImpact composes blast radius + constraints + decisions for a change", () => {
   const { store, fileOf, cleanup } = indexed();
   try {

@@ -25,15 +25,22 @@ const SWEEP_AGE_MS = 48 * 3600 * 1000;
 
 /** Decide whether this injection should be the FULL grounding block or a delta
  *  one-liner. Records the content hash as a side effect (so the next identical
- *  call dedups). Never throws. */
-export function injectionMode(sessionId: string | undefined, key: string, content: string): "full" | "delta" {
+ *  call dedups). Never throws.
+ *
+ *  `hashInput` lets a caller dedup on a STABLE PROJECTION of the block instead
+ *  of its presentation: some grounding is self-invalidating —
+ *  serving it writes delivery receipts, and the next call's wording moves
+ *  ("today" → "delivered today") with no record change, so hashing the rendered
+ *  text re-sends the full block forever. Callers pass the identity of the
+ *  underlying records; omitting it hashes `content`, the original contract. */
+export function injectionMode(sessionId: string | undefined, key: string, content: string, hashInput: string = content): "full" | "delta" {
   try {
     if (!sessionId || process.env.HUNCH_HOOK_DEDUP === "0") return "full";
     const dir = join(tmpdir(), "hunch-hookcache");
     mkdirSync(dir, { recursive: true });
     sweep(dir);
     const file = join(dir, `${sessionId.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 80)}.json`);
-    const hash = createHash("sha256").update(content).digest("hex").slice(0, 16);
+    const hash = createHash("sha256").update(hashInput).digest("hex").slice(0, 16);
     let map: Record<string, string>;
     try {
       const raw = JSON.parse(readFileSync(file, "utf8")) as unknown;

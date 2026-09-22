@@ -1,0 +1,86 @@
+{
+  "id": "dec_320e4acb4d",
+  "title": "K8s resource references as symbol-level edges, not component-level",
+  "topic": null,
+  "status": "accepted",
+  "context": "Adding K8s manifest reference resolution (Deployments → ConfigMaps/Secrets, Services → workloads) to the indexer requires deciding whether these references produce symbol-level or component-level graph edges.",
+  "decision": "Implement K8s resource references as symbol-level 'references' edges (contributing to fan_in/fan_out) rather than component-level 'depends_on' edges. This choice is driven by empirical observation: real Helm charts overwhelmingly co-locate a Deployment and its ConfigMap/Secret in the same templates/ directory, where component-level edges would be filtered out as same-component and produce no signal.",
+  "consequences": [
+    "Symbol-level edges preserve signal for the dominant real-world case of co-located resources",
+    "References contribute to fan_in/fan_out metrics, making dependency visibility accurate at scale",
+    "Aligns K8s resolution semantics with existing cross-file resolution patterns in the codebase",
+    "Requires kind-scoped resolution (not reusing resolveName()) to avoid conflating resources with identical names"
+  ],
+  "alternatives_rejected": [
+    "Component-level 'depends_on' edges: silently filtered out as same-component in real Helm charts, losing signal",
+    "Reusing resolveName() directly: has no concept of Kubernetes kind, would incorrectly conflate ConfigMap and Secret sharing a name"
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Component-level 'depends_on' edges: silently filtered out as same-component in real Helm charts, losing signal",
+      "scope": [
+        "src/extractors/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Reusing resolveName() directly: has no concept of Kubernetes kind, would incorrectly conflate ConfigMap and Secret sharing a name",
+      "scope": [
+        "src/extractors/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_a94a8fe5cc",
+    "cmp_e0ccfe26fe",
+    "cmp_f27fede222"
+  ],
+  "related_files": [
+    "src/extractors/indexer.ts",
+    "test/indexer.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "2ba4593e",
+  "valid_from": "2026-09-14T16:04:19+02:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft",
+    "confidence": 0.65,
+    "evidence": [
+      "commit:2ba4593e",
+      "synth:provider=claude-cli",
+      "branch:upstream-pr/k8s-manifest-refs",
+      "src/extractors/indexer.ts",
+      "test/indexer.test.ts"
+    ],
+    "last_verified": "2026-09-16T12:11:41.369Z"
+  },
+  "date": "2026-09-14T16:04:19+02:00"
+}

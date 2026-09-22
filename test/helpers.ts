@@ -5,7 +5,7 @@ import { pathToFileURL } from "node:url";
 import { hunchPaths } from "../src/core/paths.js";
 import { HunchStore } from "../src/store/hunchStore.js";
 import { indexRepo } from "../src/extractors/indexer.js";
-import { extracted, inferred, type Constraint, type Provenance } from "../src/core/types.js";
+import { extracted, inferred, type Constraint, type Provenance, type Symbol } from "../src/core/types.js";
 
 export function tempStore(): { store: HunchStore; root: string; cleanup: () => void } {
   const root = mkdtempSync(join(tmpdir(), "hunch-test-"));
@@ -47,6 +47,16 @@ export function mkConstraint(over: Partial<Constraint> & { id: string }): Constr
     enforcement: "advisory_v1", match: null, forbids: null, rationale: "", source_decision: null,
     violations: [], status: "active", valid_from: undefined, valid_to: null,
     provenance: { source: "human_confirmed", confidence: 1, evidence: [] },
+    ...over,
+  };
+}
+
+/** A minimal indexed-symbol fixture — id/file/name are the only fields path-matching
+ *  tests usually care about; everything else gets a harmless zero/empty default. */
+export function mkSymbol(id: string, file: string, name: string, over: Partial<Symbol> = {}): Symbol {
+  return {
+    id, file, name, kind: "function", signature_hash: "", calls: [], called_by: [],
+    metrics: { loc: 10, churn_90d: 0, bug_count: 0, fan_in: 0, fan_out: 0 }, last_changed: "",
     ...over,
   };
 }

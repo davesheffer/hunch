@@ -1,0 +1,31 @@
+{
+  "id": "fnd_f6875f475b",
+  "title": "Post-commit auto-capture regenerates grounding files from the pinned published template and reverts an in-branch generator change",
+  "observation": "On a branch that changes renderHunchSection (src/integrations/claudemd.ts), the post-commit hook's capture commit regenerates the five grounding files (CLAUDE.md, AGENTS.md, .cursor/rules/hunch.mdc, .windsurf/rules/hunch.md, .github/copilot-instructions.md) with the PINNED published hunch (npx exact pin), not the branch's own source. The capture commit therefore silently reverts the generator's new prose back to the released template while bumping the counts, and test/grounding-freshness.test.ts goes red on the branch until someone re-runs `grounding --refresh` with the worktree's source. Same family as the known post-merge hook regenerating grounding files from an older template. Candidate mechanism fix (generic, any repo that develops hunch or pins an older hunch than the block it has committed): the capture path should only touch the counts sentence of an existing block — or skip regeneration when the committed block's prose differs from what the running version would render (direction-aware, like src/core/groundingLag.ts) — never rewrite prose it did not author.",
+  "evidence": [
+    "2026-09-20 worktree .claude/worktrees/perf-task-calls: fix commit 4e7a592e edits 3 sentences in renderHunchSection + the 5 generated files; hook-authored 8fe745a0 'hunch: capture dec_d453ac2507' (`git show 8fe745a0 -- CLAUDE.md`) restores the OLD three sentences ('For a new user task, call hunch_task(action: \"start\"…', 'use the exact verification_argv launcher returned by hunch_task start', 'Call hunch_task(action: \"finish\"…') and bumps 327->328 decisions across all 5 files",
+    "b5e4018d on the same branch is the manual restoration via `npx tsx src/cli/index.ts grounding --refresh`"
+  ],
+  "method": null,
+  "severity": "medium",
+  "triage": "open",
+  "affected_files": [
+    "src/integrations/hooks.ts",
+    "src/integrations/claudemd.ts",
+    "src/core/groundingLag.ts"
+  ],
+  "affected_symbols": [],
+  "violates_constraint": null,
+  "spawned_decision": null,
+  "observed_at": "2026-09-20T04:05:13.301Z",
+  "resolved_commit": null,
+  "provenance": {
+    "source": "agent_recorded",
+    "confidence": 0.75,
+    "evidence": [
+      "2026-09-20 worktree .claude/worktrees/perf-task-calls: fix commit 4e7a592e edits 3 sentences in renderHunchSection + the 5 generated files; hook-authored 8fe745a0 'hunch: capture dec_d453ac2507' (`git show 8fe745a0 -- CLAUDE.md`) restores the OLD three sentences ('For a new user task, call hunch_task(action: \"start\"…', 'use the exact verification_argv launcher returned by hunch_task start', 'Call hunch_task(action: \"finish\"…') and bumps 327->328 decisions across all 5 files",
+      "b5e4018d on the same branch is the manual restoration via `npx tsx src/cli/index.ts grounding --refresh`"
+    ],
+    "last_verified": "2026-09-20T04:05:13.301Z"
+  }
+}

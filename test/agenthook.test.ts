@@ -1,6 +1,15 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { contextHookOutput, denyHookOutput, normalizeHookEvent, stopHookOutput } from "../src/core/agenthook.js";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { contextHookOutput, denyHookOutput, normalizeHookEvent, parseApplyPatch, stopHookOutput } from "../src/core/agenthook.js";
+import { hunchPaths } from "../src/core/paths.js";
+import { armExecutionObligations, emptyState, loadPipelineState, onCommand, onEdit, pendingExecutionObligations } from "../src/core/pipeline.js";
+import type { Constraint } from "../src/core/types.js";
+import { HunchStore } from "../src/store/hunchStore.js";
+import { mkConstraint, tsxLoaderUrl } from "./helpers.js";
 
 test("normalizes VS Code's camelCase file edit payload", () => {
   const event = normalizeHookEvent({
@@ -95,6 +104,33 @@ test("normalizes successful and failed tool outcomes without persisting raw prov
     tool_response: "",
   }, "codex");
   assert.equal(codexUnknown?.tool_outcome?.status, "unknown", "an empty PostToolUse result cannot prove failure or success");
+});
+
+test("a Codex command's plain-string output is not success evidence", () => {
+  // Codex sends a Bash call's PostToolUse `tool_response` as the command's raw
+  // output string; the exit code is not part of it. A failing test run prints
+  // output too, so text alone must not satisfy an expected-success obligation.
+  const failingRun = normalizeHookEvent({
+    hook_event_name: "PostToolUse", session_id: "thread-1", turn_id: "turn-1",
+    tool_name: "Bash", tool_input: { command: "npx vitest run src/preprocess.test.ts" },
+    tool_response: "FAIL src/preprocess.test.ts\nTest Files 1 failed | 3 passed\n",
+  }, "codex");
+  assert.equal(failingRun?.tool_outcome?.status, "unknown");
+  assert.match(failingRun?.tool_outcome?.output ?? "", /1 failed/, "the output is still kept for marker matching");
+  // Text that merely looks like an exit status is printed output, not a status.
+  for (const spoof of ["Process exited with code 0\nOutput:\nok", "Exit code: 0\nok"]) {
+    assert.equal(normalizeHookEvent({ hook_event_name: "PostToolUse", session_id: "t", tool_name: "Bash", tool_response: spoof }, "codex")?.tool_outcome?.status, "unknown", spoof);
+  }
+
+  let state = onEdit(armExecutionObligations(emptyState(), [{
+    id: "episode:runtime:preprocess", origin: "episode", category: "behavior", phase: "after-edit",
+    description: "Exercise preprocess behavior after the latest edit.",
+    command_alternatives: [["vitest", "preprocess.test.ts"]],
+    expected: { success: true, output_includes: ["passed"] },
+  }]), "src/preprocess.ts");
+  state = onCommand(state, failingRun!.tool_input!.command!, failingRun!.tool_outcome);
+  assert.equal(pendingExecutionObligations(state).length, 1, "an unobserved result cannot discharge an expected-success obligation");
+  assert.equal(state.obligations[0]?.last_attempt?.outcome, "unknown");
 });
 
 test("normalizes Cursor's lower-camel hook event and snake payload", () => {
@@ -192,4 +228,150 @@ test("does not retarget a normal write whose content contains patch markers", ()
   }, "claude");
   assert.equal(write?.tool_name, "Write");
   assert.equal(write?.tool_input?.file_path, "src/actual.md");
+});
+
+test("Codex apply_patch lists every touched file with only its added lines", () => {
+  const patch = [
+    "*** Begin Patch",
+    "*** Update File: src/other.ts",
+    "@@ function a",
+    " context eval(kept)",
+    "-removed eval(old)",
+    "+added one",
+    "*** Add File: src/new.ts",
+    "+export const x = 1;",
+    "++counter;",
+    "*** Delete File: src/gone.ts",
+    "*** Update File: src/old/name.ts",
+    "*** Move to: src/billing/name.ts",
+    "@@",
+    "-a",
+    "+b",
+    "*** End of File",
+    "*** End Patch",
+  ].join("\r\n");
+  const edit = normalizeHookEvent({ hook_event_name: "PreToolUse", session_id: "t", tool_name: "apply_patch", tool_input: { input: patch } }, "codex");
+  assert.equal(edit?.tool_input?.file_path, "src/other.ts", "the first path stays the single-file target");
+  assert.equal(edit?.tool_input?.content, patch);
+  assert.deepEqual(edit?.tool_input?.patch_files, [
+    { path: "src/other.ts", action: "update", added_lines: ["added one"] },
+    { path: "src/new.ts", action: "add", added_lines: ["export const x = 1;", "+counter;"] },
+    { path: "src/gone.ts", action: "delete", added_lines: [] },
+    { path: "src/old/name.ts", action: "update", moved_to: "src/billing/name.ts", added_lines: ["b"] },
+  ]);
+  assert.equal(parseApplyPatch("*** Begin Patch\n*** Update File: C:\\repo\\src\\a.ts\n@@\n+x\n*** End Patch\n")[0]?.path, "C:\\repo\\src\\a.ts", "paths are kept as written; the CLI normalizes them");
+  const claude = normalizeHookEvent({ hook_event_name: "PreToolUse", tool_name: "Edit", tool_input: { file_path: "src/a.ts", new_string: "x" } }, "claude");
+  assert.equal(claude?.tool_input?.patch_files, undefined, "other providers never carry patch_files");
+});
+
+// ---- end-to-end: the real `hunch hook --provider codex` against a temp repo ----
+const hookCli = resolve("src/cli/index.ts");
+function patchRepo(t: { after: (f: () => void) => void }, constraints: Constraint[], firmness = "strict"): string {
+  const root = mkdtempSync(join(tmpdir(), "hunch-codex-patch-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  execFileSync("git", ["init", "-q", root]);
+  mkdirSync(join(root, ".hunch"));
+  writeFileSync(join(root, ".gitignore"), ".hunch-cache/\n");
+  writeFileSync(join(root, ".hunch", "config.json"), JSON.stringify({ firmness }));
+  mkdirSync(join(root, "src", "billing"), { recursive: true });
+  writeFileSync(join(root, "src", "other.ts"), "export const other = 1;\n");
+  writeFileSync(join(root, "src", "billing", "charge.ts"), "export const charge = 1;\n");
+  const store = new HunchStore(hunchPaths(root));
+  store.json.ensureDirs();
+  for (const c of constraints) store.json.put("constraints", c);
+  store.reindex(); store.close();
+  return root;
+}
+function codexHook(root: string, payload: Record<string, unknown>, env: Record<string, string> = { HUNCH_PIPELINE: "0" }) {
+  const output = execFileSync(process.execPath, ["--import", tsxLoaderUrl(), hookCli, "hook", "--provider", "codex"], {
+    cwd: root, env: { ...process.env, ...env },
+    input: JSON.stringify({ cwd: root, session_id: "codex-session", turn_id: "turn-1", ...payload }), encoding: "utf8",
+  }).trim();
+  return output ? JSON.parse(output) : null;
+}
+const patchOf = (...lines: string[]) => ["*** Begin Patch", ...lines, "*** End Patch", ""].join("\n");
+const preEdit = (root: string, patch: string) => codexHook(root, { hook_event_name: "PreToolUse", tool_name: "apply_patch", tool_input: { input: patch } });
+const denialOf = (out: { hookSpecificOutput?: { permissionDecision?: string; permissionDecisionReason?: string } } | null): string | null =>
+  out?.hookSpecificOutput?.permissionDecision === "deny" ? out.hookSpecificOutput.permissionDecisionReason ?? "" : null;
+
+test("strict gate denies a multi-file patch when a later file hits a blocking invariant, naming that file", { timeout: 120_000 }, t => {
+  const root = patchRepo(t, [mkConstraint({ id: "con_billing_guard", statement: "Billing is frozen", scope: ["src/billing/**"], severity: "blocking" })]);
+  const reason = denialOf(preEdit(root, patchOf(
+    "*** Update File: src/other.ts", "@@", "-export const other = 1;", "+export const other = 2;",
+    "*** Update File: src/billing/charge.ts", "@@", "-export const charge = 1;", "+export const charge = 2;",
+  )));
+  assert.ok(reason, "the second file is gated, not only the first");
+  assert.match(reason, /src\/billing\/charge\.ts/);
+  assert.match(reason, /con_billing_guard/);
+  assert.doesNotMatch(reason, /src\/other\.ts/, "a clean file is not named as denied");
+  assert.equal(denialOf(preEdit(root, patchOf("*** Update File: src/other.ts", "@@", "-export const other = 1;", "+export const other = 2;"))), null);
+});
+
+test("strict gate evaluates a Move-to destination inside a guarded scope", { timeout: 120_000 }, t => {
+  const root = patchRepo(t, [mkConstraint({ id: "con_billing_guard", statement: "Billing is frozen", scope: ["src/billing/**"], severity: "blocking" })]);
+  const reason = denialOf(preEdit(root, patchOf("*** Update File: src/other.ts", "*** Move to: src/billing/other.ts", "@@", "-export const other = 1;", "+export const other = 3;")));
+  assert.ok(reason, "moving a file into a guarded scope is an edit there");
+  assert.match(reason, /src\/billing\/other\.ts/);
+});
+
+test("content-matched gate reads only added patch lines: removing a forbidden pattern is allowed, adding it is denied", { timeout: 120_000 }, t => {
+  const root = patchRepo(t, [mkConstraint({ id: "con_no_eval", statement: "Never call eval", scope: ["src/**"], severity: "blocking", match: "\\beval\\(" })]);
+  assert.equal(denialOf(preEdit(root, patchOf("*** Update File: src/other.ts", "@@", " const keep = eval(context);", "-export const other = eval('1');", "+export const other = 1;"))), null,
+    "a patch that removes the pattern (and only keeps it as context) is allowed, as the same Edit would be");
+  const reason = denialOf(preEdit(root, patchOf("*** Update File: src/other.ts", "@@", "-export const other = 1;", "+export const other = eval('1');")));
+  assert.ok(reason, "a patch that adds the pattern is denied");
+  assert.match(reason, /con_no_eval/);
+  const both = denialOf(preEdit(root, patchOf(
+    "*** Update File: src/other.ts", "@@", "+export const a = eval('1');",
+    "*** Add File: src/billing/extra.ts", "+export const b = eval('2');",
+  )));
+  assert.ok(both);
+  assert.match(both, /denied for 2 files \(src\/other\.ts, src\/billing\/extra\.ts\)/, "several denied files are all named");
+});
+
+test("absolute patch paths are normalized to repo-relative paths; paths outside the repo are skipped", { timeout: 120_000 }, t => {
+  const root = patchRepo(t, [mkConstraint({ id: "con_billing_guard", statement: "Billing is frozen", scope: ["src/billing/**"], severity: "blocking" })]);
+  const outside = mkdtempSync(join(tmpdir(), "hunch-codex-outside-"));
+  t.after(() => rmSync(outside, { recursive: true, force: true }));
+  // join() yields backslash paths on Windows (the shape Codex sends there) and POSIX paths elsewhere.
+  const absolutes = [join(root, "src", "billing", "charge.ts")];
+  if (process.platform === "win32") absolutes.push(join(root, "src", "billing", "charge.ts").replace(/\\/g, "/"));
+  for (const abs of absolutes) {
+    const reason = denialOf(preEdit(root, patchOf(`*** Update File: ${join(outside, "x.ts")}`, "@@", "+x", `*** Update File: ${abs}`, "@@", "+y")));
+    assert.ok(reason, `absolute path ${abs} is gated`);
+    assert.match(reason, /editing src\/billing\/charge\.ts would touch/);
+  }
+  assert.equal(preEdit(root, patchOf(`*** Update File: ${join(outside, "x.ts")}`, "@@", "+x")), null, "a patch touching only outside files says nothing");
+});
+
+test("PostToolUse records every file an apply_patch touched for the Stop gate", { timeout: 120_000 }, t => {
+  const root = patchRepo(t, [], "advisory");
+  const session = `codex-post-${process.pid}-${Date.now()}`;
+  codexHook(root, {
+    hook_event_name: "PostToolUse", session_id: session, tool_name: "apply_patch",
+    tool_input: { input: patchOf(
+      "*** Update File: src/other.ts", "@@", "+a",
+      `*** Update File: ${join(root, "src", "billing", "charge.ts")}`, "@@", "+b",
+      "*** Update File: src/old.ts", "*** Move to: src/renamed.ts", "@@", "+c",
+    ) },
+    tool_response: { output: "Success" },
+  }, { HUNCH_PIPELINE: "1" });
+  const state = loadPipelineState(session);
+  assert.deepEqual([...state.editedFiles].sort(), ["src/billing/charge.ts", "src/old.ts", "src/other.ts", "src/renamed.ts"]);
+});
+
+test("PostToolUse skips files outside the repository — a scratch edit is not a product edit (#305)", { timeout: 120_000 }, t => {
+  const root = patchRepo(t, [], "advisory");
+  const outside = mkdtempSync(join(tmpdir(), "hunch-codex-scratch-"));
+  t.after(() => rmSync(outside, { recursive: true, force: true }));
+  const session = `codex-post-outside-${process.pid}-${Date.now()}`;
+  codexHook(root, {
+    hook_event_name: "PostToolUse", session_id: session, tool_name: "apply_patch",
+    tool_input: { input: patchOf(
+      `*** Update File: ${join(outside, "probe.mts")}`, "@@", "+a",
+      "*** Update File: src/other.ts", "@@", "+b",
+    ) },
+    tool_response: { output: "Success" },
+  }, { HUNCH_PIPELINE: "1" });
+  assert.deepEqual([...loadPipelineState(session).editedFiles], ["src/other.ts"], "only the in-repo file is recorded for the Stop gate");
 });

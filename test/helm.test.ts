@@ -9,7 +9,7 @@ test("a single define/end pair produces one variable symbol spanning the whole b
   assert.equal(symbols.length, 1);
   assert.equal(symbols[0]!.name, "mychart.labels");
   assert.equal(symbols[0]!.kind, "variable");
-  assert.equal(src.slice(symbols[0]!.startByte, symbols[0]!.endByte), `{{- define "mychart.labels" -}}\napp: {{ .Chart.Name }}\n{{- end -}}`);
+  assert.equal(src.slice(symbols[0]!.startChar, symbols[0]!.endChar), `{{- define "mychart.labels" -}}\napp: {{ .Chart.Name }}\n{{- end -}}`);
 });
 
 test("include and template call sites both produce a call for the quoted name", () => {
@@ -34,7 +34,7 @@ test("a define body containing its own if/end closes at the MATCHING end, not th
   assert.equal(symbols.length, 1, "the inner if/end must not be mistaken for the define's own end");
   assert.equal(symbols[0]!.name, "mychart.fullname");
   // the symbol's range must reach the FINAL end (the define's own), not the inner if's end
-  assert.equal(symbols[0]!.endByte, src.lastIndexOf(`{{- end -}}`) + `{{- end -}}`.length);
+  assert.equal(symbols[0]!.endChar, src.lastIndexOf(`{{- end -}}`) + `{{- end -}}`.length);
 });
 
 test("a call nested inside one define invoking another define name is attributed correctly (composition)", () => {
@@ -53,8 +53,8 @@ test("a call nested inside one define invoking another define name is attributed
   assert.equal(calls[0]!.callee, "mychart.name");
   const labelsSymbol = symbols.find((s) => s.name === "mychart.labels")!;
   assert.ok(
-    calls[0]!.atByte >= labelsSymbol.startByte && calls[0]!.atByte < labelsSymbol.endByte,
-    "the include call site must fall within the enclosing define's byte range",
+    calls[0]!.atChar >= labelsSymbol.startChar && calls[0]!.atChar < labelsSymbol.endChar,
+    "the include call site must fall within the enclosing define's char range",
   );
 });
 

@@ -6,6 +6,7 @@ import { compareCodeUnits } from "../core/canonicalOrder.js";
 import { resourceId, resourceRelationshipId } from "../core/ids.js";
 import { parseJsonc } from "../core/jsonc.js";
 import { parseSource } from "./parse.js";
+import { isParserLoadError } from "./nativeTreeSitter.js";
 import {
   EdgeSchema,
   ResourceSchema,
@@ -2286,7 +2287,13 @@ function sloDeclarations(
     let valid = false;
     try {
       valid = blob.format === "json" ? validJsonOpenSlo(source) : validYamlOpenSlo(blob.path, source);
-    } catch {
+    } catch (error) {
+      // A malformed declaration is a bad file and stays one issue. A dead
+      // native parser is not: swallowing it made `landscape review` report
+      // every valid SLO as slo_declaration_invalid, drop the resource, and
+      // still exit 0 with a ready-made `landscape adopt --acknowledge-issues`
+      // line — a store write of a false verdict.
+      if (isParserLoadError(error)) throw error;
       valid = false;
     }
     if (!valid) {

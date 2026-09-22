@@ -1,0 +1,92 @@
+{
+  "id": "dec_03b67ce175",
+  "title": "Selector/labels maps with any templated value must void entirely",
+  "topic": null,
+  "status": "accepted",
+  "context": "extractLiteralLabelMap's guard rejecting partially-templated maps was untested and survived mutation testing. Without it, a Service selector with `app: {{ .Values.name }}` and `tier: web` would incorrectly resolve to just the literal `tier: web`, creating false-positive Service-to-workload reference edges.",
+  "decision": "Reinforced the guard that rejects an entire labels/selector map if ANY value is templated (not just block-form templates). Added three new tests that explicitly catch the mutation: two unit tests for selector and pod-template-labels cases, and one end-to-end indexer test confirming no false-positive edges.",
+  "consequences": [
+    "Selectors/labels with any templated value now deterministically void to null, eliminating false-positive edges",
+    "Conservative rejection of uncertainty rather than permissive partial matching",
+    "Prevents Helm-templated deployment selectors from generating spurious cross-resource references",
+    "Regression protection: mutation of the guard is now immediately caught by test suite"
+  ],
+  "alternatives_rejected": [
+    "Partially accept literal keys and skip templated ones (creates strictly more-permissive false-positive matches)",
+    "Only check for block-form templates (same-line templated values would still bypass the check)"
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Partially accept literal keys and skip templated ones (creates strictly more-permissive false-positive matches)",
+      "scope": [
+        "src/extractors/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Only check for block-form templates (same-line templated values would still bypass the check)",
+      "scope": [
+        "src/extractors/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_a94a8fe5cc",
+    "cmp_e0ccfe26fe",
+    "cmp_f27fede222"
+  ],
+  "related_files": [
+    "src/extractors/helm.ts",
+    "src/extractors/indexer.ts",
+    "src/extractors/k8sManifest.ts",
+    "test/indexer.test.ts",
+    "test/k8sManifest.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "feba1ba2",
+  "valid_from": "2026-09-16T17:59:13+02:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft",
+    "confidence": 0.65,
+    "evidence": [
+      "commit:feba1ba2",
+      "synth:provider=claude-cli",
+      "branch:upstream-pr/k8s-manifest-refs",
+      "src/extractors/helm.ts",
+      "src/extractors/indexer.ts",
+      "src/extractors/k8sManifest.ts",
+      "test/indexer.test.ts",
+      "test/k8sManifest.test.ts"
+    ],
+    "last_verified": "2026-09-16T16:07:33.895Z"
+  },
+  "date": "2026-09-16T17:59:13+02:00"
+}

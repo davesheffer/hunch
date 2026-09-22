@@ -177,19 +177,42 @@ scope's home, appended atomically): the strictly ordered `ChangeEvent` stream (s
 plus the idempotency table. A record write and its event land in one atomic ledger write after
 the record; a ledger that is not contiguous is an error, never silently restarted.
 
-**write** in order: grants → provenance → home → normalize (partition scope stamped on new
+**Partitions sharing a home stay separate.** Organization, team and user partitions all live in
+the one overlay, so every rule that looks for an incumbent compares the record's partition with the
+write's: one current derived statement per subject and transform, the supersede target and its
+still-open check are all counted within the write's own partition. A `supersedes` that names a
+record in another partition is a `conflict` (reason `supersede target in another partition`) —
+closing it from here would put its `superseded` event in the wrong ledger — and a write whose id is
+already on record in another partition of the same home (entity and relationship ids do not derive
+from the scope) is a `conflict` (reason `record id held by another partition`), never an overwrite.
+When the principal cannot read that record either refusal is `outside-grants` and describes nothing.
+Legacy kinds (decisions, constraints, bugs, findings) carry no partition scope and are read as the
+store's own partition, so they are written only under that scope; any other scope is refused
+`unsupported`.
+
+**write** in order: grants → provenance → legacy kinds only under the store's own partition → home → normalize (partition scope stamped on new
 facets, dropped from legacy ones; an agent principal cannot sign `human_confirmed` — it is
 rewritten to `agent_recorded`, a human principal can) → identity (a supplied id must equal the
 derived one, `identity` refusal otherwise; receipts, commitments and derived state derive their
-ids, entities and relationships are checked by their schemas) → facet schema → idempotency (same
-key + same payload = `replayed`; same key + other payload = `idempotency` refusal naming the
-incumbent; same content under a new key = `replayed`, the key is remembered) → `expected_version`
+ids, entities and relationships are checked by their schemas) → facet schema → exact replay (same
+key + same payload for the same record = `replayed`, checked right here, before identity,
+visibility and link checks: a retry of a write that succeeded returns what it wrote even when an
+entity has since claimed its subject, so a writer whose response was lost never re-derives a
+duplicate) → identity / visibility / link checks → idempotency (same key + other payload =
+`idempotency` refusal naming the incumbent; same content under a new key = `replayed`, the key is
+remembered; when that record is a receipt, commitment, derived statement, entity or relationship
+the ledger has never seen — no event names it and no idempotency entry references it — the replay
+also appends its missing `created` event with the hash on file, so the record stops being an
+orphan instead of being hidden behind the idempotency table) → `expected_version`
 (a record hash or the record's latest seq; mismatch = `conflict`) → one-live-decision-per-topic
 (`conflict` naming the incumbent; explicit `supersedes` closes it and yields `superseded`) →
 supersede target still open (a `supersedes` that names an already-closed commitment or derived
 record is a `conflict` naming the record that is current now — two writers racing to replace
 the same incumbent can never leave two current records for one subject; the writer that closed
-it itself, same id under a new key, is exempt) → put → ledger → reindex → durability from the flush (`local` when nothing committed). Every
+it itself, same id under a new key, is exempt) → events built and validated → put → ledger →
+reindex → durability from the flush (`local` when nothing committed). The change events are
+validated BEFORE the record is written, so a refusal never leaves a record on file without its
+event. Every
 refusal is a typed `StateRefusal { code, conflict? }`; MCP renders it as
 `nuryel.state/1 refused [code]: …`.
 
@@ -230,7 +253,14 @@ over HTTP with the same three verbs: `GET /nuryel/v1/capabilities`, `POST /nurye
 schemas minus `schema` and `principal`), plus `GET /nuryel/v1/health` and the MCP endpoint
 `POST /nuryel/v1/mcp` described below. Errors are problem+json;
 a `StateRefusal` maps to 403 outside-grants, 409 conflict / idempotency, 422 identity, 400
-malformed / unsupported, 404 no-partition-home.
+malformed / unsupported, 404 no-partition-home. A server-side failure (500 internal, 503
+write-lock-timeout) carries only a generic `detail`; lock owners, host names and filesystem
+paths are written to the server's stderr, never to the response.
+
+`GET /nuryel/v1/health` needs no credential and then answers liveness only:
+`{ ok, version, protocol }`. With a valid credential in `Authorization` (the same bearer or DPoP
+check as every other route) the response adds `partitions`, the served partition ids. A presented
+but invalid credential is refused with 401 rather than answered anonymously.
 
 **MCP over streamable HTTP.** `POST /nuryel/v1/mcp` serves the `nuryel_*` tools
 (`nuryel_capabilities`, `read`, `write`, `capture`, `capture_batch`, `subscribe`, `records`) to any
@@ -294,7 +324,10 @@ returns the record as stored so a writer verifies what landed. The `records` ver
 because subscribe events name records and reads only returned refs.
 
 Amendments made while binding (all additive, called out for the review): `ChangeEvent.subject`
-(optional); `SubscribeResponse`; `ReadResponse.records` (optional, the records behind the refs); `WriteResult.record`; the `records` verb (`nuryel.state.records/1`, in the capability list); the union read — `ReadRequest.scopes` (optional, 1..64) with `ReadResponse.scopes` and `ReadResponse.receipts` (optional; the partitions read and one receipt each; `assertReadWithinGrants` checks both against the grants) and `mergeReadResponses` in the binding; the token grammar is written as explicit character classes
+(optional; bounded at 512 characters — a record subject longer than that, such as a receipt's
+`object_type:object_key` with a long key, an entity id, a relationship endpoint or a decision topic,
+is omitted from the event rather than truncated or refused, and the record keeps it in full; a
+subscriber still matches that event by `record_id`); `SubscribeResponse`; `ReadResponse.records` (optional, the records behind the refs); `WriteResult.record`; the `records` verb (`nuryel.state.records/1`, in the capability list); the union read — `ReadRequest.scopes` (optional, 1..64) with `ReadResponse.scopes` and `ReadResponse.receipts` (optional; the partitions read and one receipt each; `assertReadWithinGrants` checks both against the grants) and `mergeReadResponses` in the binding; the token grammar is written as explicit character classes
 instead of an `i` flag so it survives zod → JSON schema in MCP output validation;
 `assertWriteWellFormed` compares the record's scope only when it is a partition scope (a legacy
 constraint carries path globs under the same key).
@@ -337,6 +370,37 @@ survivor. Once retired, its keys are free, so the survivor may carry them. A spl
 reverse — re-key or retire the survivor, then write the entity active again without `merged_into`
 (refused while any active entity still carries its keys) — and the ledger shows `retired` then
 `updated`. `test/state-entity-merge.test.ts`.
+
+## Read or compute
+
+A writer of derived state repeats one pattern: read the subject, reuse the current statement when
+nothing it rests on moved, otherwise compute and write the replacement. Both clients ship it —
+`readOrCompute(client, request)` in `@davesheffer/hunch/state` and `read_or_compute(client, ...)`
+in `hunch_state` — so the rules below are applied once instead of re-derived by every writer:
+
+1. **Reuse by dependency set.** A current statement on the subject under the same
+   `transform_version` whose dependency set equals the request's is returned and `compute` never
+   runs. Order is irrelevant, exactly as for `derivedId`.
+2. **Compute once, write current.** Otherwise `compute` runs once and its content is written as
+   the subject's current statement (`content_hash` computed client-side with the canonical form
+   above; both clients are tested byte for byte against the server's `stateHash`).
+3. **The idempotency key names the request**: statement identity (scope, subject, transform,
+   dependency set), content hash and `computed_at`. A key without the content hash collides when
+   the same evidence yields new wording, and the binding refuses a reused key with another
+   payload for good — the pilot's outbox stalled on exactly that. The same request is the same
+   key, so a resend replays.
+4. **Supersede the predecessor.** The statement it replaces under the same transform is named in
+   `supersedes`; the binding keeps one current statement per subject and transform.
+5. **Keep the audience.** Without an explicit `visibility` the new statement keeps its
+   predecessor's; an explicit change sends the predecessor's `record_hash` as `expected_version`,
+   which the binding requires for an audience change during supersession.
+6. **No retries.** Refusals (`StateClientError`) and transport failures surface. Calling again
+   re-reads first, so a write that landed before a lost response is reused, not written twice.
+
+Race: two writers that compute concurrently both miss the reuse; the second write is refused
+`409 conflict` naming the first as incumbent. Calling again reuses it when the dependency sets
+match, or supersedes it when they do not. `test/read-or-compute.test.ts`,
+`clients/python/tests/test_derived.py`, and the live Python round trip.
 
 ## Invariants (exported, asserted, tested)
 

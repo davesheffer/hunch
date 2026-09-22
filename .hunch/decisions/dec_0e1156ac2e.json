@@ -1,0 +1,50 @@
+{
+  "id": "dec_0e1156ac2e",
+  "title": "The workspace ledger refreshes on branch/worktree change and on a ledger read — never per commit, and never from a process that outlives its trigger",
+  "topic": "workspace-ledger.session-refresh",
+  "status": "accepted",
+  "context": "Two refresh triggers were wrong on Windows for the same reason: a background child that outlives what started it keeps the repository directory open, so a test that deletes its clone right after fails with EBUSY (run 35190856782 job 105102951835, and the runner's cleanup log naming orphan node+git processes). A detached child at MCP session start was one; the post-commit hook backgrounding `workspaces snapshot` was the other, and worse — commits run right up to a test's teardown, and the snapshot's git work (up to a patch-id walk over the default branch) would be paid on the most frequent operation a developer performs.",
+  "decision": "Refresh happens exactly where the ledger can actually change or is actually wanted: (1) the post-checkout hook, for branch checkouts only ($3 = 1), which is when branches and worktrees change; (2) `hunch worktree`, which creates one; (3) the `hunch_workspaces` MCP read, which publishes the observation it just took in the server process, reusing that snapshot via the pure `withPublishMode`; (4) `hunch workspaces snapshot` explicitly. The post-commit hook deliberately carries NO snapshot, and no trigger spawns a process that can outlive it. `HUNCH_WORKSPACE_REFRESH=0` makes the MCP read read-only.",
+  "consequences": [
+    "`git commit` pays nothing for the ledger; only checkouts and explicit reads do.",
+    "A record can lag between a commit and the next checkout or ledger read; the freshness label ('unverified' past stale_after_days) is what keeps that honest.",
+    "No trigger leaves a child holding a repository directory, so a harness that deletes a clone immediately after its last commit is safe."
+  ],
+  "alternatives_rejected": [
+    "Snapshot in the post-commit hook, backgrounded — a child alive at teardown held a Windows clone open (EBUSY) and taxed every commit with git work.",
+    "Snapshot in the post-commit hook, foreground — removes the orphan but makes every commit wait on a full snapshot, including a possible patch-id walk.",
+    "Detached child at MCP session start — the original orphan-process cause.",
+    "In-process timer at MCP session start — still races the server's own death mid-git on Windows, and writes into any MCP test running past the delay.",
+    "Retrying rmSync in the test's teardown — treats the symptom in the harness and leaves every real caller with a child that outlives its trigger."
+  ],
+  "rejected_tripwires": [],
+  "related_components": [],
+  "related_files": [
+    "src/integrations/hooks.ts",
+    "src/mcp/server.ts",
+    "src/integrations/workspaceLedger.ts",
+    "docs/workspace-ledger.md"
+  ],
+  "supersedes": "dec_9b2c4b884e",
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-09-17T07:57:32.334Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "premises": [],
+  "provenance": {
+    "source": "agent_recorded",
+    "confidence": 0.75,
+    "evidence": [
+      "src/integrations/hooks.ts",
+      "src/mcp/server.ts",
+      "src/integrations/workspaceLedger.ts",
+      "docs/workspace-ledger.md"
+    ]
+  },
+  "date": "2026-09-17T07:57:32.334Z"
+}

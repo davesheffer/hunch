@@ -15,6 +15,7 @@ import { join, resolve } from "node:path";
 import { test } from "node:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { ElicitRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { repoSourceInventory } from "../src/extractors/repoSource.js";
 import { hunchCliArgs } from "./cli-invocation.js";
 
@@ -140,7 +141,10 @@ async function connectMcp(actor: Actor): Promise<Client> {
     cwd: actor.root,
     env: actor.env,
   });
-  const client = new Client({ name: `matrix-${actor.name.toLowerCase()}`, version: "1.0.0" });
+  // The team members answer Hunch's in-client confirmation prompt (MCP elicitation) — the
+  // human act that, unlike a capture token alone, grants a DECISION human_confirmed authority.
+  const client = new Client({ name: `matrix-${actor.name.toLowerCase()}`, version: "1.0.0" }, { capabilities: { elicitation: {} } });
+  client.setRequestHandler(ElicitRequestSchema, async () => ({ action: "accept", content: { confirm: true } }));
   await client.connect(transport);
   return client;
 }
@@ -428,7 +432,8 @@ test("team Matrix: three isolated clones share live memory, catch a bad branch, 
     // candidate must be countersigned: hunch_policy_upgrade_correction requires
     // human_confirmed provenance (bootstrap.ts), and an un-token'd correction is
     // agent_recorded testimony capped at "warning". This models the real workflow —
-    // the architect was interviewed before the rule was given blocking authority.
+    // the architect was interviewed, then ran the printed `hunch review --confirm`
+    // (outside the agent channel) to give it blocking authority.
     const correctionInterview = await mcpText(architectClient, "hunch_capture_decision", {
       topic: "transport.boundary",
       seed: TEAM_RULE,
@@ -451,6 +456,10 @@ test("team Matrix: three isolated clones share live memory, catch a bad branch, 
     assert.ok(remoteTree(memoryRemote).includes(`.hunch/constraints/${constraintId}.json`));
     assert.equal(git(architectOverlayRoot, "status", "--short", "--", ".hunch"), "",
       "the next automatic capture must sweep pending JSON and leave a clean memory tree");
+    const confirmArgs = correctionText.match(/hunch review (--confirm \S+(?: --\S+(?: (?!--)\S+)?)*)/)?.[1]?.split(" ");
+    assert.ok(confirmArgs, correctionText);
+    const confirmed = runCli(architect, "review", ...confirmArgs);
+    assert.equal(confirmed.status, 0, output(confirmed));
 
     const upgrade = await mcpJson<CorrectionUpgrade>(architectClient, "hunch_policy_upgrade_correction", {
       constraint_id: constraintId,

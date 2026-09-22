@@ -25,7 +25,7 @@
 import { createHash } from "node:crypto";
 import type { Decision } from "../core/types.js";
 import type { RepoDoc } from "../core/docscan.js";
-import { parseDocAnchors } from "../core/docanchors.js";
+import { parseDocAnchors, type DocAnchor } from "../core/docanchors.js";
 import { currentForTopic, rejectedForTopic } from "../core/topics.js";
 
 /** Page slug for an adopted doc: full rel path, kebab-cased ("docs/api-v2.md" →
@@ -104,12 +104,21 @@ export function renderAdoptedDoc(doc: RepoDoc, content: string, decisions: reado
   }
 
   const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  for (const raw of lines) {
+  // Parse the WHOLE document once, like computeDrift and the pre-edit hook: a
+  // fence spans lines, so a per-line parse sees every line as outside any fence
+  // and would heal (and inject a callout into) a documentation example.
+  const anchorsByLine = new Map<number, DocAnchor[]>();
+  for (const a of parseDocAnchors(content)) {
+    const at = anchorsByLine.get(a.line);
+    if (at) at.push(a);
+    else anchorsByLine.set(a.line, [a]);
+  }
+  for (const [i, raw] of lines.entries()) {
     // Heal EVERY stale pin on the line, and only inside its own marker — a bare
     // decision id in the surrounding prose must never be rewritten.
     let line = raw;
     const corrections: string[] = [];
-    for (const a of parseDocAnchors(raw)) {
+    for (const a of anchorsByLine.get(i + 1) ?? []) {
       if (!a.pin) continue;
       const pinned = byId.get(a.pin);
       const current = currentForTopic(decisions, a.topic);

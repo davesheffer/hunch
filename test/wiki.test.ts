@@ -617,6 +617,25 @@ test("adopted-copy healing touches only marker pins — prose ids survive, and e
   assert.equal((copy.match(/hunch:topic store\.write-durability dec_v2/g) ?? []).length, 2, "BOTH markers on the line healed");
 });
 
+test("adopted-copy healing leaves a pin inside an example fence alone — only the live marker heals (#332)", async (t) => {
+  const { store, root, cleanup } = tempStore();
+  t.after(cleanup);
+  seed(store);
+  store.json.put("decisions", DEC({ status: "superseded", superseded_by: "dec_v2" }) as never);
+  store.json.put("decisions", DEC({ id: "dec_v2", topic: "store.write-durability", title: "fsync then rename", supersedes: "dec_atomic" }) as never);
+  mkdirSync(join(root, "docs"), { recursive: true });
+  writeFileSync(
+    join(root, "docs", "durability.md"),
+    "# Durability\n<!-- hunch:topic store.write-durability dec_atomic -->\nPin a section like this:\n\n```md\n<!-- hunch:topic store.write-durability dec_atomic -->\n```\n\nSee src/store/x.ts.\n",
+  );
+  await generateWiki(store, root, publicHome(root, "wiki"), { now: NOW, only: "all" });
+
+  const copy = readFileSync(join(root, "wiki", "docs", "docs-durability.md"), "utf8");
+  assert.match(copy, /```md\n<!-- hunch:topic store\.write-durability dec_atomic -->\n```/, "the fenced example is documentation, not a declaration — byte-identical");
+  assert.equal((copy.match(/hunch:topic store\.write-durability dec_v2/g) ?? []).length, 1, "only the live marker healed");
+  assert.equal((copy.match(/Graph correction/g) ?? []).length, 1, "one correction callout — none injected after the fence line");
+});
+
 test("wiki pages ground the doc≠graph loop: superseding a pinned decision fires doc-anchor-stale on the PAGE", async (t) => {
   const { store, root, cleanup } = tempStore();
   t.after(cleanup);

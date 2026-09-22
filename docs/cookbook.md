@@ -311,6 +311,7 @@ hunch report <task-id> --html                                         # local ev
 ```
 
 Over MCP the same flow is `hunch_task(action: "start")`, `hunch_context(target, task_id)`,
-`hunch_task(action: "finish")` and `hunch_report(task_id)`; the card names what was delivered,
+`hunch_task(action: "finish")` and `hunch_report(task_id)` — where a native prompt hook already
+opened the task, start is skipped and finish is conditional; the card names what was delivered,
 what the agent reports it applied, what a rule verified and what a command observed. It is not a
 causal impact score. Details and host boundaries: [Task contribution reports](task-reports.md).

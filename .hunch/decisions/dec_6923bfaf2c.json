@@ -1,0 +1,85 @@
+{
+  "id": "dec_6923bfaf2c",
+  "title": "Include pod-spec-level Secret references in field-path discovery",
+  "topic": null,
+  "status": "accepted",
+  "context": "Production Helm chart validation revealed that imagePullSecrets[].name (a pod-spec-level Secret reference) is a common, legitimate pattern that the original field-path table never enumerated. Six rounds of adversarial code review focused on parsing correctness missed this as a gap in field-path *completeness*, not a parsing defect.",
+  "decision": "Add imagePullSecrets[].name to the Secret reference suffixes, expanding field-path discovery beyond container-scoped references to include pod-spec-level ones. This captures a real-world authoring pattern without breaking charts that use indirection.",
+  "consequences": [
+    "Extracts imagePullSecrets references that were previously missed in direct or templated field assignments",
+    "Increases field-path suffixes to maintain (now tracks both container- and pod-spec-scoped Secret refs)",
+    "Is inert against charts using Helm helpers/indirection — adds no new false positives"
+  ],
+  "alternatives_rejected": [
+    "Stay with container-scoped references only — leaves common real-world pattern uncovered",
+    "Discover imagePullSecrets dynamically instead of enumerating it — still requires knowing the field exists"
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Stay with container-scoped references only — leaves common real-world pattern uncovered",
+      "scope": [
+        "src/extractors/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Discover imagePullSecrets dynamically instead of enumerating it — still requires knowing the field exists",
+      "scope": [
+        "src/extractors/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_a94a8fe5cc",
+    "cmp_e0ccfe26fe",
+    "cmp_f27fede222"
+  ],
+  "related_files": [
+    "src/extractors/k8sManifest.ts",
+    "test/k8sManifest.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "1d50dffe",
+  "valid_from": "2026-09-15T15:32:16+02:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft",
+    "confidence": 0.65,
+    "evidence": [
+      "commit:1d50dffe",
+      "synth:provider=claude-cli",
+      "branch:upstream-pr/k8s-manifest-refs",
+      "src/extractors/k8sManifest.ts",
+      "test/k8sManifest.test.ts"
+    ],
+    "last_verified": "2026-09-16T12:15:04.092Z"
+  },
+  "date": "2026-09-15T15:32:16+02:00"
+}

@@ -1,6 +1,6 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { verificationLauncherFor } from "../core/verifyLauncher.js";
 import { TaskIdSchema, ReportClaimSchema, LessonReferenceSchema, finishReportTask, listReportTasks, readTaskReport, readLessonHistory, recordReportClaim, reportPresentationEnabled, startReportTask } from "../core/taskReport.js";
 import { persistTaskRecord } from "../core/taskRecord.js";
 import { reportSourceSnapshot, runReportConformance } from "../core/taskReportEvidence.js";
@@ -53,31 +53,20 @@ export function boundedTaskReportForHost(report: ReturnType<typeof readTaskRepor
 }
 
 /** Reuse the MCP server's installation, not a potentially stale global binary.
- * Structured argv is authoritative; the shell hint uses literal quoting. */
-function verificationLauncher(): { argv: string[]; shell: string } {
+ * `src/core/` and `src/mcp/` are siblings, so the relative entry URL is the
+ * same from either — but each caller passes ITS OWN import.meta. */
+function verificationLauncher(): { argv: string[]; shell: string; note: string } {
   return verificationLauncherFor(import.meta.url, (specifier) => import.meta.resolve(specifier));
 }
-/** `metaUrl` is the module running (a `.ts` source checkout needs the tsx
- * loader; a published `.js` build needs nothing) and `resolve` is that
- * module's `import.meta.resolve`. The loader is resolved ONLY on the source
- * path: `import.meta.resolve` throws for a package that is not installed, and
- * `tsx` is a devDependency absent from every published install (#261). */
-export function verificationLauncherFor(metaUrl: string, resolve: (specifier: string) => string): { argv: string[]; shell: string } {
-  const dev = metaUrl.endsWith(".ts");
-  const entry = fileURLToPath(new URL(`../cli/index.${dev ? "ts" : "js"}`, metaUrl));
-  // `--import` takes a URL. Converting the resolved loader to a path made Node on
-  // Windows reject it ("Received protocol 'c:'"), so every verification launched
-  // from a source checkout there failed before running and cards showed no check.
-  const loader = dev ? resolve("tsx") : null;
-  const argv = [process.execPath, ...(loader ? ["--import", loader.startsWith("file:") ? loader : pathToFileURL(loader).href] : []), entry];
-  const quote = (s: string) => process.platform === "win32" ? `'${s.replace(/'/g, "''")}'` : `'${s.replace(/'/g, "'\\''")}'`;
-  return { argv, shell: `${process.platform === "win32" ? "& " : ""}${argv.map(quote).join(" ")}` };
-}
+/** Re-exported so existing imports keep working; the implementation lives in
+ * src/core/verifyLauncher.ts because the prompt hook needs it too and a hook
+ * must not pull in the MCP SDK. */
+export { verificationLauncherFor };
 
 export function registerTaskReportTools(server: McpServer, getRoot: () => string, getStore: () => HunchStore): void {
   server.registerTool("hunch_task", {
     title: "Start or finish a task's contribution report",
-    description: "Start once per user task; pass the returned task_id to hunch_context. Finish before your final response and include the returned concise contribution card, without asking the user. Applications are explicitly agent-reported and must name an exact delivered occurrence and record hash. Completion never implies successful verification. Not for storing decisions or claiming tests passed; use the CLI task verify wrapper for observed command results.",
+    description: "Start once per user task, unless the host's prompt hook already opened the task and printed its verify command — then reuse that task_id and do not start. Pass the task_id to hunch_context. Finish before your final response and include the returned concise contribution card, without asking the user; skip finish only when the prompt hook's own instruction said this host closes the task and the task used no Hunch (no hunch_* call on this task_id, no verified check, no hook context you acted on, nothing to claim), and a task you started with this tool must always be finished. Applications are explicitly agent-reported and must name an exact delivered occurrence and record hash. Completion never implies successful verification. Not for storing decisions or claiming tests passed; use the CLI task verify wrapper for observed command results.",
     inputSchema: {
       action: z.enum(["start", "finish"]), task_id: TaskIdSchema.optional(),
       title: z.string().min(1).max(200).optional(),
@@ -100,7 +89,7 @@ export function registerTaskReportTools(server: McpServer, getRoot: () => string
           task = readTaskReport(root, task_id, reportSourceSnapshot(root).hash).task;
         }
         const launcher = verificationLauncher();
-        return { content: [{ type: "text" as const, text: `Task ${task.task_id} · ${task.state}. Pass task_id to every hunch_context and decision/correction/finding capture call. Before the final response, finish with hunch_task and include its contribution card. For checks use this exact installation (the global hunch binary may be stale): ${launcher.shell} task verify ${task.task_id} -- <command> [arguments]. The default budget is 15 minutes; add --timeout <seconds> before -- for a longer suite.` }], structuredContent: { task, verification_argv: [...launcher.argv, "task", "verify", task.task_id, "--"] } };
+        return { content: [{ type: "text" as const, text: `Task ${task.task_id} · ${task.state}. Pass task_id to every hunch_context and decision/correction/finding capture call. Before the final response, finish with hunch_task and include its contribution card. For checks use this exact installation (the global hunch binary may be stale): ${launcher.shell} task verify ${task.task_id} -- <command> [arguments]${launcher.note}. The default budget is 15 minutes; add --timeout <seconds> before -- for a longer suite.` }], structuredContent: { task, verification_argv: [...launcher.argv, "task", "verify", task.task_id, "--"] } };
       }
       if (!task_id) throw new Error("finish requires the exact task_id");
       for (const claim of applications ?? []) recordReportClaim(root, task_id, claim);

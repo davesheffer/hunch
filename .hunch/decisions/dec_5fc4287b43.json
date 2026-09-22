@@ -1,0 +1,86 @@
+{
+  "id": "dec_5fc4287b43",
+  "title": "Centralize line-ending normalization at entry point; document LF-precondition on helpers",
+  "topic": null,
+  "status": "accepted",
+  "context": "CommonMark recognizes three line endings (CRLF, LF, lone CR). The prior fix for issue #298 only normalized CRLF pairs. More fundamentally, regex-based fence/span detection (using . and $ anchors) assumes LF-normalized text; absent normalization, CRLF checkouts miss fence boundaries and misclassify example markers as live anchors.",
+  "decision": "Changed parseDocAnchors's normalization regex from /\\r\\n/g to /\\r\\n?/g to catch all three line-ending forms in one place. Added explicit LF-normalized-input preconditions to fencedRanges and inlineSpanRanges docstrings, each citing the actual mechanism that makes it sensitive to unnormalized input.",
+  "consequences": [
+    "All line-ending variants now normalized uniformly at the single entry point",
+    "Precondition documentation on helpers catches future direct-call violations at review time",
+    "fencedRanges is CRLF-sensitive (its fence-line regex's . excludes \\r) and inlineSpanRanges is lone-CR-sensitive (split(\"\\n\") doesn't split a bare CR, so same-line backtick pairing can span logical lines) — both real, distinct mechanisms; a lone-CR regression test fails without the /\\r\\n?/g widening, proving inlineSpanRanges was affected too",
+    "Mixed LF/CRLF documents, unclosed CRLF fences, and a lone-CR document pinned with new test cases"
+  ],
+  "alternatives_rejected": [
+    "Normalize line endings separately in each helper (fencedRanges, inlineSpanRanges, MARKER) — scattered logic, unclear contracts, easier to miss a call site",
+    "Handle lone CR only when encountered — leaves edge case exploitable and obscures the root precondition"
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Normalize line endings separately in each helper (fencedRanges, inlineSpanRanges, MARKER) — scattered logic, unclear contracts, easier to miss a call site",
+      "scope": [
+        "src/core/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Handle lone CR only when encountered — leaves edge case exploitable and obscures the root precondition",
+      "scope": [
+        "src/core/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_a94a8fe5cc",
+    "cmp_b256a6aed0",
+    "cmp_f27fede222"
+  ],
+  "related_files": [
+    "src/core/docanchors.ts",
+    "test/docanchors.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "6571ec29",
+  "valid_from": "2026-09-18T21:08:48+02:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft",
+    "confidence": 0.65,
+    "evidence": [
+      "commit:6571ec29",
+      "synth:provider=claude-cli",
+      "branch:fix/doc-anchor-crlf-fence-detection",
+      "src/core/docanchors.ts",
+      "test/docanchors.test.ts"
+    ],
+    "last_verified": "2026-09-18T19:09:09.280Z"
+  },
+  "date": "2026-09-18T21:08:48+02:00"
+}

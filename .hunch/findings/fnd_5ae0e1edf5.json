@@ -1,0 +1,40 @@
+{
+  "id": "fnd_5ae0e1edf5",
+  "title": "Test suite can invoke the developer's real assistant subscription: inherited CLAUDECODE outranks HUNCH_SYNTH_PROVIDER in auto-review tests",
+  "observation": "test/autoreview-cli.test.ts spreads the whole parent process.env into the spawned CLI and only overrides PATH/HUNCH_SYNTH_PROVIDER=codex-cli with a stub `codex`. resolveSynthesisProvider consults currentInitiator(env) BEFORE HUNCH_SYNTH_PROVIDER, and detectInitiator maps an inherited CLAUDECODE=1 to claude-cli, so running `npm test` from inside a Claude Code session runs the REAL `claude` binary on the developer's subscription with fixture drafts ('Judging N draft(s) via claude-cli (subscription)'). Under Codex it would flip the other way. Static trace, not reproduced under a debugger. Open product question: should an explicit HUNCH_SYNTH_PROVIDER outrank the detected initiator? Tracked as GitHub issue #378.",
+  "evidence": [
+    "test/autoreview-cli.test.ts:77-83,171-178,245-252 env = {...process.env, PATH, HUNCH_SYNTH_PROVIDER:'codex-cli'}; stub binary is named `codex`",
+    "src/synthesis/provider.ts:1025-1036 initiator branch returns before the HUNCH_SYNTH_PROVIDER branch at :1042",
+    "src/synthesis/initiator.ts:20-21 CODEX_THREAD_ID/CODEX_SESSION_ID -> codex-cli, CLAUDECODE==='1' -> claude-cli",
+    "src/cli/index.ts:5335,5342 auto-review calls selectProvider({root}) and logs `via ${provider.name} (subscription)`",
+    "https://github.com/davesheffer/hunch/issues/378"
+  ],
+  "method": null,
+  "severity": "high",
+  "triage": "open",
+  "affected_files": [
+    "test/autoreview-cli.test.ts",
+    "src/synthesis/provider.ts",
+    "src/synthesis/initiator.ts"
+  ],
+  "affected_symbols": [
+    "resolveSynthesisProvider",
+    "detectInitiator"
+  ],
+  "violates_constraint": null,
+  "spawned_decision": null,
+  "observed_at": "2026-09-20T06:55:53.519Z",
+  "resolved_commit": null,
+  "provenance": {
+    "source": "agent_recorded",
+    "confidence": 0.75,
+    "evidence": [
+      "test/autoreview-cli.test.ts:77-83,171-178,245-252 env = {...process.env, PATH, HUNCH_SYNTH_PROVIDER:'codex-cli'}; stub binary is named `codex`",
+      "src/synthesis/provider.ts:1025-1036 initiator branch returns before the HUNCH_SYNTH_PROVIDER branch at :1042",
+      "src/synthesis/initiator.ts:20-21 CODEX_THREAD_ID/CODEX_SESSION_ID -> codex-cli, CLAUDECODE==='1' -> claude-cli",
+      "src/cli/index.ts:5335,5342 auto-review calls selectProvider({root}) and logs `via ${provider.name} (subscription)`",
+      "https://github.com/davesheffer/hunch/issues/378"
+    ],
+    "last_verified": "2026-09-20T06:55:53.519Z"
+  }
+}

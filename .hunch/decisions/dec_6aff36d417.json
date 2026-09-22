@@ -1,0 +1,124 @@
+{
+  "id": "dec_6aff36d417",
+  "title": "Taint parent containers for unresolvable YAML constructs instead of returning partial data",
+  "topic": null,
+  "status": "accepted",
+  "context": "The Kubernetes manifest extractor was silently mishandling various YAML forms (block-scalar headers, nested maps, bare list markers, __proto__ keys), either dropping data or misinterpreting it, causing false reference edges between unrelated resources.",
+  "decision": "When YAML constructs prevent reliable extraction—block-scalar headers, nested maps under labels, __proto__ keys, or bare list markers with deferred content—mark the entire parent container as unresolved (add to unresolvedContainers set) and return null for computed maps, rather than returning partial/corrupted data.",
+  "consequences": [
+    "Resources with ambiguous names or selectors produce no false reference edges",
+    "Invalid Kubernetes (nested maps in selectors) is properly rejected instead of silently mishandled",
+    "The reference graph is incomplete but correct (no false positives)",
+    "__proto__ assignment blast radius is contained by using Object.fromEntries instead of direct assignment"
+  ],
+  "alternatives_rejected": [
+    "Silently drop unresolvable entries (makes map 'more permissive', matches things it shouldn't)",
+    "Return partial maps with only-understood entries (introduces false matches when data is incomplete)",
+    "Use direct object assignment `map[key] = value` (vulnerable to __proto__ attacks, sets prototype instead of own property)",
+    "Use ordinary pop logic for bare list markers (loses sequence frame, reparents children one level up)"
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Silently drop unresolvable entries (makes map 'more permissive', matches things it shouldn't)",
+      "scope": [
+        "src/extractors/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Return partial maps with only-understood entries (introduces false matches when data is incomplete)",
+      "scope": [
+        "src/extractors/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Use direct object assignment `map[key] = value` (vulnerable to __proto__ attacks, sets prototype instead of own property)",
+      "scope": [
+        "src/extractors/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Use ordinary pop logic for bare list markers (loses sequence frame, reparents children one level up)",
+      "scope": [
+        "src/extractors/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_a94a8fe5cc",
+    "cmp_e0ccfe26fe",
+    "cmp_f27fede222"
+  ],
+  "related_files": [
+    "src/extractors/k8sManifest.ts",
+    "test/indexer.test.ts",
+    "test/k8sManifest.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "3fc1278c",
+  "valid_from": "2026-09-15T13:01:21+02:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft",
+    "confidence": 0.65,
+    "evidence": [
+      "commit:3fc1278c",
+      "synth:provider=claude-cli",
+      "branch:upstream-pr/k8s-manifest-refs",
+      "src/extractors/k8sManifest.ts",
+      "test/indexer.test.ts",
+      "test/k8sManifest.test.ts"
+    ],
+    "last_verified": "2026-09-16T12:14:41.680Z"
+  },
+  "date": "2026-09-15T13:01:21+02:00"
+}

@@ -1,0 +1,88 @@
+{
+  "id": "dec_e062218b15",
+  "title": "String char-indices vs. byte offsets: fix implementation to match actual API contract",
+  "topic": null,
+  "status": "accepted",
+  "context": "tree-sitter returns offsets as UTF-16 code-unit indices (JS string indices), but the fields are named `*Byte`, suggesting UTF-8 byte offsets. The implementation treated them as bytes, corrupting output for any non-ASCII content before a mutation target (UTF-8 byte length ≠ UTF-16 code-unit count). Touches invariant(s): con_039cee7367 (Memory hygiene is the agent's job, done without waiting for the human: accept shipped roadmap proposals, settle provenance-repair escalations (apply the true commit or drop), re-anchor or stale findings, and land the resulting capture commits through a PR. Only decisions that need genuine product judgment are queued for the human.).",
+  "decision": "Renamed `spliceBytes()` to `spliceChars()` and re-implemented as plain string slicing. The offsets are what they actually are (char indices), so fix the implementation to match the contract, not the misleading field names. Added a doc comment explaining the discrepancy for future maintainers.",
+  "consequences": [
+    "Non-ASCII content in source files is now handled correctly during mutation splicing",
+    "Naming debt remains: fields still say `*Byte` but mean char-indices — a follow-up rename would be desirable but is a separate concern",
+    "Reduced cognitive load: implementation now obviously matches the actual values flowing through the code"
+  ],
+  "alternatives_rejected": [
+    "Refactor tree-sitter wrapper to convert offsets to true UTF-8 bytes (more invasive, slower, unnecessary since JS works in char-indices)",
+    "Rename all `*Byte` fields to `*Char` across the codebase (widespread refactoring, high friction, not the blocking bug)",
+    "Keep Buffer-based approach and try to compensate for encoding differences (fragile, error-prone, ongoing maintenance hazard)"
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Rename all `*Byte` fields to `*Char` across the codebase (widespread refactoring, high friction, not the blocking bug)",
+      "scope": [
+        "src/constitution/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Keep Buffer-based approach and try to compensate for encoding differences (fragile, error-prone, ongoing maintenance hazard)",
+      "scope": [
+        "src/constitution/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_587d48fb03",
+    "cmp_a94a8fe5cc",
+    "cmp_f27fede222"
+  ],
+  "related_files": [
+    "src/constitution/sourceMutation.ts",
+    "test/constitution.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "2c82e4fe",
+  "valid_from": "2026-09-16T17:21:58+02:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [
+      "spliceBytes"
+    ],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft",
+    "confidence": 0.65,
+    "evidence": [
+      "commit:2c82e4fe",
+      "synth:provider=claude-cli",
+      "branch:85-fix-splicebytes-char-offsets",
+      "src/constitution/sourceMutation.ts",
+      "test/constitution.test.ts"
+    ],
+    "last_verified": "2026-09-16T15:22:16.367Z"
+  },
+  "date": "2026-09-16T17:21:58+02:00"
+}

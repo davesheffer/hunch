@@ -1,0 +1,49 @@
+{
+  "id": "dec_dfdd8415f6",
+  "title": "MCP session start refreshes the ledger via an unref'd 30 s timer that spawns a detached snapshot, only from the real stdio entrypoint",
+  "topic": "workspace-ledger.session-refresh",
+  "status": "superseded",
+  "context": "A machine that only ever runs an agent must still report its branches. Spawning at server construction made existing tests that count overlay commits across in-process or stdio MCP sessions nondeterministic (constitution.test.ts).",
+  "decision": "`startServer` (the `hunch mcp` stdio entrypoint) enables `workspaceRefresh`; `buildServerWithRootControl` arms an unref'd setTimeout (HUNCH_WORKSPACE_REFRESH_DELAY_MS, default 30 s) that spawns `hunch workspaces snapshot --quiet` detached with this installation's launcher (verificationLauncherFor), HUNCH_SYNC=1, only when a snapshot has a home. In-process servers (tests, embedders) never spawn; HUNCH_WORKSPACE_REFRESH=0 opts out.",
+  "consequences": [
+    "Sessions shorter than the delay never trigger it, which is what makes the test suite deterministic.",
+    "The snapshot no-ops when nothing changed and the stored record is under a day old."
+  ],
+  "alternatives_rejected": [
+    "Spawn immediately at server construction — races tests that assert overlay commit counts.",
+    "Run the snapshot in-process synchronously — blocks the MCP event loop for seconds on large repos.",
+    "Gate on a test-runner env var (NODE_TEST_CONTEXT) — undocumented and hacky."
+  ],
+  "rejected_tripwires": [],
+  "related_components": [],
+  "related_files": [
+    "docs/workspace-ledger.md",
+    "src/core/workspace.ts",
+    "src/core/machine.ts",
+    "src/extractors/workspaces.ts",
+    "src/integrations/workspaceLedger.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": "dec_9b2c4b884e",
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-09-17T06:49:13.799Z",
+  "valid_to": "2026-09-17T07:54:28.970Z",
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "premises": [],
+  "provenance": {
+    "source": "human_confirmed",
+    "confidence": 0.95,
+    "evidence": [
+      "docs/workspace-ledger.md",
+      "src/core/workspace.ts",
+      "src/core/machine.ts",
+      "src/extractors/workspaces.ts",
+      "src/integrations/workspaceLedger.ts"
+    ]
+  },
+  "date": "2026-09-17T06:49:13.799Z"
+}

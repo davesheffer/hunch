@@ -1,0 +1,109 @@
+{
+  "id": "dec_315f416796",
+  "title": "Partial selector maps are wholly unresolvable, not a subset match",
+  "topic": null,
+  "status": "accepted",
+  "context": "K8s manifest analysis extracts Service selectors and workload labels to find Service↔workload references. If a selector has any templated value among literal siblings (e.g., `app: {{ .Values.name }}, tier: web`), the whole map must resolve to null—not `{tier: web}` alone. Touches invariant(s): con_039cee7367 (Memory hygiene is the agent's job, done without waiting for the human: accept shipped roadmap proposals, settle provenance-repair escalations (apply the true commit or drop), re-anchor or stale findings, and land the resulting capture commits through a PR. Only decisions that need genuine product judgment are queued for the human.).",
+  "decision": "Any unresolvable (templated) key in a selector/labels map voids the entire map. Partial resolution is forbidden because it is strictly more permissive than the real selector, creating false-positive reference edges. Safety (no false positives) takes priority over coverage (missing real edges when templates are involved).",
+  "consequences": [
+    "Conservative: misses some real edges when manifests contain templated keys mixed with literals",
+    "Safe: prevents false-positive Service↔workload edges that would result from incomplete selectors",
+    "Requires explicit test coverage to prevent regression (the guard survived mutation until tests were added)"
+  ],
+  "alternatives_rejected": [
+    "Allow partial maps and use them for matching (creates false-positive edges; strictly wrong)",
+    "Attempt to resolve templates statically (out of scope; adds complexity)",
+    "Mark partial matches as low-confidence rather than null (still produces spurious edges)"
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Allow partial maps and use them for matching (creates false-positive edges; strictly wrong)",
+      "scope": [
+        "src/extractors/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Attempt to resolve templates statically (out of scope; adds complexity)",
+      "scope": [
+        "src/extractors/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Mark partial matches as low-confidence rather than null (still produces spurious edges)",
+      "scope": [
+        "src/extractors/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_a94a8fe5cc",
+    "cmp_e0ccfe26fe",
+    "cmp_f27fede222"
+  ],
+  "related_files": [
+    "src/extractors/helm.ts",
+    "src/extractors/indexer.ts",
+    "src/extractors/k8sManifest.ts",
+    "test/indexer.test.ts",
+    "test/k8sManifest.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "851dd365",
+  "valid_from": "2026-09-16T17:59:13+02:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft",
+    "confidence": 0.65,
+    "evidence": [
+      "commit:851dd365",
+      "synth:provider=claude-cli",
+      "branch:40-k8s-manifest-cross-resource-refs",
+      "src/extractors/helm.ts",
+      "src/extractors/indexer.ts",
+      "src/extractors/k8sManifest.ts",
+      "test/indexer.test.ts",
+      "test/k8sManifest.test.ts"
+    ],
+    "last_verified": "2026-09-16T15:59:30.981Z"
+  },
+  "date": "2026-09-16T17:59:13+02:00"
+}

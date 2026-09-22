@@ -182,10 +182,16 @@ test("P3: commitAndPushHunch never throws, and a held lock makes it a no-op (ski
     mkdirSync(hunchDir, { recursive: true });
     // normal path: never throws
     assert.doesNotThrow(() => commitAndPushHunch(hunchDir, "hunch: test", { push: false }));
-    // held lock: pre-create the lock dir → the call must skip cleanly, not throw
-    mkdirSync(join(hunchDir, ".hunch-commit.lock"), { recursive: true });
+    // held lock: pre-create the lock dir → the call must skip cleanly, not throw.
+    // Aged past the owner-less window (like the stale-lock tests below) so the
+    // skip is immediate: a JUST-created owner-less lock is a transient window a
+    // contender deliberately waits out.
+    const heldLock = join(hunchDir, ".hunch-commit.lock");
+    mkdirSync(heldLock, { recursive: true });
+    const held = new Date(Date.now() - 30_000);
+    utimesSync(heldLock, held, held);
     assert.doesNotThrow(() => commitAndPushHunch(hunchDir, "hunch: test 2", { push: false }));
-    assert.ok(existsSync(join(hunchDir, ".hunch-commit.lock")), "a live held lock is left intact (owner releases it)");
+    assert.ok(existsSync(join(hunchDir, ".hunch-commit.lock")), "an owner-less held lock is left intact (never reclaimed before its TTL)");
   } finally {
     cleanup();
   }

@@ -17,4 +17,10 @@ test("initialize delivers the grounding contract to every client, hooks or not",
   for (const tool of ["hunch_task", "hunch_context", "hunch_check_constraints", "hunch_why"]) assert.ok(instructions?.includes(tool), tool);
   assert.doesNotMatch(instructions ?? "", /claude code only|anthropic/i, "host-neutral (con_e04226bd05)");
   assert.ok((instructions ?? "").length < 1500, "short enough to survive every client's context budget");
+  // An MCP-started task has no session key, so no hook ever closes it: the finish
+  // skip must read as ONE conjunction gated on the prompt hook's own statement,
+  // never as an independent "skippable where the host closes the task" clause.
+  assert.match(instructions ?? "", /its instruction said that host closes the task AND the task used no Hunch/);
+  assert.match(instructions ?? "", /A task you started with hunch_task is always finished by you/);
+  assert.doesNotMatch(instructions ?? "", /skippable/i);
 });

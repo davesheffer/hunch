@@ -23,7 +23,12 @@ export function formatSearchHit(hit: SearchHit, record: unknown): string {
 /** Render a StructureView as a compact orientation brief (hunch_structure). */
 export function formatStructure(v: StructureView): string {
   const NL = "\n";
-  if (v.kind === "none") return `Nothing indexed matches "${v.target}" — not a known file, directory, or symbol. Run hunch index if the repo changed, or hunch_query for fuzzy search.`;
+  if (v.kind === "none") {
+    // A real working-tree file with zero indexed symbols is a different answer from
+    // an unknown path — never tell the user a file we just stat'd doesn't exist.
+    if (v.realFile) return `"${v.target}" is a real file, but the index holds no symbols for it — nothing to outline. Run hunch index if the repo changed, or hunch_why for its recorded decisions and invariants.`;
+    return `Nothing indexed matches "${v.target}" — not a known file, directory, or symbol. Run hunch index if the repo changed, or hunch_query for fuzzy search.`;
+  }
   if (v.kind === "repo") {
     const out = [`# Repo structure (from the graph — no grep needed)`];
     if (v.components.length) {

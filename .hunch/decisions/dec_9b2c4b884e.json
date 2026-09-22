@@ -1,0 +1,50 @@
+{
+  "id": "dec_9b2c4b884e",
+  "title": "A machine publishes its workspace record when an agent READS the ledger, not on a session-start timer and never from a child process",
+  "topic": "workspace-ledger.session-refresh",
+  "status": "superseded",
+  "context": "The superseded decision refreshed the ledger from an unref'd 30s timer at MCP session start, first by spawning a detached `hunch workspaces snapshot` child. On Windows CI that child (and its git subprocess) outlived the MCP session and held a test clone's directory open: team-matrix-e2e's rmSync teardown failed with EBUSY (run 35190856782, job 105102951835, orphan node+git processes in the runner cleanup log). Moving the timer in-process removed the orphan but kept a narrower race — killing the server mid-`git` can orphan git on Windows — and still wrote into the overlay of any unrelated MCP test running longer than the delay.",
+  "decision": "There is no session-start refresh. The `hunch_workspaces` MCP tool publishes the observation its own read just took (`recordWorkspaceSnapshot(store, root, { live })`, reusing the snapshot via the pure `withPublishMode` so git is not walked twice), in the server process, through the ordinary capture funnel. No timer, no child process, nothing that can outlive the session or hold a directory open. `HUNCH_WORKSPACE_REFRESH=0` makes the call read-only. The git hooks (post-checkout, post-commit) remain the normal refresh path; this covers a host that has no hooks yet.",
+  "consequences": [
+    "The machines that ask about the ledger are exactly the machines visible in it — the one moment the data provably matters.",
+    "A session nobody asks writes nothing, so no unrelated long-running MCP test can have its overlay written under it.",
+    "A machine whose agent never calls the tool and whose hooks were never installed does not publish; `hunch workspaces snapshot` and `hunch init` are the answer."
+  ],
+  "alternatives_rejected": [
+    "Detached child at session start (the original) — orphaned node+git processes held a Windows clone open and broke an unrelated test's teardown with EBUSY.",
+    "In-process unref'd timer — removes the orphan child but still races the server's own death mid-git on Windows, and writes into any MCP test that runs past the delay.",
+    "Gating the timer on a test-runner env var (NODE_TEST_CONTEXT) — undocumented, and it makes production behavior depend on how the process was launched.",
+    "No MCP refresh at all — a host with no git hooks would never publish, which is the case cross-machine visibility exists for.",
+    "Raising the timer delay — moves the race rather than removing it; any long enough session still hits it."
+  ],
+  "rejected_tripwires": [],
+  "related_components": [],
+  "related_files": [
+    "src/mcp/server.ts",
+    "src/integrations/workspaceLedger.ts",
+    "src/core/workspace.ts",
+    "docs/workspace-ledger.md"
+  ],
+  "supersedes": "dec_dfdd8415f6",
+  "superseded_by": "dec_0e1156ac2e",
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-09-17T07:54:28.970Z",
+  "valid_to": "2026-09-17T07:57:32.334Z",
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "premises": [],
+  "provenance": {
+    "source": "agent_recorded",
+    "confidence": 0.75,
+    "evidence": [
+      "src/mcp/server.ts",
+      "src/integrations/workspaceLedger.ts",
+      "src/core/workspace.ts",
+      "docs/workspace-ledger.md"
+    ]
+  },
+  "date": "2026-09-17T07:54:28.970Z"
+}

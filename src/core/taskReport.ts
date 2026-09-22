@@ -144,7 +144,10 @@ export interface LessonHistory {
 }
 
 type Database = Parameters<Parameters<typeof withServedDatabase>[1]>[0];
-function taskDb<T>(root: string, run: (db: Database) => T): T {
+/** Explicit report operations wait out a competing writer; hook/delivery paths keep
+ * the ledger's 100 ms default so a receipt never costs a delivery. */
+const PATIENT_BUSY_MS = 5_000;
+function taskDb<T>(root: string, run: (db: Database) => T, patient = false): T {
   return withServedDatabase(root, (db) => {
     db.exec(`CREATE TABLE IF NOT EXISTS report_tasks (
       task_id TEXT PRIMARY KEY, scope TEXT NOT NULL, body TEXT NOT NULL
@@ -160,10 +163,12 @@ function taskDb<T>(root: string, run: (db: Database) => T): T {
     );
     CREATE INDEX IF NOT EXISTS report_record_lookup ON report_record_links(kind, record_id, content_hash);
     CREATE TABLE IF NOT EXISTS report_history_progress (id INTEGER PRIMARY KEY CHECK(id = 1), through_rowid INTEGER NOT NULL);
-    INSERT OR IGNORE INTO report_history_progress VALUES (1, 0);
     CREATE TABLE IF NOT EXISTS report_task_aliases (alias_id TEXT PRIMARY KEY, task_id TEXT NOT NULL);`);
+    // Seed only when the row is missing: an unconditional INSERT made every pure
+    // read take the writer lock. INSERT OR IGNORE still settles the race.
+    if (!db.prepare("SELECT 1 FROM report_history_progress WHERE id = 1").get()) db.exec("INSERT OR IGNORE INTO report_history_progress VALUES (1, 0)");
     return run(db);
-  });
+  }, patient ? { busyTimeoutMs: PATIENT_BUSY_MS } : {});
 }
 
 /** A prompt identity that reports to another prompt's task: a host notification
@@ -179,6 +184,11 @@ export function aliasReportTask(root: string, aliasId: string, taskId: string): 
 /** The task an aliased prompt identity reports to, or the identity itself. */
 export function resolveReportTask(root: string, id: string): string {
   return taskDb(root, db => (db.prepare("SELECT task_id FROM report_task_aliases WHERE alias_id = ?").get(id) as { task_id: string } | undefined)?.task_id ?? id);
+}
+/** Whether a task id names a real task of THIS repository/worktree. */
+export function reportTaskExists(root: string, id: string): boolean {
+  TaskIdSchema.parse(id);
+  return taskDb(root, db => !!db.prepare("SELECT 1 FROM report_tasks WHERE task_id = ? AND scope IN (?, ?, ?)").get(id, ...scopePair(root)));
 }
 
 function deliveryRecords(kind: string, body: unknown): ReportRecord[] {
@@ -321,10 +331,12 @@ function newestSessionTask(db: Database, root: string, sessionKey: string): Repo
 export function latestSessionTask(root: string, sessionKey: string): ReportTask | null {
   return taskDb(root, db => newestSessionTask(db, root, sessionKey));
 }
-/** Check-starts still inside their own timeout plus the grace window, minus the
- * results that arrived: while positive, a runner may still deliver a result. */
+/** Check-starts still inside their own timeout plus the grace window whose own
+ * result has not arrived: while positive, a runner may still deliver a result.
+ * A result clears the start it names (its `check_id`) and nothing else — netting
+ * results against starts let a finished old check hide a running new one. */
 function pendingChecks(db: Database, taskId: string): number {
-  const { pending } = db.prepare(`SELECT SUM(CASE WHEN kind = 'check-start' AND (julianday('now') - julianday(at)) * 86400000 < COALESCE(json_extract(body, '$.timeout_ms'), ${MAX_PENDING_CHECK_MS}) + ${CHECK_RESULT_GRACE_MS} THEN 1 WHEN kind = 'check' AND json_extract(body, '$.check_id') IS NOT NULL THEN -1 ELSE 0 END) AS pending FROM report_events WHERE task_id = ?`).get(taskId) as { pending: number | null };
+  const { pending } = db.prepare(`SELECT COUNT(*) AS pending FROM report_events s WHERE s.task_id = ? AND s.kind = 'check-start' AND (julianday('now') - julianday(s.at)) * 86400000 < COALESCE(json_extract(s.body, '$.timeout_ms'), ${MAX_PENDING_CHECK_MS}) + ${CHECK_RESULT_GRACE_MS} AND NOT EXISTS (SELECT 1 FROM report_events c WHERE c.task_id = s.task_id AND c.kind = 'check' AND json_extract(c.body, '$.check_id') = s.event_id)`).get(taskId) as { pending: number | null };
   return pending ?? 0;
 }
 /** Tasks of a session that an earlier prompt left open are over once the
@@ -373,6 +385,9 @@ function appendEvent(root: string, taskId: string, kind: string, body: unknown, 
   const id = eventId ?? `hev_${randomBytes(12).toString("hex")}`;
   if (!/^(hev|hocc)_[a-f0-9]{24}$/.test(id)) throw new Error("invalid report event identity");
   const contentHash = reportHash(body);
+  // Explicit CLI/agent operations; passive observers (delivery, save, refusal,
+  // conformance) keep the default so an observation never costs a delivery.
+  const patient = kind === "check-start" || kind === "check" || kind === "claim";
   return taskDb(root, db => transaction(db, () => {
     const task = readTask(db, root, taskId);
     const prior = db.prepare("SELECT task_id, kind, content_hash FROM report_events WHERE event_id = ?").get(id) as { task_id: string; kind: string; content_hash: string } | undefined;
@@ -421,7 +436,7 @@ function appendEvent(root: string, taskId: string, kind: string, body: unknown, 
     const seq = Number(inserted.lastInsertRowid);
     db.prepare("UPDATE report_history_progress SET through_rowid = ? WHERE id = 1 AND through_rowid = ?").run(seq, seq - 1);
     return id;
-  }));
+  }), patient);
 }
 
 /** The record revisions among `records` that this task has not received before.
@@ -482,11 +497,25 @@ export function recordReportConformance(root: string, taskId: string, conformanc
   if (!report.deliveries.some(d => d.records.some(r => r.kind === value.kind && r.record_id === value.record_id && r.content_hash === value.content_hash))) throw new Error("rule evaluation does not name a record revision delivered in this task");
   return appendEvent(root, taskId, "conformance", value);
 }
+/** SQLITE_BUSY (5) / SQLITE_LOCKED (6); node:sqlite carries the extended code. */
+function isBusyError(error: unknown): boolean {
+  const code = (error as { errcode?: number }).errcode;
+  if (typeof code === "number") return (code & 0xff) === 5 || (code & 0xff) === 6;
+  return /database is locked/i.test((error as Error)?.message ?? "");
+}
 /** Only the local runner calls this. MCP never accepts a claimed successful check. */
 export function recordReportCheck(root: string, taskId: string, check: ReportCheck): string {
   const value = ReportCheckSchema.parse(check);
   if (!value.check_id) throw new Error("verification result requires a reserved check identity");
-  return appendEvent(root, taskId, "check", value, `hev_${reportHash({ taskId, check: value.check_id }).slice(7, 31)}`);
+  const id = `hev_${reportHash({ taskId, check: value.check_id }).slice(7, 31)}`;
+  // A result that took minutes to produce must not be lost to a busy ledger. The
+  // write is idempotent (deterministic id; appendEvent returns the existing id for
+  // identical content), so a retry is safe. Each attempt already waits out
+  // PATIENT_BUSY_MS in BEGIN IMMEDIATE; no sleep between them.
+  for (let attempt = 1; ; attempt++) {
+    try { return appendEvent(root, taskId, "check", value, id); }
+    catch (error) { if (attempt >= 3 || !isBusyError(error)) throw error; }
+  }
 }
 /** A start without a result blocks completion only while the runner could still
  * deliver one: its own timeout plus a minute of grace. After that the runner is
@@ -517,13 +546,12 @@ export function finishReportTask(root: string, taskId: string, state: "completed
       return task;
     }
     if (state === "completed") {
-      const { pending } = db.prepare(`SELECT SUM(CASE WHEN kind = 'check-start' AND (julianday('now') - julianday(at)) * 86400000 < COALESCE(json_extract(body, '$.timeout_ms'), ${MAX_PENDING_CHECK_MS}) + ${CHECK_RESULT_GRACE_MS} THEN 1 WHEN kind = 'check' AND json_extract(body, '$.check_id') IS NOT NULL THEN -1 ELSE 0 END) AS pending FROM report_events WHERE task_id = ?`).get(taskId) as { pending: number | null };
-      if ((pending ?? 0) > 0) throw new Error("verification is still running or was interrupted; wait for its result or close the task as interrupted");
+      if (pendingChecks(db, taskId) > 0) throw new Error("verification is still running or was interrupted; wait for its result or close the task as interrupted");
     }
     const finished = TaskSchema.parse({ ...task, state, finished_at: new Date().toISOString(), closed_by: by });
     db.prepare("UPDATE report_tasks SET body = ? WHERE task_id = ?").run(JSON.stringify(finished), taskId);
     return finished;
-  }));
+  }), by === "agent");
 }
 /** A report with no observation of any kind. Presentation surfaces may stay
  * silent for it; the task row itself is retained so "never touched Hunch" is

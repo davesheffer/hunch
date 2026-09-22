@@ -14,6 +14,7 @@ import {
   ConventionSchema, ActionReceiptSchema, CommitmentSchema, DerivedStateSchema, ExternalEntitySchema, StateRelationshipSchema,
   type Convention, type ActionReceipt, type Commitment, type DerivedState, type ExternalEntity, type StateRelationship,
 } from "./stateRecords.js";
+import { WorkspaceSchema, type Workspace } from "./workspace.js";
 
 // Provenance and the credential-free text check live in the leaf module ./provenance.js so
 // record schemas registered below can import them without a cycle; re-exported unchanged.
@@ -699,6 +700,7 @@ export function landscapeDriftCandidateFinding(value: unknown): Finding {
 export const ENTITY_KINDS = [
   "components", "resources", "edges", "symbols", "decisions", "bugs", "constraints", "runbooks", "findings",
   "receipts", "commitments", "derived", "entities", "relationships", "conventions", "tasks",
+  "workspaces",
 ] as const;
 export type EntityKind = (typeof ENTITY_KINDS)[number];
 
@@ -719,6 +721,7 @@ export const SCHEMAS = {
   entities: ExternalEntitySchema,
   relationships: StateRelationshipSchema,
   tasks: TaskRecordSchema,
+  workspaces: WorkspaceSchema,
 } as const;
 
 export type EntityFor = {
@@ -738,6 +741,7 @@ export type EntityFor = {
   entities: ExternalEntity;
   relationships: StateRelationship;
   tasks: TaskRecord;
+  workspaces: Workspace;
 };
 
 /** Default provenance helper for deterministic (extracted) records. */

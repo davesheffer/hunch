@@ -1,0 +1,31 @@
+{
+  "id": "fnd_751c7e3a9e",
+  "title": "experiment test EXP-01 fails deterministically on a developer Mac: invalid_completion !== completed",
+  "observation": "test/experiment.test.ts EXP-01 reports status `invalid_completion` where `completed` is expected when `npm test` runs inside a Claude Code session on a Mac; green in CI. 2026-09-20 narrowing: with the initiator variables removed (`env -u CLAUDECODE -u CODEX_THREAD_ID -u CODEX_SESSION_ID -u HUNCH_INITIATOR npm test`) both EXP-01 tests PASS on the combined 8-PR tree, and so does test/autoreview-cli.test.ts — so the cause is inherited host environment, the same family as the auto-review provider leak (issue #378 / fnd_5ae0e1edf5), not a product regression. Which variable, and where the experiment runner reads it, is still untraced. Tracked as GitHub issue #379.",
+  "evidence": [
+    "2026-09-20 pre-merge audit: one of the 7 failures reproducing identically on plain origin/main afe7870b with CLAUDECODE=1 inherited",
+    "2026-09-20 combined tree e00609b6 (main afe7870b + 8 PRs), `env -u CLAUDECODE -u CODEX_THREAD_ID -u CODEX_SESSION_ID -u HUNCH_INITIATOR npm test`: 2536 tests / 2520 pass / 4 fail / 12 skip; EXP-01 ok 572 + ok 585; autoreview-cli all ok; the 4 failures are the /var vs /private/var workspace tests only",
+    "https://github.com/davesheffer/hunch/issues/379"
+  ],
+  "method": null,
+  "severity": "low",
+  "triage": "open",
+  "affected_files": [
+    "test/experiment.test.ts"
+  ],
+  "affected_symbols": [],
+  "violates_constraint": null,
+  "spawned_decision": null,
+  "observed_at": "2026-09-20T06:55:58.637Z",
+  "resolved_commit": null,
+  "provenance": {
+    "source": "agent_recorded",
+    "confidence": 0.75,
+    "evidence": [
+      "2026-09-20 pre-merge audit: one of the 7 failures reproducing identically on plain origin/main afe7870b with CLAUDECODE=1 inherited",
+      "2026-09-20 combined tree e00609b6 (main afe7870b + 8 PRs), `env -u CLAUDECODE -u CODEX_THREAD_ID -u CODEX_SESSION_ID -u HUNCH_INITIATOR npm test`: 2536 tests / 2520 pass / 4 fail / 12 skip; EXP-01 ok 572 + ok 585; autoreview-cli all ok; the 4 failures are the /var vs /private/var workspace tests only",
+      "https://github.com/davesheffer/hunch/issues/379"
+    ],
+    "last_verified": "2026-09-20T07:30:25.926Z"
+  }
+}

@@ -89,10 +89,15 @@ export interface ServeOptions {
   version?: string;
   /** Injectable for tests: how a partition's store is opened. */
   openStore?: (root: string) => HunchStore;
+  /** Server-side log line sink for 5xx specifics; defaults to stderr. */
+  log?: (line: string) => void;
+  /** Injectable for tests: how long a write waits for its partition's lock. */
+  writeLockTimeoutMs?: number;
 }
 
 export function createServeApp(config: ServeConfig, opts: ServeOptions = {}): Server & { closeStores: () => void } {
   const version = opts.version ?? HUNCH_VERSION;
+  const writeLockTimeoutMs = opts.writeLockTimeoutMs;
   const configFile = (config as ServeConfig & { file?: string }).file;
   const authStateDir = opts.authStateDir ?? (configFile ? resolve(configFile + ".auth") : undefined);
   const stores = new Map<string, HunchStore>();
@@ -123,16 +128,24 @@ export function createServeApp(config: ServeConfig, opts: ServeOptions = {}): Se
   };
   const problemBody = (p: HttpProblem): ProblemShape => ({ type: `${PROBLEM_TYPE}${p.code}`, title: p.code, status: p.status, detail: p.message, ...p.extra });
   const sendProblem = (res: ServerResponse, p: HttpProblem): void => { send(res, p.status, problemBody(p), "application/problem+json"); };
-  /** Anything thrown → problem. Shared by REST (problem+json) and MCP (tool error results). */
+  const log = opts.log ?? ((line: string) => { process.stderr.write(`${line}\n`); });
+  /** Anything thrown → problem. Shared by REST (problem+json) and MCP (tool error results).
+   *  A contract refusal (4xx) explains itself to the caller. A server-side failure (5xx) does
+   *  not: its message can name lock paths, PIDs, host names or store paths, so the caller gets
+   *  a generic detail and the specifics go to the server log only. */
   const problemOf = (error: unknown): HttpProblem => {
     if (error instanceof HttpProblem) return error;
     if (error instanceof StateRefusal) return problem(REFUSAL_STATUS[error.code], error.code, error.message, error.conflict ? { conflict: error.conflict } : {});
-    if (error instanceof WriteLockTimeout) return problem(503, "write-lock-timeout", error.message, { "retry-after": 1 });
+    if (error instanceof WriteLockTimeout) {
+      log(`hunch serve: 503 write-lock-timeout: ${error.message}`);
+      return problem(503, "write-lock-timeout", "the partition is busy with another write; retry shortly", { "retry-after": 1 });
+    }
     if (error && typeof error === "object" && (error as { name?: string }).name === "ZodError") {
       const issues = ((error as { issues?: Array<{ path: Array<string | number>; message: string }> }).issues ?? []).map((i) => `${i.path.join(".") || "request"}: ${i.message}`);
       return problem(400, "malformed", `request is malformed: ${issues.join("; ")}`, { issues });
     }
-    return problem(500, "internal", (error as Error).message);
+    log(`hunch serve: 500 internal: ${error instanceof Error ? error.stack ?? error.message : String(error)}`);
+    return problem(500, "internal", "internal server error");
   };
 
   /** One authenticated state verb. The REST routes and the MCP tools both call this, so every
@@ -182,18 +195,44 @@ export function createServeApp(config: ServeConfig, opts: ServeOptions = {}): Se
     if (route === "write" || route === "capture" || route === "capture-batch") {
       const { hunchDir } = stateHomeFor(store, scope);
       const opts = { ...accessOptions, flush };
+      const lockOptions = { timeoutMs: writeLockTimeoutMs };
       if (route === "write") {
-        const result = await withWriteLock(hunchDir, () => writeState(store, { schema: STATE_WRITE_VERSION, principal, ...body }, opts));
+        const result = await withWriteLock(hunchDir, () => writeState(store, { schema: STATE_WRITE_VERSION, principal, ...body }, opts), lockOptions);
         return { status: result.outcome === "created" ? 201 : 200, payload: result };
       }
       if (route === "capture") {
-        const result = await withWriteLock(hunchDir, () => captureState(store, { schema: STATE_CAPTURE_VERSION, principal, ...body }, opts));
+        const result = await withWriteLock(hunchDir, () => captureState(store, { schema: STATE_CAPTURE_VERSION, principal, ...body }, opts), lockOptions);
         return { status: result.outcome === "created" ? 201 : 200, payload: result };
       }
-      return { status: 200, payload: await withWriteLock(hunchDir, () => captureBatchState(store, { schema: STATE_CAPTURE_BATCH_VERSION, principal, ...body }, opts)) };
+      return { status: 200, payload: await withWriteLock(hunchDir, () => captureBatchState(store, { schema: STATE_CAPTURE_BATCH_VERSION, principal, ...body }, opts), lockOptions) };
     }
     if (route === "subscribe") return { status: 200, payload: subscribeState(store, { schema: STATE_SUBSCRIBE_VERSION, principal, ...body }, accessOptions) };
     return { status: 200, payload: recordsState(store, { schema: STATE_RECORDS_VERSION, principal, ...body }, accessOptions) };
+  };
+
+  /** The bearer/DPoP credential → the principal. Every authenticated route, and health when a
+   *  credential is presented, goes through this one check. */
+  const authenticate = async (req: IncomingMessage, res: ServerResponse, url: URL, activeConfig: ServeConfig): Promise<Principal> => {
+    const authorization = /^(Bearer|DPoP) ([^\s]+)$/i.exec(req.headers.authorization ?? '');
+    const credential = resolveCredential(activeConfig, authorization?.[2]);
+    if (!credential) throw problem(401, 'unauthorized', 'valid credentials are required');
+    const countHeader = (name: string) => req.rawHeaders.filter((header, index) => index % 2 === 0 && header.toLowerCase() === name).length;
+    if (countHeader('authorization') !== 1 || countHeader('dpop') > 1) throw problem(401, 'invalid_dpop_proof', 'ambiguous authentication headers');
+    if (credential.proof_key) {
+      if (authorization![1]!.toLowerCase() !== 'dpop') throw problem(401, 'invalid_dpop_proof', 'this credential requires DPoP proof; bearer fallback is disabled');
+      if (!activeConfig.public_origin || !authStateDir) throw problem(503, 'proof-state-unavailable', 'key-bound authentication requires a public origin and persistent proof state');
+      try {
+        await verifyStateProof({ proof: typeof req.headers.dpop === 'string' ? req.headers.dpop : undefined, key: credential.proof_key, method: req.method ?? '', url: activeConfig.public_origin + url.pathname, token: authorization![2]!, stateDir: authStateDir });
+      } catch (error) {
+        if (error instanceof StateProofError) {
+          res.setHeader('WWW-Authenticate', `DPoP error="${error.code}", algs="EdDSA"`);
+          if (error.nonce) res.setHeader('DPoP-Nonce', error.nonce);
+          throw problem(401, error.code, error.message);
+        }
+        throw problem(503, 'proof-state-unavailable', 'proof replay state is unavailable; authentication is refused');
+      }
+    } else if (authorization![1]!.toLowerCase() !== 'bearer' || req.headers.dpop !== undefined) throw problem(401, 'invalid_dpop_proof', 'credential is not bound to a proof key');
+    return { id: credential.id, kind: credential.kind, grants: credential.grants, ...(credential.display ? { display: credential.display } : {}) };
   };
 
   const server = createServer(async (req, res) => {
@@ -209,28 +248,14 @@ export function createServeApp(config: ServeConfig, opts: ServeOptions = {}): Se
         return res.end(asset[0]);
       }
       if (url.pathname === "/nuryel/v1/health" && req.method === "GET") {
-        return send(res, 200, { ok: true, version, protocol: "nuryel.state/1", partitions: activeConfig.partitions.map((p) => scopePath(p.scope)) });
+        // Liveness is public (a load balancer or proxy probe holds no token). Which
+        // partitions this server hosts is not: their ids name people and organizations.
+        const liveness = { ok: true, version, protocol: "nuryel.state/1" };
+        if (req.headers.authorization === undefined && req.headers.dpop === undefined) return send(res, 200, liveness);
+        await authenticate(req, res, url, activeConfig);
+        return send(res, 200, { ...liveness, partitions: activeConfig.partitions.map((p) => scopePath(p.scope)) });
       }
-      const authorization = /^(Bearer|DPoP) ([^\s]+)$/i.exec(req.headers.authorization ?? '');
-      const credential = resolveCredential(activeConfig, authorization?.[2]);
-      if (!credential) throw problem(401, 'unauthorized', 'valid credentials are required');
-      const countHeader = (name: string) => req.rawHeaders.filter((header, index) => index % 2 === 0 && header.toLowerCase() === name).length;
-      if (countHeader('authorization') !== 1 || countHeader('dpop') > 1) throw problem(401, 'invalid_dpop_proof', 'ambiguous authentication headers');
-      if (credential.proof_key) {
-        if (authorization![1]!.toLowerCase() !== 'dpop') throw problem(401, 'invalid_dpop_proof', 'this credential requires DPoP proof; bearer fallback is disabled');
-        if (!activeConfig.public_origin || !authStateDir) throw problem(503, 'proof-state-unavailable', 'key-bound authentication requires a public origin and persistent proof state');
-        try {
-          await verifyStateProof({ proof: typeof req.headers.dpop === 'string' ? req.headers.dpop : undefined, key: credential.proof_key, method: req.method ?? '', url: activeConfig.public_origin + url.pathname, token: authorization![2]!, stateDir: authStateDir });
-        } catch (error) {
-          if (error instanceof StateProofError) {
-            res.setHeader('WWW-Authenticate', `DPoP error="${error.code}", algs="EdDSA"`);
-            if (error.nonce) res.setHeader('DPoP-Nonce', error.nonce);
-            throw problem(401, error.code, error.message);
-          }
-          throw problem(503, 'proof-state-unavailable', 'proof replay state is unavailable; authentication is refused');
-        }
-      } else if (authorization![1]!.toLowerCase() !== 'bearer' || req.headers.dpop !== undefined) throw problem(401, 'invalid_dpop_proof', 'credential is not bound to a proof key');
-      const principal: Principal = { id: credential.id, kind: credential.kind, grants: credential.grants, ...(credential.display ? { display: credential.display } : {}) };
+      const principal = await authenticate(req, res, url, activeConfig);
 
       if (url.pathname === "/nuryel/v1/capabilities" && req.method === "GET") {
         const scope = parseScopeParam(url.searchParams.get("scope"));

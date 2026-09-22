@@ -371,14 +371,19 @@ test("a native prompt hook supplies the exact cwd that re-homes a stale MCP sess
 
   const taskId = /htask_[a-f0-9]+/.exec(hookText)?.[0];
   assert.ok(taskId);
+  // Follow the instruction exactly as printed. The hook already opened the task, so
+  // the normal text forbids a start call and the capture below is the FIRST instructed
+  // call; only the fail-open fallback (no launcher) asks for start, with its exact title.
   const titleLiteral = /title:\s*("(?:\\.|[^"])*")/.exec(hookText)?.[1];
-  assert.ok(titleLiteral, `the test must follow the hook's exact task title: ${hookText}`);
-  const task = await client.callTool({
-    name: "hunch_task",
-    arguments: { action: "start", task_id: taskId, title: JSON.parse(titleLiteral), cwd: routedCwd },
-  }) as { isError?: boolean };
-  assert.equal(!!task.isError, false);
-  assert.equal(control.getRoot(), fixture.worktree, "the first instructed task call leaves the stale spawn root");
+  if (titleLiteral) {
+    const task = await client.callTool({
+      name: "hunch_task",
+      arguments: { action: "start", task_id: taskId, title: JSON.parse(titleLiteral), cwd: routedCwd },
+    }) as { isError?: boolean };
+    assert.equal(!!task.isError, false);
+  } else {
+    assert.match(hookText, /Never call hunch_task start/, `an instruction without start arguments must forbid the start call: ${hookText}`);
+  }
 
   const title = "Native prompt worktree routing";
   const capture = await client.callTool({
@@ -390,6 +395,7 @@ test("a native prompt hook supplies the exact cwd that re-homes a stale MCP sess
     },
   }) as { isError?: boolean };
   assert.equal(!!capture.isError, false);
+  assert.equal(control.getRoot(), fixture.worktree, "the first instructed call leaves the stale spawn root");
   const filename = `${findingId(title)}.json`;
   assert.equal(existsSync(join(fixture.worktree, ".hunch", "findings", filename)), true);
   assert.equal(existsSync(join(fixture.root, ".hunch", "findings", filename)), false);

@@ -1,0 +1,107 @@
+{
+  "id": "dec_eb8091957f",
+  "title": "Strip YAML comments from resource values before matching to prevent silent false negatives",
+  "topic": null,
+  "status": "accepted",
+  "context": "Values with trailing comments (e.g., `name: my-config  # note`) were including the comment in their identity text, causing them to silently fail to match the same resource's uncommented name elsewhere. This produced false negatives indistinguishable from correct conservatism — the worst failure mode for a 'no match → no edge, never guess' design.",
+  "decision": "Implement quote-aware comment stripping in the extraction layer (k8sManifest.ts) before value classification. The stripper preserves `#` characters inside quoted strings and template expressions (e.g., `{{ .x | default \"#fff\" }}` and `\"my-config#not-a-comment\"`), ensuring only trailing comments at the value boundary are removed.",
+  "consequences": [
+    "Resources are now correctly matched regardless of whether their YAML includes trailing comments",
+    "The 'no match, no edge, never guess' philosophy now works correctly with real-world annotated YAML",
+    "Quote-aware parsing prevents accidental damage to template expressions and quoted values containing `#`"
+  ],
+  "alternatives_rejected": [
+    "Stripping comments at match time (indexer.ts) — wrong architectural layer, would duplicate logic across match sites",
+    "Accepting silent false negatives — violates correctness guarantees",
+    "Relaxing the 'never guess' rule to allow loose matching — defeats the conservative design principle"
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Stripping comments at match time (indexer.ts) — wrong architectural layer, would duplicate logic across match sites",
+      "scope": [
+        "src/extractors/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Accepting silent false negatives — violates correctness guarantees",
+      "scope": [
+        "src/extractors/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Relaxing the 'never guess' rule to allow loose matching — defeats the conservative design principle",
+      "scope": [
+        "src/extractors/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_a94a8fe5cc",
+    "cmp_e0ccfe26fe",
+    "cmp_f27fede222"
+  ],
+  "related_files": [
+    "src/extractors/indexer.ts",
+    "src/extractors/k8sManifest.ts",
+    "test/indexer.test.ts",
+    "test/k8sManifest.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "7ce20982",
+  "valid_from": "2026-09-14T19:25:48+02:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft",
+    "confidence": 0.65,
+    "evidence": [
+      "commit:7ce20982",
+      "synth:provider=claude-cli",
+      "branch:upstream-pr/k8s-manifest-refs",
+      "src/extractors/indexer.ts",
+      "src/extractors/k8sManifest.ts",
+      "test/indexer.test.ts",
+      "test/k8sManifest.test.ts"
+    ],
+    "last_verified": "2026-09-16T12:12:16.062Z"
+  },
+  "date": "2026-09-14T19:25:48+02:00"
+}

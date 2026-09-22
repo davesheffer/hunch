@@ -6,6 +6,7 @@ import { hunchPathsForDir } from "../core/paths.js";
 import type { Decision } from "../core/types.js";
 import { commitMeta, fixCommits } from "../extractors/git.js";
 import { indexRepo } from "../extractors/indexer.js";
+import { isParserLoadError } from "../extractors/nativeTreeSitter.js";
 import { HunchStore } from "../store/hunchStore.js";
 import { canonicalHash } from "./canonical.js";
 import { extractStructuralDelta } from "./delta.js";
@@ -143,10 +144,14 @@ function privateGrounding(decisionStore: HunchStore, graphStore: HunchStore, roo
         exact: inspection.candidates.length === 1,
       });
       byCommit.set(meta.sha, list);
-    } catch {
+    } catch (error) {
       // A human decision can be real while still lacking a supported structural
       // binding. It contributes no candidate attestation rather than being
       // stretched over a coincidental fact from the same commit.
+      // A dead native parser is not that: it makes EVERY decision look
+      // unbindable, so the review packet would silently downgrade exact human
+      // grounding to unattested coincidence. Fail instead of under-attesting.
+      if (isParserLoadError(error)) throw error;
     }
   }
   return byCommit;
@@ -232,6 +237,9 @@ function buildFromIndexedGraph(
         });
       }
     } catch (error) {
+      // A dead native parser would turn every commit into a per-commit failure
+      // entry instead of an honest abort, so it is never recorded as one.
+      if (isParserLoadError(error)) throw error;
       failures.push({ commit, error: (error as Error).message });
     }
   }

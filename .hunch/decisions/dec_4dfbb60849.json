@@ -1,0 +1,104 @@
+{
+  "id": "dec_4dfbb60849",
+  "title": "Recognize block-scalar list items (`- |`) and skip their opaque bodies to prevent false references",
+  "topic": null,
+  "status": "accepted",
+  "context": "The manifest scanner was treating script bodies inlined via `- |` (idiomatic in Kubernetes `args:`/`command:`) as YAML field structure, causing heredoc blocks and config text to be misinterpreted as resource references.",
+  "decision": "Explicitly recognize block-scalar list item headers (e.g., `- |`, `- >`) via BLOCK_SCALAR_LIST_ITEM pattern, enter them as real sequence items, and skip their bodies (opaque text) until dedent; use blockScalarSkipIndent to track skip state; conservatively taint if a template line (`{{ }}`) appears inside, since position cannot be determined.",
+  "consequences": [
+    "Scripts inlined in container args no longer produce false Secret/ConfigMap references",
+    "Heredoc-like structures within scripts (e.g., `secretKeyRef:` blocks) are no longer scanned as manifest fields",
+    "Requires explicit state management (blockScalarSkipIndent) in the main scanner loop",
+    "Adds conservative tainting for template lines inside opaque bodies, preventing silent parse failures"
+  ],
+  "alternatives_rejected": [
+    "Parse block scalar bodies as YAML (infeasible—they are opaque text, not YAML)",
+    "Rely on pattern matching without recognizing the block-scalar header syntax (fragile, misses variants like `- | # comment`)",
+    "Use indentation heuristics alone (brittle; doesn't distinguish block scalars from regular nested fields)"
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Parse block scalar bodies as YAML (infeasible—they are opaque text, not YAML)",
+      "scope": [
+        "src/extractors/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Rely on pattern matching without recognizing the block-scalar header syntax (fragile, misses variants like `- | # comment`)",
+      "scope": [
+        "src/extractors/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Use indentation heuristics alone (brittle; doesn't distinguish block scalars from regular nested fields)",
+      "scope": [
+        "src/extractors/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_a94a8fe5cc",
+    "cmp_e0ccfe26fe",
+    "cmp_f27fede222"
+  ],
+  "related_files": [
+    "src/extractors/k8sManifest.ts",
+    "test/k8sManifest.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "a4f98609",
+  "valid_from": "2026-09-19T13:28:04+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft+summary",
+    "confidence": 0.5,
+    "evidence": [
+      "commit:a4f98609",
+      "synth:provider=claude-cli",
+      "branch:fix/k8s-manifest-scanner-gaps",
+      "src/extractors/k8sManifest.ts",
+      "test/k8sManifest.test.ts"
+    ],
+    "last_verified": "2026-09-19T10:29:11.009Z"
+  },
+  "date": "2026-09-19T13:28:04+03:00"
+}

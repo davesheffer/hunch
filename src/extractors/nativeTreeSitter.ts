@@ -29,6 +29,42 @@ export interface NativeTreeSitterRuntime {
 
 let runtime: NativeTreeSitterRuntime | null = null;
 
+/** The parser runtime itself is unavailable — the addons could not be copied or
+ *  dlopen'd (unwritable/full TMPDIR, a missing or wrong-arch prebuild, npm
+ *  replacing the package mid-session, or the fail-closed "preloaded addon"
+ *  guard). Distinct from a per-file parse error on purpose: now that the load
+ *  happens on first parse rather than at import, every swallow-and-continue
+ *  catch on a parse path would otherwise read this as "this one file is bad"
+ *  and, in a whole-repo scan, mark EVERY file parse_failed and overwrite the
+ *  graph with nothing. Callers rethrow it so the run dies before any write,
+ *  the way the import-time load used to. The original error is kept as `cause`
+ *  and its text is carried in the message so the EACCES/dlopen detail a user
+ *  needs is never lost. */
+export class NativeTreeSitterLoadError extends Error {
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = "NativeTreeSitterLoadError";
+  }
+}
+
+/** The ONE predicate every rethrow site uses — a dead parser is recognised the
+ *  same way everywhere, so no catch can quietly disagree about what counts.
+ *  `instanceof` alone is not enough: a duplicated module instance (two copies of
+ *  this file in one process, e.g. dist/ + src/ under tsx, or a worker that
+ *  re-resolves it) gives a different class identity, and an error rebuilt across
+ *  a worker/IPC boundary keeps only its plain properties. The name check
+ *  survives both. */
+export function isParserLoadError(e: unknown): boolean {
+  return e instanceof NativeTreeSitterLoadError || (e as Error | undefined)?.name === "NativeTreeSitterLoadError";
+}
+
+/** Wrap any loader failure once, preserving an already-typed one. */
+function loadFailure(error: unknown): NativeTreeSitterLoadError {
+  if (error instanceof NativeTreeSitterLoadError) return error;
+  const detail = error instanceof Error ? error.message : String(error);
+  return new NativeTreeSitterLoadError(`native tree-sitter parser unavailable: ${detail}`, { cause: error });
+}
+
 function processIsAlive(pid: number): boolean {
   if (pid === process.pid) return true;
   try {
@@ -84,6 +120,19 @@ function copyNativeBinding(packageName: string, copyRoot: string, nodeGypBuild: 
  * or falling back to a stale binary. */
 export function loadNativeTreeSitter(): NativeTreeSitterRuntime {
   if (runtime) return runtime;
+  // Only SUCCESS is memoized (in `runtime`), never the failure: the conditions
+  // that break the load are transient — a full or read-only TMPDIR, an npm
+  // install swapping the package out from under a live process. A long-lived
+  // MCP server must be able to parse again once the condition clears, so every
+  // call retries the load from scratch.
+  try {
+    return loadRuntime();
+  } catch (error) {
+    throw loadFailure(error);
+  }
+}
+
+function loadRuntime(): NativeTreeSitterRuntime {
   // Three binding spellings: prebuilds ship as tree-sitter[-typescript|-python].node
   // or, for a scoped package like @tree-sitter-grammars/tree-sitter-yaml, as
   // @scope+name.node; from-source builds are named after the binding.gyp target
@@ -100,9 +149,15 @@ export function loadNativeTreeSitter(): NativeTreeSitterRuntime {
 
   removeStaleCopies();
   const copyRoot = mkdtempSync(join(tmpdir(), `${COPY_PREFIX}${process.pid}-`));
-  const nodeGypBuild = runtimeRequire("node-gyp-build") as NodeGypBuild;
   const previous = new Map<string, string | undefined>();
   try {
+    // Resolved INSIDE the try: if node-gyp-build cannot be resolved (a partial
+    // install, npm mid-swap) the catch below still removes the copy dir we just
+    // created. Outside it, every retry — and failure is deliberately not
+    // memoized, so a long-lived MCP server retries forever — leaked one empty
+    // hunch-tree-sitter-<pid>-* dir that removeStaleCopies can never prune,
+    // because it only prunes dirs whose pid is dead.
+    const nodeGypBuild = runtimeRequire("node-gyp-build") as NodeGypBuild;
     for (const packageName of NATIVE_PACKAGES) {
       const key = environmentKey(packageName);
       previous.set(key, process.env[key]);

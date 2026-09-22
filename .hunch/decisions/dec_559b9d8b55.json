@@ -1,0 +1,112 @@
+{
+  "id": "dec_559b9d8b55",
+  "title": "Rename offset fields from *Byte to *Char for semantic honesty",
+  "topic": null,
+  "status": "accepted",
+  "context": "JavaScript string indexing (.length, .indexOf(), .index) counts UTF-16 code units, not UTF-8 bytes. The fields startByte/endByte/atByte in helm.ts and k8sManifest.ts were misleadingly named, implying byte precision they never had.",
+  "decision": "Rename all offset fields to *Char in helm.ts and k8sManifest.ts to accurately reflect they contain character indices. Map these *Char values into the shared ParsedSymbol/ParsedCall arrays' *Byte fields in indexer.ts, with explicit comments documenting the semantic mismatch (those shared arrays' *Byte fields are also character offsets in practice, tracked separately as issue #84).",
+  "consequences": [
+    "Field naming now honestly reflects actual semantics — prevents future confusion about precision",
+    "Callers must understand the *Char → *Byte mapping in indexer.ts; documented via comments",
+    "Values unchanged; purely a semantic clarification with no behavior change",
+    "Reveals a pre-existing issue: merged arrays still have misleading *Byte names (tracked separately)"
+  ],
+  "alternatives_rejected": [
+    "Keep *Byte naming despite inaccuracy — masks the real problem and allows future bugs",
+    "Convert to actual UTF-8 byte offsets — unnecessary complexity and performance cost",
+    "Leave unaddressed — continued silent semantic mismatch between field names and values"
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Keep *Byte naming despite inaccuracy — masks the real problem and allows future bugs",
+      "scope": [
+        "src/extractors/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Convert to actual UTF-8 byte offsets — unnecessary complexity and performance cost",
+      "scope": [
+        "src/extractors/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Leave unaddressed — continued silent semantic mismatch between field names and values",
+      "scope": [
+        "src/extractors/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_a94a8fe5cc",
+    "cmp_e0ccfe26fe",
+    "cmp_f27fede222"
+  ],
+  "related_files": [
+    "src/extractors/helm.ts",
+    "src/extractors/indexer.ts",
+    "src/extractors/k8sManifest.ts",
+    "test/helm.test.ts",
+    "test/indexer.test.ts",
+    "test/k8sManifest.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "d2d90289",
+  "valid_from": "2026-09-16T16:45:59+02:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft",
+    "confidence": 0.65,
+    "evidence": [
+      "commit:d2d90289",
+      "synth:provider=claude-cli",
+      "branch:upstream-pr/k8s-manifest-refs",
+      "src/extractors/helm.ts",
+      "src/extractors/indexer.ts",
+      "src/extractors/k8sManifest.ts",
+      "test/helm.test.ts",
+      "test/indexer.test.ts",
+      "test/k8sManifest.test.ts"
+    ],
+    "last_verified": "2026-09-16T16:07:14.179Z"
+  },
+  "date": "2026-09-16T16:45:59+02:00"
+}

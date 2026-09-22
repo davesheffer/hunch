@@ -1,0 +1,112 @@
+{
+  "id": "dec_3cd8d2eaf3",
+  "title": "Rename offset fields to *Char to honestly represent UTF-16 code units, not bytes",
+  "topic": null,
+  "status": "accepted",
+  "context": "Fields computed via JS string indexing (.length, .indexOf(), regex .index) yield UTF-16 code unit offsets, not UTF-8 byte offsets. The field names (startByte/endByte/atByte) misrepresented this, risking bugs if callers assumed true byte positions.",
+  "decision": "Renamed startByte/endByte/atByte → startChar/endChar/atChar in helm.ts and k8sManifest.ts. Created distinct HelmSymbol/HelmCall types (instead of reusing ParsedSymbol/ParsedCall) to encapsulate honest naming. Annotated the merge in indexer.ts to explicitly map char offsets into the shared arrays' startByte/endByte fields (which also carry char values in practice per issue #84).",
+  "consequences": [
+    "API contract now accurately represents what units offsets use, preventing misinterpretation",
+    "Explicitly documents the UTF-16 vs UTF-8 distinction at extraction and merge boundaries",
+    "Requires type mapping at the merge point (helm/k8s extractors → shared symbol/call arrays)",
+    "Distinguishes extractor-specific types from the shared ParsedSymbol/ParsedCall format"
+  ],
+  "alternatives_rejected": [
+    "Convert to actual UTF-8 byte offsets — expensive re-indexing for no practical gain given JS string APIs",
+    "Keep misleading names and add comments — doesn't fix the API contract, still confusing to future callers",
+    "Leave as-is — silently risks bugs when someone relies on 'byte' semantics that were never true"
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Convert to actual UTF-8 byte offsets — expensive re-indexing for no practical gain given JS string APIs",
+      "scope": [
+        "src/extractors/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Keep misleading names and add comments — doesn't fix the API contract, still confusing to future callers",
+      "scope": [
+        "src/extractors/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Leave as-is — silently risks bugs when someone relies on 'byte' semantics that were never true",
+      "scope": [
+        "src/extractors/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_a94a8fe5cc",
+    "cmp_e0ccfe26fe",
+    "cmp_f27fede222"
+  ],
+  "related_files": [
+    "src/extractors/helm.ts",
+    "src/extractors/indexer.ts",
+    "src/extractors/k8sManifest.ts",
+    "test/helm.test.ts",
+    "test/indexer.test.ts",
+    "test/k8sManifest.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "af52a6c8",
+  "valid_from": "2026-09-16T16:45:59+02:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft",
+    "confidence": 0.65,
+    "evidence": [
+      "commit:af52a6c8",
+      "synth:provider=claude-cli",
+      "branch:upstream-pr/k8s-manifest-refs",
+      "src/extractors/helm.ts",
+      "src/extractors/indexer.ts",
+      "src/extractors/k8sManifest.ts",
+      "test/helm.test.ts",
+      "test/indexer.test.ts",
+      "test/k8sManifest.test.ts"
+    ],
+    "last_verified": "2026-09-16T16:06:50.974Z"
+  },
+  "date": "2026-09-16T16:45:59+02:00"
+}

@@ -8,7 +8,7 @@
  */
 import type { HunchStore } from "../store/hunchStore.js";
 import { verdict } from "./checkreport.js";
-import { revExists, rangeFiles, rangeDiff } from "../extractors/git.js";
+import { revExists, rangeFiles, rangeGateDiff } from "../extractors/git.js";
 
 export interface CandidateResult {
   ref: string;
@@ -35,7 +35,8 @@ export function compareCandidates(store: HunchStore, root: string, base: string,
     if (!revExists(ref, root)) return { ...zero, error: `ref "${ref}" not found` };
     const files = rangeFiles(base, root, ref);
     if (!files.length) return { ...zero, verdict: "pass", error: `no changes vs ${base}` };
-    const r = store.buildCheckReport(files, rangeDiff(base, root, ref), { strict: true });
+    const gate = rangeGateDiff(base, root, ref);
+    const r = store.buildCheckReport(files, gate.diff, { strict: true, diffStatus: gate });
     return {
       ref,
       verdict: verdict(r),

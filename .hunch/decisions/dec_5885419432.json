@@ -1,0 +1,108 @@
+{
+  "id": "dec_5885419432",
+  "title": "Treat tree-sitter offsets as UTF-16 code-unit indices, not UTF-8 bytes",
+  "topic": null,
+  "status": "accepted",
+  "context": "sourceMutation.ts's spliceBytes() silently corrupted output when source files contained non-ASCII characters before mutation targets. Root cause: tree-sitter's startIndex/endIndex are UTF-16 code-unit offsets (matching JS char indices), not true UTF-8 byte offsets—but the code converted to Buffer and sliced as if they were bytes, causing misalignment for multi-byte UTF-8 sequences.",
+  "decision": "Renamed spliceBytes → spliceChars and reimplemented using plain string slicing. Changed all index operations (including open-brace search for call injection) to work directly on the source string using character indices, eliminating UTF-8 byte conversion entirely. Added explicit documentation of the offset semantics.",
+  "consequences": [
+    "Output is now correct for any non-ASCII source file, with exact target-span deletion even when preceding content is multi-byte",
+    "Implementation is simpler and faster (no Buffer allocation/conversion)",
+    "Contracts now explicitly document that offsets are character indices, not bytes, reducing future confusion",
+    "All existing callers continue to work without change"
+  ],
+  "alternatives_rejected": [
+    "Attempt to 'fix' UTF-8 byte handling in spliceBytes (would remain semantically wrong and fragile)",
+    "Seek true byte offsets from tree-sitter (tree-sitter does not provide them; the API returns char indices)",
+    "Add a UTF-8 byte ↔ char index converter (overcomplicated; offsets are already chars)"
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Attempt to 'fix' UTF-8 byte handling in spliceBytes (would remain semantically wrong and fragile)",
+      "scope": [
+        "src/constitution/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Seek true byte offsets from tree-sitter (tree-sitter does not provide them; the API returns char indices)",
+      "scope": [
+        "src/constitution/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [
+          "tree-sitter"
+        ],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Add a UTF-8 byte ↔ char index converter (overcomplicated; offsets are already chars)",
+      "scope": [
+        "src/constitution/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_587d48fb03",
+    "cmp_a94a8fe5cc",
+    "cmp_f27fede222"
+  ],
+  "related_files": [
+    "src/constitution/sourceMutation.ts",
+    "test/constitution.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "725c6071",
+  "valid_from": "2026-09-16T17:21:58+02:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [
+      "spliceBytes"
+    ],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft",
+    "confidence": 0.65,
+    "evidence": [
+      "commit:725c6071",
+      "synth:provider=claude-cli",
+      "branch:upstream-pr/byte-vs-char-offsets",
+      "src/constitution/sourceMutation.ts",
+      "test/constitution.test.ts"
+    ],
+    "last_verified": "2026-09-16T16:10:30.360Z"
+  },
+  "date": "2026-09-16T17:21:58+02:00"
+}

@@ -1,0 +1,112 @@
+{
+  "id": "dec_d458dd419a",
+  "title": "Rename *Byte fields to *Char to match actual UTF-16 semantics",
+  "topic": null,
+  "status": "accepted",
+  "context": "Fields named startByte/endByte/atByte in helm.ts and k8sManifest.ts were computed via JS string indexing (.length, .indexOf()), which counts UTF-16 code units, not UTF-8 bytes. The misleading names created a false contract and risk of misuse. Touches invariant(s): con_039cee7367 (Memory hygiene is the agent's job, done without waiting for the human: accept shipped roadmap proposals, settle provenance-repair escalations (apply the true commit or drop), re-anchor or stale findings, and land the resulting capture commits through a PR. Only decisions that need genuine product judgment are queued for the human.).",
+  "decision": "Systematically rename all *Byte fields to *Char throughout helm.ts, k8sManifest.ts, indexer.ts, and tests to accurately reflect that these values are character offsets, not byte offsets. Map them into shared ParsedSymbol/ParsedCall arrays with explicit comments noting the semantic equivalence.",
+  "consequences": [
+    "Field names now honestly reflect their actual content (UTF-16 code unit indices)",
+    "Eliminates a footgun where callers might assume byte-based math",
+    "Requires coordinated updates across multiple files and call sites",
+    "All tests updated to use new field names"
+  ],
+  "alternatives_rejected": [
+    "Keep misleading names and add clarifying comments only (names still lie)",
+    "Compute actual UTF-8 byte offsets (would change all values, much larger refactor)",
+    "Add a type wrapper to distinguish char vs byte offsets (unnecessary complexity for a naming issue)"
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Keep misleading names and add clarifying comments only (names still lie)",
+      "scope": [
+        "src/extractors/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Compute actual UTF-8 byte offsets (would change all values, much larger refactor)",
+      "scope": [
+        "src/extractors/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Add a type wrapper to distinguish char vs byte offsets (unnecessary complexity for a naming issue)",
+      "scope": [
+        "src/extractors/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_a94a8fe5cc",
+    "cmp_e0ccfe26fe",
+    "cmp_f27fede222"
+  ],
+  "related_files": [
+    "src/extractors/helm.ts",
+    "src/extractors/indexer.ts",
+    "src/extractors/k8sManifest.ts",
+    "test/helm.test.ts",
+    "test/indexer.test.ts",
+    "test/k8sManifest.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "db80e0ee",
+  "valid_from": "2026-09-16T16:45:59+02:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft",
+    "confidence": 0.65,
+    "evidence": [
+      "commit:db80e0ee",
+      "synth:provider=claude-cli",
+      "branch:40-k8s-manifest-cross-resource-refs",
+      "src/extractors/helm.ts",
+      "src/extractors/indexer.ts",
+      "src/extractors/k8sManifest.ts",
+      "test/helm.test.ts",
+      "test/indexer.test.ts",
+      "test/k8sManifest.test.ts"
+    ],
+    "last_verified": "2026-09-16T14:46:15.043Z"
+  },
+  "date": "2026-09-16T16:45:59+02:00"
+}

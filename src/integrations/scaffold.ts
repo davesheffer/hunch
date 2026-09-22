@@ -6,6 +6,7 @@
 import { readFileSync, existsSync, mkdirSync } from "node:fs";
 import { writeFileAtomic } from "../core/io.js";
 import { join, dirname } from "node:path";
+import { isHunchHookCommand } from "./hookmatch.js";
 
 export interface Invocation {
   command: string;
@@ -88,8 +89,19 @@ Capture the decision for **$ARGUMENTS** into Hunch's graph.
 2. Run the GRILLING LOOP: one focused question at a time. Push back on hand-wavy answers. Resolve every branch before committing — an unexamined decision poisons the graph.
 3. Confirm the TOPIC anchor with me before committing. One topic per decision; if it spans two, split into two captures.
 4. Capture REJECTED alternatives explicitly (what, and why not) — this is what makes the decision enforceable (Veto/drift check against it).
-5. Commit with \`hunch_record_decision\`, passing \`capture_token\` (from step 1) and the confirmed \`topic\`. The artifact is the graph write, not prose.
+5. Commit with \`hunch_record_decision\`, passing \`capture_token\` (from step 1) and the confirmed \`topic\`. The artifact is the graph write, not prose. The token is not my signature: confirm the record in the client prompt if one appears; otherwise it stays agent testimony until I run the \`hunch review --confirm <id>\` command the response prints.
 6. On CONFLICT for the topic, do NOT auto-supersede — Hunch refuses and presents both; let me choose supersede (link) / split the topic / discard.
+`;
+
+const WORKTREES_CMD = `---
+description: Which worktrees and branches are open on which machine, what is merged and deletable — from Hunch's workspace ledger, not from git spelunking
+---
+Answer **$ARGUMENTS** (default: "what is open, and what can I delete?") from the workspace ledger.
+
+1. Call \`hunch_workspaces(view: "branches")\` (and \`view: "inventory"\` for the worktree list). Do NOT run \`git branch\`, \`git worktree list\` or \`git log\` yourself — the tool already read this machine live and every other machine from memory.
+2. Report the rows as they are: MACHINES, WORKTREE (dirty), UPSTREAM, MERGED (with its method) and the ACTION column. A verdict of \`unknown\` or a machine marked \`unverified\` is reported as such, never upgraded to a guess.
+3. Recommend only what the ACTION column says. You never delete a branch or remove a worktree from this command; the human runs the printed git commands (or \`hunch workspaces prune\` when it ships) on the machine that holds them.
+4. If a machine is missing or stale, say so: it has not run \`hunch workspaces snapshot\` (the post-checkout hook / MCP session start does this) or it is not sharing an overlay.
 `;
 
 const AUDIT_CMD = `---
@@ -126,24 +138,25 @@ interface HookEntry {
   hooks?: Array<{ type?: string; command?: string }>;
 }
 
-/** A settings.json hook entry is Hunch's if any of its commands is either the
- *  native/source CLI entry (`…/index.js hook`) or the exact published-package
- *  launcher written by older Hunch versions (`npx --package=…@davesheffer/hunch…
- *  hunch hook`). Matching both generations makes an upgrade idempotent instead
- *  of leaving the portable old hook alongside the new native invocation. The
- *  source form still requires `index` to be a full path segment, and the npx form
- *  requires both the scoped package and the `hunch hook` tail, so foreign hooks
- *  are preserved. */
-function isHunchHook(entry: HookEntry): boolean {
-  return !!entry.hooks?.some((h) => {
-    if (typeof h.command !== "string") return false;
-    const command = h.command;
-    const nativeOrSource = /(?:dist|src)[\\/]+cli[\\/]+index\.(js|ts)"?\s+hook\s*$/.test(command);
-    const publishedNpx = /^\s*"?npx(?:\.cmd)?"?\s+/i.test(command)
-      && /--package=(?:hunch-exact@npm:)?@davesheffer\/hunch(?:@[^"\s]+)?/.test(command)
-      && /\s"?hunch"?\s+"?hook"?\s*$/.test(command);
-    return nativeOrSource || publishedNpx;
-  });
+/** Strip Hunch's own commands out of one settings.json hook entry, matching with
+ *  the SAME anchored rule the provider writers use (isHunchHookCommand, issue
+ *  #41) so an unrelated tool that merely shares our layout — `node
+ *  tools/lint/dist/cli/index.js hook` — is never classified as ours. Claude
+ *  Code's hooks carry no `--provider`, hence the bare-tail variant.
+ *
+ *  Filtering per COMMAND rather than per entry is what keeps a MIXED entry (our
+ *  hook and the user's own command side by side) intact: the entry survives with
+ *  its matcher and the user's remaining commands in order, and is dropped only
+ *  when nothing of the user's is left. Dropping the whole entry deleted user
+ *  hooks (con_8460b6770f, issue #310). */
+function withoutHunchCommands(entry: HookEntry, hookCmd: string): HookEntry | null {
+  const hooks = entry.hooks;
+  if (!Array.isArray(hooks)) return entry;
+  // The command being installed is ours by definition, whatever shape a future
+  // launcher takes — so a re-run stays idempotent even if the matcher lags it.
+  const kept = hooks.filter((h) => !(typeof h?.command === "string" && (h.command === hookCmd || isHunchHookCommand(h.command, false))));
+  if (kept.length === hooks.length) return entry;
+  return kept.length ? { ...entry, hooks: kept } : null;
 }
 
 /**
@@ -154,7 +167,7 @@ function isHunchHook(entry: HookEntry): boolean {
  *   - UserPromptSubmit → remind the agent to consult Hunch.
  * Both invoke `hunch hook`, which reads the firmness level from .hunch/config.json
  * at run time — so changing firmness needs no settings.json edit. We own only our
- * entries (matched by isHunchHook): other hooks and settings are preserved, and a
+ * commands (matched by isHunchHookCommand): other hooks and settings are preserved, and a
  * non-empty file we cannot parse THROWS rather than clobbering the user's config.
  */
 export function installClaudeHooks(root: string, hookCmd: string): ClaudeHookInstall {
@@ -185,7 +198,8 @@ export function installClaudeHooks(root: string, hookCmd: string): ClaudeHookIns
       throw new Error(`refusing to edit ${file}: hooks.${event} must be an array when present; fix it, then re-run.`);
     }
   }
-  const keep = (arr?: HookEntry[]) => (Array.isArray(arr) ? arr.filter((e) => !isHunchHook(e)) : []);
+  const keep = (arr?: HookEntry[]) =>
+    (Array.isArray(arr) ? arr.map((entry) => withoutHunchCommands(entry, hookCmd)).filter((e): e is HookEntry => e !== null) : []);
 
   json.hooks.PreToolUse = [
     ...keep(json.hooks.PreToolUse),
@@ -254,6 +268,7 @@ export function writeSlashCommands(root: string): { written: string[]; skipped: 
     ["capture.md", CAPTURE_CMD],
     ["heal.md", HEAL_CMD],
     ["audit.md", AUDIT_CMD],
+    ["worktrees.md", WORKTREES_CMD],
   ];
   for (const [name, body] of files) {
     const p = join(dir, name);

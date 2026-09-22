@@ -8,6 +8,12 @@ export const changelogLocales = {
       footer: "© Hunch — תיעוד משותף לסוכני AI.", home: "בית", githubReleases: "גרסאות ב-GitHub"
     },
     titles: [
+      "הגרף נשמר גם כשניתוח הקוד נכשל",
+      "קל יותר בכל הנחיה",
+      "שומר על מה שתיעדת",
+      "גבולות הדוקים יותר",
+      "בדיקות וניקוי בטוחים יותר",
+      "גישה, שימוש חוזר, סדר",
       "שום דבר לא נשאר פתוח",
       "כל תור נספר",
       "הדירוג שופט את עצמו",
@@ -76,6 +82,12 @@ export const changelogLocales = {
       footer: "© Hunch — общие записи для ИИ-агентов.", home: "Главная", githubReleases: "Релизы на GitHub"
     },
     titles: [
+      "Граф сохраняется при сбое разбора",
+      "Легче на каждом запросе",
+      "Сохраняет то, что вы записали",
+      "Более строгие границы",
+      "Надёжнее проверки и очистка",
+      "Доступ, повторное использование, порядок",
       "Ничего не остаётся открытым",
       "Каждый ход идёт в счёт",
       "Ранжирование оценивает себя само",
@@ -144,6 +156,12 @@ export const changelogLocales = {
       footer: "© Hunch — سجل مشترك لوكلاء الذكاء الاصطناعي.", home: "الرئيسية", githubReleases: "الإصدارات على GitHub"
     },
     titles: [
+      "يبقى الرسم البياني محفوظًا عند فشل التحليل",
+      "أخف في كل مُطالبة",
+      "يحافظ على ما سجّلته",
+      "حدود أكثر إحكامًا",
+      "فحوصات وتنظيف أكثر أمانًا",
+      "الوصول، إعادة الاستخدام، الترتيب",
       "لا شيء يبقى مفتوحًا",
       "كل دورة تُحتسب",
       "الترتيب يقيّم نفسه بنفسه",
@@ -212,6 +230,12 @@ export const changelogLocales = {
       footer: "© Hunch — un registro compartido para agentes de IA.", home: "Inicio", githubReleases: "Versiones en GitHub"
     },
     titles: [
+      "El grafo se conserva si falla el análisis",
+      "Más ligero en cada consulta",
+      "Conserva lo que registraste",
+      "Límites más estrictos",
+      "Controles y limpieza más seguros",
+      "Alcance, reutilización, orden",
       "Nada queda abierto",
       "Cada turno cuenta",
       "El ranking se evalúa a sí mismo",

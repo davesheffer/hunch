@@ -114,8 +114,8 @@ test("the post-merge hook's pending-commit-repairs queue is never committed, eve
   try {
     // Deliberately mirrors the existing installation this queue file threatens most:
     // repo() seeds a .gitignore that predates the pending-commit-repairs.json entry
-    // (ensureGitignore's own idempotent-once-installed design means an existing
-    // repo's gitignore never gets it retroactively) — so this file is exercising
+    // (a repo whose .gitignore has no Hunch-managed block never gets the entry until
+    // setup runs ensureGitignore) — so this file is exercising
     // exactly the "gitignore is stale" case, not relying on it being ignored.
     writeDec(hunch, "dec_before");
     assert.equal(commitAndPushHunch(hunch, "capture 1", { push: false, protectedRepoRoot: root }), "committed");

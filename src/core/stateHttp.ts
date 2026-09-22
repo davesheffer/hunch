@@ -6,7 +6,9 @@ export const HttpCapabilitiesSchema = CapabilityNegotiationSchema.extend({
   principal: PrincipalSchema.pick({ id: true, kind: true, grants: true }),
 }).strict();
 export const HttpHealthSchema = z.object({
-  ok: z.boolean(), version: z.string(), protocol: z.literal(STATE_CONTRACT_VERSION), partitions: z.array(z.string()),
+  ok: z.boolean(), version: z.string(), protocol: z.literal(STATE_CONTRACT_VERSION),
+  // Present only when the request carried a valid credential.
+  partitions: z.array(z.string()).optional(),
 }).strict();
 // Delivery has its own richer assertion and receipt checks in delivery.ts.
 export const HttpReadResponseSchema = ReadResponseSchema.extend({ envelope: z.record(z.string(), z.unknown()) });

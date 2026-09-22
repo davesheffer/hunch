@@ -1,6 +1,7 @@
 /**
- * Memory supply chain — the authorship stamp. Only a consumed capture token
- * (proof of a grilling interview) mints human_confirmed; a unilateral agent
+ * Memory supply chain — the authorship stamp. Only a HUMAN confirmation mints
+ * human_confirmed: a consumed capture token (callable by any agent) plus the human's
+ * answer to the client's confirmation prompt (MCP elicitation). A unilateral agent
  * write lands as agent_recorded TESTIMONY: fully functional advisory memory
  * that never carries human authority, never locks the id slot against a later
  * human capture, and surfaces with a testimony marker in pre-edit grounding.
@@ -13,17 +14,24 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { ElicitRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { buildServer } from "../src/mcp/server.js";
 import { renderGrounding } from "../src/core/topics.js";
 import { isHumanConfirmed, isStrictBlocker } from "../src/core/strictgate.js";
-import type { Decision } from "../src/core/types.js";
+import { countersignConstraint } from "../src/core/countersign.js";
+import type { Constraint, Decision } from "../src/core/types.js";
 
-async function setup() {
+/** `humanConfirms`: the client supports MCP elicitation and the human confirms the prompt.
+ *  Without it a tokened write is testimony (a token proves a tool call, not a human). */
+async function setup(humanConfirms = false) {
   const root = mkdtempSync(join(tmpdir(), "hunch-testimony-"));
   mkdirSync(join(root, ".hunch", "decisions"), { recursive: true });
   const server = buildServer(root);
   const [clientT, serverT] = InMemoryTransport.createLinkedPair();
-  const client = new Client({ name: "t", version: "0" });
+  const client = humanConfirms
+    ? new Client({ name: "t", version: "0" }, { capabilities: { elicitation: {} } })
+    : new Client({ name: "t", version: "0" });
+  if (humanConfirms) client.setRequestHandler(ElicitRequestSchema, async () => ({ action: "accept", content: { confirm: true } }));
   await Promise.all([server.connect(serverT), client.connect(clientT)]);
   return {
     root, client,
@@ -64,8 +72,8 @@ test("un-token'd record_decision lands as agent_recorded testimony, not human_co
   }
 });
 
-test("interview token mints human_confirmed; unverifiable token stays testimony with a countersign note", async () => {
-  const t = await setup();
+test("interview token + the human's in-client confirmation mints human_confirmed; unverifiable token stays testimony with a countersign note", async () => {
+  const t = await setup(true);
   try {
     const brief = await t.call("hunch_capture_decision", { topic: "auth.session" });
     const token = /capture_token:"([^"]+)"/.exec(brief)?.[1];
@@ -85,13 +93,14 @@ test("interview token mints human_confirmed; unverifiable token stays testimony 
     });
     assert.ok(ok2.includes("agent_recorded"));
     assert.ok(ok2.includes("could not be verified"));
+    assert.ok(ok2.includes("hunch review --confirm"), "the note names the human countersign command");
   } finally {
     t.cleanup();
   }
 });
 
 test("testimony never locks the slot: a later human capture takes over the same identity", async () => {
-  const t = await setup();
+  const t = await setup(true);
   try {
     await t.call("hunch_record_decision", {
       decision: { title: "cache strategy", topic: "cache.strategy", decision: "agent's first guess" },
@@ -139,7 +148,7 @@ test("pre-edit grounding marks testimony, and only testimony", () => {
  *  bite. All three are exercised through the real MCP handler. */
 
 test("an un-token'd re-record INHERITS an existing human signature — testimony cannot erase it", async () => {
-  const s = await setup();
+  const s = await setup(true);
   try {
     // A human capture vouches for the decision.
     const t = await s.call("hunch_capture_decision", { topic: "auth.transport" });
@@ -167,7 +176,7 @@ test("an un-token'd re-record INHERITS an existing human signature — testimony
 });
 
 test("agent testimony does NOT lock the id slot against a later human capture", async () => {
-  const s = await setup();
+  const s = await setup(true);
   try {
     // The id is seeded by "manual:<title>" when no resolvable commit is given, so the
     // SAME TITLE is what collides on one slot; a different TOPIC is what makes it a
@@ -193,7 +202,7 @@ test("agent testimony does NOT lock the id slot against a later human capture", 
 });
 
 test("a human_confirmed slot is STILL protected from a differently-identified record (issue #23 holds)", async () => {
-  const s = await setup();
+  const s = await setup(true);
   try {
     const t = await s.call("hunch_capture_decision", { topic: "first.topic" });
     const token = (t.match(/capture_token:"([^"]+)"/) ?? t.match(/"(cap_[A-Za-z0-9_-]+)"/))?.[1];
@@ -300,7 +309,9 @@ test("an un-token'd correction is still RECORDED and enforced — Never Twice ho
 });
 
 test("a countersigned correction keeps full blocking authority (#correction-tier)", async () => {
-  const s = await setup();
+  // The human's in-client "yes" is not enough for a rule that can deny edits; the
+  // countersign (`hunch review --confirm <id> --severity blocking`) is.
+  const s = await setup(true);
   try {
     mkdirSync(join(s.root, ".hunch", "constraints"), { recursive: true });
     const t = await s.call("hunch_capture_decision", { topic: "pay.metered" });
@@ -313,8 +324,10 @@ test("a countersigned correction keeps full blocking authority (#correction-tier
       capture_token: token,
     });
     const [c] = readConstraints(s.root);
-    assert.equal(c!.provenance.source, "human_confirmed", "an interviewed write earns the signature");
-    assert.equal(c!.severity, "blocking");
-    assert.equal(isStrictBlocker({ severity: c!.severity, provenance: c!.provenance }, false), true, "and may deny");
+    assert.equal(c!.provenance.source, "agent_recorded", "an interviewed, client-confirmed write is still testimony");
+    const signed = countersignConstraint(c as unknown as Constraint, new Date().toISOString(), "blocking");
+    assert.equal(signed.provenance.source, "human_confirmed");
+    assert.equal(signed.severity, "blocking");
+    assert.equal(isStrictBlocker({ severity: signed.severity, provenance: signed.provenance }, false), true, "the countersign may deny");
   } finally { s.cleanup(); }
 });

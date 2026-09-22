@@ -5,7 +5,9 @@ import { existsSync, mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync,
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { finishReportTask, listReportTasks, listTaskSummaries, readTaskReport, recordTaskDelivery, reportHash, startReportTask } from "../src/core/taskReport.js";
-import { promptTaskId } from "../src/core/taskReportHook.js";
+import type { HookProvider } from "../src/core/agenthook.js";
+import { promptTaskId, taskInstruction } from "../src/core/taskReportHook.js";
+import { verificationLauncher } from "../src/core/verifyLauncher.js";
 import { buildDeliveryEnvelope } from "../src/core/delivery.js";
 import type { AssembledContext } from "../src/store/hunchStore.js";
 import { HunchStore } from "../src/store/hunchStore.js";
@@ -34,8 +36,8 @@ test("native Stop stays silent for a prompt with no observation, closes the task
   const prompt = hook(root, "UserPromptSubmit", { prompt: "PRIVATE_PROMPT_SENTINEL" });
   const [task] = listReportTasks(root);
   assert.ok(task, "host must start reporting before the model can skip its instructions");
+  // The title lives in the ledger; the instruction spends no characters on it.
   assert.equal(task.title, "Assistant task");
-  assert.match(prompt.hookSpecificOutput.additionalContext, /title: "Assistant task"/);
   assert.doesNotMatch(prompt.hookSpecificOutput.additionalContext, /Claude task/);
   assert.match(prompt.hookSpecificOutput.additionalContext, new RegExp(task.task_id));
   assert.equal(hook(root, "Stop"), null, "no delivery, check, save or denial: nothing to print (dec_77d99014e0's sibling: silence only where there is no evidence to show)");
@@ -324,8 +326,8 @@ test("an in-flight pre-upgrade native task keeps its legacy title and still rece
   startReportTask(root, "Claude task", id);
   const prompt = hook(root, "UserPromptSubmit", { prompt_id: undefined, turn_id: "turn-legacy" }, "codex");
   assert.match(prompt.hookSpecificOutput.additionalContext, new RegExp(id));
-  assert.match(prompt.hookSpecificOutput.additionalContext, /title: "Claude task"/);
   assert.equal(listReportTasks(root).length, 1);
+  assert.equal(listReportTasks(root)[0]!.title, "Claude task", "the persisted legacy title is untouched");
 });
 
 test("prompt-derived titles are opt-in: the default retains no prompt text, the opt-in keeps a bounded first line", t => {
@@ -334,14 +336,76 @@ test("prompt-derived titles are opt-in: the default retains no prompt text, the 
   const prompt = hook(root, "UserPromptSubmit", { prompt: "Fix the settings merge so nested overrides survive\nsecond line is never used" });
   const [task] = listReportTasks(root);
   assert.equal(task!.title, "Fix the settings merge so nested overrides survive");
-  assert.match(prompt.hookSpecificOutput.additionalContext, /title: "Fix the settings merge so nested overrides survive"/);
+  assert.match(prompt.hookSpecificOutput.additionalContext, new RegExp(task!.task_id));
   // A credential-looking prompt keeps the generic title even when opted in.
   const secret = hook(root, "UserPromptSubmit", { prompt: "-----BEGIN PRIVATE KEY-----\nabc", prompt_id: "prompt-b" });
-  assert.match(secret.hookSpecificOutput.additionalContext, /title: "Assistant task"/);
+  const secretTask = listReportTasks(root).find(x => secret.hookSpecificOutput.additionalContext.includes(x.task_id));
+  assert.equal(secretTask?.title, "Assistant task", "a credential-looking prompt never names itself");
   assert.equal(readFileSync(join(root, ".hunch-cache", "served.db")).includes(Buffer.from("BEGIN PRIVATE KEY")), false);
   // The model paraphrasing the title on hunch_task start must not fork a task: the same
   // identity re-opened with the persisted title is the only valid answer.
   const again = hook(root, "UserPromptSubmit", { prompt: "Fix the settings merge so nested overrides survive\nsecond line is never used" });
   assert.equal(listReportTasks(root).filter(x => x.task_id === task!.task_id).length, 1);
   assert.match(again.hookSpecificOutput.additionalContext, new RegExp(task!.task_id));
+});
+
+test("the prompt hook prints the verify command inline and never asks for a start call (dec_0bf3bda2c1)", t => {
+  const root = fixture(t);
+  const prompt = hook(root, "UserPromptSubmit");
+  const [task] = listReportTasks(root);
+  const text = prompt.hookSpecificOutput.additionalContext as string;
+  // The one thing hunch_task start used to supply is now in the instruction.
+  assert.ok(text.includes(` task verify ${task!.task_id} -- `), `no inline verify command in: ${text}`);
+  assert.ok(text.includes(verificationLauncher().argv.at(-1)!), "the inline command names this installation's CLI entry");
+  assert.doesNotMatch(text, /action: "start"/, "the hook must not ask for a start call");
+  assert.doesNotMatch(text, /verification_argv/);
+  assert.match(text, /Never call hunch_task start for it/, "the no-start clause belongs to the path that printed the command");
+  assert.match(text, /--timeout <seconds>/, "the timeout budget survives the inline form");
+  // Finish is conditional, and the host close is what makes that safe.
+  assert.match(text, /ONLY if this task used Hunch/);
+  assert.match(text, /hook context you acted on/, "hook-injected grounding counts as using Hunch");
+  assert.match(text, /action: "finish"/);
+});
+
+test("the task instruction is identical in substance for every hook provider, and keeps finish mandatory where no host stop hook closes the task", () => {
+  const task = { task_id: "htask_0123456789abcdef01234567", title: "Assistant task" };
+  const cwd = JSON.stringify("/repo");
+  // claude and codex are the providers that reach this today (NATIVE_PROMPT_HOSTS);
+  // both wire Stop, so both get the conditional finish, with identical substance.
+  const claude = taskInstruction(task, cwd, "claude");
+  const codex = taskInstruction(task, cwd, "codex");
+  assert.equal(claude, codex, "no provider is left on different wording");
+  for (const text of [claude, codex]) {
+    assert.doesNotMatch(text, /Claude Code|Codex/, "host-neutral prose (con_e04226bd05)");
+    assert.match(text, /ONLY if this task used Hunch/);
+  }
+  // Every other provider — including one whose stop payload carries no native
+  // prompt identity, so closeHookTask resolves nothing — keeps finish mandatory,
+  // and an unknown provider falls on that same safe default.
+  for (const provider of ["vscode", "cursor", "antigravity", "windsurf", "nosuchhost" as HookProvider, undefined as unknown as HookProvider] as HookProvider[]) {
+    let text = "";
+    assert.doesNotThrow(() => { text = taskInstruction(task, cwd, provider); }, `${provider} must not throw`);
+    assert.doesNotMatch(text, /ONLY if/, `${provider}: finish is not optional where nothing is proven to close the task`);
+    assert.match(text, /No stop hook closes this task, so finish it yourself/);
+    assert.match(text, new RegExp(` task verify ${task.task_id} -- `), "the inline verify command is provider-independent");
+    assert.doesNotMatch(text, /action: "start"/);
+  }
+});
+
+test("the task instruction fails open: a launcher that throws falls back to the start-call wording and never throws (con_03a0b94b2e)", () => {
+  const task = { task_id: "htask_0123456789abcdef01234567", title: "Assistant task" };
+  const cwd = JSON.stringify("/repo");
+  const broken = () => { throw new Error("tsx is not installed"); };
+  let text = "";
+  assert.doesNotThrow(() => { text = taskInstruction(task, cwd, "claude", broken); });
+  assert.match(text, /action: "start"/, "the fallback asks for the start call, as before this change");
+  assert.match(text, /verification_argv/);
+  assert.doesNotMatch(text, / task verify /, "no half-built command when the launcher is unavailable");
+  assert.ok(text.includes(task.task_id));
+  // The fallback asks for the start call, so it must never also forbid it.
+  assert.doesNotMatch(text, /never[^.]*hunch_task start/i, "the fallback must not contradict its own start call");
+  assert.match(text, /action: "finish"/, "the fallback is the only source of the finish instruction on this path");
+  assert.match(text, /show its card/);
+  // The fallback applies whatever the provider is.
+  assert.match(taskInstruction(task, cwd, "windsurf", broken), /action: "start"/);
 });

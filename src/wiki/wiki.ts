@@ -33,6 +33,7 @@ import { writeFileAtomic } from "../core/io.js";
 import { compareCodeUnits } from "../core/canonicalOrder.js";
 import { hunchPaths, toPosixTarget } from "../core/paths.js";
 import { isLive } from "../core/topics.js";
+import { confirmCommand, isAgentTestimony } from "../core/countersign.js";
 import { scanRepoDocs, type RepoDoc } from "../core/docscan.js";
 import { adoptedSlug, adoptionHash, renderAdoptedDoc } from "./adopt.js";
 import { assembleGraphData, renderGraphPage, type WikiGraphData } from "./graph.js";
@@ -500,6 +501,14 @@ export interface NowItem {
   date: string;
   /** decision text for recent items; CONTEXT (the why-it's-planned) for roadmap items. */
   note: string;
+  /** Roadmap only: true when the item is agent testimony no human has confirmed yet.
+   *  Omitted (never false) otherwise, so pages rendered before this field stay fresh. */
+  unconfirmed?: true;
+}
+
+/** Marker for an unconfirmed roadmap item, naming the human countersign command. */
+export function unconfirmedRoadmapMarker(item: Pick<NowItem, "id" | "unconfirmed">, opts: { private?: boolean } = {}): string {
+  return item.unconfirmed ? `⚠ unconfirmed agent testimony — confirm: ${confirmCommand(item.id, opts)}` : "";
 }
 
 /** The hot view's inputs: last `recentLimit` decisions by date (any status — a
@@ -511,15 +520,21 @@ export function nowData(decisions: readonly Decision[], recentLimit = 10): { rec
   const byDateDesc = (a: Decision, b: Decision) => compareCodeUnits(b.valid_from ?? b.date, a.valid_from ?? a.date) || compareCodeUnits(a.id, b.id);
   const recent = [...decisions].sort(byDateDesc).slice(0, recentLimit)
     .map((d) => ({ id: d.id, topic: d.topic, title: d.title, status: d.status, date: (d.valid_from ?? d.date).slice(0, 10), note: clip1(d.decision) }));
-  // Roadmap = INTENT the human vouched for. Auto-synthesized drafts are also
-  // status "proposed", but they describe work already done and belong to the
-  // review queue (`hunch review`) — surfacing them here would bury real plans.
+  // Roadmap = deliberately recorded INTENT: human-vouched, or recorded by an agent
+  // (hunch_record_decision, e.g. at the end of /capture) and not yet confirmed. The latter
+  // is shown MARKED with the human confirm command — never hidden, and never routed to
+  // `adopt-drafts` (which would accept it). Auto-synthesized drafts are also status
+  // "proposed", but they describe work already done and belong to the review queue
+  // (`hunch review`) — surfacing them here would bury real plans.
   const live = decisions.filter((d) => d.status === "proposed" && !d.superseded_by && !d.valid_to);
-  const vouched = live.filter((d) => d.provenance.source.includes("human_confirmed"));
-  const roadmap = vouched
+  const intent = live.filter((d) => d.provenance.source.includes("human_confirmed") || isAgentTestimony(d.provenance.source));
+  const roadmap = intent
     .sort(byDateDesc)
-    .map((d) => ({ id: d.id, topic: d.topic, title: d.title, status: d.status, date: (d.valid_from ?? d.date).slice(0, 10), note: clip1(d.context || d.decision) }));
-  return { recent, roadmap, pendingReview: live.length - vouched.length };
+    .map((d): NowItem => ({
+      id: d.id, topic: d.topic, title: d.title, status: d.status, date: (d.valid_from ?? d.date).slice(0, 10), note: clip1(d.context || d.decision),
+      ...(isAgentTestimony(d.provenance.source) ? { unconfirmed: true as const } : {}),
+    }));
+  return { recent, roadmap, pendingReview: live.length - intent.length };
 }
 
 /** The hot file — a DERIVED view like every other page: what just happened
@@ -537,7 +552,7 @@ export function renderNowPage(recent: readonly NowItem[], roadmap: readonly NowI
   if (recent.length) L.push("");
   L.push("## 🗺 Roadmap — live proposed decisions", "");
   if (!roadmap.length) L.push("_Empty. Record what's next as a PROPOSED decision (`/capture`, status: proposed) and it appears here._", "");
-  for (const r of roadmap) L.push(`- **${r.title}** — ${r.note || "(no context)"} _(${r.id}${r.topic ? `, topic \`${r.topic}\`` : ""}, since ${r.date})_`);
+  for (const r of roadmap) L.push(`- **${r.title}** — ${r.note || "(no context)"} _(${r.id}${r.topic ? `, topic \`${r.topic}\`` : ""}, since ${r.date})_${r.unconfirmed ? ` — ${unconfirmedRoadmapMarker(r, { private: home.kind === "private" })}` : ""}`);
   if (roadmap.length) L.push("");
   if (pendingReview > 0) L.push(`_${pendingReview} legacy un-vouched proposed decision(s) not shown — \`hunch adopt-drafts\` auto-trusts them as advisory memory._`, "");
   L.push("---", "", "_Derived from the decision graph — regen: `hunch wiki --heal`. Ship a roadmap item by accepting/superseding its decision; never edit this page._", "");

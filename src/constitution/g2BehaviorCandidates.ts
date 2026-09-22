@@ -179,7 +179,11 @@ const DIRECT_TEST_DELTA_LIMITATIONS = [
   ...LIMITATIONS.slice(1),
 ];
 
-const { Parser, typescript: tsLanguage, tsx: tsxLanguage } = loadNativeTreeSitter();
+/** Resolved on first parse, not at import: loading the native addons copies six
+ *  `.node` files into a temp dir and dlopens them (~1.5s+ cold), which every CLI
+ *  command and every editor hook would otherwise pay just for importing this
+ *  module. loadNativeTreeSitter() memoizes the runtime itself. */
+const treeSitter = (): ReturnType<typeof loadNativeTreeSitter> => loadNativeTreeSitter();
 
 function safeTestFile(file: string): boolean {
   return !!file
@@ -326,6 +330,7 @@ function literalTestName(raw: string): string | null {
 }
 
 function literalNodeTestCases(file: string, source: string): LiteralNodeTestCase[] {
+  const { Parser, typescript: tsLanguage, tsx: tsxLanguage } = treeSitter();
   const language = /\.[cm]?[jt]sx$/.test(file) && /x$/.test(file) ? tsxLanguage : tsLanguage;
   const parser = new Parser();
   parser.setLanguage(language as never);

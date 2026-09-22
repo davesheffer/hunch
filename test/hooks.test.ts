@@ -112,7 +112,7 @@ test("post-merge hook: unchanged action when re-installed identically", () => {
 test("hookStatus: read-only, reports nothing installed on a fresh repo and never creates a managed hook file", () => {
   const r = repo();
   try {
-    assert.deepEqual(hookStatus(r), { postCommit: false, preCommit: false, postMerge: false });
+    assert.deepEqual(hookStatus(r), { postCommit: false, preCommit: false, postMerge: false, postCheckout: false });
     // git itself pre-populates .git/hooks/ with *.sample files on init — that's
     // not this function's concern. What matters is it never creates any of the
     // three REAL hook files it's merely checking for.
@@ -127,7 +127,7 @@ test("hookStatus: reports exactly which of the three managed hooks are present",
   try {
     installPostCommitHook(r, "hunch");
     installPostMergeHook(r, "hunch");
-    assert.deepEqual(hookStatus(r), { postCommit: true, preCommit: false, postMerge: true });
+    assert.deepEqual(hookStatus(r), { postCommit: true, preCommit: false, postMerge: true, postCheckout: false });
   } finally { rmSync(r, { recursive: true, force: true }); }
 });
 
@@ -151,6 +151,35 @@ test("hunch index installs/upgrades the post-merge hook for a repo that already 
     assert.equal(run.status, 0, `${run.stdout}${run.stderr}`);
     const hookPath = join(r, ".git", "hooks", "post-merge");
     assert.match(readFileSync(hookPath, "utf8"), /repair-provenance --from-hook --quiet/);
+  } finally { rmSync(r, { recursive: true, force: true }); }
+});
+
+test("hunch index self-heals the missing hooks when the post-commit block is STALE — it still proves hunch init ran (issue #315)", () => {
+  const r = repo();
+  try {
+    writeFileSync(join(r, "app.ts"), "export const x = 1;\n");
+    execFileSync("git", ["config", "user.email", "t@t.co"], { cwd: r });
+    execFileSync("git", ["config", "user.name", "T"], { cwd: r });
+    execFileSync("git", ["add", "-A"], { cwd: r });
+    execFileSync("git", ["commit", "-qm", "init"], { cwd: r });
+    installPostCommitHook(r, "hunch");
+    // The launcher this machine was installed with is gone after a reinstall —
+    // rewritten in place, never executed.
+    const gone = join(r, "gone");
+    const postCommit = join(r, ".git", "hooks", "post-commit");
+    writeFileSync(postCommit, readFileSync(postCommit, "utf8").split("\n")
+      .map((l) => (/sync\s+--from-hook/.test(l) ? `  ( ${JSON.stringify(join(gone, "node"))} ${JSON.stringify(join(gone, "cli", "index.js"))} sync --from-hook --quiet >/dev/null 2>&1 || true ) &` : l))
+      .join("\n"));
+
+    const run = spawnSync(process.execPath, [TSX, CLI, "index", "--no-auto-commit"], {
+      cwd: r,
+      env: { ...process.env, HUNCH_PRIVATE_DIR: "", HUNCH_SYNTH_PROVIDER: "deterministic" },
+      encoding: "utf8",
+    });
+    assert.equal(run.status, 0, `${run.stdout}${run.stderr}`);
+    const hookPath = join(r, ".git", "hooks", "post-merge");
+    assert.equal(existsSync(hookPath), true, "a stale post-commit block must not block the post-merge upgrade");
+    assert.match(readFileSync(hookPath, "utf8"), /grounding --refresh/);
   } finally { rmSync(r, { recursive: true, force: true }); }
 });
 
@@ -209,7 +238,9 @@ test("hunch doctor: only post-merge missing points at hunch index, which will ac
       encoding: "utf8",
     });
     assert.match(`${run.stdout}${run.stderr}`, /hooks:.*⚠.*missing.*post-merge/s);
-    assert.doesNotMatch(`${run.stdout}${run.stderr}`, /missing.*post-commit/s);
+    // Scoped to the `missing …` line itself: doctor also prints an informational
+    // line naming post-commit (where the live hook points — issue #315).
+    assert.doesNotMatch(`${run.stdout}${run.stderr}`, /missing[^\n]*post-commit/);
     assert.match(`${run.stdout}${run.stderr}`, /hunch index/);
     assert.doesNotMatch(`${run.stdout}${run.stderr}`, /hunch init/, "hunch index alone fixes this — must not send the human to the heavier command");
   } finally { rmSync(r, { recursive: true, force: true }); }

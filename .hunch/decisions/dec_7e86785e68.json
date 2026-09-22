@@ -1,0 +1,108 @@
+{
+  "id": "dec_7e86785e68",
+  "title": "Compute label parent paths and keys from frame stack at parse time, not by string-splitting paths",
+  "topic": null,
+  "status": "accepted",
+  "context": "Kubernetes label keys legitimately contain dots (app.kubernetes.io/instance), which become indistinguishable from path nesting once folded into dot-joined strings. Attempts to extract keys by slicing the joined path were ambiguous: dotted keys were silently rejected, and mismatched dotted values falsely appeared to match on the plain-key remainder alone.",
+  "decision": "FieldPathEntry now carries parentPath and key computed structurally from the scanner's frame stack at push time, rather than re-derived by string-splitting the output path. extractLiteralLabelMap matches on parentPath exactly, preserving dotted keys and their values intact.",
+  "consequences": [
+    "Dotted label keys (app.kubernetes.io/instance) are now extracted and preserved correctly",
+    "False-positive references edges from mismatched dotted-key values no longer occur",
+    "The helm create default selector convention (all-dotted keys) is now correctly handled",
+    "Parse-time structural data is now authoritative; string re-parsing is eliminated as an error source"
+  ],
+  "alternatives_rejected": [
+    "Escaping or encoding dots in the joined path string (would require a decoding scheme and would still lose nesting info)",
+    "Using array-based path representation throughout (would require refactoring path serialization end-to-end)",
+    "Heuristics to detect 'real' vs 'nested' dots from the string alone (inherently ambiguous and fragile)"
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Escaping or encoding dots in the joined path string (would require a decoding scheme and would still lose nesting info)",
+      "scope": [
+        "src/extractors/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Using array-based path representation throughout (would require refactoring path serialization end-to-end)",
+      "scope": [
+        "src/extractors/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Heuristics to detect 'real' vs 'nested' dots from the string alone (inherently ambiguous and fragile)",
+      "scope": [
+        "src/extractors/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_a94a8fe5cc",
+    "cmp_e0ccfe26fe",
+    "cmp_f27fede222"
+  ],
+  "related_files": [
+    "src/extractors/indexer.ts",
+    "src/extractors/k8sManifest.ts",
+    "test/indexer.test.ts",
+    "test/k8sManifest.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "81181fdf",
+  "valid_from": "2026-09-14T21:45:02+02:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft",
+    "confidence": 0.65,
+    "evidence": [
+      "commit:81181fdf",
+      "synth:provider=claude-cli",
+      "branch:upstream-pr/k8s-manifest-refs",
+      "src/extractors/indexer.ts",
+      "src/extractors/k8sManifest.ts",
+      "test/indexer.test.ts",
+      "test/k8sManifest.test.ts"
+    ],
+    "last_verified": "2026-09-16T12:12:45.281Z"
+  },
+  "date": "2026-09-14T21:45:02+02:00"
+}

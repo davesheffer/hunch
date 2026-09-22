@@ -8,9 +8,9 @@
  *   - buildCorrectionConstraint(): mint the Constraint record (human-confirmed,
  *     scoped conservatively) that the pre-edit hook + CI guard then enforce.
  */
-import { isAbsolute, relative } from "node:path";
+import { isAbsolute } from "node:path";
 import { constraintId } from "./ids.js";
-import { toPosixTarget } from "./paths.js";
+import { toPosixTarget, repoRelativeTarget } from "./paths.js";
 import { deriveForbids } from "./constraintmatch.js";
 import type { Constraint } from "./types.js";
 
@@ -67,12 +67,20 @@ export interface CorrectionInput {
    *  consumer matches repo-relative paths — so without this an absolute hint mints a
    *  scope that can never match. */
   root?: string;
-  /** True when a capture token was CONSUMED for this write — proof a grilling interview
-   *  preceded it. Determines the TIER, never whether the write lands: an un-vouched
-   *  correction still records immediately and still surfaces at edit time and in CI.
-   *  Only the authority to DENY waits for a countersign. */
+  /** True only when a HUMAN confirmed this write outside the agent's channel (an MCP
+   *  elicitation answered in the client UI). A consumed capture token alone is NOT
+   *  enough — any agent can mint and consume one. Determines the TIER, never whether
+   *  the write lands: an un-vouched correction still records immediately and still
+   *  surfaces at edit time and in CI. Only the authority to DENY waits for a countersign
+   *  (`hunch review --confirm <id>`). */
   vouched?: boolean;
 }
+
+/** Default rationales, exported so a later human countersign can replace the testimony
+ *  wording without touching a rationale a person actually wrote. */
+export const VOUCHED_CORRECTION_RATIONALE = "Captured from a human correction of the agent (Never Twice).";
+export const TESTIMONY_CORRECTION_RATIONALE =
+  "Recorded by the agent as a correction, without a human confirmation — advisory testimony until a human countersigns it (`hunch review --confirm`) (Never Twice).";
 
 /** Normalize a scope hint to a repo-relative POSIX path.
  *
@@ -86,15 +94,21 @@ export interface CorrectionInput {
  *  Returns "" when the hint cannot be made repo-relative (no root, or a path outside the
  *  repo). The caller then falls back to "**", where the existing severity guard
  *  down-ranks a non-explicit blocking rule to a warning — fail-safe and honest, rather
- *  than a blocking rule enforced nowhere. */
+ *  than a blocking rule enforced nowhere.
+ *
+ *  Thin adapter over the shared `repoRelativeTarget` (core/paths.ts): that function
+ *  passes an unresolvable absolute hint through UNCHANGED (still absolute) rather
+ *  than signaling failure directly, since other callers (checkConstraints, why())
+ *  want the original target back to fail their own match safely. This adapter
+ *  converts that "still absolute" signal to "" — the fail-safe this caller needs. */
 function repoRelativeHint(rawHint: string, root?: string): string {
   if (!rawHint) return "";
   const looksAbsolute = isAbsolute(rawHint) || /^[a-zA-Z]:/.test(rawHint);
   if (!looksAbsolute) return rawHint;
   if (!root) return "";
-  const rel = toPosixTarget(relative(root, rawHint));
-  if (!rel || rel === ".." || rel.startsWith("../") || isAbsolute(rel) || /^[a-zA-Z]:/.test(rel)) return "";
-  return rel;
+  const rewritten = repoRelativeTarget(rawHint, root);
+  const stillAbsolute = isAbsolute(rewritten) || /^[a-zA-Z]:/.test(rewritten);
+  return stillAbsolute ? "" : rewritten;
 }
 
 /**
@@ -123,7 +137,8 @@ export function buildCorrectionConstraint(input: CorrectionInput, now: string): 
   // the highest-authority write path the least gated one, and strictly worse than
   // hunch_record_decision, which only ever produced advisory memory and is now tiered.
   //
-  // The token sets the TIER, never whether the write lands. An un-vouched correction is
+  // A HUMAN confirmation sets the TIER (a capture token alone is not one — any agent can
+  // mint and consume a token), never whether the write lands. An un-vouched correction is
   // still recorded immediately and still held against every assistant at edit time and
   // in CI — Never Twice keeps its promise. What waits for a countersign is only the
   // authority to DENY.
@@ -143,9 +158,7 @@ export function buildCorrectionConstraint(input: CorrectionInput, now: string): 
     // rule that goes stale. Validated against the repo's real deps when supplied → never mints a
     // never-firing rule for a non-dependency. null when nothing derivable → falls back to scope.
     forbids: deriveForbids(rule, input.knownDeps),
-    rationale: input.rationale ?? (vouched
-      ? "Captured from a human correction of the agent (Never Twice)."
-      : "Recorded by the agent as a correction, WITHOUT a capture interview — advisory testimony until a human countersigns it via /capture (Never Twice)."),
+    rationale: input.rationale ?? (vouched ? VOUCHED_CORRECTION_RATIONALE : TESTIMONY_CORRECTION_RATIONALE),
     source_decision: input.source_decision ?? null,
     violations: [],
     status: "active",
