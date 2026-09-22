@@ -12,6 +12,7 @@ import { mkdtempSync, rmSync, readFileSync, writeFileSync, mkdirSync, existsSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
+import { HUNCH_PACKAGE_NAME } from "../src/core/version.js";
 import {
   installPostCommitHook, installPreCommitHook, installPostMergeHook, installPostCheckoutHook,
   hookStatus, hookReport, formatHookInstall, terminalExitLine, PORTABLE_HOOK_INVOCATION,
@@ -146,6 +147,33 @@ test("pre-commit framework: install writes nothing, returns a repo: local snippe
     assert.equal(readFileSync(hookPath, "utf8"), generated);
   } finally { cleanupDir(r); }
 });
+
+for (const manager of ["husky", "pre-commit"] as const) {
+  test(`self-build checkout keeps ${manager} post-commit and post-merge snippets portable`, () => {
+    const r = repo();
+    try {
+      writeFileSync(join(r, "package.json"), JSON.stringify({ name: HUNCH_PACKAGE_NAME }));
+      for (const entry of ["src/cli", "node_modules/tsx/dist"]) mkdirSync(join(r, entry), { recursive: true });
+      writeFileSync(join(r, "src/cli/index.ts"), "// fixture entry\n");
+      writeFileSync(join(r, "node_modules/tsx/dist/cli.mjs"), "// fixture tsx\n");
+      if (manager === "husky") huskyV9(r);
+      else for (const name of ["post-commit", "post-merge"]) {
+        writeFileSync(join(r, ".git/hooks", name), preCommitFrameworkHook(name));
+      }
+      const commit = installPostCommitHook(r, LOCAL_INV, { private: true, commit: true, localOnly: true });
+      const merge = installPostMergeHook(r, LOCAL_INV);
+      for (const result of [commit, merge]) {
+        assert.equal(result.action, "managed-elsewhere");
+        assert.equal(result.manager, manager);
+        assert.doesNotMatch(result.snippet ?? "", /cli\.mjs|index\.ts/, "tracked snippets must not embed local source paths");
+      }
+      assert.ok(commit.snippet?.includes(`${PORTABLE_HOOK_INVOCATION} sync`));
+      assert.ok(commit.snippet?.includes("--private --commit"));
+      assert.ok(commit.snippet?.includes("HUNCH_SYNTH_PROVIDER=deterministic"));
+      assert.equal(merge.snippet?.split(PORTABLE_HOOK_INVOCATION).length, 3, "both post-merge blocks use the portable launcher");
+    } finally { cleanupDir(r); }
+  });
+}
 
 test("pre-commit framework: post-checkout snippet reads the checkout type from pre-commit's env, not $3", () => {
   const r = repo();

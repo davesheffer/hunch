@@ -139,6 +139,13 @@ test("a legitimate delete/rename at the resolved root is not read as a misroute 
         [],
         "root's own history explains the absence — not a misroute",
       );
+      for (const spelling of ["./gone.ts", "src/../gone.ts", "src/nested/../../gone.ts"]) {
+        assert.deepEqual(
+          misroutedWorktreeCandidates(root, [spelling]),
+          [],
+          `root's own history also explains the equivalent path ${spelling}`,
+        );
+      }
     } finally {
       try { git(root, "worktree", "remove", "--force", worktree); } catch { /* best effort */ }
       cleanupDir(worktree);

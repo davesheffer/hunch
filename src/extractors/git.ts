@@ -3,7 +3,7 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { devNull, tmpdir } from "node:os";
-import { isAbsolute, resolve, join, basename, dirname, relative, sep } from "node:path";
+import { isAbsolute, resolve, join, basename, dirname, relative, sep, posix } from "node:path";
 import { mkdtempSync, openSync, closeSync, readSync, mkdirSync, rmSync, statSync, lstatSync, realpathSync, readFileSync, renameSync, readdirSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { MEMLOG_FORMAT } from "../core/memorylog.js";
@@ -1893,7 +1893,10 @@ export function pathKnownToHistory(root: string, file: string): boolean {
     ["log", "-n", "1", "--format=", "--name-only", "-z", "--diff-merges=first-parent", "HEAD", "--", `:(literal)${file}`],
     root,
   );
-  return !!out && out.split("\0").some((entry) => entry === file);
+  // Git reports repository-relative paths without dot segments. Normalize only
+  // slash segments for comparison, retaining literal backslashes and whitespace.
+  const comparable = posix.normalize(file);
+  return !!out && out.split("\0").some((entry) => entry === comparable);
 }
 
 /** Current branch name (e.g. "main", "feat/x"), or "" in detached HEAD / non-repo.

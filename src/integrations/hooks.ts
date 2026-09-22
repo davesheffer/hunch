@@ -26,10 +26,11 @@ const ENDMARK = "# <<< hunch post-commit <<<";
 
 /** Per-runner shell details a block may depend on. git passes post-checkout's
  *  checkout type as `$3`; the pre-commit framework runs hooks without git's
- *  positional arguments and exposes the same value as an environment variable. */
-interface BlockContext { checkoutType: string }
-const GIT_CONTEXT: BlockContext = { checkoutType: "$3" };
-const PRE_COMMIT_CONTEXT: BlockContext = { checkoutType: "$PRE_COMMIT_CHECKOUT_TYPE" };
+ *  positional arguments and exposes the same value as an environment variable.
+ *  Portable snippets are committed by the user and must not select local paths. */
+interface BlockContext { checkoutType: string; portable: boolean }
+const GIT_CONTEXT: BlockContext = { checkoutType: "$3", portable: false };
+const PRE_COMMIT_CONTEXT: BlockContext = { checkoutType: "$PRE_COMMIT_CHECKOUT_TYPE", portable: true };
 
 /** What an existing SHARED block carries that a worktree-local re-run must not
  *  take away (issue #316): its own option flags (BLOCK_FLAGS), and the
@@ -581,7 +582,7 @@ function snippetFor(t: HookTarget, mark: string, build: BlockBuilder, localInvoc
     // Untracked local hook: this machine's invocation is fine; placement is the fix.
     return `# insert ABOVE the final exec/exit in ${t.hookName}\n${build(localInvocation, GIT_CONTEXT)}`;
   }
-  return build(PORTABLE_HOOK_INVOCATION, GIT_CONTEXT);
+  return build(PORTABLE_HOOK_INVOCATION, { ...GIT_CONTEXT, portable: true });
 }
 
 /** The repo's worktree tops as `git worktree list --porcelain` reports them:
@@ -849,7 +850,7 @@ function selfBuildInvocation(root: string, invocation: string): string {
 export function installPostCommitHook(root: string, invocation: string, opts: { private?: boolean; commit?: boolean; localOnly?: boolean } = {}): HookInstall {
   // Resolve shared invocation/flags before selecting the in-tree generator.
   // Rewriting the caller first hides that it came from a linked worktree.
-  return installManagedBlock(root, "post-commit", MARK, ENDMARK, (inv, _ctx, keep) => block(selfBuildInvocation(root, inv), opts, keep), invocation);
+  return installManagedBlock(root, "post-commit", MARK, ENDMARK, (inv, ctx, keep) => block(ctx.portable ? inv : selfBuildInvocation(root, inv), opts, keep), invocation);
 }
 
 const PRE_MARK = "# >>> hunch pre-commit (constraint guard) >>>";
@@ -935,7 +936,7 @@ export function installPostMergeHook(root: string, invocation: string): HookInst
   // Only the grounding half regenerates committed docs; repair-provenance writes
   // no docs (it only queues a match for a human to confirm), so it keeps the
   // passed invocation unchanged — see selfBuildInvocation.
-  const grounding = installManagedBlock(root, "post-merge", GROUNDING_MERGE_MARK, GROUNDING_MERGE_END, inv => groundingMergeBlock(selfBuildInvocation(root, inv)), invocation);
+  const grounding = installManagedBlock(root, "post-merge", GROUNDING_MERGE_MARK, GROUNDING_MERGE_END, (inv, ctx) => groundingMergeBlock(ctx.portable ? inv : selfBuildInvocation(root, inv)), invocation);
   const repair = installManagedBlock(root, "post-merge", REPAIR_MERGE_MARK, REPAIR_MERGE_END, repairProvenanceMergeBlock, invocation);
   if (!writes(grounding) && !writes(repair)) {
     return { ...grounding, snippet: `${grounding.snippet}\n${stripComment(repair.snippet ?? "", grounding.manager)}` };

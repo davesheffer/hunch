@@ -8,8 +8,8 @@
 - Timed-out or cancelled verification commands do not report Windows' forced-termination status as the command's own exit code (#397). Helper-process fixtures stop their helpers before deleting the working directory.
 - Automatic pre-edit context no longer feeds its previous delivery for the same file back into task ranking, preventing an unchanged file from receiving repeated full context blocks (#375).
 - Linked-worktree `init` preserves an installed shared hook's auto-commit default and reports when its explicit `--commit` still overrides a local opt-out (#357).
-- Hunch's own post-commit and post-merge grounding hooks use the main checkout's source build when available. Shared hook privacy, commit, and deterministic-provider options remain preserved (#386).
-- MCP capture tools refuse writes when their file evidence is absent from the selected checkout and its history but present in a sibling worktree, identifying candidate `cwd` values. This is a partial misroute backstop; files present in both checkouts do not identify the intended destination (#388).
+- Hunch's own local post-commit and post-merge grounding hooks use the main checkout's source build when available. Shared hook privacy, commit, and deterministic-provider options remain preserved; hook-manager snippets keep portable launchers (#386).
+- MCP capture tools refuse writes when their file evidence is absent from the selected checkout and its history but present in a sibling worktree, identifying candidate `cwd` values. Deleted-file history accepts equivalent relative paths such as `./gone.ts`. This is a partial misroute backstop; files present in both checkouts do not identify the intended destination (#388).
 - Test fixtures isolate inherited assistant identities, canonicalize workspace temporary paths, and share bounded directory cleanup for transient Windows handle lag. Persistent cleanup failures still fail the test (#377, #378, #384).
 
 ## 1.40.1 — 2026-09-22
