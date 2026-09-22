@@ -1,0 +1,33 @@
+{
+  "id": "fnd_e1e9d91cea",
+  "title": "Task contribution card hides earlier failed checks behind a later unrelated pass",
+  "observation": "On 2026-09-22, an isolated fixture using the active Hunch 1.40.1 package ran Integration tests with exit 7, then Lint with exit 0, with identical source snapshots. After completion the text card showed only 'Checked   Lint · passed · current source snapshot' and no failure indication. Both checks remain correct in JSON and HTML. renderTaskReport selects checks.at(-1); repository 1.38.1 has the same selection. A compact summary can therefore conceal an unresolved failure in a different check. This is a presentation issue, not loss of evidence.",
+  "evidence": [
+    "src/core/taskReportRender.ts:64 selects report.checks.at(-1).",
+    "2026-09-22: node .hunch-cache/card-audit-runtime.mjs (through task verification launcher), exit 0; assertions confirm retained exit codes [7,0], both current, card omits Integration tests and failed; HTML contains COMMAND FAILED and COMMAND PASSED.",
+    "Local reproduction artifact .hunch-cache/card-audit-mixed-results.html; task htask_8e3a87e6ade96968613dfbdf check hev_b1025c2e349b06e4975c2a2b."
+  ],
+  "method": null,
+  "severity": "medium",
+  "triage": "open",
+  "affected_files": [
+    "src/core/taskReportRender.ts"
+  ],
+  "affected_symbols": [
+    "renderTaskReport"
+  ],
+  "violates_constraint": null,
+  "spawned_decision": null,
+  "observed_at": "2026-09-22T07:16:41.046Z",
+  "resolved_commit": null,
+  "provenance": {
+    "source": "agent_recorded",
+    "confidence": 0.75,
+    "evidence": [
+      "src/core/taskReportRender.ts:64 selects report.checks.at(-1).",
+      "2026-09-22: node .hunch-cache/card-audit-runtime.mjs (through task verification launcher), exit 0; assertions confirm retained exit codes [7,0], both current, card omits Integration tests and failed; HTML contains COMMAND FAILED and COMMAND PASSED.",
+      "Local reproduction artifact .hunch-cache/card-audit-mixed-results.html; task htask_8e3a87e6ade96968613dfbdf check hev_b1025c2e349b06e4975c2a2b."
+    ],
+    "last_verified": "2026-09-22T07:16:41.046Z"
+  }
+}
