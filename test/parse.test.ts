@@ -190,6 +190,28 @@ test("escaped NUL regexes and encoded JSX entities keep strict scans complete", 
   assert.equal(parseSource("label.tsx", jsxSource)?.parseable, true);
 });
 
+test("bare ampersands in JSX text keep strict scans complete", () => {
+  for (const source of [
+    "export const Label = () => <span>Research & Development</span>;",
+    "export const Pair = () => <span>{a} & {b}</span>;",
+    "export const Localized = () => <span>Été & 日本語</span>;",
+    "export const Leading = () => <span>&foo</span>;",
+  ]) {
+    assert.equal(parseSource("label.tsx", source)?.parseable, true, source);
+  }
+});
+
+test("real JSX errors beside bare ampersands still fail strict scans", () => {
+  for (const source of [
+    "export const Label = () => <span>Research & Development</span>; function broken( {",
+    "export const Label = () => <span>{a & }</span>;",
+    "export const Label = () => <span>hello }</span>;",
+    "export const Label = () => <span>hello & <broken</span>;",
+  ]) {
+    assert.equal(parseSource("label.tsx", source)?.parseable, false, source);
+  }
+});
+
 test("attributeCalls maps callee to enclosing symbol (keyed by stable symbol index)", () => {
   const p = parseSource("f.ts", SRC)!;
   const attr = attributeCalls(p); // Map<symbolIndex, Set<callee>>
