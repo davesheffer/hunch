@@ -220,9 +220,11 @@ function isParseable(root: SyntaxNode, spec: LanguageSpec): boolean {
 }
 
 function inToleratedScope(node: SyntaxNode, scopes: NonNullable<LanguageSpec["toleratedErrorScopes"]>): boolean {
-  for (let ancestor = node.parent; ancestor; ancestor = ancestor.parent) {
+  for (let ancestor: SyntaxNode | null = node; ancestor; ancestor = ancestor.parent) {
     for (const scope of scopes) {
-      if (ancestor.type === scope.node && ancestor.parent?.type === scope.parentIs) return true;
+      if (ancestor.type === scope.node
+        && ancestor.parent?.type === scope.parentIs
+        && (!scope.textPattern || ancestor.text.search(scope.textPattern) !== -1)) return true;
     }
   }
   return false;
