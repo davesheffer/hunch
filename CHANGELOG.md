@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.41.0 — Unreleased
+## 1.41.0 — 2026-09-22
 
 - Shared-memory operations reuse the most recent successful Git branch-name syntax check and avoid proving the identical nested publication boundary twice during one store open. This reduces Git process startup while keeping route validation fresh; Windows integration deadline verification is tracked in #398.
 - `hunch retire-constraint <id> --reason <text>` closes an active constraint's validity window while retaining its history and storage home. Public grounding drops the retired invariant; missing and already-retired IDs are refused (#387).
