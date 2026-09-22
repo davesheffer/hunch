@@ -1,15 +1,16 @@
 {
   "id": "fnd_d98451bc6b",
   "title": "Local task evidence HTML overflows mobile viewport because footer report hash does not wrap",
-  "observation": "On 2026-09-22, Playwright rendered the actual report htask_798fa5269bfc4f42467778d9 from Hunch 1.40.1. At viewport width 360px, document scrollWidth was 457px. DOM Range inspection identified the footer's unbroken sha256 report hash as the sole overflowing text. Temporarily applying footer overflow-wrap:anywhere reduced scrollWidth to 345px; restoring the original style restored 457px. Existing CSS only gives wrapping to pre, code and dd; the report hash is bare footer text. Desktop 1280px rendering had no horizontal overflow; details interaction worked.",
+  "observation": "Reproduced on 2026-09-22 with Hunch 1.40.1: an unbroken footer report hash expanded a 360px viewport to scrollWidth 457px. The candidate renderer adds footer overflow-wrap:anywhere. Browser verification of the candidate source renderer measured scrollWidth 345px at viewport 360px and 1265px at viewport 1280px. Fixed in draft PR #396; not released.",
   "evidence": [
-    "src/core/taskReportRender.ts:89-90 wraps pre/code/dd but inserts the hash as bare footer text.",
-    "Playwright on actual local report served at loopback: viewport 360, scrollWidth 457; footer hash range right 457 and overflowWrap normal; temporary footer wrap reduced scrollWidth to 345, restoration returned 457.",
-    "Screenshot .hunch-cache/card-audit-mobile.png; original HTML .hunch-cache/reports/htask_798fa5269bfc4f42467778d9.html."
+    "https://github.com/davesheffer/hunch/issues/395",
+    "https://github.com/davesheffer/hunch/pull/396",
+    "2026-09-22 Playwright: actual candidate report, viewport/scrollWidth 360/345 and 1280/1265; computed footer overflowWrap anywhere.",
+    "src/core/taskReportRender.ts: renderTaskReportHtml footer wrapping."
   ],
   "method": null,
   "severity": "low",
-  "triage": "open",
+  "triage": "resolved",
   "affected_files": [
     "src/core/taskReportRender.ts"
   ],
@@ -19,15 +20,16 @@
   "violates_constraint": null,
   "spawned_decision": null,
   "observed_at": "2026-09-22T07:16:43.108Z",
-  "resolved_commit": null,
+  "resolved_commit": "a6eb1c603256451bc7a9308dfece5f2bbad58b91",
   "provenance": {
     "source": "agent_recorded",
     "confidence": 0.75,
     "evidence": [
-      "src/core/taskReportRender.ts:89-90 wraps pre/code/dd but inserts the hash as bare footer text.",
-      "Playwright on actual local report served at loopback: viewport 360, scrollWidth 457; footer hash range right 457 and overflowWrap normal; temporary footer wrap reduced scrollWidth to 345, restoration returned 457.",
-      "Screenshot .hunch-cache/card-audit-mobile.png; original HTML .hunch-cache/reports/htask_798fa5269bfc4f42467778d9.html."
+      "https://github.com/davesheffer/hunch/issues/395",
+      "https://github.com/davesheffer/hunch/pull/396",
+      "2026-09-22 Playwright: actual candidate report, viewport/scrollWidth 360/345 and 1280/1265; computed footer overflowWrap anywhere.",
+      "src/core/taskReportRender.ts: renderTaskReportHtml footer wrapping."
     ],
-    "last_verified": "2026-09-22T07:16:43.108Z"
+    "last_verified": "2026-09-22T09:20:19.105Z"
   }
 }
