@@ -71,6 +71,18 @@ test("a single bad file remains skippable when another file of its language pars
   assert.ok(store.json.loadAll("symbols").some((s) => s.name === "alpha"));
 });
 
+test("a TSX-only repository with bare ampersand text indexes completely", (t) => {
+  const root = mkdtempSync(join(tmpdir(), "hunch-tsx-ampersand-"));
+  const store = new HunchStore(hunchPaths(root));
+  t.after(() => { store.close(); cleanupDir(root); });
+  writeFileSync(join(root, "label.tsx"), "export const Label = () => <span>{left} & middle & {right}</span>;\n");
+  store.json.ensureDirs();
+  const result = indexRepo(store, root, { churn: false });
+  assert.equal(result.skipped, 0);
+  assert.equal(result.coverage.find((item) => item.language === "typescript")?.parsed, 1);
+  assert.ok(store.json.loadAll("symbols").some((symbol) => symbol.name === "Label"));
+});
+
 test("valid symbol-free source and deleting all source files may still clear the graph", (t) => {
   const root = mkdtempSync(join(tmpdir(), "hunch-parse-empty-"));
   const store = new HunchStore(hunchPaths(root));

@@ -50,9 +50,19 @@ export interface LanguageSpec {
   /** Ancestor shapes in which an ERROR node is a known limitation of THIS grammar
    *  rather than a real syntax error. parse.ts forgives an error only when some
    *  ancestor has type `node` AND that ancestor's own parent has type `parentIs` —
-   *  the pair is what keeps the tolerance narrow. Omit for a language with no known
-   *  grammar false positives; that spec then stays strictly fail-closed. */
-  toleratedErrorScopes?: ReadonlyArray<{ readonly node: string; readonly parentIs: string }>;
+   *  the pair is what keeps the tolerance narrow. `textPattern`, when present,
+   *  must also match that ancestor's text. Omit for a language with no
+   *  known grammar false positives; that spec then stays strictly fail-closed. */
+  toleratedErrorScopes?: ReadonlyArray<{
+    readonly node: string;
+    readonly parentIs: string;
+    readonly textPattern?: RegExp;
+  }>;
+  /** Optional same-length recovery used only when the original syntax tree is
+   *  not parseable. A recovered tree may classify structure, but parse.ts reads
+   *  every captured value from the original source at the tree's unchanged
+   *  offsets. Keep replacements syntax-equivalent outside the grammar defect. */
+  parseErrorRecovery?: (source: string) => string;
   /** Patterns whose presence anywhere in the source mean "this isn't actually
    *  {id} text yet — it's a template that renders to {id} later" (Go/Jinja/Helm
    *  delimiters in a .yaml file, e.g.). parse.ts still runs the real parse — a
@@ -150,6 +160,19 @@ const TSX: LanguageSpec = {
   extensions: [".tsx", ".jsx"],
   grammarKey: "tsx",
   loadGrammar: () => loadNativeTreeSitter().tsx,
+  // tree-sitter-javascript rejects a bare ampersand in JSX text even though JSX
+  // accepts it (tree-sitter-javascript#366). The ERROR is a direct jsx_element
+  // child and its text begins at the ampersand. Require both facts plus text that
+  // cannot cross into a tag or expression; real JSX errors beside it remain fail-closed.
+  toleratedErrorScopes: [
+    ...TS_SHARED.toleratedErrorScopes,
+    { node: "ERROR", parentIs: "jsx_element", textPattern: /^&[^<>{}]*$/u },
+  ],
+  // More than one bare ampersand can make the grammar collapse the entire TSX
+  // tree instead of emitting the narrow ERROR above. `|` is accepted as JSX
+  // text and has the same length; in JS/TS syntax it preserves ampersand
+  // operators' arity, so malformed expressions remain malformed on the retry.
+  parseErrorRecovery: (source) => source.replaceAll("&", "|"),
 };
 
 const PY_QUERY = `
