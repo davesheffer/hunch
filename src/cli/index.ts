@@ -36,7 +36,7 @@ import { publishedStatus, type PublishedStatus } from "../integrations/registry.
 import { HunchStore } from "../store/hunchStore.js";
 import { JsonStore } from "../store/jsonStore.js";
 import { selectEmbedder } from "../store/embedder.js";
-import { assertCompleteRepoScan, indexRepo, mergeScannedEdges, scanRepo } from "../extractors/indexer.js";
+import { assertCompleteRepoScan, assertNoTotalParseFailure, indexRepo, mergeScannedEdges, scanRepo } from "../extractors/indexer.js";
 // Importing this module is free (the addon load is a function call, not a
 // top-level side effect); only `doctor` below actually calls the loader.
 import { isParserLoadError, loadNativeTreeSitter } from "../extractors/nativeTreeSitter.js";
@@ -6775,10 +6775,11 @@ program
     // past the isolation guard) is invisible until an index run refuses.
     try {
       loadNativeTreeSitter();
+      assertNoTotalParseFailure(scanRepo(store, root, { churn: false }));
       console.log(`parser:     native tree-sitter addons load`);
     } catch (e) {
       console.log(`parser:     ⛔ ${(e as Error).message}`);
-      console.log(dim(`            no file can be parsed — \`hunch index\` refuses rather than emptying the graph`));
+      console.log(dim(`            \`hunch index\` refuses rather than replacing the graph after a parser failure`));
       process.exitCode = 1;
     }
     const c = store.reindex().counts;

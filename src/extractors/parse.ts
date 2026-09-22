@@ -80,7 +80,7 @@ const STR_QUOTES = /^['"`]|['"`]$/g;
  *  enough that a huge function/file doesn't bloat every JSON symbol record. */
 export const MAX_BODY_TEXT_CHARS = 4000;
 
-export function parseSource(file: string, source: string): ParsedFile | null {
+export function parseSource(file: string, source: string, opts: { throwOnParseError?: boolean } = {}): ParsedFile | null {
   const spec = languageFor(file);
   if (!spec) return null;
   // Templated text (Helm chart / Jinja CI config) isn't {spec.id} yet — a real
@@ -104,7 +104,10 @@ export function parseSource(file: string, source: string): ParsedFile | null {
   let tree;
   try {
     tree = parser.parse(source, undefined, { bufferSize: Math.max(32 * 1024, source.length * 2 + 1024) });
-  } catch {
+  } catch (error) {
+    // Index scans need the underlying diagnostic for whole-language failures.
+    // Other callers retain the historical best-effort null result.
+    if (opts.throwOnParseError) throw error;
     return null;
   }
   const symbols: ParsedSymbol[] = [];
