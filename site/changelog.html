@@ -107,6 +107,10 @@
 
     <div class="clog">
       <div class="clog-group">
+        <div class="clog-date">Sep 22, 2026</div>
+        <div class="clog-row"><span class="rel-tag">v1.40.1</span><span class="clog-t"><b>Keeps the graph when parsing fails</b> — indexing refuses to replace a healthy graph when every eligible file of a language fails to parse, and doctor reports the same failure; subscriptions request a resync when their cursor is ahead of the ledger; task reports show the complete contribution card.</span></div>
+      </div>
+      <div class="clog-group">
         <div class="clog-date">Sep 20, 2026</div>
         <div class="clog-row"><span class="rel-tag">v1.40.0</span><span class="clog-t"><b>Lighter on every prompt</b> — the prompt hook prints the <span class="mono">hunch task verify</span> command inline and the task's start and finish round trips become conditional, the pre-edit hook stops re-sending a grounding block that nothing changed, and the native parsers load on first parse instead of at import, so <span class="mono">hunch --version</span> and every hook start in a fraction of the time; Kubernetes references resolve within a namespace, the grounding tools share one definition of a known path, and an install from a linked worktree keeps the repo's shared git hooks.</span></div>
       </div>

@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## 1.40.1 — 2026-09-22
+
+- Indexing preserves the previous graph and exits with an error when every eligible file of any language fails to parse. Doctor reports the same condition; partial per-file failures and valid empty graphs retain their existing behavior (#391, fixes #380).
+- State subscriptions request a resync when `after_seq` exceeds the current ledger head, including after a restore to an older ledger (#392, fixes #362).
 
 - The contribution card (`hunch_task` finish, `hunch task finish`, `hunch report`, the Stop hook) no longer cuts lesson titles, the task title, the applied action or the check label mid-word with an ellipsis: an agent asked to copy the card verbatim read the "…" as a truncated tool result and refused to reproduce it. Every field is shown whole (each is schema-bounded), and the Recalled line names every delivered lesson up to eight instead of one title plus a count; beyond eight the rest are counted, never silently dropped. The one-line "Hunch recalled:" notice on a lesson's first delivery shows the whole title too. Measured 2026-09-21 on this repository's own graph: 220 of 330 decision titles were longer than the old 65-character Recalled clip and 327 longer than the 34-character Conformed/Violated clip.
 
