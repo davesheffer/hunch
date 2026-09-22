@@ -94,6 +94,22 @@ export function assertCompleteRepoScan(scan: RepoScan): void {
   throw new Error(`incomplete semantic source scan rejected ${scan.issues.length} file(s): ${sample}${more}`);
 }
 
+/** A whole-language failure can be a broken grammar, not a set of bad files.
+ * Refuse the entire publication so cross-language edges and curated components
+ * remain consistent with the previous symbols. Read-only scans retain coverage
+ * and issues for diagnostics; a valid empty scan is still publishable. */
+export function assertNoTotalParseFailure(scan: RepoScan): void {
+  const failed = scan.result.coverage.filter((item) =>
+    item.eligible > 0 && item.reasons.parse_failed === item.eligible);
+  if (!failed.length) return;
+  const details = failed.map((item) => {
+    const first = scan.issues.find((issue) =>
+      issue.code === "parse_failed" && languageFor(issue.path)?.id === item.language);
+    return `${item.language}: all ${item.eligible} eligible file(s) failed to parse; ${first?.detail ?? "unknown parse failure"}`;
+  });
+  throw new Error(`index refused — ${details.join("; ")}. Previous graph preserved.`);
+}
+
 /** Derive the current repository graph without writing JSON or rebuilding SQLite.
  * Read-only gates use this so checking changed code can never rewrite or publish
  * the durable graph merely by inspecting it. Existing public graph records remain
@@ -207,7 +223,7 @@ export function scanRepo(store: HunchStore, root: string, opts: ScanRepoOptions 
     // one bad/oversized file must never abort the whole index run
     let parsed;
     try {
-      parsed = parseSource(rel, src);
+      parsed = parseSource(rel, src, { throwOnParseError: true });
     } catch (error) {
       // …but a dead PARSER is not a bad file. The native addons load on first
       // parse, so a broken load (unwritable TMPDIR, missing prebuild, an addon
@@ -218,7 +234,7 @@ export function scanRepo(store: HunchStore, root: string, opts: ScanRepoOptions 
       // the import-time load did.
       if (isParserLoadError(error)) throw error;
       skipped++;
-      issues.push({ path: rel, code: "parse_failed", detail: `${rel} could not be parsed` });
+      issues.push({ path: rel, code: "parse_failed", detail: `${rel} could not be parsed: ${error instanceof Error ? error.message : String(error)}` });
       noteSkip(rel, "parse_failed");
       continue;
     }
@@ -677,6 +693,7 @@ export function indexRepo(store: HunchStore, root: string, opts: IndexRepoOption
     ? { kind: "commit" as const, ref: "HEAD" }
     : opts.source;
   const scan = scanRepo(store, root, { churn: opts.churn, source });
+  assertNoTotalParseFailure(scan);
   if (opts.requireComplete) assertCompleteRepoScan(scan);
   store.json.replaceAll("symbols", scan.symbols);
   store.json.replaceAll("edges", mergeScannedEdges(store.json.loadAll("edges"), scan.edges));
