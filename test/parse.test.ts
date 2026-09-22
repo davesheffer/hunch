@@ -196,9 +196,17 @@ test("bare ampersands in JSX text keep strict scans complete", () => {
     "export const Pair = () => <span>{a} & {b}</span>;",
     "export const Localized = () => <span>Été & 日本語</span>;",
     "export const Leading = () => <span>&foo</span>;",
+    "export const Repeated = () => <span>me & you & them</span>;",
   ]) {
     assert.equal(parseSource("label.tsx", source)?.parseable, true, source);
   }
+});
+
+test("ampersand recovery preserves original captured text", () => {
+  const parsed = parseSource("label.tsx", `import value from "pkg&variant";
+export const Label = () => <span>me & you & them</span>;`)!;
+  assert.deepEqual(parsed.imports, ["pkg&variant"]);
+  assert.match(parsed.symbols.find((symbol) => symbol.name === "Label")?.bodyText ?? "", /me & you & them/);
 });
 
 test("real JSX errors beside bare ampersands still fail strict scans", () => {
@@ -207,6 +215,7 @@ test("real JSX errors beside bare ampersands still fail strict scans", () => {
     "export const Label = () => <span>{a & }</span>;",
     "export const Label = () => <span>hello }</span>;",
     "export const Label = () => <span>hello & <broken</span>;",
+    "export const Label = () => <span>me & you & them</span>; function broken( {",
   ]) {
     assert.equal(parseSource("label.tsx", source)?.parseable, false, source);
   }
