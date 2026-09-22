@@ -919,7 +919,7 @@ export function subscribeState(store: HunchStore, input: unknown, options: State
   const access = createStateAccess(store, request.principal, options);
   const visibilityFiltered = ledger.events.some(e => e.visibility !== undefined) || access.restricted;
   const filtered = !!(facets || subjects || visibilityFiltered);
-  const resync = request.after_seq < ledger.floor_seq;
+  const resync = request.after_seq < ledger.floor_seq || request.after_seq > ledger.head_seq;
   const after = resync ? ledger.floor_seq : request.after_seq;
   const events: ChangeEvent[] = ledger.events.filter((e) =>
     e.seq > after

@@ -233,6 +233,31 @@ test("subscribe: contiguous after a cursor; filters mark a subsequence and keep 
   } finally { cleanup(); }
 });
 
+test("subscribe: cursors above the head require resync, including empty and filtered ledgers", () => {
+  const { store, cleanup } = tempStore();
+  try {
+    const scope = repositoryScope(store);
+    const sub = (after_seq: number, extra = {}) => subscribeState(store, {
+      schema: "nuryel.state.subscribe/1", principal: principalFor(store), scope, after_seq, ...extra,
+    });
+    assert.equal(sub(0).resync, false);
+    assert.equal(sub(5).resync, true);
+    write(store, "receipts", receiptRecord(store), "future-cursor");
+    const current = sub(0);
+    assert.equal(current.head_seq, 1);
+    assert.equal(sub(current.head_seq).resync, false);
+    assert.deepEqual(sub(current.head_seq).events, []);
+    const ahead = sub(current.head_seq + 5);
+    assert.equal(ahead.resync, true);
+    assert.equal(ahead.head_seq, current.head_seq);
+    assert.deepEqual(ahead.events, current.events, "resync replays the retained window just like a cursor below the floor");
+    const filtered = sub(current.head_seq + 5, { facets: ["commitments"] });
+    assert.equal(filtered.resync, true);
+    assert.equal(filtered.filtered, true);
+    assert.deepEqual(filtered.events, []);
+  } finally { cleanup(); }
+});
+
 test("write: expected_version guards an update — hash or seq — and a matching payload replays instead of rewriting", () => {
   const { store, root, cleanup } = tempStore();
   try {
