@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.41.1 — 2026-09-22
+
+- Valid TSX with bare or repeated ampersands in JSX text now indexes normally instead of reporting a project-blocking parse failure. Recovery preserves the original source text and import paths while genuine syntax errors still fail validation (#367, #401).
+- The managed `.gitignore` block now keeps Hunch's local cache, event ledger, and pending or dropped commit-repair queues out of Git (#401).
+
 ## 1.41.0 — 2026-09-22
 
 - Shared-memory operations reuse the most recent successful Git branch-name syntax check and avoid proving the identical nested publication boundary twice during one store open. This reduces Git process startup while keeping route validation fresh; Windows integration deadline verification is tracked in #398.
