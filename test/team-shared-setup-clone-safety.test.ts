@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import {
@@ -196,7 +197,7 @@ test("explicit shared setup suppresses ambient checkout hooks and global attribu
     );
     assert.deepEqual(setupResidue(fixture.root), []);
   } finally {
-    rmSync(base, { recursive: true, force: true });
+    cleanupDir(base);
   }
 });
 
@@ -221,7 +222,7 @@ test("explicit shared setup rejects remote checkout attributes without execution
     assert.equal(existsSync(join(fixture.root, ".git", "hunch", "local.json")), false, "no worktree-shared pointer is written");
     assert.deepEqual(setupResidue(fixture.root), [], "all staged clone controls are removed on refusal");
   } finally {
-    rmSync(base, { recursive: true, force: true });
+    cleanupDir(base);
   }
 });
 
@@ -248,7 +249,7 @@ test("explicit shared setup refuses malformed local routing before creating an o
     assert.equal(existsSync(join(fixture.root, ".git", "hunch", "local.json")), false, "no shared pointer is written");
     assert.deepEqual(setupResidue(fixture.root), []);
   } finally {
-    rmSync(base, { recursive: true, force: true });
+    cleanupDir(base);
   }
 });
 
@@ -290,7 +291,7 @@ test("a late shared route publication failure restores pre-command routing state
       "failed atomic publication leaves no temporary route file",
     );
   } finally {
-    rmSync(base, { recursive: true, force: true });
+    cleanupDir(base);
   }
 });
 
@@ -339,7 +340,7 @@ test("a late fresh shared migration failure retains the only migrated memory cop
       "failed setup restores the pre-command worktree-shared route");
     assert.deepEqual(setupResidue(fixture.root), []);
   } finally {
-    rmSync(base, { recursive: true, force: true });
+    cleanupDir(base);
   }
 });
 
@@ -361,6 +362,6 @@ test("a rolled-back fresh setup removes BOTH hooks it installed, not just post-c
     assert.equal(existsSync(postCommit), false, "rollback removes the post-commit hook this setup created");
     assert.equal(existsSync(postMerge), false, "rollback removes the post-merge hook this setup created");
   } finally {
-    rmSync(base, { recursive: true, force: true });
+    cleanupDir(base);
   }
 });

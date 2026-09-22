@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -71,5 +72,5 @@ test("captured rule reaches existing path grounding, with source and a concrete 
     assert.match(delivered[0]!.rationale, /assert an error response/);
     assert.ok(delivered[0]!.provenance.evidence.includes(comment().html_url));
     assert.equal(store.checkConstraints("src/unrelated.ts").length, 0);
-  } finally { store.close(); rmSync(root, { recursive: true, force: true }); }
+  } finally { store.close(); cleanupDir(root); }
 });

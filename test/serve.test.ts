@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 /**
  * `hunch serve` — the HTTP binding of nuryel.state/1 and the served partition host — driven
  * through the typed client. The rules are the store binding's; these tests assert the transport:
@@ -40,7 +41,7 @@ function served() {
   const orgInit = initServeConfig({ file, scope: acme, root: join(dir, "acme"), principal: { id: "orc", kind: "service", grants: [acme, david] } });
   const config = readServeConfig(file);
   const app = createServeApp(config, { version: "test" });
-  const cleanup = async () => { await new Promise<void>((r) => app.close(() => r())); app.closeStores(); rmSync(dir, { recursive: true, force: true }); };
+  const cleanup = async () => { await new Promise<void>((r) => app.close(() => r())); app.closeStores(); cleanupDir(dir); };
   return { dir, file, config, app, sofiaToken: userInit.token!, orcToken: orgInit.token!, cleanup };
 }
 
@@ -299,7 +300,7 @@ test("the write lock is held across a sync section and released on throw", async
     assert.equal(max, 1, "never two holders");
     await assert.rejects(withWriteLock(dir, () => { throw new Error("boom"); }), /boom/);
     assert.ok(!existsSync(writeLockPath(dir)));
-  } finally { rmSync(dir, { recursive: true, force: true }); }
+  } finally { cleanupDir(dir); }
 });
 
 /** A child that stays alive until we kill it. */
@@ -337,7 +338,7 @@ test("the write lock never steals a stale-looking lock held by a live same-host 
     );
     assert.equal(entered, false, "a live same-host owner must keep the lock despite its age");
     assert.ok(existsSync(path), "the live owner's lock remains intact");
-  } finally { child.kill(); rmSync(dir, { recursive: true, force: true }); }
+  } finally { child.kill(); cleanupDir(dir); }
 });
 
 /**
@@ -378,7 +379,7 @@ for (const platform of ["darwin", "win32", "linux"] as const) {
       await withWriteLock(dir, () => { entered = true; }, { timeoutMs: 2_000, startToken: seam });
       assert.equal(entered, true, "the recycled-pid lock is taken over, not waited on forever");
       assert.ok(!existsSync(path), "the reclaimed lock is released after the write");
-    } finally { rmSync(dir, { recursive: true, force: true }); }
+    } finally { cleanupDir(dir); }
   });
 }
 
@@ -403,7 +404,7 @@ test("the write lock reclaims our own pid when the recorded TOKEN is a predecess
     });
     assert.equal(entered, true, "a recycled token is proof, whatever the lock's age");
     assert.ok(!existsSync(path), "the reclaimed lock is released after the write");
-  } finally { rmSync(dir, { recursive: true, force: true }); }
+  } finally { cleanupDir(dir); }
 });
 
 test("the write lock never steals a lock whose recorded TOKEN is our own live instance (issue #287)", async () => {
@@ -422,7 +423,7 @@ test("the write lock never steals a lock whose recorded TOKEN is our own live in
     );
     assert.equal(entered, false);
     assert.ok(existsSync(path), "the live owner's lock remains intact");
-  } finally { rmSync(dir, { recursive: true, force: true }); }
+  } finally { cleanupDir(dir); }
 });
 
 test("the write lock reclaims a lock whose pid now belongs to an unrelated live process (issue #287)", async () => {
@@ -440,7 +441,7 @@ test("the write lock reclaims a lock whose pid now belongs to an unrelated live 
     });
     assert.equal(entered, true, "a live process whose token differs never owned this lock");
     assert.ok(!existsSync(path), "the reclaimed lock is released after the write");
-  } finally { child.kill(); rmSync(dir, { recursive: true, force: true }); }
+  } finally { child.kill(); cleanupDir(dir); }
 });
 
 test("a live unrelated pid WITHOUT a token keeps the lock — the remaining macOS/Windows gap (issue #287)", async () => {
@@ -462,7 +463,7 @@ test("a live unrelated pid WITHOUT a token keeps the lock — the remaining macO
     );
     assert.equal(entered, false);
     assert.ok(existsSync(path), "a live pid we cannot disprove keeps its lock");
-  } finally { child.kill(); rmSync(dir, { recursive: true, force: true }); }
+  } finally { child.kill(); cleanupDir(dir); }
 });
 
 test("an UNPROBEABLE owner (another boot / namespace) falls back to the age rule (issue #287)", async () => {
@@ -490,7 +491,7 @@ test("an UNPROBEABLE owner (another boot / namespace) falls back to the age rule
     await withWriteLock(dir, () => { ran = true; }, { timeoutMs: 5_000, startToken: seam });
     assert.equal(ran, true, "past the stale age an unprobeable lock is taken over");
     assert.ok(!existsSync(path), "the lock is released afterwards");
-  } finally { rmSync(dir, { recursive: true, force: true }); }
+  } finally { cleanupDir(dir); }
 });
 
 /** The skew repro runs twice over the identity seam:
@@ -533,7 +534,7 @@ for (const backMs of [30_000, 10 * 60_000]) {
         assert.equal(max, 1, "the holder count never exceeds 1");
         assert.ok(stolen instanceof Error, "the contender timed out rather than stealing");
         assert.ok(!existsSync(path), "the holder released its own lock");
-      } finally { rmSync(dir, { recursive: true, force: true }); }
+      } finally { cleanupDir(dir); }
     });
   }
 }
@@ -562,7 +563,7 @@ test("regression guard: in-process contenders over one stale lock never overlap 
     assert.equal(max, 1, "the write lock is mutually exclusive across a stale-lock takeover");
     assert.equal(ran, 8, "every contender eventually ran");
     assert.ok(!existsSync(path), "the lock is released afterwards");
-  } finally { rmSync(dir, { recursive: true, force: true }); }
+  } finally { cleanupDir(dir); }
 });
 
 test("DETERMINISTIC: a contender under the claim re-judges and never removes the winner's LIVE lock (issue #287)", async () => {
@@ -642,7 +643,7 @@ test("DETERMINISTIC: a contender under the claim re-judges and never removes the
     fs.rmSync = originalFs.rmSync;
     syncBuiltinESMExports();
     child.kill();
-    rmSync(dir, { recursive: true, force: true });
+    cleanupDir(dir);
   }
 });
 
@@ -696,7 +697,7 @@ test("stress SMOKE: concurrent PROCESSES racing one stale write lock never overl
     assert.deepEqual(lines, ["a 4", "b 4", "c 4", "d 4", "e 4", "f 4"], "every child acquired the lock in every round");
     assert.ok(!existsSync(marker), "no holder marker is left behind");
     assert.ok(!existsSync(writeLockPath(dir)), "the lock is released afterwards");
-  } finally { rmSync(dir, { recursive: true, force: true }); }
+  } finally { cleanupDir(dir); }
 });
 
 test("a live reclaim claim blocks takeover; a stranded one is cleared (issue #287)", async () => {
@@ -724,7 +725,7 @@ test("a live reclaim claim blocks takeover; a stranded one is cleared (issue #28
     assert.equal(ran, true, "a stranded claim is cleared and the takeover proceeds");
     assert.ok(!existsSync(claim), "no claim directory is left behind");
     assert.ok(!existsSync(path), "the lock is released afterwards");
-  } finally { rmSync(dir, { recursive: true, force: true }); }
+  } finally { cleanupDir(dir); }
 });
 
 test("HTTP writes lock the shared overlay home, leaving a public lock owned by another writer intact", async () => {
@@ -762,7 +763,7 @@ test("HTTP writes lock the shared overlay home, leaving a public lock owned by a
       await new Promise<void>((r) => app.close(() => r()));
       app.closeStores();
     }
-  } finally { rmSync(dir, { recursive: true, force: true }); }
+  } finally { cleanupDir(dir); }
 });
 
 test("CLI: `hunch serve init --config <file>` honors the path from any cwd (1.26.0 handed it to the parent command)", () => {
@@ -778,7 +779,7 @@ test("CLI: `hunch serve init --config <file>` honors the path from any cwd (1.26
     assert.ok(!existsSync(join(elsewhere, "hunch-serve.json")), "and not into the cwd");
     assert.ok(parsed.token && !readFileSync(join(dir, "cfg.json"), "utf8").includes(parsed.token));
     assert.equal(readServeConfig(join(dir, "cfg.json")).port, 27780, "--port after init reaches init, not the parent");
-  } finally { rmSync(dir, { recursive: true, force: true }); rmSync(elsewhere, { recursive: true, force: true }); }
+  } finally { cleanupDir(dir); cleanupDir(elsewhere); }
 });
 
 test("a served partition that is a git repository commits every write: durability is committed, not local", async () => {
@@ -806,7 +807,7 @@ test("a served partition that is a git repository commits every write: durabilit
       assert.doesNotMatch(log, /write\.lock|hunch\.sqlite/, "derived artifacts never enter a commit");
       assert.ok(!existsSync(writeLockPath(join(root, ".hunch"))));
     } finally { await new Promise<void>((r) => app.close(() => r())); app.closeStores(); }
-  } finally { rmSync(dir, { recursive: true, force: true }); }
+  } finally { cleanupDir(dir); }
 });
 
 test("HTTP and typed client round-trip field citations and refuse stale value bindings", async () => {
@@ -851,7 +852,7 @@ test('HTTP authenticates visibility across partitions and concurrent users, incl
     const spoof = await fetch(base + '/nuryel/v1/records', { method: 'POST', headers: { authorization: 'Bearer ' + readerToken, 'content-type': 'application/json' }, body: JSON.stringify({ principal: { id: 'owner', kind: 'human', grants: [david, acme] }, scope: david, ids: [source.record_id] }) });
     assert.deepEqual((await spoof.json() as { missing: string[] }).missing, [source.record_id]);
     await assert.rejects(reader.write({ scope: david, facet: 'derived', idempotency_key: 'cross-private-source', record: source.record! }), (e: StateClientError) => e.status === 403 && !JSON.stringify(e.problem).includes(source.record_id));
-  } finally { await new Promise<void>(r => app.close(() => r())); app.closeStores(); rmSync(dir, { recursive: true, force: true }); }
+  } finally { await new Promise<void>(r => app.close(() => r())); app.closeStores(); cleanupDir(dir); }
 });
 
 test("MCP over streamable HTTP: the nuryel_* tools behind the same credential, grants and refusals as the REST routes", async () => {

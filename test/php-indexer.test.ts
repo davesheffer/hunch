@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
@@ -60,7 +61,7 @@ test("PHP indexing resolves Composer calls and static type relationships through
     assert.ok(dependencyReasons.some((reason) => /bootstrap\.php imports src\/Helper\.php/.test(reason)), dependencyReasons.join("; "));
   } finally {
     store.close();
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });
 
@@ -73,7 +74,7 @@ test("PHP coverage reports every parse failure with a bounded reason", () => {
     assert.deepEqual(scan.issues.map(({ path, code }) => ({ path, code })), [{ path: "src/Broken.php", code: "parse_failed" }]);
   } finally {
     store.close();
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });
 
@@ -91,6 +92,6 @@ test("PHP type relationships participate in bounded path and impact queries", ()
       .some(({ file }) => file === "src/Worker.php"));
   } finally {
     store.close();
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });

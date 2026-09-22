@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -62,7 +63,7 @@ test("MCP task lifecycle retains exact delivery, rejects borrowed evidence, and 
   const [ct, st] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: "task-report-test", version: "1" });
   await Promise.all([server.connect(st), client.connect(ct)]);
-  t.after(async () => { await client.close(); await server.close(); rmSync(root, { recursive: true, force: true }); });
+  t.after(async () => { await client.close(); await server.close(); cleanupDir(root); });
   const call = (name: string, args: Record<string, unknown>) => client.callTool({ name, arguments: args });
   const started = await call("hunch_task", { action: "start", title: "Keep delivery machine-readable" });
   assert.ok(!started.isError);
@@ -210,7 +211,7 @@ test("hunch_context exposes the delivery envelope and records exactly what MCP s
   t.after(async () => {
     await client.close().catch(() => {});
     await server.close().catch(() => {});
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   });
 
   const listed = await client.listTools();
@@ -314,7 +315,7 @@ test("MCP exposes exact change identity and semantic proof contracts without mut
   t.after(async () => {
     await client.close().catch(() => {});
     await server.close().catch(() => {});
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   });
 
   const tool = (await client.listTools()).tools.find((candidate) => candidate.name === "hunch_change_identity");
@@ -351,7 +352,7 @@ test("hunch_context delivers a reviewed landscape fragment for a plain-English t
   t.after(async () => {
     await client.close().catch(() => {});
     await server.close().catch(() => {});
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   });
 
   const listed = await client.listTools();
@@ -410,7 +411,7 @@ test("hunch_shortlist exposes an opt-in bounded diagnostic with no exact-owner c
   t.after(async () => {
     await client.close().catch(() => {});
     await server.close().catch(() => {});
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   });
 
   const listed = await client.listTools();
@@ -473,7 +474,7 @@ test("hunch_evidence_map compiles supplied observations without claiming ownersh
   t.after(async () => {
     await client.close().catch(() => {});
     await server.close().catch(() => {});
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   });
 
   const listed = await client.listTools();
@@ -512,7 +513,7 @@ test("MCP captures retain exact local saves and the next task can trace their or
   const [ct, st] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: "task-save-test", version: "1" });
   await Promise.all([server.connect(st), client.connect(ct)]);
-  t.after(async () => { await client.close(); await server.close(); rmSync(root, { recursive: true, force: true }); });
+  t.after(async () => { await client.close(); await server.close(); cleanupDir(root); });
   const call = (name: string, args: Record<string, unknown>) => client.callTool({ name, arguments: args });
   const started = await call("hunch_task", { action: "start", title: "Learn from this task" });
   const taskId = (started.structuredContent as { task: { task_id: string } }).task.task_id;

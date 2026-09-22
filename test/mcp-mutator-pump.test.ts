@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import {
@@ -63,7 +64,7 @@ function publicFixture(label: string): { root: string; cleanup: () => void } {
   commitAll(root, "fixture: public graph");
   return {
     root,
-    cleanup: () => rmSync(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 }),
+    cleanup: () => cleanupDir(root),
   };
 }
 
@@ -241,7 +242,7 @@ test("MCP private correction upgrade pumps the public index and the exact privat
     assert.equal(git(overlay.overlayRoot, "status", "--porcelain", "--", ".hunch"), "");
   } finally {
     if (client) await client.close();
-    rmSync(overlay.overlayRoot, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
+    cleanupDir(overlay.overlayRoot);
     fixture.cleanup();
   }
 });
@@ -295,7 +296,7 @@ test("MCP shared mode keeps a legacy public correction upgrade in its actual pub
     assert.equal(readFileSync(join(fixture.root, ".hunch/evidence", `${upgrade.evidence.id}.json`), "utf8").includes(correction.id), true);
   } finally {
     if (client) await client.close();
-    if (overlayRoot) rmSync(overlayRoot, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
+    if (overlayRoot) cleanupDir(overlayRoot);
     fixture.cleanup();
   }
 });

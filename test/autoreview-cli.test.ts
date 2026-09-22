@@ -1,3 +1,5 @@
+import { cleanupDir } from "./fixtures.js";
+import { isolatedCliEnv } from "./helpers.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
@@ -74,13 +76,12 @@ exit 1
   const before = [readFileSync(firstPath, "utf8"), readFileSync(secondPath, "utf8")];
 
   try {
-    const env = {
-        ...process.env,
+    const env = isolatedCliEnv({
         PATH: `${bin}${delimiter}${process.env.PATH ?? ""}`,
         HUNCH_FAKE_COUNTER: count,
         HUNCH_PRIVATE_DIR: "",
         HUNCH_SYNTH_PROVIDER: "codex-cli",
-    };
+    });
     const dryRun = spawnSync(process.execPath, [tsx, cli, "auto-review"], {
       cwd: root,
       encoding: "utf8",
@@ -126,7 +127,7 @@ exit 1
       "explicit deterministic-only triage remains available and does not invent judgments",
     );
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });
 
@@ -169,13 +170,12 @@ fi
     const run = spawnSync(process.execPath, [tsx, cli, "auto-review", "--apply"], {
       cwd: root,
       encoding: "utf8",
-      env: {
-        ...process.env,
+      env: isolatedCliEnv({
         PATH: `${bin}${delimiter}${process.env.PATH ?? ""}`,
         HUNCH_FAKE_COUNTER: count,
         HUNCH_PRIVATE_DIR: "",
         HUNCH_SYNTH_PROVIDER: "codex-cli",
-      },
+      }),
     });
     const output = `${run.stdout}${run.stderr}`;
     assert.equal(run.status, 0, output);
@@ -183,7 +183,7 @@ fi
     assert.match(output, /0 accepted, 0 rejected, 2 kept/);
     assert.ok(existsSync(firstPath) && existsSync(secondPath), "both unresolved proposals remain for human review");
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });
 
@@ -242,8 +242,7 @@ printf '%s\\n' '{"type":"item.completed","item":{"type":"agent_message","text":"
     const run = spawnSync(process.execPath, [tsx, cli, "auto-review", "--apply"], {
       cwd: root,
       encoding: "utf8",
-      env: {
-        ...process.env,
+      env: isolatedCliEnv({
         PATH: `${bin}${delimiter}${process.env.PATH ?? ""}`,
         HUNCH_PRIVATE_DIR: "",
         HUNCH_SYNTH_PROVIDER: "codex-cli",
@@ -251,7 +250,7 @@ printf '%s\\n' '{"type":"item.completed","item":{"type":"agent_message","text":"
         GIT_AUTHOR_EMAIL: "auto-review@pump.test",
         GIT_COMMITTER_NAME: "Auto Review Fixture",
         GIT_COMMITTER_EMAIL: "auto-review@pump.test",
-      },
+      }),
     });
     const output = `${run.stdout}${run.stderr}`;
     assert.equal(run.status, 0, output);
@@ -267,6 +266,6 @@ printf '%s\\n' '{"type":"item.completed","item":{"type":"agent_message","text":"
     assert.match(git(root, "log", "-1", "--format=%s"), /auto-review decision lifecycle/);
     assert.equal(git(root, "status", "--porcelain", "--", ".hunch"), "", "the pump leaves no pending memory mutation");
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });

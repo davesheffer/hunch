@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
@@ -46,5 +47,5 @@ test("CLI preview is read-only; apply routes a sourced rule and refuses overwrit
     assert.notEqual(replay.status, 0);
     assert.match(replay.stderr, /already exists/);
     assert.equal(readFileSync(join(root, ".hunch/constraints", files[0]!), "utf8"), saved);
-  } finally { rmSync(root, { recursive: true, force: true }); }
+  } finally { cleanupDir(root); }
 });

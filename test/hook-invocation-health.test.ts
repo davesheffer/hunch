@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 /**
  * Issue #315: a hunch marker in a hook file proves nothing about what the block
  * actually runs. A block rewritten into a probe, or one pointing at a node/CLI
@@ -55,7 +56,7 @@ test("a block rewritten into an arbitrary probe command is stale, not installed"
     assert.equal(report.postCommit.reason, "not a command Hunch writes");
     assert.equal(hookStatus(r).postCommit, false, "a stale block is not installed");
     assert.equal(report.postCommit.path, POST_COMMIT(r));
-  } finally { rmSync(r, { recursive: true, force: true }); }
+  } finally { cleanupDir(r); }
 });
 
 test("a JSON-escaped Windows launcher that does not exist is stale and names the decoded path", () => {
@@ -70,7 +71,7 @@ test("a JSON-escaped Windows launcher that does not exist is stale and names the
     assert.equal(entryReport.reason, `${node} does not exist`, "the reason names the decoded path, not the escaped source");
     assert.equal(entryReport.invocation, `${JSON.stringify(node)} ${JSON.stringify(entry)}`);
     assert.equal(hookStatus(r).postCommit, false);
-  } finally { rmSync(r, { recursive: true, force: true }); }
+  } finally { cleanupDir(r); }
 });
 
 test("every launcher shape Hunch writes reports installed, with the invocation it points at", () => {
@@ -92,7 +93,7 @@ test("every launcher shape Hunch writes reports installed, with the invocation i
       assert.equal(entry.invocation, inv, label);
       assert.equal(hookStatus(r).postCommit, true, label);
     }
-  } finally { rmSync(r, { recursive: true, force: true }); }
+  } finally { cleanupDir(r); }
 });
 
 test("a launcher whose path no longer exists is stale, whichever shape it is", () => {
@@ -112,7 +113,7 @@ test("a launcher whose path no longer exists is stale, whichever shape it is", (
       assert.equal(entry.reason, `${gone} does not exist`, inv);
       assert.equal(hookStatus(r).postCommit, false, inv);
     }
-  } finally { rmSync(r, { recursive: true, force: true }); }
+  } finally { cleanupDir(r); }
 });
 
 test("markers with no command line left between them are stale, not installed", () => {
@@ -124,7 +125,7 @@ test("markers with no command line left between them are stale, not installed", 
     assert.equal(entry.reason, "the block has no `hunch sync --from-hook` command");
     assert.equal(entry.invocation, undefined, "nothing to report as a launcher");
     assert.equal(hookStatus(r).postCommit, false);
-  } finally { rmSync(r, { recursive: true, force: true }); }
+  } finally { cleanupDir(r); }
 });
 
 test("an older block shape (env assignment, no parentheses) is still installed", () => {
@@ -135,7 +136,7 @@ test("an older block shape (env assignment, no parentheses) is still installed",
     assert.equal(entry.state, "installed", entry.reason ?? "");
     assert.equal(entry.invocation, "hunch");
     assert.equal(hookStatus(r).postCommit, true);
-  } finally { rmSync(r, { recursive: true, force: true }); }
+  } finally { cleanupDir(r); }
 });
 
 test("post-merge: one stale half makes the hook stale; re-installing heals it", () => {
@@ -153,7 +154,7 @@ test("post-merge: one stale half makes the hook stale; re-installing heals it", 
     assert.equal(installPostMergeHook(r, "hunch").action, "updated", "a stale block falls through to the rewrite path");
     assert.equal(hookReport(r).postMerge.state, "installed");
     assert.equal(hookStatus(r).postMerge, true);
-  } finally { rmSync(r, { recursive: true, force: true }); }
+  } finally { cleanupDir(r); }
 });
 
 test("a block carrying both a probe line and a working hunch line still works, so it is installed", () => {
@@ -170,7 +171,7 @@ test("a block carrying both a probe line and a working hunch line still works, s
     const entry = hookReport(r).postCommit;
     assert.equal(entry.state, "installed", entry.reason ?? "");
     assert.equal(entry.invocation, "hunch");
-  } finally { rmSync(r, { recursive: true, force: true }); }
+  } finally { cleanupDir(r); }
 });
 
 test("hookInvocationHealth: only the shapes Hunch writes are accepted", () => {
@@ -244,7 +245,7 @@ test("a stale hook reports the Hunch options its block carried, so a re-install 
     assert.deepEqual(report.postCommit.flags, ["--private", "--commit"]);
     assert.equal(report.preCommit.state, "stale");
     assert.deepEqual(report.preCommit.flags, ["--strict"]);
-  } finally { rmSync(r, { recursive: true, force: true }); }
+  } finally { cleanupDir(r); }
 });
 
 test("hunch doctor's stale hint names the init options that keep the block's flags", { timeout: 120_000 }, () => {
@@ -266,7 +267,7 @@ test("hunch doctor's stale hint names the init options that keep the block's fla
     const out = `${run.stdout}${run.stderr}`;
     assert.match(out, /⚠ stale: pre-commit/, out);
     assert.match(out, /--enforce-strict/, out);
-  } finally { rmSync(r, { recursive: true, force: true }); }
+  } finally { cleanupDir(r); }
 });
 
 test("a runtime not named node is ours only as an absolute path running Hunch's CLI entry", () => {
@@ -285,7 +286,7 @@ test("a runtime not named node is ours only as an absolute path running Hunch's 
     assert.equal(gone.ok ? null : gone.reason, `${join(r, "gone", "nodejs")} does not exist`);
     const bare = hookInvocationHealth(`nodejs ${q(CLI)}`, r);
     assert.equal(bare.ok ? null : bare.reason, "not a command Hunch writes", "a PATH-resolved unknown runtime is never what Hunch writes");
-  } finally { rmSync(r, { recursive: true, force: true }); }
+  } finally { cleanupDir(r); }
 });
 
 test("hookInvocationLines: identical invocations share a line, and only a differing one is flagged", () => {
@@ -326,5 +327,5 @@ test("hunch doctor reports a stale hook instead of calling it installed", { time
     assert.match(out, /hooks:.*⚠ stale: post-commit/s, out);
     assert.match(out, /C:\\nope\\node\.exe does not exist/, out);
     assert.doesNotMatch(out, /hooks:\s+post-commit, post-merge installed/, out);
-  } finally { rmSync(r, { recursive: true, force: true }); }
+  } finally { cleanupDir(r); }
 });

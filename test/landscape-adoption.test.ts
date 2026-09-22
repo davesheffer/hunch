@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -358,7 +359,7 @@ test("HLG-2 reuse verifies full reviewed bytes instead of trusting copied metada
 
 test("HLG-2 CLI review stays read-only and adopt persists only the hash-bound reviewed fragment", (t) => {
   const root = mkdtempSync(join(tmpdir(), "hunch-landscape-adopt-cli-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  t.after(() => cleanupDir(root));
   const git = (...args: string[]) => execFileSync("git", ["-C", root, ...args], { encoding: "utf8" }).trim();
   git("init", "-q");
   git("config", "user.name", "Hunch Test");

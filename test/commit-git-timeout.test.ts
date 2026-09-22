@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 /**
  * A memory flush must never freeze the caller: each git call inside commitAndPushHunch is bounded
  * (HUNCH_COMMIT_GIT_TIMEOUT_MS, default 60 s) and runs with automatic gc off. A hung git returns
@@ -38,7 +39,7 @@ test("a git that hangs is stopped at the bound and the flush returns null quickl
   } finally {
     process.env.PATH = prevPath;
     if (prevTimeout === undefined) delete process.env.HUNCH_COMMIT_GIT_TIMEOUT_MS; else process.env.HUNCH_COMMIT_GIT_TIMEOUT_MS = prevTimeout;
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });
 
@@ -53,5 +54,5 @@ test("a healthy flush still commits, with automatic gc disabled on the call", ()
     assert.equal(commitAndPushHunch(join(root, ".hunch"), "hunch: capture dec_1", { push: false }), "committed");
     const log = execFileSync("git", ["-C", root, "log", "--oneline"], { encoding: "utf8" });
     assert.match(log, /capture dec_1/);
-  } finally { rmSync(root, { recursive: true, force: true }); }
+  } finally { cleanupDir(root); }
 });

@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 /**
  * fnd_c402046ac7 end to end: two branches each capture one decision and regenerate the
  * SAME "2 decisions" counts line; git merges identical lines with no conflict, the
@@ -139,6 +140,6 @@ test("merge lag: identical count lines merge silently, the doc lags by one, and 
     git("merge", "-q", "--no-edit", "code-only");
     assert.equal(git("status", "--porcelain"), "", "no .hunch/ change in the merge → the hook does nothing");
   } finally {
-    rmSync(base, { recursive: true, force: true });
+    cleanupDir(base);
   }
 });

@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, truncateSync, unlinkSync, writeFileSync } from "node:fs";
@@ -94,7 +95,7 @@ function fixture(): { root: string; store: HunchStore; policyId: string; cleanup
     policyId: policy.id,
     cleanup: () => {
       store.close();
-      rmSync(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
+      cleanupDir(root);
     },
   };
 }

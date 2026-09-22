@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -96,7 +97,7 @@ test("a real v1 store loads (and validates) after the v2 bump — no record loss
     assert.equal(loaded.length, 1, "legacy record survives the migration");
     assert.equal(loaded[0]!.valid_from, "2026-01-01T00:00:00Z");
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });
 

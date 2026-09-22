@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import {
@@ -259,7 +260,7 @@ test("strict CLI checks fail closed when committed team memory cannot be cloned"
     assert.equal(git(code.root, "rev-parse", "HEAD"), codeHeadBefore);
     assert.equal(bareHead(code.remote), codeRemoteBefore, "a failed memory read never advances code history");
   } finally {
-    rmSync(base, { recursive: true, force: true });
+    cleanupDir(base);
   }
 });
 
@@ -296,7 +297,7 @@ test("the first CLI write cannot fall back to public .hunch when committed team 
     assert.equal(git(code.root, "rev-parse", "HEAD"), codeHeadBefore, "no public memory commit is created");
     assert.equal(bareHead(code.remote), codeRemoteBefore, "the code remote remains byte-for-byte at its original commit");
   } finally {
-    rmSync(base, { recursive: true, force: true });
+    cleanupDir(base);
   }
 });
 
@@ -351,7 +352,7 @@ test("an existing shared-overlay CLI check refreshes a teammate's new blocking c
     assert.equal(bareHead(developer.remote), codeRemoteBefore, "memory refresh never advances the code remote");
     assert.equal(git(developer.root, "diff", "--cached", "--name-only"), "", "a read-only check stages no code or memory");
   } finally {
-    rmSync(base, { recursive: true, force: true });
+    cleanupDir(base);
   }
 });
 
@@ -390,7 +391,7 @@ test("explicit shared setup rejects an unsafe cloned overlay before integration 
     assert.equal(git(code.root, "rev-parse", "HEAD"), codeHeadBefore);
     assert.equal(bareHead(code.remote), codeRemoteBefore);
   } finally {
-    rmSync(base, { recursive: true, force: true });
+    cleanupDir(base);
   }
 });
 
@@ -427,7 +428,7 @@ test("explicit shared attach rejects an unsafe fetched tree before merge or inte
     assert.equal(git(code.root, "rev-parse", "HEAD"), codeHeadBefore);
     assert.equal(bareHead(code.remote), codeRemoteBefore);
   } finally {
-    rmSync(base, { recursive: true, force: true });
+    cleanupDir(base);
   }
 });
 
@@ -459,7 +460,7 @@ test("existing shared attach merges safely without executing repository post-mer
     assert.equal(git(code.root, "rev-parse", "HEAD"), codeHeadBefore);
     assert.equal(bareHead(code.remote), codeRemoteBefore, "setup never pushes or commits the code repository");
   } finally {
-    rmSync(base, { recursive: true, force: true });
+    cleanupDir(base);
   }
 });
 
@@ -496,7 +497,7 @@ test("strict CLI refuses an existing shared overlay whose remote differs from co
     assert.equal(bareHead(fixture.memoryB), memoryBBefore);
     assert.equal(git(fixture.overlay, "rev-parse", "HEAD"), overlayHeadBefore);
   } finally {
-    rmSync(base, { recursive: true, force: true });
+    cleanupDir(base);
   }
 });
 
@@ -536,7 +537,7 @@ test("MCP refuses an existing shared overlay whose remote differs from committed
     assert.equal(bareHead(fixture.memoryB), memoryBBefore);
     assert.equal(git(fixture.overlay, "rev-parse", "HEAD"), overlayHeadBefore);
   } finally {
-    rmSync(base, { recursive: true, force: true });
+    cleanupDir(base);
   }
 });
 
@@ -565,7 +566,7 @@ test("migrate fails closed when committed team memory is unavailable", { timeout
     assert.equal(git(code.root, "rev-parse", "HEAD"), codeHeadBefore);
     assert.equal(bareHead(code.remote), codeRemoteBefore);
   } finally {
-    rmSync(base, { recursive: true, force: true });
+    cleanupDir(base);
   }
 });
 
@@ -602,6 +603,6 @@ test("worktree creation fails closed when committed team memory is unavailable",
     assert.equal(git(code.root, "rev-parse", "HEAD"), codeHeadBefore);
     assert.equal(bareHead(code.remote), codeRemoteBefore);
   } finally {
-    rmSync(base, { recursive: true, force: true });
+    cleanupDir(base);
   }
 });

@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
@@ -374,5 +375,5 @@ test("ids derive from the file path, so re-import updates instead of duplicating
   for (const d of second.decisions) store.putCapture("decisions", d);
   assert.equal(store.json.loadAll("decisions").length, 1, "re-import is an update, not a duplicate");
   store.close();
-  rmSync(root, { recursive: true, force: true });
+  cleanupDir(root);
 });

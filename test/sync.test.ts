@@ -64,7 +64,7 @@ function setupEmptyRemote(): {
     hunchDir: join(overlay, ".hunch"),
     protectedRoot,
     remote,
-    cleanup: () => rmSync(base, { recursive: true, force: true }),
+    cleanup: () => cleanupDir(base),
   };
 }
 

@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, writeFileSync, readFileSync, rmSync } from "node:fs";
@@ -38,7 +39,7 @@ test("doctor heals a c:/C: drive-letter split so BOTH casings resolve hunch", ()
     assert.deepEqual(out["c:/Users/me/repo"].history, ["h1"], "preserved other keys (lower)");
     assert.deepEqual(out["C:/Users/me/repo"].allowedTools, ["Bash"], "preserved other keys (upper)");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    cleanupDir(dir);
   }
 });
 
@@ -50,7 +51,7 @@ test("heal is idempotent — a second run makes no change", () => {
     assert.equal(res2.changed, false, "no further change on re-run");
     assert.equal(res2.backup, undefined, "no backup when nothing is written");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    cleanupDir(dir);
   }
 });
 
@@ -67,7 +68,7 @@ test("heal unions ALL servers across casings, not just hunch", () => {
       assert.ok(out[k].mcpServers.other, `${k} has other`);
     }
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    cleanupDir(dir);
   }
 });
 
@@ -80,7 +81,7 @@ test("heal is a no-op on non-Windows", () => {
     assert.equal(res.changed, false);
     assert.equal(readFileSync(file, "utf8"), before, "file untouched on non-Windows");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    cleanupDir(dir);
   }
 });
 
@@ -92,7 +93,7 @@ test("heal refuses to clobber an unparseable ~/.claude.json", () => {
     assert.throws(() => healClaudeConfigCaseSplit({ file, platform: "win32" }), /refus/i);
     assert.equal(readFileSync(file, "utf8"), "{ this is not json ", "left the unparseable file untouched");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    cleanupDir(dir);
   }
 });
 
@@ -105,6 +106,6 @@ test("heal no-ops cleanly when there is no split", () => {
     assert.equal(res.changed, false);
     assert.equal(res.applicable, true);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    cleanupDir(dir);
   }
 });

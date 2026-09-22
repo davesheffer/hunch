@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync, readFileSync, readdirSync } from "node:fs";
@@ -17,7 +18,7 @@ import {
 
 function tmp(): { root: string; cleanup: () => void } {
   const root = mkdtempSync(join(tmpdir(), "hunch-mig-"));
-  return { root, cleanup: () => rmSync(root, { recursive: true, force: true }) };
+  return { root, cleanup: () => cleanupDir(root) };
 }
 
 test("migrateRaw applies only migrations in (from, to] in ascending order", () => {

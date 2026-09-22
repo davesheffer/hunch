@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-const ci = readFileSync(".github/workflows/ci.yml", "utf8");
-const release = readFileSync(".github/workflows/release.yml", "utf8");
+// Git may check these text files out with CRLF on Windows. Assertions describe
+// YAML content and must not mistake a trailing carriage return for a job name.
+const ci = readFileSync(".github/workflows/ci.yml", "utf8").replace(/\r\n/g, "\n");
+const release = readFileSync(".github/workflows/release.yml", "utf8").replace(/\r\n/g, "\n");
 
 function runScripts(workflow: string): string[] {
   const lines = workflow.split("\n");

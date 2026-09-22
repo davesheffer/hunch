@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
@@ -64,8 +65,8 @@ test("policy reads refuse a symlinked kind directory without reading its target"
     assert.throws(() => repo.listPolicies({ publicOnly: true }), /unsafe store artifact path|symlinks/i);
     assert.throws(() => repo.putPolicy(policy(), { public: true }), /unsafe store artifact path|symlinks/i);
   } finally {
-    rmSync(root, { recursive: true, force: true });
-    rmSync(outside, { recursive: true, force: true });
+    cleanupDir(root);
+    cleanupDir(outside);
   }
 });
 
@@ -78,8 +79,8 @@ test("policy writes refuse a symlinked .hunch root without mutating its target",
     assert.throws(() => repository(root).putPolicy(policy(), { public: true }), /unsafe store artifact path|symlinks/i);
     assert.equal(existsSync(join(outside, ".hunch", "policies", "pol_aaaaaaaaaa.json")), false);
   } finally {
-    rmSync(root, { recursive: true, force: true });
-    rmSync(outside, { recursive: true, force: true });
+    cleanupDir(root);
+    cleanupDir(outside);
   }
 });
 
@@ -95,8 +96,8 @@ test("policy reads refuse a symlinked record and writes refuse to replace it", {
     assert.throws(() => repo.putPolicy(policy(), { public: true }), /unsafe store artifact path|symlinks/i);
     assert.equal(readFileSync(join(outside, "foreign.json"), "utf8"), JSON.stringify(policy()));
   } finally {
-    rmSync(root, { recursive: true, force: true });
-    rmSync(outside, { recursive: true, force: true });
+    cleanupDir(root);
+    cleanupDir(outside);
   }
 });
 
@@ -114,8 +115,8 @@ test("policy reads and writes refuse a hard-linked record", () => {
     assert.throws(() => repo.putPolicy(policy(), { public: true }), /unsafe store artifact path|hard links/i);
     assert.equal(readFileSync(target, "utf8"), original);
   } finally {
-    rmSync(root, { recursive: true, force: true });
-    rmSync(outside, { recursive: true, force: true });
+    cleanupDir(root);
+    cleanupDir(outside);
   }
 });
 
@@ -129,7 +130,7 @@ test("missing policy artifact collections remain empty and malformed records rem
     writeFileSync(join(root, ".hunch", "policies", "broken.json"), "not-json");
     assert.throws(() => repo.listPolicies({ publicOnly: true }), /invalid policies\/broken\.json/i);
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });
 
@@ -143,6 +144,6 @@ test("policy writes reject artifacts larger than the bounded read size before pu
     );
     assert.equal(existsSync(join(root, ".hunch", "policies", "pol_aaaaaaaaaa.json")), false);
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });

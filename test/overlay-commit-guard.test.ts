@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 /**
  * Safety guard for the overlay auto-commit (bug_overlay_clobber): a Hunch memory sync commits only
  * contained JSON. Snapshot deletions are allowed only after the private/shared overlay is proven to
@@ -27,7 +28,7 @@ function repo(prefix: string): { root: string; git: (...a: string[]) => string; 
   git("config", "user.email", "t@t.co");
   git("config", "user.name", "T");
   git("config", "commit.gpgsign", "false");
-  return { root, git, cleanup: () => rmSync(root, { recursive: true, force: true }) };
+  return { root, git, cleanup: () => cleanupDir(root) };
 }
 
 function sameRemoteClones(prefix: string): {
@@ -66,7 +67,7 @@ function sameRemoteClones(prefix: string): {
     overlayRoot,
     remote,
     git,
-    cleanup: () => rmSync(base, { recursive: true, force: true }),
+    cleanup: () => cleanupDir(base),
   };
 }
 
@@ -323,7 +324,7 @@ test("commitAndPushHunch REFUSES a linked worktree .hunch from the protected pub
     assert.equal(execFileSync("git", ["-C", linked, "diff", "--cached", "--name-only"], { encoding: "utf8" }).trim(), "");
   } finally {
     try { git("worktree", "remove", "--force", linked); } catch { /* cleanup best-effort */ }
-    rmSync(linked, { recursive: true, force: true });
+    cleanupDir(linked);
     cleanup();
   }
 });
@@ -403,7 +404,7 @@ test("existing plain .hunch-private plus an empty memory remote never attaches o
       encoding: "utf8",
     }).trim()), realpathSync(memoryRemote), "the memory remote is attached only inside the standalone overlay");
   } finally {
-    rmSync(remotesRoot, { recursive: true, force: true });
+    cleanupDir(remotesRoot);
     cleanup();
   }
 });
@@ -535,7 +536,7 @@ test("commitAndPushHunch disables merge hooks so remote identity cannot change b
     ], { encoding: "utf8" });
     assert.equal(published.status, 0, "private memory reached only the private memory remote");
   } finally {
-    rmSync(base, { recursive: true, force: true });
+    cleanupDir(base);
   }
 });
 
@@ -637,7 +638,7 @@ test("hunch private --repo resolves an existing overlay's relative remote before
     ], { encoding: "utf8" });
     assert.equal(leaked.status, 1, "private memory never reached the public remote");
   } finally {
-    rmSync(base, { recursive: true, force: true });
+    cleanupDir(base);
   }
 });
 
@@ -716,8 +717,8 @@ test("hunch private accepts a final-component symlink to a distinct overlay and 
     }
   } finally {
     store?.close();
-    rmSync(lexicalHolder, { recursive: true, force: true });
-    rmSync(physicalRoot, { recursive: true, force: true });
+    cleanupDir(lexicalHolder);
+    cleanupDir(physicalRoot);
     project.cleanup();
   }
 });
@@ -798,7 +799,7 @@ test("divergent repositories with shared code ancestry are never accepted as a m
     assert.equal(git(overlayRoot, "diff", "--cached", "--name-only"), "");
     assert.equal(remoteRefs(), remoteBefore, "the memory remote receives neither code ancestry nor the new record");
   } finally {
-    rmSync(base, { recursive: true, force: true });
+    cleanupDir(base);
   }
 });
 

@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -72,5 +73,5 @@ test("changedPaths reads the base...HEAD diff of a real repository", () => {
     try { execFileSync("node", [join(process.cwd(), "tooling", "merge-class.mjs"), "--base", "main", "--cwd", repo, "--require-bounded"], { encoding: "utf8", stdio: "pipe" }); }
     catch (error) { code = (error as { status: number }).status; }
     assert.equal(code, 1, "--require-bounded fails an outside change");
-  } finally { rmSync(repo, { recursive: true, force: true }); }
+  } finally { cleanupDir(repo); }
 });

@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -52,7 +53,7 @@ function diff3(base: string, ours: string, theirs: string): string {
       return typeof err.stdout === "string" ? err.stdout : (err.stdout?.toString() ?? "");
     }
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    cleanupDir(dir);
   }
 }
 
@@ -149,7 +150,7 @@ test("installMergeDriver: routes the five generated grounding docs through merge
     assert.match(cfg("merge.hunch-grounding.driver"), /merge-driver-grounding/);
     assert.match(cfg("merge.hunch.driver"), /merge-driver/); // still registered, unaffected
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });
 
@@ -195,7 +196,7 @@ test("mergeGroundingFile: a git-level error (binary content) is never mistaken f
     assert.equal(res.conflict, true);
     assert.equal(res.write, null, "must never guess content when git itself errored — nothing to write");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    cleanupDir(dir);
   }
 });
 
@@ -221,7 +222,7 @@ test("end-to-end: a real `git merge` with the driver installed auto-resolves a c
     const merged = readFileSync(doc, "utf8");
     assert.doesNotMatch(merged, /<{7}|={7}|>{7}/, "no conflict markers may survive an auto-resolved counts-only conflict");
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });
 
@@ -247,7 +248,7 @@ test("end-to-end: a real `git merge` with the driver installed leaves a genuine 
     const onDisk = readFileSync(doc, "utf8");
     assert.match(onDisk, /<{7}|={7}|>{7}/, "conflict markers must be visible on disk, never silently dropped");
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });
 
@@ -264,5 +265,5 @@ test("installed grounding attributes permit private capture without permitting a
       "AGENTS.md merge=hunch-grounding filter=evil", "*.json text eol=crlf",
       "AGENTS.md working-tree-encoding=UTF-16", "*.md merge=hunch-grounding",
     ]) assert.equal(hunchAttributesAreSafe(attrs + unsafe + "\n"), false, unsafe);
-  } finally { rmSync(root, { recursive: true, force: true }); }
+  } finally { cleanupDir(root); }
 });

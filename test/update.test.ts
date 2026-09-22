@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from "node:fs";
@@ -15,7 +16,7 @@ function fixture(manifest?: unknown) {
   const calls: string[][] = [];
   const logs: string[] = [];
   const run = (args: string[]) => { calls.push(args); return JSON.stringify("9.8.7"); };
-  return { root, calls, logs, run, log: (line: string) => { logs.push(line); }, cleanup: () => rmSync(root, { recursive: true, force: true }) };
+  return { root, calls, logs, run, log: (line: string) => { logs.push(line); }, cleanup: () => cleanupDir(root) };
 }
 
 for (const [section, flag] of [["dependencies", "--save-prod"], ["devDependencies", "--save-dev"], ["optionalDependencies", "--save-optional"]]) {

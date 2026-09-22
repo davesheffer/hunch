@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import {
@@ -133,7 +134,7 @@ function codeFixture(label: string, source = VIOLATING_SOURCE, dependencies = ["
       NO_COLOR: "1",
       CI: "1",
     },
-    cleanup: () => rmSync(sandbox, { recursive: true, force: true }),
+    cleanup: () => cleanupDir(sandbox),
   };
 }
 

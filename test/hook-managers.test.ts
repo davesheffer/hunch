@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 /**
  * Issue #311: Hunch's appended hook blocks must never be written where they are
  * dead (pre-commit framework `exec`, husky v9 `.husky/_/h` → `exit $c`, any
@@ -143,7 +144,7 @@ test("pre-commit framework: install writes nothing, returns a repo: local snippe
     assert.equal(hookStatus(r).preCommit, true);
     assert.equal(installPreCommitHook(r, LOCAL_INV).action, "unchanged");
     assert.equal(readFileSync(hookPath, "utf8"), generated);
-  } finally { rmSync(r, { recursive: true, force: true }); }
+  } finally { cleanupDir(r); }
 });
 
 test("pre-commit framework: post-checkout snippet reads the checkout type from pre-commit's env, not $3", () => {
@@ -154,7 +155,7 @@ test("pre-commit framework: post-checkout snippet reads the checkout type from p
     assert.equal(res.action, "managed-elsewhere");
     assert.match(res.snippet ?? "", /PRE_COMMIT_CHECKOUT_TYPE/);
     assert.doesNotMatch(res.snippet ?? "", /\\"\$3\\"/);
-  } finally { rmSync(r, { recursive: true, force: true }); }
+  } finally { cleanupDir(r); }
 });
 
 test("pre-commit framework: a Hunch block previously appended after its exec is reported installed-but-unreachable (hookStatus + doctor)", () => {
@@ -181,7 +182,7 @@ test("pre-commit framework: a Hunch block previously appended after its exec is 
     const out = `${run.stdout}${run.stderr}`;
     assert.match(out, /hooks:.*installed but unreachable: post-commit/s);
     assert.doesNotMatch(out, /hooks:\s+post-commit, post-merge installed/);
-  } finally { rmSync(r, { recursive: true, force: true }); }
+  } finally { cleanupDir(r); }
 });
 
 test("pre-commit framework migration mode: a reachable block in <hook>.legacy counts as installed", () => {
@@ -191,7 +192,7 @@ test("pre-commit framework migration mode: a reachable block in <hook>.legacy co
     writeFileSync(join(r, ".git", "hooks", "post-commit.legacy"), "#!/bin/sh\n# >>> hunch post-commit >>>\nhunch sync --from-hook --quiet\n# <<< hunch post-commit <<<\n");
     assert.equal(hookReport(r).postCommit.state, "installed");
     assert.equal(installPostCommitHook(r, "hunch").action, "unchanged");
-  } finally { rmSync(r, { recursive: true, force: true }); }
+  } finally { cleanupDir(r); }
 });
 
 test("husky v9: nothing is appended to .husky/_ (dead after exit $c, regenerated on install); snippet targets .husky/<hook>", () => {
@@ -231,7 +232,7 @@ test("husky v9: nothing is appended to .husky/_ (dead after exit $c, regenerated
     assert.equal(hookStatus(r).postMerge, true);
     assert.equal(installPostCommitHook(r, LOCAL_INV).action, "unchanged");
     assert.equal(installPostMergeHook(r, LOCAL_INV).action, "unchanged");
-  } finally { rmSync(r, { recursive: true, force: true }); }
+  } finally { cleanupDir(r); }
 });
 
 test("husky v9: a reachable block in husky's own script whose launcher is gone is stale, and the install says to replace it", () => {
@@ -250,7 +251,7 @@ test("husky v9: a reachable block in husky's own script whose launcher is gone i
     assert.equal(res.action, "managed-elsewhere");
     assert.match(res.reason ?? "", /stale/, "a stale block must not be reported as 'a hook manager owns this hook'");
     assert.ok(res.snippet?.includes(PORTABLE_HOOK_INVOCATION));
-  } finally { rmSync(r, { recursive: true, force: true }); }
+  } finally { cleanupDir(r); }
 });
 
 test("husky v9: a block in husky's own script run through a package runner is installed, and re-installing leaves it alone", () => {
@@ -261,7 +262,7 @@ test("husky v9: a block in husky's own script run through a package runner is in
     assert.equal(hookReport(r).postCommit.state, "installed");
     assert.equal(hookStatus(r).postCommit, true);
     assert.equal(installPostCommitHook(r, "hunch").action, "unchanged");
-  } finally { rmSync(r, { recursive: true, force: true }); }
+  } finally { cleanupDir(r); }
 });
 
 test("husky v9: a block an older Hunch appended into .husky/_/<hook> is reported unreachable", () => {
@@ -273,7 +274,7 @@ test("husky v9: a block an older Hunch appended into .husky/_/<hook> is reported
     assert.equal(report.postCommit.state, "unreachable");
     assert.equal(report.postCommit.manager, "husky");
     assert.equal(hookStatus(r).postCommit, false);
-  } finally { rmSync(r, { recursive: true, force: true }); }
+  } finally { cleanupDir(r); }
 });
 
 test("husky v9: hunch init reports the hooks as NOT installed with the snippet, and writes nothing under .husky", { timeout: 120_000 }, () => {
@@ -297,7 +298,7 @@ test("husky v9: hunch init reports the hooks as NOT installed with the snippet, 
     assert.ok(out.includes(PORTABLE_HOOK_INVOCATION));
     const after = Object.fromEntries(allFiles(join(r, ".husky")).map((p) => [p, readFileSync(p, "utf8")]));
     assert.deepEqual(after, before);
-  } finally { rmSync(r, { recursive: true, force: true }); }
+  } finally { cleanupDir(r); }
 });
 
 test("husky ≤8 (core.hooksPath=.husky, tracked): nothing with an absolute path is written into the committed hooks dir", () => {
@@ -331,7 +332,7 @@ test("husky ≤8 (core.hooksPath=.husky, tracked): nothing with an absolute path
     }
     assert.equal(existsSync(join(r, ".husky", "post-commit")), false);
     assert.equal(git(r, "status", "--porcelain"), "", "the work tree stays clean");
-  } finally { rmSync(r, { recursive: true, force: true }); }
+  } finally { cleanupDir(r); }
 });
 
 test("an untracked but committable core.hooksPath inside the work tree is treated as tracked", () => {
@@ -342,7 +343,7 @@ test("an untracked but committable core.hooksPath inside the work tree is treate
     assert.equal(res.action, "managed-elsewhere");
     assert.equal(res.manager, "tracked-hooks-path");
     assert.equal(existsSync(join(r, ".githooks", "post-commit")), false);
-  } finally { rmSync(r, { recursive: true, force: true }); }
+  } finally { cleanupDir(r); }
 });
 
 test("plain .git/hooks whose existing hook ends in exit: nothing appended, unreachable result with a placement snippet", () => {
@@ -358,7 +359,7 @@ test("plain .git/hooks whose existing hook ends in exit: nothing appended, unrea
     assert.match(res.snippet ?? "", /insert ABOVE the final exec\/exit/);
     assert.match(res.snippet ?? "", /hunch sync --from-hook --quiet/, "local .git/hooks keeps the local invocation");
     assert.equal(hookReport(r).postCommit.state, "missing");
-  } finally { rmSync(r, { recursive: true, force: true }); }
+  } finally { cleanupDir(r); }
 });
 
 test("plain .git/hooks: an existing Hunch block after exec is unreachable; one before the exit is installed and still updates in place", () => {
@@ -377,7 +378,7 @@ test("plain .git/hooks: an existing Hunch block after exec is unreachable; one b
     const text = readFileSync(hookPath, "utf8");
     assert.match(text, /hunch sync --from-hook --quiet/);
     assert.match(text, /# <<< hunch post-commit <<<\nexit 0\n$/);
-  } finally { rmSync(r, { recursive: true, force: true }); }
+  } finally { cleanupDir(r); }
 });
 
 test("plain repo without a hook manager: behavior unchanged (created, appended, unchanged, installed)", () => {
@@ -392,7 +393,7 @@ test("plain repo without a hook manager: behavior unchanged (created, appended, 
     assert.deepEqual(hookStatus(r), { postCommit: true, preCommit: false, postMerge: true, postCheckout: false });
     assert.equal(hookReport(r).postMerge.state, "installed");
     assert.deepEqual(formatHookInstall(r, "post-merge hook", pm, " (x)"), ["  ✓ post-merge hook appended (x)"]);
-  } finally { rmSync(r, { recursive: true, force: true }); }
+  } finally { cleanupDir(r); }
 });
 
 test("linked worktree of a temp repo: the shared hooks dir in the common git dir is still a plain install", () => {
@@ -408,7 +409,7 @@ test("linked worktree of a temp repo: the shared hooks dir in the common git dir
     assert.ok(existsSync(join(r, ".git", "hooks", "post-commit")));
     assert.equal(hookStatus(wt).postCommit, true);
   } finally {
-    rmSync(wt, { recursive: true, force: true });
-    rmSync(r, { recursive: true, force: true });
+    cleanupDir(wt);
+    cleanupDir(r);
   }
 });

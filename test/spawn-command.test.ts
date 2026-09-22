@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { join, win32 } from "node:path";
@@ -68,7 +69,7 @@ test("Windows: batch-launcher arguments keep percent signs, quotes and backslash
 
 test("Windows: a real .cmd shim that forwards %* delivers every argument unchanged", { skip: process.platform !== "win32" }, t => {
   const dir = mkdtempSync(join(tmpdir(), "hunch-cmd-quote-"));
-  t.after(() => rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
+  t.after(() => cleanupDir(dir));
   writeFileSync(join(dir, "argv.js"), "process.stdout.write(JSON.stringify(process.argv.slice(2)));\n");
   writeFileSync(join(dir, "hunch-argv.cmd"), `@echo off\r\n"${process.execPath}" "%~dp0argv.js" %*\r\n`);
   const env = { ...process.env, PATH: `${dir};${process.env.PATH ?? ""}`, OS: "Windows_NT", HUNCH_QUOTE_PROBE: "expanded" };
@@ -84,7 +85,7 @@ test("Windows: a real .cmd shim that forwards %* delivers every argument unchang
 
 test("a synchronous launch refusal is a recorded failure, not a rejected runner", { skip: process.platform !== "win32" }, async t => {
   const root = mkdtempSync(join(tmpdir(), "hunch-spawn-einval-"));
-  t.after(() => rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
+  t.after(() => cleanupDir(root));
   execFileSync("git", ["init", "-q", root]);
   writeFileSync(join(root, ".gitignore"), ".hunch-cache/\n");
   const task = startReportTask(root, "Batch file argument");
@@ -101,7 +102,7 @@ test("a synchronous launch refusal is a recorded failure, not a rejected runner"
 
 test("a command that cannot start is a visible failure, not a silent null", async t => {
   const root = mkdtempSync(join(tmpdir(), "hunch-spawn-"));
-  t.after(() => rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
+  t.after(() => cleanupDir(root));
   execFileSync("git", ["init", "-q", root]);
   writeFileSync(join(root, ".gitignore"), ".hunch-cache/\n");
   const task = startReportTask(root, "Spawn failure");
@@ -115,7 +116,7 @@ test("a command that cannot start is a visible failure, not a silent null", asyn
 
 test("npx actually runs through the resolver on this machine", { skip: process.platform !== "win32" }, async t => {
   const root = mkdtempSync(join(tmpdir(), "hunch-spawn-npx-"));
-  t.after(() => rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
+  t.after(() => cleanupDir(root));
   execFileSync("git", ["init", "-q", root]);
   writeFileSync(join(root, ".gitignore"), ".hunch-cache/\n");
   const task = startReportTask(root, "npx on windows");

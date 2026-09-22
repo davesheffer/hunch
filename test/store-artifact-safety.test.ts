@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { basename, join } from "node:path";
@@ -22,7 +23,7 @@ test("change ledger refuses a linked changes directory for reads and writes", { 
     assert.throws(() => readLedger(home, scope), /unsafe|symlink/i);
     assert.throws(() => writeLedger(home, emptyLedger(scope)), /unsafe|symlink/i);
     assert.equal(readFileSync(target, "utf8"), original);
-  } finally { rmSync(root, { recursive: true, force: true }); }
+  } finally { cleanupDir(root); }
 });
 
 for (const kind of ["symlink", "hardlink"] as const) {
@@ -38,7 +39,7 @@ for (const kind of ["symlink", "hardlink"] as const) {
       assert.throws(() => readLedger(home, scope), /unsafe|link/i);
       assert.throws(() => writeLedger(home, emptyLedger(scope)), /unsafe|link/i);
       assert.equal(readFileSync(outside, "utf8"), original);
-    } finally { rmSync(root, { recursive: true, force: true }); }
+    } finally { cleanupDir(root); }
   });
 
   test(`catch log skips a ${kind} without reading or appending outside the store`, { skip: kind === "symlink" ? SYMLINK_SKIP : false }, () => {
@@ -55,6 +56,6 @@ for (const kind of ["symlink", "hardlink"] as const) {
       assert.deepEqual(readEvents(paths), []);
       assert.doesNotThrow(() => appendEvent(paths, event));
       assert.equal(readFileSync(outside, "utf8"), original);
-    } finally { rmSync(root, { recursive: true, force: true }); }
+    } finally { cleanupDir(root); }
   });
 }

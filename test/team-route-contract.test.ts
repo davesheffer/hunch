@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import assert from "node:assert/strict";
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import {
@@ -244,7 +245,7 @@ test("explicit shared setup binds its graph epoch before the next Hunch command"
     ), true,
       "a coherent repoint cannot relabel an already-bound clone");
   } finally {
-    rmSync(base, { recursive: true, force: true });
+    cleanupDir(base);
   }
 });
 
@@ -260,7 +261,7 @@ test("doctor reports the unified overlay schema instead of the public routing sh
     assert.match(doctor, new RegExp(`schema:\\s+v${SCHEMA_VERSION} \\(hunch v${SCHEMA_VERSION}\\)`));
     assert.doesNotMatch(doctor, /run `hunch migrate`/);
   } finally {
-    rmSync(base, { recursive: true, force: true });
+    cleanupDir(base);
   }
 });
 
@@ -330,7 +331,7 @@ test("a CLI command refuses all handlers when its route changes during the start
   } finally {
     if (child && child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
     if (stopMarker) await stopMarker();
-    rmSync(base, { recursive: true, force: true });
+    cleanupDir(base);
   }
 });
 
@@ -493,7 +494,7 @@ for (const setupCase of explicitSetupPoisonCases) {
           "the post-refusal control proves the marker would detect ambient transport");
       }
     } finally {
-      rmSync(base, { recursive: true, force: true });
+      cleanupDir(base);
     }
   });
 }
@@ -554,7 +555,7 @@ test("explicit shared setup rejects an applicable global url.insteadOf before co
     assert.equal(existsSync(connection.marker), true, "raw Git proves the global rewrite and marker are applicable");
   } finally {
     if (stopMarker) await stopMarker();
-    rmSync(base, { recursive: true, force: true });
+    cleanupDir(base);
   }
 });
 
@@ -584,7 +585,7 @@ test("fresh team auto-discovery bounds a non-responsive transport and removes it
     assert.equal(existsSync(join(code.root, ".hunch/local.json")), false);
   } finally {
     if (stopMarker) await stopMarker();
-    rmSync(base, { recursive: true, force: true });
+    cleanupDir(base);
   }
 });
 
@@ -614,7 +615,7 @@ test("explicit shared preflight conservatively treats generic HTTPS and SSH URLs
     assert.equal(git(code.root, "rev-parse", "HEAD"), codeHeadBefore);
     assert.equal(bareRefs(code.codeRemote), codeRemoteBefore);
   } finally {
-    rmSync(base, { recursive: true, force: true });
+    cleanupDir(base);
   }
 });
 
@@ -640,7 +641,7 @@ test("explicit shared preflight rejects direct local code repositories and their
       assert.equal(bareRefs(code.codeRemote), remoteBefore);
     }
   } finally {
-    rmSync(base, { recursive: true, force: true });
+    cleanupDir(base);
   }
 });
 
@@ -759,7 +760,7 @@ for (const routeCase of routeCases) {
       const markers = routeCase.mutate(fixture, base);
       assertStrictRouteRefusal(fixture, markers);
     } finally {
-      rmSync(base, { recursive: true, force: true });
+      cleanupDir(base);
     }
   });
 }
@@ -808,7 +809,7 @@ test("an empty-memory clone auto-joins after exactly one canonical branch is pub
     assert.equal(bareRefs(code.codeRemote), codeRemoteBefore);
     assert.equal(bareRefs(memoryRemote), memoryBeforeJoin, "auto-join is read-only against team memory");
   } finally {
-    rmSync(base, { recursive: true, force: true });
+    cleanupDir(base);
   }
 });
 
@@ -847,7 +848,7 @@ test("a legacy team file derives a sole master branch without silently assuming 
       "legacy master is not silently forked into a new main graph",
     );
   } finally {
-    rmSync(base, { recursive: true, force: true });
+    cleanupDir(base);
   }
 });
 
@@ -876,7 +877,7 @@ test("fresh auto-join refuses an explicit team route whose remote has multiple h
     assert.equal(git(code.root, "status", "--porcelain=v1", "--untracked-files=all"), statusBefore);
     assert.equal(bareRefs(memoryRemote), refsBefore);
   } finally {
-    rmSync(base, { recursive: true, force: true });
+    cleanupDir(base);
   }
 });
 
@@ -922,7 +923,7 @@ test("sameRemoteUrl preserves distinct local .git paths and generic SSH username
       "known provider aliases remain intentionally equivalent",
     );
   } finally {
-    rmSync(base, { recursive: true, force: true });
+    cleanupDir(base);
   }
 });
 
@@ -969,7 +970,7 @@ test("strict PreToolUse is silent when fresh advertised team memory is unavailab
     assert.equal(git(code.root, "rev-parse", "HEAD"), codeHeadBefore);
     assert.equal(bareRefs(code.codeRemote), codeRemoteBefore);
   } finally {
-    rmSync(base, { recursive: true, force: true });
+    cleanupDir(base);
   }
 });
 
@@ -1002,7 +1003,7 @@ test("strict PreToolUse is silent when the local overlay route mismatches commit
     assert.equal(bareRefs(replacementRemote), memoryBBefore);
     assert.equal(git(fixture.overlay, "rev-parse", "HEAD"), overlayHeadBefore);
   } finally {
-    rmSync(base, { recursive: true, force: true });
+    cleanupDir(base);
   }
 });
 
@@ -1028,6 +1029,6 @@ test("strict PreToolUse is silent when a configured team overlay is stale and it
     assert.equal(git(fixture.root, "rev-parse", "HEAD"), codeHeadBefore);
     assert.equal(bareRefs(fixture.codeRemote), codeRemoteBefore);
   } finally {
-    rmSync(base, { recursive: true, force: true });
+    cleanupDir(base);
   }
 });

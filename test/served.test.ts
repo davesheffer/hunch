@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 /**
  * Delivery receipts (dec_925f4bcaad): the machine-local served ledger.
  * Observed telemetry, own database under .hunch-cache/ — never the reindexed
@@ -13,7 +14,7 @@ import { recordServed, servedSummary } from "../src/core/served.js";
 
 test("served ledger: receipts accrue, aggregate per record, and split serve from refresh", (t) => {
   const root = mkdtempSync(join(tmpdir(), "hunch-served-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  t.after(() => cleanupDir(root));
 
   recordServed(root, [
     { event: "served", kind: "constraints", record_id: "con_a", target: "src/a.ts", session_id: "s1", rank: 1, delivery_reason: "blocking-reserved", provenance_status: "current", token_cost: 42, delivery_profile: "reviewer", ranking_policy: "hunch.delivery-profile/1" },
@@ -51,7 +52,7 @@ test("served ledger: empty input is a no-op and an unwritable root reads as empt
   const root = mkdtempSync(join(tmpdir(), "hunch-served-empty-"));
   recordServed(root, []);
   assert.equal(servedSummary(root).total, 0);
-  rmSync(root, { recursive: true, force: true });
+  cleanupDir(root);
 
   // A root that cannot exist: recording and reading must both swallow, not throw.
   const impossible = join(root, "gone", "\0bad");
@@ -61,7 +62,7 @@ test("served ledger: empty input is a no-op and an unwritable root reads as empt
 
 test("served ledger: an old receipt database gains metadata columns additively", (t) => {
   const root = mkdtempSync(join(tmpdir(), "hunch-served-legacy-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  t.after(() => cleanupDir(root));
   const cache = join(root, ".hunch-cache");
   mkdirSync(cache, { recursive: true });
   const require = createRequire(import.meta.url);

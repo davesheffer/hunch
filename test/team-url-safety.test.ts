@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -124,7 +125,7 @@ test("invalid team repository writes are side-effect-free", () => {
     );
     assert.equal(existsSync(join(absentRoot, ".hunch")), false);
   } finally {
-    rmSync(base, { recursive: true, force: true });
+    cleanupDir(base);
   }
 });
 
@@ -147,7 +148,7 @@ test("team repository config read and valid canonical write share the same gate"
       assert.equal(readTeamConfig(root), null, shared_repo);
     }
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });
 
@@ -167,6 +168,6 @@ test("team repository config read refuses links and oversized startup input", { 
     writeFileSync(file, `${" ".repeat(64 * 1024)}x`);
     assert.equal(readTeamConfig(root), null, "startup never ingests an unbounded committed pointer");
   } finally {
-    rmSync(base, { recursive: true, force: true });
+    cleanupDir(base);
   }
 });

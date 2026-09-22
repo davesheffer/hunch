@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -15,7 +16,7 @@ function repo(): { root: string; cleanup(): void } {
   git(root, "init", "-q", "-b", "main");
   git(root, "config", "user.email", "test@example.com");
   git(root, "config", "user.name", "Test Human");
-  return { root, cleanup: () => rmSync(root, { recursive: true, force: true }) };
+  return { root, cleanup: () => cleanupDir(root) };
 }
 
 test("mergeRangeChanges: one candidate per commit in the range, with its changed files", () => {
@@ -170,6 +171,6 @@ test("commitsExist: returns null (not an empty set) when the check itself fails 
     // of failing open.
     assert.equal(commitsExist(["deadbeef00deadbeef00deadbeef00deadbeef00"], notARepo), null);
   } finally {
-    rmSync(notARepo, { recursive: true, force: true });
+    cleanupDir(notARepo);
   }
 });

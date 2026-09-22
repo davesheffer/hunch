@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { tempStore } from './helpers.js';
@@ -71,7 +72,7 @@ test('HTTP conventions preserve user/team/org scope, detect union conflicts, enf
     const hidden = await client.write({ scope: scopes[0], facet: 'conventions', record: { ...record('A private preference.', 'private.rule'), visibility: { owner: 'reviewer', readers: [], writers: [] } }, idempotency_key: 'private-convention' });
     assert.deepEqual((await reader.records({ scope: scopes[0], ids: [hidden.record_id] })).missing, [hidden.record_id]);
     assert.ok(!JSON.stringify(await reader.read({ scope: scopes[0] })).includes('private.rule'));
-  } finally { await new Promise<void>(r => app.close(() => r())); app.closeStores(); rmSync(dir, { recursive: true, force: true }); }
+  } finally { await new Promise<void>(r => app.close(() => r())); app.closeStores(); cleanupDir(dir); }
 });
 
 test('convention delivery marks moved sources and expired review stale, and caps merged record bodies', async () => {

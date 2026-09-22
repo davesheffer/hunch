@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -51,7 +52,7 @@ test("hunch_record_finding MCP capture is advisory agent testimony", async (t) =
   t.after(async () => {
     await client.close().catch(() => {});
     await server.close().catch(() => {});
-    rmSync(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
+    cleanupDir(root);
   });
 
   const result = await record(client, {
@@ -102,7 +103,7 @@ test("updating a human-confirmed finding through MCP cannot mint new human testi
   t.after(async () => {
     await client.close().catch(() => {});
     await server.close().catch(() => {});
-    rmSync(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
+    cleanupDir(root);
   });
 
   const result = await record(client, {

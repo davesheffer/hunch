@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 /**
  * Memory supply chain — the authorship stamp. Only a HUMAN confirmation mints
  * human_confirmed: a consumed capture token (callable by any agent) plus the human's
@@ -41,7 +42,7 @@ async function setup(humanConfirms = false) {
     },
     cleanup: () => {
       void client.close().catch(() => {});
-      try { rmSync(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 }); } catch { /* temp dir, OS reaps */ }
+      try { cleanupDir(root); } catch { /* temp dir, OS reaps */ }
     },
   };
 }

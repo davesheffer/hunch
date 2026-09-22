@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
@@ -49,7 +50,7 @@ test('one-task launcher refuses primary/dirty worktrees, retains proposal identi
     await new Promise(r => setTimeout(r, 900));
     assert.equal(existsSync(marker), false, 'descendant must not survive the timeout');
     assert.equal(existsSync(join(plan.gitDir, 'hunch-development-run.lock')), false);
-  } finally { rmSync(dir, { recursive: true, force: true }); }
+  } finally { cleanupDir(dir); }
 });
 
 test('development metrics retain unknown evidence and use a real median', () => {

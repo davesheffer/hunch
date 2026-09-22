@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
@@ -50,7 +51,7 @@ test("golden retrieval floor: Recall@10 and MRR never silently erode", { skip: !
     store?.close();
     if (previousOverlay === undefined) delete process.env.HUNCH_PRIVATE_DIR;
     else process.env.HUNCH_PRIVATE_DIR = previousOverlay;
-    rmSync(fixture, { recursive: true, force: true });
+    cleanupDir(fixture);
   });
   store = new HunchStore(hunchPaths(fixture));
   indexRepo(store, REPO, { churn: false });

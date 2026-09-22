@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 /**
  * Auto-commit in EVERY mode (default ON): the store-level `autoCommit` default, the
  * public-store commit-only flush (never push/merge the user's code branch — the
@@ -26,7 +27,7 @@ function projectRepo(): { root: string; cleanup: () => void } {
   g(root, "add", "-A"); g(root, "commit", "-q", "-m", "code");
   mkdirSync(join(root, ".hunch", "decisions"), { recursive: true });
   writeFileSync(join(root, ".hunch", "manifest.json"), '{"schema_version":1}\n');
-  return { root, cleanup: () => rmSync(root, { recursive: true, force: true }) };
+  return { root, cleanup: () => cleanupDir(root) };
 }
 
 function withoutPrivateEnv<T>(fn: () => T): T {
@@ -52,7 +53,7 @@ test("commitAndPushHunch push:false COMMITS the memory but never touches the rem
 
     assert.match(g(repo, "log", "-1", "--format=%s"), /capture dec_1/); // committed locally…
     assert.equal(g(remote, "rev-parse", "main"), before); // …but the remote never moved
-  } finally { rmSync(base, { recursive: true, force: true }); }
+  } finally { cleanupDir(base); }
 });
 
 test("commitAndPushHunch never commits a force-tracked .hunch/local.json overlay pointer", () => {

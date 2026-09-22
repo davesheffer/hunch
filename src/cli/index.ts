@@ -424,7 +424,7 @@ program
         console.warn(`  ⚠ refusing to rewrite ${localFile}: it is not a JSON object and may hold your private-overlay pointer. Fix or remove it, then re-run \`hunch init --no-auto-commit\`.`);
       } else {
         writeFileAtomic(localFile, JSON.stringify({ ...existing, autoCommit: false }, null, 2) + "\n");
-        console.log("  ✓ auto-commit OFF (captures stay uncommitted; commit .hunch/ yourself)");
+        console.log("  ✓ local auto-commit preference OFF (an explicit hook --commit flag still takes precedence)");
       }
     }
 
@@ -433,9 +433,19 @@ program
     const installs: HookInstall[] = [];
     if (isGitRepo(root)) {
       const syncToOverlay = !!(opts.privateSync || opts.sharedSync);
-      const h = installPostCommitHook(root, inv.shell, { private: syncToOverlay, commit: opts.autoCommit, localOnly: syncToOverlay });
+      // A default is not an explicit request to change the repo-wide hook.
+      // Linked init keeps an installed shared block's existing commit choice.
+      let hookCommit = opts.autoCommit;
+      if (hookCommit && isLinkedWorktree(root)) {
+        const existingHook = hookReport(root).postCommit;
+        if (existingHook.state === "installed") hookCommit = existingHook.flags?.includes("--commit") ?? false;
+      }
+      const h = installPostCommitHook(root, inv.shell, { private: syncToOverlay, commit: hookCommit, localOnly: syncToOverlay });
       installs.push(h);
-      for (const line of formatHookInstall(root, "post-commit hook", h, ` (learning loop)${syncToOverlay ? " — syncs to the shared overlay" : ""}${opts.autoCommit ? " — auto-commit on" : ""}`)) console.log(line);
+      for (const line of formatHookInstall(root, "post-commit hook", h, ` (learning loop)${syncToOverlay ? " — syncs to the shared overlay" : ""}${hookCommit ? " — auto-commit on" : ""}`)) console.log(line);
+      if (opts.autoCommit === false && hookReport(root).postCommit.flags?.includes("--commit")) {
+        console.log("  ⚠ the shared post-commit hook still auto-commits. To change it, re-run `hunch init --no-auto-commit` using a global install or the main checkout's Hunch.");
+      }
       const pm = installPostMergeHook(root, inv.shell);
       installs.push(pm);
       for (const line of formatHookInstall(root, "post-merge hook", pm, " (squash-merge provenance repair + re-syncs grounding docs after a merge that brought memory in)")) console.log(line);
@@ -4336,6 +4346,45 @@ program
     store.close();
   });
 
+// ---- retire-constraint -----------------------------------------------------
+program
+  .command("retire-constraint")
+  .description("Retire an active constraint: close its valid-time window (invalidate, don't delete) so `hunch check` and the strict hook stop enforcing it.")
+  .argument("<id>", "constraint id (con_*)")
+  .option("--reason <text>", "why it's being retired — recorded in the commit body, never the subject")
+  .action((id: string, opts: { reason?: string }) => {
+    const { store, root } = storeFor();
+    const existing = store.getRec("constraints", id);
+    if (!existing) { store.close(); return fail(`constraint "${id}" not found`); }
+    if (existing.status === "retired") {
+      store.close();
+      return fail(`constraint "${id}" is already retired — window closed at ${existing.valid_to?.slice(0, 10) ?? "unknown"}.`);
+    }
+    // Which store already holds the record decides where the close is written —
+    // same rule supersede applies to a decision's home (decisionMemoryHome).
+    const home: MemoryHome = store.getPrivateRec("constraints", id) ? "private" : "public";
+    const retired = store.retireConstraint(existing);
+    store.reindex();
+    // Public grounding docs (CLAUDE.md's Top invariants list) are a publishable
+    // artifact: flushMemoryHome regenerates them on the SAME commit when auto-commit
+    // is on, but no commit happens to carry that refresh when it's off, so do it here
+    // too — otherwise a retired constraint keeps showing as enforced on disk (the same
+    // gap record-constraint and `conform --add` close for their own capture path).
+    if (home === "public" && !store.autoCommit) refreshExistingGrounding(root, store);
+    // `--reason` goes in the commit BODY, never the subject: `hunch log`'s move
+    // classifier (src/core/memorylog.ts) regexes the commit SUBJECT for keywords
+    // like "supersed"/"repair"/"adopt"/"capture", so free-form reason text landing
+    // in the subject could accidentally match one and misclassify the move.
+    const willCommit = home === "private" ? store.privateAutoCommit : store.autoCommit;
+    const message = `hunch: retire constraint ${id}${opts.reason ? `\n\n${opts.reason}` : ""}`;
+    pumpMemoryHome(store, root, home, message);
+    console.log(`✓ ${retired.id} retired — window closed at ${retired.valid_to?.slice(0, 10)}.`);
+    if (opts.reason && !willCommit) {
+      console.log("  ⚠ --reason is not recorded anywhere: auto-commit is off, so no commit message captured it.");
+    }
+    store.close();
+  });
+
 // ---- firmness (agent-hook enforcement level) ------------------------------
 program
   .command("firmness")
@@ -4925,7 +4974,7 @@ program
       // from this file. No diff exists yet, so this is context — "don't re-add X" —
       // not a block; the commit-time `hunch check` does the actual gating.
       const retired = store.retiredForFile(target).filter((r) => r.symbols.length || r.deps.length);
-      const recentTasks = taskSelectionSupplements(store.selectTasksAuto(target, buildTaskRankingQuery(root, hookReportTaskId(root, provider, evt), target)), target);
+      const recentTasks = taskSelectionSupplements(store.selectTasksAuto(target, buildTaskRankingQuery(root, hookReportTaskId(root, provider, evt), target, { excludeTargetDeliveries: true })), target);
       const hasContent =
         ctx.constraints.length ||
         ctx.decisions.length ||

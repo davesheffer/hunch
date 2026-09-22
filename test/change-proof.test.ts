@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -82,8 +83,8 @@ function proofRepo(
   store.json.ensureDirs();
   t.after(() => {
     store.close();
-    rmSync(root, { recursive: true, force: true });
-    if (privateDir) rmSync(privateDir, { recursive: true, force: true });
+    cleanupDir(root);
+    if (privateDir) cleanupDir(privateDir);
   });
   return { root, store, base, result };
 }

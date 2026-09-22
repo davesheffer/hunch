@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from "node:fs";
@@ -19,7 +20,7 @@ test("readConfig defaults to advisory when no config file exists", () => {
     assert.equal(readConfig(hunchPaths(root)).firmness, DEFAULT_FIRMNESS);
     assert.equal(DEFAULT_FIRMNESS, "advisory");
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });
 
@@ -36,7 +37,7 @@ test("writeConfig round-trips a level; an unknown on-disk value falls back to de
     writeFileSync(paths.config, "{not json");
     assert.equal(readConfig(paths).firmness, DEFAULT_FIRMNESS);
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });
 
@@ -58,7 +59,7 @@ test("installClaudeHooks writes the full lifecycle hook set", () => {
     assert.equal(j.hooks.SubagentStart[0].hooks[0].command, cmd, "delegated agents get grounding");
     assert.equal(j.hooks.PreCompact[0].hooks[0].command, cmd, "compaction resets injection dedup");
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });
 
@@ -73,7 +74,7 @@ test("installClaudeHooks is idempotent — re-running with the same command chan
     assert.equal(j.hooks.PreToolUse.length, 1, "no duplicate PreToolUse entry");
     assert.equal(j.hooks.UserPromptSubmit.length, 1, "no duplicate UserPromptSubmit entry");
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });
 
@@ -88,7 +89,7 @@ test("installClaudeHooks replaces a stale Hunch entry after a folder rename (no 
     assert.equal(j.hooks.PreToolUse.length, 1, "old path entry replaced, not appended");
     assert.equal(j.hooks.PreToolUse[0].hooks[0].command, renamed);
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });
 
@@ -117,7 +118,7 @@ test("installClaudeHooks replaces a legacy published npx entry during upgrade", 
     assert.equal(j.hooks.UserPromptSubmit[0].hooks[0].command, current);
     assert.match(current, /^npx -y --package=hunch-exact@npm:@davesheffer\/hunch@\d+\.\d+\.\d+ hunch hook$/);
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });
 
@@ -139,7 +140,7 @@ test("installClaudeHooks preserves foreign hooks and other settings", () => {
     assert.ok(cmds.includes("/usr/local/bin/guard.sh"), "foreign Bash hook preserved");
     assert.equal(j.hooks.PreToolUse.length, 2, "Hunch entry added alongside the foreign one");
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });
 
@@ -171,7 +172,7 @@ test("installClaudeHooks keeps the user's command out of a MIXED entry (issue #3
     const kept = j.hooks.PreToolUse.find((e: { hooks: { command: string }[] }) => e.hooks.some((h) => h.command === mine));
     assert.equal(kept.matcher, "Edit|Write|MultiEdit", "the user's entry keeps its matcher");
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });
 
@@ -192,7 +193,7 @@ test("installClaudeHooks preserves a FOREIGN …/dist/cli/index.js hook (issue #
     assert.ok(all.includes(foreign), "an unrelated tool's index.js hook is not ours to delete");
     assert.equal(j.hooks.PreToolUse.length, 2, "Hunch entry added alongside the foreign one");
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });
 
@@ -216,7 +217,7 @@ test("installClaudeHooks stays idempotent for the UNQUOTED source command shellI
         assert.equal(entries.flatMap((e) => e.hooks).length, 1, `${event}: exactly one Hunch command after upgrade from ${cmd}`);
       }
     } finally {
-      rmSync(root, { recursive: true, force: true });
+      cleanupDir(root);
     }
   }
 });
@@ -259,7 +260,7 @@ test("installClaudeHooks keeps a user command that CHAINS the Hunch hook (issue 
     const all = j.hooks.Stop.flatMap((e: { hooks: { command: string }[] }) => e.hooks.map((h) => h.command));
     assert.ok(all.includes(chained), "a command the user wrote around ours is theirs, not ours to delete");
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });
 
@@ -270,6 +271,6 @@ test("installClaudeHooks refuses to clobber an unparseable settings.json", () =>
     writeFileSync(join(root, ".claude", "settings.json"), "{ this is not json");
     assert.throws(() => installClaudeHooks(root, `"node" "/x/index.js" hook`), /refusing to overwrite/);
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });

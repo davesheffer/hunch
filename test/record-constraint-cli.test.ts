@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
@@ -123,6 +124,6 @@ test("record-constraint rejects a public reference to a private-only decision be
       "the rejected constraint is never written publicly",
     );
   } finally {
-    rmSync(sandbox, { recursive: true, force: true });
+    cleanupDir(sandbox);
   }
 });

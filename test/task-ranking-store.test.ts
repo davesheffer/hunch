@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -36,7 +37,7 @@ test("co-change: parses name-only logs, ignores bulk commits, needs the target i
 
 test("co-change reads real git history, bounded, and returns empty outside a repository", t => {
   const root = mkdtempSync(join(tmpdir(), "hunch-cochange-"));
-  t.after(() => rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
+  t.after(() => cleanupDir(root));
   git(root, "init", "-q");
   commit(root, { "src/a.js": "1", "src/b.js": "1" }, "one");
   commit(root, { "src/a.js": "2", "src/b.js": "2", "src/c.js": "1" }, "two");
@@ -47,7 +48,7 @@ test("co-change reads real git history, bounded, and returns empty outside a rep
   const cached = cochangeFor(root, "src/a.js");
   assert.deepEqual([...cached.entries()], [...cochangeFor(root, "src/a.js").entries()], "cache round-trips");
   const empty = mkdtempSync(join(tmpdir(), "hunch-cochange-empty-"));
-  t.after(() => rmSync(empty, { recursive: true, force: true }));
+  t.after(() => cleanupDir(empty));
   assert.equal(cochangeFor(empty, "x.js", { cache: false }).size, 0);
 });
 
@@ -61,7 +62,7 @@ test("end to end: the ranked selection prefers the task that shares this task's 
   git(root, "add", "-A"); git(root, "commit", "-q", "-m", "init");
   const store = new HunchStore(hunchPaths(root));
   store.json.ensureDirs();
-  t.after(() => { store.close(); rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }); });
+  t.after(() => { store.close(); cleanupDir(root); });
   const preserve = mkConstraint({ id: "con_preserve", statement: "Preserve existing settings", scope: ["src/config.js"], severity: "blocking" });
   const other = mkConstraint({ id: "con_other", statement: "Other rule", scope: ["src/other.js"], severity: "warning" });
   store.json.put("constraints", preserve); store.json.put("constraints", other);

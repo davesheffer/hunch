@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 /**
  * readOrCompute (TS client helper) against a real `hunch serve`: reuse on an unchanged dependency
  * set without computing, supersede on a changed one, request-scoped idempotency keys, and a client
@@ -28,7 +29,7 @@ async function served() {
   await new Promise<void>((r) => app.listen(0, "127.0.0.1", () => r()));
   const address = app.address();
   const client = createStateClient({ baseUrl: `http://127.0.0.1:${typeof address === "object" && address ? address.port : 0}`, token: token! });
-  const cleanup = async () => { await new Promise<void>((r) => app.close(() => r())); app.closeStores(); rmSync(dir, { recursive: true, force: true }); };
+  const cleanup = async () => { await new Promise<void>((r) => app.close(() => r())); app.closeStores(); cleanupDir(dir); };
   return { client, cleanup };
 }
 

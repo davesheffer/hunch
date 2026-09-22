@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
@@ -53,7 +54,7 @@ function indexedRepo() {
   indexRepo(store, root, { churn: false });
   store.reindex();
   const fileOf = (name: string) => store.json.loadAll("symbols").find((s) => s.name === name)!.file;
-  return { store, fileOf, cleanup: () => { store.close(); rmSync(root, { recursive: true, force: true }); } };
+  return { store, fileOf, cleanup: () => { store.close(); cleanupDir(root); } };
 }
 
 test("causalChain joins constraint → source decision → originating bug", () => {

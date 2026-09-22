@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -27,7 +28,7 @@ function run(root: string, ...args: string[]) {
 
 test("Project DNA CLI exposes sealed profile, context, match, and drift", (t) => {
   const root = mkdtempSync(join(tmpdir(), "hunch-project-dna-cli-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  t.after(() => cleanupDir(root));
   git(root, "init", "-q", "-b", "main");
   writeFileSync(join(root, "CONTRIBUTING.md"), "Behavior changes must include tests. Keep changes focused. Explain why the change is needed in the pull request.\n");
   writeFileSync(join(root, "value.txt"), "0\n");

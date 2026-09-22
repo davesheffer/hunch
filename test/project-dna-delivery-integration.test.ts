@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -30,7 +31,7 @@ function git(root: string, ...args: string[]): string {
 
 test("a sealed DNA profile becomes a bounded advisory delivery supplement", (t) => {
   const root = mkdtempSync(join(tmpdir(), "hunch-project-dna-delivery-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  t.after(() => cleanupDir(root));
   git(root, "init", "-q", "-b", "main");
   writeFileSync(join(root, "CONTRIBUTING.md"), "Behavior changes must include tests. Keep pull requests small and focused.\n");
   writeFileSync(join(root, "value.txt"), "0\n");
@@ -78,7 +79,7 @@ test("normal MCP context delivery includes Project DNA and exposes sealed profil
   t.after(async () => {
     await client.close().catch(() => {});
     await server.close().catch(() => {});
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   });
 
   const tools = (await client.listTools()).tools;

@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
@@ -16,7 +17,7 @@ test("repoRelativeTarget: a plain in-repo absolute path rewrites to repo-relativ
   try {
     assert.equal(repoRelativeTarget(join(root, "src", "foo.ts"), root), "src/foo.ts");
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });
 
@@ -27,8 +28,8 @@ test("repoRelativeTarget: a path outside root passes through unchanged — nothi
     const target = join(outside, "secret.ts");
     assert.equal(repoRelativeTarget(target, root), target.replace(/\\/g, "/"));
   } finally {
-    rmSync(root, { recursive: true, force: true });
-    rmSync(outside, { recursive: true, force: true });
+    cleanupDir(root);
+    cleanupDir(outside);
   }
 });
 
@@ -39,7 +40,7 @@ test("repoRelativeTarget: the root path itself has no repo-relative form — pas
     // scope would mint a meaningless repo-wide rule if a caller treated it as valid).
     assert.equal(repoRelativeTarget(root, root), root.replace(/\\/g, "/"));
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });
 
@@ -49,7 +50,7 @@ test("repoRelativeTarget: a relative glob passes through untouched (not absolute
     assert.equal(repoRelativeTarget("src/**", root), "src/**");
     assert.equal(repoRelativeTarget("./src/auth/**", root), "src/auth/**");
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });
 
@@ -78,7 +79,7 @@ test("repoRelativeTarget: a target arriving via a symlinked root still resolves 
     symlinkSync(realRoot, linkRoot);
     assert.equal(repoRelativeTarget(join(linkRoot, "src", "session.ts"), realRoot), "src/session.ts");
   } finally {
-    rmSync(base, { recursive: true, force: true });
+    cleanupDir(base);
   }
 });
 
@@ -106,7 +107,7 @@ test("isRepoFile: a real regular file inside root is true; a directory, a missin
     assert.equal(isRepoFile(root, join(root, "empty.ts")), false, "an absolute path");
     assert.equal(isRepoFile(root, "C:/win/empty.ts"), false, "a Windows drive letter");
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });
 
@@ -124,7 +125,7 @@ test("isRepoFile: an in-repo symlink pointing OUTSIDE the root is false — stat
     // the caller can't see.
     assert.equal(isRepoFile(root, "link/secret.ts"), false, "a symlinked dir escaping the root");
   } finally {
-    rmSync(base, { recursive: true, force: true });
+    cleanupDir(base);
   }
 });
 
@@ -136,6 +137,6 @@ test("isRepoFile: a symlink to another file INSIDE the root stays true", { skip:
     symlinkSync(join(root, "a", "real.ts"), join(root, "alias.ts"));
     assert.equal(isRepoFile(root, "alias.ts"), true, "the real target is still in the repo");
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });

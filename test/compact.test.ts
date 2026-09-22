@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
@@ -187,6 +188,6 @@ test("compact --apply refuses physical deletion and leaves the additive memory p
       "the next memory commit contains no stranded deletion");
     assert.deepEqual(readFileSync(decisionFile), beforeDecision, "the rejected record remains durable until tombstone GC exists");
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });

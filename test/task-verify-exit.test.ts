@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -9,7 +10,7 @@ import { runReportCheck } from "../src/core/taskReportEvidence.js";
 
 function fixture(t: { after: (f: () => void) => void }): string {
   const root = mkdtempSync(join(tmpdir(), "hunch-task-verify-exit-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  t.after(() => cleanupDir(root));
   execFileSync("git", ["init", "-q", root]);
   mkdirSync(join(root, "src"));
   writeFileSync(join(root, ".gitignore"), ".hunch/\n.hunch-cache/\n");

@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -18,6 +19,6 @@ test("correction source collection includes production PHP and excludes test PHP
     assert.equal(collection.files_read, 2);
     assert.equal(collection.files_skipped, 0);
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });

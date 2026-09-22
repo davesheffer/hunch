@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, appendFileSync } from "node:fs";
@@ -53,7 +54,7 @@ test("syncCommit early-exits on re-sync (token-thrift) and --force re-drafts in 
   assert.equal(store.json.loadAll("decisions").length, 1, "force updates in place, never duplicates");
 
   store.close();
-  rmSync(root, { recursive: true, force: true });
+  cleanupDir(root);
 });
 
 test("auto-sync uses commit-keyed id and never clobbers a human-confirmed decision (regression #5)", async () => {
@@ -79,7 +80,7 @@ test("auto-sync uses commit-keyed id and never clobbers a human-confirmed decisi
   assert.equal(kept.decision, "Human-authored rationale");
 
   store.close();
-  rmSync(root, { recursive: true, force: true });
+  cleanupDir(root);
 });
 
 test("MCP short-sha resolves to the same decision id as auto-sync's full sha (regression R3 #2/#3)", () => {
@@ -90,7 +91,7 @@ test("MCP short-sha resolves to the same decision id as auto-sync's full sha (re
   // auto-sync keys on the full sha; the MCP path resolves the short sha a human
   // passes back (revParse) to the full sha → SAME id → upgrade, not duplicate.
   assert.equal(decisionId(revParse(short, root)), decisionId(full), "short sha → same id as full");
-  rmSync(root, { recursive: true, force: true });
+  cleanupDir(root);
 });
 
 test("revParse trims whitespace and never fakes a full sha for an unresolvable ref (regression R4 #2/#3)", () => {
@@ -100,7 +101,7 @@ test("revParse trims whitespace and never fakes a full sha for an unresolvable r
   assert.equal(revParse(`  ${short}  `, root), full, "trims surrounding whitespace and resolves");
   const bogus = revParse("not-a-real-ref", root);
   assert.ok(!/^[0-9a-f]{40}$/.test(bogus), "unresolvable ref does not masquerade as a full sha");
-  rmSync(root, { recursive: true, force: true });
+  cleanupDir(root);
 });
 
 test("findRoot ignores a .hunch regular FILE and keeps walking (regression #18)", () => {
@@ -111,7 +112,7 @@ test("findRoot ignores a .hunch regular FILE and keeps walking (regression #18)"
   writeFileSync(join(child, ".hunch"), "i am a file, not a dir"); // decoy file
   // from child, the file .hunch must NOT count — root resolves to the parent dir
   assert.equal(findRoot(child), parent);
-  rmSync(parent, { recursive: true, force: true });
+  cleanupDir(parent);
 });
 
 test("findRoot stops at the .git boundary — an ancestor .hunch never hijacks a fresh repo", () => {
@@ -123,7 +124,7 @@ test("findRoot stops at the .git boundary — an ancestor .hunch never hijacks a
   const sub = join(repo, "src");
   mkdirSync(sub);
   assert.equal(findRoot(sub), repo); // and from a subdir of the repo
-  rmSync(parent, { recursive: true, force: true });
+  cleanupDir(parent);
 });
 
 test("post-commit code change captures a decision linked to the changed file", async () => {
@@ -138,7 +139,7 @@ test("post-commit code change captures a decision linked to the changed file", a
   assert.equal(r.status, "written");
   assert.ok(r.decision!.related_files.includes("src/a.ts"));
   store.close();
-  rmSync(root, { recursive: true, force: true });
+  cleanupDir(root);
 });
 
 test("syncCommit does not skip a SKIP_SUBJECT commit whose body is substantive (regression #4)", async () => {
@@ -165,7 +166,7 @@ test("syncCommit does not skip a SKIP_SUBJECT commit whose body is substantive (
   assert.ok(r.decision, "decision was recorded despite the merge-prefixed subject");
 
   store.close();
-  rmSync(root, { recursive: true, force: true });
+  cleanupDir(root);
 });
 
 test("syncCommit still skips a SKIP_SUBJECT commit with an empty body (no regression #4)", async () => {
@@ -183,7 +184,7 @@ test("syncCommit still skips a SKIP_SUBJECT commit with an empty body (no regres
   assert.equal(store.json.loadAll("decisions").length, 0, "no decision recorded for a trivial merge commit");
 
   store.close();
-  rmSync(root, { recursive: true, force: true });
+  cleanupDir(root);
 });
 
 test("syncCommit skips a chore(deps) commit with an empty body (regex fix, regression #4)", async () => {
@@ -205,7 +206,7 @@ test("syncCommit skips a chore(deps) commit with an empty body (regex fix, regre
   assert.equal(store.json.loadAll("decisions").length, 0, "no decision recorded for a trivial chore(deps) commit");
 
   store.close();
-  rmSync(root, { recursive: true, force: true });
+  cleanupDir(root);
 });
 
 function pythonGitRepo(): string {
@@ -240,7 +241,7 @@ test("syncCommit synthesizes a decision from a Python commit (regression: was 'n
   assert.ok(r.decision, "decision was recorded");
 
   store.close();
-  rmSync(root, { recursive: true, force: true });
+  cleanupDir(root);
 });
 
 function markdownGitRepo(): string {
@@ -272,7 +273,7 @@ test("syncCommit synthesizes a decision from a markdown-only commit (issue #12)"
   assert.deepEqual(r.decision!.related_files, ["docs/adr/0001-use-postgres.md"]);
 
   store.close();
-  rmSync(root, { recursive: true, force: true });
+  cleanupDir(root);
 });
 
 test("syncCommit's deterministic fallback describes a markdown-only edit as content, not \"code\" (issue #12)", async () => {
@@ -295,7 +296,7 @@ test("syncCommit's deterministic fallback describes a markdown-only edit as cont
   assert.doesNotMatch(r.decision!.decision, /\bcode\b/i, `must not claim "code" for a markdown-only edit: ${r.decision!.decision}`);
 
   store.close();
-  rmSync(root, { recursive: true, force: true });
+  cleanupDir(root);
 });
 
 test("syncCommit skips a commit that touches .hunch/** even though it now also touches markdown (regenerated AGENTS.md/CLAUDE.md, issue #12 regression)", async () => {
@@ -320,7 +321,7 @@ test("syncCommit skips a commit that touches .hunch/** even though it now also t
   assert.match(r.reason!, /\.hunch\/\*\*/);
 
   store.close();
-  rmSync(root, { recursive: true, force: true });
+  cleanupDir(root);
 });
 
 test("syncCommit skips a commit touching neither code nor markdown (e.g. an SVG-only commit)", async () => {
@@ -342,7 +343,7 @@ test("syncCommit skips a commit touching neither code nor markdown (e.g. an SVG-
   assert.equal(r.reason, "no code or markdown files changed");
 
   store.close();
-  rmSync(root, { recursive: true, force: true });
+  cleanupDir(root);
 });
 
 test("syncCommit drives synthesis through the openai-compat provider end-to-end (no API key, reports via LLM)", async () => {
@@ -397,7 +398,7 @@ test("syncCommit drives synthesis through the openai-compat provider end-to-end 
     __resetAvailabilityCacheForTests();
     await new Promise<void>((resolve) => server.close(() => resolve()));
     store.close();
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });
 
@@ -452,6 +453,6 @@ test("syncCommit reports the ACTUAL (fallback) provider when the openai-compat c
     __resetAvailabilityCacheForTests();
     await new Promise<void>((resolve) => server.close(() => resolve()));
     store.close();
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });

@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createRequire, syncBuiltinESMExports } from "node:module";
@@ -64,7 +65,7 @@ test("writeFileAtomic retries transient rename contention without writing the ta
     assert.equal(directTargetWrites, 0, "the destination is published only by rename");
     assert.deepEqual(readdirSync(root), ["index.json"], "the temporary file is removed");
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });
 
@@ -106,7 +107,7 @@ test("writeFileAtomic preserves the old target when rename contention persists",
     assert.equal(readFileSync(target, "utf8"), "old-complete-json\n", "the previous complete file survives");
     assert.deepEqual(readdirSync(root), ["index.json"], "the temporary file is removed");
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });
 
@@ -147,7 +148,7 @@ for (const writer of ["writeFileAtomic", "writeFileAtomicIfAbsent"] as const) {
       } finally {
         fs.openSync = originalOpen;
         syncBuiltinESMExports();
-        rmSync(root, { recursive: true, force: true });
+        cleanupDir(root);
       }
     });
   }
@@ -163,7 +164,7 @@ test("atomic replacement preserves a private config's access permissions", { ski
     writeFileAtomic(target, '{"token":"private","enabled":true}\n');
     assert.equal(lstatSync(target).mode & 0o777, 0o600, "rewriting a user config must not make its credentials readable to other users");
     assert.equal(readFileSync(target, "utf8"), '{"token":"private","enabled":true}\n');
-  } finally { rmSync(root, { recursive: true, force: true }); }
+  } finally { cleanupDir(root); }
 });
 
 for (const writer of ["writeFileAtomic", "writeFileAtomicIfAbsent"] as const) {
@@ -190,7 +191,7 @@ for (const writer of ["writeFileAtomic", "writeFileAtomicIfAbsent"] as const) {
     } finally {
       fs.writeSync = originalWrite;
       syncBuiltinESMExports();
-      rmSync(root, { recursive: true, force: true });
+      cleanupDir(root);
     }
   });
 }

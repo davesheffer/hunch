@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
@@ -20,7 +21,7 @@ function fixture(extra: string[], check: (path: string) => void) {
     assert.equal(created.status, 0, created.stderr);
     check(path);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    cleanupDir(dir);
   }
 }
 

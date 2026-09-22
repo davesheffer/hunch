@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 /**
  * Findings — observations with no diff (the anchor is a date + evidence, not a
  * commit). Covers: JSON round-trip + unified-FTS ride (no dedicated SQL table),
@@ -170,7 +171,7 @@ test("findingId is idempotent across whitespace/case variants of the same title"
 
 test("a legacy graph without a findings directory loads empty and reindexes clean", () => {
   const { store, root, cleanup } = tempStore();
-  rmSync(join(root, ".hunch", "findings"), { recursive: true, force: true });
+  cleanupDir(join(root, ".hunch", "findings"));
   assert.deepEqual(store.json.loadAll("findings"), []);
   const { counts } = store.reindex();
   assert.equal(counts.findings, 0);

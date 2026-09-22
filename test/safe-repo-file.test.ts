@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, truncateSync, writeFileSync } from "node:fs";
@@ -23,7 +24,7 @@ test("createRepoFileReader checks the opened descriptor size before reading", ()
     assert.equal(readRepoFile(small), "export const answer = 42;\n");
     assert.equal(readRepoFile(oversized), null, "oversized descriptor is rejected before readFileSync");
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });
 
@@ -36,6 +37,6 @@ test("createRepoFileReader validates an explicit byte ceiling", () => {
     assert.equal(createRepoFileReader(root, { maxBytes: 4 })(file), "1234");
     assert.throws(() => createRepoFileReader(root, { maxBytes: -1 }), /non-negative safe integer/);
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });

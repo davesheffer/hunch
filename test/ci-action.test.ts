@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -44,6 +45,6 @@ test("CI scaffold is idempotent and never clobbers an existing workflow", () => 
     assert.equal(second.action, "exists");
     assert.match(readFileSync(second.path, "utf8"), /# user edit/);
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });

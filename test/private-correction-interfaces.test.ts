@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
@@ -137,8 +138,8 @@ function privateFixture(label: string, autoCommit = false): {
     correctionId: correction.id,
     env: { ...process.env, HUNCH_PRIVATE_DIR: privateRoot, HUNCH_SYNTH_PROVIDER: "deterministic" },
     cleanup: () => {
-      rmSync(root, { recursive: true, force: true });
-      rmSync(overlayRoot, { recursive: true, force: true });
+      cleanupDir(root);
+      cleanupDir(overlayRoot);
     },
   };
 }

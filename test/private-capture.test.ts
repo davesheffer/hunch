@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -22,7 +23,7 @@ function privateStore(): { root: string; store: HunchStore; cleanup: () => void 
   writeFileSync(join(root, ".hunch", "local.json"), JSON.stringify({ privateDir: overlay, autoCommit: false }) + "\n");
   const store = new HunchStore(hunchPaths(root));
   store.json.ensureDirs();
-  return { root, store, cleanup: () => { store.close(); rmSync(sandbox, { recursive: true, force: true }); } };
+  return { root, store, cleanup: () => { store.close(); cleanupDir(sandbox); } };
 }
 
 test("private bug capture stays in the overlay and never invokes a subscription provider", async () => {

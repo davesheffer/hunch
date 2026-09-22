@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 /**
  * Write integrity of nuryel.state/1 (#282, #283, #284): a record and its change event land
  * together, a retry repairs an event the ledger never got, and an exact retry of a write that
@@ -205,7 +206,7 @@ test("#286: `serve compact` compacts the store's RESOLVED state home — the ove
     assert.equal(result.dropped, 2, "compaction found the overlay ledger, not an empty <root>/.hunch one");
     assert.equal(readLedger(overlay, scope).events.length, 0);
   } finally {
-    rmSync(root, { recursive: true, force: true });
-    rmSync(join(overlay, ".."), { recursive: true, force: true });
+    cleanupDir(root);
+    cleanupDir(join(overlay, ".."));
   }
 });

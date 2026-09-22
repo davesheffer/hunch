@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
@@ -25,7 +26,7 @@ function workspace() {
     writeFileSync(file, body);
     return { path: name, sha256: digestFile(file) };
   };
-  return { dir, artifact, close: () => rmSync(dir, { recursive: true, force: true }) };
+  return { dir, artifact, close: () => cleanupDir(dir) };
 }
 
 function repositoryUserRecord(artifact: (name: string) => { path: string; sha256: string }) {

@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
@@ -137,6 +138,6 @@ test("a recorded correction enforces: blockingInScope flags a direct edit to its
     assert.match(hit!.reason, new RegExp(rec.id));
   } finally {
     store.close();
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });

@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 /**
  * The strict hook's catch-log must not kill the public memory pump (round-3 audit #1).
  *
@@ -33,7 +34,7 @@ function repo(): { root: string; hunch: string; cleanup: () => void } {
   writeFileSync(join(root, ".gitignore"), ".hunch/hunch.sqlite*\n");
   g(root, "add", "-A");
   g(root, "commit", "-qm", "seed");
-  return { root, hunch, cleanup: () => rmSync(root, { recursive: true, force: true }) };
+  return { root, hunch, cleanup: () => cleanupDir(root) };
 }
 
 const writeDec = (hunch: string, id: string): void =>

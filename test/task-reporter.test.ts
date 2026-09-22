@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -10,7 +11,7 @@ import { createTaskReporter } from "../src/taskReports.js";
 // receives display data even if its agent never calls Hunch.
 test("generic harness owns reporting, separates retries/attempts, and shows missing evidence", async t => {
   const root = mkdtempSync(join(tmpdir(), "hunch-harness-report-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  t.after(() => cleanupDir(root));
   execFileSync("git", ["init", "-q", root]);
   writeFileSync(join(root, ".gitignore"), ".hunch-cache/\n");
   const host = createTaskReporter(root);

@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -164,6 +165,6 @@ test("a contending process drains a record written after the first owner's exact
   } finally {
     if (writer && writer.exitCode === null && writer.signalCode === null) writer.kill("SIGKILL");
     if (owner && owner.exitCode === null && owner.signalCode === null) owner.kill("SIGKILL");
-    rmSync(base, { recursive: true, force: true });
+    cleanupDir(base);
   }
 });

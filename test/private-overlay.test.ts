@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -41,8 +42,8 @@ function setup(withPrivate: boolean): { store: HunchStore; pub: string; priv: st
       store.close();
       if (prev === undefined) delete process.env.HUNCH_PRIVATE_DIR;
       else process.env.HUNCH_PRIVATE_DIR = prev;
-      rmSync(pub, { recursive: true, force: true });
-      if (priv) rmSync(priv, { recursive: true, force: true });
+      cleanupDir(pub);
+      if (priv) cleanupDir(priv);
     },
   };
 }
@@ -130,8 +131,8 @@ test("private overlay: resolves from gitignored .hunch/local.json when NO env va
   } finally {
     if (prev === undefined) delete process.env.HUNCH_PRIVATE_DIR;
     else process.env.HUNCH_PRIVATE_DIR = prev;
-    rmSync(pub, { recursive: true, force: true });
-    rmSync(priv, { recursive: true, force: true });
+    cleanupDir(pub);
+    cleanupDir(priv);
   }
 });
 
@@ -153,7 +154,7 @@ test("private overlay: a RELATIVE privateDir in local.json resolves against the 
   } finally {
     if (prev === undefined) delete process.env.HUNCH_PRIVATE_DIR;
     else process.env.HUNCH_PRIVATE_DIR = prev;
-    rmSync(pub, { recursive: true, force: true });
+    cleanupDir(pub);
   }
 });
 
@@ -184,7 +185,7 @@ test("private overlay: HUNCH_PRIVATE_DIR env overrides .hunch/local.json", () =>
   } finally {
     if (prev === undefined) delete process.env.HUNCH_PRIVATE_DIR;
     else process.env.HUNCH_PRIVATE_DIR = prev;
-    for (const d of [pub, envDir, localDir]) rmSync(d, { recursive: true, force: true });
+    for (const d of [pub, envDir, localDir]) cleanupDir(d);
   }
 });
 
@@ -204,8 +205,8 @@ test("private overlay: an env target equal to local.json is identified without a
   } finally {
     if (prev === undefined) delete process.env.HUNCH_PRIVATE_DIR;
     else process.env.HUNCH_PRIVATE_DIR = prev;
-    rmSync(pub, { recursive: true, force: true });
-    rmSync(overlay, { recursive: true, force: true });
+    cleanupDir(pub);
+    cleanupDir(overlay);
   }
 });
 
@@ -223,8 +224,8 @@ test("private overlay: an explicit env overlay makes bypassed team discovery lou
   } finally {
     if (prev === undefined) delete process.env.HUNCH_PRIVATE_DIR;
     else process.env.HUNCH_PRIVATE_DIR = prev;
-    rmSync(pub, { recursive: true, force: true });
-    rmSync(envDir, { recursive: true, force: true });
+    cleanupDir(pub);
+    cleanupDir(envDir);
   }
 });
 

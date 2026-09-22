@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -30,7 +31,7 @@ test("working change surface includes staged, unstaged, and untracked files", ()
     assert.match(diff, /src\/new\.ts/);
     assert.match(diff, /export function introduced/);
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });
 
@@ -57,7 +58,7 @@ test("non-ASCII paths enumerate as literal UTF-8, never octal-quoted (issue #50)
     const staged = stagedFilesAfterAdd(root);
     assert.ok(staged.includes("src/café.ts"), `staged enumeration too, got: ${JSON.stringify(staged)}`);
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });
 
@@ -86,7 +87,7 @@ test("workingDiff reports an untracked symlink path without reading its external
     assert.doesNotMatch(diff, /EXTERNAL_SECRET_MUST_NOT_APPEAR/);
     assert.equal(diff, "", "a symlink has scope visibility but contributes no synthetic source bytes");
   } finally {
-    rmSync(root, { recursive: true, force: true });
-    rmSync(outside, { recursive: true, force: true });
+    cleanupDir(root);
+    cleanupDir(outside);
   }
 });

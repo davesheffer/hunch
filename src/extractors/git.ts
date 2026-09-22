@@ -1842,6 +1842,60 @@ export function isLinkedWorktree(cwd: string): boolean {
   return !sameFilesystemEntry(own, common);
 }
 
+/** Every worktree of this repo (the main checkout AND every linked one), as absolute
+ *  paths — parsed from `git worktree list --porcelain`. Named for what it returns, not
+ *  `linkedWorktreePaths`: unlike `isLinkedWorktree`, this deliberately includes the main
+ *  checkout, since callers need it for self-exclusion. Lets a write tool guess where an
+ *  auto-commit actually belongs when its own evidence (e.g. a decision's related_files)
+ *  doesn't exist at the resolved root but does exist in a sibling worktree — a caller
+ *  working in a linked worktree that forgot to pass a cwd hint. Empty on any error /
+ *  non-repo. */
+export function worktreePaths(root: string): string[] {
+  const out = gitSafe(["worktree", "list", "--porcelain"], root);
+  if (!out) return [];
+  const paths: string[] = [];
+  for (const line of out.split("\n")) {
+    if (line.startsWith("worktree ")) paths.push(line.slice("worktree ".length).trim());
+  }
+  return paths;
+}
+
+/** True when `root`'s OWN history has ever tracked `file` — EXACTLY `file`, not
+ *  merely something under it — at HEAD. Distinguishes an ordinary delete/rename
+ *  recorded correctly at the resolved root (the file is gone here because THIS
+ *  checkout removed it, and a sibling worktree that branched earlier simply
+ *  predates the change) from a genuine misroute: without this check, deleting or
+ *  renaming a tracked file at the correct root reads as evidence the write
+ *  belonged in whichever sibling still has the old path, refusing a correct write
+ *  and pointing the caller at the wrong worktree. `git log --name-only` alone
+ *  treats `file` as an ordinary PATHSPEC: a directory name or a glob matches
+ *  anything under/matching it, so "src" or "*.ts" would read as "known to
+ *  history" whenever ANYTHING under that directory was ever tracked, anywhere in
+ *  the repo. `:(literal)` disables glob/magic interpretation, and checking the
+ *  commit's OWN changed-file list for an exact string match (not just "the
+ *  pathspec matched something") confirms `file` was itself a tracked PATH.
+ *
+ *  `--diff-merges=first-parent` makes a merge commit report its own changes like
+ *  an ordinary commit instead of being skipped by diff simplification (the
+ *  `--name-only` default prints nothing at all for a merge). `-z` (NUL-separated,
+ *  read via the untrimmed `gitRawSafe`) sidesteps git's path-quoting rules
+ *  entirely, so a name containing a quote, backslash, control character, or a
+ *  leading/trailing space compares exactly rather than being C-quoted or trimmed
+ *  away.
+ *
+ *  `file` must be non-empty: `-z` NUL-terminates every entry rather than
+ *  separating them, so splitting on "\0" always yields a trailing "" element —
+ *  and an empty pathspec matches everything, so an empty `file` would otherwise
+ *  read as "known to history" for any repo with history at all. */
+export function pathKnownToHistory(root: string, file: string): boolean {
+  if (!file) return false;
+  const out = gitRawSafe(
+    ["log", "-n", "1", "--format=", "--name-only", "-z", "--diff-merges=first-parent", "HEAD", "--", `:(literal)${file}`],
+    root,
+  );
+  return !!out && out.split("\0").some((entry) => entry === file);
+}
+
 /** Current branch name (e.g. "main", "feat/x"), or "" in detached HEAD / non-repo.
  *  Stamped onto auto-captured decisions so branch-scoped work stays filterable. */
 export function currentBranch(cwd: string): string {

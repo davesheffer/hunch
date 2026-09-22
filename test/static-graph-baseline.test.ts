@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -220,7 +221,7 @@ test("static plans converge across clones but code, reverts, and merges advance 
   } finally {
     storeA?.close();
     storeB?.close();
-    rmSync(sandbox, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
+    cleanupDir(sandbox);
   }
 });
 
@@ -238,7 +239,7 @@ test("a repository with no indexed code anchors its empty graph to the shared ro
     git(root, "commit", "-qm", "docs: notes");
     assert.equal(canonicalStaticGraphBaseline(root), rootCommit);
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
+    cleanupDir(root);
   }
 });
 
@@ -300,6 +301,6 @@ test("clone-local replacement refs cannot move a docs-only static baseline or pr
     assert.equal(after.id, before.id, "a clone-local replacement view cannot fork canonical proof-plan identity");
   } finally {
     store?.close();
-    rmSync(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
+    cleanupDir(root);
   }
 });

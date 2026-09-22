@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
@@ -90,7 +91,7 @@ function fixture() {
   const store = new HunchStore(hunchPaths(root));
   store.json.ensureDirs();
   const repository = new G3EvidenceRepository(store);
-  return { root, privateRoot, store, repository, cleanup: () => { store.close(); rmSync(root, { recursive: true, force: true }); } };
+  return { root, privateRoot, store, repository, cleanup: () => { store.close(); cleanupDir(root); } };
 }
 
 test("G3 evidence is human-selected, immutable, content-addressed, and branch-protected", () => {

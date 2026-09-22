@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, symlinkSync } from "node:fs";
@@ -39,7 +40,7 @@ test("extractInlineIntent lifts tagged comments (comment-gated; ignores string l
     // a string literal containing the tag (no comment marker before it) is NOT captured
     assert.ok(!got.some((i) => i.text.includes("not intent")), "string literal must not be mistaken for intent");
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });
 
@@ -56,8 +57,8 @@ test("extractInlineIntent never follows a tracked source symlink", { skip: SYMLI
 
     assert.deepEqual(extractInlineIntent(root), []);
   } finally {
-    rmSync(root, { recursive: true, force: true });
-    rmSync(outside, { recursive: true, force: true });
+    cleanupDir(root);
+    cleanupDir(outside);
   }
 });
 
@@ -125,7 +126,7 @@ test("capture-comments never copies a same-id private decision into the public h
     assert.equal(readFileSync(join(privateRoot, "decisions", `${id}.json`), "utf8"), privateBefore,
       "the exact private record remains byte-identical");
   } finally {
-    rmSync(root, { recursive: true, force: true });
-    rmSync(overlayRoot, { recursive: true, force: true });
+    cleanupDir(root);
+    cleanupDir(overlayRoot);
   }
 });

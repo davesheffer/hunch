@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -60,7 +61,7 @@ test("same commit cannot silently replace a different human-confirmed decision",
   t.after(async () => {
     await client.close().catch(() => {});
     await server.close().catch(() => {});
-    try { rmSync(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 }); } catch { /* temp only */ }
+    try { cleanupDir(root); } catch { /* temp only */ }
   });
 
   const first = await record(client, {
@@ -129,7 +130,7 @@ test("a human capture still upgrades the machine draft for its commit", async (t
   t.after(async () => {
     await client.close().catch(() => {});
     await server.close().catch(() => {});
-    try { rmSync(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 }); } catch { /* temp only */ }
+    try { cleanupDir(root); } catch { /* temp only */ }
   });
 
   // The human vouch is the human's own in-client confirmation of the capture (authorship
@@ -163,7 +164,7 @@ test("same-topic human re-record may refine the title without minting a duplicat
   t.after(async () => {
     await client.close().catch(() => {});
     await server.close().catch(() => {});
-    try { rmSync(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 }); } catch { /* temp only */ }
+    try { cleanupDir(root); } catch { /* temp only */ }
   });
 
   const first = await record(client, {

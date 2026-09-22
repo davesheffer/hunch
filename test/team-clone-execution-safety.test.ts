@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import {
@@ -141,7 +142,7 @@ test("fresh team auto-discovery never executes an ambient post-checkout hook", (
       assert.match(readFileSync(join(wired!, "decisions", "dec_clone_safe.json"), "utf8"), /safe clone record/);
     });
   } finally {
-    rmSync(base, { recursive: true, force: true });
+    cleanupDir(base);
   }
 });
 
@@ -169,7 +170,7 @@ test("fresh team auto-discovery suppresses ambient global attributes and smudge 
       assert.match(readFileSync(join(wired!, "decisions", "dec_clone_safe.json"), "utf8"), /safe clone record/);
     });
   } finally {
-    rmSync(base, { recursive: true, force: true });
+    cleanupDir(base);
   }
 });
 
@@ -193,7 +194,7 @@ test("fresh team auto-discovery rejects a remote smudge filter before executing 
       assertNoCloneResidue(project);
     });
   } finally {
-    rmSync(base, { recursive: true, force: true });
+    cleanupDir(base);
   }
 });
 
@@ -217,7 +218,7 @@ test("fresh team auto-discovery rejects a remote process filter before executing
       assertNoCloneResidue(project);
     });
   } finally {
-    rmSync(base, { recursive: true, force: true });
+    cleanupDir(base);
   }
 });
 
@@ -240,6 +241,6 @@ test("fresh team auto-discovery rejects tracked clone-local and derived runtime 
       }
     });
   } finally {
-    rmSync(base, { recursive: true, force: true });
+    cleanupDir(base);
   }
 });

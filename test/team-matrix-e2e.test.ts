@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import {
@@ -258,7 +259,7 @@ test("commit semantic source isolates Git config with a platform-compatible null
     assert.match(inventory.identity.revision ?? "", /^[0-9a-f]{40,64}$/);
     assert.deepEqual(inventory.entries.map((entry) => entry.path), ["src/orders.ts"]);
   } finally {
-    rmSync(sandbox, { recursive: true, force: true });
+    cleanupDir(sandbox);
   }
 });
 
@@ -754,7 +755,7 @@ test("team Matrix: three isolated clones share live memory, catch a bad branch, 
     if (process.env.HUNCH_KEEP_TEAM_MATRIX === "1") {
       console.error(`# HUNCH_KEEP_TEAM_MATRIX=${sandbox}`);
     } else {
-      rmSync(sandbox, { recursive: true, force: true });
+      cleanupDir(sandbox);
     }
   }
 });

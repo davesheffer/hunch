@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
@@ -105,7 +106,7 @@ test("init and durable index never publish dirty private source absent from comm
     assert.doesNotMatch(git(root, "log", "-p", "--all", "--", ".hunch"), /PRIVATE_(?:FUNCTION|PACKAGE)_SENTINEL/,
       "private checkout bytes never enter public Git history through a later pump");
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });
 
@@ -138,7 +139,7 @@ for (const start of ["unborn-git", "non-git-then-git"] as const) {
       assert.doesNotMatch(memoryText(root), /PRIVATE_(?:FUNCTION|PACKAGE)_SENTINEL/);
       assert.doesNotMatch(git(root, "log", "-p", "--all", "--", ".hunch"), /PRIVATE_(?:FUNCTION|PACKAGE)_SENTINEL/);
     } finally {
-      rmSync(root, { recursive: true, force: true });
+      cleanupDir(root);
     }
   });
 }

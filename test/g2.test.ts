@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -39,7 +40,7 @@ function privateFixture() {
   const store = new HunchStore(hunchPaths(root));
   store.json.ensureDirs();
   const service = new ConstitutionService(store, root);
-  return { root, privateRoot, store, service, cleanup: () => { store.close(); rmSync(root, { recursive: true, force: true }); } };
+  return { root, privateRoot, store, service, cleanup: () => { store.close(); cleanupDir(root); } };
 }
 
 function createTwoCommitHistory(root: string): void {
@@ -334,6 +335,6 @@ test("G2 operational drills bind exact runbooks and historical backfill aborts a
   } finally {
     if (client) await client.close();
     cleanup();
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });

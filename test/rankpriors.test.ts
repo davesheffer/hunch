@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -134,7 +135,7 @@ test("rank priors: a changed decision anchor dims after HEAD advances while the 
   const { store, cleanup } = tempStore();
   const codeRoot = mkdtempSync(join(tmpdir(), "hunch-freshness-code-"));
   t.after(cleanup);
-  t.after(() => rmSync(codeRoot, { recursive: true, force: true }));
+  t.after(() => cleanupDir(codeRoot));
   git(codeRoot, ["init", "--initial-branch=main"]);
   mkdirSync(join(codeRoot, "src"), { recursive: true });
   writeFileSync(join(codeRoot, "src", "stale.ts"), "export const stale = 1;\n");

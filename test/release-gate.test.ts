@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -390,7 +391,7 @@ test("git() preserves the leading space of an unstaged-only porcelain line", () 
     assert.equal(status[0], " ", "the first porcelain line's leading index-column space must survive git()");
     assert.equal(statusWithoutMemoryChurn(status), "", "an unstaged-only .hunch/ edit sorted first is still recognized as memory churn");
   } finally {
-    rmSync(repo, { recursive: true, force: true });
+    cleanupDir(repo);
   }
 });
 

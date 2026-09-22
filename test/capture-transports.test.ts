@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -89,6 +90,6 @@ test("MCP and HTTP share capture identity, lock, readback and per-item refusals"
   } finally {
     await mcp.close(); await server.close();
     await new Promise<void>(r => app.close(() => r())); app.closeStores();
-    rmSync(sandbox, { recursive: true, force: true });
+    cleanupDir(sandbox);
   }
 });

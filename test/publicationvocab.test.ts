@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
@@ -15,7 +16,7 @@ import { publicationVocabulary } from "../src/mcp/server.js";
  */
 test("two stores in one process get their own publication vocabularies", (t) => {
   const root = mkdtempSync(join(tmpdir(), "pubvocab-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  t.after(() => cleanupDir(root));
 
   const a = join(root, "a", ".hunch");
   const b = join(root, "b", ".hunch");

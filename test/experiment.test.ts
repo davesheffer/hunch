@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -154,7 +155,7 @@ function fixture() {
   writeFileSync(join(root, ".hunch/local.json"), JSON.stringify({ privateDir: privateRoot, autoCommit: false, mode: "private" }));
   const store = new HunchStore(hunchPaths(root));
   store.json.ensureDirs();
-  return { root, privateRoot, store, repository: new ExperimentRepository(store), cleanup: () => { store.close(); rmSync(root, { recursive: true, force: true }); } };
+  return { root, privateRoot, store, repository: new ExperimentRepository(store), cleanup: () => { store.close(); cleanupDir(root); } };
 }
 
 function qualifyReviewer(
@@ -768,6 +769,6 @@ console.log(JSON.stringify({valid_completion:existsSync("solution.txt"),policy_v
   } finally {
     process.env.PATH = oldPath;
     cleanup();
-    rmSync(session, { recursive: true, force: true });
+    cleanupDir(session);
   }
 });

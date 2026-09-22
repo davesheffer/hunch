@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 /**
  * Capture tokens prove an interview protocol was issued — never that a HUMAN answered.
  *
@@ -55,7 +56,7 @@ async function setup(answer: Answer = "no-capability") {
     token: async () => /capture_token:"([^"]+)"/.exec(await call("hunch_capture_decision", { topic: "t.topic" }))![1]!,
     cleanup: () => {
       void client.close().catch(() => {});
-      try { rmSync(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 }); } catch { /* temp dir */ }
+      try { cleanupDir(root); } catch { /* temp dir */ }
     },
   };
 }

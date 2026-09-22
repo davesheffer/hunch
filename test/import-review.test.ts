@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -143,7 +144,7 @@ test("CLI asks plainly, refuses the unbound accept path, and applies an exact ap
     assert.match(stored.provenance.source, /human_confirmed/);
     assert.equal(importedAdrReview(stored)?.disposition, "approve");
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });
 
@@ -167,7 +168,7 @@ test("MCP surfaces the question in chat and only the explicit hash-bound answer 
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
   t.after(async () => {
     await client.close();
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   });
 
   const text = (result: ToolText): string => result.content.map((part) => part.text ?? "").join("\n");
