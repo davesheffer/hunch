@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -9,7 +10,7 @@ import { readPendingRepairs, writePendingRepairs, readDroppedRepairs, writeDropp
 function tmpRoot(): { root: string; cleanup(): void } {
   const root = mkdtempSync(join(tmpdir(), "hunch-repairqueue-"));
   mkdirSync(join(root, ".hunch"), { recursive: true });
-  return { root, cleanup: () => rmSync(root, { recursive: true, force: true }) };
+  return { root, cleanup: () => cleanupDir(root) };
 }
 
 /** withheldRewriteIds needs a real git repository — commitsExist shells out. */
@@ -23,7 +24,7 @@ function gitRoot(): { root: string; headSha: string; cleanup(): void } {
   git("add", "-A");
   git("commit", "-qm", "init");
   mkdirSync(join(root, ".hunch"), { recursive: true });
-  return { root, headSha: git("rev-parse", "HEAD"), cleanup: () => rmSync(root, { recursive: true, force: true }) };
+  return { root, headSha: git("rev-parse", "HEAD"), cleanup: () => cleanupDir(root) };
 }
 
 test("readPendingRepairs: returns an empty array when the queue file doesn't exist", () => {

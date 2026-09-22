@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 /**
  * Single source of truth — the memory-resolution contract:
  *  · captureHome routes every capture to ONE home per mode (public / private-split / shared-unified)
@@ -32,7 +33,7 @@ function repo(): { root: string; cleanup: () => void } {
   g(root, "add", "-A"); g(root, "commit", "-q", "-m", "code");
   mkdirSync(join(root, ".hunch"), { recursive: true });
   writeFileSync(join(root, ".hunch", "manifest.json"), '{"schema_version":1}\n');
-  return { root, cleanup: () => rmSync(root, { recursive: true, force: true }) };
+  return { root, cleanup: () => cleanupDir(root) };
 }
 
 function dec(id: string): Decision {
@@ -213,7 +214,7 @@ test("team.json auto-discovery: a fresh clone wires itself to the shared store (
       assert.match(readFileSync(join(overlayRoot, ".gitattributes"), "utf8"), /merge=hunch/);
       assert.match(g(overlayRoot, "config", "--get", "merge.hunch.driver"), /merge-driver/);
     });
-  } finally { rmSync(base, { recursive: true, force: true }); }
+  } finally { cleanupDir(base); }
 });
 
 test("team.json URL gate: flag smuggling, ext:: transport, and file:// never reach git clone (drive-by RCE guard)", () => {
@@ -287,7 +288,7 @@ test("team overlay clone rejects symlink entries before any integration write ca
       assert.equal(wired, null, "unsafe overlay must not be wired");
       assert.equal(existsSync(join(project, ".hunch", "local.json")), false);
     });
-  } finally { rmSync(base, { recursive: true, force: true }); }
+  } finally { cleanupDir(base); }
 });
 
 test("team overlay clone rejects a symlinked .hunch before ensureDirs can create external state", { skip: SYMLINK_SKIP }, () => {
@@ -316,7 +317,7 @@ test("team overlay clone rejects a symlinked .hunch before ensureDirs can create
       assert.equal(wired, null, "unsafe overlay must not be wired");
       assert.equal(existsSync(join(project, ".hunch", "local.json")), false);
     });
-  } finally { rmSync(base, { recursive: true, force: true }); }
+  } finally { cleanupDir(base); }
 });
 
 test("team overlay clone rejects symlinked Hunch children so later record writes stay contained", { skip: SYMLINK_SKIP }, () => {
@@ -347,7 +348,7 @@ test("team overlay clone rejects symlinked Hunch children so later record writes
       assert.equal(existsSync(join(project, ".hunch", "local.json")), false);
       assert.equal(readFileSync(victimFile, "utf8"), '{"outside":true}\n');
     });
-  } finally { rmSync(base, { recursive: true, force: true }); }
+  } finally { cleanupDir(base); }
 });
 
 test("integration capability writers independently refuse symlinked top-level files", { skip: SYMLINK_SKIP }, () => {
@@ -366,7 +367,7 @@ test("integration capability writers independently refuse symlinked top-level fi
     symlinkSync(victim, join(root, ".gitignore"));
     assert.throws(() => ensureGitignore(root), /refusing to write unsafe integration config/);
     assert.equal(readFileSync(victim, "utf8"), "outside must stay unchanged\n");
-  } finally { rmSync(base, { recursive: true, force: true }); }
+  } finally { cleanupDir(base); }
 });
 
 test("team overlay clone rejects a non-file capability entry before creating any Hunch state", () => {
@@ -395,7 +396,7 @@ test("team overlay clone rejects a non-file capability entry before creating any
       assert.equal(existsSync(join(cloned, ".hunch", "decisions")), false, "validation must precede ensureDirs");
       assert.equal(existsSync(join(project, ".hunch", "local.json")), false);
     });
-  } finally { rmSync(base, { recursive: true, force: true }); }
+  } finally { cleanupDir(base); }
 });
 
 test("putWhereItLives updates the holding store — an overlay record never forks a public copy", () => {

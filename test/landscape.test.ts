@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
@@ -188,6 +189,6 @@ test("resources preserve the public/private single-source boundary while the der
     store.close();
     if (previous === undefined) delete process.env.HUNCH_PRIVATE_DIR;
     else process.env.HUNCH_PRIVATE_DIR = previous;
-    rmSync(base, { recursive: true, force: true });
+    cleanupDir(base);
   }
 });

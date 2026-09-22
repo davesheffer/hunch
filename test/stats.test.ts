@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, rmSync } from "node:fs";
@@ -25,7 +26,7 @@ test("catch-log round-trips and skips corrupt lines", () => {
     assert.equal(got[0]?.kind, "constraint");
     assert.equal(got[1]?.decision, "dec_1");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    cleanupDir(dir);
   }
 });
 

@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 /**
  * Constraint gates evaluate the COMPLETE diff and fail closed when they cannot.
  *
@@ -66,7 +67,7 @@ function repo(): { root: string; store: HunchStore; cleanup: () => void } {
   const store = new HunchStore(hunchPaths(root));
   store.json.ensureDirs();
   seedConstraints(store);
-  return { root, store, cleanup: () => { store.close(); rmSync(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 }); } };
+  return { root, store, cleanup: () => { store.close(); cleanupDir(root); } };
 }
 
 /** ~90 KB of clean code in a file that sorts BEFORE the violating one in git's diff order. */
@@ -268,7 +269,7 @@ test("git failure: a content-matched blocking constraint is reported unevaluable
     assert.equal(store.buildCheckReport(["src/cart.ts"], "", strictOpts()).direct.length, 0);
   } finally {
     cleanup();
-    rmSync(notRepo, { recursive: true, force: true });
+    cleanupDir(notRepo);
   }
 });
 

@@ -1,0 +1,35 @@
+{
+  "id": "fnd_d98451bc6b",
+  "title": "Local task evidence HTML overflows mobile viewport because footer report hash does not wrap",
+  "observation": "Reproduced on 2026-09-22 with Hunch 1.40.1: an unbroken footer report hash expanded a 360px viewport to scrollWidth 457px. The candidate renderer adds footer overflow-wrap:anywhere. Browser verification of the candidate source renderer measured scrollWidth 345px at viewport 360px and 1265px at viewport 1280px. Fixed in draft PR #396; not released.",
+  "evidence": [
+    "https://github.com/davesheffer/hunch/issues/395",
+    "https://github.com/davesheffer/hunch/pull/396",
+    "2026-09-22 Playwright: actual candidate report, viewport/scrollWidth 360/345 and 1280/1265; computed footer overflowWrap anywhere.",
+    "src/core/taskReportRender.ts: renderTaskReportHtml footer wrapping."
+  ],
+  "method": null,
+  "severity": "low",
+  "triage": "resolved",
+  "affected_files": [
+    "src/core/taskReportRender.ts"
+  ],
+  "affected_symbols": [
+    "renderTaskReportHtml"
+  ],
+  "violates_constraint": null,
+  "spawned_decision": null,
+  "observed_at": "2026-09-22T07:16:43.108Z",
+  "resolved_commit": "a6eb1c603256451bc7a9308dfece5f2bbad58b91",
+  "provenance": {
+    "source": "agent_recorded",
+    "confidence": 0.75,
+    "evidence": [
+      "https://github.com/davesheffer/hunch/issues/395",
+      "https://github.com/davesheffer/hunch/pull/396",
+      "2026-09-22 Playwright: actual candidate report, viewport/scrollWidth 360/345 and 1280/1265; computed footer overflowWrap anywhere.",
+      "src/core/taskReportRender.ts: renderTaskReportHtml footer wrapping."
+    ],
+    "last_verified": "2026-09-22T09:20:19.105Z"
+  }
+}

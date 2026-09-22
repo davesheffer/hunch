@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
@@ -67,7 +68,7 @@ function renamedBindingFixture(): { root: string; decisionFile: string; cleanup(
   return {
     root,
     decisionFile,
-    cleanup: () => rmSync(root, { recursive: true, force: true }),
+    cleanup: () => cleanupDir(root),
   };
 }
 

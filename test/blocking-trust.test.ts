@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 /**
  * A BLOCKING constraint denies edits under strict firmness, so it must never be
  * minted from an unverified input (round-3 audit #2 and #3).
@@ -118,6 +119,6 @@ test("the store never accumulates an auto-derived repo-wide deny end to end (#3)
       assert.deepEqual(repoWideDenies, [], "no auto-derived repo-wide blocking constraint was written");
     } finally { store.close(); }
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });

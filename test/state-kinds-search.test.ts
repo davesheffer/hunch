@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 /**
  * nuryel.state/1 kinds are searchable and delivered like decisions: reindex adds every state
  * record to the `search` FTS table, hunch_query / `hunch query` render them one line per kind,
@@ -230,7 +231,7 @@ test("over MCP: hunch_query renders state hits per kind (current above supersede
   t.after(async () => {
     await client.close().catch(() => {});
     await server.close().catch(() => {});
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   });
 
   const query = await client.callTool({ name: "hunch_query", arguments: { query: subject } });

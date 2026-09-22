@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 /**
  * Wiki path containment (round-2 audit). `.hunch/wiki-manifest.json` is COMMITTED
  * so CI can gate on it, which makes every page KEY inside it PR- and
@@ -20,7 +21,7 @@ function repo(): { root: string; store: HunchStore; cleanup: () => void } {
   const root = mkdtempSync(join(tmpdir(), "hunch-wiki-contain-"));
   const store = new HunchStore(hunchPaths(root));
   store.json.ensureDirs();
-  return { root, store, cleanup: () => { store.close(); rmSync(root, { recursive: true, force: true }); } };
+  return { root, store, cleanup: () => { store.close(); cleanupDir(root); } };
 }
 
 /** Seed an adopted wiki manifest carrying hostile page keys alongside a benign one. */
@@ -68,7 +69,7 @@ test("orphan removal deletes nothing outside the wiki directory, end to end (#1)
     assert.equal(readFileSync(victimOutside, "utf8"), "PRIVATE KEY", "a file outside the repo must survive");
     assert.equal(existsSync(victimInRepo), true, "a repo file outside wiki/ must survive");
   } finally {
-    rmSync(outside, { recursive: true, force: true });
+    cleanupDir(outside);
     cleanup();
   }
 });

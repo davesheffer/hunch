@@ -14,6 +14,8 @@ const GENERIC_TITLES: ReadonlySet<string> = new Set(["Assistant task", "Claude t
 export interface TaskQueryOptions {
   /** A phrase the caller has (hunch_context's target when it is not a path). */
   phrase?: string | null;
+  /** Automatic hooks must not feed their own target delivery back into ranking. */
+  excludeTargetDeliveries?: boolean;
   now?: number;
 }
 
@@ -28,6 +30,7 @@ export function buildTaskRankingQuery(root: string, taskId: string | null | unde
     try {
       const report = readTaskReport(root, taskId);
       for (const d of report.deliveries) {
+        if (options.excludeTargetDeliveries && d.target && normalizePath(d.target) === normalizePath(target)) continue;
         if (d.target && targetLooksLikePath(d.target)) files.add(normalizePath(d.target));
         for (const r of d.records) recordIds.add(r.record_id);
       }

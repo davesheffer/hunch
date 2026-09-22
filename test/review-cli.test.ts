@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
@@ -253,6 +254,6 @@ test("public veto backfill never overwrites an identically-named private decisio
     assert.equal(git(overlay, "rev-parse", "HEAD"), privateHead, "the private home is neither written nor pumped");
   } finally {
     fixture.cleanup();
-    rmSync(overlay, { recursive: true, force: true });
+    cleanupDir(overlay);
   }
 });

@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 /**
  * The MCP binding of nuryel.state/1: four tools that are a thin transport over
  * src/store/stateBinding.ts. Exercised through a real MCP client over an in-memory
@@ -36,7 +37,7 @@ test("nuryel_* tools bind read / write / subscribe / capabilities over MCP with 
   t.after(async () => {
     await client.close().catch(() => {});
     await server.close().catch(() => {});
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   });
 
   const listed = await client.listTools();
@@ -145,7 +146,7 @@ test("MCP state writes lock the selected shared overlay home", async (t) => {
   t.after(async () => {
     await client.close().catch(() => {});
     await server.close().catch(() => {});
-    rmSync(dir, { recursive: true, force: true });
+    cleanupDir(dir);
   });
 
   const caps = await client.callTool({ name: "nuryel_capabilities", arguments: {} });
@@ -184,7 +185,7 @@ test("MCP preserves and renders exact field citations without implying verified 
   const server = buildServer(root), client = new Client({ name: "citation-test", version: "1" });
   const [ct, st] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(st), client.connect(ct)]);
-  t.after(async () => { await client.close(); await server.close(); rmSync(root, { recursive: true, force: true }); });
+  t.after(async () => { await client.close(); await server.close(); cleanupDir(root); });
   const scope = { kind: "repository", id: basename(root) }, principal = { id: "writer", kind: "agent", grants: [scope] };
   const dep = { kind: "external", ref: crmEvent }, content = '{"count":0,"confirmed":false}';
   const field_provenance = [{ selector: { kind: "json_pointer", path: "/count" }, value_hash: stateHash(0), dependency_hashes: [stateHash(dep)] }];

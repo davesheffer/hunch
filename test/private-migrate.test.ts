@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -35,7 +36,7 @@ function stores(): { pub: JsonStore; priv: JsonStore; roots: string[]; cleanup: 
   priv.ensureDirs();
   return {
     pub, priv, roots: [pubRoot, privRoot],
-    cleanup: () => { rmSync(pubRoot, { recursive: true, force: true }); rmSync(privRoot, { recursive: true, force: true }); },
+    cleanup: () => { cleanupDir(pubRoot); cleanupDir(privRoot); },
   };
 }
 
@@ -168,5 +169,5 @@ test("private --migrate: ignoreHunchMemory adds the memory tree once and is idem
     assert.equal(second.action, "unchanged"); // re-running is a no-op
     const occurrences = readFileSync(join(root, ".gitignore"), "utf8").split("private-only").length - 1;
     assert.equal(occurrences, 2); // exactly one marked block (START + END markers)
-  } finally { rmSync(root, { recursive: true, force: true }); }
+  } finally { cleanupDir(root); }
 });

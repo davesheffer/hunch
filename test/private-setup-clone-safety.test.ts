@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import {
@@ -199,7 +200,7 @@ test("explicit private setup suppresses ambient checkout hooks and global attrib
     assert.equal(existsSync(join(fixture.root, ".git", "hunch", "local.json")), true, "all worktrees receive the local route");
     assert.deepEqual(setupResidue(fixture.root), []);
   } finally {
-    rmSync(base, { recursive: true, force: true });
+    cleanupDir(base);
   }
 });
 
@@ -221,7 +222,7 @@ test("explicit private setup rejects remote checkout attributes without executio
     assert.equal(existsSync(join(fixture.root, ".hunch-private")), false, "the unsafe overlay is never installed");
     assertNoRoutingResidue(fixture.root);
   } finally {
-    rmSync(base, { recursive: true, force: true });
+    cleanupDir(base);
   }
 });
 
@@ -279,6 +280,6 @@ test("existing private attach rejects info attributes before fetch, checkout, or
     git(overlay, "checkout", "--", controlledPath);
     assert.equal(existsSync(markers.filterMarker), true, "the adversarial info attribute is executable under raw Git");
   } finally {
-    rmSync(base, { recursive: true, force: true });
+    cleanupDir(base);
   }
 });

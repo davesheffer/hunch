@@ -1,0 +1,64 @@
+{
+  "id": "htask_798fa5269bfc4f42467778d9",
+  "title": "Create a task and return its full task card",
+  "state": "completed",
+  "started_at": "2026-09-22T07:10:25.248Z",
+  "finished_at": "2026-09-22T07:10:57.904Z",
+  "coverage": "delivered",
+  "lessons": [
+    {
+      "kind": "constraints",
+      "record_id": "con_cc04976048",
+      "content_hash": "sha256:b17cd7ad91456c5f713e0ca2f8291c7094654b7e11c1564cf32d7471d1b3fa84",
+      "title": "The homepage DNA hero must visibly communicate code and repository context; keep the headline fully opaque while scrolling and do not use floating label cards or scattered scroll effects."
+    },
+    {
+      "kind": "decisions",
+      "record_id": "dec_4c7f212b2a",
+      "content_hash": "sha256:2b69efed6a2df9d9ccefcc608058328ee91851e69be024e21e118da58e7849b8",
+      "title": "Preserve Hunch evidence command verbatim, not rendered"
+    },
+    {
+      "kind": "decisions",
+      "record_id": "dec_c6b0d50fbd",
+      "content_hash": "sha256:d1c8f670a7b93f3e35f2a10fc9f14d6aa0e6788b1fc79ddb901feff010512d2d",
+      "title": "Finished tasks are graph memory: .hunch/tasks/ records written through the normal capture path, ledger stays local"
+    }
+  ],
+  "applied": [],
+  "saved": [],
+  "checks": [],
+  "conformance": [
+    {
+      "kind": "constraints",
+      "record_id": "con_cc04976048",
+      "content_hash": "sha256:b17cd7ad91456c5f713e0ca2f8291c7094654b7e11c1564cf32d7471d1b3fa84",
+      "outcome": "unavailable"
+    },
+    {
+      "kind": "decisions",
+      "record_id": "dec_4c7f212b2a",
+      "content_hash": "sha256:2b69efed6a2df9d9ccefcc608058328ee91851e69be024e21e118da58e7849b8",
+      "outcome": "unavailable"
+    },
+    {
+      "kind": "decisions",
+      "record_id": "dec_c6b0d50fbd",
+      "content_hash": "sha256:d1c8f670a7b93f3e35f2a10fc9f14d6aa0e6788b1fc79ddb901feff010512d2d",
+      "outcome": "unavailable"
+    }
+  ],
+  "refusals": 0,
+  "files": [],
+  "supersedes": [],
+  "source_snapshot": null,
+  "report_hash": "sha256:8c9e9df7e677fb5e0ca0b5bb507761a57474855bd67b752117383497724d5df8",
+  "provenance": {
+    "source": "task_report",
+    "confidence": 1,
+    "evidence": [
+      "hunch report htask_798fa5269bfc4f42467778d9"
+    ],
+    "last_verified": "2026-09-22T07:10:57.904Z"
+  }
+}

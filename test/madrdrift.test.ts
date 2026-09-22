@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync, existsSync, readdirSync } from "node:fs";
@@ -47,7 +48,7 @@ function adoptedRepo(decisions: readonly Decision[]): { root: string; cleanup: (
   const { files } = exportMadrCorpus(decisions, DIR);
   for (const f of files) writeFileSync(join(root, DIR, f.name), f.text);
   writeMadrManifest(root, buildMadrManifest(DIR, files, NOW));
-  return { root, cleanup: () => rmSync(root, { recursive: true, force: true }) };
+  return { root, cleanup: () => cleanupDir(root) };
 }
 
 const A = dec({ id: "dec_aaaaaaaaaa", title: "Use Postgres", decision: "Relational fits.", valid_from: "2024-01-01T00:00:00.000Z" });
@@ -58,7 +59,7 @@ test("a repo that never exported sees no MADR drift at all", () => {
   try {
     assert.deepEqual(computeMadrDrift([A, B], root), []);
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });
 
@@ -158,7 +159,7 @@ test("refresh is a no-op where no corpus was ever adopted", () => {
     assert.equal(refreshMadrCorpus([A, B], root, NOW), null);
     assert.equal(existsSync(join(root, DIR)), false);
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });
 

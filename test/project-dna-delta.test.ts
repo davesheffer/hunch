@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -21,7 +22,7 @@ function git(root: string, ...args: string[]): string {
 
 test("DNA drift is an immutable profile delta rather than an in-place rewrite", (t) => {
   const root = mkdtempSync(join(tmpdir(), "hunch-project-dna-delta-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  t.after(() => cleanupDir(root));
   git(root, "init", "-q", "-b", "main");
   writeFileSync(join(root, "value.txt"), "0\n");
   git(root, "add", "value.txt");

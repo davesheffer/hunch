@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
@@ -5,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
 import { installPostCommitHook, installPreCommitHook, installPostMergeHook, hookStatus } from "../src/integrations/hooks.js";
+import { HUNCH_PACKAGE_NAME } from "../src/core/version.js";
 
 const PROJECT_ROOT = process.cwd();
 const TSX = join(PROJECT_ROOT, "node_modules/tsx/dist/cli.mjs");
@@ -17,6 +19,19 @@ function repo(): string {
 }
 const hookText = (r: string): string => readFileSync(join(r, ".git", "hooks", "post-commit"), "utf8");
 
+/** A fixture repo whose package.json identifies it as Hunch's own checkout,
+ *  with just enough of an in-tree build present (a fixture `src/cli/index.ts`
+ *  and `node_modules/tsx/dist/cli.mjs`) for `selfBuildInvocation` to find it. */
+function selfRepo(): string {
+  const r = repo();
+  writeFileSync(join(r, "package.json"), JSON.stringify({ name: HUNCH_PACKAGE_NAME }));
+  mkdirSync(join(r, "src", "cli"), { recursive: true });
+  writeFileSync(join(r, "src", "cli", "index.ts"), "// fixture entry\n");
+  mkdirSync(join(r, "node_modules", "tsx", "dist"), { recursive: true });
+  writeFileSync(join(r, "node_modules", "tsx", "dist", "cli.mjs"), "// fixture tsx\n");
+  return r;
+}
+
 test("post-commit hook: default sync line carries no --private / --commit", () => {
   const r = repo();
   try {
@@ -25,7 +40,7 @@ test("post-commit hook: default sync line carries no --private / --commit", () =
     assert.match(h, /hunch sync --from-hook --quiet >/);
     assert.doesNotMatch(h, /--private/);
     assert.doesNotMatch(h, /--commit/);
-  } finally { rmSync(r, { recursive: true, force: true }); }
+  } finally { cleanupDir(r); }
 });
 
 test("post-commit hook: --private and --commit are emitted only when opted in", () => {
@@ -33,7 +48,7 @@ test("post-commit hook: --private and --commit are emitted only when opted in", 
   try {
     installPostCommitHook(r, "hunch", { private: true, commit: true });
     assert.match(hookText(r), /sync --from-hook --quiet --private --commit >/);
-  } finally { rmSync(r, { recursive: true, force: true }); }
+  } finally { cleanupDir(r); }
 });
 
 test("post-commit hook: local-only private sync forces deterministic synthesis", () => {
@@ -41,7 +56,7 @@ test("post-commit hook: local-only private sync forces deterministic synthesis",
   try {
     installPostCommitHook(r, "hunch", { private: true, commit: true, localOnly: true });
     assert.match(hookText(r), /HUNCH_SYNTH_PROVIDER=deterministic/);
-  } finally { rmSync(r, { recursive: true, force: true }); }
+  } finally { cleanupDir(r); }
 });
 
 test("post-commit hook: --commit without --private (regular auto-commit)", () => {
@@ -51,7 +66,92 @@ test("post-commit hook: --commit without --private (regular auto-commit)", () =>
     const h = hookText(r);
     assert.match(h, /sync --from-hook --quiet --commit >/);
     assert.doesNotMatch(h, /--private/);
-  } finally { rmSync(r, { recursive: true, force: true }); }
+  } finally { cleanupDir(r); }
+});
+
+test("post-commit hook: inside Hunch's own checkout, always calls back into the in-tree tsx build, regardless of the invocation the installing process was actually running", () => {
+  const r = selfRepo();
+  try {
+    // A global/npx install (or any other build) performed the install; the
+    // installed hook must still call back into THIS checkout's own src/cli/index.ts
+    // for doc regeneration, never the installing process's own build.
+    installPostCommitHook(r, "npx -y --package=hunch-exact@npm:@davesheffer/hunch@9.9.9 hunch");
+    const h = hookText(r);
+    assert.doesNotMatch(h, /hunch-exact/, "must not embed the installing process's own (possibly stale/newer) build");
+    assert.ok(h.includes(JSON.stringify(process.execPath)), "invokes node directly, not a bare `npx`");
+    assert.ok(h.includes(JSON.stringify(join(r, "node_modules", "tsx", "dist", "cli.mjs"))));
+    assert.ok(h.includes(JSON.stringify(join(r, "src", "cli", "index.ts"))));
+    assert.match(h, /sync --from-hook --quiet/);
+  } finally { cleanupDir(r); }
+});
+
+test("post-commit hook: outside Hunch's own checkout, the passed invocation is used unchanged (a repo merely depending on Hunch)", () => {
+  const r = repo();
+  try {
+    writeFileSync(join(r, "package.json"), JSON.stringify({ name: "some-other-project" }));
+    installPostCommitHook(r, "hunch");
+    assert.match(hookText(r), /hunch sync --from-hook --quiet/);
+  } finally { cleanupDir(r); }
+});
+
+test("post-commit hook: a Hunch-named checkout with no in-tree src/ (e.g. a published-tarball checkout, which ships dist/** only) falls back to the passed invocation instead of silently no-opping forever", () => {
+  const r = repo();
+  try {
+    writeFileSync(join(r, "package.json"), JSON.stringify({ name: HUNCH_PACKAGE_NAME }));
+    // No src/cli/index.ts and no node_modules/tsx present — the self-build override must not apply.
+    installPostCommitHook(r, "hunch");
+    const h = hookText(r);
+    assert.match(h, /hunch sync --from-hook --quiet/);
+    assert.doesNotMatch(h, /tsx\/dist\/cli\.mjs/);
+  } finally { cleanupDir(r); }
+});
+
+test("post-commit hook: installed from a LINKED worktree of Hunch's own checkout, still bakes in the MAIN worktree's entry — not the linked worktree's own (soon-to-be-removed) path", () => {
+  const main = selfRepo();
+  execFileSync("git", ["config", "user.email", "t@t.co"], { cwd: main });
+  execFileSync("git", ["config", "user.name", "T"], { cwd: main });
+  execFileSync("git", ["add", "-A"], { cwd: main });
+  execFileSync("git", ["commit", "-qm", "init"], { cwd: main });
+  const linkedDir = join(tmpdir(), `hunch-hook-linked-${Date.now()}`);
+  execFileSync("git", ["worktree", "add", "-b", "linked-branch", linkedDir], { cwd: main });
+  try {
+    // The linked worktree has its OWN copy of src/cli/index.ts (checked out from
+    // the same commit) at a totally different absolute path than main's.
+    assert.ok(existsSync(join(linkedDir, "src", "cli", "index.ts")));
+    assert.notEqual(linkedDir, main);
+
+    installPostCommitHook(linkedDir, "hunch");
+    // The hook file is shared (hooksDir resolves through the common git dir) —
+    // installing from the linked worktree still writes into main's .git/hooks.
+    assert.equal(existsSync(join(linkedDir, ".git", "hooks", "post-commit")), false);
+    const h = hookText(main);
+    assert.ok(h.includes(JSON.stringify(join(main, "src", "cli", "index.ts"))), "must bake in the MAIN worktree's entry");
+    assert.ok(!h.includes(JSON.stringify(join(linkedDir, "src", "cli", "index.ts"))), "must NOT bake in the linked (removable) worktree's own entry");
+  } finally {
+    execFileSync("git", ["worktree", "remove", "--force", linkedDir], { cwd: main });
+    cleanupDir(main);
+  }
+});
+
+test("self-build selection preserves shared privacy and commit options on a linked reinstall", () => {
+  const main = selfRepo();
+  const linked = join(main, "linked");
+  const git = (...args: string[]) => execFileSync("git", args, { cwd: main, stdio: "pipe" });
+  try {
+    git("config", "user.email", "fixture@example.test");
+    git("config", "user.name", "Fixture");
+    git("add", "-A"); git("commit", "-qm", "fixture");
+    git("worktree", "add", "-b", "linked", linked);
+    installPostCommitHook(main, "hunch", { private: true, commit: true, localOnly: true });
+    const before = hookText(main);
+    const invocation = `${JSON.stringify(process.execPath)} ${JSON.stringify(join(linked, "src/cli/index.ts"))}`;
+    const result = installPostCommitHook(linked, invocation);
+    assert.equal(result.action, "kept-shared");
+    assert.equal(hookText(main), before);
+    assert.ok(result.keptFlags?.includes("--private"));
+    assert.ok(result.keptFlags?.includes("--commit"));
+    assert.ok(result.keptFlags?.includes("HUNCH_SYNTH_PROVIDER=deterministic"));
+  } finally { cleanupDir(main); }
 });
 
 test("post-commit hook: re-install is idempotent (managed block replaced, not duplicated)", () => {
@@ -62,7 +162,7 @@ test("post-commit hook: re-install is idempotent (managed block replaced, not du
     const h = hookText(r);
     assert.equal(h.match(/>>> hunch post-commit >>>/g)?.length, 1); // single managed block
     assert.match(h, /--private --commit/);
-  } finally { rmSync(r, { recursive: true, force: true }); }
+  } finally { cleanupDir(r); }
 });
 
 const mergeHookText = (r: string): string => readFileSync(join(r, ".git", "hooks", "post-merge"), "utf8");
@@ -75,7 +175,7 @@ test("post-merge hook: invokes repair-provenance from the hook, quietly, WITHOUT
     assert.match(h, /hunch repair-provenance --from-hook --quiet >/);
     assert.doesNotMatch(h, /--apply/);
     assert.match(h, /HUNCH_MERGE_SYNC/);
-  } finally { rmSync(r, { recursive: true, force: true }); }
+  } finally { cleanupDir(r); }
 });
 
 test("post-merge hook: re-install is idempotent (managed block replaced, not duplicated)", () => {
@@ -85,7 +185,7 @@ test("post-merge hook: re-install is idempotent (managed block replaced, not dup
     installPostMergeHook(r, "hunch");
     const h = mergeHookText(r);
     assert.equal(h.match(/>>> hunch post-merge >>>/g)?.length, 1);
-  } finally { rmSync(r, { recursive: true, force: true }); }
+  } finally { cleanupDir(r); }
 });
 
 test("post-merge hook: appended to an existing hook file without clobbering it", () => {
@@ -97,7 +197,7 @@ test("post-merge hook: appended to an existing hook file without clobbering it",
     const h = mergeHookText(r);
     assert.match(h, /echo existing/);
     assert.match(h, />>> hunch post-merge >>>/);
-  } finally { rmSync(r, { recursive: true, force: true }); }
+  } finally { cleanupDir(r); }
 });
 
 test("post-merge hook: unchanged action when re-installed identically", () => {
@@ -106,7 +206,7 @@ test("post-merge hook: unchanged action when re-installed identically", () => {
     installPostMergeHook(r, "hunch");
     const result = installPostMergeHook(r, "hunch");
     assert.equal(result.action, "unchanged");
-  } finally { rmSync(r, { recursive: true, force: true }); }
+  } finally { cleanupDir(r); }
 });
 
 test("hookStatus: read-only, reports nothing installed on a fresh repo and never creates a managed hook file", () => {
@@ -119,7 +219,7 @@ test("hookStatus: read-only, reports nothing installed on a fresh repo and never
     for (const name of ["post-commit", "pre-commit", "post-merge"]) {
       assert.equal(existsSync(join(r, ".git", "hooks", name)), false, `hookStatus must never create ${name}`);
     }
-  } finally { rmSync(r, { recursive: true, force: true }); }
+  } finally { cleanupDir(r); }
 });
 
 test("hookStatus: reports exactly which of the three managed hooks are present", () => {
@@ -128,7 +228,7 @@ test("hookStatus: reports exactly which of the three managed hooks are present",
     installPostCommitHook(r, "hunch");
     installPostMergeHook(r, "hunch");
     assert.deepEqual(hookStatus(r), { postCommit: true, preCommit: false, postMerge: true, postCheckout: false });
-  } finally { rmSync(r, { recursive: true, force: true }); }
+  } finally { cleanupDir(r); }
 });
 
 test("hunch index installs/upgrades the post-merge hook for a repo that already has hunch's post-commit hook — the upgrade path for existing installations", () => {
@@ -151,7 +251,7 @@ test("hunch index installs/upgrades the post-merge hook for a repo that already 
     assert.equal(run.status, 0, `${run.stdout}${run.stderr}`);
     const hookPath = join(r, ".git", "hooks", "post-merge");
     assert.match(readFileSync(hookPath, "utf8"), /repair-provenance --from-hook --quiet/);
-  } finally { rmSync(r, { recursive: true, force: true }); }
+  } finally { cleanupDir(r); }
 });
 
 test("hunch index self-heals the missing hooks when the post-commit block is STALE — it still proves hunch init ran (issue #315)", () => {
@@ -180,7 +280,7 @@ test("hunch index self-heals the missing hooks when the post-commit block is STA
     const hookPath = join(r, ".git", "hooks", "post-merge");
     assert.equal(existsSync(hookPath), true, "a stale post-commit block must not block the post-merge upgrade");
     assert.match(readFileSync(hookPath, "utf8"), /grounding --refresh/);
-  } finally { rmSync(r, { recursive: true, force: true }); }
+  } finally { cleanupDir(r); }
 });
 
 test("hunch index never installs any hook in a repo that never ran hunch init — no silent hooking of an un-hooked repo (e.g. a CI checkout)", () => {
@@ -200,7 +300,7 @@ test("hunch index never installs any hook in a repo that never ran hunch init �
     assert.equal(run.status, 0, `${run.stdout}${run.stderr}`);
     assert.equal(existsSync(join(r, ".git", "hooks", "post-merge")), false, "index must never newly hook a repo hunch init was never run on");
     assert.equal(existsSync(join(r, ".git", "hooks", "post-commit")), false);
-  } finally { rmSync(r, { recursive: true, force: true }); }
+  } finally { cleanupDir(r); }
 });
 
 test("hunch doctor: both hooks missing points at hunch init, not hunch index (index alone can't fix this)", () => {
@@ -219,7 +319,7 @@ test("hunch doctor: both hooks missing points at hunch init, not hunch index (in
     });
     assert.match(`${run.stdout}${run.stderr}`, /hooks:.*⚠.*missing.*post-commit.*post-merge/s);
     assert.match(`${run.stdout}${run.stderr}`, /hunch init/);
-  } finally { rmSync(r, { recursive: true, force: true }); }
+  } finally { cleanupDir(r); }
 });
 
 test("hunch doctor: only post-merge missing points at hunch index, which will actually fix it", () => {
@@ -243,7 +343,7 @@ test("hunch doctor: only post-merge missing points at hunch index, which will ac
     assert.doesNotMatch(`${run.stdout}${run.stderr}`, /missing[^\n]*post-commit/);
     assert.match(`${run.stdout}${run.stderr}`, /hunch index/);
     assert.doesNotMatch(`${run.stdout}${run.stderr}`, /hunch init/, "hunch index alone fixes this — must not send the human to the heavier command");
-  } finally { rmSync(r, { recursive: true, force: true }); }
+  } finally { cleanupDir(r); }
 });
 
 test("hunch doctor reports hooks installed once post-commit and post-merge are present", () => {
@@ -264,7 +364,7 @@ test("hunch doctor reports hooks installed once post-commit and post-merge are p
     });
     assert.match(run.stdout, /hooks:\s+post-commit, post-merge installed/);
     assert.doesNotMatch(`${run.stdout}${run.stderr}`, /⚠.*missing/);
-  } finally { rmSync(r, { recursive: true, force: true }); }
+  } finally { cleanupDir(r); }
 });
 
 test("strict pre-commit enforces the exact alternate index Git is committing", { timeout: 60_000 }, () => {
@@ -325,7 +425,7 @@ test("strict pre-commit enforces the exact alternate index Git is committing", {
     assert.equal(execFileSync("git", ["rev-parse", "HEAD"], { cwd: r, env, encoding: "utf8" }).trim(), headBefore,
       "the strict hook blocks the exact staged bytes in the alternate index");
   } finally {
-    rmSync(base, { recursive: true, force: true });
+    cleanupDir(base);
   }
 });
 
@@ -345,5 +445,37 @@ test("post-merge hook: refreshes grounding only when the merge touched .hunch/, 
     writeFileSync(join(r, ".git", "hooks", "post-merge"), "#!/bin/sh\necho user-hook\n");
     assert.equal(installPostMergeHook(r, "hunch").action, "appended");
     assert.match(readFileSync(join(r, ".git", "hooks", "post-merge"), "utf8"), /^#!\/bin\/sh\necho user-hook\n# >>> hunch post-merge >>>/);
-  } finally { rmSync(r, { recursive: true, force: true }); }
+  } finally { cleanupDir(r); }
+});
+
+test("post-merge hook: inside Hunch's own checkout, the grounding-refresh half calls back into the in-tree tsx build", () => {
+  const r = selfRepo();
+  try {
+    installPostMergeHook(r, "npx -y --package=hunch-exact@npm:@davesheffer/hunch@9.9.9 hunch");
+    const h = mergeHookText(r);
+    assert.ok(h.includes(JSON.stringify(join(r, "src", "cli", "index.ts"))));
+    assert.ok(h.includes(JSON.stringify(join(r, "node_modules", "tsx", "dist", "cli.mjs"))));
+    assert.match(h, /grounding --refresh/);
+    assert.doesNotMatch(h, /hunch-exact.*grounding --refresh/, "grounding refresh must not use the installing process's own build");
+  } finally { cleanupDir(r); }
+});
+
+test("post-merge hook: a Hunch-named checkout with no in-tree src/ falls back to the passed invocation for grounding refresh too", () => {
+  const r = repo();
+  try {
+    writeFileSync(join(r, "package.json"), JSON.stringify({ name: HUNCH_PACKAGE_NAME }));
+    installPostMergeHook(r, "hunch");
+    const h = mergeHookText(r);
+    assert.match(h, /hunch grounding --refresh/);
+    assert.doesNotMatch(h, /tsx\/dist\/cli\.mjs/);
+  } finally { cleanupDir(r); }
+});
+
+test("post-merge hook: inside Hunch's own checkout, the repair-provenance half is UNCHANGED — only the doc-regenerating grounding half is affected", () => {
+  const r = selfRepo();
+  try {
+    installPostMergeHook(r, "hunch");
+    const h = mergeHookText(r);
+    assert.match(h, /hunch repair-provenance --from-hook --quiet/, "repair-provenance keeps the passed invocation — it does no doc regeneration");
+  } finally { cleanupDir(r); }
 });

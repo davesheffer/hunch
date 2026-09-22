@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
@@ -19,7 +20,7 @@ function inTmp(fn: (root: string) => void) {
   try {
     fn(root);
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 }
 const read = (root: string) => readFileSync(join(root, ".gitignore"), "utf8");

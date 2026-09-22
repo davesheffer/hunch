@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, truncateSync, writeFileSync } from "node:fs";
@@ -56,6 +57,6 @@ test("exact commit hydration batches Git blob reads without weakening repeatable
   } finally {
     if (previousTrace === undefined) delete process.env.GIT_TRACE2_EVENT;
     else process.env.GIT_TRACE2_EVENT = previousTrace;
-    rmSync(sandbox, { recursive: true, force: true });
+    cleanupDir(sandbox);
   }
 });

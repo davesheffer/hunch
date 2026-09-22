@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -36,7 +37,7 @@ test("merge-only attributes do not make immutable checkout replay unsafe", () =>
   try {
     assert.equal(hasUnsafeCheckoutAttributes(root, head, process.env), false);
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });
 
@@ -46,7 +47,7 @@ test("checkout transforms still fail closed", () => {
     try {
       assert.equal(hasUnsafeCheckoutAttributes(root, head, process.env), true, attributes.trim());
     } finally {
-      rmSync(root, { recursive: true, force: true });
+      cleanupDir(root);
     }
   }
 });

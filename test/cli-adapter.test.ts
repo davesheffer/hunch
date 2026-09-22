@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
@@ -22,7 +23,7 @@ test("custom stdin CLI receives literal input and initiating identity without a 
     assert.throws(() => readAgentCliConfig(config), /duplicate/);
   } finally {
     assert.ok(resolve(root).startsWith(resolve(tmpdir())));
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });
 
@@ -65,6 +66,6 @@ readline.createInterface({input:process.stdin}).on('line', line=>{
     await assert.rejects(withInitiator({ provider: "acp-test", source: "explicit" }, () => runAgentCli({ ...adapter, timeout_ms: 1000 }, "data")), /timed out/);
   } finally {
     assert.ok(resolve(root).startsWith(resolve(tmpdir())));
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });

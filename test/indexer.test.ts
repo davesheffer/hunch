@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, symlinkSync } from "node:fs";
@@ -45,7 +46,7 @@ test("indexRepo builds symbols, call edges, components, and cross-file blast rad
   assert.deepEqual(comps, ["Auth", "Billing"]);
 
   store.close();
-  rmSync(root, { recursive: true, force: true });
+  cleanupDir(root);
 });
 
 test("reindex preserves component enrichment and does not churn timestamps", () => {
@@ -81,7 +82,7 @@ test("reindex preserves component enrichment and does not churn timestamps", () 
   assert.equal(grown.responsibility, "Session verification", "enrichment survives a real change");
 
   store.close();
-  rmSync(root, { recursive: true, force: true });
+  cleanupDir(root);
 });
 
 test("fast reindex preserves measured churn instead of rewriting it to zero", () => {
@@ -108,7 +109,7 @@ test("fast reindex preserves measured churn instead of rewriting it to zero", ()
       "an unchanged fast scan is byte-identical to the last fully measured graph");
   } finally {
     store.close();
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });
 
@@ -130,7 +131,7 @@ test("GIT-TRACKED vendored dirs (node_modules, dist) are excluded from indexing"
   const files = new Set(store.json.loadAll("symbols").map((s) => s.file.replace(/\\/g, "/")));
   assert.ok(![...files].some((f) => f.includes("node_modules") || f.startsWith("dist/")), `vendored files indexed: ${[...files].join(", ")}`);
   store.close();
-  rmSync(root, { recursive: true, force: true });
+  cleanupDir(root);
 });
 
 test("a Git-tracked source symlink is skipped without reading its external target", { skip: SYMLINK_SKIP }, () => {
@@ -157,8 +158,8 @@ test("a Git-tracked source symlink is skipped without reading its external targe
     assert.equal(readFileSync(outsideFile, "utf8"), outsideBytes);
   } finally {
     store.close();
-    rmSync(root, { recursive: true, force: true });
-    rmSync(outside, { recursive: true, force: true });
+    cleanupDir(root);
+    cleanupDir(outside);
   }
 });
 
@@ -182,7 +183,7 @@ test("same-named symbols in one file get unique, stable ids (no PK collision)", 
   const secondIds = store.json.loadAll("symbols").filter((s) => s.name === "run").map((s) => s.id).sort();
   assert.deepEqual(secondIds, firstIds);
   store.close();
-  rmSync(root, { recursive: true, force: true });
+  cleanupDir(root);
 });
 
 test("member call to a top-level function does NOT create an edge; method calls do (regression #4)", () => {
@@ -210,7 +211,7 @@ test("member call to a top-level function does NOT create an edge; method calls 
   assert.ok(methodDeps.some((v) => v.includes("viaMethod")), "member call to a real method creates an edge");
 
   store.close();
-  rmSync(root, { recursive: true, force: true });
+  cleanupDir(root);
 });
 
 test("unimported same-named callbacks do NOT resolve to unrelated cross-file symbols", () => {
@@ -231,7 +232,7 @@ test("unimported same-named callbacks do NOT resolve to unrelated cross-file sym
   assert.deepEqual(store.getDependents(unrelated.id), [], "a callback parameter with the same name creates no cross-file call edge");
 
   store.close();
-  rmSync(root, { recursive: true, force: true });
+  cleanupDir(root);
 });
 
 function pythonFixtureRepo(): string {
@@ -296,7 +297,7 @@ test("indexRepo resolves Python relative imports across component boundaries (is
   );
 
   store.close();
-  rmSync(root, { recursive: true, force: true });
+  cleanupDir(root);
 });
 
 function pythonTooManyDotsFixtureRepo(): string {
@@ -329,7 +330,7 @@ test("Python relative import with too many leading dots (above repo root) is ski
   );
 
   store.close();
-  rmSync(root, { recursive: true, force: true });
+  cleanupDir(root);
 });
 
 function pythonRelativeAtRepoRootBoundaryFixtureRepo(): string {
@@ -364,7 +365,7 @@ test("Python relative import landing exactly on the repo root (dot count == dire
   );
 
   store.close();
-  rmSync(root, { recursive: true, force: true });
+  cleanupDir(root);
 });
 
 function pythonBareDotFixtureRepo(withInit: boolean): string {
@@ -397,7 +398,7 @@ test("Python bare-dot relative import (`from . import x`) resolves within its ow
     "the __init__.py the bare-dot import targets is indexed",
   );
   storeWithInit.close();
-  rmSync(withInitRoot, { recursive: true, force: true });
+  cleanupDir(withInitRoot);
 
   const noInitRoot = pythonBareDotFixtureRepo(false);
   const storeNoInit = new HunchStore(hunchPaths(noInitRoot));
@@ -407,7 +408,7 @@ test("Python bare-dot relative import (`from . import x`) resolves within its ow
   storeNoInit.reindex();
   assert.equal(resNoInit.files, 1);
   storeNoInit.close();
-  rmSync(noInitRoot, { recursive: true, force: true });
+  cleanupDir(noInitRoot);
 });
 
 function pythonAbsoluteRepoRootFixtureRepo(): string {
@@ -444,7 +445,7 @@ test("Python absolute import resolves off the repo root when there is no src/ la
   assert.equal(edges[0]!.to, billingpkg.id);
 
   store.close();
-  rmSync(root, { recursive: true, force: true });
+  cleanupDir(root);
 });
 
 function pythonAbsoluteBarePackageFixtureRepo(): string {
@@ -479,7 +480,7 @@ test("Python absolute import of a bare package (no submodule) resolves via __ini
   );
 
   store.close();
-  rmSync(root, { recursive: true, force: true });
+  cleanupDir(root);
 });
 
 function pythonAbsoluteSrcLayoutFixtureRepo(): string {
@@ -515,7 +516,7 @@ test("Python absolute import resolves via a detected src/ layout root (issue #5)
   );
 
   store.close();
-  rmSync(root, { recursive: true, force: true });
+  cleanupDir(root);
 });
 
 function pythonDecoratedMethodFixtureRepo(): string {
@@ -563,7 +564,7 @@ test("cross-file member call to a decorated Python method creates a call edge (r
   assert.ok(deps.some((v) => v.includes("use_it")), "use_it is a dependent of the decorated method create");
 
   store.close();
-  rmSync(root, { recursive: true, force: true });
+  cleanupDir(root);
 });
 
 test("indexing is deterministic — same ids on re-run", () => {
@@ -576,7 +577,7 @@ test("indexing is deterministic — same ids on re-run", () => {
   const second = store.json.loadAll("symbols").map((s) => s.id).sort();
   assert.deepEqual(first, second);
   store.close();
-  rmSync(root, { recursive: true, force: true });
+  cleanupDir(root);
 });
 
 test("YAML anchor/alias produces a \"references\" edge end-to-end, counted toward fan-in like a call", () => {
@@ -607,7 +608,7 @@ development:
   assert.ok(anchor!.metrics.fan_in >= 1, "references edges count toward fan-in the same way calls do");
 
   store.close();
-  rmSync(root, { recursive: true, force: true });
+  cleanupDir(root);
 });
 
 test("Helm define/include produces a \"references\" edge, chart-scoped by nearest Chart.yaml", () => {
@@ -642,7 +643,7 @@ metadata:
   assert.ok(define!.metrics.fan_in >= 1, "the include counts toward the define's fan_in");
 
   store.close();
-  rmSync(root, { recursive: true, force: true });
+  cleanupDir(root);
 });
 
 test("two charts defining the same helper name never produce a cross-chart edge; each chart's own include still resolves within its own chart", () => {
@@ -689,7 +690,7 @@ metadata:
   assert.equal(crossChart.length, 0, "no cross-chart edge for a same-named helper in two separate charts");
 
   store.close();
-  rmSync(root, { recursive: true, force: true });
+  cleanupDir(root);
 });
 
 test("a nested subchart (charts/<sub>/Chart.yaml) resolves to its OWN chart root, not the parent's (issue #42)", () => {
@@ -746,7 +747,7 @@ metadata:
   assert.equal(crossChart.length, 0, "no edge crosses the nested subchart boundary in either direction");
 
   store.close();
-  rmSync(root, { recursive: true, force: true });
+  cleanupDir(root);
 });
 
 test("a parent chart including a define that exists ONLY in a subchart produces no edge (conservative miss, issue #42)", () => {
@@ -788,7 +789,7 @@ app: sub
   );
 
   store.close();
-  rmSync(root, { recursive: true, force: true });
+  cleanupDir(root);
 });
 
 test("a plain .yaml file with no ancestor Chart.yaml is unaffected by Helm-shaped text", () => {
@@ -809,7 +810,7 @@ note: |
   assert.ok(!edges.some((e) => e.type === "references"), "no references edge fabricated outside a chart");
 
   store.close();
-  rmSync(root, { recursive: true, force: true });
+  cleanupDir(root);
 });
 
 test("a literal ConfigMap reference from a Deployment produces a \"references\" edge and correct fan_in/fan_out", () => {
@@ -853,7 +854,7 @@ metadata:
   assert.equal(edges.some((e) => e.type === "depends_on" && (e.from === deployment!.id || e.to === deployment!.id)), false, "no component-level depends_on edge for this same-directory pair (spec Non-goals)");
 
   store.close();
-  rmSync(root, { recursive: true, force: true });
+  cleanupDir(root);
 });
 
 test("a Helm chart's Secret name and its Deployment's secretKeyRef.name are the identical template text -- resolves via template-text equality", () => {
@@ -896,7 +897,7 @@ spec:
   assert.ok(edges.some((e) => e.from === deployment!.id && e.to === secret!.id && e.type === "references"), "identical template-expression text resolves to a references edge");
 
   store.close();
-  rmSync(root, { recursive: true, force: true });
+  cleanupDir(root);
 });
 
 test("two ConfigMaps with the same name in the same chart scope are ambiguous -- no edge is fabricated", () => {
@@ -930,7 +931,7 @@ spec:
   assert.equal(edges.filter((e) => e.type === "references" && e.from === deployment!.id).length, 0, "ambiguous (2 candidates) match produces no edge");
 
   store.close();
-  rmSync(root, { recursive: true, force: true });
+  cleanupDir(root);
 });
 
 test("a raw manifest (no Chart.yaml) resolves a ConfigMap reference WITHIN its own file but not to an unrelated file", () => {
@@ -976,7 +977,7 @@ metadata:
   assert.equal(edges.some((e) => e.from === deployment!.id && e.to === unrelatedConfigMap!.id), false, "the same-named ConfigMap in a different, unrelated file (no shared chart scope) is never targeted");
 
   store.close();
-  rmSync(root, { recursive: true, force: true });
+  cleanupDir(root);
 });
 
 test("a Service's literal selector resolves to a workload whose pod-template labels are a superset", () => {
@@ -1021,7 +1022,7 @@ spec:
   assert.ok(edges.some((e) => e.from === service!.id && e.to === deployment!.id && e.type === "references"), "Service selector subset-matches the Deployment's pod-template labels");
 
   store.close();
-  rmSync(root, { recursive: true, force: true });
+  cleanupDir(root);
 });
 
 test("a Service's selector that is NOT a subset of a workload's labels produces no edge to it", () => {
@@ -1062,7 +1063,7 @@ spec:
   assert.equal(edges.filter((e) => e.from === service!.id && e.type === "references").length, 0, "non-matching selector produces no edge");
 
   store.close();
-  rmSync(root, { recursive: true, force: true });
+  cleanupDir(root);
 });
 
 test("a Service's selector with ONE same-line templated key among literal siblings produces no edge, not a false-positive on the literal keys alone (issue #82 review)", () => {
@@ -1108,7 +1109,7 @@ spec:
   );
 
   store.close();
-  rmSync(root, { recursive: true, force: true });
+  cleanupDir(root);
 });
 
 test("a Service's selector matching TWO workloads' labels produces edges to BOTH -- fan-out is intentional here, unlike Phase 1's ambiguity guard", () => {
@@ -1170,7 +1171,7 @@ spec:
   assert.ok(edges.some((e) => e.from === service!.id && e.to === green!.id && e.type === "references"), "AND matches the green deployment -- a real blue/green pattern, not an error to guard against");
 
   store.close();
-  rmSync(root, { recursive: true, force: true });
+  cleanupDir(root);
 });
 
 test("a dotted app.kubernetes.io/instance label that genuinely differs between Service selector and workload labels does NOT produce a references edge (regression: a false-positive edge on real, untemplated YAML)", () => {
@@ -1215,7 +1216,7 @@ spec:
     "the app label matches but app.kubernetes.io/instance genuinely differs (prod vs staging) -- must not read as a match");
 
   store.close();
-  rmSync(root, { recursive: true, force: true });
+  cleanupDir(root);
 });
 
 test("a quoted selector key the scanner can't parse produces NO edge, not an over-permissive false-positive one (regression)", () => {
@@ -1264,7 +1265,7 @@ spec:
     "the quoted app.kubernetes.io/name key must taint the whole selector, not silently vanish and over-match on the remainder");
 
   store.close();
-  rmSync(root, { recursive: true, force: true });
+  cleanupDir(root);
 });
 
 test("a column-0 template conditional inside a Service's selector does not produce a false-positive edge to the wrong workload (regression)", () => {
@@ -1317,7 +1318,7 @@ spec:
     "the column-0 conditional must taint the whole selector, not leave app=my-app as a false-positive match against the canary track");
 
   store.close();
-  rmSync(root, { recursive: true, force: true });
+  cleanupDir(root);
 });
 
 test("a multi-line flow-style selector does not produce a false-positive edge from a dropped key (regression)", () => {
@@ -1367,7 +1368,7 @@ spec:
     "the multi-line flow selector's dropped app key must taint the whole map, not leave tier=web as a false-positive match against a different app");
 
   store.close();
-  rmSync(root, { recursive: true, force: true });
+  cleanupDir(root);
 });
 
 test("two resources whose names are both block-scalar headers do not collide into a false-positive edge (regression)", () => {
@@ -1417,7 +1418,7 @@ spec:
     "two unrelated block-scalar-named resources must not collide into a references edge");
 
   store.close();
-  rmSync(root, { recursive: true, force: true });
+  cleanupDir(root);
 });
 
 test("a Helm-templated block-form selector/labels pair produces no Phase 2 edge and does not crash indexing", () => {
@@ -1460,7 +1461,7 @@ spec:
   assert.ok(res, "indexRepo completes without throwing");
 
   store.close();
-  rmSync(root, { recursive: true, force: true });
+  cleanupDir(root);
 });
 
 test("a chart-wide Helm define does not fabricate a cross-language edge into a same-named TS symbol (finding #1)", () => {
@@ -1493,7 +1494,7 @@ app: x
   );
 
   store.close();
-  rmSync(root, { recursive: true, force: true });
+  cleanupDir(root);
 });
 
 test("chart-wide widening for YAML files must not silently drop a genuine cross-file TS import edge (finding #1)", () => {
@@ -1528,7 +1529,7 @@ test("chart-wide widening for YAML files must not silently drop a genuine cross-
   );
 
   store.close();
-  rmSync(root, { recursive: true, force: true });
+  cleanupDir(root);
 });
 
 test("a Helm define at byte 0 (no leading newline) does not collide with the YAML whole-file fallback symbol, and a top-level include outside the define still resolves (regression: startByte-keyed attribution)", () => {
@@ -1564,7 +1565,7 @@ test("a Helm define at byte 0 (no leading newline) does not collide with the YAM
   );
 
   store.close();
-  rmSync(root, { recursive: true, force: true });
+  cleanupDir(root);
 });
 
 for (const dirtyKind of ["staged", "unstaged", "untracked"] as const) {
@@ -1598,7 +1599,7 @@ for (const dirtyKind of ["staged", "unstaged", "untracked"] as const) {
       assert.deepEqual(readFileSync(symbolsFile), before, "the failed preflight writes no graph bytes");
     } finally {
       store.close();
-      rmSync(root, { recursive: true, force: true });
+      cleanupDir(root);
     }
   });
 }
@@ -1657,7 +1658,7 @@ test("indexRepo resolves module-prefixed Go imports across component boundaries"
   );
 
   store.close();
-  rmSync(root, { recursive: true, force: true });
+  cleanupDir(root);
 });
 
 test("root-level indexed files get exact-match component paths, not a match-everything glob (issue #34)", (t) => {
@@ -1731,7 +1732,7 @@ test("reindex keeps supersedes edges and reviewed relationships (#288)", () => {
   assert.equal(after.filter(isExtractorEdge).length, extractorEdgesBefore, "every extractor edge is still there");
 
   store.close();
-  rmSync(root, { recursive: true, force: true });
+  cleanupDir(root);
 });
 
 test("reindex still drops stale extractor edges", () => {
@@ -1753,7 +1754,7 @@ test("reindex still drops stale extractor edges", () => {
   );
 
   store.close();
-  rmSync(root, { recursive: true, force: true });
+  cleanupDir(root);
 });
 
 test("mergeScannedEdges keeps the carried edge on an id collision", () => {
@@ -1821,7 +1822,7 @@ spec:
   assert.equal(edges.some((e) => e.from === deployment!.id && e.to === cmB!.id), false, "the same-named ConfigMap in namespace b is never targeted");
 
   store.close();
-  rmSync(root, { recursive: true, force: true });
+  cleanupDir(root);
 });
 
 test("a Deployment with no namespace still resolves to a single ConfigMap in namespace b (unknown matches anything)", () => {
@@ -1855,7 +1856,7 @@ spec:
   assert.ok(edges.some((e) => e.from === deployment!.id && e.to === configMap!.id && e.type === "references"), "an unknown namespace must not start blocking edges that resolved before");
 
   store.close();
-  rmSync(root, { recursive: true, force: true });
+  cleanupDir(root);
 });
 
 test("a Deployment in namespace a does NOT resolve to the only ConfigMap when that ConfigMap is in namespace b", () => {
@@ -1891,7 +1892,7 @@ spec:
   assert.equal(edges.some((e) => e.from === deployment!.id && e.to === configMap!.id), false, "two different literal namespaces block the edge");
 
   store.close();
-  rmSync(root, { recursive: true, force: true });
+  cleanupDir(root);
 });
 
 test("a reference in namespace a with one candidate in a and one with no namespace is ambiguous -- no edge", () => {
@@ -1926,7 +1927,7 @@ spec:
   assert.equal(edges.filter((e) => e.type === "references" && e.from === deployment!.id).length, 0, "an unknown-namespace candidate stays compatible, so two candidates survive the filter and the existing don't-guess rule declines");
 
   store.close();
-  rmSync(root, { recursive: true, force: true });
+  cleanupDir(root);
 });
 
 test("a Service's selector in namespace a binds a label-matching workload with no namespace but NOT one in namespace b", () => {
@@ -1988,7 +1989,7 @@ spec:
   assert.ok(edges.some((e) => e.from === service!.id && e.to === noNs!.id && e.type === "references"), "an unknown-namespace workload still matches");
 
   store.close();
-  rmSync(root, { recursive: true, force: true });
+  cleanupDir(root);
 });
 
 test("a Deployment in namespace a resolves to the only ConfigMap when that ConfigMap has NO namespace", () => {
@@ -2027,7 +2028,7 @@ spec:
   assert.ok(edges.some((e) => e.from === deployment!.id && e.to === configMap!.id && e.type === "references"), "a literal-namespace reference still reaches an unknown-namespace target");
 
   store.close();
-  rmSync(root, { recursive: true, force: true });
+  cleanupDir(root);
 });
 
 test("a Service with NO namespace selects a label-matching workload in namespace b, and a Service in b selects the one in b", () => {
@@ -2086,7 +2087,7 @@ spec:
   assert.ok(edges.some((e) => e.from === svcInB!.id && e.to === inB!.id && e.type === "references"), "two identical literal namespaces bind");
 
   store.close();
-  rmSync(root, { recursive: true, force: true });
+  cleanupDir(root);
 });
 
 test("a Deployment whose namespace is PARTIALLY templated still resolves to the only ConfigMap in namespace app-prod", () => {
@@ -2125,7 +2126,7 @@ spec:
   assert.ok(edges.some((e) => e.from === deployment!.id && e.to === configMap!.id && e.type === "references"), "a partially templated namespace is unknown, and unknown never blocks an edge");
 
   store.close();
-  rmSync(root, { recursive: true, force: true });
+  cleanupDir(root);
 });
 
 test("a Deployment whose namespace is the YAML null word still resolves to the only ConfigMap in namespace app-prod", () => {
@@ -2161,5 +2162,5 @@ spec:
   assert.ok(edges.some((e) => e.from === deployment!.id && e.to === configMap!.id && e.type === "references"), "`namespace: null` is the same empty value as an absent key, so it must not block");
 
   store.close();
-  rmSync(root, { recursive: true, force: true });
+  cleanupDir(root);
 });

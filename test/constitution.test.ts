@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
@@ -94,7 +95,7 @@ function layeredRepo(
     store,
     cleanup: () => {
       store.close();
-      rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+      cleanupDir(root);
     },
   };
 }
@@ -936,7 +937,7 @@ test("private migration moves policy/proof artifacts only after validation", () 
     assert.ok(existsSync(join(privateHome, "shadow")));
     assert.deepEqual(readdirSync(join(privateHome, "corpora")), readdirSync(join(privateHome, "policies")), "migrated corpus keeps its policy-keyed filename");
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });
 
@@ -951,7 +952,7 @@ test("private migration preserves the public source when any policy artifact is 
     assert.throws(() => movePolicyArtifactsToPrivate(publicHome, privateHome), /invalid policies/);
     assert.equal(readFileSync(corrupt, "utf8"), "{ corrupt", "source survives a refused migration");
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });
 
@@ -974,7 +975,7 @@ test("private migration validates late corpus artifacts before moving an earlier
     assert.equal(existsSync(join(privateHome, "policies", `${policy.id}.json`)), false);
   } finally {
     fixture.cleanup();
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });
 
@@ -1229,7 +1230,7 @@ test("Phase 3 replays current, known-bad, known-good, and bounded accepted histo
     assert.equal(first.policy.authority, null);
 
     const replayPlan = service.repository.listPlans({ publicOnly: true }).find((candidate) => candidate.content_hash === first.proof.plan_hash)!;
-    rmSync(join(root, ".hunch-cache", "replay"), { recursive: true, force: true });
+    cleanupDir(join(root, ".hunch-cache", "replay"));
     const parallel = replayProofPlan(root, first.policy, replayPlan, { maxWorkers: 2 });
     assert.deepEqual(parallel.replay_receipts, first.proof.replay_receipts, "parallel scheduling cannot perturb canonical receipts");
     assert.deepEqual(parallel.cache_stats, { hits: 0, misses: 3, rebuilds: 0, memory_hits: 1 });
@@ -3524,9 +3525,9 @@ test("MD-1a private proof packet is byte-reusable across differently named linke
     consumerStore?.close();
     for (const worktree of [consumer, producer]) {
       try { execFileSync("git", ["worktree", "remove", "--force", worktree], { cwd: fixture.root, stdio: "ignore" }); } catch { /* cleanup best-effort */ }
-      rmSync(worktree, { recursive: true, force: true });
+      cleanupDir(worktree);
     }
-    rmSync(overlayRoot, { recursive: true, force: true });
+    cleanupDir(overlayRoot);
     fixture.cleanup();
   }
 });
@@ -3623,7 +3624,7 @@ test("MD-1a private proof packet is byte-reusable across ordinary clones after o
   } finally {
     producerStore?.close();
     consumerStore?.close();
-    rmSync(base, { recursive: true, force: true });
+    cleanupDir(base);
     fixture.cleanup();
   }
 });
@@ -3908,7 +3909,7 @@ test("MD-1a rejects a tracked source symlink without touching its external targe
     assert.equal(service.repository.listProofs({ publicOnly: true }).length, 0);
   } finally {
     cleanup();
-    rmSync(outsideRoot, { recursive: true, force: true });
+    cleanupDir(outsideRoot);
   }
 });
 
@@ -3955,7 +3956,7 @@ test("source mutation independently refuses a symlink and preserves the external
     assert.equal(readFileSync(outsideFile, "utf8"), outsideBytes);
   } finally {
     cleanup();
-    rmSync(outsideRoot, { recursive: true, force: true });
+    cleanupDir(outsideRoot);
   }
 });
 
@@ -4671,7 +4672,7 @@ test("MD-1a private split sync commits its proposal only to a standalone overlay
     store.close();
   } finally {
     fixture.cleanup();
-    rmSync(overlayRoot, { recursive: true, force: true });
+    cleanupDir(overlayRoot);
   }
 });
 

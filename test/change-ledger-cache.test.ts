@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync, unlinkSync } from 'node:fs';
@@ -12,7 +13,7 @@ function fixture() {
   const dir = mkdtempSync(join(tmpdir(), 'hunch-ledger-cache-'));
   appendChanges(dir, scope, [{ facet: 'derived', record_id: 'nds_fixture', record_hash: stateHash('one'), change: 'created', invalidates: ['subject:one'] }],
     { key: 'first', entry: { record_id: 'nds_fixture', record_hash: stateHash('one'), facet: 'derived' } });
-  return { dir, file: ledgerFile(dir, scope), cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+  return { dir, file: ledgerFile(dir, scope), cleanup: () => cleanupDir(dir) };
 }
 
 test('unchanged ledger validates once; returned nested objects cannot poison later reads', () => {

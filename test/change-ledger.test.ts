@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 /**
  * The per-scope change ledger: compaction moves the floor and makes stale cursors resynchronize;
  * two clones that both appended merge to one re-sequenced ledger through the git merge driver.
@@ -28,7 +29,7 @@ test("compaction keeps the newest events, moves the floor, and keeps the ledger 
     assert.deepEqual(compactLedger(dir, scope, { keep: 3 }), { dropped: 0, floor_seq: 4, head_seq: 7 }, "idempotent");
     const next = appendChanges(dir, scope, [ev(8, "2026-09-08T10:00:08Z")], null);
     assert.equal(next[0]?.seq, 8, "appends continue from the head");
-  } finally { rmSync(dir, { recursive: true, force: true }); }
+  } finally { cleanupDir(dir); }
 });
 
 test("subscribe below the floor says resync and starts at the floor; above it stays contiguous", () => {
@@ -74,7 +75,7 @@ test("two clones that both appended merge to one re-sequenced ledger; a key used
   assert.equal(mergeHunchJson(text(base), text(ours), text(clash)).conflict, true, "the driver falls back to git's conflict handling");
   // A merged ledger round-trips through the reader's contiguity check.
   const dir = mkdtempSync(join(tmpdir(), "hunch-ledger-merge-"));
-  try { writeLedger(dir, ledger); assert.equal(readLedger(dir, scope).head_seq, 6); } finally { rmSync(dir, { recursive: true, force: true }); }
+  try { writeLedger(dir, ledger); assert.equal(readLedger(dir, scope).head_seq, 6); } finally { cleanupDir(dir); }
 });
 
 // --- issue #285: a merge that renumbers published events must invalidate both sides' cursors ---
@@ -211,7 +212,7 @@ test("issue #285: a renumbering merge of compacted ledgers respects the existing
   assert.equal(ledger.head_seq, 16);
   assert.equal(ledger.head_seq, ledger.floor_seq + ledger.events.length);
   const dir = mkdtempSync(join(tmpdir(), "hunch-ledger-285-"));
-  try { writeLedger(dir, ledger); assert.equal(readLedger(dir, scope).floor_seq, 13, "the reader's contiguity check accepts it"); } finally { rmSync(dir, { recursive: true, force: true }); }
+  try { writeLedger(dir, ledger); assert.equal(readLedger(dir, scope).floor_seq, 13, "the reader's contiguity check accepts it"); } finally { cleanupDir(dir); }
 });
 
 test("issue #285: idempotency entries follow their event's new seq across a renumbering merge", () => {

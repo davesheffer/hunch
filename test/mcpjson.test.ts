@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 /** writeMcpJson honors con_8460b6770f: merge idempotently, preserve other
  *  servers, and REFUSE to clobber an unparseable .mcp.json. */
 import { test } from "node:test";
@@ -20,7 +21,7 @@ test("writeMcpJson merges into an existing config, preserving other servers; ide
     assert.deepEqual(json.mcpServers.hunch, { command: "node", args: ["/abs/dist/cli/index.js", "mcp"] });
     writeMcpJson(root, INV);
     assert.equal(readFileSync(join(root, ".mcp.json"), "utf8"), once, "re-run is byte-identical");
-  } finally { rmSync(root, { recursive: true, force: true }); }
+  } finally { cleanupDir(root); }
 });
 
 test("writeMcpJson REFUSES an unparseable .mcp.json — never clobbers (con_8460b6770f)", () => {
@@ -38,5 +39,5 @@ test("writeMcpJson REFUSES an unparseable .mcp.json — never clobbers (con_8460
     writeFileSync(join(root, ".mcp.json"), "  \n");
     writeMcpJson(root, INV);
     assert.ok(JSON.parse(readFileSync(join(root, ".mcp.json"), "utf8")).mcpServers.hunch);
-  } finally { rmSync(root, { recursive: true, force: true }); }
+  } finally { cleanupDir(root); }
 });

@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -17,7 +18,7 @@ import { mkConstraint, tsxLoaderUrl } from "./helpers.js";
 const cli = resolve("src/cli/index.ts");
 function fixture(t: { after: (f: () => void) => void }) {
   const root = mkdtempSync(join(tmpdir(), "hunch-report-hook-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  t.after(() => cleanupDir(root));
   execFileSync("git", ["init", "-q", root]);
   mkdirSync(join(root, ".hunch"));
   writeFileSync(join(root, ".gitignore"), ".hunch-cache/\n");

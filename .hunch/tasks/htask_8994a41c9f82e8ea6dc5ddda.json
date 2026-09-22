@@ -1,0 +1,40 @@
+{
+  "id": "htask_8994a41c9f82e8ea6dc5ddda",
+  "title": "Check next steps for release 1.41.0",
+  "state": "completed",
+  "started_at": "2026-09-22T12:02:24.361Z",
+  "finished_at": "2026-09-22T12:02:43.273Z",
+  "coverage": "delivered",
+  "lessons": [
+    {
+      "kind": "decisions",
+      "record_id": "dec_f783d26fbc",
+      "content_hash": "sha256:4bf9742fcb536c46ea25666c1b34c638351de7f2b002c517e93ed836f7ccb7dd",
+      "title": "v1.3.0 released: graph-ranked retrieval, the NOW view, and the quieter agent loop are on npm"
+    }
+  ],
+  "applied": [],
+  "saved": [],
+  "checks": [],
+  "conformance": [
+    {
+      "kind": "decisions",
+      "record_id": "dec_f783d26fbc",
+      "content_hash": "sha256:4bf9742fcb536c46ea25666c1b34c638351de7f2b002c517e93ed836f7ccb7dd",
+      "outcome": "unavailable"
+    }
+  ],
+  "refusals": 0,
+  "files": [],
+  "supersedes": [],
+  "source_snapshot": null,
+  "report_hash": "sha256:a9698b485260f536fd90b3b07ee339726f588ec3fc53f5a3d0e6a58049eb0aa3",
+  "provenance": {
+    "source": "task_report",
+    "confidence": 1,
+    "evidence": [
+      "hunch report htask_8994a41c9f82e8ea6dc5ddda"
+    ],
+    "last_verified": "2026-09-22T12:02:43.273Z"
+  }
+}

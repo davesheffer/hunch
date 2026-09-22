@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -15,7 +16,7 @@ for (const raw of ['{"value":1/* gap */2}', '{"value":tru/* gap */e}', '{} /* un
       assert.throws(() => parseJsonc(raw));
       assert.throws(() => writeCursorMcp(root, { command: "hunch", args: [] }), /refusing to overwrite/);
       assert.equal(readFileSync(file, "utf8"), raw);
-    } finally { rmSync(root, { recursive: true, force: true }); }
+    } finally { cleanupDir(root); }
   });
 }
 

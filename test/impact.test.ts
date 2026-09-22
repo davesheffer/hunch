@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 /**
  * hunch path + hunch impact — the derived-query surface (shortestPath,
  * resolveNodeIds, prImpact). Read-only, advisory; composes the same primitives
@@ -34,7 +35,7 @@ function indexed() {
   const syms = store.json.loadAll("symbols");
   const idOf = (name: string) => syms.find((s) => s.name === name)!.id;
   const fileOf = (name: string) => syms.find((s) => s.name === name)!.file;
-  return { store, root, idOf, fileOf, cleanup: () => { store.close(); rmSync(root, { recursive: true, force: true }); } };
+  return { store, root, idOf, fileOf, cleanup: () => { store.close(); cleanupDir(root); } };
 }
 
 test("shortestPath finds the chain across edge direction, cycles terminate, unreachable → null", () => {
@@ -75,7 +76,7 @@ function indexedWithRootIndex() {
   store.reindex();
   const syms = store.json.loadAll("symbols");
   const idsIn = (file: string) => syms.filter((s) => s.file === file).map((s) => s.id).sort();
-  return { store, root, idsIn, cleanup: () => { store.close(); rmSync(root, { recursive: true, force: true }); } };
+  return { store, root, idsIn, cleanup: () => { store.close(); cleanupDir(root); } };
 }
 
 test("resolveNodeIds: a root file resolves to ONLY its own symbols — a same-basename nested file must not leak in (issue #335)", () => {
@@ -120,7 +121,7 @@ test("resolveNodeIds: a real on-disk file with zero indexed symbols resolves to 
     assert.ok(nested.length, "fixture indexed the nested file");
     assert.deepEqual(store.resolveNodeIds("empty.ts"), [], "the real root file must not pull a/empty.ts's symbols");
     assert.deepEqual(store.resolveNodeIds("a/empty.ts").sort(), nested, "the nested file still resolves exactly");
-  } finally { store.close(); rmSync(root, { recursive: true, force: true }); }
+  } finally { store.close(); cleanupDir(root); }
 });
 
 test("resolveNodeIds: a glob-covered path that no file occupies still suffix-resolves — coverage is not existence", () => {
@@ -141,7 +142,7 @@ test("resolveNodeIds: a glob-covered path that no file occupies still suffix-res
     const target = store.json.loadAll("symbols").filter((s) => s.file === "src/test/util.ts").map((s) => s.id).sort();
     assert.ok(target.length, "fixture indexed src/test/util.ts");
     assert.deepEqual(store.resolveNodeIds("test/util.ts").sort(), target, "the suffix tier must still run");
-  } finally { store.close(); rmSync(root, { recursive: true, force: true }); }
+  } finally { store.close(); cleanupDir(root); }
 });
 
 test("prImpact composes blast radius + constraints + decisions for a change", () => {

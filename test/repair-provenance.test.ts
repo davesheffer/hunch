@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
@@ -107,7 +108,7 @@ function squashFixture(): { root: string; decisionFile: string; oldRef: string; 
   git(root, "add", ".hunch/decisions/dec_squash_fixture.json");
   git(root, "commit", "-qm", "hunch: record feature decision");
 
-  return { root, decisionFile, oldRef: origHead, newRef: newHead, origCommit, cleanup: () => rmSync(root, { recursive: true, force: true }) };
+  return { root, decisionFile, oldRef: origHead, newRef: newHead, origCommit, cleanup: () => cleanupDir(root) };
 }
 
 const queueFile = (root: string): string => join(root, ".hunch", "pending-commit-repairs.json");
@@ -329,7 +330,7 @@ function twoDecisionQueueFixture(): { root: string; decisionFile: (id: string) =
     decisionFile: (id: string) => join(root, ".hunch/decisions", `${id}.json`),
     shaANew,
     shaBNew,
-    cleanup: () => rmSync(root, { recursive: true, force: true }),
+    cleanup: () => cleanupDir(root),
   };
 }
 
@@ -1369,7 +1370,7 @@ test("repair-provenance --from-hook is silent and exits 0 when there's no ORIG_H
     assert.equal(run.status, 0, run.stderr);
     assert.equal(run.stdout.trim(), "");
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });
 
@@ -1446,8 +1447,8 @@ function privateOverlaySessionStartFixture(): { root: string; overlayRoot: strin
     decisionId,
     env: { ...process.env, HUNCH_PRIVATE_DIR: privateRoot, HUNCH_SYNTH_PROVIDER: "deterministic" },
     cleanup: () => {
-      rmSync(root, { recursive: true, force: true });
-      rmSync(overlayRoot, { recursive: true, force: true });
+      cleanupDir(root);
+      cleanupDir(overlayRoot);
     },
   };
 }

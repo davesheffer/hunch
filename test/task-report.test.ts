@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
@@ -18,7 +19,7 @@ import { writeCodexConfig } from "../src/integrations/providers.js";
 
 function fixture(t: { after: (f: () => void) => void }): string {
   const root = mkdtempSync(join(tmpdir(), "hunch-task-report-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  t.after(() => cleanupDir(root));
   execFileSync("git", ["init", "-q", root]);
   mkdirSync(join(root, "src"));
   writeFileSync(join(root, ".gitignore"), ".hunch/\n.hunch-cache/\n");
@@ -161,6 +162,22 @@ test("verification records actual failures and invalidates a pass after a source
   await runReportCheck(root, task.task_id, [process.execPath, "-e", "process.exit(7)"], "Fixture failure");
   assert.equal(readTaskReport(root, task.task_id).checks[1]!.exit_code, 7);
   assert.match(renderTaskReport(readTaskReport(root, task.task_id)), /failed/);
+});
+
+test("card keeps a failed command visible until that exact command succeeds", async t => {
+  const root = fixture(t), task = startReportTask(root, "Independent checks");
+  const command = [process.execPath, "-e", "process.exit(require('node:fs').existsSync('.hunch-cache/pass') ? 0 : 7)"];
+  await runReportCheck(root, task.task_id, command, "Integration tests");
+  await runReportCheck(root, task.task_id, [process.execPath, "-e", "process.exit(0)"], "Lint");
+  const card = () => renderTaskReport(readTaskReport(root, task.task_id, reportSourceSnapshot(root).hash));
+  assert.match(card(), /Lint · passed/);
+  assert.match(card(), /Failures\s+1 unresolved check\(s\): Integration tests/);
+  writeFileSync(join(root, "src/config.js"), "changed source\n");
+  assert.match(card(), /Failures\s+1 unresolved/ , "a source edit is not a successful rerun");
+  writeFileSync(join(root, ".hunch-cache/pass"), "pass");
+  await runReportCheck(root, task.task_id, command, "Integration rerun");
+  assert.doesNotMatch(card(), /Failures\s/);
+  assert.equal(readTaskReport(root, task.task_id).checks.length, 3, "retain the original failure in the evidence view");
 });
 
 test("checks changing source are not presented as verification of a stable snapshot", async t => {

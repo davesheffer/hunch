@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 /**
  * Partition isolation inside ONE overlay home. Organization, team and user partitions share the
  * overlay, so every rule that looks for an incumbent or a supersede target must compare the
@@ -31,7 +32,7 @@ function overlayStore(): { store: HunchStore; cleanup: () => void } {
   writeFileSync(join(root, ".hunch", "local.json"), JSON.stringify({ privateDir: overlay, autoCommit: false }) + "\n");
   const store = new HunchStore(hunchPaths(root));
   store.json.ensureDirs();
-  return { store, cleanup: () => { store.close(); rmSync(sandbox, { recursive: true, force: true }); } };
+  return { store, cleanup: () => { store.close(); cleanupDir(sandbox); } };
 }
 
 const agent = (id: string, grants: Scope[]) => ({ id, kind: "agent" as const, grants });

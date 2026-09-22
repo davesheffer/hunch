@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -36,7 +37,7 @@ test("sibling tool families carry a 'Not for' boundary naming a sibling, and des
   t.after(async () => {
     await client.close().catch(() => {});
     await server.close().catch(() => {});
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   });
 
   const listed = await client.listTools();
@@ -74,7 +75,7 @@ test("hunch_record_decision refuses a second live decision per topic with the Re
   t.after(async () => {
     await client.close().catch(() => {});
     await server.close().catch(() => {});
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   });
 
   const text = (result: Awaited<ReturnType<Client["callTool"]>>): string =>

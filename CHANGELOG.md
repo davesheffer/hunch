@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.41.0 — 2026-09-22
+
+- Shared-memory operations reuse the most recent successful Git branch-name syntax check and avoid proving the identical nested publication boundary twice during one store open. This reduces Git process startup while keeping route validation fresh; Windows integration deadline verification is tracked in #398.
+- `hunch retire-constraint <id> --reason <text>` closes an active constraint's validity window while retaining its history and storage home. Public grounding drops the retired invariant; missing and already-retired IDs are refused (#387).
+- Task cards retain unresolved failed, cancelled, and timed-out checks when a different command passes. Only a successful rerun of the same command clears that failure. Long report hashes wrap on narrow screens (#394, #395).
+- Timed-out or cancelled verification commands do not report Windows' forced-termination status as the command's own exit code (#397). Helper-process fixtures stop their helpers before deleting the working directory.
+- Automatic pre-edit context no longer feeds its previous delivery for the same file back into task ranking, preventing an unchanged file from receiving repeated full context blocks (#375).
+- Linked-worktree `init` preserves an installed shared hook's auto-commit default and reports when its explicit `--commit` still overrides a local opt-out (#357).
+- Hunch's own local post-commit and post-merge grounding hooks use the main checkout's source build when available. Shared hook privacy, commit, and deterministic-provider options remain preserved; hook-manager snippets keep portable launchers (#386).
+- MCP capture tools refuse writes when their file evidence is absent from the selected checkout and its history but present in a sibling worktree, identifying candidate `cwd` values. Deleted-file history accepts equivalent relative paths such as `./gone.ts`. This is a partial misroute backstop; files present in both checkouts do not identify the intended destination (#388).
+- Test fixtures isolate inherited assistant identities, canonicalize workspace temporary paths, and share bounded directory cleanup for transient Windows handle lag. Persistent cleanup failures still fail the test (#377, #378, #384).
+
 ## 1.40.1 — 2026-09-22
 
 - Indexing preserves the previous graph and exits with an error when every eligible file of any language fails to parse. Doctor reports the same condition; partial per-file failures and valid empty graphs retain their existing behavior (#391, fixes #380).

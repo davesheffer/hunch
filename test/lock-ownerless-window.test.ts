@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
@@ -25,7 +26,7 @@ function tempRepo(): { root: string; hunchDir: string; lock: string; cleanup: ()
     root,
     hunchDir,
     lock: join(hunchDir, ".hunch-commit.lock"),
-    cleanup: () => rmSync(root, { recursive: true, force: true }),
+    cleanup: () => cleanupDir(root),
   };
 }
 

@@ -28,14 +28,23 @@ export interface TeamConfig {
 
 export const DEFAULT_TEAM_REF = "refs/heads/main";
 
+// check-ref-format without --branch checks syntax only, independent of the
+// repository, ref existence, or remote state. Retain just its last successful
+// input: one shared sync can otherwise spawn Git dozens of times for the same
+// name. Route/remote validation still runs afresh, and failed invocations retry.
+let lastValidTeamRef: string | undefined;
+
 export function safeTeamRef(value: string): string | null {
   const ref = value.trim();
   if (!ref.startsWith("refs/heads/") || ref === "refs/heads/") return null;
+  if (ref === lastValidTeamRef) return ref;
   const checked = spawnSync("git", ["check-ref-format", ref], {
     stdio: "ignore",
     env: { ...process.env, GIT_CONFIG_NOSYSTEM: "1" },
   });
-  return checked.status === 0 ? ref : null;
+  if (checked.status !== 0) return null;
+  lastValidTeamRef = ref;
+  return ref;
 }
 
 export function teamSharedRef(team: TeamConfig): string {

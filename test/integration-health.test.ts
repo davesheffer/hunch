@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, symlinkSync } from "node:fs";
@@ -23,7 +24,7 @@ function fixture() {
   };
   write("package.json", { dependencies: { "@davesheffer/hunch": version } });
   const claude = (v = version) => { writeMcpJson(root, launcher(v)); installClaudeHooks(root, command(v)); };
-  return { root, write, claude, cleanup: () => rmSync(root, { recursive: true, force: true }) };
+  return { root, write, claude, cleanup: () => cleanupDir(root) };
 }
 
 test("original regression: dependency upgrades cannot leave stale MCP or hook pins healthy", () => {
@@ -271,7 +272,7 @@ test("fresh expected-version failure evidence wins over a stale failure row", as
 test("legacy four-column hook observation ledgers migrate without treating old rows as failure evidence", async (t) => {
   const { readHookObservations, recordHookObservation } = await import("../src/core/hookObservations.js");
   const root = mkdtempSync(join(tmpdir(), "hunch-hook-observations-legacy-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  t.after(() => cleanupDir(root));
   const cache = join(root, ".hunch-cache");
   mkdirSync(cache, { recursive: true });
   const { DatabaseSync } = createRequire(import.meta.url)("node:sqlite") as typeof import("node:sqlite");

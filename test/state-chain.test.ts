@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 /**
  * Gate 4 (ROADMAP): the cross-domain chain, run through the ONE binding by three different
  * principals over one store — a repository partition plus an organization drawer in the overlay.
@@ -40,7 +41,7 @@ function overlayStore() {
   writeFileSync(join(root, ".hunch", "local.json"), JSON.stringify({ privateDir: overlay, autoCommit: false }) + "\n");
   const store = new HunchStore(hunchPaths(root));
   store.json.ensureDirs();
-  return { store, cleanup: () => { store.close(); rmSync(sandbox, { recursive: true, force: true }); } };
+  return { store, cleanup: () => { store.close(); cleanupDir(sandbox); } };
 }
 
 function refusal(fn: () => unknown, code: StateRefusal["code"]): StateRefusal {

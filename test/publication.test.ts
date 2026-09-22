@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
@@ -133,7 +134,7 @@ test("the opt-in list degrades to silence, never to an exception", () => {
     assert.equal(loaded.length, 1, "the good pattern survives its broken neighbour");
     assert.ok(scanRecord({ title: "t", context: "our moat" }, { vocabulary: loaded }).length === 1);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    cleanupDir(dir);
   }
 });
 

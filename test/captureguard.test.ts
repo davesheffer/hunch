@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 /**
  * Shared-mode capture guard (regression for the willClose keying bug): the
  * uniqueness guard must key its incumbent lookup on the store the write
@@ -55,7 +56,7 @@ async function sharedSetup() {
       else process.env.HUNCH_PRIVATE_DIR = prevEnv;
       // Windows: the server's sqlite handle may still hold the dir; best-effort.
       for (const d of [root, overlay]) {
-        try { rmSync(d, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 }); } catch { /* temp dir, OS reaps */ }
+        try { cleanupDir(d); } catch { /* temp dir, OS reaps */ }
       }
     },
   };

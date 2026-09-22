@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
@@ -130,6 +131,6 @@ test("the pinned current PHP policy ranks above its superseded history", {
     assert.ok(superseded < 0 || current < superseded, "current ADR 0008 must rank ahead of superseded ADR 0005");
   } finally {
     store.close();
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });

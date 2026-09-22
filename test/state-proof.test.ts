@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { generateKeyPairSync } from 'node:crypto';
@@ -73,7 +74,7 @@ test('key-bound credentials require fresh proof, resist replay across instances,
     await assert.rejects(current.capabilities(), /unauthorized/);
   } finally {
     for (const server of [app, second]) if (server) { await new Promise<void>(r => server.close(() => r())); server.closeStores(); }
-    rmSync(dir, { recursive: true, force: true });
+    cleanupDir(dir);
   }
 });
 
@@ -114,5 +115,5 @@ test('proof validation binds method, target, token, key, algorithm and time, and
     await assert.rejects(verifyStateProof({ ...input, proof: proof() }), /already used/);
     await verifyStateProof({ ...input, now: now + 60, proof: proof({ ...claims, jti: 'nonce-boundary-valid' }) });
     await assert.rejects(verifyStateProof({ ...input, now: now + 121, proof: proof({ ...claims, iat: now + 121, jti: 'nonce-boundary-expired' }) }), (error: unknown) => error instanceof StateProofError && error.code === 'use_dpop_nonce');
-  } finally { rmSync(dir, { recursive: true, force: true }); }
+  } finally { cleanupDir(dir); }
 });

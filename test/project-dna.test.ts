@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -40,7 +41,7 @@ function commit(root: string, subject: string, content: string): void {
 
 function fixture(t: Parameters<typeof test>[1] extends (t: infer T) => unknown ? T : never): { root: string; revision: string } {
   const root = mkdtempSync(join(tmpdir(), "hunch-project-dna-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  t.after(() => cleanupDir(root));
   git(root, "init", "-q", "-b", "main");
   writeFileSync(join(root, "CONTRIBUTING.md"), [
     "# Contributing",
@@ -139,7 +140,7 @@ test("project DNA match scores only deterministic applicable traits", (t) => {
 
 test("small histories do not manufacture communication conventions", (t) => {
   const root = mkdtempSync(join(tmpdir(), "hunch-project-dna-small-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  t.after(() => cleanupDir(root));
   git(root, "init", "-q", "-b", "main");
   writeFileSync(join(root, "value.txt"), "1\n");
   git(root, "add", "value.txt");
@@ -242,7 +243,7 @@ test("host evidence is bounded, canonical, deterministic, and tamper evident", (
 
 test("authorized host evidence extends DNA without retaining raw PR or review text", (t) => {
   const root = mkdtempSync(join(tmpdir(), "hunch-project-dna-host-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  t.after(() => cleanupDir(root));
   git(root, "init", "-q", "-b", "main");
   writeFileSync(join(root, "value.txt"), "1\n");
   git(root, "add", "value.txt");

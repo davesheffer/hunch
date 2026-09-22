@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, mkdirSync, writeFileSync, existsSync, utimesSync } from "node:fs";
@@ -22,7 +23,7 @@ function tempRepo(): { root: string; cleanup: () => void } {
   writeFileSync(join(root, "f.txt"), "x");
   g(root, "add", "-A");
   g(root, "commit", "-q", "-m", "init");
-  return { root, cleanup: () => rmSync(root, { recursive: true, force: true }) };
+  return { root, cleanup: () => cleanupDir(root) };
 }
 
 /** Write the SHARED overlay pointer at <git-common-dir>/hunch/local.json — what
@@ -93,7 +94,7 @@ test("stableRepositoryName is remote-name, checkout-name, worktree, and shallow-
       "the artifact label never exposes a remote path or remote alias");
   } finally {
     try { g(full, "worktree", "remove", "--force", linked); } catch { /* best-effort */ }
-    rmSync(base, { recursive: true, force: true });
+    cleanupDir(base);
   }
 });
 
@@ -149,8 +150,8 @@ test("P1: a linked worktree auto-discovers the overlay via the shared common-dir
     store.close();
   } finally {
     try { g(root, "worktree", "remove", "--force", wt); } catch { /* best-effort */ }
-    rmSync(wt, { recursive: true, force: true });
-    rmSync(overlay, { recursive: true, force: true });
+    cleanupDir(wt);
+    cleanupDir(overlay);
     cleanup();
   }
 });
@@ -169,8 +170,8 @@ test("P1: a per-worktree local.json still wins over the shared pointer (explicit
     assert.equal(store.privateDir, resolve(join(local, ".hunch")), "per-worktree pointer takes precedence");
     store.close();
   } finally {
-    rmSync(shared, { recursive: true, force: true });
-    rmSync(local, { recursive: true, force: true });
+    cleanupDir(shared);
+    cleanupDir(local);
     cleanup();
   }
 });
@@ -210,7 +211,7 @@ test("commit lock ownership preserves a live old owner and immediately recovers 
     assert.equal(pullHunchStatus(hunchDir), "busy");
     assert.ok(existsSync(lock), "mtime alone never reclaims a demonstrably live owner");
 
-    rmSync(lock, { recursive: true, force: true });
+    cleanupDir(lock);
     mkdirSync(join(lock, "owner-2147483647"), { recursive: true });
     writeFileSync(join(hunchDir, "decisions", "dec_dead_owner.json"),
       `${JSON.stringify({ id: "dec_dead_owner", title: "dead owner recovery" })}\n`);
@@ -245,9 +246,9 @@ test("ensureSharedOverlayPointer: registers an absolute pointer at the common di
     assert.equal(store.privateDir, resolve(overlay));
     store.close();
     g(root, "worktree", "remove", "--force", wt);
-    rmSync(wt, { recursive: true, force: true });
+    cleanupDir(wt);
   } finally {
-    rmSync(overlay, { recursive: true, force: true });
+    cleanupDir(overlay);
     cleanup();
   }
 });

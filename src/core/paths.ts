@@ -11,7 +11,15 @@ export const HUNCH_DIR = ".hunch";
  *  `src\auth\session.ts` never matches the stored `src/auth/session.ts`). Safe on
  *  symbol names too: they contain no backslashes. This does NOT make a path
  *  repo-relative — an absolute path passes through with its separators flipped,
- *  unchanged otherwise; use `repoRelativeTarget` for that. */
+ *  unchanged otherwise; use `repoRelativeTarget` for that.
+ *
+ *  Inherently ambiguous for a string like `docs/notes\notes.md`: it could be a
+ *  Windows-style path with a literal separator, or a POSIX path whose filename
+ *  legitimately contains a backslash BYTE (illegal on Windows, legal on
+ *  POSIX/git) — the string alone can't say which, and this function always
+ *  assumes the former. A caller that can check the filesystem/git history and
+ *  needs the correct answer for a real file should decide from that evidence
+ *  instead of trusting this blindly. */
 export function toPosixTarget(target: string): string {
   return target.replace(/\\/g, "/").replace(/^\.\//, "");
 }

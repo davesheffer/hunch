@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -45,7 +46,7 @@ function fixture(t: { after: (f: () => void) => void }): { root: string; store: 
   writeFileSync(join(root, "src", "config.js"), "export const preserve = true;\n");
   const store = new HunchStore(hunchPaths(root));
   store.json.ensureDirs();
-  t.after(() => { store.close(); rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }); });
+  t.after(() => { store.close(); cleanupDir(root); });
   return { root, store };
 }
 const ctxFor = (target: string) => ({ target, constraints: [{ id: "con_preserve", type: "architecture", statement: "Preserve existing settings", scope: [target], severity: "blocking", enforcement: "advisory_v1", match: null, forbids: null, rationale: "", source_decision: null, violations: [], status: "active", valid_from: "2026-09-11T00:00:00.000Z", valid_to: null, provenance: { source: "human_confirmed", confidence: 1, evidence: [] } }], decisions: [], bugs: [], blast_radius: [], components: [], findings: [], budget_tokens: 1500 } as unknown as AssembledContext);

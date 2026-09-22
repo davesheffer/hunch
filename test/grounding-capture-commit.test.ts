@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 /**
  * Kills the refresh-counts treadmill: every public capture bumps record counts, so the
  * generated grounding blocks (CLAUDE.md, AGENTS.md, …) went stale on the very commit that
@@ -31,7 +32,7 @@ function repo(prefix: string): { root: string; git: (...a: string[]) => string; 
   git("config", "user.email", "t@t.co");
   git("config", "user.name", "T");
   git("config", "commit.gpgsign", "false");
-  return { root, git, cleanup: () => rmSync(root, { recursive: true, force: true }) };
+  return { root, git, cleanup: () => cleanupDir(root) };
 }
 
 function decision(id: string, title: string): Decision {

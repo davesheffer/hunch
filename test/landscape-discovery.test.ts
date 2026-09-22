@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import {
@@ -41,7 +42,7 @@ function repository(t: test.TestContext, input: {
   // Keep fixture repositories synchronous. Auto-maintenance may outlive the Git command that
   // triggered it and recreate .git entries while Node is removing the temporary repository.
   // The retry window is a bounded backstop for filesystem latency, not the primary coordination.
-  t.after(() => rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
+  t.after(() => cleanupDir(root));
   git(root, "init", "-q");
   git(root, "config", "maintenance.auto", "false");
   git(root, "config", "gc.auto", "0");

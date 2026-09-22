@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
@@ -273,6 +274,6 @@ test("revert-move refuses unsafe commits without mutation, but reverts and publi
     assert.match(remoteTree, /^src\/app\.ts$/m);
     assert.match(remoteTree, /^\.hunch\/decisions\/dec_a11ced\.json$/m);
   } finally {
-    rmSync(sandbox, { recursive: true, force: true });
+    cleanupDir(sandbox);
   }
 });

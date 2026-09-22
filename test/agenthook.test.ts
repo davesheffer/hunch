@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -268,7 +269,7 @@ test("Codex apply_patch lists every touched file with only its added lines", () 
 const hookCli = resolve("src/cli/index.ts");
 function patchRepo(t: { after: (f: () => void) => void }, constraints: Constraint[], firmness = "strict"): string {
   const root = mkdtempSync(join(tmpdir(), "hunch-codex-patch-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  t.after(() => cleanupDir(root));
   execFileSync("git", ["init", "-q", root]);
   mkdirSync(join(root, ".hunch"));
   writeFileSync(join(root, ".gitignore"), ".hunch-cache/\n");
@@ -332,7 +333,7 @@ test("content-matched gate reads only added patch lines: removing a forbidden pa
 test("absolute patch paths are normalized to repo-relative paths; paths outside the repo are skipped", { timeout: 120_000 }, t => {
   const root = patchRepo(t, [mkConstraint({ id: "con_billing_guard", statement: "Billing is frozen", scope: ["src/billing/**"], severity: "blocking" })]);
   const outside = mkdtempSync(join(tmpdir(), "hunch-codex-outside-"));
-  t.after(() => rmSync(outside, { recursive: true, force: true }));
+  t.after(() => cleanupDir(outside));
   // join() yields backslash paths on Windows (the shape Codex sends there) and POSIX paths elsewhere.
   const absolutes = [join(root, "src", "billing", "charge.ts")];
   if (process.platform === "win32") absolutes.push(join(root, "src", "billing", "charge.ts").replace(/\\/g, "/"));
@@ -363,7 +364,7 @@ test("PostToolUse records every file an apply_patch touched for the Stop gate", 
 test("PostToolUse skips files outside the repository — a scratch edit is not a product edit (#305)", { timeout: 120_000 }, t => {
   const root = patchRepo(t, [], "advisory");
   const outside = mkdtempSync(join(tmpdir(), "hunch-codex-scratch-"));
-  t.after(() => rmSync(outside, { recursive: true, force: true }));
+  t.after(() => cleanupDir(outside));
   const session = `codex-post-outside-${process.pid}-${Date.now()}`;
   codexHook(root, {
     hook_event_name: "PostToolUse", session_id: session, tool_name: "apply_patch",

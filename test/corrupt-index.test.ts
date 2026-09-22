@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 /**
  * A corrupt DERIVED index must be rebuilt, not fatal (round-3 audit #10).
  *
@@ -21,7 +22,7 @@ import { openDb } from "../src/store/db.js";
 
 function tmp(): { dir: string; path: string; cleanup: () => void } {
   const dir = mkdtempSync(join(tmpdir(), "hunch-corrupt-"));
-  return { dir, path: join(dir, "hunch.sqlite"), cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+  return { dir, path: join(dir, "hunch.sqlite"), cleanup: () => cleanupDir(dir) };
 }
 
 /** Bytes that are definitively not a SQLite database. */

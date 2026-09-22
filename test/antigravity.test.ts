@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from "node:fs";
@@ -16,7 +17,7 @@ test("antigravity: registers the hunch stdio server in the global config when in
     assert.equal(file, join(home, ".gemini", "antigravity", "mcp_config.json"));
     const cfg = JSON.parse(readFileSync(file!, "utf8"));
     assert.deepEqual(cfg.mcpServers.hunch, { command: INV.command, args: [...INV.args, "mcp"] });
-  } finally { rmSync(home, { recursive: true, force: true }); }
+  } finally { cleanupDir(home); }
 });
 
 test("antigravity: merges idempotently, preserving other servers (con_8460b6770f)", () => {
@@ -31,7 +32,7 @@ test("antigravity: merges idempotently, preserving other servers (con_8460b6770f
     assert.ok(cfg.mcpServers.github, "existing server preserved");
     assert.ok(cfg.mcpServers.hunch, "hunch added");
     assert.equal(Object.keys(cfg.mcpServers).length, 2);
-  } finally { rmSync(home, { recursive: true, force: true }); }
+  } finally { cleanupDir(home); }
 });
 
 test("antigravity: not installed → null, never creates a global config", () => {
@@ -40,7 +41,7 @@ test("antigravity: not installed → null, never creates a global config", () =>
     assert.equal(antigravityMcpFile(home), null);
     assert.equal(writeAntigravityMcp(INV, home), null);
     assert.equal(existsSync(join(home, ".gemini")), false);
-  } finally { rmSync(home, { recursive: true, force: true }); }
+  } finally { cleanupDir(home); }
 });
 
 test("antigravity: adapts to the `config/` dir variant", () => {
@@ -48,5 +49,5 @@ test("antigravity: adapts to the `config/` dir variant", () => {
   try {
     mkdirSync(join(home, ".gemini", "config"), { recursive: true });
     assert.equal(writeAntigravityMcp(INV, home), join(home, ".gemini", "config", "mcp_config.json"));
-  } finally { rmSync(home, { recursive: true, force: true }); }
+  } finally { cleanupDir(home); }
 });

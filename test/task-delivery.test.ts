@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -65,7 +66,7 @@ test("a persisted task is found for its file and delivered on the next context r
   writeFileSync(join(root, "src", "config.js"), "export const preserve = true;\n");
   const store = new HunchStore(hunchPaths(root));
   store.json.ensureDirs();
-  t.after(() => { store.close(); rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }); });
+  t.after(() => { store.close(); cleanupDir(root); });
   const ctx = { target: "src/config.js", constraints: [], decisions: [], bugs: [], blast_radius: [], components: [], findings: [], budget_tokens: 1500 } as unknown as AssembledContext;
   ctx.constraints.push({ id: "con_preserve", type: "architecture", statement: "Preserve existing settings", scope: ["src/config.js"], severity: "blocking", enforcement: "advisory_v1", match: null, forbids: null, rationale: "", source_decision: null, violations: [], status: "active", valid_from: "2026-09-11T00:00:00.000Z", valid_to: null, provenance: { source: "human_confirmed", confidence: 1, evidence: [] } });
   const record = { record_id: "con_preserve", kind: "constraints", title: "Preserve existing settings", lesson: "Merge settings.", content_hash: reportHash("fixture record revision"), recorded_at: "2026-09-11T00:00:00.000Z" };
@@ -98,7 +99,7 @@ test("tasksFor rewrites an absolute target to repo-relative and never suffix-lea
     );
   } finally {
     store.close();
-    rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+    cleanupDir(root);
   }
 });
 
@@ -118,6 +119,6 @@ test("tasksFor: a REAL working-tree file the index cannot see must not suffix-le
     assert.deepEqual(store.tasksFor("a/empty.ts").map((r) => r.id), ["htask_000000000000000000000012"], "the nested file still answers for itself");
   } finally {
     store.close();
-    rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+    cleanupDir(root);
   }
 });

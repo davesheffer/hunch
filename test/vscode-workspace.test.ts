@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -62,6 +63,6 @@ test("Windows CLI quoting survives a real .cmd shim and cmd.exe expansion pass",
   } finally {
     if (previous === undefined) delete process.env.HUNCH_WINQUOTE_SENTINEL;
     else process.env.HUNCH_WINQUOTE_SENTINEL = previous;
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });

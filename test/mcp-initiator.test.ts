@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -34,7 +35,7 @@ test("real MCP client handshakes bind isolated origins to registered callbacks",
       await client.close();
       await server.close();
       assert.ok(resolve(root).startsWith(resolve(tmpdir())));
-      rmSync(root, { recursive: true, force: true });
+      cleanupDir(root);
     }
   }));
   assert.deepEqual(results.map(r => r.origin.provider), ["claude-cli", "codex-cli", "kimi-cli", null]);

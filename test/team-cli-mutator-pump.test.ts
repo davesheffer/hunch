@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -232,6 +233,6 @@ test("shared CLI mutators pump their actual home and rejection leaves the next c
       "the first capture after rejection must commit and push normally");
     assert.match(expectCli(teammate, "runbook", "--find", "PUMP_AFTER_REJECT"), /PUMP_AFTER_REJECT/);
   } finally {
-    rmSync(sandbox, { recursive: true, force: true });
+    cleanupDir(sandbox);
   }
 });

@@ -1,3 +1,5 @@
+import { cleanupDir } from "./fixtures.js";
+import { tempDir } from "./helpers.js";
 /**
  * Workspace ledger, Phase 2 (docs/workspace-ledger.md): the git hooks that keep a machine's
  * record fresh, the shared record/read path, the read-only `hunch_workspaces` MCP tool, the
@@ -44,7 +46,7 @@ const OTHER = { id: "mac_fedcba9876543210fedcba9876543210", label: "other-box", 
 /** A repo (with committed .hunch/) plus a private overlay repo wired through local.json, and
  *  a machine identity under a private XDG root — the shape of a developer's real setup. */
 function fixture(): { base: string; repo: string; overlayRoot: string; env: Record<string, string>; cleanup: () => void } {
-  const base = mkdtempSync(join(tmpdir(), "hunch-ledger-"));
+  const base = tempDir("hunch-ledger-");
   const repo = join(base, "repo");
   g(base, "init", "-q", "-b", "main", repo); cfg(repo);
   mkdirSync(join(repo, ".hunch"), { recursive: true });
@@ -60,7 +62,7 @@ function fixture(): { base: string; repo: string; overlayRoot: string; env: Reco
   const cfgHome = join(base, "xdg");
   mkdirSync(join(cfgHome, "hunch"), { recursive: true });
   writeFileSync(join(cfgHome, "hunch", "machine.json"), JSON.stringify(MACHINE));
-  return { base, repo, overlayRoot, env: { XDG_CONFIG_HOME: cfgHome }, cleanup: () => rmSync(base, { recursive: true, force: true }) };
+  return { base, repo, overlayRoot, env: { XDG_CONFIG_HOME: cfgHome }, cleanup: () => cleanupDir(base) };
 }
 
 /** Apply an env patch; the returned function restores it (call from `finally` / `t.after`). */
@@ -97,7 +99,7 @@ function otherRecord(observed: string, branches: Array<{ name: string; merged?: 
 // ---- hooks --------------------------------------------------------------------------------
 
 test("post-checkout hook: constant argv, HUNCH_SYNC-guarded, branch checkouts only ($3 = 1), backgrounded, idempotent; post-commit stays out of it", () => {
-  const r = mkdtempSync(join(tmpdir(), "hunch-ledger-hook-"));
+  const r = tempDir("hunch-ledger-hook-");
   try {
     g(r, "init", "-q");
     assert.equal(hookStatus(r).postCheckout, false);
@@ -124,7 +126,7 @@ test("post-checkout hook: constant argv, HUNCH_SYNC-guarded, branch checkouts on
     const commit = readFileSync(join(r, ".git", "hooks", "post-commit"), "utf8");
     assert.match(commit, /hunch sync --from-hook --quiet >/);
     assert.doesNotMatch(commit, /workspaces snapshot/);
-  } finally { rmSync(r, { recursive: true, force: true }); }
+  } finally { cleanupDir(r); }
 });
 
 test("the installed post-checkout hook really records a snapshot on a branch checkout, and not on a file checkout", { skip: process.platform === "win32" ? "sh hook" : false }, () => {
@@ -322,7 +324,7 @@ test("a PRIVATE overlay is its own repository: a detached code HEAD still record
 });
 
 test("gitHeadUnsettled: null on a settled branch and outside a repo; per-worktree, so a rebase in a linked worktree is invisible to the main checkout (issue #313)", () => {
-  const base = mkdtempSync(join(tmpdir(), "hunch-unsettled-"));
+  const base = tempDir("hunch-unsettled-");
   try {
     const repo = join(base, "repo");
     g(base, "init", "-q", "-b", "main", repo); cfg(repo);
@@ -342,7 +344,7 @@ test("gitHeadUnsettled: null on a settled branch and outside a repo; per-worktre
     g(wt, "rebase", "--abort");
     g(wt, "checkout", "-q", "--detach");
     assert.equal(gitHeadUnsettled(wt), "detached-head");
-  } finally { rmSync(base, { recursive: true, force: true }); }
+  } finally { cleanupDir(base); }
 });
 
 test("workspaceSummaryLine reads stored records only and counts machines, dirty worktrees and deletable branches", () => {
@@ -479,7 +481,7 @@ test("HUNCH_WORKSPACE_REFRESH=0 makes a hunch_workspaces call read-only", async 
 // ---- scaffold, worktree, doctor, now ------------------------------------------------------
 
 test("hunch init scaffolds /worktrees, which routes the agent to hunch_workspaces and never to git or a delete", () => {
-  const root = mkdtempSync(join(tmpdir(), "hunch-ledger-scaffold-"));
+  const root = tempDir("hunch-ledger-scaffold-");
   try {
     const { written } = writeSlashCommands(root);
     assert.ok(written.some((p) => p.endsWith("worktrees.md")));
@@ -488,7 +490,7 @@ test("hunch init scaffolds /worktrees, which routes the agent to hunch_workspace
     assert.match(body, /Do NOT run `git branch`/);
     assert.match(body, /You never delete a branch/);
     assert.match(body, /hunch:generated/);
-  } finally { rmSync(root, { recursive: true, force: true }); }
+  } finally { cleanupDir(root); }
 });
 
 test("CLI: hunch worktree records the new worktree; doctor and now report the ledger", { skip: process.platform === "win32" ? "sh launcher" : false }, () => {

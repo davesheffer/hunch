@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -9,7 +10,7 @@ import { runReportCheck } from "../src/core/taskReportEvidence.js";
 
 function fixture(t: { after: (f: () => void) => void }): string {
   const root = mkdtempSync(join(tmpdir(), "hunch-task-verify-exit-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  t.after(() => cleanupDir(root));
   execFileSync("git", ["init", "-q", root]);
   mkdirSync(join(root, "src"));
   writeFileSync(join(root, ".gitignore"), ".hunch/\n.hunch-cache/\n");
@@ -28,9 +29,11 @@ function reapHelpers(t: { after: (f: () => void) => void }, pids: number[]) {
 }
 
 test("a passing command that leaves a helper holding stdout settles on its own exit, not on the pipes closing", async t => {
-  const root = fixture(t), task = startReportTask(root, "Command that leaves a helper");
   const pids: number[] = [];
+  // after hooks run in registration order: stop the helper before deleting its
+  // working directory, which Windows keeps open until that process exits.
   reapHelpers(t, pids);
+  const root = fixture(t), task = startReportTask(root, "Command that leaves a helper");
   let out = "";
   const start = Date.now();
   const result = await runReportCheck(root, task.task_id, [process.execPath, "-e", linger(0)], "Lingering helper", 6_000, {
@@ -43,9 +46,9 @@ test("a passing command that leaves a helper holding stdout settles on its own e
 });
 
 test("a non-zero exit with a lingering helper records that exit code, never null", async t => {
-  const root = fixture(t), task = startReportTask(root, "Failing command with a helper");
   const pids: number[] = [];
   reapHelpers(t, pids);
+  const root = fixture(t), task = startReportTask(root, "Failing command with a helper");
   let out = "";
   const result = await runReportCheck(root, task.task_id, [process.execPath, "-e", linger(3)], "Lingering helper fails", 6_000, {
     onStdout: chunk => { out += chunk.toString("utf8"); const m = /helper-pid (\d+)/.exec(out); if (m) pids[0] = Number(m[1]); },
@@ -72,4 +75,18 @@ test("a command that outlives its budget is still recorded as a timeout with no 
   assert.equal(result.exit_code, null);
   assert.equal(result.timed_out, true);
   assert.ok(Date.now() - start < 5_000, "the timeout path must still bound settlement");
+});
+
+test("cancelling a running command records no synthetic termination exit code", async t => {
+  const root = fixture(t), task = startReportTask(root, "Cancelled command");
+  const controller = new AbortController();
+  const result = await runReportCheck(root, task.task_id,
+    [process.execPath, "-e", "process.stdout.write('ready');setTimeout(()=>{}, 10000)"],
+    "Cancelled sleeper", 5_000, {
+      signal: controller.signal,
+      onStdout: () => controller.abort(),
+    });
+  assert.equal(result.cancelled, true);
+  assert.equal(result.timed_out, false);
+  assert.equal(result.exit_code, null);
 });

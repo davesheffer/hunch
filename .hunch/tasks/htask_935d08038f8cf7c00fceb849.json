@@ -1,0 +1,26 @@
+{
+  "id": "htask_935d08038f8cf7c00fceb849",
+  "title": "Clean merged branches and resolved issue; check open PRs",
+  "state": "completed",
+  "started_at": "2026-09-22T06:20:48.969Z",
+  "finished_at": "2026-09-22T06:22:55.246Z",
+  "coverage": "no-relevant-memory",
+  "lessons": [],
+  "applied": [],
+  "saved": [],
+  "checks": [],
+  "conformance": [],
+  "refusals": 0,
+  "files": [],
+  "supersedes": [],
+  "source_snapshot": null,
+  "report_hash": "sha256:69e100203593ba31cc50f0bfdcbede9bd2b2b5191a6c1e4942738bbfdf167832",
+  "provenance": {
+    "source": "task_report",
+    "confidence": 1,
+    "evidence": [
+      "hunch report htask_935d08038f8cf7c00fceb849"
+    ],
+    "last_verified": "2026-09-22T06:22:55.246Z"
+  }
+}

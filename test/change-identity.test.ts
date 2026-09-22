@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -29,7 +30,7 @@ function git(root: string, ...args: string[]): string {
 
 test("an exact branch delta and its squash commit share one change identity", (t) => {
   const root = mkdtempSync(join(tmpdir(), "hunch-change-id-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  t.after(() => cleanupDir(root));
   git(root, "init", "-q", "-b", "main");
   const source = join(root, "value.ts");
   writeFileSync(source, "export const value = 0;\n");
@@ -106,7 +107,7 @@ test("an exact branch delta and its squash commit share one change identity", (t
 
 test("exact change identity distinguishes whitespace/blob changes even when Git patch identity is looser", (t) => {
   const root = mkdtempSync(join(tmpdir(), "hunch-change-id-exact-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  t.after(() => cleanupDir(root));
   git(root, "init", "-q", "-b", "main");
   const source = join(root, "value.ts");
   writeFileSync(source, "export const value = 0;\n");

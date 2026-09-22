@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -93,8 +94,8 @@ test("real init refuses a public .hunch symlink without scaffolding its target",
     assert.deepEqual(readdirSync(outside), ["keep.txt"]);
     assert.equal(readFileSync(sentinel, "utf8"), "PUBLIC_HUNCH_LINK_TARGET_MUST_STAY_UNTOUCHED\n");
   } finally {
-    rmSync(root, { recursive: true, force: true });
-    rmSync(outside, { recursive: true, force: true });
+    cleanupDir(root);
+    cleanupDir(outside);
   }
 });
 
@@ -115,8 +116,8 @@ test("real init refuses a committed kind-directory symlink without touching its 
     assert.equal(readFileSync(sentinel, "utf8"), bytes);
     assert.deepEqual(readdirSync(outside), ["dec_keep.json"], "init created nothing through the symlink");
   } finally {
-    rmSync(root, { recursive: true, force: true });
-    rmSync(outside, { recursive: true, force: true });
+    cleanupDir(root);
+    cleanupDir(outside);
   }
 });
 
@@ -139,8 +140,8 @@ test("real index refuses a symbols kind symlink without rewriting the outside in
     assert.equal(readFileSync(sentinel, "utf8"), bytes);
     assert.deepEqual(readdirSync(outside), ["index.json"], "index created nothing through the symlink");
   } finally {
-    rmSync(root, { recursive: true, force: true });
-    rmSync(outside, { recursive: true, force: true });
+    cleanupDir(root);
+    cleanupDir(outside);
   }
 });
 
@@ -170,8 +171,8 @@ test("JsonStore skips record symlinks and refuses every write/delete path that t
     assert.throws(() => store.dropAll("decisions"), /unsafe JSON store path/);
     assert.equal(readFileSync(target, "utf8"), bytes, "outside target stayed byte-identical");
   } finally {
-    rmSync(root, { recursive: true, force: true });
-    rmSync(outside, { recursive: true, force: true });
+    cleanupDir(root);
+    cleanupDir(outside);
   }
 });
 
@@ -204,7 +205,7 @@ test("JsonStore rejects traversal IDs and oversized record reads, writes, and de
     const huge = decision("dec_huge", "x".repeat(MAX_JSON_RECORD_BYTES));
     assert.throws(() => store.put("decisions", huge as never), /oversized JSON write/);
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });
 
@@ -233,8 +234,8 @@ test("MCP startup and query do not ingest an external record through a symlink",
     else process.env.HUNCH_PRIVATE_DIR = previousPrivate;
     if (previousEmbeddings === undefined) delete process.env.HUNCH_EMBEDDINGS;
     else process.env.HUNCH_EMBEDDINGS = previousEmbeddings;
-    rmSync(root, { recursive: true, force: true });
-    rmSync(outside, { recursive: true, force: true });
+    cleanupDir(root);
+    cleanupDir(outside);
   });
 
   try {

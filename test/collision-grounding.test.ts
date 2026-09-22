@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 /**
  * A contested topic must never be injected as authority (round-3 audit #5 and #6).
  *
@@ -89,7 +90,7 @@ function sharedStore(): { store: HunchStore; cleanup: () => void } {
   writeFileSync(join(root, ".hunch", "local.json"), JSON.stringify({ privateDir: overlay, autoCommit: false, mode: "shared" }) + "\n");
   const store = new HunchStore(hunchPaths(root));
   store.json.ensureDirs();
-  return { store, cleanup: () => { store.close(); rmSync(sandbox, { recursive: true, force: true }); } };
+  return { store, cleanup: () => { store.close(); cleanupDir(sandbox); } };
 }
 
 test("a topic collision in a SHARED overlay reaches the escalation surface (#6)", (t) => {

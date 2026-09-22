@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -53,7 +54,7 @@ test("dependency materialization preserves internal relative symlinks but reject
     symlinkSync("../outside.js", join(source, "escape"));
     assert.throws(() => dependencySnapshotTreeHash(source), /escaping symlink target/);
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });
 
@@ -286,12 +287,12 @@ test("behavior execution cannot mutate its shared dependency snapshot and ordina
     assert.match(evaluationAfterTamper.explanation, /human selection, activation and retirement remain required/);
     assert.match(evaluationAfterTamper.explanation, /Re-proving an active policy does not refresh its pins/);
     // A machine that never built the cache is a different, named situation (fnd_b421b3f7ab).
-    rmSync(join(root, ".hunch-cache", "behavior-deps"), { recursive: true, force: true });
+    cleanupDir(join(root, ".hunch-cache", "behavior-deps"));
     const evaluationWithoutCache = evaluateExecutableBehaviorPolicy(root, policy, { commit: head });
     assert.equal(evaluationWithoutCache.result, "error", "an absent cache is never coerced into a pass");
     assert.equal(evaluationWithoutCache.behavior?.error_code, "dependency-snapshot-cache-absent");
     assert.match(evaluationWithoutCache.explanation, /hunch constitution g2 --behavior-deps <candidate> --behavior-review-hash <hash>/);
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });

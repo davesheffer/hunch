@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
@@ -112,7 +113,7 @@ function workspaceFixture(): { root: string; policy: PolicySpec; attestation: G2
     updated_at: at,
     provenance: { source: "human_confirmed+executable_regression", confidence: 1, evidence: ["fixture"], last_verified: at },
   });
-  return { root, policy, attestation, cleanup: () => rmSync(root, { recursive: true, force: true }) };
+  return { root, policy, attestation, cleanup: () => cleanupDir(root) };
 }
 
 test("executable advisory evaluation distinguishes committed, staged, and working snapshots", () => {
@@ -291,7 +292,7 @@ test("CLI, MCP, and check share one non-blocking working-snapshot receipt withou
   } finally {
     if (client) await client.close();
     fixture.cleanup();
-    rmSync(privateRepo, { recursive: true, force: true });
+    cleanupDir(privateRepo);
   }
 });
 
@@ -369,8 +370,8 @@ test("CLI, MCP, check, and the VS Code seam share one non-blocking working-snaps
       else process.env[key] = value;
     }
     if (client) await client.close();
-    if (binDir) { try { rmSync(binDir, { recursive: true, force: true }); } catch { /* best effort */ } }
+    if (binDir) { try { cleanupDir(binDir); } catch { /* best effort */ } }
     fixture.cleanup();
-    rmSync(privateRepo, { recursive: true, force: true });
+    cleanupDir(privateRepo);
   }
 });

@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 /** The pre-edit grounding block must not invalidate its OWN dedup hash.
  *
  * Serving the full block writes delivery receipts; the next hook call's task
@@ -52,7 +53,7 @@ const lesson = () => ({
  *  self-invalidating part. Its own fixture graph; nothing from this repo. */
 function fixture(t: { after: (f: () => void) => void }): string {
   const root = mkdtempSync(join(tmpdir(), "hunch-hook-dedupe-"));
-  t.after(() => rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
+  t.after(() => cleanupDir(root));
   execFileSync("git", ["init", "-q", root]);
   mkdirSync(join(root, "src"), { recursive: true });
   writeFileSync(join(root, ".gitignore"), ".hunch-cache/\n");
@@ -97,6 +98,26 @@ const PRE_EDIT: Record<string, (root: string) => Record<string, unknown>> = {
 };
 
 for (const provider of Object.keys(PRE_EDIT)) {
+  test(`${provider}: a crowded task selection does not change after its own delivery`, { timeout: 120_000 }, t => {
+    const root = fixture(t);
+    const store = new HunchStore(hunchPaths(root));
+    for (let i = 0; i < 6; i++) {
+      const prior = startReportTask(root, `Earlier settings work ${i}`);
+      const context = ctx();
+      if (i >= 3) context.constraints = [];
+      recordTaskDelivery(root, prior.task_id, buildDeliveryEnvelope(context), i < 3 ? [lesson()] : [], undefined, "src/config.ts");
+      finishReportTask(root, prior.task_id);
+      persistTaskRecord(root, store, prior.task_id, { flush: false });
+    }
+    store.close();
+    const session = sessionId();
+    runHook(root, provider, session, { hook_event_name: "UserPromptSubmit", prompt: "merge the settings" });
+    const ground = () => runHook(root, provider, session, PRE_EDIT[provider]!(root))?.hookSpecificOutput?.additionalContext as string;
+    assert.doesNotMatch(ground(), /unchanged this session/);
+    assert.match(ground(), /unchanged this session/, "delivery must not add its own rule ids to the next ranking query");
+    assert.match(ground(), /unchanged this session/);
+  });
+
   test(`${provider}: repeated pre-edit calls with no record change stay deltas — a delivery receipt must not re-send the full block`, { timeout: 120_000 }, t => {
     const root = fixture(t);
     const session = sessionId();

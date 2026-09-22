@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -229,7 +230,7 @@ test("report measures the observed funnel rather than treating discovery as cont
 
 test("CLI runs a lead through explicit qualify, approve, draft and contact evidence", (t) => {
   const root = mkdtempSync(join(tmpdir(), "hunch-outreach-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  t.after(() => cleanupDir(root));
   const store = join(root, "leads.jsonl");
   const tool = resolve("tooling/outreach-pipeline.mjs");
   const discovered = approvedLead({ status: "discovered", approved_at: undefined, contact: undefined });

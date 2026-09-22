@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -23,7 +24,7 @@ function repo(root: string) {
 
 test("save proofs follow actual shared home and never assign a different revision's publication", t => {
   const base = mkdtempSync(join(tmpdir(), "hunch-save-proof-"));
-  t.after(() => rmSync(base, { recursive: true, force: true }));
+  t.after(() => cleanupDir(base));
   const root = join(base, "code"), overlay = join(base, "memory"), remote = join(base, "remote.git");
   repo(root); repo(overlay);
   git(base, "init", "--bare", "-q", "-b", "main", remote);
@@ -58,7 +59,7 @@ test("save proofs follow actual shared home and never assign a different revisio
 
 test("public capture proof is commit-only", t => {
   const base = mkdtempSync(join(tmpdir(), "hunch-save-local-"));
-  t.after(() => rmSync(base, { recursive: true, force: true }));
+  t.after(() => cleanupDir(base));
   const root = join(base, "code"); repo(root);
   const store = new HunchStore(hunchPaths(root)); t.after(() => store.close());
   const task = startReportTask(root, "Save public memory");

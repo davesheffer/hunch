@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -43,8 +44,8 @@ function repoWithWorktree(): { root: string; worktree: string; cleanup: () => vo
     worktree,
     cleanup: () => {
       try { git(root, "worktree", "remove", "--force", worktree); } catch { /* best effort */ }
-      try { rmSync(worktree, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 }); } catch { /* temp only */ }
-      try { rmSync(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 }); } catch { /* temp only */ }
+      try { cleanupDir(worktree); } catch { /* temp only */ }
+      try { cleanupDir(root); } catch { /* temp only */ }
     },
   };
 }
@@ -94,7 +95,7 @@ test("case-variant spellings of ONE repo resolve to one canonical root, not an a
     assert.notEqual(resolved, null, "one repo in two spellings must never read as ambiguous");
     assert.equal(resolveActiveRoot([pathToFileURL(swapped).href], root), resolved, "either spelling resolves to the same canonical root");
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });
 
@@ -108,8 +109,8 @@ test("resolveActiveRoot refuses an ambiguous multi-repo list instead of choosing
       "two valid Hunch stores have no protocol-level active marker",
     );
   } finally {
-    rmSync(first, { recursive: true, force: true });
-    rmSync(second, { recursive: true, force: true });
+    cleanupDir(first);
+    cleanupDir(second);
   }
 });
 
@@ -118,7 +119,7 @@ test("resolveActiveRoot accepts a valid file root by resolving its containing re
   try {
     assert.equal(resolveActiveRoot([pathToFileURL(join(root, "app.ts")).href], root), root);
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });
 
@@ -151,7 +152,7 @@ test("a failed root activation leaves the previous root and store active", async
   t.after(async () => {
     await control.server.close().catch(() => {});
     fixture.cleanup();
-    rmSync(invalid, { recursive: true, force: true });
+    cleanupDir(invalid);
   });
 
   assert.throws(
@@ -173,7 +174,7 @@ test("initialize and roots/list_changed re-home the live MCP server", async (t) 
     await client.close().catch(() => {});
     await control.server.close().catch(() => {});
     try { git(fixture.root, "worktree", "remove", "--force", second); } catch { /* best effort */ }
-    try { rmSync(second, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 }); } catch { /* temp only */ }
+    try { cleanupDir(second); } catch { /* temp only */ }
     fixture.cleanup();
   });
 
@@ -249,7 +250,7 @@ test("a root swap waits for an in-flight tool request before closing its store",
     await client.close().catch(() => {});
     await control.server.close().catch(() => {});
     try { git(fixture.root, "worktree", "remove", "--force", second); } catch { /* best effort */ }
-    try { rmSync(second, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 }); } catch { /* temp only */ }
+    try { cleanupDir(second); } catch { /* temp only */ }
     fixture.cleanup();
   });
 
@@ -279,7 +280,7 @@ test("a stale roots/list response cannot overwrite a newer workspace", async (t)
     await client.close().catch(() => {});
     await control.server.close().catch(() => {});
     try { git(fixture.root, "worktree", "remove", "--force", second); } catch { /* best effort */ }
-    try { rmSync(second, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 }); } catch { /* temp only */ }
+    try { cleanupDir(second); } catch { /* temp only */ }
     fixture.cleanup();
   });
 
@@ -487,7 +488,7 @@ test("a cwd hint that fails to activate (invalid team.json) reports the error an
     await client.close().catch(() => {});
     await control.server.close().catch(() => {});
     fixture.cleanup();
-    rmSync(invalid, { recursive: true, force: true });
+    cleanupDir(invalid);
   });
 
   await Promise.all([control.server.connect(serverTransport), client.connect(clientTransport)]);

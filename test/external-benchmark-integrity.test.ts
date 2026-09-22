@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -18,7 +19,7 @@ import {
 
 test("external benchmark detects hidden-test edits before scoring overwrites them", (t) => {
   const root = mkdtempSync(join(tmpdir(), "hunch-bench-integrity-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  t.after(() => cleanupDir(root));
   mkdirSync(join(root, "test"));
   writeFileSync(join(root, "test/existing.test.ts"), "original\n");
 
@@ -224,7 +225,7 @@ test("rolling execution episodes remain task-relative and exclude their target f
       assert.match(validTournament.stdout, /HUNCH_TOURNAMENT state=ready/);
       assert.match(validTournament.stdout, /closure=true/);
     } finally {
-      rmSync(tournamentRoot, { recursive: true, force: true });
+      cleanupDir(tournamentRoot);
     }
     assert.equal(episode.probes.length, 1, `${taskId} pilot must expose exactly one bounded falsification probe`);
     assert.deepEqual(normalizeExecutableProbes(episode.probes), episode.probes, `${taskId} probe must satisfy the runtime contract`);

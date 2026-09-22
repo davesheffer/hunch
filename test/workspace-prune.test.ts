@@ -1,3 +1,5 @@
+import { cleanupDir } from "./fixtures.js";
+import { tempDir } from "./helpers.js";
 /**
  * Workspace ledger, Phase 3 (docs/workspace-ledger.md): the prune planner's refusal rules,
  * pull-request linkage from local commit subjects, and `hunch workspaces prune` end to end —
@@ -130,7 +132,7 @@ test("the schema refuses a pull request on anything but a merged verdict", () =>
 // ---- PR linkage from local git ----------------------------------------------------------------
 
 function originFixture(): { base: string; repo: string; cleanup: () => void } {
-  const base = mkdtempSync(join(tmpdir(), "hunch-prune-"));
+  const base = tempDir("hunch-prune-");
   const remote = join(base, "origin.git");
   g(base, "init", "-q", "--bare", "-b", "main", remote);
   const repo = join(base, "repo");
@@ -141,7 +143,7 @@ function originFixture(): { base: string; repo: string; cleanup: () => void } {
   commitFile(repo, "app.ts", "export const x = 1;\n", "init");
   g(repo, "push", "-q", "-u", "origin", "main");
   g(repo, "remote", "set-head", "origin", "main");
-  return { base, repo, cleanup: () => rmSync(base, { recursive: true, force: true }) };
+  return { base, repo, cleanup: () => cleanupDir(base) };
 }
 
 test("a merged branch carries the pull request its LOCAL merge or squash commit subject names; nothing is fetched", () => {

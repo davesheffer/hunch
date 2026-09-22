@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
@@ -30,7 +31,7 @@ function indexedRepo(chargeBody: string) {
   store.json.ensureDirs();
   indexRepo(store, root, { churn: false });
   store.reindex();
-  return { store, cleanup: () => { store.close(); rmSync(root, { recursive: true, force: true }); } };
+  return { store, cleanup: () => { store.close(); cleanupDir(root); } };
 }
 
 test("conformance proves code SATISFIES intent and catches direct-vs-transitive + existence", () => {
@@ -68,7 +69,7 @@ test("Architectural Conformance: a controller bypassing the service layer to rea
     store.json.ensureDirs();
     indexRepo(store, root, { churn: false });
     store.reindex();
-    return { store, cleanup: () => { store.close(); rmSync(root, { recursive: true, force: true }); } };
+    return { store, cleanup: () => { store.close(); cleanupDir(root); } };
   }
   // "controllers must not reach the DB directly" — a layering rule no pattern-matcher can express.
   const INV = [{ assert: "not-calls", subject: "listOrders", object: "dbQuery", transitive: false }];
@@ -137,6 +138,6 @@ test("duplicate symbol names cannot hide a forbidden edge or prove an ambiguous 
       "file-qualified required relations remain exact and provable");
   } finally {
     store.close();
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });

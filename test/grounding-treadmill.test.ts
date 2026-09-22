@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 /**
  * The stranded-grounding heal (fnd_b269d5c422): once a grounding doc went
  * stale-DIRTY (an earlier missed refresh), the clean-only rule skipped it on
@@ -35,7 +36,7 @@ function fixture(): { root: string; store: HunchStore; cleanup: () => void } {
   writeFileSync(join(root, "CLAUDE.md"), readFileSync(join(root, "CLAUDE.md"), "utf8") + "\nUser prose BELOW.\n");
   git(root, "add", "-A");
   git(root, "commit", "-qm", "seed");
-  return { root, store, cleanup: () => { store.close(); rmSync(root, { recursive: true, force: true }); } };
+  return { root, store, cleanup: () => { store.close(); cleanupDir(root); } };
 }
 
 test("a doc dirty ONLY inside the managed block is refreshed and staged (treadmill heal)", () => {

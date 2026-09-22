@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 /**
  * The agent farm (tooling/agent-farm) runs K concurrent agents against an in-process `hunch serve`
  * and must end the day with zero contradictions, a contiguous ledger, every deliberate refusal
@@ -62,5 +63,5 @@ test("agent farm: 3 sofias x 4 customers end the day with zero contradictions an
     assert.equal(report.replay.ok, true, `every partition's records are exactly what its ledger implies: ${report.replay.divergences.join(", ")}`);
     assert.ok(report.replay.verified > 0);
     assert.ok(existsSync(report.out), "farm-report.json was written");
-  } finally { rmSync(outDir, { recursive: true, force: true }); }
+  } finally { cleanupDir(outDir); }
 });

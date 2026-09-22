@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 /**
  * The committed grounding docs must match what THIS repo's graph generates.
  *
@@ -101,7 +102,7 @@ test("the committed CLAUDE.md grounding block matches what the graph generates (
     store.close();
     process.env.HUNCH_PRIVATE_DIR = prior;
     if (prior === undefined) delete process.env.HUNCH_PRIVATE_DIR;
-    rmSync(emptyPrivate, { recursive: true, force: true });
+    cleanupDir(emptyPrivate);
   }
 });
 
@@ -129,6 +130,6 @@ test("the record counts in the block are public-store numbers, never the overlay
     store.close();
     process.env.HUNCH_PRIVATE_DIR = prior;
     if (prior === undefined) delete process.env.HUNCH_PRIVATE_DIR;
-    rmSync(emptyPrivate, { recursive: true, force: true });
+    cleanupDir(emptyPrivate);
   }
 });

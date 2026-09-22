@@ -152,14 +152,14 @@ jobs:
         id: matrix-safety
         env:
           HUNCH_TEST_COMPILED_CLI: "1"
-        run: npx --no-install tsx --test --test-concurrency=1 test/parse.test.ts test/io.test.ts test/migrate.test.ts test/matrix-release-verification.test.ts test/team-matrix-e2e.test.ts test/vscode-workspace.test.ts test/development-preparation.test.ts
+        run: npx --no-install tsx --test --test-concurrency=1 test/parse.test.ts test/io.test.ts test/migrate.test.ts test/matrix-release-verification.test.ts test/team-matrix-e2e.test.ts test/vscode-workspace.test.ts test/development-preparation.test.ts test/fixture-environment.test.ts test/workspace-ledger.test.ts test/workspace-prune.test.ts test/workspaces.test.ts test/hook-shared-worktree.test.ts test/init-shared-autocommit.test.ts test/task-verify-exit.test.ts
 
       - name: Write platform Matrix safety receipt
         if: always()
         env:
           MATRIX_SAFETY_OUTCOME: ${{ steps.matrix-safety.outcome }}
           MATRIX_RUNNER_OS: ${{ runner.os }}
-        run: node -e 'const fs=require("node:fs"),crypto=require("node:crypto"); const body={schema:"hunch.platform-matrix-safety.v1",commit:process.env.GITHUB_SHA,node:process.version,runner_os:process.env.MATRIX_RUNNER_OS,outcome:process.env.MATRIX_SAFETY_OUTCOME,tests:["test/parse.test.ts","test/io.test.ts","test/migrate.test.ts","test/matrix-release-verification.test.ts","test/team-matrix-e2e.test.ts","test/vscode-workspace.test.ts","test/development-preparation.test.ts"]}; const content_hash="sha256:"+crypto.createHash("sha256").update(JSON.stringify(body)).digest("hex"); fs.writeFileSync("platform-matrix-safety.json",JSON.stringify({...body,content_hash},null,2)+"\n");'
+        run: node -e 'const fs=require("node:fs"),crypto=require("node:crypto"); const body={schema:"hunch.platform-matrix-safety.v1",commit:process.env.GITHUB_SHA,node:process.version,runner_os:process.env.MATRIX_RUNNER_OS,outcome:process.env.MATRIX_SAFETY_OUTCOME,tests:["test/parse.test.ts","test/io.test.ts","test/migrate.test.ts","test/matrix-release-verification.test.ts","test/team-matrix-e2e.test.ts","test/vscode-workspace.test.ts","test/development-preparation.test.ts","test/fixture-environment.test.ts","test/workspace-ledger.test.ts","test/workspace-prune.test.ts","test/workspaces.test.ts","test/hook-shared-worktree.test.ts","test/init-shared-autocommit.test.ts","test/task-verify-exit.test.ts"]}; const content_hash="sha256:"+crypto.createHash("sha256").update(JSON.stringify(body)).digest("hex"); fs.writeFileSync("platform-matrix-safety.json",JSON.stringify({...body,content_hash},null,2)+"\n");'
 
       - name: Upload platform Matrix safety receipt
         if: always()

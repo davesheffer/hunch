@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 /**
  * Issue #316: linked worktrees share ONE `<git-common-dir>/hooks` directory.
  * Running `hunch init` / `hunch index` from a worktree that has its own
@@ -88,7 +89,7 @@ function fixture(): Fixture {
     local2: launcher(join(wt2, "node_modules", "@davesheffer", "hunch")),
     globalEntry: join(base, "global", "dist", "cli", "index.js"),
     global2Entry: join(base, "global2", "dist", "cli", "index.js"),
-    cleanup: () => { rmSync(base, { recursive: true, force: true }); },
+    cleanup: () => { cleanupDir(base); },
   };
 }
 
@@ -161,7 +162,7 @@ test("4. a STALE shared block with no healthy sibling is replaced by the worktre
     const h = installPostCommitHook(f.wt, f.local);
     assert.equal(h.action, "updated");
     assert.equal(h.sharedInvocation, undefined);
-    assert.ok(read(f.main, "post-commit").includes(f.wt), "with nothing healthy left, the worktree's own path is better than a dead one");
+    assert.ok(read(f.main, "post-commit").includes(f.local), "with nothing healthy left, the worktree's own launcher is better than a dead one");
   } finally { f.cleanup(); }
 });
 
@@ -183,7 +184,7 @@ test("5. a MISSING block adopts a healthy sibling's shared invocation, but a who
     const h = installPostCommitHook(g.wt, g.local);
     assert.equal(h.action, "created", "nothing to inherit — the first install wins");
     assert.equal(h.sharedInvocation, undefined);
-    assert.ok(read(g.main, "post-commit").includes(g.wt));
+    assert.ok(read(g.main, "post-commit").includes(g.local));
   } finally { g.cleanup(); }
 });
 
@@ -256,7 +257,7 @@ test("10. sharedHooksNote reports what the shared blocks actually RUN, from eith
         assert.equal(b.length, 1, where);
         assert.match(b[0]!, /^ {2}⚠ shared hooks dir \(/, where);
         assert.match(b[0]!, /run Hunch from inside a linked worktree \(/, where);
-        assert.ok(b[0]!.includes(g.wt), `${where} names the worktree that owns the launcher`);
+        assert.ok(b[0]!.includes(g.wt.replace(/\\/g, "/")), `${where} names the worktree that owns the launcher`);
       }
     } finally { g.cleanup(); }
 
@@ -294,7 +295,7 @@ test("11. formatHookInstall renders kept-shared and a substituted install truthf
       ["  ✓ post-commit hook updated (learning loop)"],
       "an ordinary install is unchanged",
     );
-  } finally { rmSync(root, { recursive: true, force: true }); }
+  } finally { cleanupDir(root); }
 });
 
 test("12. a block bound to ANOTHER linked worktree is not a shared launcher either", () => {
@@ -352,7 +353,7 @@ test("13. a BARE repo's worktrees share the hooks dir, and the bare entry is not
     const ok = sharedHooksNote(b, [healed]);
     assert.equal(ok.length, 1);
     assert.match(ok[0]!, /^ {2}✓ linked worktree — sharing the repo's hooks \+ memory \(hooks dir is shared by 2 worktrees: /);
-  } finally { rmSync(base, { recursive: true, force: true }); }
+  } finally { cleanupDir(base); }
 });
 
 test("14. an install from wt with a launcher inside wt2 keeps the repo's unbound launcher", () => {
@@ -547,7 +548,7 @@ test("24. formatHookInstall says which options a shared block gained and which i
       ["  ✓ pre-commit constraint guard updated (strict) — runs the repo's shared Hunch (node /g/cli/index.js), not this worktree's — added --strict (a worktree re-run adds options, never removes them)"],
       "with nothing kept, the requested detail is still the truth",
     );
-  } finally { rmSync(root, { recursive: true, force: true }); }
+  } finally { cleanupDir(root); }
 });
 
 test("25. a shared block with no closing marker is reported, never passed off as kept or unchanged", () => {

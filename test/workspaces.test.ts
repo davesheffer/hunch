@@ -1,3 +1,5 @@
+import { cleanupDir } from "./fixtures.js";
+import { tempDir } from "./helpers.js";
 /**
  * Workspace ledger, Phase 1 (docs/workspace-ledger.md): one machine's worktrees and
  * branches snapshotted from REAL git with deterministic merged verdicts, the strict record
@@ -44,7 +46,7 @@ const OTHER = { id: "mac_fedcba9876543210fedcba9876543210", label: "other-box", 
 /** A clone of a bare `origin` with main pushed, so origin/HEAD resolves the default branch
  *  and upstream tracking exists — the shape every real repository has. */
 function fixture(): { base: string; remote: string; repo: string; cleanup: () => void } {
-  const base = mkdtempSync(join(tmpdir(), "hunch-ws-"));
+  const base = tempDir("hunch-ws-");
   const remote = join(base, "origin.git");
   g(base, "init", "-q", "--bare", "-b", "main", remote);
   const repo = join(base, "repo");
@@ -55,7 +57,7 @@ function fixture(): { base: string; remote: string; repo: string; cleanup: () =>
   mkdirSync(join(repo, ".hunch"), { recursive: true });
   commitFile(repo, ".hunch/manifest.json", '{"schema_version":3}\n', "hunch: init");
   g(repo, "push", "-q", "origin", "main");
-  return { base, remote, repo, cleanup: () => rmSync(base, { recursive: true, force: true }) };
+  return { base, remote, repo, cleanup: () => cleanupDir(base) };
 }
 
 function branch(record: Workspace, name: string) {
@@ -179,7 +181,7 @@ test("a huge repository degrades to a truncated record that says so; a branch na
 });
 
 test("without a resolvable default branch every verdict is unknown — never unmerged, never merged", () => {
-  const base = mkdtempSync(join(tmpdir(), "hunch-ws-nodefault-"));
+  const base = tempDir("hunch-ws-nodefault-");
   try {
     const repo = join(base, "repo");
     g(base, "init", "-q", "-b", "trunk", repo); cfg(repo);
@@ -188,7 +190,7 @@ test("without a resolvable default branch every verdict is unknown — never unm
     const record = snapshotWorkspace(repo, { machine: MACHINE, publish: "branches" });
     assert.equal(record.default_branch, null);
     assert.ok(record.branches.every((b) => b.merged.status === "unknown"));
-  } finally { rmSync(base, { recursive: true, force: true }); }
+  } finally { cleanupDir(base); }
 });
 
 test("a reland (revert of a revert) or a value flipped back is NOT merged: only default-branch commits after the merge base count; a genuine squash still is (#307)", () => {
@@ -337,7 +339,7 @@ test("the record schema is strict, bounded, credential-free and self-consistent"
 });
 
 test("a forged record on disk is skipped by the loader; valid siblings still load; a symlinked kind dir is refused", () => {
-  const root = mkdtempSync(join(tmpdir(), "hunch-ws-forged-"));
+  const root = tempDir("hunch-ws-forged-");
   try {
     const store = new HunchStore(hunchPaths(root));
     try {
@@ -359,21 +361,21 @@ test("a forged record on disk is skipped by the loader; valid siblings still loa
       assert.ok(existsSync(join(dir, `${forged.id}.json`)), "the forged file is left as written, never rewritten");
     } finally { store.close(); }
     // A symlinked kind directory (a cloned repo pointing .hunch/workspaces elsewhere) is refused outright.
-    const root2 = mkdtempSync(join(tmpdir(), "hunch-ws-symlink-"));
+    const root2 = tempDir("hunch-ws-symlink-");
     try {
       mkdirSync(join(root2, ".hunch"), { recursive: true });
       mkdirSync(join(root2, "elsewhere"));
       symlinkSync(join(root2, "elsewhere"), join(root2, ".hunch", "workspaces"));
       const store2 = new HunchStore(hunchPaths(root2));
       try { assert.throws(() => store2.json.loadAll("workspaces"), /symlink|unsafe|refus/i); } finally { store2.close(); }
-    } finally { rmSync(root2, { recursive: true, force: true }); }
-  } finally { rmSync(root, { recursive: true, force: true }); }
+    } finally { cleanupDir(root2); }
+  } finally { cleanupDir(root); }
 });
 
 // ---- machine identity ----------------------------------------------------------------------
 
 test("machine identity is minted once, random, owner-only, and never the hostname; a broken file re-mints", () => {
-  const home = mkdtempSync(join(tmpdir(), "hunch-ws-home-"));
+  const home = tempDir("hunch-ws-home-");
   try {
     // The XDG root here is a real path on the running platform, so `machineFile` must judge
     // it as that platform does — `platform: "linux"` would call `C:\\…` relative on Windows.
@@ -385,7 +387,7 @@ test("machine identity is minted once, random, owner-only, and never the hostnam
     assert.equal(a.label, defaultMachineLabel(a.id));
     assert.match(a.label, /^machine-[0-9a-f]{4}$/, "default label embeds nothing personal");
     assert.deepEqual(loadOrCreateMachine(opts), a, "stable across calls");
-    assert.notEqual(loadOrCreateMachine({ ...opts, home: mkdtempSync(join(tmpdir(), "hunch-ws-home2-")), env: {} }).id, a.id, "a different user root is a different machine");
+    assert.notEqual(loadOrCreateMachine({ ...opts, home: tempDir("hunch-ws-home2-"), env: {} }).id, a.id, "a different user root is a different machine");
     if (process.platform !== "win32") assert.equal(statSync(file).mode & 0o777, 0o600);
     assert.equal(!!readFileSync(file, "utf8").match(/hostname|username/), false);
 
@@ -402,7 +404,7 @@ test("machine identity is minted once, random, owner-only, and never the hostnam
     // XDG_CONFIG_HOME containing a `.hunch` segment is ignored (findRoot's repository marker).
     assert.equal(machineFile({ env: { XDG_CONFIG_HOME: "/tmp/.hunch/x" }, home, platform: "linux" }), join(home, ".config", "hunch", "machine.json"));
     assert.equal(machineFile({ env: { XDG_CONFIG_HOME: "relative/x" }, home, platform: "linux" }), join(home, ".config", "hunch", "machine.json"));
-  } finally { rmSync(home, { recursive: true, force: true }); }
+  } finally { cleanupDir(home); }
 });
 
 // ---- aggregation across machines -----------------------------------------------------------
@@ -638,7 +640,7 @@ test("CLI: forget with both homes forgets the overlay record and reports the ref
 });
 
 test("CLI: label shows and sets the machine label, refusing unsafe values", () => {
-  const base = mkdtempSync(join(tmpdir(), "hunch-ws-label-"));
+  const base = tempDir("hunch-ws-label-");
   try {
     const env = { XDG_CONFIG_HOME: join(base, "xdg") };
     const shown = cli(base, env, "workspaces", "label");
@@ -647,5 +649,5 @@ test("CLI: label shows and sets the machine label, refusing unsafe values", () =
     assert.match(cli(base, env, "workspaces", "label").stdout, /^build-box/);
     const bad = cli(base, env, "workspaces", "label", "bad label!");
     assert.notEqual(bad.status, 0);
-  } finally { rmSync(base, { recursive: true, force: true }); }
+  } finally { cleanupDir(base); }
 });

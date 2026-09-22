@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
@@ -27,7 +28,7 @@ function indexed() {
   store.reindex();
   const syms = store.json.loadAll("symbols");
   const fileOf = (name: string) => syms.find((s) => s.name === name)!.file;
-  return { store, root, fileOf, cleanup: () => { store.close(); rmSync(root, { recursive: true, force: true }); } };
+  return { store, root, fileOf, cleanup: () => { store.close(); cleanupDir(root); } };
 }
 
 test("blastRadiusFiles collapses transitive dependents to files (nearest depth wins, self excluded)", () => {

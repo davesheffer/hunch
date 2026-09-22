@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 /** The ledger is shared by hooks, MCP and verification runners at once. Reads
  * must not take the writer lock, and a verification result that took minutes to
  * produce must not be dropped because a writer held the ledger for a moment. */
@@ -15,7 +16,7 @@ const { DatabaseSync } = createRequire(import.meta.url)("node:sqlite") as typeof
 
 function fixture(t: { after: (f: () => void) => void }): string {
   const root = mkdtempSync(join(tmpdir(), "hunch-report-lock-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  t.after(() => cleanupDir(root));
   execFileSync("git", ["init", "-q", root]);
   mkdirSync(join(root, "src"));
   writeFileSync(join(root, ".gitignore"), ".hunch/\n.hunch-cache/\n");

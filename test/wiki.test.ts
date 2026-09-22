@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
@@ -81,8 +82,8 @@ function overlayStore(): { store: HunchStore; pub: string; overlayRoot: string; 
       store.close();
       if (prev === undefined) delete process.env.HUNCH_PRIVATE_DIR;
       else process.env.HUNCH_PRIVATE_DIR = prev;
-      rmSync(pub, { recursive: true, force: true });
-      rmSync(overlayRoot, { recursive: true, force: true });
+      cleanupDir(pub);
+      cleanupDir(overlayRoot);
     },
   };
 }

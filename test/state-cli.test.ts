@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
@@ -54,7 +55,7 @@ test('state CLI uses the real authenticated contract for writes, reads, records,
     assert.equal((await invoke(['read', '--input', fileInput], '', env)).code, 0);
     assert.equal((await invoke(['write', '--input', '-'], '[]', env)).code, 1);
     assert.equal((await invoke(['read', '--input', '-', '--scope', 'organization:other'], JSON.stringify({ scope }), env)).code, 1);
-  } finally { await new Promise<void>(r => app.close(() => r())); app.closeStores(); rmSync(dir, { recursive: true, force: true }); }
+  } finally { await new Promise<void>(r => app.close(() => r())); app.closeStores(); cleanupDir(dir); }
 });
 
 test('state CLI refuses unsupported capabilities and redirects, times out, and bounds input before sending writes', async () => {

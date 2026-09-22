@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 /**
  * hunch structure — graph-served orientation (the anti-grep). Resolution order:
  * repo map / directory / file outline / exact symbol; deterministic, read-only.
@@ -24,7 +25,7 @@ function indexed() {
   store.json.ensureDirs();
   indexRepo(store, root, { churn: false });
   store.reindex();
-  return { store, cleanup: () => { store.close(); rmSync(root, { recursive: true, force: true }); } };
+  return { store, cleanup: () => { store.close(); cleanupDir(root); } };
 }
 
 test("structure(): repo map lists directories by symbol weight", (t) => {
@@ -91,7 +92,7 @@ function indexedWithEmptyRootFile() {
   store.json.ensureDirs();
   indexRepo(store, root, { churn: false });
   store.reindex();
-  return { store, root, cleanup: () => { store.close(); rmSync(root, { recursive: true, force: true }); } };
+  return { store, root, cleanup: () => { store.close(); cleanupDir(root); } };
 }
 
 test("structure(): an absolute in-repo path resolves identically to its repo-relative form (issue #335)", (t) => {
@@ -144,7 +145,7 @@ function indexedWithGlobPhantom() {
   store.json.ensureDirs();
   indexRepo(store, root, { churn: false });
   store.reindex();
-  return { store, root, cleanup: () => { store.close(); rmSync(root, { recursive: true, force: true }); } };
+  return { store, root, cleanup: () => { store.close(); cleanupDir(root); } };
 }
 
 test("structure(): a glob-covered path that no file occupies still suffix-resolves — coverage is not existence", (t) => {

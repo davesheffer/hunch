@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
@@ -95,7 +96,7 @@ test("worker refresh stores only a valid registry version and never throws", asy
     const offline = (async () => { throw new Error("ECONNREFUSED"); }) as unknown as typeof fetch;
     assert.equal(await refreshUpdateCache({ cacheFile: file, fetchImpl: offline, now: () => 789 }), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    cleanupDir(dir);
   }
 });
 
@@ -129,7 +130,7 @@ test("a stale cache returns its known notice while one detached refresh is sched
     scheduleUpdateCheck({ cacheFile: file, currentVersion: "1.0.0", now: () => 10 + DAY_MS + 1, spawnImpl: fakeSpawn });
     assert.equal(calls, 1, "a failed or still-running refresh is throttled for the interval");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    cleanupDir(dir);
   }
 });
 
@@ -151,7 +152,7 @@ test("a corrupt cache is replaced before refresh, while an unwritable cache disa
     scheduleUpdateCheck({ cacheFile: join(blocker, "cache.json"), now: () => 60, spawnImpl: fakeSpawn });
     assert.equal(calls, 1, "no cache claim means no unbounded repeated network attempt");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    cleanupDir(dir);
   }
 });
 
@@ -178,7 +179,7 @@ test("an existing refresh claim is left untouched and an abandoned claim fails c
     assert.equal(calls, 1, "removing an abandoned derived lock restores checks");
     assert.deepEqual(JSON.parse(readFileSync(file, "utf8")), { lastCheckedAt: 60_001 });
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    cleanupDir(dir);
   }
 });
 
@@ -191,7 +192,7 @@ test("an asynchronous spawn error cannot crash the foreground command", () => {
     scheduleUpdateCheck({ cacheFile: file, now: () => 1, spawnImpl: fakeSpawn });
     assert.doesNotThrow(() => child.emit("error", new Error("EAGAIN")));
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    cleanupDir(dir);
   }
 });
 
@@ -233,7 +234,7 @@ test("the detached refresh worker cannot hold the foreground process open", { sk
     assert.equal(result.status, 0, `${result.stdout}${result.stderr}`);
     assert.ok(elapsed < 1000, `foreground waited ${elapsed.toFixed(0)}ms for a 1500ms worker`);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    cleanupDir(dir);
   }
 });
 
@@ -252,6 +253,6 @@ test("a spawned source-checkout CLI neither checks nor writes a user cache", () 
     assert.match(result.stdout, /Hunch root:/, `${result.stdout}${result.stderr}`);
     assert.equal(existsSync(join(home, ".cache", "hunch", "update-check.json")), false);
   } finally {
-    rmSync(home, { recursive: true, force: true });
+    cleanupDir(home);
   }
 });

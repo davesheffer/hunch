@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Command } from "commander";
@@ -71,7 +72,7 @@ test("auto CLI saves without rules.json, replays, previews and detects context c
     }
   } finally {
     assert.ok(resolve(root).startsWith(resolve(tmpdir()) + (process.platform === "win32" ? "\\" : "/")));
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });
 
@@ -88,7 +89,7 @@ test("file reader refuses untracked files and escaping directory links", () => {
   } finally {
     for (const dir of [root, outside]) {
       assert.ok(resolve(dir).startsWith(resolve(tmpdir()) + (process.platform === "win32" ? "\\" : "/")));
-      rmSync(dir, { recursive: true, force: true });
+      cleanupDir(dir);
     }
   }
 });

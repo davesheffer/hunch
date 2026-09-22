@@ -214,7 +214,10 @@ export class HunchStore {
       if (
         canonical(candidate) === canonical(this.paths.hunch) ||
         (nestedBoundary && (!distinctNestedRoot || sameGitPublication(distinctNestedRoot, this.paths.root))) ||
-        sameGitPublication(publicationProbe, this.paths.root)
+        // If these paths are identical, the nested-boundary clause just ran
+        // this exact proof. Different probe paths still need their own check;
+        // no result is retained across store opens or publication operations.
+        (distinctNestedRoot !== publicationProbe && sameGitPublication(publicationProbe, this.paths.root))
       ) {
         throw new Error(
           `Unsafe private overlay "${candidate}" shares the public code repository's local or remote publication boundary. ` +
@@ -1950,6 +1953,17 @@ export class HunchStore {
    *  "what did we believe, and when/why did it change?" (hunch_timeline). */
   timeline(target: string): Decision[] {
     return this.why(target).decisions.sort((a, b) => (b.valid_from ?? b.date).localeCompare(a.valid_from ?? a.date));
+  }
+
+  /** Invalidate, don't delete: close an active constraint's valid-time window
+   *  (status → "retired", valid_to → now) so `hunch check` and the strict hook
+   *  stop enforcing it while its full history stays on record. The caller has
+   *  already resolved `existing` (id lookup + already-retired refusal are the
+   *  CLI's job, not this method's), so there is no internal re-lookup and no
+   *  nullable return. Writes to whichever store already holds the record
+   *  (`putWhereItLives`), so a public/private twin can never be forked. */
+  retireConstraint(existing: Constraint): Constraint {
+    return this.putWhereItLives("constraints", { ...existing, status: "retired", valid_to: new Date().toISOString() });
   }
 
   /** Invalidate, don't delete (Zep edge-invalidation): close `oldId`'s valid-time

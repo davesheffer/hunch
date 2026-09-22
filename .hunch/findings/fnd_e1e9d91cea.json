@@ -1,0 +1,35 @@
+{
+  "id": "fnd_e1e9d91cea",
+  "title": "Task contribution card hides earlier failed checks behind a later unrelated pass",
+  "observation": "Reproduced on Hunch 1.40.1: Integration tests exit 7 followed by Lint exit 0 left only the passing lint on the text card, although JSON and HTML retained both. Fixed in the 1.41.0 candidate: the latest result per exact command argv determines unresolved failures, so unrelated passes and source edits do not clear them. A successful rerun of that command clears its failure. Candidate is in draft PR #396, not released.",
+  "evidence": [
+    "https://github.com/davesheffer/hunch/issues/394",
+    "https://github.com/davesheffer/hunch/pull/396",
+    "test/task-report.test.ts: card keeps a failed command visible until that exact command succeeds; observed red before fix, green after fix.",
+    "2026-09-22: report/runner regression group passed 37 tests with 1 platform skip."
+  ],
+  "method": null,
+  "severity": "medium",
+  "triage": "resolved",
+  "affected_files": [
+    "src/core/taskReportRender.ts"
+  ],
+  "affected_symbols": [
+    "renderTaskReport"
+  ],
+  "violates_constraint": null,
+  "spawned_decision": null,
+  "observed_at": "2026-09-22T07:16:41.046Z",
+  "resolved_commit": "a6eb1c603256451bc7a9308dfece5f2bbad58b91",
+  "provenance": {
+    "source": "agent_recorded",
+    "confidence": 0.75,
+    "evidence": [
+      "https://github.com/davesheffer/hunch/issues/394",
+      "https://github.com/davesheffer/hunch/pull/396",
+      "test/task-report.test.ts: card keeps a failed command visible until that exact command succeeds; observed red before fix, green after fix.",
+      "2026-09-22: report/runner regression group passed 37 tests with 1 platform skip."
+    ],
+    "last_verified": "2026-09-22T09:20:15.390Z"
+  }
+}

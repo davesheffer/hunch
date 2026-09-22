@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -26,7 +27,7 @@ function fixture(t: Ctx): string {
     closers.set(t, []);
     t.after(() => { for (const close of closers.get(t)!.splice(0)) { try { close(); } catch { /* already closed */ } } });
   }
-  t.after(() => rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
+  t.after(() => cleanupDir(root));
   execFileSync("git", ["init", "-q", root]);
   mkdirSync(join(root, "src"));
   writeFileSync(join(root, ".gitignore"), ".hunch-cache/\n");
@@ -197,7 +198,7 @@ test("task list merges graph records with the ledger and keeps graph-only tasks 
 
 test("a task that touched the private overlay is homed private, never named in the public store", t => {
   const root = fixture(t), overlay = mkdtempSync(join(tmpdir(), "hunch-task-record-overlay-"));
-  t.after(() => rmSync(overlay, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
+  t.after(() => cleanupDir(overlay));
   mkdirSync(join(root, ".hunch"), { recursive: true });
   writeFileSync(join(root, ".hunch", "local.json"), JSON.stringify({ privateDir: join(overlay, ".hunch"), autoCommit: false }));
   const store = openStore(root, t);

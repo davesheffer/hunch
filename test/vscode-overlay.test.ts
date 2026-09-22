@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
@@ -27,7 +28,7 @@ test("VS Code read layer unions private overlay records and reports an unavailab
     assert.equal(active.overlay?.mode, "private");
     assert.deepEqual(active.decisions.map((d) => d.id).sort(), ["dec_private", "dec_public"]);
 
-    rmSync(privateDir, { recursive: true, force: true });
+    cleanupDir(privateDir);
     assert.ok(!existsSync(privateDir));
     const missing = loadHunch(root)!;
     assert.equal(missing.overlay?.state, "missing");
@@ -35,6 +36,6 @@ test("VS Code read layer unions private overlay records and reports an unavailab
   } finally {
     if (previous === undefined) delete process.env.HUNCH_PRIVATE_DIR;
     else process.env.HUNCH_PRIVATE_DIR = previous;
-    rmSync(root, { recursive: true, force: true });
+    cleanupDir(root);
   }
 });

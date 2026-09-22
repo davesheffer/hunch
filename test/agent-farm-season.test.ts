@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 /**
  * The season (tooling/agent-farm/season.mjs): ten principals of different styles over one
  * organization drawer for a run of simulated days, driven by a conductor. A short season must end
@@ -51,5 +52,5 @@ test("season: 21 simulated days, 10 principals, zero problems, every expected re
     assert.equal(report.replay.ok, true, "every partition replays hash for hash");
     assert.ok(report.audits.some((a) => a.kind === "weekly"), "weekly audits ran");
     assert.ok(report.durations_ms.total < 180_000, `the season took ${report.durations_ms.total} ms`);
-  } finally { rmSync(outDir, { recursive: true, force: true }); }
+  } finally { cleanupDir(outDir); }
 });
