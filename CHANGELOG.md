@@ -2,7 +2,7 @@
 
 ## 1.41.0 — Unreleased
 
-- Shared-memory operations reuse the most recent successful Git branch-name syntax check, reducing repeated Git process startup while keeping route validation fresh. This mitigates local Windows integration timeouts; remaining startup deadlines are tracked in #398.
+- Shared-memory operations reuse the most recent successful Git branch-name syntax check and avoid proving the identical nested publication boundary twice during one store open. This reduces Git process startup while keeping route validation fresh; Windows integration deadline verification is tracked in #398.
 - `hunch retire-constraint <id> --reason <text>` closes an active constraint's validity window while retaining its history and storage home. Public grounding drops the retired invariant; missing and already-retired IDs are refused (#387).
 - Task cards retain unresolved failed, cancelled, and timed-out checks when a different command passes. Only a successful rerun of the same command clears that failure. Long report hashes wrap on narrow screens (#394, #395).
 - Timed-out or cancelled verification commands do not report Windows' forced-termination status as the command's own exit code (#397). Helper-process fixtures stop their helpers before deleting the working directory.

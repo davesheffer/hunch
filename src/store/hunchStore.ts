@@ -214,7 +214,10 @@ export class HunchStore {
       if (
         canonical(candidate) === canonical(this.paths.hunch) ||
         (nestedBoundary && (!distinctNestedRoot || sameGitPublication(distinctNestedRoot, this.paths.root))) ||
-        sameGitPublication(publicationProbe, this.paths.root)
+        // If these paths are identical, the nested-boundary clause just ran
+        // this exact proof. Different probe paths still need their own check;
+        // no result is retained across store opens or publication operations.
+        (distinctNestedRoot !== publicationProbe && sameGitPublication(publicationProbe, this.paths.root))
       ) {
         throw new Error(
           `Unsafe private overlay "${candidate}" shares the public code repository's local or remote publication boundary. ` +
