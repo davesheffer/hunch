@@ -110,11 +110,33 @@ export function parseSource(file: string, source: string, opts: { throwOnParseEr
     if (opts.throwOnParseError) throw error;
     return null;
   }
+  let parseable = isParseable(tree.rootNode, spec);
+  let usingRecoveredTree = false;
+  if (!parseable && spec.parseErrorRecovery) {
+    const recoveredSource = spec.parseErrorRecovery(source);
+    // Offsets from the recovery tree are used against the original source below.
+    // Refuse a misconfigured recovery rather than corrupt captured names/text.
+    if (recoveredSource.length === source.length) {
+      try {
+        const recoveredTree = parser.parse(recoveredSource, undefined, { bufferSize: Math.max(32 * 1024, recoveredSource.length * 2 + 1024) });
+        if (isParseable(recoveredTree.rootNode, spec)) {
+          tree = recoveredTree;
+          parseable = true;
+          usingRecoveredTree = true;
+        }
+      } catch (error) {
+        if (opts.throwOnParseError) throw error;
+      }
+    }
+  }
   const symbols: ParsedSymbol[] = [];
   const imports: string[] = [];
   const calls: ParsedCall[] = [];
   const relations: ParsedRelation[] = [];
   let namespace: string | null = null;
+  const originalText = (node: SyntaxNode): string => usingRecoveredTree
+    ? source.slice(node.startIndex, node.endIndex)
+    : node.text;
 
   // group captures by their enclosing @*.def via a quick pass: we record names
   // keyed by the def node, then emit a symbol per def.
@@ -135,23 +157,25 @@ export function parseSource(file: string, source: string, opts: { throwOnParseEr
       const defNode = ascendToDef(node, spec.defNodeTypes);
       if (defNode) {
         const existing = pendingDefs.get(defNode.id);
-        if (existing) existing.name = node.text;
-        else pendingDefs.set(defNode.id, { kind: spec.defKindOf[spec.nameToDef[cname]!]!, def: defNode, name: node.text });
+        if (existing) existing.name = originalText(node);
+        else pendingDefs.set(defNode.id, { kind: spec.defKindOf[spec.nameToDef[cname]!]!, def: defNode, name: originalText(node) });
       }
-      if (cname === "namespace.name") namespace = node.text;
+      if (cname === "namespace.name") namespace = originalText(node);
     } else if (cname === "import.src") {
-      imports.push(node.text.replace(STR_QUOTES, ""));
+      imports.push(originalText(node).replace(STR_QUOTES, ""));
     } else if (cname === "call.id") {
-      if (!spec.builtinFunctions?.has(node.text)) {
-        calls.push({ callee: node.text, atByte: node.startIndex, endByte: node.endIndex, member: false });
+      const text = originalText(node);
+      if (!spec.builtinFunctions?.has(text)) {
+        calls.push({ callee: text, atByte: node.startIndex, endByte: node.endIndex, member: false });
       }
     } else if (cname === "call.member") {
       // skip builtin method names to avoid false edges to similarly-named symbols
-      if (!spec.builtinMethods.has(node.text)) calls.push({ callee: node.text, atByte: node.startIndex, endByte: node.endIndex, member: true });
+      const text = originalText(node);
+      if (!spec.builtinMethods.has(text)) calls.push({ callee: text, atByte: node.startIndex, endByte: node.endIndex, member: true });
     } else if (spec.relationKindOf?.[cname]) {
       const relation = spec.relationKindOf[cname]!;
       relations.push({
-        target: node.text,
+        target: originalText(node),
         atByte: node.startIndex,
         endByte: node.endIndex,
         edgeType: relation.edgeType,
@@ -167,7 +191,7 @@ export function parseSource(file: string, source: string, opts: { throwOnParseEr
     symbols.push({
       name: resolvedName, kind,
       startByte: def.startIndex, endByte: def.endIndex, loc,
-      bodyText: def.text.slice(0, MAX_BODY_TEXT_CHARS),
+      bodyText: originalText(def).slice(0, MAX_BODY_TEXT_CHARS),
     });
   }
   // Every other successfully-parsed YAML file gets at least a file-root symbol
@@ -187,7 +211,7 @@ export function parseSource(file: string, source: string, opts: { throwOnParseEr
     });
   }
   symbols.sort((a, b) => a.startByte - b.startByte);
-  return { symbols, imports, calls, relations, namespace, parseable: templated || isParseable(tree.rootNode, spec) };
+  return { symbols, imports, calls, relations, namespace, parseable: templated || parseable };
 }
 
 /** True when every ERROR/MISSING node in the tree sits in an ancestor shape this

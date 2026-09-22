@@ -75,7 +75,7 @@ test("a TSX-only repository with bare ampersand text indexes completely", (t) =>
   const root = mkdtempSync(join(tmpdir(), "hunch-tsx-ampersand-"));
   const store = new HunchStore(hunchPaths(root));
   t.after(() => { store.close(); cleanupDir(root); });
-  writeFileSync(join(root, "label.tsx"), "export const Label = () => <span>{left} & {right}</span>;\n");
+  writeFileSync(join(root, "label.tsx"), "export const Label = () => <span>{left} & middle & {right}</span>;\n");
   store.json.ensureDirs();
   const result = indexRepo(store, root, { churn: false });
   assert.equal(result.skipped, 0);
