@@ -1,0 +1,64 @@
+{
+  "id": "htask_62a35201ba163a6ffadd4a14",
+  "title": "Report task card bugs and reconcile checkout version mismatch",
+  "state": "completed",
+  "started_at": "2026-09-22T07:19:55.802Z",
+  "finished_at": "2026-09-22T07:25:21.309Z",
+  "coverage": "delivered",
+  "lessons": [
+    {
+      "kind": "constraints",
+      "record_id": "con_d56f17a941",
+      "content_hash": "sha256:d8fc6a8e70c898327c7237fb3d5f1e34af91390f7aa516f2bf1551716700b7ec",
+      "title": "A release version bump must also update the exact-version pins in plugin/.mcp.json and server.json — package.json alone is not the version"
+    },
+    {
+      "kind": "findings",
+      "record_id": "fnd_e1e9d91cea",
+      "content_hash": "sha256:6ff028d2ff359ddeea141ab96e67dc73d5926c93378b0467dfd994ac5424c8a2",
+      "title": "Task contribution card hides earlier failed checks behind a later unrelated pass"
+    }
+  ],
+  "applied": [
+    {
+      "record_id": "con_d56f17a941",
+      "content_hash": "sha256:d8fc6a8e70c898327c7237fb3d5f1e34af91390f7aa516f2bf1551716700b7ec",
+      "action": "Merged the released 1.40.1 code and verified package, lockfile, registry manifest, and launcher pins together.",
+      "supported_by": null
+    }
+  ],
+  "saved": [],
+  "checks": [
+    {
+      "label": "Verification command",
+      "state": "passed",
+      "exit_code": 0
+    },
+    {
+      "label": "Verification command",
+      "state": "passed",
+      "exit_code": 0
+    }
+  ],
+  "conformance": [
+    {
+      "kind": "constraints",
+      "record_id": "con_d56f17a941",
+      "content_hash": "sha256:d8fc6a8e70c898327c7237fb3d5f1e34af91390f7aa516f2bf1551716700b7ec",
+      "outcome": "unavailable"
+    }
+  ],
+  "refusals": 0,
+  "files": [],
+  "supersedes": [],
+  "source_snapshot": "sha256:1ce5b9aea409ed5170dda861a929e1c8d69803b2f9cc444be24ea368c3458ee9",
+  "report_hash": "sha256:7c977f1b78c543187cc3636824db231808b0dbfd5e5e0031f0ea73133be54830",
+  "provenance": {
+    "source": "task_report",
+    "confidence": 1,
+    "evidence": [
+      "hunch report htask_62a35201ba163a6ffadd4a14"
+    ],
+    "last_verified": "2026-09-22T07:25:21.309Z"
+  }
+}
