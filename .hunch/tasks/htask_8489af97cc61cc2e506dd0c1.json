@@ -1,0 +1,40 @@
+{
+  "id": "htask_8489af97cc61cc2e506dd0c1",
+  "title": "Audit branch PR and issue cleanup",
+  "state": "completed",
+  "started_at": "2026-09-22T06:18:19.043Z",
+  "finished_at": "2026-09-22T06:18:58.875Z",
+  "coverage": "delivered",
+  "lessons": [
+    {
+      "kind": "decisions",
+      "record_id": "dec_db88c8b080",
+      "content_hash": "sha256:0bda6a2d4d549b0ceff6918328f74d820d7f92d2ee5b482925b263c82c4376a6",
+      "title": "Single source of truth for memory: one deterministic resolver, one home per record, mode-gated unified routing (shared), worktree-stable anchor, committed team.json discovery"
+    }
+  ],
+  "applied": [],
+  "saved": [],
+  "checks": [],
+  "conformance": [
+    {
+      "kind": "decisions",
+      "record_id": "dec_db88c8b080",
+      "content_hash": "sha256:0bda6a2d4d549b0ceff6918328f74d820d7f92d2ee5b482925b263c82c4376a6",
+      "outcome": "unavailable"
+    }
+  ],
+  "refusals": 0,
+  "files": [],
+  "supersedes": [],
+  "source_snapshot": null,
+  "report_hash": "sha256:57b0b9dc3ee6e5d97c15008bc89385428ac3db95d8caf29a4b9bd762b11ec9a4",
+  "provenance": {
+    "source": "task_report",
+    "confidence": 1,
+    "evidence": [
+      "hunch report htask_8489af97cc61cc2e506dd0c1"
+    ],
+    "last_verified": "2026-09-22T06:18:58.875Z"
+  }
+}
