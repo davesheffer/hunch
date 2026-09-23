@@ -1,0 +1,46 @@
+{
+  "id": "htask_21aee4372ec91180903c52d9",
+  "title": "Publish Hunch v1.41.5 patch release",
+  "state": "completed",
+  "started_at": "2026-09-23T11:19:57.694Z",
+  "finished_at": "2026-09-23T11:47:54.041Z",
+  "coverage": "delivered",
+  "lessons": [
+    {
+      "kind": "decisions",
+      "record_id": "dec_d1de6818be",
+      "content_hash": "sha256:0a9dff4fc250ce7e916b3e9caccee2457574885dd17352168302e7633262ca23",
+      "title": "Add 'P' (pipeline) arm to benchmark suite for shipped verification mode"
+    }
+  ],
+  "applied": [],
+  "saved": [],
+  "checks": [
+    {
+      "label": "Verification command",
+      "state": "passed",
+      "exit_code": 0
+    }
+  ],
+  "conformance": [
+    {
+      "kind": "decisions",
+      "record_id": "dec_d1de6818be",
+      "content_hash": "sha256:0a9dff4fc250ce7e916b3e9caccee2457574885dd17352168302e7633262ca23",
+      "outcome": "unavailable"
+    }
+  ],
+  "refusals": 0,
+  "files": [],
+  "supersedes": [],
+  "source_snapshot": "sha256:4152018677151207c5ad492d8f4b8e84164b5ebee9057d8d0445d2b129b4c32e",
+  "report_hash": "sha256:955d11fd47fb2a473385ce02f3da7b932cc734b16b3ec114ea871a43bc8d3243",
+  "provenance": {
+    "source": "task_report",
+    "confidence": 1,
+    "evidence": [
+      "hunch report htask_21aee4372ec91180903c52d9"
+    ],
+    "last_verified": "2026-09-23T11:47:54.041Z"
+  }
+}
