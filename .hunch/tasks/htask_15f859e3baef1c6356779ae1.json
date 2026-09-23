@@ -1,0 +1,48 @@
+{
+  "id": "htask_15f859e3baef1c6356779ae1",
+  "title": "Fix patch tests in release worktree",
+  "state": "completed",
+  "started_at": "2026-09-23T09:10:02.302Z",
+  "finished_at": "2026-09-23T09:19:25.857Z",
+  "coverage": "delivered",
+  "lessons": [
+    {
+      "kind": "bugs",
+      "record_id": "bug_b6f1abb9a6",
+      "content_hash": "sha256:f66dfb5c32407b6b0a4de318d05791716d7de279bb799e53763d054ab3107952",
+      "title": "Flaky test failure under parallelism: native tree-sitter module resolution race on Windows"
+    }
+  ],
+  "applied": [],
+  "saved": [],
+  "checks": [
+    {
+      "label": "Verification command",
+      "state": "passed",
+      "exit_code": 0
+    },
+    {
+      "label": "Verification command",
+      "state": "passed",
+      "exit_code": 0
+    }
+  ],
+  "conformance": [],
+  "refusals": 0,
+  "files": [
+    ".github/workflows/ci.yml",
+    "test/experiment.test.ts",
+    "test/git-merge-range.test.ts"
+  ],
+  "supersedes": [],
+  "source_snapshot": "sha256:c1764ac7e818eae3e2c34d29cc988a10b7ddd2af169726764afe35bd3684456b",
+  "report_hash": "sha256:e780fb35dd59d9920b89ec017273dd00bd732e80b847ff3f8a1e5b36a5491bdc",
+  "provenance": {
+    "source": "task_report",
+    "confidence": 1,
+    "evidence": [
+      "hunch report htask_15f859e3baef1c6356779ae1"
+    ],
+    "last_verified": "2026-09-23T09:19:25.857Z"
+  }
+}
