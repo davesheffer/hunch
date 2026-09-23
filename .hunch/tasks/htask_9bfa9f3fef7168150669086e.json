@@ -1,0 +1,32 @@
+{
+  "id": "htask_9bfa9f3fef7168150669086e",
+  "title": "Fix ledger merge defects for 1.41.2",
+  "state": "completed",
+  "started_at": "2026-09-23T06:04:38.568Z",
+  "finished_at": "2026-09-23T07:09:27.127Z",
+  "coverage": "no-relevant-memory",
+  "lessons": [],
+  "applied": [],
+  "saved": [],
+  "checks": [
+    {
+      "label": "Verification command",
+      "state": "passed",
+      "exit_code": 0
+    }
+  ],
+  "conformance": [],
+  "refusals": 0,
+  "files": [],
+  "supersedes": [],
+  "source_snapshot": "sha256:9eb0ad8eb7711bc7b81b8899a20cd8a09e7899e1b4e360f4e98df3d6064a5c73",
+  "report_hash": "sha256:bf85a8fbf73dde976b41f3fb816ff6f6e2d7006aa9da0c3bcd695cdca25644ef",
+  "provenance": {
+    "source": "task_report",
+    "confidence": 1,
+    "evidence": [
+      "hunch report htask_9bfa9f3fef7168150669086e"
+    ],
+    "last_verified": "2026-09-23T07:09:27.127Z"
+  }
+}
