@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.41.6 — 2026-09-23
+
+- Line-oriented scanners now share one EOL boundary for LF, CRLF, and lone CR. Kubernetes manifest extraction keeps offsets in the original source, managed `.gitignore` blocks preserve their existing line endings, and a regression check guards all five scanners (#333).
+
 ## 1.41.5 — 2026-09-23
 
 - Test runs disable automatic Git maintenance across temporary repository fixtures, including Git calls that sanitize runtime configuration. This reduces a possible teardown race while the broader fixture cleanup tracked in #384 remains open.

@@ -179,6 +179,7 @@ test("resolveGroundingConflicts: CRLF line endings don't defeat marker detection
   const res = resolveGroundingConflicts(text);
   assert.equal(res.conflict, false);
   assert.doesNotMatch(res.text, /<<<<<<</, "no marker may survive into a result reported as resolved");
+  assert.equal(res.text.replace(/\r\n/g, "").includes("\n"), false, "resolved CRLF text retains its line endings");
 });
 
 test("mergeGroundingFile: a git-level error (binary content) is never mistaken for diff3 output — never truncates the file", () => {

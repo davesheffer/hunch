@@ -15,6 +15,7 @@
 import { readFileSync, existsSync, lstatSync, realpathSync } from "node:fs";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { writeFileAtomic } from "../core/io.js";
+import { lineContent } from "../core/eol.js";
 import { gitTrackedPaths, gitUntrackCached, isGitRepoRoot } from "../extractors/git.js";
 
 const MARK = "# >>> hunch (derived runtime index — regenerable from .hunch/*.json) >>>";
@@ -129,7 +130,7 @@ export function assertSafeTopLevelConfigFile(root: string, name: string): string
 
 interface BlockSpan { start: number; end: number; inner: string[] }
 
-const cleanLine = (line: string): string => line.replace(/\r$/, "").trim();
+const cleanLine = (line: string): string => lineContent(line).trim();
 
 /** Locate a managed block as whole lines: the marker line and the FIRST end-marker
  *  line after it. `null` when either is missing — a hand-damaged block is never

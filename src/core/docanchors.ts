@@ -15,6 +15,7 @@
  */
 import type { Decision } from "./types.js";
 import { currentForTopic, rejectedForTopic } from "./topics.js";
+import { normalizeEol } from "./eol.js";
 
 export interface DocAnchor {
   topic: string;
@@ -242,7 +243,7 @@ export function parseDocAnchors(text: string): DocAnchor[] {
   // a live, pinned anchor. Normalizing both CRLF and lone CR once here keeps
   // fencedRanges/inlineSpanRanges/MARKER offsets consistent with each other
   // and with the line numbers reported below.
-  text = text.replace(/\r\n?/g, "\n");
+  text = normalizeEol(text);
   const out: DocAnchor[] = [];
   const skip = [...fencedRanges(text), ...inlineSpanRanges(text)];
   MARKER.lastIndex = 0;

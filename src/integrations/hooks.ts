@@ -20,6 +20,7 @@ import { homedir } from "node:os";
 import { hooksDir, gitCommonDir, isLinkedWorktree, mainWorktreeRoot } from "../extractors/git.js";
 import { initiatorChildEnv } from "../synthesis/initiator.js";
 import { HUNCH_NPX_PACKAGE_SPEC, HUNCH_PACKAGE_NAME } from "../core/version.js";
+import { normalizeEol } from "../core/eol.js";
 
 const MARK = "# >>> hunch post-commit >>>";
 const ENDMARK = "# <<< hunch post-commit <<<";
@@ -148,7 +149,7 @@ const BLOCK_CLOSE = /^(?:fi|esac|done)\b|^\}|[;\s](?:fi|esac|done|\})\s*;?\s*$/;
  *  or a trailing top-level `if … else … fi` whose every branch ends in
  *  `exec`/`exit` — the shape of the pre-commit framework's generated hook. */
 export function terminalExitLine(content: string): string | null {
-  const lines = content.replace(/\r/g, "").split("\n");
+  const lines = normalizeEol(content).split("\n");
   let depth = 0;
   for (const raw of lines) {
     const line = raw.trim();
@@ -463,7 +464,7 @@ function blockFlags(line: string): string[] {
 function builtFlags(blk: string, mark: string, liveRoot?: string): string[] {
   const { re } = blockSubcommand(mark);
   const found = new Set<string>();
-  for (const line of blk.replace(/\r/g, "").split("\n")) {
+  for (const line of normalizeEol(blk).split("\n")) {
     if (line.trim().startsWith("#")) continue;
     const m = re.exec(line);
     if (!m) continue;
@@ -495,7 +496,7 @@ function inspectBlock(file: string, mark: string, root: string): BlockInspection
   const { re, words } = blockSubcommand(mark);
   const text = readText(file) ?? "";
   const at = text.indexOf(mark);
-  const body = at < 0 ? [] : text.slice(at).replace(/\r/g, "").split("\n").slice(1);
+  const body = at < 0 ? [] : normalizeEol(text.slice(at)).split("\n").slice(1);
   let first: BlockInspection | null = null;
   for (const line of body) {
     if (/^# <<< hunch /.test(line)) break;
@@ -596,7 +597,7 @@ function snippetFor(t: HookTarget, mark: string, build: BlockBuilder, localInvoc
 function worktreeTops(root: string): { linked: string[]; count: number } {
   const out = gitRun(["worktree", "list", "--porcelain"], root).stdout;
   if (!out) return { linked: [], count: 0 };
-  const entries = out.replace(/\r/g, "").split(/\n\s*\n/).map((e) => e.split("\n"));
+  const entries = normalizeEol(out).split(/\n\s*\n/).map((e) => e.split("\n"));
   const parsed = entries
     .map((lines) => ({
       path: lines.find((l) => l.startsWith("worktree "))?.slice("worktree ".length) ?? "",
