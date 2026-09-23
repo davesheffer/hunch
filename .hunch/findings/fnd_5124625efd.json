@@ -1,0 +1,36 @@
+{
+  "id": "fnd_5124625efd",
+  "title": "Concurrent RMW lock stress intermittently reports unsafe owner metadata",
+  "observation": "On 2026-09-23, Node 22 release PR CI for v1.41.4 failed the existing six-process stale .rmw-lock stress smoke test. One writer threw from storeArtifactPath while reading .hunch/edges/.rmw-lock/owner.tmp.json through readRmwOwner. The exact path check that failed was not logged; no hostile artifact or root cause was demonstrated. The same commit passed Node 24, and Node 22 passed on attempt 2. The lock code documents a release/re-acquire window that can turn a retry into an error; this is a candidate to test, not a conclusion. Issue #293 remains open.",
+  "evidence": [
+    "GitHub Actions run 35843843780 attempt 1, job 107125095170: not ok 2135, unsafe store artifact path .../edges/.rmw-lock/owner.tmp.json, 2590 pass / 1 fail / 10 skip",
+    "GitHub Actions run 35843843780 attempt 2, Node 22 ci job success on the same commit d2fc97f17c241eb10e5510cd01093ddacded35f0",
+    "https://github.com/davesheffer/hunch/issues/293#issuecomment-5792631354"
+  ],
+  "method": null,
+  "severity": "medium",
+  "triage": "open",
+  "affected_files": [
+    "src/store/jsonStore.ts",
+    "src/core/storeArtifact.ts",
+    "test/store.test.ts"
+  ],
+  "affected_symbols": [
+    "readRmwOwner",
+    "storeArtifactPath"
+  ],
+  "violates_constraint": null,
+  "spawned_decision": null,
+  "observed_at": "2026-09-23T09:59:22.692Z",
+  "resolved_commit": null,
+  "provenance": {
+    "source": "agent_recorded",
+    "confidence": 0.75,
+    "evidence": [
+      "GitHub Actions run 35843843780 attempt 1, job 107125095170: not ok 2135, unsafe store artifact path .../edges/.rmw-lock/owner.tmp.json, 2590 pass / 1 fail / 10 skip",
+      "GitHub Actions run 35843843780 attempt 2, Node 22 ci job success on the same commit d2fc97f17c241eb10e5510cd01093ddacded35f0",
+      "https://github.com/davesheffer/hunch/issues/293#issuecomment-5792631354"
+    ],
+    "last_verified": "2026-09-23T09:59:22.692Z"
+  }
+}
