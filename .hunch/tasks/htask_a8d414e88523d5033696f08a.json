@@ -1,0 +1,96 @@
+{
+  "id": "htask_a8d414e88523d5033696f08a",
+  "title": "Fix RMW lock stress for next fold",
+  "state": "interrupted",
+  "started_at": "2026-09-23T10:25:34.699Z",
+  "finished_at": "2026-09-23T10:38:19.064Z",
+  "coverage": "delivered",
+  "lessons": [
+    {
+      "kind": "bugs",
+      "record_id": "bug_b6f1abb9a6",
+      "content_hash": "sha256:f66dfb5c32407b6b0a4de318d05791716d7de279bb799e53763d054ab3107952",
+      "title": "Flaky test failure under parallelism: native tree-sitter module resolution race on Windows"
+    },
+    {
+      "kind": "decisions",
+      "record_id": "dec_9130451387",
+      "content_hash": "sha256:6bbf77e15a9c4f355912707237b8ebdc19583eb831f06bb336955be856c989b0",
+      "title": "Complete HLG-2 deterministic repository fragment discovery"
+    },
+    {
+      "kind": "decisions",
+      "record_id": "dec_a466655539",
+      "content_hash": "sha256:3025aab1f9d6f93ac45a010d78028f5bf7be2684c26ee0e3e3f04772da7b504b",
+      "title": "Veto blocks only on human-confirmed tripwires across all tiers"
+    }
+  ],
+  "applied": [],
+  "saved": [],
+  "checks": [
+    {
+      "label": "Verification command",
+      "state": "failed",
+      "exit_code": null
+    },
+    {
+      "label": "Verification command",
+      "state": "passed",
+      "exit_code": 0
+    },
+    {
+      "label": "Verification command",
+      "state": "failed",
+      "exit_code": 1
+    },
+    {
+      "label": "Verification command",
+      "state": "passed",
+      "exit_code": 0
+    },
+    {
+      "label": "Verification command",
+      "state": "passed",
+      "exit_code": 0
+    },
+    {
+      "label": "Verification command",
+      "state": "passed",
+      "exit_code": 0
+    },
+    {
+      "label": "Verification command",
+      "state": "passed",
+      "exit_code": 0
+    },
+    {
+      "label": "Verification command",
+      "state": "passed",
+      "exit_code": 0
+    },
+    {
+      "label": "Verification command",
+      "state": "passed",
+      "exit_code": 0
+    },
+    {
+      "label": "Verification command",
+      "state": "passed",
+      "exit_code": 0
+    }
+  ],
+  "conformance": [],
+  "refusals": 0,
+  "files": [],
+  "supersedes": [],
+  "source_snapshot": "sha256:21e98cd61e94d499a1306866ca1894517e1569a8e86f8a3879b9ea8596efafbf",
+  "report_hash": "sha256:f334d3ef1f4e2e1a28425827bc254050e1171ecd801463924d4ed36f59224b35",
+  "provenance": {
+    "source": "task_report",
+    "confidence": 1,
+    "evidence": [
+      "hunch report htask_a8d414e88523d5033696f08a"
+    ],
+    "last_verified": "2026-09-23T10:38:19.064Z"
+  }
+}

@@ -15,8 +15,8 @@ npm run dev -- <args>        # run the CLI from source via tsx (e.g. npm run dev
 npm run hunch -- <args>      # alias for the above
 npm run build                # clean + tsc -> dist/ (the published artifact; bin = dist/cli/index.js)
 npm run typecheck            # tsc --noEmit
-npm test                     # tsx --test over test/*.test.ts
-tsx --test test/check.test.ts   # run a single test file
+npm test                     # fixture-safe runner over test/*.test.ts
+node tooling/run-tests.mjs test/check.test.ts  # run a single test file
 ```
 
 There is no separate lint step; `typecheck` (strict `tsc`) is the gate. The `site/` and `vscode-extension/` dirs are independent sub-projects with their own tooling.
