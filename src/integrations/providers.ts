@@ -30,6 +30,24 @@ import { headFileContent, isGitCleanPath } from "../extractors/git.js";
 import { parseJsonc } from "../core/jsonc.js";
 import { parse as parseToml } from "smol-toml";
 
+/** JSONC comments are user prose. A parsed object cannot retain their position,
+ * so refuse a write rather than reserialize the file without them. */
+function hasJsoncComments(raw: string): boolean {
+  let inString = false;
+  for (let i = 0; i < raw.length; i++) {
+    const char = raw[i];
+    if (inString) {
+      if (char === "\\") i++;
+      else if (char === '"') inString = false;
+    } else if (char === '"') {
+      inString = true;
+    } else if (char === "/" && (raw[i + 1] === "/" || raw[i + 1] === "*")) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /** Read a JSON/JSONC object. Returns {} only for an ABSENT or empty file. A
  *  non-empty file we cannot parse THROWS — overwriting it would silently wipe the
  *  user's other MCP servers. */
@@ -37,13 +55,18 @@ function readJsonObj(file: string): Record<string, unknown> {
   if (!existsSync(file)) return {};
   const raw = readFileSync(file, "utf8");
   if (!raw.trim()) return {};
+  let value: Record<string, unknown>;
   try {
     const v = parseJsonc(raw);
-    if (v && typeof v === "object" && !Array.isArray(v)) return v as Record<string, unknown>;
-    throw new Error("not a JSON object");
+    if (v && typeof v === "object" && !Array.isArray(v)) value = v as Record<string, unknown>;
+    else throw new Error("not a JSON object");
   } catch (e) {
     throw new Error(`refusing to overwrite ${file}: could not parse it (${(e as Error).message}). Fix or remove it, then re-run.`);
   }
+  if (hasJsoncComments(raw)) {
+    throw new Error(`refusing to edit ${file}: JSONC comments cannot be preserved by this writer. Edit the Hunch entry manually or remove the comments, then re-run.`);
+  }
+  return value;
 }
 
 /** Render a string as a TOML value: a literal '…' when safe (no escaping needed —
