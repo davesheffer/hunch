@@ -180,14 +180,19 @@ export function mergeLedgers(base: Ledger | null, ours: Ledger, theirs: Ledger):
   const seen = new Map<string, ChangeEvent>();
   const order: ChangeEvent[] = [];
   const add = (e: ChangeEvent): void => { const k = eventIdentity(e); if (!seen.has(k)) { seen.set(k, e); order.push(e); } };
-  for (const e of base?.events ?? []) add(e);
+  const ourIdentities = new Set(ours.events.map(eventIdentity));
+  const theirIdentities = new Set(theirs.events.map(eventIdentity));
+  // Base is a merge ancestor, not a source of history both clones have compacted away.
+  for (const e of base?.events ?? []) {
+    const key = eventIdentity(e);
+    if (ourIdentities.has(key) || theirIdentities.has(key) || (e.seq > ours.floor_seq && e.seq > theirs.floor_seq)) add(e);
+  }
   for (const e of ours.events) add(e);
   for (const e of theirs.events) add(e);
   // The tiebreak is "ours before theirs", so only an event theirs ALONE contributed sorts late:
   // side 1 iff theirs holds it and neither ours nor base does. Deciding by object identity
   // (`includes`) would instead put anything ours compacted away — base's object, which `add`
   // keeps — after its same-`at` siblings and silently reorder a batch both sides already had.
-  const ourIdentities = new Set(ours.events.map(eventIdentity));
   const baseIdentities = new Set((base?.events ?? []).map(eventIdentity));
   const theirsOnly = (e: ChangeEvent): boolean => {
     const k = eventIdentity(e);
