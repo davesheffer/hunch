@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.41.3 — 2026-09-23
+
+- Provider setup now refuses to rewrite a JSONC config containing comments instead of silently erasing those comments. The file is left untouched with a manual-edit instruction; configs without comments, including those with trailing commas, still merge normally (#314).
+
 ## 1.41.2 — 2026-09-23
 
 - Merging two clones' state ledgers no longer restores events both clones compacted away. The merge base still contributes history retained by either side, and the merged stream keeps its cursor resync rule (#360).
