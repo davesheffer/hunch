@@ -149,7 +149,7 @@ test("npm publication isolates OIDC from repository code and publishes only vali
   assert.match(platformSafety, /actions\/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38[\s\S]*node-version: 22[\s\S]*cache: npm/);
   assert.match(platformSafety, /^        run: npm ci$/m,
     "the platform gate uses the repository's exact integrity-locked dependency tree");
-  const platformTestCommand = "npx --no-install tsx --test --test-concurrency=1 test/parse.test.ts test/io.test.ts test/migrate.test.ts test/matrix-release-verification.test.ts test/team-matrix-e2e.test.ts";
+  const platformTestCommand = "node tooling/run-tests.mjs --test-concurrency=1 test/parse.test.ts test/io.test.ts test/migrate.test.ts test/matrix-release-verification.test.ts test/team-matrix-e2e.test.ts";
   assert.ok(platformSafety.includes(`run: ${platformTestCommand}`),
     "the tagged release reruns native, atomic-write, and real team-Matrix safety on both non-Linux platforms");
   assert.ok(jobBlock(ci, "platform-matrix-safety").includes(`run: ${platformTestCommand}`),

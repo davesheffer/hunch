@@ -272,7 +272,7 @@ jobs:
         id: matrix-safety
         env:
           HUNCH_TEST_COMPILED_CLI: "1"
-        run: npx --no-install tsx --test --test-concurrency=1 test/parse.test.ts test/io.test.ts test/migrate.test.ts test/matrix-release-verification.test.ts test/team-matrix-e2e.test.ts
+        run: node tooling/run-tests.mjs --test-concurrency=1 test/parse.test.ts test/io.test.ts test/migrate.test.ts test/matrix-release-verification.test.ts test/team-matrix-e2e.test.ts
 
       - name: Write tagged platform Matrix safety receipt
         if: always()

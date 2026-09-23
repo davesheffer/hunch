@@ -16,7 +16,8 @@ Node ≥ 22.13. No build step at dev time — everything runs from source via `t
 ```bash
 npm install
 npm run dev -- doctor        # run the CLI from source (any subcommand after `--`)
-npm test                     # tsx --test over test/*.test.ts
+npm test                     # fixture-safe runner over test/*.test.ts
+node tooling/run-tests.mjs test/check.test.ts  # run one test file
 npm run typecheck            # strict tsc — this is the gate (there is no separate lint)
 npm run build                # clean + tsc -> dist/ (the published artifact)
 ```
