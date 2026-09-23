@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.41.5 — 2026-09-23
+
+- Test runs disable automatic Git maintenance across temporary repository fixtures, including Git calls that sanitize runtime configuration. This reduces a possible teardown race while the broader fixture cleanup tracked in #384 remains open.
+
+## 1.41.4 — 2026-09-23
+
+- The EXP-01 test uses its declared Codex fixture even inside a Claude session, and the merge-range Git fixture disables background maintenance during teardown.
+
 ## 1.41.3 — 2026-09-23
 
 - Provider setup now refuses to rewrite a JSONC config containing comments instead of silently erasing those comments. The file is left untouched with a manual-edit instruction; configs without comments, including those with trailing commas, still merge normally (#314).

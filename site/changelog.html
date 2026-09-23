@@ -108,6 +108,7 @@
     <div class="clog">
       <div class="clog-group">
         <div class="clog-date">Sep 23, 2026</div>
+        <div class="clog-row"><span class="rel-tag">v1.41.5</span><span class="clog-t"><b>Test fixtures avoid background Git maintenance</b> — test runs disable automatic Git maintenance across temporary repositories, including Git calls that sanitize runtime settings. This reduces a possible teardown race while the wider fixture cleanup remains open.</span></div>
         <div class="clog-row"><span class="rel-tag">v1.41.4</span><span class="clog-t"><b>Checks stay reliable across agent sessions</b> — the EXP-01 test uses its declared Codex fixture even inside a Claude session, and the merge-range Git fixture avoids background maintenance that could race its teardown.</span></div>
         <div class="clog-row"><span class="rel-tag">v1.41.3</span><span class="clog-t"><b>JSONC comments stay intact</b> — provider setup leaves a commented config untouched and asks for a manual edit instead of erasing the comments. Configs without comments still merge normally.</span></div>
         <div class="clog-row"><span class="rel-tag">v1.41.2</span><span class="clog-t"><b>Compacted history stays compacted</b> — merging two state ledgers no longer brings back events both clones already compacted. Events retained by either clone still survive the merge.</span></div>

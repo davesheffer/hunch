@@ -2,7 +2,7 @@
   "mcpServers": {
     "hunch": {
       "command": "npx",
-      "args": ["-y", "--package=hunch-exact@npm:@davesheffer/hunch@1.41.4", "hunch", "mcp"]
+      "args": ["-y", "--package=hunch-exact@npm:@davesheffer/hunch@1.41.5", "hunch", "mcp"]
     }
   }
 }
