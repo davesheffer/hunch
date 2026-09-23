@@ -107,6 +107,10 @@
 
     <div class="clog">
       <div class="clog-group">
+        <div class="clog-date">Sep 23, 2026</div>
+        <div class="clog-row"><span class="rel-tag">v1.41.2</span><span class="clog-t"><b>Compacted history stays compacted</b> — merging two state ledgers no longer brings back events both clones already compacted. Events retained by either clone still survive the merge.</span></div>
+      </div>
+      <div class="clog-group">
         <div class="clog-date">Sep 22, 2026</div>
         <div class="clog-row"><span class="rel-tag">v1.41.1</span><span class="clog-t"><b>JSX text keeps indexing</b> — bare and repeated ampersands in JSX text no longer make valid TSX look unparseable, so labels such as <span class="mono">Research &amp; Development</span> cannot block project indexing. Original source text and import paths stay intact, genuine syntax errors still fail, and Hunch's local runtime files stay out of Git.</span></div>
         <div class="clog-row"><span class="rel-tag">v1.41.0</span><span class="clog-t"><b>Clearer task cards, safer worktrees</b> — failed checks stay visible until the same command passes, long report hashes fit small screens, and <span class="mono">hunch retire-constraint</span> retires outdated rules while keeping their history. Capture tools catch more wrong-worktree writes, shared hooks preserve their options, hook-manager snippets stay portable, and shared-memory operations start faster on Windows.</span></div>
