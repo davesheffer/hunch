@@ -1,0 +1,54 @@
+{
+  "id": "htask_1507ca33cd16f3a0514a8fcb",
+  "title": "Fix Hunch guard review for memory-only task PR",
+  "state": "completed",
+  "started_at": "2026-09-23T11:50:49.951Z",
+  "finished_at": "2026-09-23T12:07:51.320Z",
+  "coverage": "delivered",
+  "lessons": [
+    {
+      "kind": "decisions",
+      "record_id": "dec_632cf14dff",
+      "content_hash": "sha256:c288d6620d70d4dc225398665f077250974dc75454d2ed2b99e817934901d993",
+      "title": "bug_overlay_clobber: overlay auto-commit could commit memory OVER the project repo (−305k) — fixed with a memory-only staged-set guard + standalone-repo init (v0.38.3)"
+    }
+  ],
+  "applied": [],
+  "saved": [],
+  "checks": [
+    {
+      "label": "Verification command",
+      "state": "passed",
+      "exit_code": 0
+    },
+    {
+      "label": "Verification command",
+      "state": "passed",
+      "exit_code": 0
+    }
+  ],
+  "conformance": [
+    {
+      "kind": "decisions",
+      "record_id": "dec_632cf14dff",
+      "content_hash": "sha256:c288d6620d70d4dc225398665f077250974dc75454d2ed2b99e817934901d993",
+      "outcome": "unavailable"
+    }
+  ],
+  "refusals": 0,
+  "files": [
+    "test/hunch-guard-review.test.ts",
+    "tooling/hunch-guard-review-producer.mjs"
+  ],
+  "supersedes": [],
+  "source_snapshot": "sha256:3779d37955cf10611f5f35af9f48f2fff6a972bfc53a65a7c45f2d9754250b12",
+  "report_hash": "sha256:90b638aebd45bdd699e71f372a7a2e8f87cc9fbaad72292ab76578f4c105eeee",
+  "provenance": {
+    "source": "task_report",
+    "confidence": 1,
+    "evidence": [
+      "hunch report htask_1507ca33cd16f3a0514a8fcb"
+    ],
+    "last_verified": "2026-09-23T12:07:51.320Z"
+  }
+}
