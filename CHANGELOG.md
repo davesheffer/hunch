@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.41.2 — 2026-09-23
+
+- Merging two clones' state ledgers no longer restores events both clones compacted away. The merge base still contributes history retained by either side, and the merged stream keeps its cursor resync rule (#360).
+
 ## 1.41.1 — 2026-09-22
 
 - Valid TSX with bare or repeated ampersands in JSX text now indexes normally instead of reporting a project-blocking parse failure. Recovery preserves the original source text and import paths while genuine syntax errors still fail validation (#367, #401).

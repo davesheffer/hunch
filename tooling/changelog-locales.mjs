@@ -8,6 +8,7 @@ export const changelogLocales = {
       footer: "© Hunch — תיעוד משותף לסוכני AI.", home: "בית", githubReleases: "גרסאות ב-GitHub"
     },
     titles: [
+      "היסטוריה שכבר כווצה לא חוזרת במיזוג",
       "טקסט JSX נשאר ניתן לאינדוקס",
       "כרטיסי משימה ברורים יותר וסביבות עבודה בטוחות יותר",
       "הגרף נשמר גם כשניתוח הקוד נכשל",
@@ -84,6 +85,7 @@ export const changelogLocales = {
       footer: "© Hunch — общие записи для ИИ-агентов.", home: "Главная", githubReleases: "Релизы на GitHub"
     },
     titles: [
+      "Сжатая история не возвращается при слиянии",
       "Текст JSX продолжает индексироваться",
       "Понятнее карточки задач, безопаснее рабочие деревья",
       "Граф сохраняется при сбое разбора",
@@ -160,6 +162,7 @@ export const changelogLocales = {
       footer: "© Hunch — سجل مشترك لوكلاء الذكاء الاصطناعي.", home: "الرئيسية", githubReleases: "الإصدارات على GitHub"
     },
     titles: [
+      "لا يعود السجل المضغوط عند الدمج",
       "يبقى نص JSX قابلًا للفهرسة",
       "بطاقات مهام أوضح وأشجار عمل أكثر أمانًا",
       "يبقى الرسم البياني محفوظًا عند فشل التحليل",
@@ -236,6 +239,7 @@ export const changelogLocales = {
       footer: "© Hunch — un registro compartido para agentes de IA.", home: "Inicio", githubReleases: "Versiones en GitHub"
     },
     titles: [
+      "El historial compactado no reaparece al fusionar",
       "El texto JSX sigue indexándose",
       "Tarjetas de tareas más claras y árboles de trabajo más seguros",
       "El grafo se conserva si falla el análisis",
