@@ -220,15 +220,41 @@ test("MCP writers MERGE — other servers and user TOML are preserved", () => {
   } finally { cleanup(); }
 });
 
-test("writeVscodeMcp tolerates JSONC (comments) and preserves other servers", () => {
+test("writeVscodeMcp refuses to erase comments in an existing JSONC config", () => {
   const { root, cleanup } = tempStore();
   try {
     mkdirSync(join(root, ".vscode"), { recursive: true });
-    writeFileSync(join(root, ".vscode/mcp.json"), `{\n  // team servers\n  "servers": { "other": { "type": "stdio", "command": "x" } },\n}`);
+    const file = join(root, ".vscode/mcp.json");
+    const before = `{\n  // team servers\n  "servers": { "other": { "type": "stdio", "command": "x" } },\n}`;
+    writeFileSync(file, before);
+    assert.throws(() => writeVscodeMcp(root, inv), /refusing.*comments/i);
+    assert.equal(readFileSync(file, "utf8"), before);
+  } finally { cleanup(); }
+});
+
+test("hook writers leave block comments and foreign hooks untouched", () => {
+  const { root, cleanup } = tempStore();
+  try {
+    const file = join(root, ".cursor/hooks.json");
+    mkdirSync(dirname(file), { recursive: true });
+    const before = `{\n  /* Keep this hook until the migration ends. */\n  "hooks": { "sessionStart": [{ "command": "node other.js" }] }\n}`;
+    writeFileSync(file, before);
+    assert.throws(() => writeCursorHooks(root, inv), /refusing.*comments/i);
+    assert.equal(readFileSync(file, "utf8"), before);
+  } finally { cleanup(); }
+});
+
+test("comment-looking text inside JSON strings does not block an MCP merge", () => {
+  const { root, cleanup } = tempStore();
+  try {
+    const file = join(root, ".vscode/mcp.json");
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, JSON.stringify({ servers: { other: { command: "https://example.test/a/*literal*/", args: ['say "//" now'] } } }));
     writeVscodeMcp(root, inv);
-    const j = JSON.parse(readFileSync(join(root, ".vscode/mcp.json"), "utf8"));
-    assert.ok(j.servers.other, "comment-bearing config not clobbered");
-    assert.ok(j.servers.hunch);
+    const result = JSON.parse(readFileSync(file, "utf8"));
+    assert.equal(result.servers.other.command, "https://example.test/a/*literal*/");
+    assert.deepEqual(result.servers.other.args, ["say \"//\" now"]);
+    assert.ok(result.servers.hunch);
   } finally { cleanup(); }
 });
 
