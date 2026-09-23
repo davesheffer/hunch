@@ -5,7 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { evaluateReview, reportHash, validateArtifactMetadata } from "../tooling/hunch-guard-review.mjs";
-import { activeExecutablePolicy, assertLivePrRevision, classifySarif, isBaseAncestor, normalizeLivePr, validateProducerReport, workflowRunMeta } from "../tooling/hunch-guard-review-producer.mjs";
+import { activeExecutablePolicy, assertLivePrRevision, buildSyntheticRepo, classifySarif, isBaseAncestor, normalizeLivePr, validateProducerReport, workflowRunMeta } from "../tooling/hunch-guard-review-producer.mjs";
+import { cleanupDir } from "./helpers.js";
 
 const head = "0123456789abcdef0123456789abcdef01234567";
 const base = "fedcba9876543210fedcba9876543210fedcba98";
@@ -249,6 +250,35 @@ test("behind-main PR heads are refused before synthetic evaluation", () => {
   const source = { run_id: runId, workflow_path: ".github/workflows/hunch-guard-review-producer.yml", workflow_sha: trusted, event: "workflow_run", trigger_head_sha: head };
   const report = { schema: "hunch.guard-report/1", ...expected, verdict: "failure", reviewable: false, evaluation_complete: false, failure_classes: ["stale_base"], findings: [{ rule_id: "hunch/stale-base", level: "error", message: "PR head does not contain the current protected main branch tip" }], evaluator: { package: "@davesheffer/hunch", version: evaluatorVersion }, source };
   assert.equal(validateProducerReport(report, expected).reviewable, false);
+});
+
+test("producer evaluates a memory-only PR with an empty trusted source diff", () => {
+  const root = mkdtempSync(join(tmpdir(), "hunch-guard-memory-pr-"));
+  try {
+    const repo = join(root, "source");
+    mkdirSync(repo);
+    const git = (...args: string[]) => execFileSync("git", ["-C", repo, ...args], { encoding: "utf8" }).trim();
+    git("init", "--quiet");
+    git("config", "user.name", "fixture");
+    git("config", "user.email", "fixture@invalid");
+    mkdirSync(join(repo, ".hunch", "tasks"), { recursive: true });
+    writeFileSync(join(repo, "README.md"), "source\n");
+    writeFileSync(join(repo, ".hunch", "tasks", "first.json"), "{}\n");
+    git("add", "--all");
+    git("commit", "--quiet", "-m", "base");
+    const baseSha = git("rev-parse", "HEAD");
+    writeFileSync(join(repo, ".hunch", "tasks", "second.json"), "{}\n");
+    git("add", "--all");
+    git("commit", "--quiet", "-m", "memory only");
+    const headSha = git("rev-parse", "HEAD");
+
+    const synthetic = buildSyntheticRepo(repo, baseSha, headSha, join(root, "synthetic"), process.env);
+    const syntheticGit = (...args: string[]) => execFileSync("git", ["-C", synthetic.checkout, ...args], { encoding: "utf8" }).trim();
+    assert.notEqual(synthetic.syntheticHead, synthetic.syntheticBase);
+    assert.equal(syntheticGit("rev-parse", `${synthetic.syntheticHead}^{tree}`), syntheticGit("rev-parse", `${synthetic.syntheticBase}^{tree}`));
+  } finally {
+    cleanupDir(root);
+  }
 });
 
 test("producer finalizer is a separate least-privilege status publisher", () => {

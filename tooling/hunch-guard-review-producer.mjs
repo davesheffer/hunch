@@ -63,9 +63,9 @@ function emptyTree(destination) {
   }
 }
 
-function commit(repo, message, env) {
+function commit(repo, message, env, allowEmpty = false) {
   git(repo, ["add", "--all"], env);
-  git(repo, ["commit", "--quiet", "--no-verify", "-m", message], env);
+  git(repo, ["commit", "--quiet", "--no-verify", ...(allowEmpty ? ["--allow-empty"] : []), "-m", message], env);
   return git(repo, ["rev-parse", "HEAD"], env);
 }
 
@@ -86,7 +86,9 @@ function buildSyntheticRepo(repo, baseSha, headSha, temp, env) {
   rmSync(join(checkout, ".hunch"), { recursive: true, force: true });
   // The candidate cannot choose the memory graph or private overlay.
   archive(repo, baseSha, checkout, ".hunch", env);
-  const syntheticHead = commit(checkout, "candidate source data", env);
+  // A memory-only PR has the same candidate source tree after its untrusted
+  // .hunch graph is replaced with the trusted base graph.
+  const syntheticHead = commit(checkout, "candidate source data", env, true);
   return { checkout, syntheticBase, syntheticHead };
 }
 
