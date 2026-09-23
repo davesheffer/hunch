@@ -1,3 +1,5 @@
+import { sourceLines } from "../core/eol.js";
+
 /**
  * Deterministic text scan for Kubernetes manifest cross-resource references —
  * NOT a tree-sitter walk. Confirmed directly (not assumed): parsing a realistic
@@ -111,14 +113,9 @@ function framePath(frames: readonly StackFrame[]): string {
   return frames.map((f) => f.key).filter(Boolean).join(".").replace(/\.\[/g, "[");
 }
 
-// `\r?` before `$`: without it, a CRLF-terminated line (the Git-for-Windows
-// `core.autocrlf=true` default -- every .yaml file in a Windows checkout) never
-// matches at all, since JS `.` never matches `\r` and `$` (no /m flag) only
-// matches at the true end of the string. That silently zeroes out this whole
-// module's output on any Windows clone, with no error. `.*?` (lazy, not `.*`
-// greedy) so `\r?` gets first claim on a trailing `\r` instead of the value
-// capture swallowing it.
-const KEY_LINE = /^(\s*)(-\s+)?([A-Za-z0-9_.\/-]+):[ \t]*(.*?)\r?$/;
+// sourceLines removes line terminators while retaining offsets in the original
+// source, so every line parser sees the same content on LF, CRLF, and CR input.
+const KEY_LINE = /^(\s*)(-\s+)?([A-Za-z0-9_.\/-]+):[ \t]*(.*?)$/;
 // A line that is ENTIRELY a `{{ ... }}` template action (no `key:` prefix at
 // all) -- e.g. a block-form injection appearing as a SIBLING after other
 // literal keys under the same mapping (`app: my-app` then, on its own later
@@ -139,7 +136,7 @@ const BARE_TEMPLATE_LINE = /^\s*(?:-\s+)?\{\{[\s\S]*$/;
 // branch, which used ORDINARY popping and lost the list-item frame entirely
 // -- reparenting the item's real children one level up (`containers.name`
 // instead of `containers[0].name`), silently dropping every reference under it.
-const BARE_LIST_MARKER = /^(\s*)-[ \t]*\r?$/;
+const BARE_LIST_MARKER = /^(\s*)-[ \t]*$/;
 // A list item whose ENTIRE content is a block-scalar header (`- |`, `- |-`,
 // `- >`, `- |2`, `- | # comment`) -- the idiomatic way a chart inlines a shell
 // script into `args:`/`command:`. The item's value is opaque TEXT, not YAML,
@@ -153,7 +150,7 @@ const BARE_LIST_MARKER = /^(\s*)-[ \t]*\r?$/;
 // match. The rest is captured (not `[|>]` inline) so the header can be run
 // through stripTrailingComment before BLOCK_SCALAR_HEADER, exactly as a
 // key line's value is.
-const BLOCK_SCALAR_LIST_ITEM = /^(\s*)-[ \t]+(.*?)\r?$/;
+const BLOCK_SCALAR_LIST_ITEM = /^(\s*)-[ \t]+(.*?)$/;
 // A YAML block-scalar header (`|`, `>`, plus an optional chomping indicator
 // `+`/`-` and/or an explicit indent digit, in either order: `|`, `|-`, `>+`,
 // `|2`, `|2-`, `|-2`). When a key's value is JUST this header, the real
@@ -224,7 +221,6 @@ function scanFieldPaths(text: string, baseChar: number): { entries: FieldPathEnt
   // (selector/labels) cares, and it checks this set itself.
   const valuelessKeyParents = new Set<string>();
   const stack: StackFrame[] = [];
-  let charOffset = baseChar;
   // Indent of the `-` of a `- |` list item whose block-scalar body is being
   // skipped, or null when no such skip is active. The body ends at the first
   // line indented at or shallower than that dash (YAML's own rule for where a
@@ -292,14 +288,12 @@ function scanFieldPaths(text: string, baseChar: number): { entries: FieldPathEnt
     }
   };
 
-  for (const line of text.split("\n")) {
-    const lineStartChar = charOffset;
-    charOffset += line.length + 1; // +1 for the \n split() consumed
+  for (const { content: line, start } of sourceLines(text)) {
+    const lineStartChar = baseChar + start;
 
     // Inside a `- |` item's body: these lines are script/config TEXT, so they
-    // must never be read as field structure. Runs after the charOffset
-    // bookkeeping above so skipped lines still advance the offset exactly --
-    // every atChar/endChar after the block scalar depends on it.
+    // must never be read as field structure. sourceLines retains original
+    // offsets even when skipped lines use CRLF.
     if (blockScalarSkipIndent !== null) {
       // A blank line is part of the block scalar (YAML lets a scalar body
       // contain empty lines at any indent), never its terminator.
@@ -742,12 +736,14 @@ function buildDocument(text: string, docStartChar: number, entries: FieldPathEnt
 // deliberately NOT a separator -- real YAML doesn't treat it as one either,
 // and it still isn't here: the dashes must be followed by whitespace or end
 // of line.
-const DOC_SEPARATOR = /^(?:---(?:[ \t]+.*)?|\.\.\.)[ \t]*\r?$/m;
+const DOC_SEPARATOR = /^(?:---(?:[ \t]+.*)?|\.\.\.)[ \t]*$/;
 
 export function extractK8sManifest(source: string): K8sManifestDocument[] {
   const docs: K8sManifestDocument[] = [];
   const boundaries: number[] = [];
-  for (const m of source.matchAll(new RegExp(DOC_SEPARATOR, "gm"))) boundaries.push(m.index!, m.index! + m[0].length);
+  for (const line of sourceLines(source)) {
+    if (DOC_SEPARATOR.test(line.content)) boundaries.push(line.start, line.end);
+  }
   const starts = [0, ...boundaries.filter((_, i) => i % 2 === 1)];
   const ends = [...boundaries.filter((_, i) => i % 2 === 0), source.length];
   for (let i = 0; i < starts.length; i++) {

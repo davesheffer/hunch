@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.41.6 — 2026-09-23
+
+- Five line-oriented scanners now use shared EOL helpers for CRLF-aware parsing. Kubernetes manifest extraction also handles lone CR while keeping offsets in the original source; managed `.gitignore` blocks preserve their existing line endings. A regression check guards against another scanner-specific CRLF workaround (#333).
+
 ## 1.41.5 — 2026-09-23
 
 - Test runs disable automatic Git maintenance across temporary repository fixtures, including Git calls that sanitize runtime configuration. This reduces a possible teardown race while the broader fixture cleanup tracked in #384 remains open.

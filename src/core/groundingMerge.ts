@@ -20,16 +20,16 @@
  */
 import { execFileSync } from "node:child_process";
 import { parseGroundingCounts, stripCountsMatch, renderCountsMatch, type GroundingCounts } from "./groundingLag.js";
+import { normalizeEol } from "./eol.js";
 
-// `\r?\n` (not a bare `\n`) throughout: on a CRLF worktree every diff3 marker
-// line is itself `\r\n`-terminated, and a bare `\n` fails to match ANY of
-// them. `^...$` with /m anchor each marker at its own line start rather than
+// The entry point normalizes EOL before matching. `^...$` with /m anchors
+// each marker at its own line start rather than
 // requiring a specific preceding/following literal newline, so a hunk whose
 // ours or theirs side is EMPTY (one side deleted the line, the other edited
 // it) still matches — with a literal `\n` requirement there, git's real
 // output for that shape has no such newline to match, so the whole hunk
 // silently fails to match at all.
-const CONFLICT_RE = /^<<<<<<< ours\r?\n([\s\S]*?)^\|\|\|\|\|\|\| base\r?\n[\s\S]*?^=======\r?\n([\s\S]*?)^>>>>>>> theirs[^\n]*\r?\n?/gm;
+const CONFLICT_RE = /^<<<<<<< ours\n([\s\S]*?)^\|\|\|\|\|\|\| base\n[\s\S]*?^=======\n([\s\S]*?)^>>>>>>> theirs[^\n]*\n?/gm;
 
 /** `null` when the hunk isn't confined to the counts sentence; otherwise the
  *  resolved sentence text, with each field taken as max(ours, theirs). */
@@ -50,8 +50,10 @@ function resolveCountsOnlyHunk(ours: string, theirs: string): string | null {
  *  confined to the counts sentence; otherwise return it untouched. */
 export function resolveGroundingConflicts(diff3Text: string): { conflict: boolean; text: string } {
   if (!diff3Text.includes("<<<<<<< ours")) return { conflict: false, text: diff3Text };
+  const eol = diff3Text.includes("\r\n") ? "\r\n" : diff3Text.includes("\r") ? "\r" : "\n";
+  const normalized = normalizeEol(diff3Text);
   let allResolved = true;
-  const resolved = diff3Text.replace(CONFLICT_RE, (whole: string, ours: string, theirs: string) => {
+  const resolved = normalized.replace(CONFLICT_RE, (whole: string, ours: string, theirs: string) => {
     const merged = resolveCountsOnlyHunk(ours, theirs);
     if (merged === null) {
       allResolved = false;
@@ -63,7 +65,7 @@ export function resolveGroundingConflicts(diff3Text: string): { conflict: boolea
   // read as resolved just because the callback never ran on it — if any
   // marker survives, this is a real conflict, full stop.
   if (!allResolved || resolved.includes("<<<<<<< ours")) return { conflict: true, text: diff3Text };
-  return { conflict: false, text: resolved };
+  return { conflict: false, text: eol === "\n" ? resolved : resolved.replace(/\n/g, eol) };
 }
 
 /** Run `git merge-file --diff3` on real files and resolve the result.

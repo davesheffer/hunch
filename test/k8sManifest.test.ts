@@ -455,6 +455,15 @@ test("a CRLF-terminated manifest is scanned identically to its LF equivalent", (
   assert.equal((crlfDoc!.references[0]!.name as { value: string }).value, "my-config");
 });
 
+test("mixed line endings keep manifest value offsets in the original source", () => {
+  const src = "apiVersion: v1\r\nkind: ConfigMap\rmetadata:\n  name: mixed\r\n";
+  const [doc] = extractK8sManifest(src);
+  assert.equal(doc!.resource?.kind, "ConfigMap");
+  assert.deepEqual(doc!.resource?.name, {
+    form: "literal", value: "mixed", atChar: src.indexOf("mixed"), endChar: src.indexOf("mixed") + 5,
+  });
+});
+
 test("a CRLF-terminated Service selector and workload labels are extracted the same as LF", () => {
   const lf = `apiVersion: v1\nkind: Service\nmetadata:\n  name: my-service\nspec:\n  selector:\n    app: my-app\n`;
   const crlf = lf.replace(/\n/g, "\r\n");
