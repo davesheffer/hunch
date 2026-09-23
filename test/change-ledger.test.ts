@@ -169,16 +169,14 @@ test("issue #285: a merge that moves only THEIRS' events still raises the floor"
   assert.ok(theirs.head_seq < ledger.floor_seq, "a theirs cursor at 3 is below the floor and resyncs instead of missing ours' event");
 });
 
-test("issue #285: the ours-before-theirs tiebreak keeps a batch both sides retained in its original order", () => {
-  // The repro: base holds a same-`at` batch (1, 2) plus a later event; BOTH clones compacted to
-  // floor 1, so event 1 survives only as base's object. Under an object-identity `side` rule it
-  // counted as theirs and sorted after event 2, flipping a batch nobody touched.
+test("issue #360: an event compacted on one side survives when the other still retains it", () => {
+  // Base holds a same-`at` batch; only one clone compacted its first event.
   const at = (n: number, t: string): Ledger["events"][number] => ({ schema: "nuryel.state.subscribe/1", seq: n, at: t, scope, ...ev(n, "") });
   const batchAt = "2026-09-08T10:00:01Z";
   const base: Ledger = { ...emptyLedger(scope), head_seq: 3, events: [at(1, batchAt), at(2, batchAt), at(3, "2026-09-08T10:00:03Z")] };
   const compacted: Ledger = { ...base, floor_seq: 1, events: base.events.slice(1) };
-  const { ledger } = mergeLedgers(base, compacted, compacted);
-  assert.deepEqual(ledger.events.map((e) => e.record_id.slice(-2)), ["01", "02", "03"], "the batch keeps the order base recorded it in");
+  const { ledger } = mergeLedgers(base, compacted, base);
+  assert.deepEqual(ledger.events.map((e) => e.record_id.slice(-2)), ["01", "02", "03"], "history retained by either clone survives");
 });
 
 test("issue #285: on a same-`at` tie an ours-only event still sorts before a theirs-only one", () => {
@@ -228,4 +226,15 @@ test("issue #285: idempotency entries follow their event's new seq across a renu
   const withOrphan = mergeLedgers(base, orphaned, theirs).ledger;
   assert.equal(withOrphan.idempotency.kGone?.seq, 2);
   assert.ok(withOrphan.idempotency.kGone!.seq <= withOrphan.head_seq, "never points above the head");
+});
+
+test("issue #360: merging two compacted clones does not resurrect base-only history", () => {
+  const at = (n: number): Ledger["events"][number] => ({ schema: "nuryel.state.subscribe/1", seq: n, at: `2026-09-08T10:00:0${n}Z`, scope, ...ev(n, "") });
+  const base: Ledger = { ...emptyLedger(scope), head_seq: 3, events: [at(1), at(2), at(3)] };
+  const ours: Ledger = { ...base, floor_seq: 2, head_seq: 4, events: [at(3), at(4)] };
+  const theirs: Ledger = { ...base, floor_seq: 2, head_seq: 4, events: [at(3), { ...at(5), seq: 4 }] };
+  const { ledger } = mergeLedgers(base, ours, theirs);
+  assert.deepEqual(ledger.events.map((e) => e.record_id), [3, 4, 5].map((n) => ev(n, "").record_id));
+  assert.ok(ledger.floor_seq >= 2);
+  assert.doesNotThrow(() => assertChangeSequence(ledger.events, ledger.floor_seq));
 });
