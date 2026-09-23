@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync, rmdirSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -25,15 +25,13 @@ export function fixtureGitEnv(inherited = process.env) {
   return env;
 }
 
-/** A test-only global config remains effective when product Git calls strip the
- * runtime GIT_CONFIG_COUNT variables to avoid crossing repository boundaries. */
-export function fixtureGitGlobalConfig(inherited = process.env) {
+/** A test-only system config remains effective when product Git calls strip
+ * runtime pairs. Unlike a shared global config, test files can independently
+ * write their own HOME/.gitconfig without contaminating one another. */
+export function fixtureGitSystemConfig(inherited = process.env) {
   const dir = mkdtempSync(join(tmpdir(), "hunch-test-git-config-"));
   const file = join(dir, "config");
-  const home = homedir();
-  const originals = inherited.GIT_CONFIG_GLOBAL
-    ? [inherited.GIT_CONFIG_GLOBAL]
-    : [join(inherited.XDG_CONFIG_HOME || join(home, ".config"), "git", "config"), join(home, ".gitconfig")];
+  const originals = inherited.GIT_CONFIG_SYSTEM ? [inherited.GIT_CONFIG_SYSTEM] : [];
   const configure = (...args) => {
     const run = spawnSync("git", ["config", "--file", file, ...args], { encoding: "utf8", windowsHide: true });
     if (run.error || run.status !== 0) throw run.error ?? new Error(run.stderr || "could not set test Git config");
@@ -52,11 +50,11 @@ export function fixtureGitGlobalConfig(inherited = process.env) {
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
   const tsx = fileURLToPath(import.meta.resolve("tsx/cli"));
-  const config = fixtureGitGlobalConfig();
+  const config = fixtureGitSystemConfig();
   let status = 1;
   try {
     const run = spawnSync(process.execPath, [tsx, "--test", ...process.argv.slice(2)], {
-      env: fixtureGitEnv({ ...process.env, GIT_CONFIG_GLOBAL: config.file }), stdio: "inherit", windowsHide: true,
+      env: fixtureGitEnv({ ...process.env, GIT_CONFIG_SYSTEM: config.file }), stdio: "inherit", windowsHide: true,
     });
     if (run.error) throw run.error;
     status = run.status ?? 1;

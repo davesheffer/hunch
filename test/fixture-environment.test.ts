@@ -5,7 +5,7 @@ import { realpathSync, rmSync, rmdirSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { detectInitiator } from "../src/synthesis/initiator.js";
 import { cleanupDir, isolatedCliEnv, tempDir } from "./helpers.js";
-import { fixtureGitEnv, fixtureGitGlobalConfig } from "../tooling/run-tests.mjs";
+import { fixtureGitEnv, fixtureGitSystemConfig } from "../tooling/run-tests.mjs";
 import { foreignRepoEnv } from "../src/extractors/git.js";
 
 test("fixture CLI environment drops every inherited initiator and preserves explicit fixture choices", () => {
@@ -54,14 +54,16 @@ test("fixture Git settings survive Hunch's Git environment sanitization", () => 
   const root = tempDir("hunch-test-global-git-");
   const original = join(root, "original.gitconfig");
   execFileSync("git", ["config", "--file", original, "user.name", "Original Human"]);
-  const config = fixtureGitGlobalConfig({ ...process.env, GIT_CONFIG_GLOBAL: original });
+  const config = fixtureGitSystemConfig();
   try {
     const repo = join(root, "repo");
-    const env = fixtureGitEnv({ ...process.env, GIT_CONFIG_GLOBAL: config.file });
+    const env = fixtureGitEnv({ ...process.env, GIT_CONFIG_GLOBAL: original, GIT_CONFIG_SYSTEM: config.file });
+    delete env.GIT_CONFIG_NOSYSTEM;
     execFileSync("git", ["init", "-q", repo], { env });
     const sanitized = foreignRepoEnv(env);
     assert.equal(sanitized.GIT_CONFIG_COUNT, undefined, "product Git calls strip runtime pairs");
-    assert.equal(sanitized.GIT_CONFIG_GLOBAL, config.file, "the test-only global config survives");
+    assert.equal(sanitized.GIT_CONFIG_SYSTEM, config.file, "the test-only system config survives");
+    assert.equal(sanitized.GIT_CONFIG_GLOBAL, original, "fixture global config remains independent");
     const get = (key: string) => execFileSync("git", ["config", "--get", key], { cwd: repo, env: sanitized, encoding: "utf8" }).trim();
     assert.equal(get("user.name"), "Original Human", "the developer's existing global settings remain available");
     assert.equal(get("gc.auto"), "0");
