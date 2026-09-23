@@ -55,16 +55,18 @@ function readJsonObj(file: string): Record<string, unknown> {
   if (!existsSync(file)) return {};
   const raw = readFileSync(file, "utf8");
   if (!raw.trim()) return {};
-  if (hasJsoncComments(raw)) {
-    throw new Error(`refusing to edit ${file}: JSONC comments cannot be preserved by this writer. Edit the Hunch entry manually or remove the comments, then re-run.`);
-  }
+  let value: Record<string, unknown>;
   try {
     const v = parseJsonc(raw);
-    if (v && typeof v === "object" && !Array.isArray(v)) return v as Record<string, unknown>;
-    throw new Error("not a JSON object");
+    if (v && typeof v === "object" && !Array.isArray(v)) value = v as Record<string, unknown>;
+    else throw new Error("not a JSON object");
   } catch (e) {
     throw new Error(`refusing to overwrite ${file}: could not parse it (${(e as Error).message}). Fix or remove it, then re-run.`);
   }
+  if (hasJsoncComments(raw)) {
+    throw new Error(`refusing to edit ${file}: JSONC comments cannot be preserved by this writer. Edit the Hunch entry manually or remove the comments, then re-run.`);
+  }
+  return value;
 }
 
 /** Render a string as a TOML value: a literal '…' when safe (no escaping needed —
