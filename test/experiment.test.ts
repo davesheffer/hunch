@@ -29,6 +29,7 @@ import {
   type ExperimentOutcome,
 } from "../src/constitution/experiment.js";
 import { executeExp01Assignment } from "../src/constitution/experimentRunner.js";
+import { withInitiator } from "../src/synthesis/initiator.js";
 
 const REGISTERED = "2026-07-11T12:00:00.000Z";
 const LOCKED = "2026-07-12T12:00:00.000Z";
@@ -649,7 +650,7 @@ test("non-completed assignments cannot fabricate primary metrics", () => {
   }, run, { now: LOCKED }), /non-completed outcomes cannot claim primary metrics/i);
 });
 
-test("EXP-01 runner uses a fresh worktree, strips ambient instructions, and scores only with a hidden external evaluator", { skip: process.platform === "win32" }, () => {
+test("EXP-01 runner uses a fresh worktree, strips ambient instructions, and scores only with a hidden external evaluator", { skip: process.platform === "win32" }, () => withInitiator({ provider: "codex-cli", source: "explicit" }, () => {
   const session = mkdtempSync(join(tmpdir(), "hunch-exp01-runner-test-"));
   const source = join(session, "source");
   const bin = join(session, "bin");
@@ -687,7 +688,9 @@ console.log(JSON.stringify({valid_completion:existsSync("solution.txt"),policy_v
 `;
   writeFileSync(evaluator, successfulEvaluator);
   const oldPath = process.env.PATH;
+  const oldClaudeCode = process.env.CLAUDECODE;
   process.env.PATH = `${bin}:${oldPath ?? ""}`;
+  process.env.CLAUDECODE = "1";
   const { repository, cleanup } = fixture();
   try {
     const registration = prereg("EXP-01");
@@ -723,7 +726,7 @@ console.log(JSON.stringify({valid_completion:existsSync("solution.txt"),policy_v
       reason: "Executable isolated runner fixture.",
     }, registration, bank, { now: LOCKED }));
     const outcome = executeExp01Assignment(repository, run, bank, run.assignments[0]!, { now: "2026-07-12T13:00:00.000Z" });
-    assert.equal(outcome.status, "completed");
+    assert.equal(outcome.status, "completed", outcome.error_code ?? outcome.reason);
     assert.equal(outcome.invocation_started, true);
     assert.equal(outcome.incidents.confirmed_private_leak, false);
     assert.equal(outcome.metrics && "valid_completion" in outcome.metrics && outcome.metrics.valid_completion, true);
@@ -768,7 +771,9 @@ console.log(JSON.stringify({valid_completion:existsSync("solution.txt"),policy_v
     }
   } finally {
     process.env.PATH = oldPath;
+    if (oldClaudeCode === undefined) delete process.env.CLAUDECODE;
+    else process.env.CLAUDECODE = oldClaudeCode;
     cleanup();
     cleanupDir(session);
   }
-});
+}));

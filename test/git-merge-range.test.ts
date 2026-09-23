@@ -14,6 +14,8 @@ function git(root: string, ...args: string[]): string {
 function repo(): { root: string; cleanup(): void } {
   const root = mkdtempSync(join(tmpdir(), "hunch-git-merge-range-"));
   git(root, "init", "-q", "-b", "main");
+  git(root, "config", "gc.auto", "0");
+  git(root, "config", "maintenance.auto", "false");
   git(root, "config", "user.email", "test@example.com");
   git(root, "config", "user.name", "Test Human");
   return { root, cleanup: () => cleanupDir(root) };
