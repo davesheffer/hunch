@@ -2,7 +2,7 @@
 
 ## 1.41.6 — 2026-09-23
 
-- Line-oriented scanners now share one EOL boundary for LF, CRLF, and lone CR. Kubernetes manifest extraction keeps offsets in the original source, managed `.gitignore` blocks preserve their existing line endings, and a regression check guards all five scanners (#333).
+- Five line-oriented scanners now use shared EOL helpers for CRLF-aware parsing. Kubernetes manifest extraction also handles lone CR while keeping offsets in the original source; managed `.gitignore` blocks preserve their existing line endings. A regression check guards against another scanner-specific CRLF workaround (#333).
 
 ## 1.41.5 — 2026-09-23
 
