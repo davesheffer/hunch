@@ -8,6 +8,7 @@ export const changelogLocales = {
       footer: "© Hunch — תיעוד משותף לסוכני AI.", home: "בית", githubReleases: "גרסאות ב-GitHub"
     },
     titles: [
+      "הערות בקובצי JSONC נשארות ללא שינוי",
       "היסטוריה שכבר כווצה לא חוזרת במיזוג",
       "טקסט JSX נשאר ניתן לאינדוקס",
       "כרטיסי משימה ברורים יותר וסביבות עבודה בטוחות יותר",
@@ -85,6 +86,7 @@ export const changelogLocales = {
       footer: "© Hunch — общие записи для ИИ-агентов.", home: "Главная", githubReleases: "Релизы на GitHub"
     },
     titles: [
+      "Комментарии в JSONC остаются без изменений",
       "Сжатая история не возвращается при слиянии",
       "Текст JSX продолжает индексироваться",
       "Понятнее карточки задач, безопаснее рабочие деревья",
@@ -162,6 +164,7 @@ export const changelogLocales = {
       footer: "© Hunch — سجل مشترك لوكلاء الذكاء الاصطناعي.", home: "الرئيسية", githubReleases: "الإصدارات على GitHub"
     },
     titles: [
+      "تبقى تعليقات JSONC دون تغيير",
       "لا يعود السجل المضغوط عند الدمج",
       "يبقى نص JSX قابلًا للفهرسة",
       "بطاقات مهام أوضح وأشجار عمل أكثر أمانًا",
@@ -239,6 +242,7 @@ export const changelogLocales = {
       footer: "© Hunch — un registro compartido para agentes de IA.", home: "Inicio", githubReleases: "Versiones en GitHub"
     },
     titles: [
+      "Los comentarios JSONC permanecen intactos",
       "El historial compactado no reaparece al fusionar",
       "El texto JSX sigue indexándose",
       "Tarjetas de tareas más claras y árboles de trabajo más seguros",
