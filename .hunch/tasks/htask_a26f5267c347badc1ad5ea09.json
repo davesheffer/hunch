@@ -1,0 +1,40 @@
+{
+  "id": "htask_a26f5267c347badc1ad5ea09",
+  "title": "Release Hunch 1.41.4 patch",
+  "state": "completed",
+  "started_at": "2026-09-23T09:32:57.768Z",
+  "finished_at": "2026-09-23T09:35:48.299Z",
+  "coverage": "no-relevant-memory",
+  "lessons": [],
+  "applied": [],
+  "saved": [],
+  "checks": [
+    {
+      "label": "Verification command",
+      "state": "passed",
+      "exit_code": 0
+    }
+  ],
+  "conformance": [],
+  "refusals": 0,
+  "files": [
+    ".windsurf/hooks.json",
+    "package-lock.json",
+    "package.json",
+    "plugin/.mcp.json",
+    "server.json",
+    "site/changelog.html",
+    "tooling/changelog-locales.mjs"
+  ],
+  "supersedes": [],
+  "source_snapshot": "sha256:3742cc638050af240becb18718e698234c76e2b13c0f5e7fb9f11fe55139f241",
+  "report_hash": "sha256:55154256696f3c0886e880e8a7adece5d630841939f829a343bcfc9f55353289",
+  "provenance": {
+    "source": "task_report",
+    "confidence": 1,
+    "evidence": [
+      "hunch report htask_a26f5267c347badc1ad5ea09"
+    ],
+    "last_verified": "2026-09-23T09:35:48.299Z"
+  }
+}
