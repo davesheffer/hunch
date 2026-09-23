@@ -1,0 +1,58 @@
+{
+  "id": "htask_46fdf8930c8a68331f7ddb92",
+  "title": "Next Hunch release fold",
+  "state": "completed",
+  "started_at": "2026-09-23T10:23:48.715Z",
+  "finished_at": "2026-09-23T11:48:11.689Z",
+  "coverage": "delivered",
+  "lessons": [
+    {
+      "kind": "constraints",
+      "record_id": "con_902759b3dc",
+      "content_hash": "sha256:267c10c1c7eee06f78d5f270e8bccbbb1aaed8374d729ddfa62a0509ff92ddda",
+      "title": "All JSON writes to .hunch/ must be atomic (temp-file + rename) so an interrupted write can never truncate the index"
+    },
+    {
+      "kind": "constraints",
+      "record_id": "con_a87360128b",
+      "content_hash": "sha256:7e75cee1e0d0dc6dfeab87cea0248e2a2bbcee57c49fff55a33957a3e50f75e6",
+      "title": "Semantic vectors are a derived layer in SQLite, never the source of truth; reconcile by content hash on reindex"
+    }
+  ],
+  "applied": [],
+  "saved": [],
+  "checks": [
+    {
+      "label": "Verification command",
+      "state": "failed",
+      "exit_code": 1
+    }
+  ],
+  "conformance": [
+    {
+      "kind": "constraints",
+      "record_id": "con_902759b3dc",
+      "content_hash": "sha256:267c10c1c7eee06f78d5f270e8bccbbb1aaed8374d729ddfa62a0509ff92ddda",
+      "outcome": "not-exercised"
+    },
+    {
+      "kind": "constraints",
+      "record_id": "con_a87360128b",
+      "content_hash": "sha256:7e75cee1e0d0dc6dfeab87cea0248e2a2bbcee57c49fff55a33957a3e50f75e6",
+      "outcome": "not-exercised"
+    }
+  ],
+  "refusals": 0,
+  "files": [],
+  "supersedes": [],
+  "source_snapshot": "sha256:9eb0ad8eb7711bc7b81b8899a20cd8a09e7899e1b4e360f4e98df3d6064a5c73",
+  "report_hash": "sha256:e6f976f774355e53148cd48643fd61d106b3d3da86e5a9451e84ce05ec1b0325",
+  "provenance": {
+    "source": "task_report",
+    "confidence": 1,
+    "evidence": [
+      "hunch report htask_46fdf8930c8a68331f7ddb92"
+    ],
+    "last_verified": "2026-09-23T11:48:11.689Z"
+  }
+}
