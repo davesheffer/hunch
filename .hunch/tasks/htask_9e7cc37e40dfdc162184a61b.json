@@ -1,0 +1,52 @@
+{
+  "id": "htask_9e7cc37e40dfdc162184a61b",
+  "title": "Close issues resolved by Hunch v1.41.5",
+  "state": "completed",
+  "started_at": "2026-09-23T12:30:38.482Z",
+  "finished_at": "2026-09-23T12:31:15.579Z",
+  "coverage": "delivered",
+  "lessons": [
+    {
+      "kind": "decisions",
+      "record_id": "dec_d291f3c6e8",
+      "content_hash": "sha256:1ba76c9b8773c652963660bb3665c9ee73831742a8b2f659d66c95256f3fc01c",
+      "title": "Extend Windows teardown timeout to 5s for native library handle release"
+    },
+    {
+      "kind": "decisions",
+      "record_id": "dec_d50dcce8c3",
+      "content_hash": "sha256:6ce7e0b96b6be30202b1bfd21aec3d1b1842b4a11b205d7be6e604eaf9bc6da4",
+      "title": "Retry-based resilience for Windows test fixture cleanup"
+    }
+  ],
+  "applied": [],
+  "saved": [],
+  "checks": [],
+  "conformance": [
+    {
+      "kind": "decisions",
+      "record_id": "dec_d291f3c6e8",
+      "content_hash": "sha256:1ba76c9b8773c652963660bb3665c9ee73831742a8b2f659d66c95256f3fc01c",
+      "outcome": "unavailable"
+    },
+    {
+      "kind": "decisions",
+      "record_id": "dec_d50dcce8c3",
+      "content_hash": "sha256:6ce7e0b96b6be30202b1bfd21aec3d1b1842b4a11b205d7be6e604eaf9bc6da4",
+      "outcome": "unavailable"
+    }
+  ],
+  "refusals": 0,
+  "files": [],
+  "supersedes": [],
+  "source_snapshot": null,
+  "report_hash": "sha256:4b95a571641edc8edfb102f2975b35ef8c212335aad8e7fb5eb89040bf690784",
+  "provenance": {
+    "source": "task_report",
+    "confidence": 1,
+    "evidence": [
+      "hunch report htask_9e7cc37e40dfdc162184a61b"
+    ],
+    "last_verified": "2026-09-23T12:31:15.579Z"
+  }
+}
