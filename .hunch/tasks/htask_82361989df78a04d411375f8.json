@@ -3,7 +3,7 @@
   "title": "whats next",
   "state": "completed",
   "started_at": "2026-09-24T06:42:41.835Z",
-  "finished_at": "2026-09-24T08:46:41.608Z",
+  "finished_at": "2026-09-24T09:06:17.679Z",
   "coverage": "delivered",
   "lessons": [
     {
@@ -48,7 +48,7 @@
   ],
   "supersedes": [],
   "source_snapshot": null,
-  "report_hash": "sha256:3693ce373607234957e180d453a09f968fecfe57db59e2dcdd315add8ccaa88e",
+  "report_hash": "sha256:1bb658f20ae18aee41842a56e8965f98ef1c81ff86af519c7a853786382a86e0",
   "provenance": {
     "source": "task_report",
     "confidence": 1,
@@ -56,8 +56,9 @@
       "hunch report htask_82361989df78a04d411375f8",
       "hunch report htask_53ab4c89045ba6490a5d0f28",
       "hunch report htask_9dd88588e6fa763662dcdea7",
-      "hunch report htask_c8d0560d444d32865d815e0f"
+      "hunch report htask_c8d0560d444d32865d815e0f",
+      "hunch report htask_f40d577bb5c84f40c066c2d2"
     ],
-    "last_verified": "2026-09-24T08:46:41.608Z"
+    "last_verified": "2026-09-24T09:06:17.679Z"
   }
 }
