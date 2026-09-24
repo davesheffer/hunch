@@ -122,10 +122,8 @@ const invalid = (text: string): ToolResult => err(`Invalid: ${text}`);
  *  never moves on its own — this is the client-agnostic fallback, resolved fresh on
  *  every call by the generic tool wrapper below (see extractCwdHint). */
 const cwdHintField = z.string().optional().describe(
-  "Your ACTUAL current working directory for THIS call. Pass it whenever it differs from where this MCP " +
-  "session started — most commonly after entering a git worktree (EnterWorktree) or `cd`-ing to a different " +
-  "checkout — so the write commits to that repo/branch instead of silently landing on the server's original " +
-  "root. Omit only when you are still in the session's starting directory.",
+  "Your current directory, when it differs from where this session started (e.g. a worktree); " +
+  "writes then commit there, not to the original root.",
 );
 
 /** Pull `cwd` out of a tool call's already-parsed input without assuming any one
@@ -1823,7 +1821,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
     {
       title: "Shortlist the likely correction stage and declarations",
       description:
-        "Experimental, deterministic, read-only repository-adaptive diagnostic for a schema/validation issue or reproduction. Preserves a flat top five, adds a transfer-tested hierarchical inspection view, and emits an efficiency-tested advisory progressive inspection queue capped at eleven declarations with deterministic receipts. Optional authenticated same-claim evidence is annotated but cannot reorder candidates because fresh transfer rejected that mechanism. It never claims an exact implementation owner or per-case confidence and does not edit, gate, or capture memory.",
+        "Experimental, deterministic, read-only diagnostic for a schema/validation issue or reproduction: a flat top five, a hierarchical inspection view, and an advisory progressive inspection queue (max eleven declarations) with receipts. Same-claim evidence is annotated, never reorders. It never claims an exact implementation owner or per-case confidence and does not edit, gate, or capture memory.",
       inputSchema: {
         issue: z.string().min(1).max(100_000).describe("Issue report or reproduction prose, including observed and expected behavior when available."),
         limit: z.number().int().min(1).max(5).optional().describe("Candidate count, capped at five (default 5)."),
@@ -1924,7 +1922,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
     {
       title: "Worktrees and branches across machines",
       description:
-        "The workspace ledger: which git worktrees are open on which machine, and every local branch with a deterministic verdict — merged (ancestry / squash / rebase), never pushed, upstream gone, dirty worktree — plus a recommended action per branch. Call this INSTEAD of running git branch / git worktree list / git log to answer 'what is open, what is stale, what can be deleted'. This machine is read live; other machines from memory (a machine older than the staleness window is marked unverified). Read-only: it never deletes anything. Not for design rationale (hunch_why) or code structure (hunch_structure).",
+        "Worktrees per machine and every local branch with a deterministic verdict — merged (ancestry / squash / rebase), never pushed, upstream gone, dirty — plus a recommended action. Use INSTEAD of git branch / git worktree list to see what is open, stale, or deletable. This machine is read live; others from memory (stale ones marked unverified). Read-only. Not for design rationale (hunch_why) or code structure (hunch_structure).",
       inputSchema: {
         view: z.enum(["inventory", "branches"]).optional().describe("inventory = one row per worktree (default); branches = one row per branch with its verdict and action."),
         machine: z.string().optional().describe("Only this machine label."),
@@ -1971,7 +1969,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
     {
       title: "Decisions the human must make now (ask inline, not a queue)",
       description:
-        "The rare decisions the graph cannot resolve on its own — surfaced so you ASK THE USER in the prompt at the moment, then act. Auto-captured memory is trusted automatically and never appears here; this returns topic conflicts (>1 live decision for one topic), premise-stale decisions (a live decision whose recorded REASON no longer holds — its authority is unchanged until the human re-attests, supersedes, or retires), one exact imported ADR at a time awaiting approve/decline, a queued commit-provenance repair (the post-merge hook detected a decision's commit was squash-merged away but never applies the fix unattended — apply with `hunch repair-provenance --apply` or leave it queued), and Constitution human moments (candidate policies awaiting review, proposed policies awaiting an activation decision). Normally empty. Raise each question with the user; do NOT decide it for them — an entry is a question, silence is never approval. Reads the public store, or the unified overlay when the repo is in shared mode — never private-mode overlay records, EXCEPT a queued commit-repair, whose liveness is checked against the full store; only its id and commit shas ever surface, never its title.",
+        "Decisions only the human can make, so you ASK THE USER before acting: topic conflicts (>1 live decision per topic), premise-stale decisions (the recorded reason no longer holds; authority is unchanged until the human re-attests, supersedes, or retires), one imported ADR at a time awaiting approve/decline, a queued commit-provenance repair (`hunch repair-provenance --apply`, never applied unattended), and Constitution policies awaiting review or activation. Normally empty. Never decide an entry for the user — silence is never approval. Reads the public or shared-mode store, never private-mode records — except a queued repair, whose liveness is checked against the full store and which surfaces only its id and commit shas.",
       inputSchema: {},
     },
     async (): Promise<ToolResult> => {
@@ -2102,7 +2100,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
     {
       title: "Capture a decision (grilling interview)",
       description:
-        "Start a decision-capture interview: returns the grilling protocol (interrogate ONE question at a time until the decision tree is resolved) plus a capture-session token. Grill the human, then commit via hunch_record_decision with the token + confirmed topic. Use for '/capture', 'record this decision', 'grill me on this'. The token proves the write is the tail of an interview, not a silent guess — it is NOT a human signature: human-confirmed authority needs the human's own confirmation (a client prompt, or `hunch review --confirm <id>`). Returns the protocol text and the token; it writes nothing. Not for corrections (hunch_record_correction) or observations (hunch_record_finding).",
+        "Start a decision-capture interview ('/capture', 'grill me'): returns the protocol — ONE question at a time until the decision is resolved — and a capture-session token; writes nothing. Then commit via hunch_record_decision with the token + confirmed topic. The token is NOT a human signature: human-confirmed authority needs the human's own confirmation (a client confirmation prompt, or `hunch review --confirm <id>`). Not for corrections (hunch_record_correction) or observations (hunch_record_finding).",
       inputSchema: {
         topic: z.string().optional().describe("proposed topic anchor (confirm with the human before committing)"),
         seed: z.string().optional().describe("what the decision is about, to focus the first question"),
@@ -2169,7 +2167,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
     {
       title: "Record a decision (write-back)",
       description:
-        "Persist a new Decision (ADR) into Hunch with provenance. Use after making a non-trivial design choice so future sessions are grounded in it. Set private:true to keep a SENSITIVE decision out of a (possibly public) repo — it is written to the HUNCH_PRIVATE_DIR overlay store and stays queryable locally, never committed here. Returns the stored id, home, and status. Not for a rule the agent must obey (hunch_record_correction) or an observation with no choice made (hunch_record_finding). Errors are classed by prefix: 'Refused:' means a gate held (resolve it, do not retry), 'Invalid:' means fix the arguments, 'Failed to' means internal.",
+        "Persist a Decision (ADR) with provenance after a non-trivial design choice. private:true keeps a SENSITIVE decision in the HUNCH_PRIVATE_DIR overlay, never committed here. Returns id, home, and status. Not for a rule the agent must obey (hunch_record_correction) or an observation (hunch_record_finding). Errors: 'Refused:' a gate held (resolve it, do not retry); 'Invalid:' fix the arguments; 'Failed to' internal.",
       inputSchema: {
         decision: z.object({
           title: z.string(),
@@ -2432,7 +2430,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
     {
       title: "Capture a correction as an enforced constraint (Never Twice)",
       description:
-        "When a human corrects the agent ('no, do it this way' / 'never call X here'), persist that correction as a first-class, SCOPED Constraint with provenance — so the pre-edit hook and the CI Constraint Guard hold EVERY assistant to it from now on, instead of it being forgotten next session. Writes to the shared .hunch/ graph (client-agnostic). Set severity:'blocking' only when the human said never/must; set applies_to_all:true only when the rule is genuinely repo-wide (otherwise it is scoped to scope_hint_file). Returns the constraint id, scope, and what it now enforces. Not for a design choice with alternatives (hunch_record_decision) or an observed gap with no rule yet (hunch_record_finding).",
+        "When a human corrects the agent ('never call X here'), persist it as a SCOPED Constraint with provenance, so the pre-edit hook and CI Constraint Guard hold every assistant to it. severity:'blocking' only when the human said never/must; applies_to_all:true only for a genuinely repo-wide rule (else scoped to scope_hint_file). Returns the constraint id and scope. Not for a design choice (hunch_record_decision) or an observed gap with no rule yet (hunch_record_finding).",
       inputSchema: {
         rule: z.string().describe("The invariant in the human's words, e.g. \"never call the pay-per-token API here\"."),
         scope_hint_file: z.string().optional().describe("A file the correction was about; scopes the constraint to it (the conservative default). Prefer a REPO-RELATIVE path (src/foo.ts); an absolute path is relativized against the repo root, and one outside the repo is discarded rather than scoped to a path that could never match."),
@@ -2537,7 +2535,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
     {
       title: "Record a finding (an observation with no code change)",
       description:
-        "Persist an OBSERVATION into Hunch — audited knowledge with no diff: an audit that surfaced a gap (e.g. queries missing tenant scoping), a measured number, a vendor/platform fact, an incident with no code fix. The anchor is a date + evidence, not a commit. Advisory: it grounds future edits to the affected files/symbols (pre-edit hook + hunch_context) and is listed by hunch_findings; it never blocks. Re-record the SAME title to update triage (e.g. triage:'resolved' + resolved_commit once fixed). If the finding is a violation of a rule that ISN'T recorded yet, record the rule first (hunch_record_correction) and link it via violates_constraint. Returns the finding id, triage, and the files it now grounds. Not for a rule to enforce (hunch_record_correction) or a choice between alternatives (hunch_record_decision).",
+        "Persist an OBSERVATION with no code change — an audit gap, a measured number, a platform fact, an incident — anchored to a date + evidence, not a commit. Advisory: grounds future edits to the affected files (pre-edit hook, hunch_context) and is listed by hunch_findings; never blocks. Re-record the SAME title to update triage (e.g. triage:'resolved' + resolved_commit). If it violates an unrecorded rule, record the rule first (hunch_record_correction) and link it via violates_constraint. Not for a rule to enforce (hunch_record_correction) or a choice between alternatives (hunch_record_decision).",
       inputSchema: {
         finding: z.object({
           title: z.string().describe("stable one-line name — re-recording the same title updates the finding"),
@@ -2934,7 +2932,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
     {
       title: "Causal merge verdict: is this change safe against the recorded WHY?",
       description:
-        "Before opening or merging a PR, replay a diff against engineering memory and return ONE verdict — BLOCK / WARN / PASS. For each invariant DIRECTLY in scope it cites WHY the guard exists (the decision that motivated it + the bug whose root cause spawned it); it also lists invariants reached via blast radius (near, advisory), any deliberately-retired code the diff re-introduces, and symbols the diff adds that are already defined elsewhere in the graph (possible re-implementation/sprawl, advisory). Deterministic, no LLM. Omit base, commit, and working to check STAGED changes; pass working:true for all local changes, base (e.g. origin/main) for a PR range, or commit for a single commit. Call this before merging a widely-scoped change. Not for an advisory impact map (hunch_pr_impact), intent erosion with no diff (hunch_conformance), or a sealed proof of one committed transition (hunch_change_proof).",
+        "Before opening or merging a PR, replay a diff against memory and return ONE verdict — BLOCK / WARN / PASS — citing the decision and bug behind each invariant in scope, plus advisory blast-radius invariants, re-introduced retired code, and symbols already defined elsewhere. Deterministic, no LLM. Default: staged changes; working:true for all local changes, base (e.g. origin/main) for a PR range, commit for one commit. Not for an advisory impact map (hunch_pr_impact), intent erosion with no diff (hunch_conformance), or a sealed proof (hunch_change_proof).",
       inputSchema: {
         base: z.string().optional().describe("Diff against this base ref (e.g. origin/main) — for a PR/branch."),
         commit: z.string().optional().describe("Diff a single commit (sha/ref). Omit base AND commit to check staged changes."),
@@ -2984,7 +2982,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
     {
       title: "PR impact: the dependency + memory surface of a change",
       description:
-        "Given a change (staged, working tree, a branch vs base, or a single commit), return its IMPACT SURFACE: the files whose code transitively depends on the changed files, the invariants directly in scope and those reached via blast radius, and the recorded decisions concerning the touched files. Read-only and advisory — use hunch_merge_verdict for the gate. Call before review to know what a PR can break and which recorded intent it touches. Omit base, commit, and working for staged changes. Not for a verdict (hunch_merge_verdict) or a sealed proof (hunch_change_proof).",
+        "IMPACT SURFACE of a change (default staged; or working:true, base, or commit): files that transitively depend on it, invariants in scope and via blast radius, and decisions on the touched files. Read-only, advisory. Not for a verdict (hunch_merge_verdict) or a sealed proof (hunch_change_proof).",
       inputSchema: {
         base: z.string().optional().describe("Diff against this base ref (e.g. origin/main) — for a PR/branch."),
         commit: z.string().optional().describe("Impact of a single commit (sha/ref). Omit base AND commit for staged changes."),
