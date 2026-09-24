@@ -1,0 +1,32 @@
+{
+  "id": "htask_815ae2efe127bb97aec548a6",
+  "title": "lets go for the best option for hunch users",
+  "state": "completed",
+  "started_at": "2026-09-24T11:41:30.914Z",
+  "finished_at": "2026-09-24T11:47:30.974Z",
+  "coverage": "no-delivery-observed",
+  "lessons": [],
+  "applied": [],
+  "saved": [],
+  "checks": [
+    {
+      "label": "Verification command",
+      "state": "passed",
+      "exit_code": 0
+    }
+  ],
+  "conformance": [],
+  "refusals": 0,
+  "files": [],
+  "supersedes": [],
+  "source_snapshot": "sha256:e0e162966fa50d1f8595c7234662c4f3f4edd8982832c23b9a57b850b8350d87",
+  "report_hash": "sha256:897ace86ef7f2137282f8c85b143b1907c7eb60f837e60d90eb7f4bb51aae309",
+  "provenance": {
+    "source": "task_report",
+    "confidence": 1,
+    "evidence": [
+      "hunch report htask_815ae2efe127bb97aec548a6"
+    ],
+    "last_verified": "2026-09-24T11:47:30.974Z"
+  }
+}
