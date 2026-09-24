@@ -1,0 +1,64 @@
+{
+  "id": "htask_82361989df78a04d411375f8",
+  "title": "whats next",
+  "state": "completed",
+  "started_at": "2026-09-24T06:42:41.835Z",
+  "finished_at": "2026-09-24T09:06:17.679Z",
+  "coverage": "delivered",
+  "lessons": [
+    {
+      "kind": "constraints",
+      "record_id": "con_902759b3dc",
+      "content_hash": "sha256:267c10c1c7eee06f78d5f270e8bccbbb1aaed8374d729ddfa62a0509ff92ddda",
+      "title": "All JSON writes to .hunch/ must be atomic (temp-file + rename) so an interrupted write can never truncate the index"
+    },
+    {
+      "kind": "constraints",
+      "record_id": "con_a87360128b",
+      "content_hash": "sha256:7e75cee1e0d0dc6dfeab87cea0248e2a2bbcee57c49fff55a33957a3e50f75e6",
+      "title": "Semantic vectors are a derived layer in SQLite, never the source of truth; reconcile by content hash on reindex"
+    },
+    {
+      "kind": "decisions",
+      "record_id": "dec_a6d088f409",
+      "content_hash": "sha256:e743552ed08e14348632e6a373bf97bcc08eab012fb109dfee999d3ddfa44de2",
+      "title": "Implement HLG-1 as an additive versioned view over the existing graph"
+    },
+    {
+      "kind": "decisions",
+      "record_id": "dec_c13810566c",
+      "content_hash": "sha256:69b1f72151bf7a943b5a598f5d34cf23ad09a236d9676adeb06d61a8439a3bcc",
+      "title": "Git-native reasoning graph for persistent code intent capture"
+    },
+    {
+      "kind": "decisions",
+      "record_id": "dec_e2c514ab8f",
+      "content_hash": "sha256:dc30c1150ee2aea87d002da9c02a9f1af7361f0acf292874b73fc333934fc6ce",
+      "title": "Stale-lock takeover is serialized under an exclusive reclaim claim, and a recycled pid is detected by process-identity equality, judged by one shared table"
+    }
+  ],
+  "applied": [],
+  "saved": [],
+  "checks": [],
+  "conformance": [],
+  "refusals": 4,
+  "files": [
+    "src/store/jsonStore.ts",
+    "test/store.test.ts"
+  ],
+  "supersedes": [],
+  "source_snapshot": null,
+  "report_hash": "sha256:1bb658f20ae18aee41842a56e8965f98ef1c81ff86af519c7a853786382a86e0",
+  "provenance": {
+    "source": "task_report",
+    "confidence": 1,
+    "evidence": [
+      "hunch report htask_82361989df78a04d411375f8",
+      "hunch report htask_53ab4c89045ba6490a5d0f28",
+      "hunch report htask_9dd88588e6fa763662dcdea7",
+      "hunch report htask_c8d0560d444d32865d815e0f",
+      "hunch report htask_f40d577bb5c84f40c066c2d2"
+    ],
+    "last_verified": "2026-09-24T09:06:17.679Z"
+  }
+}
