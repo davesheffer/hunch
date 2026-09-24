@@ -1,0 +1,42 @@
+{
+  "id": "htask_5c413188d115ed103b2f9bde",
+  "title": "relay:e47adf55 continue \"Hunch footprint cuts after #419/#420\" from the…",
+  "state": "completed",
+  "started_at": "2026-09-24T11:14:21.124Z",
+  "finished_at": "2026-09-24T11:28:32.136Z",
+  "coverage": "no-delivery-observed",
+  "lessons": [],
+  "applied": [],
+  "saved": [],
+  "checks": [
+    {
+      "label": "Verification command",
+      "state": "passed",
+      "exit_code": 0
+    },
+    {
+      "label": "Verification command",
+      "state": "passed",
+      "exit_code": 0
+    }
+  ],
+  "conformance": [],
+  "refusals": 0,
+  "files": [
+    "src/mcp/server.ts",
+    "src/mcp/taskReportTools.ts",
+    "test/footprint.test.ts"
+  ],
+  "supersedes": [],
+  "source_snapshot": "sha256:e0e162966fa50d1f8595c7234662c4f3f4edd8982832c23b9a57b850b8350d87",
+  "report_hash": "sha256:3cea1daa3af2154ecaf3da9995311e93dbe8e79c2e55e30d1788ff0662971c81",
+  "provenance": {
+    "source": "task_report",
+    "confidence": 1,
+    "evidence": [
+      "hunch report htask_5c413188d115ed103b2f9bde",
+      "hunch report htask_878fc9342e4ff2b1eef9ce27"
+    ],
+    "last_verified": "2026-09-24T11:28:32.136Z"
+  }
+}
