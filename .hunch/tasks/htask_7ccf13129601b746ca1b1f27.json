@@ -1,0 +1,61 @@
+{
+  "id": "htask_7ccf13129601b746ca1b1f27",
+  "title": "Investigate release CI stale lock race",
+  "state": "completed",
+  "started_at": "2026-09-23T09:45:48.798Z",
+  "finished_at": "2026-09-23T09:59:30.076Z",
+  "coverage": "delivered",
+  "lessons": [
+    {
+      "kind": "decisions",
+      "record_id": "dec_e2c514ab8f",
+      "content_hash": "sha256:dc30c1150ee2aea87d002da9c02a9f1af7361f0acf292874b73fc333934fc6ce",
+      "title": "Stale-lock takeover is serialized under an exclusive reclaim claim, and a recycled pid is detected by process-identity equality, judged by one shared table"
+    },
+    {
+      "kind": "decisions",
+      "record_id": "dec_d97fc20000",
+      "content_hash": "sha256:a561a2fa34481c205bb3a1c42a04a84a1e0bea31af0a629565d843aed058330e",
+      "title": "Add cross-process RMW lock for concurrent index writes"
+    }
+  ],
+  "applied": [],
+  "saved": [
+    {
+      "kind": "findings",
+      "record_id": "fnd_5124625efd",
+      "content_hash": "sha256:831321bf2dd5469c0632d9307c2d663aff3e85e6b0c98416c7b5e8836e7a87e8",
+      "home": "public",
+      "operation": "created",
+      "durability": "committed"
+    }
+  ],
+  "checks": [],
+  "conformance": [
+    {
+      "kind": "decisions",
+      "record_id": "dec_e2c514ab8f",
+      "content_hash": "sha256:dc30c1150ee2aea87d002da9c02a9f1af7361f0acf292874b73fc333934fc6ce",
+      "outcome": "unavailable"
+    },
+    {
+      "kind": "decisions",
+      "record_id": "dec_d97fc20000",
+      "content_hash": "sha256:a561a2fa34481c205bb3a1c42a04a84a1e0bea31af0a629565d843aed058330e",
+      "outcome": "unavailable"
+    }
+  ],
+  "refusals": 0,
+  "files": [],
+  "supersedes": [],
+  "source_snapshot": null,
+  "report_hash": "sha256:5b869e432df7ae4ef1daa282ad213a2cc8474d161692dd9e8ac8e4861953c8b2",
+  "provenance": {
+    "source": "task_report",
+    "confidence": 1,
+    "evidence": [
+      "hunch report htask_7ccf13129601b746ca1b1f27"
+    ],
+    "last_verified": "2026-09-23T09:59:30.076Z"
+  }
+}
