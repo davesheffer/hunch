@@ -636,6 +636,25 @@ const WHY_CAP = 6; // per record-type in hunch_why
 const DEP_CAP = 25; // dependents in hunch_get_dependents
 const QUERY_HITS = 8; // hunch_query matches (was 12)
 const FINDINGS_CAP = 12; // hunch_findings listing
+const FINDINGS_MAX = 50; // hunch_findings limit ceiling
+const FINDING_GIST_CHARS = 200; // list view: first sentence, clipped
+const FINDING_GIST_MIN = 60; // keep reading past a dateline like "Observed 2026-09-14."
+const NOT_A_SENTENCE_END = /(?:\b(?:e\.g|i\.e|vs|etc|cf|approx|incl)|^\d+|\s\d+)\.$/i;
+/** The list view's gist of an observation: whole sentences until the gist says
+ *  something (≥ FINDING_GIST_MIN chars), clipped to FINDING_GIST_CHARS. A
+ *  period after an abbreviation or a list number is not a sentence end. */
+export const firstSentence = (text: string): string => {
+  const flat = text.replace(/\s+/g, " ").trim();
+  const ends = /[.!?](?=\s|$)/g;
+  let cut = flat.length;
+  for (let m = ends.exec(flat); m; m = ends.exec(flat)) {
+    const end = m.index + 1;
+    if (NOT_A_SENTENCE_END.test(flat.slice(0, end))) continue;
+    if (end >= FINDING_GIST_MIN) { cut = end; break; }
+  }
+  const gist = flat.slice(0, cut);
+  return gist.length > FINDING_GIST_CHARS ? `${gist.slice(0, FINDING_GIST_CHARS - 1)}…` : gist;
+};
 const SEV_CONSTRAINT: Record<string, number> = { blocking: 3, warning: 2, advisory: 1 };
 const SEV_BUG: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1 };
 const more = (total: number, cap: number, hint = ""): string =>
@@ -730,6 +749,12 @@ const DELIVERY_OUTPUT_SCHEMA = z.object({
     reason: z.enum(["budget", "stale-provenance", "retired", "actionability-cap", "endpoint-not-delivered", "landscape-cap", "profile-cap", "low-confidence", "insufficient-context", "low-relevance"]),
     detail: z.string(),
   })),
+  // The per-record list above is a SAMPLE on MCP (see compactOmissions); these
+  // two carry the whole picture in constant size. Optional: the CLI envelope
+  // keeps its full list and omits them.
+  omitted_total: z.number().int().nonnegative().optional(),
+  omitted_truncated: z.boolean().optional(),
+  omitted_by_reason: z.record(z.string(), z.number().int().positive()).optional(),
   landscape: LANDSCAPE_FRAGMENT_SCHEMA.nullable(),
   budget_tokens: z.number().int().nonnegative(),
   used_chars: z.number().int().nonnegative(),
@@ -873,7 +898,39 @@ function deliveredContext(
   ]);
   return {
     content: [{ type: "text", text: structuredContent.text }],
-    structuredContent,
+    structuredContent: compactOmissions(structuredContent),
+  };
+}
+
+/** Omitted records the MCP result names individually; the rest are counted. */
+const OMITTED_SAMPLE = 5;
+
+/** The budget must govern the whole tool result, not only the brief: a host
+ *  that shows the model structuredContent otherwise pays for one repeated
+ *  sentence per withheld record (104 of them measured on this repo, issue #371).
+ *  Keep a few ids — round-robin across reasons so every reason the brief cites
+ *  keeps an id to pass to hunch_why, budget first — and count all of them by
+ *  reason. Runs after recordServed and after the full envelope validated, so
+ *  receipts and receipt_id are unchanged. */
+export function compactOmissions(envelope: z.infer<typeof DELIVERY_OUTPUT_SCHEMA>): z.infer<typeof DELIVERY_OUTPUT_SCHEMA> {
+  const groups = new Map<string, typeof envelope.omitted>();
+  for (const item of envelope.omitted) groups.set(item.reason, [...(groups.get(item.reason) ?? []), item]);
+  const byReason: Record<string, number> = {};
+  for (const [reason, items] of groups) byReason[reason] = items.length;
+  const order = [...groups.keys()].sort((left, right) => Number(right === "budget") - Number(left === "budget") || left.localeCompare(right));
+  const sample: typeof envelope.omitted = [];
+  for (let depth = 0; sample.length < OMITTED_SAMPLE && sample.length < envelope.omitted.length; depth++) {
+    for (const reason of order) {
+      const item = groups.get(reason)![depth];
+      if (item && sample.length < OMITTED_SAMPLE) sample.push(item);
+    }
+  }
+  return {
+    ...envelope,
+    omitted: sample,
+    omitted_total: envelope.omitted.length,
+    omitted_truncated: sample.length < envelope.omitted.length,
+    omitted_by_reason: byReason,
   };
 }
 
@@ -2824,23 +2881,34 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
     {
       title: "Open findings for a scope",
       description:
-        "List LIVE findings (observed gaps/debt with no fix yet — triage open/accepted-risk/scheduled) concerning a file, glob, or symbol; omit scope for the whole ledger. Call before planning work in an area to inherit past audits instead of re-discovering them. Advisory; resolved/stale findings are excluded unless all:true. Not for invariants (hunch_check_constraints) or bug history (hunch_bug_lineage): findings are observations, never rules.",
+        "List LIVE findings (observed gaps/debt with no fix yet — triage open/accepted-risk/scheduled) concerning a file, glob, or symbol; omit scope for the whole ledger. Call before planning work in an area to inherit past audits instead of re-discovering them. The list shows each finding's first sentence; pass id for one finding's full observation. Advisory; resolved/stale findings are excluded unless all:true. Not for invariants (hunch_check_constraints) or bug history (hunch_bug_lineage): findings are observations, never rules.",
       inputSchema: {
         scope: z.string().optional().describe("a path, glob, or symbol (e.g. src/procs/** or dbo.GetOrders); omit for all"),
         all: z.boolean().optional().describe("include resolved/stale findings (the full history)"),
+        id: z.string().optional().describe("one finding id (fnd_*) — returns its full observation, whatever its triage; scope/all/limit are ignored"),
+        limit: z.number().int().min(1).max(FINDINGS_MAX).optional().describe(`how many to list (default ${FINDINGS_CAP}, max ${FINDINGS_MAX})`),
       },
     },
-    async ({ scope, all }): Promise<ToolResult> => {
+    async ({ scope, all, id, limit }): Promise<ToolResult> => {
+      const concerns = (f: Finding): string => [...f.affected_files, ...f.affected_symbols].join(", ") || "(unscoped)";
+      const links = (f: Finding): string => [f.violates_constraint ? `violates ${f.violates_constraint}` : "", f.method ? `re-verify via ${f.method}` : "", f.resolved_commit ? `fixed in ${f.resolved_commit.slice(0, 9)}` : ""].filter(Boolean).join("; ");
+      if (id) {
+        const f = store.recs("findings").find((r) => r.id === id);
+        if (!f) return ok(`No finding "${id}".`);
+        return ok(`[${f.triage}/${f.severity}] ${f.title} (${f.id}, observed ${f.observed_at.slice(0, 10)})\n${f.observation}\nconcerns: ${concerns(f)}${links(f) ? `\n${links(f)}` : ""}`);
+      }
       const live = (f: Finding): boolean => f.triage === "open" || f.triage === "accepted-risk" || f.triage === "scheduled";
       const list = (scope ? store.liveFindingsFor(scope) : store.recs("findings").filter(all ? () => true : live))
         .filter(all ? () => true : live)
         .sort((a, b) => (SEV_BUG[b.severity] ?? 0) - (SEV_BUG[a.severity] ?? 0) || a.id.localeCompare(b.id));
       if (!list.length) return ok(`No ${all ? "" : "live "}findings${scope ? ` for "${scope}"` : ""}. (Record one after an audit with hunch_record_finding.)`);
-      const L = list.slice(0, FINDINGS_CAP).map((f) => {
-        const links = [f.violates_constraint ? `violates ${f.violates_constraint}` : "", f.method ? `re-verify via ${f.method}` : "", f.resolved_commit ? `fixed in ${f.resolved_commit.slice(0, 9)}` : ""].filter(Boolean).join("; ");
-        return `• [${f.triage}/${f.severity}] ${f.title} (${f.id}, observed ${f.observed_at.slice(0, 10)})\n    ${f.observation}\n    concerns: ${[...f.affected_files, ...f.affected_symbols].join(", ") || "(unscoped)"}${links ? `\n    ${links}` : ""}`;
+      const cap = limit ?? FINDINGS_CAP;
+      const L = list.slice(0, cap).map((f) => {
+        const where = [...f.affected_files, ...f.affected_symbols];
+        const shown = where.length > 3 ? `${where.slice(0, 3).join(", ")} (+${where.length - 3})` : concerns(f);
+        return `• [${f.triage}/${f.severity}] ${f.title} (${f.id}, observed ${f.observed_at.slice(0, 10)})\n    ${firstSentence(f.observation)}\n    concerns: ${shown}`;
       });
-      return ok(`${list.length} finding(s)${scope ? ` for "${scope}"` : ""}:\n${L.join("\n")}${more(list.length, FINDINGS_CAP)}`);
+      return ok(`${list.length} finding(s)${scope ? ` for "${scope}"` : ""} — hunch_findings(id) for one in full:\n${L.join("\n")}${more(list.length, cap, "raise limit or narrow scope")}`);
     },
   );
 
