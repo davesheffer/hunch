@@ -62,7 +62,29 @@ type FileStat = Stats;
 type SafeDirectory = { lexical: string; canonical: string; stat: FileStat };
 type RmwOwner = { pid: number; host: string; nonce?: string; start?: string };
 
+/** Reads of ownership metadata that a concurrent release + re-acquire can make
+ *  fail once. A real refusal (hardlink, symlink, oversize) is persistent and
+ *  still throws after the last attempt. */
+const RMW_OWNER_READ_ATTEMPTS = 3;
+
 function readRmwOwner(lock: string): RmwOwner | undefined {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return readRmwOwnerOnce(lock);
+    } catch (error) {
+      // Residual of the excuse in readRmwOwnerOnce (issue #293, CI run
+      // 35843843780): a release AND re-acquire between the reader's failure and
+      // its re-lstat leaves the next holder's owner file in place, so a refusal
+      // caused only by the race looked real. Re-reading from scratch settles it:
+      // the race does not repeat on demand, an unsafe file does. Retrying never
+      // licenses a steal: the caller still judges the owner it finally reads.
+      if (attempt >= RMW_OWNER_READ_ATTEMPTS) throw error;
+      Atomics.wait(RMW_LOCK_WAITER, 0, 0, 5);
+    }
+  }
+}
+
+function readRmwOwnerOnce(lock: string): RmwOwner | undefined {
   let text: string | null;
   try {
     text = readStoreArtifact(lock, ["owner.tmp.json"], 4096);
@@ -81,10 +103,9 @@ function readRmwOwner(lock: string): RmwOwner | undefined {
     // requires the lock itself to be either gone (the release we are modelling)
     // or a REAL directory that is not a link.
     //
-    // Residual accepted: a release + re-acquire between the reader's failure and
-    // this re-lstat makes a REAL refusal (hardlink/oversize) throw for a file
-    // that already belongs to the next holder. That only turns a retry into an
-    // error — it never licenses a steal, so the safe direction is preserved.
+    // A release + re-acquire between the reader's failure and this re-lstat
+    // finds the next holder's owner file and throws here; readRmwOwner re-reads
+    // from scratch before letting that surface.
     let ownerMissing = false;
     try { lstatSync(join(lock, "owner.tmp.json")); } catch (statError) {
       ownerMissing = (statError as NodeJS.ErrnoException).code === "ENOENT";
