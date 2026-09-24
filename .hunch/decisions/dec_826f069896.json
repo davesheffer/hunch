@@ -1,0 +1,50 @@
+{
+  "id": "dec_826f069896",
+  "title": "MCP default tool set: policy group on by policy evidence, analysis group opt-in; hunch_context advertises a lean landscape schema",
+  "topic": "mcp.default-toolset",
+  "status": "proposed",
+  "context": "#368: hosts that load every tool schema paid ~81k chars (42 tools) per session. David asked for the best option for Hunch users (2026-09-24).",
+  "decision": "Add MCP tool groups `policy` (7 hunch_policy_* tools, enabled by default when PolicyRepository lists any policy) and `analysis` (project DNA/match, change proof/identity, shortlist, evidence map, wiki status; opt-in via HUNCH_MCP_TOOLS or .hunch/config.json mcp_tools). Hidden tools are filtered at the registerTool wrapper. The grounding block names policy tools only when the repo holds a committed public policy (never env/gitignored config, so the committed block is machine-independent). hunch_context advertises landscape by identity fields + passthrough; the handler still parses with the full DELIVERY_OUTPUT_SCHEMA.",
+  "consequences": [
+    "Default tools 42 -> 27; empty-store tools_list 75.6k -> 37.4k chars, core 43.5k -> 29.3k",
+    "hunch_change_proof/identity have no CLI twin: orchestrators must enable analysis (CHANGELOG at release)",
+    "Toolset resolved once per process; a re-homed server keeps it until restart"
+  ],
+  "alternatives_rejected": [
+    "Drop outputSchema on hunch_context entirely — tests pin it and validating hosts lose the contract",
+    "Four-tool default (orient/why/check/record) — breaks verdict and task loops the hooks and grounding rely on",
+    "Gate the grounding policy line on .hunch/config.json — it is gitignored, so the committed CLAUDE.md would differ by machine (critic finding)"
+  ],
+  "rejected_tripwires": [],
+  "related_components": [],
+  "related_files": [
+    "src/mcp/toolset.ts",
+    "src/mcp/server.ts",
+    "src/integrations/claudemd.ts",
+    "test/mcp-toolset.test.ts",
+    "test/footprint.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-09-24T12:36:30.178Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "premises": [],
+  "provenance": {
+    "source": "agent_recorded",
+    "confidence": 0.75,
+    "evidence": [
+      "src/mcp/toolset.ts",
+      "src/mcp/server.ts",
+      "src/integrations/claudemd.ts",
+      "test/mcp-toolset.test.ts",
+      "test/footprint.test.ts"
+    ]
+  },
+  "date": "2026-09-24T12:36:30.178Z"
+}
