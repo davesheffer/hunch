@@ -71,6 +71,8 @@ import { installMergeDriver } from "../integrations/mergeDriver.js";
 import { ensureGitignore, ignoreHunchMemory, HUNCH_MEMORY_DIRS, upgradeManagedGitignore, describeGitignoreUpgrade } from "../integrations/gitignore.js";
 import { writeCiWorkflow } from "../integrations/ciAction.js";
 import { updateClaudeMd, renderHunchSection } from "../integrations/claudemd.js";
+import { HOOK_REMINDER } from "../core/hookText.js";
+import { measureFootprint } from "../core/footprint.js";
 import { classifyGroundingBlock, describeGroundingFreshness } from "../core/groundingLag.js";
 import { mergeGroundingFile } from "../core/groundingMerge.js";
 import { writeMcpJson, writeSlashCommands, installClaudeHooks } from "../integrations/scaffold.js";
@@ -6153,6 +6155,21 @@ program
     console.log("✓ pushed the current branch to its remote.");
   });
 
+// ---- footprint (how much text Hunch injects into an agent's context) -------
+program
+  .command("footprint")
+  .description("Measure how much text Hunch injects into an agent's context — MCP tool list, hunch_context brief, grounding block, hook text — from the same code paths the product serves. Tokens are estimated as characters / 4.")
+  .option("--json", "emit the report (hunch.footprint/1) as JSON")
+  .action(async (opts: { json?: boolean }) => {
+    const report = await measureFootprint(findRoot());
+    if (opts.json) return console.log(JSON.stringify(report, null, 2));
+    const width = Math.max(...report.surfaces.map((s) => s.id.length));
+    for (const s of report.surfaces) console.log(`${s.id.padEnd(width)}  ${String(s.chars).padStart(7)}  ~${s.est_tokens}`);
+    console.log("\nNot measured in-process:");
+    for (const u of report.unmeasured) console.log(`· ${u}`);
+    console.log(dim("\nTokens estimated as characters / 4, not a tokenizer."));
+  });
+
 // ---- drift (doc≠graph detector; advisory + CI-gateable) -------------------
 program
   .command("drift")
@@ -6926,12 +6943,6 @@ function fail(msg: string): void {
 }
 
 // --- agent-hook helpers (used by `hunch hook`) -----------------------------
-
-const HOOK_REMINDER =
-  "Hunch (engineering memory) is available for this repo. Before editing, call " +
-  "hunch_check_constraints(scope) for do-not-break invariants and hunch_why(target) " +
-  "for the rationale; use hunch_get_dependents for blast radius and hunch_bug_lineage " +
-  "for prior root causes. After a non-trivial choice, record it with hunch_record_decision.";
 
 /** Read all of stdin (the hook event JSON). A TTY (no piped input) resolves to ""
  *  so an accidental interactive `hunch hook` exits cleanly instead of hanging. */
