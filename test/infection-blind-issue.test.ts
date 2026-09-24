@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
+// These suites exercise specialist MCP tool groups; the everyday default hides them (src/mcp/toolset.ts).
+process.env.HUNCH_MCP_TOOLS = "all";
 
 const root = new URL("../", import.meta.url);
 const readJson = (path: string): unknown => JSON.parse(readFileSync(new URL(path, root), "utf8"));

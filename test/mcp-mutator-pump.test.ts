@@ -19,6 +19,8 @@ import { hunchPaths } from "../src/core/paths.js";
 import { indexRepo } from "../src/extractors/indexer.js";
 import { writeAgentsMd } from "../src/integrations/providers.js";
 import { HunchStore } from "../src/store/hunchStore.js";
+// These suites exercise specialist MCP tool groups; the everyday default hides them (src/mcp/toolset.ts).
+process.env.HUNCH_MCP_TOOLS = "all";
 
 const PROJECT_ROOT = process.cwd();
 const TSX = join(PROJECT_ROOT, "node_modules/tsx/dist/cli.mjs");

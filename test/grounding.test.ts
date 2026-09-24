@@ -1,5 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { tempStore, mkConstraint } from "./helpers.js";
 import { renderHunchSection } from "../src/integrations/claudemd.js";
 
@@ -87,4 +89,20 @@ test("renderHunchSection doesn't let retired constraints starve active ones out 
 
   const md = renderHunchSection(store);
   assert.match(md, /ACTIVE_MUST_SURVIVE_SLICE/);
+});
+
+// The policy-tools grounding line must track whether the MCP server actually registers
+// the policy group (src/mcp/toolset.ts) — a root with no policy evidence and no config
+// opt-in must not advertise a tool that isn't listed.
+test("renderHunchSection names the policy tools only when the repo holds a committed policy", (t) => {
+  const { store, root, cleanup } = tempStore();
+  t.after(cleanup);
+
+  const withoutPolicies = renderHunchSection(store, root);
+  assert.doesNotMatch(withoutPolicies, /hunch_policy_evaluate\(/);
+
+  // .hunch/config.json is gitignored: a local opt-in must not change the committed block.
+  writeFileSync(join(root, ".hunch", "config.json"), JSON.stringify({ firmness: "advisory", mcp_tools: "core,policy" }));
+  assert.equal(renderHunchSection(store, root), withoutPolicies);
+  assert.match(renderHunchSection(store), /hunch_policy_evaluate\(/, "a bare render keeps the full list");
 });

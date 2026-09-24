@@ -7,8 +7,8 @@ import { tempStore } from "./helpers.js";
 // the next 500 on an empty temp store. Ratchet — lower when a cut lands; raising needs a
 // reason in the PR.
 const CEILINGS: Record<string, number> = {
-  "mcp.tools_list": 83_500,
-  "mcp.tools_list.core": 48_000,
+  "mcp.tools_list": 41_500,
+  "mcp.tools_list.core": 32_500,
   "mcp.hunch_context": 1_000,
   "grounding.block": 9_000,
   "hook.session.pipeline_loop": 1_000,

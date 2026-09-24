@@ -18,7 +18,7 @@ const SIBLING_FAMILIES: Record<string, string[]> = {
   orient: ["hunch_context", "hunch_why", "hunch_query", "hunch_structure", "hunch_runbook"],
   scope: ["hunch_check_constraints", "hunch_get_dependents", "hunch_blast_radius", "hunch_findings"],
   write: ["hunch_record_decision", "hunch_record_correction", "hunch_record_finding", "hunch_capture_decision"],
-  verdict: ["hunch_merge_verdict", "hunch_pr_impact", "hunch_conformance", "hunch_change_proof"],
+  verdict: ["hunch_merge_verdict", "hunch_pr_impact", "hunch_conformance"],
 };
 
 /** Every description is sent to the model on every session. A boundary sentence is worth

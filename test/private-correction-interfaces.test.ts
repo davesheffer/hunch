@@ -11,6 +11,8 @@ import { buildCorrectionConstraint } from "../src/core/correction.js";
 import { hunchPaths } from "../src/core/paths.js";
 import { indexRepo } from "../src/extractors/indexer.js";
 import { HunchStore } from "../src/store/hunchStore.js";
+// These suites exercise specialist MCP tool groups; the everyday default hides them (src/mcp/toolset.ts).
+process.env.HUNCH_MCP_TOOLS = "all";
 
 const NOW = "2026-07-17T10:00:00.000Z";
 const PROJECT_ROOT = process.cwd();

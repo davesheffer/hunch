@@ -16,6 +16,8 @@ import { test } from "node:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { hunchCliArgs } from "./cli-invocation.js";
+// These suites exercise specialist MCP tool groups; the everyday default hides them (src/mcp/toolset.ts).
+process.env.HUNCH_MCP_TOOLS = "all";
 
 const FIXED_SOURCE = "export function listOrders(user: string) { return [`order:${user}`]; }\n";
 const VIOLATING_SOURCE = [

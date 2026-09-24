@@ -8,7 +8,7 @@ import { buildServer } from "../src/mcp/server.js";
 import { MCP_TOOL_GROUPS, parseToolsetSpec, resolveMcpToolset, rootStoresState } from "../src/mcp/toolset.js";
 import { tempStore } from "./helpers.js";
 
-const SPECIALIST = [...MCP_TOOL_GROUPS.nuryel, ...MCP_TOOL_GROUPS["constitution-experiments"]];
+const SPECIALIST = [...MCP_TOOL_GROUPS.nuryel, ...MCP_TOOL_GROUPS["constitution-experiments"], ...MCP_TOOL_GROUPS.policy, ...MCP_TOOL_GROUPS.analysis];
 
 async function toolNames(root: string, env: NodeJS.ProcessEnv): Promise<string[]> {
   const saved = process.env.HUNCH_MCP_TOOLS;
@@ -25,7 +25,7 @@ async function toolNames(root: string, env: NodeJS.ProcessEnv): Promise<string[]
 }
 
 test("spec grammar: all, core, and extra groups on top of core; unknown words are ignored", () => {
-  assert.deepEqual(parseToolsetSpec("all")?.sort(), ["constitution-experiments", "nuryel"]);
+  assert.deepEqual(parseToolsetSpec("all")?.sort(), ["analysis", "constitution-experiments", "nuryel", "policy"]);
   assert.deepEqual(parseToolsetSpec("core"), []);
   assert.deepEqual(parseToolsetSpec("core, nuryel"), ["nuryel"]);
   assert.deepEqual(parseToolsetSpec("Nuryel,bogus"), ["nuryel"]);
@@ -41,8 +41,8 @@ test("an ordinary repository gets the everyday tools only; the specialist groups
     assert.deepEqual(set.hidden.sort(), [...SPECIALIST].sort());
     const names = await toolNames(root, {});
     for (const tool of SPECIALIST) assert.ok(!names.includes(tool), `${tool} must not be listed by default`);
-    for (const tool of ["hunch_context", "hunch_task", "hunch_why", "hunch_check_constraints", "hunch_record_decision", "hunch_policy_evaluate", "hunch_conformance"]) assert.ok(names.includes(tool), tool);
-    assert.ok(names.length >= 40, `everyday set still carries the grounding tools (${names.length})`);
+    for (const tool of ["hunch_context", "hunch_task", "hunch_why", "hunch_check_constraints", "hunch_record_decision", "hunch_conformance"]) assert.ok(names.includes(tool), tool);
+    assert.ok(names.length >= 25, `everyday set still carries the grounding tools (${names.length})`);
   } finally { cleanup(); }
 });
 
@@ -66,6 +66,19 @@ test("a pinned root (hunch mcp --root) serves the nuryel tools even before its f
   try {
     assert.deepEqual(resolveMcpToolset(root, { env: {}, pinned: true }).groups, ["nuryel"]);
     assert.deepEqual(resolveMcpToolset(root, { env: { HUNCH_MCP_TOOLS: "core" }, pinned: true }).groups, [], "an explicit spec still wins");
+  } finally { cleanup(); }
+});
+
+test("a repo with policy evidence exposes the policy group by default but not analysis; an explicit env spec still wins", async () => {
+  const { root, cleanup } = tempStore();
+  try {
+    const set = resolveMcpToolset(root, { env: {}, hasPolicies: true });
+    assert.ok(set.groups.includes("policy"), "policy group enabled by policy evidence");
+    assert.ok(!set.groups.includes("analysis"), "analysis stays opt-in only");
+    const env = resolveMcpToolset(root, { env: { HUNCH_MCP_TOOLS: "core" }, hasPolicies: true });
+    assert.deepEqual(env.groups, [], "an explicit env spec still wins over policy evidence");
+    const names = await toolNames(root, {});
+    for (const tool of MCP_TOOL_GROUPS.analysis) assert.ok(!names.includes(tool), `${tool} stays hidden without opt-in`);
   } finally { cleanup(); }
 });
 
