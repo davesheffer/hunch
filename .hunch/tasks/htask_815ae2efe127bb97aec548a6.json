@@ -3,9 +3,16 @@
   "title": "lets go for the best option for hunch users",
   "state": "completed",
   "started_at": "2026-09-24T11:41:30.914Z",
-  "finished_at": "2026-09-24T11:47:30.974Z",
-  "coverage": "no-delivery-observed",
-  "lessons": [],
+  "finished_at": "2026-09-24T11:52:11.867Z",
+  "coverage": "delivered",
+  "lessons": [
+    {
+      "kind": "findings",
+      "record_id": "fnd_7f4779ad80",
+      "content_hash": "sha256:32fa72a35e982f383a35a18e017630d23e15160a569a6a19912157bf099348d5",
+      "title": "Steal sweep 2026-09-09: five 'deterministic agent infrastructure' talks — three bounded items shipped, six killed with flip conditions"
+    }
+  ],
   "applied": [],
   "saved": [],
   "checks": [
@@ -17,16 +24,21 @@
   ],
   "conformance": [],
   "refusals": 0,
-  "files": [],
+  "files": [
+    "test/footprint.test.ts",
+    "test/grounding.test.ts",
+    "test/mcp-descriptions.test.ts",
+    "test/mcp-toolset.test.ts"
+  ],
   "supersedes": [],
   "source_snapshot": "sha256:e0e162966fa50d1f8595c7234662c4f3f4edd8982832c23b9a57b850b8350d87",
-  "report_hash": "sha256:897ace86ef7f2137282f8c85b143b1907c7eb60f837e60d90eb7f4bb51aae309",
+  "report_hash": "sha256:10e17e25c0347705883bad6bd75518574d01f4fd4571b2ecb8fc80d20a634116",
   "provenance": {
     "source": "task_report",
     "confidence": 1,
     "evidence": [
       "hunch report htask_815ae2efe127bb97aec548a6"
     ],
-    "last_verified": "2026-09-24T11:47:30.974Z"
+    "last_verified": "2026-09-24T11:52:11.867Z"
   }
 }
