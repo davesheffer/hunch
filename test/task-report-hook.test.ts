@@ -21,12 +21,17 @@ function fixture(t: { after: (f: () => void) => void }) {
   t.after(() => cleanupDir(root));
   execFileSync("git", ["init", "-q", root]);
   mkdirSync(join(root, ".hunch"));
-  writeFileSync(join(root, ".gitignore"), ".hunch-cache/\n");
+  writeFileSync(join(root, ".gitignore"), ".hunch-cache/\n.tmp/\n");
   return root;
 }
+// The per-session injection cache lives in the OS tmpdir keyed by session_id, and
+// these tests reuse session ids; a per-fixture tmpdir keeps one test's dedup state
+// out of the next.
 function hook(root: string, event: string, extra: Record<string, unknown> = {}, provider = "claude") {
+  const tmp = join(root, ".tmp");
+  mkdirSync(tmp, { recursive: true });
   const output = execFileSync(process.execPath, ["--import", tsxLoaderUrl(), cli, "hook", "--provider", provider], {
-    cwd: root, env: { ...process.env, HUNCH_PIPELINE: "0" },
+    cwd: root, env: { ...process.env, HUNCH_PIPELINE: "0", TMPDIR: tmp, TMP: tmp, TEMP: tmp },
     input: JSON.stringify({ hook_event_name: event, cwd: root, session_id: "session-a", prompt_id: "prompt-a", ...extra }), encoding: "utf8",
   }).trim();
   return output ? JSON.parse(output) : null;
@@ -366,6 +371,31 @@ test("the prompt hook prints the verify command inline and never asks for a star
   assert.match(text, /ONLY if this task used Hunch/);
   assert.match(text, /hook context you acted on/, "hook-injected grounding counts as using Hunch");
   assert.match(text, /action: "finish"/);
+});
+
+test("the prompt hook prints the reminder and full task rules once per session, then a compact line; compaction restores the full form (#370)", t => {
+  const root = fixture(t);
+  const ctx = (prompt_id: string, extra: Record<string, unknown> = {}) =>
+    hook(root, "UserPromptSubmit", { prompt_id, ...extra }).hookSpecificOutput.additionalContext as string;
+  const first = ctx("p1");
+  assert.match(first, /Hunch \(engineering memory\) is available/, "the first prompt carries the availability reminder");
+  assert.match(first, /ONLY if this task used Hunch/, "the first prompt carries the full rules");
+  const second = ctx("p2");
+  const id2 = /htask_[a-f0-9]{24}/.exec(second)?.[0];
+  assert.ok(id2 && !first.includes(id2), "each prompt still gets its own ID");
+  assert.doesNotMatch(second, /engineering memory\) is available/, "the reminder is not repeated alongside the task report");
+  assert.doesNotMatch(second, /ONLY if this task used Hunch/, "the generic rules are not repeated");
+  assert.ok(second.includes(` task verify ${id2} -- `), `the compact line keeps this prompt's verify command: ${second}`);
+  assert.match(second, /Never call hunch_task start/);
+  assert.match(second, /finish only if this task used Hunch/);
+  // A correction is never deduped, even mid-session.
+  assert.match(ctx("p3", { prompt: "no, that's wrong — never do that again" }), /engineering memory\) is available/);
+  // Context cleared under the same session id: full rules again.
+  hook(root, "SessionStart", { source: "clear" });
+  assert.match(ctx("p3b"), /ONLY if this task used Hunch/);
+  // Compaction summarizes the rules away; the next prompt gets them in full again.
+  hook(root, "PreCompact");
+  assert.match(ctx("p4"), /ONLY if this task used Hunch/);
 });
 
 test("the task instruction is identical in substance for every hook provider, and keeps finish mandatory where no host stop hook closes the task", () => {

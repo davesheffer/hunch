@@ -4668,18 +4668,23 @@ program
         // nudge the agent to PERSIST it as an enforced constraint (Never Twice) —
         // not just obey it this once and forget it next session.
         const isCorrection = looksLikeCorrection(evt.prompt);
-        let text = isCorrection ? `${HOOK_REMINDER}\n\n${CORRECTION_NUDGE}` : HOOK_REMINDER;
-        // Payloads that must NEVER be deduped away. The dedup key hashes CONTENT, and
-        // this content is assembled from constants — so two back-to-back corrections
-        // produce byte-identical text and the second (usually the escalating one) was
-        // silently swallowed, never becoming an enforced rule. Same for the unverified
-        // nag, which is documented as the one nag that must repeat but rode the same
-        // deduped payload and so fired once per streak.
-        let mustDeliver = isCorrection;
+        // Once per session is enough for the bare availability reminder — repeating it
+        // every prompt burns context for zero information (dec_244397d920). It is deduped
+        // on its OWN key: hashed together with the per-prompt task report (a new ID each
+        // prompt) it was re-sent on every prompt. A correction is never deduped: two
+        // back-to-back corrections are byte-identical, and the second (usually the
+        // escalating one) must still become an enforced rule. Neither is the unverified
+        // nag below, the one nag that must repeat.
+        const parts: string[] = [];
+        // Always stamp the key, so a correction that delivers the reminder counts as
+        // this session's one delivery.
+        const reminderDue = injectionMode(evt.session_id, "prompt-reminder", HOOK_REMINDER) === "full";
+        if (isCorrection) parts.push(`${HOOK_REMINDER}\n\n${CORRECTION_NUDGE}`);
+        else if (reminderDue) parts.push(HOOK_REMINDER);
         // Reporting failure must not suppress the existing correction/policy reminder.
         try {
           const report = startHookReport(root, provider, evt);
-          if (report) { text += `\n\n${report}`; mustDeliver = true; }
+          if (report) parts.push(report);
         } catch { /* passive reporting remains fail-open */ }
         // A task an earlier prompt of this session left open (interrupted before
         // its Stop) is over now: close it and keep its record.
@@ -4693,15 +4698,11 @@ program
           const st = onPrompt(loadPipelineState(evt.session_id));
           savePipelineState(evt.session_id, st);
           if (!st.verifyAfterEdit || st.obligations.some((item) => item.status !== "satisfied")) {
-            text += `\n\n${unverifiedNag(st)}`;
-            mustDeliver = true;
+            parts.push(unverifiedNag(st));
           }
         }
-        // Once per session is enough for the bare availability reminder — repeating it
-        // every prompt burns context for zero information (dec_244397d920). Only that
-        // ambient case is deduped.
-        if (!mustDeliver && injectionMode(evt.session_id, "prompt-reminder", text) === "delta") return;
-        emitContext(provider, "UserPromptSubmit", text);
+        if (!parts.length) return;
+        emitContext(provider, "UserPromptSubmit", parts.join("\n\n"));
         return;
       }
       if (evt.hook_event_name === "PreCompact") {
@@ -4799,10 +4800,11 @@ program
         return;
       }
       if (evt.hook_event_name === "SessionStart") {
-        // A compact-resume means everything injected so far was just summarized
-        // away — the dedup map must forget it delivered anything, or the rest of
-        // the session gets delta one-liners against grounding that is gone.
-        if (evt.source === "compact") resetSessionInjections(evt.session_id);
+        // A compact-resume (or a cleared context that keeps its session id) means
+        // everything injected so far is gone — the dedup map must forget it
+        // delivered anything, or the rest of the session gets delta one-liners
+        // against grounding and task rules the agent no longer has.
+        if (evt.source === "compact" || evt.source === "clear") resetSessionInjections(evt.session_id);
         // Orientation at the moment it matters: what just happened + what's next,
         // straight from the graph — the agent sits down already knowing where it
         // is instead of pulling (or worse, grepping) for it. Cheap reads only
