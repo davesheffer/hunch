@@ -3,7 +3,7 @@
   "title": "relay:e47adf55 continue \"Hunch footprint cuts after #419/#420\" from the…",
   "state": "completed",
   "started_at": "2026-09-24T11:14:21.124Z",
-  "finished_at": "2026-09-24T11:39:23.861Z",
+  "finished_at": "2026-09-24T11:41:05.281Z",
   "coverage": "no-delivery-observed",
   "lessons": [],
   "applied": [],
@@ -29,15 +29,16 @@
   ],
   "supersedes": [],
   "source_snapshot": "sha256:e0e162966fa50d1f8595c7234662c4f3f4edd8982832c23b9a57b850b8350d87",
-  "report_hash": "sha256:a46b95d094ec3bc1f8578b33861a605c57b937e45594b442308919f7e72b02b2",
+  "report_hash": "sha256:7fc2486c6457e8aaee185c89a8904f0d847b2cf3423b55bb96efb744307f5da4",
   "provenance": {
     "source": "task_report",
     "confidence": 1,
     "evidence": [
       "hunch report htask_5c413188d115ed103b2f9bde",
       "hunch report htask_878fc9342e4ff2b1eef9ce27",
-      "hunch report htask_15ee38a98199cb49696dd54d"
+      "hunch report htask_15ee38a98199cb49696dd54d",
+      "hunch report htask_f0ff922cb955bf7386310a80"
     ],
-    "last_verified": "2026-09-24T11:39:23.861Z"
+    "last_verified": "2026-09-24T11:41:05.281Z"
   }
 }
