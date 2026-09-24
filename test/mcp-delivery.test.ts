@@ -102,6 +102,11 @@ test("MCP task lifecycle retains exact delivery, rejects borrowed evidence, and 
   assert.equal(finished.structuredContent?.report_path, null, "finish renders no HTML; the evidence view is generated on demand");
   assert.ok(JSON.stringify(finished.structuredContent).length < 20_000, "a one-delivery finish result stays small");
   const next = await call("hunch_task", { action: "start", title: "A fresh task" });
+  // The reporting rules the grounding block no longer carries (#369) arrive here.
+  const startText = JSON.stringify(next.content);
+  assert.match(startText, /application_references/);
+  assert.match(startText, /card verbatim, Evidence line and agent-reported label included/);
+  assert.match(startText, /interrupted/);
   // The launcher must be runnable as-is: a `--import` argument is a URL, never a bare path.
   const argv = (next.structuredContent as { verification_argv: string[] }).verification_argv;
   const importAt = argv.indexOf("--import");

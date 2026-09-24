@@ -6221,9 +6221,10 @@ program
   .command("grounding")
   .description("Check the committed grounding docs (CLAUDE.md, AGENTS.md, copilot-instructions, hunch.mdc, hunch.md) against what the PUBLIC graph generates — direction-aware: counts that merely LAG a merge are reported, counts AHEAD of the store (a record never committed) or divergent prose fail. --refresh regenerates every existing doc from the public store (never the overlay union, never a doc the project lacks). Exits 1 on ahead/diverged unless refreshed.")
   .option("--refresh", "regenerate the existing grounding docs from the public store (what the post-merge hook and the release remedy run)")
+  .option("--force", "with --refresh: re-render even a block written by a newer Hunch template")
   .option("--json", "machine-readable verdicts")
   .option("--quiet", "print nothing on success")
-  .action((opts: { refresh?: boolean; json?: boolean; quiet?: boolean }) => {
+  .action((opts: { refresh?: boolean; force?: boolean; json?: boolean; quiet?: boolean }) => {
     const root = findRoot();
     // PUBLIC-ONLY by construction, exactly as the release gate and the freshness test
     // read it: HUNCH_PRIVATE_DIR at an empty overlay beats .hunch/local.json and the
@@ -6243,7 +6244,8 @@ program
         if (committed === null) return { doc: rel, verdict: { kind: "diverged" as const, reason: "no managed HUNCH block" } };
         return { doc: rel, verdict: classifyGroundingBlock(committed, generated) };
       });
-      const refreshed = opts.refresh ? refreshExistingGrounding(root, store) : [];
+      const refreshed = opts.refresh ? refreshExistingGrounding(root, store, { force: opts.force }) : [];
+      // `newer` (a block from a newer Hunch template) is reported, never failing.
       const failing = verdicts.filter((v) => v.verdict.kind === "ahead" || v.verdict.kind === "diverged");
       const lagging = verdicts.filter((v) => v.verdict.kind === "lagging");
       if (opts.json) {
@@ -6254,7 +6256,7 @@ program
         for (const v of verdicts) {
           if (v.verdict.kind === "absent") continue;
           if (v.verdict.kind === "fresh" && opts.quiet) continue;
-          console.log(`${v.verdict.kind === "fresh" ? "✓" : v.verdict.kind === "lagging" ? "·" : "✗"} ${describeGroundingFreshness(v.doc, v.verdict)}`);
+          console.log(`${v.verdict.kind === "fresh" ? "✓" : v.verdict.kind === "lagging" || v.verdict.kind === "newer" ? "·" : "✗"} ${describeGroundingFreshness(v.doc, v.verdict)}`);
         }
         if (!opts.quiet && !failing.length) {
           console.log(lagging.length
