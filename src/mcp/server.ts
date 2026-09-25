@@ -1818,11 +1818,12 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
         profile: z.enum(DELIVERY_PROFILES).optional().describe("Delivery role: builder (default), reviewer, or architect. Changes non-blocking order only."),
         as_of: z.string().optional().describe("Time-travel ref (commit/tag/branch): assemble the slice as it stood then."),
         task_id: TaskIdSchema.optional().describe("Exact task ID from hunch_task; records this delivery for the task's contribution report."),
+        include: z.array(z.enum(["recent_tasks", "project_dna"])).optional().describe("Opt-in extras; omitted by default to keep the brief small."),
         cwd: cwdHintField,
       },
       outputSchema: DELIVERY_ADVERTISED_OUTPUT_SCHEMA,
     },
-    async ({ target, budget_tokens, profile, as_of, task_id }, extra): Promise<ToolResult> => {
+    async ({ target, budget_tokens, profile, as_of, task_id, include }, extra): Promise<ToolResult> => {
       const deliver = (envelope: DeliveryEnvelope): ToolResult => {
         const result = deliveredContext(root, as_of ? `${target} (as_of:${as_of})` : target, envelope, extra.sessionId);
         if (task_id) {
@@ -1842,13 +1843,17 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
       const asOf = as_of ? asOfDate(as_of, root) : undefined;
       if (as_of && !asOf) return invalid(`Could not resolve as_of "${as_of}" to a commit.`);
       const ctx = store.assembleContext(target, budget_tokens ?? 1500, { asOf });
+      // Both extras below cost brief tokens (and, for DNA/recent-tasks selection, extra
+      // latency) — opt-in only via `include`, omitted from the default brief.
       let dnaSupplement: ReturnType<typeof projectDnaDeliverySupplement> = null;
-      try {
-        dnaSupplement = projectDnaDeliverySupplement(discoverProjectDna(root, as_of ?? "HEAD"));
-      } catch {
-        // Context retrieval must keep its existing graceful behavior when the
-        // Git checkout cannot provide DNA; the dedicated DNA tool reports the
-        // exact derivation error when a caller needs diagnostics.
+      if (include?.includes("project_dna")) {
+        try {
+          dnaSupplement = projectDnaDeliverySupplement(discoverProjectDna(root, as_of ?? "HEAD"));
+        } catch {
+          // Context retrieval must keep its existing graceful behavior when the
+          // Git checkout cannot provide DNA; the dedicated DNA tool reports the
+          // exact derivation error when a caller needs diagnostics.
+        }
       }
       // The "State" section (nuryel.state/1): current derived, in-force commitments and the
       // latest receipts whose subject/text matches the target — bounded, ordered, sharing the
@@ -1856,7 +1861,9 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
       const stateGrounding = asOf ? [] : stateSupplements(store.stateSlice(target), target);
       // Recent finished tasks that touched the target: what earlier agent work did
       // here, from graph memory. Advisory history sharing the brief's budget.
-      const recentTasks = asOf ? [] : taskSelectionSupplements(store.selectTasksAuto(target, buildTaskRankingQuery(root, task_id ?? null, target)), target);
+      const recentTasks = (asOf || !include?.includes("recent_tasks"))
+        ? []
+        : taskSelectionSupplements(store.selectTasksAuto(target, buildTaskRankingQuery(root, task_id ?? null, target)), target);
       const options = {
         root,
         symbols: store.recs("symbols"),

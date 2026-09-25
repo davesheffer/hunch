@@ -4229,7 +4229,8 @@ program
   .option("--profile <profile>", "delivery role: builder, reviewer, or architect", "builder")
   .option("--as-of <ref>", "time-travel: assemble the slice as it stood at a commit/tag/branch")
   .option("--task <id>", "retain the exact context delivery for this task's contribution report")
-  .action(async (target: string, opts: { budget: string; profile: string; asOf?: string; task?: string }) => {
+  .option("--include <kinds>", "opt-in extras (comma list): recent-tasks,project-dna — omitted by default to keep the brief small")
+  .action(async (target: string, opts: { budget: string; profile: string; asOf?: string; task?: string; include?: string }) => {
     if (!DELIVERY_PROFILES.includes(opts.profile as DeliveryProfile)) {
       return fail(`--profile must be one of: ${DELIVERY_PROFILES.join(", ")}`);
     }
@@ -4254,6 +4255,25 @@ program
     // receipts matching the target — the same slice and render as hunch_context.
     const slice = asOf ? null : store.stateSlice(target);
     const stateGrounding = slice ? stateSupplements(slice, target) : [];
+    // Both extras below cost brief tokens (and, for DNA/recent-tasks selection, extra
+    // latency) — opt-in only via --include, omitted from the default brief.
+    // Accept the MCP spelling (recent_tasks) too, so a name copied from the tool schema works.
+    const include = opts.include ? opts.include.split(",").map((s) => s.trim().replace(/_/g, "-")).filter(Boolean) : [];
+    const unknownInclude = include.filter((k) => k !== "recent-tasks" && k !== "project-dna");
+    if (unknownInclude.length) return fail(`--include accepts recent-tasks, project-dna (got: ${unknownInclude.join(", ")})`);
+    const recentTasks = (asOf || !include.includes("recent-tasks"))
+      ? []
+      : taskSelectionSupplements(store.selectTasksAuto(target, buildTaskRankingQuery(root, opts.task ?? null, target)), target);
+    let dnaSupplement: ReturnType<typeof projectDnaDeliverySupplement> = null;
+    if (!asOf && include.includes("project-dna")) {
+      try {
+        dnaSupplement = projectDnaDeliverySupplement(discoverProjectDna(root, "HEAD"));
+      } catch {
+        // Same graceful behavior as hunch_context: a missing/unreadable Git checkout
+        // must not break the CLI brief; the dedicated `hunch project-dna` command
+        // reports the exact derivation error when a caller needs diagnostics.
+      }
+    }
     if (empty && !asOf && opts.task) {
       const resolved = store.rankedSearch(target, 8).map(hit => ({ hit, record: store.resolve(hit.ref)?.record }));
       ctx = { ...ctx,
@@ -4287,7 +4307,7 @@ program
       decisionCorpus: store.recs("decisions"),
       historical: !!asOf,
       profile: opts.profile as DeliveryProfile,
-      supplements: [...stateGrounding, ...(asOf ? [] : taskSelectionSupplements(store.selectTasksAuto(target, buildTaskRankingQuery(root, opts.task ?? null, target)), target))],
+      supplements: [...(dnaSupplement ? [dnaSupplement] : []), ...stateGrounding, ...recentTasks],
     });
     process.stdout.write(envelope.text);
     if (opts.task) {
