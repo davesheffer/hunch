@@ -13,6 +13,8 @@ const CEILINGS: Record<string, number> = {
   "grounding.block": 9_000,
   "hook.session.pipeline_loop": 1_000,
   "hook.prompt.reminder": 500,
+  "hook.prompt.task_instruction": 1_000,
+  "hook.prompt.task_instruction.compact": 500,
 };
 
 test("footprint: every surface is measured, non-empty, and under its ceiling", async () => {

@@ -10,6 +10,7 @@ import { aliasReportTask, continuationLinks, finishReportTask, isEmptyTaskReport
 import { reportSourceSnapshot } from "./taskReportEvidence.js";
 import { renderTaskReport } from "./taskReportRender.js";
 import { verificationLauncher } from "./verifyLauncher.js";
+import { injectionMode } from "./hookcache.js";
 
 /** The exact task identity a native host prompt maps to. */
 export function promptTaskId(root: string, sessionId: string, promptId: string, agentId: string | null = null, provider: HookProvider = "claude"): string {
@@ -129,7 +130,7 @@ export function startHookReport(root: string, provider: HookProvider, event: Hun
       // this prompt's Stop and hook observations report to that task.
       if (previous && previous.task_id !== id && isNotificationPrompt(event.prompt) && previous.closed_by !== "agent") {
         aliasReportTask(root, id, previous.task_id);
-        return taskInstruction(previous, cwdLiteral, provider);
+        return sessionTaskInstruction(previous, cwdLiteral, provider, event.session_id);
       }
       const continued = previous && previous.task_id !== id ? continuationLinks(previous) : null;
       if (continued) links = { ...links, ...continued };
@@ -145,7 +146,18 @@ export function startHookReport(root: string, provider: HookProvider, event: Hun
     if (existing.title !== title && !GENERIC_TASK_TITLES.has(existing.title) && !GENERIC_TASK_TITLES.has(title)) throw error;
     task = existing;
   }
-  return taskInstruction(task, cwdLiteral, provider);
+  return sessionTaskInstruction(task, cwdLiteral, provider, event.session_id);
+}
+/** The generic rules are the same on every prompt of a session; only the ID and
+ * the launcher line change. Print them in full once per session (and again after
+ * compaction, which resets the dedup map), then a compact line that still carries
+ * everything the prompt needs: its ID, cwd, verify command, no-start and finish
+ * rule. The dedup key hashes the full wording for a placeholder task, so a new
+ * launcher or rule text is delivered in full again. Fail-open: any cache error
+ * yields the full form (injectionMode never throws and defaults to "full"). */
+function sessionTaskInstruction(task: { task_id: string; title: string }, cwdLiteral: string, provider: HookProvider, sessionId: string | undefined): string {
+  const rules = taskInstruction({ task_id: "htask_" + "0".repeat(24), title: NATIVE_TASK_TITLE }, "\"<cwd>\"", provider);
+  return taskInstruction(task, cwdLiteral, provider, verificationLauncher, injectionMode(sessionId, "prompt-task-rules", rules) === "delta" ? "compact" : "full");
 }
 /** The hook already opened the task, so the model needs no start call: the only
  * thing start used to supply was verification_argv, and the launcher is printed
@@ -159,11 +171,15 @@ export function startHookReport(root: string, provider: HookProvider, event: Hun
  * cannot be computed, fall back to asking for the start call — that path is then
  * the only source of both the launcher and the finish instruction, so it carries
  * its own finish sentence. */
-export function taskInstruction(task: { task_id: string; title: string }, cwdLiteral: string, provider: HookProvider, launcher: () => { shell: string; note?: string } = verificationLauncher): string {
+export function taskInstruction(task: { task_id: string; title: string }, cwdLiteral: string, provider: HookProvider, launcher: () => { shell: string; note?: string } = verificationLauncher, form: "full" | "compact" = "full"): string {
   const head = `Hunch has already opened this prompt's report: ${task.task_id}. Reuse this exact ID; never open another report. Pass this task_id and cwd: ${cwdLiteral} to hunch_context and decision/correction/finding captures.`;
   let verify: string;
   try {
     const l = launcher();
+    if (form === "compact") {
+      const finishRule = HOST_CLOSES_TASK.has(provider) ? "finish only if this task used Hunch" : `finish it yourself with hunch_task(action: "finish", task_id, cwd)`;
+      return `Hunch report for this prompt: ${task.task_id} (cwd: ${cwdLiteral}). Use it instead of any earlier ID. Never call hunch_task start. Checks: ${l.shell} task verify ${task.task_id} -- <command> [arguments]${l.note ?? ""}. Same rules as this session's first report; ${finishRule}.`;
+    }
     verify = ` Never call hunch_task start for it. For checks, run: ${l.shell} task verify ${task.task_id} -- <command> [arguments]${l.note ?? ""}. Default budget 15 min; add --timeout <seconds> before -- for longer suites.`;
   }
   catch { return `${head} Call hunch_task(action: "start", task_id: "${task.task_id}", title: ${JSON.stringify(task.title)}, cwd: ${cwdLiteral}) to obtain verification_argv, and finish with hunch_task(action: "finish", task_id, cwd) before responding and show its card.`; }

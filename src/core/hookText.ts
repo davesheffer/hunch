@@ -1,4 +1,5 @@
-/** The UserPromptSubmit reminder `hunch hook` injects on every prompt. Lives in
+/** The UserPromptSubmit reminder `hunch hook` injects once per session (and with
+ *  every correction). Lives in
  *  core so `hunch footprint` measures the exact text the hook sends. */
 export const HOOK_REMINDER =
   "Hunch (engineering memory) is available for this repo. Before editing, call " +
