@@ -75,6 +75,8 @@ test("the committed CLAUDE.md grounding block matches what the graph generates (
     const committed = committedBlock(join(repoRoot, "CLAUDE.md"));
     assert.ok(committed !== null, "CLAUDE.md carries a managed HUNCH block");
     const verdict = classifyGroundingBlock(committed, generated);
+    // `newer` is tolerated in a repo whose pinned Hunch lags its docs, never here: this
+    // source tree IS the newest renderer, so a higher template stamp is a bad block.
     if (verdict.kind === "lagging") {
       // Records merged in behind the doc (fnd_c402046ac7). Transient by construction:
       // refreshCommittableGrounding folds the regenerated docs into the next capture

@@ -70,8 +70,8 @@ export function registerTaskReportTools(server: McpServer, getRoot: () => string
     inputSchema: {
       action: z.enum(["start", "finish"]), task_id: TaskIdSchema.optional(),
       title: z.string().min(1).max(200).optional(),
-      outcome: z.enum(["completed", "interrupted"]).optional(),
-      applications: z.array(ReportClaimSchema).max(20).optional(),
+      outcome: z.enum(["completed", "interrupted"]).optional().describe("\"interrupted\" when the task was cut short."),
+      applications: z.array(ReportClaimSchema).max(20).optional().describe("Only lessons you actually applied. Copy occurrence_id, record_id and content_hash exactly from hunch_report(task_id) application_references; never derive an ID from a receipt or use a scope hash."),
       cwd: z.string().optional().describe("Actual repository/worktree directory for this task."),
     },
   }, async ({ action, task_id, title, outcome, applications }) => {
@@ -89,7 +89,7 @@ export function registerTaskReportTools(server: McpServer, getRoot: () => string
           task = readTaskReport(root, task_id, reportSourceSnapshot(root).hash).task;
         }
         const launcher = verificationLauncher();
-        return { content: [{ type: "text" as const, text: `Task ${task.task_id} · ${task.state}. Pass task_id to every hunch_context and decision/correction/finding capture call. Before the final response, finish with hunch_task and include its contribution card. For checks use this exact installation (the global hunch binary may be stale): ${launcher.shell} task verify ${task.task_id} -- <command> [arguments]${launcher.note}. The default budget is 15 minutes; add --timeout <seconds> before -- for a longer suite.` }], structuredContent: { task, verification_argv: [...launcher.argv, "task", "verify", task.task_id, "--"] } };
+        return { content: [{ type: "text" as const, text: `Task ${task.task_id} · ${task.state}. Pass task_id to every hunch_context and decision/correction/finding capture call; a successful capture does not prove it was committed or pushed. To claim an application, call hunch_report(task_id) and copy occurrence_id, record_id and content_hash exactly from application_references, with the action you actually took; omit applications you did not make. Before the final response, finish with hunch_task (outcome "interrupted" if cut short) and include its contribution card verbatim, Evidence line and agent-reported label included; omit it if presentation_enabled is false. Do not rerun an expensive check only for reporting; missing evidence stays unverified. For checks use this exact installation (the global hunch binary may be stale): ${launcher.shell} task verify ${task.task_id} -- <command> [arguments]${launcher.note}. The default budget is 15 minutes; add --timeout <seconds> before -- for a longer suite.` }], structuredContent: { task, verification_argv: [...launcher.argv, "task", "verify", task.task_id, "--"] } };
       }
       if (!task_id) throw new Error("finish requires the exact task_id");
       for (const claim of applications ?? []) recordReportClaim(root, task_id, claim);

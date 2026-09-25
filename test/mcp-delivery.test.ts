@@ -102,6 +102,11 @@ test("MCP task lifecycle retains exact delivery, rejects borrowed evidence, and 
   assert.equal(finished.structuredContent?.report_path, null, "finish renders no HTML; the evidence view is generated on demand");
   assert.ok(JSON.stringify(finished.structuredContent).length < 20_000, "a one-delivery finish result stays small");
   const next = await call("hunch_task", { action: "start", title: "A fresh task" });
+  // The reporting rules the grounding block no longer carries (#369) arrive here.
+  const startText = JSON.stringify(next.content);
+  assert.match(startText, /application_references/);
+  assert.match(startText, /card verbatim, Evidence line and agent-reported label included/);
+  assert.match(startText, /interrupted/);
   // The launcher must be runnable as-is: a `--import` argument is a URL, never a bare path.
   const argv = (next.structuredContent as { verification_argv: string[] }).verification_argv;
   const importAt = argv.indexOf("--import");
@@ -220,6 +225,11 @@ test("hunch_context exposes the delivery envelope and records exactly what MCP s
   const contextTool = listed.tools.find((tool) => tool.name === "hunch_context");
   assert.ok(contextTool?.outputSchema, "tools/list advertises the structured delivery contract");
   assert.ok("delivered" in (contextTool.outputSchema.properties ?? {}));
+  // A hook-opened task never sees the hunch_task start result, so the claim rules
+  // must reach every host through the tool schema itself.
+  const taskTool = listed.tools.find((tool) => tool.name === "hunch_task");
+  const applications = (taskTool?.inputSchema.properties as Record<string, { description?: string }> | undefined)?.applications;
+  assert.match(applications?.description ?? "", /application_references/);
 
   const result = await client.callTool({
     name: "hunch_context",

@@ -26,6 +26,15 @@
  * branch, a finding recorded on another), so a differing findings count alone is lag.
  */
 
+const TEMPLATE_RE = /<!-- hunch:template (\d+) -->/;
+
+/** The block's prose template version (claudemd.ts GROUNDING_TEMPLATE). A block
+ *  without the stamp is template 1. */
+export function groundingTemplate(block: string): number {
+  const m = TEMPLATE_RE.exec(block);
+  return m ? Number(m[1]) : 1;
+}
+
 const COUNTS_RE = /\*\*(\d+) decisions?, (\d+) bugs?, (\d+) constraints?, (\d+) components?, (\d+) polic(?:y|ies)(?:, (\d+) open findings?)?\*\*/;
 
 export interface GroundingCounts {
@@ -82,16 +91,30 @@ export type GroundingFreshness =
   | { kind: "lagging"; committed: GroundingCounts; generated: GroundingCounts; behind: string[] }
   /** An append-only count in the committed doc exceeds the store: the doc knows a
    *  record the repository does not carry (never committed, or pruned by hand). */
-  | { kind: "ahead"; committed: GroundingCounts; generated: GroundingCounts; ahead: string[] }
+  | { kind: "ahead"; committed: GroundingCounts; generated: GroundingCounts; ahead: string[]; newerTemplate?: { committed: number; renderer: number } }
   /** The block differs outside the counts sentence (or a counts sentence is missing). */
-  | { kind: "diverged"; reason: string };
+  | { kind: "diverged"; reason: string }
+  /** The committed block was written by a newer renderer template than this
+   *  version's: its prose is preserved (preserveNewerTemplate), never a failure. */
+  | { kind: "newer"; committedTemplate: number; rendererTemplate: number; countsReadable: boolean };
 
 /** Classify a committed managed block against the one the graph generates NOW.
  *  Both inputs are block CONTENT (markers stripped, trimmed). */
 export function classifyGroundingBlock(committed: string, generated: string): GroundingFreshness {
   if (committed === generated) return { kind: "fresh" };
+  const committedTemplate = groundingTemplate(committed);
+  const rendererTemplate = groundingTemplate(generated);
   const c = parseGroundingCounts(committed);
   const g = parseGroundingCounts(generated);
+  if (committedTemplate > rendererTemplate) {
+    // A newer template may reword the prose, but a count AHEAD of the store still
+    // means the doc knows a record this repository does not carry.
+    const ahead = c && g ? APPEND_ONLY_COUNT_KINDS.filter((k) => c.counts[k] > g.counts[k]) : [];
+    if (c && g && ahead.length) {
+      return { kind: "ahead", committed: c.counts, generated: g.counts, ahead, newerTemplate: { committed: committedTemplate, renderer: rendererTemplate } };
+    }
+    return { kind: "newer", committedTemplate, rendererTemplate, countsReadable: c !== null };
+  }
   if (!c) return { kind: "diverged", reason: "the committed block carries no record-counts sentence" };
   if (!g) return { kind: "diverged", reason: "the generated block carries no record-counts sentence" };
   if (stripCountsMatch(committed, c.match) !== stripCountsMatch(generated, g.match)) {
@@ -113,8 +136,17 @@ export function describeGroundingFreshness(doc: string, verdict: GroundingFreshn
     case "lagging":
       return `${doc}: counts lag the store (${delta(verdict.committed, verdict.generated, verdict.behind)}) — records merged in behind the doc; heals on the next capture or \`hunch grounding --refresh\``;
     case "ahead":
+      // A newer Hunch may have written records this version skips as unreadable, and a
+      // plain refresh keeps a newer block's prose: only an upgrade or --force settles it.
+      if (verdict.newerTemplate) {
+        return `${doc}: counts run AHEAD of the store (${delta(verdict.committed, verdict.generated, verdict.ahead)}) in a block written by a newer Hunch (template ${verdict.newerTemplate.committed} > ${verdict.newerTemplate.renderer}) — this version may skip records it cannot read, or the record was removed; upgrade Hunch, or run \`hunch grounding --refresh --force\` and commit`;
+      }
       return `${doc}: counts run AHEAD of the store (${delta(verdict.committed, verdict.generated, verdict.ahead)}) — the doc counted a record this repository does not carry; commit the missing .hunch/ record or regenerate`;
     case "diverged":
       return `${doc}: stale — ${verdict.reason}; regenerate with \`hunch grounding --refresh\` and commit`;
+    case "newer":
+      return `${doc}: written by a newer Hunch (template ${verdict.committedTemplate} > ${verdict.rendererTemplate}); ${verdict.countsReadable
+        ? "its prose is kept and a refresh updates only the counts"
+        : "this version cannot read its counts sentence, so a refresh leaves the block as written"}. Upgrade Hunch, or run \`hunch grounding --refresh --force\` to re-render with this version`;
   }
 }

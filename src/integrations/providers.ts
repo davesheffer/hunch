@@ -25,7 +25,7 @@ import type { HunchStore } from "../store/hunchStore.js";
 import type { Invocation } from "./scaffold.js";
 import type { HookProvider } from "../core/agenthook.js";
 import { isHunchHookCommand } from "./hookmatch.js";
-import { renderHunchSection, stripManagedSection, upsertSection, updateClaudeMd } from "./claudemd.js";
+import { renderHunchSection, stripManagedSection, upsertSection, updateClaudeMd, preserveNewerTemplate } from "./claudemd.js";
 import { headFileContent, isGitCleanPath } from "../extractors/git.js";
 import { parseJsonc } from "../core/jsonc.js";
 import { parse as parseToml } from "smol-toml";
@@ -265,20 +265,33 @@ export function writeCodexConfig(root: string, inv: Invocation): string {
 
 /** AGENTS.md — the cross-tool ambient-instruction standard (Codex and a growing
  *  set of assistants read it). Marker-delimited so user prose is preserved. */
-export function writeAgentsMd(root: string, store: HunchStore): string {
-  return upsertSection(join(root, "AGENTS.md"), renderHunchSection(store, root), "# AGENTS.md");
+export function writeAgentsMd(root: string, store: HunchStore, opts?: GroundingWriteOptions): string {
+  return upsertSection(join(root, "AGENTS.md"), renderHunchSection(store, root), "# AGENTS.md", opts);
 }
 
 /** GitHub Copilot custom instructions (VS Code / github.com). Same grounding. */
-export function writeCopilotInstructions(root: string, store: HunchStore): string {
-  return upsertSection(join(root, ".github", "copilot-instructions.md"), renderHunchSection(store, root), "# Copilot instructions");
+export function writeCopilotInstructions(root: string, store: HunchStore, opts?: GroundingWriteOptions): string {
+  return upsertSection(join(root, ".github", "copilot-instructions.md"), renderHunchSection(store, root), "# Copilot instructions", opts);
+}
+
+/** `force` re-renders even a block written by a newer Hunch template. */
+export interface GroundingWriteOptions {
+  force?: boolean;
+}
+
+/** The block for a wholly-owned rule file, never downgrading newer prose (unless forced). */
+function ownedSection(file: string, store: HunchStore, root: string, opts?: GroundingWriteOptions): string {
+  const section = renderHunchSection(store, root);
+  if (opts?.force) return section;
+  const existing = existsSync(file) ? readFileSync(file, "utf8") : "";
+  return preserveNewerTemplate(existing, section);
 }
 
 /** Cursor project rule (.mdc = frontmatter + body). `alwaysApply` keeps the Hunch
  *  grounding in context for every request. Fully managed by Hunch (overwritten). */
-export function writeCursorRule(root: string, store: HunchStore): string {
+export function writeCursorRule(root: string, store: HunchStore, opts?: GroundingWriteOptions): string {
   const file = join(root, ".cursor", "rules", "hunch.mdc");
-  const body = `---\ndescription: Hunch engineering memory — consult the hunch_* MCP tools before editing\nalwaysApply: true\n---\n\n${renderHunchSection(store, root)}\n`;
+  const body = `---\ndescription: Hunch engineering memory — consult the hunch_* MCP tools before editing\nalwaysApply: true\n---\n\n${ownedSection(file, store, root, opts)}\n`;
   mkdirSync(dirname(file), { recursive: true });
   writeFileAtomic(file, body);
   return file;
@@ -314,9 +327,9 @@ export function writeWindsurfGlobalMcp(inv: Invocation, home = homedir()): strin
 
 /** Windsurf project rule (.windsurf/rules/hunch.md). `trigger: always_on` keeps the
  *  Hunch grounding in Cascade's context for every request. Fully managed (overwritten). */
-export function writeWindsurfRule(root: string, store: HunchStore): string {
+export function writeWindsurfRule(root: string, store: HunchStore, opts?: GroundingWriteOptions): string {
   const file = join(root, ".windsurf", "rules", "hunch.md");
-  const body = `---\ntrigger: always_on\ndescription: Hunch engineering memory — consult the hunch_* MCP tools before editing\n---\n\n${renderHunchSection(store, root)}\n`;
+  const body = `---\ntrigger: always_on\ndescription: Hunch engineering memory — consult the hunch_* MCP tools before editing\n---\n\n${ownedSection(file, store, root, opts)}\n`;
   mkdirSync(dirname(file), { recursive: true });
   writeFileAtomic(file, body);
   return file;
@@ -440,12 +453,16 @@ export function writeAntigravityHooks(root: string, inv: Invocation): string {
  *  docs reflect that no engineering memory is published here (renderHunchSection
  *  reads the public store only, so private records never leak into them). */
 export function regenerateGrounding(root: string, store: HunchStore): string[] {
+  // FORCED: a block from a newer template would otherwise keep its prose — including
+  // its Top-invariants list — so a constraint that just moved to the overlay would stay
+  // printed in the committed public doc.
+  const force = { force: true };
   return [
-    updateClaudeMd(root, store),
-    writeAgentsMd(root, store),
-    writeCopilotInstructions(root, store),
-    writeCursorRule(root, store),
-    writeWindsurfRule(root, store),
+    updateClaudeMd(root, store, force),
+    writeAgentsMd(root, store, force),
+    writeCopilotInstructions(root, store, force),
+    writeCursorRule(root, store, force),
+    writeWindsurfRule(root, store, force),
   ];
 }
 
@@ -458,13 +475,13 @@ export const GROUNDING_DOC_PATHS: readonly string[] = Object.freeze([
   ".windsurf/rules/hunch.md",
 ]);
 
-function groundingTargets(root: string, store: HunchStore): Array<[string, () => string]> {
+function groundingTargets(root: string, store: HunchStore, opts?: GroundingWriteOptions): Array<[string, () => string]> {
   return [
-    ["CLAUDE.md", () => updateClaudeMd(root, store)],
-    ["AGENTS.md", () => writeAgentsMd(root, store)],
-    [join(".github", "copilot-instructions.md"), () => writeCopilotInstructions(root, store)],
-    [join(".cursor", "rules", "hunch.mdc"), () => writeCursorRule(root, store)],
-    [join(".windsurf", "rules", "hunch.md"), () => writeWindsurfRule(root, store)],
+    ["CLAUDE.md", () => updateClaudeMd(root, store, opts)],
+    ["AGENTS.md", () => writeAgentsMd(root, store, opts)],
+    [join(".github", "copilot-instructions.md"), () => writeCopilotInstructions(root, store, opts)],
+    [join(".cursor", "rules", "hunch.mdc"), () => writeCursorRule(root, store, opts)],
+    [join(".windsurf", "rules", "hunch.md"), () => writeWindsurfRule(root, store, opts)],
   ];
 }
 
@@ -474,9 +491,9 @@ function groundingTargets(root: string, store: HunchStore): Array<[string, () =>
  *  assistant). Run by `hunch index` and non-hook `hunch sync` so a project silently
  *  picks up generator fixes (e.g. corrected MCP tool param names) and fresh record
  *  counts on the next refresh — no manual `hunch init`. */
-export function refreshExistingGrounding(root: string, store: HunchStore): string[] {
+export function refreshExistingGrounding(root: string, store: HunchStore, opts?: GroundingWriteOptions): string[] {
   const changed: string[] = [];
-  for (const [rel, write] of groundingTargets(root, store)) {
+  for (const [rel, write] of groundingTargets(root, store, opts)) {
     const file = join(root, rel);
     if (!existsSync(file)) continue; // refresh-only: never scaffold a doc the project doesn't have
     const before = readFileSync(file, "utf8");

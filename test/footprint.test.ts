@@ -10,7 +10,7 @@ const CEILINGS: Record<string, number> = {
   "mcp.tools_list": 41_500,
   "mcp.tools_list.core": 32_500,
   "mcp.hunch_context": 1_000,
-  "grounding.block": 9_000,
+  "grounding.block": 2_000,
   "hook.session.pipeline_loop": 1_000,
   "hook.prompt.reminder": 500,
   "hook.prompt.task_instruction": 1_000,

@@ -9,10 +9,59 @@ import { basename, join, dirname } from "node:path";
 import type { HunchStore } from "../store/hunchStore.js";
 import { wikiSummary } from "../wiki/wiki.js";
 import { PolicyRepository } from "../constitution/repository.js";
-import { renderCountsMatch } from "../core/groundingLag.js";
+import { renderCountsMatch, parseGroundingCounts, groundingTemplate } from "../core/groundingLag.js";
 
 const START = "<!-- HUNCH:START — auto-generated, do not edit by hand -->";
 const END = "<!-- HUNCH:END -->";
+
+/** Version of the block's PROSE. Bump it whenever renderHunchSection's wording
+ *  changes. A block without the stamp is template 1. */
+export const GROUNDING_TEMPLATE = 2;
+/** The pre-edit hook injects each in-scope invariant in full; the always-loaded
+ *  list only has to name it (fnd_a65f71f38f, #369). Blocking statements are never
+ *  clipped; others are cut at a word boundary within this many chars. */
+const INVARIANT_CHARS = 200;
+
+export { groundingTemplate };
+
+/** Never downgrade a block's prose (fnd_f6875f475b). The post-commit capture runs
+ *  the PINNED hunch, which can be older than the renderer that wrote the committed
+ *  block (a branch that develops the renderer, or a repo whose pin lags its docs).
+ *  When the existing block carries a newer template than `section`, keep its prose
+ *  and move only the record counts, so the counts stay true without reverting text
+ *  this version did not author. The preserved block keeps its wiki line and those
+ *  Top-invariants lines whose constraint this version still renders.
+ *  Returns the section to write. */
+export function preserveNewerTemplate(existing: string, section: string): string {
+  const iStart = existing.indexOf(START);
+  const iEnd = existing.indexOf(END);
+  if (iStart < 0 || iEnd <= iStart) return section;
+  const current = existing.slice(iStart, iEnd + END.length);
+  if (groundingTemplate(current) <= groundingTemplate(section)) return section;
+  // Never republish an invariant this version no longer renders: a constraint that
+  // was retired, deleted, or moved to the private overlay drops out of the kept list.
+  const rendered = new Set(section.split(/\r?\n/).map((line) => INVARIANT_LINE_RE.exec(line)?.[1]).filter(Boolean));
+  const eol = current.includes("\r\n") ? "\r\n" : "\n";
+  const lines = current.split(/\r?\n/).filter((line) => {
+    const id = INVARIANT_LINE_RE.exec(line)?.[1];
+    return !id || rendered.has(id);
+  });
+  // A heading left with no invariants under it goes too.
+  const h = lines.findIndex((line) => line.startsWith(INVARIANTS_HEADING));
+  if (h >= 0 && !lines.slice(h + 1).some((line) => INVARIANT_LINE_RE.test(line))) {
+    lines.splice(lines[h - 1] === "" ? h - 1 : h, lines[h - 1] === "" ? 2 : 1);
+  }
+  const kept = lines.join(eol);
+  const have = parseGroundingCounts(kept);
+  const next = parseGroundingCounts(section);
+  // Unreadable counts leave the counts sentence as written rather than downgrading
+  // the block (two versions would flip-flop); `hunch grounding` reports countsReadable: false.
+  return have && next ? kept.replace(have.match, next.match) : kept;
+}
+
+const INVARIANTS_HEADING = "### ⛔ Top invariants";
+/** A Top-invariants line; group 1 is its constraint id. */
+const INVARIANT_LINE_RE = /^- \*\*\[[a-z]+\]\*\* .*; (con_[A-Za-z0-9_]+)\)_\r?$/;
 
 /** Remove the managed HUNCH section (markers inclusive), leaving only the
  *  user-authored surroundings. Lets a caller decide whether two versions of a
@@ -48,58 +97,24 @@ export function renderHunchSection(store: HunchStore, root?: string): string {
 
   const lines: string[] = [];
   lines.push(START);
+  lines.push(`<!-- hunch:template ${GROUNDING_TEMPLATE} -->`);
   lines.push("## 🧠 Hunch (Engineering Memory)");
   lines.push("");
   lines.push(
-    "This repo has **Hunch** — a curated graph of *why* the code is the way it is " +
-      "(decisions, bug history, invariants). It currently holds " +
-      `${renderCountsMatch(counts)}.`,
+    "This repo has **Hunch**, a graph of *why* the code is the way it is. It holds " +
+      `${renderCountsMatch(counts)}. Use the \`hunch_*\` MCP tools by moment:`,
   );
   lines.push("");
-  lines.push("**Consult Hunch via the `hunch_*` MCP tools — pick by MOMENT, not from memory:**");
-  lines.push("");
-  lines.push("**Orient (session/task start):**");
-  lines.push("- If the host's prompt hook already opened the task and printed a task ID plus a `task verify` command, reuse that exact ID and command — do NOT call `hunch_task(action: \"start\")` for it. Otherwise start the task yourself: call `hunch_task(action: \"start\", title: <short task title>)` once and take `verification_argv` from its result. Each new prompt has its own ID; reuse the ID for follow-up work on the same task and never borrow another task's ID. This is task bookkeeping; `hunch_context` remains the first memory lookup. If reporting fails, continue the work and disclose the gap.");
-  lines.push("- When the user asks to **update Hunch**, run `hunch update` from this repository root. It updates to the latest release and repairs all configured harness pins. Use `hunch update --global` to also update a global CLI alongside a repository dependency; reconnect active MCP sessions afterward.");
-  lines.push("- `hunch_context(target, task_id)` — the minimal relevant slice for what you're about to do; a task phrase falls back to the closest graph matches. **Call FIRST** for memory. Include the current task ID on each context call so its contribution is inspectable.");
-  lines.push("- `hunch_structure(target?)` — the indexed shape of the repo/dir/file/symbol — orient from the graph, not grep rounds.");
-  lines.push("- `hunch_workspaces(view?)` — which worktrees and branches are open on which machine, what is merged and deletable (read-only; this machine live, others from memory). Call it instead of `git branch` / `git worktree list`; never delete on its say-so.");
-  lines.push("- `hunch_runbook(task)` — the proven steps for a recurring task, before re-deriving them.");
-  lines.push("- `hunch_escalations()` — the decisions only the HUMAN can make (including one exact imported ADR at a time, topic conflicts, and policy calls). Normally empty; when it isn't, ASK the user inline — an entry is a question, silence is never approval. Apply an ADR answer only through `hunch_review_imported_adr` with its printed source and review hashes.");
-  lines.push("- `hunch now` (CLI) — recent decisions + the live roadmap; `hunch log` — the memory-move timeline (every capture/adopt/supersede/prune/repair, each revertable).");
-  lines.push("");
-  lines.push("**Before designing / choosing an approach:**");
-  lines.push("- `hunch_why(target)` — why a file/symbol is shaped this way (decisions, bugs, constraints) — including what was already REJECTED.");
-  lines.push("- `hunch_current_decision(topic)` — the one live answer for a topic (history + rejected included).");
-  lines.push("- `hunch_bug_lineage(symptom_or_symbol)` — has this failed before? what was the root cause?");
-  lines.push("- `hunch_compare(candidates)` — rank candidate branches/commits by fewest invariant hits.");
-  lines.push("- `hunch_query(query)` — free-text search when nothing above fits.");
-  lines.push("");
-  lines.push("**Before editing:**");
-  lines.push("- `hunch_check_constraints(scope)` and `hunch_get_dependents(symbol)` / `hunch_blast_radius(target)` — invariants in scope + who you'd break. (The pre-edit hook injects this per file automatically; call these for PLANNING breadth.)");
-  lines.push("- `hunch_findings(scope?)` — known-but-unfixed gaps in the area (past audits, measurements, incidents) so you inherit them instead of re-discovering them.");
-  lines.push("");
-  lines.push("**Before committing / merging:**");
-  lines.push("- `hunch_conformance()` — does the code still SATISFY recorded intent? Run before and after a refactor.");
-  if (policyTools) lines.push("- `hunch_policy_evaluate(policy_id?, active_only?)` / `hunch_policy_plan(policy_id)` / `hunch_policy_card(policy_id)` / `hunch_policy_proof(policy_id)` — evaluate canonical policy, inspect the planned corpus, review the evidence/uncertainty card, and inspect raw replay receipts; only an explicit human activation grants authority.");
-  lines.push("- `hunch_pr_impact(base?)` / `hunch_merge_verdict(...)` — a change's memory surface; would it re-open a closed bug?");
-  lines.push("");
-  lines.push("**Before the final response — make Hunch's contribution visible:**");
-  lines.push("- When running a relevant check, use the exact launcher the prompt hook printed — or, on a host without one, the `verification_argv` returned by hunch_task start — followed by the check command and its arguments, from this worktree. It runs `hunch task verify <task_id> -- <command> [arguments]` using the same installation as MCP, avoiding stale global binaries. This retains the actual exit result and source snapshot; raw output is not stored. Do not rerun an expensive check solely for reporting; missing evidence stays unverified.");
-  lines.push("- Include the current task_id when calling hunch_record_decision, hunch_record_correction, or hunch_record_finding. The save path records its actual memory home and verifies exact Git revisions when committing or pushing; never infer publication from a successful capture alone.");
-  lines.push("- Before claiming an application, call `hunch_report(task_id)` and copy the exact occurrence_id, record_id and content_hash from application_references, adding an action you actually took. Never derive an occurrence ID by replacing a receipt prefix or use the task's scope hash as a record hash. If you did not apply a lesson, omit applications.");
-  lines.push("- When this task actually used Hunch (a `hunch_*` call carrying the task_id, a verified check, Hunch hook context you acted on, or an application to claim), call `hunch_task(action: \"finish\", task_id, applications?)` and include the returned contribution_card in your final response without the user asking. Skip the finish call only when it used none of those AND the host's own stop hook closes the task and shows the evidence for you (its prompt-hook instruction says so); where no host hook closes the task, and for a task you started yourself with `hunch_task(action: \"start\")`, always finish it yourself. Copy the card verbatim, including its Evidence line (the command that renders the local report on demand) and the agent-reported label; the structured result contains the card even when the host hides text blocks. Do not replace it with a generic claim that Hunch helped. If presentation_enabled is false, omit the card. A delivered lesson or passing command alone does not prove causal impact.");
-  lines.push("- If interrupted, finish with `outcome: \"interrupted\"` when possible. `hunch_report(task_id, html: true)` opens the evidence trail by generating a local file; it may contain private memory and is not a public export. If report tools are unavailable after an update, say so and reconnect the host rather than inventing a report.");
-  lines.push("");
-  lines.push("**Build the Constitution review queue:**");
-  lines.push("- `hunch constitution bootstrap --since 90d --max-candidates 3` (CLI) — normalize recent structured human evidence into at most three non-active policy candidates; add `--history` for exact, human-identifier-grounded fix/revert deltas or explicit dependency retirements. Coincidence/ambiguity stays uncompilable; neither path grants authority.");
-  lines.push("- `hunch constitution ingest --since 90d [--instructions] [--from export.json]` (CLI) — normalize corrections/failures plus bounded committed instructions/ADRs and strict local review/conversation/PR exports into Git-native evidence; raw prose is hash-only, unsupported intent remains uncompilable, and no policy is minted.");
-  lines.push("");
-  lines.push("**After deciding / when corrected:**");
-  lines.push("- `hunch_capture_decision(topic?)` → `hunch_record_decision(...)` — interview first, then write; status `proposed` = roadmap intent (shows in `hunch now`).");
-  lines.push("- `hunch_record_correction(...)` — a human correction becomes an ENFORCED rule (Never Twice), not a one-session memory.");
-  lines.push("- `hunch_record_finding(...)` — an OBSERVATION with no code change (an audit that found a gap, a measured number, an incident) becomes durable memory anchored to a date + evidence; `/audit` runs the ritual.");
-  lines.push("- `hunch_timeline(target)` — decision history when investigating how something evolved.");
+  lines.push("- **Start:** reuse the task ID and `task verify` command the prompt hook printed; with none, call `hunch_task(action: \"start\", title)` once. Then `hunch_context(target, task_id)` first. Orient with `hunch_structure`, `hunch_workspaces`, `hunch_runbook(task)`. Ask the user about each `hunch_escalations()` entry; silence is never approval.");
+  lines.push("- **Design:** `hunch_why(target)` (includes what was rejected), `hunch_current_decision(topic)`, `hunch_bug_lineage(symptom_or_symbol)`, `hunch_compare(candidates)`, `hunch_query(query)`.");
+  lines.push("- **Edit:** `hunch_check_constraints(scope)`, `hunch_get_dependents(symbol)` / `hunch_blast_radius(target)`, `hunch_findings(scope?)`.");
+  lines.push(
+    "- **Merge:** `hunch_conformance()`, `hunch_pr_impact(base?)`, `hunch_merge_verdict`." +
+      (policyTools ? " Policy review: `hunch_policy_evaluate`, `hunch_policy_plan(policy_id)`, `hunch_policy_card(policy_id)`, `hunch_policy_proof`; only a human activates a policy." : ""),
+  );
+  lines.push("- **Record:** `hunch_capture_decision` → `hunch_record_decision`; `hunch_record_correction` turns a human correction into an enforced rule; `hunch_record_finding` keeps an observation with evidence. Pass the task_id.");
+  lines.push("- **Finish:** run checks through the `task verify` launcher. If the task used Hunch, you started it, or no host stop hook closes it, call `hunch_task(action: \"finish\", task_id)` and show its card verbatim. Its `applications` schema carries the claim rules.");
+  lines.push("- To update Hunch, run `hunch update` from the repo root.");
   const wiki = root ? wikiSummary(root) : null;
   if (wiki) {
     lines.push("");
@@ -111,11 +126,11 @@ export function renderHunchSection(store: HunchStore, root?: string): string {
     lines.push("");
     lines.push("### ⛔ Top invariants (do not break)");
     for (const c of constraints) {
-      lines.push(`- **[${c.severity}]** ${c.statement} _(scope: ${c.scope.join(", ") || "repo"}; ${c.id})_`);
+      lines.push(`- **[${c.severity}]** ${c.severity === "blocking" ? c.statement : clip(c.statement, INVARIANT_CHARS)} _(scope: ${c.scope.join(", ") || "repo"}; ${c.id})_`);
     }
   }
   lines.push("");
-  lines.push("_Hunch updates itself from commits and test failures. Records carry provenance + confidence; treat low-confidence items as advisory._");
+  lines.push("_Records carry provenance and confidence; treat low-confidence items as advisory._");
   lines.push(END);
   return lines.join("\n");
 }
@@ -123,8 +138,9 @@ export function renderHunchSection(store: HunchStore, root?: string): string {
 /** Insert/replace the marker-delimited HUNCH section in a markdown doc, preserving
  *  all user-authored content outside the markers. Shared by CLAUDE.md, AGENTS.md,
  *  and .github/copilot-instructions.md so every assistant gets the same grounding. */
-export function upsertSection(file: string, section: string, fallbackTitle: string): string {
+export function upsertSection(file: string, section: string, fallbackTitle: string, opts?: { force?: boolean }): string {
   let content = existsSync(file) ? readFileSync(file, "utf8") : "";
+  if (!opts?.force) section = preserveNewerTemplate(content, section);
   const iStart = content.indexOf(START);
   const iEnd = content.indexOf(END);
   if (iStart >= 0 && iEnd > iStart) {
@@ -146,8 +162,16 @@ export function upsertSection(file: string, section: string, fallbackTitle: stri
 }
 
 /** Insert/replace the HUNCH section in CLAUDE.md, preserving everything else. */
-export function updateClaudeMd(root: string, store: HunchStore): string {
-  return upsertSection(join(root, "CLAUDE.md"), renderHunchSection(store, root), `# ${basename(root)}`);
+export function updateClaudeMd(root: string, store: HunchStore, opts?: { force?: boolean }): string {
+  return upsertSection(join(root, "CLAUDE.md"), renderHunchSection(store, root), `# ${basename(root)}`, opts);
+}
+
+/** Cut at the last whitespace at or before `max - 1` chars, so a word is never split. */
+function clip(text: string, max: number): string {
+  if (text.length <= max) return text;
+  const head = text.slice(0, max);
+  const cut = head.search(/\s\S*$/);
+  return `${(cut > 0 ? text.slice(0, cut) : text.slice(0, max - 1)).trimEnd()}…`;
 }
 
 function sev(s: string): number {
