@@ -1,0 +1,33 @@
+{
+  "id": "fnd_0ad2885943",
+  "title": "MCP hosts show the model one result channel; hunch_context host-visible cost is structuredContent on Claude Code",
+  "observation": "Claude Code hands the model only structuredContent (not the content text block) for a tool that returns both, so the host-visible cost of a Hunch tool result is max(content, structuredContent), not their sum, and structuredContent.text cannot be dropped. On main 46414c90, hunch_context('src/mcp/server.ts', budget 1500) = content 6,076 chars, structured 9,764 chars (text 6,051 + delivered 1,099 + supplements 991 + omitted 833 + abstention 274): metadata adds ~60% over budget. On the published build installed here (pre-#419) the structured result carried the full per-record omitted list (~20k chars). Separately, ~450 of the 1,500 brief tokens were low-value for a code edit: a project-dna supplement (commit-title punctuation conventions) and recent-task lines titled 'Assistant task'. The footprint gate measured target 'src' on an empty store, which under-reports a real file target.",
+  "evidence": [
+    "mcp__hunch__hunch_context(target='src/mcp/server.ts') in a Claude Code session returned the raw envelope JSON as the tool result (2026-09-25)",
+    "in-memory MCP client on origin/main 46414c90: CALL hunch_context src/mcp/server.ts content 6076 structured 9764; keys text:6051 delivered:1099 supplements:991 omitted:833",
+    "hunch footprint on 46414c90: mcp.hunch_context 8767 chars (target 'src')"
+  ],
+  "method": null,
+  "severity": "medium",
+  "triage": "scheduled",
+  "affected_files": [
+    "src/mcp/server.ts",
+    "src/core/footprint.ts",
+    "test/footprint.test.ts"
+  ],
+  "affected_symbols": [],
+  "violates_constraint": null,
+  "spawned_decision": null,
+  "observed_at": "2026-09-25T16:03:51.655Z",
+  "resolved_commit": null,
+  "provenance": {
+    "source": "agent_recorded",
+    "confidence": 0.75,
+    "evidence": [
+      "mcp__hunch__hunch_context(target='src/mcp/server.ts') in a Claude Code session returned the raw envelope JSON as the tool result (2026-09-25)",
+      "in-memory MCP client on origin/main 46414c90: CALL hunch_context src/mcp/server.ts content 6076 structured 9764; keys text:6051 delivered:1099 supplements:991 omitted:833",
+      "hunch footprint on 46414c90: mcp.hunch_context 8767 chars (target 'src')"
+    ],
+    "last_verified": "2026-09-25T16:03:51.655Z"
+  }
+}
