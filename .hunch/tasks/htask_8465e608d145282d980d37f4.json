@@ -3,7 +3,7 @@
   "title": "Assistant task",
   "state": "completed",
   "started_at": "2026-09-25T17:28:50.882Z",
-  "finished_at": "2026-09-25T18:21:32.786Z",
+  "finished_at": "2026-09-25T18:24:04.867Z",
   "coverage": "delivered",
   "lessons": [
     {
@@ -41,6 +41,18 @@
       "record_id": "dec_d684d7db79",
       "content_hash": "sha256:7e09d9dc64bd70fef9d42d0ba3c37d1344301149fdb019ce2cbc7860a655a103",
       "title": "VS Code becomes a certifiable G3 conformance client via its real spawn seam"
+    },
+    {
+      "kind": "decisions",
+      "record_id": "dec_db88c8b080",
+      "content_hash": "sha256:0bda6a2d4d549b0ceff6918328f74d820d7f92d2ee5b482925b263c82c4376a6",
+      "title": "Single source of truth for memory: one deterministic resolver, one home per record, mode-gated unified routing (shared), worktree-stable anchor, committed team.json discovery"
+    },
+    {
+      "kind": "findings",
+      "record_id": "fnd_503db3a619",
+      "content_hash": "sha256:cf2e4b92078b066c53ed4bb1576581e6ceb6f6361de36c2fe28a63e8d61d02d2",
+      "title": "Team CLI-spawn tests time out under full-suite load on a slow Windows host"
     }
   ],
   "applied": [],
@@ -63,14 +75,17 @@
     "test/experiment.test.ts",
     "test/g2.test.ts",
     "test/g3.test.ts",
+    "test/md1-e2e.test.ts",
     "test/private-correction-interfaces.test.ts",
+    "test/singlesource.test.ts",
     "test/workspace-ledger.test.ts",
     "test/workspace-prune.test.ts",
-    "test/workspaces.test.ts"
+    "test/workspaces.test.ts",
+    "test/worktree.test.ts"
   ],
   "supersedes": [],
   "source_snapshot": "sha256:6ad1f46a1cf584bcda1db72efa17a83c427485041ff676f09d7b9f2a16e797a1",
-  "report_hash": "sha256:f3fd118ea13d76732a63b0922e90de122a79e3e8c965de5c5c4b5cc3526765b4",
+  "report_hash": "sha256:9c639ab4769751d419ac7d4b5a5052afc8b41bba4c3086b7bb275d43ce166df9",
   "provenance": {
     "source": "task_report",
     "confidence": 1,
@@ -79,6 +94,6 @@
       "hunch report htask_4ef9458f3a6b0979c6bf8b1f",
       "hunch report htask_3f17e05da38ba110cd15ed0a"
     ],
-    "last_verified": "2026-09-25T18:21:32.786Z"
+    "last_verified": "2026-09-25T18:24:04.867Z"
   }
 }
