@@ -2278,7 +2278,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
           supersedes: z.string().optional().describe("id of a decision this replaces — closes its valid-time window (invalidate, don't delete)"),
           private: z.boolean().optional().describe("write into the PRIVATE overlay store (HUNCH_PRIVATE_DIR), not the committed repo — for sensitive decisions. Errors if no private store is configured."),
         }),
-        capture_token: z.string().optional().describe("token from hunch_capture_decision — proves this write tails a grilling interview (not a signature: the client may still ask the human to confirm). Omit for a quick manual record (returns a deprecation nudge)."),
+        capture_token: z.string().optional().describe("token from hunch_capture_decision — proves this write tails a grilling interview (not a signature: the client may still ask the human to confirm). Omit only for a quick manual record (returns a deprecation nudge)."),
         task_id: saveTaskIdField,
         cwd: cwdHintField,
       },
