@@ -7,8 +7,8 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { renderHunchSection, upsertSection, preserveNewerTemplate, groundingTemplate, GROUNDING_TEMPLATE } from "../src/integrations/claudemd.js";
-import { writeCursorRule, refreshExistingGrounding } from "../src/integrations/providers.js";
-import { parseGroundingCounts, classifyGroundingBlock } from "../src/core/groundingLag.js";
+import { writeCursorRule, refreshExistingGrounding, regenerateGrounding } from "../src/integrations/providers.js";
+import { parseGroundingCounts, classifyGroundingBlock, describeGroundingFreshness } from "../src/core/groundingLag.js";
 
 // The grounding documents each MCP tool's call signature. If a documented param name
 // drifts from the tool's actual inputSchema key, an agent copies the wrong key and the
@@ -171,8 +171,56 @@ test("a block from a newer template classifies as newer, not stale", (t) => {
   t.after(cleanup);
   const generated = renderHunchSection(store);
   assert.deepEqual(classifyGroundingBlock(newerBlock(generated), generated), {
-    kind: "newer", committedTemplate: GROUNDING_TEMPLATE + 1, rendererTemplate: GROUNDING_TEMPLATE,
+    kind: "newer", committedTemplate: GROUNDING_TEMPLATE + 1, rendererTemplate: GROUNDING_TEMPLATE, countsReadable: true,
   });
+});
+
+test("a newer-template block whose counts run AHEAD of the store still fails as ahead", (t) => {
+  const { store, cleanup } = tempStore();
+  t.after(cleanup);
+  const generated = renderHunchSection(store);
+  const counts = parseGroundingCounts(generated)!;
+  const ahead = newerBlock(generated).replace(counts.match, counts.match.replace(/\*\*\d+ decisions?/, "**99 decisions"));
+  const verdict = classifyGroundingBlock(ahead, generated);
+  assert.equal(verdict.kind, "ahead");
+  assert.deepEqual(verdict.kind === "ahead" && verdict.ahead, ["decisions"]);
+  assert.match(describeGroundingFreshness("CLAUDE.md", verdict), /newer Hunch .*--refresh --force/);
+  const plain = classifyGroundingBlock(generated.replace(counts.match, counts.match.replace(/\*\*\d+ decisions?/, "**99 decisions")), generated);
+  assert.equal(plain.kind === "ahead" && plain.newerTemplate, undefined, "a same-template ahead verdict is unchanged");
+});
+
+test("a newer-template block with unreadable counts says a refresh cannot move them", (t) => {
+  const { store, cleanup } = tempStore();
+  t.after(cleanup);
+  const generated = renderHunchSection(store);
+  const reworded = newerBlock(generated).replace(parseGroundingCounts(generated)!.match, "a reworded counts sentence");
+  const verdict = classifyGroundingBlock(reworded, generated);
+  assert.deepEqual(verdict, { kind: "newer", committedTemplate: GROUNDING_TEMPLATE + 1, rendererTemplate: GROUNDING_TEMPLATE, countsReadable: false });
+  assert.match(describeGroundingFreshness("CLAUDE.md", verdict), /cannot read its counts sentence/);
+  assert.match(describeGroundingFreshness("CLAUDE.md", classifyGroundingBlock(newerBlock(generated), generated)), /a refresh updates only the counts/);
+});
+
+test("regenerateGrounding (private --migrate) re-renders even a newer-template block", (t) => {
+  const { store, cleanup } = tempStore();
+  t.after(cleanup);
+  const root = mkdtempSync(join(tmpdir(), "hunch-template-migrate-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  store.json.put("constraints", mkConstraint({ id: "con_nowprivate1", statement: "NOW_PRIVATE_INVARIANT", severity: "blocking" }));
+  const withSecret = newerBlock(renderHunchSection(store, root));
+  assert.match(withSecret, /NOW_PRIVATE_INVARIANT/);
+  store.json.dropAll("constraints");
+  writeFileSync(join(root, "CLAUDE.md"), `# Mine\n\n${withSecret}\n`);
+  mkdirSync(join(root, ".cursor", "rules"), { recursive: true });
+  writeFileSync(join(root, ".cursor", "rules", "hunch.mdc"), `---\nalwaysApply: true\n---\n\n${withSecret}\n`);
+
+  regenerateGrounding(root, store);
+  for (const rel of ["CLAUDE.md", ".cursor/rules/hunch.mdc"]) {
+    const text = readFileSync(join(root, rel), "utf8");
+    assert.doesNotMatch(text, /NOW_PRIVATE_INVARIANT/, `${rel}: a now-private constraint must not stay published`);
+    assert.doesNotMatch(text, /NEWER_PROSE_MUST_SURVIVE/, `${rel}: the migrate path re-renders`);
+    assert.equal(groundingTemplate(text), GROUNDING_TEMPLATE);
+  }
+  assert.match(readFileSync(join(root, "CLAUDE.md"), "utf8"), /^# Mine/, "user prose outside the block survives");
 });
 
 test("refreshExistingGrounding keeps newer prose unless forced", (t) => {

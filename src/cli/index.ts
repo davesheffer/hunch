@@ -6226,6 +6226,7 @@ program
   .option("--quiet", "print nothing on success")
   .action((opts: { refresh?: boolean; force?: boolean; json?: boolean; quiet?: boolean }) => {
     const root = findRoot();
+    if (opts.force && !opts.refresh) console.error("hunch grounding: --force only applies with --refresh; checking without re-rendering.");
     // PUBLIC-ONLY by construction, exactly as the release gate and the freshness test
     // read it: HUNCH_PRIVATE_DIR at an empty overlay beats .hunch/local.json and the
     // shared pointer, so a dev machine with an overlay attached can never write union

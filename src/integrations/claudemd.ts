@@ -40,6 +40,8 @@ export function preserveNewerTemplate(existing: string, section: string): string
   if (groundingTemplate(current) <= groundingTemplate(section)) return section;
   const have = parseGroundingCounts(current);
   const next = parseGroundingCounts(section);
+  // Unreadable counts keep the block as written rather than downgrading it (two
+  // versions would flip-flop); `hunch grounding` reports it as countsReadable: false.
   return have && next ? current.replace(have.match, next.match) : current;
 }
 

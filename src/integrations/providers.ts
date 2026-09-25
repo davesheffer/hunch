@@ -453,12 +453,16 @@ export function writeAntigravityHooks(root: string, inv: Invocation): string {
  *  docs reflect that no engineering memory is published here (renderHunchSection
  *  reads the public store only, so private records never leak into them). */
 export function regenerateGrounding(root: string, store: HunchStore): string[] {
+  // FORCED: a block from a newer template would otherwise keep its prose — including
+  // its Top-invariants list — so a constraint that just moved to the overlay would stay
+  // printed in the committed public doc.
+  const force = { force: true };
   return [
-    updateClaudeMd(root, store),
-    writeAgentsMd(root, store),
-    writeCopilotInstructions(root, store),
-    writeCursorRule(root, store),
-    writeWindsurfRule(root, store),
+    updateClaudeMd(root, store, force),
+    writeAgentsMd(root, store, force),
+    writeCopilotInstructions(root, store, force),
+    writeCursorRule(root, store, force),
+    writeWindsurfRule(root, store, force),
   ];
 }
 
