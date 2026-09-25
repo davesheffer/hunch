@@ -101,6 +101,12 @@ test("hunch_context names at most a few omitted records and counts every one by 
   assert.ok(structured.omitted_by_reason.budget > 0);
   assert.equal(structured.omitted[0]?.reason, "budget", "budget omissions (drillable via hunch_why) are sampled first");
   assert.equal((structured as { omitted_truncated?: boolean }).omitted_truncated, true);
+  // Per-record metadata is drill-down ids only; the brief and the receipt carry the rest.
+  assert.ok(structured.omitted.every((o) => !("detail" in o)), "the sample repeats no detail sentence");
+  const slim = result.structuredContent as { delivered: object[]; supplements: Array<{ delivered: boolean }> };
+  assert.ok(slim.delivered.length > 0);
+  assert.ok(slim.delivered.every((d) => Object.keys(d).sort().join() === "kind,record_id"));
+  assert.ok(slim.supplements.every((s) => s.delivered), "undelivered supplements are dropped");
 });
 
 test("the omission sample keeps an id for every reason, budget first, and passes a short list through whole", () => {

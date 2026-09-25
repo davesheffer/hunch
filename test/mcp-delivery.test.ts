@@ -239,14 +239,7 @@ test("hunch_context exposes the delivery envelope and records exactly what MCP s
     text: string;
     profile: string;
     ranking_policy: string;
-    delivered: Array<{
-      kind: string;
-      record_id: string;
-      rank: number;
-      delivery_reason: string;
-      provenance_status: string;
-      token_cost: number;
-    }>;
+    delivered: Array<{ kind: string; record_id: string }>;
     hypotheses: unknown[];
     obligations: unknown[];
     omitted: unknown[];
@@ -260,15 +253,9 @@ test("hunch_context exposes the delivery envelope and records exactly what MCP s
   assert.equal(text, structured.text, "legacy text and structured envelope describe the same delivery");
   assert.equal(structured.profile, "builder");
   assert.equal(structured.ranking_policy, "hunch.delivery-profile/1");
-  assert.deepEqual(structured.delivered, [{
-    kind: "constraints",
-    record_id: "con_mcp_receipt",
-    rank: 1,
-    delivery_reason: "blocking-reserved",
-    provenance_status: "current",
-    token_cost: structured.delivered[0]?.token_cost,
-  }]);
-  assert.ok((structured.delivered[0]?.token_cost ?? 0) > 0);
+  // The MCP result names delivered records for drill-down only; rank, reason,
+  // provenance and cost live in the served receipt below (#371).
+  assert.deepEqual(structured.delivered, [{ kind: "constraints", record_id: "con_mcp_receipt" }]);
   assert.deepEqual(structured.hypotheses, []);
   assert.deepEqual(structured.obligations, []);
   assert.deepEqual(structured.omitted, []);
@@ -294,10 +281,11 @@ test("hunch_context exposes the delivery envelope and records exactly what MCP s
     rank: 1,
     delivery_reason: "blocking-reserved",
     provenance_status: "current",
-    token_cost: structured.delivered[0]?.token_cost,
+    token_cost: receipts.recent[0]?.token_cost,
     delivery_profile: "builder",
     ranking_policy: "hunch.delivery-profile/1",
   });
+  assert.ok((receipts.recent[0]?.token_cost ?? 0) > 0);
 });
 
 test("MCP exposes exact change identity and semantic proof contracts without mutating memory", async (t) => {

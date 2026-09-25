@@ -777,6 +777,16 @@ const DELIVERY_OUTPUT_SCHEMA = z.object({
  *  fields only. The handler still parses the result with the full
  *  DELIVERY_OUTPUT_SCHEMA, so the delivered shape is exactly as strict as before. */
 const DELIVERY_ADVERTISED_OUTPUT_SCHEMA = DELIVERY_OUTPUT_SCHEMA.extend({
+  // The MCP result carries drill-down ids only (see compactEnvelope, #371): the
+  // per-record receipt facts stay in the served ledger and hunch_report. Optional,
+  // so a reader of the full CLI envelope and of the MCP result shares one shape.
+  delivered: z.array(DELIVERY_OUTPUT_SCHEMA.shape.delivered.element.partial({
+    rank: true, delivery_reason: true, provenance_status: true, token_cost: true,
+  })),
+  supplements: z.array(DELIVERY_OUTPUT_SCHEMA.shape.supplements.element.partial({
+    reason: true, rank: true, token_cost: true,
+  })),
+  omitted: z.array(DELIVERY_OUTPUT_SCHEMA.shape.omitted.element.partial({ detail: true })),
   landscape: z.object({
     schema: z.literal("hunch.landscape-fragment/1"),
     target: z.string(),
@@ -910,7 +920,20 @@ function deliveredContext(
   ]);
   return {
     content: [{ type: "text", text: structuredContent.text }],
-    structuredContent: compactOmissions(structuredContent),
+    structuredContent: compactEnvelope(structuredContent),
+  };
+}
+
+/** What the MCP result names per record: enough to drill down (hunch_why), no
+ *  more. A host shows the model either `content` or `structuredContent`, and
+ *  `text` is the only brief a structured-only host sees, so every other field
+ *  repeats what the brief already says; rank, costs and provenance stay in the
+ *  receipt. Undelivered supplements are dropped (the brief never showed them). */
+export function compactEnvelope(envelope: z.infer<typeof DELIVERY_OUTPUT_SCHEMA>): z.infer<typeof DELIVERY_ADVERTISED_OUTPUT_SCHEMA> {
+  return {
+    ...compactOmissions(envelope),
+    delivered: envelope.delivered.map(({ kind, record_id }) => ({ kind, record_id })),
+    supplements: envelope.supplements.filter((s) => s.delivered).map(({ id, kind, delivered }) => ({ id, kind, delivered })),
   };
 }
 
@@ -924,17 +947,18 @@ const OMITTED_SAMPLE = 5;
  *  keeps an id to pass to hunch_why, budget first — and count all of them by
  *  reason. Runs after recordServed and after the full envelope validated, so
  *  receipts and receipt_id are unchanged. */
-export function compactOmissions(envelope: z.infer<typeof DELIVERY_OUTPUT_SCHEMA>): z.infer<typeof DELIVERY_OUTPUT_SCHEMA> {
+export function compactOmissions(envelope: z.infer<typeof DELIVERY_OUTPUT_SCHEMA>): z.infer<typeof DELIVERY_ADVERTISED_OUTPUT_SCHEMA> {
   const groups = new Map<string, typeof envelope.omitted>();
   for (const item of envelope.omitted) groups.set(item.reason, [...(groups.get(item.reason) ?? []), item]);
   const byReason: Record<string, number> = {};
   for (const [reason, items] of groups) byReason[reason] = items.length;
   const order = [...groups.keys()].sort((left, right) => Number(right === "budget") - Number(left === "budget") || left.localeCompare(right));
-  const sample: typeof envelope.omitted = [];
+  const sample: Array<Omit<(typeof envelope.omitted)[number], "detail">> = [];
   for (let depth = 0; sample.length < OMITTED_SAMPLE && sample.length < envelope.omitted.length; depth++) {
     for (const reason of order) {
       const item = groups.get(reason)![depth];
-      if (item && sample.length < OMITTED_SAMPLE) sample.push(item);
+      // The per-record detail sentence is left out: hunch_why(record_id) explains it.
+      if (item && sample.length < OMITTED_SAMPLE) sample.push({ kind: item.kind, record_id: item.record_id, reason: item.reason });
     }
   }
   return {
@@ -1952,16 +1976,23 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
       description:
         "What just happened and what's next, straight from the graph: the last N decisions, the ROADMAP, and any inline human question such as an imported ADR awaiting explicit approve/decline. Call at session start to orient, or before planning what to work on. Same data as the wiki's now.md. Public store only, EXCEPT a queued commit-repair's liveness is checked against the full store (so a private-overlay decision's fully-answerable repair doesn't go silently unanswerable); only its id and the commit shas ever surface, never its title.",
       inputSchema: {
-        recent_limit: z.number().optional().describe("How many recent decisions to include (default 10)."),
+        recent_limit: z.number().optional().describe("How many recent decisions to include (default 5)."),
+        roadmap_limit: z.number().optional().describe("How many roadmap entries to include (default 2); the rest are counted."),
       },
     },
-    async ({ recent_limit }): Promise<ToolResult> => {
-      const { recent, roadmap, pendingReview } = nowData(store.json.loadAll("decisions"), recent_limit ?? 10);
+    async ({ recent_limit, roadmap_limit }): Promise<ToolResult> => {
+      // Bounded by default (#371): the hot view is read at session start, so its
+      // size is paid on every session; the rest stays one call away.
+      const decisions = store.json.loadAll("decisions");
+      const { recent, roadmap, pendingReview } = nowData(decisions, recent_limit ?? 5);
+      const shownRoadmap = roadmap.slice(0, Math.max(0, roadmap_limit ?? 2));
       const L: string[] = [`🔥 Recent (${recent.length}):`];
       for (const r of recent) L.push(`  ${r.date} [${r.status}] ${r.title} (${r.id}${r.topic ? `, ${r.topic}` : ""})`);
+      if (decisions.length > recent.length) L.push(`  +${decisions.length - recent.length} more — hunch_now(recent_limit) or hunch now`);
       L.push("", `🗺 Roadmap — live proposed decisions (${roadmap.length}):`);
       if (!roadmap.length) L.push("  (empty — record intent as a PROPOSED decision and it appears here)");
-      for (const r of roadmap) L.push(`  • ${r.title} (${r.id}${r.topic ? `, ${r.topic}` : ""}, since ${r.date})\n      ${r.note}`);
+      for (const r of shownRoadmap) L.push(`  • ${r.title} (${r.id}${r.topic ? `, ${r.topic}` : ""}, since ${r.date})\n      ${r.note}`);
+      if (roadmap.length > shownRoadmap.length) L.push(`  +${roadmap.length - shownRoadmap.length} more — hunch_now(roadmap_limit) or hunch now`);
       if (pendingReview > 0) L.push("", `${pendingReview} legacy un-vouched draft(s) — \`hunch adopt-drafts\` auto-trusts them as advisory (new captures land trusted automatically).`);
       // Workspace ledger, from stored PUBLIC records only (same jurisdiction rule as the rest
       // of this view; no git, so the hot view stays fast). Machine labels are user-chosen

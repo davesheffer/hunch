@@ -6162,8 +6162,9 @@ program
   .command("footprint")
   .description("Measure how much text Hunch injects into an agent's context — MCP tool list, hunch_context brief, grounding block, hook text — from the same code paths the product serves. Tokens are estimated as characters / 4.")
   .option("--json", "emit the report (hunch.footprint/1) as JSON")
-  .action(async (opts: { json?: boolean }) => {
-    const report = await measureFootprint(findRoot());
+  .option("--target <file>", "file to measure the hunch_context result for (default: the file most decisions cite)")
+  .action(async (opts: { json?: boolean; target?: string }) => {
+    const report = await measureFootprint(findRoot(), { target: opts.target });
     if (opts.json) return console.log(JSON.stringify(report, null, 2));
     const width = Math.max(...report.surfaces.map((s) => s.id.length));
     for (const s of report.surfaces) console.log(`${s.id.padEnd(width)}  ${String(s.chars).padStart(7)}  ~${s.est_tokens}`);
