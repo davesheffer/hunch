@@ -1,0 +1,32 @@
+{
+  "id": "htask_3e15d25dbb2d01a0cb7e8a60",
+  "title": "Assistant task",
+  "state": "completed",
+  "started_at": "2026-09-25T19:18:48.530Z",
+  "finished_at": "2026-09-25T19:28:14.337Z",
+  "coverage": "no-delivery-observed",
+  "lessons": [],
+  "applied": [],
+  "saved": [],
+  "checks": [
+    {
+      "label": "Verification command",
+      "state": "cancelled",
+      "exit_code": null
+    }
+  ],
+  "conformance": [],
+  "refusals": 0,
+  "files": [],
+  "supersedes": [],
+  "source_snapshot": "sha256:d6909933c2ec7c55bd1a11c7fe18ff069aa56375e6ee0d31680fe660b603497a",
+  "report_hash": "sha256:555c4acc3ce54397263a0b5359a8d00190e8b9903907b32226372963efc92059",
+  "provenance": {
+    "source": "task_report",
+    "confidence": 1,
+    "evidence": [
+      "hunch report htask_3e15d25dbb2d01a0cb7e8a60"
+    ],
+    "last_verified": "2026-09-25T19:28:14.337Z"
+  }
+}
