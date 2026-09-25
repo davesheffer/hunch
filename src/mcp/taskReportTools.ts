@@ -70,8 +70,8 @@ export function registerTaskReportTools(server: McpServer, getRoot: () => string
     inputSchema: {
       action: z.enum(["start", "finish"]), task_id: TaskIdSchema.optional(),
       title: z.string().min(1).max(200).optional(),
-      outcome: z.enum(["completed", "interrupted"]).optional(),
-      applications: z.array(ReportClaimSchema).max(20).optional(),
+      outcome: z.enum(["completed", "interrupted"]).optional().describe("\"interrupted\" when the task was cut short."),
+      applications: z.array(ReportClaimSchema).max(20).optional().describe("Only lessons you actually applied. Copy occurrence_id, record_id and content_hash exactly from hunch_report(task_id) application_references; never derive an ID from a receipt or use a scope hash."),
       cwd: z.string().optional().describe("Actual repository/worktree directory for this task."),
     },
   }, async ({ action, task_id, title, outcome, applications }) => {

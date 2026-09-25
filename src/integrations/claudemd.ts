@@ -113,7 +113,7 @@ export function renderHunchSection(store: HunchStore, root?: string): string {
       (policyTools ? " Policy review: `hunch_policy_evaluate`, `hunch_policy_plan(policy_id)`, `hunch_policy_card(policy_id)`, `hunch_policy_proof`; only a human activates a policy." : ""),
   );
   lines.push("- **Record:** `hunch_capture_decision` → `hunch_record_decision`; `hunch_record_correction` turns a human correction into an enforced rule; `hunch_record_finding` keeps an observation with evidence. Pass the task_id.");
-  lines.push("- **Finish:** run checks through the `task verify` launcher. If the task used Hunch, you started it, or no host stop hook closes it, call `hunch_task(action: \"finish\", task_id)` and show its card verbatim. The start and finish results carry the full reporting rules.");
+  lines.push("- **Finish:** run checks through the `task verify` launcher. If the task used Hunch, you started it, or no host stop hook closes it, call `hunch_task(action: \"finish\", task_id)` and show its card verbatim. Its `applications` schema carries the claim rules.");
   lines.push("- To update Hunch, run `hunch update` from the repo root.");
   const wiki = root ? wikiSummary(root) : null;
   if (wiki) {

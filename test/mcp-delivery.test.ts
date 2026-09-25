@@ -225,6 +225,11 @@ test("hunch_context exposes the delivery envelope and records exactly what MCP s
   const contextTool = listed.tools.find((tool) => tool.name === "hunch_context");
   assert.ok(contextTool?.outputSchema, "tools/list advertises the structured delivery contract");
   assert.ok("delivered" in (contextTool.outputSchema.properties ?? {}));
+  // A hook-opened task never sees the hunch_task start result, so the claim rules
+  // must reach every host through the tool schema itself.
+  const taskTool = listed.tools.find((tool) => tool.name === "hunch_task");
+  const applications = (taskTool?.inputSchema.properties as Record<string, { description?: string }> | undefined)?.applications;
+  assert.match(applications?.description ?? "", /application_references/);
 
   const result = await client.callTool({
     name: "hunch_context",
