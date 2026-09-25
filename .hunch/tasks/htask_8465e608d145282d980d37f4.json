@@ -3,9 +3,46 @@
   "title": "Assistant task",
   "state": "completed",
   "started_at": "2026-09-25T17:28:50.882Z",
-  "finished_at": "2026-09-25T18:12:17.191Z",
-  "coverage": "no-delivery-observed",
-  "lessons": [],
+  "finished_at": "2026-09-25T18:21:11.083Z",
+  "coverage": "delivered",
+  "lessons": [
+    {
+      "kind": "constraints",
+      "record_id": "con_7217ab24ab",
+      "content_hash": "sha256:dc67a48896cadd65cde5c1a70c18ae355b57c4153aa560220664f9e9e03a9260",
+      "title": "Regression guard: \"Flaky test failure under parallelism: native tree-sitter module resolution race on Windows\" must not recur."
+    },
+    {
+      "kind": "bugs",
+      "record_id": "bug_b6f1abb9a6",
+      "content_hash": "sha256:f66dfb5c32407b6b0a4de318d05791716d7de279bb799e53763d054ab3107952",
+      "title": "Flaky test failure under parallelism: native tree-sitter module resolution race on Windows"
+    },
+    {
+      "kind": "findings",
+      "record_id": "fnd_751c7e3a9e",
+      "content_hash": "sha256:d7e5c6cbf2587a2e975bf1b0976f2a2c0f9ac6967980d987fe65095fcda5be24",
+      "title": "experiment test EXP-01 fails deterministically on a developer Mac: invalid_completion !== completed"
+    },
+    {
+      "kind": "findings",
+      "record_id": "fnd_75a4d0e3d3",
+      "content_hash": "sha256:9d9c6d7b7164cb3af9f3733a27b72e30f3156b549509297388da03a31ec2ad0f",
+      "title": "macOS: workspace tests compare os.tmpdir() (/var/folders) with realpath'd git paths (/private/var/folders)"
+    },
+    {
+      "kind": "decisions",
+      "record_id": "dec_ed1a05fb08",
+      "content_hash": "sha256:66e2302cb1ba23f6dbdb47cef68fb8e818c1adf94e92bfe5c422126c78c0540f",
+      "title": "Complete G2 operations with exact drills and atomic real-history shadow backfill"
+    },
+    {
+      "kind": "decisions",
+      "record_id": "dec_d684d7db79",
+      "content_hash": "sha256:7e09d9dc64bd70fef9d42d0ba3c37d1344301149fdb019ce2cbc7860a655a103",
+      "title": "VS Code becomes a certifiable G3 conformance client via its real spawn seam"
+    }
+  ],
   "applied": [],
   "saved": [],
   "checks": [
@@ -22,10 +59,18 @@
   ],
   "conformance": [],
   "refusals": 0,
-  "files": [],
+  "files": [
+    "test/experiment.test.ts",
+    "test/g2.test.ts",
+    "test/g3.test.ts",
+    "test/private-correction-interfaces.test.ts",
+    "test/workspace-ledger.test.ts",
+    "test/workspace-prune.test.ts",
+    "test/workspaces.test.ts"
+  ],
   "supersedes": [],
   "source_snapshot": "sha256:6ad1f46a1cf584bcda1db72efa17a83c427485041ff676f09d7b9f2a16e797a1",
-  "report_hash": "sha256:9198389bb504487b8e1ebec7ff2ddc27bfcdcc06a7ff940467ca4c1a218136f4",
+  "report_hash": "sha256:a3878e787976ef499b44c7a8fdc1b588e57b2ccddaedb709f1e38532c0403ac1",
   "provenance": {
     "source": "task_report",
     "confidence": 1,
@@ -34,6 +79,6 @@
       "hunch report htask_4ef9458f3a6b0979c6bf8b1f",
       "hunch report htask_3f17e05da38ba110cd15ed0a"
     ],
-    "last_verified": "2026-09-25T18:12:17.191Z"
+    "last_verified": "2026-09-25T18:21:11.083Z"
   }
 }
