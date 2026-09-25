@@ -1,0 +1,37 @@
+{
+  "id": "fnd_7d92ebc698",
+  "title": "CI strict check disarms a human-confirmed veto: the PR's own commit makes the decision stale",
+  "observation": "In `hunch check --base <ref> --strict` (the mode the generated CI Hunch Guard runs), a human-confirmed, pattern-tier rejected-alternative veto is rendered advisory and does not count toward the strict fail. The staleness input is lastChangeDate(file) at HEAD; on the PR branch HEAD already contains the PR's own edit to the decision's related file, so the decision looks changed-after-verified (stale) and isVetoBlocker returns false. The same change checked with --staged (pre-commit) still blocks as human-confirmed, and a precise constraint (match regex) keeps blocking because it is staleness-immune. Net: in CI a veto alone would not fail the PR. Mechanism is inferred from code (strictgate.ts isVetoBlocker stale gate + hunchStore.staleness); symptom verified. Scout confirmed no test covers veto + --base --strict.",
+  "evidence": [
+    "demo repo (ip-limit branch, dec_ef1f2ef156 tripwire /req\\.ip/ human-confirmed): `hunch check --base main --format markdown` -> '⛔ dec_ef1f2ef156 rejected this approach **(human-confirmed)**'; same + `--public-only` -> human-confirmed; same + `--strict` -> '⚠ ... _(advisory)_'",
+    "`hunch check --staged --strict` on the same change -> '⛔ ... (human-confirmed)' and '+ 1 reversed-decision veto(es)', exit 1",
+    "2026-09-25, found while producing explainer Ep5"
+  ],
+  "method": null,
+  "severity": "high",
+  "triage": "open",
+  "affected_files": [
+    "src/core/strictgate.ts",
+    "src/store/hunchStore.ts",
+    "src/cli/index.ts"
+  ],
+  "affected_symbols": [
+    "isVetoBlocker",
+    "staleness",
+    "buildCheckReport"
+  ],
+  "violates_constraint": null,
+  "spawned_decision": null,
+  "observed_at": "2026-09-25T13:37:32.525Z",
+  "resolved_commit": null,
+  "provenance": {
+    "source": "agent_recorded",
+    "confidence": 0.75,
+    "evidence": [
+      "demo repo (ip-limit branch, dec_ef1f2ef156 tripwire /req\\.ip/ human-confirmed): `hunch check --base main --format markdown` -> '⛔ dec_ef1f2ef156 rejected this approach **(human-confirmed)**'; same + `--public-only` -> human-confirmed; same + `--strict` -> '⚠ ... _(advisory)_'",
+      "`hunch check --staged --strict` on the same change -> '⛔ ... (human-confirmed)' and '+ 1 reversed-decision veto(es)', exit 1",
+      "2026-09-25, found while producing explainer Ep5"
+    ],
+    "last_verified": "2026-09-25T13:37:32.525Z"
+  }
+}

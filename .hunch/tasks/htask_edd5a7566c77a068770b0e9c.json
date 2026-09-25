@@ -1,0 +1,32 @@
+{
+  "id": "htask_edd5a7566c77a068770b0e9c",
+  "title": "Assistant task",
+  "state": "interrupted",
+  "started_at": "2026-09-25T18:20:12.557Z",
+  "finished_at": "2026-09-25T18:32:14.484Z",
+  "coverage": "no-delivery-observed",
+  "lessons": [],
+  "applied": [],
+  "saved": [],
+  "checks": [
+    {
+      "label": "Verification command",
+      "state": "passed",
+      "exit_code": 0
+    }
+  ],
+  "conformance": [],
+  "refusals": 0,
+  "files": [],
+  "supersedes": [],
+  "source_snapshot": null,
+  "report_hash": "sha256:2169a77cf34d32a9f4dc5663949e77f6029a4a8e2fadb09e4075e73c8a720d99",
+  "provenance": {
+    "source": "task_report",
+    "confidence": 1,
+    "evidence": [
+      "hunch report htask_edd5a7566c77a068770b0e9c"
+    ],
+    "last_verified": "2026-09-25T18:32:14.484Z"
+  }
+}

@@ -1,5 +1,6 @@
 import { conventionSupplements } from '../core/conventionDelivery.js';
 import { fieldCitationText } from "../core/fieldProvenance.js";
+import { siblingGrounding } from "../core/siblingfix.js";
 import type { DerivedState } from "../core/stateRecords.js";
 /**
  * MCP server — the structured two-way API into the Hunch (DESIGN.md §7 / App. A).
@@ -1801,6 +1802,12 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
     async ({ target, budget_tokens, profile, as_of, task_id }, extra): Promise<ToolResult> => {
       const deliver = (envelope: DeliveryEnvelope): ToolResult => {
         const result = deliveredContext(root, as_of ? `${target} (as_of:${as_of})` : target, envelope, extra.sessionId);
+        // Same sibling-fix lesson the pre-edit hook injects, for a file target.
+        // Sibling lessons need a repo-relative file; a target outside the repo gets none.
+        const rel = relative(root, resolve(root, target)).replace(/\\/g, "/");
+        const siblings = as_of || !rel || rel.startsWith("..") || isAbsolute(rel) ? null : siblingGrounding(root, rel, store.recs("symbols"));
+        // Leads the result: the most specific lesson must not trail the memory slice.
+        if (siblings?.text) result.content.unshift({ type: "text", text: siblings.text });
         if (task_id) {
           try {
             // Historical contexts must not borrow today's record text/revision.

@@ -1,0 +1,135 @@
+{
+  "id": "htask_3bea24c5df562e3f42bd3aca",
+  "title": "Assistant task",
+  "state": "completed",
+  "started_at": "2026-09-19T03:09:07.738Z",
+  "finished_at": "2026-09-19T03:10:47.263Z",
+  "coverage": "no-delivery-observed",
+  "lessons": [],
+  "applied": [],
+  "saved": [],
+  "checks": [],
+  "conformance": [
+    {
+      "kind": "decisions",
+      "record_id": "dec_0c2e4c26df",
+      "content_hash": "sha256:88e4655a20e87783f3af3ea385dac67dd3790d7e72e95615695a464bb80e4705",
+      "outcome": "unavailable"
+    },
+    {
+      "kind": "decisions",
+      "record_id": "dec_5eaa4664f7",
+      "content_hash": "sha256:338493c85b11d2c44821518012ad539e9ee7eb1b0dfa8f46445414b86c72115e",
+      "outcome": "unavailable"
+    },
+    {
+      "kind": "decisions",
+      "record_id": "dec_5f66ef1a19",
+      "content_hash": "sha256:91753163e0abbfbaf527a343c4cf78bfe359d0375926deb0879027c37ea80c42",
+      "outcome": "unavailable"
+    },
+    {
+      "kind": "decisions",
+      "record_id": "dec_710fd0fb4f",
+      "content_hash": "sha256:2ef69791defb649b22fd897475ebda5fa873b2ba1eff5180ced6c232849c628c",
+      "outcome": "not-exercised"
+    },
+    {
+      "kind": "decisions",
+      "record_id": "dec_79272efbaa",
+      "content_hash": "sha256:55eec88de565e32cbe3292c5ed51e4c0050d2cf456cc35db7bdd24330f32a8f5",
+      "outcome": "unavailable"
+    },
+    {
+      "kind": "decisions",
+      "record_id": "dec_9b8d8aade0",
+      "content_hash": "sha256:08707dbc932f83cd639ffdf74acd89b0f4fda07fb9831844d7f2e6395ecfd866",
+      "outcome": "unavailable"
+    },
+    {
+      "kind": "decisions",
+      "record_id": "dec_a2899939d9",
+      "content_hash": "sha256:ca7c7df3d80de5cdb4ea7593676869ff987629e78b78da86ba9202b08167f364",
+      "outcome": "not-exercised"
+    },
+    {
+      "kind": "decisions",
+      "record_id": "dec_c205c26472",
+      "content_hash": "sha256:8e1969b8f76b768da2cb6e5a8b2ddbcf10ca0fc0f6931ec8ed34a8f829dcd435",
+      "outcome": "not-exercised"
+    },
+    {
+      "kind": "constraints",
+      "record_id": "con_902759b3dc",
+      "content_hash": "sha256:267c10c1c7eee06f78d5f270e8bccbbb1aaed8374d729ddfa62a0509ff92ddda",
+      "outcome": "not-exercised"
+    },
+    {
+      "kind": "constraints",
+      "record_id": "con_a87360128b",
+      "content_hash": "sha256:7e75cee1e0d0dc6dfeab87cea0248e2a2bbcee57c49fff55a33957a3e50f75e6",
+      "outcome": "not-exercised"
+    },
+    {
+      "kind": "decisions",
+      "record_id": "dec_65b058de66",
+      "content_hash": "sha256:d7eca1e461791e8cd752a1c9f288020eaf779c10b6755a4fcfa2d58157498548",
+      "outcome": "unavailable"
+    },
+    {
+      "kind": "decisions",
+      "record_id": "dec_08a685fca2",
+      "content_hash": "sha256:5e31aa5da198d7cb85a6e9bfe8d9af0eaf186c5f828b00d515e787471333c2e4",
+      "outcome": "not-exercised"
+    },
+    {
+      "kind": "decisions",
+      "record_id": "dec_093a1cfe5b",
+      "content_hash": "sha256:1d300c22a5003a2d2aa2ad0ffe8201eb8398a4198210903267655b503495f45d",
+      "outcome": "unavailable"
+    },
+    {
+      "kind": "decisions",
+      "record_id": "dec_093de2b0bd",
+      "content_hash": "sha256:ca950ea2bb85f7e83b4c307112515059019ba4b4bd9191d24edb609ee0880625",
+      "outcome": "unavailable"
+    },
+    {
+      "kind": "decisions",
+      "record_id": "dec_0d5d1f416a",
+      "content_hash": "sha256:3b784d8cb5aaaa20aaa7a5d9fd739e2e7e9da8c82aa070d58d4020ed0e497136",
+      "outcome": "unavailable"
+    },
+    {
+      "kind": "decisions",
+      "record_id": "dec_15de4710c8",
+      "content_hash": "sha256:5585a438e93a9230d32de0c6c99dc82f8949b6269a94d1c796029aa1cf0a2b06",
+      "outcome": "unavailable"
+    },
+    {
+      "kind": "decisions",
+      "record_id": "dec_1869a16bd6",
+      "content_hash": "sha256:5bd7f49a4cdd26c164784bcf259ba06e136e94f7df568658b02530223c330145",
+      "outcome": "unavailable"
+    },
+    {
+      "kind": "decisions",
+      "record_id": "dec_20f0bbaae5",
+      "content_hash": "sha256:0f0ae79c76335ea4fdfe0ed0287e15d8e254efbab196c6ae65c392976f380138",
+      "outcome": "unavailable"
+    }
+  ],
+  "refusals": 0,
+  "files": [],
+  "supersedes": [],
+  "source_snapshot": null,
+  "report_hash": "sha256:e0c64d2f28fd5aebe4853bc98b560f1011020e4bb19cf7dc9166b105687fa4bf",
+  "provenance": {
+    "source": "task_report",
+    "confidence": 1,
+    "evidence": [
+      "hunch report htask_3bea24c5df562e3f42bd3aca"
+    ],
+    "last_verified": "2026-09-19T03:10:47.263Z"
+  }
+}

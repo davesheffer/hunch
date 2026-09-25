@@ -108,7 +108,7 @@ import { renderRecalledLine } from "../core/taskReportRender.js";
 import { closeHookTask, hookReportTaskId, nativeHookCwd, settleHookSession, startHookReport, stopHookReport, observeHookDenial } from "../core/taskReportHook.js";
 import { persistTaskRecord } from "../core/taskRecord.js";
 import { recordHookObservation } from "../core/hookObservations.js";
-import { contextHookOutput, denyHookOutput, hookProvider, normalizeHookEvent, stopHookOutput, type HookProvider, type HunchHookEvent, type HunchToolInput } from "../core/agenthook.js";
+import { contextHookOutput, denyHookOutput, hookProvider, normalizeHookEvent, stopHookOutput, type HookProvider, type HunchHookEvent, type HunchHookInput, type HunchToolInput } from "../core/agenthook.js";
 import {
   PIPELINE_LOOP,
   armExecutionObligations,
@@ -127,6 +127,8 @@ import {
   proofCheckpoint,
   savePipelineState,
   stopVerdict,
+  onLessonsDelivered,
+  lessonReminder,
   unverifiedNag,
 } from "../core/pipeline.js";
 import { draftDuplicateOf, isAcceptedDuplicateAnchor } from "../core/dupdetect.js";
@@ -147,6 +149,9 @@ import { buildMadrManifest, writeMadrManifest, refreshMadrCorpus } from "../inte
 import { pendingEscalations, policyEscalations, commitRepairEscalations, actionableEscalations, escalationHeadline } from "../core/escalations.js";
 import { premiseEscalations } from "../core/premises.js";
 import { parseDocAnchors, renderDocGrounding } from "../core/docanchors.js";
+import { pathMatchesGlob } from "../core/glob.js";
+import { SIBLING_HEADING, functionBodyHash, siblingGrounding } from "../core/siblingfix.js";
+import { refreshShellBaseline, shellWrittenFiles } from "../core/shellwrites.js";
 import { compareCandidates } from "../core/compare.js";
 import { compareCodeUnits } from "../core/canonicalOrder.js";
 import {
@@ -4611,10 +4616,34 @@ program
       // Verification pipeline (delivery enforced, not hoped for — see core/pipeline.ts).
       // PostToolUse records facts; Stop gates on them. Both are pipeline-only events,
       // handled before the grounding dispatch below.
-      if ((evt.hook_event_name === "PostToolUse" || evt.hook_event_name === "PostToolUseFailure") && evt.session_id && pipelineEnabled()) {
+      const postTool = evt.hook_event_name === "PostToolUse" || evt.hook_event_name === "PostToolUseFailure" ? evt.hook_event_name : null;
+      // A shell command can edit files without the edit tools ever firing: ground
+      // what it wrote now. Every other tool call just moves the baseline.
+      let shellGround = "";
+      if (postTool) {
+        // Fail-open on its own: a grounding error must not cost the pipeline
+        // bookkeeping below (a missed check would wrongly hold the Stop gate).
+        try {
+          if (evt.tool_name === "Bash" || evt.tool_name === "PowerShell") {
+            const written = shellWrittenFiles(root, evt.session_id);
+            if (written.length) {
+              const opened = openTeamStore(root, { requireFreshTeamMemory: firmness === "strict" });
+              store = opened.store;
+              // Same rule as the pre-edit path: strict never grounds from stale team rules.
+              const stale = firmness === "strict" && opened.teamPullStatus
+                && opened.teamPullStatus !== "updated" && opened.teamPullStatus !== "current";
+              if (!stale) shellGround = shellWriteGrounding(root, store, provider, evt, written);
+            }
+          } else {
+            refreshShellBaseline(root, evt.session_id);
+          }
+        } catch { shellGround = ""; }
+      }
+      if (postTool && evt.session_id && pipelineEnabled()) {
         let st = loadPipelineState(evt.session_id);
         const before = st;
         let activity: Parameters<typeof proofCheckpoint>[2] | null = null;
+        let lessonNote = "";
         if (/^(Edit|Write|MultiEdit)$/.test(evt.tool_name ?? "")) {
           // A Codex apply_patch touches every file it lists (and each Move-to
           // destination); the Stop gate must see all of them, not only the first.
@@ -4628,6 +4657,13 @@ program
           const command = String(evt.tool_input?.command ?? "");
           st = onCommand(st, command, evt.tool_outcome);
           activity = { kind: "command", command };
+          // A command that both wrote the file and ran a check just received the
+          // lesson itself; the follow-up waits for the next check.
+          if (!shellGround) {
+            const followUp = lessonReminder(st, command, (l) => functionBodyHash(root, l.file, l.symbol));
+            st = followUp.state;
+            lessonNote = followUp.reminder;
+          }
         } else if (evt.tool_name === "Skill") {
           st = onSkill(st, String(evt.tool_input?.skill ?? ""));
           activity = { kind: "skill" };
@@ -4636,10 +4672,16 @@ program
           const checkpoint = proofCheckpoint(before, st, activity);
           st = checkpoint.state;
           savePipelineState(evt.session_id, st);
-          if (checkpoint.reminder) emitContext(provider, evt.hook_event_name, checkpoint.reminder);
+          const post = [shellGround, lessonNote, checkpoint.reminder].filter(Boolean).join("\n\n");
+          if (post) emitContext(provider, postTool, post);
           return;
         }
         savePipelineState(evt.session_id, st);
+        if (shellGround) emitContext(provider, postTool, shellGround);
+        return;
+      }
+      if (postTool) {
+        if (shellGround) emitContext(provider, postTool, shellGround);
         return;
       }
       if (evt.hook_event_name === "Stop") {
@@ -4667,6 +4709,8 @@ program
         // When the prompt reads like a correction ("no / that's wrong / never X"),
         // nudge the agent to PERSIST it as an enforced constraint (Never Twice) —
         // not just obey it this once and forget it next session.
+        // Shell writes are measured from the start of each prompt.
+        refreshShellBaseline(root, evt.session_id);
         const isCorrection = looksLikeCorrection(evt.prompt);
         // Once per session is enough for the bare availability reminder — repeating it
         // every prompt burns context for zero information (dec_244397d920). It is deduped
@@ -4964,114 +5008,9 @@ program
       }
 
       // advisory / firm / strict(non-blocking): inject the relevant Hunch slice.
-      // Decision-grounding for PROSE (doc≠graph): a markdown target that declares
-      // <!-- hunch:topic … --> anchors gets each topic's CURRENT decision — the
-      // graph outranks the prose being edited, and a stale pin is called out inline.
-      let docGround = "";
-      if (/\.(md|mdx)$/i.test(target)) {
-        try {
-          docGround = renderDocGrounding(parseDocAnchors(readFileSync(abs, "utf8")), store.recs("decisions"));
-        } catch { /* unreadable / not yet created — no doc grounding */ }
-      }
-      const ctx = store.assembleContext(target);
-      // Regression Guard (edit-time grounding): what an in-force decision retired
-      // from this file. No diff exists yet, so this is context — "don't re-add X" —
-      // not a block; the commit-time `hunch check` does the actual gating.
-      const retired = store.retiredForFile(target).filter((r) => r.symbols.length || r.deps.length);
-      const recentTasks = taskSelectionSupplements(store.selectTasksAuto(target, buildTaskRankingQuery(root, hookReportTaskId(root, provider, evt), target, { excludeTargetDeliveries: true })), target);
-      const hasContent =
-        ctx.constraints.length ||
-        ctx.decisions.length ||
-        ctx.bugs.length ||
-        ctx.blast_radius.length ||
-        ctx.findings.length ||
-        ctx.landscape?.resources.length ||
-        ctx.landscape?.relationships.length ||
-        retired.length ||
-        recentTasks.length ||
-        docGround;
-      if (!hasContent) return; // no noise on files Hunch hasn't learned yet
-      const supplements = [
-        ...(retired.length ? [{
-          id: "retired-code",
-          kind: "retired-code",
-          priority: 200,
-          text: `⚠ Deliberately RETIRED from this file — do not re-introduce without cause: ${retired.map((r) => `${[...r.symbols, ...r.deps].join(", ")} (${r.decision})`).join("; ")}.`,
-        }] : []),
-        ...(docGround ? [{ id: "doc-grounding", kind: "doc-grounding", priority: 100, text: docGround }] : []),
-        ...recentTasks,
-      ];
-      const envelope = buildDeliveryEnvelope(ctx, {
-        profile: "builder",
-        root,
-        symbols: store.recs("symbols"),
-        components: store.recs("components"),
-        decisionCorpus: store.recs("decisions"),
-        supplements,
-      });
-      const text = envelope.text.trim();
-      // Identical grounding already shown this session → one-line delta instead of
-      // the full 10-16KB block. Any record change re-sends the full text; the
-      // strict-gate deny path above never routes through this (dec_244397d920).
-      // Delivery receipts (dec_925f4bcaad): the ledger of what actually reached
-      // an agent. A full injection is a serve; a delta one-liner attests the
-      // earlier serve is still standing. Never throws, never blocks.
-      const receipts = (event: "served" | "refreshed") => recordServed(root, [
-        ...envelope.delivered.map((item) => ({
-          event,
-          kind: item.kind,
-          record_id: item.record_id,
-          target,
-          session_id: evt.session_id,
-          rank: item.rank,
-          delivery_reason: item.delivery_reason,
-          provenance_status: item.provenance_status,
-          token_cost: item.token_cost,
-          delivery_profile: envelope.profile,
-          ranking_policy: envelope.ranking_policy,
-        })),
-        // Delivered task lines are receipts too: they feed access-based recency.
-        ...envelope.supplements.filter((s) => s.kind === "recent-task" && s.delivered).map((s) => ({
-          event, kind: "tasks", record_id: s.id, target, session_id: evt.session_id,
-          rank: s.rank, delivery_reason: "supplemental", token_cost: s.token_cost,
-          delivery_profile: envelope.profile, ranking_policy: envelope.ranking_policy,
-        })),
-      ]);
-      const reportTaskId = hookReportTaskId(root, provider, evt);
-      // A new authoritative prompt gets its own full delivery. An earlier
-      // prompt's session-level delta cannot establish this task's receipt.
-      // A subagent reports to the prompt's task but starts with FRESH context:
-      // it never saw that grounding, so its dedup is scoped by its own agent
-      // identity (hashed — the raw agent_id is never retained in the key).
-      const agentKey = evt.agent_id ? `:${reportHash(evt.agent_id).slice(7, 19)}` : "";
-      // Dedup on the envelope's stable IDENTITY projection, never on the
-      // rendered block: serving the full text writes delivery receipts, and the
-      // next call's task ranking reads them back and moves the wording ("today"
-      // → "delivered today"), so hashing the presentation made this grounding
-      // self-invalidating and re-sent the full block for unchanged records.
-      if (injectionMode(evt.session_id, `pre:${target}${reportTaskId ? `:${reportTaskId}` : ""}${agentKey}`, text, deliveryDedupeInput(envelope, supplements)) === "delta") {
-        receipts("refreshed");
-        emitContext(
-          provider,
-          "PreToolUse",
-          `Hunch grounding for ${target}: unchanged this session (${envelope.delivered.filter((item) => item.kind === "decisions").length} decision(s), ${envelope.delivered.filter((item) => item.kind === "constraints").length} invariant(s) shown earlier — still current; hunch_why("${target}") to re-expand).`,
-        );
-        return;
-      }
-      receipts("served");
-      let reportNotice = "";
-      let recalled: string | null = null;
-      if (reportTaskId) {
-        try {
-          const snapshots = snapshotDeliveredRecords(store, envelope);
-          // The first time a lesson reaches this prompt's task, tell the USER in one
-          // line (systemMessage); repeats of the same revision stay silent.
-          recalled = reportPresentationEnabled(root) ? renderRecalledLine(unseenLessons(root, reportTaskId, snapshots)) : null;
-          const occurrence = recordTaskDelivery(root, reportTaskId, envelope, snapshots, undefined, target);
-          reportNotice = `\n\nHunch task ${reportTaskId} · delivery ${occurrence}. Inspect exact application references with hunch_report(task_id).`;
-        } catch { reportNotice = "\n\nTask report observation unavailable; this delivery's task contribution remains unverified."; recalled = null; }
-      }
-      emitContext(provider, "PreToolUse", text + reportNotice, recalled ?? undefined);
+      const grounded = fileGrounding(root, store, provider, evt, target, abs);
+      if (!grounded) return; // no noise on files Hunch hasn't learned yet
+      emitContext(provider, "PreToolUse", grounded.text, grounded.mode === "full" ? grounded.recalled ?? undefined : undefined);
     } catch (e) {
       // Never block an edit on a hook failure — and never go silent either: an
       // ungrounded edit that looks grounded gets diagnosed as model flakiness.
@@ -6977,6 +6916,166 @@ function readStdin(): Promise<string> {
 function toRepoRel(root: string, abs: string): string {
   const rel = repoRelativeTarget(abs, root);
   return isAbsolute(rel) || /^[a-zA-Z]:/.test(rel) ? "" : rel;
+}
+
+/** Files a shell command wrote get the grounding the edit tools would have
+ *  delivered before the edit — late, but while the agent can still revise.
+ *  Already-served grounding (a delta) is not repeated. */
+const MAX_SHELL_GROUNDED = 3;
+function shellWriteGrounding(root: string, store: HunchStore, provider: HookProvider, evt: HunchHookInput, written: readonly string[]): string {
+  const parts: string[] = [];
+  const grounded: string[] = [];
+  for (const target of written.slice(0, MAX_SHELL_GROUNDED)) {
+    const g = fileGrounding(root, store, provider, evt, target, join(root, target));
+    if (g?.mode === "full") { parts.push(g.text); grounded.push(target); }
+  }
+  if (!parts.length) return "";
+  const more = written.length > MAX_SHELL_GROUNDED ? ` (${written.length - MAX_SHELL_GROUNDED} more written file(s) not checked)` : "";
+  const sibling = parts.some((p) => p.startsWith(SIBLING_HEADING)) ? " It starts with a fix a same-shaped function elsewhere received and this file's copy never did: resolve it before you finish." : "";
+  return `Hunch: this shell command wrote ${grounded.join(", ")}${more}. Edits made outside the Edit/Write tools skip the pre-edit grounding, so it arrives now: re-check the change against it before relying on it.${sibling}\n\n${parts.join("\n\n")}`;
+}
+
+type FileGrounding = { mode: "delta"; text: string } | { mode: "full"; text: string; recalled: string | null };
+/** Memory budget beside a sibling lesson (the default is 1500 tokens). */
+const SIBLING_MEMORY_BUDGET_TOKENS = 800;
+
+/** The advisory grounding for one repo-relative file: the ranked memory slice,
+ *  retired code, doc anchors, recent tasks and sibling-fix lessons. `delta` when
+ *  identical grounding was already served this session, null when Hunch knows
+ *  nothing about the file. Serves the pre-edit hook and files a shell command
+ *  wrote (which never pass through the edit tools). */
+function fileGrounding(root: string, store: HunchStore, provider: HookProvider, evt: HunchHookInput, target: string, abs: string): FileGrounding | null {
+  // Decision-grounding for PROSE (doc≠graph): a markdown target that declares
+  // <!-- hunch:topic … --> anchors gets each topic's CURRENT decision — the
+  // graph outranks the prose being edited, and a stale pin is called out inline.
+  let docGround = "";
+  if (/\.(md|mdx)$/i.test(target)) {
+    try {
+      docGround = renderDocGrounding(parseDocAnchors(readFileSync(abs, "utf8")), store.recs("decisions"));
+    } catch { /* unreadable / not yet created — no doc grounding */ }
+  }
+  const ctx = store.assembleContext(target);
+  // Sibling fixes: a same-shaped function elsewhere was fixed and this copy
+  // never was — the concrete lesson a scoped constraint cannot carry.
+  const siblings = siblingGrounding(root, target, store.recs("symbols"),
+    ctx.constraints.filter((c) => c.severity === "blocking" && c.scope.some((g) => pathMatchesGlob(target, g))).map((c) => ({ id: c.id, statement: c.statement })));
+  // Remember what was delivered, so the first check the agent runs can follow
+  // up if the function is still untouched (pipeline.ts lessonReminder).
+  if (siblings.lessons.length && evt.session_id && pipelineEnabled()) {
+    try {
+      savePipelineState(evt.session_id, onLessonsDelivered(loadPipelineState(evt.session_id), siblings.lessons.map((l) => ({
+        id: `${l.file}:${l.symbol}~${l.siblingFile}:${l.sibling}`,
+        file: l.file,
+        symbol: l.symbol,
+        sibling: l.sibling,
+        siblingFile: l.siblingFile,
+        change: l.commits.map((c) => `${c.sha.slice(0, 8)} ${c.subject}`).join("; "),
+        callers: [...(siblings.callers.get(l.symbol) ?? [])],
+        hash: functionBodyHash(root, l.file, l.symbol),
+      }))));
+    } catch { /* the reminder is a convenience; the lesson itself was delivered */ }
+  }
+  // Regression Guard (edit-time grounding): what an in-force decision retired
+  // from this file. No diff exists yet, so this is context — "don't re-add X" —
+  // not a block; the commit-time `hunch check` does the actual gating.
+  const retired = store.retiredForFile(target).filter((r) => r.symbols.length || r.deps.length);
+  const recentTasks = taskSelectionSupplements(store.selectTasksAuto(target, buildTaskRankingQuery(root, hookReportTaskId(root, provider, evt), target, { excludeTargetDeliveries: true })), target);
+  const hasContent =
+    ctx.constraints.length ||
+    ctx.decisions.length ||
+    ctx.bugs.length ||
+    ctx.blast_radius.length ||
+    ctx.findings.length ||
+    ctx.landscape?.resources.length ||
+    ctx.landscape?.relationships.length ||
+    retired.length ||
+    recentTasks.length ||
+    docGround ||
+    siblings.text;
+  if (!hasContent) return null;
+  const supplements = [
+    ...(retired.length ? [{
+      id: "retired-code",
+      kind: "retired-code",
+      priority: 200,
+      text: `⚠ Deliberately RETIRED from this file — do not re-introduce without cause: ${retired.map((r) => `${[...r.symbols, ...r.deps].join(", ")} (${r.decision})`).join("; ")}.`,
+    }] : []),
+    ...(docGround ? [{ id: "doc-grounding", kind: "doc-grounding", priority: 100, text: docGround }] : []),
+    ...recentTasks,
+  ];
+  // A sibling lesson is the most specific thing Hunch knows about this edit:
+  // it leads, and the ranked memory gets a smaller budget so it cannot bury it.
+  const envelope = buildDeliveryEnvelope(siblings.text ? { ...ctx, budget_tokens: Math.min(ctx.budget_tokens, SIBLING_MEMORY_BUDGET_TOKENS) } : ctx, {
+    profile: "builder",
+    root,
+    symbols: store.recs("symbols"),
+    components: store.recs("components"),
+    decisionCorpus: store.recs("decisions"),
+    supplements,
+  });
+  // Outside the envelope's budget on purpose: the lesson is a code change, not a
+  // one-line supplement, and memory records must not crowd it out.
+  const text = [siblings.text, envelope.text.trim()].filter(Boolean).join("\n\n");
+  // Identical grounding already shown this session → one-line delta instead of
+  // the full 10-16KB block. Any record change re-sends the full text; the
+  // strict-gate deny path above never routes through this (dec_244397d920).
+  // Delivery receipts (dec_925f4bcaad): the ledger of what actually reached
+  // an agent. A full injection is a serve; a delta one-liner attests the
+  // earlier serve is still standing. Never throws, never blocks.
+  const receipts = (event: "served" | "refreshed") => recordServed(root, [
+    ...envelope.delivered.map((item) => ({
+      event,
+      kind: item.kind,
+      record_id: item.record_id,
+      target,
+      session_id: evt.session_id,
+      rank: item.rank,
+      delivery_reason: item.delivery_reason,
+      provenance_status: item.provenance_status,
+      token_cost: item.token_cost,
+      delivery_profile: envelope.profile,
+      ranking_policy: envelope.ranking_policy,
+    })),
+    // Delivered task lines are receipts too: they feed access-based recency.
+    ...envelope.supplements.filter((s) => s.kind === "recent-task" && s.delivered).map((s) => ({
+      event, kind: "tasks", record_id: s.id, target, session_id: evt.session_id,
+      rank: s.rank, delivery_reason: "supplemental", token_cost: s.token_cost,
+      delivery_profile: envelope.profile, ranking_policy: envelope.ranking_policy,
+    })),
+  ]);
+  const reportTaskId = hookReportTaskId(root, provider, evt);
+  // A new authoritative prompt gets its own full delivery. An earlier
+  // prompt's session-level delta cannot establish this task's receipt.
+  // A subagent reports to the prompt's task but starts with FRESH context:
+  // it never saw that grounding, so its dedup is scoped by its own agent
+  // identity (hashed — the raw agent_id is never retained in the key).
+  const agentKey = evt.agent_id ? `:${reportHash(evt.agent_id).slice(7, 19)}` : "";
+  // Dedup on the envelope's stable IDENTITY projection, never on the
+  // rendered block: serving the full text writes delivery receipts, and the
+  // next call's task ranking reads them back and moves the wording ("today"
+  // → "delivered today"), so hashing the presentation made this grounding
+  // self-invalidating and re-sent the full block for unchanged records.
+  if (injectionMode(evt.session_id, `pre:${target}${reportTaskId ? `:${reportTaskId}` : ""}${agentKey}`, text, deliveryDedupeInput(envelope, supplements) + (siblings.identity ? `\u0000sibling-fix\u0000${siblings.identity}` : "")) === "delta") {
+    receipts("refreshed");
+    return {
+      mode: "delta",
+      text: `Hunch grounding for ${target}: unchanged this session (${envelope.delivered.filter((item) => item.kind === "decisions").length} decision(s), ${envelope.delivered.filter((item) => item.kind === "constraints").length} invariant(s)${siblings.identity ? ", sibling-fix lesson" : ""} shown earlier — still current; hunch_why("${target}") to re-expand).`,
+    };
+  }
+  receipts("served");
+  let reportNotice = "";
+  let recalled: string | null = null;
+  if (reportTaskId) {
+    try {
+      const snapshots = snapshotDeliveredRecords(store, envelope);
+      // The first time a lesson reaches this prompt's task, tell the USER in one
+      // line (systemMessage); repeats of the same revision stay silent.
+      recalled = reportPresentationEnabled(root) ? renderRecalledLine(unseenLessons(root, reportTaskId, snapshots)) : null;
+      const occurrence = recordTaskDelivery(root, reportTaskId, envelope, snapshots, undefined, target);
+      reportNotice = `\n\nHunch task ${reportTaskId} · delivery ${occurrence}. Inspect exact application references with hunch_report(task_id).`;
+    } catch { reportNotice = "\n\nTask report observation unavailable; this delivery's task contribution remains unverified."; recalled = null; }
+  }
+  return { mode: "full", text: text + reportNotice, recalled };
 }
 
 /** The in-repo files a pre-edit event would change, each with the lines the edit

@@ -221,6 +221,24 @@ export interface PipelineState {
   /** Activity index and count for bounded mid-flight reminders. */
   proofReminderActivity: number;
   proofReminders: number;
+  /** Sibling-fix lessons delivered this session (see core/siblingfix.ts). */
+  lessons: PendingLesson[];
+}
+
+/** A delivered lesson the agent has not visibly acted on yet. `hash` is the
+ *  target function's body at delivery; a different body later means the agent
+ *  touched it, so the lesson is no longer pending. */
+export interface PendingLesson {
+  id: string;
+  file: string;
+  symbol: string;
+  sibling: string;
+  siblingFile: string;
+  /** "<sha8> <subject>" of the change the sibling received. */
+  change: string;
+  callers: string[];
+  hash: string | null;
+  reminded: boolean;
 }
 
 export const emptyState = (): PipelineState => ({
@@ -236,6 +254,7 @@ export const emptyState = (): PipelineState => ({
   proofActivity: 0,
   proofReminderActivity: 0,
   proofReminders: 0,
+  lessons: [],
 });
 
 const MAX_OBLIGATIONS = 12;
@@ -1234,6 +1253,53 @@ export function unverifiedNag(state: PipelineState): string {
   return `${generic} Controller obligations still pending: ${pending.slice(0, 4).map((item) => `[${item.category}] ${item.description}`).join("; ")}.`;
 }
 
+const MAX_LESSONS = 6;
+/** Any profile's check shape: the reminder fires when the agent starts proving
+ *  its work, whatever the domain. */
+const CHECK_SHAPE = new RegExp([...Object.values(DEFAULT_PROFILES).map((p) => p.verify.source), "node (--test|-e\\b)"].join("|"), "i");
+
+/** Record lessons the grounding just delivered (dedup by id; first delivery keeps its baseline). */
+export function onLessonsDelivered(state: PipelineState, lessons: readonly Omit<PendingLesson, "reminded">[]): PipelineState {
+  const known = new Set(state.lessons.map((l) => l.id));
+  const added = lessons.filter((l) => !known.has(l.id)).map((l) => ({ ...l, reminded: false }));
+  return added.length ? { ...state, lessons: [...state.lessons, ...added].slice(-MAX_LESSONS) } : state;
+}
+
+/** The one follow-up an advisory lesson gets. It fires when the agent runs a
+ *  check (test/build/typecheck) while a delivered lesson's function is still
+ *  untouched: the moment the agent thinks it is done, which is when an ignored
+ *  lesson would otherwise ship. Once per lesson, never a block. `hashOf`
+ *  returns the function's current body hash (null: cannot tell, stay silent). */
+export function lessonReminder(
+  state: PipelineState,
+  command: string,
+  hashOf: (lesson: PendingLesson) => string | null,
+): { state: PipelineState; reminder: string } {
+  if (!CHECK_SHAPE.test(command) || !state.lessons.some((l) => !l.reminded)) return { state, reminder: "" };
+  const due: PendingLesson[] = [];
+  const lessons = state.lessons.map((l) => {
+    if (l.reminded) return l;
+    const now = hashOf(l);
+    if (now === null || l.hash === null) return l;
+    if (now !== l.hash) return { ...l, reminded: true };
+    due.push(l);
+    return { ...l, reminded: true };
+  });
+  if (!due.length) return { state: { ...state, lessons }, reminder: "" };
+  const lines = due.map((l) => {
+    const via = l.callers.length ? ` ${l.callers.slice(0, 3).map((c) => `\`${c}\``).join(", ")} call${l.callers.length === 1 ? "s" : ""} it, so your change runs through the copy that lacks the fix.` : "";
+    return `- \`${l.symbol}\` (${l.file}) is unchanged since Hunch showed you the change its same-shaped sibling \`${l.sibling}\` (${l.siblingFile}) received: ${l.change}.${via}`;
+  });
+  return {
+    state: { ...state, lessons },
+    reminder: [
+      "Hunch — before you finish: a lesson delivered earlier is still open.",
+      ...lines,
+      "The checks you are running were written before this lesson; unless one feeds this function the input the sibling's change handles, they do not show it is covered. Carry the change with a test. It does not apply only if that input cannot reach the function or is already handled another way; then say which in your final answer. \"Pre-existing\" or \"outside this task\" does not count: your change runs through this copy, so leaving it ships the gap again inside your change.",
+    ].join("\n"),
+  };
+}
+
 /** Stop-gate verdict. Blocks only at firm/strict, only with unverified product
  *  edits, and at most twice per turn. */
 export function stopVerdict(state: PipelineState, firmness: Firmness): { block: false } | { block: true; reason: string; state: PipelineState } {
@@ -1275,6 +1341,10 @@ export function loadPipelineState(sessionId: string): PipelineState {
     state.proofReminderActivity = Number.isSafeInteger(raw.proofReminderActivity) && raw.proofReminderActivity! >= 0 ? raw.proofReminderActivity! : 0;
     state.proofReminders = Number.isSafeInteger(raw.proofReminders) && raw.proofReminders! >= 0 ? raw.proofReminders! : 0;
     state.probeBlocks = Number.isSafeInteger(raw.probeBlocks) && raw.probeBlocks! >= 0 ? raw.probeBlocks! : 0;
+    state.lessons = (Array.isArray(raw.lessons) ? raw.lessons : []).filter((l): l is PendingLesson => !!l && typeof l === "object"
+      && typeof l.id === "string" && typeof l.file === "string" && typeof l.symbol === "string" && typeof l.sibling === "string"
+      && typeof l.siblingFile === "string" && typeof l.change === "string" && Array.isArray(l.callers)
+      && (l.hash === null || typeof l.hash === "string") && typeof l.reminded === "boolean").slice(-MAX_LESSONS);
     const specs = normalizeExecutionObligations(raw.obligations);
     const tracked = new Map((Array.isArray(raw.obligations) ? raw.obligations : []).map((item) => {
       const candidate = item as Partial<TrackedExecutionObligation>;

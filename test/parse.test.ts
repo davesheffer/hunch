@@ -30,7 +30,7 @@ test("parseSource extracts symbols, imports, calls", () => {
   assert.ok(p.calls.some((c) => c.callee === "jwtDecode"));
 });
 
-test("native tree-sitter addons load only from per-process temp copies", () => {
+test("native tree-sitter addons load only from the per-user content-addressed copy cache", () => {
   // Load them here rather than relying on an earlier test having parsed: the
   // addons arrive on FIRST PARSE, so run alone this case would otherwise find
   // an empty require cache and fail for the wrong reason.
@@ -40,9 +40,9 @@ test("native tree-sitter addons load only from per-process temp copies", () => {
     .filter((path) => /(?:tree-sitter(?:-typescript|-python|-yaml)?)\.node$/.test(path))
     .sort();
   assert.equal(bindings.length, 4, `expected core, TypeScript, Python, and YAML native bindings, got: ${bindings.join(", ")}`);
-  const processCopyPrefix = join(realpathSync(tmpdir()), `hunch-tree-sitter-${process.pid}-`);
+  const cachePrefix = join(realpathSync(tmpdir()), "hunch-tree-sitter-cache-");
   for (const binding of bindings) {
-    assert.ok(realpathSync(binding).startsWith(processCopyPrefix), `installed native binding remains loaded: ${binding}`);
+    assert.ok(realpathSync(binding).startsWith(cachePrefix), `installed native binding remains loaded: ${binding}`);
   }
 });
 

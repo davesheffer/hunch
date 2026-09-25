@@ -1,13 +1,13 @@
 /**
  * Cold start: importing the parsing module graph must not load the native
- * tree-sitter addons. Loading them copies six `.node` files into a per-process
- * temp dir and dlopens them, which cost every CLI process and every editor hook
+ * tree-sitter addons. Loading them dlopens six `.node` files (copied into a
+ * per-user cache), which cost every CLI process and every editor hook
  * 1.5-5 s of startup even when nothing ever parsed (fnd_4b091dd16c).
  *
  * The assertions are deliberately OS-neutral and never time anything: they check
- * that no tree-sitter addon is in the require cache and that no per-process temp
- * copy dir was created, which holds identically on Windows (where the temp-copy
- * file-lock isolation matters most) as on POSIX.
+ * that no tree-sitter addon is in the require cache or was dlopen'd, which holds
+ * identically on Windows (where the copy's file-lock isolation matters most) as
+ * on POSIX.
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -18,7 +18,6 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { cleanupDir } from "./helpers.js";
 
-const COPY_PREFIX = "hunch-tree-sitter-";
 const ADDON = /tree-sitter.*\.node$/;
 
 function moduleUrl(relative: string): string {
@@ -38,24 +37,19 @@ function inChild(script: string): { status: number | null; stdout: string; stder
 test("importing the parse/indexer/constitution modules loads no native tree-sitter addon", () => {
   const script = `
     import { createRequire } from "node:module";
-    import { readdirSync } from "node:fs";
-    import { tmpdir } from "node:os";
     await import(${moduleUrl("src/extractors/parse.ts")});
     await import(${moduleUrl("src/extractors/indexer.ts")});
     await import(${moduleUrl("src/constitution/g2BehaviorCandidates.ts")});
     const require = createRequire(import.meta.url);
     const loaded = Object.keys(require.cache).filter((p) => ${ADDON}.test(p));
-    let copies = [];
-    try {
-      copies = readdirSync(tmpdir()).filter((n) => n.startsWith(${JSON.stringify(COPY_PREFIX)} + process.pid + "-"));
-    } catch { /* unreadable tmpdir: the require-cache assertion still holds */ }
-    console.log(JSON.stringify({ loaded, copies }));
+    console.log(JSON.stringify({ loaded }));
   `;
   const child = inChild(script);
   assert.equal(child.status, 0, child.stderr || child.stdout);
-  const report = JSON.parse(child.stdout.trim().split("\n").at(-1)!) as { loaded: string[]; copies: string[] };
+  // The copy cache is shared across processes, so its presence says nothing
+  // about THIS import; the require cache is the direct evidence.
+  const report = JSON.parse(child.stdout.trim().split("\n").at(-1)!) as { loaded: string[] };
   assert.deepEqual(report.loaded, [], `native addon loaded merely by importing: ${report.loaded.join(", ")}`);
-  assert.deepEqual(report.copies, [], `per-process temp copy dir created without parsing: ${report.copies.join(", ")}`);
 });
 
 test("a real parse still works and loads the addons on first use", () => {
@@ -91,10 +85,9 @@ test("a real parse still works and loads the addons on first use", () => {
 // deletes its own evidence before the parent can look — a top-level
 // loadNativeTreeSitter() added to parse.ts left that check passing. So OBSERVE
 // THE LOAD ITSELF, with a CJS preload that runs before any application module
-// and wraps fs.copyFileSync: copying a `.node` file into the per-process dir is
-// the loader's first irreversible act, it happens on EVERY load (there is no
-// other route to the addons), and it is recorded the moment it happens rather
-// than being read back afterwards, so exit-time cleanup cannot erase it.
+// and wraps process.dlopen: every addon load goes through it (there is no other
+// route to the addons, cached copy or not), and it is recorded the moment it
+// happens rather than being read back afterwards.
 //
 // Two details the probe depends on, both learned the hard way:
 //   · the preload must be passed in NODE_OPTIONS, not as a bare --require:
@@ -107,12 +100,15 @@ test("a real parse still works and loads the addons on first use", () => {
 const PROBE = `
   const fs = require("fs");
   const out = process.env.HUNCH_ADDON_PROBE_OUT;
-  const original = fs.copyFileSync;
-  fs.copyFileSync = function (source, destination, ...rest) {
-    if (String(destination).endsWith(".node")) {
-      try { fs.appendFileSync(out, String(source) + "\\n"); } catch { /* the assertion below reads what did land */ }
+  // dlopen, not the copy: the copy cache is reused across processes, so a
+  // warm run copies nothing while still loading every addon.
+  const original = process.dlopen;
+  process.dlopen = function (module, filename, ...rest) {
+    // tree-sitter only: the tsx launcher dlopens its own watcher (fsevents).
+    if (/tree[-_]sitter[^\\/]*\\.node$/.test(String(filename))) {
+      try { fs.appendFileSync(out, String(filename) + "\\n"); } catch { /* the assertion below reads what did land */ }
     }
-    return original.call(this, source, destination, ...rest);
+    return original.call(this, module, filename, ...rest);
   };
 `;
 
@@ -147,7 +143,7 @@ test("the real CLI entry loads no native addon for a command that parses nothing
 // The positive control. Without it the gate above proves nothing: a probe that
 // can never see an addon would pass whatever the CLI does. `hunch index` in a
 // one-file repo parses for real, so this asserts the probe DOES observe a load
-// — through the same createRequire + *_PREBUILD temp-copy path production uses.
+// — through the same createRequire + *_PREBUILD cached-copy path production uses.
 test("the addon probe observes the addons when a command really parses", () => {
   const repo = mkdtempSync(join(tmpdir(), "hunch-cold-start-repo-"));
   try {

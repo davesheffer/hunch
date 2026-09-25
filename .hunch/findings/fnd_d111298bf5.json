@@ -1,0 +1,29 @@
+{
+  "id": "fnd_d111298bf5",
+  "title": "Task ranking evaluation verdict changed: insufficient-data → inconclusive at 84 task records",
+  "observation": "Automatic leave-one-out evaluation of task-record ranking (dec_66925aa0ee) recomputed after a task record was written. Ranked Hit@5 80% vs latest3 80%, MRR 0.80 vs 0.80, paired bootstrap CI on Hit@5 [+0, +0] over 5 cases (15 evaluable of 84). Delivery mode now: ranked — evaluation inconclusive (5 cases).",
+  "evidence": [
+    "hunch task rank-eval --json (computed 2026-09-25T11:19:21.133Z)",
+    ".hunch-cache/task-rank-eval.json corpus sha256:cf1a42330290391987ce5ced43cba5b012a8c7a29cf9cf890dec3c7cba64b88c"
+  ],
+  "method": null,
+  "severity": "low",
+  "triage": "open",
+  "affected_files": [
+    "src/core/taskRanking.ts",
+    "src/core/taskRankingMode.ts"
+  ],
+  "affected_symbols": [],
+  "violates_constraint": null,
+  "spawned_decision": null,
+  "observed_at": "2026-09-25T11:19:21.133Z",
+  "resolved_commit": null,
+  "provenance": {
+    "source": "task_rank_eval",
+    "confidence": 0.9,
+    "evidence": [
+      "hunch task rank-eval"
+    ],
+    "last_verified": "2026-09-25T11:19:21.133Z"
+  }
+}

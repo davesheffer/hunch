@@ -1,0 +1,37 @@
+{
+  "id": "htask_9fa0e14381bdef5044970189",
+  "title": "Assistant task",
+  "state": "completed",
+  "started_at": "2026-09-25T13:17:55.475Z",
+  "finished_at": "2026-09-25T13:51:53.479Z",
+  "coverage": "no-delivery-observed",
+  "lessons": [],
+  "applied": [],
+  "saved": [
+    {
+      "kind": "findings",
+      "record_id": "fnd_7d92ebc698",
+      "content_hash": "sha256:a9cff1a1588ce3b1fe711749f40d9230d8cc5599c671153b22f39ee534ac3a74",
+      "home": "public",
+      "operation": "created",
+      "durability": "committed"
+    }
+  ],
+  "checks": [],
+  "conformance": [],
+  "refusals": 0,
+  "files": [],
+  "supersedes": [],
+  "source_snapshot": null,
+  "report_hash": "sha256:dbcb42f28458ca8b8e82675ede1b868e732820345533c7ac08c7cb095e5b5a66",
+  "provenance": {
+    "source": "task_report",
+    "confidence": 1,
+    "evidence": [
+      "hunch report htask_9fa0e14381bdef5044970189",
+      "hunch report htask_aa25e6b188b4c6f459109972",
+      "hunch report htask_22026004633b5c9c798d7ce3"
+    ],
+    "last_verified": "2026-09-25T13:51:53.479Z"
+  }
+}
