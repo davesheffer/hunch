@@ -3,7 +3,7 @@
   "title": "Assistant task",
   "state": "completed",
   "started_at": "2026-09-25T19:30:43.481Z",
-  "finished_at": "2026-09-25T19:50:49.236Z",
+  "finished_at": "2026-09-25T19:57:07.672Z",
   "coverage": "no-delivery-observed",
   "lessons": [],
   "applied": [],
@@ -18,14 +18,19 @@
       "label": "Verification command",
       "state": "failed",
       "exit_code": 1
+    },
+    {
+      "label": "Verification command",
+      "state": "cancelled",
+      "exit_code": null
     }
   ],
   "conformance": [],
   "refusals": 0,
   "files": [],
   "supersedes": [],
-  "source_snapshot": "sha256:4f70b4e3d0985a87a66e18fed036f4d70ccccfd38116568427a26d78b035d48a",
-  "report_hash": "sha256:b6a625d70d1a49a0b43e07dde09aadbd13d65f8ca966b8995e0fe82eaafe659e",
+  "source_snapshot": "sha256:974de8776a3faa06be9a931b651acf42bbe609de38b1b1411aeaf0fdc220507c",
+  "report_hash": "sha256:d4e289dc2e29cbc7525131fd8051e0099dcc4838c9a2986a9ee1c8dd1038df0f",
   "provenance": {
     "source": "task_report",
     "confidence": 1,
@@ -34,6 +39,6 @@
       "hunch report htask_445ed37178fbb44bb38c2822",
       "hunch report htask_2bd70831eaf2e808373bb342"
     ],
-    "last_verified": "2026-09-25T19:50:49.236Z"
+    "last_verified": "2026-09-25T19:57:07.672Z"
   }
 }
