@@ -3,7 +3,7 @@
   "title": "Assistant task",
   "state": "completed",
   "started_at": "2026-09-25T13:08:58.171Z",
-  "finished_at": "2026-09-25T13:30:34.234Z",
+  "finished_at": "2026-09-25T13:40:18.269Z",
   "coverage": "no-delivery-observed",
   "lessons": [],
   "applied": [],
@@ -37,18 +37,20 @@
     "src/core/groundingLag.ts",
     "src/integrations/claudemd.ts",
     "src/integrations/providers.ts",
+    "test/grounding-freshness.test.ts",
     "test/grounding.test.ts"
   ],
   "supersedes": [],
   "source_snapshot": "sha256:28e7d9cb7ed9be99f898201329858ca8a2b27b02af5049524a5dacf16440948a",
-  "report_hash": "sha256:51d2b1bd536849cfd28da8185a0eeaf237498515f0ba1bb2711ea276b604278a",
+  "report_hash": "sha256:40c10d816a9165f15e9567f034341773b0b56f13f06acec21bb31f0f8be01d8e",
   "provenance": {
     "source": "task_report",
     "confidence": 1,
     "evidence": [
       "hunch report htask_80b7e58b4a51138c35bfc8a1",
-      "hunch report htask_8f6bc792aae5001778b8411f"
+      "hunch report htask_8f6bc792aae5001778b8411f",
+      "hunch report htask_33e1f0e86557b45b94dcd419"
     ],
-    "last_verified": "2026-09-25T13:30:34.234Z"
+    "last_verified": "2026-09-25T13:40:18.269Z"
   }
 }
