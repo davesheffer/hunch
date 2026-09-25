@@ -1,0 +1,93 @@
+{
+  "id": "dec_00b28b189e",
+  "title": "Preserve 'only' constraint in record_decision capture hint",
+  "topic": null,
+  "status": "accepted",
+  "context": "Hunch rules documentation across multiple files (Cursor, Windsurf, Copilot) needed restructuring and clarification. During this update, precision of the `record_decision` capture token guidance was at stake. Touches invariant(s): con_e04226bd05 (The MCP server must stay client-agnostic: all assistants point to the same .hunch/ graph; no Claude-only behavior in the server).",
+  "decision": "Retain the word 'only' in the `record_decision` capture token hint rather than removing or rewriting it, ensuring the guidance accurately conveys the constraint on when this MCP tool should be invoked.",
+  "consequences": [
+    "Documentation precisely communicates the limited scope of `record_decision` usage",
+    "Developers understand it is not a catch-all record tool but has specific applicability rules",
+    "Consistency maintained across Cursor, Windsurf, and Copilot instruction contexts"
+  ],
+  "alternatives_rejected": [
+    "Omitting 'only' — would weaken precision and leave scope ambiguous",
+    "Rewriting the hint with different phrasing — alternative wording tested was less clear about the constraint"
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Omitting 'only' — would weaken precision and leave scope ambiguous",
+      "scope": [
+        ".github/**",
+        ".windsurf/rules/**",
+        "src/mcp/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Rewriting the hint with different phrasing — alternative wording tested was less clear about the constraint",
+      "scope": [
+        ".github/**",
+        ".windsurf/rules/**",
+        "src/mcp/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_4c40eab00f",
+    "cmp_dfa5b5acde",
+    "cmp_f27fede222"
+  ],
+  "related_files": [
+    ".github/copilot-instructions.md",
+    ".windsurf/rules/hunch.md",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "src/mcp/server.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "d44a6916",
+  "valid_from": "2026-09-25T19:15:40+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft+summary",
+    "confidence": 0.5,
+    "evidence": [
+      "commit:d44a6916",
+      "synth:provider=claude-cli",
+      "branch:feat/tool-list-budget-2",
+      ".github/copilot-instructions.md",
+      ".windsurf/rules/hunch.md",
+      "AGENTS.md",
+      "CLAUDE.md",
+      "src/mcp/server.ts"
+    ],
+    "last_verified": "2026-09-25T16:18:35.506Z"
+  },
+  "date": "2026-09-25T19:15:40+03:00"
+}
