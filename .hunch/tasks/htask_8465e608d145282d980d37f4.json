@@ -3,7 +3,7 @@
   "title": "Assistant task",
   "state": "completed",
   "started_at": "2026-09-25T17:28:50.882Z",
-  "finished_at": "2026-09-25T18:21:11.083Z",
+  "finished_at": "2026-09-25T18:21:32.786Z",
   "coverage": "delivered",
   "lessons": [
     {
@@ -70,7 +70,7 @@
   ],
   "supersedes": [],
   "source_snapshot": "sha256:6ad1f46a1cf584bcda1db72efa17a83c427485041ff676f09d7b9f2a16e797a1",
-  "report_hash": "sha256:a3878e787976ef499b44c7a8fdc1b588e57b2ccddaedb709f1e38532c0403ac1",
+  "report_hash": "sha256:f3fd118ea13d76732a63b0922e90de122a79e3e8c965de5c5c4b5cc3526765b4",
   "provenance": {
     "source": "task_report",
     "confidence": 1,
@@ -79,6 +79,6 @@
       "hunch report htask_4ef9458f3a6b0979c6bf8b1f",
       "hunch report htask_3f17e05da38ba110cd15ed0a"
     ],
-    "last_verified": "2026-09-25T18:21:11.083Z"
+    "last_verified": "2026-09-25T18:21:32.786Z"
   }
 }
