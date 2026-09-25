@@ -6260,9 +6260,12 @@ program
           console.log(`${v.verdict.kind === "fresh" ? "✓" : v.verdict.kind === "lagging" || v.verdict.kind === "newer" ? "·" : "✗"} ${describeGroundingFreshness(v.doc, v.verdict)}`);
         }
         if (!opts.quiet && !failing.length) {
+          const newer = verdicts.filter((v) => v.verdict.kind === "newer");
           console.log(lagging.length
             ? `\n${lagging.length} doc(s) lag a merge — transient; the next capture commit or \`hunch grounding --refresh\` heals it.`
-            : "✓ grounding docs are fresh.");
+            : newer.length
+              ? `\n${newer.length} doc(s) written by a newer Hunch — kept as written; upgrade Hunch to check them fully.`
+              : "✓ grounding docs are fresh.");
         }
       }
       if (!opts.refresh && failing.length) process.exitCode = 1;

@@ -29,8 +29,8 @@ export { groundingTemplate };
  *  block (a branch that develops the renderer, or a repo whose pin lags its docs).
  *  When the existing block carries a newer template than `section`, keep its prose
  *  and move only the record counts, so the counts stay true without reverting text
- *  this version did not author. The preserved block also keeps its Top-invariants
- *  list and wiki line until a renderer of that template (or `--force`) runs.
+ *  this version did not author. The preserved block keeps its wiki line and those
+ *  Top-invariants lines whose constraint this version still renders.
  *  Returns the section to write. */
 export function preserveNewerTemplate(existing: string, section: string): string {
   const iStart = existing.indexOf(START);
@@ -38,12 +38,24 @@ export function preserveNewerTemplate(existing: string, section: string): string
   if (iStart < 0 || iEnd <= iStart) return section;
   const current = existing.slice(iStart, iEnd + END.length);
   if (groundingTemplate(current) <= groundingTemplate(section)) return section;
-  const have = parseGroundingCounts(current);
+  // Never republish an invariant this version no longer renders: a constraint that
+  // was retired, deleted, or moved to the private overlay drops out of the kept list.
+  const kept = current
+    .split("\n")
+    .filter((line) => {
+      const id = INVARIANT_LINE_RE.exec(line)?.[1];
+      return !id || section.includes(id);
+    })
+    .join("\n");
+  const have = parseGroundingCounts(kept);
   const next = parseGroundingCounts(section);
   // Unreadable counts keep the block as written rather than downgrading it (two
   // versions would flip-flop); `hunch grounding` reports it as countsReadable: false.
-  return have && next ? current.replace(have.match, next.match) : current;
+  return have && next ? kept.replace(have.match, next.match) : kept;
 }
+
+/** A Top-invariants line; group 1 is its constraint id. */
+const INVARIANT_LINE_RE = /^- \*\*\[[a-z]+\]\*\* .*; (con_[A-Za-z0-9_]+)\)_$/;
 
 /** Remove the managed HUNCH section (markers inclusive), leaving only the
  *  user-authored surroundings. Lets a caller decide whether two versions of a

@@ -141,6 +141,20 @@ test("an older renderer moves only the counts of a newer-template block", (t) =>
   assert.equal(preserveNewerTemplate("# Doc\n", older), older, "no block renders normally");
 });
 
+test("a kept newer block drops invariant lines this version no longer renders", (t) => {
+  const { store, cleanup } = tempStore();
+  t.after(cleanup);
+  store.json.put("constraints", mkConstraint({ id: "con_stillpublic", statement: "STILL_PUBLIC_INVARIANT", severity: "blocking" }));
+  store.json.put("constraints", mkConstraint({ id: "con_goneprivate", statement: "GONE_PRIVATE_INVARIANT", severity: "blocking" }));
+  const committed = newerBlock(renderHunchSection(store));
+  store.json.dropAll("constraints");
+  store.json.put("constraints", mkConstraint({ id: "con_stillpublic", statement: "STILL_PUBLIC_INVARIANT", severity: "blocking" }));
+  const kept = preserveNewerTemplate(`# Doc\n\n${committed}\n`, renderHunchSection(store));
+  assert.match(kept, /NEWER_PROSE_MUST_SURVIVE/);
+  assert.match(kept, /STILL_PUBLIC_INVARIANT/);
+  assert.doesNotMatch(kept, /GONE_PRIVATE_INVARIANT/, "a constraint that left the public store is not republished");
+});
+
 test("grounding writers never downgrade newer prose, but still upgrade older prose", (t) => {
   const { store, cleanup } = tempStore();
   t.after(cleanup);
