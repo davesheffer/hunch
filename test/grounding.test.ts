@@ -5,7 +5,8 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { renderHunchSection, upsertSection, preserveNewerTemplate, groundingTemplate, GROUNDING_TEMPLATE } from "../src/integrations/claudemd.js";
-import { writeCursorRule, refreshExistingGrounding, regenerateGrounding } from "../src/integrations/providers.js";
+import { writeCursorRule, refreshExistingGrounding, regenerateGrounding, refreshCommittableGrounding } from "../src/integrations/providers.js";
+import { execFileSync } from "node:child_process";
 import { parseGroundingCounts, classifyGroundingBlock, describeGroundingFreshness } from "../src/core/groundingLag.js";
 
 // The grounding documents each MCP tool's call signature. If a documented param name
@@ -190,6 +191,31 @@ test("grounding writers never downgrade newer prose, but still upgrade older pro
   const upgraded = readFileSync(doc, "utf8");
   assert.doesNotMatch(upgraded, /Old prose/);
   assert.equal(groundingTemplate(upgraded), GROUNDING_TEMPLATE);
+});
+
+// The path that actually reverted the short block on this repo's branches: the
+// post-commit capture (`sync --commit`) folds refreshCommittableGrounding's output into
+// its memory commit. Every committed grounding doc must keep its newer prose there too.
+test("the capture-commit refresh keeps newer-template prose in every committed grounding doc", (t) => {
+  const { store, root, cleanup } = tempStore();
+  t.after(cleanup);
+  const git = (...args: string[]) => execFileSync("git", args, { cwd: root, stdio: "pipe" });
+  git("init", "-q");
+  const section = renderHunchSection(store, root);
+  const docs = ["CLAUDE.md", "AGENTS.md", join(".github", "copilot-instructions.md"), join(".cursor", "rules", "hunch.mdc"), join(".windsurf", "rules", "hunch.md")];
+  for (const rel of docs) {
+    mkdirSync(join(root, rel, ".."), { recursive: true });
+    writeFileSync(join(root, rel), `# Doc\n\n${newerBlock(section)}\n`);
+  }
+  git("add", "-A");
+  git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--no-verify", "-m", "docs");
+
+  refreshCommittableGrounding(root, store);
+  for (const rel of docs) {
+    const text = readFileSync(join(root, rel), "utf8");
+    assert.match(text, /NEWER_PROSE_MUST_SURVIVE/, `${rel} keeps the newer prose`);
+    assert.equal(groundingTemplate(text), GROUNDING_TEMPLATE + 1, `${rel} keeps the newer template stamp`);
+  }
 });
 
 test("a block from a newer template classifies as newer, not stale", (t) => {
