@@ -4,7 +4,7 @@ import { createRequire, syncBuiltinESMExports } from "node:module";
 import { existsSync, mkdirSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
 import { hostname } from "node:os";
 import { join } from "node:path";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { tempStore, prov, mkSymbol } from "./helpers.js";
 import { openMemoryDb, type DB } from "../src/store/db.js";
 import { HunchStore } from "../src/store/hunchStore.js";
@@ -415,6 +415,47 @@ test("single-file RMW lock: an owner file that vanishes mid-read is a retry, not
     // took the ordinary stale-by-age route — proving nothing about the window.
     assert.ok(hits >= 2, `the simulated mid-read release must actually have fired (hits=${hits})`);
     assert.ok(store.json.loadAll("edges").some((e) => e.id === "e_vanished"), "the waiter retried and acquired the freed lock");
+  } finally {
+    fs.realpathSync = originalRealpathSync;
+    syncBuiltinESMExports();
+    cleanup();
+  }
+});
+
+test("single-file RMW lock: a release AND re-acquire mid-read is a retry, not a hard failure (issue #293)", () => {
+  const { store, root, cleanup } = seed();
+  const lock = join(root, ".hunch", "edges", ".rmw-lock");
+  mkdirSync(lock, { recursive: true });
+  const owner = join(lock, "owner.tmp.json");
+  writeFileSync(owner, JSON.stringify({ pid: process.pid, host: hostname(), nonce: "releasing" }));
+  const old = new Date(Date.now() - 60_000);
+  utimesSync(lock, old, old);
+  // CI run 35843843780: the holder releases inside the waiter's read window and
+  // a NEXT holder re-acquires before the waiter re-checks, so the owner file is
+  // present again and the race-induced refusal used to surface as
+  // "unsafe store artifact path … owner.tmp.json". The successor here is a
+  // same-host process that has already exited, so once the waiter re-reads it
+  // judges the successor dead and the write lands.
+  const successor = spawnSync(process.execPath, ["-e", ""]).pid;
+  const originalRealpathSync = fs.realpathSync;
+  let hits = 0;
+  const patched = ((path: Parameters<typeof originalRealpathSync>[0], options?: never) => {
+    if (String(path).replace(/\\/g, "/").endsWith(".rmw-lock/owner.tmp.json") && ++hits === 2) {
+      fs.realpathSync = originalRealpathSync;
+      syncBuiltinESMExports();
+      fs.rmSync(lock, { recursive: true, force: true });
+      mkdirSync(lock);
+      writeFileSync(owner, JSON.stringify({ pid: successor, host: hostname(), nonce: "successor" }));
+    }
+    return originalRealpathSync(path, options);
+  }) as typeof fs.realpathSync;
+  patched.native = originalRealpathSync.native;
+  fs.realpathSync = patched;
+  syncBuiltinESMExports();
+  try {
+    store.json.put("edges", { id: "e_reacquired", from: "sym_a", to: "sym_b", type: "calls", reason: "", strength: 1, provenance: prov() } as never);
+    assert.ok(hits >= 2, `the simulated release + re-acquire must actually have fired (hits=${hits})`);
+    assert.ok(store.json.loadAll("edges").some((e) => e.id === "e_reacquired"), "the waiter re-read the successor's owner and acquired the lock");
   } finally {
     fs.realpathSync = originalRealpathSync;
     syncBuiltinESMExports();
