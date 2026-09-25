@@ -1,4 +1,4 @@
-import { cleanupDir } from "./fixtures.js";
+import { cleanupDir, writeLocalPointer } from "./fixtures.js";
 /**
  * Gate 4 (ROADMAP): the cross-domain chain, run through the ONE binding by three different
  * principals over one store — a repository partition plus an organization drawer in the overlay.
@@ -37,8 +37,9 @@ function overlayStore() {
   const overlay = join(sandbox, "private-memory", ".hunch");
   mkdirSync(overlay, { recursive: true });
   execFileSync("git", ["init", "-q", join(sandbox, "private-memory")]);
-  mkdirSync(join(root, ".hunch"), { recursive: true });
-  writeFileSync(join(root, ".hunch", "local.json"), JSON.stringify({ privateDir: overlay, autoCommit: false }) + "\n");
+  mkdirSync(root, { recursive: true });
+  execFileSync("git", ["init", "-q", root]);
+  writeLocalPointer(root, { privateDir: overlay, autoCommit: false });
   const store = new HunchStore(hunchPaths(root));
   store.json.ensureDirs();
   return { store, cleanup: () => { store.close(); cleanupDir(sandbox); } };

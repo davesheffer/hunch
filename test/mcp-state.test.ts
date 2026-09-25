@@ -1,4 +1,4 @@
-import { cleanupDir } from "./fixtures.js";
+import { cleanupDir, writeLocalPointer } from "./fixtures.js";
 /**
  * The MCP binding of nuryel.state/1: four tools that are a thin transport over
  * src/store/stateBinding.ts. Exercised through a real MCP client over an in-memory
@@ -134,7 +134,7 @@ test("MCP state writes lock the selected shared overlay home", async (t) => {
   mkdirSync(overlay, { recursive: true });
   execFileSync("git", ["init", "-q", root]);
   execFileSync("git", ["init", "-q", overlayRoot]);
-  writeFileSync(join(root, ".hunch", "local.json"), JSON.stringify({ privateDir: overlay, mode: "shared", autoCommit: false }) + "\n");
+  writeLocalPointer(root, { privateDir: overlay, mode: "shared", autoCommit: false });
   const seed = new HunchStore(hunchPaths(root));
   seed.json.ensureDirs();
   seed.reindex();

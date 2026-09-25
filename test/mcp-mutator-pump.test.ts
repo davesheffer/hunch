@@ -1,4 +1,4 @@
-import { cleanupDir } from "./fixtures.js";
+import { cleanupDir, writeLocalPointer } from "./fixtures.js";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import {
@@ -77,11 +77,11 @@ function privateOverlay(root: string, label: string, mode: "private" | "shared")
   mkdirSync(hunch, { recursive: true });
   writeFileSync(join(overlayRoot, ".gitignore"), ".hunch/hunch.sqlite*\n");
   commitAll(overlayRoot, "fixture: overlay repository");
-  writeFileSync(join(root, ".hunch/local.json"), `${JSON.stringify({
+  writeLocalPointer(root, {
     privateDir: hunch,
     autoCommit: true,
     mode,
-  }, null, 2)}\n`);
+  });
   return { overlayRoot, hunch };
 }
 

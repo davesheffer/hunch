@@ -60,10 +60,25 @@ test("team repository URL gate preserves credential-free supported transports", 
     "git@github.com:team/memory.git",
     "/mnt/team memory/memory.git",
     "C:\\team memory\\memory.git",
-    "\\\\server\\team memory\\memory.git",
   ];
 
   for (const url of accepted) assert.equal(safeGitUrl(url), url, url);
+});
+
+test("team repository URL gate rejects network paths", () => {
+  // On Windows, resolving any of these contacts the named host before Git runs.
+  const rejected = [
+    "\\\\server\\team memory\\memory.git",
+    "\\\\fileserver.example\\share",
+    "//server/team/memory.git",
+    "\\/server/share",
+    "/\\server\\share",
+    "\\\\?\\UNC\\server\\share",
+    "\\\\.\\pipe\\memory",
+    "  \\\\server\\share  ",
+  ];
+
+  for (const url of rejected) assert.equal(safeGitUrl(url), null, url);
 });
 
 test("team repository URL gate rejects committed credentials and secret-bearing suffixes", () => {

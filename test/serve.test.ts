@@ -1,4 +1,4 @@
-import { cleanupDir } from "./fixtures.js";
+import { cleanupDir, writeLocalPointer } from "./fixtures.js";
 /**
  * `hunch serve` — the HTTP binding of nuryel.state/1 and the served partition host — driven
  * through the typed client. The rules are the store binding's; these tests assert the transport:
@@ -737,7 +737,8 @@ test("HTTP writes lock the shared overlay home, leaving a public lock owned by a
   execFileSync("git", ["init", "-q", overlayRoot]);
   const file = join(dir, "hunch-serve.json");
   const init = initServeConfig({ file, scope: david, root, principal: { id: "sofia@david", kind: "agent" } });
-  writeFileSync(join(root, ".hunch", "local.json"), JSON.stringify({ privateDir: overlay, mode: "shared", autoCommit: false }) + "\n");
+  execFileSync("git", ["init", "-q", root]);
+  writeLocalPointer(root, { privateDir: overlay, mode: "shared", autoCommit: false });
   const publicLock = writeLockPath(join(root, ".hunch"));
   try {
     // A live writer in the public checkout may be old enough to trip age-based

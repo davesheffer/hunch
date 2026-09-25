@@ -229,7 +229,7 @@ function clearStrandedIndexLock(repoDir: string, env: NodeJS.ProcessEnv, sinceMs
  * directory that Node reached through its long path. A nonzero file ID keeps
  * this exact even on case-sensitive Windows directories; canonical text is a
  * conservative fallback for filesystems that do not expose stable IDs. */
-function sameFilesystemEntry(left: string, right: string): boolean {
+export function sameFilesystemEntry(left: string, right: string): boolean {
   try {
     const leftStat = statSync(left, { bigint: true });
     const rightStat = statSync(right, { bigint: true });
@@ -1829,6 +1829,91 @@ export function gitCommonDir(cwd: string): string {
   const p = gitSafe(["rev-parse", "--git-common-dir"], cwd);
   if (!p) return "";
   return isAbsolute(p) ? p : resolve(cwd, p);
+}
+
+/** The git common dir for `cwd`, but only when Git reached it through the worktree's own
+ *  `.git` entry and that entry is one Git itself set up (gitDirServesWorktree). Checkout
+ *  content can never supply a `.git` entry through Git (Git refuses to track `.git`), but
+ *  an extracted archive can, so the entry alone proves nothing. A directory that merely
+ *  looks like a repository (HEAD/objects/refs/config committed as ordinary files) is never
+ *  accepted, whichever Git version runs. "" when there is no such repo. */
+export function checkoutCommonDir(cwd: string): string {
+  // Isolated env: a hook's exported GIT_DIR/GIT_COMMON_DIR must not redirect resolution
+  // away from `cwd`'s own layout.
+  const [top, own, commonOut] = gitSafeIsolated(
+    ["-c", "safe.bareRepository=explicit", "rev-parse", "--show-toplevel", "--absolute-git-dir", "--git-common-dir"],
+    cwd,
+  ).split("\n");
+  if (!top || !own || !commonOut) return "";
+  const common = isAbsolute(commonOut) ? commonOut : resolve(cwd, commonOut);
+  const dotGit = join(top, ".git");
+  try {
+    // lstat: Git never creates `.git` as a symlink, so a linked `.git` is treated like a
+    // `.git` file — it must be vouched for by the repository it reaches.
+    const entry = lstatSync(dotGit);
+    const stat = entry.isSymbolicLink() ? statSync(dotGit) : entry;
+    const indirect = entry.isSymbolicLink() || stat.isFile();
+    if (stat.isDirectory()) {
+      if (!sameFilesystemEntry(own, dotGit)) return "";
+    } else if (stat.isFile()) {
+      const named = /^gitdir:\s*(.+?)\s*$/m.exec(readFileSync(dotGit, "utf8"))?.[1];
+      if (!named || !sameFilesystemEntry(own, resolve(top, named))) return "";
+    } else {
+      return "";
+    }
+    if (!gitDirServesWorktree(own, common, top, dotGit, indirect, entry.isSymbolicLink())) return "";
+  } catch {
+    return "";
+  }
+  if (!insideDirectory(cwd, top)) return "";
+  return canonicalPath(common);
+}
+
+/** Whether `path` physically is `dir` or lies below it, by filesystem identity rather than
+ *  path text, so a case variant or firmlink spelling of the same directory still counts.
+ *  The walk starts from the resolved path: a symlink inside `dir` that leads elsewhere does
+ *  not count as inside. */
+function insideDirectory(path: string, dir: string): boolean {
+  for (let at = canonicalPath(path); ; at = dirname(at)) {
+    if (sameFilesystemEntry(at, dir)) return true;
+    if (dirname(at) === at) return false;
+  }
+}
+
+/** Whether Git itself set up `gitdir` to serve the worktree at `top`, so that `common` is
+ *  genuinely this checkout's repository:
+ *  - `gitdir` IS the common dir (no `commondir` indirection): a real `.git` directory, or,
+ *    reached through a `.git` file or symlink, a repository whose `core.worktree` resolves
+ *    to `top` (a submodule; `git init --separate-git-dir` sets no `core.worktree`, so that
+ *    layout needs it configured by hand);
+ *  - otherwise `gitdir` must be registered in the common dir's own `worktrees/` directory,
+ *    its `gitdir` back-link must name `top/.git`, and that `.git` must not be a symlink.
+ *    A git dir anywhere else can name any repository through a `commondir` file, so it is
+ *    never accepted. */
+function gitDirServesWorktree(
+  gitdir: string, common: string, top: string, dotGit: string, indirect: boolean, symlinked: boolean,
+): boolean {
+  if (sameFilesystemEntry(gitdir, common)) {
+    if (!indirect) return true;
+    const worktree = gitSafeIsolated(["config", "--file", join(gitdir, "config"), "--get", "core.worktree"], gitdir);
+    return !!worktree && sameFilesystemEntry(resolve(gitdir, worktree), top);
+  }
+  // A linked worktree's back-link names its own `.git` file, and a symlink resolves to the
+  // very file it points at, so the back-link cannot vouch for a symlinked `.git`.
+  if (symlinked) return false;
+  const registry = dirname(canonicalPath(gitdir));
+  if (basename(registry) !== "worktrees" || !sameFilesystemEntry(dirname(registry), common)) return false;
+  try {
+    const backLink = readFileSync(join(gitdir, "gitdir"), "utf8").trim();
+    if (!backLink) return false;
+    // Same file AND same parent directory: a hard link to another worktree's `.git` file
+    // shares its inode but not its directory. Identity, not path text, so case variants
+    // and firmlink spellings that Git may have written still match.
+    const named = resolve(gitdir, backLink);
+    return basename(named) === ".git" && sameFilesystemEntry(named, dotGit) && sameFilesystemEntry(dirname(named), top);
+  } catch {
+    return false;
+  }
 }
 
 /** True when `cwd` is inside a LINKED worktree (not the main checkout): its own git

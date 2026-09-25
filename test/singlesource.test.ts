@@ -1,4 +1,4 @@
-import { cleanupDir } from "./fixtures.js";
+import { cleanupDir, writeLocalPointer } from "./fixtures.js";
 /**
  * Single source of truth — the memory-resolution contract:
  *  · captureHome routes every capture to ONE home per mode (public / private-split / shared-unified)
@@ -15,7 +15,7 @@ import { execFileSync } from "node:child_process";
 import { HunchStore } from "../src/store/hunchStore.js";
 import { hunchPaths } from "../src/core/paths.js";
 import { ensureSharedOverlayPointer } from "../src/integrations/worktree.js";
-import { ensureTeamOverlay, writeTeamConfig, readTeamConfig, safeGitUrl } from "../src/integrations/team.js";
+import { ensureTeamOverlay, writeTeamConfig, readTeamConfig, safeGitUrl, trustTeamStore } from "../src/integrations/team.js";
 import { ensureGitignore } from "../src/integrations/gitignore.js";
 import { installMergeDriver } from "../src/integrations/mergeDriver.js";
 import { mainWorktreeRoot } from "../src/extractors/git.js";
@@ -68,6 +68,19 @@ function withoutPrivateEnv<T>(fn: () => T): T {
   try { return fn(); } finally { if (saved !== undefined) process.env.HUNCH_PRIVATE_DIR = saved; }
 }
 
+// trustTeamStore() (and every later read of that consent, e.g. ensureTeamOverlay)
+// resolves its file under XDG_CONFIG_HOME; point it at a scratch dir for the whole
+// callback so the test never touches the real user config.
+function withIsolatedConfigHome<T>(base: string, fn: () => T): T {
+  const savedXdg = process.env.XDG_CONFIG_HOME;
+  process.env.XDG_CONFIG_HOME = join(base, "config-home", ".config");
+  try {
+    return fn();
+  } finally {
+    if (savedXdg === undefined) delete process.env.XDG_CONFIG_HOME; else process.env.XDG_CONFIG_HOME = savedXdg;
+  }
+}
+
 function standaloneOverlay(root: string): string {
   const overlayRoot = join(root, ".hunch-private");
   const overlay = join(overlayRoot, ".hunch");
@@ -89,7 +102,7 @@ test("captureHome: one home per record in every mode — public, private-split, 
       pub.close();
 
       // Private mode (and legacy configs with NO mode field) → split routing.
-      writeFileSync(join(root, ".hunch", "local.json"), JSON.stringify({ privateDir: overlay }) + "\n");
+      writeLocalPointer(root, { privateDir: overlay });
       const legacy = new HunchStore(hunchPaths(root));
       assert.equal(legacy.mode, "private"); // absent mode reads private — upgrade-safe
       assert.equal(legacy.unified, false);
@@ -98,7 +111,7 @@ test("captureHome: one home per record in every mode — public, private-split, 
       legacy.close();
 
       // Shared mode → unified: EVERY capture routes to the overlay.
-      writeFileSync(join(root, ".hunch", "local.json"), JSON.stringify({ privateDir: overlay, mode: "shared" }) + "\n");
+      writeLocalPointer(root, { privateDir: overlay, mode: "shared" });
       const shared = new HunchStore(hunchPaths(root));
       assert.equal(shared.mode, "shared");
       assert.equal(shared.unified, true);
@@ -117,7 +130,7 @@ test("replaceCaptures bulk-replaces array graph kinds in the routed home without
   try {
     withoutPrivateEnv(() => {
       const overlay = standaloneOverlay(root);
-      writeFileSync(join(root, ".hunch", "local.json"), JSON.stringify({ privateDir: overlay, mode: "shared" }) + "\n");
+      writeLocalPointer(root, { privateDir: overlay, mode: "shared" });
       const store = new HunchStore(hunchPaths(root));
 
       store.putCapture("symbols", sym("sym_stale"));
@@ -194,25 +207,28 @@ test("team.json auto-discovery: a fresh clone wires itself to the shared store (
       g(base, "clone", "-q", proj, clone); cfg(clone);
 
       assert.deepEqual(readTeamConfig(clone), { shared_repo: memRemote });
-      const wired = ensureTeamOverlay(clone);
-      assert.ok(wired, "fresh clone should auto-wire from team.json");
-      const store = new HunchStore(hunchPaths(clone));
-      assert.equal(store.mode, "shared");
-      assert.equal(store.unified, true);
-      assert.ok(store.recs("decisions").some((d) => d.id === "dec_team")); // the team's memory is visible
-      store.close();
-      const overlayRoot = dirname(wired!);
-      assert.match(readFileSync(join(overlayRoot, ".gitignore"), "utf8"), /\.hunch\/\*\.sqlite/);
-      assert.match(g(overlayRoot, "config", "--get", "merge.hunch.driver"), /merge-driver/);
-      // Existing pointers are also an upgrade seam: repair clone-local capabilities
-      // removed from an older overlay without recloning or changing its pointer.
-      rmSync(join(overlayRoot, ".gitignore"), { force: true });
-      rmSync(join(overlayRoot, ".gitattributes"), { force: true });
-      g(overlayRoot, "config", "--unset", "merge.hunch.driver");
-      assert.equal(ensureTeamOverlay(clone), null); // idempotent routing, active capability repair
-      assert.match(readFileSync(join(overlayRoot, ".gitignore"), "utf8"), /\.hunch\/\*\.sqlite/);
-      assert.match(readFileSync(join(overlayRoot, ".gitattributes"), "utf8"), /merge=hunch/);
-      assert.match(g(overlayRoot, "config", "--get", "merge.hunch.driver"), /merge-driver/);
+      withIsolatedConfigHome(base, () => {
+        trustTeamStore(clone, readTeamConfig(clone)!);
+        const wired = ensureTeamOverlay(clone);
+        assert.ok(wired, "fresh clone should auto-wire from team.json");
+        const store = new HunchStore(hunchPaths(clone));
+        assert.equal(store.mode, "shared");
+        assert.equal(store.unified, true);
+        assert.ok(store.recs("decisions").some((d) => d.id === "dec_team")); // the team's memory is visible
+        store.close();
+        const overlayRoot = dirname(wired!);
+        assert.match(readFileSync(join(overlayRoot, ".gitignore"), "utf8"), /\.hunch\/\*\.sqlite/);
+        assert.match(g(overlayRoot, "config", "--get", "merge.hunch.driver"), /merge-driver/);
+        // Existing pointers are also an upgrade seam: repair clone-local capabilities
+        // removed from an older overlay without recloning or changing its pointer.
+        rmSync(join(overlayRoot, ".gitignore"), { force: true });
+        rmSync(join(overlayRoot, ".gitattributes"), { force: true });
+        g(overlayRoot, "config", "--unset", "merge.hunch.driver");
+        assert.equal(ensureTeamOverlay(clone), null); // idempotent routing, active capability repair
+        assert.match(readFileSync(join(overlayRoot, ".gitignore"), "utf8"), /\.hunch\/\*\.sqlite/);
+        assert.match(readFileSync(join(overlayRoot, ".gitattributes"), "utf8"), /merge=hunch/);
+        assert.match(g(overlayRoot, "config", "--get", "merge.hunch.driver"), /merge-driver/);
+      });
     });
   } finally { cleanupDir(base); }
 });
@@ -404,7 +420,7 @@ test("putWhereItLives updates the holding store — an overlay record never fork
   try {
     withoutPrivateEnv(() => {
       const overlay = standaloneOverlay(root);
-      writeFileSync(join(root, ".hunch", "local.json"), JSON.stringify({ privateDir: overlay, mode: "shared" }) + "\n");
+      writeLocalPointer(root, { privateDir: overlay, mode: "shared" });
       const store = new HunchStore(hunchPaths(root));
       store.putCapture("decisions", dec("dec_upd")); // lands in the overlay (unified)
       store.putWhereItLives("decisions", { ...dec("dec_upd"), title: "updated" });

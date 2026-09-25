@@ -1,4 +1,4 @@
-import { cleanupDir } from "./fixtures.js";
+import { cleanupDir, writeLocalPointer } from "./fixtures.js";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -77,7 +77,7 @@ function proofRepo(
   const privateDir = options.privateOverlay ? mkdtempSync(join(tmpdir(), "hunch-change-proof-private-")) : null;
   if (privateDir) {
     mkdirSync(join(root, ".hunch"), { recursive: true });
-    writeFileSync(join(root, ".hunch/local.json"), JSON.stringify({ privateDir }));
+    writeLocalPointer(root, { privateDir });
   }
   const store = new HunchStore(hunchPaths(root));
   store.json.ensureDirs();

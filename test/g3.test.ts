@@ -1,4 +1,4 @@
-import { cleanupDir } from "./fixtures.js";
+import { cleanupDir, writeLocalPointer } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
@@ -86,8 +86,9 @@ function fixture() {
   const privateRoot = join(root, "private", ".hunch");
   mkdirSync(privateRoot, { recursive: true });
   execFileSync("git", ["init", "-q", join(root, "private")]);
+  execFileSync("git", ["init", "-q", root]);
   mkdirSync(join(root, ".hunch"), { recursive: true });
-  writeFileSync(join(root, ".hunch/local.json"), JSON.stringify({ privateDir: privateRoot, autoCommit: false, mode: "private" }));
+  writeLocalPointer(root, { privateDir: privateRoot, autoCommit: false, mode: "private" });
   const store = new HunchStore(hunchPaths(root));
   store.json.ensureDirs();
   const repository = new G3EvidenceRepository(store);

@@ -1,4 +1,4 @@
-import { cleanupDir } from "./fixtures.js";
+import { cleanupDir, writeLocalPointer } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
@@ -126,11 +126,11 @@ function duplicatePolicyHomesFixture() {
   execFileSync("git", ["-C", overlayRoot, "commit", "-qm", "fixture: duplicate private policy"]);
 
   ensureGitignore(root);
-  writeFileSync(join(root, ".hunch/local.json"), `${JSON.stringify({
+  writeLocalPointer(root, {
     privateDir: ".hunch-private/.hunch",
     mode: "private",
     autoCommit: true,
-  }, null, 2)}\n`);
+  });
   execFileSync("git", ["-C", root, "add", "-A"]);
   execFileSync("git", ["-C", root, "commit", "-qm", "fixture: duplicate policy homes"]);
   return { ...fixture, policy, overlayRoot };
@@ -792,7 +792,7 @@ test("private evidence produces private policy/proof and public-only evaluation 
   initial.close();
   const privateRoot = join(root, "private-overlay/.hunch");
   initializePrivateOverlay(privateRoot);
-  writeFileSync(join(root, ".hunch/local.json"), JSON.stringify({ privateDir: privateRoot, autoCommit: false, mode: "private" }));
+  writeLocalPointer(root, { privateDir: privateRoot, autoCommit: false, mode: "private" });
   const store = new HunchStore(hunchPaths(root));
   try {
     store.putPrivate("decisions", decision("dec_private", { private: true }));
@@ -851,7 +851,7 @@ test("private composite receipts and member hashes never cross into the public p
   initial.close();
   const privateRoot = join(root, "private-overlay/.hunch");
   initializePrivateOverlay(privateRoot);
-  writeFileSync(join(root, ".hunch/local.json"), JSON.stringify({ privateDir: privateRoot, autoCommit: false, mode: "private" }));
+  writeLocalPointer(root, { privateDir: privateRoot, autoCommit: false, mode: "private" });
   const store = new HunchStore(hunchPaths(root));
   try {
     store.putPrivate("decisions", decision("dec_private_composite", { private: true }));
@@ -1041,7 +1041,7 @@ test("Phase 2A bootstrap inherits private taint and public-only reads reveal not
   initial.close();
   const privateRoot = join(root, "private-bootstrap/.hunch");
   initializePrivateOverlay(privateRoot);
-  writeFileSync(join(root, ".hunch/local.json"), JSON.stringify({ privateDir: privateRoot, autoCommit: false, mode: "private" }));
+  writeLocalPointer(root, { privateDir: privateRoot, autoCommit: false, mode: "private" });
   const store = new HunchStore(hunchPaths(root));
   try {
     store.putPrivate("decisions", decision("dec_private_bootstrap", { private: true }));
@@ -1067,7 +1067,7 @@ test("Phase 2A home selection cannot substitute a same-id private decision into 
   initial.close();
   const privateRoot = join(root, "private-collision/.hunch");
   initializePrivateOverlay(privateRoot);
-  writeFileSync(join(root, ".hunch/local.json"), JSON.stringify({ privateDir: privateRoot, autoCommit: false, mode: "private" }));
+  writeLocalPointer(root, { privateDir: privateRoot, autoCommit: false, mode: "private" });
   const store = new HunchStore(hunchPaths(root));
   try {
     store.json.put("decisions", { ...decision("dec_collision"), title: "PUBLIC boundary evidence" });
@@ -1527,7 +1527,7 @@ test("Phase 2Q G2 shadow sweep is real-state deduplicated, retry-safe, private, 
   initial.close();
   const privateRoot = join(root, "private-g2-shadow/.hunch");
   initializePrivateOverlay(privateRoot);
-  writeFileSync(join(root, ".hunch/local.json"), JSON.stringify({ privateDir: privateRoot, autoCommit: false, mode: "private" }));
+  writeLocalPointer(root, { privateDir: privateRoot, autoCommit: false, mode: "private" });
   const store = new HunchStore(hunchPaths(root));
   try {
     store.putPrivate("decisions", decision("dec_g2_shadow", { private: true }));
@@ -1659,7 +1659,7 @@ test("Phase 2R G2 candidate review separates human grounding from structural coi
   initial.close();
   const privateRoot = join(root, "private-g2-candidates/.hunch");
   initializePrivateOverlay(privateRoot);
-  writeFileSync(join(root, ".hunch/local.json"), JSON.stringify({ privateDir: privateRoot, autoCommit: false, mode: "private" }));
+  writeLocalPointer(root, { privateDir: privateRoot, autoCommit: false, mode: "private" });
 
   writeFileSync(join(root, "src/global.ts"), "export function resolve(id){ return id; }\n");
   commitFiles(root, ["src/global.ts"], "chore: add unrelated resolver");
@@ -1741,7 +1741,7 @@ test("Phase 2S G2 candidate attestations are exact, append-only, private, and no
   initial.close();
   const privateRoot = join(root, "private-g2-attestations/.hunch");
   initializePrivateOverlay(privateRoot);
-  writeFileSync(join(root, ".hunch/local.json"), JSON.stringify({ privateDir: privateRoot, autoCommit: false, mode: "private" }));
+  writeLocalPointer(root, { privateDir: privateRoot, autoCommit: false, mode: "private" });
 
   writeFileSync(join(root, "src/api/orders.ts"), 'import { fetchOrders } from "../services/orders.js";\nexport function listOrders(u){ return fetchOrders(u); }\nexport function guardedOrders(){ return fetchOrders("guarded"); }\n');
   const groundedCommit = commitFiles(root, ["src/api/orders.ts"], "fix: guardedOrders must call fetchOrders");
@@ -2032,7 +2032,7 @@ test("Phase 2U/2V/2W/2X/2Y replays, attests, and proves exact executable behavio
   initializePrivateOverlay(privateRoot);
   const fixtureExclude = join(root, ".git/info/exclude");
   writeFileSync(fixtureExclude, `${readFileSync(fixtureExclude, "utf8")}\nprivate-g2-behavior/\n`);
-  writeFileSync(join(root, ".hunch/local.json"), JSON.stringify({ privateDir: privateRoot, autoCommit: false, mode: "private" }));
+  writeLocalPointer(root, { privateDir: privateRoot, autoCommit: false, mode: "private" });
 
   mkdirSync(join(root, "test"), { recursive: true });
   writeFileSync(join(root, "package.json"), JSON.stringify({
@@ -3114,7 +3114,7 @@ test("Phase 2B exact-home history compilation cannot leak a same-id private judg
   initial.close();
   const privateRoot = join(root, "private-history/.hunch");
   initializePrivateOverlay(privateRoot);
-  writeFileSync(join(root, ".hunch/local.json"), JSON.stringify({ privateDir: privateRoot, autoCommit: false, mode: "private" }));
+  writeLocalPointer(root, { privateDir: privateRoot, autoCommit: false, mode: "private" });
   const store = new HunchStore(hunchPaths(root));
   try {
     indexRepo(store, root, { churn: false });
@@ -3451,11 +3451,11 @@ test("MD-1a private proof packet is byte-reusable across differently named linke
     execFileSync("git", ["worktree", "add", "-q", "-b", "md1-consumer", consumer], { cwd: fixture.root });
     for (const worktree of [producer, consumer]) {
       mkdirSync(join(worktree, ".hunch"), { recursive: true });
-      writeFileSync(join(worktree, ".hunch/local.json"), JSON.stringify({
+      writeLocalPointer(worktree, {
         privateDir: privateRoot,
         autoCommit: false,
         mode: "private",
-      }) + "\n");
+      });
     }
 
     producerStore = new HunchStore(hunchPaths(producer));
@@ -3556,11 +3556,11 @@ test("MD-1a private proof packet is byte-reusable across ordinary clones after o
       execFileSync("git", ["config", "user.email", "test@example.com"], { cwd: checkout });
       execFileSync("git", ["config", "user.name", "Test Human"], { cwd: checkout });
       mkdirSync(join(checkout, ".hunch"), { recursive: true });
-      writeFileSync(join(checkout, ".hunch/local.json"), JSON.stringify({
+      writeLocalPointer(checkout, {
         privateDir: privateRoot,
         autoCommit: false,
         mode: "private",
-      }) + "\n");
+      });
     }
 
     producerStore = new HunchStore(hunchPaths(producer));
@@ -4207,7 +4207,7 @@ test("MD-1a private correction batch leaves exact-zero public artifacts and publ
   initial.close();
   const privateRoot = join(root, "private-correction-policy/.hunch");
   initializePrivateOverlay(privateRoot);
-  writeFileSync(join(root, ".hunch/local.json"), JSON.stringify({ privateDir: privateRoot, autoCommit: false, mode: "private" }));
+  writeLocalPointer(root, { privateDir: privateRoot, autoCommit: false, mode: "private" });
   const store = new HunchStore(hunchPaths(root));
   try {
     const correction = buildCorrectionConstraint({
@@ -4258,7 +4258,7 @@ test("MD-1a rejects public references to private-only decisions before evidence 
   initial.close();
   const privateRoot = join(root, "private-source-taint/.hunch");
   initializePrivateOverlay(privateRoot);
-  writeFileSync(join(root, ".hunch/local.json"), JSON.stringify({ privateDir: privateRoot, autoCommit: false, mode: "private" }));
+  writeLocalPointer(root, { privateDir: privateRoot, autoCommit: false, mode: "private" });
   const store = new HunchStore(hunchPaths(root));
   const privateDecision = {
     ...decision("dec_private_transport"),
@@ -4600,11 +4600,11 @@ test("MD-1a private split sync commits its proposal only to a standalone overlay
     ensureGitignore(fixture.root);
     commitFiles(fixture.root, ["AGENTS.md", ".gitignore"], "fixture: track public grounding target");
     fixture.store.close();
-    writeFileSync(join(fixture.root, ".hunch/local.json"), JSON.stringify({
+    writeLocalPointer(fixture.root, {
       privateDir: privateRoot,
       autoCommit: true,
       mode: "private",
-    }) + "\n");
+    });
     const configured = new HunchStore(hunchPaths(fixture.root));
     const correction = buildCorrectionConstraint({
       rule: "PRIVATE_CORRECTION_SENTINEL: never import @secret/billing",
@@ -4681,7 +4681,7 @@ test("Phase 2C correction ingestion inherits private home and public reads revea
   initial.close();
   const privateRoot = join(root, "private-adapter/.hunch");
   initializePrivateOverlay(privateRoot);
-  writeFileSync(join(root, ".hunch/local.json"), JSON.stringify({ privateDir: privateRoot, autoCommit: false, mode: "private" }));
+  writeLocalPointer(root, { privateDir: privateRoot, autoCommit: false, mode: "private" });
   const store = new HunchStore(hunchPaths(root));
   try {
     const correction = buildCorrectionConstraint({
@@ -4755,7 +4755,7 @@ test("Phase 2D public instruction coverage never resolves through a private-only
     initial.close();
     const privateRoot = join(root, "private-instruction/.hunch");
     initializePrivateOverlay(privateRoot);
-    writeFileSync(join(root, ".hunch/local.json"), JSON.stringify({ privateDir: privateRoot, autoCommit: false, mode: "private" }));
+    writeLocalPointer(root, { privateDir: privateRoot, autoCommit: false, mode: "private" });
     const store = new HunchStore(hunchPaths(root));
     try {
       indexRepo(store, root, { churn: false });
@@ -4786,7 +4786,7 @@ test("Phase 2D review/conversation exports validate as one batch and preserve ex
   initial.close();
   const privateRoot = join(root, "private-import/.hunch");
   initializePrivateOverlay(privateRoot);
-  writeFileSync(join(root, ".hunch/local.json"), JSON.stringify({ privateDir: privateRoot, autoCommit: false, mode: "private" }));
+  writeLocalPointer(root, { privateDir: privateRoot, autoCommit: false, mode: "private" });
   const store = new HunchStore(hunchPaths(root));
   try {
     store.putPrivate("decisions", decision("dec_privateexport", { private: true }));

@@ -6,7 +6,7 @@
  */
 import { existsSync, readFileSync, mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { gitCommonDir } from "../extractors/git.js";
+import { checkoutCommonDir } from "../extractors/git.js";
 import { writeFileAtomic } from "../core/io.js";
 
 /** Register the resolved private overlay at the shared git common dir, so every worktree
@@ -17,7 +17,7 @@ import { writeFileAtomic } from "../core/io.js";
  *  (memory is worktree-shared), false when there's no overlay configured or no git
  *  common dir. Reused by `init`/`worktree`/`private`/`shared`. */
 export function ensureSharedOverlayPointer(root: string, overlayDir: string | undefined, autoCommit: boolean, mode: "private" | "shared" = "private"): boolean {
-  const common = overlayDir ? gitCommonDir(root) : "";
+  const common = overlayDir ? checkoutCommonDir(root) : "";
   if (!common || !overlayDir) return false;
   const file = join(common, "hunch", "local.json");
   const want = JSON.stringify({ privateDir: resolve(overlayDir), autoCommit, mode }, null, 2) + "\n";

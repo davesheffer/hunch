@@ -1,4 +1,4 @@
-import { cleanupDir } from "./fixtures.js";
+import { cleanupDir, writeLocalPointer } from "./fixtures.js";
 /**
  * nuryel.state/1 bound to the store: read / write / subscribe over a HunchStore, with the
  * contract's invariants enforced by the ONE binding every transport calls.
@@ -51,8 +51,9 @@ function overlayStore(): { root: string; overlay: string; store: HunchStore; cle
   const overlay = join(sandbox, "private-memory", ".hunch");
   mkdirSync(overlay, { recursive: true });
   execFileSync("git", ["init", "-q", join(sandbox, "private-memory")]);
-  mkdirSync(join(root, ".hunch"), { recursive: true });
-  writeFileSync(join(root, ".hunch", "local.json"), JSON.stringify({ privateDir: overlay, autoCommit: false }) + "\n");
+  mkdirSync(root, { recursive: true });
+  execFileSync("git", ["init", "-q", root]);
+  writeLocalPointer(root, { privateDir: overlay, autoCommit: false });
   const store = new HunchStore(hunchPaths(root));
   store.json.ensureDirs();
   return { root, overlay, store, cleanup: () => { store.close(); cleanupDir(sandbox); } };

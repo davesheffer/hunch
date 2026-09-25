@@ -1,4 +1,4 @@
-import { cleanupDir } from "./fixtures.js";
+import { cleanupDir, writeLocalPointer } from "./fixtures.js";
 /**
  * Safety guard for the overlay auto-commit (bug_overlay_clobber): a Hunch memory sync commits only
  * contained JSON. Snapshot deletions are allowed only after the private/shared overlay is proven to
@@ -871,12 +871,7 @@ test("HunchStore refuses an auto-commit-disabled privateDir nested in the protec
     project.git("commit", "-qm", "public code");
     const nestedHunch = join(project.root, "var", "deep", "private-memory", ".hunch");
     mkdirSync(nestedHunch, { recursive: true });
-    mkdirSync(join(project.root, ".hunch"), { recursive: true });
-    writeFileSync(join(project.root, ".hunch", "local.json"), JSON.stringify({
-      privateDir: nestedHunch,
-      autoCommit: false,
-      mode: "private",
-    }) + "\n");
+    writeLocalPointer(project.root, { privateDir: nestedHunch, autoCommit: false, mode: "private" });
 
     assert.throws(() => withoutPrivateEnv(() => {
       const unsafe = new HunchStore(hunchPaths(project.root));
@@ -897,12 +892,7 @@ test("HunchStore refuses a nonexistent privateDir nested in the protected code r
     project.git("add", "-A");
     project.git("commit", "-qm", "public code");
     const nestedHunch = join(project.root, "not-created", "deep", "private-memory", ".hunch");
-    mkdirSync(join(project.root, ".hunch"), { recursive: true });
-    writeFileSync(join(project.root, ".hunch", "local.json"), JSON.stringify({
-      privateDir: nestedHunch,
-      autoCommit: false,
-      mode: "private",
-    }) + "\n");
+    writeLocalPointer(project.root, { privateDir: nestedHunch, autoCommit: false, mode: "private" });
 
     assert.equal(existsSync(join(project.root, "not-created")), false, "fixture starts with no private path");
     assert.throws(() => withoutPrivateEnv(() => {
@@ -927,12 +917,7 @@ test("HunchStore treats malformed nested Git metadata as unsafe instead of a dis
     const nestedHunch = join(trap, "missing", "deep", ".hunch");
     mkdirSync(trap, { recursive: true });
     writeFileSync(join(trap, ".git"), "gitdir: /definitely/missing/hunch-overlay-gitdir\n");
-    mkdirSync(join(project.root, ".hunch"), { recursive: true });
-    writeFileSync(join(project.root, ".hunch", "local.json"), JSON.stringify({
-      privateDir: nestedHunch,
-      autoCommit: false,
-      mode: "private",
-    }) + "\n");
+    writeLocalPointer(project.root, { privateDir: nestedHunch, autoCommit: false, mode: "private" });
 
     assert.throws(() => withoutPrivateEnv(() => {
       const unsafe = new HunchStore(hunchPaths(project.root));
@@ -984,12 +969,7 @@ test("HunchStore accepts a nested privateDir whose parent is a distinct standalo
     const nestedHunch = join(overlayRoot, ".hunch");
     mkdirSync(nestedHunch, { recursive: true });
     execFileSync("git", ["init", "-q", overlayRoot]);
-    mkdirSync(join(project.root, ".hunch"), { recursive: true });
-    writeFileSync(join(project.root, ".hunch", "local.json"), JSON.stringify({
-      privateDir: nestedHunch,
-      autoCommit: false,
-      mode: "private",
-    }) + "\n");
+    writeLocalPointer(project.root, { privateDir: nestedHunch, autoCommit: false, mode: "private" });
 
     const store = withoutPrivateEnv(() => new HunchStore(hunchPaths(project.root)));
     try {

@@ -1,4 +1,4 @@
-import { cleanupDir } from "./fixtures.js";
+import { cleanupDir, writeLocalPointer } from "./fixtures.js";
 /**
  * Partition isolation inside ONE overlay home. Organization, team and user partitions share the
  * overlay, so every rule that looks for an incumbent or a supersede target must compare the
@@ -28,8 +28,9 @@ function overlayStore(): { store: HunchStore; cleanup: () => void } {
   const overlay = join(sandbox, "private-memory", ".hunch");
   mkdirSync(overlay, { recursive: true });
   execFileSync("git", ["init", "-q", join(sandbox, "private-memory")]);
-  mkdirSync(join(root, ".hunch"), { recursive: true });
-  writeFileSync(join(root, ".hunch", "local.json"), JSON.stringify({ privateDir: overlay, autoCommit: false }) + "\n");
+  mkdirSync(root, { recursive: true });
+  execFileSync("git", ["init", "-q", root]);
+  writeLocalPointer(root, { privateDir: overlay, autoCommit: false });
   const store = new HunchStore(hunchPaths(root));
   store.json.ensureDirs();
   return { store, cleanup: () => { store.close(); cleanupDir(sandbox); } };

@@ -1,4 +1,4 @@
-import { cleanupDir } from "./fixtures.js";
+import { cleanupDir, writeLocalPointer } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -117,7 +117,8 @@ test("private overlay: resolves from gitignored .hunch/local.json when NO env va
   delete process.env.HUNCH_PRIVATE_DIR; // prove it works with NO env
   try {
     mkdirSync(join(pub, ".hunch"), { recursive: true });
-    writeFileSync(join(pub, ".hunch", "local.json"), JSON.stringify({ privateDir: priv }));
+    execFileSync("git", ["init", "-q", pub]);
+    writeLocalPointer(pub, { privateDir: priv });
     const store = new HunchStore(hunchPaths(pub));
     store.json.ensureDirs();
     assert.equal(store.hasPrivate, true); // picked up from local.json, not env
@@ -144,7 +145,8 @@ test("private overlay: a RELATIVE privateDir in local.json resolves against the 
     mkdirSync(join(pub, ".hunch-private", ".hunch"), { recursive: true });
     execFileSync("git", ["init", "-q", join(pub, ".hunch-private")]);
     mkdirSync(join(pub, ".hunch"), { recursive: true });
-    writeFileSync(join(pub, ".hunch", "local.json"), JSON.stringify({ privateDir: ".hunch-private/.hunch" }));
+    execFileSync("git", ["init", "-q", pub]);
+    writeLocalPointer(pub, { privateDir: ".hunch-private/.hunch" });
     const store = new HunchStore(hunchPaths(pub));
     assert.equal(store.hasPrivate, true);
     assert.equal(store.privateDir, resolve(pub, ".hunch-private/.hunch")); // resolved under root, not cwd
@@ -165,7 +167,8 @@ test("private overlay: HUNCH_PRIVATE_DIR env overrides .hunch/local.json", () =>
   const prev = process.env.HUNCH_PRIVATE_DIR;
   try {
     mkdirSync(join(pub, ".hunch"), { recursive: true });
-    writeFileSync(join(pub, ".hunch", "local.json"), JSON.stringify({ privateDir: localDir, mode: "shared" }));
+    execFileSync("git", ["init", "-q", pub]);
+    writeLocalPointer(pub, { privateDir: localDir, mode: "shared" });
     process.env.HUNCH_PRIVATE_DIR = envDir; // env should win
     const store = new HunchStore(hunchPaths(pub));
     store.json.ensureDirs();
@@ -195,7 +198,8 @@ test("private overlay: an env target equal to local.json is identified without a
   const prev = process.env.HUNCH_PRIVATE_DIR;
   try {
     mkdirSync(join(pub, ".hunch"), { recursive: true });
-    writeFileSync(join(pub, ".hunch", "local.json"), JSON.stringify({ privateDir: overlay }));
+    execFileSync("git", ["init", "-q", pub]);
+    writeLocalPointer(pub, { privateDir: overlay });
     process.env.HUNCH_PRIVATE_DIR = overlay;
     const store = new HunchStore(hunchPaths(pub));
     assert.equal(store.overlaySource, "environment");

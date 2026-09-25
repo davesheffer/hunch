@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { hunchPaths } from "../src/core/paths.js";
 import { HunchStore } from "../src/store/hunchStore.js";
-import { cleanupDir, tempDir } from "./fixtures.js";
+import { cleanupDir, tempDir, writeLocalPointer } from "./fixtures.js";
 
 const require = createRequire(import.meta.url);
 const cp = require("node:child_process") as typeof import("node:child_process");
@@ -31,8 +31,7 @@ test("a nested overlay checks each distinct publication probe once and rechecks 
     }
     mkdirSync(join(code, ".hunch"));
     mkdirSync(join(overlay, ".hunch"));
-    const localFile = join(code, ".hunch", "local.json");
-    writeFileSync(localFile, JSON.stringify({ privateDir: join(overlay, ".hunch") }));
+    writeLocalPointer(code, { privateDir: join(overlay, ".hunch") });
     const probes: string[] = [];
     cp.execFileSync = ((command: string, args: string[], options: { cwd?: string }) => {
       if (command === "git" && args.join(" ") === "rev-parse --verify HEAD^{commit}") probes.push(options.cwd ?? "");
@@ -50,14 +49,14 @@ test("a nested overlay checks each distinct publication probe once and rechecks 
     // A pointer below the nested repo's root still has two DISTINCT probes.
     const deeper = join(overlay, "subtree");
     mkdirSync(join(deeper, ".hunch"), { recursive: true });
-    writeFileSync(localFile, JSON.stringify({ privateDir: join(deeper, ".hunch") }));
+    writeLocalPointer(code, { privateDir: join(deeper, ".hunch") });
     probes.length = 0;
     new HunchStore(hunchPaths(code)).close();
     assert.ok(probes.includes(overlay), "the nested repository boundary is checked");
     assert.ok(probes.includes(deeper), "a different publication probe is also checked");
 
     // The optimization must not retain authority after the physical remote changes.
-    writeFileSync(localFile, JSON.stringify({ privateDir: join(overlay, ".hunch") }));
+    writeLocalPointer(code, { privateDir: join(overlay, ".hunch") });
     git(overlay, "remote", "add", "origin", code);
     assert.throws(() => new HunchStore(hunchPaths(code)), /Unsafe private overlay.*publication boundary/);
   } finally {

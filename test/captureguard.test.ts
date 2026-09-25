@@ -1,4 +1,5 @@
-import { cleanupDir } from "./fixtures.js";
+import { cleanupDir, writeLocalPointer } from "./fixtures.js";
+import { execFileSync } from "node:child_process";
 /**
  * Shared-mode capture guard (regression for the willClose keying bug): the
  * uniqueness guard must key its incumbent lookup on the store the write
@@ -40,7 +41,8 @@ async function sharedSetup() {
   delete process.env.HUNCH_PRIVATE_DIR; // local.json must be the source of the overlay config
   mkdirSync(join(root, ".hunch", "decisions"), { recursive: true });
   mkdirSync(join(overlay, "decisions"), { recursive: true });
-  writeFileSync(join(root, ".hunch", "local.json"), JSON.stringify({ privateDir: overlay, mode: "shared", autoCommit: false }));
+  execFileSync("git", ["init", "-q", root]);
+  writeLocalPointer(root, { privateDir: overlay, mode: "shared", autoCommit: false });
   return {
     root, overlay,
     connect: async () => {

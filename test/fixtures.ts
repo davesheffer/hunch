@@ -1,6 +1,8 @@
-import { mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
+import { readTeamConfig, trustTeamStore } from "../src/integrations/team.js";
 
 /** A canonical fixture root, including macOS symlinks and Windows 8.3 aliases. */
 export function tempDir(prefix: string, parent = tmpdir()): string {
@@ -38,4 +40,42 @@ export function cleanupDir(dir: string): void {
       while (Date.now() < until) { /* sync wait — node:test has no async cleanup here */ }
     }
   }
+}
+
+/** Record the local consent a teammate gives with `hunch shared --trust`, into the
+ *  config dir of `env` (a fixture actor's isolated home), for the team.json at `root`.
+ *  An unsafe advertised URL is left untrusted, exactly as the CLI would refuse it. */
+export function trustTeamStoreAs(env: NodeJS.ProcessEnv, root: string): void {
+  const keys = ["XDG_CONFIG_HOME", "APPDATA", "HOME", "USERPROFILE"] as const;
+  const saved = keys.map((key) => [key, process.env[key]] as const);
+  if (!env.XDG_CONFIG_HOME) throw new Error("trustTeamStoreAs needs an env with an isolated XDG_CONFIG_HOME");
+  try {
+    for (const key of keys) {
+      if (env[key] === undefined) delete process.env[key];
+      else process.env[key] = env[key];
+    }
+    const team = readTeamConfig(root);
+    if (team) trustTeamStore(root, team);
+  } finally {
+    for (const [key, value] of saved) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+}
+
+/** Wire a private overlay the way `hunch private` does: the per-worktree
+ *  `.hunch/local.json` exactly as given, plus the pointer this machine's setup
+ *  registers in the git common dir (absolute path). A per-worktree pointer alone is
+ *  checkout content and is ignored, so `root` must already be a Git repository. */
+export function writeLocalPointer(root: string, config: { privateDir: string; autoCommit?: boolean; mode?: "private" | "shared"; [key: string]: unknown }): void {
+  mkdirSync(join(root, ".hunch"), { recursive: true });
+  writeFileSync(join(root, ".hunch", "local.json"), `${JSON.stringify(config, null, 2)}\n`);
+  const raw = execFileSync("git", ["rev-parse", "--git-common-dir"], { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+  const common = isAbsolute(raw) ? raw : resolve(root, raw);
+  mkdirSync(join(common, "hunch"), { recursive: true });
+  const registered: Record<string, unknown> = { privateDir: resolve(root, config.privateDir) };
+  if (config.autoCommit !== undefined) registered.autoCommit = config.autoCommit;
+  if (config.mode !== undefined) registered.mode = config.mode;
+  writeFileSync(join(common, "hunch", "local.json"), `${JSON.stringify(registered, null, 2)}\n`);
 }

@@ -191,9 +191,18 @@ Hunch prints. On every teammate machine:
 ```bash
 npm i -g @davesheffer/hunch
 git pull
+hunch shared --trust   # once per machine: confirms the store URL from .hunch/team.json
 hunch init
 hunch doctor
 ```
+
+A committed `.hunch/team.json` is never enough on its own. Hunch clones and routes memory to the
+advertised store only after `hunch shared --trust` on that machine; the consent lives in the user's
+Hunch config directory, not in the repository, and a changed URL needs fresh consent.
+CI runners and fresh dev containers are new machines too: a job that needs the team memory runs
+`hunch shared --trust` as an explicit step before other Hunch commands. A checkout whose store
+pointer was not registered by this machine's own setup, including some wired by older Hunch
+versions, needs `hunch shared --trust` (or re-running `hunch private` / `hunch worktree`) once.
 
 **Observe:** the code repo commits `.hunch/team.json`; credentials remain in SSH or the Git
 credential helper. Each machine gets an ignored `.hunch-private/` clone and `.hunch/local.json`

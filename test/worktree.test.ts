@@ -156,22 +156,22 @@ test("P1: a linked worktree auto-discovers the overlay via the shared common-dir
   }
 });
 
-test("P1: a per-worktree local.json still wins over the shared pointer (explicit override / back-compat)", () => {
+test("P1: a per-worktree local.json naming the SAME store this machine registered still resolves it (explicit override / back-compat)", () => {
   const { root, cleanup } = tempRepo();
   const shared = mkdtempSync(join(tmpdir(), "hunch-shared-"));
-  const local = mkdtempSync(join(tmpdir(), "hunch-local-"));
   try {
+    // A per-worktree pointer is honored only when it names the same overlay this machine's
+    // setup registered at the git common dir.
     registerShared(root, join(shared, ".hunch"));
     const perWorktree = join(hunchPaths(root).hunch, "local.json");
     mkdirSync(hunchPaths(root).hunch, { recursive: true });
-    writeFileSync(perWorktree, JSON.stringify({ privateDir: join(local, ".hunch") }) + "\n");
+    writeFileSync(perWorktree, JSON.stringify({ privateDir: join(shared, ".hunch") }) + "\n");
 
     const store = new HunchStore(hunchPaths(root));
-    assert.equal(store.privateDir, resolve(join(local, ".hunch")), "per-worktree pointer takes precedence");
+    assert.equal(store.privateDir, resolve(join(shared, ".hunch")), "registered per-worktree pointer resolves the overlay");
     store.close();
   } finally {
     cleanupDir(shared);
-    cleanupDir(local);
     cleanup();
   }
 });

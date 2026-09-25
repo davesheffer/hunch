@@ -1,4 +1,4 @@
-import { cleanupDir } from "./fixtures.js";
+import { cleanupDir, trustTeamStoreAs } from "./fixtures.js";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import {
@@ -227,6 +227,8 @@ function makeMismatchedTeamFixture(base: string, name: string): MismatchedTeamFi
   git(code.root, "add", ".gitignore", ".hunch/team.json");
   git(code.root, "commit", "-qm", "chore: switch advertised team memory");
   git(code.root, "push", "-q", "origin", "main");
+  // Consent to B as well, so only the remote-identity gate can refuse the stale overlay.
+  trustTeamStoreAs(code.env, code.root);
   const overlay = join(code.root, ".hunch-private");
   assert.equal(realpathSync(git(overlay, "remote", "get-url", "origin")), realpathSync(memoryA),
     "fixture retains the old local overlay remote");
@@ -317,6 +319,7 @@ test("an existing shared-overlay CLI check refreshes a teammate's new blocking c
     const codeHeadBefore = git(developer.root, "rev-parse", "HEAD");
     const codeRemoteBefore = bareHead(developer.remote);
     const teammate = cloneCodeActor(base, developer.remote, "teammate");
+    expectCli(teammate, ["shared", "--trust"], 0);
     const rule = "TEAM_LIVE_REFRESH_RULE: never import axios in src/app.ts";
     const recorded = expectCli(teammate, [
       "record-constraint", rule,
@@ -489,6 +492,7 @@ test("strict CLI refuses an existing shared overlay whose remote differs from co
       "the strict gate must reject remote-identity drift before evaluating stale overlay A");
     assert.match(text, /team\.json|advertised team memory|does not match.*(?:remote|overlay)|(?:remote|overlay).*does not match/i,
       "the failure must identify the committed-vs-local memory identity mismatch");
+    assert.doesNotMatch(text, /have not trusted/, "consent is given; the refusal must come from the remote-identity gate");
     assert.deepEqual(jsonSnapshot(fixture.code.root), publicJsonBefore);
     assert.equal(git(fixture.code.root, "status", "--porcelain=v1", "--untracked-files=all"), statusBefore);
     assert.equal(git(fixture.code.root, "rev-parse", "HEAD"), codeHeadBefore);
@@ -527,6 +531,7 @@ test("MCP refuses an existing shared overlay whose remote differs from committed
     assert.equal(result.status, 1, text);
     assert.match(text, /team\.json|advertised team memory|does not match.*(?:remote|overlay)|(?:remote|overlay).*does not match/i,
       "MCP must identify the committed-vs-local memory identity mismatch");
+    assert.doesNotMatch(text, /have not trusted/, "consent is given; the refusal must come from the remote-identity gate");
     assert.doesNotMatch(text, /serving Hunch|REMOTE_A_ONLY_RULE/,
       "MCP never serves tools from stale overlay A");
     assert.deepEqual(jsonSnapshot(fixture.code.root), publicJsonBefore);

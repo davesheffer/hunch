@@ -11,7 +11,7 @@
  *   - fragility():      ranked fragility report with evidence
  */
 import { resolve, join, dirname, isAbsolute, relative } from "node:path";
-import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { toPosixTarget, repoRelativeTarget, isRepoFile, hunchPathsForDir, type HunchPaths } from "../core/paths.js";
 import { ENTITY_KINDS, type Component, type Constraint, type Bug, type Decision, type Symbol, type Edge, type Finding, type RejectedTripwire, type EntityKind, type EntityFor, type TaskRecord } from "../core/types.js";
 import { openDb, withTx, type DB } from "./db.js";
@@ -19,7 +19,8 @@ import { RESET_SQL, embedHash } from "./schema.js";
 import { selectEmbedder, type Embedder } from "./embedder.js";
 import { JsonStore } from "./jsonStore.js";
 import {
-  gitCommonDir,
+  checkoutCommonDir,
+  sameFilesystemEntry,
   gitWorktreeRoot,
   isolatedHeadSha,
   sameGitPublication,
@@ -138,6 +139,8 @@ export class HunchStore {
   /** How privateDir was selected. Multi-store consumers can use this instead of
    *  inferring process-global routing from process.env. */
   readonly overlaySource: OverlayResolutionSource;
+  /** A per-worktree overlay pointer this machine's setup never registered (ignored). */
+  private ignoredLocalPointer: string | null = null;
   /** Present only when HUNCH_PRIVATE_DIR redirects this store away from the
    *  repo/worktree-local pointer. Precedence is compatibility-sensitive and stays
    *  env-first; making the redirection queryable removes the silent footgun. */
@@ -250,6 +253,9 @@ export class HunchStore {
     }
     if (this.overlaySource === "environment" && teamConfigBypassed && this.privateDir) {
       return `HUNCH_PRIVATE_DIR bypasses .hunch/team.json and selects ${this.privateDir} in ${this.mode} mode; team-store auto-discovery is disabled for this process. Unset HUNCH_PRIVATE_DIR to use the advertised team store.`;
+    }
+    if (this.ignoredLocalPointer && !this.privateDir) {
+      return `.hunch/local.json names a memory store at ${this.ignoredLocalPointer} that this machine's setup has not registered, so it is ignored. If it is yours, re-run \`hunch private\` (or \`hunch shared\`, \`hunch worktree\`) here to register it, or set HUNCH_PRIVATE_DIR.`;
     }
     return null;
   }
@@ -370,18 +376,47 @@ export class HunchStore {
     // Per-worktree pointer first (explicit / back-compat). If it names no overlay, fall back to
     // the SHARED pointer in the git common dir — identical across ALL worktrees, so a freshly
     // added worktree (whose gitignored .hunch/local.json doesn't exist yet) still auto-discovers
-    // the same memory. The git lookup runs ONLY when the cheap per-worktree read is empty, keeping
-    // it off the hot path for already-configured checkouts.
-    const perWorktree = read(join(this.paths.hunch, "local.json"));
-    if (perWorktree.privateDir) return perWorktree;
-    const common = gitCommonDir(this.paths.root);
-    if (common) {
-      const shared = read(join(common, "hunch", "local.json"));
-      // A per-worktree `autoCommit: false` (hunch init --no-auto-commit) is an explicit
-      // local opt-out — it must survive the fall-through to the shared overlay pointer.
-      if (shared.privateDir) return { ...shared, autoCommit: perWorktree.autoCommit ?? shared.autoCommit };
+    // the same memory. A per-worktree pointer that names an overlay must be one this machine's
+    // setup registered (ownsLocalPointer) before it wins.
+    const perWorktreeFile = join(this.paths.hunch, "local.json");
+    let perWorktree = this.localPointerFileIsPlain(perWorktreeFile) ? read(perWorktreeFile) : {};
+    // The shared pointer is trusted only in a repository Git reached through this
+    // checkout's own `.git` entry, and only with the absolute path setup always writes.
+    const common = checkoutCommonDir(this.paths.root);
+    const registered = common ? read(join(common, "hunch", "local.json")) : {};
+    const shared = registered.privateDir && isAbsolute(registered.privateDir) ? registered : {};
+    if (perWorktree.privateDir && !this.ownsLocalPointer(perWorktree.privateDir, shared.privateDir)) {
+      this.ignoredLocalPointer = resolve(this.paths.root, perWorktree.privateDir);
+      perWorktree = {}; // not registered by this machine's setup: ignore every field it carries
     }
+    // The registered pointer decides the store and its routing mode. A per-worktree
+    // `autoCommit: false` (hunch init --no-auto-commit) is an explicit local opt-out that
+    // survives; a checkout can never turn auto-commit on.
+    if (shared.privateDir) return { ...shared, autoCommit: perWorktree.autoCommit === false ? false : shared.autoCommit };
     return perWorktree;
+  }
+
+  /** Whether the per-worktree pointer is a plain file inside a real `.hunch` directory of
+   *  this checkout. A symlinked `.hunch` or `local.json` is never followed. */
+  private localPointerFileIsPlain(file: string): boolean {
+    try {
+      const hunchStat = lstatSync(dirname(file));
+      if (hunchStat.isSymbolicLink() || !hunchStat.isDirectory()) return false;
+      const stat = lstatSync(file);
+      return !stat.isSymbolicLink() && stat.isFile();
+    } catch {
+      return false;
+    }
+  }
+
+  /** Whether a per-worktree `.hunch/local.json` naming `privateDir` was registered by this
+   *  machine's own setup rather than shipped with the checkout. The file is gitignored by
+   *  convention only, so a repository or archive can still carry one. Every setup path
+   *  (`hunch init`, `hunch private`, `hunch shared`, `hunch worktree`) also writes the
+   *  pointer in the git common dir, which no clone or checkout content can supply; the
+   *  per-worktree pointer is honored only when that pointer names the same store. */
+  private ownsLocalPointer(privateDir: string, sharedDir: string | undefined): boolean {
+    return !!sharedDir && sameFilesystemEntry(resolve(this.paths.root, privateDir), sharedDir);
   }
 
   /** Merged read: public ∪ private overlay (private wins on id collision). Every

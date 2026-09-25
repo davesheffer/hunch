@@ -1,4 +1,4 @@
-import { cleanupDir } from "./fixtures.js";
+import { cleanupDir, writeLocalPointer } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
@@ -107,11 +107,11 @@ function privateFixture(label: string, autoCommit = false): {
   initial.close();
 
   mkdirSync(privateRoot, { recursive: true });
-  writeFileSync(join(root, ".hunch/local.json"), JSON.stringify({
+  writeLocalPointer(root, {
     privateDir: privateRoot,
     autoCommit,
     mode: "private",
-  }) + "\n");
+  });
   const ruleSentinel = `PRIVATE_${label.toUpperCase()}_RULE_SENTINEL: never import @private-${label}/transport`;
   const dependencySentinel = `@private-${label}/transport`;
   const configured = new HunchStore(hunchPaths(root));

@@ -1,4 +1,4 @@
-import { cleanupDir } from "./fixtures.js";
+import { cleanupDir, writeLocalPointer } from "./fixtures.js";
 /**
  * Auto-commit in EVERY mode (default ON): the store-level `autoCommit` default, the
  * public-store commit-only flush (never push/merge the user's code branch — the
@@ -94,7 +94,7 @@ test("store.autoCommit defaults ON with no local.json; an explicit false opts ou
       const overlay = join(root, ".hunch-private", ".hunch");
       mkdirSync(overlay, { recursive: true });
       g(join(root, ".hunch-private"), "init", "-q");
-      writeFileSync(join(root, ".hunch", "local.json"), JSON.stringify({ privateDir: overlay }) + "\n");
+      writeLocalPointer(root, { privateDir: overlay });
       const shared = new HunchStore(hunchPaths(root));
       assert.equal(shared.privateAutoCommit, true); // overlay configured, no opt-out → ON
       shared.close();
@@ -164,11 +164,7 @@ test("flushMemoryHome honors an explicit public Constitution home even when shar
       writeFileSync(join(root, ".gitignore"), ".hunch/local.json\n.hunch-private/\n");
       g(root, "add", ".gitignore", ".hunch/manifest.json");
       g(root, "commit", "-q", "-m", "track public memory home");
-      writeFileSync(join(root, ".hunch", "local.json"), JSON.stringify({
-        privateDir: overlayHunch,
-        autoCommit: true,
-        mode: "shared",
-      }) + "\n");
+      writeLocalPointer(root, { privateDir: overlayHunch, autoCommit: true, mode: "shared" });
       mkdirSync(join(root, ".hunch", "policies"), { recursive: true });
       writeFileSync(join(root, ".hunch", "policies", "pol_public.json"),
         '{"id":"pol_public","data_class":"public"}\n');

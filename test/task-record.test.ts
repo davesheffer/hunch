@@ -1,4 +1,4 @@
-import { cleanupDir } from "./fixtures.js";
+import { cleanupDir, writeLocalPointer } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -200,7 +200,7 @@ test("a task that touched the private overlay is homed private, never named in t
   const root = fixture(t), overlay = mkdtempSync(join(tmpdir(), "hunch-task-record-overlay-"));
   t.after(() => cleanupDir(overlay));
   mkdirSync(join(root, ".hunch"), { recursive: true });
-  writeFileSync(join(root, ".hunch", "local.json"), JSON.stringify({ privateDir: join(overlay, ".hunch"), autoCommit: false }));
+  writeLocalPointer(root, { privateDir: join(overlay, ".hunch"), autoCommit: false });
   const store = openStore(root, t);
   assert.equal(store.hasPrivate, true);
   assert.equal(store.captureHome(false), "public", "split routing: public stays the default home");

@@ -1,4 +1,4 @@
-import { cleanupDir } from "./fixtures.js";
+import { cleanupDir, writeLocalPointer } from "./fixtures.js";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import {
@@ -439,11 +439,11 @@ test("MD-1a private cross-adapter journey keeps every sensitive token and artifa
     git(overlayRoot, "config", "commit.gpgsign", "false");
     git(overlayRoot, "commit", "--allow-empty", "-qm", "fixture: private memory root");
     mkdirSync(join(fixture.root, ".hunch"), { recursive: true });
-    writeFileSync(join(fixture.root, ".hunch/local.json"), `${JSON.stringify({
+    writeLocalPointer(fixture.root, {
       privateDir: privateRoot,
       autoCommit: false,
       mode: "private",
-    }, null, 2)}\n`);
+    });
     fixture.env.HUNCH_PRIVATE_DIR = privateRoot;
     const publicHead = git(fixture.root, "rev-parse", "HEAD");
 

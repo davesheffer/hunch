@@ -1,4 +1,5 @@
-import { cleanupDir } from "./fixtures.js";
+import { cleanupDir, writeLocalPointer } from "./fixtures.js";
+import { execFileSync } from "node:child_process";
 /**
  * A contested topic must never be injected as authority (round-3 audit #5 and #6).
  *
@@ -87,7 +88,8 @@ function sharedStore(): { store: HunchStore; cleanup: () => void } {
   mkdirSync(overlay, { recursive: true });
   mkdirSync(join(root, ".hunch"), { recursive: true });
   // mode "shared" = unified: the overlay IS the store, the public .hunch is a routing shell.
-  writeFileSync(join(root, ".hunch", "local.json"), JSON.stringify({ privateDir: overlay, autoCommit: false, mode: "shared" }) + "\n");
+  execFileSync("git", ["init", "-q", root]);
+  writeLocalPointer(root, { privateDir: overlay, autoCommit: false, mode: "shared" });
   const store = new HunchStore(hunchPaths(root));
   store.json.ensureDirs();
   return { store, cleanup: () => { store.close(); cleanupDir(sandbox); } };
