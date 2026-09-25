@@ -41,7 +41,7 @@
   ],
   "supersedes": [],
   "source_snapshot": "sha256:28e7d9cb7ed9be99f898201329858ca8a2b27b02af5049524a5dacf16440948a",
-  "report_hash": "sha256:4b07abaa9f0b449daa9f4f7e82427bc5fe61b69051fef20924221c1614dab03a",
+  "report_hash": "sha256:51d2b1bd536849cfd28da8185a0eeaf237498515f0ba1bb2711ea276b604278a",
   "provenance": {
     "source": "task_report",
     "confidence": 1,
