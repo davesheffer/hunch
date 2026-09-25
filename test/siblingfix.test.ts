@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
@@ -212,7 +212,7 @@ test("a fix that reached the target inside a whole-file rewrite is shared histor
   assert.deepEqual(siblingLessonsFor(root, "src/claude.ts", [], { cache: false, budgetMs: 60_000 }), []);
 });
 
-test("a truncated inventory is reused only within its own subtree", t => {
+test("a truncated inventory keeps what it parsed and the next call carries on", t => {
   const root = mkdtempSync(join(tmpdir(), "hunch-sibling-inv-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   execFileSync("git", ["init", "-q", root]);
@@ -226,18 +226,134 @@ test("a truncated inventory is reused only within its own subtree", t => {
   commit(root, "feat: matchers");
   for (const d of ["a", "z"]) writeFileSync(join(root, d, "y.ts"), `\n${fixedMatcher(`isOur${d.toUpperCase()}ProviderHook`)}\n`);
   commit(root, "fix: mixed entries stay foreign");
-  // A zero scan budget leaves a truncated inventory scoped to "a".
+  // A zero scan budget parses nothing: no candidates, no lesson.
   assert.deepEqual(siblingLessonsFor(root, "a/x.ts", [], { inventoryBudgetMs: 0 }), []);
-  const cacheDir = join(root, ".hunch-cache", "siblingfix");
-  const inventoryFile = () => join(cacheDir, readdirSync(cacheDir).find((f) => f.endsWith("-inventory.json"))!);
-  assert.deepEqual(JSON.parse(readFileSync(inventoryFile(), "utf8")), { complete: false, scope: "a", symbols: [] });
-  // Another subtree must not inherit it: the scan runs again and finds z's sibling.
+  const inventoryFile = join(root, ".hunch-cache", "siblingfix", "inventory.json");
+  assert.deepEqual(JSON.parse(readFileSync(inventoryFile, "utf8")), { version: 1, files: {} });
+  // The next call parses what is missing and finds z's sibling.
   const lessons = siblingLessonsFor(root, "z/x.ts", [], { budgetMs: 60_000 });
   assert.deepEqual(lessons.map((l) => `${l.symbol}~${l.sibling}`), ["isOurZClaudeHook~isOurZProviderHook"]);
-  const rebuilt = JSON.parse(readFileSync(inventoryFile(), "utf8")) as { complete: boolean; scope: string };
-  assert.equal(rebuilt.complete, true);
-  // A complete inventory serves every target at this HEAD.
-  assert.equal(siblingLessonsFor(root, "a/x.ts", [], { cache: false, budgetMs: 60_000 }).length, 1);
+  const rebuilt = JSON.parse(readFileSync(inventoryFile, "utf8")) as { files: Record<string, { blob: string }> };
+  assert.deepEqual(Object.keys(rebuilt.files).sort(), ["a/x.ts", "a/y.ts", "z/y.ts"]);
+  // The "no candidates" answer cached for a/x.ts no longer matches its
+  // candidate set: it is recomputed, not served.
+  assert.equal(siblingLessonsFor(root, "a/x.ts", [], { budgetMs: 60_000 }).length, 1);
+});
+
+test("the cache is keyed by content: an unrelated commit keeps the answer, a sibling change recomputes it", t => {
+  const root = repo(t);
+  writeFileSync(join(root, "src", "providers.ts"), `\n${fixedMatcher("isOurProviderHook")}\nexport function unrelated(): number {\n  const a = 1;\n  return a + 1;\n}\n`);
+  commit(root, "fix(providers): a mixed hook entry keeps the user's command");
+  assert.equal(siblingLessonsFor(root, "src/claude.ts", [], { budgetMs: 60_000 }).length, 1);
+  const cacheDir = join(root, ".hunch-cache", "siblingfix");
+  const [entry] = readdirSync(cacheDir).filter((f) => f !== "inventory.json");
+  const mark = () => {
+    const cached = JSON.parse(readFileSync(join(cacheDir, entry!), "utf8")) as { lessons: { similarity: number }[] };
+    cached.lessons[0]!.similarity = 0.01;
+    writeFileSync(join(cacheDir, entry!), JSON.stringify(cached));
+  };
+  mark();
+  writeFileSync(join(root, "README.md"), "unrelated\n");
+  commit(root, "docs: readme");
+  assert.equal(siblingLessonsFor(root, "src/claude.ts", [], { budgetMs: 60_000 })[0]?.similarity, 0.01, "served from the cache across HEADs");
+  writeFileSync(join(root, "src", "providers.ts"), readFileSync(join(root, "src", "providers.ts"), "utf8").replace("const a = 1;", "const a = 2;"));
+  commit(root, "chore: touch the sibling's file");
+  assert.notEqual(siblingLessonsFor(root, "src/claude.ts", [], { budgetMs: 60_000 })[0]?.similarity, 0.01, "a candidate's new content recomputes");
+});
+
+test("the cache directory is pruned to a bound on write, keeping the inventory", t => {
+  const root = repo(t);
+  const cacheDir = join(root, ".hunch-cache", "siblingfix");
+  mkdirSync(cacheDir, { recursive: true });
+  const old = new Date(Date.now() - 86_400_000);
+  for (let i = 0; i < 300; i++) {
+    writeFileSync(join(cacheDir, `stale-${i}.json`), "{}");
+    utimesSync(join(cacheDir, `stale-${i}.json`), old, old);
+  }
+  siblingLessonsFor(root, "src/claude.ts", [], { budgetMs: 60_000 });
+  const left = readdirSync(cacheDir);
+  assert.ok(left.length <= 257, `bounded, got ${left.length}`);
+  assert.ok(left.includes("inventory.json"));
+  assert.equal(left.filter((f) => !f.startsWith("stale-") && f !== "inventory.json").length, 1, "the fresh answer survives");
+});
+
+test("a tiny consumer is not a copy of the large producer whose words it uses", t => {
+  const root = mkdtempSync(join(tmpdir(), "hunch-sibling-size-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  execFileSync("git", ["init", "-q", root]);
+  writeFileSync(join(root, ".gitignore"), ".hunch-cache/\n");
+  mkdirSync(join(root, "src"));
+  // The renderer prints the plan's buckets; the planner builds them. Every
+  // word of the renderer occurs in the planner (containment 1.0).
+  writeFileSync(join(root, "src", "cli.ts"), `export function printReviewPlan(plan: { accept: string[]; reject: string[] }): void {
+  console.log(\`accept \${plan.accept.length} duplicate\`);
+  console.log(\`reject \${plan.reject.length} irrelevant\`);
+}
+`);
+  const planner = (guard: string) => `export function planReview(drafts: { id: string; score: number; duplicate: boolean; irrelevant: boolean }[]): { accept: string[]; reject: string[] } {
+  const accept: string[] = [];
+  const reject: string[] = [];
+  const ranked = drafts.slice().sort((left, right) => right.score - left.score);
+  for (const draft of ranked) {${guard}
+    if (draft.duplicate || draft.irrelevant) { reject.push(draft.id); continue; }
+    const threshold = Math.round(draft.score * 100);
+    if (threshold >= 70) accept.push(draft.id); else reject.push(draft.id);
+  }
+  console.log(\`planned \${accept.length} of \${drafts.length}\`);
+  return { accept, reject };
+}
+`;
+  writeFileSync(join(root, "src", "planner.ts"), planner(""));
+  commit(root, "feat: review plan");
+  writeFileSync(join(root, "src", "planner.ts"), planner("\n    if (!draft.id) { reject.push(\"anonymous\"); continue; }"));
+  commit(root, "fix(review): anchor dedup to accepted records");
+  assert.deepEqual(siblingLessonsFor(root, "src/cli.ts", [], { cache: false, budgetMs: 60_000 }), []);
+});
+
+test("a pair exactly twice apart in size is not a copy", t => {
+  const root = mkdtempSync(join(tmpdir(), "hunch-sibling-2x-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  execFileSync("git", ["init", "-q", root]);
+  writeFileSync(join(root, ".gitignore"), ".hunch-cache/\n");
+  mkdirSync(join(root, "src"));
+  // Shape of writeVscodeMcp (21 tokens) ~ writeMcpJson (42): every word of the
+  // small one is in the large one, at exactly half its size.
+  const words = ["alpha", "bravo", "charlie", "delta", "echo", "foxtrot", "golf"];
+  const extra = ["hotel", "india", "juliet", "kilo", "lima", "mike", "november", "oscar"];
+  const small = `export function writeHookConfig(): number {\n  return ${words.join(" + ")};\n}\n`;
+  const large = (guard: string) => `export function writeHookConfigFile(): number {${guard}\n  return ${[...words, ...extra].join(" + ")};\n}\n`;
+  writeFileSync(join(root, "src", "a.ts"), small);
+  writeFileSync(join(root, "src", "b.ts"), large(""));
+  commit(root, "feat: writers");
+  writeFileSync(join(root, "src", "b.ts"), large("\n  if (!zulu) return 0;"));
+  commit(root, "fix(b): refuse an unparseable file");
+  assert.equal(codeTokens(small).size * 2, codeTokens(large("\n  if (!zulu) return 0;")).size, "exactly 2x");
+  assert.deepEqual(siblingLessonsFor(root, "src/a.ts", [], { cache: false, budgetMs: 60_000 }), []);
+});
+
+test("a history rewrite invalidates the cache: amend-reworded fixes surface, cited SHAs exist", t => {
+  const root = repo(t);
+  writeFileSync(join(root, "src", "providers.ts"), `\n${fixedMatcher("isOurProviderHook")}\nexport function unrelated(): number {\n  const a = 1;\n  return a + 1;\n}\n`);
+  commit(root, "chore(providers): tidy the matcher");
+  assert.deepEqual(siblingLessonsFor(root, "src/claude.ts", [], { budgetMs: 60_000 }), [], "not a fix: no lesson, cached");
+  git(root, "commit", "-q", "--amend", "-m", "fix(providers): a mixed hook entry keeps the user's command");
+  const lessons = siblingLessonsFor(root, "src/claude.ts", [], { budgetMs: 60_000 });
+  assert.equal(lessons.length, 1, "same blobs, rewritten history: recomputed");
+  git(root, "commit", "-q", "--amend", "-m", "fix(providers): mixed entries stay foreign");
+  const again = siblingLessonsFor(root, "src/claude.ts", [], { budgetMs: 60_000 });
+  const history = new Set(git(root, "log", "--format=%H").split("\n"));
+  assert.equal(again.length, 1);
+  for (const c of again.flatMap((l) => l.commits)) assert.ok(history.has(c.sha), `cited ${c.sha} is in history`);
+  assert.equal(again[0]?.commits[0]?.subject, "fix(providers): mixed entries stay foreign");
+});
+
+test("a fix commit that also modified the target file is not divergence", t => {
+  const root = repo(t);
+  writeFileSync(join(root, "src", "providers.ts"), `\n${fixedMatcher("isOurProviderHook")}\nexport function unrelated(): number {\n  const a = 1;\n  return a + 1;\n}\n`);
+  // The same commit edits the target file, outside the target function.
+  writeFileSync(join(root, "src", "claude.ts"), readFileSync(join(root, "src", "claude.ts"), "utf8").replace("other = 1", "other = 2"));
+  commit(root, "fix(providers): a mixed hook entry keeps the user's command");
+  assert.deepEqual(siblingLessonsFor(root, "src/claude.ts", [], { cache: false, budgetMs: 60_000 }), []);
 });
 
 test("an incomplete computation is no answer for a while, then retried a bounded number of times", t => {
@@ -253,9 +369,10 @@ test("an incomplete computation is no answer for a while, then retried a bounded
   const t0 = 1_000_000_000;
   assert.deepEqual(siblingLessonsFor(root, "src/claude.ts", [], { now: t0 }), []);
   const cacheDir = join(root, ".hunch-cache", "siblingfix");
-  const entries = readdirSync(cacheDir).filter((f) => !f.endsWith("-inventory.json"));
+  const entries = readdirSync(cacheDir).filter((f) => f !== "inventory.json");
   assert.equal(entries.length, 1);
-  assert.deepEqual(JSON.parse(readFileSync(join(cacheDir, entries[0]!), "utf8")), { complete: false, lessons: [], attempts: 1, at: t0 });
+  const { complete, lessons: cachedLessons, attempts, at } = JSON.parse(readFileSync(join(cacheDir, entries[0]!), "utf8")) as Record<string, unknown>;
+  assert.deepEqual({ complete, lessons: cachedLessons, attempts, at }, { complete: false, lessons: [], attempts: 1, at: t0 });
   // History restored: inside the retry window the cached "no answer" still
   // wins, and answers fast.
   writeFileSync(object, bytes);
@@ -265,7 +382,8 @@ test("an incomplete computation is no answer for a while, then retried a bounded
   // After the window a momentary failure no longer silences the lesson.
   assert.equal(siblingLessonsFor(root, "src/claude.ts", [], { now: t0 + 120_000, budgetMs: 60_000 }).length, 1);
   // A history that keeps failing stops being retried after three attempts.
-  writeFileSync(join(cacheDir, entries[0]!), JSON.stringify({ complete: false, lessons: [], attempts: 3, at: t0 }));
+  const failing = JSON.parse(readFileSync(join(cacheDir, entries[0]!), "utf8")) as Record<string, unknown>;
+  writeFileSync(join(cacheDir, entries[0]!), JSON.stringify({ ...failing, complete: false, lessons: [], attempts: 3, at: t0 }));
   assert.deepEqual(siblingLessonsFor(root, "src/claude.ts", [], { now: t0 + 10_000_000, budgetMs: 60_000 }), []);
 });
 

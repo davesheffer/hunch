@@ -4625,7 +4625,7 @@ program
         // bookkeeping below (a missed check would wrongly hold the Stop gate).
         try {
           if (evt.tool_name === "Bash" || evt.tool_name === "PowerShell") {
-            const written = shellWrittenFiles(root, evt.session_id);
+            const written = shellWrittenFiles(root, evt.session_id, evt.agent_id);
             if (written.length) {
               const opened = openTeamStore(root, { requireFreshTeamMemory: firmness === "strict" });
               store = opened.store;
@@ -4635,7 +4635,7 @@ program
               if (!stale) shellGround = shellWriteGrounding(root, store, provider, evt, written);
             }
           } else {
-            refreshShellBaseline(root, evt.session_id);
+            refreshShellBaseline(root, evt.session_id, evt.agent_id);
           }
         } catch { shellGround = ""; }
       }

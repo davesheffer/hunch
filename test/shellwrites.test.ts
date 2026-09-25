@@ -78,3 +78,21 @@ test("outside a git repository or without a session, nothing is reported and not
   renameSync(join(root, "src"), join(root, "gone"));
   assert.doesNotThrow(() => shellWrittenFiles(root, "s"));
 });
+
+test("concurrent subagents keep separate baselines: one agent's write is not the other's", t => {
+  const root = repo(t);
+  const s = session();
+  refreshShellBaseline(root, s, "agent-one");
+  refreshShellBaseline(root, s, "agent-two");
+  write(join(root, "src", "a.ts"), "export const a = 2;\n", 1); // agent-one's sed -i runs
+  // agent-two's Read lands before agent-one's shell hook: with one shared
+  // baseline it would absorb the write and agent-one would get no grounding.
+  refreshShellBaseline(root, s, "agent-two");
+  assert.deepEqual(shellWrittenFiles(root, s, "agent-one"), ["src/a.ts"]);
+  // agent-two's read-only command is not credited with agent-one's write.
+  assert.deepEqual(shellWrittenFiles(root, s, "agent-two"), []);
+  write(join(root, "src", "b.ts"), "export const b = 2;\n", 2);
+  assert.deepEqual(shellWrittenFiles(root, s, "agent-two"), ["src/b.ts"]);
+  // No agent id keeps its own (session) baseline: none was taken yet.
+  assert.deepEqual(shellWrittenFiles(root, s), []);
+});

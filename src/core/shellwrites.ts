@@ -8,7 +8,7 @@
  * shell for write targets is guesswork.
  *
  * Instead: fingerprint the working tree's dirty files (`git status`, then
- * mtime+size) per session and repository. A prompt and every tool call refresh
+ * mtime+size) per session, repository and agent. A prompt and every tool call refresh
  * the fingerprint; after a shell command, a dirty file whose fingerprint moved
  * was written by that command. Deterministic, shell-agnostic, and bounded by the
  * dirty set (never a tree walk). Any failure yields no files — never an error. */
@@ -26,8 +26,11 @@ const OWN_STATE = /^\.hunch(?:-cache)?\//;
 
 type Fingerprints = Record<string, string>;
 
-function snapshotFile(root: string, sessionId: string): string {
-  const key = createHash("sha256").update(`${sessionId}\u0000${root}`).digest("hex").slice(0, 24);
+/** Concurrent subagents share the session but not their commands: each keeps
+ *  its own baseline, keyed by its agent id (hashed with the rest, never kept
+ *  raw) like the pre-edit dedupe. No agent id keeps the session's baseline. */
+function snapshotFile(root: string, sessionId: string, agentId?: string): string {
+  const key = createHash("sha256").update(`${sessionId}\u0000${root}${agentId ? `\u0000${agentId}` : ""}`).digest("hex").slice(0, 24);
   // Same directory as the session injection cache: its sweep drops stale files.
   return join(tmpdir(), "hunch-hookcache", `shell-${key}.json`);
 }
@@ -100,18 +103,18 @@ function save(file: string, fp: Fingerprints): void {
 
 /** Record the working tree as it stands, so later shell writes are measured
  *  from here (a prompt, or any tool call that is not a shell command). */
-export function refreshShellBaseline(root: string, sessionId: string | undefined): void {
+export function refreshShellBaseline(root: string, sessionId: string | undefined, agentId?: string): void {
   if (!sessionId) return;
   const fp = fingerprint(root);
-  if (fp) save(snapshotFile(root, sessionId), fp);
+  if (fp) save(snapshotFile(root, sessionId, agentId), fp);
 }
 
 /** Repo-relative files the shell command that just ran wrote (created or
  *  modified), and the baseline moves forward. Empty without a baseline: a
  *  session's first observation cannot tell its own writes from earlier ones. */
-export function shellWrittenFiles(root: string, sessionId: string | undefined): string[] {
+export function shellWrittenFiles(root: string, sessionId: string | undefined, agentId?: string): string[] {
   if (!sessionId) return [];
-  const file = snapshotFile(root, sessionId);
+  const file = snapshotFile(root, sessionId, agentId);
   const before = load(file);
   const now = fingerprint(root);
   if (!now) return [];

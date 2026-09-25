@@ -15,10 +15,11 @@
  *      the sibling's current body — its code and comments carry the lesson.
  *
  * Bounded like cochange.ts: few pairs, one wall-clock budget for all git calls,
- * a per-HEAD cache under .hunch-cache (an incomplete run is cached as no
- * answer), and any failure yields no lessons — never an error. */
+ * a content-keyed cache under .hunch-cache (a commit that touches neither the
+ * file nor its candidate siblings keeps the answer; an incomplete run is cached
+ * as no answer), and any failure yields no lessons — never an error. */
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { parseSource } from "../extractors/parse.js";
@@ -71,6 +72,17 @@ const MIN_BODY_OVERLAP = 0.5;
  *  below 0.6 the pairs were mostly unrelated helpers sharing a verb. */
 const MIN_SIMILARITY = 0.6;
 const MIN_BODY_LINES = 3;
+/** Containment is shared / SMALLER set, so a small body is "contained" in any
+ *  larger one that uses its words: a 6-line console.log renderer (26 tokens)
+ *  scored 0.7 against the 53-line planner whose output it prints (59 tokens).
+ *  So both sides need some code of their own (the smallest real copies in this
+ *  repo, duplicated gitEnv helpers, have 8 tokens), and the pair must be of
+ *  comparable size: a hardened copy grows by a guard or two, and every pair
+ *  here 2x or more apart (ratios 0.16-0.5) was a consumer/producer or a thin
+ *  wrapper, not a copy. */
+const MIN_BODY_TOKENS = 8;
+/** Exclusive: exactly 2x apart (writeVscodeMcp 21 ~ writeMcpJson 42) is not a copy. */
+const MIN_SIZE_RATIO = 0.5;
 const MAX_COMMITS_SHOWN = 4;
 /** Changed lines shown per commit: the change itself is the lesson, a subject
  *  like "feat(codex): …" rarely names the behaviour it fixed. */
@@ -79,7 +91,11 @@ const MAX_CHANGE_LINES = 12;
  *  half of a two-commit fix (trap-310 v5 carried one commit, missed the other). */
 const MAX_FIX_CHANGE_LINES = 32;
 /** Bumped when the cached lesson shape changes. */
-const CACHE_VERSION = 6;
+const CACHE_VERSION = 7;
+/** Cached answers kept; past it the least recently written go (pruned on write). */
+const MAX_CACHE_ENTRIES = 256;
+const INVENTORY_FILE = "inventory.json";
+const INVENTORY_VERSION = 1;
 /** Candidate files whose bodies are parsed (best name match first). */
 const MAX_CANDIDATE_FILES = 8;
 /** Words too common in code to count as shared shape. */
@@ -247,7 +263,7 @@ const MAX_REANCHORS = 3;
 const INVENTORY_BUDGET_MS = 4_000;
 /** Wall-clock budget for one whole computation. */
 const TOTAL_BUDGET_MS = 5_000;
-/** An incomplete run is retried after this long, at most this many times per HEAD. */
+/** An incomplete run is retried after this long, at most this many times per cached key. */
 const INCOMPLETE_RETRY_MS = 60_000;
 const MAX_INCOMPLETE_ATTEMPTS = 3;
 
@@ -307,51 +323,121 @@ function proximityTo(target: string): (p: string) => number {
   };
 }
 
-/** First directory of a repo-relative path ("" at the root): a truncated
- *  inventory scanned nearest-first only serves targets in the same subtree. */
-function scopeOf(target: string): string {
-  return target.includes("/") ? target.split("/")[0]! : "";
+/** HEAD's blob id per tracked path, from one `git ls-tree` call: the content
+ *  key for every cached answer, so a commit that did not touch a file keeps
+ *  what was learned about it. */
+function headBlobs(root: string, env: NodeJS.ProcessEnv, budget: Budget): Map<string, string> | null {
+  const raw = git(root, ["ls-tree", "-r", "-z", "--full-tree", "HEAD"], env, budget);
+  if (raw == null) return null;
+  const out = new Map<string, string>();
+  for (const entry of raw.split("\0")) {
+    const tab = entry.indexOf("\t");
+    const meta = entry.slice(0, tab).split(" ");
+    if (tab > 0 && meta[1] === "blob" && meta[2]) out.set(entry.slice(tab + 1), meta[2]);
+  }
+  return out;
 }
 
-interface InventoryCache { complete: boolean; scope: string; symbols: IndexedSymbol[] }
+interface InventoryCache { version: number; files: Record<string, { blob: string; fns: { name: string; kind: string }[] }> }
 
-/** Function names per tracked source file when no symbol index exists yet (a
- *  fresh clone: the index is derived and gitignored). Files nearest the target
- *  are parsed first under a time budget; the result is cached per HEAD. */
-function functionInventory(root: string, target: string, head: string, env: NodeJS.ProcessEnv, budget: Budget, scanMs: number): IndexedSymbol[] {
-  const cacheDir = join(root, ".hunch-cache", "siblingfix");
-  const cacheFile = join(cacheDir, `${head.slice(0, 12)}-inventory.json`);
-  const scope = scopeOf(target);
-  if (existsSync(cacheFile)) {
-    try {
-      const cached = JSON.parse(readFileSync(cacheFile, "utf8")) as InventoryCache;
-      // A truncated scan holds the files nearest ITS target; elsewhere it would
-      // miss the nearest siblings, so another subtree rescans.
-      if (Array.isArray(cached.symbols) && (cached.complete || cached.scope === scope)) return cached.symbols;
-    } catch { /* rebuild */ }
-  }
-  const listed = git(root, ["ls-files"], env, budget);
-  if (listed == null) return [];
+/** Function names per tracked source file, kept per file by HEAD blob so a
+ *  commit re-parses only the files it changed. A scan the budget cuts short
+ *  keeps what it parsed (nearest the target first) and the next call carries
+ *  on from there. */
+function functionInventory(root: string, target: string, blobs: ReadonlyMap<string, string>, budget: Budget, scanMs: number): IndexedSymbol[] {
+  const cacheFile = join(root, ".hunch-cache", "siblingfix", INVENTORY_FILE);
+  let cached: InventoryCache["files"] = {};
+  try {
+    const raw = JSON.parse(readFileSync(cacheFile, "utf8")) as InventoryCache;
+    if (raw.version === INVENTORY_VERSION && raw.files && typeof raw.files === "object") cached = raw.files;
+  } catch { /* rebuild */ }
   const proximity = proximityTo(target);
-  const files = listed.split("\n").filter((f) => f && f !== target && !TEST_PATH.test(f) && languageFor(f))
+  const files = [...blobs.keys()].filter((f) => f !== target && !TEST_PATH.test(f) && languageFor(f))
     .sort((a, b) => proximity(b) - proximity(a) || a.localeCompare(b));
   const deadline = Math.min(Date.now() + scanMs, budget.deadline);
-  const out: IndexedSymbol[] = [];
-  let complete = true;
+  const next: InventoryCache["files"] = {};
+  let changed = false;
   for (const f of files) {
-    if (Date.now() >= deadline) { complete = false; break; }
+    const blob = blobs.get(f)!;
+    const hit = cached[f];
+    if (hit?.blob === blob) { next[f] = hit; continue; }
+    changed = true;
+    if (Date.now() >= deadline) continue;
     let source: string;
-    try { source = readFileSync(join(root, f), "utf8"); } catch { continue; }
-    if (source.length > 400_000) continue;
-    for (const s of parseSource(f, source)?.symbols ?? []) if (FN_KINDS.has(s.kind)) out.push({ file: f, name: s.name, kind: s.kind });
+    // An unreadable path is recorded empty, or every call would rewrite the cache.
+    try { source = readFileSync(join(root, f), "utf8"); } catch { next[f] = { blob, fns: [] }; continue; }
+    const fns = source.length > 400_000 ? [] : (parseSource(f, source)?.symbols ?? []).filter((s) => FN_KINDS.has(s.kind)).map((s) => ({ name: s.name, kind: s.kind }));
+    next[f] = { blob, fns };
   }
-  // Cached even when the budget cut it short: the nearest files came first, and
-  // re-scanning on every edit would charge a large repo the budget each time.
+  // A path gone from HEAD is dropped too.
+  if (changed || Object.keys(cached).some((f) => !(f in next) && f !== target)) {
+    try {
+      mkdirSync(join(root, ".hunch-cache", "siblingfix"), { recursive: true });
+      writeFileSync(cacheFile, JSON.stringify({ version: INVENTORY_VERSION, files: { ...(cached[target] ? { [target]: cached[target] } : {}), ...next } } satisfies InventoryCache));
+    } catch { /* cache is a convenience */ }
+  }
+  return Object.entries(next).flatMap(([file, e]) => e.fns.map((fn) => ({ file, name: fn.name, kind: fn.kind })));
+}
+
+interface Candidates { files: string[]; names: Map<string, Set<string>> }
+
+/** Cheap retrieval by name shape: the files holding a function whose name
+ *  tokens overlap one of the target's, closest names first. Bodies are parsed
+ *  only for these. */
+function candidatesFor(ownNames: readonly string[], target: string, inventory: readonly IndexedSymbol[]): Candidates {
+  const names = new Map<string, Set<string>>();
+  const bestName = new Map<string, number>();
+  for (const name of ownNames) {
+    const tokens = nameTokens(name);
+    for (const s of inventory) {
+      if (!FN_KINDS.has(s.kind) || TEST_PATH.test(s.file)) continue;
+      if (s.file === target && s.name === name) continue;
+      const other = nameTokens(s.name);
+      let shared = 0;
+      for (const t of tokens) if (other.has(t)) shared++;
+      const nameSim = jaccard(tokens, other);
+      if (shared < 2 || nameSim < MIN_NAME_JACCARD) continue;
+      const set = names.get(s.file) ?? new Set<string>();
+      set.add(s.name);
+      names.set(s.file, set);
+      bestName.set(s.file, Math.max(bestName.get(s.file) ?? 0, nameSim));
+    }
+  }
+  const proximity = proximityTo(target);
+  const files = [...names.keys()]
+    .sort((a, b) => bestName.get(b)! - bestName.get(a)! || proximity(b) - proximity(a) || a.localeCompare(b))
+    .slice(0, MAX_CANDIDATE_FILES);
+  return { files, names };
+}
+
+/** What a cached answer was computed from: the target's HEAD blob, its function
+ *  names (they decide the candidates), and each candidate file's HEAD blob. */
+interface LessonCache {
+  /** HEAD it was computed at: lessons cite commit SHAs and subjects, which an
+   *  amend, rebase or squash rewrites while every blob stays the same. */
+  head: string;
+  targetBlob: string;
+  ownNames: string[];
+  candidates: Record<string, string>;
+  complete: boolean;
+  lessons: SiblingLesson[];
+  attempts?: number;
+  at?: number;
+}
+
+function candidateBlobs(files: readonly string[], blobs: ReadonlyMap<string, string>): Record<string, string> {
+  return Object.fromEntries(files.map((f) => [f, blobs.get(f) ?? ""]));
+}
+
+/** Least recently written entries go once the directory passes its bound;
+ *  run on write only, so a cache hit never pays for it. */
+function pruneCache(cacheDir: string): void {
   try {
-    mkdirSync(cacheDir, { recursive: true });
-    writeFileSync(cacheFile, JSON.stringify({ complete, scope, symbols: out } satisfies InventoryCache));
+    const names = readdirSync(cacheDir).filter((n) => n.endsWith(".json") && n !== INVENTORY_FILE);
+    if (names.length <= MAX_CACHE_ENTRIES) return;
+    const aged = names.map((n) => ({ n, t: statSync(join(cacheDir, n)).mtimeMs })).sort((a, b) => a.t - b.t);
+    for (const { n } of aged.slice(0, aged.length - MAX_CACHE_ENTRIES)) unlinkSync(join(cacheDir, n));
   } catch { /* cache is a convenience */ }
-  return out;
 }
 
 interface Pair { target: FnRange; sibling: FnRange; siblingFile: string; similarity: number }
@@ -370,29 +456,52 @@ export function siblingLessonsFor(
   if (TEST_PATH.test(target)) return [];
   const env = gitEnv();
   const head = git(root, ["rev-parse", "HEAD"], env, budget)?.trim();
-  if (!head) return [];
+  const blobs = head ? headBlobs(root, env, budget) : null;
+  const targetBlob = blobs?.get(target);
+  if (!head || !blobs || !targetBlob) return [];
   const cacheDir = join(root, ".hunch-cache", "siblingfix");
-  const cacheFile = join(cacheDir, `${head.slice(0, 12)}-${createHash("sha256").update(`${CACHE_VERSION}\n${target}\n${maxPairs}\n${maxLessons}`).digest("hex").slice(0, 16)}.json`);
+  const cacheFile = join(cacheDir, `${createHash("sha256").update(`${CACHE_VERSION}\n${target}\n${maxPairs}\n${maxLessons}`).digest("hex").slice(0, 16)}.json`);
+  const scanMs = Math.min(options.inventoryBudgetMs ?? INVENTORY_BUDGET_MS, budget.deadline - Date.now());
+  // HEAD is scanned even when an index exists: a derived index can lag HEAD
+  // or hold a partial subset, and a missing sibling means a missed lesson.
+  // Indexed names only add candidates; bodies always come from HEAD.
+  const inventory = [...functionInventory(root, target, blobs, budget, scanMs), ...symbols];
   const now = options.now ?? Date.now();
   let attempts = 0;
   if (options.cache !== false && existsSync(cacheFile)) {
     try {
-      const cached = JSON.parse(readFileSync(cacheFile, "utf8")) as { complete: boolean; lessons: SiblingLesson[]; attempts?: number; at?: number };
-      if (cached.complete) return cached.lessons;
-      // An incomplete run is "no answer" for a while, not for the whole HEAD: a
-      // momentarily loaded machine must not silence the lesson for good, and a
-      // history that is always too slow stops being retried after a few tries.
-      attempts = cached.attempts ?? MAX_INCOMPLETE_ATTEMPTS;
-      if (attempts >= MAX_INCOMPLETE_ATTEMPTS || now - (cached.at ?? 0) < INCOMPLETE_RETRY_MS) return [];
+      const cached = JSON.parse(readFileSync(cacheFile, "utf8")) as LessonCache;
+      // Valid while the target, its candidate set and every candidate's
+      // content are what the answer was computed from, and the history it
+      // read is still ours: HEAD moved only forward from where it was computed.
+      const same = cached.targetBlob === targetBlob && Array.isArray(cached.ownNames)
+        && JSON.stringify(candidateBlobs(candidatesFor(cached.ownNames, target, inventory).files, blobs)) === JSON.stringify(cached.candidates);
+      const descends = same && typeof cached.head === "string"
+        && (cached.head === head || git(root, ["merge-base", "--is-ancestor", cached.head, head], env, budget) !== null);
+      if (descends && cached.complete) return cached.lessons;
+      // Attempts count per HEAD: a new commit earns an incomplete run a fresh try.
+      if (descends && cached.head === head) {
+        // An incomplete run is "no answer" for a while, not for good: a
+        // momentarily loaded machine must not silence the lesson, and a
+        // history that is always too slow stops being retried after a few tries.
+        attempts = cached.attempts ?? MAX_INCOMPLETE_ATTEMPTS;
+        if (attempts >= MAX_INCOMPLETE_ATTEMPTS || now - (cached.at ?? 0) < INCOMPLETE_RETRY_MS) return [];
+      }
     } catch { /* recompute */ }
   }
-  const scanMs = Math.min(options.inventoryBudgetMs ?? INVENTORY_BUDGET_MS, budget.deadline - Date.now());
-  const computed = computeLessons(root, target, head, symbols, env, budget, scanMs, maxPairs, maxLessons);
+  const own = functionsAt(root, target, env, budget);
+  const candidates = candidatesFor(own.map((f) => f.name), target, inventory);
+  const computed = computeLessons(root, target, own, candidates, env, budget, maxPairs, maxLessons);
   const complete = computed.complete && !budget.exhausted;
   if (options.cache !== false) {
+    const entry: LessonCache = {
+      head, targetBlob, ownNames: own.map((f) => f.name), candidates: candidateBlobs(candidates.files, blobs),
+      complete, lessons: complete ? computed.lessons : [], ...(complete ? {} : { attempts: attempts + 1, at: now }),
+    };
     try {
       mkdirSync(cacheDir, { recursive: true });
-      writeFileSync(cacheFile, JSON.stringify(complete ? { complete, lessons: computed.lessons } : { complete, lessons: [], attempts: attempts + 1, at: now }));
+      writeFileSync(cacheFile, JSON.stringify(entry));
+      pruneCache(cacheDir);
     } catch { /* cache is a convenience */ }
   }
   // A git call that failed or timed out is not an answer.
@@ -402,50 +511,19 @@ export function siblingLessonsFor(
 function computeLessons(
   root: string,
   target: string,
-  head: string,
-  symbols: readonly IndexedSymbol[],
+  own: readonly FnRange[],
+  candidates: Candidates,
   env: NodeJS.ProcessEnv,
   budget: Budget,
-  scanMs: number,
   maxPairs: number,
   maxLessons: number,
 ): { lessons: SiblingLesson[]; complete: boolean } {
   let complete = true;
-  const own = functionsAt(root, target, env, budget);
   if (!own.length) return { lessons: [], complete };
-  // Cheap retrieval by name shape; bodies are parsed only for files that hold
-  // a candidate.
-  // HEAD is scanned even when an index exists: a derived index can lag HEAD
-  // or hold a partial subset, and a missing sibling means a missed lesson.
-  // Indexed names only add candidates; bodies always come from HEAD.
-  const inventory = [...functionInventory(root, target, head, env, budget, scanMs), ...symbols];
-  const byFile = new Map<string, Set<string>>();
-  const bestName = new Map<string, number>();
-  for (const fn of own) {
-    const tokens = nameTokens(fn.name);
-    for (const s of inventory) {
-      if (!FN_KINDS.has(s.kind) || TEST_PATH.test(s.file)) continue;
-      if (s.file === target && s.name === fn.name) continue;
-      const other = nameTokens(s.name);
-      let shared = 0;
-      for (const t of tokens) if (other.has(t)) shared++;
-      const nameSim = jaccard(tokens, other);
-      if (shared < 2 || nameSim < MIN_NAME_JACCARD) continue;
-      const names = byFile.get(s.file) ?? new Set<string>();
-      names.add(s.name);
-      byFile.set(s.file, names);
-      bestName.set(s.file, Math.max(bestName.get(s.file) ?? 0, nameSim));
-    }
-  }
-  // Parsing is the cost: only the files with the closest-named candidates.
-  const proximity = proximityTo(target);
-  const candidateFiles = [...byFile.keys()]
-    .sort((a, b) => bestName.get(b)! - bestName.get(a)! || proximity(b) - proximity(a) || a.localeCompare(b))
-    .slice(0, MAX_CANDIDATE_FILES);
   const pairs: Pair[] = [];
-  for (const siblingFile of candidateFiles) {
+  for (const siblingFile of candidates.files) {
     if (budget.deadline <= Date.now()) return { lessons: [], complete: false };
-    const names = byFile.get(siblingFile)!;
+    const names = candidates.names.get(siblingFile)!;
     const fns = siblingFile === target ? own : functionsAt(root, siblingFile, env, budget);
     for (const sibling of fns) {
       if (!names.has(sibling.name)) continue;
@@ -455,7 +533,10 @@ function computeLessons(
         if (nameSim < MIN_NAME_JACCARD) continue;
         // A function that calls the other delegates to it; it is not a copy.
         if (mentions(fn.body, sibling.name) || mentions(sibling.body, fn.name)) continue;
-        const bodySim = overlap(codeTokens(fn.body), codeTokens(sibling.body));
+        const a = codeTokens(fn.body), b = codeTokens(sibling.body);
+        const small = Math.min(a.size, b.size);
+        if (small < MIN_BODY_TOKENS || small / Math.max(a.size, b.size) <= MIN_SIZE_RATIO) continue;
+        const bodySim = overlap(a, b);
         if (bodySim < MIN_BODY_OVERLAP) continue;
         const similarity = Math.round(((nameSim + bodySim) / 2) * 100) / 100;
         if (similarity < MIN_SIMILARITY) continue;
@@ -484,10 +565,12 @@ function computeLessons(
     // target. Shared commits already carried their change to both copies.
     // The sibling's creation is not a change made to it.
     let divergent = siblingLog.commits.filter((c) => !history.touched.has(c.sha) && !c.created && isSubstantive(c));
-    if (history.incomplete && divergent.length) {
-      // The target's own walk lost tracking somewhere, so its history is not
-      // exhaustive: a commit that modified the target file at all may have
-      // carried the change there too.
+    // A commit that also modified the target file was made with this file in
+    // hand: whoever wrote the fix saw it and may have carried the change in
+    // another form. Where the target's own walk lost tracking this is also the
+    // only evidence left. A same-file pair always shares the file, so there it
+    // applies only to a lost walk.
+    if (divergent.length && (history.incomplete || pair.siblingFile !== target)) {
       const modifiedTarget = new Set<string>();
       for (const c of divergent) {
         const files = git(root, ["show", "--no-color", "--name-only", "--format=", c.sha, "--", target], env, budget);
