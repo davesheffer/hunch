@@ -153,6 +153,20 @@ test("a kept newer block drops invariant lines this version no longer renders", 
   assert.match(kept, /NEWER_PROSE_MUST_SURVIVE/);
   assert.match(kept, /STILL_PUBLIC_INVARIANT/);
   assert.doesNotMatch(kept, /GONE_PRIVATE_INVARIANT/, "a constraint that left the public store is not republished");
+
+  const crlf = preserveNewerTemplate(`# Doc\r\n\r\n${committed.replace(/\n/g, "\r\n")}\r\n`, renderHunchSection(store));
+  assert.doesNotMatch(crlf, /GONE_PRIVATE_INVARIANT/, "CRLF docs drop it too");
+  assert.doesNotMatch(crlf, /[^\r]\n/, "line endings stay CRLF");
+
+  store.json.dropAll("constraints");
+  store.json.put("constraints", mkConstraint({ id: "con_citesother", statement: "Replaces con_goneprivate", severity: "blocking" }));
+  const cited = preserveNewerTemplate(`# Doc\n\n${committed}\n`, renderHunchSection(store));
+  assert.doesNotMatch(cited, /GONE_PRIVATE_INVARIANT/, "an id cited in another statement is not a rendered invariant");
+
+  store.json.dropAll("constraints");
+  const none = preserveNewerTemplate(`# Doc\n\n${committed}\n`, renderHunchSection(store));
+  assert.doesNotMatch(none, /Top invariants/, "no orphan heading");
+  assert.match(none, /NEWER_PROSE_MUST_SURVIVE/);
 });
 
 test("grounding writers never downgrade newer prose, but still upgrade older prose", (t) => {

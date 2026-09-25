@@ -40,22 +40,28 @@ export function preserveNewerTemplate(existing: string, section: string): string
   if (groundingTemplate(current) <= groundingTemplate(section)) return section;
   // Never republish an invariant this version no longer renders: a constraint that
   // was retired, deleted, or moved to the private overlay drops out of the kept list.
-  const kept = current
-    .split("\n")
-    .filter((line) => {
-      const id = INVARIANT_LINE_RE.exec(line)?.[1];
-      return !id || section.includes(id);
-    })
-    .join("\n");
+  const rendered = new Set(section.split(/\r?\n/).map((line) => INVARIANT_LINE_RE.exec(line)?.[1]).filter(Boolean));
+  const eol = current.includes("\r\n") ? "\r\n" : "\n";
+  const lines = current.split(/\r?\n/).filter((line) => {
+    const id = INVARIANT_LINE_RE.exec(line)?.[1];
+    return !id || rendered.has(id);
+  });
+  // A heading left with no invariants under it goes too.
+  const h = lines.findIndex((line) => line.startsWith(INVARIANTS_HEADING));
+  if (h >= 0 && !lines.slice(h + 1).some((line) => INVARIANT_LINE_RE.test(line))) {
+    lines.splice(lines[h - 1] === "" ? h - 1 : h, lines[h - 1] === "" ? 2 : 1);
+  }
+  const kept = lines.join(eol);
   const have = parseGroundingCounts(kept);
   const next = parseGroundingCounts(section);
-  // Unreadable counts keep the block as written rather than downgrading it (two
-  // versions would flip-flop); `hunch grounding` reports it as countsReadable: false.
+  // Unreadable counts leave the counts sentence as written rather than downgrading
+  // the block (two versions would flip-flop); `hunch grounding` reports countsReadable: false.
   return have && next ? kept.replace(have.match, next.match) : kept;
 }
 
+const INVARIANTS_HEADING = "### ⛔ Top invariants";
 /** A Top-invariants line; group 1 is its constraint id. */
-const INVARIANT_LINE_RE = /^- \*\*\[[a-z]+\]\*\* .*; (con_[A-Za-z0-9_]+)\)_$/;
+const INVARIANT_LINE_RE = /^- \*\*\[[a-z]+\]\*\* .*; (con_[A-Za-z0-9_]+)\)_\r?$/;
 
 /** Remove the managed HUNCH section (markers inclusive), leaving only the
  *  user-authored surroundings. Lets a caller decide whether two versions of a
