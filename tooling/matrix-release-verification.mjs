@@ -855,13 +855,20 @@ function seedRemotes(temp, candidate, env) {
   return { codeRemote, memoryRemote, actorNetworkGuardVerified };
 }
 
-function cloneActor(temp, codeRemote, name, env) {
+function cloneActor(temp, codeRemote, name, env, trustWith) {
   const root = join(temp, name.toLowerCase());
   const home = join(temp, `${name.toLowerCase()}-home`);
   run(actualGit, ["clone", "-q", codeRemote, root], { env, timeout: 120_000 });
   const actorEnv = actorEnvironment(home, name, env);
   configureRepo(root, name, actorEnv, join(temp, `${name.toLowerCase()}-hooks`));
-  return { name, root, env: actorEnv };
+  const actor = { name, root, env: actorEnv };
+  // A fresh clone's advertised team store stays unwired until this machine
+  // consents, exactly as a real teammate runs `hunch shared --trust` once.
+  if (trustWith) {
+    const trusted = cliText(actor, trustWith, ["shared", "--trust"]);
+    if (!/trusted the team memory store/.test(trusted)) throw new Error(`${name} could not trust the team store:\n${trusted}`);
+  }
+  return actor;
 }
 
 function remoteTree(remote, env) {
@@ -999,7 +1006,7 @@ function runLegacyReproofAttack(temp, codeRemote, memoryRemote, legacy, policyId
 }
 
 function runCompatibilityLane(temp, codeRemote, memoryRemote, candidate, legacy, env) {
-  const actor = cloneActor(temp, codeRemote, "CompatibilityLane", env);
+  const actor = cloneActor(temp, codeRemote, "CompatibilityLane", env, candidate);
   const candidateVersion = cliText(actor, candidate, ["--version"]).trim();
   const legacyVersion = cliText(actor, legacy, ["--version"]).trim();
   if (candidateVersion !== candidate.version || legacyVersion !== legacy.version) {
@@ -1243,7 +1250,7 @@ function killProcessTree(child) {
 }
 
 async function runCrashLane(temp, codeRemote, memoryRemote, candidate, env) {
-  const actor = cloneActor(temp, codeRemote, "CrashLane", env);
+  const actor = cloneActor(temp, codeRemote, "CrashLane", env, candidate);
   cliText(actor, candidate, ["query", SENTINEL_PREFIX]);
   const wrapperRoot = join(temp, "crash-git-wrapper");
   const marker = join(temp, "crash-commit-seam.json");
@@ -1328,7 +1335,7 @@ async function requireAsyncSuccess(result, label) {
 
 async function runSoak(temp, codeRemote, memoryRemote, candidate, env, actorCount, rounds) {
   const actors = Array.from({ length: actorCount }, (_, index) =>
-    cloneActor(temp, codeRemote, `Soak${String(index).padStart(2, "0")}`, env));
+    cloneActor(temp, codeRemote, `Soak${String(index).padStart(2, "0")}`, env, candidate));
   const prewire = await Promise.all(actors.map((actor) => runCliAsync(actor, candidate, ["query", SENTINEL_PREFIX])));
   for (let index = 0; index < prewire.length; index += 1) {
     await requireAsyncSuccess(prewire[index], `soak actor ${index} prewire`);
