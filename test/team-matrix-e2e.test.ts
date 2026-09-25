@@ -19,6 +19,8 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { ElicitRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { repoSourceInventory } from "../src/extractors/repoSource.js";
 import { hunchCliArgs } from "./cli-invocation.js";
+// These suites exercise specialist MCP tool groups; the everyday default hides them (src/mcp/toolset.ts).
+process.env.HUNCH_MCP_TOOLS = "all";
 
 const TEAM_RULE = "MATRIX_TEAM_RULE: never import axios in src/orders.ts; use the shared fetch transport";
 const FIRST_COMMAND_WRITE_RULE = "MATRIX_FIRST_COMMAND_WRITE: keep retry state outside the public code repository";

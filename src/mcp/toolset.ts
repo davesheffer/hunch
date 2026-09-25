@@ -1,10 +1,11 @@
 /** Which MCP tool groups a server exposes. Every host shares one server, so the
- * selection surface is the same for all of them: 57 tools with ~24 KB of
- * descriptions dilute tool choice for everyday grounding. The everyday set is
- * the default; the two specialist groups are enabled by evidence (a root that
- * stores nuryel state records), by `.hunch/config.json` `mcp_tools`, or by the
- * `HUNCH_MCP_TOOLS` environment variable. Hidden tools are not registered at
- * all, so a client never sees them in tools/list. */
+ * selection surface is the same for all of them, and a host that loads every
+ * schema pays for each tool on every session (#368). The everyday set is the
+ * default; the specialist groups are enabled by evidence (a root that stores
+ * nuryel state records, a repo with Constitution policies), by
+ * `.hunch/config.json` `mcp_tools`, or by the `HUNCH_MCP_TOOLS` environment
+ * variable. Hidden tools are not registered at all, so a client never sees
+ * them in tools/list. */
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { STATE_KINDS } from "../core/stateDelivery.js";
@@ -17,6 +18,16 @@ export const MCP_TOOL_GROUPS = {
     "hunch_constitution_g2_readiness", "hunch_constitution_g3_readiness", "hunch_constitution_g2_shadow_queue",
     "hunch_constitution_g2_operational_drill", "hunch_constitution_g2_candidates", "hunch_constitution_g2_behavior_candidates",
     "hunch_constitution_g2_behavior_replay", "hunch_constitution_g2_behavior_materialization", "hunch_constitution_g2_behavior_policy_materialize",
+  ],
+  /** Constitution policy review; on by default once the repo holds a policy. */
+  policy: [
+    "hunch_policy_candidates", "hunch_policy_plan", "hunch_policy_card", "hunch_policy_shadow",
+    "hunch_policy_proof", "hunch_policy_evaluate", "hunch_policy_upgrade_correction",
+  ],
+  /** Research, audit and sealed-proof tools outside the everyday loop; opt-in only. */
+  analysis: [
+    "hunch_project_dna", "hunch_project_dna_delta", "hunch_project_match", "hunch_change_proof",
+    "hunch_change_identity", "hunch_shortlist", "hunch_evidence_map", "hunch_wiki_status",
   ],
 } as const;
 export type McpToolGroup = keyof typeof MCP_TOOL_GROUPS;
@@ -51,15 +62,25 @@ export function rootStoresState(root: string): boolean {
 
 /** `pinned` is `hunch mcp --root <dir>`: a server dedicated to one root, which is
  * how state partitions are served — including a brand-new partition that has no
- * state records yet and could never receive its first nuryel_write otherwise. */
-export function resolveMcpToolset(root: string, opts: { env?: NodeJS.ProcessEnv; configSpec?: string | null; pinned?: boolean } = {}): McpToolset {
+ * state records yet and could never receive its first nuryel_write otherwise.
+ * `hasPolicies` is the caller's policy evidence (public or private overlay); the
+ * first policy comes from `hunch index` or `hunch policy upgrade-correction`. The
+ * grounding block counts public policies only, so private-only policies register
+ * the tools without advertising them. The set is resolved once per process; a
+ * re-homed server keeps it until restart, as with the nuryel group. */
+export function resolveMcpToolset(root: string, opts: { env?: NodeJS.ProcessEnv; configSpec?: string | null; pinned?: boolean; hasPolicies?: boolean } = {}): McpToolset {
   const env = opts.env ?? process.env;
   let groups: McpToolGroup[] | null = null;
   let source: McpToolset["source"] = "default";
   const fromEnv = env.HUNCH_MCP_TOOLS?.trim();
   if (fromEnv) { groups = parseToolsetSpec(fromEnv); if (groups) source = "env"; }
   if (!groups && opts.configSpec?.trim()) { groups = parseToolsetSpec(opts.configSpec); if (groups) source = "config"; }
-  if (!groups) { groups = opts.pinned || rootStoresState(root) ? ["nuryel"] : []; source = "default"; }
+  if (!groups) {
+    groups = [];
+    if (opts.pinned || rootStoresState(root)) groups.push("nuryel");
+    if (opts.hasPolicies) groups.push("policy");
+    source = "default";
+  }
   const set = new Set(groups);
   const hidden = MCP_TOOL_GROUP_NAMES.filter(g => !set.has(g)).flatMap(g => [...MCP_TOOL_GROUPS[g]]);
   return { enabled: g => set.has(g), groups: [...set], hidden, source };

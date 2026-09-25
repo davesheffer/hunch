@@ -16,6 +16,7 @@ import { z } from "zod";
 import { hunchPaths, findRoot, toPosixTarget, repoRelativeTarget } from "../core/paths.js";
 import { matchSymbolsTiered } from "../core/glob.js";
 import { resolveMcpToolset } from "./toolset.js";
+import { PolicyRepository } from "../constitution/repository.js";
 import { readConfig } from "../core/config.js";
 import { canonicalRootPath, resolveActiveRoot } from "./roots.js";
 import { HunchStore } from "../store/hunchStore.js";
@@ -745,6 +746,19 @@ const DELIVERY_OUTPUT_SCHEMA = z.object({
   }),
 });
 
+/** What tools/list advertises for hunch_context (#368). The landscape fragment embeds
+ *  the full Resource and Edge record schemas (~7k of the ~13k chars), which every
+ *  schema-loading host would pay on every session; it is advertised by its identity
+ *  fields only. The handler still parses the result with the full
+ *  DELIVERY_OUTPUT_SCHEMA, so the delivered shape is exactly as strict as before. */
+const DELIVERY_ADVERTISED_OUTPUT_SCHEMA = DELIVERY_OUTPUT_SCHEMA.extend({
+  landscape: z.object({
+    schema: z.literal("hunch.landscape-fragment/1"),
+    target: z.string(),
+    fragmentHash: z.string(),
+  }).passthrough().nullable(),
+});
+
 const CHANGE_IDENTITY_OUTPUT_SCHEMA = z.object({
   schema: z.literal(CHANGE_IDENTITY_SCHEMA_VERSION),
   algorithm: z.literal(CHANGE_IDENTITY_ALGORITHM),
@@ -1184,7 +1198,10 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
   // Everyday tools by default; specialist groups by evidence, config, or env
   // (src/mcp/toolset.ts). Hidden tools are never registered, so tools/list is
   // exactly what the host can call.
-  const toolset = resolveMcpToolset(root, { configSpec: readConfig(hunchPaths(root)).mcp_tools ?? null, pinned });
+  let hasPolicies = false;
+  try { hasPolicies = new PolicyRepository(root, store).listPolicies().length > 0; } catch { /* unreadable policies: keep the group hidden */ }
+  const toolset = resolveMcpToolset(root, { configSpec: readConfig(hunchPaths(root)).mcp_tools ?? null, pinned, hasPolicies });
+  const hiddenTools = new Set(toolset.hidden);
   if (toolset.hidden.length) process.stderr.write(`[hunch-mcp] tool groups: ${toolset.groups.length ? toolset.groups.join(", ") : "core only"} (${toolset.source}); ${toolset.hidden.length} specialist tool(s) hidden — HUNCH_MCP_TOOLS=all or .hunch/config.json mcp_tools to expose\n`);
   const server = new McpServer({ name: "hunch", version: HUNCH_VERSION }, { instructions: MCP_INSTRUCTIONS });
   let activeRequests = 0;
@@ -1284,7 +1301,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
     callback: UntypedToolHandler,
   ) => unknown;
   server.registerTool = ((name: string, config: unknown, callback: UntypedToolHandler) =>
-    registerTool(name, config, async (...args: unknown[]) => {
+    hiddenTools.has(name) ? undefined : registerTool(name, config, async (...args: unknown[]) => {
       // Claude Code CLI never advertises `roots`/`roots/list_changed` for an agent-driven
       // `cd` or EnterWorktree (issue #20) — the cached `root` above just never moves, so a
       // write silently lands wherever the process was spawned. Write tools accept an
@@ -1722,7 +1739,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
         task_id: TaskIdSchema.optional().describe("Exact task ID from hunch_task; records this delivery for the task's contribution report."),
         cwd: cwdHintField,
       },
-      outputSchema: DELIVERY_OUTPUT_SCHEMA,
+      outputSchema: DELIVERY_ADVERTISED_OUTPUT_SCHEMA,
     },
     async ({ target, budget_tokens, profile, as_of, task_id }, extra): Promise<ToolResult> => {
       const deliver = (envelope: DeliveryEnvelope): ToolResult => {
@@ -2932,7 +2949,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
     {
       title: "Causal merge verdict: is this change safe against the recorded WHY?",
       description:
-        "Before opening or merging a PR, replay a diff against memory and return ONE verdict — BLOCK / WARN / PASS — citing the decision and bug behind each invariant in scope, plus advisory blast-radius invariants, re-introduced retired code, and symbols already defined elsewhere. Deterministic, no LLM. Default: staged changes; working:true for all local changes, base (e.g. origin/main) for a PR range, commit for one commit. Not for an advisory impact map (hunch_pr_impact), intent erosion with no diff (hunch_conformance), or a sealed proof (hunch_change_proof).",
+        "Before opening or merging a PR, replay a diff against memory and return ONE verdict — BLOCK / WARN / PASS — citing the decision and bug behind each invariant in scope, plus advisory blast-radius invariants, re-introduced retired code, and symbols already defined elsewhere. Deterministic, no LLM. Default: staged changes; working:true for all local changes, base (e.g. origin/main) for a PR range, commit for one commit. Not for an advisory impact map (hunch_pr_impact), or intent erosion with no diff (hunch_conformance).",
       inputSchema: {
         base: z.string().optional().describe("Diff against this base ref (e.g. origin/main) — for a PR/branch."),
         commit: z.string().optional().describe("Diff a single commit (sha/ref). Omit base AND commit to check staged changes."),
@@ -2982,7 +2999,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
     {
       title: "PR impact: the dependency + memory surface of a change",
       description:
-        "IMPACT SURFACE of a change (default staged; or working:true, base, or commit): files that transitively depend on it, invariants in scope and via blast radius, and decisions on the touched files. Read-only, advisory. Not for a verdict (hunch_merge_verdict) or a sealed proof (hunch_change_proof).",
+        "IMPACT SURFACE of a change (default staged; or working:true, base, or commit): files that transitively depend on it, invariants in scope and via blast radius, and decisions on the touched files. Read-only, advisory. Not for a verdict (hunch_merge_verdict).",
       inputSchema: {
         base: z.string().optional().describe("Diff against this base ref (e.g. origin/main) — for a PR/branch."),
         commit: z.string().optional().describe("Impact of a single commit (sha/ref). Omit base AND commit for staged changes."),

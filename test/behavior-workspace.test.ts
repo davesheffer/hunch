@@ -15,6 +15,8 @@ import { provisionG2BehaviorDependencySnapshotsForCommits } from "../src/constit
 import { PolicySpecSchema, type PolicySpec } from "../src/constitution/schema.js";
 import { shortHash } from "../src/core/ids.js";
 import type { G2BehaviorAttestation } from "../src/constitution/g2BehaviorAttestation.js";
+// These suites exercise specialist MCP tool groups; the everyday default hides them (src/mcp/toolset.ts).
+process.env.HUNCH_MCP_TOOLS = "all";
 
 function workspaceFixture(): { root: string; policy: PolicySpec; attestation: G2BehaviorAttestation; cleanup: () => void } {
   const root = mkdtempSync(join(tmpdir(), "hunch-behavior-workspace-"));

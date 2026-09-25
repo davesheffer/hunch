@@ -15,6 +15,8 @@ import { buildServer } from "../src/mcp/server.js";
 import { HunchStore } from "../src/store/hunchStore.js";
 import { readTaskReport, type TaskReport } from "../src/core/taskReport.js";
 import { runReportCheck } from "../src/core/taskReportEvidence.js";
+// These suites exercise specialist MCP tool groups; the everyday default hides them (src/mcp/toolset.ts).
+process.env.HUNCH_MCP_TOOLS = "all";
 
 function mcpDeliveryFixture(): string {
   const root = mkdtempSync(join(tmpdir(), "hunch-mcp-delivery-"));
