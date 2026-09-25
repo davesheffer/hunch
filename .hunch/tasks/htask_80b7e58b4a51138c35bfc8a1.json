@@ -3,7 +3,7 @@
   "title": "Assistant task",
   "state": "completed",
   "started_at": "2026-09-25T13:08:58.171Z",
-  "finished_at": "2026-09-25T13:25:48.887Z",
+  "finished_at": "2026-09-25T13:30:34.234Z",
   "coverage": "no-delivery-observed",
   "lessons": [],
   "applied": [],
@@ -18,20 +18,37 @@
       "label": "Verification command",
       "state": "failed",
       "exit_code": 1
+    },
+    {
+      "label": "Verification command",
+      "state": "failed",
+      "exit_code": 1
     }
   ],
   "conformance": [],
   "refusals": 0,
-  "files": [],
+  "files": [
+    ".cursor/rules/hunch.mdc",
+    ".github/copilot-instructions.md",
+    ".windsurf/rules/hunch.md",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "src/cli/index.ts",
+    "src/core/groundingLag.ts",
+    "src/integrations/claudemd.ts",
+    "src/integrations/providers.ts",
+    "test/grounding.test.ts"
+  ],
   "supersedes": [],
-  "source_snapshot": "sha256:5f1d876d1ab5dce6e032d5a573a5d1cca713bc52dab6e7ffca49194b16ca0581",
-  "report_hash": "sha256:84cef1660c5ccb471f7be6d7c437c1c81b7f1631d346868c0d7df556086c4bfa",
+  "source_snapshot": "sha256:28e7d9cb7ed9be99f898201329858ca8a2b27b02af5049524a5dacf16440948a",
+  "report_hash": "sha256:4b07abaa9f0b449daa9f4f7e82427bc5fe61b69051fef20924221c1614dab03a",
   "provenance": {
     "source": "task_report",
     "confidence": 1,
     "evidence": [
-      "hunch report htask_80b7e58b4a51138c35bfc8a1"
+      "hunch report htask_80b7e58b4a51138c35bfc8a1",
+      "hunch report htask_8f6bc792aae5001778b8411f"
     ],
-    "last_verified": "2026-09-25T13:25:48.887Z"
+    "last_verified": "2026-09-25T13:30:34.234Z"
   }
 }
