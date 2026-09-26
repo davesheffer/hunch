@@ -1,0 +1,113 @@
+{
+  "id": "dec_a1570c9f73",
+  "title": "Compact MCP task results; defer full history to on-demand hunch_report query",
+  "topic": null,
+  "status": "accepted",
+  "context": "hunch_task start/finish results were returning all task metadata, deliveries, checks, conformance, and graph records inline, causing footprint bloat. Different host UIs show different result channels (some only structuredContent), so result size directly impacts token cost. Footprint measurement needed to track and bound these costs. Touches invariant(s): con_e04226bd05 (The MCP server must stay client-agnostic: all assistants point to the same .hunch/ graph; no Claude-only behavior in the server).",
+  "decision": "Split task results into two layers: (1) synchronous MCP result contains only agent-actionable bits (task_id, state, contribution card, verification_argv, presentation flag), (2) full historical/graph data moves to `hunch report <id> --json` command. Start now returns ~1.5KB max; finish ~1KB max.",
+  "consequences": [
+    "Tool results stay within defined footprint budgets (start ≤1500 chars, finish ≤1000 chars)",
+    "Agents receive minimal but sufficient data to act (IDs, state, card to include, verification command)",
+    "Full task history (deliveries, checks, conformance, graph record) remains available but requires explicit secondary query",
+    "Test assertions tightened to enforce compactness; finish struct changed to match new schema",
+    "Host measurement now includes a synthetic task lifecycle in throwaway store to validate both content and structuredContent sizes"
+  ],
+  "alternatives_rejected": [
+    "Keep everything inline: exceeds footprint budgets and wastes tokens on data agents don't immediately need",
+    "Make full details unavailable: loses historical record and provenance tracking",
+    "Force agents to always query hunch_report separately: adds latency and complexity for synchronous operations"
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Keep everything inline: exceeds footprint budgets and wastes tokens on data agents don't immediately need",
+      "scope": [
+        "src/core/**",
+        "src/mcp/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Make full details unavailable: loses historical record and provenance tracking",
+      "scope": [
+        "src/core/**",
+        "src/mcp/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Force agents to always query hunch_report separately: adds latency and complexity for synchronous operations",
+      "scope": [
+        "src/core/**",
+        "src/mcp/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_a94a8fe5cc",
+    "cmp_b256a6aed0",
+    "cmp_dfa5b5acde",
+    "cmp_f27fede222"
+  ],
+  "related_files": [
+    "src/core/footprint.ts",
+    "src/mcp/taskReportTools.ts",
+    "test/footprint.test.ts",
+    "test/mcp-delivery.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "cda1b669",
+  "valid_from": "2026-09-25T19:22:13+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft",
+    "confidence": 0.65,
+    "evidence": [
+      "commit:cda1b669",
+      "synth:provider=claude-cli",
+      "branch:feat/task-finish-budget",
+      "src/core/footprint.ts",
+      "src/mcp/taskReportTools.ts",
+      "test/footprint.test.ts",
+      "test/mcp-delivery.test.ts"
+    ],
+    "last_verified": "2026-09-25T16:25:52.313Z"
+  },
+  "date": "2026-09-25T19:22:13+03:00"
+}

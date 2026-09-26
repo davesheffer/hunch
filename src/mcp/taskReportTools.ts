@@ -89,7 +89,9 @@ export function registerTaskReportTools(server: McpServer, getRoot: () => string
           task = readTaskReport(root, task_id, reportSourceSnapshot(root).hash).task;
         }
         const launcher = verificationLauncher();
-        return { content: [{ type: "text" as const, text: `Task ${task.task_id} · ${task.state}. Pass task_id to every hunch_context and decision/correction/finding capture call; a successful capture does not prove it was committed or pushed. To claim an application, call hunch_report(task_id) and copy occurrence_id, record_id and content_hash exactly from application_references, with the action you actually took; omit applications you did not make. Before the final response, finish with hunch_task (outcome "interrupted" if cut short) and include its contribution card verbatim, Evidence line and agent-reported label included; omit it if presentation_enabled is false. Do not rerun an expensive check only for reporting; missing evidence stays unverified. For checks use this exact installation (the global hunch binary may be stale): ${launcher.shell} task verify ${task.task_id} -- <command> [arguments]${launcher.note}. The default budget is 15 minutes; add --timeout <seconds> before -- for a longer suite.` }], structuredContent: { task, verification_argv: [...launcher.argv, "task", "verify", task.task_id, "--"] } };
+        // Compact by design (#370): the rules an agent needs to act, and exact
+        // identities; scope, title and timestamps stay in `hunch report <id> --json`.
+        return { content: [{ type: "text" as const, text: `Task ${task.task_id} · ${task.state}. Pass task_id to hunch_context and every decision/correction/finding capture (a capture is not proof of a commit or push). To claim an application, copy occurrence_id, record_id and content_hash exactly from hunch_report(task_id) application_references, with the action you took; omit applications you did not make. Before the final response, finish with hunch_task (outcome "interrupted" if cut short) and include its contribution card verbatim, Evidence line and agent-reported label included, unless presentation_enabled is false. Never rerun an expensive check only for reporting; missing evidence stays unverified. Checks, with this exact installation (a global hunch may be stale): ${launcher.shell} task verify ${task.task_id} -- <command> [arguments]${launcher.note} (15-minute default; --timeout <seconds> before -- for longer).` }], structuredContent: { task: { task_id: task.task_id, state: task.state }, verification_argv: [...launcher.argv, "task", "verify", task.task_id, "--"] } };
       }
       if (!task_id) throw new Error("finish requires the exact task_id");
       for (const claim of applications ?? []) recordReportClaim(root, task_id, claim);
@@ -99,12 +101,10 @@ export function registerTaskReportTools(server: McpServer, getRoot: () => string
       finishReportTask(root, task_id, outcome ?? "completed");
       // The finished task becomes graph memory through the normal capture path;
       // a failed write is disclosed on the card, never a reason to lose it.
-      let graph: { id: string; home: "public" | "private"; flushed: "pushed" | "committed" | null; changed: boolean } | null = null;
       let graphNote = "";
       try {
         const saved = persistTaskRecord(root, getStore(), task_id);
         if (saved) {
-          graph = { id: saved.record.id, home: saved.home, flushed: saved.flushed, changed: saved.changed };
           graphNote = `\nGraph     ${saved.changed ? "saved" : "already saved"} as ${saved.record.id} (${saved.home}${saved.flushed ? `, ${saved.flushed}` : ""})`;
         } else {
           graphNote = "\nGraph     nothing to keep (no observation, or task records disabled)";
@@ -115,7 +115,10 @@ export function registerTaskReportTools(server: McpServer, getRoot: () => string
       // The HTML evidence view is rendered on demand (hunch_report(html: true),
       // `hunch report <id> --html`, or the VS Code view); finish writes no file.
       const card = renderTaskReport(report) + graphNote;
-      return { content: [{ type: "text" as const, text: show ? card : "Task report retained. Automatic presentation is disabled; omit the contribution card from the final response." }], structuredContent: { ...boundedTaskReportForHost(report), presentation_enabled: show, contribution_card: show ? card : null, report_path: null, graph_record: graph } as unknown as Record<string, unknown> };
+      // Compact by design (#370): the card (in structuredContent too — some hosts
+      // show only that) and what an agent acts on. Deliveries, checks, conformance
+      // and the graph record stay in hunch_report(task_id) / `hunch report <id> --json`.
+      return { content: [{ type: "text" as const, text: show ? card : "Task report retained. Automatic presentation is disabled; omit the contribution card from the final response." }], structuredContent: { schema: "hunch.task-finish/1", task_id: report.task.task_id, state: report.task.state, presentation_enabled: show, contribution_card: show ? card : null, full_report: `hunch report ${report.task.task_id} --json` } };
     } catch (error) {
       const message = `Task report unavailable: ${(error as Error).message}`;
       // Some hosts show structuredContent instead of text blocks. Return exact

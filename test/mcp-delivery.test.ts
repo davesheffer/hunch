@@ -102,8 +102,14 @@ test("MCP task lifecycle retains exact delivery, rejects borrowed evidence, and 
   assert.match(JSON.stringify(finished.content), /passed/);
   assert.match(String(finished.structuredContent?.contribution_card), /agent-reported/);
   assert.match(String(finished.structuredContent?.contribution_card), /Evidence  hunch report htask_[a-f0-9]{24} --html/);
-  assert.equal(finished.structuredContent?.report_path, null, "finish renders no HTML; the evidence view is generated on demand");
-  assert.ok(JSON.stringify(finished.structuredContent).length < 20_000, "a one-delivery finish result stays small");
+  assert.equal(finished.structuredContent?.report_path, undefined, "finish result carries no report_path; the evidence view is generated on demand");
+  // Compact (#370): the card and what an agent acts on; the rest is in hunch_report.
+  assert.equal(finished.structuredContent?.schema, "hunch.task-finish/1");
+  assert.equal(finished.structuredContent?.task_id, taskId);
+  assert.equal(finished.structuredContent?.state, "completed");
+  assert.equal(finished.structuredContent?.full_report, `hunch report ${taskId} --json`);
+  assert.equal(finished.structuredContent?.deliveries, undefined, "delivery detail stays in hunch_report");
+  assert.ok(JSON.stringify(finished.structuredContent).length < 2_000, "a one-delivery finish result stays small");
   const next = await call("hunch_task", { action: "start", title: "A fresh task" });
   // The reporting rules the grounding block no longer carries (#369) arrive here.
   const startText = JSON.stringify(next.content);
