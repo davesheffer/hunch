@@ -128,6 +128,13 @@ const cwdHintField = z.string().optional().describe(
   "writes then commit there, not to the original root.",
 );
 
+/** Shared by hunch_record_decision/correction/finding — identical text repeated 3x
+ *  otherwise. hunch_context's task_id field differs (delivery vs. save) and keeps its
+ *  own description. */
+const saveTaskIdField = TaskIdSchema.optional().describe(
+  "Task ID, to attribute this save to it; never affects capture authority.",
+);
+
 /** Pull `cwd` out of a tool call's already-parsed input without assuming any one
  *  tool's exact input shape — every write tool spreads the same cwdHintField in,
  *  but the wrapper below runs for every tool, read or write. */
@@ -778,6 +785,16 @@ const DELIVERY_OUTPUT_SCHEMA = z.object({
  *  fields only. The handler still parses the result with the full
  *  DELIVERY_OUTPUT_SCHEMA, so the delivered shape is exactly as strict as before. */
 const DELIVERY_ADVERTISED_OUTPUT_SCHEMA = DELIVERY_OUTPUT_SCHEMA.extend({
+  // The MCP result carries drill-down ids only (see compactEnvelope, #371): the
+  // per-record receipt facts stay in the served ledger and hunch_report. Optional,
+  // so a reader of the full CLI envelope and of the MCP result shares one shape.
+  delivered: z.array(DELIVERY_OUTPUT_SCHEMA.shape.delivered.element.partial({
+    rank: true, delivery_reason: true, provenance_status: true, token_cost: true,
+  })),
+  supplements: z.array(DELIVERY_OUTPUT_SCHEMA.shape.supplements.element.partial({
+    reason: true, rank: true, token_cost: true,
+  })),
+  omitted: z.array(DELIVERY_OUTPUT_SCHEMA.shape.omitted.element.partial({ detail: true })),
   landscape: z.object({
     schema: z.literal("hunch.landscape-fragment/1"),
     target: z.string(),
@@ -911,7 +928,20 @@ function deliveredContext(
   ]);
   return {
     content: [{ type: "text", text: structuredContent.text }],
-    structuredContent: compactOmissions(structuredContent),
+    structuredContent: compactEnvelope(structuredContent),
+  };
+}
+
+/** What the MCP result names per record: enough to drill down (hunch_why), no
+ *  more. A host shows the model either `content` or `structuredContent`, and
+ *  `text` is the only brief a structured-only host sees, so every other field
+ *  repeats what the brief already says; rank, costs and provenance stay in the
+ *  receipt. Undelivered supplements are dropped (the brief never showed them). */
+export function compactEnvelope(envelope: z.infer<typeof DELIVERY_OUTPUT_SCHEMA>): z.infer<typeof DELIVERY_ADVERTISED_OUTPUT_SCHEMA> {
+  return {
+    ...compactOmissions(envelope),
+    delivered: envelope.delivered.map(({ kind, record_id }) => ({ kind, record_id })),
+    supplements: envelope.supplements.filter((s) => s.delivered).map(({ id, kind, delivered }) => ({ id, kind, delivered })),
   };
 }
 
@@ -925,17 +955,18 @@ const OMITTED_SAMPLE = 5;
  *  keeps an id to pass to hunch_why, budget first — and count all of them by
  *  reason. Runs after recordServed and after the full envelope validated, so
  *  receipts and receipt_id are unchanged. */
-export function compactOmissions(envelope: z.infer<typeof DELIVERY_OUTPUT_SCHEMA>): z.infer<typeof DELIVERY_OUTPUT_SCHEMA> {
+export function compactOmissions(envelope: z.infer<typeof DELIVERY_OUTPUT_SCHEMA>): z.infer<typeof DELIVERY_ADVERTISED_OUTPUT_SCHEMA> {
   const groups = new Map<string, typeof envelope.omitted>();
   for (const item of envelope.omitted) groups.set(item.reason, [...(groups.get(item.reason) ?? []), item]);
   const byReason: Record<string, number> = {};
   for (const [reason, items] of groups) byReason[reason] = items.length;
   const order = [...groups.keys()].sort((left, right) => Number(right === "budget") - Number(left === "budget") || left.localeCompare(right));
-  const sample: typeof envelope.omitted = [];
+  const sample: Array<Omit<(typeof envelope.omitted)[number], "detail">> = [];
   for (let depth = 0; sample.length < OMITTED_SAMPLE && sample.length < envelope.omitted.length; depth++) {
     for (const reason of order) {
       const item = groups.get(reason)![depth];
-      if (item && sample.length < OMITTED_SAMPLE) sample.push(item);
+      // The per-record detail sentence is left out: hunch_why(record_id) explains it.
+      if (item && sample.length < OMITTED_SAMPLE) sample.push({ kind: item.kind, record_id: item.record_id, reason: item.reason });
     }
   }
   return {
@@ -1788,18 +1819,19 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
     {
       title: "Assemble the minimal relevant Hunch slice for a task",
       description:
-        "Given a file, symbol, or task phrase you're about to work on, return the MINIMAL relevant memory — invariants to preserve, decisions explaining the design, bug history not to reintroduce, and the blast radius — as a compact brief. Call this FIRST when starting work on something. A task phrase that resolves to no file/symbol falls back to the closest graph matches. Returns a budgeted brief plus a delivery receipt. Not for exhaustive rationale on one file (hunch_why) or keyword search (hunch_query).",
+        "Given a file, symbol, or task phrase you're about to work on, return the MINIMAL relevant memory — invariants, decisions, bug history, blast radius — as a compact brief. Call FIRST when starting work. A task phrase with no file/symbol match falls back to the closest graph matches. Returns a budgeted brief plus a delivery receipt. Not for exhaustive rationale on one file (hunch_why) or keyword search (hunch_query).",
       inputSchema: {
         target: z.string().describe("A file path, symbol, or task phrase you're about to work on."),
         budget_tokens: z.number().optional().describe("Rough token budget for the brief (default 1500)."),
         profile: z.enum(DELIVERY_PROFILES).optional().describe("Delivery role: builder (default), reviewer, or architect. Changes non-blocking order only."),
         as_of: z.string().optional().describe("Time-travel ref (commit/tag/branch): assemble the slice as it stood then."),
         task_id: TaskIdSchema.optional().describe("Exact task ID from hunch_task; records this delivery for the task's contribution report."),
+        include: z.array(z.enum(["recent_tasks", "project_dna"])).optional().describe("Opt-in extras; omitted by default to keep the brief small."),
         cwd: cwdHintField,
       },
       outputSchema: DELIVERY_ADVERTISED_OUTPUT_SCHEMA,
     },
-    async ({ target, budget_tokens, profile, as_of, task_id }, extra): Promise<ToolResult> => {
+    async ({ target, budget_tokens, profile, as_of, task_id, include }, extra): Promise<ToolResult> => {
       const deliver = (envelope: DeliveryEnvelope): ToolResult => {
         const result = deliveredContext(root, as_of ? `${target} (as_of:${as_of})` : target, envelope, extra.sessionId);
         // Same sibling-fix lesson the pre-edit hook injects, for a file target.
@@ -1825,13 +1857,17 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
       const asOf = as_of ? asOfDate(as_of, root) : undefined;
       if (as_of && !asOf) return invalid(`Could not resolve as_of "${as_of}" to a commit.`);
       const ctx = store.assembleContext(target, budget_tokens ?? 1500, { asOf });
+      // Both extras below cost brief tokens (and, for DNA/recent-tasks selection, extra
+      // latency) — opt-in only via `include`, omitted from the default brief.
       let dnaSupplement: ReturnType<typeof projectDnaDeliverySupplement> = null;
-      try {
-        dnaSupplement = projectDnaDeliverySupplement(discoverProjectDna(root, as_of ?? "HEAD"));
-      } catch {
-        // Context retrieval must keep its existing graceful behavior when the
-        // Git checkout cannot provide DNA; the dedicated DNA tool reports the
-        // exact derivation error when a caller needs diagnostics.
+      if (include?.includes("project_dna")) {
+        try {
+          dnaSupplement = projectDnaDeliverySupplement(discoverProjectDna(root, as_of ?? "HEAD"));
+        } catch {
+          // Context retrieval must keep its existing graceful behavior when the
+          // Git checkout cannot provide DNA; the dedicated DNA tool reports the
+          // exact derivation error when a caller needs diagnostics.
+        }
       }
       // The "State" section (nuryel.state/1): current derived, in-force commitments and the
       // latest receipts whose subject/text matches the target — bounded, ordered, sharing the
@@ -1839,7 +1875,9 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
       const stateGrounding = asOf ? [] : stateSupplements(store.stateSlice(target), target);
       // Recent finished tasks that touched the target: what earlier agent work did
       // here, from graph memory. Advisory history sharing the brief's budget.
-      const recentTasks = asOf ? [] : taskSelectionSupplements(store.selectTasksAuto(target, buildTaskRankingQuery(root, task_id ?? null, target)), target);
+      const recentTasks = (asOf || !include?.includes("recent_tasks"))
+        ? []
+        : taskSelectionSupplements(store.selectTasksAuto(target, buildTaskRankingQuery(root, task_id ?? null, target)), target);
       const options = {
         root,
         symbols: store.recs("symbols"),
@@ -1959,16 +1997,23 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
       description:
         "What just happened and what's next, straight from the graph: the last N decisions, the ROADMAP, and any inline human question such as an imported ADR awaiting explicit approve/decline. Call at session start to orient, or before planning what to work on. Same data as the wiki's now.md. Public store only, EXCEPT a queued commit-repair's liveness is checked against the full store (so a private-overlay decision's fully-answerable repair doesn't go silently unanswerable); only its id and the commit shas ever surface, never its title.",
       inputSchema: {
-        recent_limit: z.number().optional().describe("How many recent decisions to include (default 10)."),
+        recent_limit: z.number().optional().describe("How many recent decisions to include (default 5)."),
+        roadmap_limit: z.number().optional().describe("How many roadmap entries to include (default 2); the rest are counted."),
       },
     },
-    async ({ recent_limit }): Promise<ToolResult> => {
-      const { recent, roadmap, pendingReview } = nowData(store.json.loadAll("decisions"), recent_limit ?? 10);
+    async ({ recent_limit, roadmap_limit }): Promise<ToolResult> => {
+      // Bounded by default (#371): the hot view is read at session start, so its
+      // size is paid on every session; the rest stays one call away.
+      const decisions = store.json.loadAll("decisions");
+      const { recent, roadmap, pendingReview } = nowData(decisions, recent_limit ?? 5);
+      const shownRoadmap = roadmap.slice(0, Math.max(0, roadmap_limit ?? 2));
       const L: string[] = [`🔥 Recent (${recent.length}):`];
       for (const r of recent) L.push(`  ${r.date} [${r.status}] ${r.title} (${r.id}${r.topic ? `, ${r.topic}` : ""})`);
+      if (decisions.length > recent.length) L.push(`  +${decisions.length - recent.length} more — hunch_now(recent_limit) or hunch now`);
       L.push("", `🗺 Roadmap — live proposed decisions (${roadmap.length}):`);
       if (!roadmap.length) L.push("  (empty — record intent as a PROPOSED decision and it appears here)");
-      for (const r of roadmap) L.push(`  • ${r.title} (${r.id}${r.topic ? `, ${r.topic}` : ""}, since ${r.date})\n      ${r.note}`);
+      for (const r of shownRoadmap) L.push(`  • ${r.title} (${r.id}${r.topic ? `, ${r.topic}` : ""}, since ${r.date})\n      ${r.note}`);
+      if (roadmap.length > shownRoadmap.length) L.push(`  +${roadmap.length - shownRoadmap.length} more — hunch_now(roadmap_limit) or hunch now`);
       if (pendingReview > 0) L.push("", `${pendingReview} legacy un-vouched draft(s) — \`hunch adopt-drafts\` auto-trusts them as advisory (new captures land trusted automatically).`);
       // Workspace ledger, from stored PUBLIC records only (same jurisdiction rule as the rest
       // of this view; no git, so the hot view stays fast). Machine labels are user-chosen
@@ -2088,7 +2133,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
     {
       title: "Apply the human's exact imported-ADR answer",
       description:
-        "Use ONLY after the human explicitly answers the currently surfaced imported-ADR question with approve or decline in this conversation. Never infer approval from silence, continued work, a generic earlier sign-off, or the ADR file's own status. The source and review hashes bind the answer to both the exact bytes and mapped meaning shown. Approve grants human-confirmed authority; decline records review but keeps the ADR advisory.",
+        "Use ONLY after the human explicitly answers the currently surfaced imported-ADR question with approve or decline, in this conversation. Never infer approval from silence, continued work, an earlier generic sign-off, or the ADR file's own status. The source and review hashes bind the answer to the exact bytes and mapped meaning shown. Approve grants human-confirmed authority; decline records review but keeps the ADR advisory.",
       inputSchema: {
         decision_id: z.string().regex(/^dec_[A-Za-z0-9_-]+$/),
         expected_source_hash: z.string().regex(/^sha256:[a-f0-9]{64}$/),
@@ -2181,7 +2226,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
     {
       title: "Capture a decision (grilling interview)",
       description:
-        "Start a decision-capture interview ('/capture', 'grill me'): returns the protocol — ONE question at a time until the decision is resolved — and a capture-session token; writes nothing. Then commit via hunch_record_decision with the token + confirmed topic. The token is NOT a human signature: human-confirmed authority needs the human's own confirmation (a client confirmation prompt, or `hunch review --confirm <id>`). Not for corrections (hunch_record_correction) or observations (hunch_record_finding).",
+        "Start a decision-capture interview ('/capture', 'grill me'): returns the protocol — ONE question at a time until resolved — and a capture-session token; writes nothing. Then commit via hunch_record_decision with the token + confirmed topic. The token is NOT a human signature: human-confirmed authority needs the human's own confirmation (client prompt, or `hunch review --confirm <id>`). Not for corrections (hunch_record_correction) or observations (hunch_record_finding).",
       inputSchema: {
         topic: z.string().optional().describe("proposed topic anchor (confirm with the human before committing)"),
         seed: z.string().optional().describe("what the decision is about, to focus the first question"),
@@ -2248,7 +2293,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
     {
       title: "Record a decision (write-back)",
       description:
-        "Persist a Decision (ADR) with provenance after a non-trivial design choice. private:true keeps a SENSITIVE decision in the HUNCH_PRIVATE_DIR overlay, never committed here. Returns id, home, and status. Not for a rule the agent must obey (hunch_record_correction) or an observation (hunch_record_finding). Errors: 'Refused:' a gate held (resolve it, do not retry); 'Invalid:' fix the arguments; 'Failed to' internal.",
+        "Persist a Decision (ADR) with provenance after a non-trivial design choice. private:true keeps it in the HUNCH_PRIVATE_DIR overlay, never committed here. Returns id, home, status. Not for an agent-obeyed rule (hunch_record_correction) or an observation (hunch_record_finding). Errors: 'Refused:' a gate held (don't retry); 'Invalid:' fix arguments; 'Failed to' internal.",
       inputSchema: {
         decision: z.object({
           title: z.string(),
@@ -2258,7 +2303,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
           alternatives_rejected: z.array(z.string()).optional(),
           related_files: z.array(z.string()).optional(),
           related_components: z.array(z.string()).optional(),
-          topic: z.string().optional().describe("decision-grounding anchor — one topic per decision; enables doc≠graph drift detection for it. Omit to leave un-anchored."),
+          topic: z.string().optional().describe("decision-grounding anchor — one topic per decision; enables doc≠graph drift detection. Omit to leave un-anchored."),
           // FLAT, matching PremiseSchema exactly. A nested { check: {...} } shape is
           // silently STRIPPED by Zod, leaving a claim-only premise — and a claim-only
           // premise is "documented only (no check attached)", which ALWAYS HOLDS. An
@@ -2266,20 +2311,20 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
           // the exact fail-open this feature exists to prevent. Keep in lockstep with
           // PremiseSchema in src/core/types.ts.
           premises: z.array(z.object({
-            claim: z.string().min(1).describe("the human-readable reason this decision rests on"),
-            path_absent: z.string().optional().describe("premise holds while this repo-relative path does NOT exist. REQUIRES `under`. Prefer path_exists where you can — a negative probe fails OPEN, a positive one fails closed."),
-            under: z.string().optional().describe("required with path_absent: an EXISTING repo-relative ANCESTOR of it (path_absent 'src/gateway' -> under 'src'). When the anchor disappears the premise reads unevaluable instead of silently 'still absent'."),
-            path_exists: z.string().optional().describe("premise holds while this repo-relative path exists"),
-            review_by: z.string().optional().describe("dated attestation: premise holds until this ISO date, then needs re-attesting"),
-            attested: z.string().optional().describe("ISO date a human last attested the claim (informational)"),
-          })).optional().describe("the checkable reasons this decision rests on — at most ONE check per premise (path_absent | path_exists | review_by). A dead premise NEVER changes authority; it raises an escalation for the human. Omit on re-record to keep the incumbent's premises."),
+            claim: z.string().min(1).describe("human-readable reason"),
+            path_absent: z.string().optional().describe("holds while this repo-relative path does NOT exist; requires `under`. Prefer path_exists — negative probes fail OPEN, positive fail closed."),
+            under: z.string().optional().describe("required with path_absent: an EXISTING repo-relative ancestor ('src/gateway' -> under 'src'). If it disappears, reads unevaluable, not silently absent."),
+            path_exists: z.string().optional().describe("holds while this repo-relative path exists"),
+            review_by: z.string().optional().describe("holds until this ISO date, then needs re-attesting"),
+            attested: z.string().optional().describe("ISO date a human last attested (informational)"),
+          })).optional().describe("checkable reasons this decision rests on, at most one check per premise. A dead premise never changes authority, only raises a human escalation. Omit on re-record to keep the incumbent's."),
           status: z.enum(["proposed", "accepted", "rejected", "superseded"]).optional(),
           commit: z.string().optional(),
-          supersedes: z.string().optional().describe("id of a decision this one replaces — closes its valid-time window (invalidate, don't delete)"),
-          private: z.boolean().optional().describe("write into the PRIVATE overlay store (HUNCH_PRIVATE_DIR) instead of the committed repo — for sensitive decisions kept out of a public repo. Errors if no private store is configured."),
+          supersedes: z.string().optional().describe("id of a decision this replaces — closes its valid-time window (invalidate, don't delete)"),
+          private: z.boolean().optional().describe("write into the PRIVATE overlay store (HUNCH_PRIVATE_DIR), not the committed repo — for sensitive decisions. Errors if no private store is configured."),
         }),
-        capture_token: z.string().optional().describe("token from hunch_capture_decision — proves this write is the tail of a grilling interview (not a human signature: Hunch asks the human to confirm in the client when supported). Omit only for a quick manual record (a deprecation nudge is returned)."),
-        task_id: TaskIdSchema.optional().describe("Exact task ID for observing this successful save; reporting never changes capture authority."),
+        capture_token: z.string().optional().describe("token from hunch_capture_decision — proves this write tails a grilling interview (not a signature: the client may still ask the human to confirm). Omit only for a quick manual record (returns a deprecation nudge)."),
+        task_id: saveTaskIdField,
         cwd: cwdHintField,
       },
     },
@@ -2514,15 +2559,15 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
         "When a human corrects the agent ('never call X here'), persist it as a SCOPED Constraint with provenance, so the pre-edit hook and CI Constraint Guard hold every assistant to it. severity:'blocking' only when the human said never/must; applies_to_all:true only for a genuinely repo-wide rule (else scoped to scope_hint_file). Returns the constraint id and scope. Not for a design choice (hunch_record_decision) or an observed gap with no rule yet (hunch_record_finding).",
       inputSchema: {
         rule: z.string().describe("The invariant in the human's words, e.g. \"never call the pay-per-token API here\"."),
-        scope_hint_file: z.string().optional().describe("A file the correction was about; scopes the constraint to it (the conservative default). Prefer a REPO-RELATIVE path (src/foo.ts); an absolute path is relativized against the repo root, and one outside the repo is discarded rather than scoped to a path that could never match."),
+        scope_hint_file: z.string().optional().describe("File the correction was about; scopes the constraint to it (conservative default). Prefer a repo-relative path — an absolute one is relativized, and one outside the repo is discarded rather than scoped to a path that could never match."),
         severity: z.enum(["advisory", "warning", "blocking"]).optional().describe("Default 'warning'. Use 'blocking' only for a hard never/must rule."),
         applies_to_all: z.boolean().optional().describe("True ONLY if the rule is genuinely repo-wide (scopes to **); required to make a repo-wide rule blocking."),
         type: z.enum(["security", "performance", "correctness", "architecture", "compliance"]).optional(),
         rationale: z.string().optional().describe("Why it must hold."),
         source_decision: z.string().optional().describe("id of a decision this correction derives from."),
-        private: z.boolean().optional().describe("write into the PRIVATE overlay store (HUNCH_PRIVATE_DIR) instead of the committed repo — a sensitive rule enforced locally (pre-edit hook + local check) but never exposed in a public PR comment. Errors if no private store is configured."),
-        capture_token: z.string().optional().describe("token from hunch_capture_decision. The rule is recorded and enforced either way, as agent testimony capped at severity 'warning'. A token never lets it DENY: blocking authority comes only from a human running the printed `hunch review --confirm <id> --severity <s>` command."),
-        task_id: TaskIdSchema.optional().describe("Exact task ID for observing this successful save; reporting never changes capture authority."),
+        private: z.boolean().optional().describe("write into the PRIVATE overlay store (HUNCH_PRIVATE_DIR), not the committed repo — enforced locally (pre-edit hook + check), never in a public PR comment. Errors if no private store is configured."),
+        capture_token: z.string().optional().describe("token from hunch_capture_decision. Recorded and enforced either way, as agent testimony capped at severity 'warning'. A token never lets it DENY: blocking authority needs a human running the printed `hunch review --confirm <id> --severity <s>`."),
+        task_id: saveTaskIdField,
         cwd: cwdHintField,
       },
     },
@@ -2621,7 +2666,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
         finding: z.object({
           title: z.string().describe("stable one-line name — re-recording the same title updates the finding"),
           observation: z.string().describe("what was observed, in plain words"),
-          evidence: z.array(z.string()).optional().describe("the query/command run + representative output — a finding without evidence is an opinion"),
+          evidence: z.array(z.string()).optional().describe("query/command run + representative output — a finding without evidence is an opinion"),
           method: z.string().optional().describe("rb_* runbook that re-runs the audit (makes it re-verifiable)"),
           severity: z.enum(["low", "medium", "high", "critical"]).optional(),
           triage: z.enum(["open", "accepted-risk", "scheduled", "resolved", "stale"]).optional().describe("default 'open'. 'resolved' should carry resolved_commit."),
@@ -2630,9 +2675,9 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
           violates_constraint: z.string().optional().describe("con_* this finding is a known violation of"),
           spawned_decision: z.string().optional().describe("dec_* recorded in response"),
           resolved_commit: z.string().optional().describe("the commit that fixed it (with triage:'resolved')"),
-          private: z.boolean().optional().describe("write into the PRIVATE overlay store instead of the committed repo. Errors if no private store is configured."),
+          private: z.boolean().optional().describe("write into the PRIVATE overlay store, not the committed repo. Errors if no private store is configured."),
         }),
-        task_id: TaskIdSchema.optional().describe("Exact task ID for observing this successful save; reporting never changes capture authority."),
+        task_id: saveTaskIdField,
         cwd: cwdHintField,
       },
     },
@@ -2903,7 +2948,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
     {
       title: "Open findings for a scope",
       description:
-        "List LIVE findings (observed gaps/debt with no fix yet — triage open/accepted-risk/scheduled) concerning a file, glob, or symbol; omit scope for the whole ledger. Call before planning work in an area to inherit past audits instead of re-discovering them. The list shows each finding's first sentence; pass id for one finding's full observation. Advisory; resolved/stale findings are excluded unless all:true. Not for invariants (hunch_check_constraints) or bug history (hunch_bug_lineage): findings are observations, never rules.",
+        "List LIVE findings (observed gaps/debt with no fix yet — triage open/accepted-risk/scheduled) for a file, glob, or symbol; omit scope for the whole ledger. Call before planning work in an area to inherit past audits instead of re-discovering them. Lists each finding's first sentence; pass id for one finding's full observation. Advisory; resolved/stale findings are excluded unless all:true. Not for invariants (hunch_check_constraints) or bug history (hunch_bug_lineage): findings are observations, never rules.",
       inputSchema: {
         scope: z.string().optional().describe("a path, glob, or symbol (e.g. src/procs/** or dbo.GetOrders); omit for all"),
         all: z.boolean().optional().describe("include resolved/stale findings (the full history)"),
@@ -2939,12 +2984,12 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
     {
       title: "Build a proved review proposal from one exact correction",
       description:
-        "Upgrade the exact supported static ESM import-declaration package projection of one captured correction into a deterministic review packet when the baseline is clean. Writes proposal, plan, proof, and evidence artifacts only; never activates, warns, blocks, or grants authority. Unsupported corrections keep their immediate legacy guard and create no policy.",
+        "Upgrade the exact supported static ESM import-declaration package projection of one captured correction into a deterministic review packet, when the baseline is clean. Writes proposal, plan, proof, and evidence artifacts only; never activates, warns, blocks, or grants authority. Unsupported corrections keep their immediate legacy guard and create no policy.",
       inputSchema: {
         constraint_id: z.string().describe("Captured correction constraint id (con_*)."),
         public_only: z.boolean().optional().describe("Read and write only the public correction home."),
-        private_only: z.boolean().optional().describe("Keep correction-derived evidence/policy/proof artifacts in the configured private overlay; the public source-code graph is refreshed before proof."),
-        include_artifacts: z.boolean().optional().describe("Include the complete Policy IR, proof plan, proof receipts, and evidence object. Default output is a concise review envelope."),
+        private_only: z.boolean().optional().describe("Keep correction-derived artifacts in the private overlay; the public source-code graph is refreshed before proof."),
+        include_artifacts: z.boolean().optional().describe("Include the full Policy IR, proof plan, receipts, and evidence. Default is a concise review envelope."),
         cwd: cwdHintField,
       },
     },
