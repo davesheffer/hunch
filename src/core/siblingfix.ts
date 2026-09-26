@@ -684,7 +684,7 @@ function computeLessons(
  *  surface as a fix. Null when the messages could not be read. */
 function revertedPairs(root: string, commits: readonly LineLogCommit[], env: NodeJS.ProcessEnv, budget: Budget): Set<string> | null {
   const cancelled = new Set<string>();
-  if (commits.length < 2) return cancelled;
+  if (!commits.length) return cancelled;
   const raw = git(root, ["show", "-s", "--no-color", "--format=%x1e%H%x1f%B", ...commits.map((c) => c.sha)], env, budget);
   if (raw == null) return null;
   const message = new Map<string, string>();
@@ -709,8 +709,11 @@ function revertedPairs(root: string, commits: readonly LineLogCommit[], env: Nod
       if (target === c.sha || !refs.some((ref) => target.startsWith(ref))) continue;
       const prior = effect.get(target);
       if (!prior) { mine.set(target, true); continue; }
-      // Reverting a revert undoes each of its effects individually.
-      for (const [sha, didCancel] of prior) mine.set(sha, !didCancel);
+      // Reverting a revert undoes each of its effects individually; a fix this
+      // commit ALSO names directly stays cancelled (git reverts both changes).
+      for (const [sha, didCancel] of prior) {
+        if (!refs.some((ref) => sha.startsWith(ref))) mine.set(sha, !didCancel);
+      }
     }
     for (const [sha, cancel] of mine) {
       if (cancel) cancelled.add(sha);

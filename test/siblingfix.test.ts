@@ -424,8 +424,11 @@ test("a mixed revert (drops one fix, re-lands another) is undone per fix when it
   // Reverting E restores X and cancels A again: A must not come back.
   writeFileSync(join(root, "src", "providers.ts"), body(fixedMatcher("isOurProviderHook")));
   commitWithMessage(root, `Revert "revert: swap the fixes back"\n\nThis reverts commit ${e}.`);
+  const f = sha();
   const after = lessons();
+  assert.ok(after.includes(x), "X re-lands");
   assert.ok(!after.includes(a), "A stays cancelled");
+  assert.ok(!after.includes(f), "the final revert is not a lesson");
   assert.ok(!after.includes(e) && !after.includes(b), "no revert commit is a lesson");
 });
 
