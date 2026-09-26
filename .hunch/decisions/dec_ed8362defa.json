@@ -1,0 +1,106 @@
+{
+  "id": "dec_ed8362defa",
+  "title": "Replace detailed Hunch instructions with minimal MCP-delegate grounding block",
+  "topic": null,
+  "status": "accepted",
+  "context": "The grounding block in editor rules (.cursor/hunch.mdc) previously contained extensive inline instructions covering all Hunch workflows (task start, context lookup, constraints, reporting). This was verbose and duplicated information available through MCP tools.",
+  "decision": "Regenerated the grounding block to be minimal — one summary statement and a pointer to `hunch_*` MCP tools, removing ~40 lines of prescriptive instructions. Users now discover workflows through tool documentation rather than inline hints.",
+  "consequences": [
+    "Grounding block is concise, reducing initial cognitive load in editor rules",
+    "Users must call MCP tools or read their help to discover workflows (learning curve shift)",
+    "Single source of truth for Hunch workflows moves from editor rules to MCP tool layer",
+    "All four edited files (.github/copilot-instructions.md, .windsurf/rules/hunch.md, AGENTS.md, CLAUDE.md) likely received similar regeneration, keeping grounding blocks consistent across IDE rule sets"
+  ],
+  "alternatives_rejected": [
+    "Keep full detailed inline instructions (too verbose for rules files)",
+    "Remove Hunch context entirely (loses discovery and initial orientation)",
+    "Maintain separate instructions per IDE rule file (inconsistent, harder to maintain)"
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Keep full detailed inline instructions (too verbose for rules files)",
+      "scope": [
+        ".github/**",
+        ".windsurf/rules/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Remove Hunch context entirely (loses discovery and initial orientation)",
+      "scope": [
+        ".github/**",
+        ".windsurf/rules/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Maintain separate instructions per IDE rule file (inconsistent, harder to maintain)",
+      "scope": [
+        ".github/**",
+        ".windsurf/rules/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_4c40eab00f"
+  ],
+  "related_files": [
+    ".github/copilot-instructions.md",
+    ".windsurf/rules/hunch.md",
+    "AGENTS.md",
+    "CLAUDE.md"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "08f81a40",
+  "valid_from": "2026-09-25T19:53:44+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft+summary",
+    "confidence": 0.5,
+    "evidence": [
+      "commit:08f81a40",
+      "synth:provider=claude-cli",
+      "branch:feat/task-finish-budget",
+      ".github/copilot-instructions.md",
+      ".windsurf/rules/hunch.md",
+      "AGENTS.md",
+      "CLAUDE.md"
+    ],
+    "last_verified": "2026-09-25T16:56:45.579Z"
+  },
+  "date": "2026-09-25T19:53:44+03:00"
+}

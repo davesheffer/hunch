@@ -298,9 +298,12 @@ the report contract.
 
 Clients that prefer MCP `structuredContent` receive copyable application
 references from `hunch_report` and the completion card from `hunch_task`.
-Both return `hunch.task-report-summary/1`: exact identities, verdicts, counts
-and the card, bounded to the host's round-trip (envelope text and lesson prose
-are omitted; `omitted` counts what fell off). The full `hunch.task-report/1`
+`hunch_report` returns `hunch.task-report-summary/1`: exact identities,
+verdicts, counts and the card, bounded to the host's round-trip (envelope text
+and lesson prose are omitted; `omitted` counts what fell off). `hunch_task`
+finish returns only `hunch.task-finish/1`: the task ID, state, the card when
+presentation is enabled, and a `full_report` command; call `hunch_report` for
+deliveries, claims and checks. The full `hunch.task-report/1`
 document is `hunch report <id> --json` or the HTML view. Native
 context envelopes remain unchanged; task occurrence IDs and record hashes must
 not be derived from the envelope receipt ID or task scope hash. The card and

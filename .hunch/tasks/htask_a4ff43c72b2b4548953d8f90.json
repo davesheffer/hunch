@@ -1,0 +1,45 @@
+{
+  "id": "htask_a4ff43c72b2b4548953d8f90",
+  "title": "Assistant task",
+  "state": "completed",
+  "started_at": "2026-09-19T02:53:26.567Z",
+  "finished_at": "2026-09-19T02:54:34.042Z",
+  "coverage": "delivered",
+  "lessons": [
+    {
+      "kind": "constraints",
+      "record_id": "con_947c578b2c",
+      "content_hash": "sha256:dc4e129528159278eb6f6f5c42be4748e256865eda6ff8b53606898a998fe7e2",
+      "title": "Forward-migrate raw JSON to the current schema BEFORE Zod validation; never silently drop unmigratable records"
+    },
+    {
+      "kind": "decisions",
+      "record_id": "dec_093de2b0bd",
+      "content_hash": "sha256:ca950ea2bb85f7e83b4c307112515059019ba4b4bd9191d24edb609ee0880625",
+      "title": "Forward-migrate schema before validation to prevent silent record loss"
+    },
+    {
+      "kind": "decisions",
+      "record_id": "dec_ce1da882cd",
+      "content_hash": "sha256:d78e9e4c2baf9484012a5ce11292d16228d5366e54732f0cc4e7df55c769a5a6",
+      "title": "Refuse migration if validating loader skipped any on-disk records"
+    }
+  ],
+  "applied": [],
+  "saved": [],
+  "checks": [],
+  "conformance": [],
+  "refusals": 0,
+  "files": [],
+  "supersedes": [],
+  "source_snapshot": null,
+  "report_hash": "sha256:78853b2d23de16e15147998def5c5bdc892970fe450132138d38f3e3ee1c5763",
+  "provenance": {
+    "source": "task_report",
+    "confidence": 1,
+    "evidence": [
+      "hunch report htask_a4ff43c72b2b4548953d8f90"
+    ],
+    "last_verified": "2026-09-19T02:54:34.042Z"
+  }
+}

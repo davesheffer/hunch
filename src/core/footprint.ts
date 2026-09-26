@@ -1,6 +1,10 @@
 // Context footprint (#372): how much text Hunch injects into an agent's
 // context, measured deterministically from the same code paths the product
 // serves. Tokens are an estimate (characters / 4), not a tokenizer.
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { buildServer } from "../mcp/server.js";
@@ -31,6 +35,57 @@ const estTokens = (chars: number): number => Math.ceil(chars / 4);
 const surface = (id: string, chars: number, detail?: Record<string, number>): FootprintSurface =>
   ({ id, chars, est_tokens: estTokens(chars), ...(detail ? { detail } : {}) });
 const jsonChars = (v: unknown): number => (v === undefined ? 0 : JSON.stringify(v).length);
+
+/** A host shows one channel of a tool result: Claude Code shows only
+ * structuredContent, text-only hosts only content. The larger one is the cost. */
+function hostVisible(id: string, result: Record<string, unknown>): FootprintSurface {
+  const content = jsonChars(result.content), structured = jsonChars(result.structuredContent);
+  return surface(id, Math.max(content, structured), { content_chars: content, structured_chars: structured });
+}
+
+/** The hunch_task start and finish results for a task with one delivered lesson.
+ * Driven in a throwaway store, never `root`: a task writes a ledger row, and
+ * `taskRecords: false` keeps finish from writing or committing a graph record. */
+async function measureTaskLifecycle(): Promise<FootprintSurface[]> {
+  const dir = mkdtempSync(join(tmpdir(), "hunch-footprint-"));
+  try {
+    // A real task runs in a git repo; the source snapshot reads git.
+    try { execFileSync("git", ["init", "-q", dir], { stdio: "ignore" }); } catch { /* measured without git */ }
+    const store = new HunchStore(hunchPaths(dir));
+    try {
+      store.json.ensureDirs();
+      writeFileSync(join(dir, ".hunch", "local.json"), JSON.stringify({ taskRecords: false, autoCommit: false }));
+      store.json.put("constraints", {
+        id: "con_footprint_sample", type: "architecture", statement: "Tool results stay machine-readable.",
+        scope: ["src/sample.ts"], severity: "blocking", enforcement: "advisory_v1", match: null, forbids: null,
+        rationale: "Orchestrators must not parse prose.", source_decision: null, violations: [], status: "active",
+        valid_from: "2026-01-01T00:00:00.000Z", valid_to: null,
+        provenance: { source: "human_confirmed", confidence: 1, evidence: [] },
+      });
+      store.reindex();
+    } finally {
+      store.close();
+    }
+    const server = buildServer(dir);
+    const [ct, st] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: "hunch-footprint", version: "1" });
+    await Promise.all([server.connect(st), client.connect(ct)]);
+    try {
+      const start = await client.callTool({ name: "hunch_task", arguments: { action: "start", title: "Assistant task" } });
+      const taskId = (start.structuredContent as { task?: { task_id?: string } } | undefined)?.task?.task_id;
+      if (start.isError || !taskId) throw new Error("hunch_task start failed");
+      await client.callTool({ name: "hunch_context", arguments: { target: "src/sample.ts", task_id: taskId } });
+      const finish = await client.callTool({ name: "hunch_task", arguments: { action: "finish", task_id: taskId } });
+      if (finish.isError) throw new Error("hunch_task finish failed");
+      return [hostVisible("mcp.hunch_task.start", start), hostVisible("mcp.hunch_task.finish", finish)];
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
 
 /** Surfaces built inline from live host/session state; not measurable in-process. */
 const UNMEASURED = [
@@ -97,6 +152,8 @@ export async function measureFootprint(root: string, opts: { target?: string } =
     await client.close();
     await server.close();
   }
+
+  surfaces.push(...await measureTaskLifecycle());
 
   const store = new HunchStore(hunchPaths(root));
   try {

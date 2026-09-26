@@ -1,0 +1,37 @@
+{
+  "id": "fnd_2b5ac06068",
+  "title": "hunch runbook capture includes Hunch's own auto-commits and .hunch/** files as steps",
+  "observation": "`hunch runbook <range> --task` builds steps from rangeSubjects and files from rangeFiles with no filter, so every 'hunch: capture …' / 'hunch: capture test results' auto-commit becomes a runbook step and every .hunch/** record and generated grounding doc becomes a runbook file. sync already treats .hunch/** as circular (never synthesis input); runbook does not. Fix should be generic: exclude Hunch's own capture commits and store/grounding paths from runbook steps/files. Tracked as GitHub issue #425.",
+  "evidence": [
+    "demo repo (git init + hunch init, auto-commit on): hunch runbook 3b53aed~1..HEAD --task \"add a new auth rule\" → rb_f0408d71d9 (12 steps, 29 files); 9 of 12 steps are 'hunch: …' commits; 23 of 29 files are Hunch-owned (18 under .hunch/**, plus AGENTS.md, CLAUDE.md, .cursor/rules/hunch.mdc, .windsurf/rules/hunch.md, .github/copilot-instructions.md)",
+    "src/extractors/git.ts:2548-2557 rangeFiles/rangeSubjects: plain git log/diff, no filter",
+    "src/cli/index.ts ~1816 runbook command uses them directly",
+    "https://github.com/davesheffer/hunch/issues/425"
+  ],
+  "method": null,
+  "severity": "medium",
+  "triage": "scheduled",
+  "affected_files": [
+    "src/extractors/git.ts",
+    "src/cli/index.ts"
+  ],
+  "affected_symbols": [
+    "rangeSubjects",
+    "rangeFiles"
+  ],
+  "violates_constraint": null,
+  "spawned_decision": null,
+  "observed_at": "2026-09-25T11:52:02.772Z",
+  "resolved_commit": null,
+  "provenance": {
+    "source": "agent_recorded",
+    "confidence": 0.75,
+    "evidence": [
+      "demo repo (git init + hunch init, auto-commit on): hunch runbook 3b53aed~1..HEAD --task \"add a new auth rule\" → rb_f0408d71d9 (12 steps, 29 files); 9 of 12 steps are 'hunch: …' commits; 23 of 29 files are Hunch-owned (18 under .hunch/**, plus AGENTS.md, CLAUDE.md, .cursor/rules/hunch.mdc, .windsurf/rules/hunch.md, .github/copilot-instructions.md)",
+      "src/extractors/git.ts:2548-2557 rangeFiles/rangeSubjects: plain git log/diff, no filter",
+      "src/cli/index.ts ~1816 runbook command uses them directly",
+      "https://github.com/davesheffer/hunch/issues/425"
+    ],
+    "last_verified": "2026-09-25T11:54:34.362Z"
+  }
+}

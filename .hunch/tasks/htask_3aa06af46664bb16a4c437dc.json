@@ -1,0 +1,58 @@
+{
+  "id": "htask_3aa06af46664bb16a4c437dc",
+  "title": "Assistant task",
+  "state": "completed",
+  "started_at": "2026-09-25T11:39:26.563Z",
+  "finished_at": "2026-09-25T12:03:19.240Z",
+  "coverage": "no-delivery-observed",
+  "lessons": [],
+  "applied": [],
+  "saved": [
+    {
+      "kind": "findings",
+      "record_id": "fnd_2b5ac06068",
+      "content_hash": "sha256:b545665c3698359cc63ddc6c52396f7722cdfd90a11fee463d74c0d3be813949",
+      "home": "public",
+      "operation": "created",
+      "durability": "committed"
+    },
+    {
+      "kind": "findings",
+      "record_id": "fnd_2b5ac06068",
+      "content_hash": "sha256:4a95869c62839bfcd386ecd440a7a710808709a4928d086400a2b53fdb7d68f1",
+      "home": "public",
+      "operation": "updated",
+      "durability": "committed"
+    },
+    {
+      "kind": "findings",
+      "record_id": "fnd_2b5ac06068",
+      "content_hash": "sha256:b86c79b83f8e971acb2d3beacdedb3366a7d6037a2c6ed677f47e18133eb7e5f",
+      "home": "public",
+      "operation": "updated",
+      "durability": "committed"
+    }
+  ],
+  "checks": [],
+  "conformance": [],
+  "refusals": 0,
+  "files": [],
+  "supersedes": [],
+  "source_snapshot": null,
+  "report_hash": "sha256:41f8d9f252c9a6f1c263160a1e7f19498c11e928569114b22b6c0a93f18aeeb0",
+  "provenance": {
+    "source": "task_report",
+    "confidence": 1,
+    "evidence": [
+      "hunch report htask_3aa06af46664bb16a4c437dc",
+      "hunch report htask_8499e74c2f6f06dbcc4f84ce",
+      "hunch report htask_0394451fa9357564c4734053",
+      "hunch report htask_09d34a776b3e6c46ed780bd6",
+      "hunch report htask_212c1905d8a16178d3d7295e",
+      "hunch report htask_a52d6ee2724c7e0c3a24a358",
+      "hunch report htask_12837e7a7e02300f9032c3ab",
+      "hunch report htask_3d37ce9253fe1350426eb0ff"
+    ],
+    "last_verified": "2026-09-25T12:03:19.240Z"
+  }
+}

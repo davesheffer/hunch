@@ -1,0 +1,39 @@
+{
+  "id": "htask_9153677d92528c0e3a6de595",
+  "title": "Assistant task",
+  "state": "completed",
+  "started_at": "2026-09-19T04:33:28.204Z",
+  "finished_at": "2026-09-19T04:36:05.081Z",
+  "coverage": "delivered",
+  "lessons": [
+    {
+      "kind": "decisions",
+      "record_id": "dec_3a3d3867fc",
+      "content_hash": "sha256:4d83fd5775cefd50479740f7e93db8816d120224456d0256b1605905bc938413",
+      "title": "`prune --apply` acts on this machine only, from a live snapshot, with `git branch -d` / `worktree remove` and no force flags, after confirmation; the MCP surface is read-only"
+    },
+    {
+      "kind": "decisions",
+      "record_id": "dec_63cf9b4bbc",
+      "content_hash": "sha256:79230b962207e6942ec3ae176e63464ae12b515f9f275007001045255bee97d3",
+      "title": "Workspace ledger lives in the git-native memory store as one record per machine, synced through the overlay — not the state server"
+    }
+  ],
+  "applied": [],
+  "saved": [],
+  "checks": [],
+  "conformance": [],
+  "refusals": 0,
+  "files": [],
+  "supersedes": [],
+  "source_snapshot": null,
+  "report_hash": "sha256:a97d756e88b246423e01dd8565002782236e655607635a5709cbd19c5a1ab694",
+  "provenance": {
+    "source": "task_report",
+    "confidence": 1,
+    "evidence": [
+      "hunch report htask_9153677d92528c0e3a6de595"
+    ],
+    "last_verified": "2026-09-19T04:36:05.081Z"
+  }
+}
