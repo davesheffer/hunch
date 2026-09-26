@@ -4770,6 +4770,11 @@ program
         // malformed or names another checkout, serving this process root's memory
         // would cross worktrees; stay silent instead of guessing which side is right.
         if ((provider === "claude" || provider === "codex") && evt.cwd !== undefined && !routedCwd) return;
+        // The prompt's baseline is the session's, not this agent's: without its
+        // own, a first tool call that is a shell write would go ungrounded.
+        // Without an agent id the key would be the SESSION's baseline, and
+        // refreshing it here could swallow a parent write not yet grounded.
+        if (evt.agent_id) refreshShellBaseline(root, evt.session_id, evt.agent_id);
         const s = new HunchStore(paths);
         try {
           const clip1 = (text: string, max: number): string => {

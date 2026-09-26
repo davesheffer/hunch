@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
   attributable, changeLines, codeTokens, isFixSubject, isSubstantive, nameTokens, overlap, parseLineLog,
-  renderSiblingLessons, siblingLessonsFor,
+  renderSiblingLessons, siblingCounters, siblingLessonsFor,
 } from "../src/core/siblingfix.js";
 import { emptyState, lessonReminder, onLessonsDelivered } from "../src/core/pipeline.js";
 import { tsxLoaderUrl } from "./helpers.js";
@@ -259,6 +259,188 @@ test("the cache is keyed by content: an unrelated commit keeps the answer, a sib
   writeFileSync(join(root, "src", "providers.ts"), readFileSync(join(root, "src", "providers.ts"), "utf8").replace("const a = 1;", "const a = 2;"));
   commit(root, "chore: touch the sibling's file");
   assert.notEqual(siblingLessonsFor(root, "src/claude.ts", [], { budgetMs: 60_000 })[0]?.similarity, 0.01, "a candidate's new content recomputes");
+});
+
+test("a cache hit validates by digest and never re-runs the candidate scan", t => {
+  const root = repo(t);
+  writeFileSync(join(root, "src", "providers.ts"), `\n${fixedMatcher("isOurProviderHook")}\nexport function unrelated(): number {\n  const a = 1;\n  return a + 1;\n}\n`);
+  commit(root, "fix(providers): a mixed hook entry keeps the user's command");
+  const before = siblingCounters.candidateScans;
+  assert.equal(siblingLessonsFor(root, "src/claude.ts", [], { budgetMs: 60_000 }).length, 1);
+  assert.equal(siblingCounters.candidateScans, before + 1, "a miss scans once");
+  writeFileSync(join(root, "README.md"), "unrelated\n");
+  commit(root, "docs: readme");
+  assert.equal(siblingLessonsFor(root, "src/claude.ts", [], { budgetMs: 60_000 }).length, 1);
+  assert.equal(siblingCounters.candidateScans, before + 1, "a hit across an unrelated commit does not scan");
+  // A new function whose name overlaps the target's OWN names becomes a real
+  // candidate in a new file: the digest moves, the one-shot fallback scan
+  // finds a genuinely different candidate set (extra.ts is now included), so
+  // it falls through to a full recompute — two scans total for this call.
+  writeFileSync(join(root, "src", "extra.ts"), "export function isOurExtraHook(): boolean {\n  const a = 1;\n  return a > 0;\n}\n");
+  commit(root, "feat: another hook");
+  siblingLessonsFor(root, "src/claude.ts", [], { budgetMs: 60_000 });
+  assert.equal(siblingCounters.candidateScans, before + 3, "digest miss: one fallback scan plus one full-miss scan");
+});
+
+test("an unrelated new function is served from cache with no lesson recompute; a test-file function keeps the digest unchanged", t => {
+  const root = repo(t);
+  writeFileSync(join(root, "src", "providers.ts"), `\n${fixedMatcher("isOurProviderHook")}\nexport function unrelated(): number {\n  const a = 1;\n  return a + 1;\n}\n`);
+  commit(root, "fix(providers): a mixed hook entry keeps the user's command");
+  assert.equal(siblingLessonsFor(root, "src/claude.ts", [], { budgetMs: 60_000 }).length, 1);
+  const scansAfterFirst = siblingCounters.candidateScans;
+  const computesAfterFirst = siblingCounters.lessonComputes;
+  // A brand-new function with zero token overlap with the target's own names
+  // (`isOurClaudeHook`) can never itself become a candidate, but it is still
+  // matchable so the digest moves: the one-shot fallback retry confirms the
+  // candidate set is unchanged and serves the cached lessons without a recompute.
+  writeFileSync(join(root, "src", "zzz.ts"), "export function totallyDifferentThing(): number {\n  return 42;\n}\n");
+  commit(root, "feat: unrelated helper");
+  assert.equal(siblingLessonsFor(root, "src/claude.ts", [], { budgetMs: 60_000 }).length, 1);
+  // The digest moved (a matchable function was added), so the fallback runs
+  // ONE retry scan; its candidate content matches the cached one, so the
+  // cached lessons are still served and no lesson recompute happens.
+  assert.equal(siblingCounters.candidateScans, scansAfterFirst + 1, "one fallback scan on the digest miss");
+  assert.equal(siblingCounters.lessonComputes, computesAfterFirst, "no recompute of lessons: the fallback served the cached answer");
+  siblingLessonsFor(root, "src/claude.ts", [], { budgetMs: 60_000 });
+  assert.equal(siblingCounters.candidateScans, scansAfterFirst + 1, "the digest was healed: the next call is a pure digest hit");
+  // A function added inside a test path is excluded from the digest outright
+  // (candidatesFor already ignores TEST_PATH), so it never even takes the
+  // fallback path: the digest itself does not move.
+  mkdirSync(join(root, "test"), { recursive: true });
+  writeFileSync(join(root, "test", "extra.test.ts"), "export function isOurTestHook(): boolean {\n  return true;\n}\n");
+  commit(root, "test: add a fixture");
+  siblingLessonsFor(root, "src/claude.ts", [], { budgetMs: 60_000 });
+  assert.equal(siblingCounters.candidateScans, scansAfterFirst + 1, "a test-file function does not move the digest: still a pure digest hit");
+});
+
+test("a spent budget during the candidate scan yields no lessons and caches no partial answer", t => {
+  const root = repo(t);
+  writeFileSync(join(root, "src", "providers.ts"), `\n${fixedMatcher("isOurProviderHook")}\nexport function unrelated(): number {\n  const a = 1;\n  return a + 1;\n}\n`);
+  commit(root, "fix(providers): a mixed hook entry keeps the user's command");
+  const realNow = Date.now;
+  let jumped = false;
+  // The clock passes every deadline the moment the scan reaches the indexed symbols.
+  const trip = { file: "lib/trip.ts", name: "isOurTripHook", get kind() { jumped = true; return "function"; } };
+  const many = Array.from({ length: 2_000 }, (_, i) => ({ file: `lib/f${i}.ts`, name: `isOurHook${i}`, kind: "function" }));
+  Date.now = () => realNow() + (jumped ? 3_600_000 : 0);
+  let lessons;
+  try {
+    lessons = siblingLessonsFor(root, "src/claude.ts", [trip, ...many], { budgetMs: 60_000 });
+  } finally { Date.now = realNow; }
+  assert.ok(jumped, "the scan ran");
+  assert.deepEqual(lessons, []);
+  const cacheDir = join(root, ".hunch-cache", "siblingfix");
+  const [entry] = readdirSync(cacheDir).filter((f) => f !== "inventory.json");
+  const cached = JSON.parse(readFileSync(join(cacheDir, entry!), "utf8")) as { complete: boolean; lessons: unknown[]; candidates: object };
+  assert.equal(cached.complete, false);
+  assert.deepEqual(cached.lessons, []);
+  assert.deepEqual(cached.candidates, {}, "no partial candidate set kept");
+});
+
+test("a reverted fix is not a lesson; an unrelated later commit keeps it", t => {
+  const root = repo(t);
+  writeFileSync(join(root, "src", "providers.ts"), `\n${fixedMatcher("isOurProviderHook")}\nexport function unrelated(): number {\n  const a = 1;\n  return a + 1;\n}\n`);
+  commit(root, "fix(providers): a mixed hook entry keeps the user's command");
+  const kept = repo(t);
+  writeFileSync(join(kept, "src", "providers.ts"), readFileSync(join(root, "src", "providers.ts"), "utf8"));
+  commit(kept, "fix(providers): a mixed hook entry keeps the user's command");
+  git(root, "revert", "--no-edit", "HEAD");
+  assert.deepEqual(siblingLessonsFor(root, "src/claude.ts", [], { cache: false, budgetMs: 60_000 }), []);
+  writeFileSync(join(kept, "README.md"), "unrelated\n");
+  commit(kept, "docs: readme");
+  assert.equal(siblingLessonsFor(kept, "src/claude.ts", [], { cache: false, budgetMs: 60_000 }).length, 1);
+});
+
+function commitWithMessage(root: string, message: string): void {
+  execFileSync("git", ["-C", root, "add", "-A"]);
+  execFileSync("git", ["-C", root, "commit", "-q", "-m", message], { env: { ...process.env, GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@t" } });
+}
+
+test("a revert naming two shas cancels both", t => {
+  const root = repo(t);
+  // Two separate fix-shaped commits to the sibling, oldest first.
+  writeFileSync(join(root, "src", "providers.ts"), `\n${matcher("isOurProviderHook", "\n    if (!command) return false;")}\nexport function unrelated(): number {\n  const a = 1;\n  return a + 1;\n}\n`);
+  commit(root, "fix(providers): first mixed-entry fix");
+  const firstSha = git(root, "rev-parse", "HEAD").trim();
+  writeFileSync(join(root, "src", "providers.ts"), `\n${fixedMatcher("isOurProviderHook")}\nexport function unrelated(): number {\n  const a = 1;\n  return a + 1;\n}\n`);
+  commit(root, "fix(providers): second mixed-entry fix");
+  const secondSha = git(root, "rev-parse", "HEAD").trim();
+  // One revert commit whose message names BOTH prior shas: it must cancel
+  // both, not only the nearer one. Restore the pre-fix body so the revert is
+  // a real (substantive) change too.
+  writeFileSync(join(root, "src", "providers.ts"), `\n${matcher("isOurProviderHook")}\nexport function unrelated(): number {\n  const a = 1;\n  return a + 1;\n}\n`);
+  commitWithMessage(root, `revert: undo both fixes\n\nThis reverts commit ${firstSha}.\nThis reverts commit ${secondSha}.`);
+  assert.deepEqual(siblingLessonsFor(root, "src/claude.ts", [], { cache: false, budgetMs: 60_000 }), []);
+});
+
+test("a revert whose target lies outside the log window is not itself surfaced as a fix", t => {
+  const root = repo(t);
+  // A revert commit that names a sha not present in this line's log (the fix
+  // was never applied to THIS function's history) must still never surface
+  // as a fix lesson on its own subject.
+  writeFileSync(join(root, "src", "providers.ts"), `\n${fixedMatcher("isOurProviderHook")}\nexport function unrelated(): number {\n  const a = 1;\n  return a + 1;\n}\n`);
+  const bogusSha = "f".repeat(40);
+  commitWithMessage(root, `fix(providers): a mixed hook entry keeps the user's command\n\nThis reverts commit ${bogusSha}.`);
+  assert.deepEqual(siblingLessonsFor(root, "src/claude.ts", [], { cache: false, budgetMs: 60_000 }), []);
+});
+
+test("reverts toggle: a revert of the revert re-lands the fix; reverting that cancels it again", t => {
+  const root = repo(t);
+  writeFileSync(join(root, "src", "providers.ts"), `\n${fixedMatcher("isOurProviderHook")}\nexport function unrelated(): number {\n  const a = 1;\n  return a + 1;\n}\n`);
+  commit(root, "fix(providers): a mixed hook entry keeps the user's command");
+  const lessons = () => siblingLessonsFor(root, "src/claude.ts", [], { cache: false, budgetMs: 60_000 });
+  assert.equal(lessons().length, 1, "the fix");
+  git(root, "revert", "--no-edit", "HEAD");
+  assert.deepEqual(lessons(), [], "reverted");
+  git(root, "revert", "--no-edit", "HEAD");
+  const relanded = lessons();
+  assert.equal(relanded.length, 1, "the revert of the revert makes the fix live again");
+  assert.ok(relanded[0]!.commits.every((c) => !/^(Revert|Reapply)\b/.test(c.subject)), "the lesson is the original fix, never a revert commit");
+  git(root, "revert", "--no-edit", "HEAD");
+  assert.deepEqual(lessons(), [], "reverting the reapply cancels it again");
+});
+
+test("a mixed revert (drops one fix, re-lands another) is undone per fix when it is reverted", t => {
+  const root = repo(t);
+  const body = (m: string) => `\n${m}\nexport function unrelated(): number {\n  const a = 1;\n  return a + 1;\n}\n`;
+  const sha = () => git(root, "rev-parse", "HEAD").trim();
+  const lessons = () => siblingLessonsFor(root, "src/claude.ts", [], { cache: false, budgetMs: 60_000 }).flatMap((l) => l.commits.map((c) => c.sha));
+  writeFileSync(join(root, "src", "providers.ts"), body(matcher("isOurProviderHook", "\n    if (!command) return false;")));
+  commit(root, "fix(providers): first mixed-entry fix");
+  const a = sha();
+  writeFileSync(join(root, "src", "providers.ts"), body(matcher("isOurProviderHook")));
+  commitWithMessage(root, `Revert "fix(providers): first mixed-entry fix"\n\nThis reverts commit ${a}.`);
+  const b = sha();
+  writeFileSync(join(root, "src", "providers.ts"), body(fixedMatcher("isOurProviderHook")));
+  commit(root, "fix(providers): second mixed-entry fix");
+  const x = sha();
+  // One commit that reverts X AND the revert B: X is dropped, A re-lands.
+  writeFileSync(join(root, "src", "providers.ts"), body(matcher("isOurProviderHook", "\n    if (!command) return false;")));
+  commitWithMessage(root, `revert: swap the fixes back\n\nThis reverts commit ${x}.\nThis reverts commit ${b}.`);
+  const e = sha();
+  const afterE = lessons();
+  assert.ok(!afterE.includes(x), "X was reverted");
+  assert.ok(afterE.includes(a), "A re-landed (so the check below is not vacuous)");
+  // Reverting E restores X and cancels A again: A must not come back.
+  writeFileSync(join(root, "src", "providers.ts"), body(fixedMatcher("isOurProviderHook")));
+  commitWithMessage(root, `Revert "revert: swap the fixes back"\n\nThis reverts commit ${e}.`);
+  const after = lessons();
+  assert.ok(!after.includes(a), "A stays cancelled");
+  assert.ok(!after.includes(e) && !after.includes(b), "no revert commit is a lesson");
+});
+
+test("a revert whose body lost the `This reverts commit` line is still never a lesson", t => {
+  const root = repo(t);
+  writeFileSync(join(root, "src", "providers.ts"), `\n${fixedMatcher("isOurProviderHook")}\nexport function unrelated(): number {\n  const a = 1;\n  return a + 1;\n}\n`);
+  commitWithMessage(root, `Revert "fix(providers): a mixed hook entry keeps the user's command"`);
+  assert.deepEqual(siblingLessonsFor(root, "src/claude.ts", [], { cache: false, budgetMs: 60_000 }), []);
+});
+
+test("cache: false neither reads nor writes the inventory", t => {
+  const root = repo(t);
+  siblingLessonsFor(root, "src/claude.ts", [], { cache: false, budgetMs: 60_000 });
+  assert.equal(existsSync(join(root, ".hunch-cache", "siblingfix", "inventory.json")), false);
+  assert.equal(existsSync(join(root, ".hunch-cache")), false);
 });
 
 test("the cache directory is pruned to a bound on write, keeping the inventory", t => {

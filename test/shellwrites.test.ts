@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, renameSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import { tsxLoaderUrl } from "./helpers.js";
 import { refreshShellBaseline, shellWrittenFiles } from "../src/core/shellwrites.js";
 
 function repo(t: { after: (f: () => void) => void }): string {
@@ -95,4 +96,36 @@ test("concurrent subagents keep separate baselines: one agent's write is not the
   assert.deepEqual(shellWrittenFiles(root, s, "agent-two"), ["src/b.ts"]);
   // No agent id keeps its own (session) baseline: none was taken yet.
   assert.deepEqual(shellWrittenFiles(root, s), []);
+});
+
+test("a subagent's start baseline grounds its first shell write", t => {
+  const root = repo(t);
+  const s = session();
+  refreshShellBaseline(root, s); // the prompt's baseline carries no agent id
+  refreshShellBaseline(root, s, "agent-new"); // SubagentStart
+  write(join(root, "src", "a.ts"), "export const a = 2;\n", 1); // its first tool call: a shell write
+  assert.deepEqual(shellWrittenFiles(root, s, "agent-new"), ["src/a.ts"]);
+});
+
+// ---- end-to-end: the real `hunch hook` SubagentStart path ----
+const hookCli = resolve("src/cli/index.ts");
+function subagentStart(root: string, payload: Record<string, unknown>): void {
+  execFileSync(process.execPath, ["--import", tsxLoaderUrl(), hookCli, "hook", "--provider", "claude"], {
+    cwd: root, env: { ...process.env, HUNCH_PIPELINE: "0" },
+    input: JSON.stringify({ hook_event_name: "SubagentStart", cwd: root, agent_type: "general-purpose", ...payload }), encoding: "utf8",
+  });
+}
+
+test("the SubagentStart hook takes the new agent's baseline, and never the session's without an agent id", t => {
+  const root = repo(t);
+  mkdirSync(join(root, ".hunch"));
+  const s = session();
+  subagentStart(root, { session_id: s, agent_id: "agent-cli" });
+  write(join(root, "src", "a.ts"), "export const a = 2;\n", 1);
+  assert.deepEqual(shellWrittenFiles(root, s, "agent-cli"), ["src/a.ts"], "the hook took this agent's baseline");
+  // A parent write not yet grounded must survive a SubagentStart with no agent id.
+  refreshShellBaseline(root, s);
+  write(join(root, "src", "b.ts"), "export const b = 2;\n", 2);
+  subagentStart(root, { session_id: s });
+  assert.deepEqual(shellWrittenFiles(root, s), ["src/b.ts"]);
 });

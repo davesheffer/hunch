@@ -16,10 +16,11 @@
  *
  * Bounded like cochange.ts: few pairs, one wall-clock budget for all git calls,
  * a content-keyed cache under .hunch-cache (a commit that touches neither the
- * file nor its candidate siblings keeps the answer; an incomplete run is cached
- * as no answer), and any failure yields no lessons — never an error. */
+ * file nor its candidate siblings, and renames no function, keeps the answer;
+ * an incomplete run is cached as no answer), and any failure yields no lessons — never an error. */
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync } from "node:fs";
+import { writeFileAtomic } from "./io.js";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { parseSource } from "../extractors/parse.js";
@@ -91,7 +92,7 @@ const MAX_CHANGE_LINES = 12;
  *  half of a two-commit fix (trap-310 v5 carried one commit, missed the other). */
 const MAX_FIX_CHANGE_LINES = 32;
 /** Bumped when the cached lesson shape changes. */
-const CACHE_VERSION = 7;
+const CACHE_VERSION = 8;
 /** Cached answers kept; past it the least recently written go (pruned on write). */
 const MAX_CACHE_ENTRIES = 256;
 const INVENTORY_FILE = "inventory.json";
@@ -344,13 +345,15 @@ interface InventoryCache { version: number; files: Record<string, { blob: string
  *  commit re-parses only the files it changed. A scan the budget cuts short
  *  keeps what it parsed (nearest the target first) and the next call carries
  *  on from there. */
-function functionInventory(root: string, target: string, blobs: ReadonlyMap<string, string>, budget: Budget, scanMs: number): IndexedSymbol[] {
+function functionInventory(root: string, target: string, blobs: ReadonlyMap<string, string>, budget: Budget, scanMs: number, useCache = true): IndexedSymbol[] {
   const cacheFile = join(root, ".hunch-cache", "siblingfix", INVENTORY_FILE);
   let cached: InventoryCache["files"] = {};
-  try {
-    const raw = JSON.parse(readFileSync(cacheFile, "utf8")) as InventoryCache;
-    if (raw.version === INVENTORY_VERSION && raw.files && typeof raw.files === "object") cached = raw.files;
-  } catch { /* rebuild */ }
+  if (useCache) {
+    try {
+      const raw = JSON.parse(readFileSync(cacheFile, "utf8")) as InventoryCache;
+      if (raw.version === INVENTORY_VERSION && raw.files && typeof raw.files === "object") cached = raw.files;
+    } catch { /* rebuild */ }
+  }
   const proximity = proximityTo(target);
   const files = [...blobs.keys()].filter((f) => f !== target && !TEST_PATH.test(f) && languageFor(f))
     .sort((a, b) => proximity(b) - proximity(a) || a.localeCompare(b));
@@ -370,10 +373,10 @@ function functionInventory(root: string, target: string, blobs: ReadonlyMap<stri
     next[f] = { blob, fns };
   }
   // A path gone from HEAD is dropped too.
-  if (changed || Object.keys(cached).some((f) => !(f in next) && f !== target)) {
+  if (useCache && (changed || Object.keys(cached).some((f) => !(f in next) && f !== target))) {
     try {
       mkdirSync(join(root, ".hunch-cache", "siblingfix"), { recursive: true });
-      writeFileSync(cacheFile, JSON.stringify({ version: INVENTORY_VERSION, files: { ...(cached[target] ? { [target]: cached[target] } : {}), ...next } } satisfies InventoryCache));
+      writeFileAtomic(cacheFile, JSON.stringify({ version: INVENTORY_VERSION, files: { ...(cached[target] ? { [target]: cached[target] } : {}), ...next } } satisfies InventoryCache));
     } catch { /* cache is a convenience */ }
   }
   return Object.entries(next).flatMap(([file, e]) => e.fns.map((fn) => ({ file, name: fn.name, kind: fn.kind })));
@@ -381,18 +384,54 @@ function functionInventory(root: string, target: string, blobs: ReadonlyMap<stri
 
 interface Candidates { files: string[]; names: Map<string, Set<string>> }
 
+/** Candidate scans run (tests: a cache hit must not run one). */
+export const siblingCounters = { candidateScans: 0, lessonComputes: 0 };
+
+/** Whether a symbol can ever be matched by `candidatesFor`: shared with
+ *  `inventoryDigest` so the two can't drift — a symbol the scan ignores must
+ *  not be able to invalidate a cached digest. */
+function matchable(s: IndexedSymbol): boolean {
+  return FN_KINDS.has(s.kind) && !TEST_PATH.test(s.file) && nameTokens(s.name).size >= 2;
+}
+
+/** What decides the candidate set besides the target's own names: every
+ *  function name the scan can match. A commit that adds, removes or renames no
+ *  MATCHABLE function anywhere keeps it, so a cached answer is validated by
+ *  comparing this digest instead of re-running the scan. */
+function inventoryDigest(ownNames: readonly string[], inventory: readonly IndexedSymbol[]): string {
+  const keys = inventory.filter(matchable).map((s) => `${s.file}\u0000${s.name}`).sort();
+  return createHash("sha256").update(`${ownNames.join("\u0000")}\u0001${keys.join("\u0001")}`).digest("hex");
+}
+
 /** Cheap retrieval by name shape: the files holding a function whose name
  *  tokens overlap one of the target's, closest names first. Bodies are parsed
- *  only for these. */
-function candidatesFor(ownNames: readonly string[], target: string, inventory: readonly IndexedSymbol[]): Candidates {
+ *  only for these. Null when the budget ran out mid-scan: a partial candidate
+ *  set is not an answer. */
+function candidatesFor(ownNames: readonly string[], target: string, inventory: readonly IndexedSymbol[], budget: Budget): Candidates | null {
+  siblingCounters.candidateScans++;
   const names = new Map<string, Set<string>>();
   const bestName = new Map<string, number>();
+  // Tokens once per distinct name, not once per (own name, symbol) pair.
+  const tokensOf = new Map<string, Set<string>>();
+  const tokenize = (name: string) => {
+    let tokens = tokensOf.get(name);
+    if (!tokens) { tokens = nameTokens(name); tokensOf.set(name, tokens); }
+    return tokens;
+  };
+  const pool: { s: IndexedSymbol; tokens: Set<string> }[] = [];
+  let step = 0;
+  const late = () => (++step & 1023) === 0 && Date.now() >= budget.deadline;
+  for (const s of inventory) {
+    if (late()) { budget.exhausted = true; return null; }
+    if (!matchable(s)) continue;
+    pool.push({ s, tokens: tokenize(s.name) });
+  }
   for (const name of ownNames) {
-    const tokens = nameTokens(name);
-    for (const s of inventory) {
-      if (!FN_KINDS.has(s.kind) || TEST_PATH.test(s.file)) continue;
+    const tokens = tokenize(name);
+    if (tokens.size < 2) continue;
+    for (const { s, tokens: other } of pool) {
+      if (late()) { budget.exhausted = true; return null; }
       if (s.file === target && s.name === name) continue;
-      const other = nameTokens(s.name);
       let shared = 0;
       for (const t of tokens) if (other.has(t)) shared++;
       const nameSim = jaccard(tokens, other);
@@ -418,6 +457,8 @@ interface LessonCache {
   head: string;
   targetBlob: string;
   ownNames: string[];
+  /** inventoryDigest() the candidate set was computed from. */
+  inventory: string;
   candidates: Record<string, string>;
   complete: boolean;
   lessons: SiblingLesson[];
@@ -465,7 +506,7 @@ export function siblingLessonsFor(
   // HEAD is scanned even when an index exists: a derived index can lag HEAD
   // or hold a partial subset, and a missing sibling means a missed lesson.
   // Indexed names only add candidates; bodies always come from HEAD.
-  const inventory = [...functionInventory(root, target, blobs, budget, scanMs), ...symbols];
+  const inventory = [...functionInventory(root, target, blobs, budget, scanMs, options.cache !== false), ...symbols];
   const now = options.now ?? Date.now();
   let attempts = 0;
   if (options.cache !== false && existsSync(cacheFile)) {
@@ -474,13 +515,38 @@ export function siblingLessonsFor(
       // Valid while the target, its candidate set and every candidate's
       // content are what the answer was computed from, and the history it
       // read is still ours: HEAD moved only forward from where it was computed.
-      const same = cached.targetBlob === targetBlob && Array.isArray(cached.ownNames)
-        && JSON.stringify(candidateBlobs(candidatesFor(cached.ownNames, target, inventory).files, blobs)) === JSON.stringify(cached.candidates);
-      const descends = same && typeof cached.head === "string"
+      // The candidate set is not recomputed here: same names in, same set out.
+      const targetOk = cached.targetBlob === targetBlob && Array.isArray(cached.ownNames)
+        && !!cached.candidates && typeof cached.candidates === "object";
+      const digestSame = targetOk && cached.inventory === inventoryDigest(cached.ownNames, inventory);
+      const contentSame = targetOk
+        && Object.entries(cached.candidates).every(([f, blob]) => (blobs.get(f) ?? "") === blob);
+      const descends = targetOk && contentSame && typeof cached.head === "string"
         && (cached.head === head || git(root, ["merge-base", "--is-ancestor", cached.head, head], env, budget) !== null);
-      if (descends && cached.complete) return cached.lessons;
+      if (descends && digestSame && cached.complete) return cached.lessons;
+      // The digest moved (some function, anywhere matchable, was added,
+      // removed or renamed) but the candidate set it actually drives may not
+      // have: fall back ONCE to recomputing candidates and compare the result
+      // against what the cached answer used. Equal candidate content means the
+      // cached lessons are still right; only the digest itself is stale, so it
+      // is rewritten and the next call is a pure digest hit again.
+      if (descends && targetOk && !digestSame && cached.complete) {
+        const retried = candidatesFor(cached.ownNames, target, inventory, budget);
+        if (retried) {
+          const retriedBlobs = candidateBlobs(retried.files, blobs);
+          if (JSON.stringify(retriedBlobs) === JSON.stringify(cached.candidates)) {
+            const healed: LessonCache = { ...cached, inventory: inventoryDigest(cached.ownNames, inventory) };
+            try {
+              mkdirSync(cacheDir, { recursive: true });
+              writeFileAtomic(cacheFile, JSON.stringify(healed));
+            } catch { /* cache is a convenience */ }
+            return cached.lessons;
+          }
+        }
+        // No match (or the retry hit the budget): fall through to a full miss.
+      }
       // Attempts count per HEAD: a new commit earns an incomplete run a fresh try.
-      if (descends && cached.head === head) {
+      if (descends && digestSame && cached.head === head) {
         // An incomplete run is "no answer" for a while, not for good: a
         // momentarily loaded machine must not silence the lesson, and a
         // history that is always too slow stops being retried after a few tries.
@@ -490,17 +556,20 @@ export function siblingLessonsFor(
     } catch { /* recompute */ }
   }
   const own = functionsAt(root, target, env, budget);
-  const candidates = candidatesFor(own.map((f) => f.name), target, inventory);
-  const computed = computeLessons(root, target, own, candidates, env, budget, maxPairs, maxLessons);
+  const ownNames = own.map((f) => f.name);
+  const candidates = candidatesFor(ownNames, target, inventory, budget);
+  const computed = candidates
+    ? computeLessons(root, target, own, candidates, env, budget, maxPairs, maxLessons)
+    : { lessons: [], complete: false };
   const complete = computed.complete && !budget.exhausted;
   if (options.cache !== false) {
     const entry: LessonCache = {
-      head, targetBlob, ownNames: own.map((f) => f.name), candidates: candidateBlobs(candidates.files, blobs),
+      head, targetBlob, ownNames, inventory: inventoryDigest(ownNames, inventory), candidates: candidateBlobs(candidates?.files ?? [], blobs),
       complete, lessons: complete ? computed.lessons : [], ...(complete ? {} : { attempts: attempts + 1, at: now }),
     };
     try {
       mkdirSync(cacheDir, { recursive: true });
-      writeFileSync(cacheFile, JSON.stringify(entry));
+      writeFileAtomic(cacheFile, JSON.stringify(entry));
       pruneCache(cacheDir);
     } catch { /* cache is a convenience */ }
   }
@@ -518,6 +587,7 @@ function computeLessons(
   maxPairs: number,
   maxLessons: number,
 ): { lessons: SiblingLesson[]; complete: boolean } {
+  siblingCounters.lessonComputes++;
   let complete = true;
   if (!own.length) return { lessons: [], complete };
   const pairs: Pair[] = [];
@@ -565,6 +635,13 @@ function computeLessons(
     // target. Shared commits already carried their change to both copies.
     // The sibling's creation is not a change made to it.
     let divergent = siblingLog.commits.filter((c) => !history.touched.has(c.sha) && !c.created && isSubstantive(c));
+    // A reverted fix is no longer in the sibling, and its revert carries the
+    // fix's subject: the pair cancels out.
+    if (divergent.some((c) => isFixSubject(c.subject))) {
+      const reverted = revertedPairs(root, siblingLog.commits, env, budget);
+      if (!reverted) { complete = false; continue; }
+      divergent = divergent.filter((c) => !reverted.has(c.sha));
+    }
     // A commit that also modified the target file was made with this file in
     // hand: whoever wrote the fix saw it and may have carried the change in
     // another form. Where the target's own walk lost tracking this is also the
@@ -595,6 +672,55 @@ function computeLessons(
     });
   }
   return { lessons, complete };
+}
+
+/** Commits of a newest-first range that cancel out. Reverts toggle: a commit
+ *  whose message names a prior commit with git's default `This reverts commit
+ *  <sha>` cancels every live sha it names (not just the nearest one); a revert
+ *  of a REVERT (git's `Revert "Revert …"` / `Reapply …`) restores what that
+ *  revert cancelled, and reverting the reapply cancels it again. A revert
+ *  commit is itself always cancelled, even when none of its refs match a
+ *  commit in this log (its target lies outside the window): it must never
+ *  surface as a fix. Null when the messages could not be read. */
+function revertedPairs(root: string, commits: readonly LineLogCommit[], env: NodeJS.ProcessEnv, budget: Budget): Set<string> | null {
+  const cancelled = new Set<string>();
+  if (commits.length < 2) return cancelled;
+  const raw = git(root, ["show", "-s", "--no-color", "--format=%x1e%H%x1f%B", ...commits.map((c) => c.sha)], env, budget);
+  if (raw == null) return null;
+  const message = new Map<string, string>();
+  for (const chunk of raw.split("\x1e").slice(1)) {
+    const sep = chunk.indexOf("\x1f");
+    if (sep > 0) message.set(chunk.slice(0, sep).trim(), chunk.slice(sep + 1));
+  }
+  // What each revert did, per original (non-revert) sha: true = it cancelled that
+  // sha, false = it restored it. Per sha, because one revert can do both.
+  const effect = new Map<string, Map<string, boolean>>();
+  // Oldest first: a revert can only act on a commit that came before it.
+  const seen: string[] = [];
+  for (const c of [...commits].reverse()) {
+    const body = message.get(c.sha) ?? "";
+    const refs = [...body.matchAll(/This reverts commit ([0-9a-f]{7,40})/g)].map((m) => m[1]!);
+    seen.push(c.sha);
+    // A revert whose body lost the `This reverts commit` line (a squash merge that
+    // dropped it) still names itself in git's subject; it just cancels nothing.
+    if (!refs.length && !/^(?:Revert|Reapply) "/.test(body)) continue;
+    const mine = new Map<string, boolean>();
+    for (const target of seen) {
+      if (target === c.sha || !refs.some((ref) => target.startsWith(ref))) continue;
+      const prior = effect.get(target);
+      if (!prior) { mine.set(target, true); continue; }
+      // Reverting a revert undoes each of its effects individually.
+      for (const [sha, didCancel] of prior) mine.set(sha, !didCancel);
+    }
+    for (const [sha, cancel] of mine) {
+      if (cancel) cancelled.add(sha);
+      else cancelled.delete(sha);
+    }
+    effect.set(c.sha, mine);
+    // A revert is never itself a fix lesson.
+    cancelled.add(c.sha);
+  }
+  return cancelled;
 }
 
 const MAX_TESTS_SHOWN = 2;
