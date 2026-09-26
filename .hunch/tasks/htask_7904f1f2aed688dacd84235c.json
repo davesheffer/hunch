@@ -1,0 +1,75 @@
+{
+  "id": "htask_7904f1f2aed688dacd84235c",
+  "title": "Assistant task",
+  "state": "completed",
+  "started_at": "2026-09-25T18:38:45.127Z",
+  "finished_at": "2026-09-25T19:02:16.651Z",
+  "coverage": "no-delivery-observed",
+  "lessons": [],
+  "applied": [],
+  "saved": [
+    {
+      "kind": "decisions",
+      "record_id": "dec_6274e6035f",
+      "content_hash": "sha256:814b298d0e90c9d47ca5ba8f7b399c4c2223f80c009660a5e7f1d725ccb69ef2",
+      "home": "private",
+      "operation": "created",
+      "durability": "local"
+    },
+    {
+      "kind": "decisions",
+      "record_id": "dec_f44579adb1",
+      "content_hash": "sha256:251862e33b63cedade4c36bc73db680a44877fa5ec6f1ca2e2d87aa655f76298",
+      "home": "private",
+      "operation": "created",
+      "durability": "local"
+    },
+    {
+      "kind": "decisions",
+      "record_id": "dec_11b132c91a",
+      "content_hash": "sha256:3e9c3d0c6e6baad8cc2af713ab09ce00116d85626b840380ab29ddc1679a079a",
+      "home": "private",
+      "operation": "created",
+      "durability": "local"
+    },
+    {
+      "kind": "findings",
+      "record_id": "fnd_ce0f4048e5",
+      "content_hash": "sha256:940dcad02205e16cde3f4a94c5bd06f36338fe6056069ab1a1ded46ad71d32f9",
+      "home": "private",
+      "operation": "created",
+      "durability": "local"
+    }
+  ],
+  "checks": [
+    {
+      "label": "Verification command",
+      "state": "passed",
+      "exit_code": 0
+    },
+    {
+      "label": "Verification command",
+      "state": "passed",
+      "exit_code": 0
+    },
+    {
+      "label": "Verification command",
+      "state": "failed",
+      "exit_code": 1
+    }
+  ],
+  "conformance": [],
+  "refusals": 0,
+  "files": [],
+  "supersedes": [],
+  "source_snapshot": null,
+  "report_hash": "sha256:84d8e0c47b0b8c6f68fc2154e63c0589833fb3f488d325ce915f9939f115bfd4",
+  "provenance": {
+    "source": "task_report",
+    "confidence": 1,
+    "evidence": [
+      "hunch report htask_7904f1f2aed688dacd84235c"
+    ],
+    "last_verified": "2026-09-25T19:02:16.651Z"
+  }
+}

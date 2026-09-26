@@ -1,0 +1,47 @@
+{
+  "id": "htask_01c13c960d43cedab8e73279",
+  "title": "Assistant task",
+  "state": "completed",
+  "started_at": "2026-09-25T17:51:32.252Z",
+  "finished_at": "2026-09-25T18:30:35.212Z",
+  "coverage": "delivered",
+  "lessons": [
+    {
+      "kind": "decisions",
+      "record_id": "dec_a52de62f0d",
+      "content_hash": "sha256:49f80a7749cb9846bd7a5e805c943ca89377fd14fef0217274685d9bdaada7bd",
+      "title": "Codex gets a native lifecycle adapter through .codex/hooks.json; the MCP server exposes the everyday tool set by default"
+    },
+    {
+      "kind": "decisions",
+      "record_id": "dec_43d3800cad",
+      "content_hash": "sha256:8c16840ba8a0bb4b9fa110c32e709a422c8219b838c134e23dffeedf91a51816",
+      "title": "Ground Hunch enforcement in Claude Code hooks with runtime-tunable firmness"
+    }
+  ],
+  "applied": [],
+  "saved": [],
+  "checks": [
+    {
+      "label": "Verification command",
+      "state": "failed",
+      "exit_code": 1
+    }
+  ],
+  "conformance": [],
+  "refusals": 0,
+  "files": [
+    "src/core/shellwrites.ts"
+  ],
+  "supersedes": [],
+  "source_snapshot": null,
+  "report_hash": "sha256:5eb66d36c20629c5b047dcc7092e763d4e5204463f983314adee203ae9c7ef4b",
+  "provenance": {
+    "source": "task_report",
+    "confidence": 1,
+    "evidence": [
+      "hunch report htask_01c13c960d43cedab8e73279"
+    ],
+    "last_verified": "2026-09-25T18:30:35.212Z"
+  }
+}

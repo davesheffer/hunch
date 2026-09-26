@@ -1,0 +1,29 @@
+{
+  "id": "htask_ce815d2fb98447e2b386564a",
+  "title": "Assistant task",
+  "state": "completed",
+  "started_at": "2026-09-19T05:34:49.003Z",
+  "finished_at": "2026-09-19T05:47:23.113Z",
+  "coverage": "no-relevant-memory",
+  "lessons": [],
+  "applied": [],
+  "saved": [],
+  "checks": [],
+  "conformance": [],
+  "refusals": 0,
+  "files": [
+    "src/serve/writelock.ts"
+  ],
+  "supersedes": [],
+  "source_snapshot": null,
+  "report_hash": "sha256:2f168d7cef82861a495ff1b054138681fdc9bb5c3677917b05bea704d61663aa",
+  "provenance": {
+    "source": "task_report",
+    "confidence": 1,
+    "evidence": [
+      "hunch report htask_ce815d2fb98447e2b386564a",
+      "hunch report htask_d5b91b7149642d98c6e933d7"
+    ],
+    "last_verified": "2026-09-19T05:47:23.113Z"
+  }
+}

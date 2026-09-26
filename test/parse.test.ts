@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
-import { readFileSync, realpathSync, renameSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
@@ -30,7 +30,7 @@ test("parseSource extracts symbols, imports, calls", () => {
   assert.ok(p.calls.some((c) => c.callee === "jwtDecode"));
 });
 
-test("native tree-sitter addons load only from per-process temp copies", () => {
+test("native tree-sitter addons load only from the per-user content-addressed copy cache", () => {
   // Load them here rather than relying on an earlier test having parsed: the
   // addons arrive on FIRST PARSE, so run alone this case would otherwise find
   // an empty require cache and fail for the wrong reason.
@@ -40,9 +40,9 @@ test("native tree-sitter addons load only from per-process temp copies", () => {
     .filter((path) => /(?:tree-sitter(?:-typescript|-python|-yaml)?)\.node$/.test(path))
     .sort();
   assert.equal(bindings.length, 4, `expected core, TypeScript, Python, and YAML native bindings, got: ${bindings.join(", ")}`);
-  const processCopyPrefix = join(realpathSync(tmpdir()), `hunch-tree-sitter-${process.pid}-`);
+  const cachePrefix = join(realpathSync(tmpdir()), "hunch-tree-sitter-cache-");
   for (const binding of bindings) {
-    assert.ok(realpathSync(binding).startsWith(processCopyPrefix), `installed native binding remains loaded: ${binding}`);
+    assert.ok(realpathSync(binding).startsWith(cachePrefix), `installed native binding remains loaded: ${binding}`);
   }
 });
 
@@ -618,4 +618,53 @@ test("known trade-off: a plain YAML file whose STRING VALUE merely contains \"{{
   const names = p.symbols.map((s) => s.name).sort();
   assert.deepEqual(names, ["base", "literal-braces.yml"].sort(),
     "the real anchor is NOT silently dropped — the templating tolerance runs the real parse, it doesn't skip it");
+});
+
+// ---- the per-user copy cache, exercised in fresh processes under a private TMPDIR ----
+const PROBE = `
+import { createRequire } from "node:module";
+import { realpathSync } from "node:fs";
+import { parseSource } from ${JSON.stringify(pathToFileURL(join(process.cwd(), "src/extractors/parse.ts")).href)};
+const parseable = parseSource("probe.ts", "export function probe(): number { return 1; }")?.parseable === true;
+const bindings = Object.keys(createRequire(import.meta.url).cache).filter((p) => /tree-sitter\\.node$/.test(p)).map((p) => realpathSync(p));
+console.log(JSON.stringify({ parseable, pid: process.pid, core: bindings[0] ?? null }));
+`;
+function probe(tmp: string): { parseable: boolean; pid: number; core: string | null } {
+  const tsx = createRequire(import.meta.url).resolve("tsx");
+  const run = spawnSync(process.execPath, ["--import", pathToFileURL(tsx).href, "--input-type=module", "-e", PROBE], {
+    env: { ...process.env, TMPDIR: tmp, TMP: tmp, TEMP: tmp }, encoding: "utf8", timeout: 60_000,
+  });
+  assert.equal(run.status, 0, run.stderr);
+  return JSON.parse(run.stdout.trim().split("\n").at(-1)!) as { parseable: boolean; pid: number; core: string | null };
+}
+
+test("a cached copy is reused by the next process, and a corrupt one is rewritten before loading", { skip: process.platform === "win32", timeout: 120_000 }, t => {
+  const tmp = realpathSync(mkdtempSync(join(tmpdir(), "hunch-ts-cache-")));
+  t.after(() => rmSync(tmp, { recursive: true, force: true }));
+  const first = probe(tmp);
+  assert.equal(first.parseable, true);
+  assert.ok(first.core?.startsWith(join(tmp, "hunch-tree-sitter-cache-")), `loaded from the cache: ${first.core}`);
+  const original = readFileSync(first.core!);
+  const inode = statSync(first.core!).ino;
+  const second = probe(tmp);
+  assert.equal(second.core, first.core, "same content-addressed path");
+  assert.equal(statSync(second.core!).ino, inode, "reused, not copied again");
+  // A truncated copy must never be dlopen'd: it is rewritten from the source.
+  writeFileSync(first.core!, original.subarray(0, 64));
+  const third = probe(tmp);
+  assert.equal(third.parseable, true);
+  assert.equal(third.core, first.core);
+  assert.ok(readFileSync(third.core!).equals(original), "the copy holds the installed bytes again");
+});
+
+test("a cache dir that is not private to the user falls back to a per-process copy", { skip: process.platform === "win32" || typeof process.getuid !== "function", timeout: 120_000 }, t => {
+  const tmp = realpathSync(mkdtempSync(join(tmpdir(), "hunch-ts-refused-")));
+  t.after(() => rmSync(tmp, { recursive: true, force: true }));
+  const squatted = join(tmp, `hunch-tree-sitter-cache-${process.getuid!()}`);
+  mkdirSync(squatted);
+  chmodSync(squatted, 0o777); // world-writable: refused
+  const run = probe(tmp);
+  assert.equal(run.parseable, true, "parsing still works");
+  assert.ok(run.core?.startsWith(join(tmp, `hunch-tree-sitter-${run.pid}-`)), `per-process copy: ${run.core}`);
+  assert.deepEqual(readdirSync(squatted), [], "nothing was written into the refused dir");
 });
