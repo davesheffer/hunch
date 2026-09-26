@@ -7,6 +7,7 @@ import { isAbsolute, resolve, join, basename, dirname, relative, sep, posix } fr
 import { mkdtempSync, openSync, closeSync, readSync, mkdirSync, rmSync, statSync, lstatSync, realpathSync, readFileSync, renameSync, readdirSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { MEMLOG_FORMAT } from "../core/memorylog.js";
+import { writeFileAtomic } from "../core/io.js";
 import { hunchAttributesAreSafe, hunchTreeAttributesAreSafe, safeOverlayGitTreeListing, safeOverlayTree } from "../core/overlaySafety.js";
 import { createRepoFileReader } from "../core/safeRepoFile.js";
 import { DIFF_TRUNCATED_LINE } from "./diff.js";
@@ -1884,8 +1885,10 @@ function insideDirectory(path: string, dir: string): boolean {
  *  genuinely this checkout's repository:
  *  - `gitdir` IS the common dir (no `commondir` indirection): a real `.git` directory, or,
  *    reached through a `.git` file or symlink, a repository whose `core.worktree` resolves
- *    to `top` (a submodule; `git init --separate-git-dir` sets no `core.worktree`, so that
- *    layout needs it configured by hand);
+ *    to `top` (a submodule). `git init --separate-git-dir` sets no `core.worktree`, so that
+ *    layout is accepted only through a `.git` FILE (never a symlink) whose git dir lies
+ *    outside the checkout and carries Hunch's back-link naming `top` — written only by
+ *    explicit setup run in that checkout (claimSeparateGitDir);
  *  - otherwise `gitdir` must be registered in the common dir's own `worktrees/` directory,
  *    its `gitdir` back-link must name `top/.git`, and that `.git` must not be a symlink.
  *    A git dir anywhere else can name any repository through a `commondir` file, so it is
@@ -1896,7 +1899,8 @@ function gitDirServesWorktree(
   if (sameFilesystemEntry(gitdir, common)) {
     if (!indirect) return true;
     const worktree = gitSafeIsolated(["config", "--file", join(gitdir, "config"), "--get", "core.worktree"], gitdir);
-    return !!worktree && sameFilesystemEntry(resolve(gitdir, worktree), top);
+    if (worktree) return sameFilesystemEntry(resolve(gitdir, worktree), top);
+    return !symlinked && separateGitDirLinksTo(gitdir, top);
   }
   // A linked worktree's back-link names its own `.git` file, and a symlink resolves to the
   // very file it points at, so the back-link cannot vouch for a symlinked `.git`.
@@ -1914,6 +1918,80 @@ function gitDirServesWorktree(
   } catch {
     return false;
   }
+}
+
+/** Hunch's back-link inside a separate git dir, naming the one checkout it serves. Git
+ *  records nothing for `git init --separate-git-dir` (no `core.worktree`, no worktree
+ *  registry entry), so without this a `.git` file could name any repository's git dir. */
+export function separateGitDirLink(gitdir: string): string {
+  return join(gitdir, "hunch", "checkout-root");
+}
+
+/** Whether a separate git dir is vouched for `top`: it lies outside the checkout (so no
+ *  checkout or archive content can supply it or its back-link) and its Hunch back-link
+ *  names `top`. */
+function separateGitDirLinksTo(gitdir: string, top: string): boolean {
+  if (insideDirectory(gitdir, top)) return false;
+  try {
+    const linked = readFileSync(separateGitDirLink(gitdir), "utf8").trim();
+    return !!linked && isAbsolute(linked) && sameFilesystemEntry(linked, top);
+  } catch {
+    return false;
+  }
+}
+
+/** Explicit setup (`hunch private` / `hunch shared` / `hunch worktree`) run in a checkout
+ *  created by `git init --separate-git-dir`: record that this checkout owns its git dir,
+ *  then resolve it through checkoutCommonDir. Called ONLY from a command the user ran in
+ *  this checkout — never while opening a store, so repository content can never claim a
+ *  git dir. Refuses another checkout's own `.git` directory, a git dir inside the
+ *  checkout, a symlinked `.git`, and a git dir whose back-link names a different checkout
+ *  whose `.git` file still names it. "" when this is not such a layout. */
+export function claimSeparateGitDir(cwd: string): string {
+  const candidate = separateGitDirCandidate(cwd);
+  if (!candidate) return "";
+  try {
+    const link = separateGitDirLink(candidate.gitDir);
+    mkdirSync(dirname(link), { recursive: true });
+    writeFileAtomic(link, `${canonicalPath(candidate.top)}\n`);
+  } catch {
+    return "";
+  }
+  return checkoutCommonDir(cwd);
+}
+
+/** The separate git dir claimSeparateGitDir WOULD claim for `cwd`, without writing
+ *  anything (setup snapshots it for rollback). null when the layout is not claimable. */
+export function separateGitDirCandidate(cwd: string): { gitDir: string; top: string } | null {
+  const [top, own, commonOut] = gitSafeIsolated(
+    ["-c", "safe.bareRepository=explicit", "rev-parse", "--show-toplevel", "--absolute-git-dir", "--git-common-dir"],
+    cwd,
+  ).split("\n");
+  if (!top || !own || !commonOut) return null;
+  const common = isAbsolute(commonOut) ? commonOut : resolve(cwd, commonOut);
+  if (!sameFilesystemEntry(own, common) || !insideDirectory(cwd, top)) return null;
+  const dotGit = join(top, ".git");
+  const namesOwn = (file: string): boolean => {
+    try {
+      if (!lstatSync(file).isFile()) return false;
+      const named = /^gitdir:\s*(.+?)\s*$/m.exec(readFileSync(file, "utf8"))?.[1];
+      return !!named && sameFilesystemEntry(own, resolve(dirname(file), named));
+    } catch {
+      return false;
+    }
+  };
+  if (!namesOwn(dotGit)) return null;
+  if (gitSafeIsolated(["config", "--file", join(own, "config"), "--get", "core.worktree"], own)) return null;
+  if (insideDirectory(own, top)) return null;
+  try {
+    const parentDotGit = join(dirname(canonicalPath(own)), ".git");
+    if (lstatSync(parentDotGit).isDirectory() && sameFilesystemEntry(parentDotGit, own)) return null;
+  } catch { /* not another checkout's embedded .git directory */ }
+  try {
+    const prior = readFileSync(separateGitDirLink(own), "utf8").trim();
+    if (prior && !sameFilesystemEntry(prior, top) && namesOwn(join(prior, ".git"))) return null;
+  } catch { /* no back-link yet */ }
+  return { gitDir: canonicalPath(own), top };
 }
 
 /** True when `cwd` is inside a LINKED worktree (not the main checkout): its own git

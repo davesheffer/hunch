@@ -12,7 +12,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import process from "node:process";
 
@@ -157,7 +157,13 @@ try {
   const hookSentinel = join(temp, "hook-executed");
   write(repo, ".git/hooks/post-checkout", `#!/bin/sh\ntouch '${hookSentinel}'\n`);
   chmodSync(join(repo, ".git/hooks/post-checkout"), 0o755);
-  write(repo, ".hunch/local.json", JSON.stringify({ privateDir: privateHome, mode: "private", autoCommit: false }));
+  const pointer = { privateDir: privateHome, mode: "private", autoCommit: false };
+  write(repo, ".hunch/local.json", JSON.stringify(pointer));
+  // Register the overlay the way `hunch private` does: a per-worktree pointer alone is
+  // checkout content, which the store refuses; setup also writes the git-common-dir pointer.
+  const commonRaw = git(repo, ["rev-parse", "--git-common-dir"]);
+  const commonDir = isAbsolute(commonRaw) ? commonRaw : resolve(repo, commonRaw);
+  write(commonDir, "hunch/local.json", JSON.stringify({ ...pointer, privateDir: resolve(repo, privateHome) }));
 
   const previousEnv = {
     HOME: process.env.HOME,

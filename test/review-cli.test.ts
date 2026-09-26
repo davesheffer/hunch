@@ -1,4 +1,4 @@
-import { cleanupDir } from "./fixtures.js";
+import { cleanupDir, writeLocalPointer } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
@@ -240,7 +240,7 @@ test("public veto backfill never overwrites an identically-named private decisio
     git(overlay, "commit", "-qm", "seed private collision");
     const privateBefore = readFileSync(privatePath, "utf8");
     const privateHead = git(overlay, "rev-parse", "HEAD");
-    writeFileSync(join(fixture.root, ".hunch/local.json"), `${JSON.stringify({ privateDir: join(overlay, ".hunch"), autoCommit: true, mode: "private" })}\n`);
+    writeLocalPointer(fixture.root, { privateDir: join(overlay, ".hunch"), autoCommit: true, mode: "private" });
 
     const run = spawnSync(process.execPath, [tsx, cli, "veto", "backfill"], {
       cwd: fixture.root,

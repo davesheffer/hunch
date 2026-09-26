@@ -1,13 +1,13 @@
 import { cleanupDir, isolatedCliEnv, tempDir } from "./fixtures.js";
 import { hunchCliArgs } from "./cli-invocation.js";
 import assert from "node:assert/strict";
-import { cpSync, existsSync, linkSync, mkdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, linkSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { execFileSync, spawnSync } from "node:child_process";
 import { basename, join } from "node:path";
 import { test } from "node:test";
 import { hunchPaths } from "../src/core/paths.js";
 import { HunchStore } from "../src/store/hunchStore.js";
-import { checkoutCommonDir } from "../src/extractors/git.js";
+import { checkoutCommonDir, claimSeparateGitDir } from "../src/extractors/git.js";
 
 // `.hunch/local.json` is gitignored by convention only. A checkout can still ship
 // one that names another checkout's overlay store; it must never be read from or
@@ -47,6 +47,7 @@ function makeFixture(prefix: string): Fixture {
   const env = isolatedCliEnv({
     HOME: home, USERPROFILE: home, XDG_CONFIG_HOME: join(home, ".config"), APPDATA: join(home, "AppData"),
     GIT_CONFIG_NOSYSTEM: "1", GIT_TERMINAL_PROMPT: "0", HUNCH_PRIVATE_DIR: "", HUNCH_EMBEDDINGS: "off", NO_COLOR: "1", CI: "1",
+    HUNCH_TEAM_CLONE_TIMEOUT_MS: "120000", // parallel load can stall a local clone past the production bound
   });
 
   const seed = join(base, "memory-seed");
@@ -98,15 +99,18 @@ function storeOf(root: string, env: NodeJS.ProcessEnv): HunchStore {
   }
 }
 
+const REFUSED = /has not registered in the git common dir, so Hunch refuses/;
+
+/** The store fails closed on an unregistered pointer: it never opens (so it can neither
+ *  serve another checkout's memory nor demote captures to the public .hunch/). */
+function assertRefused(root: string, env: NodeJS.ProcessEnv, label: string): void {
+  assert.throws(() => storeOf(root, env).close(), REFUSED, label);
+}
+
 test("a committed local.json never attaches another checkout's overlay (store, CLI capture, hook)", { timeout: 180_000 }, () => {
   const f = makeFixture("hunch-local-pointer-git-");
   try {
-    const store = storeOf(f.hostile, f.env);
-    try {
-      assert.equal(store.hasPrivate, false, "the shipped pointer is ignored");
-    } finally {
-      store.close();
-    }
+    assertRefused(f.hostile, f.env, "the shipped pointer is refused");
 
     const before = git(f.base, "ls-remote", f.remote, "refs/heads/main");
     const victimHead = git(join(f.victimStore, ".."), "rev-parse", "HEAD");
@@ -140,12 +144,7 @@ test("outside Git, a shipped pointer is ignored even for a store inside the arch
     const archive = join(f.base, "archive");
     cpSync(f.hostile, archive, { recursive: true });
     rmSync(join(archive, ".git"), { recursive: true, force: true });
-    const outside = storeOf(archive, f.env);
-    try {
-      assert.equal(outside.hasPrivate, false, "a pointer at another checkout's store is ignored");
-    } finally {
-      outside.close();
-    }
+    assertRefused(archive, f.env, "a pointer at another checkout's store is refused");
 
     // An archive can also ship its own store whose origin is a remote the archive chose.
     const foreignSeed = join(f.base, "foreign-seed");
@@ -161,12 +160,7 @@ test("outside Git, a shipped pointer is ignored even for a store inside the arch
     git(overlay, "config", "user.email", "pointer@test.invalid");
     mkdirSync(join(overlay, ".hunch"), { recursive: true });
     writeFileSync(join(archive, ".hunch", "local.json"), `${JSON.stringify({ privateDir: ".hunch-private/.hunch", mode: "shared", autoCommit: true }, null, 2)}\n`);
-    const inside = storeOf(archive, f.env);
-    try {
-      assert.equal(inside.hasPrivate, false, "a store the archive ships is ignored too");
-    } finally {
-      inside.close();
-    }
+    assertRefused(archive, f.env, "a store the archive ships is refused too");
     const before = refsOf(f.base, foreign);
     const captured = cli(archive, f.env, [
       "record-constraint", "ARCHIVE_RULE: never import axios in src/app.ts",
@@ -188,12 +182,7 @@ test("an archive inside an unrelated Git repository cannot borrow that repositor
     mkdirSync(join(outer, "vendor"), { recursive: true });
     cpSync(f.hostile, archive, { recursive: true });
     rmSync(join(archive, ".git"), { recursive: true, force: true });
-    const store = storeOf(archive, f.env);
-    try {
-      assert.equal(store.hasPrivate, false, "the outer repository never vouches for the archive's pointer");
-    } finally {
-      store.close();
-    }
+    assertRefused(archive, f.env, "the outer repository never vouches for the archive's pointer");
   } finally {
     cleanupDir(f.base);
   }
@@ -211,9 +200,140 @@ test("a tracked .hunch symlink into another checkout is never followed", { timeo
     git(seed, "commit", "-qm", "fixture: linked memory dir");
     const clone = join(f.base, "symlink-clone");
     git(f.base, "clone", "-q", seed, clone);
-    const store = storeOf(clone, f.env);
+    // The pointer behind the link is never followed, and never silently dropped either:
+    // opening public here would route captures past the overlay the pointer names.
+    assert.throws(() => storeOf(clone, f.env).close(), /never followed/, "the linked pointer fails closed");
+  } finally {
+    cleanupDir(f.base);
+  }
+});
+
+test("a symlinked, non-file, or malformed pointer fails closed; a UTF-8 BOM is tolerated", { timeout: 180_000 }, () => {
+  const f = makeFixture("hunch-local-pointer-malformed-");
+  try {
+    const victim = join(f.victimStore, "..", "..");
+    const local = join(victim, ".hunch", "local.json");
+    const registered = join(victim, ".git", "hunch", "local.json");
+    const localBytes = readFileSync(local, "utf8");
+    const registeredBytes = readFileSync(registered, "utf8");
+    const opensPrivate = (label: string): void => {
+      const store = storeOf(victim, f.env);
+      try {
+        assert.equal(store.hasPrivate, true, label);
+      } finally {
+        store.close();
+      }
+    };
+
+    // A symlinked local.json (even one pointing at the registered pointer) is never followed.
+    const elsewhere = join(f.base, "elsewhere-local.json");
+    writeFileSync(elsewhere, localBytes);
+    rmSync(local);
+    symlinkSync(elsewhere, local, "file");
+    assert.throws(() => storeOf(victim, f.env).close(), /never followed[\s\S]*hunch private <dir>/, "symlinked local.json");
+    rmSync(local);
+    mkdirSync(local);
+    assert.throws(() => storeOf(victim, f.env).close(), /not a plain file/, "a directory named local.json");
+    rmSync(local, { recursive: true });
+
+    // A leading BOM is stripped, in both pointer files.
+    writeFileSync(local, `\uFEFF${localBytes}`);
+    writeFileSync(registered, `\uFEFF${registeredBytes}`);
+    opensPrivate("BOM-prefixed pointers still open the registered overlay");
+
+    // Any other invalid JSON refuses and names the file.
+    const trailingComma = (bytes: string): string => bytes.replace(/\n\}\s*$/, ",\n}\n");
+    writeFileSync(registered, registeredBytes);
+    writeFileSync(local, trailingComma(localBytes));
+    assert.throws(() => storeOf(victim, f.env).close(), (error: Error) =>
+      error.message.includes(local) && /is not valid JSON[\s\S]*refuses/.test(error.message), "trailing comma, per-worktree");
+    writeFileSync(local, localBytes);
+    writeFileSync(registered, trailingComma(registeredBytes));
+    assert.throws(() => storeOf(victim, f.env).close(), (error: Error) =>
+      error.message.includes(registered) && /is not valid JSON/.test(error.message), "trailing comma, registration");
+    writeFileSync(registered, "[]\n");
+    assert.throws(() => storeOf(victim, f.env).close(), /is not a JSON object/, "non-object registration");
+
+    // Absent per-worktree pointer: unchanged behavior (the registration alone opens).
+    writeFileSync(registered, registeredBytes);
+    rmSync(local);
+    opensPrivate("the registered pointer alone opens the overlay");
+  } finally {
+    cleanupDir(f.base);
+  }
+});
+
+test("an invalid privateDir or mode key refuses rather than silently opening public", { timeout: 180_000 }, () => {
+  const f = makeFixture("hunch-local-pointer-invalid-keys-");
+  try {
+    const victim = join(f.victimStore, "..", "..");
+    const local = join(victim, ".hunch", "local.json");
+    const registered = join(victim, ".git", "hunch", "local.json");
+    const registeredBytes = readFileSync(registered, "utf8");
+    const refusesInvalidKey = (body: unknown, label: string): void => {
+      writeFileSync(registered, registeredBytes); // keep the registration valid; only the per-worktree pointer is under test
+      writeFileSync(local, `${JSON.stringify(body)}\n`);
+      assert.throws(() => storeOf(victim, f.env).close(), /has an invalid (privateDir|mode)/, label);
+    };
+    refusesInvalidKey({ privateDir: 5, mode: "shared" }, "numeric privateDir");
+    refusesInvalidKey({ privateDir: "" }, "empty privateDir");
+    refusesInvalidKey({ privateDir: "   " }, "whitespace-only privateDir");
+    refusesInvalidKey({ privateDir: null }, "null privateDir");
+    refusesInvalidKey({ mode: "bogus", privateDir: "/x" }, "bogus mode");
+  } finally {
+    cleanupDir(f.base);
+  }
+});
+
+test("a registered common-dir pointer with a non-absolute privateDir refuses", { timeout: 180_000 }, () => {
+  const f = makeFixture("hunch-local-pointer-relative-registered-");
+  try {
+    const victim = join(f.victimStore, "..", "..");
+    const local = join(victim, ".hunch", "local.json");
+    const registered = join(victim, ".git", "hunch", "local.json");
+    rmSync(local, { force: true }); // isolate the registered (common-dir) pointer
+    writeFileSync(registered, `${JSON.stringify({ privateDir: "relative/overlay", mode: "shared" }, null, 2)}\n`);
+    assert.throws(() => storeOf(victim, f.env).close(), /has a non-absolute privateDir/, "relative registered privateDir");
+  } finally {
+    cleanupDir(f.base);
+  }
+});
+
+test("a symlinked registered common-dir pointer is never followed", { timeout: 180_000 }, () => {
+  const f = makeFixture("hunch-local-pointer-registered-symlink-");
+  try {
+    const victim = join(f.victimStore, "..", "..");
+    const local = join(victim, ".hunch", "local.json");
+    const registered = join(victim, ".git", "hunch", "local.json");
+    const registeredBytes = readFileSync(registered, "utf8");
+    rmSync(local, { force: true }); // isolate the registered (common-dir) pointer
+    const elsewhere = join(f.base, "elsewhere-registered.json");
+    writeFileSync(elsewhere, registeredBytes);
+    rmSync(registered);
+    symlinkSync(elsewhere, registered, "file");
+    assert.throws(() => storeOf(victim, f.env).close(), /never followed[\s\S]*hunch private <dir>/, "symlinked registered local.json");
+  } finally {
+    cleanupDir(f.base);
+  }
+});
+
+test("a per-worktree pointer naming a different store than the registration warns and uses the registered one", { timeout: 180_000 }, () => {
+  const f = makeFixture("hunch-local-pointer-mismatch-");
+  try {
+    const victim = join(f.victimStore, "..", "..");
+    const local = join(victim, ".hunch", "local.json");
+    const other = join(f.base, "other-store", ".hunch");
+    mkdirSync(other, { recursive: true });
+    const pointer = JSON.parse(readFileSync(local, "utf8")) as Record<string, unknown>;
+    writeFileSync(local, `${JSON.stringify({ ...pointer, privateDir: other }, null, 2)}\n`);
+    const store = storeOf(victim, f.env);
     try {
-      assert.equal(store.hasPrivate, false, "the linked pointer is ignored");
+      assert.equal(realpathSync(store.privateDir!), realpathSync(f.victimStore), "the registered store is used");
+      const warning = store.overlayResolutionWarning();
+      assert.ok(warning, "the ignored pointer is reported");
+      assert.ok(warning.includes(other), warning);
+      assert.ok(warning.includes(store.privateDir!), warning);
+      assert.match(warning, /ignored/);
     } finally {
       store.close();
     }
@@ -245,28 +365,116 @@ test("this machine's own setup works in the main checkout and a linked worktree"
   }
 });
 
-test("an unregistered per-worktree pointer is ignored with a warning until setup re-registers it", { timeout: 180_000 }, () => {
+function publicMemoryFiles(root: string): string[] {
+  const out: string[] = [];
+  const walk = (dir: string): void => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const path = join(dir, entry.name);
+      if (entry.isDirectory()) walk(path);
+      else if (entry.name.endsWith(".json") && entry.name !== "local.json") out.push(`${path}:${readFileSync(path, "utf8")}`);
+    }
+  };
+  walk(join(root, ".hunch"));
+  return out.sort();
+}
+
+test("a pre-v0.33 per-worktree pointer fails closed, writes nothing public, until the named command re-registers it", { timeout: 180_000 }, () => {
   const f = makeFixture("hunch-local-pointer-legacy-");
   try {
     // An older setup: per-worktree pointer only, no git-common-dir pointer.
     const victim = join(f.victimStore, "..", "..");
     rmSync(join(victim, ".git", "hunch", "local.json"), { force: true });
-    const legacy = storeOf(victim, f.env);
-    try {
-      assert.equal(legacy.hasPrivate, false, "an unregistered pointer is not trusted");
-      assert.match(legacy.overlayResolutionWarning() ?? "", /has not registered/);
-    } finally {
-      legacy.close();
-    }
-    const again = cli(victim, f.env, ["private", "--repo", f.remote, "--no-hook"]);
+    assertRefused(victim, f.env, "an unregistered pointer never demotes the store to public mode");
+    const before = publicMemoryFiles(victim);
+    const captured = cli(victim, f.env, [
+      "record-constraint", "LEGACY_RULE: never import axios in src/app.ts",
+      "--scope", "src/app.ts", "--severity", "blocking", "--forbid-dep", "axios",
+    ]);
+    assert.notEqual(captured.status, 0, "a capture is refused");
+    const message = captured.stdout + captured.stderr;
+    assert.match(message, REFUSED);
+    writeFileSync(join(victim, "src.txt"), "change\n");
+    git(victim, "add", "src.txt");
+    git(victim, "commit", "-qm", "a commit the post-commit hook would capture");
+    const synced = cli(victim, f.env, ["sync", "--from-hook", "--quiet"]);
+    assert.doesNotMatch(synced.stdout, /captured|✓/, synced.stdout + synced.stderr);
+    assert.deepEqual(publicMemoryFiles(victim), before, "no hook, sync, or capture writes public memory");
+    assert.equal(git(victim, "status", "--porcelain", "--", ".hunch"), "", "nothing public is staged or left for sync to commit");
+
+    // The refusal names the exact command; running it re-registers ownership.
+    const command = /`hunch (private|shared) ([^`]+)`/.exec(message);
+    assert.ok(command, message);
+    const again = cli(victim, f.env, [command[1], ...command[2].split(" "), "--no-hook"]);
     assert.equal(again.status, 0, again.stdout + again.stderr);
     const restored = storeOf(victim, f.env);
     try {
-      assert.equal(restored.hasPrivate, true, "re-running setup restores the overlay");
+      assert.equal(restored.hasPrivate, true, "re-registering restores the overlay");
       assert.equal(restored.overlayResolutionWarning(), null);
     } finally {
       restored.close();
     }
+  } finally {
+    cleanupDir(f.base);
+  }
+});
+
+test("a failed fresh setup in a --separate-git-dir checkout leaves no back-link behind", { timeout: 180_000 }, () => {
+  const f = makeFixture("hunch-local-pointer-separate-rollback-");
+  try {
+    const checkout = join(f.base, "separate");
+    const gitDir = join(f.base, "separate-git");
+    git(f.base, "init", "-q", "-b", "main", `--separate-git-dir=${gitDir}`, checkout);
+    git(checkout, "config", "user.name", "Pointer Test");
+    git(checkout, "config", "user.email", "pointer@test.invalid");
+    git(checkout, "config", "commit.gpgsign", "false");
+    writeFileSync(join(checkout, "README.md"), "# separate\n");
+    git(checkout, "add", "-A");
+    git(checkout, "commit", "-qm", "init");
+    // Fails after the shared pointer (and the back-link claim) are written.
+    const failed = cli(checkout, { ...f.env, HUNCH_TEST_FAIL_OVERLAY_MIGRATION_AFTER_PUBLIC_DROP: "1" },
+      ["private", "--repo", f.remote, "--migrate", "--no-hook"]);
+    assert.notEqual(failed.status, 0, failed.stdout + failed.stderr);
+    assert.match(failed.stdout + failed.stderr, /injected late overlay migration failure/);
+    assert.equal(existsSync(join(gitDir, "hunch", "checkout-root")), false, "the back-link is rolled back");
+    assert.equal(existsSync(join(gitDir, "hunch", "local.json")), false, "the registration is rolled back");
+    assert.equal(existsSync(join(gitDir, "hunch")), false, "the hunch/ dir setup created is removed");
+    assert.equal(checkoutCommonDir(checkout), "", "the git dir is unclaimed again");
+  } finally {
+    cleanupDir(f.base);
+  }
+});
+
+test("a --separate-git-dir checkout registers through setup and opens private; a borrowed .git file does not", { timeout: 180_000 }, () => {
+  const f = makeFixture("hunch-local-pointer-separate-");
+  try {
+    const checkout = join(f.base, "separate");
+    const gitDir = join(f.base, "separate-git");
+    git(f.base, "init", "-q", "-b", "main", `--separate-git-dir=${gitDir}`, checkout);
+    git(checkout, "config", "user.name", "Pointer Test");
+    git(checkout, "config", "user.email", "pointer@test.invalid");
+    git(checkout, "config", "commit.gpgsign", "false");
+    writeFileSync(join(checkout, "README.md"), "# separate\n");
+    git(checkout, "add", "-A");
+    git(checkout, "commit", "-qm", "init");
+    assert.equal(checkoutCommonDir(checkout), "", "Git alone records no back-link for a separate git dir");
+    const setup = cli(checkout, f.env, ["private", "--repo", f.remote, "--no-hook"]);
+    assert.equal(setup.status, 0, setup.stdout + setup.stderr);
+    assert.doesNotMatch(setup.stdout, /could not register/, setup.stdout);
+    assert.equal(checkoutCommonDir(checkout), realpathSync(gitDir), "setup claimed the separate git dir");
+    const store = storeOf(checkout, f.env);
+    try {
+      assert.equal(store.hasPrivate, true, "the registered overlay opens");
+      assert.equal(store.mode, "private");
+    } finally {
+      store.close();
+    }
+
+    // An unpacked tree whose .git file names that git dir borrows nothing.
+    const unpacked = join(f.base, "unpacked-separate");
+    mkdirSync(unpacked, { recursive: true });
+    writeFileSync(join(unpacked, ".git"), `gitdir: ${gitDir}\n`);
+    assert.equal(checkoutCommonDir(unpacked), "", "the back-link names the real checkout");
+    assert.equal(claimSeparateGitDir(unpacked), "", "a live checkout's git dir is never re-claimed");
   } finally {
     cleanupDir(f.base);
   }
@@ -304,12 +512,7 @@ test("committed files shaped like a repository never act as the registered point
       git(seed, "commit", "-qm", `fixture: ${label}`);
       rmSync(clone, { recursive: true, force: true });
       git(f.base, "clone", "-q", seed, clone);
-      const store = storeOf(join(clone, "evil"), f.env);
-      try {
-        assert.equal(store.hasPrivate, false, `a ${label} pointer inside tracked repository-shaped files is ignored`);
-      } finally {
-        store.close();
-      }
+      assertRefused(join(clone, "evil"), f.env, `a ${label} pointer inside tracked repository-shaped files is refused`);
     }
   } finally {
     cleanupDir(f.base);

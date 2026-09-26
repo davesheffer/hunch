@@ -459,6 +459,14 @@ function checkoutIsolatedEnv(): NodeJS.ProcessEnv {
   };
 }
 
+/** Bound for each post-clone validation spawn: 2s by default, widened (never
+ *  narrowed) by HUNCH_TEAM_CLONE_TIMEOUT_MS so slow disks or loaded CI do not turn a
+ *  valid clone into a validation failure. */
+function teamValidationTimeout(): number {
+  const override = teamCloneTimeoutOverride();
+  return override === undefined ? 2_000 : Math.max(2_000, override);
+}
+
 function exactCommit(
   root: string,
   revision: string,
@@ -468,7 +476,7 @@ function exactCommit(
     encoding: "utf8",
     stdio: ["ignore", "pipe", "ignore"],
     env,
-    timeout: 2_000,
+    timeout: teamValidationTimeout(),
   });
   const oid = result.status === 0 ? result.stdout.trim() : "";
   return {
@@ -482,7 +490,7 @@ function exactTreeListing(root: string, oid: string, env: NodeJS.ProcessEnv): st
     encoding: "utf8",
     stdio: ["ignore", "pipe", "ignore"],
     env,
-    timeout: 2_000,
+    timeout: teamValidationTimeout(),
     maxBuffer: 64 * 1024 * 1024,
   });
   return result.status === 0 && safeOverlayGitTreeListing(result.stdout) ? result.stdout : null;
@@ -493,7 +501,7 @@ function repositoryHasNoRefs(root: string, env: NodeJS.ProcessEnv): boolean {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "ignore"],
     env,
-    timeout: 2_000,
+    timeout: teamValidationTimeout(),
   });
   return result.status === 0 && result.stdout.trim() === "";
 }
@@ -504,7 +512,7 @@ function treeAttributesAreSafe(root: string, listing: string, env: NodeJS.Proces
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
       env,
-      timeout: 2_000,
+      timeout: teamValidationTimeout(),
       maxBuffer: 4 * 1024 * 1024,
     });
     return blob.status === 0 ? blob.stdout : null;
@@ -611,7 +619,7 @@ function materializeValidatedClone(
   ], {
     stdio: "ignore",
     env,
-    timeout: 5_000,
+    timeout: Math.max(5_000, teamCloneTimeoutOverride() ?? 0),
   });
   if (reset.status !== 0) {
     reportTeamCloneFailure("materialize-reset", reset);
@@ -639,6 +647,16 @@ export type ValidatedTeamClone = {
   empty: boolean;
 };
 
+/** HUNCH_TEAM_CLONE_TIMEOUT_MS: a per-process override for every team-store clone
+ *  and materialization timeout (default: the caller's own bound). For slow disks,
+ *  networks, or heavily parallel CI; ignored unless a positive integer. */
+export function teamCloneTimeoutOverride(): number | undefined {
+  const raw = process.env.HUNCH_TEAM_CLONE_TIMEOUT_MS?.trim();
+  if (!raw || !/^\d+$/.test(raw)) return undefined;
+  const value = Number(raw);
+  return value > 0 ? Math.min(600_000, value) : undefined;
+}
+
 /** Clone a shared memory repository without checking out attacker-controlled
  * paths, validate its exact route/OID/tree/attributes, and only then publish the
  * fully materialized clone at `destination`. Failure removes both quarantine and
@@ -656,9 +674,10 @@ export function cloneValidatedTeamOverlay(
     return null;
   }
   const requestedTimeout = opts.timeoutMs ?? 5_000;
-  const timeoutMs = Number.isFinite(requestedTimeout)
+  const defaultTimeoutMs = Number.isFinite(requestedTimeout)
     ? Math.min(30_000, Math.max(1, Math.trunc(requestedTimeout)))
     : 5_000;
+  const timeoutMs = Math.max(defaultTimeoutMs, teamCloneTimeoutOverride() ?? 0);
   const parent = dirname(destination);
   const prefix = basename(destination);
   let stagedDest = "";
@@ -783,16 +802,35 @@ export function isTeamStoreTrusted(root: string, team: TeamConfig): boolean {
   }
 }
 
-/** Record this user's explicit consent to wire `root` to `team.shared_repo`. */
-export function trustTeamStore(root: string, team: TeamConfig): void {
+/** Record this user's explicit consent to wire `root` to `team.shared_repo`. Returns an
+ *  undo that removes only THIS checkout's key (restoring its prior entry if one existed),
+ *  never the whole file byte-for-byte: another checkout's concurrent trust write must
+ *  survive the undo. The file is deleted only if it ends up empty and did not exist
+ *  before, so a caller can make consent conditional on a later step. */
+export function trustTeamStore(root: string, team: TeamConfig): () => void {
   const sharedRepo = safeGitUrl(team.shared_repo);
   if (!sharedRepo) throw new Error("refusing to trust an unsafe team repository URL");
   const file = teamTrustFile();
   const current = readTeamTrust(file);
   if (!current) throw new Error(`refusing to overwrite unreadable team trust file: ${file}`);
-  current.stores[teamTrustKey(root)] = { shared_repo: sharedRepo, trusted_at: new Date().toISOString() };
+  // readTeamTrust proved the file is absent or a plain, bounded, parseable file.
+  const fileExistedBefore = existsSync(file);
+  const key = teamTrustKey(root);
+  const priorEntry = current.stores[key];
+  current.stores[key] = { shared_repo: sharedRepo, trusted_at: new Date().toISOString() };
   mkdirSync(dirname(file), { recursive: true });
   writeFileAtomic(file, JSON.stringify(current, null, 2) + "\n");
+  return () => {
+    const latest = readTeamTrust(file);
+    if (!latest) return; // file went missing or unreadable out from under us: nothing safe to undo
+    if (priorEntry) latest.stores[key] = priorEntry;
+    else delete latest.stores[key];
+    if (Object.keys(latest.stores).length === 0 && !fileExistedBefore) {
+      rmSync(file, { force: true });
+      return;
+    }
+    writeFileAtomic(file, JSON.stringify(latest, null, 2) + "\n");
+  };
 }
 
 /** Whether this user consented to `root` using `privateDir` as the advertised team

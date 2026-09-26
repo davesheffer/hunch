@@ -6,7 +6,7 @@
  */
 import { existsSync, readFileSync, mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { checkoutCommonDir } from "../extractors/git.js";
+import { checkoutCommonDir, claimSeparateGitDir } from "../extractors/git.js";
 import { writeFileAtomic } from "../core/io.js";
 
 /** Register the resolved private overlay at the shared git common dir, so every worktree
@@ -15,9 +15,12 @@ import { writeFileAtomic } from "../core/io.js";
  *  Carries the overlay MODE so every worktree routes captures identically (shared =
  *  unified store, private = split). Returns true once the shared pointer is in place
  *  (memory is worktree-shared), false when there's no overlay configured or no git
- *  common dir. Reused by `init`/`worktree`/`private`/`shared`. */
-export function ensureSharedOverlayPointer(root: string, overlayDir: string | undefined, autoCommit: boolean, mode: "private" | "shared" = "private"): boolean {
-  const common = overlayDir ? checkoutCommonDir(root) : "";
+ *  common dir. Reused by `init`/`worktree`/`private`/`shared`, which pass
+ *  `claimSeparateGitDirLayout` (see claimSeparateGitDir). */
+export function ensureSharedOverlayPointer(root: string, overlayDir: string | undefined, autoCommit: boolean, mode: "private" | "shared" = "private", claimSeparateGitDirLayout = false): boolean {
+  // Only an explicit setup command the user ran in this checkout may claim a
+  // `git init --separate-git-dir` layout — never a store open or team auto-wiring.
+  const common = overlayDir ? checkoutCommonDir(root) || (claimSeparateGitDirLayout ? claimSeparateGitDir(root) : "") : "";
   if (!common || !overlayDir) return false;
   const file = join(common, "hunch", "local.json");
   const want = JSON.stringify({ privateDir: resolve(overlayDir), autoCommit, mode }, null, 2) + "\n";

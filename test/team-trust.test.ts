@@ -18,7 +18,7 @@ import {
 // wires the advertised store only after THIS user consents, and that consent
 // lives outside every repository.
 
-const ENV_KEYS = ["HOME", "USERPROFILE", "XDG_CONFIG_HOME", "APPDATA", "GIT_CONFIG_GLOBAL", "GIT_CONFIG_NOSYSTEM", "GIT_TERMINAL_PROMPT", "HUNCH_PRIVATE_DIR"] as const;
+const ENV_KEYS = ["HOME", "USERPROFILE", "XDG_CONFIG_HOME", "APPDATA", "GIT_CONFIG_GLOBAL", "GIT_CONFIG_NOSYSTEM", "GIT_TERMINAL_PROMPT", "HUNCH_PRIVATE_DIR", "HUNCH_TEAM_CLONE_TIMEOUT_MS"] as const;
 
 function git(cwd: string, ...args: string[]): string {
   return execFileSync("git", args, {
@@ -45,6 +45,8 @@ function homeEnv(home: string): NodeJS.ProcessEnv {
     GIT_CONFIG_NOSYSTEM: "1",
     GIT_TERMINAL_PROMPT: "0",
     HUNCH_PRIVATE_DIR: "",
+    // Parallel test load can stall a local clone past the 5s production bound.
+    HUNCH_TEAM_CLONE_TIMEOUT_MS: "120000",
   };
 }
 
@@ -218,6 +220,106 @@ test("CLI: an untrusted team.json fails closed with the trust step; `hunch share
   }
 });
 
+test("CLI: `hunch shared --trust` that cannot connect records no trust and says how to retry", () => {
+  const base = tempDir("hunch-team-trust-offline-");
+  try {
+    const home = join(base, "home");
+    const env = isolatedCliEnv({ ...homeEnv(home), HUNCH_EMBEDDINGS: "off", NO_COLOR: "1", CI: "1" });
+    const remote = makeMemoryRemote(base, "memory");
+    const project = withIsolatedHome(home, () => makeProject(base, "project", remote));
+    rmSync(remote, { recursive: true, force: true }); // the advertised store is unreachable
+    const trusted = spawnSync(process.execPath, hunchCliArgs("shared", "--trust"), {
+      cwd: project, env, encoding: "utf8", timeout: 60_000,
+    });
+    const out = trusted.stdout + trusted.stderr;
+    assert.notEqual(trusted.status, 0, out);
+    assert.match(out, /trust was NOT recorded[\s\S]*retry: `hunch shared --trust`/);
+    assert.doesNotMatch(out, /trusted the team memory store/);
+    assertUnwired(project);
+    // Consent persists only after a successful connect: no trust file was created.
+    withIsolatedHome(home, () => {
+      assert.equal(existsSync(teamTrustFile()), false);
+      assert.equal(isTeamStoreTrusted(project, readTeamConfig(project)!), false);
+    });
+  } finally {
+    cleanupDir(base);
+  }
+});
+
+test("CLI: a failed `hunch shared --trust` restores a pre-existing trust file's other entries, keyed not byte-for-byte", () => {
+  const base = tempDir("hunch-team-trust-restore-");
+  try {
+    const home = join(base, "home");
+    const env = isolatedCliEnv({ ...homeEnv(home), HUNCH_EMBEDDINGS: "off", NO_COLOR: "1", CI: "1" });
+    const remote = makeMemoryRemote(base, "memory");
+    const project = withIsolatedHome(home, () => makeProject(base, "project", remote));
+    const file = withIsolatedHome(home, () => teamTrustFile());
+    mkdirSync(join(file, ".."), { recursive: true });
+    const priorStores = { "/elsewhere": { shared_repo: "/other.git", trusted_at: "2026-01-01T00:00:00.000Z" } };
+    const prior = JSON.stringify({ version: 1, stores: priorStores }) + "\n";
+    writeFileSync(file, prior);
+    rmSync(remote, { recursive: true, force: true }); // the advertised store is unreachable
+    const trusted = spawnSync(process.execPath, hunchCliArgs("shared", "--trust"), {
+      cwd: project, env, encoding: "utf8", timeout: 60_000,
+    });
+    assert.notEqual(trusted.status, 0, trusted.stdout + trusted.stderr);
+    // The undo is now keyed (removes only this checkout's own entry), not a byte-for-byte
+    // restore, so another checkout's entry present before the attempt must still be there.
+    assert.deepEqual(JSON.parse(readFileSync(file, "utf8")).stores, priorStores);
+    assertUnwired(project);
+  } finally {
+    cleanupDir(base);
+  }
+});
+
+test("trustTeamStore's undo restores the exact prior consent state", () => {
+  const base = tempDir("hunch-team-trust-undo-");
+  try {
+    const home = join(base, "home");
+    withIsolatedHome(home, () => {
+      const project = makeProject(base, "project", makeMemoryRemote(base, "memory"));
+      const team = readTeamConfig(project)!;
+      const file = teamTrustFile();
+      assert.equal(existsSync(file), false);
+      trustTeamStore(project, team)();
+      assert.equal(existsSync(file), false);
+
+      trustTeamStore(project, team); // established consent
+      const bytes = readFileSync(file, "utf8");
+      trustTeamStore(project, team)(); // a later re-trust that is then undone
+      assert.equal(readFileSync(file, "utf8"), bytes);
+      assert.equal(isTeamStoreTrusted(project, team), true);
+    });
+  } finally {
+    cleanupDir(base);
+  }
+});
+
+test("trustTeamStore's undo keeps a key another checkout added concurrently", () => {
+  const base = tempDir("hunch-team-trust-concurrent-");
+  try {
+    const home = join(base, "home");
+    withIsolatedHome(home, () => {
+      const remote = makeMemoryRemote(base, "memory");
+      const project = makeProject(base, "project", remote);
+      const other = makeProject(base, "other", remote);
+      const team = readTeamConfig(project)!;
+      const otherTeam = readTeamConfig(other)!;
+
+      const undo = trustTeamStore(project, team);
+      // A concurrent process wires a different checkout in between: its key must
+      // survive this checkout's undo, and the file must not be deleted underneath it.
+      trustTeamStore(other, otherTeam);
+      undo();
+
+      assert.equal(isTeamStoreTrusted(project, team), false);
+      assert.equal(isTeamStoreTrusted(other, otherTeam), true);
+    });
+  } finally {
+    cleanupDir(base);
+  }
+});
+
 test("a committed .hunch/local.json cannot borrow another checkout's trusted store", () => {
   const base = tempDir("hunch-team-trust-borrow-");
   try {
@@ -249,7 +351,8 @@ test("a committed .hunch/local.json cannot borrow another checkout's trusted sto
 
       const refused = spawnSync(process.execPath, hunchCliArgs("init"), { cwd: hostile, env, encoding: "utf8", timeout: 60_000 });
       assert.notEqual(refused.status, 0, refused.stdout + refused.stderr);
-      assert.match(refused.stdout + refused.stderr, /have not trusted on this machine/);
+      // Either refusal is fail-closed: the shipped pointer is unregistered, and the store is untrusted.
+      assert.match(refused.stdout + refused.stderr, /have not trusted on this machine|has not registered in the git common dir/);
     });
   } finally {
     cleanupDir(base);

@@ -141,6 +141,9 @@ export class HunchStore {
   readonly overlaySource: OverlayResolutionSource;
   /** A per-worktree overlay pointer this machine's setup never registered (ignored). */
   private ignoredLocalPointer: string | null = null;
+  /** The routing that ignored pointer asked for, so the refusal can name the exact
+   *  setup command that re-registers it. */
+  private ignoredLocalPointerSetup: { mode?: "private" | "shared"; autoCommit?: boolean } = {};
   /** Present only when HUNCH_PRIVATE_DIR redirects this store away from the
    *  repo/worktree-local pointer. Precedence is compatibility-sensitive and stays
    *  env-first; making the redirection queryable removes the silent footgun. */
@@ -186,6 +189,13 @@ export class HunchStore {
     const resolvedEnvironmentDir = environmentDir
       ? resolve(this.paths.root, environmentDir)
       : undefined;
+    // Fail closed: a per-worktree pointer naming an overlay this machine never registered
+    // (a pre-v0.33 setup, or one shipped with the checkout) must not silently demote this
+    // store to public mode — the next hook capture or sync would publish memory meant for
+    // the overlay. Only explicit setup (or HUNCH_PRIVATE_DIR) re-establishes ownership.
+    if (this.ignoredLocalPointer && !configuredDir && !resolvedEnvironmentDir) {
+      throw new Error(this.unregisteredPointerMessage(this.ignoredLocalPointer));
+    }
     const priv = resolvedEnvironmentDir || configuredDir;
     this.overlaySource = resolvedEnvironmentDir
       ? "environment"
@@ -254,10 +264,22 @@ export class HunchStore {
     if (this.overlaySource === "environment" && teamConfigBypassed && this.privateDir) {
       return `HUNCH_PRIVATE_DIR bypasses .hunch/team.json and selects ${this.privateDir} in ${this.mode} mode; team-store auto-discovery is disabled for this process. Unset HUNCH_PRIVATE_DIR to use the advertised team store.`;
     }
-    if (this.ignoredLocalPointer && !this.privateDir) {
-      return `.hunch/local.json names a memory store at ${this.ignoredLocalPointer} that this machine's setup has not registered, so it is ignored. If it is yours, re-run \`hunch private\` (or \`hunch shared\`, \`hunch worktree\`) here to register it, or set HUNCH_PRIVATE_DIR.`;
+    if (this.ignoredLocalPointer && this.overlaySource === "local-config" && this.privateDir) {
+      return `.hunch/local.json points at ${this.ignoredLocalPointer}, which this machine's setup did not register, so that per-worktree pointer is ignored and the registered store ${this.privateDir} is used. Delete .hunch/local.json, or run \`hunch private\` (or \`hunch shared\`) here to change the registered store.`;
     }
     return null;
+  }
+
+  /** Why an unregistered per-worktree pointer blocks this store, with the exact command
+   *  that re-registers it. Never auto-re-registered: the pointer may be repository content. */
+  private unregisteredPointerMessage(dir: string): string {
+    const { mode, autoCommit } = this.ignoredLocalPointerSetup;
+    const quoted = /^[\w@%+=:,./-]+$/.test(dir) ? dir : JSON.stringify(dir);
+    const command = `hunch ${mode === "shared" ? "shared" : "private"} ${quoted}${autoCommit === false ? " --no-auto-commit" : ""}`;
+    return `.hunch/local.json names a memory store at ${dir} that this machine's setup has not registered in the git common dir, ` +
+      "so Hunch refuses to open this repository's memory rather than silently writing captures to the public .hunch/. " +
+      `If you set up that store for THIS repository, register it by running \`${command}\` in this checkout. ` +
+      "Otherwise delete .hunch/local.json. (HUNCH_PRIVATE_DIR also selects an overlay explicitly for one process.)";
   }
 
   /** Where a capture belongs: an explicit private:true always goes to the overlay
@@ -358,20 +380,45 @@ export class HunchStore {
   }
 
   /** The private-overlay config from the gitignored `.hunch/local.json` (per-machine,
-   *  never committed). Tolerant: returns {} on missing/invalid so reads never crash.
+   *  never committed). An absent file reads as {}; a present one that is unreadable,
+   *  not valid JSON (a leading UTF-8 BOM is tolerated), not a JSON object, or a symlink
+   *  throws: reading it as "no overlay" would silently open this repository PUBLIC.
    *  `autoCommit` is tri-state: true/false when the file says so, undefined when unset.
    *  `mode` records HOW the overlay was set up ("private" split vs "shared" unified). */
   private localConfig(): { privateDir?: string; autoCommit?: boolean; mode?: "private" | "shared" } {
     const read = (file: string): { privateDir?: string; autoCommit?: boolean; mode?: "private" | "shared" } => {
+      let raw: string;
       try {
-        if (!existsSync(file)) return {};
-        const v = JSON.parse(readFileSync(file, "utf8")) as { privateDir?: unknown; autoCommit?: unknown; mode?: unknown };
-        const privateDir = typeof v.privateDir === "string" && v.privateDir.trim() ? v.privateDir.trim() : undefined;
-        const mode = v.mode === "private" || v.mode === "shared" ? v.mode : undefined;
-        return { privateDir, autoCommit: typeof v.autoCommit === "boolean" ? v.autoCommit : undefined, mode };
-      } catch {
-        return {};
+        raw = readFileSync(file, "utf8");
+      } catch (error) {
+        if (["ENOENT", "ENOTDIR"].includes((error as NodeJS.ErrnoException).code ?? "")) return {};
+        throw new Error(this.invalidPointerMessage(file, `cannot be read (${(error as NodeJS.ErrnoException).code ?? String(error)})`));
       }
+      let v: unknown;
+      try {
+        v = JSON.parse(raw.startsWith("\uFEFF") ? raw.slice(1) : raw);
+      } catch (error) {
+        throw new Error(this.invalidPointerMessage(file, `is not valid JSON (${error instanceof Error ? error.message : String(error)})`));
+      }
+      if (!v || typeof v !== "object" || Array.isArray(v)) {
+        throw new Error(this.invalidPointerMessage(file, "is not a JSON object"));
+      }
+      const o = v as { privateDir?: unknown; autoCommit?: unknown; mode?: unknown };
+      let privateDir: string | undefined;
+      if ("privateDir" in o) {
+        if (typeof o.privateDir !== "string" || !o.privateDir.trim()) {
+          throw new Error(this.invalidPointerMessage(file, "has an invalid privateDir"));
+        }
+        privateDir = o.privateDir.trim();
+      }
+      let mode: "private" | "shared" | undefined;
+      if ("mode" in o) {
+        if (o.mode !== "private" && o.mode !== "shared") {
+          throw new Error(this.invalidPointerMessage(file, "has an invalid mode"));
+        }
+        mode = o.mode;
+      }
+      return { privateDir, autoCommit: typeof o.autoCommit === "boolean" ? o.autoCommit : undefined, mode };
     };
     // Per-worktree pointer first (explicit / back-compat). If it names no overlay, fall back to
     // the SHARED pointer in the git common dir — identical across ALL worktrees, so a freshly
@@ -379,14 +426,38 @@ export class HunchStore {
     // the same memory. A per-worktree pointer that names an overlay must be one this machine's
     // setup registered (ownsLocalPointer) before it wins.
     const perWorktreeFile = join(this.paths.hunch, "local.json");
-    let perWorktree = this.localPointerFileIsPlain(perWorktreeFile) ? read(perWorktreeFile) : {};
+    const perWorktreeState = this.localPointerFileState(perWorktreeFile);
+    if (perWorktreeState === "unsafe") {
+      throw new Error(
+        `${perWorktreeFile} (or its .hunch directory) is a symlink or not a plain file; a symlinked .hunch/local.json is never followed, ` +
+        "so Hunch refuses to open this repository's memory rather than silently writing captures to the public .hunch/. " +
+        "Re-create it as a plain file, or run `hunch private <dir>` here, or delete it.",
+      );
+    }
+    let perWorktree = perWorktreeState === "plain" ? read(perWorktreeFile) : {};
     // The shared pointer is trusted only in a repository Git reached through this
     // checkout's own `.git` entry, and only with the absolute path setup always writes.
     const common = checkoutCommonDir(this.paths.root);
-    const registered = common ? read(join(common, "hunch", "local.json")) : {};
-    const shared = registered.privateDir && isAbsolute(registered.privateDir) ? registered : {};
+    let registered: { privateDir?: string; autoCommit?: boolean; mode?: "private" | "shared" } = {};
+    if (common) {
+      const commonFile = join(common, "hunch", "local.json");
+      const commonState = this.localPointerFileState(commonFile);
+      if (commonState === "unsafe") {
+        throw new Error(
+          `${commonFile} (or its .hunch directory) is a symlink or not a plain file; a symlinked local.json is never followed, ` +
+          "so Hunch refuses to open this repository's memory rather than silently writing captures to the public .hunch/. " +
+          "Re-create it as a plain file, or run `hunch private <dir>` (or `hunch shared`) here.",
+        );
+      }
+      registered = commonState === "plain" ? read(commonFile) : {};
+      if (registered.privateDir && !isAbsolute(registered.privateDir)) {
+        throw new Error(this.invalidPointerMessage(commonFile, "has a non-absolute privateDir"));
+      }
+    }
+    const shared = registered.privateDir ? registered : {};
     if (perWorktree.privateDir && !this.ownsLocalPointer(perWorktree.privateDir, shared.privateDir)) {
       this.ignoredLocalPointer = resolve(this.paths.root, perWorktree.privateDir);
+      this.ignoredLocalPointerSetup = { mode: perWorktree.mode, autoCommit: perWorktree.autoCommit };
       perWorktree = {}; // not registered by this machine's setup: ignore every field it carries
     }
     // The registered pointer decides the store and its routing mode. A per-worktree
@@ -396,17 +467,27 @@ export class HunchStore {
     return perWorktree;
   }
 
-  /** Whether the per-worktree pointer is a plain file inside a real `.hunch` directory of
-   *  this checkout. A symlinked `.hunch` or `local.json` is never followed. */
-  private localPointerFileIsPlain(file: string): boolean {
-    try {
-      const hunchStat = lstatSync(dirname(file));
-      if (hunchStat.isSymbolicLink() || !hunchStat.isDirectory()) return false;
-      const stat = lstatSync(file);
-      return !stat.isSymbolicLink() && stat.isFile();
-    } catch {
-      return false;
-    }
+  /** Why a present overlay pointer file blocks this store. */
+  private invalidPointerMessage(file: string, problem: string): string {
+    return `${file} ${problem}, so Hunch refuses to open this repository's memory rather than silently ` +
+      "writing captures to the public .hunch/. Fix the file, or delete it and re-run `hunch private <dir>` (or `hunch shared`) here.";
+  }
+
+  /** The per-worktree pointer's shape, WITHOUT following any link: "absent" when neither
+   *  it nor a symlink sits there, "plain" for a regular file inside a real `.hunch`
+   *  directory of this checkout, and "unsafe" for anything else that exists (a symlinked
+   *  `local.json`, a directory, or a pointer reachable only through a symlinked `.hunch`). */
+  private localPointerFileState(file: string): "absent" | "plain" | "unsafe" {
+    const present = (path: string): boolean => {
+      try { lstatSync(path); return true; } catch { return false; }
+    };
+    let hunchStat;
+    try { hunchStat = lstatSync(dirname(file)); } catch { return "absent"; }
+    if (hunchStat.isSymbolicLink()) return present(file) ? "unsafe" : "absent";
+    if (!hunchStat.isDirectory()) return "absent";
+    let stat;
+    try { stat = lstatSync(file); } catch { return "absent"; }
+    return !stat.isSymbolicLink() && stat.isFile() ? "plain" : "unsafe";
   }
 
   /** Whether a per-worktree `.hunch/local.json` naming `privateDir` was registered by this
