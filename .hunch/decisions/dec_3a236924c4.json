@@ -1,0 +1,107 @@
+{
+  "id": "dec_3a236924c4",
+  "title": "Consolidate Hunch documentation via templated grounding blocks",
+  "topic": null,
+  "status": "accepted",
+  "context": "Hunch (Engineering Memory) documentation was duplicated across multiple agent/IDE configuration files (.cursor/rules, .windsurf/rules, copilot-instructions, CLAUDE.md, AGENTS.md), making it difficult to maintain consistency and update guidance.",
+  "decision": "Introduced template-based grounding blocks (e.g., `<!-- hunch:template 2 -->`) to replace verbose inline documentation. Condensed the full moment-by-moment tool guidance into a shorter reference form while preserving essential structure and tool names.",
+  "consequences": [
+    "Single source of truth for Hunch tool guidance across all IDE/agent configurations",
+    "Reduced documentation size and improved readability in each config file",
+    "Easier maintenance: update template once, regenerate all files",
+    "Users still have access to core tool names and invoke patterns in each context",
+    "Detailed tool reference (when to call what, by moment) now delegated to external source or template definition"
+  ],
+  "alternatives_rejected": [
+    "Keep verbose inline documentation in each file (maintenance burden, inconsistency risk)",
+    "Remove Hunch guidance entirely from IDE/agent configs (discoverability loss)",
+    "Move all documentation to external reference with no inline summary (higher friction for tool adoption)"
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Keep verbose inline documentation in each file (maintenance burden, inconsistency risk)",
+      "scope": [
+        ".github/**",
+        ".windsurf/rules/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Remove Hunch guidance entirely from IDE/agent configs (discoverability loss)",
+      "scope": [
+        ".github/**",
+        ".windsurf/rules/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Move all documentation to external reference with no inline summary (higher friction for tool adoption)",
+      "scope": [
+        ".github/**",
+        ".windsurf/rules/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_4c40eab00f"
+  ],
+  "related_files": [
+    ".github/copilot-instructions.md",
+    ".windsurf/rules/hunch.md",
+    "AGENTS.md",
+    "CLAUDE.md"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "6d2d2561",
+  "valid_from": "2026-09-25T19:33:59+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft+summary",
+    "confidence": 0.5,
+    "evidence": [
+      "commit:6d2d2561",
+      "synth:provider=claude-cli",
+      "branch:feat/tool-list-budget-2",
+      ".github/copilot-instructions.md",
+      ".windsurf/rules/hunch.md",
+      "AGENTS.md",
+      "CLAUDE.md"
+    ],
+    "last_verified": "2026-09-25T16:37:49.725Z"
+  },
+  "date": "2026-09-25T19:33:59+03:00"
+}

@@ -13,8 +13,11 @@ import { servedSummary } from "../src/core/served.js";
 import { EdgeSchema, ResourceSchema } from "../src/core/types.js";
 import { buildServer } from "../src/mcp/server.js";
 import { HunchStore } from "../src/store/hunchStore.js";
-import { readTaskReport, type TaskReport } from "../src/core/taskReport.js";
+import { buildDeliveryEnvelope } from "../src/core/delivery.js";
+import { finishReportTask, readTaskReport, recordTaskDelivery, reportHash, startReportTask, type TaskReport } from "../src/core/taskReport.js";
 import { runReportCheck } from "../src/core/taskReportEvidence.js";
+import { persistTaskRecord } from "../src/core/taskRecord.js";
+import type { AssembledContext } from "../src/store/hunchStore.js";
 // These suites exercise specialist MCP tool groups; the everyday default hides them (src/mcp/toolset.ts).
 process.env.HUNCH_MCP_TOOLS = "all";
 
@@ -239,14 +242,7 @@ test("hunch_context exposes the delivery envelope and records exactly what MCP s
     text: string;
     profile: string;
     ranking_policy: string;
-    delivered: Array<{
-      kind: string;
-      record_id: string;
-      rank: number;
-      delivery_reason: string;
-      provenance_status: string;
-      token_cost: number;
-    }>;
+    delivered: Array<{ kind: string; record_id: string }>;
     hypotheses: unknown[];
     obligations: unknown[];
     omitted: unknown[];
@@ -260,15 +256,9 @@ test("hunch_context exposes the delivery envelope and records exactly what MCP s
   assert.equal(text, structured.text, "legacy text and structured envelope describe the same delivery");
   assert.equal(structured.profile, "builder");
   assert.equal(structured.ranking_policy, "hunch.delivery-profile/1");
-  assert.deepEqual(structured.delivered, [{
-    kind: "constraints",
-    record_id: "con_mcp_receipt",
-    rank: 1,
-    delivery_reason: "blocking-reserved",
-    provenance_status: "current",
-    token_cost: structured.delivered[0]?.token_cost,
-  }]);
-  assert.ok((structured.delivered[0]?.token_cost ?? 0) > 0);
+  // The MCP result names delivered records for drill-down only; rank, reason,
+  // provenance and cost live in the served receipt below (#371).
+  assert.deepEqual(structured.delivered, [{ kind: "constraints", record_id: "con_mcp_receipt" }]);
   assert.deepEqual(structured.hypotheses, []);
   assert.deepEqual(structured.obligations, []);
   assert.deepEqual(structured.omitted, []);
@@ -294,10 +284,11 @@ test("hunch_context exposes the delivery envelope and records exactly what MCP s
     rank: 1,
     delivery_reason: "blocking-reserved",
     provenance_status: "current",
-    token_cost: structured.delivered[0]?.token_cost,
+    token_cost: receipts.recent[0]?.token_cost,
     delivery_profile: "builder",
     ranking_policy: "hunch.delivery-profile/1",
   });
+  assert.ok((receipts.recent[0]?.token_cost ?? 0) > 0);
 });
 
 test("MCP exposes exact change identity and semantic proof contracts without mutating memory", async (t) => {
@@ -543,4 +534,49 @@ test("MCP captures retain exact local saves and the next task can trace their or
   const unlinked = await call("hunch_record_decision", { task_id: "htask_000000000000000000000000", decision: { title: "Unlinked real capture", decision: "Keep saved memory if reporting is unavailable" } });
   assert.ok(!unlinked.isError, JSON.stringify(unlinked));
   assert.match(JSON.stringify(unlinked.content), /report.*unavailable/i);
+});
+
+test("hunch_context omits recent tasks and Project DNA by default, and surfaces recent tasks only when included (#371)", async t => {
+  const root = mcpDeliveryFixture();
+  const store = new HunchStore(hunchPaths(root));
+  const receipt = store.json.get("constraints", "con_mcp_receipt")!;
+  // A finished task that already delivered on the target file, so the default brief
+  // has something to withhold and `include: ["recent_tasks"]` has something to surface.
+  const finished = startReportTask(root, "Earlier work on context.ts");
+  recordTaskDelivery(
+    root,
+    finished.task_id,
+    buildDeliveryEnvelope({ target: "src/context.ts", constraints: [receipt], decisions: [], bugs: [], blast_radius: [], components: [], findings: [], budget_tokens: 1500 } as unknown as AssembledContext),
+    [{ record_id: receipt.id, kind: "constraints", title: receipt.statement, lesson: receipt.statement, content_hash: reportHash(receipt.id), recorded_at: "2026-08-15T00:00:00.000Z" }],
+    undefined,
+    "src/context.ts",
+  );
+  finishReportTask(root, finished.task_id);
+  assert.ok(persistTaskRecord(root, store, finished.task_id, { flush: false }));
+  store.reindex();
+  store.close();
+
+  const server = buildServer(root);
+  const [ct, st] = InMemoryTransport.createLinkedPair();
+  const client = new Client({ name: "context-result-budget-test", version: "1.0.0" });
+  await Promise.all([server.connect(st), client.connect(ct)]);
+  t.after(async () => { await client.close().catch(() => {}); await server.close().catch(() => {}); cleanupDir(root); });
+
+  const byDefault = await client.callTool({ name: "hunch_context", arguments: { target: "src/context.ts" } });
+  const defaultText = (byDefault.content as Array<{ type: string; text?: string }>).map(item => item.text ?? "").join("\n");
+  const defaultStructured = byDefault.structuredContent as { supplements?: Array<{ kind: string }> };
+  assert.doesNotMatch(defaultText, /RECENT TASKS/);
+  assert.ok(
+    !(defaultStructured.supplements ?? []).some(s => s.kind === "recent-task" || s.kind === "recent-tasks" || s.kind === "project-dna"),
+    "default brief must carry no recent-task or project-dna supplement",
+  );
+
+  const withRecentTasks = await client.callTool({
+    name: "hunch_context",
+    arguments: { target: "src/context.ts", include: ["recent_tasks"] },
+  });
+  const includedText = (withRecentTasks.content as Array<{ type: string; text?: string }>).map(item => item.text ?? "").join("\n");
+  const includedStructured = withRecentTasks.structuredContent as { supplements?: Array<{ kind: string }> };
+  assert.match(includedText, /RECENT TASKS/);
+  assert.ok((includedStructured.supplements ?? []).some(s => s.kind === "recent-tasks"));
 });

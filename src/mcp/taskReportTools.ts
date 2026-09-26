@@ -66,12 +66,12 @@ export { verificationLauncherFor };
 export function registerTaskReportTools(server: McpServer, getRoot: () => string, getStore: () => HunchStore): void {
   server.registerTool("hunch_task", {
     title: "Start or finish a task's contribution report",
-    description: "Start once per user task, unless the host's prompt hook already opened one — then reuse its task_id. Pass the task_id to hunch_context. Finish before your final response and show the returned contribution card without asking; skip finish only when the hook said the host closes the task and the task used no Hunch (no hunch_* call, verified check, or hook context you acted on). A task you started must always be finished. Applications must name an exact delivered occurrence and record hash. Finishing never implies verification. Not for storing decisions or claiming tests passed; use the CLI task verify wrapper for command results.",
+    description: "Start once per user task, unless the host's prompt hook already opened one — then reuse its task_id. Pass task_id to hunch_context. Finish before your final response and show the returned contribution card without asking; skip finish only when the hook said the host closes the task and the task used no Hunch (no hunch_* call, verified check, or hook context you acted on). A task you started must always be finished. Applications must name an exact delivered occurrence and record hash. Finishing never implies verification. Not for storing decisions or claiming tests passed; use the CLI task verify wrapper for command results.",
     inputSchema: {
       action: z.enum(["start", "finish"]), task_id: TaskIdSchema.optional(),
       title: z.string().min(1).max(200).optional(),
-      outcome: z.enum(["completed", "interrupted"]).optional().describe("\"interrupted\" when the task was cut short."),
-      applications: z.array(ReportClaimSchema).max(20).optional().describe("Only lessons you actually applied. Copy occurrence_id, record_id and content_hash exactly from hunch_report(task_id) application_references; never derive an ID from a receipt or use a scope hash."),
+      outcome: z.enum(["completed", "interrupted"]).optional().describe("\"interrupted\" when cut short."),
+      applications: z.array(ReportClaimSchema).max(20).optional().describe("Only lessons actually applied. Copy occurrence_id, record_id, content_hash exactly from hunch_report(task_id) application_references; never derive an ID from a receipt or use a scope hash."),
       cwd: z.string().optional().describe("Actual repository/worktree directory for this task."),
     },
   }, async ({ action, task_id, title, outcome, applications }) => {
@@ -127,8 +127,8 @@ export function registerTaskReportTools(server: McpServer, getRoot: () => string
   });
   server.registerTool("hunch_report", {
     title: "Inspect the evidence for Hunch's contribution to a task",
-    description: "Read task reports: exact delivered memory, agent-reported applications, observed command results and explicit unknowns, as a bounded summary (identities and verdicts, not envelope text; the full report is `hunch report <id> --json`). Supply lesson for exact revision history across tasks. With neither task_id nor lesson, lists recent tasks without guessing which is yours. html writes a local private evidence view. Not a causal impact score, public export, or authority to execute verification commands.",
-    inputSchema: { task_id: TaskIdSchema.optional(), lesson: LessonReferenceSchema.optional().describe("Exact kind and record_id, optionally content_hash, to inspect retained appearances across tasks. Partial indexing requires refreshing before pagination."), before: z.number().int().positive().optional(), html: z.boolean().optional(), cwd: z.string().optional() },
+    description: "Read task reports: exact delivered memory, agent-reported applications, observed command results and explicit unknowns, as a bounded summary (identities and verdicts, not envelope text; full report is `hunch report <id> --json`). Supply lesson for exact revision history across tasks. With neither task_id nor lesson, lists recent tasks without guessing which is yours. html writes a local private evidence view. Not a causal impact score, public export, or authority to execute verification commands.",
+    inputSchema: { task_id: TaskIdSchema.optional(), lesson: LessonReferenceSchema.optional().describe("Exact kind and record_id, optionally content_hash, for retained appearances across tasks. Partial indexing needs a refresh before pagination."), before: z.number().int().positive().optional(), html: z.boolean().optional(), cwd: z.string().optional() },
   }, async ({ task_id, lesson, before, html }) => {
     try {
       const root = getRoot();

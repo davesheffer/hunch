@@ -38,8 +38,23 @@ const UNMEASURED = [
   "hook.pre_edit.grounding — PreToolUse grounding is built per edited file and event",
 ];
 
-export async function measureFootprint(root: string): Promise<FootprintReport> {
+/** The file most decisions cite — a FILE target, so the brief carries per-record
+ *  lines and omissions the way a pre-edit call does. "src" when no decision names one. */
+function busiestFile(store: HunchStore): string {
+  const counts = new Map<string, number>();
+  for (const d of store.advisoryRecs("decisions")) {
+    for (const f of new Set(d.related_files)) if (!f.includes("*")) counts.set(f, (counts.get(f) ?? 0) + 1);
+  }
+  return [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0] ?? "src";
+}
+
+export async function measureFootprint(root: string, opts: { target?: string } = {}): Promise<FootprintReport> {
   const surfaces: FootprintSurface[] = [];
+  let target = opts.target;
+  if (!target) {
+    const store = new HunchStore(hunchPaths(root));
+    try { target = busiestFile(store); } finally { store.close(); }
+  }
 
   const server = buildServer(root);
   const [ct, st] = InMemoryTransport.createLinkedPair();
@@ -65,9 +80,15 @@ export async function measureFootprint(root: string): Promise<FootprintReport> {
     const core = tools.map(t => ({ name: t.name, description: t.description, inputSchema: t.inputSchema }));
     surfaces.push(surface("mcp.tools_list.core", jsonChars(core)));
 
-    const result = await client.callTool({ name: "hunch_context", arguments: { target: "src", budget_tokens: CONTEXT_BUDGET } });
-    const chars = jsonChars(result.content) + jsonChars(result.structuredContent);
+    const result = await client.callTool({ name: "hunch_context", arguments: { target, budget_tokens: CONTEXT_BUDGET } });
+    // A host shows the model one channel — structuredContent when it reads it,
+    // content otherwise — so the cost it pays is the larger, not the sum.
+    const contentChars = jsonChars(result.content);
+    const structuredChars = jsonChars(result.structuredContent);
+    const chars = Math.max(contentChars, structuredChars);
     surfaces.push(surface("mcp.hunch_context", chars, {
+      content_chars: contentChars,
+      structured_chars: structuredChars,
       budget_tokens: CONTEXT_BUDGET,
       // est_tokens / budget, ×100 as an integer percentage.
       budget_ratio_pct: Math.round((estTokens(chars) / CONTEXT_BUDGET) * 100),

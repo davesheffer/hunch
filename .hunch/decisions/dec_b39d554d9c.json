@@ -1,0 +1,120 @@
+{
+  "id": "dec_b39d554d9c",
+  "title": "Omit delivery metadata from MCP result; keep only drill-down ids",
+  "topic": null,
+  "status": "accepted",
+  "context": "MCP clients show the model exactly one channel (structuredContent or content, not both). Hunch was exposing rank, delivery_reason, provenance_status, and token_cost for every delivered record, redundant metadata the model never sees and the host already holds in receipts. Touches invariant(s): con_03a0b94b2e (The agent hook must never block an edit on failure: any error exits 0 and never denies; after the event is recognized it emits at most one 'grounding unavailable' context line, unrecognized input emits nothing); con_e04226bd05 (The MCP server must stay client-agnostic: all assistants point to the same .hunch/ graph; no Claude-only behavior in the server).",
+  "decision": "compactEnvelope() reduces delivered/supplements entries to {kind, record_id} only — enough to drill-down via hunch_why(), nothing more. Rank, costs, and provenance stay in the served receipt and the delivery ledger. Same footprint optimization applies to omitted samples: detail sentences dropped, replaced with reason+ids only.",
+  "consequences": [
+    "MCP result payload shrinks; smaller context overhead for the model",
+    "Single source of truth: metadata (rank, costs, provenance) lives in receipts, not duplicated in the result",
+    "Cost accounting now correct: hunch_context footprint is max(content_chars, structured_chars), not sum (host pays for one channel)",
+    "Drill-down remains available (hunch_why) but requires an explicit call, matching the model's actual access pattern"
+  ],
+  "alternatives_rejected": [
+    "Keep full metadata in MCP result: wasteful duplication, increases footprint, model doesn't use these fields",
+    "Include both channels in footprint calculation: misrepresents actual cost (host pays for one, not both)",
+    "Sum both channels even though only one is visible: inflates perceived hunch_context footprint"
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Keep full metadata in MCP result: wasteful duplication, increases footprint, model doesn't use these fields",
+      "scope": [
+        "src/cli/**",
+        "src/core/**",
+        "src/mcp/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Include both channels in footprint calculation: misrepresents actual cost (host pays for one, not both)",
+      "scope": [
+        "src/cli/**",
+        "src/core/**",
+        "src/mcp/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Sum both channels even though only one is visible: inflates perceived hunch_context footprint",
+      "scope": [
+        "src/cli/**",
+        "src/core/**",
+        "src/mcp/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_50037f41a9",
+    "cmp_a94a8fe5cc",
+    "cmp_b256a6aed0",
+    "cmp_dfa5b5acde",
+    "cmp_f27fede222"
+  ],
+  "related_files": [
+    "src/cli/index.ts",
+    "src/core/footprint.ts",
+    "src/mcp/server.ts",
+    "test/footprint.test.ts",
+    "test/mcp-delivery.test.ts",
+    "test/tool-result-budget.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "25cdeead",
+  "valid_from": "2026-09-25T19:35:04+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft",
+    "confidence": 0.65,
+    "evidence": [
+      "commit:25cdeead",
+      "synth:provider=claude-cli",
+      "branch:feat/context-result-budget",
+      "src/cli/index.ts",
+      "src/core/footprint.ts",
+      "src/mcp/server.ts",
+      "test/footprint.test.ts",
+      "test/mcp-delivery.test.ts",
+      "test/tool-result-budget.test.ts"
+    ],
+    "last_verified": "2026-09-25T16:39:12.267Z"
+  },
+  "date": "2026-09-25T19:35:04+03:00"
+}
