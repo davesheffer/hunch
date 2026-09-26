@@ -90,7 +90,7 @@ test("normal MCP context delivery includes Project DNA and exposes sealed profil
 
   const context = await client.callTool({
     name: "hunch_context",
-    arguments: { target: "mutation fixture", budget_tokens: 900 },
+    arguments: { target: "mutation fixture", budget_tokens: 900, include: ["project_dna"] },
   });
   const contextEnvelope = context.structuredContent as {
     text: string;
