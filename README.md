@@ -126,7 +126,7 @@ git commit -m "chore: connect shared Hunch memory"
 git push
 ```
 
-Teammates install Hunch, pull the code, and run `hunch init`. Normal Git access controls the shared repository. Credentials, local clone paths, and private overlays stay out of the committed pointer. Use `hunch shared --sync` to retry synchronization; add `--no-auto-commit` when captures should wait for explicit sync.
+Teammates install Hunch, pull the code, and run `hunch shared --trust` once per machine: it shows the store URL from `.hunch/team.json` and connects only after that explicit consent. Then run `hunch init`. Until a machine trusts the store, Hunch refuses to clone it or route memory there. Normal Git access controls the shared repository. Credentials, local clone paths, and private overlays stay out of the committed pointer. Use `hunch shared --sync` to retry synchronization; add `--no-auto-commit` when captures should wait for explicit sync.
 
 This shares a project's engineering memory. The state server below adds authenticated access across multiple scopes.
 

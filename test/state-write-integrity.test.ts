@@ -1,9 +1,10 @@
-import { cleanupDir } from "./fixtures.js";
+import { cleanupDir, writeLocalPointer } from "./fixtures.js";
 /**
  * Write integrity of nuryel.state/1 (#282, #283, #284): a record and its change event land
  * together, a retry repairs an event the ledger never got, and an exact retry of a write that
  * succeeded replays before any check that depends on state changed since.
  */
+import { execFileSync } from "node:child_process";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -192,7 +193,8 @@ test("#286: `serve compact` compacts the store's RESOLVED state home — the ove
   try {
     mkdirSync(join(root, ".hunch"), { recursive: true });
     mkdirSync(overlay, { recursive: true });
-    writeFileSync(join(root, ".hunch", "local.json"), JSON.stringify({ privateDir: overlay, mode: "shared", autoCommit: false }) + "\n");
+    execFileSync("git", ["init", "-q", root]);
+    writeLocalPointer(root, { privateDir: overlay, mode: "shared", autoCommit: false });
     const store = new HunchStore(hunchPaths(root));
     let scope;
     try {

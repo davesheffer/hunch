@@ -14,7 +14,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { ensureTeamOverlay, writeTeamConfig } from "../src/integrations/team.js";
+import { ensureTeamOverlay, readTeamConfig, trustTeamStore, writeTeamConfig } from "../src/integrations/team.js";
 
 const ENV_KEYS = [
   "HOME",
@@ -100,6 +100,8 @@ function makeProject(base: string, name: string, memoryRemote: string): string {
   writeTeamConfig(root, { shared_repo: memoryRemote, shared_ref: "refs/heads/main" });
   git(root, "add", "-A");
   git(root, "commit", "-qm", "fixture: advertise shared memory");
+  // Consent is granted so each case exercises the clone gate it names, not the trust gate.
+  trustTeamStore(root, readTeamConfig(root)!);
   return root;
 }
 

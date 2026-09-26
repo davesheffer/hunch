@@ -4,6 +4,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { tempStore, prov, tsxLoaderUrl } from "./helpers.js";
+import { writeLocalPointer } from "./fixtures.js";
 import { computeDrift } from "../src/core/drift.js";
 import { hunchPaths } from "../src/core/paths.js";
 import { HunchStore } from "../src/store/hunchStore.js";
@@ -47,7 +48,8 @@ test("drift dead-ref: private overlay decisions can cite portable private:<path>
   mkdirSync(join(overlay, "docs"), { recursive: true });
   writeFileSync(join(overlay, "docs", "runbooks.md"), "# Private runbooks\n");
   mkdirSync(join(root, ".hunch"), { recursive: true });
-  writeFileSync(join(root, ".hunch", "local.json"), JSON.stringify({ privateDir: join(overlay, ".hunch") }));
+  execFileSync("git", ["init", "-q", root]);
+  writeLocalPointer(root, { privateDir: join(overlay, ".hunch") });
   const store = new HunchStore(hunchPaths(root));
   t.after(() => store.close());
   store.putPrivate("decisions", DEC({ id: "dec_private_doc", related_files: ["private:docs/runbooks.md"] }) as never);

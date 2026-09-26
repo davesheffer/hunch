@@ -1,4 +1,4 @@
-import { cleanupDir } from "./fixtures.js";
+import { cleanupDir, writeLocalPointer } from "./fixtures.js";
 import { tempDir } from "./helpers.js";
 /**
  * Workspace ledger, Phase 2 (docs/workspace-ledger.md): the git hooks that keep a machine's
@@ -21,7 +21,7 @@ import { installPostCheckoutHook, installPostCommitHook, hookStatus } from "../s
 import { writeSlashCommands } from "../src/integrations/scaffold.js";
 import { branchRows, recordWorkspaceSnapshot, renderBranchTable, snapshotHasHome, workspaceSummaryLine, workspaceLedgerView } from "../src/integrations/workspaceLedger.js";
 import { WorkspaceSchema, workspaceId, type Workspace } from "../src/core/workspace.js";
-import { gitHeadUnsettled } from "../src/extractors/git.js";
+import { gitHeadUnsettled, gitCommonDir } from "../src/extractors/git.js";
 
 const PROJECT_ROOT = process.cwd();
 const TSX = join(PROJECT_ROOT, "node_modules/tsx/dist/cli.mjs");
@@ -58,7 +58,7 @@ function fixture(): { base: string; repo: string; overlayRoot: string; env: Reco
   mkdirSync(join(overlayRoot, ".hunch"), { recursive: true });
   writeFileSync(join(overlayRoot, ".gitignore"), ".hunch/hunch.sqlite*\n");
   g(overlayRoot, "add", "-A"); g(overlayRoot, "commit", "-q", "-m", "overlay");
-  writeFileSync(join(repo, ".hunch", "local.json"), JSON.stringify({ privateDir: join(overlayRoot, ".hunch"), autoCommit: true, mode: "private" }) + "\n");
+  writeLocalPointer(repo, { privateDir: join(overlayRoot, ".hunch"), autoCommit: true, mode: "private" });
   const cfgHome = join(base, "xdg");
   mkdirSync(join(cfgHome, "hunch"), { recursive: true });
   writeFileSync(join(cfgHome, "hunch", "machine.json"), JSON.stringify(MACHINE));
@@ -192,6 +192,7 @@ test("recordWorkspaceSnapshot: off / no-home / written / unchanged / dry-run, on
 
       writeFileSync(join(repo, ".hunch", "config.json"), "{}");
       rmSync(join(repo, ".hunch", "local.json"));
+      rmSync(join(gitCommonDir(repo), "hunch", "local.json"));
       store = open();
       try {
         assert.equal(store.hasPrivate, false);
@@ -221,6 +222,7 @@ test("recordWorkspaceSnapshot: off / no-home / written / unchanged / dry-run, on
 function publicFixture(): ReturnType<typeof fixture> {
   const f = fixture();
   rmSync(join(f.repo, ".hunch", "local.json"));
+  rmSync(join(gitCommonDir(f.repo), "hunch", "local.json"));
   writeFileSync(join(f.repo, ".hunch", "config.json"), JSON.stringify({ workspaces: { publish_public: true } }));
   return f;
 }

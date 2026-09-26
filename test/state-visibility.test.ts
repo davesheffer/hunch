@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import { captureState, captureBatchState } from '../src/store/stateCapture.js';
 import { ScopeSchema, entityId } from '../src/core/stateContract.js';
 import { tempStore, mkConstraint } from './helpers.js';
+import { writeLocalPointer } from './fixtures.js';
 import { partitionOf, readState, recordsState, writeState, subscribeState } from '../src/store/stateBinding.js';
 import { stateHash } from '../src/core/stateContract.js';
 
@@ -128,7 +129,7 @@ test('protected writes refuse shared overlays where other older checkout readers
   const f = fixture(), overlay = tempStore(); let overlayStore: HunchStore | undefined;
   try {
     const privateDir = join(overlay.root, '.hunch'); execFileSync('git', ['init', '-q', overlay.root]);
-    writeFileSync(join(f.root, '.hunch/local.json'), JSON.stringify({ privateDir, autoCommit: false }));
+    execFileSync('git', ['init', '-q', f.root]); writeLocalPointer(f.root, { privateDir, autoCommit: false });
     overlayStore = new HunchStore(hunchPaths(f.root));
     const user = { kind: 'user', id: 'owner' }, principal = { ...f.owner, grants: [user] };
     assert.throws(() => writeState(overlayStore!, { schema: 'nuryel.state.write/1', principal, scope: user, facet: 'derived', record: { ...f.base, scope: user }, idempotency_key: 'overlay-must-refuse' }), /dedicated partition home/);

@@ -1,0 +1,57 @@
+{
+  "id": "htask_5ea89ba5e49330e5d6f5c5cf",
+  "title": "Assistant task",
+  "state": "completed",
+  "started_at": "2026-09-25T19:30:43.481Z",
+  "finished_at": "2026-09-25T20:15:12.598Z",
+  "coverage": "no-delivery-observed",
+  "lessons": [],
+  "applied": [],
+  "saved": [],
+  "checks": [
+    {
+      "label": "Verification command",
+      "state": "cancelled",
+      "exit_code": null
+    },
+    {
+      "label": "Verification command",
+      "state": "failed",
+      "exit_code": 1
+    },
+    {
+      "label": "Verification command",
+      "state": "cancelled",
+      "exit_code": null
+    },
+    {
+      "label": "Verification command",
+      "state": "failed",
+      "exit_code": 1
+    },
+    {
+      "label": "Verification command",
+      "state": "failed",
+      "exit_code": 1
+    }
+  ],
+  "conformance": [],
+  "refusals": 0,
+  "files": [],
+  "supersedes": [],
+  "source_snapshot": "sha256:dbda8dd7ca62cd33f1bf96b01bba3ffeadc909eb9c4ae366efcd0c8bfdf941dd",
+  "report_hash": "sha256:4ec1f6c890738431fde98c22b267afdab62983be024d66e2c36f319791c4ed2d",
+  "provenance": {
+    "source": "task_report",
+    "confidence": 1,
+    "evidence": [
+      "hunch report htask_5ea89ba5e49330e5d6f5c5cf",
+      "hunch report htask_445ed37178fbb44bb38c2822",
+      "hunch report htask_2bd70831eaf2e808373bb342",
+      "hunch report htask_69625ad12c74bfe7d726ab08",
+      "hunch report htask_8e2375a1535d5590669000ff",
+      "hunch report htask_2bb9e60d07a2f3ab8dacd0a6"
+    ],
+    "last_verified": "2026-09-25T20:15:12.598Z"
+  }
+}

@@ -686,6 +686,7 @@ test("a truly empty shared remote boots on the first unified capture and auto-jo
     };
     const memoryBeforeJoin = bareRefs(memoryRemote);
     const codeBeforeJoin = bareRefs(code.codeRemote);
+    expectCli(second, ["shared", "--trust"]);
     const queried = expectCli(second, ["query", "EMPTY_REMOTE_FIRST_CAPTURE_SPINE"]);
     assert.match(queried, new RegExp(rule));
     const secondOverlay = join(secondRoot, ".hunch-private");

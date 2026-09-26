@@ -36,7 +36,7 @@ import { workspacesConfig } from "../core/config.js";
 import { revParse, asOfDate, revExists, lastChangeDate, rangeFiles, rangeGateDiff, commitFiles, commitGateDiff, stagedFiles, stagedGateDiff, workingFiles, workingGateDiff, pullHunchStatus, sameRemoteUrl, currentBranch, worktreePaths, pathKnownToHistory, type HunchPullStatus } from "../extractors/git.js";
 import { flushCapture, flushMemoryHome, pinSharedRemote } from "../integrations/sync.js";
 import { withWriteLock } from "../serve/writelock.js";
-import { advertisedTeamRemoteContract, ensureTeamOverlay, overlayMatchesTeamRemote, readTeamConfig, teamRemoteContract, teamSharedRef } from "../integrations/team.js";
+import { advertisedTeamRemoteContract, ensureTeamOverlay, isTeamStoreTrusted, overlayMatchesTeamRemote, teamWiringConsented, untrustedTeamStoreMessage, readTeamConfig, teamRemoteContract, teamSharedRef } from "../integrations/team.js";
 import { formatSearchHit, formatStructure } from "../core/format.js";
 import { isStateKind, stateSupplements } from "../core/stateDelivery.js";
 import { taskSelectionSupplements } from "../core/taskDelivery.js";
@@ -1144,10 +1144,13 @@ function prepareRoot(root: string, explicitOverlay: boolean, requireIndex: boole
   try {
     const overlayWarning = store.overlayResolutionWarning(explicitOverlay && existsSync(teamFile));
     if (overlayWarning) console.error(`[hunch-mcp] ⚠ ${overlayWarning}`);
-    if (teamAdvertised && (store.mode !== "shared"
+    if (startupTeamConfig && (store.mode !== "shared"
       || !store.privateDir
       || !existsSync(store.privateDir)
+      || !teamWiringConsented(root, startupTeamConfig, store.privateDir)
       || !overlayMatchesTeamRemote(root, join(store.privateDir, "..")))) {
+      const consented = !!store.privateDir && teamWiringConsented(root, startupTeamConfig, store.privateDir);
+      if (!consented && !isTeamStoreTrusted(root, startupTeamConfig)) throw new Error(untrustedTeamStoreMessage(startupTeamConfig));
       throw new Error("the advertised team memory store is unavailable or tracks a different remote; refusing to start MCP on another graph");
     }
     const startupTeamRoute = teamAdvertised && store.privateDir

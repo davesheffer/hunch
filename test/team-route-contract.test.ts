@@ -1,4 +1,4 @@
-import { cleanupDir } from "./fixtures.js";
+import { cleanupDir, trustTeamStoreAs } from "./fixtures.js";
 import assert from "node:assert/strict";
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import {
@@ -179,7 +179,10 @@ function makeCodeFixture(base: string, name: string, teamRemote?: string): Fixtu
   git(base, "clone", "-q", "--bare", seed, codeRemote);
   git(base, "clone", "-q", codeRemote, root);
   configureRepo(root, name);
-  return { root, home, env: actorEnv(home), codeRemote };
+  const env = actorEnv(home);
+  // Consent is granted so each case exercises the route gate it names, not the trust gate.
+  if (teamRemote) trustTeamStoreAs(env, root);
+  return { root, home, env, codeRemote };
 }
 
 function makeSharedFixture(base: string, name: string): SharedFixture {
@@ -959,6 +962,8 @@ test("strict PreToolUse is silent when fresh advertised team memory is unavailab
     git(code.root, "add", ".hunch/team.json", ".hunch/config.json");
     git(code.root, "commit", "-qm", "fixture: advertise unavailable team memory");
     git(code.root, "push", "-q", "origin", "main");
+    // Consent to the store, so only its unavailability can refuse the route.
+    trustTeamStoreAs(code.env, code.root);
     const codeHeadBefore = git(code.root, "rev-parse", "HEAD");
     const codeRemoteBefore = bareRefs(code.codeRemote);
 
@@ -967,6 +972,8 @@ test("strict PreToolUse is silent when fresh advertised team memory is unavailab
     assert.equal(result.status, 0, output(result));
     assert.doesNotMatch(output(result), /"deny"|"allow"|permissionDecision|con_|dec_/, "hook route failure must emit neither deny, allow, nor public grounding");
     assert.match(output(result), /Hunch grounding unavailable for this edit/, "fail-open says so instead of passing silently");
+    assert.match(output(result), /advertised team memory store is unavailable/, "the unavailable-store gate is what refused");
+    assert.doesNotMatch(output(result), /have not trusted/);
     assert.equal(git(code.root, "rev-parse", "HEAD"), codeHeadBefore);
     assert.equal(bareRefs(code.codeRemote), codeRemoteBefore);
   } finally {
@@ -997,6 +1004,8 @@ test("strict PreToolUse is silent when the local overlay route mismatches commit
     assert.equal(result.status, 0, output(result));
     assert.doesNotMatch(output(result), /"deny"|"allow"|permissionDecision|con_|dec_/, "hook route mismatch must emit neither deny, allow, nor stale grounding");
     assert.match(output(result), /Hunch grounding unavailable for this edit/, "fail-open says so instead of passing silently");
+    assert.match(output(result), /tracks a different remote/, "the remote-identity gate is what refused");
+    assert.doesNotMatch(output(result), /have not trusted/);
     assert.equal(git(fixture.root, "rev-parse", "HEAD"), codeHeadBefore);
     assert.equal(bareRefs(fixture.codeRemote), codeRemoteBefore);
     assert.equal(bareRefs(fixture.memoryRemote), memoryABefore);
@@ -1025,6 +1034,8 @@ test("strict PreToolUse is silent when a configured team overlay is stale and it
     assert.equal(result.status, 0, output(result));
     assert.doesNotMatch(output(result), /"deny"|permissionDecision/, "strict hook fail-opens instead of denying from stale local team rules");
     assert.match(output(result), /Hunch grounding unavailable for this edit/, "fail-open says so instead of passing silently");
+    assert.match(output(result), /team memory is (?!updated|current)|advertised team memory store is unavailable/, "an availability gate, not consent, is what refused");
+    assert.doesNotMatch(output(result), /have not trusted/);
     assert.equal(git(fixture.overlay, "rev-parse", "HEAD"), overlayHeadBefore);
     assert.equal(git(fixture.root, "rev-parse", "HEAD"), codeHeadBefore);
     assert.equal(bareRefs(fixture.codeRemote), codeRemoteBefore);

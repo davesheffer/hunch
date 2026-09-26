@@ -1,4 +1,4 @@
-import { cleanupDir } from "./fixtures.js";
+import { cleanupDir, writeLocalPointer } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, symlinkSync } from "node:fs";
@@ -82,11 +82,11 @@ test("capture-comments never copies a same-id private decision into the public h
     const bootstrap = new HunchStore(hunchPaths(root));
     bootstrap.json.ensureDirs();
     bootstrap.close();
-    writeFileSync(join(root, ".hunch/local.json"), `${JSON.stringify({
+    writeLocalPointer(root, {
       privateDir: privateRoot,
       autoCommit: false,
       mode: "private",
-    })}\n`);
+    });
     const privateDecision: Decision = {
       id,
       title: text,

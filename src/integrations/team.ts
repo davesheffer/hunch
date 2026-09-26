@@ -6,12 +6,13 @@
  * Written ONLY by `hunch shared --repo <url>` — `hunch private` never publishes its URL.
  */
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync } from "node:fs";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { writeFileAtomic } from "../core/io.js";
+import { machineFile } from "../core/machine.js";
 import { hunchTreeAttributesAreSafe, safeOverlayGitTreeListing, safeOverlayTree } from "../core/overlaySafety.js";
 import { hunchPaths, hunchPathsForDir } from "../core/paths.js";
-import { canonicalRemoteUrl, gitNullDevice, mainWorktreeRoot, sameRemoteUrl, type HunchRemoteContract } from "../extractors/git.js";
+import { canonicalRemoteUrl, checkoutCommonDir, gitNullDevice, mainWorktreeRoot, sameFilesystemEntry, sameRemoteUrl, type HunchRemoteContract } from "../extractors/git.js";
 import { HunchStore } from "../store/hunchStore.js";
 import { JsonStore } from "../store/jsonStore.js";
 import { ensureSharedOverlayPointer } from "./worktree.js";
@@ -52,8 +53,8 @@ export function teamSharedRef(team: TeamConfig): string {
 }
 
 /** SECURITY GATE for team.json's URL. team.json is COMMITTED — in a freshly cloned
- *  (possibly untrusted) repo it is attacker-controlled, and ensureTeamOverlay auto-clones
- *  it on MCP server start. Without this gate a value like `--upload-pack=…` (argument
+ *  (possibly untrusted) repo it is attacker-controlled, and every consumer parses and
+ *  compares it before the user's trust is checked. Without this gate a value like `--upload-pack=…` (argument
  *  smuggling) or `ext::sh -c …` (git's ext transport) is remote code execution from
  *  merely opening a repo. Allow only credential-free https://, ssh://, git://,
  *  scp-style git@host:path, and never anything that could parse as a Git flag. */
@@ -64,10 +65,14 @@ export function safeGitUrl(url: string): string | null {
   // safe to publish. Reject them for every accepted form rather than trying to keep
   // an inevitably incomplete list of token/password parameter names.
   if (/[?#]/.test(u)) return null;
-  // A plain absolute path (POSIX / Windows drive / UNC) — a network-mount team store or a
-  // local test remote. Safe: a local clone never executes hooks or remote helpers. The
-  // file:// URL FORM stays rejected (no legitimate team.json uses it; keeps the gate tight).
-  if (u.startsWith("/") || /^[A-Za-z]:[\\/]/.test(u) || u.startsWith("\\\\")) return u;
+  // A network path (`\\host\share`, `//host/share`, `\\?\UNC\…`, and any mix of the
+  // two separators) is not local: on Windows, merely resolving or comparing it contacts
+  // and authenticates to the named host. Reject every form before any consumer touches it.
+  if (/^[\\/]{2}/.test(u)) return null;
+  // A plain absolute path (POSIX / Windows drive) — a mounted team store or a local test
+  // remote. Safe: a local clone never executes hooks or remote helpers. The file:// URL
+  // FORM stays rejected (no legitimate team.json uses it; keeps the gate tight).
+  if (u.startsWith("/") || /^[A-Za-z]:[\\/]/.test(u)) return u;
   // SCP syntax carries an SSH account name, not an embedded authentication secret.
   // Its deliberately narrow account/host grammar cannot encode a password delimiter.
   if (/^[A-Za-z0-9_.-]+@[A-Za-z0-9_.:-]+:[^\s]+$/.test(u) && !u.includes("::")) return u; // scp-like, excludes ext::
@@ -454,6 +459,14 @@ function checkoutIsolatedEnv(): NodeJS.ProcessEnv {
   };
 }
 
+/** Bound for each post-clone validation spawn: 2s by default, widened (never
+ *  narrowed) by HUNCH_TEAM_CLONE_TIMEOUT_MS so slow disks or loaded CI do not turn a
+ *  valid clone into a validation failure. */
+function teamValidationTimeout(): number {
+  const override = teamCloneTimeoutOverride();
+  return override === undefined ? 2_000 : Math.max(2_000, override);
+}
+
 function exactCommit(
   root: string,
   revision: string,
@@ -463,7 +476,7 @@ function exactCommit(
     encoding: "utf8",
     stdio: ["ignore", "pipe", "ignore"],
     env,
-    timeout: 2_000,
+    timeout: teamValidationTimeout(),
   });
   const oid = result.status === 0 ? result.stdout.trim() : "";
   return {
@@ -477,7 +490,7 @@ function exactTreeListing(root: string, oid: string, env: NodeJS.ProcessEnv): st
     encoding: "utf8",
     stdio: ["ignore", "pipe", "ignore"],
     env,
-    timeout: 2_000,
+    timeout: teamValidationTimeout(),
     maxBuffer: 64 * 1024 * 1024,
   });
   return result.status === 0 && safeOverlayGitTreeListing(result.stdout) ? result.stdout : null;
@@ -488,7 +501,7 @@ function repositoryHasNoRefs(root: string, env: NodeJS.ProcessEnv): boolean {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "ignore"],
     env,
-    timeout: 2_000,
+    timeout: teamValidationTimeout(),
   });
   return result.status === 0 && result.stdout.trim() === "";
 }
@@ -499,7 +512,7 @@ function treeAttributesAreSafe(root: string, listing: string, env: NodeJS.Proces
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
       env,
-      timeout: 2_000,
+      timeout: teamValidationTimeout(),
       maxBuffer: 4 * 1024 * 1024,
     });
     return blob.status === 0 ? blob.stdout : null;
@@ -606,7 +619,7 @@ function materializeValidatedClone(
   ], {
     stdio: "ignore",
     env,
-    timeout: 5_000,
+    timeout: Math.max(5_000, teamCloneTimeoutOverride() ?? 0),
   });
   if (reset.status !== 0) {
     reportTeamCloneFailure("materialize-reset", reset);
@@ -634,6 +647,16 @@ export type ValidatedTeamClone = {
   empty: boolean;
 };
 
+/** HUNCH_TEAM_CLONE_TIMEOUT_MS: a per-process override for every team-store clone
+ *  and materialization timeout (default: the caller's own bound). For slow disks,
+ *  networks, or heavily parallel CI; ignored unless a positive integer. */
+export function teamCloneTimeoutOverride(): number | undefined {
+  const raw = process.env.HUNCH_TEAM_CLONE_TIMEOUT_MS?.trim();
+  if (!raw || !/^\d+$/.test(raw)) return undefined;
+  const value = Number(raw);
+  return value > 0 ? Math.min(600_000, value) : undefined;
+}
+
 /** Clone a shared memory repository without checking out attacker-controlled
  * paths, validate its exact route/OID/tree/attributes, and only then publish the
  * fully materialized clone at `destination`. Failure removes both quarantine and
@@ -651,9 +674,10 @@ export function cloneValidatedTeamOverlay(
     return null;
   }
   const requestedTimeout = opts.timeoutMs ?? 5_000;
-  const timeoutMs = Number.isFinite(requestedTimeout)
+  const defaultTimeoutMs = Number.isFinite(requestedTimeout)
     ? Math.min(30_000, Math.max(1, Math.trunc(requestedTimeout)))
     : 5_000;
+  const timeoutMs = Math.max(defaultTimeoutMs, teamCloneTimeoutOverride() ?? 0);
   const parent = dirname(destination);
   const prefix = basename(destination);
   let stagedDest = "";
@@ -729,12 +753,117 @@ export function cloneValidatedTeamOverlay(
   }
 }
 
+/** Local consent for team auto-wiring. team.json is COMMITTED, so its URL is chosen
+ *  by whoever wrote the repository, not by this user, and wiring it means cloning that
+ *  remote, reading its records as memory, and pushing captures to it. The consent lives
+ *  OUTSIDE every repository (beside machine.json), keyed by this checkout's main
+ *  worktree and the exact advertised URL: a changed URL needs fresh consent, and no
+ *  repository content can grant it. */
+const TEAM_TRUST_MAX_BYTES = 256 * 1024;
+
+type TeamTrustFile = { version: 1; stores: Record<string, { shared_repo: string; trusted_at: string }> };
+
+export function teamTrustFile(): string {
+  return join(dirname(machineFile()), "team-trust.json");
+}
+
+function teamTrustKey(root: string): string {
+  // Anchored through checkoutCommonDir so a `.git` file cannot borrow another checkout's key.
+  const common = checkoutCommonDir(root);
+  return realpathSync(common && basename(common) === ".git" ? dirname(common) : root);
+}
+
+/** The parsed consent file. Absent → empty; unreadable or malformed → null, which
+ *  callers treat as "nothing trusted" and writers refuse to clobber. */
+function readTeamTrust(file: string): TeamTrustFile | null {
+  let raw: string;
+  try {
+    const stat = lstatSync(file);
+    if (!stat.isFile() || stat.size > TEAM_TRUST_MAX_BYTES) return null;
+    raw = readFileSync(file, "utf8");
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "ENOENT" ? { version: 1, stores: {} } : null;
+  }
+  try {
+    const value = JSON.parse(raw) as Partial<TeamTrustFile>;
+    if (value.version !== 1 || !value.stores || typeof value.stores !== "object" || Array.isArray(value.stores)) return null;
+    return { version: 1, stores: value.stores };
+  } catch {
+    return null;
+  }
+}
+
+export function isTeamStoreTrusted(root: string, team: TeamConfig): boolean {
+  try {
+    const entry = readTeamTrust(teamTrustFile())?.stores[teamTrustKey(root)];
+    return !!entry && typeof entry.shared_repo === "string" && entry.shared_repo === team.shared_repo;
+  } catch {
+    return false;
+  }
+}
+
+/** Record this user's explicit consent to wire `root` to `team.shared_repo`. Returns an
+ *  undo that removes only THIS checkout's key (restoring its prior entry if one existed),
+ *  never the whole file byte-for-byte: another checkout's concurrent trust write must
+ *  survive the undo. The file is deleted only if it ends up empty and did not exist
+ *  before, so a caller can make consent conditional on a later step. */
+export function trustTeamStore(root: string, team: TeamConfig): () => void {
+  const sharedRepo = safeGitUrl(team.shared_repo);
+  if (!sharedRepo) throw new Error("refusing to trust an unsafe team repository URL");
+  const file = teamTrustFile();
+  const current = readTeamTrust(file);
+  if (!current) throw new Error(`refusing to overwrite unreadable team trust file: ${file}`);
+  // readTeamTrust proved the file is absent or a plain, bounded, parseable file.
+  const fileExistedBefore = existsSync(file);
+  const key = teamTrustKey(root);
+  const priorEntry = current.stores[key];
+  current.stores[key] = { shared_repo: sharedRepo, trusted_at: new Date().toISOString() };
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileAtomic(file, JSON.stringify(current, null, 2) + "\n");
+  return () => {
+    const latest = readTeamTrust(file);
+    if (!latest) return; // file went missing or unreadable out from under us: nothing safe to undo
+    if (priorEntry) latest.stores[key] = priorEntry;
+    else delete latest.stores[key];
+    if (Object.keys(latest.stores).length === 0 && !fileExistedBefore) {
+      rmSync(file, { force: true });
+      return;
+    }
+    writeFileAtomic(file, JSON.stringify(latest, null, 2) + "\n");
+  };
+}
+
+/** Whether this user consented to `root` using `privateDir` as the advertised team
+ *  store. The per-worktree `.hunch/local.json` alone proves nothing: a repository can
+ *  ship one that points at another checkout's store. Consent is an explicit trust
+ *  entry, or the git-common-dir pointer that only this machine's own setup writes
+ *  (a git clone never delivers the source's `.git`; an archive that ships its own `.git`
+ *  already ships hooks that run on the next git command), naming the same store. */
+export function teamWiringConsented(root: string, team: TeamConfig, privateDir: string): boolean {
+  if (isTeamStoreTrusted(root, team)) return true;
+  try {
+    const common = checkoutCommonDir(root);
+    if (!common) return false;
+    const pointer = JSON.parse(readFileSync(join(common, "hunch", "local.json"), "utf8")) as { privateDir?: unknown };
+    return typeof pointer.privateDir === "string" && isAbsolute(pointer.privateDir)
+      && sameFilesystemEntry(pointer.privateDir, privateDir);
+  } catch {
+    return false;
+  }
+}
+
+export function untrustedTeamStoreMessage(team: TeamConfig): string {
+  return `.hunch/team.json advertises a shared memory store (${team.shared_repo}) that you have not trusted on this machine. ` +
+    "Connecting would clone it, serve its records as memory, and push your captures to it. " +
+    "If this is your team's store, run `hunch shared --trust`; otherwise leave it untrusted.";
+}
+
 /** Auto-wire this checkout to the team's shared store advertised in `.hunch/team.json`:
  *  clone it to the worktree-stable anchor, and register the gitignored local pointer +
  *  the git-common-dir pointer (mode "shared", auto-commit on) so every consumer — CLI,
  *  MCP server, hooks, all worktrees — resolves the same single source of truth.
- *  No-op (null) when an overlay is already configured, there's no team.json, or the
- *  clone fails (best-effort: never throws, never blocks startup). Returns the overlay
+ *  No-op (null) when an overlay is already configured, there's no team.json, this user
+ *  has not trusted its URL (see trustTeamStore), or the clone fails (best-effort: never throws, never blocks startup). Returns the overlay
  *  hunch dir when wired. */
 export function ensureTeamOverlay(root: string): string | null {
   try {
@@ -750,12 +879,16 @@ export function ensureTeamOverlay(root: string): string | null {
       // an existing pointer as a total no-op would leave those teams permanently
       // vulnerable until they deleted and recloned their memory.
       const configuredRoot = join(configured, "..");
+      if (!teamWiringConsented(root, team, configured)) return null;
       if (!overlayMatchesTeamRemote(root, configuredRoot)) return null;
       installMergeDriver(configuredRoot, resolveInvocation().shell);
       ensureGitignore(configuredRoot);
       return null; // already wired and alive
     }
 
+    // Everything below creates NEW wiring (a clone, or adopting a pre-existing
+    // directory), so it needs this user's explicit consent to the advertised URL.
+    if (!isTeamStoreTrusted(root, team)) return null;
     const anchor = mainWorktreeRoot(root);
     const dest = join(anchor, ".hunch-private");
     if (!existsSync(dest)) {

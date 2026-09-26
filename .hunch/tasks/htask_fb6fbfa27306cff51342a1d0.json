@@ -1,0 +1,28 @@
+{
+  "id": "htask_fb6fbfa27306cff51342a1d0",
+  "title": "Assistant task",
+  "state": "completed",
+  "started_at": "2026-09-25T18:25:30.732Z",
+  "finished_at": "2026-09-25T18:25:49.301Z",
+  "coverage": "no-relevant-memory",
+  "lessons": [],
+  "applied": [],
+  "saved": [],
+  "checks": [],
+  "conformance": [],
+  "refusals": 0,
+  "files": [
+    "test/drift.test.ts"
+  ],
+  "supersedes": [],
+  "source_snapshot": null,
+  "report_hash": "sha256:86a5cf5c0fa4d0f9f0a7a61c88ef3a7d6a9911fbaea1f381ecf56139b9fac12e",
+  "provenance": {
+    "source": "task_report",
+    "confidence": 1,
+    "evidence": [
+      "hunch report htask_fb6fbfa27306cff51342a1d0"
+    ],
+    "last_verified": "2026-09-25T18:25:49.301Z"
+  }
+}

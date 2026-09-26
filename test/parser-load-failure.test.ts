@@ -27,6 +27,7 @@ import { bootstrapStructuralPolicies } from "../src/constitution/structural.js";
 import { buildG2CandidateReview } from "../src/constitution/g2Candidates.js";
 import type { Decision } from "../src/core/types.js";
 import { cleanupDir } from "./helpers.js";
+import { writeLocalPointer } from "./fixtures.js";
 
 const projectRoot = process.cwd();
 const tsx = join(projectRoot, "node_modules/tsx/dist/cli.mjs");
@@ -341,8 +342,7 @@ test("G2 candidate grounding rethrows a parser load failure instead of under-att
     const privateRoot = join(fixture.root, "private-parser-load/.hunch");
     mkdirSync(privateRoot, { recursive: true });
     execFileSync("git", ["init", "-q", join(fixture.root, "private-parser-load")], { stdio: "ignore" });
-    writeFileSync(join(fixture.root, ".hunch/local.json"),
-      JSON.stringify({ privateDir: privateRoot, autoCommit: false, mode: "private" }));
+    writeLocalPointer(fixture.root, { privateDir: privateRoot, autoCommit: false, mode: "private" });
     const store = new HunchStore(hunchPaths(fixture.root));
     try {
       store.putPrivate("decisions", fixingDecision("dec_parser_load_g2", fixture.commit, now));

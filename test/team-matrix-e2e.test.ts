@@ -1,4 +1,4 @@
-import { cleanupDir } from "./fixtures.js";
+import { cleanupDir, trustTeamStoreAs } from "./fixtures.js";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import {
@@ -328,6 +328,8 @@ test("team Matrix: three isolated clones share live memory, catch a bad branch, 
     const developer = cloneActor(sandbox, codeRemote, "Developer");
     assert.equal(existsSync(join(developer.root, ".hunch", "local.json")), false,
       "the teammate begins as a genuinely fresh clone");
+    // Consent only; the first CLI write below still performs the wiring itself.
+    trustTeamStoreAs(developer.env, developer.root);
     const firstWrite = expectCli(developer, [
       "record-constraint",
       FIRST_COMMAND_WRITE_RULE,
@@ -589,6 +591,8 @@ test("team Matrix: three isolated clones share live memory, catch a bad branch, 
       "the reviewer begins as a genuinely fresh clone");
     // The strict CLI check is the reviewer's FIRST Hunch process. No MCP start or
     // init command may pre-wire the team overlay and hide a CLI-first false-green.
+    // Consent is recorded directly, so it grants trust without wiring anything.
+    trustTeamStoreAs(reviewer.env, reviewer.root);
     const reviewRed = expectCli(reviewer, ["check", "--base", "origin/main", "--strict"], 1);
     assert.match(reviewRed, new RegExp(constraintId));
     const reviewerPointer = JSON.parse(readFileSync(join(reviewer.root, ".hunch", "local.json"), "utf8")) as {

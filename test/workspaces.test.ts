@@ -1,4 +1,4 @@
-import { cleanupDir } from "./fixtures.js";
+import { cleanupDir, writeLocalPointer } from "./fixtures.js";
 import { tempDir } from "./helpers.js";
 /**
  * Workspace ledger, Phase 1 (docs/workspace-ledger.md): one machine's worktrees and
@@ -533,7 +533,7 @@ test("CLI: snapshot writes nothing without an overlay (dry-run too), writes into
     mkdirSync(join(overlayRoot, ".hunch"), { recursive: true });
     writeFileSync(join(overlayRoot, ".gitignore"), ".hunch/hunch.sqlite*\n");
     g(overlayRoot, "add", "-A"); g(overlayRoot, "commit", "-q", "-m", "overlay");
-    writeFileSync(join(repo, ".hunch", "local.json"), JSON.stringify({ privateDir: join(overlayRoot, ".hunch"), autoCommit: true, mode: "private" }) + "\n");
+    writeLocalPointer(repo, { privateDir: join(overlayRoot, ".hunch"), autoCommit: true, mode: "private" });
 
     const first = cli(repo, env, "workspaces", "snapshot");
     assert.equal(first.status, 0, first.stderr);
@@ -618,7 +618,7 @@ test("CLI: forget with both homes forgets the overlay record and reports the ref
     try { store.json.ensureDirs(); store.json.put("workspaces", publicRecord); } finally { store.close(); }
     g(repo, "add", "-A"); g(repo, "commit", "-q", "-m", "hunch: public workspace record");
 
-    writeFileSync(join(repo, ".hunch", "local.json"), JSON.stringify({ privateDir: join(overlayRoot, ".hunch"), autoCommit: true, mode: "private" }) + "\n");
+    writeLocalPointer(repo, { privateDir: join(overlayRoot, ".hunch"), autoCommit: true, mode: "private" });
     const first = cli(repo, env, "workspaces", "snapshot");
     assert.equal(first.status, 0, first.stderr);
     const overlayFile = join(overlayRoot, ".hunch", "workspaces", `${workspaceId(MACHINE.id)}.json`);

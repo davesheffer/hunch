@@ -1,0 +1,45 @@
+{
+  "id": "htask_2b9a41c497964c826f93043a",
+  "title": "Assistant task",
+  "state": "completed",
+  "started_at": "2026-09-25T15:35:13.418Z",
+  "finished_at": "2026-09-25T15:46:26.147Z",
+  "coverage": "no-delivery-observed",
+  "lessons": [],
+  "applied": [],
+  "saved": [],
+  "checks": [
+    {
+      "label": "Verification command",
+      "state": "cancelled",
+      "exit_code": null
+    },
+    {
+      "label": "Verification command",
+      "state": "failed",
+      "exit_code": 1
+    }
+  ],
+  "conformance": [],
+  "refusals": 0,
+  "files": [
+    "README.md",
+    "docs/cookbook.md",
+    "src/cli/index.ts",
+    "src/integrations/team.ts",
+    "src/mcp/server.ts",
+    "test/team-trust.test.ts",
+    "test/team-url-safety.test.ts"
+  ],
+  "supersedes": [],
+  "source_snapshot": "sha256:052ee21119eb956d7ac7a4f14b9a8708c0b1255041a54a859fe6202e01dbfbe9",
+  "report_hash": "sha256:f9b79dd1bd2c84651163736df7c40a34d2b122c4bad5ba86150f057011314775",
+  "provenance": {
+    "source": "task_report",
+    "confidence": 1,
+    "evidence": [
+      "hunch report htask_2b9a41c497964c826f93043a"
+    ],
+    "last_verified": "2026-09-25T15:46:26.147Z"
+  }
+}

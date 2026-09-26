@@ -180,6 +180,7 @@ test("shared CLI mutators pump their actual home and rejection leaves the next c
     assert.match(backfillOutput, /decision\(s\) seeded/);
     const backfilled = remoteTree(memoryRemote).filter((path) => path.startsWith(".hunch/decisions/"));
     assert.ok(backfilled.length > 0, "backfill pumps shared captures to the team remote");
+    expectCli(teammate, "shared", "--trust");
     assert.match(expectCli(teammate, "query", "tiny app"), /tiny app/i, "a teammate sees backfilled history on the next command");
 
     const failureOutput = expectCli(architect, "record-bug", "--test", "MATRIX_FAILURE_PUMP", "--message", "shared failure memory must reach every teammate");

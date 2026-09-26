@@ -51,13 +51,13 @@ import {
   normalizeProviderName,
   type SynthPreference,
 } from "../synthesis/provider.js";
-import { isGitRepo, isGitRepoRoot, sameGitPublication, sameRemoteUrl, canonicalRemoteUrl, repositoryUsesRemote, headSha, isolatedHeadSha, logSince, lastChangeDate, firstCommitForFile, stagedFiles, workingFiles, commitFiles, asOfDate, stagedGateDiff, workingGateDiff, commitGateDiff, rangeFiles, rangeGateDiff, rangeSubjects, revExists, revParse, commitAndPushHunch, pullHunchStatus, syncExistingHunch, gitUntrackCached, gitCommonDir, hooksDir, isLinkedWorktree, mainWorktreeRoot, gitMemoryLog, memoryMoveDiff, revertMemoryMove, pushCurrentBranch, commitChanges, commitRepairStatus, mergeRangeChanges, commitsExist, type HunchPullStatus } from "../extractors/git.js";
+import { isGitRepo, isGitRepoRoot, sameGitPublication, sameRemoteUrl, canonicalRemoteUrl, repositoryUsesRemote, headSha, isolatedHeadSha, logSince, lastChangeDate, firstCommitForFile, stagedFiles, workingFiles, commitFiles, asOfDate, stagedGateDiff, workingGateDiff, commitGateDiff, rangeFiles, rangeGateDiff, rangeSubjects, revExists, revParse, commitAndPushHunch, pullHunchStatus, syncExistingHunch, gitUntrackCached, gitCommonDir, checkoutCommonDir, separateGitDirCandidate, separateGitDirLink, hooksDir, isLinkedWorktree, mainWorktreeRoot, gitMemoryLog, memoryMoveDiff, revertMemoryMove, pushCurrentBranch, commitChanges, commitRepairStatus, mergeRangeChanges, commitsExist, type HunchPullStatus } from "../extractors/git.js";
 import { parseMemoryLog, type MemoryMove } from "../core/memorylog.js";
 import { renamesOf, planRepair, repairDecision, repairConstraint, type RepairPlan } from "../core/repair.js";
 import { orphanedCommitDecisions, planCommitRepair, repairDecisionCommit, pickRewrite, commitRepairReviewHash, mergeRewrites, firstFor, deadRewrites, resolvedRewriteIds, withoutDropped, addDropped, withheldForUnresolvableTo, type CommitRewrite, type DroppedRewrite } from "../core/commitrepair.js";
 import { readPendingRepairs, writePendingRepairs, readDroppedRepairs, writeDroppedRepairs, readActivePendingRepairs, withheldRewrites } from "../core/repairqueue.js";
 import { planPolicyRepair, repairPolicySpec, type PolicyBindingRewrite } from "../constitution/repairPolicies.js";
-import { writeTeamConfig, ensureTeamOverlay, readTeamConfig, safeGitUrl, safeTeamRef, overlayMatchesTeamRemote, advertisedTeamRemoteContract, boundedTeamGitEnv, cloneValidatedTeamOverlay, explicitTeamRemoteContract, teamRemoteContract } from "../integrations/team.js";
+import { writeTeamConfig, ensureTeamOverlay, readTeamConfig, isTeamStoreTrusted, teamWiringConsented, trustTeamStore, teamTrustFile, untrustedTeamStoreMessage, safeGitUrl, safeTeamRef, overlayMatchesTeamRemote, advertisedTeamRemoteContract, boundedTeamGitEnv, cloneValidatedTeamOverlay, explicitTeamRemoteContract, teamRemoteContract } from "../integrations/team.js";
 import { runbookId, decisionId } from "../core/ids.js";
 import { deriveForbids, effectiveForbids } from "../core/constraintmatch.js";
 import type { Runbook } from "../core/types.js";
@@ -280,7 +280,8 @@ function openTeamStore(root: string, opts: TeamStoreOptions = {}): {
   const explicitOverlay = !!process.env.HUNCH_PRIVATE_DIR?.trim();
   const teamFile = join(hunchPaths(root).hunch, "team.json");
   const teamAdvertised = !explicitOverlay && existsSync(teamFile);
-  if (teamAdvertised && !readTeamConfig(root)) {
+  const advertisedTeam = teamAdvertised ? readTeamConfig(root) : null;
+  if (teamAdvertised && !advertisedTeam) {
     throw new Error(".hunch/team.json is invalid or unsafe; refusing to fall back to public memory");
   }
 
@@ -289,12 +290,15 @@ function openTeamStore(root: string, opts: TeamStoreOptions = {}): {
   openStore = store;
   const overlayWarning = store.overlayResolutionWarning(explicitOverlay && existsSync(teamFile));
   if (overlayWarning) console.error(`[hunch] ⚠ ${overlayWarning}`);
-  if (teamAdvertised && (store.mode !== "shared"
+  if (advertisedTeam && (store.mode !== "shared"
     || !store.privateDir
     || !existsSync(store.privateDir)
+    || !teamWiringConsented(root, advertisedTeam, store.privateDir)
     || !overlayMatchesTeamRemote(root, dirname(store.privateDir)))) {
+    const consented = !!store.privateDir && teamWiringConsented(root, advertisedTeam, store.privateDir);
     store.close();
     openStore = null;
+    if (!consented && !isTeamStoreTrusted(root, advertisedTeam)) throw new Error(untrustedTeamStoreMessage(advertisedTeam));
     throw new Error("the advertised team memory store is unavailable or tracks a different remote; refusing to read or write another graph");
   }
 
@@ -521,7 +525,7 @@ program
     // Worktree-seamless: register any configured overlay at the git common dir so EVERY
     // worktree of this repo auto-discovers it (also backfills pre-0.32 single-worktree setups),
     // and note when we're initializing inside a linked worktree (memory is shared, not separate).
-    if (ensureSharedOverlayPointer(root, store.privateDir, store.privateAutoCommit, store.mode === "shared" ? "shared" : "private")) {
+    if (ensureSharedOverlayPointer(root, store.privateDir, store.privateAutoCommit, store.mode === "shared" ? "shared" : "private", true)) {
       console.log(`  ✓ private overlay registered at the git common dir — shared by every worktree of this repo`);
     }
     for (const line of sharedHooksNote(root, installs)) console.log(line);
@@ -827,7 +831,7 @@ program
   });
 
 // ---- private (one-command setup for the private memory overlay) ------------
-type OverlaySetupOpts = { repo?: string; hook: boolean; autoCommit?: boolean; sync?: boolean; migrate?: boolean };
+type OverlaySetupOpts = { repo?: string; hook: boolean; autoCommit?: boolean; sync?: boolean; migrate?: boolean; trust?: boolean };
 
 function canonicalSharedRef(repoRoot: string): string | null {
   const env = boundedTeamGitEnv();
@@ -1052,15 +1056,18 @@ function beginFreshOverlaySetup(
   const localFile = join(hunchPaths(root).hunch, "local.json");
   const teamFile = join(hunchPaths(root).hunch, "team.json");
   const codeGitignore = join(root, ".gitignore");
-  const commonDir = gitCommonDir(root);
+  const commonDir = checkoutCommonDir(root) || separateGitDirCandidate(root)?.gitDir || "";
   const sharedPointer = commonDir ? join(commonDir, "hunch", "local.json") : "";
+  // Registering the shared pointer can also claim a separate git dir (claimSeparateGitDir),
+  // writing its checkout back-link beside the pointer; a failed setup must not leave it.
+  const backLink = commonDir ? separateGitDirLink(commonDir) : "";
   const configuredHooks = includeHook ? hooksDir(root) : "";
   const hookDir = configuredHooks ? (isAbsolute(configuredHooks) ? configuredHooks : join(root, configuredHooks)) : "";
   // Setup installs post-commit AND post-merge together, so both must be in the
   // ledger — restoring one while leaving the other pointing at a just-deleted
   // overlay is not a rollback.
   const hookFiles = hookDir ? [join(hookDir, "post-commit"), join(hookDir, "post-merge")] : [];
-  const paths = [localFile, codeGitignore, teamFile, ...(sharedPointer ? [sharedPointer] : []), ...hookFiles];
+  const paths = [localFile, codeGitignore, teamFile, ...(sharedPointer ? [sharedPointer, backLink] : []), ...hookFiles];
   const snapshots = new Map(paths.map((path) => [path, setupPathSnapshot(path)] as const));
   const parentExisted = new Map([
     [dirname(localFile), existsSync(dirname(localFile))],
@@ -1078,7 +1085,7 @@ function beginFreshOverlaySetup(
     markLocalWrite: () => mark(localFile),
     markGitignoreWrite: () => mark(codeGitignore),
     markTeamWrite: () => mark(teamFile),
-    markSharedPointerWrite: () => mark(sharedPointer),
+    markSharedPointerWrite: () => { mark(backLink); mark(sharedPointer); },
     markHookWrite: () => hookFiles.forEach(mark),
     // Migration is a one-way ownership handoff. Once public records have been
     // durably copied into this clone, a later setup failure may restore routing
@@ -1100,6 +1107,66 @@ function beginFreshOverlaySetup(
   };
 }
 
+/** `hunch shared --trust`: the one explicit step that lets this machine auto-wire
+ *  the store a committed team.json advertises. Shows the exact URL being trusted. */
+function trustAdvertisedTeamStore(root: string, dir: string | undefined, opts: OverlaySetupOpts): void {
+  if (dir || opts.repo || opts.sync || opts.migrate) {
+    return fail("--trust takes no directory and cannot be combined with --repo, --sync, or --migrate");
+  }
+  if (process.env.HUNCH_PRIVATE_DIR?.trim()) {
+    return fail("HUNCH_PRIVATE_DIR is set, so .hunch/team.json is bypassed; unset it before trusting the team store");
+  }
+  const team = readTeamConfig(root);
+  if (!team) {
+    return fail(existsSync(join(hunchPaths(root).hunch, "team.json"))
+      ? ".hunch/team.json is invalid or unsafe; refusing to trust it"
+      : "no .hunch/team.json in this repository; nothing to trust");
+  }
+  // Consent persists only after a successful connect: openTeamStore reads the trust
+  // entry, so it is written first and restored to the exact prior state on failure.
+  // The connect can also write routing BEFORE it fails (this checkout's pointer, the
+  // registered common-dir pointer, a separate git dir's back-link), and a registered
+  // pointer is itself consent, so those are snapshotted and restored too — otherwise
+  // "trust was NOT recorded" would be false in substance.
+  const priorTrust = isTeamStoreTrusted(root, team);
+  const commonDir = checkoutCommonDir(root) || separateGitDirCandidate(root)?.gitDir || "";
+  const routing = [
+    join(hunchPaths(root).hunch, "local.json"),
+    ...(commonDir ? [join(commonDir, "hunch", "local.json"), separateGitDirLink(commonDir)] : []),
+  ];
+  const routingBefore = routing.map((path) => [path, setupPathSnapshot(path)] as const);
+  const undoTrust = trustTeamStore(root, team);
+  let opened: ReturnType<typeof openTeamStore>;
+  try {
+    opened = openTeamStore(root);
+  } catch (error) {
+    let reverted = true;
+    for (const [path, before] of routingBefore) {
+      try { restoreSetupPath(path, before); } catch { reverted = false; }
+    }
+    try { undoTrust(); } catch { reverted = false; }
+    // The undo only removes THIS invocation's own entry: a trust entry this checkout
+    // already had stays, and a concurrent process may have recorded (and kept) its own.
+    const stillConsented = reverted && isTeamStoreTrusted(root, team);
+    return fail(
+      `could not connect to the team store: ${error instanceof Error ? error.message : String(error)}\n` +
+      (stillConsented
+        ? priorTrust
+          ? `  · this checkout's earlier trust entry is kept (${teamTrustFile()})\n`
+          : `  · trust for this checkout was recorded by another process meanwhile (${teamTrustFile()})\n`
+        : reverted
+        ? `  · trust was NOT recorded for this checkout (${teamTrustFile()} and its store pointers are unchanged)\n`
+        : `  · trust could not be fully rolled back: remove this checkout's entry from ${teamTrustFile()} and its .hunch/local.json store pointer\n`) +
+      "  · retry: `hunch shared --trust` once the store is reachable",
+    );
+  }
+  console.log(`✓ trusted the team memory store on this machine → ${team.shared_repo}`);
+  const { store, teamWired } = opened;
+  console.log(teamWired
+    ? `  ✓ connected to the team's shared memory store → ${teamWired}`
+    : `  · already connected → ${store.privateDir}`);
+}
+
 function configureOverlay(dir: string | undefined, opts: OverlaySetupOpts, mode: "private" | "shared"): void {
   let freshSetup: FreshOverlaySetupTransaction | null = null;
   let setupComplete = false;
@@ -1107,6 +1174,7 @@ function configureOverlay(dir: string | undefined, opts: OverlaySetupOpts, mode:
     const root = findRoot();
     const paths = hunchPaths(root);
     const commandName = mode === "private" ? "private" : "shared";
+  if (opts.trust) return trustAdvertisedTeamStore(root, dir, opts);
   // A repository URL reaches Git before the overlay is trusted in BOTH modes.
   // Keep private split stores private by omitting team.json, not by weakening the
   // clone transport gate: credentials stay in normal Git helpers and every setup
@@ -1283,6 +1351,9 @@ function configureOverlay(dir: string | undefined, opts: OverlaySetupOpts, mode:
     if (!sharedRef) return fail("could not select one canonical branch for the shared memory repository");
     freshSetup?.markTeamWrite();
     writeTeamConfig(root, { shared_repo: opts.repo, shared_ref: sharedRef });
+    // The author typed this URL, which is the consent teammates give with --trust.
+    const published = readTeamConfig(root);
+    if (published) trustTeamStore(root, published);
     // Bind the graph epoch immediately, in clone-local Git metadata. Waiting
     // until the next command would let a coherent team.json+origin repoint
     // relabel this clone after setup but before its first normal open.
@@ -1299,8 +1370,10 @@ function configureOverlay(dir: string | undefined, opts: OverlaySetupOpts, mode:
   // only an absolute path survives the move. Lives under .git/ (never tracked; nothing to ignore).
   let worktreeNote = "";
   freshSetup?.markSharedPointerWrite();
-  if (ensureSharedOverlayPointer(root, hunchDir, !!opts.autoCommit, mode)) {
+  if (ensureSharedOverlayPointer(root, hunchDir, !!opts.autoCommit, mode, true)) {
     worktreeNote = "  ✓ registered in the git common dir — shared by every worktree of this repo, on any branch\n";
+  } else {
+    worktreeNote = "  ⚠ could not register the overlay in this checkout's git common dir, so Hunch will not use .hunch/local.json here; set HUNCH_PRIVATE_DIR to this overlay instead\n";
   }
 
   // 4) route post-commit synthesis to the overlay (local hook, never committed)
@@ -1410,6 +1483,7 @@ program
   .option("--no-auto-commit", "DON'T auto commit+push the overlay after each capture (default: ON — fully automated two-way sync)")
   .option("--sync", "flush the configured overlay store now (git add+commit+push)")
   .option("--migrate", "ONE-TIME: move this repo's EXISTING public .hunch memory into the shared overlay, then make the public repo code-only")
+  .option("--trust", "trust the shared store advertised in the committed .hunch/team.json on this machine, then connect to it")
   .action((dir: string | undefined, opts: OverlaySetupOpts) => configureOverlay(dir, opts, "shared"));
 
 // ---- worktree (one-command worktree wired into Hunch) ----------------------
@@ -1441,7 +1515,7 @@ program
     let shareNote: string;
     if (!opts.share) {
       shareNote = `  · --no-share — the worktree will NOT see private memory`;
-    } else if (overlay && ensureSharedOverlayPointer(root, overlay, autoCommit, overlayMode)) {
+    } else if (overlay && ensureSharedOverlayPointer(root, overlay, autoCommit, overlayMode, true)) {
       shareNote = `  ✓ memory shared via the git common dir — this worktree sees the same decisions / bugs / constraints`;
     } else if (overlay) {
       shareNote = `  · could not register the shared overlay pointer (no git common dir?)`;
@@ -6845,7 +6919,7 @@ program
     } else {
       const team = readTeamConfig(root);
       console.log(team
-        ? `overlay:    off, but .hunch/team.json advertises the team store (${team.shared_repo}) — run \`hunch init\` to auto-connect`
+        ? `overlay:    off, but .hunch/team.json advertises the team store (${team.shared_repo}) — ${isTeamStoreTrusted(root, team) ? "run \`hunch init\` to auto-connect" : "if it is your team's store, run \`hunch shared --trust\` to connect"}`
         : dim(`private:    off — run \`hunch shared\` (or \`hunch private\`) to use one overlay repo across teammates/worktrees (or set HUNCH_PRIVATE_DIR)`));
     }
     // Worktree posture: linked worktrees share ONE memory via the git common dir. Only

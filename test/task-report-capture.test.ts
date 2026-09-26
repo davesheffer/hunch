@@ -1,4 +1,4 @@
-import { cleanupDir } from "./fixtures.js";
+import { cleanupDir, writeLocalPointer } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -29,7 +29,7 @@ test("save proofs follow actual shared home and never assign a different revisio
   repo(root); repo(overlay);
   git(base, "init", "--bare", "-q", "-b", "main", remote);
   git(overlay, "remote", "add", "origin", remote);
-  writeFileSync(join(root, ".hunch", "local.json"), JSON.stringify({ privateDir: join(overlay, ".hunch"), mode: "shared" }));
+  writeLocalPointer(root, { privateDir: join(overlay, ".hunch"), mode: "shared" });
   const store = new HunchStore(hunchPaths(root));
   t.after(() => store.close());
   const task = startReportTask(root, "Capture exact evidence");

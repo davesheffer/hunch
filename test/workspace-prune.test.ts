@@ -1,4 +1,4 @@
-import { cleanupDir } from "./fixtures.js";
+import { cleanupDir, writeLocalPointer } from "./fixtures.js";
 import { tempDir } from "./helpers.js";
 /**
  * Workspace ledger, Phase 3 (docs/workspace-ledger.md): the prune planner's refusal rules,
@@ -255,7 +255,7 @@ test("CLI prune: dry run prints per-machine commands and deletes nothing; --appl
     mkdirSync(join(overlayRoot, ".hunch"), { recursive: true });
     writeFileSync(join(overlayRoot, ".gitignore"), ".hunch/hunch.sqlite*\n");
     g(overlayRoot, "add", "-A"); g(overlayRoot, "commit", "-q", "-m", "overlay");
-    writeFileSync(join(repo, ".hunch", "local.json"), JSON.stringify({ privateDir: join(overlayRoot, ".hunch"), autoCommit: true, mode: "private" }) + "\n");
+    writeLocalPointer(repo, { privateDir: join(overlayRoot, ".hunch"), autoCommit: true, mode: "private" });
     const cfgHome = join(base, "xdg");
     mkdirSync(join(cfgHome, "hunch"), { recursive: true });
     writeFileSync(join(cfgHome, "hunch", "machine.json"), JSON.stringify(MACHINE));
