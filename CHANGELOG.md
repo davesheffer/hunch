@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.42.0 — 2026-09-26
+
+- **Smaller MCP footprint.** Host-visible `hunch_context` on a file target shrinks from 8773 to 7035 chars: structured results carry drill-down IDs only, and recent tasks and project DNA are now opt-in (`include: ["recent_tasks","project_dna"]` over MCP, `hunch context --include recent-tasks,project-dna` on the CLI). `hunch_now` defaults to 5 recent decisions and 2 roadmap entries with a "+N more" tail (`roadmap_limit` is new). `hunch_task` finish results drop from 2200 to 568 chars and start from 1230 to 1146. Tool schemas are shorter with no parameter or behavior change. `hunch footprint` gains the `mcp.hunch_task.start`/`finish` surfaces (#368, #370, #371).
+- **Shared stores require trust.** Hunch no longer clones or connects a team store advertised in `.hunch/team.json` until you confirm it once with `hunch shared --trust`; a failed `--trust` rolls back the pointers it wrote. The overlay is chosen from the pointer that setup registers in the Git common directory, so a per-worktree `local.json` naming another store is ignored with a warning, and symlinked `.hunch/` entries are not followed. **Action:** if you set up a private or shared overlay before this release, re-run `hunch private` (or `hunch shared --trust` / `hunch worktree`) once per repository (#432).
+- **Sibling-fix lessons.** Before an agent edits a function, Hunch pairs it with same-shaped functions and reports a fix commit that changed a sibling copy but never the target, with the sibling's current body. Advisory only; delivered by the pre-edit hook and `hunch_context` (#310, #433).
+- **Grounding for shell edits.** A file written by a shell command (`sed -i`, heredocs, `Set-Content`, …) now gets the same grounding as one edited with the host's edit tools (#433).
+- **Faster cold start on macOS.** Native tree-sitter bindings are cached content-addressed per user instead of copied per process, avoiding ~2s of dylib assessment per addon (#433).
+
 ## 1.41.6 — 2026-09-23
 
 - Five line-oriented scanners now use shared EOL helpers for CRLF-aware parsing. Kubernetes manifest extraction also handles lone CR while keeping offsets in the original source; managed `.gitignore` blocks preserve their existing line endings. A regression check guards against another scanner-specific CRLF workaround (#333).

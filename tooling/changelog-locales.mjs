@@ -8,6 +8,7 @@ export const changelogLocales = {
       footer: "© Hunch — תיעוד משותף לסוכני AI.", home: "בית", githubReleases: "גרסאות ב-GitHub"
     },
     titles: [
+      "הקשר רזה יותר, מאגרים משותפים באישור, ולקחים מתיקונים במקבילים",
       "כלי סריקת הטקסט משתמשים בכלל אחיד לסיומות שורה",
       "בדיקות מאגר זמני ללא תחזוקת Git ברקע",
       "בדיקות נשארות יציבות גם בתוך סביבת סוכן",
@@ -89,6 +90,7 @@ export const changelogLocales = {
       footer: "© Hunch — общие записи для ИИ-агентов.", home: "Главная", githubReleases: "Релизы на GitHub"
     },
     titles: [
+      "Меньше контекста, общие хранилища с подтверждением и уроки из исправлений-двойников",
       "Текстовые сканеры используют единое правило для окончаний строк",
       "Временные репозитории тестов обходятся без фонового обслуживания Git",
       "Проверки стабильны и внутри сеанса агента",
@@ -170,6 +172,7 @@ export const changelogLocales = {
       footer: "© Hunch — سجل مشترك لوكلاء الذكاء الاصطناعي.", home: "الرئيسية", githubReleases: "الإصدارات على GitHub"
     },
     titles: [
+      "سياق أخف، ومخازن مشتركة بعد الموافقة، ودروس من إصلاحات النسخ المشابهة",
       "الماسحات النصية تستخدم قاعدة موحدة لنهايات الأسطر",
       "مستودعات الاختبار المؤقتة تتجنب صيانة Git في الخلفية",
       "تبقى الاختبارات مستقرة داخل جلسات الوكلاء",
@@ -251,6 +254,7 @@ export const changelogLocales = {
       footer: "© Hunch — un registro compartido para agentes de IA.", home: "Inicio", githubReleases: "Versiones en GitHub"
     },
     titles: [
+      "Contexto más ligero, almacenes compartidos con confianza y lecciones de correcciones gemelas",
       "Los analizadores de texto comparten una regla para los finales de línea",
       "Los repositorios temporales de prueba evitan el mantenimiento de Git en segundo plano",
       "Las pruebas siguen siendo fiables en sesiones de agentes",

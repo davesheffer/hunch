@@ -54,6 +54,20 @@ jobs:
           HUNCH_TEST_COMPILED_CLI: "1"
         run: npm run gate:release -- --tag "${GITHUB_REF_NAME}" --output release-gate.json
 
+      # Record what this release costs an agent's context (#372). Budgets are
+      # enforced by test/footprint.test.ts in the gate above; this only keeps the
+      # per-release numbers so a growth shows up between tagged runs.
+      - name: Record the context footprint
+        continue-on-error: true
+        shell: bash
+        run: |
+          {
+            echo "## Context footprint (${GITHUB_REF_NAME})"
+            echo '```'
+            node dist/cli/index.js footprint 2>/dev/null
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       # The gate already built and tested dist/. Pack without running the
       # package's prepublish lifecycle again, then bind the exact tgz to the
       # release-gate and Matrix receipts.
