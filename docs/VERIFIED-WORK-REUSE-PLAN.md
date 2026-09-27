@@ -129,7 +129,32 @@ This packet is derived or cached locally and is not a new source of truth. Redac
 - [ ] Migrate forward compatibly; old records remain readable and sparse. No backfilled fake summaries.
 - [ ] Re-run Stage 3 before enabling by default.
 
-## 9. Decision thresholds
+## 9. Three outcome measures: time, money, peace of mind
+
+Record these per task and aggregate only compatible observations. A smaller packet by itself is not a product outcome.
+
+### Time
+
+- [ ] Measure total spawn-through-validation wall time for the same quality outcome, plus investigation time or investigation tool calls when observable.
+- [ ] Include packet lookup, hash checks, Hunch startup and validator overhead; a shorter agent phase that adds longer validation is not a win.
+- [ ] Report median and range for the pilot; flag timeouts and retries rather than dropping them.
+
+### Money
+
+- [ ] Keep provider-reported input/output tokens and tool calls separate. A local subscription CLI does not expose a trustworthy marginal dollar bill per task; never multiply its token counts by an API price and call that realized savings.
+- [ ] If metered API costs are evaluated later, use the actual billable model rates and observed usage for both arms, including memory extraction, storage, retrieval and replay overhead; label this a separate priced scenario.
+- [ ] For a team, report avoided engineer investigation minutes as an estimate with an explicit hourly-rate assumption, distinct from observed machine cost. Do not add hypothetical labor savings to realized cash savings.
+- [ ] Track infrastructure footprint per active repository and per stored task, and the break-even repeated-task frequency at which retrieval/verification overhead is repaid.
+
+### Peace of mind
+
+- [ ] Require an inspectable receipt: prior task, observed action, evidence identity, changed/unknown dependencies, today's validation result, and why the mode was selected.
+- [ ] Measure invalid exact candidates (hard target: zero), stale advice accepted, quality regressions, post-task rework and cases the system correctly withheld; investigate each failure individually.
+- [ ] Ask a small blinded user/developer review whether the packet made the decision easier to trust, but report that subjective rating separately from verified correctness. Do not call a green test complete safety.
+
+A convincing outcome is **faster completed tasks with equal or better quality**, a credible cost model under the deployment actually used, and fewer unverified assumptions. If a dimension is unobservable, write `unavailable` instead of claiming improvement.
+
+## 10. Decision thresholds
 
 **Go to larger 20-task experiment** when paired repeat-task results show lower median investigation calls *and* lower median total time, with no meaningful success regression, zero invalid exact candidates, and enough comparable observations to justify the claim. The existing context-efficiency plan's numerical optimization goals (25% input tokens, 20% time, 30% investigation calls on eligible tasks) remain hypotheses, not a promise or a small-pilot significance test.
 
@@ -137,7 +162,7 @@ This packet is derived or cached locally and is not a new source of truth. Redac
 
 **Stop or reposition** if quality drops, unsafe reuse occurs, historical source snapshots cannot support currentness and prospective capture has no value, or the claimed saving depends on leaking future solutions.
 
-## 10. Codex handoff prompt
+## 11. Codex handoff prompt
 
 ```text
 Work on the dedicated verified-work-reuse branch in davesheffer/hunch.
@@ -146,6 +171,6 @@ Read AGENTS.md and docs/VERIFIED-WORK-REUSE-PLAN.md. Audit the current main task
 If Stage 0 qualifies and the separate Gate A baseline is available, implement Stages 1–3 in order with focused tests. Keep current Hunch as the unchanged control, packets advisory, exact candidacy dependent on complete bounded evidence, and current validation mandatory. Report commands, changed files, evidence, measured comparisons and limitations. Stop if validation, data provenance or isolation fails.
 ```
 
-## 11. Scope and state today
+## 12. Scope and state today
 
 This branch supplies a reviewed execution specification only. No packet compiler, agent-run harness, issue qualification, benchmark result, percentage saving or commercial uniqueness is implied by the existence of this document.
