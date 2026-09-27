@@ -58,8 +58,9 @@ function childEnv(): Record<string, string> {
     .filter((kv): kv is [string, string] => kv[1] !== undefined && !/^(GIT_|HUNCH_)/i.test(kv[0])));
 }
 
-/** A stand-in for an audited Hunch build: only the dist entry points prepareArm uses. */
-function writeStubAudited(dir: string): void {
+/** A stand-in for an audited Hunch build: only the dist entry points prepareArm uses.
+ *  `indexWritesComponent` makes `index` add a file under .hunch/components/, as the real index may. */
+function writeStubAudited(dir: string, opts: { indexWritesComponent?: boolean } = {}): void {
   put(dir, "package.json", JSON.stringify({ type: "module" }) + "\n");
   put(dir, "dist/integrations/scaffold.js", String.raw`import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -76,7 +77,7 @@ export function writeSlashCommands(root) {
   return { written: [], skipped: [] };
 }
 `);
-  put(dir, "dist/cli/index.js", String.raw`import { readFileSync, writeFileSync } from "node:fs";
+  put(dir, "dist/cli/index.js", String.raw`import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 const args = process.argv.slice(2).join(" ");
 const BLOCK = "<!-- HUNCH:START — stub -->\nstub grounding\n<!-- HUNCH:END -->";
 const END = "<!-- HUNCH:END -->";
@@ -87,7 +88,14 @@ if (args === "grounding --refresh") {
   writeFileSync("CLAUDE.md", start === -1 ? text + BLOCK + "\n" : text.slice(0, start) + BLOCK + text.slice(end + END.length));
   process.exit(0);
 }
-if (args === "index") process.exit(process.env.HUNCH_PRIVATE_DIR ? 0 : 3);
+if (args === "index") {
+  if (!process.env.HUNCH_PRIVATE_DIR) process.exit(3);
+  if (${opts.indexWritesComponent ? "true" : "false"}) {
+    mkdirSync(".hunch/components", { recursive: true });
+    writeFileSync(".hunch/components/cmp_stub.json", "{}\n");
+  }
+  process.exit(0);
+}
 if (args === "footprint --json") {
   process.stdout.write(JSON.stringify({ schema: "hunch.footprint/1", surfaces: [{ id: "mcp.tools_list", chars: 1234 }] }));
   process.exit(0);
@@ -162,7 +170,7 @@ test("prepareTaskBase rewrites the starting commit without .hunch history and re
 });
 
 test("buildMemorySnapshot freezes cutoff-bounded public and private memory with a stable hash", () => {
-  const opts = { sourceRepo: source, sourceRef: "main", privateRepo: overlay, cutoffIso: CUTOFF };
+  const opts = { sourceRepo: source, sourceRef: "main", startingCommit: commits.c3!, privateRepo: overlay, cutoffIso: CUTOFF };
   const first = buildMemorySnapshot({ ...opts, dest: join(root, "snapshots", "one") });
   const second = buildMemorySnapshot({ ...opts, dest: join(root, "snapshots", "two") });
 
@@ -170,7 +178,15 @@ test("buildMemorySnapshot freezes cutoff-bounded public and private memory with 
   assert.equal(first.public.revision, commits.c1);
   assert.deepEqual(listRel(join(root, "snapshots", "one", "public")), ["decisions/dec_aaaaaaaaaa.json"]);
   assert.equal(first.public.files, 1);
-  assert.deepEqual(first.public.dropped.map((d) => d.path).sort(), ["decisions/dec_cccccccccc.json", "team.json"]);
+  assert.equal(first.public.starting_commit, commits.c3);
+  assert.deepEqual(first.public.sources, { "decisions/dec_aaaaaaaaaa.json": commits.c1 });
+  assert.deepEqual(first.public.dropped.map((d) => d.path).sort(), [
+    "config.json", "decisions/dec_bbbbbbbbbb.json", "decisions/dec_cccccccccc.json", "team.json",
+  ]);
+  assert.equal(
+    first.public.dropped.find((d) => d.path === "decisions/dec_bbbbbbbbbb.json")?.reason,
+    "no pre-cutoff commit reachable from the starting commit",
+  );
   assert.equal(
     first.public.dropped.find((d) => d.path === "decisions/dec_cccccccccc.json")?.reason,
     "capture created_at=2026-03-01T00:00:00Z >= cutoff",
@@ -199,6 +215,7 @@ test("prepareArm no-hunch strips markers and generated commands and proves expos
     "mcp-empty", "hooks-absent", "env-clean", "worktree-clean",
   ]);
   assert.equal(prepared.exposure.memory_snapshot_sha256, null);
+  assert.equal(prepared.exposure.post_setup_hunch_sha256, null);
   assert.equal(readFileSync(join(prepared.repo, "CLAUDE.md"), "utf8"), "# Project\n\nUser intro text.\n\nTrailing user text.\n");
   assert.deepEqual(readFileSync(join(prepared.repo, "AGENTS.md")), Buffer.from("Agents intro\r\n\r\nAgents tail\r\n"));
   assert.equal(existsSync(join(prepared.repo, ".claude", "commands", "mine.md")), true);
@@ -213,10 +230,25 @@ test("prepareArm no-hunch strips markers and generated commands and proves expos
   assert.equal(prepared.static_hunch_chars.grounding_agents_md, 0);
 });
 
+const CURRENT_HUNCH_CHECKS = [
+  "hunch-dir-present", "mcp-hunch-server", "hooks-installed", "grounding-present", "worktree-clean",
+  "snapshot-hash-match", "private-snapshot-hash-match", "footprint-tools-list",
+];
+
+/** prepareArm's snapshot option for a frozen snapshot under `dir`. */
+function snapshotOption(dir: string, snapshot: MemorySnapshot) {
+  return {
+    publicDir: join(dir, "public"),
+    privateDir: snapshot.private ? join(dir, "private") : null,
+    publicSha256: snapshot.public.sha256,
+    privateSha256: snapshot.private?.sha256 ?? null,
+  };
+}
+
 test("prepareArm current-hunch mounts the snapshot through the audited dist and proves exposure", async () => {
   const base = await prepareTaskBase({ sourceRepo: source, startingCommit: commits.c3!, dest: join(root, "bases", "task-1") });
   const snapshotDir = join(root, "snapshots", "arm");
-  const snapshot = buildMemorySnapshot({ sourceRepo: source, sourceRef: "main", privateRepo: overlay, cutoffIso: CUTOFF, dest: snapshotDir });
+  const snapshot = buildMemorySnapshot({ sourceRepo: source, sourceRef: "main", startingCommit: commits.c3!, privateRepo: overlay, cutoffIso: CUTOFF, dest: snapshotDir });
   const audited = join(root, "audited");
   writeStubAudited(audited);
   const runDir = join(root, "runs", "current-hunch");
@@ -226,17 +258,15 @@ test("prepareArm current-hunch mounts the snapshot through the audited dist and 
     runDir,
     nodePath: process.execPath,
     env: childEnv(),
-    snapshot: { publicDir: join(snapshotDir, "public"), privateDir: join(snapshotDir, "private") },
+    snapshot: snapshotOption(snapshotDir, snapshot),
     audited: { root: audited },
     npmCi: false,
   });
 
   assert.equal(prepared.exposure.ok, true, JSON.stringify(prepared.exposure.checks));
-  assert.deepEqual(prepared.exposure.checks.map((c) => c.id), [
-    "hunch-dir-present", "snapshot-hash-match", "mcp-hunch-server", "hooks-installed",
-    "grounding-present", "worktree-clean", "footprint-tools-list",
-  ]);
+  assert.deepEqual(prepared.exposure.checks.map((c) => c.id), CURRENT_HUNCH_CHECKS);
   assert.equal(prepared.exposure.memory_snapshot_sha256, snapshot.public.sha256);
+  assert.equal(prepared.exposure.post_setup_hunch_sha256, snapshot.public.sha256, "the stub index leaves .hunch untouched");
   assert.equal(git(prepared.repo, ["ls-files", ".hunch"]), ".hunch/decisions/dec_aaaaaaaaaa.json");
 
   const privateMount = join(runDir, "private", ".hunch");
@@ -255,6 +285,55 @@ test("prepareArm current-hunch mounts the snapshot through the audited dist and 
   assert.equal(prepared.static_hunch_chars.grounding_claude_md, [...STUB_BLOCK].length);
   assert.equal(prepared.static_hunch_chars.grounding_agents_md, [...AGENTS_BLOCK].length);
   assert.equal(git(prepared.repo, ["status", "--porcelain"]), "");
+});
+
+test("prepareArm current-hunch fails exposure when the frozen public snapshot was tampered with", async () => {
+  const base = await prepareTaskBase({ sourceRepo: source, startingCommit: commits.c3!, dest: join(root, "bases", "task-1") });
+  const snapshotDir = join(root, "snapshots", "tampered");
+  const snapshot = buildMemorySnapshot({ sourceRepo: source, sourceRef: "main", startingCommit: commits.c3!, privateRepo: overlay, cutoffIso: CUTOFF, dest: snapshotDir });
+  writeFileSync(join(snapshotDir, "public", "decisions", "dec_aaaaaaaaaa.json"), JSON.stringify({ id: "dec_aaaaaaaaaa", tampered: true }) + "\n");
+  const audited = join(root, "audited-tampered");
+  writeStubAudited(audited);
+  const prepared = await prepareArm({
+    base: base.base,
+    arm: "current-hunch",
+    runDir: join(root, "runs", "tampered"),
+    nodePath: process.execPath,
+    env: childEnv(),
+    snapshot: snapshotOption(snapshotDir, snapshot),
+    audited: { root: audited },
+    npmCi: false,
+  });
+
+  assert.equal(prepared.exposure.ok, false);
+  const failing = prepared.exposure.checks.filter((c) => !c.ok).map((c) => c.id);
+  assert.deepEqual(failing, ["snapshot-hash-match"]);
+});
+
+test("prepareArm current-hunch checks the snapshot hash before index rewrites components/", async () => {
+  const base = await prepareTaskBase({ sourceRepo: source, startingCommit: commits.c3!, dest: join(root, "bases", "task-1") });
+  const snapshotDir = join(root, "snapshots", "indexed");
+  const snapshot = buildMemorySnapshot({ sourceRepo: source, sourceRef: "main", startingCommit: commits.c3!, privateRepo: overlay, cutoffIso: CUTOFF, dest: snapshotDir });
+  const audited = join(root, "audited-indexing");
+  writeStubAudited(audited, { indexWritesComponent: true });
+  const prepared = await prepareArm({
+    base: base.base,
+    arm: "current-hunch",
+    runDir: join(root, "runs", "indexed"),
+    nodePath: process.execPath,
+    env: childEnv(),
+    snapshot: snapshotOption(snapshotDir, snapshot),
+    audited: { root: audited },
+    npmCi: false,
+  });
+
+  assert.equal(prepared.exposure.ok, true, JSON.stringify(prepared.exposure.checks));
+  assert.deepEqual(prepared.exposure.checks.map((c) => c.id), CURRENT_HUNCH_CHECKS);
+  assert.equal(prepared.exposure.checks.find((c) => c.id === "snapshot-hash-match")?.ok, true);
+  assert.equal(prepared.exposure.memory_snapshot_sha256, snapshot.public.sha256);
+  assert.match(prepared.exposure.post_setup_hunch_sha256 ?? "", /^[0-9a-f]{64}$/);
+  assert.notEqual(prepared.exposure.post_setup_hunch_sha256, prepared.exposure.memory_snapshot_sha256);
+  assert.equal(git(prepared.repo, ["ls-files", ".hunch"]), ".hunch/components/cmp_stub.json\n.hunch/decisions/dec_aaaaaaaaaa.json");
 });
 
 test("repoStateFingerprint changes when a watched repository is written", () => {

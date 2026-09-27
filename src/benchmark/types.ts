@@ -84,7 +84,10 @@ export interface ExposureProof {
   arm: BenchmarkArm;
   ok: boolean;
   checks: { id: string; ok: boolean; detail: string }[];
+  /** The frozen public snapshot hash, verified against the mount before setup (current-hunch). */
   memory_snapshot_sha256: string | null;
+  /** Tracked `.hunch/` hash after the audited writers and `hunch index` ran (current-hunch). */
+  post_setup_hunch_sha256: string | null;
 }
 
 /** Parsed from a stream-json transcript. */
