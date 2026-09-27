@@ -1,0 +1,485 @@
+{
+  "note": "Warm-memory tasks: merged PRs that closed an issue; see run.ts",
+  "tasks": [
+    {
+      "id": "pr431",
+      "pr": 431,
+      "issue": 371,
+      "base": "0423ac46a8c7e804d930593ae9b6238054053dfe",
+      "merge": "ca487f2a185badb77c0eef77712ec840a5f64573",
+      "mergedAt": "2026-09-26T13:25:01+03:00",
+      "issueTitle": "Tool results ignore the budget: hunch_context returns ~9k tokens for a 1.5k brief; hunch_findings is unbounded",
+      "issueBody": "## What was measured\n`hunch_context(\"src/mcp/server.ts\")` with the default `budget_tokens: 1500`:\n\n- `content` text: 6,000 characters — exactly the budget.\n- `structuredContent`: 30,348 characters (about 7.6k tokens). Of that, `omitted` is 21,047 characters: 104 entries, each repeating the same sentence (\"only the top 2 decision hypotheses are delivered; refine the task evidence or inspect this record with hunch_why\"). `text` (6,351) repeats the content text.\n- Whole result: about 9.2k tokens. A host that shows the model the structured result (Claude Code does) pays ~7.6k for a brief budgeted at 1.5k.\n\nTwo list tools have no budget at all:\n- `hunch_findings()` with no scope: 25,079 characters (~6.3k tokens) — 12 of 51 findings printed with their full observation text, then \"+39 more\".\n- `hunch_now()`: 3,768 characters (~0.9k tokens).\n\n## Suggested direction\n- The budget must govern the whole result, not only the text. Replace the per-record `omitted` list with counts by reason (`{\"actionability-cap\": 98, \"retired\": 6}`) plus at most a few ids; the full list belongs in the receipt (`hunch report`), not in the model's context.\n- Do not duplicate the brief in both `content` and `structuredContent.text`.\n- `hunch_findings` list view: id + triage + severity + title + first sentence; full observation through a single-id lookup. Add a `limit`/`budget_tokens` argument.\n- Source: `src/mcp/server.ts`, the delivery envelope assembly.\n\n---\nMeasured 2026-09-20 on the published `@davesheffer/hunch@1.39.3` dist in the hunch repo itself (328 decisions, 51 findings). Tokens are estimated as characters / 4, not from a tokenizer. Part of the context-footprint work; the fix must hold for every MCP host, not one client.\n",
+      "issueCreatedAt": "2026-09-20T04:07:31Z",
+      "testFiles": [
+        "test/footprint.test.ts",
+        "test/mcp-delivery.test.ts",
+        "test/project-dna-delivery-integration.test.ts",
+        "test/tool-result-budget.test.ts"
+      ],
+      "srcFiles": [
+        "src/cli/index.ts",
+        "src/core/footprint.ts",
+        "src/mcp/server.ts"
+      ],
+      "srcLines": 126,
+      "memoryHits": 130
+    },
+    {
+      "id": "pr417",
+      "pr": 417,
+      "issue": 333,
+      "base": "761e4f14f46c622600b6ec65bed9b9dd63183d52",
+      "merge": "f9bb261037fee8319406a66cf85a15d9719facd8",
+      "mergedAt": "2026-09-23T17:08:58+03:00",
+      "issueTitle": "Five independent CRLF-tolerance idioms across the codebase, each added by its own bug fix",
+      "issueBody": "## Background\n\nFound while reviewing PR #329 (issue #298, CRLF fence detection in `docanchors.ts`).\n\n## Pattern\n\nCRLF handling in line-oriented text scanners has been fixed independently, at least five times, each time as its own bug:\n\n- `src/core/groundingMerge.ts:24-32` — `\\r?\\n` inside the regexes, with a comment describing the identical failure mode.\n- `src/integrations/hooks.ts:106` — `content.replace(/\\r/g, \"\")`.\n- `src/integrations/gitignore.ts:132` — `line.replace(/\\r$/, \"\")`.\n- `src/core/docanchors.ts` (PR #329, issue #298) — `text.replace(/\\r\\n?/g, \"\\n\")` at the top of `parseDocAnchors`.\n- commit `8ae8fe96` (\"CRLF line endings and unrecognized YAML shapes silently defeated the scanner\") — a fifth instance in the k8s manifest scanner.\n\nEach fix is narrowly correct for its own call site, but the repeated pattern — a new line-oriented scanner ships without EOL normalization, breaks on a Windows checkout, gets its own bespoke fix — suggests the gap is structural rather than incidental.\n\n## Suggested fix\n\nA shared `normalizeEol()` helper (in `src/core/paths.ts` or a similar core module) that every line-oriented text scanner calls at its entry point, plus (if this repo's Constitution/policy tooling supports it) a recorded constraint along the lines of \"a line-oriented text scanner normalizes EOL at entry\" scoped to scanner-shaped modules, so the next one doesn't reopen the same bug a sixth time.\n\n## Related\n\n- #298 / PR #329 — the instance that prompted this ticket.\n- `8ae8fe96` — the k8s manifest scanner instance.",
+      "issueCreatedAt": "2026-09-18T19:08:25Z",
+      "testFiles": [
+        "test/eol.test.ts",
+        "test/grounding-merge-driver.test.ts",
+        "test/k8sManifest.test.ts"
+      ],
+      "srcFiles": [
+        "src/core/docanchors.ts",
+        "src/core/eol.ts",
+        "src/core/groundingMerge.ts",
+        "src/extractors/k8sManifest.ts",
+        "src/integrations/gitignore.ts",
+        "src/integrations/hooks.ts"
+      ],
+      "srcLines": 85,
+      "memoryHits": 35
+    },
+    {
+      "id": "pr406",
+      "pr": 406,
+      "issue": 314,
+      "base": "7742a3b17b4bc36514464ef730a74fb902935a6a",
+      "merge": "847a2fc34193b97f11c470a17e88cf0334bf7c02",
+      "mergedAt": "2026-09-23T11:08:18+03:00",
+      "issueTitle": "Provider config writers silently drop comments from JSONC files (.vscode/mcp.json, .cursor/hooks.json, ...)",
+      "issueBody": "## Bug\n`src/integrations/providers.ts:35-46`, `:62-67`: `readJsonObj` accepts JSONC, then `writeJson` re-serializes with `JSON.stringify`, so comments in `.vscode/mcp.json`, `.cursor/hooks.json`, `.github/hooks/hunch.json` etc. are lost on every `hunch init` / update. `repairIntegrationPins` preserves comments; these writers do not. The test at `test/providers.test.ts:223` only checks that the servers survive.\n\n## Evidence\nA `.vscode/mcp.json` containing `// DB server: token comes from 1Password…` and `/* pinned to 2.x until #412 */` comes back with both comments gone.\n\n## Suggested fix\nUse the token-preserving edit `health.ts` uses, or refuse and print a manual snippet when the file contains comments.\n\nFound in the 2026-09-17 bug sweep against v1.39.0 (main e171a37).\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n",
+      "issueCreatedAt": "2026-09-17T11:14:05Z",
+      "testFiles": [
+        "test/providers.test.ts"
+      ],
+      "srcFiles": [
+        "src/integrations/providers.ts"
+      ],
+      "srcLines": 27,
+      "memoryHits": 9
+    },
+    {
+      "id": "pr403",
+      "pr": 403,
+      "issue": 360,
+      "base": "3550f3766e39adb18ab309ab5755d45337ba1a40",
+      "merge": "ad9e16812043f398597a159d44aa71a8c8d9aa4d",
+      "mergedAt": "2026-09-23T09:38:36+03:00",
+      "issueTitle": "mergeLedgers re-adds compacted base events that neither side retains",
+      "issueBody": "Found while reviewing #285 / PR #359. Pre-existing; not changed by that PR.\n\n`mergeLedgers(base, ours, theirs)` (`src/store/changeLedger.ts`) seeds the union with `base.events`. When **both** sides have since compacted an event away, base still contributes it, so the merged ledger resurrects an event neither clone retains — below what both sides consider their floor's history.\n\nConsequence: the merged `events` can contain entries older than either side's `floor_seq` implied, and the operator-facing text around `operator.ts:195` (which describes compaction as final) is then misleading.\n\nExpected: an event absent from both ours and theirs **and** at or below either side's floor is treated as compacted, not re-added. Base should only settle identity/ordering, never re-introduce history.\n\nAcceptance: a test where base has events 1..3, ours and theirs both compacted to floor 2 and each appended one event — the merged ledger must not contain events 1..2.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n",
+      "issueCreatedAt": "2026-09-19T21:19:52Z",
+      "testFiles": [
+        "test/change-ledger.test.ts"
+      ],
+      "srcFiles": [
+        "src/store/changeLedger.ts"
+      ],
+      "srcLines": 9,
+      "memoryHits": 3
+    },
+    {
+      "id": "pr392",
+      "pr": 392,
+      "issue": 362,
+      "base": "70da0825e9d82a4e399f28d43da5b7bce57b2b9d",
+      "merge": "e3be6aeb0b84a97ab32296c71d55bbd4febf8f97",
+      "mergedAt": "2026-09-22T09:23:54+03:00",
+      "issueTitle": "subscribe: a cursor above head_seq is never flagged for resync",
+      "issueBody": "Found while reviewing #285 / PR #359. Pre-existing; not changed by that PR.\n\n`subscribe` flags `resync` when `after_seq < floor_seq`. A cursor **above** `head_seq` is not flagged: the subscriber gets an empty page and keeps polling with a cursor the ledger has never issued. That state is reachable when a ledger file is replaced by one with a lower head (a restore, a reset to an older commit, or a merge resolution that took one side wholesale).\n\nThe subscriber then silently misses every event until the head climbs past its stale cursor.\n\nExpected: `after_seq > head_seq` is answered with `resync: true`, same as a cursor below the floor — the cursor is not a position in this ledger's sequence.\n\nAcceptance: a test subscribing with `after_seq = head_seq + 5` gets `resync: true`; `docs/state-cli.md` names both conditions.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n",
+      "issueCreatedAt": "2026-09-19T21:19:53Z",
+      "testFiles": [
+        "test/state-binding.test.ts"
+      ],
+      "srcFiles": [
+        "src/store/stateBinding.ts"
+      ],
+      "srcLines": 2,
+      "memoryHits": 17
+    },
+    {
+      "id": "pr391",
+      "pr": 391,
+      "issue": 380,
+      "base": "4b6ce9daa86dbcca631571baa36628a8f041f14b",
+      "merge": "70da0825e9d82a4e399f28d43da5b7bce57b2b9d",
+      "mergedAt": "2026-09-22T09:23:51+03:00",
+      "issueTitle": "indexRepo replaces the graph with nothing when every file of a language fails to parse",
+      "issueBody": "Follow-up from the review of #366 (lazy native tree-sitter load).\n\n#366's follow-up makes a parser **load** failure typed (`NativeTreeSitterLoadError`) and rethrows it at every indexing call site, so it can no longer be swallowed per file. The underlying hazard is wider than that one error class:\n\n**Symptom.** `indexRepo` catches parse errors per file, marks the file `parse_failed`, and then `replaceAll`s the symbol/edge store with what it has. Any failure that hits EVERY file of a language — an untyped `setLanguage`/`Query` construction failure, an ABI mismatch after a Node upgrade, a corrupt grammar — yields an empty result set, and a plain `hunch index` replaces a healthy graph with nothing at exit 0.\n\n**Expected.** A deterministic guard in `indexRepo` before the store write: if a language had eligible files and 100% of them are `parse_failed`, refuse the write for that language (keep the previous records), exit non-zero, and name the first underlying error. `hunch doctor` should report the same condition. One broken file must stay a per-file event; this is only about the all-files case. Must hold for every language and every OS, not only the native TypeScript addon path.\n",
+      "issueCreatedAt": "2026-09-20T06:55:29Z",
+      "testFiles": [
+        "test/index-all-parse-failed.test.ts"
+      ],
+      "srcFiles": [
+        "src/cli/index.ts",
+        "src/extractors/indexer.ts",
+        "src/extractors/parse.ts"
+      ],
+      "srcLines": 33,
+      "memoryHits": 112
+    },
+    {
+      "id": "pr365",
+      "pr": 365,
+      "issue": 297,
+      "base": "8d9580917066cd1115894588be6565742a3ad5f4",
+      "merge": "893890001d98f978c723f9e46f2028c17b86a29f",
+      "mergedAt": "2026-09-20T10:38:39+03:00",
+      "issueTitle": "Kubernetes manifest references: wrong edges across namespaces, from script text, and from empty selector keys; tagged document separators merge documents",
+      "issueBody": "Follow-up to #262 (manifest references, new in 1.39.0). Four scanner/resolver gaps that produce wrong or missing edges.\n\n## 1. Namespaces are ignored (`src/extractors/indexer.ts:422-441`, `:456-483`)\nService `web` and ConfigMap `cfg` in namespace `team-a`, a Deployment in `team-b` with `envFrom configMapRef cfg` and label `app: web`: the index emits Deployment→ConfigMap/cfg (a pod cannot use another namespace's ConfigMap) and Service(team-a)→Deployment(team-b) (a Service never selects across namespaces).\n```\n== cross-namespace: issues=0\n   Deployment/web references ConfigMap/cfg\n   Service selector matches workload pod-template labels\n```\nFix: extract a literal `metadata.namespace` (null = default/unknown), key lookups and selector matching on it, and emit no edge when it is templated and the sides differ.\n\n## 2. Script text in a `- |` list item is parsed as manifest fields (`src/extractors/k8sManifest.ts:274-284`)\nA Job with `args:` then `- |` and a heredoc containing `env: / - name: DB_PASSWORD / valueFrom: / secretKeyRef: / name: prod-db-creds` yields a Secret reference that does not exist. `key: |` is handled; only the list-item form is not.\n```\n[{\"r\":\"Job/bootstrap\",\"refs\":[\"Secret/prod-db-creds\"],...}]\n```\nFix: on `-` plus a block-scalar header, skip every following line indented deeper than the marker.\n\n## 3. An empty-valued selector key is dropped, widening the selector (`k8sManifest.ts:326`, `:489-524`)\nSelector `tier:` (null) plus `app: web` becomes `{app: web}` and matches a Deployment labelled `tier: backend`.\nFix: treat an empty-valued key with no children as unresolved.\n\n## 4. `--- !!map` does not split documents\nA separator followed by a tag merges two documents; the second resource disappears (`--- !!map docs: 1`).\n\nFound in the 2026-09-17 bug sweep against v1.39.0 (main e171a37).\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n",
+      "issueCreatedAt": "2026-09-17T11:10:26Z",
+      "testFiles": [
+        "test/indexer.test.ts",
+        "test/k8sManifest.test.ts"
+      ],
+      "srcFiles": [
+        "src/extractors/indexer.ts",
+        "src/extractors/k8sManifest.ts"
+      ],
+      "srcLines": 164,
+      "memoryHits": 23
+    },
+    {
+      "id": "pr363",
+      "pr": 363,
+      "issue": 334,
+      "base": "f7758faa9c052f1b814f4664e2f078e134e0087d",
+      "merge": "8d9580917066cd1115894588be6565742a3ad5f4",
+      "mergedAt": "2026-09-20T10:38:36+03:00",
+      "issueTitle": "Grounding tools' 'is this a real path' check misses a file with no symbol and no component coverage",
+      "issueBody": "## Background\n\nFollow-up from PR #328 (issues #296, #299, #300 — repo-relative and segment-anchored path matching for `hunch_why`, `hunch_check_constraints`, `hunch_get_dependents`, `hunch_blast_radius`).\n\nThat PR added `isIndexedPath()` (symbol files ∪ indexed component path-globs) as the gate for whether a target should be treated as a real, indexed file (exact-match tier) versus falling through to the suffix-match fallback. This correctly closes the cases the three issues named (files with tree-sitter symbols, and files covered by a component's `paths` glob).\n\n## Gap\n\nA real, tracked file that has **neither** a tree-sitter symbol **nor** component-glob coverage (e.g. a data file no component's `paths` happens to cover) is not \"indexed\" by that definition, so it still falls through to the unanchored suffix-match tier and could theoretically leak on a same-basename collision with an unrelated file elsewhere in the repo — the same class of bug #296/#299/#300 were about, just for a narrower category of file PR #328 didn't scope in.\n\nNot independently reproduced with a live repro run — flagged during PR #328's implementation while writing test coverage for `liveFindingsFor`/`tasksFor` (a test for it only passed because a symbol was deliberately added at the target path first; without that, the gap should reproduce).\n\n## Suggested next step\n\nDecide how to widen \"is this a real, indexed path\" without becoming circular (e.g. using a Finding's/Task's own `affected_files`/`files` as evidence for \"is this real\" is exactly the kind of self-referential check to avoid). Possibly: fall back to a working-tree/git-tracked-file check as a last resort tier, below symbol/component coverage but above the suffix-match fallback, when a target isn't covered by either index.\n\n## Related\n\n- #296, #299, #300 / PR #328 — the fixes this gap sits next to.",
+      "issueCreatedAt": "2026-09-18T19:20:10Z",
+      "testFiles": [
+        "test/findings.test.ts",
+        "test/impact.test.ts",
+        "test/mcp-resolve.test.ts",
+        "test/paths.test.ts",
+        "test/store.test.ts",
+        "test/structure.test.ts",
+        "test/task-delivery.test.ts"
+      ],
+      "srcFiles": [
+        "src/core/format.ts",
+        "src/core/glob.ts",
+        "src/core/paths.ts",
+        "src/mcp/server.ts",
+        "src/store/hunchStore.ts"
+      ],
+      "srcLines": 186,
+      "memoryHits": 78
+    },
+    {
+      "id": "pr359",
+      "pr": 359,
+      "issue": 285,
+      "base": "9993b7802db9c99d01bb8c2c5a23aff2f13f2205",
+      "merge": "f7758faa9c052f1b814f4664e2f078e134e0087d",
+      "mergedAt": "2026-09-20T10:38:32+03:00",
+      "issueTitle": "mergeLedgers renumbers diverged events without forcing subscribers to resync",
+      "issueBody": "## Bug\n`mergeLedgers` (`src/store/changeLedger.ts:171-194`) renumbers events when two clones diverged, but never forces subscribers to resync.\n\nBoth clones append after seq 2: ours at seq 3 (written later), theirs at seq 3 (written earlier). The merge orders by time, so theirs becomes 3 and ours becomes 4. `floor_seq` stays 0, so `resync` never fires.\n\n## Impact\nA subscriber whose cursor is 3 (it saw ours as event 3) asks for events after 3, gets `4:ours` again, and never sees theirs. The code comment says the gap rule forces a resync; nothing triggers it.\n\n## Reproduction\n```\nmerged: 0 4 [ '1:a', '2:b', '3:theirs', '4:ours' ]\nsubscriber after_seq=3 → resync: false events: [ '4:ours' ]\n```\n\n## Suggested fix\nAfter a merge that renumbers, raise `floor_seq` to at least the larger pre-merge head (or add a merge epoch carried by the subscribe cursor) so old cursors resync; alternatively keep our seqs and append theirs after them.\n\nFound in the 2026-09-17 bug sweep against v1.39.0 (main e171a37); reproduced locally.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n",
+      "issueCreatedAt": "2026-09-17T11:05:12Z",
+      "testFiles": [
+        "test/change-ledger.test.ts"
+      ],
+      "srcFiles": [
+        "src/store/changeLedger.ts"
+      ],
+      "srcLines": 45,
+      "memoryHits": 3
+    },
+    {
+      "id": "pr358",
+      "pr": 358,
+      "issue": 331,
+      "base": "4c23ac89cd7b9caf05ccb66cb1f7769b530c4ae9",
+      "merge": "9993b7802db9c99d01bb8c2c5a23aff2f13f2205",
+      "mergedAt": "2026-09-20T10:38:28+03:00",
+      "issueTitle": "docanchors: a fence indented 4+ spaces inside a list item is still missed",
+      "issueBody": "## Background\n\nSplit out of #298, whose CRLF fence-detection defect is fixed by PR #329. That PR's scope note:\n\n> the issue also mentions a fence indented 4+ spaces inside a list item being missed (`^ {0,3}`). That's a separate, harder case — `fencedRanges` is deliberately \"CommonMark-lite\" (no block/list-container tracking), and handling it correctly needs that context. Left out of this PR to keep it focused on the CRLF regression.\n\n## Gap\n\n`fencedRanges` (`src/core/docanchors.ts`) matches a fence opener with `^ {0,3}(\\`{3,}|~{3,})(.*)$` — at most 3 leading spaces. A fence inside a list item is commonly indented 4+ spaces (continuation indent), so it never registers as a fence at all, and a documentation example marker shown inside one is treated as a live, pinned anchor — the same false `doc-anchor-stale`/`doc-anchor-dangling` failure mode #298 was about, just reached by list-item indentation instead of CRLF. Confirmed still live on both LF and CRLF:\n\n```\n1. Anchor a doc like this:\n\n    ```markdown\n    <!-- hunch:topic example.topic dec_ffff000009 -->\n    ```\n```\n\n`parseDocAnchors` on this input returns the marker as a live pinned anchor at its line, instead of treating it as inside a fence.\n\n## Why this needs its own design pass, not a quick patch\n\nCorrectly handling this needs list-container/indentation tracking that `fencedRanges` deliberately doesn't have (it's \"CommonMark-lite\" by design, matching only the fence syntax itself). A real fix likely means either tracking the ambient list-item indent as fences are scanned, or a narrower heuristic (e.g. treating a fence indented enough to plausibly be inside a preceding list item's continuation as still a fence, at the cost of a wider match). Worth a deliberate design pass rather than folding into an unrelated PR.\n\n## Related\n\n- #298 — original report (CRLF half fixed by PR #329).",
+      "issueCreatedAt": "2026-09-18T19:08:07Z",
+      "testFiles": [
+        "test/docanchors.test.ts"
+      ],
+      "srcFiles": [
+        "src/core/docanchors.ts"
+      ],
+      "srcLines": 170,
+      "memoryHits": 3
+    },
+    {
+      "id": "pr349",
+      "pr": 349,
+      "issue": 295,
+      "base": "6b703a677d6a820b5d91d8711fa9c4245c5e9fca",
+      "merge": "a8c08f5cf6d382d381169913e42435060be598ab",
+      "mergedAt": "2026-09-19T13:51:47+03:00",
+      "issueTitle": "A capture arriving during another flush's lock release can stay uncommitted",
+      "issueBody": "## Bug\n`src/extractors/git.ts:1659-1665` and `:1686`: a commit lock with no owner is treated as \"held-unknown\", which is also the normal release window (the owner directory is removed before the lock directory). `waitForCommitLockHandoff` only waits on \"held-live\", so a capture arriving in that window returns null.\n\n## Impact\nThe record stays on disk but uncommitted (and on the overlay unpushed) until some later flush — the gap the 120 s handoff was meant to close.\n\n## Evidence\nCode path `git.ts:1655-1665 → 1686` (not reproduced; timing-dependent).\n\n## Suggested fix\nKeep polling through \"held-unknown\" while the lock's mtime is recent, within the same handoff deadline.\n\nFound in the 2026-09-17 bug sweep against v1.39.0 (main e171a37).\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n",
+      "issueCreatedAt": "2026-09-17T11:10:22Z",
+      "testFiles": [
+        "test/lock-ownerless-window.test.ts",
+        "test/worktree.test.ts"
+      ],
+      "srcFiles": [
+        "src/extractors/git.ts"
+      ],
+      "srcLines": 65,
+      "memoryHits": 21
+    },
+    {
+      "id": "pr347",
+      "pr": 347,
+      "issue": 303,
+      "base": "f7e3bb369995fcf5dc0fe565cc61ba875d4bfcfd",
+      "merge": "ec4918663b53622c3ab7a93a682ee2d6d71b644e",
+      "mergedAt": "2026-09-19T13:51:30+03:00",
+      "issueTitle": "served.db: concurrent hook/MCP/verify processes get \"database is locked\"",
+      "issueBody": "## Bug\n`src/core/served.ts:130` opens `served.db` with the default rollback journal and a 100 ms busy timeout. Every `taskDb` call (`src/core/taskReport.ts:147-167`, `:278-281`) also runs `INSERT OR IGNORE INTO report_history_progress` before its transaction, so even reads take a write lock. Parallel PreToolUse hooks, the MCP finish and a verify writing its result compete.\n\n## Impact\n- `recordReportCheck` failures are not caught (`src/core/taskReportEvidence.ts:212`): `hunch task verify` exits 1 after the command finished, the result is gone, and the unmatched check-start blocks completing the task for up to timeout + 1 min.\n- Hook deliveries degrade to \"Task report observation unavailable\".\n\n## Evidence\n6 processes × 4 s, each doing task-report reads/writes:\n```\n{\"ok\":38,\"fail\":4,\"errs\":[[\"database is locked\",4]]}\n{\"ok\":35,\"fail\":5,\"errs\":[[\"database is locked\",5]]}\n{\"ok\":57,\"fail\":2,\"errs\":[[\"database is locked\",2]]}\n{\"ok\":42,\"fail\":4,\"errs\":[[\"database is locked\",4]]}\n```\n\n## Suggested fix\n`PRAGMA journal_mode=WAL` plus a multi-second `busy_timeout` on the report path; move schema/seed statements into a one-time guarded migration; retry the result write.\n\nFound in the 2026-09-17 bug sweep against v1.39.0 (main e171a37).\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n",
+      "issueCreatedAt": "2026-09-17T11:10:35Z",
+      "testFiles": [
+        "test/task-report-locking.test.ts"
+      ],
+      "srcFiles": [
+        "src/core/served.ts",
+        "src/core/taskReport.ts"
+      ],
+      "srcLines": 50,
+      "memoryHits": 15
+    },
+    {
+      "id": "pr346",
+      "pr": 346,
+      "issue": 306,
+      "base": "c4eb2b1d5eec1574152b1556bf0e21fcd83ddefb",
+      "merge": "f7e3bb369995fcf5dc0fe565cc61ba875d4bfcfd",
+      "mergedAt": "2026-09-19T13:51:23+03:00",
+      "issueTitle": "Subagent tool calls report to a task that was never started, so their deliveries and denials are missing from the report",
+      "issueBody": "## Bug\n`src/core/taskReportHook.ts:63-73` (used at `src/cli/index.ts:4916-4939` and in `observeHookDenial`): a subagent's PreToolUse carries the parent's `session_id` and `prompt_id` plus an `agent_id`. `promptTaskId` includes `agent_id`, so the id differs from the prompt's task, which UserPromptSubmit opened without one. `recordTaskDelivery` throws \"task not found\".\n\n## Impact\nEvery subagent edit shows \"Task report observation unavailable\"; its deliveries and strict denials never reach the report or the contribution card; its dedup key never matches the parent's.\n\n## Evidence\n```\nsubagent PreToolUse tail: … Task report observation unavailable; this delivery's task contribution remains unverified.\nmain-agent PreToolUse tail: … Hunch task htask_… · delivery hocc_…\ndeliveries on prompt task: 1\n```\nAssumes Claude Code sends the parent's `prompt_id` together with `agent_id` for subagent tool calls.\n\n## Suggested fix\nWhen no task exists for (session, prompt, agent_id), attribute to (session, prompt, null), or alias the agent's id to it at SubagentStart.\n\nFound in the 2026-09-17 bug sweep against v1.39.0 (main e171a37).\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n",
+      "issueCreatedAt": "2026-09-17T11:10:40Z",
+      "testFiles": [
+        "test/task-report-subagent.test.ts"
+      ],
+      "srcFiles": [
+        "src/cli/index.ts",
+        "src/core/taskReport.ts",
+        "src/core/taskReportHook.ts"
+      ],
+      "srcLines": 27,
+      "memoryHits": 98
+    },
+    {
+      "id": "pr345",
+      "pr": 345,
+      "issue": 302,
+      "base": "f46d3cbd0b553f7a5a6039378a3e6ef19d831b9c",
+      "merge": "c4eb2b1d5eec1574152b1556bf0e21fcd83ddefb",
+      "mergedAt": "2026-09-19T13:51:16+03:00",
+      "issueTitle": "Task pending-check count goes wrong after an old check: a task closes while a check runs, and the result is lost",
+      "issueBody": "## Bug\n`src/core/taskReport.ts:326-328` (same SQL at `:520`): a `check-start` stops counting as pending once it is older than its timeout plus the 60 s grace, but its matching `check` result still subtracts 1 forever.\n\n## Scenario\n1. Check 1 (15 min budget) finishes; more than 16 minutes pass.\n2. Check 2 starts (a long suite). Sum = 0 − 1 + 1 = 0.\n3. `finishReportTask(completed)` succeeds (and `settleSessionTasks` would also close the task).\n4. When check 2 finishes, `appendEvent` throws \"task is already closed\", so `hunch task verify` fails after running the whole suite and the result is dropped.\n\n## Evidence\n```\nfinish while check 2 still running succeeded (BUG): completed agent\ncheck 2 result LOST: task is already closed; start a new task for new work\n```\n\n## Suggested fix\nCount only check-starts with no matching `check` row (join on `check_id`) that are still inside timeout plus grace; never subtract a result on its own.\n\nFound in the 2026-09-17 bug sweep against v1.39.0 (main e171a37).\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n",
+      "issueCreatedAt": "2026-09-17T11:10:34Z",
+      "testFiles": [
+        "test/task-report.test.ts"
+      ],
+      "srcFiles": [
+        "src/core/taskReport.ts"
+      ],
+      "srcLines": 11,
+      "memoryHits": 13
+    },
+    {
+      "id": "pr344",
+      "pr": 344,
+      "issue": 304,
+      "base": "100cc4f901aa4256283740dc2c703778f7b8164d",
+      "merge": "f46d3cbd0b553f7a5a6039378a3e6ef19d831b9c",
+      "mergedAt": "2026-09-19T13:50:43+03:00",
+      "issueTitle": "hunch task verify records a passing check as timed out when the command leaves a background process holding stdout",
+      "issueBody": "## Bug\n`src/core/taskReportEvidence.ts:205` settles on the child's `close` event, not `exit`. `close` waits until every holder of the stdio pipes exits. A command that starts a helper inheriting stdio (dev server, build daemon, watcher) and then exits 0 blocks the verify for the whole budget (15 min default) and records `exit_code: null, timed_out: true`.\n\n## Evidence\n`check.js` prints \"tests passed\" and exits 0, leaving a detached helper holding stdout; timeout 8 s:\n```\n(a) elapsed ms 9289 exit_code null timed_out true\n```\n\n## Suggested fix\nCapture the exit code on `exit`, then settle after a short drain window (or on pipe close, whichever comes first).\n\nFound in the 2026-09-17 bug sweep against v1.39.0 (main e171a37).\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n",
+      "issueCreatedAt": "2026-09-17T11:10:37Z",
+      "testFiles": [
+        "test/task-verify-exit.test.ts"
+      ],
+      "srcFiles": [
+        "src/core/taskReportEvidence.ts"
+      ],
+      "srcLines": 15,
+      "memoryHits": 11
+    },
+    {
+      "id": "pr342",
+      "pr": 342,
+      "issue": 291,
+      "base": "ab4b1c9b6beb0f6824706828a10345b77474a2e4",
+      "merge": "92afe11c8d1916092c960e752728d212e7814d93",
+      "mergedAt": "2026-09-19T13:50:29+03:00",
+      "issueTitle": "A stray copy of a record file breaks the SQLite rebuild (duplicate id)",
+      "issueBody": "## Bug\nThe JSON loader reads every `*.json` in a kind directory without checking that the file name matches the record id (`src/store/jsonStore.ts:453`). A leftover like `dec_x_BASE_1234.json` (aborted git mergetool), `dec_x.orig.json`, or a OneDrive/Dropbox conflict copy yields a duplicate id, and `reindex()` (`src/store/hunchStore.ts:549-561`) hits a PRIMARY KEY violation and rolls back.\n\n## Impact\n`hunch query` / `check` / `doctor` and MCP startup break; the pre-edit hook goes silently blind.\n\n## Evidence\n```\nreindex threw: UNIQUE constraint failed: decisions.id\n```\n\n## Suggested fix\nIn `readAllFromDisk`, skip (with a warning) records whose id differs from the file basename, or dedupe by id before insert.\n\nFound in the 2026-09-17 bug sweep against v1.39.0 (main e171a37).\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n",
+      "issueCreatedAt": "2026-09-17T11:10:14Z",
+      "testFiles": [
+        "test/store.test.ts"
+      ],
+      "srcFiles": [
+        "src/store/jsonStore.ts"
+      ],
+      "srcLines": 28,
+      "memoryHits": 8
+    },
+    {
+      "id": "pr341",
+      "pr": 341,
+      "issue": 290,
+      "base": "099d8b32a1e4f3569e9d9566296b705a9d7ac9dd",
+      "merge": "ab4b1c9b6beb0f6824706828a10345b77474a2e4",
+      "mergedAt": "2026-09-19T13:50:22+03:00",
+      "issueTitle": "Merge driver silently undoes a supersession when the other branch changed the record's provenance",
+      "issueBody": "## Bug\n`src/store/merge.ts:110-137`: `pickWinner` ranks human-confirmed, then confidence, then recency, all before `closureEvidence`.\n\nBranch A runs `hunch supersede dec_old --by dec_new` (sets `status`, `superseded_by`, `valid_to`; provenance unchanged). Branch B runs `hunch review --accept dec_old` (human_confirmed, confidence 0.95, fresh `last_verified`). B wins in both merge directions, so `dec_old` is live again beside `dec_new`: two live decisions on one topic, and no conflict is reported.\n\n## Evidence\n```\nA merges B conflict= false status= accepted superseded_by= null valid_to= null\nB merges A conflict= false status= accepted superseded_by= null valid_to= null\n```\n\n## Suggested fix\nEvaluate `closureEvidence` before the provenance tiebreaks, or merge the lifecycle fields (`status`, `superseded_by`, `valid_to`) field-wise.\n\nFound in the 2026-09-17 bug sweep against v1.39.0 (main e171a37).\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n",
+      "issueCreatedAt": "2026-09-17T11:10:12Z",
+      "testFiles": [
+        "test/merge.test.ts"
+      ],
+      "srcFiles": [
+        "src/store/merge.ts"
+      ],
+      "srcLines": 66,
+      "memoryHits": 2
+    },
+    {
+      "id": "pr340",
+      "pr": 340,
+      "issue": 288,
+      "base": "2b59d1802b50a3b6957cdf9bb6ba06d4da03c82c",
+      "merge": "099d8b32a1e4f3569e9d9566296b705a9d7ac9dd",
+      "mergedAt": "2026-09-19T13:50:15+03:00",
+      "issueTitle": "hunch index wipes human-reviewed Landscape relationships and supersedes edges from the edges index",
+      "issueBody": "## Bug\n`indexRepo` replaces the whole edges index with freshly scanned edges (`src/extractors/indexer.ts:636`). `scanRepo` never reads the existing edges, so edges written by other paths are deleted:\n- `hunch landscape adopt --reviewed-by …` writes `hunch.resource-relationship/1` edges (`src/cli/index.ts:3263`),\n- `supersede` writes a `supersedes` edge (`src/store/hunchStore.ts:1900`).\n\n`indexRepo` runs from `hunch index`, from post-commit `hunch sync` whenever a human-confirmed active constraint exists, and from correction upgrade. The rewritten index is a normal modification, so the next public flush commits the loss.\n\n## Evidence\n```\nbefore index: [ 'contains:hunch.resource-relationship/1', 'supersedes:hunch.edge/1' ]\nafter index:  []\n```\nThis repository's committed edges index currently holds 0 `supersedes` edges.\n\n## Suggested fix\nCarry forward edges that are not extractor-derived (schema `hunch.resource-relationship/1`, type `supersedes`, non-extractor provenance) before `replaceAll`.\n\nFound in the 2026-09-17 bug sweep against v1.39.0 (main e171a37).\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n",
+      "issueCreatedAt": "2026-09-17T11:10:09Z",
+      "testFiles": [
+        "test/indexer.test.ts"
+      ],
+      "srcFiles": [
+        "src/cli/index.ts",
+        "src/extractors/indexer.ts"
+      ],
+      "srcLines": 24,
+      "memoryHits": 105
+    },
+    {
+      "id": "pr339",
+      "pr": 339,
+      "issue": 310,
+      "base": "2ad1bc883359f3ece37ff9ae24a7a06c74bd8445",
+      "merge": "2b59d1802b50a3b6957cdf9bb6ba06d4da03c82c",
+      "mergedAt": "2026-09-19T13:50:06+03:00",
+      "issueTitle": "installClaudeHooks deletes user hooks from .claude/settings.json (mixed entries and foreign dist/cli/index.js hooks)",
+      "issueBody": "## Bug\n`src/integrations/scaffold.ts:148-157`, `:199`, on every `hunch init` / update. Violates the invariant \"config writers merge idempotently into existing user files\" (con_8460b6770f).\n\n- **Mixed entries:** `isHunchHook` uses `.some`, so a matcher entry holding Hunch's command *plus* a user's own command is treated as Hunch's, and the whole entry, including the user's command, is dropped.\n- **Foreign tools:** the `(dist|src)/cli/index.js hook$` pattern matches any tool with that entry path, so e.g. `node tools/lint/dist/cli/index.js hook` is dropped.\n\n`src/integrations/providers.ts` already fixed both for the other hosts (#41: a mixed entry stays foreign, and a `--provider` tail is required); `scaffold.ts` did not get the fix.\n\n## Evidence\n```\nprettier survives: false\nforeign lint hook survives: false\n```\n\n## Suggested fix\nReuse the providers.ts rule (every nested command must be Hunch's, anchored launcher and tail), and filter commands inside an entry instead of dropping the entry.\n\nFound in the 2026-09-17 bug sweep against v1.39.0 (main e171a37).\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n",
+      "issueCreatedAt": "2026-09-17T11:13:59Z",
+      "testFiles": [
+        "test/firmness.test.ts"
+      ],
+      "srcFiles": [
+        "src/integrations/hookmatch.ts",
+        "src/integrations/providers.ts",
+        "src/integrations/scaffold.ts"
+      ],
+      "srcLines": 123,
+      "memoryHits": 16
+    },
+    {
+      "id": "pr337",
+      "pr": 337,
+      "issue": 289,
+      "base": "506b5cc041b3b4d643cb875826a37846cef8a649",
+      "merge": "cdb7ff5e4e91633836e61c94b0654741d665fd30",
+      "mergedAt": "2026-09-19T13:49:52+03:00",
+      "issueTitle": "hunch private/shared --migrate deletes overlay records that fail to load, and pushes the deletion",
+      "issueBody": "## Bug\n`src/store/privateMigrate.ts:55` (via `src/store/jsonStore.ts:580-597`) proves no *public* record failed to load (`rawRecordCount`), but never checks the private side. `privRecs` comes from the validating `loadAll`, which skips corrupt or newer-schema records; `priv.replaceAll` then removes every file not in the loaded set. The migration commit uses `push: true`, so a teammate's newer-schema or hand-typo'd records disappear from the shared remote.\n\n## Evidence\n```\nprivate files before: [ 'dec_future.json', 'dec_privok.json', 'dec_typo.json' ]\n[hunch] skipping invalid decisions/dec_future.json ...\n[hunch] skipping corrupt decisions/dec_typo.json ...\nprivate files after:  [ 'dec_privok.json', 'dec_pub.json' ]\n```\nViolates the invariant \"never silently drop unmigratable records\".\n\n## Suggested fix\nApply the same `rawRecordCount(kind) === loadAll(kind).length` refusal to the private store, or union by id without the delete-stale step.\n\nFound in the 2026-09-17 bug sweep against v1.39.0 (main e171a37).\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n",
+      "issueCreatedAt": "2026-09-17T11:10:11Z",
+      "testFiles": [
+        "test/private-migrate.test.ts",
+        "test/team-shared-setup-clone-safety.test.ts"
+      ],
+      "srcFiles": [
+        "src/store/privateMigrate.ts"
+      ],
+      "srcLines": 12,
+      "memoryHits": 1
+    },
+    {
+      "id": "pr330",
+      "pr": 330,
+      "issue": 294,
+      "base": "50b21b8859c7d1a05a6e3e442ebb72df5eda4a0c",
+      "merge": "40339ce51322c577c6fbd7582fd34ce22254c6f7",
+      "mergedAt": "2026-09-19T13:49:13+03:00",
+      "issueTitle": "hunch supersede (CLI) only looks in the public store",
+      "issueBody": "## Bug\n`src/cli/index.ts:4265-4267` resolves both ids with `store.json.get` and calls `store.supersede` → `supersedeIn(this.json, …)` (`src/store/hunchStore.ts:1853`).\n\n## Impact\n- Shared (unified) mode: every decision lives in the overlay, so `hunch supersede <old> --by <new>` always fails with `--by decision \"…\" not found`.\n- Private mode: overlay decisions cannot be superseded from the CLI.\n\nThe MCP path handles this correctly (`src/mcp/server.ts:1888`).\n\n## Suggested fix\nResolve both ids with `getRec` / `decisionMemoryHome`, call `supersedePrivate` for overlay records, and flush that home.\n\nFound in the 2026-09-17 bug sweep against v1.39.0 (main e171a37).\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n",
+      "issueCreatedAt": "2026-09-17T11:10:21Z",
+      "testFiles": [
+        "test/supersede-cli.test.ts"
+      ],
+      "srcFiles": [
+        "src/cli/index.ts"
+      ],
+      "srcLines": 15,
+      "memoryHits": 89
+    },
+    {
+      "id": "pr328",
+      "pr": 328,
+      "issue": 296,
+      "base": "5c3bdc672513dff43332e808b7315acc58c78192",
+      "merge": "0b54eea6a1b63987da6987a4ddb4ab0967a984ce",
+      "mergedAt": "2026-09-19T13:48:38+03:00",
+      "issueTitle": "hunch_check_constraints and hunch_blast_radius return nothing for absolute paths",
+      "issueBody": "## Bug\n`src/store/hunchStore.ts:1555` (`checkConstraints`) and `src/mcp/server.ts:510-517`, `:1020`, `:1064` match scope globs against the target as given. An agent passing the absolute path from its edit payload gets \"No constraints in scope\" even though a blocking `src/store/**` rule applies. `hunch_why` works on the same path because it matches by suffix, so grounding and planning tools disagree.\n\n## Evidence\n```\nscope: [ 'src/store/**' ]\ncheckConstraints(rel): [ 'con_bd606fb786' ]\ncheckConstraints(abs win):   []\ncheckConstraints(abs posix): []\nwhy(abs).constraints: [ 'con_bd606fb786' ]\n```\n\n## Suggested fix\nConvert absolute targets to repo-relative paths in the MCP read tools, as `repoRelativeHint` already does in `correction.ts`.\n\nFound in the 2026-09-17 bug sweep against v1.39.0 (main e171a37).\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n",
+      "issueCreatedAt": "2026-09-17T11:10:24Z",
+      "testFiles": [
+        "test/findings.test.ts",
+        "test/mcp-resolve.test.ts",
+        "test/paths.test.ts",
+        "test/store.test.ts",
+        "test/task-delivery.test.ts"
+      ],
+      "srcFiles": [
+        "src/cli/index.ts",
+        "src/core/correction.ts",
+        "src/core/glob.ts",
+        "src/core/paths.ts",
+        "src/mcp/server.ts",
+        "src/store/hunchStore.ts"
+      ],
+      "srcLines": 229,
+      "memoryHits": 131
+    },
+    {
+      "id": "pr321",
+      "pr": 321,
+      "issue": 282,
+      "base": "714b2e5f0772dcd3a9747b60f039a6db65767712",
+      "merge": "c2c4222a68720c10f1dde1d44040ca083a5978cf",
+      "mergedAt": "2026-09-17T15:47:42+03:00",
+      "issueTitle": "State write interrupted between record and ledger event is later answered replayed; the event is never written",
+      "issueBody": "## Bug\nA state write that saves its record but fails before appending its change event is later answered `replayed`, and the event is never written.\n\n`writeStateAuthorized` saves the record (`putCapture`, `src/store/stateBinding.ts:814`) before `appendChanges` (`:834`). If anything throws in between (process killed, disk error, or the event-subject ZodError in the sibling issue), the retry finds the record on file with an equal hash (`:689-691`), records the idempotency key and returns `replayed`, without the missing `created` event.\n\n## Impact\n- Subscribers never learn the record exists.\n- `hunch serve replay` reports the partition OK: the record counts as `verified_by_idempotency`, hiding the orphan.\n- Contradicts the header of `src/store/changeLedger.ts`, which promises the next writer detects a record without its event.\n\n## Reproduction\nWrite a derived record, remove the event it produced (simulating a crash between the two steps), retry the identical request:\n```\nretry outcome: replayed\nevents: 0 []\ncurrent via read: [ 'nds_4f56f0df740b38defe5b832f' ]\nreplay ok: true { verified_by_idempotency: 1, ... }\n```\n\n## Suggested fix\nWhen the record is on file but the ledger holds no event naming it, append the missing `created`/`updated` event instead of only recording the key.\n\nFound in the 2026-09-17 bug sweep against v1.39.0 (main e171a37); reproduced locally.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n",
+      "issueCreatedAt": "2026-09-17T11:05:07Z",
+      "testFiles": [
+        "test/state-write-integrity.test.ts"
+      ],
+      "srcFiles": [
+        "src/store/stateBinding.ts"
+      ],
+      "srcLines": 118,
+      "memoryHits": 17
+    }
+  ]
+}

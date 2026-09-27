@@ -1,0 +1,87 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "npx -y --package=hunch-exact@npm:@davesheffer/hunch@1.42.0 hunch hook"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "npx -y --package=hunch-exact@npm:@davesheffer/hunch@1.42.0 hunch hook"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "npx -y --package=hunch-exact@npm:@davesheffer/hunch@1.42.0 hunch hook"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit|Bash|PowerShell|Skill",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "npx -y --package=hunch-exact@npm:@davesheffer/hunch@1.42.0 hunch hook"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "npx -y --package=hunch-exact@npm:@davesheffer/hunch@1.42.0 hunch hook"
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "npx -y --package=hunch-exact@npm:@davesheffer/hunch@1.42.0 hunch hook"
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "npx -y --package=hunch-exact@npm:@davesheffer/hunch@1.42.0 hunch hook"
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "npx -y --package=hunch-exact@npm:@davesheffer/hunch@1.42.0 hunch hook"
+          }
+        ]
+      }
+    ]
+  }
+}
