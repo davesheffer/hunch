@@ -1,0 +1,34 @@
+{
+  "id": "fnd_5124625efd",
+  "title": "Concurrent RMW lock stress intermittently reports unsafe owner metadata",
+  "observation": "The intermittent Node 22 stale .rmw-lock stress failure seen on the v1.41.4 release CI (a writer threw reading .hunch/edges/.rmw-lock/owner.tmp.json through readRmwOwner) was a release+re-acquire race during the owner read. Fixed by #420 (4660473): readRmwOwner re-reads the owner after that race, with a regression test (aa691b1); shipped in v1.42.0. The issue #293 takeover race and PID reuse were fixed earlier by a91b400 (an exclusive .reclaim claim, and recycled PIDs detected by process identity).",
+  "evidence": [
+    "git log v1.41.4..v1.42.0 -- src/store/jsonStore.ts -> 4660473 fix(store): re-read the RMW lock owner after a release+re-acquire race (#293)",
+    "git log -- src/store/jsonStore.ts -> a91b400 fix(locks): serialize stale-lock takeover and detect recycled pids by process identity",
+    "src/store/jsonStore.ts:70 readRmwOwner retry comment cites issue #293"
+  ],
+  "method": null,
+  "severity": "medium",
+  "triage": "resolved",
+  "affected_files": [
+    "src/store/jsonStore.ts"
+  ],
+  "affected_symbols": [
+    "readRmwOwner",
+    "readRmwOwnerOnce"
+  ],
+  "violates_constraint": null,
+  "spawned_decision": null,
+  "observed_at": "2026-09-27T05:37:54.217Z",
+  "resolved_commit": "4660473",
+  "provenance": {
+    "source": "agent_recorded",
+    "confidence": 0.75,
+    "evidence": [
+      "git log v1.41.4..v1.42.0 -- src/store/jsonStore.ts -> 4660473 fix(store): re-read the RMW lock owner after a release+re-acquire race (#293)",
+      "git log -- src/store/jsonStore.ts -> a91b400 fix(locks): serialize stale-lock takeover and detect recycled pids by process identity",
+      "src/store/jsonStore.ts:70 readRmwOwner retry comment cites issue #293"
+    ],
+    "last_verified": "2026-09-27T05:37:54.217Z"
+  }
+}

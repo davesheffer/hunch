@@ -1,0 +1,64 @@
+{
+  "id": "dec_68e4ca8893",
+  "title": "Memory-only changes reach protected main unattended: CI fast path plus a local post-commit memory shipper",
+  "topic": "ci.memory-shipping",
+  "status": "accepted",
+  "context": "Hunch hooks commit memory (task records, findings, captures) onto local main. Branch protection refuses direct pushes, so memory commits strand locally and each batch needed a hand-made PR plus a full ~15-minute CI run.",
+  "decision": "(1) ci.yml gains a classify job that runs the BASE branch's tooling/merge-class.mjs --require-memory-only; required matrix jobs are never skipped as whole jobs, and for a memory-only PR each leg runs a reduced gate (Linux: graph tests, then index, conform --strict, drift --fail-on finding-stale; Windows/macOS: every .hunch JSON parses). Anything else, a classify failure, or a push runs the full gate. merge-class gets a memory_only verdict, --no-renames, dot-segment rejection, and keeps .hunch/publication.json and *.local.json out of the class. (2) tooling/ship-memory.mjs, run from a local post-commit hook with --wait, pushes local main's unpushed memory commits to memory/host-<sha256(hostname)[:10]> and opens the PR; hunch-guard's merge-class job auto-merges it. It refuses (distinct exit codes) when any commit in range leaves the memory class (3), when the publication scanner flags any string, raw literal, key, path name or commit message in any commit at any unescape level (4), or when a human closed an earlier memory PR unmerged whose commits main still carries (5). Structural hits (machine paths, overlay paths, secrets) are never excused; a vocabulary hit is excused only if the exact match plus 40 chars each side is already in the same path's origin/main blob. History is read with replace refs off and a grafts file refuses. A lock in the common git dir serialises runs. (3) The publication scanner's home-path rules also catch file URIs, cwd=, Git Bash /c/Users, WSL /mnt/c/Users, %3A drives and case-insensitive drives, and skip quoted regex sources.",
+  "consequences": [
+    "Commits auto-merged with GITHUB_TOKEN trigger no push-to-main CI; full CI covers them at the next human-merged PR",
+    "Memory PRs pushed by hand (not by the shipper) still auto-merge without a content scan (fnd_4d9cc3f747)",
+    "A refused shipper run leaves commits unshipped, visible only in .git/hunch-ship-memory.log",
+    "The post-commit hook is armed locally after this merges; it is not in the repo"
+  ],
+  "alternatives_rejected": [
+    "Job-level skip of required checks for memory PRs: a skipped required check can satisfy protection with nothing run; each matrix leg runs and gates its own steps instead",
+    "Classifier taken from the PR head: a PR could widen the class that judges it",
+    "Excusing structural hits already public on origin/main: a new secret sharing a public prefix would ship",
+    "Excusing vocabulary hits by the clipped log excerpt: a long match could hide new text past the clip",
+    "Widening the overlay-path rule to relative paths into a sibling overlay checkout: three already-public records match and structural hits are never excused, so the shipper would wedge",
+    "Case-insensitive /users/ POSIX rule: flags API routes like /users/123 and wedges the shipper",
+    "Scheduled or CI-side shipping instead of a local post-commit hook: the stranded commits exist only on the local machine"
+  ],
+  "rejected_tripwires": [],
+  "related_components": [],
+  "related_files": [
+    ".github/workflows/ci.yml",
+    "tooling/merge-class.mjs",
+    "tooling/ship-memory.mjs",
+    "src/core/publication.ts",
+    "test/ship-memory.test.ts",
+    "test/merge-class.test.ts",
+    "test/publication.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-09-27T08:41:53.422Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "premises": [
+    {
+      "claim": "The shipper exists in the repo",
+      "path_exists": "tooling/ship-memory.mjs"
+    }
+  ],
+  "provenance": {
+    "source": "agent_recorded",
+    "confidence": 0.75,
+    "evidence": [
+      ".github/workflows/ci.yml",
+      "tooling/merge-class.mjs",
+      "tooling/ship-memory.mjs",
+      "src/core/publication.ts",
+      "test/ship-memory.test.ts",
+      "test/merge-class.test.ts",
+      "test/publication.test.ts"
+    ]
+  },
+  "date": "2026-09-27T08:41:53.422Z"
+}
