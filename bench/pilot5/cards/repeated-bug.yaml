@@ -1,0 +1,122 @@
+# PILOT5 issue card: repeated-bug (preregistered; rule: bench/pilot5/SELECTION.md)
+# Walk stopped at the first qualifying candidate (#360); #335, #334, #331, #316 were not walked.
+category_walk:
+  - issue: 360
+    verdict: qualified
+    reason: >-
+      Names an earlier defect in the same function/family (#285 / PR #359, mergeLedgers merge semantics);
+      deterministic pure-function repro on Windows 11 / Node 22; single-commit fix touching 1 non-test
+      source file, not bundled with another issue; issue text states expected behaviour but no patch.
+    evidence: >-
+      gh api issues/360: created_at 2026-09-19T21:19:52Z, updated_at == closed_at 2026-09-23T06:38:37Z,
+      GraphQL lastEditedAt null, userContentEdits [] (body never edited). Closed by PR #403
+      (merge ad9e16812043f398597a159d44aa71a8c8d9aa4d), sole commit 48f391a8 touching
+      src/store/changeLedger.ts + test/change-ledger.test.ts. Validator fails at start (exit 1), passes at fix (exit 0).
+
+issue_number: 360
+issue_url: "https://github.com/davesheffer/hunch/issues/360"
+category: repeated-bug
+issue_created_at: "2026-09-19T21:19:52Z"
+issue_text_sha256: "fdf1f360266180d7af70d98e845b780dc476ae4a984b189a5cb5660a5a645049" # sha256(UTF-8 title + "\n\n" + body), body as returned by gh
+task_prompt: | # verbatim title + blank line + body at arrival; no comments existed; nothing required sanitizing
+  mergeLedgers re-adds compacted base events that neither side retains
+
+  Found while reviewing #285 / PR #359. Pre-existing; not changed by that PR.
+
+  `mergeLedgers(base, ours, theirs)` (`src/store/changeLedger.ts`) seeds the union with `base.events`. When **both** sides have since compacted an event away, base still contributes it, so the merged ledger resurrects an event neither clone retains — below what both sides consider their floor's history.
+
+  Consequence: the merged `events` can contain entries older than either side's `floor_seq` implied, and the operator-facing text around `operator.ts:195` (which describes compaction as final) is then misleading.
+
+  Expected: an event absent from both ours and theirs **and** at or below either side's floor is treated as compacted, not re-added. Base should only settle identity/ordering, never re-introduce history.
+
+  Acceptance: a test where base has events 1..3, ours and theirs both compacted to floor 2 and each appended one event — the merged ledger must not contain events 1..2.
+
+  🤖 Generated with [Claude Code](https://claude.com/claude-code)
+starting_commit: "3550f3766e39adb18ab309ab5755d45337ba1a40" # first parent of 48f391a8 (Merge PR #402, release/1.41.1)
+starting_state_proof:
+  command: >-
+    cp bench/pilot5/validators/360/pilot5-issue-360.test.ts <worktree@3550f37>/test/ &&
+    cd <worktree@3550f37> && npx tsx --test test/pilot5-issue-360.test.ts
+  expected: "exit 1; the #360 regression fails because base-only events 1..2 are resurrected by the merge"
+  observed: >-
+    exit 1; fail 1 / pass 1. "merging two compacted clones does not resurrect base-only history":
+    actual [ncm_..01, ncm_..02, ncm_..03, ncm_..04, ncm_..05], expected [ncm_..03, ncm_..04, ncm_..05].
+solution_boundary:
+  first_known_fix_commit: "48f391a83507f3c2d359b1bad74500e3d77ab089" # merged to main by ad9e16812043f398597a159d44aa71a8c8d9aa4d (PR #403)
+  later_issue_comments_excluded: [] # the issue has no comments
+  later_sources_excluded:
+    - "PR #403 (fix) and its commit 48f391a8"
+    - "PR #401 (cross-reference only, 2026-09-22)"
+    - "PR #359 body 'Known, not fixed here' list (names the defect, no solution; merged after cutoff)"
+memory:
+  cutoff_at: "2026-09-19T21:19:52Z" # issue createdAt
+  revision_or_snapshot_sha256: "9be1a98102a9cd3c386770c4aa97430a26e3549baa2512efd43c7967c5a6eea9"
+  # sha256 of the LF-joined, sorted manifest below (one "<store>:<path> <git blob sha>" line each, trailing newline).
+  # Public blobs from origin/main f909958e041b444cd48ad296e3f06adc6bc01adb (last first-parent commit before cutoff;
+  # identical blobs at starting_commit). Private blobs from overlay commit 9fe38c251b25a884b50a72855ff546e92bb80b15
+  # (last first-parent overlay commit before cutoff).
+  snapshot_manifest:
+    - "private:.hunch/decisions/dec_a80438754d.json 27d786e47f8e20f911d9ed4d6662ae5375c1606b"
+    - "private:.hunch/decisions/dec_b4d64d643a.json f8ff13672400045d82debab1a35e8d7439c5124e"
+    - "private:.hunch/findings/fnd_1317f8935e.json 23c3a4f76cd2f4447768142fc9e6407db6d4e35d"
+    - "public:.hunch/decisions/dec_24029155a7.json 58c4ebe9454f7c5c1a6ec17545cb745148db5baf"
+    - "public:.hunch/decisions/dec_55918cfc0d.json f08b8e2cd82a008bcfcedde69a6fc936163d8700"
+    - "public:.hunch/decisions/dec_9d0e63ba79.json 4730810d1fd7b9f7267e9bb168f655fd14ef1357"
+    - "public:.hunch/decisions/dec_a9bfb5dd8d.json b5ba4bd9bc83abbc39dda0a683b8943c65fa4a77"
+    - "public:.hunch/decisions/dec_b4c8543113.json 34c46d40e8889229a37f9d5ea6992023b60fefc2"
+  eligible_record_ids:
+    - dec_24029155a7 # public; related_files includes src/store/changeLedger.ts; ledger replay + compaction background
+    - dec_55918cfc0d # public; introduced the per-scope change ledger (src/store/changeLedger.ts)
+    - dec_a9bfb5dd8d # public; state contract: subscribe gap forces resynchronization
+    - dec_b4c8543113 # public; drift runs the replay check over the change ledger (weak)
+    - dec_9d0e63ba79 # public; mentions changeLedger (weak)
+    - dec_a80438754d # private overlay; ID only (weak, superseded)
+    - dec_b4d64d643a # private overlay; ID only (weak, superseded)
+    - fnd_1317f8935e # private overlay; ID only; names #285 among triaged sweep items, not this defect
+  excluded_future_record_ids:
+    - htask_df33f5485679255619034f2a # private; task touching changeLedger, started 2026-09-19T21:57:23Z, first add 2026-09-19T22:12:53Z (after cutoff)
+    - dec_1a1f5f22ea # private; sibling ledger subscribe fix, captured 2026-09-22T06:01:18Z, first add 2026-09-22T06:02:55Z
+    - dec_229b26e220 # private; this issue's fix (commit 48f391a), captured 2026-09-23T06:28:00Z, first add 2026-09-23T06:29:26Z
+    - ws_a0454ce3f14f # private workspace-ledger record naming #403, first add 2026-09-22 (not a memory record class; future)
+  source_and_timestamp_evidence:
+    - "method: git grep at starting_commit (public .hunch/{decisions,constraints,bugs,findings,tasks}) and overlay HEAD for mergeLedgers|changeLedger|compactLedger|#285|#359|#360|#403|floor_seq|renumber|resync|ledger merge/compaction; first add = git log --diff-filter=A --format=%cI (origin/main or overlay); capture = record date/observed_at/started_at"
+    - "dec_24029155a7 public first_add 2026-09-09T12:45:19Z capture 2026-09-09T12:46:02.843Z"
+    - "dec_55918cfc0d public first_add 2026-09-08T07:28:45Z capture 2026-09-08T07:27:22Z"
+    - "dec_a9bfb5dd8d public first_add 2026-09-07T13:21:04Z capture 2026-09-07T13:21:02.656Z"
+    - "dec_b4c8543113 public first_add 2026-09-09T13:13:40Z capture 2026-09-09T13:12:28Z"
+    - "dec_9d0e63ba79 public first_add 2026-09-09T02:45:11Z capture 2026-09-09T02:43:18Z"
+    - "dec_a80438754d private first_add 2026-09-09T06:05:24Z capture 2026-09-09T06:05:20.743Z"
+    - "dec_b4d64d643a private first_add 2026-09-09T06:05:12Z capture 2026-09-09T06:05:09.168Z"
+    - "fnd_1317f8935e private first_add 2026-09-17T11:40:50Z capture 2026-09-17T11:40:46.658Z"
+    - "no public record on origin/main mentions #285, #359, #360, #403 or mergeLedgers (checked 2026-09-27)"
+  relevance_expected: unknown
+  relevance_note: >-
+    No eligible record covers this defect family: records of the #285 fix and of this fix were captured
+    after the cutoff. Eligible memory is change-ledger design background only. Delivery for
+    src/store/changeLedger.ts is unverified.
+validator:
+  command: >-
+    cp bench/pilot5/validators/360/pilot5-issue-360.test.ts <target>/test/ &&
+    cd <target> && npx tsx --test test/pilot5-issue-360.test.ts
+  # tooling/run-tests.mjs does not exist at 3550f37 or 48f391a; the repo's own runner there is `tsx --test`.
+  validator_sha256: "62b29ea1ea53bb8b20581f8793a5671269bd68cdd000dcb5854b94e555252638" # single file, bench/pilot5/validators/360/pilot5-issue-360.test.ts
+  starting_state_result: failed
+  success_criteria: >-
+    Exit 0 with both tests passing: (1) base [1,2,3], ours/theirs compacted to floor 2 and each appended
+    one event -> merged record_ids exactly [3,4,5], floor_seq >= 2, assertChangeSequence holds; (2) guard:
+    an event one clone compacted but the other retains survives ([01,02,03]). Uses only exports that exist
+    at starting_commit (emptyLedger, mergeLedgers, Ledger, assertChangeSequence, stateHash).
+  notes: >-
+    The fix deleted an existing #285 test in test/change-ledger.test.ts ("the ours-before-theirs tiebreak
+    keeps a batch both sides retained in its original order"), which asserts the old resurrecting behaviour
+    for a batch compacted on both sides. A correct fix will fail that test in the agent workspace. The
+    validator does not run it. This is inferred from the fix diff and was not executed.
+validation_runs:
+  start:
+    exit: 1
+    key_line: "✖ issue #360: merging two compacted clones does not resurrect base-only history (actual ncm_..01..05, expected ncm_..03..05); pass 1 fail 1"
+  fix:
+    exit: 0
+    key_line: "✔ both issue #360 tests; ℹ pass 2 ℹ fail 0"
+status: qualified
+exclusion_reason: null

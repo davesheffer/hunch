@@ -1,0 +1,92 @@
+# PILOT5 issue card: self-contained category (retrospective). Built under bench/pilot5/SELECTION.md.
+issue_number: 394
+issue_url: "https://github.com/davesheffer/hunch/issues/394"
+category: self-contained
+issue_created_at: "2026-09-22T07:20:42Z"
+issue_text_sha256: "19f7d5a92633dd97ece67ca45c5c02d28a224bd569aa377fbf25f524467cf580" # sha256 of UTF-8 title + "\n\n" + body; body never edited (GraphQL lastEditedAt null, userContentEdits 0)
+task_prompt: "Task card hides failed checks when a later unrelated check passes\n\n## Problem\n\nThe completion card displays only the last verification command. A later pass from an unrelated check hides an earlier unresolved failure, leaving the card looking green although the full report retains a failed check.\n\nReproduced on the published Hunch 1.40.1 runtime on Windows on 2026-09-22. The same selection exists in the 1.38.1 checkout.\n\n## Reproduction\n\nIn an isolated Git repository, start a task, then run these commands using its returned task ID:\n\n```text\nhunch task verify <task-id> --label \"Integration tests\" -- node -e \"process.exit(7)\"\nhunch task verify <task-id> --label \"Lint\" -- node -e \"process.exit(0)\"\nhunch task finish <task-id>\n```\n\nKeep the source unchanged between checks. The JSON report correctly retains exit codes `[7, 0]`, with both checks current. The completion card shows only:\n\n```text\nChecked   Lint · passed · current source snapshot\n```\n\nThere is no mention of the failed integration check. The HTML report correctly shows both COMMAND FAILED and COMMAND PASSED.\n\n## Expected\n\nKeep unresolved failures visible in the compact card, or explicitly show that it summarizes only the latest check alongside the count of failures requiring inspection. Define how a successful rerun supersedes a failure so that a different check passing cannot conceal it.\n\n## Location and validation\n\n`src/core/taskReportRender.ts`, `renderTaskReport`: `const check = report.checks.at(-1)`.\n\nAn isolated runtime reproduction verified actual command exits, unchanged source snapshots, repeat completion, and invalidation after a source edit. This is a presentation defect, not evidence loss. Add regression coverage for fail-A/pass-B, fail-A/pass-A, and stale-source results.\n\nRelated Hunch finding: `fnd_e1e9d91cea`.\n" # title + body verbatim at arrival; the issue has no comments; its Expected/Location text is the issue's own suggestion, not the fix
+starting_commit: "43b9339b686549c50950accdfee2098ca9c9183c" # first parent of a6eb1c60, the earliest fix commit (reached main through merge 1c2763e of PR #396)
+starting_state_proof:
+  command: "copy bench/pilot5/validators/394/pilot5-issue-394.test.ts to <worktree at starting_commit>/test/, then from that worktree: node --import tsx --test test/pilot5-issue-394.test.ts"
+  expected: "fails: after Integration tests exits 7 and Lint exits 0, the card shows no failure"
+  observed: "exit 1; AssertionError [ERR_ASSERTION]: fail-A/pass-B: the card must still show the unresolved failure; the card showed only 'Checked   Lint · passed · current source snapshot'"
+solution_boundary:
+  first_known_fix_commit: "a6eb1c603256451bc7a9308dfece5f2bbad58b91" # feat: assemble 1.41.0 card, worktree, and constraint release candidate (2026-09-22T09:04:24Z)
+  fix_scope_note: "a6eb1c60 is a multi-issue release-candidate commit (#394 #395 #375 #357 #386 #387 #388 #377 #378 #384; 8 src files overall). The #394 part is renderTaskReport in src/core/taskReportRender.ts only, one non-test source file. The validator exercises renderTaskReport alone, so it isolates #394 (qualification item 5)."
+  later_issue_comments_excluded: [] # the issue has no comments
+  later_sources_excluded:
+    - "PR #396 (cross-referenced 2026-09-22T09:06:40Z) and its commits"
+    - "CHANGELOG 1.41.0 entry"
+    - "later revision of fnd_e1e9d91cea in commit 3e795164 (2026-09-22T09:20:17Z)"
+memory:
+  cutoff_at: "2026-09-22T07:20:42Z" # issue createdAt
+  revision_or_snapshot_sha256: "e3bc5cd60c18ef199f365904b55d99578c0a2feac41ff5cb8c6b6e848134a7e2" # sha256 of the concatenated historical blobs of eligible_record_ids: the public records from 43b9339b in path-sorted order (decisions, findings, tasks), then private dec_b24f11f7f5@8086ed13, htask_70e10453@e833cb41 and htask_8e3a87e6@9df2298e. Public .hunch tree at start: b38774661a155ba27d8e9f0523e9819b39979e4e. Private overlay head at cutoff: 9df2298e5cca51fdbfe15c4d364e5dd447e5cda5.
+  eligible_record_ids:
+    # Public records whose origin/main first-add time and own capture time are both before the cutoff. Found by grepping for taskReportRender, renderTaskReport, checks.at( and card terms.
+    - fnd_e1e9d91cea # first-add 07:16:42Z, observed_at 07:16:41Z; the issue's own source finding; restates the defect and holds no solution
+    - dec_d928ec4b2c # 2026-09-11; task-report rule evaluation; states that violations always show on the card (analogous; does not govern check display)
+    - htask_ebb7daa9f38413b21384fba6 # 2026-09-21; earlier edit of taskReportRender.ts for a different defect (title truncation)
+    - htask_798fa5269bfc4f42467778d9 # 2026-09-22T07:10Z; card-display task; unrelated to which check the card shows
+    - dec_0bf3bda2c1 # 2026-09-19/20; when agents call hunch_task finish; unrelated
+    - dec_2c8f841465 # 2026-09-11; evidence tiers; lists taskReportRender.ts among its files; unrelated
+    - dec_30ddff7308 # 2026-09-15; ESM loader URLs; unrelated
+    - dec_fc93aec4ac # 2026-09-15; command resolution without shell; unrelated
+    - fnd_53991b877b # 2026-09-12; report size; unrelated
+    - fnd_84e5181565 # 2026-09-15; verify argv on Windows; unrelated
+    - fnd_aba5b3019c # 2026-09-16; POSIX-only tests; unrelated
+    - fnd_ff4d2899ee # 2026-09-15; .cmd launchers recorded exit null; unrelated
+    - fnd_d98451bc6b # 07:16:44Z; sibling finding for #395 (footer wrap); unrelated to #394
+    # Private overlay records, by ID only. First added to hunch-private before the cutoff; the historical version is used.
+    - dec_b24f11f7f5 # first-add 2026-09-13; where the card is displayed; does not govern which checks it shows
+    - htask_70e104539c850052cb72b4e4 # first-add 2026-09-20; delivery log only
+    - htask_8e3a87e6ade96968613dfbdf # first-add 2026-09-22T07:17:10Z; the audit task that produced fnd_e1e9d91cea; holds no solution content
+  excluded_future_record_ids:
+    - htask_62a35201ba163a6ffadd4a14 # PUBLIC and present in the starting tree, but first added at 07:25:23Z, after the cutoff; remove it from the Hunch-arm mount
+    - dec_276ee822f7 # private, first-add 2026-09-22T09:06:36Z
+    - dec_1106c0b056 # private, first-add 2026-09-22T12:07:32Z
+    - fnd_1d6bc8dda9 # private, first-add 2026-09-25
+    - htask_2b988b2739b08da1ed2413a8 # private, first-add 2026-09-22T09:33Z
+    - htask_60f5c9163e1c7a65d0ad007c # private, first-add 2026-09-22T13:02Z
+    - htask_51d9287a8d5f7e9df83fb9c0 # private, first-add 2026-09-22T13:02Z
+    - htask_9ff788768e455224abc58e1f # private, first-add 2026-09-22T13:03Z
+    - htask_813cfaf240bc4c328734b698 # private, first-add 2026-09-23
+    - htask_9a9a3b1eabd18bc14399a1d0 # private, first-add 2026-09-23
+  source_and_timestamp_evidence:
+    - "public first-add: git log origin/main --diff-filter=A --format=%cI -- .hunch/<kind>/<id>.json; own timestamp: valid_from, observed_at or started_at of the version at 43b9339b"
+    - "private first-add: git -C hunch-private log --diff-filter=A --format=%cI -- .hunch/<kind>/<id>.json; content read at the last commit before the cutoff"
+    - "git log 43b9339b --since=<cutoff> -- .hunch: only 43b9339b itself adds a record (htask_62a35201), so the starting tree holds exactly one future record"
+    - "no public or private constraint, bug or earlier issue governs which checks the card shows; the issue names no earlier issue"
+    - "delivery unverified: retrieval of these records under Hunch 1.42 and its budget was not tested"
+  relevance_expected: abstain # the only on-topic record (fnd_e1e9d91cea) restates the issue and adds nothing toward the fix
+validator:
+  command: "copy bench/pilot5/validators/394/pilot5-issue-394.test.ts to <target worktree>/test/, then from that worktree: node --import tsx --test test/pilot5-issue-394.test.ts. tooling/run-tests.mjs does not exist at these commits; their package.json test script is tsx --test."
+  validator_sha256: "68b384d58615b0c62dd568570cd92a2efb2e0483c3880c2b6eaf32d07f02a59a" # single file
+  starting_state_result: failed
+  success_criteria: "exit 0. After fail-A/pass-B, and again after a source edit, the text card still indicates a failure (matches fail* or unresolved). After a successful rerun with the same argv and label, the card shows no outstanding failure. The report keeps all 3 checks. The validator uses only readTaskReport, startReportTask, reportSourceSnapshot, runReportCheck and renderTaskReport, which all exist at the starting commit. It does not require the fix's 'Failures' wording."
+  derived_from: "the fix's regression test 'card keeps a failed command visible until that exact command succeeds' (test/task-report.test.ts in a6eb1c60)"
+status: qualified
+exclusion_reason: null
+validation_runs:
+  start: {exit: 1, key_line: "AssertionError [ERR_ASSERTION]: fail-A/pass-B: the card must still show the unresolved failure (card showed 'Checked   Lint · passed · current source snapshot')"}
+  fix: {exit: 0, key_line: "ok #394: a later unrelated passing check does not hide an unresolved failure on the card; tests 1, pass 1, fail 0"}
+category_walk:
+  - issue: 397
+    verdict: excluded
+    reason: "item 6: the issue text at arrival discloses the solution. It says 'Fix: retain the timeout/cancellation flags and normalize the exit code to null when the runner terminated the command' and 'Included in the 1.41.0 candidate #396', and it names the already-failing assertion. The report was written after the fix."
+    evidence: "gh issue view 397 (created 2026-09-22T09:11:33Z, no edits); fix 3ab150500add76666d7a96b77792632d09a6be54 is a one-line change in src/core/taskReportEvidence.ts, parent a6eb1c60; not reproduced, because the exclusion does not depend on it"
+  - issue: 395
+    verdict: excluded
+    reason: "item 3: the fix has no regression test and none can be derived. The fix in a6eb1c60 only adds 'footer' to the CSS overflow-wrap selector, and no test in that commit covers footer wrapping. A CSS-string check would reject the issue's own alternative ('wrap the hash', for example in <code>). A layout check needs a browser, which is not a repo dependency."
+    evidence: "git show a6eb1c60 -- test | grep footer|overflow|wrap: no matches; git log -S'pre,code,dd,footer' finds only a6eb1c60; node_modules has no playwright, puppeteer or jsdom"
+  - issue: 394
+    verdict: qualified
+    reason: "Every qualification item holds: deterministic Windows reproduction; a derived validator that fails at start and passes at fix; one non-test source file for this issue; isolable from its bundle; no solution in the issue text. It fits self-contained because no earlier issue, decision series or constraint governs the fix."
+    evidence: "validator exit 1 at start 43b9339b, on the issue's own symptom; exit 0 at fix a6eb1c60; memory audit above"
+  - issue: 307
+    verdict: not-evaluated
+    reason: "the walk stopped at the first qualified candidate (#394)"
+    evidence: null
+  - issue: 301
+    verdict: not-evaluated
+    reason: "the walk stopped at the first qualified candidate (#394)"
+    evidence: null

@@ -1,0 +1,105 @@
+# PILOT5 issue card - category: convention (preregistered; built 2026-09-27)
+# Selection rule: bench/pilot5/SELECTION.md. Walk stopped at the first qualifying
+# candidate (#314); #312 and #310 were not evaluated.
+issue_number: 314
+issue_url: "https://github.com/davesheffer/hunch/issues/314"
+category: convention
+issue_created_at: "2026-09-17T11:14:05Z"
+issue_text_sha256: "3e5b580d464cda9efd39a37fb8545284f531d60b30f6daf5ae0de1e0695aa0a0" # sha256(UTF-8 title + "\n\n" + body) as returned by gh; body never edited (GraphQL lastEditedAt null, userContentEdits empty); 0 comments
+task_prompt: |2 # literal, clip: keeps the body's single trailing newline
+  Provider config writers silently drop comments from JSONC files (.vscode/mcp.json, .cursor/hooks.json, ...)
+
+  ## Bug
+  `src/integrations/providers.ts:35-46`, `:62-67`: `readJsonObj` accepts JSONC, then `writeJson` re-serializes with `JSON.stringify`, so comments in `.vscode/mcp.json`, `.cursor/hooks.json`, `.github/hooks/hunch.json` etc. are lost on every `hunch init` / update. `repairIntegrationPins` preserves comments; these writers do not. The test at `test/providers.test.ts:223` only checks that the servers survive.
+
+  ## Evidence
+  A `.vscode/mcp.json` containing `// DB server: token comes from 1Password…` and `/* pinned to 2.x until #412 */` comes back with both comments gone.
+
+  ## Suggested fix
+  Use the token-preserving edit `health.ts` uses, or refuse and print a manual snippet when the file contains comments.
+
+  Found in the 2026-09-17 bug sweep against v1.39.0 (main e171a37).
+
+  🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+starting_commit: "7742a3b17b4bc36514464ef730a74fb902935a6a" # first parent of earliest fix commit ea6a14c0 (PR #406 base, main 2026-09-23T07:21:04Z)
+starting_state_proof:
+  command: "git -c core.hooksPath=<empty dir> worktree add --detach <wt> 7742a3b17b4bc36514464ef730a74fb902935a6a; junction node_modules; cp bench/pilot5/validators/314/pilot5-issue-314.test.ts <wt>/test/; cd <wt>; node node_modules/tsx/dist/cli.mjs --test test/pilot5-issue-314.test.ts"
+  expected: "validator fails: writeVscodeMcp / writeCursorHooks re-serialize an existing JSONC config and erase its // and /* */ comments"
+  observed: "exit 1; tests 3, pass 1, fail 2; both comment cases fail with 'AssertionError [ERR_ASSERTION]: comment erased:' followed by the rewritten comment-free JSON"
+solution_boundary:
+  first_known_fix_commit: "ea6a14c04e8073a641834c012b82eca7bdb09c51"
+  fix_commits_on_main: ["ea6a14c04e8073a641834c012b82eca7bdb09c51", "12147998a4b7ff08ee3b0d5a5a47a7b3b0c9a2e8"] # merged by 847a2fc34193b97f11c470a17e88cf0334bf7c02 (PR #406, 2026-09-23T08:08:19Z)
+  non_test_source_files_touched: ["src/integrations/providers.ts"] # 1 file; not bundled with another issue's fix
+  later_issue_comments_excluded: [] # the issue has no comments
+  later_sources_excluded: ["PR #406 title/body/commits", "v1.41.3 CHANGELOG/release notes", "test/providers.test.ts at or after ea6a14c0"]
+memory:
+  cutoff_at: "2026-09-17T11:14:05Z" # issue createdAt
+  cutoff_revisions:
+    public: "e171a372fc98aa8579746752899600f5ddd713d2" # last origin/main first-parent commit before cutoff (2026-09-17T10:46:09Z); the issue itself cites main e171a37
+    private_overlay: "df58cbd15938ce3df1220915553bb22b4937ad22" # last hunch-private commit before cutoff (2026-09-17T11:11:39Z)
+  revision_or_snapshot_sha256: "59190600d8912f8e8918d92f2d5ac6c1bac8c7f5287aa82172c19023a5950886" # sha256 over eligible records sorted by "<store>:<path>", each fed as "<store>:<path>\n<file bytes at the cutoff revision>"
+  eligible_record_ids:
+    - con_8460b6770f # public + private copy; scope lists src/integrations/providers.ts; governs the fix (merge into user files, refuse to clobber)
+    - dec_20f0bbaae5 # public
+    - dec_261e42920c # public + private copy
+    - dec_9ce94e6771 # private (ID only)
+    - dec_811f2dc486 # private (ID only)
+    - dec_a69788b691 # private (ID only)
+  excluded_future_record_ids:
+    - fnd_bafbcd6e83 # private; captured 2026-09-17T11:15:03Z, 58 s after the issue (the sweep that filed it)
+    - fnd_1317f8935e # private; captured 2026-09-17T11:40:46Z
+    - dec_568212dbc7 # private; fix commit ea6a14c0 capture, 2026-09-23
+    - dec_a34fce505e # private; fix commit 12147998 capture, 2026-09-23
+    - dec_74978cf66f # private; release capture, 2026-09-23
+    - dec_8218606b60 # private; release capture, 2026-09-23
+    - htask_bd24264896fb33532a6ade25 # private; fix task, 2026-09-23
+    - fnd_41d1337f09 # private; 2026-09-25, later delivery study of the same governing constraint
+  source_and_timestamp_evidence:
+    - "con_8460b6770f public: first add 2026-06-16T13:31:36+03:00 (git log origin/main --diff-filter=A); provenance.last_verified 2026-08-28T18:35:00Z; human_confirmed"
+    - "con_8460b6770f private: first add 2026-06-24T08:39:29+03:00; provenance.last_verified 2026-08-28T18:35:00Z"
+    - "dec_20f0bbaae5 public: captured 2026-07-05T00:34:33+03:00, first add 2026-07-05T00:34:53+03:00"
+    - "dec_261e42920c: captured 2026-06-16T10:13:00+03:00; public first add 2026-06-16T10:13:33+03:00, private 2026-06-23T01:02:48+03:00"
+    - "dec_9ce94e6771 private: captured 2026-06-16T10:22:24+03:00, first add 2026-06-23T01:02:48+03:00"
+    - "dec_811f2dc486 private: captured 2026-06-16T10:31:53+03:00, first add 2026-06-23T01:02:48+03:00"
+    - "dec_a69788b691 private: captured 2026-06-21T12:19:58+03:00, first add 2026-06-23T01:02:48+03:00"
+    - "No public .hunch record on origin/main mentions #314 or JSONC comment erasure (git grep origin/main -- .hunch/)"
+    - "Public .hunch/ at starting_commit holds records added after the cutoff; mount the cutoff snapshot, never the starting commit's .hunch/, for the Hunch arm"
+  relevance_expected: relevant # delivery unverified: con_8460b6770f's scope names providers.ts exactly, but delivery under the benchmarked Hunch version and budget was not run
+validator:
+  command: "cp bench/pilot5/validators/314/pilot5-issue-314.test.ts <wt>/test/ && (cd <wt> && node node_modules/tsx/dist/cli.mjs --test test/pilot5-issue-314.test.ts)" # tooling/run-tests.mjs does not exist at starting_commit; its package.json test script is 'tsx --test'
+  validator_sha256: "1b00f4d0b411f234f65e933b91637d9c7ea260350418a861edc298c8f99df996" # single file bench/pilot5/validators/314/pilot5-issue-314.test.ts
+  starting_state_result: failed
+  success_criteria: "exit 0 with all 3 tests passing. For a JSONC .vscode/mcp.json (// comment) and .cursor/hooks.json (/* */ comment), the writer either leaves the file byte-identical (refusal, thrown or returned) or writes a merged file that still contains every comment, keeps the user's other server/hook and adds Hunch's entry; comment-looking text inside JSON strings still merges normally. Derived from the fix's tests in test/providers.test.ts, relaxed so the issue's other suggested fix (token-preserving edit) also passes; uses only APIs present at starting_commit (writeVscodeMcp, writeCursorHooks, parseJsonc, tempStore)."
+status: qualified
+exclusion_reason: null
+validation_runs:
+  start: { commit: "7742a3b17b4bc36514464ef730a74fb902935a6a", exit: 1, key_line: "AssertionError [ERR_ASSERTION]: comment erased: (2 of 3 tests fail; string-literal guard passes)" }
+  fix: { commit: "847a2fc34193b97f11c470a17e88cf0334bf7c02", exit: 0, key_line: "tests 3, pass 3, fail 0" }
+  environment: "Windows 11, Node v24.13.0 (the rule names Node 22), git hooks disabled via core.hooksPath=<empty dir>"
+category_walk:
+  - issue: 357
+    verdict: excluded
+    reason: "fails items 3, 4 and 5: the only fix on main is bundled in a release-candidate commit, and the correct behaviour depended on a product decision the issue text leaves open"
+    evidence:
+      - "No commit on origin/main references #357; it is closed by release PR #396 (merge 1c2763e77c1f7c8c048f83056daf826254b26b81), which closes #394 #395 #375 #357 #377 #378 #397 #398 #399 #400"
+      - "Fix lives in a6eb1c603256451bc7a9308dfece5f2bbad58b91 'assemble 1.41.0 card, worktree, and constraint release candidate' (parent 43b9339b686549c50950accdfee2098ca9c9183c): 191 files, 8 non-test src files (src/cli/index.ts, src/core/paths.ts, src/core/taskQuery.ts, src/core/taskReportRender.ts, src/extractors/git.ts, src/integrations/hooks.ts, src/mcp/server.ts, src/store/hunchStore.ts)"
+      - "Issue text asks to 'Decide whether sync --from-hook should let a stored autoCommit: false override the hook's --commit'; the choice was settled only in a post-arrival comment (2026-09-19T21:20:13Z) that lists open product calls"
+      - "The fix's test (test/init-shared-autocommit.test.ts) asserts the new message /shared post-commit hook still auto-commits/; the precedence alternative the issue allows would fail it, so no solution-agnostic validator was derivable"
+      - "Issue text frames it as a follow-up to #356/#316, not as a recorded-convention fix. Not reproduced (excluded before step 3)"
+  - issue: 315
+    verdict: excluded
+    reason: "category mismatch: no constraint or recorded convention at the cutoff (2026-09-17T12:07:51Z) governs the correct fix; the issue text frames it as a sequel to #311"
+    evidence:
+      - "Fix 338a51ef75a0ed1041fd4740f72b6d5b5e0196fc (parent 6733f6cc7e28070a33336f63cf493c79264e775c) touches src/cli/index.ts and src/integrations/hooks.ts; items 4 and 5 would pass"
+      - "Public constraints at 6733f6cc: none scopes src/integrations/hooks.ts or doctor"
+      - "Private overlay: the only hooks.ts-scoped constraint before the cutoff is con_38bf8aa397 (first add 2026-09-17T11:40:31Z); it does not govern hook-health reporting"
+      - "Issue text: 'Add a stale state to hookReport (after #311 lands)'. The fix design (accepted launcher shapes) comes from the code, not a recorded rule"
+      - "Body never edited (lastEditedAt null). Not reproduced (excluded before step 3)"
+  - issue: 314
+    verdict: qualified
+    reason: "the issue names the violated behaviour (writers drop comments from user config files); con_8460b6770f (scope includes providers.ts, human-confirmed, present since 2026-06-16) requires config writers to merge into existing user files and refuse to clobber; the fix refuses comment-erasing writes"
+    evidence:
+      - "fix ea6a14c0 + 12147998 (PR #406), 1 non-test source file, no other issue closed by that PR"
+      - "validator exit 1 at 7742a3b1 ('comment erased'), exit 0 at 847a2fc3"
+      - "issue body never edited (lastEditedAt null), 0 comments; the suggested fix in the body is the issue's own original text"

@@ -1,0 +1,149 @@
+# PILOT5 issue card: continuation (preregistered; rule: bench/pilot5/SELECTION.md)
+# Walk order: #375, #372, #371, #370, #369, #266. Stopped at the first qualifying
+# candidate (#372); #371, #370, #369, #266 were not walked (rule: take the first
+# qualifying candidate in order and stop).
+category_walk:
+  - issue: 375
+    verdict: excluded
+    reason: >-
+      Category matches (explicit "Follow-up to #373", continuing a sibling issue's fix), but the fix
+      fails qualification items 4/5. #375 was closed only by the 1.41.0 release-candidate PR (#396,
+      merge commit 1c2763e), whose release note lists it as one bullet ("stops repeated pre-edit
+      delivery from feeding back into ranking") among fixes for #394, #395, #357, #377, #378, #397,
+      #398, #399, #400 all closed by the same PR. The commit that assembles that release
+      (a6eb1c60, "feat: assemble 1.41.0 card, worktree, and constraint release candidate") touches
+      60+ files across src/cli, src/core, src/integrations, src/mcp, src/store plus dozens of test
+      files, with no earlier commit isolating a #375-only diff. The #375-specific slice cannot be
+      separated from the other nine issues' fixes in that commit, so it fails "fix touches at most 6
+      non-test source files" and "not bundled so tightly that the validator cannot isolate it."
+    evidence: >-
+      gh api issues/375: created_at 2026-09-20T04:42:09Z, updated_at == closed_at 2026-09-22T12:19:23Z
+      (no edit between creation and close). No commit in `git log origin/main --grep "#375"` exists;
+      the only closing reference is PR #396's body: "Closes #394, closes #395, closes #375, closes
+      #357, closes #377, closes #378, closes #397, closes #398, closes #399, closes #400." Commit
+      a6eb1c603256451bc7a9308dfece5f2bbad58b91 (the release-assembly commit in that PR) is the
+      earliest commit touching the relevant area and spans far more than 6 non-test source files
+      across five different subsystems, entangled with the other nine issues.
+  - issue: 372
+    verdict: qualified
+    reason: >-
+      "Part of the context-footprint work" — an umbrella/sibling issue in the same #369-#372 series
+      (all four measured 2026-09-20 on the same 1.39.3 baseline, cross-referencing "the linked
+      issues"), matching the continuation criterion (continues sibling issues in the same series).
+      Body not edited after creation. Earliest fix commit (448d5359, "feat: measure the context
+      footprint and gate it with a ratchet (#372)") touches exactly 3 non-test source files
+      (src/cli/index.ts, src/core/footprint.ts, src/core/hookText.ts) plus test/footprint.test.ts,
+      and its commit message names only #372 — not bundled with #369/#370/#371 (checked their
+      separate closing references below). Deterministic, reproduces on Windows 11 / Node 22 (no
+      timing/network dependency — the CLI command either exists or it doesn't).
+    evidence: >-
+      gh api issues/372: created_at 2026-09-20T04:07:33Z, updated_at == closed_at 2026-09-26T18:40:51Z
+      (no edit between creation and close). Fix commit 448d53597be86a7e1bf20950442157b032434643,
+      parent (starting_commit) a068fb723452a97e6ec7a454448ceb7b9ba42b80. A second, tiny follow-up
+      commit 525616cbf20c915b919346dd9cfb38a6855cdefe ("ci(release): record the context footprint in
+      each tagged release summary (#372)", 1 file: .github/workflows/release.yml) wires the CLI
+      output into the release job; not needed for the validator (CLI surface already exists after
+      448d5359). Validator fails at start, exit 1 (real failure: "error: unknown command 'footprint'"
+      — the issue's own complaint, not an import error); passes at fix, exit 0.
+  - issue: 371
+    verdict: not_walked
+    reason: "Quota met by #372 (first qualifying candidate in order); rule requires stopping there."
+  - issue: 370
+    verdict: not_walked
+    reason: "Quota met by #372 (first qualifying candidate in order); rule requires stopping there."
+  - issue: 369
+    verdict: not_walked
+    reason: "Quota met by #372 (first qualifying candidate in order); rule requires stopping there."
+  - issue: 266
+    verdict: not_walked
+    reason: "Quota met by #372 (first qualifying candidate in order); rule requires stopping there."
+
+issue_number: 372
+issue_url: "https://github.com/davesheffer/hunch/issues/372"
+category: continuation
+issue_created_at: "2026-09-20T04:07:33Z"
+issue_text_sha256: "f6f8195c19131b6680870181cadb5b8018de4db15dd86b6ca11166fd97cf50f4" # sha256(UTF-8 title + "\n\n" + body), body as returned by gh; verified 64 hex chars
+task_prompt: | # verbatim title + blank line + body at arrival (no comments existed yet); nothing disclosed a solution, so nothing required sanitizing
+  No measurement or regression gate for Hunch's context footprint
+
+  ## Problem
+  Nothing measures how many tokens Hunch puts into an agent's context, so the footprint grows release by release without anyone seeing it. A one-off measurement on 1.39.3 found: tool list 12.7k–21.4k tokens, grounding block 2.4k, ~1.8k per prompt, up to ~9k per `hunch_context` call, ~1.5k per edit on a well-anchored file (see the linked issues).
+
+  ## Suggested direction
+  - `hunch doctor --context` (or `hunch footprint`): print the fixed, per-prompt, per-edit and per-call sizes for this repo and host, in characters and estimated tokens, from the same code paths the hooks and MCP server use.
+  - A test that fails when a budget is exceeded: `tools/list` size, grounding block size, SessionStart / UserPromptSubmit text, and "whole tool result ≤ k × budget_tokens" for `hunch_context`.
+  - Record the numbers per release (a finding or a line in the release checklist) so a regression shows up as a diff.
+
+  ---
+  Measured 2026-09-20 on the published `@davesheffer/hunch@1.39.3` dist in the hunch repo itself (328 decisions, 51 findings). Tokens are estimated as characters / 4, not from a tokenizer. Part of the context-footprint work; the fix must hold for every MCP host, not one client.
+starting_commit: "a068fb723452a97e6ec7a454448ceb7b9ba42b80" # first parent of 448d5359 (earliest fix commit)
+starting_state_proof:
+  command: >-
+    cp bench/pilot5/validators/372/pilot5-issue-372.test.ts <worktree@a068fb72>/test/ &&
+    cd <worktree@a068fb72> && node tooling/run-tests.mjs test/pilot5-issue-372.test.ts
+  expected: "exit 1; `hunch footprint` does not exist yet at this commit"
+  observed: >-
+    exit 1; fail 1 / pass 0. AssertionError: "hunch footprint --json failed: error: unknown
+    command 'footprint'" (1 !== 0) — a real CLI error for the issue's own reason (no
+    measurement tool exists), not an import/module error.
+solution_boundary:
+  first_known_fix_commit: "448d53597be86a7e1bf20950442157b032434643" # "feat: measure the context footprint and gate it with a ratchet (#372)"
+  later_issue_comments_excluded: [] # issue had no comments at any point; only its own closing comment (below) postdates the fix
+  later_sources_excluded:
+    - "Closing comment (2026-09-26T18:40:50Z): 'Shipped in v1.42.0 (525616cb): each tagged release now records `hunch footprint`...' — names the exact fix SHA"
+    - "Follow-up commit 525616cbf20c915b919346dd9cfb38a6855cdefe (CI wiring, not needed for the validator)"
+memory:
+  cutoff_at: "2026-09-20T04:07:33Z" # issue createdAt
+  revision_or_snapshot_sha256: "not computed — see relevance_note; no eligible record was found to snapshot"
+  eligible_record_ids: [] # none found, public or private overlay
+  excluded_future_record_ids:
+    - dec_3ca27de266 # public roadmap decision "context-footprint budget — measure first, then cut..."; valid_from 2026-09-20T04:08:09.573Z (~35s AFTER createdAt); first git-add on origin/main 2026-09-20T08:00:21+03:00 (05:00:21Z, ~53min after createdAt)
+    - fnd_a65f71f38f # public finding "Context footprint baseline for 1.39.3..."; same first-add commit as dec_3ca27de266 (2026-09-20T08:00:21+03:00), after createdAt
+    - dec_131f1fc0d7 # private overlay; first_add 2026-09-24T15:36:23+03:00 (after createdAt)
+    - dec_15d3e59914 # private overlay; first_add 2026-09-24T16:20:59+03:00
+    - dec_5bb0a4f986 # private overlay; first_add 2026-09-27T15:00:15+03:00
+    - dec_c18c3f4374 # private overlay; first_add 2026-09-24T16:54:03+03:00
+    - dec_dd52ad3e90 # private overlay; first_add 2026-09-24T12:11:55+03:00
+    - fnd_2fa0d27f53 # private overlay; first_add 2026-09-24T17:08:15+03:00
+  source_and_timestamp_evidence:
+    - "method: grep -rl 'footprint' at starting_commit over public .hunch/{decisions,constraints,bugs,findings,tasks} and over the hunch-private overlay working tree (current HEAD, since no historical private snapshot pin was taken — see UNVERIFIED); first-add = git log --diff-filter=A --format=%cI (origin/main for public, hunch-private repo for the overlay)"
+    - "one unrelated grep hit, dec_24029165a7-style substring match on a different topic (replay determinism), excluded as irrelevant despite predating cutoff (first_add 2026-09-09, valid_from 2026-09-09) — keyword collision, not a footprint-measurement record"
+    - "no public or private record whose first-add AND own capture timestamp both predate 2026-09-20T04:07:33Z was found to be about the context-footprint measurement gap; the earliest candidates (dec_3ca27de266 roadmap decision, fnd_a65f71f38f baseline finding) were captured within roughly 35 seconds to 53 minutes of the issue's own creation, i.e. the same authoring session that filed the #369-#372 series, not prior memory"
+  relevance_expected: abstain
+  relevance_note: >-
+    No eligible pre-cutoff record exists for this issue in either store. The strongest candidates
+    (the roadmap decision and the measured baseline finding) were captured essentially
+    contemporaneously with the issue's filing, not before it, so they are future leakage rather than
+    prior memory Hunch could have delivered. Delivery is therefore moot for this card — there is
+    nothing eligible to prove was or wasn't delivered.
+validator:
+  command: >-
+    cp bench/pilot5/validators/372/pilot5-issue-372.test.ts <target>/test/ &&
+    cd <target> && node tooling/run-tests.mjs test/pilot5-issue-372.test.ts
+  validator_sha256: "3eba80036e50c8369c3922fec87c03f84378eb48dc4a83f4d2621efeb982934e" # single file, bench/pilot5/validators/372/pilot5-issue-372.test.ts
+  starting_state_result: failed
+  success_criteria: >-
+    Exit 0: `hunch footprint --json` (run via the CLI entry, not by importing the fix's internal
+    `measureFootprint` symbol) exits 0, emits `hunch.footprint/1` JSON with a non-empty `surfaces`
+    array including at least mcp.tools_list, mcp.hunch_context and grounding.block, every surface's
+    chars > 0 and est_tokens === ceil(chars/4), and a non-empty `unmeasured` list.
+  notes: >-
+    The fix's own test/footprint.test.ts imports `measureFootprint` from src/core/footprint.ts
+    directly and pins exact character ceilings per surface — that would fail a correct alternative
+    fix that chose a different internal function name or the issue's other suggested surface
+    (`hunch doctor --context`). This validator instead drives the CLI surface the fix actually
+    shipped (`hunch footprint --json`) and checks structural properties (non-empty surfaces, the
+    three surfaces the issue explicitly asked for, internal consistency of est_tokens) rather than
+    exact ceilings, so it is somewhat more portable across alternative implementations — but it is
+    still anchored to the specific command name `footprint` chosen by this fix, which a correct
+    fix implementing only `hunch doctor --context` would fail. Flagged here rather than silently
+    accepted; treat this validator as a good-faith adaptation, not a fully implementation-agnostic one.
+validation_runs:
+  start:
+    exit: 1
+    key_line: "AssertionError [ERR_ASSERTION]: hunch footprint --json failed: error: unknown command 'footprint' ... 1 !== 0"
+  fix:
+    exit: 0
+    key_line: "✔ hunch footprint (#372) measures the context-footprint surfaces as non-zero JSON (1509.0384ms); pass 1 fail 0"
+status: qualified
+exclusion_reason: null
