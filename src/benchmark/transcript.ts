@@ -28,6 +28,11 @@ function hookInjectedText(stdout: string): string[] {
   return [specific, parsed.systemMessage, parsed.reason].filter((value): value is string => typeof value === "string");
 }
 
+/** Sorted unique record ids (same pattern as the transcript parser) in `text`. */
+export function recordIdsIn(text: string): string[] {
+  return [...new Set(Array.from(text.matchAll(RECORD_ID), (match) => match[0]))].sort();
+}
+
 export function parseTranscript(text: string): TranscriptMetrics {
   const events: Obj[] = [];
   for (const line of text.split(/\r?\n/)) {

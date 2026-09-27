@@ -13,9 +13,11 @@ import { evaluateTaskRanking, renderRankEval } from "../core/taskRankEval.js";
 import { rankingStatusLine, refreshRankEval, resolveTaskRankingMode } from "../core/taskRankingMode.js";
 import { taskRecordStats } from "../core/taskRecordStats.js";
 import type { HunchStore } from "../store/hunchStore.js";
+import { registerTaskBenchmarkCommand } from "./taskBenchmark.js";
 
 export function registerTaskReportCommands(program: Command, openStore: () => { store: HunchStore; root: string }): void {
   const task = program.command("task").description("Record an explicit task lifecycle for Hunch contribution reports");
+  registerTaskBenchmarkCommand(task);
   task.command("start <title>").option("--id <id>", "retry an exact existing task identity")
     .action((title: string, opts: { id?: string }) => console.log(JSON.stringify(startReportTask(findRoot(), title, opts.id), null, 2)));
   task.command("conform <id>").description("Evaluate each delivered lesson's declared rule against the changed files; Hunch computes the verdict, never the agent")

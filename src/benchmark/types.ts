@@ -151,4 +151,6 @@ export interface EfficiencyRun {
   delivered_eligible_ids: string[];
   isolation_evidence: string[];
   validation_evidence: string[];
+  /** The manifest this run was produced under; resume keeps a run only when it matches. */
+  manifest_sha256: string;
 }

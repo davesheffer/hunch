@@ -31,7 +31,7 @@ const cost = (over: Partial<TaskCost> = {}): TaskCost => ({
 const run = (task_id: string, arm: BenchmarkArm, run_index: number, costOver: Partial<TaskCost> = {},
   over: Partial<EfficiencyRun> = {}): EfficiencyRun => ({
   schema: "hunch.context-efficiency-run/1", task_id, arm, run_index, suite_hash: "s", harness_revision: "h",
-  audited_hunch_revision: null, arm_order_seed: "seed", repository_revision: "r", memory_revision: null,
+  audited_hunch_revision: null, arm_order_seed: "seed", manifest_sha256: "m", repository_revision: "r", memory_revision: null,
   runner: { provider: "claude", cli_version: "1", sanitized_argv_hash: "x", model_identity: null, model_identity_source: "unknown" },
   cache_state: "cold", evidence_kind: "product", success: true, status: "completed",
   quality: { outcome: "passed", validator_id: "v" }, cost: cost(costOver), replay_packet_id: null,
