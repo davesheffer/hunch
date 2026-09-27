@@ -2,7 +2,7 @@
   "id": "dec_826f069896",
   "title": "MCP default tool set: policy group on by policy evidence, analysis group opt-in; hunch_context advertises a lean landscape schema",
   "topic": "mcp.default-toolset",
-  "status": "proposed",
+  "status": "accepted",
   "context": "#368: hosts that load every tool schema paid ~81k chars (42 tools) per session. David asked for the best option for Hunch users (2026-09-24).",
   "decision": "Add MCP tool groups `policy` (7 hunch_policy_* tools, enabled by default when PolicyRepository lists any policy) and `analysis` (project DNA/match, change proof/identity, shortlist, evidence map, wiki status; opt-in via HUNCH_MCP_TOOLS or .hunch/config.json mcp_tools). Hidden tools are filtered at the registerTool wrapper. The grounding block names policy tools only when the repo holds a committed public policy (never env/gitignored config, so the committed block is machine-independent). hunch_context advertises landscape by identity fields + passthrough; the handler still parses with the full DELIVERY_OUTPUT_SCHEMA.",
   "consequences": [
@@ -36,15 +36,16 @@
   },
   "premises": [],
   "provenance": {
-    "source": "agent_recorded",
-    "confidence": 0.75,
+    "source": "human_confirmed",
+    "confidence": 0.95,
     "evidence": [
       "src/mcp/toolset.ts",
       "src/mcp/server.ts",
       "src/integrations/claudemd.ts",
       "test/mcp-toolset.test.ts",
       "test/footprint.test.ts"
-    ]
+    ],
+    "last_verified": "2026-09-27T12:11:49.460Z"
   },
   "date": "2026-09-24T12:36:30.178Z"
 }
