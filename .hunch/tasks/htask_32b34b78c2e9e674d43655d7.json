@@ -3,7 +3,7 @@
   "title": "relay:bcf1086b continue \"Memory CI automatic: delta critic, commit,…",
   "state": "completed",
   "started_at": "2026-09-27T07:24:28.809Z",
-  "finished_at": "2026-09-27T07:32:20.386Z",
+  "finished_at": "2026-09-27T07:47:50.277Z",
   "coverage": "delivered",
   "lessons": [
     {
@@ -25,25 +25,38 @@
       "label": "Verification command",
       "state": "passed",
       "exit_code": 0
+    },
+    {
+      "label": "Verification command",
+      "state": "passed",
+      "exit_code": 0
+    },
+    {
+      "label": "Verification command",
+      "state": "passed",
+      "exit_code": 0
     }
   ],
   "conformance": [],
   "refusals": 0,
   "files": [
+    "src/core/publication.ts",
+    "test/publication.test.ts",
     "test/ship-memory.test.ts",
     "tooling/ship-memory.mjs"
   ],
   "supersedes": [
     "htask_74cb9b769384121d05f871b0"
   ],
-  "source_snapshot": "sha256:095e170f94195fff2a284fb7a7d49c92dfaf2816ae3ee828d5b916334df8c2b4",
-  "report_hash": "sha256:c8603fa918f9ca5166f6848c273cf86279b96b57eec8b636c5e1a06269be1b6d",
+  "source_snapshot": "sha256:c185a123b6d1a4ace0eb6f76b05807c67a8edfbeafa6598e22f67efb7e266ed4",
+  "report_hash": "sha256:7b948e0c65146da41218315698b2cb0ea0ea25e5f87fb2b8ab8ee2c13e469025",
   "provenance": {
     "source": "task_report",
     "confidence": 1,
     "evidence": [
-      "hunch report htask_32b34b78c2e9e674d43655d7"
+      "hunch report htask_32b34b78c2e9e674d43655d7",
+      "hunch report htask_734af5ec673aa1b548adbf2c"
     ],
-    "last_verified": "2026-09-27T07:32:20.386Z"
+    "last_verified": "2026-09-27T07:47:50.277Z"
   }
 }
