@@ -152,6 +152,13 @@ Record these per task and aggregate only compatible observations. A smaller pack
 - [ ] Measure invalid exact candidates (hard target: zero), stale advice accepted, quality regressions, post-task rework and cases the system correctly withheld; investigate each failure individually.
 - [ ] Ask a small blinded user/developer review whether the packet made the decision easier to trust, but report that subjective rating separately from verified correctness. Do not call a green test complete safety.
 
+### Work omitted, observed rather than assumed
+
+- [ ] For each matched run, list the *specific exploratory operations* (file reads, searches, tool calls or investigation steps) observed in the unchanged-current-Hunch control and absent from the reuse arm. Report the trace and reason for comparison; do not infer an avoided operation merely because a replay packet was delivered.
+- [ ] Separate genuine omitted exploration from work that was deferred, moved into a new tool call, or replaced by a slower validation step. Include lookup, recheck and false-shortcut recovery overhead in total time and cost.
+- [ ] Never grant a blanket permission to omit tests, security checks, validations, approvals or irreversible actions. A candidate shortcut covers only explicitly enumerated exploratory work, with its bounded dependency fingerprint and today's validator still required.
+- [ ] If the advisory packet is demonstrably ignored in repeat tasks, test a **narrow point-of-action recheck** as a separate experimental arm after Stages 1–3; use an existing hook and current authority semantics. Do not add a new mandatory guard or claim that advisory delivery enforces the shortcut without measured evidence.
+
 A convincing outcome is **faster completed tasks with equal or better quality**, a credible cost model under the deployment actually used, and fewer unverified assumptions. If a dimension is unobservable, write `unavailable` instead of claiming improvement.
 
 ## 10. Decision thresholds
