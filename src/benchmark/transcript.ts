@@ -50,12 +50,19 @@ export function parseTranscript(text: string): TranscriptMetrics {
 
   for (const event of events) {
     if (event.type === "system" && event.subtype === "init" && !init) {
+      const servers = Array.isArray(event.mcp_servers) ? event.mcp_servers : [];
+      const serverStatus: Record<string, string> = {};
+      for (const server of servers) {
+        if (!isObj(server)) continue;
+        const name = asString(server.name);
+        const status = asString(server.status);
+        if (name !== null && status !== null) serverStatus[name] = status;
+      }
       init = {
         model: asString(event.model),
         api_key_source: asString(event.apiKeySource),
-        mcp_servers: Array.isArray(event.mcp_servers)
-          ? event.mcp_servers.map((server) => (isObj(server) ? asString(server.name) : asString(server))).filter((name): name is string => name !== null)
-          : [],
+        mcp_servers: servers.map((server) => (isObj(server) ? asString(server.name) : asString(server))).filter((name): name is string => name !== null),
+        mcp_server_status: serverStatus,
         tool_names: Array.isArray(event.tools) ? event.tools.filter((name): name is string => typeof name === "string") : [],
       };
     } else if (event.type === "system" && event.subtype === "hook_response") {

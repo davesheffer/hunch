@@ -67,6 +67,17 @@ export interface RunAgentOptions {
   outDir: string;
 }
 
+/**
+ * Kills a process and its descendants: `taskkill /T /F` on Windows, the process group on POSIX
+ * (the leader must have been spawned detached). Falls back to the single pid; never throws.
+ */
+export function killProcessTree(pid: number, signal: NodeJS.Signals = "SIGTERM"): void {
+  try {
+    if (process.platform === "win32") execFileSync("taskkill", ["/pid", String(pid), "/T", "/F"], { stdio: "ignore", timeout: 5000, windowsHide: true });
+    else process.kill(-pid, signal);
+  } catch { try { process.kill(pid, signal); } catch { /* already gone */ } }
+}
+
 /** Runs one agent to completion or timeout. Never rejects on child failure. */
 export async function runAgent(opts: RunAgentOptions): Promise<AgentRunResult> {
   const { cfg } = opts;
@@ -102,11 +113,7 @@ export async function runAgent(opts: RunAgentOptions): Promise<AgentRunResult> {
       return;
     }
     const killTree = (signal: NodeJS.Signals) => {
-      if (!child.pid) return;
-      try {
-        if (process.platform === "win32") execFileSync("taskkill", ["/pid", String(child.pid), "/T", "/F"], { stdio: "ignore", timeout: 5000, windowsHide: true });
-        else process.kill(-child.pid, signal);
-      } catch { try { child.kill(signal); } catch { /* already gone */ } }
+      if (child.pid) killProcessTree(child.pid, signal);
     };
     child.stdout?.pipe(transcript);
     child.stderr?.pipe(stderr);
