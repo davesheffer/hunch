@@ -62,6 +62,13 @@ test("leanTool keeps what carries meaning: a non-default execution and the marke
   ]) {
     assert.equal((leanTool({ name: "t", inputSchema: { $schema: DRAFT7, ...sensitive } }).inputSchema as Record<string, unknown>).$schema, DRAFT7);
   }
+  // Another dialect's marker stays: draft-04's boolean exclusiveMinimum means nothing in 2020-12.
+  const draft4 = "http://json-schema.org/draft-04/schema#";
+  assert.equal((leanTool({ name: "t", inputSchema: { $schema: draft4, type: "object" } }).inputSchema as Record<string, unknown>).$schema, draft4);
+  // Values are data, not subschemas: a default shaped like an integer schema is copied untouched.
+  const value = { type: "integer", maximum: SAFE };
+  const lean = leanTool({ name: "t", inputSchema: { type: "object", properties: { x: { type: "object", default: value, const: value } } } });
+  assert.deepEqual((lean.inputSchema as { properties: { x: unknown } }).properties.x, { type: "object", default: value, const: value });
 });
 
 test("tools/list across every tool group carries no $schema, default execution, or safe-integer bound — and calls still validate", async () => {

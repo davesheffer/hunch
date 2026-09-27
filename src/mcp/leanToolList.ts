@@ -26,6 +26,9 @@ function dialectNeutral(node: unknown): boolean {
   return true;
 }
 
+// Keywords whose value is data, not a subschema: copied as-is.
+const VALUE_KEYWORDS = new Set(["default", "const", "enum", "examples"]);
+
 /** A copy without zod's safe-integer bounds, which only restate what JSON numbers can hold. */
 function withoutSafeIntegerBounds(node: unknown): unknown {
   if (Array.isArray(node)) return node.map(withoutSafeIntegerBounds);
@@ -34,14 +37,21 @@ function withoutSafeIntegerBounds(node: unknown): unknown {
   const out: JsonObject = {};
   for (const [key, value] of Object.entries(node)) {
     if (integer && ((key === "maximum" && value === Number.MAX_SAFE_INTEGER) || (key === "minimum" && value === Number.MIN_SAFE_INTEGER))) continue;
-    out[key] = withoutSafeIntegerBounds(value);
+    out[key] = VALUE_KEYWORDS.has(key) ? value : withoutSafeIntegerBounds(value);
   }
   return out;
 }
 
+// Only these markers are safe to drop on a dialect-neutral schema; any other
+// dialect (draft-04's boolean exclusiveMinimum, say) keeps its marker.
+const DROPPABLE_MARKERS = new Set([
+  "http://json-schema.org/draft-07/schema#",
+  "https://json-schema.org/draft/2020-12/schema",
+]);
+
 function leanSchema(schema: JsonObject): JsonObject {
   const lean = withoutSafeIntegerBounds(schema) as JsonObject;
-  if (dialectNeutral(schema)) delete lean.$schema;
+  if (DROPPABLE_MARKERS.has(schema.$schema as string) && dialectNeutral(schema)) delete lean.$schema;
   return lean;
 }
 
@@ -58,6 +68,17 @@ export function leanTool(tool: JsonObject): JsonObject {
   return out;
 }
 
+/** The request method a schema handles — by identity, or by its method literal
+ *  when a second SDK copy supplied a different schema object. */
+function handlesToolsList(schema: unknown): boolean {
+  if (schema === ListToolsRequestSchema) return true;
+  try {
+    return (schema as { shape?: { method?: { value?: unknown } } }).shape?.method?.value === "tools/list";
+  } catch {
+    return false;
+  }
+}
+
 /** Route the SDK's tools/list result through leanTool. Call right after
  *  constructing the server: McpServer installs its tools/list handler on the
  *  first registerTool, through this public setRequestHandler. */
@@ -65,7 +86,7 @@ export function installLeanToolList(server: McpServer): void {
   const protocol = server.server;
   const setRequestHandler = protocol.setRequestHandler.bind(protocol) as (schema: unknown, handler: unknown) => void;
   protocol.setRequestHandler = ((schema: unknown, handler: (...args: unknown[]) => unknown) => {
-    if (schema !== ListToolsRequestSchema) return setRequestHandler(schema, handler);
+    if (!handlesToolsList(schema)) return setRequestHandler(schema, handler);
     setRequestHandler(schema, async (...args: unknown[]) => {
       const result = await handler(...args);
       if (!isObject(result) || !Array.isArray(result.tools)) return result;
