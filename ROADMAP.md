@@ -14,14 +14,14 @@ Read [Deterministic organizational state](docs/deterministic-state.md) for the c
 
 ## Start here — current handoff
 
-To run the coding-task context-efficiency pilot in Codex, switch to
+To run the coding-task context-efficiency pilot in Claude Code or Codex, switch to
 [the PILOT5 branch](https://github.com/davesheffer/hunch/tree/docs/context-efficiency-pilot5)
 and read [the pilot plan](https://github.com/davesheffer/hunch/blob/docs/context-efficiency-pilot5/docs/HUNCH-CONTEXT-EFFICIENCY-POC.md),
-especially sections 8, 11, 13 and 15. In that Codex session, say:
+especially sections 8, 11, 13 and 15. In that session, say:
 
 > Read `docs/HUNCH-CONTEXT-EFFICIENCY-POC.md` and execute PILOT5 intake. Prepare at most five issue cards with a pre-fix code revision, cutoff-bounded memory and an independent validator. Start Gate A only after the cards and runner pass preflight. Report excluded issues and uncertain results; claim savings only from comparable completed runs.
 
-`PILOT5` is a handoff word in the Codex conversation, not a GitHub issue trigger.
+`PILOT5` is a handoff word in the agent conversation, not a GitHub issue trigger.
 The five tasks are not yet qualified or benchmarked. Gate A compares no Hunch with
 current Hunch on isolated, fixed tasks; it precedes replay work. After Gate A,
 [Verified Work Reuse](https://github.com/davesheffer/hunch/blob/docs/verified-work-reuse/docs/VERIFIED-WORK-REUSE-PLAN.md)

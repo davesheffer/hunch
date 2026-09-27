@@ -644,7 +644,7 @@ This is the fastest path to answering the product question: **Does current Hunch
 Place this file in the Hunch repository and give the coding agent this prompt:
 
 ```text
-Implement the completion plan in HUNCH-MEMORY-BUDGET-ENGINE-POC.md against the current Hunch main branch.
+Implement the completion plan in docs/HUNCH-CONTEXT-EFFICIENCY-POC.md against the current Hunch main branch.
 
 This is not a request to build a second memory engine. First inspect AGENTS.md, ROADMAP.md, package.json, src/core/delivery.ts, src/core/taskRanking.ts, src/core/taskReport.ts, src/core/hookcache.ts, src/core/served.ts and src/core/footprint.ts. Reuse the existing hard-budget envelope, abstention, task records, delivery supplements, receipts and footprint gates.
 
@@ -687,13 +687,13 @@ The numbers above are illustrative placeholders. The report must refuse to print
 
 The product is not “a more complex memory architecture.” The product is a repeatable measurement showing that Hunch helps an agent avoid work it would otherwise repeat.
 
-## 15. GitHub issue intake and handoff for Codex
+## 15. GitHub issue intake and agent handoff
 
 This section is the entry point for today's five-issue pilot. The experiment controller may be developed at the audited revision, but the **target starting revision is chosen separately per issue**. Do not run historical issues against a single checkout where their solutions are already present. The issue itself is task input for both arms; no later PR, comment, memory record or source change may disclose the solution.
 
 ### One-word handoff
 
-When this document is present in a working checkout of this branch, tell Codex: **PILOT5**. That word is a human shorthand, not an installed GitHub trigger. Paste the following instruction in the same Codex session the first time:
+When this document is present in a working checkout of this branch, tell the coding agent (Claude Code or Codex): **PILOT5**. That word is a human shorthand, not an installed GitHub trigger. Paste the following instruction in the same session the first time:
 
 > Read `docs/HUNCH-CONTEXT-EFFICIENCY-POC.md`, especially sections 8, 11, 13 and 15. Execute the PILOT5 intake for at most five GitHub issues in davesheffer/hunch. First create and review issue cards and check their memory against the historical cutoff. Implement Gate A only when the cards and runner pass preflight. Do not claim that PILOT5, a comment, or an issue label launches an automatic agent; no such workflow is established here. Report qualified, excluded and uncertain issues with evidence. Do not invent validation or savings.
 
