@@ -117,3 +117,6 @@ bench/external/results/????-??-??T??-??-??-???Z*.json
 
 # Constitution replay: disposable worktrees and derived snapshot graphs.
 .hunch-cache/
+
+# git merge-file temp files a killed merge-tree (the memory shipper's driver timeout) leaves behind.
+.merge_file_*

@@ -52,9 +52,25 @@ export function isStructural(hit: SensitivityHit): boolean {
  *  illustration; flagging those would train everyone to ignore the scanner. */
 const PLACEHOLDER_USER = /^(me|you|user|username|<[^>]+>|\$\{[^}]+\}|example|test|foo|bar)$/i;
 
+/** A regex quoted in a record (`\/home\/([^/]+)`, `C:\\Users\\([^\\]+)`) names a
+ *  pattern, not a user: its capture starts with a regex metacharacter and, past a
+ *  `(?<name>` label, holds no word. A group that lists names (`(alice|bob)`,
+ *  `{alice,bob}`) still names users. */
+const PATTERN_USER = /^[([*^{|+?]/;
+
+function isPatternUser(who: string): boolean {
+  return PATTERN_USER.test(who) && !/[A-Za-z]{3,}/.test(who.replace(/^\(\?<\w+>/, ""));
+}
+
+/** Home directories in the forms tools print them: a drive path (also as a URI's
+ *  `c%3A`), a POSIX path after any separator (`file:///Users/x`, `cwd=/home/x`,
+ *  `git -C /Users/x`) but not after a drive letter's colon, which the drive rule
+ *  reports, and Git Bash's `/c/Users/x` or WSL's `/mnt/c/Users/x`. A letter right
+ *  before the colon makes it a scheme (`file:/Users/x`), not a drive. */
 const MACHINE_PATH = [
-  /[A-Za-z]:[\\/]Users[\\/]([^\\/"'\s,)\]]+)/g,
-  /(?:^|[\s"'(])\/(?:Users|home)\/([^/"'\s,)\]]+)/g,
+  /(?<![A-Za-z])[A-Z](?::|%3A)[\\/]Users[\\/]([^\\/"'\s,)\]]+)/gi,
+  /(?:^|[^A-Za-z0-9_.~])(?<!(?<![A-Za-z])[A-Za-z]:)\/(?:Users|home)\/([^/"'\s,)\]]+)/g,
+  /(?:^|[^A-Za-z0-9_.~])\/(?:mnt\/)?[A-Za-z]\/Users\/([^/"'\s,)\]]+)/g,
 ];
 
 /** A path INTO the overlay (dir + file), not a bare mention of the feature. The
@@ -176,7 +192,7 @@ export function scanRecord(record: unknown, opts: ScanOptions = {}): Sensitivity
     for (const re of MACHINE_PATH) {
       for (const m of text.matchAll(re)) {
         const who = m[1] ?? "";
-        if (PLACEHOLDER_USER.test(who)) continue;
+        if (PLACEHOLDER_USER.test(who) || isPatternUser(who)) continue;
         hits.push({ kind: "machine-path", field, excerpt: clip(m[0]) });
       }
     }

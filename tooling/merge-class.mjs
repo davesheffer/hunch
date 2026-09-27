@@ -9,10 +9,14 @@
 // a path allowlist, deterministic, with no model involved; a file the allowlist
 // does not name is outside by construction, never assumed harmless.
 //
+// A narrower "memory-only" verdict (graph records plus the grounding docs Hunch
+// regenerates from them) selects the CI fast path in ci.yml: such a change cannot
+// alter code, so the required legs run only the checks that read the graph.
+//
 // The workflow that consumes this is wired by a human (workflow edits are on the
 // "never" rung). Usage:
-//   node tooling/merge-class.mjs --base origin/main [--json] [--require-bounded]
-// Exit 0 always unless --require-bounded is set, then 1 when the class is "outside".
+//   node tooling/merge-class.mjs --base origin/main [--json] [--require-bounded] [--require-memory-only]
+// Exit 0 always unless a --require-* flag is set, then 1 when that verdict fails.
 import { execFileSync } from "node:child_process";
 import process from "node:process";
 
@@ -45,10 +49,29 @@ export const ALWAYS_OUTSIDE = Object.freeze([
   (p) => p === "package.json" || p === "package-lock.json",
   (p) => p.startsWith("src/") || p.startsWith("tooling/") || p.startsWith("vscode-extension/"),
   (p) => p.startsWith(".hunch/config.json") || p.startsWith(".hunch/local.json") || p.startsWith(".hunch/team.json"),
+  // The publication scanner's vocabulary is policy, not memory: an auto-merged edit
+  // could weaken the gate that judges the same PR, and the gitignored local list
+  // names the very terms it keeps out of the public tree.
+  (p) => p === ".hunch/publication.json" || (p.startsWith(".hunch/") && p.endsWith(".local.json")),
+]);
+
+/** Root grounding docs a capture regenerates. They merge as "docs", but a change
+ *  that touches them next to memory records is still memory-only for CI. */
+export const GROUNDING_DOCS = Object.freeze(["CLAUDE.md", "AGENTS.md"]);
+
+/** Tests that read THIS repo's committed graph or grounding docs — what a
+ *  memory-only change can break, so exactly what its CI fast path runs. */
+export const MEMORY_GRAPH_TESTS = Object.freeze([
+  "test/grounding-freshness.test.ts",
+  "test/public-constraint-scope.test.ts",
+  "test/development-preparation.test.ts",
 ]);
 
 export function classifyPath(path) {
   const p = String(path).replace(/\\/g, "/").replace(/^\.\//, "");
+  // A `.`/`..` segment (e.g. a Linux file literally named `.hunch\..\src\x.ts`)
+  // names somewhere other than its prefix claims: outside, never normalized in.
+  if (p.split("/").some((segment) => segment === "." || segment === "..")) return { path: p, group: "outside" };
   if (ALWAYS_OUTSIDE.some((test) => test(p))) return { path: p, group: "outside" };
   const rule = BOUNDED_CLASS.find((r) => r.test(p));
   return { path: p, group: rule ? rule.group : "outside" };
@@ -64,6 +87,7 @@ export function classifyChange(paths) {
   return {
     schema: "hunch.merge-class/1",
     class: files.length && !outside.length ? "bounded" : "outside",
+    memory_only: files.length > 0 && files.every((f) => f.group === "memory" || GROUNDING_DOCS.includes(f.path)),
     groups,
     files,
     outside,
@@ -71,25 +95,28 @@ export function classifyChange(paths) {
 }
 
 export function changedPaths(base, cwd = process.cwd()) {
-  const out = execFileSync("git", ["diff", "--name-only", "-z", `${base}...HEAD`], { cwd, encoding: "utf8" });
+  // --no-renames: with rename detection a moved file lists only its NEW path, so
+  // `git mv src/x.ts .hunch/x.json` would hide a source deletion inside the class.
+  const out = execFileSync("git", ["diff", "--name-only", "--no-renames", "-z", `${base}...HEAD`], { cwd, encoding: "utf8" });
   return out.split("\0").filter(Boolean);
 }
 
 export function renderText(result) {
-  const lines = [`merge class: ${result.class}${result.groups.length ? ` (${result.groups.join(", ")})` : ""}`];
+  const lines = [`merge class: ${result.class}${result.groups.length ? ` (${result.groups.join(", ")})` : ""}${result.memory_only ? " · memory-only" : ""}`];
   for (const f of result.files) lines.push(`  ${f.group === "outside" ? "✗" : "✓"} ${f.path} [${f.group}]`);
   if (result.class === "outside") lines.push(result.files.length ? `${result.outside.length} file(s) outside the bounded class — rung 1 (human merge).` : "no changed files.");
   return lines.join("\n");
 }
 
 function parseArgs(argv) {
-  const opts = { base: "origin/main", json: false, requireBounded: false, cwd: process.cwd() };
+  const opts = { base: "origin/main", json: false, requireBounded: false, requireMemoryOnly: false, cwd: process.cwd() };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--base") opts.base = argv[++i];
     else if (a === "--cwd") opts.cwd = argv[++i];
     else if (a === "--json") opts.json = true;
     else if (a === "--require-bounded") opts.requireBounded = true;
+    else if (a === "--require-memory-only") opts.requireMemoryOnly = true;
     else throw new Error(`unknown argument: ${a}`);
   }
   if (!opts.base) throw new Error("--base needs a ref");
@@ -100,7 +127,8 @@ export function main(argv = process.argv.slice(2)) {
   const opts = parseArgs(argv);
   const result = classifyChange(changedPaths(opts.base, opts.cwd));
   process.stdout.write((opts.json ? JSON.stringify(result, null, 2) : renderText(result)) + "\n");
-  return opts.requireBounded && result.class !== "bounded" ? 1 : 0;
+  if (opts.requireBounded && result.class !== "bounded") return 1;
+  return opts.requireMemoryOnly && !result.memory_only ? 1 : 0;
 }
 
 if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {
