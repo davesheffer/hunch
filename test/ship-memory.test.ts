@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import { acquireLock, fastForwardMain, heldByClosedPr, memoryBranch, planShip } from "../tooling/ship-memory.mjs";
+import { acquireLock, fastForwardMain, heldByClosedPr, memoryBranch, planShip, syncTip } from "../tooling/ship-memory.mjs";
 
 type Fixture = { root: string; work: string; other: string; git: (cwd: string, ...args: string[]) => string };
 
@@ -355,7 +355,7 @@ test("a PR closed unmerged holds every later tip that still carries its commits"
     commitFile(f, f.work, ".hunch/tasks/htask_1.json", record("htask_1", "a hook commit"));
     assert.equal(heldByClosedPr(f.work, prs, f.git(f.work, "rev-parse", "HEAD"), base)?.number, 7, "a new tip on top is still held");
     assert.equal(heldByClosedPr(f.work, [{ ...prs[0], mergedAt: "2026-09-27T00:00:00Z" }], f.git(f.work, "rev-parse", "HEAD"), base), null, "a merged PR holds nothing");
-    assert.equal(heldByClosedPr(f.work, [{ number: 8, headRefOid: "f".repeat(40), mergedAt: null }], f.git(f.work, "rev-parse", "HEAD"), base), null, "a head absent here is not in tip's history");
+    assert.throws(() => heldByClosedPr(f.work, [{ number: 8, headRefOid: "f".repeat(40), mergedAt: null }], f.git(f.work, "rev-parse", "HEAD"), base), "a head absent here that origin cannot serve is not an answer");
     assert.equal(heldByClosedPr(f.work, prs, f.git(f.work, "rev-parse", "HEAD"), f.git(f.work, "rev-parse", "HEAD")), null, "commits that reached origin/main another way are public already");
     assert.equal(heldByClosedPr(f.work, [{ ...prs[0], headRefOid: rejected.toUpperCase() }], f.git(f.work, "rev-parse", "HEAD"), base)?.number, 7, "an oid in upper case names the same commit");
     assert.throws(() => heldByClosedPr(f.work, [{ number: 9, headRefOid: "", mergedAt: null }], f.git(f.work, "rev-parse", "HEAD"), base), /no usable head oid/, "an unusable oid is not an answer");
@@ -391,6 +391,135 @@ test("a local merge of origin/main does not drag origin's code into the verdict"
     const plan = planShip({ cwd: f.work });
     assert.equal(plan.status, "ship");
     assert.deepEqual(plan.paths, [".hunch/tasks/htask_1.json"]);
+  } finally { cleanupDir(f.root); }
+});
+
+/** Both sides add the same record with different content: an add/add conflict for any
+ *  merge without this repository's merge driver, which is how GitHub merges. */
+function divergeOnRecord(f: Fixture, path = ".hunch/tasks/htask_1.json") {
+  commitFile(f, f.other, path, record("htask_1", "from a feature branch"));
+  f.git(f.other, "push", "-q", "origin", "main");
+  commitFile(f, f.work, path, record("htask_1", "from a hook on main"));
+  f.git(f.work, "fetch", "-q", "origin");
+}
+
+/** A local-only merge driver, as `merge=hunch` is: config plus info/attributes, nothing
+ *  a remote merge would see. */
+function localDriver(f: Fixture, driver: string) {
+  f.git(f.work, "config", "merge.local.driver", driver);
+  writeFileSync(join(f.work, ".git", "info", "attributes"), ".hunch/**/*.json merge=local\n");
+}
+
+test("a diverged local main ships a merge built with the local drivers, which GitHub can merge without them", () => {
+  const f = fixture();
+  try {
+    divergeOnRecord(f);
+    localDriver(f, "true");
+    const synced = syncTip({ cwd: f.work });
+    assert.equal(synced.status, "merged");
+    const [, ...parents] = f.git(f.work, "rev-list", "--parents", "-n", "1", synced.tip).split(" ");
+    assert.deepEqual(parents, [f.git(f.work, "rev-parse", "main"), f.git(f.work, "rev-parse", "origin/main")]);
+    f.git(f.work, "merge-base", "--is-ancestor", "origin/main", synced.tip); // throws unless GitHub's merge is a fast-forward
+    assert.equal(f.git(f.work, "show", `${synced.tip}:.hunch/tasks/htask_1.json`), record("htask_1", "from a hook on main").trim());
+    assert.equal(syncTip({ cwd: f.work }).tip, synced.tip, "the same pair yields the same commit, so a poll does not re-push");
+    assert.equal(f.git(f.work, "rev-parse", "main"), synced.local, "local main is not moved");
+
+    const plan = planShip({ cwd: f.work, local: synced.tip });
+    assert.equal(plan.status, "ship");
+    assert.deepEqual(plan.paths, [".hunch/tasks/htask_1.json"]);
+
+    // hunch-guard merges with a merge commit; local main then fast-forwards under it.
+    f.git(f.work, "push", "-q", "origin", `${synced.tip}:refs/heads/memory/test`);
+    f.git(f.other, "fetch", "-q", "origin");
+    f.git(f.other, "merge", "-q", "--no-ff", "--no-edit", "origin/memory/test");
+    f.git(f.other, "push", "-q", "origin", "main");
+    f.git(f.work, "fetch", "-q", "origin");
+    assert.equal(fastForwardMain(f.work), "fast-forwarded");
+    assert.equal(syncTip({ cwd: f.work }).status, "direct");
+    assert.equal(planShip({ cwd: f.work }).status, "nothing");
+  } finally { cleanupDir(f.root); }
+});
+
+test("a conflict the local drivers cannot resolve ships nothing; a merge that adds nothing is absorbed", () => {
+  const f = fixture();
+  try {
+    divergeOnRecord(f);
+    const synced = syncTip({ cwd: f.work });
+    assert.equal(synced.status, "conflict");
+    assert.equal(synced.tip, null);
+    assert.deepEqual(synced.conflicts, [".hunch/tasks/htask_1.json"]);
+    const run = spawnSync(process.execPath, ["--import", "tsx", join(process.cwd(), "tooling", "ship-memory.mjs"), "--cwd", f.work, "--dry-run"], { encoding: "utf8" });
+    assert.equal(run.status, 6, run.stderr);
+    assert.match(run.stdout, /refused: local main conflicts with origin\/main on 1 path\(s\) .*\.hunch\/tasks\/htask_1\.json/);
+
+    f.git(f.work, "reset", "-q", "--hard", "HEAD~1");
+    commitFile(f, f.work, ".hunch/tasks/htask_1.json", record("htask_1", "from a feature branch"), "the same record, committed twice");
+    assert.equal(syncTip({ cwd: f.work }).status, "absorbed", "a PR with no diff is not memory-only and would never merge");
+  } finally { cleanupDir(f.root); }
+});
+
+test("bytes only the local merge driver writes are scanned before they publish", () => {
+  const f = fixture();
+  try {
+    divergeOnRecord(f);
+    writeFileSync(join(f.work, ".hunch", "publication.local.json"), JSON.stringify({ vocabulary: ["zorblax"] }));
+    const driver = join(f.root, "driver.mjs").replace(/\\/g, "/");
+    writeFileSync(driver, `import { writeFileSync } from "node:fs";\nwriteFileSync(process.argv[2], ${JSON.stringify(record("htask_1", "Zorblax pricing teardown"))});\n`);
+    localDriver(f, `node "${driver}" %A`);
+    const synced = syncTip({ cwd: f.work });
+    assert.equal(synced.status, "merged");
+    const plan = planShip({ cwd: f.work, local: synced.tip });
+    assert.equal(plan.status, "refused-publication");
+    assert.ok(plan.hits.some((h: { kind: string; file: string }) => h.kind === "market-vocabulary" && h.file === ".hunch/tasks/htask_1.json"));
+  } finally { cleanupDir(f.root); }
+});
+
+test("a closed PR whose head is a shipper merge holds later tips that still carry its commits", () => {
+  const f = fixture();
+  try {
+    divergeOnRecord(f);
+    localDriver(f, "true");
+    const base = f.git(f.work, "rev-parse", "origin/main");
+    const closed = syncTip({ cwd: f.work }).tip;
+    const prs = [{ number: 10, headRefOid: closed, mergedAt: null }];
+    commitFile(f, f.work, ".hunch/tasks/htask_2.json", record("htask_2", "a later hook commit"));
+    const later = syncTip({ cwd: f.work }).tip;
+    assert.notEqual(later, closed);
+    assert.equal(heldByClosedPr(f.work, prs, later, base)?.number, 10, "the closed head is no ancestor, but its local commit is still carried");
+    assert.equal(heldByClosedPr(f.work, prs, closed, base)?.number, 10, "the same pair is the same commit, still held");
+
+    // The merge head is on no local branch: gc prunes it while its commit is still on
+    // main. GitHub keeps the PR's head, so the hold re-fetches it instead of lapsing.
+    f.git(f.work, "push", "-q", "origin", `${closed}:refs/pull/10/head`);
+    f.git(f.work, "update-ref", "refs/test/later", later);
+    f.git(f.work, "gc", "-q", "--prune=now");
+    assert.throws(() => f.git(f.work, "cat-file", "-e", closed), "the fixture really pruned the head");
+    assert.equal(heldByClosedPr(f.work, prs, later, base)?.number, 10, "a pruned head is fetched back, and still holds");
+    assert.equal(f.git(f.work, "rev-parse", "refs/hunch/closed-pr/10"), closed, "and pinned so gc cannot take it again");
+
+    // No pull ref for it: the commit itself is fetched by oid and pinned.
+    f.git(f.work, "update-ref", "-d", "refs/hunch/closed-pr/10");
+    f.git(f.work, "push", "-q", "origin", `${closed}:refs/heads/kept`);
+    f.git(f.work, "update-ref", "-d", "refs/remotes/origin/kept"); // the push's tracking ref would keep it alive
+    f.git(f.work, "gc", "-q", "--prune=now");
+    assert.throws(() => f.git(f.work, "cat-file", "-e", closed), "pruned again");
+    assert.equal(heldByClosedPr(f.work, [{ ...prs[0], number: 11 }], later, base)?.number, 11, "fetched by oid, still holds");
+    assert.equal(f.git(f.work, "rev-parse", "refs/hunch/closed-pr/11"), closed);
+
+    f.git(f.work, "reset", "-q", "--hard", "origin/main");
+    commitFile(f, f.work, ".hunch/tasks/htask_3.json", record("htask_3", "after the human dropped it"));
+    assert.equal(heldByClosedPr(f.work, prs, f.git(f.work, "rev-parse", "HEAD"), base), null, "dropped from main: shipping resumes");
+  } finally { cleanupDir(f.root); }
+});
+
+test("merge drivers that outlast the timeout refuse instead of hanging the lock", () => {
+  const f = fixture();
+  try {
+    divergeOnRecord(f);
+    localDriver(f, `node -e "setTimeout(() => {}, 4000)"`);
+    const synced = syncTip({ cwd: f.work, timeoutMs: 1000 });
+    assert.equal(synced.status, "timeout");
+    assert.equal(synced.tip, null);
   } finally { cleanupDir(f.root); }
 });
 

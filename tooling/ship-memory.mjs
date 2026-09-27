@@ -2,9 +2,10 @@
 // Memory shipper: lands this machine's memory-only commits on a protected main
 // with no human in the loop. Hunch's hooks commit task records, findings and
 // derived memory onto local `main`, which branch protection refuses by push. This
-// pushes the unpushed range to memory/<host>, opens (or refreshes) that branch's
-// PR, and leaves the rest to CI: ci.yml's memory-only fast path and hunch-guard's
-// merge-class auto-merge.
+// pushes the unpushed range to memory/<host> (merged with origin/main first when
+// local main has diverged, so GitHub never sees a conflict only a local merge driver
+// resolves), opens (or refreshes) that branch's PR, and leaves the rest to CI:
+// ci.yml's memory-only fast path and hunch-guard's merge-class auto-merge.
 //
 // It pushes NOTHING when any commit in the range touches a path outside the
 // memory-only class, or when the publication scanner flags a record (a machine
@@ -33,6 +34,7 @@ const LOCK_STALE_MS = 30 * 60_000;
 const LOCK_HARD_MS = 2 * 60 * 60_000;
 const WAIT_LIMIT_MS = 20 * 60_000;
 const POLL_MS = 20_000;
+const MERGE_TIMEOUT_MS = 10 * 60_000;
 // A hung fetch, push or gh call would hold the lock forever; a blob past Node's 1 MiB
 // default buffer would read as a failure and refuse a clean record. Replacement refs
 // are off: every read would follow them, but a push sends the real objects, so the
@@ -65,6 +67,44 @@ const nul = (text) => text.split("\0").filter(Boolean);
 
 function tryGit(cwd, args) {
   try { return git(cwd, args); } catch { return null; }
+}
+
+function isAncestor(cwd, a, b) {
+  const status = gitStatus(cwd, ["merge-base", "--is-ancestor", a, b]);
+  if (status > 1) throw new Error(`git merge-base --is-ancestor ${a} ${b} exited ${status}`);
+  return status === 0;
+}
+
+const SYNC_MESSAGE = "hunch: merge origin/main into local memory\n\nBuilt by tooling/ship-memory.mjs with this repository's merge drivers.";
+
+/** The commit to ship for `local`: itself when it already descends from `remoteBase`
+ *  (or is behind it), else a merge of `remoteBase` into it. GitHub tests a PR by
+ *  merging without this repository's merge drivers, so a record both sides wrote (a
+ *  task record a feature branch merged while a hook also committed it on main) is an
+ *  add/add conflict there even though `merge=hunch` resolves it here, and a conflicting
+ *  PR gets no Actions run and never auto-merges. The merge is built off the working
+ *  tree with the local drivers and dated from its parents, so the same pair always
+ *  yields the same commit. A merge that adds nothing to `remoteBase` is "absorbed": a
+ *  PR without a diff is not memory-only and would never merge. */
+export function syncTip({ cwd, local = "refs/heads/main", remoteBase = "refs/remotes/origin/main", timeoutMs = MERGE_TIMEOUT_MS }) {
+  const tip = git(cwd, ["rev-parse", "--verify", `${local}^{commit}`]);
+  const base = git(cwd, ["rev-parse", "--verify", `${remoteBase}^{commit}`]);
+  if (isAncestor(cwd, base, tip) || isAncestor(cwd, tip, base)) return { status: "direct", tip, local: tip, base, conflicts: [] };
+  let out;
+  // Each conflicted record runs a merge driver, which may be a cold `npx tsx` start.
+  try { out = execFileSync("git", ["merge-tree", "--write-tree", "--name-only", "--no-messages", "-z", tip, base], { cwd, ...EXEC, timeout: timeoutMs }); }
+  catch (error) {
+    if (error?.code === "ETIMEDOUT") return { status: "timeout", tip: null, local: tip, base, conflicts: [] };
+    // 1 is "conflicts"; anything else is not an answer.
+    if (error?.status !== 1) throw error;
+    return { status: "conflict", tip: null, local: tip, base, conflicts: [...new Set(nul(String(error.stdout ?? "")).slice(1))] };
+  }
+  const [tree] = nul(out);
+  if (tree === git(cwd, ["rev-parse", "--verify", `${base}^{tree}`])) return { status: "absorbed", tip: null, local: tip, base, conflicts: [] };
+  const date = `@${Math.max(...[tip, base].map((c) => Number(git(cwd, ["log", "-1", "--format=%ct", c]))))} +0000`;
+  const env = { ...EXEC.env, GIT_AUTHOR_DATE: date, GIT_COMMITTER_DATE: date };
+  const merge = execFileSync("git", ["commit-tree", tree, "-p", tip, "-p", base, "-m", SYNC_MESSAGE], { cwd, ...EXEC, env }).trim();
+  return { status: "merged", tip: merge, local: tip, base, conflicts: [] };
 }
 
 /** A stable per-machine label that does not publish the machine's name: the branch,
@@ -317,24 +357,35 @@ function openPr(cwd, branch) {
 /** A memory PR a human closed unmerged is a decision, not a failure to retry. Any
  *  later tip that still carries its commits would re-publish them (the hooks commit
  *  to main all the time), so the shipper holds until those commits leave local main
- *  or reach origin/main by some other route. */
+ *  or reach origin/main by some other route. Its commits, not its head: a head the
+ *  shipper merged origin/main into never becomes an ancestor of a later tip, but the
+ *  local commits under it do. */
 export function heldByClosedPr(cwd, prs, tip, base) {
-  const isAncestor = (a, b) => {
-    const status = gitStatus(cwd, ["merge-base", "--is-ancestor", a, b]);
-    if (status > 1) throw new Error(`git merge-base --is-ancestor ${a} ${b} exited ${status}`);
-    return status === 0;
-  };
+  const count = (...args) => Number(git(cwd, ["rev-list", "--count", ...args]));
   for (const pr of prs) {
     if (pr.mergedAt) continue;
     // An oid that is not one is a parse failure, not an answer.
     const head = String(pr.headRefOid ?? "").toLowerCase();
     if (!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(head)) throw new Error(`closed PR #${pr.number} has no usable head oid`);
-    // Absent locally (status 1) means absent from tip's history, which is complete
-    // here. Any other failure is not an answer.
-    const present = gitStatus(cwd, ["cat-file", "-e", head]);
-    if (present === 1) continue;
+    if (!Number.isSafeInteger(pr.number) || pr.number <= 0) throw new Error(`closed PR has no usable number: ${pr.number}`);
+    // Absent locally is not an answer: a shipper-built merge head sits on no local
+    // branch, so gc can prune it while the commits under it are still on main. GitHub
+    // keeps every PR's head; fetch it and pin it so the hold cannot be lost again.
+    let present = gitStatus(cwd, ["cat-file", "-e", head]);
+    if (present === 1) {
+      const pin = `refs/hunch/closed-pr/${pr.number}`;
+      tryGit(cwd, ["fetch", "--quiet", "--no-tags", "origin", `+refs/pull/${pr.number}/head:${pin}`]);
+      present = gitStatus(cwd, ["cat-file", "-e", head]);
+      // GitHub also serves a reachable commit by oid, whatever its pull ref says now.
+      if (present === 1 && tryGit(cwd, ["fetch", "--quiet", "--no-tags", "origin", head]) !== null) {
+        present = gitStatus(cwd, ["cat-file", "-e", head]);
+        if (present === 0) git(cwd, ["update-ref", pin, head]);
+      }
+      if (present === 1) throw new Error(`closed PR #${pr.number}: its head ${head} cannot be fetched; drop its commits from main, or fetch that commit and pin it as ${pin}`);
+    }
     if (present !== 0) throw new Error(`git cat-file -e ${head} exited ${present}`);
-    if (isAncestor(head, tip) && !isAncestor(head, base)) return pr;
+    const own = count(head, "--not", base);
+    if (own && count(head, "--not", base, tip) < own) return pr;
   }
   return null;
 }
@@ -438,16 +489,29 @@ export async function main(argv = process.argv.slice(2)) {
     const branch = memoryBranch();
     const deadline = Date.now() + WAIT_LIMIT_MS;
     let shippedTip = null;
+    let synced = null;
     for (;;) {
       release.renew?.();
       fetchMain(cwd);
-      const plan = planShip({ cwd });
+      const local = git(cwd, ["rev-parse", "--verify", "refs/heads/main^{commit}"]);
+      const base = git(cwd, ["rev-parse", "--verify", "refs/remotes/origin/main^{commit}"]);
+      // Building the merge runs the merge drivers; a poll rebuilds it only when a side moved.
+      if (synced?.local !== local || synced?.base !== base) synced = syncTip({ cwd, local, remoteBase: base });
+      const pushed = shippedTip ? `this tip was not pushed; ${shippedTip.slice(0, 7)} stays pushed` : "nothing was pushed";
+      if (synced.status === "conflict") {
+        log(`refused: local main conflicts with origin/main on ${synced.conflicts.length} path(s) even with this repository's merge drivers: ${synced.conflicts.join(", ")} — merge origin/main into main by hand; ${pushed}`);
+        return 6;
+      }
+      if (synced.status === "timeout") {
+        log(`refused: the merge drivers did not merge origin/main into local main within ${MERGE_TIMEOUT_MS / 60_000} min — merge it by hand; ${pushed}`);
+        return 6;
+      }
+      const plan = synced.status === "absorbed" ? { status: "nothing" } : planShip({ cwd, local: synced.tip, remoteBase: base });
       if (plan.status === "nothing") {
         if (!opts.dryRun) log(`nothing to ship; local main ${fastForwardMain(cwd)}`);
         else log("nothing to ship");
         return 0;
       }
-      const pushed = shippedTip ? `this tip was not pushed; ${shippedTip.slice(0, 7)} stays pushed` : "nothing was pushed";
       if (plan.status === "refused-outside") {
         log(`refused: ${plan.outside.length} path(s) outside the memory-only class — ship these by a reviewed PR: ${plan.outside.join(", ")}; ${pushed}`);
         return 3;
