@@ -1,0 +1,37 @@
+{
+  "id": "fnd_bbff65a132",
+  "title": "Context footprint after the #368–#372 cuts (main 1.42.0 + lean tools/list): tool list still ~0.7k tok over the 8k target; pre-edit grounding ~1.5k tok per busy file is ungated",
+  "observation": "Re-measured 2026-09-27 with `hunch footprint` (chars/4) on main plus branch feat/lean-tool-list. MET targets of dec_3ca27de266: grounding block 3,697 chars (~925 tok, target ≤1k); per-prompt 328 reminder + 806 task instruction first time (~284 tok), 377 compact after (~95 tok; target ≤400); hunch_context result 7,060 chars for a 1,500-tok budget (1.18×, target ≤1.5×). NOT MET: tools/list ≤8k tok. Default toolset on an empty store is 34,883 chars (~8.7k tok) after the lean pass, down from 37,824. Without outputSchema, which is what function-calling hosts forward as name + description + parameters, it is 28,085 (~7.0k tok, meets the target). This repo has the policy group on (34 tools): 39,894 (~10.0k tok). The largest remaining item is the hunch_context outputSchema at 5,349 chars; it advertises the execution-obligation item schema twice (hypotheses[].obligations and top-level obligations). UNGATED: pre-edit (PreToolUse) grounding is 6,209 chars (~1.55k tok) on the first touch of src/mcp/server.ts, 6,215 for src/integrations/claudemd.ts, 6,201 for src/cli/index.ts, and 413 for src/core/io.ts. The builder fills the full 1,500-tok budget. It includes a RECENT TASKS supplement (up to ~1.3k chars) chosen by fuzzy query overlap, so even a brand-new file (test/lean-tool-list.test.ts) received 4 unrelated task lines. It is not in `hunch footprint` (listed as unmeasured), and neither is SessionStart orientation.",
+  "evidence": [
+    "npm run dev -- footprint → mcp.tools_list 43479 (repo, before lean pass) · tools_list.core 34545 · hunch_context 7060 · task.start 1145 · task.finish 568 · grounding.block 3697 · pipeline_loop 661 · prompt.reminder 328 · task_instruction 806 · compact 377",
+    "tools/list per-tool breakdown (scratchpad tools-breakdown.mts): empty store 27 tools 37824→34883 chars; core 29516→28085; hunch_context all 7488→6966, outputSchema 5779→5349",
+    "PreToolUse hook on stdin (Edit, fresh session_id): src/mcp/server.ts 6209 · src/integrations/claudemd.ts 6215 · src/cli/index.ts 6201 · src/core/io.ts 413 chars",
+    "pre-edit recent tasks: src/cli/index.ts:7082 taskSelectionSupplements(selectTasksAuto(..., excludeTargetDeliveries)) — added in a6eb1c6"
+  ],
+  "method": null,
+  "severity": "medium",
+  "triage": "open",
+  "affected_files": [
+    "src/mcp/server.ts",
+    "src/mcp/leanToolList.ts",
+    "src/core/footprint.ts",
+    "src/cli/index.ts",
+    "src/core/taskDelivery.ts"
+  ],
+  "affected_symbols": [],
+  "violates_constraint": null,
+  "spawned_decision": null,
+  "observed_at": "2026-09-27T12:11:42.824Z",
+  "resolved_commit": null,
+  "provenance": {
+    "source": "agent_recorded",
+    "confidence": 0.75,
+    "evidence": [
+      "npm run dev -- footprint → mcp.tools_list 43479 (repo, before lean pass) · tools_list.core 34545 · hunch_context 7060 · task.start 1145 · task.finish 568 · grounding.block 3697 · pipeline_loop 661 · prompt.reminder 328 · task_instruction 806 · compact 377",
+      "tools/list per-tool breakdown (scratchpad tools-breakdown.mts): empty store 27 tools 37824→34883 chars; core 29516→28085; hunch_context all 7488→6966, outputSchema 5779→5349",
+      "PreToolUse hook on stdin (Edit, fresh session_id): src/mcp/server.ts 6209 · src/integrations/claudemd.ts 6215 · src/cli/index.ts 6201 · src/core/io.ts 413 chars",
+      "pre-edit recent tasks: src/cli/index.ts:7082 taskSelectionSupplements(selectTasksAuto(..., excludeTargetDeliveries)) — added in a6eb1c6"
+    ],
+    "last_verified": "2026-09-27T12:11:42.824Z"
+  }
+}

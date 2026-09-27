@@ -11,6 +11,7 @@
  */
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { installLeanToolList } from "../mcp/leanToolList.js";
 // The web-standard transport, not the Node one: the Node wrapper imports @hono/node-server,
 // which the production dependency audit keeps unreachable (tooling/production-dependency-audit.mjs).
 // Bridging IncomingMessage → Request → ServerResponse here is a few lines and keeps that boundary.
@@ -73,6 +74,7 @@ const TOOLS: Array<{ name: string; route: StateRoute; title: string; description
 
 function buildServer(dispatch: StateDispatch, problemOf: (error: unknown) => ProblemShape, version: string): McpServer {
   const server = new McpServer({ name: "hunch-serve", version });
+  installLeanToolList(server);
   for (const tool of TOOLS) {
     server.registerTool(tool.name, { title: tool.title, description: tool.description, inputSchema: tool.input }, async (input): Promise<ToolResult> => {
       try {

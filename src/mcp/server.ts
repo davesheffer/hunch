@@ -17,6 +17,7 @@ import { z } from "zod";
 import { hunchPaths, findRoot, toPosixTarget, repoRelativeTarget } from "../core/paths.js";
 import { matchSymbolsTiered } from "../core/glob.js";
 import { resolveMcpToolset } from "./toolset.js";
+import { installLeanToolList } from "./leanToolList.js";
 import { PolicyRepository } from "../constitution/repository.js";
 import { readConfig } from "../core/config.js";
 import { canonicalRootPath, resolveActiveRoot } from "./roots.js";
@@ -1296,6 +1297,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
   const hiddenTools = new Set(toolset.hidden);
   if (toolset.hidden.length) process.stderr.write(`[hunch-mcp] tool groups: ${toolset.groups.length ? toolset.groups.join(", ") : "core only"} (${toolset.source}); ${toolset.hidden.length} specialist tool(s) hidden — HUNCH_MCP_TOOLS=all or .hunch/config.json mcp_tools to expose\n`);
   const server = new McpServer({ name: "hunch", version: HUNCH_VERSION }, { instructions: MCP_INSTRUCTIONS });
+  installLeanToolList(server);
   let activeRequests = 0;
   let pendingRoot: string | null = null;
   let pendingScheduled = false;
