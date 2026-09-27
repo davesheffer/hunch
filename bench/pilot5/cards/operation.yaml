@@ -13,8 +13,7 @@ category_walk:
       gh issue view 398 body + investigation comment (2026-09-22): "Node's
       synchronous test work can overrun a timer before the event loop processes
       it, so that pass does not demonstrate timing margin"; fixes landed inside the
-      191-file 1.41.0 assembly commit a6eb1c6 (see #378 below), so it would also
-      fail items 4/5 even if item 2 did not exclude it outright.
+      1.41.0 assembly commit a6eb1c6.
   - issue: 379
     verdict: excluded
     reason: >-
@@ -35,22 +34,21 @@ category_walk:
   - issue: 378
     verdict: excluded
     reason: >-
-      Qualification items 4 and 5: the only commit in the relevant window
-      touching test/autoreview-cli.test.ts / src/synthesis/provider.ts /
-      src/synthesis/initiator.ts is a6eb1c6 ("feat: assemble 1.41.0 card,
-      worktree, and constraint release candidate"), a single commit changing
-      191 files that is the squashed assembly for release PR #396, which itself
-      closes 10 issues at once (#394, #395, #375, #357, #377, #378, #397, #398,
-      #399, #400). The #378-specific fix (env-leak guard for CLAUDECODE/
-      CODEX_THREAD_ID/CODEX_SESSION_ID in spawned-CLI test env builders) is not
-      separable from the other nine issues' fixes bundled in that same commit;
-      no earlier isolated fix commit exists on main.
+      Qualification item 3, like #270: the fix is test-only, so no validator run
+      against product code can discriminate the starting commit from the fix. The
+      issue asks that no test reach a real assistant CLI through inherited
+      initiator signals (CLAUDECODE, CODEX_THREAD_ID, CODEX_SESSION_ID,
+      HUNCH_INITIATOR) and leaves the provider-precedence change as an open
+      "product question for the maintainer". The fix in a6eb1c60 strips those
+      variables only in the test fixture env builder; src/synthesis/provider.ts
+      and src/synthesis/initiator.ts are unchanged, so product behaviour is
+      identical at both revisions.
     evidence: >-
-      git log origin/main --oneline --since=2026-09-20 --until=2026-09-23 -- \
-      test/autoreview-cli.test.ts src/synthesis/provider.ts src/synthesis/initiator.ts
-      -> only a6eb1c6; git show --stat a6eb1c6 -> 191 files changed; PR #396 body
-      lists "closes #394, closes #395, closes #375, closes #357, closes #377,
-      closes #378, closes #397, closes #398, closes #399, closes #400".
+      gh issue view 378 (created 2026-09-20T06:55:26Z), Expected items 1 and 2;
+      git show a6eb1c60 | grep -E 'CLAUDECODE|CODEX_THREAD_ID' -> matches only in
+      test/fixtures.ts (the delete loop) and test/fixture-environment.test.ts (its
+      test); git show --stat a6eb1c60 lists 8 non-test src files, none of them
+      src/synthesis/*.
   - issue: 270
     verdict: excluded
     reason: >-
@@ -69,9 +67,7 @@ category_walk:
       same result at both revisions (either it always fails, if unconditional, or
       always trivially passes/skips, if guarded) — it cannot fail-at-start /
       pass-at-fix as item 3 requires. (The issue and category fit otherwise: this
-      machine is Windows 11 and the issue is squarely "verification work"; also
-      bundled with 7 other issues in commit 5558d6d, so item 5 would likely also
-      apply to any source-level portion.)
+      machine is Windows 11 and the issue is squarely "verification work".)
     evidence: >-
       git show 5558d6d -- test/external-acceptance.test.ts test/sync.test.ts
       (diff adds only a platform guard / a `skip` option, no src/** change);
@@ -80,19 +76,29 @@ category_walk:
     verdict: qualified
     reason: >-
       Deterministic, Windows-reproducible, isolable behavioral fix: `hunch task
-      verify`'s default check timeout (`DEFAULT_CHECK_TIMEOUT_MS`) was 120_000ms,
-      causing a real full suite to be recorded as a failed/timed-out check even
-      when it would have passed. Fix raises the default to 15 minutes. Touches
-      exactly 2 non-test source files (src/core/taskReportEvidence.ts constant +
-      default param; src/mcp/taskReportTools.ts advisory text string), both part
-      of the same self-contained change, importable/assertable via a symbol that
-      already existed (with the old value) at the starting commit. Category
-      "operation" fits: this is verification-workflow behavior (how `hunch task
-      verify` budgets a check), matching the issue title itself.
+      verify`'s default check budget was 120 s, so a passing check longer than
+      that, run through the `verification_argv` that `hunch_task start` returns,
+      was recorded as timed out and failed. 5558d6d is a BUNDLED commit: PR #271
+      (merge 3d45886b) closes #261, #263, #264, #265, #266, #268, #269 and #270,
+      and `git show --stat 5558d6d` touches 7 non-test source files
+      (src/cli/index.ts, src/core/taskRecord.ts, src/core/taskReport.ts,
+      src/core/taskReportEvidence.ts, src/core/taskReportHook.ts,
+      src/core/taskTouched.ts, src/mcp/taskReportTools.ts). Rule 4 is read per
+      issue slice (bench/pilot5/DEVIATIONS.md, amendment a); the #268 slice is 2
+      non-test source files: src/core/taskReportEvidence.ts
+      (DEFAULT_CHECK_TIMEOUT_MS 120_000 -> 15 * 60_000, and runReportCheck's
+      default parameter now uses it) and the advisory text of `hunch_task start`
+      in src/mcp/taskReportTools.ts ("The default budget is 15 minutes"); the
+      verificationLauncherFor change in that file is #261's slice. Test-side
+      slice: test/agent-farm-season.test.ts (HUNCH_SLOW_TESTS opt-in). Rule 5
+      holds: the validator exercises only the default verification path, which
+      no other issue in the bundle changes. Category "operation" fits: this is
+      verification-workflow behavior, matching the issue title itself.
     evidence: >-
-      git show 5558d6d -- src/core/taskReportEvidence.ts: "-export const
-      DEFAULT_CHECK_TIMEOUT_MS = 120_000;" / "+export const
-      DEFAULT_CHECK_TIMEOUT_MS = 15 * 60_000;"; validator run below.
+      git show --stat 5558d6d (15 files, 7 non-test src); gh pr view 271
+      closingIssuesReferences [261,263,264,265,266,268,269,270]; git show 5558d6d
+      -- src/core/taskReportEvidence.ts src/mcp/taskReportTools.ts; validator
+      runs below.
 
 issue_number: 268
 issue_url: "https://github.com/davesheffer/hunch/issues/268"
@@ -100,12 +106,9 @@ category: operation
 issue_created_at: "2026-09-16T13:47:49Z"
 issue_text_sha256: "4aeb58411cd7d586b3341d8e608e267ce94c355f4b998e950ac5a984ccaba570"
 issue_text_edit_check: >-
-  gh api repos/davesheffer/hunch/issues/268 -> created_at 2026-09-16T13:47:49Z,
-  updated_at 2026-09-16T14:42:02Z. updated_at differs from created_at, but
-  14:42:02Z exactly matches the issue's own closedAt (2026-09-16T14:42:02Z per
-  gh issue view), i.e. it is consistent with the close event rather than a body
-  edit. Not independently proven (no issue-edit-events endpoint checked); treat
-  as uncertain but likely unedited.
+  GraphQL repository.issue(number: 268): createdAt 2026-09-16T13:47:49Z,
+  lastEditedAt null, userContentEdits.totalCount 0, comments.totalCount 0.
+  The body was never edited; the task prompt is the text at arrival.
 task_prompt: |
   hunch task verify: 120 s default timeout turns a passing full suite into a recorded failed check
 
@@ -128,22 +131,32 @@ task_prompt: |
   Hunch finding `fnd_a894c4e4ed`.
 starting_commit: "0cdb20f423cd30bd53f24c9856f36b9783ba95a9"
 starting_state_proof:
-  command: "npx tsx --test test/pilot5-issue-268.test.ts   # (or: node tooling/run-tests.mjs test/pilot5-issue-268.test.ts once that script exists)"
-  expected: "DEFAULT_CHECK_TIMEOUT_MS exported by src/core/taskReportEvidence.ts equals 120000 (the old 2-minute default), so the assertion that it was raised past 120000ms fails"
+  command: "copy bench/pilot5/validators/268/pilot5-issue-268.test.ts to <worktree at starting_commit>/test/, then from that worktree: node node_modules/tsx/dist/cli.mjs --test test/pilot5-issue-268.test.ts"
+  expected: "fails: a check that exits 0 after 130 s, run through the verification_argv returned by hunch_task start (no --timeout), is killed at the 120 s default and recorded as timed out with exit_code 1"
   observed: >-
-    AssertionError: expected DEFAULT_CHECK_TIMEOUT_MS to be raised above the old
-    120000ms budget that turned a passing full suite into a recorded failed
-    check, got 120000
+    exit 1 after 124 s (2026-09-27, Node v24.13.0, after npm ci); tests 1,
+    pass 0, fail 1; AssertionError [ERR_ASSERTION]: a check that passes after
+    130 s was recorded as timed out by the default verification path; the
+    recorded result shows "exit_code": 1 and "timed_out": true.
 solution_boundary:
   first_known_fix_commit: "5558d6d8145d928ad410251d67274f296515fdae"
-  later_issue_comments_excluded: []
+  fix_scope_note: >-
+    Bundled commit (8 issues, 7 non-test src files); the #268 slice is
+    src/core/taskReportEvidence.ts plus the hunch_task start advisory text in
+    src/mcp/taskReportTools.ts. Merged to main by 3d45886b (PR #271,
+    2026-09-16T14:41:58Z).
+  later_issue_comments_excluded: [] # the issue has no comments
 memory:
   cutoff_at: "2026-09-16T13:47:49Z"
-  revision_or_snapshot_sha256: "0cdb20f423cd30bd53f24c9856f36b9783ba95a9"
+  workspace_memory: "replaced per bench/pilot5/GATE-A-HARNESS.md (target history rewritten without .hunch/; current-hunch mounts the cutoff snapshot; no-hunch has none)"
+  revision_or_snapshot_sha256: "computed at freeze by the harness (snapshot.json)"
+  cutoff_revisions:
+    public: "0cdb20f423cd30bd53f24c9856f36b9783ba95a9" # git rev-list -1 --first-parent --before=2026-09-16T13:47:49Z origin/main (2026-09-15T14:07:29Z); also the starting commit
+    private_overlay: "91167ce9d9645da90c39caba641a62b0e800c4a5" # last first-parent overlay commit before the cutoff
   eligible_record_ids:
     - fnd_70dd5c4034
-  excluded_future_record_ids:
     - fnd_a894c4e4ed
+  excluded_future_record_ids: []
   source_and_timestamp_evidence:
     - record: fnd_70dd5c4034
       title_summary: >-
@@ -154,6 +167,7 @@ memory:
       observed_at: "2026-09-11T18:26:33.896Z"
       cutoff: "2026-09-16T13:47:49Z"
       eligible: true
+      in_harness_snapshot: true # present at 0cdb20f4
       note: >-
         Both the git first-add time and the record's own observed_at are
         roughly 5 days before the issue's createdAt; comfortably eligible.
@@ -168,24 +182,28 @@ memory:
       title_summary: >-
         (public, title only) the finding the issue text itself cites
         ("Hunch finding fnd_a894c4e4ed").
-      first_add_commit_time: "2026-09-16T16:47:43+03:00 (2026-09-16T13:47:43Z)"
+      first_add_commit_time: "2026-09-16T16:47:43+03:00 (2026-09-16T13:47:43Z), commit 9021f3b7"
       observed_at: "2026-09-16T13:47:41.614Z"
       cutoff: "2026-09-16T13:47:49Z"
-      eligible: false
+      eligible: true
+      in_harness_snapshot: false
       note: >-
-        Excluded as future/contemporaneous leakage even though both
-        timestamps are technically a few seconds before createdAt (6s and 8s
-        respectively): this record documents the issue's own defect and was
-        evidently captured by the same reporting workflow that filed the
-        issue seconds later (it is literally the finding the issue links to).
-        Treating it as "eligible prior memory" would leak the task's own
-        write into its own grounding; excluded on that basis rather than the
-        bare timestamp comparison.
+        ELIGIBLE under the memory rule read literally (DEVIATIONS.md amendment
+        d): both its first-add commit time and its own observed_at precede
+        createdAt (by 6 s and 7 s), and same-session records are not excluded.
+        It is NOT in the Hunch arm's snapshot: it is absent from 0cdb20f4's tree
+        (git cat-file -e 0cdb20f4:.hunch/findings/fnd_a894c4e4ed.json fails),
+        and 0cdb20f4 is itself the last first-parent origin/main commit at or
+        before the cutoff. Commit 9021f3b7 sat on the feat/serve-mcp-http branch
+        and reached first-parent main only through ac55963 (PR #267,
+        2026-09-17T09:51:31Z). It is also absent from the private overlay at
+        91167ce9. The delivery check will therefore report it as not delivered.
     - record: dec_617976d34a
       title_summary: (public) a general "budget test timeout to measured reality" decision
       first_add_commit_time: "2026-08-06T11:11:11+03:00"
       cutoff: "2026-09-16T13:47:49Z"
       eligible: true
+      in_harness_snapshot: true # present at 0cdb20f4
       note: >-
         Eligible by timestamp but scoped to a different, specific test
         (test/team-workflow-failure-regressions.test.ts's MCP-refusal
@@ -200,31 +218,50 @@ memory:
       eligible: false
   relevance_expected: relevant
 validator:
-  command: >-
-    copy bench/pilot5/validators/268/pilot5-issue-268.test.ts to
-    test/pilot5-issue-268.test.ts in the target worktree, then
-    `npx tsx --test test/pilot5-issue-268.test.ts` from that worktree
-    (tooling/run-tests.mjs does not exist yet at the starting commit; this is
-    the same command shape node's own `--test` runner supports at both
-    revisions)
-  validator_sha256: "88882c7dc3025a8464a38d7e9016a6954bf82b4e6e12ad70aeada7ef656d66fe"
+  command: "copy bench/pilot5/validators/268/pilot5-issue-268.test.ts to <target worktree>/test/, then from that worktree: node node_modules/tsx/dist/cli.mjs --test test/pilot5-issue-268.test.ts" # tooling/run-tests.mjs does not exist at the starting commit
+  validator_sha256: "cbe546d69eca07e78618f58a9fab122cd390e56ee5764724f646cfc5a54ff747" # single file bench/pilot5/validators/268/pilot5-issue-268.test.ts
   starting_state_result: failed
   success_criteria: >-
-    Imports the already-existing exported symbol DEFAULT_CHECK_TIMEOUT_MS from
-    src/core/taskReportEvidence.ts and asserts it is greater than 120000 (the
-    old, issue-reported default). Deliberately checks ">120000" rather than
-    "===900000" so an alternative correct fix (e.g. defaulting to the 6h max
-    instead of 15 min, per the issue's own second proposal) still passes.
+    exit 0. In a fresh Git repository with an empty .hunch/, the validator
+    starts `hunch mcp --root <repo>` from the target's own source, calls
+    `hunch_task` with action start, takes the returned `verification_argv`
+    verbatim, appends a node command that exits 0 after 130 s, and runs it with
+    no `--timeout` of its own. The run must exit 0, its printed result must
+    carry "exit_code": 0, and it must not say "timed_out": true. Needs about
+    135 s at the fix commit.
+  notes: >-
+    Replaces the earlier validator, which asserted only
+    DEFAULT_CHECK_TIMEOUT_MS > 120000 and so pinned one constant and one
+    remedy. This one tests the issue's required behaviour (a passing suite
+    longer than 120 s, run the way the issue describes, is not recorded as a
+    timed-out failed check) through the surfaces the issue names:
+    `hunch_task start`, `verification_argv`, `hunch task verify`, and the
+    `exit_code` / `timed_out` result fields. It pins no symbol outside the
+    issue text; the MCP entry point (src/cli/index.ts mcp --root) is only the
+    transport, unchanged at both commits. Remedies accepted: a larger default
+    (15 min, the 6 h max or anything above 130 s), or a `verification_argv`
+    that carries `--timeout <n>` with n above 130. Remedies not required and
+    not sufficient alone: the instruction text mentioning `--timeout` (the
+    starting commit's hunch_task start text already says "add --timeout
+    <seconds> before -- for a long suite" and the defect still reproduces),
+    rendering a timed-out check as `timed out (n s)` (the check is still cut
+    off at 120 s and its passing result is lost), and the season-test opt-in
+    (repository test hygiene). Not a timing race under item 2: at the start
+    commit the 120 s budget is below the check's minimum duration of 130 s,
+    so the kill always fires; at the fix commit the budget is 900 s.
 status: qualified
 exclusion_reason: null
 
 validation_runs:
   start:
+    commit: "0cdb20f423cd30bd53f24c9856f36b9783ba95a9"
     exit: 1
     key_line: >-
-      AssertionError [ERR_ASSERTION]: expected DEFAULT_CHECK_TIMEOUT_MS to be
-      raised above the old 120000ms budget that turned a passing full suite
-      into a recorded failed check, got 120000
+      AssertionError [ERR_ASSERTION]: a check that passes after 130 s was
+      recorded as timed out by the default verification path ("exit_code": 1,
+      "timed_out": true); tests 1, pass 0, fail 1; 124 s
   fix:
+    commit: "5558d6d8145d928ad410251d67274f296515fdae"
     exit: 0
-    key_line: "pilot5 #268: hunch task verify default check timeout is raised past the old 120s budget (0.3921ms) ... pass 1"
+    key_line: "✔ #268: a passing check longer than 120 s, run through verification_argv without --timeout, is recorded as passed (133452ms); tests 1, pass 1, fail 0"
+  environment: "2026-09-27, Windows 11, Node v24.13.0 (the rule names Node 22; DEVIATIONS.md amendment b), npm ci --no-audit --no-fund, detached scratch worktrees"

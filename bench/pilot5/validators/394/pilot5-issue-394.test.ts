@@ -24,8 +24,11 @@ function fixture(t: { after: (f: () => void) => void }): string {
   return root;
 }
 const showsFailure = (card: string) => /\bfail(?:ed|ure|ures|ing)?\b|\bunresolved\b/i.test(card);
+// Outstanding = a positive failure count, or a line saying "failed" that is not
+// marked superseded. "0 failed" and "failed (superseded)" are not outstanding.
 const showsOutstandingFailure = (card: string) =>
-  /\bfailed\b/i.test(card) || /\b[1-9]\d*\s+(?:unresolved|failed|failures?)\b/i.test(card);
+  /\b[1-9]\d*\s+(?:unresolved|failed|failures?)\b/i.test(card) ||
+  card.split(/\r?\n/).some(line => /\bfailed\b/i.test(line.replace(/\b0\s+failed\b/gi, "")) && !/\bsuperseded\b/i.test(line));
 
 test("#394: a later unrelated passing check does not hide an unresolved failure on the card", async t => {
   const root = fixture(t), task = startReportTask(root, "Independent checks");

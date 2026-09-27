@@ -38,7 +38,8 @@ memory:
   cutoff_revisions:
     public: "e171a372fc98aa8579746752899600f5ddd713d2" # last origin/main first-parent commit before cutoff (2026-09-17T10:46:09Z); the issue itself cites main e171a37
     private_overlay: "df58cbd15938ce3df1220915553bb22b4937ad22" # last hunch-private commit before cutoff (2026-09-17T11:11:39Z)
-  revision_or_snapshot_sha256: "59190600d8912f8e8918d92f2d5ac6c1bac8c7f5287aa82172c19023a5950886" # sha256 over eligible records sorted by "<store>:<path>", each fed as "<store>:<path>\n<file bytes at the cutoff revision>"
+  workspace_memory: "replaced per bench/pilot5/GATE-A-HARNESS.md (target history rewritten without .hunch/; current-hunch mounts the cutoff snapshot; no-hunch has none)"
+  revision_or_snapshot_sha256: "computed at freeze by the harness (snapshot.json)"
   eligible_record_ids:
     - con_8460b6770f # public + private copy; scope lists src/integrations/providers.ts; governs the fix (merge into user files, refuse to clobber)
     - dec_20f0bbaae5 # public
@@ -64,12 +65,13 @@ memory:
     - "dec_811f2dc486 private: captured 2026-06-16T10:31:53+03:00, first add 2026-06-23T01:02:48+03:00"
     - "dec_a69788b691 private: captured 2026-06-21T12:19:58+03:00, first add 2026-06-23T01:02:48+03:00"
     - "No public .hunch record on origin/main mentions #314 or JSONC comment erasure (git grep origin/main -- .hunch/)"
-    - "Public .hunch/ at starting_commit holds records added after the cutoff; mount the cutoff snapshot, never the starting commit's .hunch/, for the Hunch arm"
+    - "Public .hunch/ at starting_commit holds records added after the cutoff; the harness drops it and mounts the cutoff snapshot (workspace_memory above)"
   relevance_expected: relevant # delivery unverified: con_8460b6770f's scope names providers.ts exactly, but delivery under the benchmarked Hunch version and budget was not run
 validator:
   command: "cp bench/pilot5/validators/314/pilot5-issue-314.test.ts <wt>/test/ && (cd <wt> && node node_modules/tsx/dist/cli.mjs --test test/pilot5-issue-314.test.ts)" # tooling/run-tests.mjs does not exist at starting_commit; its package.json test script is 'tsx --test'
   validator_sha256: "1b00f4d0b411f234f65e933b91637d9c7ea260350418a861edc298c8f99df996" # single file bench/pilot5/validators/314/pilot5-issue-314.test.ts
   starting_state_result: failed
+  notes: "The third test (comment-looking text inside JSON strings must still merge) is deliberately stricter than the issue text, which does not mention it: a fix that refuses every file whose raw text contains // or /* would satisfy the issue's refusal alternative but fail this test. Justified by con_8460b6770f (config/provider writers must merge idempotently into existing user files and refuse to clobber an unparseable file): such a file is parseable, so the constraint requires a merge, not a refusal. Recorded as DEVIATIONS.md amendment f."
   success_criteria: "exit 0 with all 3 tests passing. For a JSONC .vscode/mcp.json (// comment) and .cursor/hooks.json (/* */ comment), the writer either leaves the file byte-identical (refusal, thrown or returned) or writes a merged file that still contains every comment, keeps the user's other server/hook and adds Hunch's entry; comment-looking text inside JSON strings still merges normally. Derived from the fix's tests in test/providers.test.ts, relaxed so the issue's other suggested fix (token-preserving edit) also passes; uses only APIs present at starting_commit (writeVscodeMcp, writeCursorHooks, parseJsonc, tempStore)."
 status: qualified
 exclusion_reason: null
@@ -80,13 +82,11 @@ validation_runs:
 category_walk:
   - issue: 357
     verdict: excluded
-    reason: "fails items 3, 4 and 5: the only fix on main is bundled in a release-candidate commit, and the correct behaviour depended on a product decision the issue text leaves open"
+    reason: "excluded: category mismatch. The issue text frames it as a follow-up to #356/#316, not as a breach of a recorded convention, and no recorded convention governed the fix at the cutoff (2026-09-19T20:28:05Z)"
     evidence:
-      - "No commit on origin/main references #357; it is closed by release PR #396 (merge 1c2763e77c1f7c8c048f83056daf826254b26b81), which closes #394 #395 #375 #357 #377 #378 #397 #398 #399 #400"
-      - "Fix lives in a6eb1c603256451bc7a9308dfece5f2bbad58b91 'assemble 1.41.0 card, worktree, and constraint release candidate' (parent 43b9339b686549c50950accdfee2098ca9c9183c): 191 files, 8 non-test src files (src/cli/index.ts, src/core/paths.ts, src/core/taskQuery.ts, src/core/taskReportRender.ts, src/extractors/git.ts, src/integrations/hooks.ts, src/mcp/server.ts, src/store/hunchStore.ts)"
-      - "Issue text asks to 'Decide whether sync --from-hook should let a stored autoCommit: false override the hook's --commit'; the choice was settled only in a post-arrival comment (2026-09-19T21:20:13Z) that lists open product calls"
-      - "The fix's test (test/init-shared-autocommit.test.ts) asserts the new message /shared post-commit hook still auto-commits/; the precedence alternative the issue allows would fail it, so no solution-agnostic validator was derivable"
-      - "Issue text frames it as a follow-up to #356/#316, not as a recorded-convention fix. Not reproduced (excluded before step 3)"
+      - "gh issue view 357: createdAt 2026-09-19T20:28:05Z; gh pr view 356: mergedAt 2026-09-20T07:38:25Z, after #357 arrived"
+      - "last first-parent origin/main commit before the cutoff: f909958e041b444cd48ad296e3f06adc6bc01adb (2026-09-19T17:27:08Z); git grep -E '#356' f909958e -- .hunch/decisions finds nothing (exit 1), and nothing under .hunch/ at all"
+      - "Not reproduced (excluded before step 3)"
   - issue: 315
     verdict: excluded
     reason: "category mismatch: no constraint or recorded convention at the cutoff (2026-09-17T12:07:51Z) governs the correct fix; the issue text frames it as a sequel to #311"

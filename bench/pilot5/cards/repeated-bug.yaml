@@ -36,7 +36,7 @@ starting_commit: "3550f3766e39adb18ab309ab5755d45337ba1a40" # first parent of 48
 starting_state_proof:
   command: >-
     cp bench/pilot5/validators/360/pilot5-issue-360.test.ts <worktree@3550f37>/test/ &&
-    cd <worktree@3550f37> && npx tsx --test test/pilot5-issue-360.test.ts
+    cd <worktree@3550f37> && node node_modules/tsx/dist/cli.mjs --test test/pilot5-issue-360.test.ts
   expected: "exit 1; the #360 regression fails because base-only events 1..2 are resurrected by the merge"
   observed: >-
     exit 1; fail 1 / pass 1. "merging two compacted clones does not resurrect base-only history":
@@ -50,8 +50,10 @@ solution_boundary:
     - "PR #359 body 'Known, not fixed here' list (names the defect, no solution; merged after cutoff)"
 memory:
   cutoff_at: "2026-09-19T21:19:52Z" # issue createdAt
-  revision_or_snapshot_sha256: "9be1a98102a9cd3c386770c4aa97430a26e3549baa2512efd43c7967c5a6eea9"
-  # sha256 of the LF-joined, sorted manifest below (one "<store>:<path> <git blob sha>" line each, trailing newline).
+  workspace_memory: "replaced per bench/pilot5/GATE-A-HARNESS.md (target history rewritten without .hunch/; current-hunch mounts the cutoff snapshot; no-hunch has none)"
+  revision_or_snapshot_sha256: "computed at freeze by the harness (snapshot.json)"
+  # snapshot_manifest lists only the eligible records' blobs, one "<store>:<path> <git blob sha>" line each
+  # (reference; the Hunch arm mounts the whole cutoff-bounded snapshot).
   # Public blobs from origin/main f909958e041b444cd48ad296e3f06adc6bc01adb (last first-parent commit before cutoff;
   # identical blobs at starting_commit). Private blobs from overlay commit 9fe38c251b25a884b50a72855ff546e92bb80b15
   # (last first-parent overlay commit before cutoff).
@@ -97,7 +99,7 @@ memory:
 validator:
   command: >-
     cp bench/pilot5/validators/360/pilot5-issue-360.test.ts <target>/test/ &&
-    cd <target> && npx tsx --test test/pilot5-issue-360.test.ts
+    cd <target> && node node_modules/tsx/dist/cli.mjs --test test/pilot5-issue-360.test.ts
   # tooling/run-tests.mjs does not exist at 3550f37 or 48f391a; the repo's own runner there is `tsx --test`.
   validator_sha256: "62b29ea1ea53bb8b20581f8793a5671269bd68cdd000dcb5854b94e555252638" # single file, bench/pilot5/validators/360/pilot5-issue-360.test.ts
   starting_state_result: failed

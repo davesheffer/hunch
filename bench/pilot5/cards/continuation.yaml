@@ -1,149 +1,180 @@
 # PILOT5 issue card: continuation (preregistered; rule: bench/pilot5/SELECTION.md)
-# Walk order: #375, #372, #371, #370, #369, #266. Stopped at the first qualifying
-# candidate (#372); #371, #370, #369, #266 were not walked (rule: take the first
-# qualifying candidate in order and stop).
+# Walk order: #375, #372, #371, #370, #369, #266. The walk stopped at the first qualifying
+# candidate (#375); #372, #371, #370, #369, #266 were not walked.
+# Rule-4 reading (orchestrator ruling, recorded here, not re-argued): qualification item 4 is
+# read per issue SLICE. For a bundled fix commit, count the non-test source files of the issue's
+# own separable slice, not of the whole commit.
 category_walk:
   - issue: 375
-    verdict: excluded
-    reason: >-
-      Category matches (explicit "Follow-up to #373", continuing a sibling issue's fix), but the fix
-      fails qualification items 4/5. #375 was closed only by the 1.41.0 release-candidate PR (#396,
-      merge commit 1c2763e), whose release note lists it as one bullet ("stops repeated pre-edit
-      delivery from feeding back into ranking") among fixes for #394, #395, #357, #377, #378, #397,
-      #398, #399, #400 all closed by the same PR. The commit that assembles that release
-      (a6eb1c60, "feat: assemble 1.41.0 card, worktree, and constraint release candidate") touches
-      60+ files across src/cli, src/core, src/integrations, src/mcp, src/store plus dozens of test
-      files, with no earlier commit isolating a #375-only diff. The #375-specific slice cannot be
-      separated from the other nine issues' fixes in that commit, so it fails "fix touches at most 6
-      non-test source files" and "not bundled so tightly that the validator cannot isolate it."
-    evidence: >-
-      gh api issues/375: created_at 2026-09-20T04:42:09Z, updated_at == closed_at 2026-09-22T12:19:23Z
-      (no edit between creation and close). No commit in `git log origin/main --grep "#375"` exists;
-      the only closing reference is PR #396's body: "Closes #394, closes #395, closes #375, closes
-      #357, closes #377, closes #378, closes #397, closes #398, closes #399, closes #400." Commit
-      a6eb1c603256451bc7a9308dfece5f2bbad58b91 (the release-assembly commit in that PR) is the
-      earliest commit touching the relevant area and spans far more than 6 non-test source files
-      across five different subsystems, entangled with the other nine issues.
-  - issue: 372
     verdict: qualified
     reason: >-
-      "Part of the context-footprint work" — an umbrella/sibling issue in the same #369-#372 series
-      (all four measured 2026-09-20 on the same 1.39.3 baseline, cross-referencing "the linked
-      issues"), matching the continuation criterion (continues sibling issues in the same series).
-      Body not edited after creation. Earliest fix commit (448d5359, "feat: measure the context
-      footprint and gate it with a ratchet (#372)") touches exactly 3 non-test source files
-      (src/cli/index.ts, src/core/footprint.ts, src/core/hookText.ts) plus test/footprint.test.ts,
-      and its commit message names only #372 — not bundled with #369/#370/#371 (checked their
-      separate closing references below). Deterministic, reproduces on Windows 11 / Node 22 (no
-      timing/network dependency — the CLI command either exists or it doesn't).
+      Continuation: the issue text opens "Follow-up to #373 (pre-edit dedupe on record identity)" and
+      continues that sibling fix in the same series. Under the per-slice reading of item 4, #375 is a
+      separable slice of the bundled release-candidate commit a6eb1c60: one option in
+      src/core/taskQuery.ts (buildTaskRankingQuery skips the prompt task's own deliveries for the
+      same target) and one call site in src/cli/index.ts (the pre-edit hook passes that option).
+      That is 2 non-test source files (item 4). No other issue's change shares those lines, and the
+      validator drives only the pre-edit hook path (item 5). The starting state reproduces on
+      Windows 11 / Node 22 with no timing or network dependency (item 2). The validator fails at
+      start for the issue's own reason and passes at fix (item 3).
     evidence: >-
-      gh api issues/372: created_at 2026-09-20T04:07:33Z, updated_at == closed_at 2026-09-26T18:40:51Z
-      (no edit between creation and close). Fix commit 448d53597be86a7e1bf20950442157b032434643,
-      parent (starting_commit) a068fb723452a97e6ec7a454448ceb7b9ba42b80. A second, tiny follow-up
-      commit 525616cbf20c915b919346dd9cfb38a6855cdefe ("ci(release): record the context footprint in
-      each tagged release summary (#372)", 1 file: .github/workflows/release.yml) wires the CLI
-      output into the release job; not needed for the validator (CLI surface already exists after
-      448d5359). Validator fails at start, exit 1 (real failure: "error: unknown command 'footprint'"
-      — the issue's own complaint, not an import error); passes at fix, exit 0.
+      gh api issues/375: created_at 2026-09-20T04:42:09Z, closed 2026-09-22T12:19:23Z, 0 comments;
+      GraphQL lastEditedAt null, userContentEdits totalCount 0. git rev-parse a6eb1c60^ =
+      43b9339b686549c50950accdfee2098ca9c9183c. `git log origin/main --grep '#375'` returns nothing.
+      `git log --since=2026-09-20T04:42:09Z a6eb1c60 -- src/core/taskQuery.ts` lists only a6eb1c60.
+      Validator: exit 1 at 43b9339b ("got: FULL, FULL, delta, delta, delta"), exit 0 at a6eb1c60.
+      An earlier card revision excluded #375 by counting a6eb1c60 as a whole (8 non-test src files);
+      the per-slice ruling replaces that reading.
+  - issue: 372
+    verdict: not_walked
+    reason: "Quota met by #375 (first qualifying candidate in order); the rule requires stopping there."
   - issue: 371
     verdict: not_walked
-    reason: "Quota met by #372 (first qualifying candidate in order); rule requires stopping there."
+    reason: "Quota met by #375 (first qualifying candidate in order); the rule requires stopping there."
   - issue: 370
     verdict: not_walked
-    reason: "Quota met by #372 (first qualifying candidate in order); rule requires stopping there."
+    reason: "Quota met by #375 (first qualifying candidate in order); the rule requires stopping there."
   - issue: 369
     verdict: not_walked
-    reason: "Quota met by #372 (first qualifying candidate in order); rule requires stopping there."
+    reason: "Quota met by #375 (first qualifying candidate in order); the rule requires stopping there."
   - issue: 266
     verdict: not_walked
-    reason: "Quota met by #372 (first qualifying candidate in order); rule requires stopping there."
+    reason: "Quota met by #375 (first qualifying candidate in order); the rule requires stopping there."
 
-issue_number: 372
-issue_url: "https://github.com/davesheffer/hunch/issues/372"
+issue_number: 375
+issue_url: "https://github.com/davesheffer/hunch/issues/375"
 category: continuation
-issue_created_at: "2026-09-20T04:07:33Z"
-issue_text_sha256: "f6f8195c19131b6680870181cadb5b8018de4db15dd86b6ca11166fd97cf50f4" # sha256(UTF-8 title + "\n\n" + body), body as returned by gh; verified 64 hex chars
-task_prompt: | # verbatim title + blank line + body at arrival (no comments existed yet); nothing disclosed a solution, so nothing required sanitizing
-  No measurement or regression gate for Hunch's context footprint
+issue_created_at: "2026-09-20T04:42:09Z"
+issue_text_sha256: "67c0014138425fd8c6c211c3c36c77ce399077c3c244e619383634729f225f09" # sha256(UTF-8 title + "\n\n" + body), body as returned by gh (ends with "\n"); 1388 chars; body never edited, no comments
+task_prompt: | # verbatim title + blank line + body at arrival; the issue never had comments
+  Pre-edit hook: the picked task set moves after its own first delivery, re-sending one full block (>3 tasks per file)
 
-  ## Problem
-  Nothing measures how many tokens Hunch puts into an agent's context, so the footprint grows release by release without anyone seeing it. A one-off measurement on 1.39.3 found: tool list 12.7k–21.4k tokens, grounding block 2.4k, ~1.8k per prompt, up to ~9k per `hunch_context` call, ~1.5k per edit on a well-anchored file (see the linked issues).
+  Follow-up to #373 (pre-edit dedupe on record identity).
 
-  ## Suggested direction
-  - `hunch doctor --context` (or `hunch footprint`): print the fixed, per-prompt, per-edit and per-call sizes for this repo and host, in characters and estimated tokens, from the same code paths the hooks and MCP server use.
-  - A test that fails when a budget is exceeded: `tools/list` size, grounding block size, SessionStart / UserPromptSubmit text, and "whole tool result ≤ k × budget_tokens" for `hunch_context`.
-  - Record the numbers per release (a finding or a line in the release checklist) so a regression shows up as a diff.
+  **Observed.** With more than three finished tasks anchored to one file, two back-to-back pre-edit calls with no record change still yield FULL, FULL, delta, delta… instead of FULL, delta….
 
-  ---
-  Measured 2026-09-20 on the published `@davesheffer/hunch@1.39.3` dist in the hunch repo itself (328 decisions, 51 findings). Tokens are estimated as characters / 4, not from a tokenizer. Part of the context-footprint work; the fix must hold for every MCP host, not one client.
-starting_commit: "a068fb723452a97e6ec7a454448ceb7b9ba42b80" # first parent of 448d5359 (earliest fix commit)
+  **Reproduction.** Fixture: six finished tasks on `src/config.ts`, three sharing one constraint lesson and three with no lesson; one UserPromptSubmit, then five identical pre-edit calls. On the #373 code the second call is a second FULL.
+
+  **Cause.** The first call's own delivery gives the prompt's task record ids, so the second call's ranking query gains a "shares <rule>" term and picks a different task SET. #373 correctly treats a changed set as records entering and leaving, so it re-sends the block — safe, and the block really differs — but the change is self-inflicted by the delivery, not by the repository.
+
+  **Direction (generic, all providers).** Build the hook's ranking query without the current prompt task's own hook deliveries for the same target, or freeze the picked set per session + key until a record changes. Add the six-task fixture to `test/hook-dedupe-stability.test.ts`.
+
+  **Impact.** One extra 3–4 KB block per file per prompt in repositories with many task records per file. No correctness risk.
+disclosure_check: >-
+  Item 6. The text states a cause and a "Direction" with two alternatives. It was written on
+  2026-09-20, two days before the fix on 2026-09-22, as the reporter's proposal. It names no
+  function, option or code location of the shipped change (buildTaskRankingQuery, the new option,
+  the src/cli/index.ts call site). The shipped fix follows the first alternative at the level of
+  intent. This matches how the other cards treat pre-fix suggestions (#372 "Suggested direction",
+  #394 "Expected/Location") and differs from #397, whose text was written after the fix and
+  described it. No sanitization applied. If a reviewer rules that the Direction paragraph
+  discloses the solution, the sanitization would be to drop the whole "**Direction (generic, all
+  providers).** ..." paragraph. That changes issue_text_sha256 and must be logged in
+  DEVIATIONS.md.
+starting_commit: "43b9339b686549c50950accdfee2098ca9c9183c" # first parent of a6eb1c60, the earliest fix commit (reached main through merge 1c2763e of PR #396)
 starting_state_proof:
   command: >-
-    cp bench/pilot5/validators/372/pilot5-issue-372.test.ts <worktree@a068fb72>/test/ &&
-    cd <worktree@a068fb72> && node tooling/run-tests.mjs test/pilot5-issue-372.test.ts
-  expected: "exit 1; `hunch footprint` does not exist yet at this commit"
+    copy bench/pilot5/validators/375/pilot5-issue-375.test.ts to <worktree at starting_commit>/test/,
+    run npm ci --no-audit --no-fund, then from that worktree:
+    node node_modules/tsx/dist/cli.mjs --test test/pilot5-issue-375.test.ts
+  expected: "exit 1; with six finished tasks on src/config.ts the second identical pre-edit call is a second FULL block"
   observed: >-
-    exit 1; fail 1 / pass 0. AssertionError: "hunch footprint --json failed: error: unknown
-    command 'footprint'" (1 !== 0) — a real CLI error for the issue's own reason (no
-    measurement tool exists), not an import/module error.
+    exit 1; tests 2, pass 0, fail 2 (claude and codex providers). AssertionError [ERR_ASSERTION]:
+    "no record changed between calls, so only the first may be FULL (got: FULL, FULL, delta, delta,
+    delta); the picked task set must not move after its own delivery". This is the issue's exact
+    observed shape. It is not an import or module error. Reproduced twice.
 solution_boundary:
-  first_known_fix_commit: "448d53597be86a7e1bf20950442157b032434643" # "feat: measure the context footprint and gate it with a ratchet (#372)"
-  later_issue_comments_excluded: [] # issue had no comments at any point; only its own closing comment (below) postdates the fix
+  first_known_fix_commit: "a6eb1c603256451bc7a9308dfece5f2bbad58b91" # feat: assemble 1.41.0 card, worktree, and constraint release candidate (2026-09-22T09:04:24Z)
+  fix_scope_note: >-
+    a6eb1c60 is a multi-issue release-candidate commit (8 non-test src files overall). The #375 slice
+    has 2 non-test source files: src/core/taskQuery.ts (3 added lines, one option on
+    buildTaskRankingQuery that skips deliveries whose target equals the ranked target) and
+    src/cli/index.ts (hunk @@ -4925,7 +4974,7 @@, the pre-edit hook passes that option). Its
+    regression test is "a crowded task selection does not change after its own delivery" in
+    test/hook-dedupe-stability.test.ts. The #373 dedupe the issue builds on is already in the
+    starting commit (PR #373 merged 9e48b8d, 2026-09-20T07:38:46Z).
+  later_issue_comments_excluded: [] # the issue has no comments
   later_sources_excluded:
-    - "Closing comment (2026-09-26T18:40:50Z): 'Shipped in v1.42.0 (525616cb): each tagged release now records `hunch footprint`...' — names the exact fix SHA"
-    - "Follow-up commit 525616cbf20c915b919346dd9cfb38a6855cdefe (CI wiring, not needed for the validator)"
+    - "PR #396 body and its commits (closes #375 among ten issues) and merge commit 1c2763e"
+    - "CHANGELOG 1.41.0 entry ('stops repeated pre-edit delivery from feeding back into ranking')"
+    - "fnd_72bbb7f236 (public #373 finding; own observed_at 2026-09-19T22:48:31Z but first added to origin/main 2026-09-20T08:55:28Z, after the cutoff; never in the private overlay)"
 memory:
-  cutoff_at: "2026-09-20T04:07:33Z" # issue createdAt
-  revision_or_snapshot_sha256: "not computed — see relevance_note; no eligible record was found to snapshot"
-  eligible_record_ids: [] # none found, public or private overlay
+  cutoff_at: "2026-09-20T04:42:09Z" # issue createdAt
+  revision_or_snapshot_sha256: "computed at freeze by the harness (snapshot.json)"
+  workspace_memory: replaced per bench/pilot5/GATE-A-HARNESS.md
+  snapshot_sources:
+    public: "d2fb4a3a70985eb871cfa9807679b777844e44ad" # last first-parent origin/main commit at or before the cutoff (2026-09-19T21:39:41Z)
+    private: "e833cb411943f175ec09cc90ee083bdf54b27cb1" # last hunch-private commit at or before the cutoff (2026-09-19T23:16:40Z)
+  eligible_record_ids:
+    # Public. First add on origin/main and own timestamp both before the cutoff.
+    - dec_7cce5bcd8a # 2026-07-05; hook injections dedupe per session: full block on first touch, one-line delta on repeats (the contract #373/#375 serve)
+    - dec_66925aa0ee # 2026-09-15 (proposed); ranks task records for pre-edit delivery
+    - dec_3bf895e46b # 2026-09-15; multi-signal relevance ranking for task selection
+    - dec_238b516c1b # 2026-09-15; access-based recency for task records (deliveries feeding ranking)
+    - dec_d7e341238c # 2026-09-15; self-evaluating task-ranking strategy selection
+    - dec_2cb893a262 # 2026-08-10; delivery receipts in a machine-local ledger
+    - dec_9a5a48376d # 2026-08-09; forced full injection at session lifecycle boundaries
+    - dec_c6b0d50fbd # 2026-09-14; finished tasks are graph memory (.hunch/tasks)
+    - dec_244397d920 # 2026-07-05 (superseded); roadmap item for per-session pre-edit dedupe
+    # Private overlay, by ID only (contents not quoted; this card is public). First added to hunch-private
+    # before the cutoff, own timestamp before the cutoff; the version at e833cb41 is used.
+    - htask_70e104539c850052cb72b4e4 # first-add 2026-09-19T22:41:48Z, own 2026-09-19T22:36:23Z; on-topic
+    - htask_fee76cfd747b12725b460981 # first-add 2026-09-15T09:21:46Z; on-topic
+    - fnd_507c9356af # first-add 2026-09-15T08:49:33Z; on-topic
+    - dec_58cc8dbd87 # first-add 2026-08-09T13:47:16Z; adjacent
+    - dec_a788cc039b # first-add 2026-08-09T13:47:16Z; adjacent
+    - dec_925f4bcaad # first-add 2026-08-09T13:47:16Z; adjacent
   excluded_future_record_ids:
-    - dec_3ca27de266 # public roadmap decision "context-footprint budget — measure first, then cut..."; valid_from 2026-09-20T04:08:09.573Z (~35s AFTER createdAt); first git-add on origin/main 2026-09-20T08:00:21+03:00 (05:00:21Z, ~53min after createdAt)
-    - fnd_a65f71f38f # public finding "Context footprint baseline for 1.39.3..."; same first-add commit as dec_3ca27de266 (2026-09-20T08:00:21+03:00), after createdAt
-    - dec_131f1fc0d7 # private overlay; first_add 2026-09-24T15:36:23+03:00 (after createdAt)
-    - dec_15d3e59914 # private overlay; first_add 2026-09-24T16:20:59+03:00
-    - dec_5bb0a4f986 # private overlay; first_add 2026-09-27T15:00:15+03:00
-    - dec_c18c3f4374 # private overlay; first_add 2026-09-24T16:54:03+03:00
-    - dec_dd52ad3e90 # private overlay; first_add 2026-09-24T12:11:55+03:00
-    - fnd_2fa0d27f53 # private overlay; first_add 2026-09-24T17:08:15+03:00
+    - fnd_72bbb7f236 # public; own timestamp before the cutoff, but first added to origin/main 2026-09-20T08:55:28Z (after); the harness snapshot at d2fb4a3a does not contain it
   source_and_timestamp_evidence:
-    - "method: grep -rl 'footprint' at starting_commit over public .hunch/{decisions,constraints,bugs,findings,tasks} and over the hunch-private overlay working tree (current HEAD, since no historical private snapshot pin was taken — see UNVERIFIED); first-add = git log --diff-filter=A --format=%cI (origin/main for public, hunch-private repo for the overlay)"
-    - "one unrelated grep hit, dec_24029165a7-style substring match on a different topic (replay determinism), excluded as irrelevant despite predating cutoff (first_add 2026-09-09, valid_from 2026-09-09) — keyword collision, not a footprint-measurement record"
-    - "no public or private record whose first-add AND own capture timestamp both predate 2026-09-20T04:07:33Z was found to be about the context-footprint measurement gap; the earliest candidates (dec_3ca27de266 roadmap decision, fnd_a65f71f38f baseline finding) were captured within roughly 35 seconds to 53 minutes of the issue's own creation, i.e. the same authoring session that filed the #369-#372 series, not prior memory"
-  relevance_expected: abstain
+    - "public first-add: git log origin/main --diff-filter=A --format=%cI -- .hunch/<kind>/<id>.json (earliest); own timestamp: valid_from / observed_at at d2fb4a3a"
+    - "private first-add: git -C hunch-private log --diff-filter=A --format=%cI -- .hunch/<kind>/<id>.json; own timestamp: valid_from / observed_at / started_at at e833cb41"
+    - "search: git grep -i -E over .hunch at each snapshot for dedup|pre-edit|preedit|PreToolUse|#373|ranking|selectTasksAuto|buildTaskRankingQuery|taskQuery|recent-task|task set|self-invalidat|delivery receipt|deliveries|re-send|full block|unchanged this session; the remaining hits (about 40 public, about 30 private) are keyword collisions on unrelated topics and are not listed"
+    - "git log d2fb4a3a..origin/main --before=<cutoff> --diff-filter=A -- .hunch: empty, so no record reached main via a branch commit dated before the cutoff (the #373 branch added no .hunch files)"
+    - "post-cutoff leak scan (#375, excludeTargetDeliveries, own delivery, picked task set, crowded task, self-inflicted): public origin/main only fnd_72bbb7f236 (excluded above); private HEAD none"
+    - "delivery unverified: retrieval of these records by the audited Hunch within its budget was not tested"
+  relevance_expected: relevant
   relevance_note: >-
-    No eligible pre-cutoff record exists for this issue in either store. The strongest candidates
-    (the roadmap decision and the measured baseline finding) were captured essentially
-    contemporaneously with the issue's filing, not before it, so they are future leakage rather than
-    prior memory Hunch could have delivered. Delivery is therefore moot for this card — there is
-    nothing eligible to prove was or wasn't delivered.
+    The eligible memory orients but holds no solution. It gives the per-session dedupe contract
+    (full block, then deltas), the task-ranking design for pre-edit delivery, and the idea that
+    access and delivery feed task recency. The private records are on-topic or adjacent by ID only.
+    Nothing eligible says that the hook's own delivery must be kept out of its ranking query. The
+    record closest to the defect, fnd_72bbb7f236, is future and excluded. Expect help with
+    orientation (where ranking and dedupe live), not with the fix.
 validator:
   command: >-
-    cp bench/pilot5/validators/372/pilot5-issue-372.test.ts <target>/test/ &&
-    cd <target> && node tooling/run-tests.mjs test/pilot5-issue-372.test.ts
-  validator_sha256: "3eba80036e50c8369c3922fec87c03f84378eb48dc4a83f4d2621efeb982934e" # single file, bench/pilot5/validators/372/pilot5-issue-372.test.ts
+    copy bench/pilot5/validators/375/pilot5-issue-375.test.ts to <target>/test/, then from <target>:
+    node node_modules/tsx/dist/cli.mjs --test test/pilot5-issue-375.test.ts
+  validator_sha256: "1e74e10aac33b389e8c14dd1b20a3355de2d2f303450768ac9bfa0f4893d442d" # single file, bench/pilot5/validators/375/pilot5-issue-375.test.ts
   starting_state_result: failed
   success_criteria: >-
-    Exit 0: `hunch footprint --json` (run via the CLI entry, not by importing the fix's internal
-    `measureFootprint` symbol) exits 0, emits `hunch.footprint/1` JSON with a non-empty `surfaces`
-    array including at least mcp.tools_list, mcp.hunch_context and grounding.block, every surface's
-    chars > 0 and est_tokens === ceil(chars/4), and a non-empty `unmeasured` list.
+    Exit 0. For each pre-edit provider (claude Edit, codex apply_patch), the issue's fixture is used:
+    one blocking invariant on src/config.ts and six finished tasks anchored to it, three with the
+    constraint lesson and three with none. After one UserPromptSubmit, five identical pre-edit hook
+    calls must give "FULL, delta, delta, delta, delta". The first call must carry the invariant
+    and the fixture's tasks. Guard: after the invariant's statement changes, the next call must
+    be FULL again and carry the new statement, so a fix that answers every repeat with a delta
+    fails.
+  derived_from: "the fix's regression test 'a crowded task selection does not change after its own delivery' (test/hook-dedupe-stability.test.ts in a6eb1c60) and the issue's own Reproduction paragraph"
   notes: >-
-    The fix's own test/footprint.test.ts imports `measureFootprint` from src/core/footprint.ts
-    directly and pins exact character ceilings per surface — that would fail a correct alternative
-    fix that chose a different internal function name or the issue's other suggested surface
-    (`hunch doctor --context`). This validator instead drives the CLI surface the fix actually
-    shipped (`hunch footprint --json`) and checks structural properties (non-empty surfaces, the
-    three surfaces the issue explicitly asked for, internal consistency of est_tokens) rather than
-    exact ceilings, so it is somewhat more portable across alternative implementations — but it is
-    still anchored to the specific command name `footprint` chosen by this fix, which a correct
-    fix implementing only `hunch doctor --context` would fail. Flagged here rather than silently
-    accepted; treat this validator as a good-faith adaptation, not a fully implementation-agnostic one.
+    Fairness: the validator drives the public `hunch hook --provider <p>` CLI from src/cli/index.ts,
+    as the fix's own test does. It imports only APIs present at 43b9339b (buildDeliveryEnvelope,
+    startReportTask, recordTaskDelivery, finishReportTask, reportHash, persistTaskRecord,
+    HunchStore, hunchPaths). It inlines the constraint fixture and tsx loader instead of importing
+    test/helpers.ts. It names neither the fix's new option nor buildTaskRankingQuery, so either of
+    the issue's two directions passes. It detects a delta only by the "unchanged this session"
+    line that the #373 dedupe already emits at the starting commit. It strips every HUNCH_* variable
+    from the hook environment and sets HUNCH_PIPELINE=0, so no private overlay can leak into the
+    fixture. It uses five calls (the issue's count) where the fix's test uses three, and adds the
+    record-change guard, which the issue's "until a record changes" implies. The strict typecheck
+    of the validator alone at 43b9339b exits 0.
 validation_runs:
   start:
     exit: 1
-    key_line: "AssertionError [ERR_ASSERTION]: hunch footprint --json failed: error: unknown command 'footprint' ... 1 !== 0"
+    key_line: "AssertionError [ERR_ASSERTION]: no record changed between calls, so only the first may be FULL (got: FULL, FULL, delta, delta, delta); the picked task set must not move after its own delivery; tests 2, pass 0, fail 2"
   fix:
     exit: 0
-    key_line: "✔ hunch footprint (#372) measures the context-footprint surfaces as non-zero JSON (1509.0384ms); pass 1 fail 0"
+    key_line: "✔ #375 claude: five identical pre-edit calls with >3 tasks per file give FULL then deltas; ✔ #375 codex: ...; tests 2, pass 2, fail 0"
+  reruns: "start exit 1 (same assertion), fix exit 0 (pass 2)"
 status: qualified
 exclusion_reason: null
