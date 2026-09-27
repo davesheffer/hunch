@@ -1,0 +1,38 @@
+{
+  "id": "htask_5df4e7dd19fb5c5fa03f7e44",
+  "title": "<ide_opened_file>The user opened the file…",
+  "state": "completed",
+  "started_at": "2026-09-27T05:26:29.707Z",
+  "finished_at": "2026-09-27T05:37:59.272Z",
+  "coverage": "no-delivery-observed",
+  "lessons": [],
+  "applied": [],
+  "saved": [
+    {
+      "kind": "findings",
+      "record_id": "fnd_5124625efd",
+      "content_hash": "sha256:e928016b6700030b33ef1e57a5fdf0b266380dd71005d2e1f34e75bca17cc491",
+      "home": "public",
+      "operation": "created",
+      "durability": "committed"
+    }
+  ],
+  "checks": [],
+  "conformance": [],
+  "refusals": 0,
+  "files": [],
+  "supersedes": [],
+  "source_snapshot": null,
+  "report_hash": "sha256:01f831b3a21dcfcf83d450926bb72e076dedb420c740bab6d6ae14746c536237",
+  "provenance": {
+    "source": "task_report",
+    "confidence": 1,
+    "evidence": [
+      "hunch report htask_5df4e7dd19fb5c5fa03f7e44",
+      "hunch report htask_b86aec7f5f489ce633399f64",
+      "hunch report htask_5c494e9a1a24fd609d9ff790",
+      "hunch report htask_f93399dc1fc93d08d03f1470"
+    ],
+    "last_verified": "2026-09-27T05:37:59.272Z"
+  }
+}
