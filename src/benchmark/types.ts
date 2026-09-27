@@ -92,7 +92,14 @@ export interface ExposureProof {
 
 /** Parsed from a stream-json transcript. */
 export interface TranscriptMetrics {
-  init: { model: string | null; api_key_source: string | null; mcp_servers: string[]; tool_names: string[] } | null;
+  init: {
+    model: string | null;
+    api_key_source: string | null;
+    mcp_servers: string[];
+    /** Server name -> reported status (e.g. "connected", "failed"); bare-string entries carry no status. */
+    mcp_server_status: Record<string, string>;
+    tool_names: string[];
+  } | null;
   result: { subtype: string | null; is_error: boolean | null; num_turns: number | null } | null;
   usage: { input: number; cache_creation: number; cache_read: number; output: number } | null;
   model_usage: Record<string, unknown> | null;

@@ -45,7 +45,8 @@ test("parseTranscript counts distinct calls and only Hunch-injected text", () =>
 
   const metrics = parseTranscript(transcript);
   assert.deepEqual(metrics.init, {
-    model: "claude-opus-5-5[1m]", api_key_source: "none", mcp_servers: ["hunch"], tool_names: ["Read", "Grep", "mcp__hunch__hunch_context"],
+    model: "claude-opus-5-5[1m]", api_key_source: "none", mcp_servers: ["hunch"], mcp_server_status: { hunch: "connected" },
+    tool_names: ["Read", "Grep", "mcp__hunch__hunch_context"],
   });
   assert.equal(metrics.result, null);
   assert.equal(metrics.usage, null);
@@ -62,6 +63,17 @@ test("parseTranscript counts distinct calls and only Hunch-injected text", () =>
   });
   assert.deepEqual(metrics.delivered_record_ids, ["con_abcdef0123", "dec_0123456789", "fnd_aaaaaaaaaa", HTASK]);
   assert.ok(!metrics.delivered_record_ids.includes("dec_ffffffffff"), "a non-Hunch Read result is not delivery");
+});
+
+test("parseTranscript maps each MCP server to its init status and skips bare-string entries", () => {
+  const metrics = parseTranscript(line({ type: "system", subtype: "init", model: "m", apiKeySource: "none", tools: [],
+    mcp_servers: [{ name: "hunch", status: "connected" }, { name: "other", status: "failed" }, "legacy", { name: "nostatus" }] }));
+  assert.deepEqual(metrics.init?.mcp_servers, ["hunch", "other", "legacy", "nostatus"]);
+  assert.deepEqual(metrics.init?.mcp_server_status, { hunch: "connected", other: "failed" });
+
+  const none = parseTranscript(line({ type: "system", subtype: "init", model: "m", apiKeySource: "none", tools: [] }));
+  assert.deepEqual(none.init?.mcp_servers, []);
+  assert.deepEqual(none.init?.mcp_server_status, {});
 });
 
 test("parseTranscript reads the result line and tolerates an empty transcript", () => {
