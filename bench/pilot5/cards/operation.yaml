@@ -129,6 +129,8 @@ task_prompt: |
   - Separately: the ~7-minute season test should be opt-in locally (`HUNCH_SLOW_TESTS=1` or a separate script), so `npm test` on a dev machine stays under the timeout and CI keeps running it.
 
   Hunch finding `fnd_a894c4e4ed`.
+
+  🤖 Generated with [Claude Code](https://claude.com/claude-code)
 starting_commit: "0cdb20f423cd30bd53f24c9856f36b9783ba95a9"
 starting_state_proof:
   command: "copy bench/pilot5/validators/268/pilot5-issue-268.test.ts to <worktree at starting_commit>/test/, then from that worktree: node node_modules/tsx/dist/cli.mjs --test test/pilot5-issue-268.test.ts"

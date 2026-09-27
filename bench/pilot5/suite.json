@@ -1,0 +1,141 @@
+{
+  "schema": "hunch.context-efficiency-suite/1",
+  "id": "pilot5-gate-a",
+  "kind": "retrospective",
+  "timeout_ms": 1800000,
+  "validator_timeout_ms": 600000,
+  "tasks": [
+    {
+      "id": "repeated-bug-360",
+      "issue_number": 360,
+      "category": "repeated-bug",
+      "prompt": "mergeLedgers re-adds compacted base events that neither side retains\n\nFound while reviewing #285 / PR #359. Pre-existing; not changed by that PR.\n\n`mergeLedgers(base, ours, theirs)` (`src/store/changeLedger.ts`) seeds the union with `base.events`. When **both** sides have since compacted an event away, base still contributes it, so the merged ledger resurrects an event neither clone retains — below what both sides consider their floor's history.\n\nConsequence: the merged `events` can contain entries older than either side's `floor_seq` implied, and the operator-facing text around `operator.ts:195` (which describes compaction as final) is then misleading.\n\nExpected: an event absent from both ours and theirs **and** at or below either side's floor is treated as compacted, not re-added. Base should only settle identity/ordering, never re-introduce history.\n\nAcceptance: a test where base has events 1..3, ours and theirs both compacted to floor 2 and each appended one event — the merged ledger must not contain events 1..2.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n",
+      "starting_commit": "3550f3766e39adb18ab309ab5755d45337ba1a40",
+      "memory": {
+        "cutoff_at": "2026-09-19T21:19:52Z",
+        "eligible_record_ids": [
+          "dec_24029155a7",
+          "dec_55918cfc0d",
+          "dec_a9bfb5dd8d",
+          "dec_b4c8543113",
+          "dec_9d0e63ba79",
+          "dec_a80438754d",
+          "dec_b4d64d643a",
+          "fnd_1317f8935e"
+        ],
+        "relevance_expected": "unknown"
+      },
+      "validator": {
+        "file": "validators/360/pilot5-issue-360.test.ts",
+        "sha256": "62b29ea1ea53bb8b20581f8793a5671269bd68cdd000dcb5854b94e555252638"
+      }
+    },
+    {
+      "id": "continuation-375",
+      "issue_number": 375,
+      "category": "continuation",
+      "prompt": "Pre-edit hook: the picked task set moves after its own first delivery, re-sending one full block (>3 tasks per file)\n\nFollow-up to #373 (pre-edit dedupe on record identity).\n\n**Observed.** With more than three finished tasks anchored to one file, two back-to-back pre-edit calls with no record change still yield FULL, FULL, delta, delta… instead of FULL, delta….\n\n**Reproduction.** Fixture: six finished tasks on `src/config.ts`, three sharing one constraint lesson and three with no lesson; one UserPromptSubmit, then five identical pre-edit calls. On the #373 code the second call is a second FULL.\n\n**Cause.** The first call's own delivery gives the prompt's task record ids, so the second call's ranking query gains a \"shares <rule>\" term and picks a different task SET. #373 correctly treats a changed set as records entering and leaving, so it re-sends the block — safe, and the block really differs — but the change is self-inflicted by the delivery, not by the repository.\n\n**Direction (generic, all providers).** Build the hook's ranking query without the current prompt task's own hook deliveries for the same target, or freeze the picked set per session + key until a record changes. Add the six-task fixture to `test/hook-dedupe-stability.test.ts`.\n\n**Impact.** One extra 3–4 KB block per file per prompt in repositories with many task records per file. No correctness risk.\n",
+      "starting_commit": "43b9339b686549c50950accdfee2098ca9c9183c",
+      "memory": {
+        "cutoff_at": "2026-09-20T04:42:09Z",
+        "eligible_record_ids": [
+          "dec_7cce5bcd8a",
+          "dec_66925aa0ee",
+          "dec_3bf895e46b",
+          "dec_238b516c1b",
+          "dec_d7e341238c",
+          "dec_2cb893a262",
+          "dec_9a5a48376d",
+          "dec_c6b0d50fbd",
+          "dec_244397d920",
+          "htask_70e104539c850052cb72b4e4",
+          "htask_fee76cfd747b12725b460981",
+          "fnd_507c9356af",
+          "dec_58cc8dbd87",
+          "dec_a788cc039b",
+          "dec_925f4bcaad"
+        ],
+        "relevance_expected": "relevant"
+      },
+      "validator": {
+        "file": "validators/375/pilot5-issue-375.test.ts",
+        "sha256": "1e74e10aac33b389e8c14dd1b20a3355de2d2f303450768ac9bfa0f4893d442d"
+      }
+    },
+    {
+      "id": "convention-314",
+      "issue_number": 314,
+      "category": "convention",
+      "prompt": "Provider config writers silently drop comments from JSONC files (.vscode/mcp.json, .cursor/hooks.json, ...)\n\n## Bug\n`src/integrations/providers.ts:35-46`, `:62-67`: `readJsonObj` accepts JSONC, then `writeJson` re-serializes with `JSON.stringify`, so comments in `.vscode/mcp.json`, `.cursor/hooks.json`, `.github/hooks/hunch.json` etc. are lost on every `hunch init` / update. `repairIntegrationPins` preserves comments; these writers do not. The test at `test/providers.test.ts:223` only checks that the servers survive.\n\n## Evidence\nA `.vscode/mcp.json` containing `// DB server: token comes from 1Password…` and `/* pinned to 2.x until #412 */` comes back with both comments gone.\n\n## Suggested fix\nUse the token-preserving edit `health.ts` uses, or refuse and print a manual snippet when the file contains comments.\n\nFound in the 2026-09-17 bug sweep against v1.39.0 (main e171a37).\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n",
+      "starting_commit": "7742a3b17b4bc36514464ef730a74fb902935a6a",
+      "memory": {
+        "cutoff_at": "2026-09-17T11:14:05Z",
+        "eligible_record_ids": [
+          "con_8460b6770f",
+          "dec_20f0bbaae5",
+          "dec_261e42920c",
+          "dec_9ce94e6771",
+          "dec_811f2dc486",
+          "dec_a69788b691"
+        ],
+        "relevance_expected": "relevant"
+      },
+      "validator": {
+        "file": "validators/314/pilot5-issue-314.test.ts",
+        "sha256": "1b00f4d0b411f234f65e933b91637d9c7ea260350418a861edc298c8f99df996"
+      }
+    },
+    {
+      "id": "operation-268",
+      "issue_number": 268,
+      "category": "operation",
+      "prompt": "hunch task verify: 120 s default timeout turns a passing full suite into a recorded failed check\n\n## Summary\n\n`hunch task verify` defaults to a 120 s timeout (`DEFAULT_CHECK_TIMEOUT_MS`), and the `verification_argv` returned by `hunch_task start` carries no `--timeout`. An agent that follows the card instruction and runs `npm test` through the wrapper records a **timed-out, failed** check even when the suite would pass. That check then shows up in the contribution card as a failed verification and in RECENT TASKS as `Verification command: timed out` — misleading memory for the next agent on the same file.\n\n## Observed (2026-09-16, this repo)\n\n- A prior task's `npm test` check: `timed_out: true`, `exit_code: 1`, killed at 120 s.\n- Re-run with `--timeout 600`: also timed out with 1800 of ~2026 tests passed — the local suite exceeds 10 minutes when `dist/` exists (`agent-farm-season.test.ts` alone runs ~7 minutes and only skips when `dist/` is missing).\n\n## Proposed\n\n- Raise the default to something a real suite fits in (e.g. 15 min) or make the default the max (6 h) with the process tree still killed on Stop; the timeout is a safety net, not a verdict.\n- Have `verification_argv` include `--timeout <n>` explicitly, or have the card instruction mention it, so agents know it exists.\n- Render a timed-out check as `timed out (n s)` rather than as a failed verification; it is an unknown, not a failure.\n- Separately: the ~7-minute season test should be opt-in locally (`HUNCH_SLOW_TESTS=1` or a separate script), so `npm test` on a dev machine stays under the timeout and CI keeps running it.\n\nHunch finding `fnd_a894c4e4ed`.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n",
+      "starting_commit": "0cdb20f423cd30bd53f24c9856f36b9783ba95a9",
+      "memory": {
+        "cutoff_at": "2026-09-16T13:47:49Z",
+        "eligible_record_ids": [
+          "fnd_70dd5c4034",
+          "fnd_a894c4e4ed"
+        ],
+        "relevance_expected": "relevant"
+      },
+      "validator": {
+        "file": "validators/268/pilot5-issue-268.test.ts",
+        "sha256": "cbe546d69eca07e78618f58a9fab122cd390e56ee5764724f646cfc5a54ff747"
+      }
+    },
+    {
+      "id": "self-contained-394",
+      "issue_number": 394,
+      "category": "self-contained",
+      "prompt": "Task card hides failed checks when a later unrelated check passes\n\n## Problem\n\nThe completion card displays only the last verification command. A later pass from an unrelated check hides an earlier unresolved failure, leaving the card looking green although the full report retains a failed check.\n\nReproduced on the published Hunch 1.40.1 runtime on Windows on 2026-09-22. The same selection exists in the 1.38.1 checkout.\n\n## Reproduction\n\nIn an isolated Git repository, start a task, then run these commands using its returned task ID:\n\n```text\nhunch task verify <task-id> --label \"Integration tests\" -- node -e \"process.exit(7)\"\nhunch task verify <task-id> --label \"Lint\" -- node -e \"process.exit(0)\"\nhunch task finish <task-id>\n```\n\nKeep the source unchanged between checks. The JSON report correctly retains exit codes `[7, 0]`, with both checks current. The completion card shows only:\n\n```text\nChecked   Lint · passed · current source snapshot\n```\n\nThere is no mention of the failed integration check. The HTML report correctly shows both COMMAND FAILED and COMMAND PASSED.\n\n## Expected\n\nKeep unresolved failures visible in the compact card, or explicitly show that it summarizes only the latest check alongside the count of failures requiring inspection. Define how a successful rerun supersedes a failure so that a different check passing cannot conceal it.\n\n## Location and validation\n\n`src/core/taskReportRender.ts`, `renderTaskReport`: `const check = report.checks.at(-1)`.\n\nAn isolated runtime reproduction verified actual command exits, unchanged source snapshots, repeat completion, and invalidation after a source edit. This is a presentation defect, not evidence loss. Add regression coverage for fail-A/pass-B, fail-A/pass-A, and stale-source results.\n\nRelated Hunch finding: `fnd_e1e9d91cea`.\n",
+      "starting_commit": "43b9339b686549c50950accdfee2098ca9c9183c",
+      "memory": {
+        "cutoff_at": "2026-09-22T07:20:42Z",
+        "eligible_record_ids": [
+          "fnd_e1e9d91cea",
+          "dec_d928ec4b2c",
+          "htask_ebb7daa9f38413b21384fba6",
+          "htask_798fa5269bfc4f42467778d9",
+          "dec_0bf3bda2c1",
+          "dec_2c8f841465",
+          "dec_30ddff7308",
+          "dec_fc93aec4ac",
+          "fnd_53991b877b",
+          "fnd_84e5181565",
+          "fnd_aba5b3019c",
+          "fnd_ff4d2899ee",
+          "fnd_d98451bc6b",
+          "dec_b24f11f7f5",
+          "htask_70e104539c850052cb72b4e4",
+          "htask_8e3a87e6ade96968613dfbdf"
+        ],
+        "relevance_expected": "abstain"
+      },
+      "validator": {
+        "file": "validators/394/pilot5-issue-394.test.ts",
+        "sha256": "990bf63dec68761483f9ca02d6da8cedd590acf65774ceca8649d881db07fe3f"
+      }
+    }
+  ]
+}
