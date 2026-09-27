@@ -36,15 +36,16 @@
   },
   "premises": [],
   "provenance": {
-    "source": "agent_recorded",
-    "confidence": 0.75,
+    "source": "human_confirmed",
+    "confidence": 0.95,
     "evidence": [
       "src/mcp/toolset.ts",
       "src/mcp/server.ts",
       "src/integrations/claudemd.ts",
       "test/mcp-toolset.test.ts",
       "test/footprint.test.ts"
-    ]
+    ],
+    "last_verified": "2026-09-27T11:45:00.595Z"
   },
   "date": "2026-09-24T12:36:30.178Z"
 }
