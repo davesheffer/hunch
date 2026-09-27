@@ -77,32 +77,60 @@ npx tsx bench/warm/run.ts run --reps 3 --concurrency 4 --out bench/warm/results/
 npx tsx bench/warm/run.ts report bench/warm/results/<file>.json
 ```
 
-## Running the full benchmark on another machine
+## Running the full benchmark on another machine (Windows PC → WSL2)
 
-Needs macOS (Seatbelt sandbox, APFS `cp -c`), Node ≥22.13, and the `claude`
-CLI logged in on the subscription. No GitHub access: `tasks.json` is committed,
-and the sealed clones are rebuilt from local git history on first use.
+The sealed run relies on Claude Code's sandbox, which works on macOS and
+Linux, **not native Windows**. On a PC, run everything inside WSL2 (Ubuntu).
+Keep the clone in the Linux filesystem (`~/hunch`), not under `/mnt/c`. The
+harness refuses to start on native Windows.
+
+**One-time setup (Ubuntu shell in WSL2):**
 
 ```bash
-git fetch origin && git checkout bench/warm-cost
-npm ci && npm run build                # the frozen Hunch copy is taken from dist/ (must be 1.42.0)
-node dist/cli/index.js --version       # → 1.42.0
-rm -rf "$TMPDIR/hunch-warm/_hunch"     # drop any stale frozen copy from an earlier run
-git fetch origin main                  # PR base commits must be present locally
+sudo apt update && sudo apt install -y git bubblewrap socat build-essential   # bubblewrap + socat = Claude Code sandbox
+curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash && source ~/.bashrc
+nvm install 22                                          # Node ≥ 22.13
+npm i -g @anthropic-ai/claude-code && claude            # log in with the subscription, then /exit
+git clone https://github.com/davesheffer/hunch.git ~/hunch && cd ~/hunch
+git checkout bench/warm-cost
+npm ci && npm run build && node dist/cli/index.js --version   # → 1.42.0
+```
 
-# 12 tasks × 2 arms × 3 reps = 72 sessions, ~3–4 h at concurrency 4
+**1. Re-validate the tasks on this machine (no model, ~10 min).** Tests were
+validated on macOS. Any task printed as `INVALID HERE` must be dropped from
+`--only` below for this machine; record which ones.
+
+```bash
+npx tsx bench/warm/run.ts check --only 342,344,431,347,328,365,341,330,358,346,392,349
+```
+
+**2. Smoke (2 sessions, ~15 min).** Confirms the sandbox, hooks and MCP work
+under Linux.
+
+```bash
+npx tsx bench/warm/run.ts run --only 344 --reps 1 --out bench/warm/results/smoke-wsl.json
+```
+
+Go on only if both `■` lines show no `INFRA`, have a `$` cost, and the C line
+has `hunch=` > 0. If the sandbox refuses to start, check that `bwrap` and
+`socat` are installed and that you are inside WSL2, not WSL1
+(`wsl -l -v` in PowerShell).
+
+**3. Full run (72 sessions, ~3–4 h at concurrency 4).**
+
+```bash
 nohup npx tsx bench/warm/run.ts run \
   --only 342,344,431,347,328,365,341,330,358,346,392,349 \
   --reps 3 --concurrency 4 --out bench/warm/results/full.json \
   > bench/warm/results/full.log 2>&1 &
-
-tail -f bench/warm/results/full.log    # ▶ started / ■ finished, one line per session
+tail -f bench/warm/results/full.log     # ▶ started / ■ finished
 ```
 
-- **Usage limit:** the run drains and exits 3; rerun the identical command
-  later and it resumes (finished rows in `full.json` are skipped).
-- **Health checks on the first few `■` lines:** no `INFRA`, a `$` cost on
-  every row, `hunch=` usually > 0 on C rows, and few `error_max_turns`.
+- **Usage limit:** the run drains and exits 3. Rerun the identical command
+  later and it resumes; finished rows in `full.json` are skipped.
+- **Sleep:** keep the PC awake. Closing the WSL terminal is fine with `nohup`,
+  but Windows sleep suspends WSL.
 - **Result:** `npx tsx bench/warm/run.ts report bench/warm/results/full.json`,
-  judged only against the decision rule above. Commit `full.json`, `full.log`
-  and the report output together.
+  judged only against the decision rule above. Commit `full.json`, `full.log`,
+  the report output and the `check` output together. The machine is part of
+  the record: the smoke ran on macOS, the full run on WSL2 Linux.

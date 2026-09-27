@@ -52,6 +52,13 @@ const git = (cwd: string, ...a: string[]): string =>
   execFileSync("git", a, { cwd, encoding: "utf8", maxBuffer: 1 << 28, stdio: ["ignore", "pipe", "pipe"] }).trim();
 const sha = (s: string): string => createHash("sha256").update(s).digest("hex").slice(0, 16);
 
+/** Copy a tree: copy-on-write where the filesystem supports it (APFS clone, Linux reflink). */
+function cloneTree(src: string, dst: string): void {
+  if (process.platform === "darwin") execFileSync("cp", ["-Rc", src, dst]);
+  else if (process.platform === "linux") execFileSync("cp", ["-a", "--reflink=auto", src, dst]);
+  else throw new Error("the sealed run needs Claude Code's sandbox: run on macOS, Linux or WSL2, not native Windows");
+}
+
 // ------------------------------------------------------------ sealed clones
 function templateDir(t: Pick<Task, "id">): string { return join(TEMPLATES, t.id); }
 
@@ -68,7 +75,7 @@ function buildTemplate(t: Pick<Task, "id" | "base" | "merge">): string {
   git(dir, "config", "user.name", "bench");
   if (git(dir, "rev-parse", "HEAD") !== t.base) throw new Error(`${t.id}: sealed checkout is not the base`);
   if (spawnSync("git", ["cat-file", "-e", `${t.merge}^{commit}`], { cwd: dir }).status === 0) throw new Error(`${t.id}: fix commit leaked into the sealed clone`);
-  execFileSync("cp", ["-Rc", join(REPO, "node_modules"), join(dir, "node_modules")]); // APFS clone
+  cloneTree(join(REPO, "node_modules"), join(dir, "node_modules"));
   writeFileSync(`${dir}.sealed`, t.base);
   return dir;
 }
@@ -76,7 +83,7 @@ function buildTemplate(t: Pick<Task, "id" | "base" | "merge">): string {
 function freezeHunch(): void {
   if (existsSync(join(FROZEN, "dist", "cli", "index.js"))) return;
   mkdirSync(FROZEN, { recursive: true });
-  for (const p of ["dist", "node_modules", "package.json"]) execFileSync("cp", ["-Rc", join(REPO, p), join(FROZEN, p)]);
+  for (const p of ["dist", "node_modules", "package.json"]) cloneTree(join(REPO, p), join(FROZEN, p));
 }
 
 function copyFromMerge(t: Task, dir: string, files: string[]): void {
@@ -162,7 +169,7 @@ function prepareOne(pr: number, tasks: Task[]): void {
     const probe = join(WORK, "probe", id);
     rmSync(probe, { recursive: true, force: true });
     mkdirSync(dirname(probe), { recursive: true });
-    execFileSync("cp", ["-Rc", tpl, probe]);
+    cloneTree(tpl, probe);
     copyFromMerge(t, probe, testFiles);
     const red = runTests(probe, testFiles);
     // green: the whole PR (minus graph/docs churn) applied
@@ -223,7 +230,9 @@ function shapeArm(dir: string, arm: "A" | "C"): void {
 
 function sealedSettings(dir: string): string {
   const denied = [
-    join(homedir(), "Documents", "GitHub"), // the live repo, the private overlay, every other clone
+    REPO, // the live checkout holds the fix commits
+    dirname(REPO), // sibling clones, incl. the private overlay
+    join(homedir(), "Documents", "GitHub"),
     join(homedir(), ".claude", "projects"), // prior transcripts
     join(homedir(), ".hunch"),
     join(homedir(), ".npm"), // npx cache holds published (future) Hunch builds
@@ -295,7 +304,7 @@ async function runOne(t: Task, arm: "A" | "C", rep: number, model: string, maxTu
   const root = join(WORK, "runs", `${t.id}-${arm}-${rep}-${Date.now()}`);
   const dir = join(root, "repo");
   mkdirSync(root, { recursive: true });
-  execFileSync("cp", ["-Rc", buildTemplate(t), dir]);
+  cloneTree(buildTemplate(t), dir);
   shapeArm(dir, arm);
   copyFromMerge(t, dir, t.testFiles);
   const testHash = sha(t.testFiles.map((f) => readFileSync(join(dir, f), "utf8")).join("\0"));
@@ -419,6 +428,29 @@ if (cmd === "prepare") {
   await Promise.all(Array.from({ length: concurrency }, worker));
   console.log(`\n${queue.length} queued jobs left${stop ? " (stopped on usage limit)" : ""}\n` + report(rows as Array<Record<string, any>>));
   if (stop) process.exit(3);
+} else if (cmd === "check") {
+  // re-validate committed tasks on THIS machine (red on base, green with the PR); no GitHub needed
+  const all: Task[] = JSON.parse(readFileSync(TASKS_PATH, "utf8")).tasks;
+  const only = flag("only", "").split(",").filter(Boolean).map((s) => (s.startsWith("pr") ? s : `pr${s}`));
+  let bad = 0;
+  for (const t of only.length ? all.filter((x) => only.includes(x.id)) : all) {
+    const tpl = buildTemplate(t);
+    const probe = join(WORK, "probe", t.id);
+    rmSync(probe, { recursive: true, force: true });
+    mkdirSync(dirname(probe), { recursive: true });
+    cloneTree(tpl, probe);
+    copyFromMerge(t, probe, t.testFiles);
+    const red = runTests(probe, t.testFiles);
+    const files = git(REPO, "diff", "--name-only", t.base, t.merge).split("\n").filter((f) => f && !f.startsWith(".hunch/") && spawnSync("git", ["cat-file", "-e", `${t.merge}:${f}`], { cwd: REPO }).status === 0);
+    copyFromMerge(t, probe, files);
+    const green = runTests(probe, t.testFiles);
+    rmSync(probe, { recursive: true, force: true });
+    const ok = !red.pass && green.pass;
+    if (!ok) bad++;
+    console.log(`${t.id}: red=${red.pass ? "PASS(bad)" : "fail"} green=${green.pass ? "pass" : "FAIL(bad)"} → ${ok ? "ok" : "INVALID HERE"}`);
+    if (!green.pass) console.log(green.tail.split("\n").slice(-8).join("\n"));
+  }
+  process.exit(bad ? 1 : 0);
 } else if (cmd === "report") {
   console.log(report(JSON.parse(readFileSync(argv[1]!, "utf8")).rows));
 } else {
