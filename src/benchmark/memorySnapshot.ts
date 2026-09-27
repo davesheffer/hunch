@@ -2,9 +2,9 @@
 // Design: bench/pilot5/GATE-A-HARNESS.md, section "Memory snapshot".
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, rmSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { writeFileAtomic } from "../core/io.js";
 
 /** One file removed from a snapshot, with the reason logged in snapshot.json. */
@@ -18,6 +18,10 @@ export interface MemorySnapshotPart {
   sha256: string;
   files: number;
   dropped: SnapshotDrop[];
+  /** Public part only: the resolved starting commit the paths were read from. */
+  starting_commit?: string;
+  /** Public part only: `.hunch/`-relative path -> commit its blob was taken from. */
+  sources?: Record<string, string>;
 }
 
 export interface MemorySnapshot {
@@ -189,10 +193,105 @@ function buildPart(repo: string, ref: string, cutoffIso: string, dest: string, l
   return { revision, sha256: hash, files, dropped };
 }
 
+/** `.hunch/`-relative (forward-slash) paths of every file under `.hunch/` in `rev`. */
+function hunchPaths(repo: string, rev: string): string[] {
+  return benchmarkGit(["-C", repo, "ls-tree", "-r", "-z", "--name-only", rev, "--", ".hunch"]).stdout.toString("utf8")
+    .split("\0").filter((p) => p.startsWith(".hunch/")).map((p) => p.slice(".hunch/".length));
+}
+
+/** The object behind each `<rev>:<path>` spec from one `git cat-file --batch`
+ *  call, in input order; null when git reports it missing. */
+function catFileBatch(repo: string, specs: string[]): Array<{ type: string; bytes: Buffer } | null> {
+  if (!specs.length) return [];
+  const run = spawnSync("git", [...BENCHMARK_GIT_CONFIG, "-C", repo, "cat-file", "--batch"], {
+    env: benchmarkChildEnv(), input: specs.map((spec) => `${spec}\n`).join(""), maxBuffer: MAX_GIT_OUTPUT, shell: false, windowsHide: true,
+  });
+  if (run.error) throw run.error;
+  if (run.status !== 0) throw new Error(`git cat-file --batch failed (exit ${run.status}): ${run.stderr.toString("utf8").trim()}`);
+  const out = run.stdout;
+  const objects: Array<{ type: string; bytes: Buffer } | null> = [];
+  let at = 0;
+  for (const spec of specs) {
+    const eol = out.indexOf(0x0a, at);
+    if (eol === -1) throw new Error(`git cat-file --batch output ended before ${spec}`);
+    const header = out.subarray(at, eol).toString("utf8");
+    at = eol + 1;
+    if (header.endsWith(" missing")) {
+      objects.push(null);
+      continue;
+    }
+    const [, type, size] = header.split(" ");
+    const length = Number(size);
+    if (!type || !Number.isInteger(length)) throw new Error(`unexpected git cat-file --batch header for ${spec}: ${header}`);
+    objects.push({ type, bytes: out.subarray(at, at + length) });
+    at += length + 1;
+  }
+  return objects;
+}
+
+/** Write exact bytes; UTF-8 content (every JSON record) goes through writeFileAtomic. */
+function writeBytes(file: string, bytes: Buffer): void {
+  mkdirSync(dirname(file), { recursive: true });
+  const text = bytes.toString("utf8");
+  if (Buffer.from(text, "utf8").equals(bytes)) writeFileAtomic(file, text);
+  else writeFileSync(file, bytes);
+}
+
+/** The resolved starting commit and the last first-parent `ref` commit at or before the cutoff. */
+function publicRevisions(repo: string, ref: string, startingCommit: string, cutoffIso: string): { main: string; start: string } {
+  const main = memoryRevisionAt(repo, ref, cutoffIso, true);
+  if (!main) throw new Error(`no public memory revision: ${ref} in ${repo} has no first-parent commit at or before ${cutoffIso}`);
+  return { main, start: benchmarkGitText(["-C", repo, "rev-parse", "--verify", `${startingCommit}^{commit}`]) };
+}
+
+/** Public memory as of the cutoff: every `.hunch/` path in the starting commit's
+ *  or the cutoff main commit's tree, each read from the last pre-cutoff commit
+ *  reachable from the starting commit that touched it (falling back to the main
+ *  commit). A path no such commit reaches, or one deleted there, is excluded;
+ *  a record only on an unmerged branch is never a candidate. */
+function buildPublicPart(repo: string, ref: string, startingCommit: string, cutoffIso: string, dest: string): MemorySnapshotPart {
+  const { main, start } = publicRevisions(repo, ref, startingCommit, cutoffIso);
+  const inMain = new Set(hunchPaths(repo, main));
+  const candidates = [...new Set([...hunchPaths(repo, start), ...inMain])].sort();
+  const dropped: SnapshotDrop[] = [];
+  const picked: Array<{ path: string; source: string }> = [];
+  for (const path of candidates) {
+    // rev-list selects the same commit as `git log -1` without honoring log.* config.
+    const touched = benchmarkGitText(["-C", repo, "rev-list", "-1", `--before=${cutoffIso}`, start, "--", `.hunch/${path}`]);
+    const source = touched || (inMain.has(path) ? main : "");
+    if (!source) dropped.push({ path, reason: "no pre-cutoff commit reachable from the starting commit" });
+    else picked.push({ path, source });
+  }
+  mkdirSync(dest, { recursive: true });
+  const objects = catFileBatch(repo, picked.map((p) => `${p.source}:.hunch/${p.path}`));
+  const sources: Record<string, string> = {};
+  picked.forEach(({ path, source }, i) => {
+    const object = objects[i];
+    if (!object) dropped.push({ path, reason: `deleted at ${source}` });
+    else if (object.type !== "blob") dropped.push({ path, reason: `${object.type} at ${source}` });
+    else {
+      writeBytes(join(dest, path), object.bytes);
+      sources[path] = source;
+    }
+  });
+  dropped.push(...applyCutoffGuard(dest, cutoffIso));
+  for (const drop of dropped) delete sources[drop.path];
+  const { sha256: hash, files } = hashTree(dest);
+  return { revision: main, sha256: hash, files, dropped, starting_commit: start, sources };
+}
+
 /** An existing snapshot is reused only when its record still describes the
  *  trees on disk and the revisions the cutoff selects today; a frozen snapshot is
  *  never rebuilt in place. */
-function reuseSnapshot(opts: { sourceRepo: string; sourceRef: string; privateRepo: string | null; privateRef?: string; cutoffIso: string; dest: string }): MemorySnapshot | null {
+function reuseSnapshot(opts: {
+  sourceRepo: string;
+  sourceRef: string;
+  startingCommit: string;
+  privateRepo: string | null;
+  privateRef?: string;
+  cutoffIso: string;
+  dest: string;
+}): MemorySnapshot | null {
   const record = join(opts.dest, "snapshot.json");
   const partial = ["public", "private"].some((part) => listFiles(join(opts.dest, part)).length > 0);
   if (!existsSync(record)) {
@@ -206,8 +305,15 @@ function reuseSnapshot(opts: { sourceRepo: string; sourceRef: string; privateRep
       && part.revision === memoryRevisionAt(repo, ref, opts.cutoffIso, true)
       && part.sha256 === hashTree(dir).sha256;
   };
+  const publicMatches = (): boolean => {
+    const { main, start } = publicRevisions(opts.sourceRepo, opts.sourceRef, opts.startingCommit, opts.cutoffIso);
+    return !!stored.public
+      && stored.public.revision === main
+      && stored.public.starting_commit === start
+      && stored.public.sha256 === hashTree(join(opts.dest, "public")).sha256;
+  };
   if (stored.cutoff_at === opts.cutoffIso
-    && matches(stored.public, opts.sourceRepo, opts.sourceRef, join(opts.dest, "public"))
+    && publicMatches()
     && matches(stored.private, opts.privateRepo, opts.privateRef ?? "HEAD", join(opts.dest, "private"))) {
     return stored;
   }
@@ -215,11 +321,13 @@ function reuseSnapshot(opts: { sourceRepo: string; sourceRef: string; privateRep
 }
 
 /** Freeze the cutoff-bounded public (and optional private overlay) memory into
- *  `<dest>/public` and `<dest>/private`, hashed, with every guard drop logged in
- *  `<dest>/snapshot.json`. */
+ *  `<dest>/public` and `<dest>/private`, hashed, with every exclusion and guard
+ *  drop logged in `<dest>/snapshot.json`. `sourceRef` is the main ref; public
+ *  paths are resolved against `startingCommit`. */
 export function buildMemorySnapshot(opts: {
   sourceRepo: string;
   sourceRef: string;
+  startingCommit: string;
   privateRepo: string | null;
   privateRef?: string;
   cutoffIso: string;
@@ -229,7 +337,7 @@ export function buildMemorySnapshot(opts: {
   if (reused) return reused;
   const snapshot: MemorySnapshot = {
     cutoff_at: opts.cutoffIso,
-    public: buildPart(opts.sourceRepo, opts.sourceRef, opts.cutoffIso, join(opts.dest, "public"), "public"),
+    public: buildPublicPart(opts.sourceRepo, opts.sourceRef, opts.startingCommit, opts.cutoffIso, join(opts.dest, "public")),
     private: opts.privateRepo
       ? buildPart(opts.privateRepo, opts.privateRef ?? "HEAD", opts.cutoffIso, join(opts.dest, "private"), "private")
       : null,

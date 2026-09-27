@@ -303,7 +303,8 @@ export interface PrepareArmOptions {
   nodePath?: string;
   /** The stripped child environment; GIT_* and HUNCH_* are removed again for setup commands. */
   env: Record<string, string>;
-  snapshot?: { publicDir: string; privateDir: string | null };
+  /** Frozen snapshot dirs and the hashes recorded for them in snapshot.json. */
+  snapshot?: { publicDir: string; privateDir: string | null; publicSha256: string; privateSha256: string | null };
   audited?: { root: string };
   npmCi?: boolean;
 }
@@ -338,7 +339,6 @@ export async function prepareArm(opts: PrepareArmOptions): Promise<PreparedArm> 
   let armEnv: Record<string, string> = {};
   let mcpConfig: { mcpServers: Record<string, unknown> } = { mcpServers: {} };
   let hookCmd: string | undefined;
-  let expectedSnapshotSha256: string | undefined;
 
   if (opts.arm === "no-hunch") {
     stripHunchExposure(repo);
@@ -347,9 +347,26 @@ export async function prepareArm(opts: PrepareArmOptions): Promise<PreparedArm> 
     const auditedRoot = resolve(opts.audited.root);
     const auditedCli = join(auditedRoot, "dist", "cli", "index.js");
     hookCmd = `"${nodePath}" "${auditedCli}" hook`;
-    expectedSnapshotSha256 = hashTree(opts.snapshot.publicDir).sha256;
-    cpSync(opts.snapshot.publicDir, join(repo, ".hunch"), { recursive: true });
-    if (opts.snapshot.privateDir) armEnv = { HUNCH_PRIVATE_DIR: mountPrivateSnapshot(opts.snapshot.privateDir, runDir) };
+    const { publicDir, privateDir, publicSha256, privateSha256 } = opts.snapshot;
+    cpSync(publicDir, join(repo, ".hunch"), { recursive: true });
+    // Checked before any audited writer runs: `hunch index` legitimately rewrites components/.
+    const frozen = hashTree(publicDir);
+    const mounted = hashTree(join(repo, ".hunch"));
+    setupChecks.push({
+      id: "snapshot-hash-match",
+      ok: frozen.sha256 === publicSha256 && mounted.sha256 === publicSha256,
+      detail: `snapshot dir ${frozen.sha256} (${frozen.files} files), mounted .hunch ${mounted.sha256} (${mounted.files} files) vs frozen ${publicSha256}`,
+    });
+    if (privateDir) {
+      const privateMount = mountPrivateSnapshot(privateDir, runDir);
+      armEnv = { HUNCH_PRIVATE_DIR: privateMount };
+      const mountedPrivate = hashTree(privateMount);
+      setupChecks.push({
+        id: "private-snapshot-hash-match",
+        ok: mountedPrivate.sha256 === privateSha256,
+        detail: `mounted private ${mountedPrivate.sha256} (${mountedPrivate.files} files) vs frozen ${privateSha256 ?? "none"}`,
+      });
+    }
 
     const scaffold = await import(pathToFileURL(join(auditedRoot, "dist", "integrations", "scaffold.js")).href) as AuditedScaffold;
     if (typeof scaffold.installClaudeHooks !== "function" || typeof scaffold.writeSlashCommands !== "function") {
@@ -384,7 +401,8 @@ export async function prepareArm(opts: PrepareArmOptions): Promise<PreparedArm> 
 
   const mcpConfigPath = join(runDir, "mcp.json");
   writeFileAtomic(mcpConfigPath, JSON.stringify(mcpConfig, null, 2) + "\n");
-  const exposure = proveExposure({ arm: opts.arm, repo, mcpConfigPath, env: { ...opts.env, ...armEnv }, hookCmd, expectedSnapshotSha256 });
+  const exposure = proveExposure({ arm: opts.arm, repo, mcpConfigPath, env: { ...opts.env, ...armEnv }, hookCmd });
+  if (opts.arm === "current-hunch") exposure.memory_snapshot_sha256 = opts.snapshot?.publicSha256 ?? null;
   if (setupChecks.length) {
     exposure.checks.push(...setupChecks);
     exposure.ok = exposure.checks.every((c) => c.ok);
@@ -435,7 +453,6 @@ export function proveExposure(p: {
   mcpConfigPath: string;
   env: Record<string, string>;
   hookCmd?: string;
-  expectedSnapshotSha256?: string;
 }): ExposureProof {
   const checks: ExposureCheck[] = [];
   const check = (id: string, ok: boolean, detail: string) => checks.push({ id, ok, detail });
@@ -445,7 +462,7 @@ export function proveExposure(p: {
     ? settings.value.hooks as Record<string, unknown>
     : {};
   const { servers, error: mcpError } = mcpServers(p.mcpConfigPath);
-  let memorySnapshotSha256: string | null = null;
+  let postSetupHunchSha256: string | null = null;
 
   if (p.arm === "no-hunch") {
     const markers = markerFiles(p.repo);
@@ -468,12 +485,7 @@ export function proveExposure(p: {
     const hunchDir = join(p.repo, ".hunch");
     const present = existsSync(hunchDir) && statSync(hunchDir).isDirectory();
     check("hunch-dir-present", present, present ? ".hunch/ present" : "no .hunch/ directory");
-    const tracked = trackedHunchHash(p.repo);
-    memorySnapshotSha256 = tracked.sha256;
-    check("snapshot-hash-match", p.expectedSnapshotSha256 !== undefined && tracked.sha256 === p.expectedSnapshotSha256,
-      p.expectedSnapshotSha256 === undefined
-        ? "no expected snapshot hash given"
-        : `tracked .hunch ${tracked.sha256} (${tracked.files} files) vs snapshot ${p.expectedSnapshotSha256}`);
+    postSetupHunchSha256 = trackedHunchHash(p.repo).sha256;
     const hunch = servers?.hunch as { command?: unknown; args?: unknown } | undefined;
     const args = Array.isArray(hunch?.args) ? hunch.args.filter((a): a is string => typeof a === "string") : [];
     const rootArg = args[args.indexOf("--root") + 1];
@@ -488,7 +500,7 @@ export function proveExposure(p: {
     check("grounding-present", grounded, grounded ? "CLAUDE.md has a HUNCH block" : "CLAUDE.md has no HUNCH block");
   }
   check("worktree-clean", status === "", status ? `git status: ${status.split("\n").length} entr(ies)` : "clean");
-  return { arm: p.arm, ok: checks.every((c) => c.ok), checks, memory_snapshot_sha256: memorySnapshotSha256 };
+  return { arm: p.arm, ok: checks.every((c) => c.ok), checks, memory_snapshot_sha256: null, post_setup_hunch_sha256: postSetupHunchSha256 };
 }
 
 /** HEAD and `git status --porcelain` per path (both null when not a repository),
