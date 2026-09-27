@@ -3,7 +3,7 @@
   "title": "relay:bcf1086b continue \"Memory CI automatic: delta critic, commit,…",
   "state": "completed",
   "started_at": "2026-09-27T07:24:28.809Z",
-  "finished_at": "2026-09-27T07:47:50.277Z",
+  "finished_at": "2026-09-27T08:03:13.579Z",
   "coverage": "delivered",
   "lessons": [
     {
@@ -16,6 +16,26 @@
   "applied": [],
   "saved": [],
   "checks": [
+    {
+      "label": "Verification command",
+      "state": "passed",
+      "exit_code": 0
+    },
+    {
+      "label": "Verification command",
+      "state": "passed",
+      "exit_code": 0
+    },
+    {
+      "label": "Verification command",
+      "state": "passed",
+      "exit_code": 0
+    },
+    {
+      "label": "Verification command",
+      "state": "passed",
+      "exit_code": 0
+    },
     {
       "label": "Verification command",
       "state": "passed",
@@ -48,15 +68,16 @@
   "supersedes": [
     "htask_74cb9b769384121d05f871b0"
   ],
-  "source_snapshot": "sha256:c185a123b6d1a4ace0eb6f76b05807c67a8edfbeafa6598e22f67efb7e266ed4",
-  "report_hash": "sha256:7b948e0c65146da41218315698b2cb0ea0ea25e5f87fb2b8ab8ee2c13e469025",
+  "source_snapshot": "sha256:2036e3509002f71722c13280e6e6f92f1f1b62603e81eef6f78e65ab0778b4f7",
+  "report_hash": "sha256:65a880cf884aeebe76b6914e254dd7299c95d1650c38f17a6da8de46a28b912e",
   "provenance": {
     "source": "task_report",
     "confidence": 1,
     "evidence": [
       "hunch report htask_32b34b78c2e9e674d43655d7",
-      "hunch report htask_734af5ec673aa1b548adbf2c"
+      "hunch report htask_734af5ec673aa1b548adbf2c",
+      "hunch report htask_e6a4c96c79a858f59c2f57dd"
     ],
-    "last_verified": "2026-09-27T07:47:50.277Z"
+    "last_verified": "2026-09-27T08:03:13.579Z"
   }
 }
