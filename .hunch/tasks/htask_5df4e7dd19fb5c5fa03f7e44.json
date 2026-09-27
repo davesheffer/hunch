@@ -3,8 +3,8 @@
   "title": "<ide_opened_file>The user opened the file…",
   "state": "completed",
   "started_at": "2026-09-27T05:26:29.707Z",
-  "finished_at": "2026-09-27T05:37:59.272Z",
-  "coverage": "no-delivery-observed",
+  "finished_at": "2026-09-27T05:59:27.572Z",
+  "coverage": "no-relevant-memory",
   "lessons": [],
   "applied": [],
   "saved": [
@@ -20,10 +20,14 @@
   "checks": [],
   "conformance": [],
   "refusals": 0,
-  "files": [],
+  "files": [
+    ".cursor/rules/hunch.mdc",
+    ".github/copilot-instructions.md",
+    ".windsurf/rules/hunch.md"
+  ],
   "supersedes": [],
   "source_snapshot": null,
-  "report_hash": "sha256:01f831b3a21dcfcf83d450926bb72e076dedb420c740bab6d6ae14746c536237",
+  "report_hash": "sha256:f6c65c7c612235624da67544d1b7ed966e58b7cc6a343c7db1f81670d98db9d6",
   "provenance": {
     "source": "task_report",
     "confidence": 1,
@@ -31,8 +35,12 @@
       "hunch report htask_5df4e7dd19fb5c5fa03f7e44",
       "hunch report htask_b86aec7f5f489ce633399f64",
       "hunch report htask_5c494e9a1a24fd609d9ff790",
-      "hunch report htask_f93399dc1fc93d08d03f1470"
+      "hunch report htask_f93399dc1fc93d08d03f1470",
+      "hunch report htask_03c8a57da065d5ca1755ba29",
+      "hunch report htask_4151da143ea926623b3fd0ad",
+      "hunch report htask_5b9df0439b70bbd59fd561ea",
+      "hunch report htask_cd6078893fbf52859452e38e"
     ],
-    "last_verified": "2026-09-27T05:37:59.272Z"
+    "last_verified": "2026-09-27T05:59:27.572Z"
   }
 }
