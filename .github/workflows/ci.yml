@@ -15,7 +15,45 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # A memory-only PR (graph records under .hunch/ plus the grounding docs Hunch
+  # regenerates from them) cannot change code, so the required legs below run a
+  # graph-only fast path instead of the full gate, and merge-class auto-merge
+  # lands it in minutes. The required checks are matrix jobs: skipping a whole
+  # job would report a bare "ci" and leave "ci (22)" pending forever, so every
+  # leg still runs and gates its own steps. The PR cannot widen the class that
+  # judges it — the classifier is read from the target branch, never the PR's
+  # tree — and any failure here falls back to the full run. Pushes to main
+  # always run everything.
+  classify:
+    # Skipped on push: the legs then see an empty output and run in full.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      memory_only: ${{ steps.classify.outputs.memory_only }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 0
+
+      - name: Classify with the trusted base's classifier
+        id: classify
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          memory_only=false
+          if [ "$EVENT_NAME" = "pull_request" ] \
+            && git fetch --no-tags origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}" \
+            && git show "origin/${BASE_REF}:tooling/merge-class.mjs" > "$RUNNER_TEMP/merge-class.mjs" \
+            && node "$RUNNER_TEMP/merge-class.mjs" --base "origin/${BASE_REF}" --require-memory-only; then
+            memory_only=true
+          fi
+          echo "memory_only=$memory_only" >> "$GITHUB_OUTPUT"
+
   python-state:
+    needs: classify
+    if: ${{ !cancelled() && needs.classify.outputs.memory_only != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     strategy:
@@ -48,12 +86,17 @@ jobs:
       - run: node tooling/verify-python-state.mjs python --proof
 
   ci:
+    needs: classify
+    # A failed classify still runs the leg, in full: never a skipped required check.
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
         node-version: [22, 24]
+    env:
+      MEMORY_ONLY: ${{ needs.classify.outputs.memory_only == 'true' }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
@@ -71,10 +114,27 @@ jobs:
       - name: Install (locked)
         run: npm ci
 
+      # The release gate's graph stages, in its order: the tests that read the
+      # committed graph run BEFORE `index` regenerates the grounding docs, or the
+      # freshness test would compare the regenerated copy with itself.
+      - name: Memory-only fast path — graph tests, fresh index, conformance, drift
+        if: env.MEMORY_ONLY == 'true'
+        run: |
+          # A bare assignment fails the step if the list cannot be read, instead of
+          # handing run-tests.mjs no arguments.
+          tests="$(node -e 'import("./tooling/merge-class.mjs").then((m) => console.log(m.MEMORY_GRAPH_TESTS.join(" ")))')"
+          test -n "$tests"
+          node tooling/run-tests.mjs $tests
+          export HUNCH_PRIVATE_DIR="$(mktemp -d)" HUNCH_SYNTH_PROVIDER=deterministic
+          npx tsx src/cli/index.ts index --no-auto-commit
+          npx tsx src/cli/index.ts conform --strict
+          npx tsx src/cli/index.ts drift --fail-on finding-stale
+
       # Build once before the gate so black-box Matrix tests can execute the
       # exact compiled CLI that ships. The gate still repeats and receipts its
       # own build; this warm build only removes per-command TS transpilation.
       - name: Build compiled CLI for black-box tests
+        if: env.MEMORY_ONLY != 'true'
         run: npm run build
 
       # One cross-platform gate is shared by normal CI and the publish workflow:
@@ -82,12 +142,13 @@ jobs:
       # rehearsal/privacy sentinel, and production dependency audit. It emits a
       # content-addressed receipt even when a prerequisite fails.
       - name: Constitution release gate
+        if: env.MEMORY_ONLY != 'true'
         env:
           HUNCH_TEST_COMPILED_CLI: "1"
         run: npm run gate:release -- --output release-gate.json
 
       - name: Upload release-gate receipt
-        if: always()
+        if: ${{ always() && env.MEMORY_ONLY != 'true' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: constitution-release-gate-node-${{ matrix.node-version }}-${{ github.sha }}
@@ -99,7 +160,7 @@ jobs:
       # release gate on the tag; this pre-tag Node 24 leg catches packaging-only
       # regressions while the change is still a PR/main commit.
       - name: Build Node 24 npm package candidate
-        if: matrix.node-version == 24
+        if: matrix.node-version == 24 && env.MEMORY_ONLY != 'true'
         id: package-candidate
         run: |
           npm run prepublishOnly
@@ -107,13 +168,13 @@ jobs:
           node -e 'const fs=require("node:fs"); const value=JSON.parse(fs.readFileSync("npm-package-manifest.json","utf8")); if (!Array.isArray(value) || value.length !== 1 || !Array.isArray(value[0].files)) throw new Error("npm package manifest is malformed");'
 
       - name: Write Node 24 package-candidate receipt
-        if: ${{ always() && matrix.node-version == 24 }}
+        if: ${{ always() && matrix.node-version == 24 && env.MEMORY_ONLY != 'true' }}
         env:
           CANDIDATE_OUTCOME: ${{ steps.package-candidate.outcome }}
         run: node -e 'const fs=require("node:fs"),crypto=require("node:crypto"); const manifest=fs.existsSync("npm-package-manifest.json")?fs.readFileSync("npm-package-manifest.json"):null; const body={schema:"hunch.npm-package-candidate.v1",commit:process.env.GITHUB_SHA,node:process.version,outcome:process.env.CANDIDATE_OUTCOME,manifest_sha256:manifest?"sha256:"+crypto.createHash("sha256").update(manifest).digest("hex"):null}; const content_hash="sha256:"+crypto.createHash("sha256").update(JSON.stringify(body)).digest("hex"); fs.writeFileSync("npm-package-candidate-receipt.json",JSON.stringify({...body,content_hash},null,2)+"\n");'
 
       - name: Upload Node 24 package-candidate receipt
-        if: ${{ always() && matrix.node-version == 24 }}
+        if: ${{ always() && matrix.node-version == 24 && env.MEMORY_ONLY != 'true' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: npm-package-candidate-node-24-${{ github.sha }}
@@ -123,12 +184,16 @@ jobs:
           if-no-files-found: error
 
   platform-matrix-safety:
+    needs: classify
+    if: ${{ !cancelled() }}
     strategy:
       fail-fast: false
       matrix:
         os: [windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
+    env:
+      MEMORY_ONLY: ${{ needs.classify.outputs.memory_only == 'true' }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
@@ -139,10 +204,19 @@ jobs:
           node-version: 22
           cache: npm
 
+      # Schema, conformance and grounding run on the Linux legs; here the records
+      # must check out (names legal on this OS) and parse.
+      - name: Memory-only fast path — every record checks out and parses on this OS
+        if: env.MEMORY_ONLY == 'true'
+        run: |
+          node -e 'const fs=require("node:fs"),path=require("node:path"); let n=0; const walk=(dir)=>{ for (const e of fs.readdirSync(dir,{withFileTypes:true})) { const p=path.join(dir,e.name); if (e.isDirectory()) walk(p); else if (e.name.endsWith(".json")) { try { JSON.parse(fs.readFileSync(p,"utf8")); } catch (error) { throw new Error(p+": "+error.message); } n++; } } }; walk(".hunch"); console.log(n+" memory records parse on "+process.platform);'
+
       - name: Install (locked)
+        if: env.MEMORY_ONLY != 'true'
         run: npm ci
 
       - name: Build compiled CLI for black-box tests
+        if: env.MEMORY_ONLY != 'true'
         run: npm run build
 
       # Exercise the platform-specific native lock regression plus the real
@@ -150,19 +224,20 @@ jobs:
       # release gate runs on both supported Node lines above.
       - name: Native bindings, atomic writes, and the team Matrix stay safe
         id: matrix-safety
+        if: env.MEMORY_ONLY != 'true'
         env:
           HUNCH_TEST_COMPILED_CLI: "1"
         run: node tooling/run-tests.mjs --test-concurrency=1 test/parse.test.ts test/io.test.ts test/migrate.test.ts test/matrix-release-verification.test.ts test/team-matrix-e2e.test.ts test/vscode-workspace.test.ts test/development-preparation.test.ts test/fixture-environment.test.ts test/experiment.test.ts test/git-merge-range.test.ts test/workspace-ledger.test.ts test/workspace-prune.test.ts test/workspaces.test.ts test/hook-shared-worktree.test.ts test/init-shared-autocommit.test.ts test/task-verify-exit.test.ts
 
       - name: Write platform Matrix safety receipt
-        if: always()
+        if: ${{ always() && env.MEMORY_ONLY != 'true' }}
         env:
           MATRIX_SAFETY_OUTCOME: ${{ steps.matrix-safety.outcome }}
           MATRIX_RUNNER_OS: ${{ runner.os }}
         run: node -e 'const fs=require("node:fs"),crypto=require("node:crypto"); const body={schema:"hunch.platform-matrix-safety.v1",commit:process.env.GITHUB_SHA,node:process.version,runner_os:process.env.MATRIX_RUNNER_OS,outcome:process.env.MATRIX_SAFETY_OUTCOME,tests:["test/parse.test.ts","test/io.test.ts","test/migrate.test.ts","test/matrix-release-verification.test.ts","test/team-matrix-e2e.test.ts","test/vscode-workspace.test.ts","test/development-preparation.test.ts","test/fixture-environment.test.ts","test/experiment.test.ts","test/git-merge-range.test.ts","test/workspace-ledger.test.ts","test/workspace-prune.test.ts","test/workspaces.test.ts","test/hook-shared-worktree.test.ts","test/init-shared-autocommit.test.ts","test/task-verify-exit.test.ts"]}; const content_hash="sha256:"+crypto.createHash("sha256").update(JSON.stringify(body)).digest("hex"); fs.writeFileSync("platform-matrix-safety.json",JSON.stringify({...body,content_hash},null,2)+"\n");'
 
       - name: Upload platform Matrix safety receipt
-        if: always()
+        if: ${{ always() && env.MEMORY_ONLY != 'true' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: platform-matrix-safety-${{ matrix.os }}-${{ github.sha }}
