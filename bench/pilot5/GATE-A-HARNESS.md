@@ -8,7 +8,7 @@ Frozen before any timed run. A change to any rule below after the first timed ru
 | Role | What | Rule |
 | --- | --- | --- |
 | Controller | `hunch task benchmark` code | Runs from a clean worktree of the harness commit. Refuses a dirty tree. |
-| Audited Hunch | The product the `current-hunch` arm uses | A separate clean worktree at the audited revision, built with `npm ci && npm run build`. Only its `dist/` is used. |
+| Audited Hunch | The product the `current-hunch` arm uses | A separate clean worktree at the audited revision, built with `npm ci && npm run build`. Only its `dist/` is used. Pilot 5: tag `v1.42.0` (5ff071a), the published 1.42.0; PR #441 is not included. |
 | Target | The code the agent edits | Per task: the card's `starting_commit`, rebuilt without `.hunch/` (below). |
 | Memory | The `current-hunch` arm's input memory | Per task: cutoff-bounded snapshot (below), frozen and hashed before the first run. |
 
@@ -79,11 +79,14 @@ sha256 and must contain no `hunch` string; unrelated user instructions are prese
 - Provider: Claude Code CLI on a subscription. Argv, both arms:
   `claude -p <prompt> --output-format stream-json --verbose --include-hook-events --setting-sources project
   --strict-mcp-config --mcp-config <file> --no-session-persistence --permission-mode bypassPermissions
-  --model <pinned> --effort <pinned>`.
+  --model <pinned> --effort <pinned>`. Pilot 5: `--model claude-opus-5-5`; no `--effort` flag (CLI default, recorded as
+  `effort: null`).
 - Child environment: delete `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_BASE_URL`, `CLAUDE_CODE_USE_BEDROCK`,
   `CLAUDE_CODE_USE_VERTEX`, `CLAUDE_CODE_USE_FOUNDRY`, `AWS_BEARER_TOKEN_BEDROCK`, `OPENAI_API_KEY`, `CURSOR_API_KEY`,
   `GEMINI_API_KEY`, `GOOGLE_API_KEY`, every `HUNCH_*`, every `GIT_*` except `GIT_EDITOR`, `CLAUDECODE`, and every
-  `CLAUDE_*` / `CLAUDE_CODE_*` variable except `CLAUDE_CODE_GIT_BASH_PATH`. Then add the arm's own `HUNCH_PRIVATE_DIR`.
+  `CLAUDE_*` / `CLAUDE_CODE_*` variable except `CLAUDE_CODE_GIT_BASH_PATH`. Then add `DISABLE_AUTOUPDATER=1` (both arms)
+  and the arm's own `HUNCH_PRIVATE_DIR`.
+- `claude --version` runs before every timed run; a version other than the manifest's stops the schedule.
 - Preflight (fails closed, no timed run after a failure): executable found, `--version` recorded, stripped environment
   asserted, one untimed probe with the `no-hunch` flags in an empty directory must succeed with `apiKeySource: "none"`.
   Record CLI version, the reported model, and sha256 of the argv with the prompt and paths replaced by placeholders.
@@ -108,15 +111,24 @@ From the stream-json transcript:
 
 ## Schedule
 
-- Tasks in suite order. Repetition 1 arm order from sha256(`seed|task|1`) low bit; later repetitions alternate.
+- Tasks in suite order. Repetition 1 arm order from sha256(`seed|task|1`) low bit (last hex digit of the hex digest,
+  `& 1`): 0 keeps the `--arms` order, 1 reverses it; later repetitions alternate. Pilot 5 seed: `pilot5-gate-a-v1`.
 - Two repetitions. When one arm's two runs disagree on success for a task, one extra paired repetition for that task.
-- Sequential runs. Resume: an existing `run.json` under the same manifest hash is kept, never rerun.
+- Sequential runs. Resume: an existing `run.json` under the same manifest hash is kept, never rerun. A run directory
+  without `run.json` (interrupted) is renamed `<dir>.interrupted-<n>`, kept, and rerun. Invalid runs are recorded, not
+  retried.
 
 ## Validation
 
 After the child exits: copy the task's validator into `<repo>/test/`, run
 `<node> node_modules/tsx/dist/cli.mjs --test test/<validator>` with a 10-minute timeout and the stripped environment.
-Exit 0 = passed. Validator files are hashed against the suite before the first run.
+Exit 0 = passed. Validator files are hashed against the suite before the first run. The validator's `HOME`,
+`USERPROFILE`, `APPDATA`, `LOCALAPPDATA`, `XDG_CONFIG_HOME` and `XDG_CACHE_HOME` point under `<run>/validator-home`.
+
+`quality.outcome` is the validator result for every run with a valid exposure. `success` is true only when the
+validator passed and the run completed: agent exit 0, `result.is_error` false, no timeout, exposure proven before and
+after the run, and no isolation breach. After the run, `current-hunch` requires the `hunch` MCP server reported
+`connected` in the `init` event; `no-hunch` requires no MCP server, no `mcp__hunch__*` tool and no Hunch hook output.
 
 ## Output
 
