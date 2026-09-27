@@ -21,6 +21,48 @@ test("machine paths are caught on both platforms", () => {
 
   const linux = scanRecord({ title: "t", context: "binary at /home/buildbot/.local/bin/hunch" });
   assert.ok(has(linux, "machine-path"), "Linux home directory should be flagged");
+
+  for (const context of [
+    "see file:///Users/contributor/app",
+    "cwd=/home/buildbot/x",
+    "git -C /Users/contributor/app status",
+    "touching a /home/buildbot/x path",
+    "Git Bash cwd /c/Users/contributor/app",
+    "WSL at /mnt/c/Users/contributor/app",
+    "opened file:///c%3A/Users/contributor/app",
+    String.raw`typed C:\users\contributor\x`,
+    String.raw`typed C:\USERS\contributor\x`,
+    "cwd:/Users/contributor/x",
+    "keys under /home/(buildbot|ci)/.ssh",
+    "keys under /home/{buildbot,ci}/.ssh",
+    "repo at /Users/(contributor)/app",
+    String.raw`typed C:\Users\(contributor)\x`,
+  ]) {
+    assert.ok(has(scanRecord({ title: "t", context }), "machine-path"), `${context} should be flagged`);
+  }
+  for (const context of [
+    "ran c:/Users/contributor/app",
+    String.raw`path1C:\Users\contributor\x`,
+    String.raw`HOME_C:\Users\contributor\x`,
+    "opened file:/Users/contributor/app",
+  ]) {
+    const hits = scanRecord({ title: "t", context }).filter((h) => h.kind === "machine-path");
+    assert.equal(hits.length, 1, `${context} is one hit, got ${JSON.stringify(hits)}`);
+  }
+  for (const context of [
+    "https://example.com/home/contributor/x",
+    "src/home/contributor/x",
+    "./home/contributor/x",
+    "~/home/contributor/x",
+    "GET /v/users/contributor",
+    "api:/users/contributor",
+    "rule: /home/([^/]+)",
+    "rule: /home/(?<user>[^/]+)",
+    "rule: /Users/[a-z_][a-z0-9_-]*",
+    String.raw`rule: C:\Users\([^\]+)`,
+  ]) {
+    assert.equal(has(scanRecord({ title: "t", context }), "machine-path"), false, `${context} is not a home directory`);
+  }
 });
 
 test("placeholder home directories in docs and tests are NOT flagged", () => {
