@@ -1,0 +1,108 @@
+{
+  "id": "htask_1fe3287f1a8da4ba37896f4a",
+  "title": "relay:c35e83b9 continue \"Context-footprint budget: start\" from the…",
+  "state": "completed",
+  "started_at": "2026-09-27T11:45:19.388Z",
+  "finished_at": "2026-09-27T12:12:36.740Z",
+  "coverage": "delivered",
+  "lessons": [
+    {
+      "kind": "constraints",
+      "record_id": "con_e04226bd05",
+      "content_hash": "sha256:22fa18e57f979b7757fb0801c0782cdfa41035095473384660c7686374f1f36a",
+      "title": "The MCP server must stay client-agnostic: all assistants point to the same .hunch/ graph; no Claude-only behavior in the server"
+    },
+    {
+      "kind": "decisions",
+      "record_id": "dec_e3817dc552",
+      "content_hash": "sha256:ebd25a5e5ece17165c2068d2a29cbbfbe6b63f6ad9e4482e6a0d2da543b57cfe",
+      "title": "MCP over streamable HTTP in hunch serve: one dispatcher for REST and MCP, stateless JSON, web-standard transport so Hono stays unreachable"
+    },
+    {
+      "kind": "decisions",
+      "record_id": "dec_64f897a0f4",
+      "content_hash": "sha256:ae791b5ce7652c5dd38a21c89954b9550281a7a03d621b33df34123fe6c09743",
+      "title": "Agent-gateway readiness: bind the state layer to managed agent runtimes in two phases, generic only"
+    },
+    {
+      "kind": "decisions",
+      "record_id": "dec_f69a16649a",
+      "content_hash": "sha256:6fb79e8ab7d024d08117af4a239c039ca8bd58af5514a37f012de04f1ff91c52",
+      "title": "Agent-gateway readiness: bind the state layer to managed agent runtimes in two phases, generic only — gated on a named partner"
+    }
+  ],
+  "applied": [],
+  "saved": [
+    {
+      "kind": "findings",
+      "record_id": "fnd_bbff65a132",
+      "content_hash": "sha256:24bbc54e1517b7363230ec5f49907730ebbe573e6bc04990f451cb6e0e0e5ebe",
+      "home": "public",
+      "operation": "created",
+      "durability": "committed"
+    }
+  ],
+  "checks": [
+    {
+      "label": "Verification command",
+      "state": "passed",
+      "exit_code": 0
+    },
+    {
+      "label": "Verification command",
+      "state": "passed",
+      "exit_code": 0
+    }
+  ],
+  "conformance": [
+    {
+      "kind": "constraints",
+      "record_id": "con_e04226bd05",
+      "content_hash": "sha256:22fa18e57f979b7757fb0801c0782cdfa41035095473384660c7686374f1f36a",
+      "outcome": "unavailable"
+    },
+    {
+      "kind": "decisions",
+      "record_id": "dec_e3817dc552",
+      "content_hash": "sha256:ebd25a5e5ece17165c2068d2a29cbbfbe6b63f6ad9e4482e6a0d2da543b57cfe",
+      "outcome": "unavailable"
+    },
+    {
+      "kind": "decisions",
+      "record_id": "dec_64f897a0f4",
+      "content_hash": "sha256:ae791b5ce7652c5dd38a21c89954b9550281a7a03d621b33df34123fe6c09743",
+      "outcome": "unavailable"
+    },
+    {
+      "kind": "decisions",
+      "record_id": "dec_f69a16649a",
+      "content_hash": "sha256:6fb79e8ab7d024d08117af4a239c039ca8bd58af5514a37f012de04f1ff91c52",
+      "outcome": "unavailable"
+    }
+  ],
+  "refusals": 0,
+  "files": [
+    "src/mcp/leanToolList.ts",
+    "src/serve/mcpHttp.ts",
+    "test/lean-tool-list.test.ts",
+    "src/mcp/server.ts",
+    "test/footprint.test.ts"
+  ],
+  "supersedes": [
+    "htask_27507b470ecf88ae9dbb2667",
+    "htask_83c4ed09b3b8f544c0ca933d",
+    "htask_b5f1b688f2b817df15cc04ad",
+    "htask_c1ae87379a520e5ca8b313ad",
+    "htask_d13f1ac02566faf8da948527"
+  ],
+  "source_snapshot": "sha256:c1a5400e0c8d8f062ee1baa360d96130470e5bc4d808ae11ae65858ea8e950af",
+  "report_hash": "sha256:5a105b93d8dc0002e8988a62add73b1f8dd8f28e68572521f9288d152575b20e",
+  "provenance": {
+    "source": "task_report",
+    "confidence": 1,
+    "evidence": [
+      "hunch report htask_2b214912bbc1fbcde2c4b699"
+    ],
+    "last_verified": "2026-09-27T12:12:36.740Z"
+  }
+}
