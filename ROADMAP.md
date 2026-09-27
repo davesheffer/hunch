@@ -12,6 +12,30 @@ This file is the public execution view. Historical releases and completed implem
 
 Read [Deterministic organizational state](docs/deterministic-state.md) for the current architecture.
 
+## Start here — current handoff
+
+To run the coding-task context-efficiency pilot in Codex, switch to
+[the PILOT5 branch](https://github.com/davesheffer/hunch/tree/docs/context-efficiency-pilot5)
+and read [the pilot plan](https://github.com/davesheffer/hunch/blob/docs/context-efficiency-pilot5/docs/HUNCH-CONTEXT-EFFICIENCY-POC.md),
+especially sections 8, 11, 13 and 15. In that Codex session, say:
+
+> Read `docs/HUNCH-CONTEXT-EFFICIENCY-POC.md` and execute PILOT5 intake. Prepare at most five issue cards with a pre-fix code revision, cutoff-bounded memory and an independent validator. Start Gate A only after the cards and runner pass preflight. Report excluded issues and uncertain results; claim savings only from comparable completed runs.
+
+`PILOT5` is a handoff word in the Codex conversation, not a GitHub issue trigger.
+The five tasks are not yet qualified or benchmarked. Gate A compares no Hunch with
+current Hunch on isolated, fixed tasks; it precedes replay work. After Gate A,
+[Verified Work Reuse](https://github.com/davesheffer/hunch/blob/docs/verified-work-reuse/docs/VERIFIED-WORK-REUSE-PLAN.md)
+tests whether validated previous work improves current Hunch further, including
+investigation steps actually omitted and lookup and validation overhead. Use the same
+measurement infrastructure for both stages.
+
+These coding-task measurements complement the organizational-state priority below.
+They do not replace the open two-user acceptance week for Sofia and another agent,
+and their populations and results must be reported separately. Measure task time,
+actual or explicitly modeled cost including overhead, and quality and confidence
+through validation failures, stale reuse and false blocks. Research enhancements
+remain hypotheses until tested.
+
 ## Documents
 
 Every planning, contract and program document, and what it is for. A document not listed here is
@@ -433,11 +457,12 @@ deployment. Each item names its acceptance evidence; a checkbox flips only on th
   the subject, reuse the current record when its dependencies are unchanged, otherwise compute
   and write with supersession — becomes a documented client helper. Evidence: the emulation's
   reuse number reproduces through the helper instead of bespoke code.
-- [ ] **A worked multi-agent sample** under `examples/`, never in core: a flagged case, an
-  orchestrator that reads first, specialists that write receipts, a decision record citing them and
-  the policy version, an escalation as an open commitment, a human closure as a correction.
-  Evidence: a deterministic replay over synthetic cases reports reuse, zero contradictions and
-  which decisions rest on a superseded policy.
+- [ ] **Conditional managed-runtime smoke using the existing agent farm.** When an external
+  partner needs MCP gateway acceptance, extend `tooling/agent-farm` with a flagged case,
+  specialist receipts, a decision bound to a policy version, a policy change, escalation and
+  human closure. Evidence: deterministic synthetic replay reports reuse, zero contradictions,
+  contiguous ledger and decisions on a superseded policy version. This is not a blocker for
+  the current pilot or customer evidence.
 
 ### Phase B — acceptable to a regulated organization
 
