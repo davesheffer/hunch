@@ -37,15 +37,16 @@
   },
   "premises": [],
   "provenance": {
-    "source": "agent_recorded",
-    "confidence": 0.75,
+    "source": "human_confirmed",
+    "confidence": 0.95,
     "evidence": [
       "src/mcp/server.ts",
       "src/integrations/claudemd.ts",
       "src/core/taskReportHook.ts",
       "src/core/hookpolicy.ts",
       "test/grounding-freshness.test.ts"
-    ]
+    ],
+    "last_verified": "2026-09-27T11:44:57.168Z"
   },
   "date": "2026-09-20T04:08:09.573Z"
 }
