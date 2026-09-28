@@ -217,13 +217,15 @@ function pathPattern(path: string): RegExp {
 
 /**
  * True when a tool-input string reaches outside the run's own directory: after every mention of
- * `allowedPrefix` (the run's own `runDir`) is dropped, it still names one of the deny roots
+ * each `allowed` path (the run's own `runDir`, and for `current-hunch` the audited CLI entrypoint
+ * its hooks tell the agent to run) is dropped, it still names one of the deny roots
  * (source repo, private overlay, audited checkout, controller, `<out>`), or it contains a
  * directory-traversal run ("../../../" or "..\..\..\", either slash style).
  */
-export function isOutOfRepoAccess(value: string, denyRoots: string[], allowedPrefix: string): boolean {
+export function isOutOfRepoAccess(value: string, denyRoots: string[], allowed: string | string[]): boolean {
   if (/(?:\.\.[\\/]){3}/.test(value)) return true;
-  const rest = normalizeForMatch(value).replace(pathPattern(allowedPrefix), " ");
+  let rest = normalizeForMatch(value);
+  for (const path of Array.isArray(allowed) ? allowed : [allowed]) rest = rest.replace(pathPattern(path), " ");
   return denyRoots.some((root) => pathPattern(root).test(rest));
 }
 
@@ -349,8 +351,10 @@ async function executeRun(ctx: RunContext, task: SuiteTask, rep: number, arm: Be
       );
     }
     const denyRoots = [ctx.sourceRepo, ctx.privateRepo, ctx.auditedRoot, ctx.controller, ctx.out].filter((p): p is string => p !== null);
+    // The audited UserPromptSubmit hook tells the agent to run checks through `<node> <audited>/dist/cli/index.js task verify`.
+    const allowed = arm === "current-hunch" ? [runDir, join(ctx.auditedRoot, "dist", "cli", "index.js")] : [runDir];
     const offenders = [...new Set(toolInputStrings(readFileSync(agent.transcript_path, "utf8"))
-      .filter((value) => isOutOfRepoAccess(value, denyRoots, runDir)))];
+      .filter((value) => isOutOfRepoAccess(value, denyRoots, allowed)))];
     outOfRepoBreach = offenders.length > 0;
     post.push(["no-out-of-repo-access", !outOfRepoBreach, outOfRepoBreach
       ? `offending string(s): ${offenders.slice(0, 5).map((s) => s.slice(0, 200)).join(" | ")}`

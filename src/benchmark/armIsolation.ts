@@ -438,6 +438,9 @@ export async function prepareArm(opts: PrepareArmOptions): Promise<PreparedArm> 
       detail: "chars" in toolsList ? `mcp.tools_list ${toolsList.chars} chars` : toolsList.error,
     });
     mcpConfig = { mcpServers: { hunch: { type: "stdio", command: nodePath, args: [auditedCli, "mcp", "--root", repo], env: armEnv } } };
+    // A `hunch init` user has a repo .mcp.json; without one the audited SessionStart hook injects an
+    // "integration needs attention" warning. The child still loads only mcp.json (--strict-mcp-config).
+    writeFileAtomic(join(repo, ".mcp.json"), JSON.stringify(mcpConfig, null, 2) + "\n");
   }
   staticChars.grounding_claude_md = hunchBlockChars(join(repo, "CLAUDE.md"));
   staticChars.grounding_agents_md = hunchBlockChars(join(repo, "AGENTS.md"));
@@ -543,6 +546,13 @@ export function proveExposure(p: {
     const serverOk = !!servers && Object.keys(servers).length === 1 && !!hunch && typeof hunch.command === "string"
       && args.includes("mcp") && args.includes("--root") && rootArg !== undefined && resolve(rootArg) === resolve(p.repo);
     check("mcp-hunch-server", serverOk, servers ? `servers: ${Object.keys(servers).join(", ") || "none"}; hunch args: ${JSON.stringify(args)}` : `mcp config unreadable: ${mcpError}`);
+    const repoMcp = readJsonObject(join(p.repo, ".mcp.json"));
+    const repoServers = repoMcp.value?.mcpServers as Record<string, unknown> | undefined;
+    const repoMcpOk = !!repoServers && Object.keys(repoServers).length === 1 && !!hunch
+      && JSON.stringify(repoServers.hunch) === JSON.stringify(hunch);
+    check("repo-mcp-json-matches", repoMcpOk, repoMcp.error
+      ? `.mcp.json unreadable: ${repoMcp.error}`
+      : repoMcp.value ? (repoMcpOk ? ".mcp.json has the same single hunch server as the child MCP config" : ".mcp.json differs from the child MCP config") : "no .mcp.json");
     const missing = HOOK_EVENTS_REQUIRED.filter((event) => !p.hookCmd || !hookCommands(hooks[event]).includes(p.hookCmd));
     check("hooks-installed", !settings.error && !!settings.value && missing.length === 0,
       settings.error ? `.claude/settings.json unreadable: ${settings.error}` : missing.length ? `hook command missing on ${missing.join(", ")}` : `hook command on ${HOOK_EVENTS_REQUIRED.join(", ")}`);
