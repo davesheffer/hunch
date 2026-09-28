@@ -14,7 +14,7 @@ import { prepareArm, prepareTaskBase, repoStateFingerprint } from "./armIsolatio
 import { benchmarkGit, benchmarkGitText, buildMemorySnapshot, type MemorySnapshot } from "./memorySnapshot.js";
 import { armOrder, canonicalJson, manifestSha256, needsTieBreak } from "./schedule.js";
 import { preflight, runAgent, strippedChildEnv } from "./taskRunner.js";
-import { recordIdsIn, toolInputStrings } from "./transcript.js";
+import { parseTranscript, recordIdsIn, toolInputStrings, transcriptCost } from "./transcript.js";
 import type { AgentRunResult, BenchmarkArm, BenchmarkSuite, EfficiencyRun, PreparedArm, RunnerConfig, RunnerIdentity, SuiteTask, TaskCost } from "./types.js";
 import { runValidator, type ValidatorResult } from "./validate.js";
 
@@ -44,6 +44,9 @@ export interface RunBenchmarkOptions {
   tasks?: string[] | null;
   prepareOnly?: boolean;
   reportOnly?: boolean;
+  /** With `reportOnly`: recount token and call fields from each run's transcript.jsonl with this harness's parser
+   *  instead of trusting run.json (which stays untouched as evidence); the report names the recount revision. */
+  recount?: boolean;
   /** Fixture provider only. */
   noNpmCi?: boolean;
   /** Fixture provider only. */
@@ -412,22 +415,14 @@ async function executeRun(ctx: RunContext, task: SuiteTask, rep: number, arm: Be
   const passed = validator !== null && validator.exit_code === 0 && !validator.timed_out;
   const success = status === "completed" && passed;
 
-  const usage = agent?.metrics.usage ?? null;
   const staticChars = Object.values(prepared?.static_hunch_chars ?? {}).reduce((sum, chars) => sum + chars, 0);
   const dynamic = agent?.metrics.hunch_dynamic_chars ?? { tool_results: 0, hooks: 0 };
   const agentMs = agent?.agent_wall_clock_ms ?? 0;
   const validationMs = validator?.validation_ms ?? 0;
   const cost: TaskCost = {
-    input_tokens: usage ? usage.input + usage.cache_creation + usage.cache_read : null,
-    output_tokens: usage ? usage.output : null,
-    token_measurement: usage ? "provider" : "unavailable",
-    input_token_parts: usage ? { input: usage.input, cache_creation: usage.cache_creation, cache_read: usage.cache_read } : null,
+    ...transcriptCost(agent?.metrics ?? null),
     hunch_context_estimated_tokens: Math.ceil((staticChars + dynamic.tool_results + dynamic.hooks) / 4),
     memory_processing_tokens: null,
-    model_calls: agent ? agent.metrics.model_calls : null,
-    tool_calls: agent ? agent.metrics.tool_calls : null,
-    investigation_tool_calls: agent ? agent.metrics.investigation_tool_calls : null,
-    call_measurement: agent ? "parsed" : "unavailable",
     agent_wall_clock_ms: agentMs,
     validation_ms: validationMs,
     total_wall_clock_ms: agentMs + validationMs,
@@ -467,28 +462,42 @@ async function executeRun(ctx: RunContext, task: SuiteTask, rep: number, arm: Be
   return run;
 }
 
-/** report.json + report.md over every run.json under the manifest. */
-function writeReport(out: string, suite: BenchmarkSuite, manifestSha: string, arms: BenchmarkArm[], log: (line: string) => void): string {
+/** report.json + report.md over every run.json under the manifest. With `recountRevision`, each run's token and
+ *  call fields come from its transcript.jsonl (parsed now) instead of run.json; run.json is never rewritten. */
+function writeReport(
+  out: string, suite: BenchmarkSuite, manifestSha: string, arms: BenchmarkArm[], log: (line: string) => void,
+  recountRevision: string | null = null,
+): string {
   const runsDir = join(out, "runs");
   const runs: EfficiencyRun[] = [];
   const taskIds = new Set(suite.tasks.map((task) => task.id));
+  let recounted = 0;
   if (existsSync(runsDir)) {
     for (const taskDir of readdirSync(runsDir, { withFileTypes: true })) {
       if (!taskDir.isDirectory()) continue;
       for (const runDir of readdirSync(join(runsDir, taskDir.name), { withFileTypes: true })) {
         const file = join(runsDir, taskDir.name, runDir.name, "run.json");
         if (!runDir.isDirectory() || !existsSync(file)) continue;
-        const run = readJson(file, "run.json") as EfficiencyRun;
+        let run = readJson(file, "run.json") as EfficiencyRun;
         if (run.manifest_sha256 !== manifestSha) { log(`warning: skipping ${file}: manifest ${run.manifest_sha256} != ${manifestSha}`); continue; }
         if (!taskIds.has(run.task_id)) { log(`warning: skipping ${file}: task ${run.task_id} is not selected`); continue; }
+        const transcript = join(runsDir, taskDir.name, runDir.name, "transcript.jsonl");
+        if (recountRevision !== null && existsSync(transcript)) {
+          run = { ...run, cost: { ...run.cost, ...transcriptCost(parseTranscript(readFileSync(transcript, "utf8"))) } };
+          recounted++;
+        } else if (recountRevision !== null) log(`recount: ${taskDir.name}/${runDir.name} has no transcript.jsonl; keeping its recorded fields`);
         runs.push(run);
       }
     }
   }
   const order = new Map(suite.tasks.map((task, index) => [task.id, index]));
   runs.sort((x, y) => order.get(x.task_id)! - order.get(y.task_id)! || x.run_index - y.run_index || x.arm.localeCompare(y.arm));
+  if (recountRevision !== null) log(`recount: token and call fields of ${recounted} of ${runs.length} run(s) recounted from transcript.jsonl`);
   const report = buildBenchmarkReport(suite, runs, {
     baseline: arms[0]!, treatment: arms[1]!, manifest_sha256: manifestSha, generated_at: new Date().toISOString(),
+    token_source: recountRevision === null
+      ? { kind: "recorded" }
+      : { kind: "recounted", harness_revision: recountRevision, recounted_runs: recounted, runs: runs.length },
   });
   writeFileAtomic(join(out, "report.json"), JSON.stringify(report, null, 2) + "\n");
   const reportPath = join(out, "report.md");
@@ -508,6 +517,7 @@ export async function runBenchmark(opts: RunBenchmarkOptions): Promise<RunBenchm
     if (!Number.isInteger(opts.runs) || opts.runs < 1) throw new Stop(1, `--runs must be an integer >= 1, got ${opts.runs}`);
     const suitePath = resolve(opts.suite);
     const { selected, suiteHash } = loadSuite(suitePath, opts.tasks);
+    if (opts.recount && !opts.reportOnly) throw new Stop(1, "--recount only applies with --report-only");
 
     if (opts.reportOnly) {
       if (!existsSync(manifestPath)) throw new Stop(1, `--report-only needs an existing ${manifestPath}`);
@@ -521,7 +531,12 @@ export async function runBenchmark(opts: RunBenchmarkOptions): Promise<RunBenchm
       }
       const inManifest = new Set((file.manifest.tasks ?? []).map((task) => task.id));
       const suite = { ...selected, tasks: selected.tasks.filter((task) => inManifest.has(task.id)) };
-      return { exitCode: 0, manifestPath, reportPath: writeReport(out, suite, file.manifest_sha256, manifestArms, log) };
+      let recountRevision: string | null = null;
+      if (opts.recount) {
+        const controller = controllerRoot();
+        recountRevision = benchmarkGitText(["-C", controller, "rev-parse", "HEAD"]) + (gitStatus(controller) ? "+dirty" : "");
+      }
+      return { exitCode: 0, manifestPath, reportPath: writeReport(out, suite, file.manifest_sha256, manifestArms, log, recountRevision) };
     }
 
     const missing = (["runnerConfig", "sourceRepo", "privateRepo", "audited"] as const).filter((key) => !opts[key]);

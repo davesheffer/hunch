@@ -233,6 +233,30 @@ test("task benchmark runs, resumes, reruns an interrupted run, rebuilds the repo
   assert.equal(reportOnly.exitCode, 0, logs.join("\n"));
   assert.match(readFileSync(join(out, "report.md"), "utf8").split("\n")[0]!, /FIXTURE EVIDENCE/);
 
+  // --report-only takes token fields from run.json as recorded; --recount re-reads transcript.jsonl and leaves run.json alone.
+  const tampered = join(out, "runs", TASK, "1-no-hunch", "run.json");
+  const original = JSON.parse(readFileSync(tampered, "utf8")) as EfficiencyRun;
+  writeFileSync(tampered, JSON.stringify({ ...original, cost: { ...original.cost, input_tokens: 999, main_input_tokens: undefined } }, null, 2) + "\n");
+  const tamperedText = readFileSync(tampered, "utf8");
+  const observed = () => (JSON.parse(readFileSync(join(out, "report.json"), "utf8")) as {
+    token_source: { kind: string; recounted_runs?: number };
+    observations: Array<{ arm: string; run_index: number; input_tokens: number | null; main_input_tokens: number | null }>;
+  });
+  const row = () => observed().observations.find((o) => o.arm === "no-hunch" && o.run_index === 1)!;
+  assert.equal((await runBenchmark({ ...opts, reportOnly: true })).exitCode, 0, logs.join("\n"));
+  assert.equal(row().input_tokens, 999, "recorded source keeps run.json's value");
+  assert.equal(row().main_input_tokens, null, "a field missing from an older run.json reads as null");
+  assert.equal(observed().token_source.kind, "recorded");
+  assert.equal((await runBenchmark({ ...opts, reportOnly: true, recount: true })).exitCode, 0, logs.join("\n"));
+  assert.equal(row().input_tokens, 115, "recounted from the transcript");
+  assert.equal(row().main_input_tokens, 115);
+  assert.equal(observed().token_source.kind, "recounted");
+  assert.equal(observed().token_source.recounted_runs, 4);
+  assert.match(readFileSync(join(out, "report.md"), "utf8"), /recounted from transcript\.jsonl by harness `[0-9a-f]{40}(\+dirty)?` for 4 of 4 run\(s\)/);
+  assert.equal(readFileSync(tampered, "utf8"), tamperedText, "run.json is never rewritten by a recount");
+  assert.equal((await runBenchmark({ ...opts, recount: true })).exitCode, 1, "--recount without --report-only refuses");
+  writeFileSync(tampered, JSON.stringify(original, null, 2) + "\n");
+
   // F6: --report-only takes arms from the manifest; an explicit --arms mismatch refuses,
   // but the CLI default (armsExplicit unset) never triggers the check.
   const reversedArms = [...ARMS].reverse();
@@ -279,6 +303,9 @@ test("isOutOfRepoAccess flags deny roots outside the run dir and traversal, in e
     assert.equal(isOutOfRepoAccess(`& 'C:\\Program Files\\nodejs\\node.exe' '/home/dave/audited/dist/cli/index.js'${tail}`, denyRoots, runDir, [auditedCli]), false, `flag invocation: ${JSON.stringify(tail)}`);
   }
   assert.equal(isOutOfRepoAccess("/home/dave/audited/dist/cli/index.js", denyRoots, runDir, [auditedCli]), true, "a bare mention (a Read of the entrypoint) stays denied");
+  // Known false positive (PILOT5 Gate A, self-contained-394 rep 2): the entrypoint stored in a shell variable and
+  // invoked through it reads as a bare mention. Kept denied: allowing it needs a spec amendment before a timed run.
+  assert.equal(isOutOfRepoAccess(`H='/home/dave/audited/dist/cli/index.js'; node "$H" task verify htask_1 -- npm test`, denyRoots, runDir, [auditedCli]), true, "entrypoint assigned to a variable stays denied (known false positive)");
   assert.equal(isOutOfRepoAccess('import { x } from "../../../src/core/io.js";', denyRoots, runDir, [], "/home/dave", false), false, "file content skips the traversal rule");
   assert.equal(isOutOfRepoAccess('const p = "/home/dave/hunch-private/x";', denyRoots, runDir, [], "/home/dave", false), true, "file content still hits deny roots");
   assert.equal(isOutOfRepoAccess("../.././../etc/passwd", denyRoots, runDir), true, "traversal tolerating a ./ segment");

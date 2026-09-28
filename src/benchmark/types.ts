@@ -6,14 +6,32 @@ export type TokenMeasurement = "provider" | "estimate" | "unavailable";
 export type CallMeasurement = "provider" | "parsed" | "unavailable";
 
 export interface TaskCost {
+  /** Whole session, provider-reported: main loop plus subagents (see `main_*` / `subagent_*`). */
   input_tokens: number | null;
   output_tokens: number | null;
   token_measurement: TokenMeasurement;
   /** Parts of input_tokens as the provider reported them; null when unavailable. */
   input_token_parts: { input: number; cache_creation: number; cache_read: number } | null;
+  /** Main agent loop: `result.usage` summed over every result event. Optional: absent in run.json written before 2026-09-28. */
+  main_input_tokens?: number | null;
+  main_output_tokens?: number | null;
+  /** Session total minus the main loop (subagents and any other model calls); null when the total is unknown. */
+  subagent_input_tokens?: number | null;
+  subagent_output_tokens?: number | null;
+  /** Result events in the transcript; more than 1 when a background-task notification re-invoked the session. */
+  result_events?: number | null;
+  /** Only when no result event exists (timeout, crash): tokens streamed before the end, main + subagents.
+   *  A lower bound, reported next to the run; never a median input (token_measurement stays "unavailable"). */
+  input_tokens_lower_bound?: number | null;
+  /** Weak: a streamed message's `output_tokens` is an early snapshot (PILOT5: 442 streamed vs 37,167 reported). */
+  output_tokens_lower_bound?: number | null;
   hunch_context_estimated_tokens: number;
   memory_processing_tokens: number | null;
+  /** Distinct assistant message ids, main loop and subagents together. */
   model_calls: number | null;
+  main_model_calls?: number | null;
+  /** Subagent assistant messages seen in the stream; a lower bound (the stream can omit some). */
+  subagent_model_calls?: number | null;
   tool_calls: number | null;
   investigation_tool_calls: number | null;
   call_measurement: CallMeasurement;
@@ -90,6 +108,8 @@ export interface ExposureProof {
   post_setup_hunch_sha256: string | null;
 }
 
+export interface TokenParts { input: number; cache_creation: number; cache_read: number; output: number }
+
 /** Parsed from a stream-json transcript. */
 export interface TranscriptMetrics {
   init: {
@@ -102,10 +122,23 @@ export interface TranscriptMetrics {
     /** Optional; e.g. `memory_paths.auto`, the auto-memory file Claude Code wrote for this cwd. */
     memory_paths_auto: string | null;
   } | null;
+  /** The last result event. */
   result: { subtype: string | null; is_error: boolean | null; num_turns: number | null } | null;
-  usage: { input: number; cache_creation: number; cache_read: number; output: number } | null;
+  result_events: number;
+  /** Main agent loop: `result.usage` summed over every result event; null without one. */
+  usage: TokenParts | null;
+  /** The last result event's `modelUsage` (session-cumulative across result events, subagents included). */
   model_usage: Record<string, unknown> | null;
+  /** Whole session: the last `modelUsage` summed over models; the main loop when no result carries `modelUsage` and no
+   *  subagent message was streamed; null without a result event, when subagents ran without `modelUsage`, or when the
+   *  models sum below the main loop (inconsistent report). */
+  session_usage: TokenParts | null;
+  /** Per assistant message id (last usage seen), split by `parent_tool_use_id`. Incomplete by nature: a lower bound. */
+  streamed_usage: { main: { input: number; output: number }; subagents: { input: number; output: number } };
+  /** Distinct assistant message ids, main loop and subagents together. */
   model_calls: number;
+  main_model_calls: number;
+  subagent_model_calls: number;
   tool_calls: number;
   tool_histogram: Record<string, number>;
   investigation_tool_calls: number;

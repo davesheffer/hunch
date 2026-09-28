@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { parseTranscript } from "../src/benchmark/transcript.js";
+import { parseTranscript, transcriptCost } from "../src/benchmark/transcript.js";
 import {
   buildClaudeArgv, isForbiddenChildEnvKey, preflight, runAgent, sanitizedArgvHash, strippedChildEnv,
 } from "../src/benchmark/taskRunner.js";
@@ -91,6 +91,111 @@ test("parseTranscript reads the result line and tolerates an empty transcript", 
   assert.equal(empty.model_calls, 0);
   assert.equal(empty.tool_calls, 0);
   assert.deepEqual(empty.delivered_record_ids, []);
+});
+
+// Shapes from real PILOT5 transcripts (CLI 2.1.280): a background-task notification re-invokes the session and
+// emits a second result whose `usage` covers only that invocation, while `modelUsage` is session-cumulative and
+// includes subagent models that never appear in `usage`.
+const usage = (input: number, creation: number, read: number, output: number) =>
+  ({ input_tokens: input, cache_creation_input_tokens: creation, cache_read_input_tokens: read, output_tokens: output });
+const modelEntry = (input: number, creation: number, read: number, output: number) =>
+  ({ inputTokens: input, cacheCreationInputTokens: creation, cacheReadInputTokens: read, outputTokens: output, costUSD: 0.1 });
+
+test("parseTranscript sums usage over every result event and takes subagents from the last cumulative modelUsage", () => {
+  const transcript = [
+    line({ type: "assistant", parent_tool_use_id: null, message: { id: "msg_1", usage: usage(1, 100, 0, 5), content: [
+      { type: "tool_use", id: "toolu_1", name: "Agent", input: {} }] } }),
+    // Subagent messages: the first is repeated per content block, the last seen usage wins.
+    line({ type: "assistant", parent_tool_use_id: "toolu_1", message: { id: "msg_s1", usage: usage(1, 50, 0, 1), content: [{ type: "text", text: "a" }] } }),
+    line({ type: "assistant", parent_tool_use_id: "toolu_1", message: { id: "msg_s1", usage: usage(1, 50, 0, 7), content: [
+      { type: "tool_use", id: "toolu_s1", name: "Read", input: {} }] } }),
+    line({ type: "assistant", parent_tool_use_id: "toolu_1", message: { id: "msg_s2", usage: usage(1, 0, 60, 2), content: [{ type: "text", text: "b" }] } }),
+    line({ type: "assistant", parent_tool_use_id: null, message: { id: "msg_2", usage: usage(1, 10, 100, 5), content: [{ type: "text", text: "wait" }] } }),
+    line({ type: "result", subtype: "success", is_error: false, num_turns: 2, usage: usage(2, 110, 100, 10),
+      modelUsage: { main: modelEntry(2, 110, 100, 10), sub: modelEntry(2, 50, 60, 20) } }),
+    line({ type: "assistant", parent_tool_use_id: null, message: { id: "msg_3", usage: usage(1, 5, 210, 3), content: [{ type: "text", text: "done" }] } }),
+    line({ type: "result", subtype: "success", is_error: false, num_turns: 1, origin: { kind: "task-notification" }, usage: usage(1, 5, 210, 3),
+      modelUsage: { main: modelEntry(3, 115, 310, 13), sub: modelEntry(2, 50, 60, 20) } }),
+  ].join("\n");
+
+  const metrics = parseTranscript(transcript);
+  assert.equal(metrics.result_events, 2);
+  assert.deepEqual(metrics.result, { subtype: "success", is_error: false, num_turns: 1 }, "the last result");
+  assert.deepEqual(metrics.usage, { input: 3, cache_creation: 115, cache_read: 310, output: 13 }, "main loop: both invocations");
+  assert.deepEqual(metrics.session_usage, { input: 5, cache_creation: 165, cache_read: 370, output: 33 }, "last modelUsage, all models");
+  assert.deepEqual(metrics.streamed_usage, { main: { input: 428, output: 13 }, subagents: { input: 112, output: 9 } });
+  assert.equal(metrics.model_calls, 5);
+  assert.equal(metrics.main_model_calls, 3);
+  assert.equal(metrics.subagent_model_calls, 2);
+
+  const cost = transcriptCost(metrics);
+  assert.equal(cost.token_measurement, "provider");
+  assert.equal(cost.input_tokens, 540);
+  assert.equal(cost.output_tokens, 33);
+  assert.deepEqual(cost.input_token_parts, { input: 5, cache_creation: 165, cache_read: 370 });
+  assert.equal(cost.main_input_tokens, 428);
+  assert.equal(cost.main_output_tokens, 13);
+  assert.equal(cost.subagent_input_tokens, 112);
+  assert.equal(cost.subagent_output_tokens, 20);
+  assert.equal(cost.result_events, 2);
+  assert.equal(cost.input_tokens_lower_bound, null, "a run with a result has exact counts, not a bound");
+  assert.equal(cost.model_calls, 5);
+  assert.equal(cost.main_model_calls, 3);
+  assert.equal(cost.subagent_model_calls, 2);
+  assert.equal(cost.call_measurement, "parsed");
+});
+
+test("transcriptCost: no result is unavailable with a streamed lower bound; missing or inconsistent modelUsage is never guessed", () => {
+  const streamedOnly = parseTranscript([
+    line({ type: "assistant", parent_tool_use_id: null, message: { id: "msg_1", usage: usage(1, 100, 0, 5), content: [] } }),
+    line({ type: "assistant", parent_tool_use_id: "toolu_1", message: { id: "msg_s1", usage: usage(1, 0, 40, 2), content: [] } }),
+  ].join("\n"));
+  const timedOut = transcriptCost(streamedOnly);
+  assert.equal(timedOut.token_measurement, "unavailable");
+  assert.equal(timedOut.input_tokens, null);
+  assert.equal(timedOut.main_input_tokens, null);
+  assert.equal(timedOut.subagent_input_tokens, null);
+  assert.equal(timedOut.result_events, 0);
+  assert.equal(timedOut.input_tokens_lower_bound, 142);
+  assert.equal(timedOut.output_tokens_lower_bound, 7);
+  assert.equal(timedOut.model_calls, 2);
+
+  const noModelUsage = transcriptCost(parseTranscript(line({ type: "result", subtype: "success", is_error: false, usage: usage(1, 2, 3, 4) })));
+  assert.equal(noModelUsage.token_measurement, "provider");
+  assert.equal(noModelUsage.input_tokens, 6, "without modelUsage the session is the main loop");
+  assert.equal(noModelUsage.main_input_tokens, 6);
+  assert.equal(noModelUsage.subagent_input_tokens, null, "subagent share unknown, not 0");
+
+  const subagentsWithoutModelUsage = transcriptCost(parseTranscript([
+    line({ type: "assistant", parent_tool_use_id: "toolu_1", message: { id: "msg_s1", usage: usage(1, 0, 40, 2), content: [] } }),
+    line({ type: "result", subtype: "success", is_error: false, usage: usage(1, 2, 3, 4) }),
+  ].join("\n")));
+  assert.equal(subagentsWithoutModelUsage.token_measurement, "unavailable", "a main-only total is not a session total when subagents ran");
+  assert.equal(subagentsWithoutModelUsage.input_tokens, null);
+  assert.equal(subagentsWithoutModelUsage.main_input_tokens, 6);
+
+  const laterWithout = transcriptCost(parseTranscript([
+    line({ type: "result", subtype: "success", is_error: false, usage: usage(1, 2, 3, 4), modelUsage: { main: modelEntry(1, 2, 3, 4), sub: modelEntry(0, 0, 10, 1) } }),
+    line({ type: "result", subtype: "success", is_error: false, usage: usage(0, 0, 5, 1) }),
+  ].join("\n")));
+  // The earlier cumulative modelUsage (16) predates the second invocation, so it is not reused; no subagent streamed,
+  // so the session is the main loop over both invocations.
+  assert.equal(laterWithout.input_tokens, 11, "a stale earlier modelUsage is not the session total");
+  assert.equal(laterWithout.main_input_tokens, 11);
+  assert.equal(laterWithout.subagent_input_tokens, null);
+
+  const inconsistent = transcriptCost(parseTranscript(line({ type: "result", subtype: "success", is_error: false,
+    usage: usage(1, 2, 3, 4), modelUsage: { main: modelEntry(1, 1, 1, 4) } })));
+  assert.equal(inconsistent.token_measurement, "unavailable", "models summing below the main loop are not a number");
+  assert.equal(inconsistent.input_tokens, null);
+  assert.equal(inconsistent.main_input_tokens, 6);
+  assert.equal(inconsistent.subagent_input_tokens, null);
+
+  const none = transcriptCost(null);
+  assert.equal(none.token_measurement, "unavailable");
+  assert.equal(none.call_measurement, "unavailable");
+  assert.equal(none.input_tokens_lower_bound, null);
+  assert.equal(none.model_calls, null);
 });
 
 test("strippedChildEnv removes routing, Hunch, Git and Claude keys and applies extra", () => {

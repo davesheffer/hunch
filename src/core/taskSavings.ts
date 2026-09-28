@@ -5,7 +5,7 @@ import type {
 } from "../benchmark/types.js";
 
 export const METRICS = [
-  "input_tokens", "output_tokens", "hunch_context_estimated_tokens",
+  "input_tokens", "output_tokens", "main_input_tokens", "subagent_input_tokens", "hunch_context_estimated_tokens",
   "model_calls", "tool_calls", "investigation_tool_calls",
   "agent_wall_clock_ms", "validation_ms", "total_wall_clock_ms",
 ] as const;
@@ -13,7 +13,7 @@ export type MetricName = (typeof METRICS)[number];
 export type TaskCategory = SuiteTask["category"];
 export type RunStatus = EfficiencyRun["status"];
 
-const TOKEN_METRICS: readonly MetricName[] = ["input_tokens", "output_tokens"];
+const TOKEN_METRICS: readonly MetricName[] = ["input_tokens", "output_tokens", "main_input_tokens", "subagent_input_tokens"];
 const CALL_METRICS: readonly MetricName[] = ["model_calls", "tool_calls", "investigation_tool_calls"];
 const VALID_STATUSES: readonly RunStatus[] = ["completed", "timed_out", "agent_error"];
 /** Criterion (3) looks only at these categories. */
@@ -37,7 +37,18 @@ export interface Observation extends Record<MetricName, number | null> {
   excluded_reason: string | null;
   token_measurement: TokenMeasurement;
   call_measurement: CallMeasurement;
+  result_events: number | null;
+  /** Set only for a run without a result event: tokens streamed before the end; never in a median. */
+  input_tokens_lower_bound: number | null;
+  main_model_calls: number | null;
+  /** Streamed subagent messages; a lower bound. */
+  subagent_model_calls: number | null;
 }
+
+/** Where the token and call fields came from: run.json as the run wrote it, or a later recount from transcript.jsonl. */
+export type TokenSource =
+  | { kind: "recorded" }
+  | { kind: "recounted"; harness_revision: string; recounted_runs: number; runs: number };
 
 export interface ArmSummary {
   arm: BenchmarkArm;
@@ -108,6 +119,7 @@ export interface BenchmarkReport {
   manifest_sha256: string;
   generated_at: string;
   evidence: "product" | "fixture";
+  token_source: TokenSource;
   arms: { baseline: BenchmarkArm; treatment: BenchmarkArm };
   sample: { tasks: number; runs: number; valid_runs: number; excluded_runs: number };
   observations: Observation[];
@@ -141,7 +153,7 @@ function excludedReason(run: EfficiencyRun): string | null {
 
 /** A run's value for aggregation: provider tokens only, calls unless unavailable, timing always. */
 function metricValue(run: EfficiencyRun, metric: MetricName): number | null {
-  const value = run.cost[metric];
+  const value = run.cost[metric] ?? null; // optional fields are absent in run.json written before 2026-09-28
   if (value === null) return null;
   if (TOKEN_METRICS.includes(metric)) return run.cost.token_measurement === "provider" ? value : null;
   if (CALL_METRICS.includes(metric)) return run.cost.call_measurement === "unavailable" ? null : value;
@@ -252,10 +264,12 @@ function existingHunchCriteria(
 }
 
 function observation(run: EfficiencyRun, category: TaskCategory): Observation {
-  const values = Object.fromEntries(METRICS.map((metric) => [metric, run.cost[metric]])) as Record<MetricName, number | null>;
+  const values = Object.fromEntries(METRICS.map((metric) => [metric, run.cost[metric] ?? null])) as Record<MetricName, number | null>;
   return {
     task_id: run.task_id, category, arm: run.arm, run_index: run.run_index, status: run.status, success: run.success,
     excluded_reason: excludedReason(run), token_measurement: run.cost.token_measurement, call_measurement: run.cost.call_measurement,
+    result_events: run.cost.result_events ?? null, input_tokens_lower_bound: run.cost.input_tokens_lower_bound ?? null,
+    main_model_calls: run.cost.main_model_calls ?? null, subagent_model_calls: run.cost.subagent_model_calls ?? null,
     ...values,
   };
 }
@@ -263,7 +277,7 @@ function observation(run: EfficiencyRun, category: TaskCategory): Observation {
 export function buildBenchmarkReport(
   suite: BenchmarkSuite,
   runs: EfficiencyRun[],
-  opts: { baseline: BenchmarkArm; treatment: BenchmarkArm; manifest_sha256: string; generated_at: string },
+  opts: { baseline: BenchmarkArm; treatment: BenchmarkArm; manifest_sha256: string; generated_at: string; token_source?: TokenSource },
 ): BenchmarkReport {
   const { baseline, treatment } = opts;
   if (baseline === treatment) throw new Error(`baseline and treatment are the same arm: ${baseline}`);
@@ -284,6 +298,7 @@ export function buildBenchmarkReport(
     manifest_sha256: opts.manifest_sha256,
     generated_at: opts.generated_at,
     evidence: sorted.some((run) => run.evidence_kind === "fixture") ? "fixture" : "product",
+    token_source: opts.token_source ?? { kind: "recorded" },
     arms: { baseline, treatment },
     sample: { tasks: suite.tasks.length, runs: sorted.length, valid_runs: validRuns, excluded_runs: sorted.length - validRuns },
     observations: sorted.map((run) => observation(run, taskById.get(run.task_id)!.category)),
@@ -340,15 +355,22 @@ export function renderBenchmarkMarkdown(report: BenchmarkReport): string {
   lines.push(`# Context-efficiency pilot report: ${treatment} vs ${baseline}`, "");
   lines.push(`Evidence: ${report.evidence === "fixture" ? "fixture (not product evidence)" : "product"}. `
     + `Manifest \`${report.manifest_sha256}\`. Generated ${report.generated_at}.`, "");
+  const source = report.token_source;
+  lines.push(source.kind === "recorded"
+    ? "Token and call fields: as each run recorded them in run.json."
+    : `Token and call fields: recounted from transcript.jsonl by harness \`${source.harness_revision}\` for `
+      + `${source.recounted_runs} of ${source.runs} run(s); run.json files are unchanged.`, "");
 
   lines.push("## Observations", "", table(
-    ["task", "category", "arm", "run", "status", "success", "excluded", "input tok", "output tok", "token meas.",
-      "hunch ctx est.", "model calls", "tool calls", "invest. calls", "agent ms", "validation ms", "total ms"],
+    ["task", "category", "arm", "run", "status", "success", "excluded", "input tok", "main in", "subagent in",
+      "results", "in lower bound", "output tok", "token meas.", "hunch ctx est.", "model calls (main/sub)", "tool calls",
+      "invest. calls", "agent ms", "validation ms", "total ms"],
     report.observations.map((o) => [
       o.task_id, o.category, o.arm, String(o.run_index), o.status, o.success ? "yes" : "no", o.excluded_reason ?? "-",
-      num(o.input_tokens), num(o.output_tokens), o.token_measurement, num(o.hunch_context_estimated_tokens),
-      num(o.model_calls), num(o.tool_calls), num(o.investigation_tool_calls),
-      num(o.agent_wall_clock_ms), num(o.validation_ms), num(o.total_wall_clock_ms),
+      num(o.input_tokens), num(o.main_input_tokens), num(o.subagent_input_tokens), num(o.result_events),
+      num(o.input_tokens_lower_bound), num(o.output_tokens), o.token_measurement, num(o.hunch_context_estimated_tokens),
+      `${num(o.model_calls)} (${num(o.main_model_calls)}/${num(o.subagent_model_calls)})`, num(o.tool_calls),
+      num(o.investigation_tool_calls), num(o.agent_wall_clock_ms), num(o.validation_ms), num(o.total_wall_clock_ms),
     ]),
   ), "");
 
@@ -399,7 +421,15 @@ export function renderBenchmarkMarkdown(report: BenchmarkReport): string {
   lines.push(`- Sample size: ${sample.tasks} tasks, ${sample.runs} runs (${sample.valid_runs} valid, ${sample.excluded_runs} excluded).`);
   lines.push("- Pilot statistics are every observation plus median and range; no p95, no means. Criteria are indicative only.");
   lines.push("- hunch_context_estimated_tokens is a local estimate reported separately; it is never added to input_tokens.");
+  lines.push("- input_tokens is the whole session (provider): the last result's cumulative modelUsage summed over models. "
+    + "main_input_tokens sums result.usage over every result event (background-task wake-ups add events); "
+    + "subagent_input_tokens is the difference. Subagent model calls are counted from the stream and are a lower bound.");
   lines.push("- Token percentages are withheld unless every valid run on both sides has provider token counts.");
+  const unmeasured = report.observations.filter((o) => o.excluded_reason === null && o.token_measurement !== "provider");
+  for (const o of unmeasured) {
+    lines.push(`- ${o.task_id} ${o.arm} run ${o.run_index} (${o.status}) has no provider token count and is left out of every `
+      + `token median${o.input_tokens_lower_bound === null ? "" : `; at least ${num(o.input_tokens_lower_bound)} input tokens were streamed before it ended`}.`);
+  }
   if (report.evidence === "fixture") lines.push("- Fixture evidence: not product evidence.");
   return `${lines.join("\n")}\n`;
 }
