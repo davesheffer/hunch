@@ -33,11 +33,16 @@ injections were the shell-write catch-up with full per-file grounding. `PreToolU
 - D1. Shell-write catch-up becomes a pointer. When a Bash or PowerShell command wrote files Hunch has records for,
   the hook emits one line per file (at most three files, as now) naming the record ids that apply and
   `hunch_why("<file>")`. A blocking invariant scoped to the file keeps its one-line statement. No full grounding, no
-  sibling-fix lesson body (a pointer line says one exists), no instruction to re-check. The pointer does not count as
+  sibling-fix lesson body (a pointer line says one exists and names a tool that shows it), no instruction to re-check.
+  Content only the hook produces, which `hunch_why` cannot re-expand (the current decision for a markdown file's topic
+  anchors, the retired-code warning), stays in the pointer verbatim. The pointer does not count as
   serving the file's grounding, so a later Edit of that file still receives it. A file whose grounding was already
   served this session gets no pointer, and the same pointer is not repeated.
 - D2. Repeats are silent. When the session dedupe says a file's grounding is unchanged, the hook emits nothing.
-  Delivery receipts are still recorded.
+  Delivery receipts are still recorded. The dedupe is session-wide per agent identity: a file already served in full to
+  an agent this session, with the same records, is a repeat under a later prompt too (including a turn started by a
+  background-task notification). A repeat costs no budget, gets no D1 pointer, and adds no delivery to the later
+  prompt's task report.
 - D3. Session budget. Full file grounding injected by the pre-edit hook is capped at 8,000 characters per session
   (about 2,000 tokens), counted per agent identity like the dedupe. A grounding that would cross the cap is replaced
   by the D1 pointer line. The budget resets when the dedupe resets (compaction).
@@ -87,7 +92,9 @@ positive this version accepts), as are `{ "$H" task; }`, `("$H" task)` and a ful
 
 ## Harness changes
 
-- Three arms per schedule. The arm order per task and repetition comes from the seeded shuffle, as in version 1.
+- Three arms per schedule. Version 1's seeded order only keeps or reverses the arm list, which with three arms
+  would always run the middle arm second. Each task instead gets a seeded order of the three arms, rotated by one
+  position per repetition, so across every three repetitions each arm runs first, second and third once.
 - `--diet-root <worktree>` for the `diet-hunch` audited root, with the same clean-build checks as `current-hunch`.
 - Report: each Hunch arm against `no-hunch` under the plan's section 9 criteria, and `diet-hunch` against
   `current-hunch` (below).
