@@ -14,7 +14,7 @@ import { prepareArm, prepareTaskBase, repoStateFingerprint } from "./armIsolatio
 import { benchmarkGit, benchmarkGitText, buildMemorySnapshot, type MemorySnapshot } from "./memorySnapshot.js";
 import { armOrder, canonicalJson, manifestSha256, needsTieBreak } from "./schedule.js";
 import { preflight, runAgent, strippedChildEnv } from "./taskRunner.js";
-import { recordIdsIn } from "./transcript.js";
+import { recordIdsIn, toolInputStrings } from "./transcript.js";
 import type { AgentRunResult, BenchmarkArm, BenchmarkSuite, EfficiencyRun, PreparedArm, RunnerConfig, RunnerIdentity, SuiteTask, TaskCost } from "./types.js";
 import { runValidator, type ValidatorResult } from "./validate.js";
 
@@ -24,6 +24,8 @@ export interface RunBenchmarkOptions {
   suite: string;
   /** Exactly two distinct arms; the first is the baseline, the second the treatment. */
   arms: string[];
+  /** True only when the user passed --arms (vs. the CLI default); gates the --report-only mismatch check. */
+  armsExplicit?: boolean;
   runs: number;
   seed: string;
   /** Required unless `reportOnly`. */
@@ -48,6 +50,8 @@ export interface RunBenchmarkOptions {
   allowDirtyController?: boolean;
   /** Test seam; default `~/.claude/CLAUDE.md`. */
   userInstructionsFile?: string;
+  /** Test seam; default `~/.claude` (Claude Code's per-cwd auto memory lives under its `projects/`). */
+  claudeHome?: string;
   log?: (line: string) => void;
 }
 
@@ -198,6 +202,31 @@ function firstDifferingKey(a: Record<string, unknown>, b: Record<string, unknown
   return keys.find((key) => canonicalJson(a[key] ?? null) !== canonicalJson(b[key] ?? null)) ?? null;
 }
 
+/** backslash -> forward slash, lowercase, MSYS drive paths (/c/…) -> c:/…, no trailing slash. */
+function normalizeForMatch(path: string): string {
+  const slashed = path.replace(/\\/g, "/").toLowerCase().replace(/(^|[\s"'`=(;])\/([a-z])\//g, "$1$2:/");
+  return slashed.endsWith("/") ? slashed.slice(0, -1) : slashed;
+}
+
+/** A path mention ends at end of text, a separator, or shell/quote punctuation (so `…/hunch` does not match `…/hunch-bench-out`). */
+const PATH_END = "(?=$|[/\\s\"'`;:)|&<>,])";
+
+function pathPattern(path: string): RegExp {
+  return new RegExp(normalizeForMatch(path).replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + PATH_END, "g");
+}
+
+/**
+ * True when a tool-input string reaches outside the run's own directory: after every mention of
+ * `allowedPrefix` (the run's own `runDir`) is dropped, it still names one of the deny roots
+ * (source repo, private overlay, audited checkout, controller, `<out>`), or it contains a
+ * directory-traversal run ("../../../" or "..\..\..\", either slash style).
+ */
+export function isOutOfRepoAccess(value: string, denyRoots: string[], allowedPrefix: string): boolean {
+  if (/(?:\.\.[\\/]){3}/.test(value)) return true;
+  const rest = normalizeForMatch(value).replace(pathPattern(allowedPrefix), " ");
+  return denyRoots.some((root) => pathPattern(root).test(rest));
+}
+
 function freeSuffix(path: string, label: string): string {
   for (let n = 1; ; n++) {
     const candidate = `${path}${label}${n}`;
@@ -219,6 +248,7 @@ interface RunContext {
   auditedRoot: string;
   noNpmCi: boolean;
   snapshots: Map<string, MemorySnapshot>;
+  claudeHome: string;
   log: (line: string) => void;
 }
 
@@ -244,6 +274,13 @@ async function executeRun(ctx: RunContext, task: SuiteTask, rep: number, arm: Be
   const before = repoStateFingerprint(fingerprintPaths);
   const isolation: string[] = [];
   const validation: string[] = [];
+  // Claude Code keeps auto memory per cwd; a rerun after an .interrupted rename reuses this repo path.
+  const autoMemoryDir = join(ctx.claudeHome, "projects", join(runDir, "repo").replace(/[^A-Za-z0-9]/g, "-"));
+  if (existsSync(autoMemoryDir)) {
+    const moved = freeSuffix(autoMemoryDir, ".bench-stale-");
+    renameSync(autoMemoryDir, moved);
+    isolation.push(`auto-memory dir ${autoMemoryDir} moved to ${moved}`);
+  }
   const snapshot = ctx.snapshots.get(task.id)!;
   const snapshotDir = join(ctx.out, "snapshots", task.id);
   let prepared: PreparedArm | null = null;
@@ -275,6 +312,7 @@ async function executeRun(ctx: RunContext, task: SuiteTask, rep: number, arm: Be
 
   let agent: AgentRunResult | null = null;
   let validator: ValidatorResult | null = null;
+  let outOfRepoBreach = false;
   if (prepared && !invalid) {
     const agentEnv = strippedChildEnv(process.env, { DISABLE_AUTOUPDATER: "1", ...prepared.env });
     if (ctx.cfg.provider === "claude") {
@@ -293,7 +331,14 @@ async function executeRun(ctx: RunContext, task: SuiteTask, rep: number, arm: Be
     const post: Array<[string, boolean, string]> = [];
     if (!init) post.push(["init-present", false, "transcript has no init event"]);
     else if (arm === "current-hunch") {
-      post.push(["mcp-hunch-connected", init.mcp_server_status.hunch === "connected", `hunch status ${init.mcp_server_status.hunch ?? "missing"}`]);
+      const servers = init.mcp_servers;
+      post.push(
+        ["mcp-servers-exactly-hunch", servers.length === 1 && servers[0] === "hunch", `${servers.length} MCP server(s)${servers.length ? `: ${servers.join(", ")}` : ""}`],
+        ["mcp-hunch-connected", init.mcp_server_status.hunch === "connected", `hunch status ${init.mcp_server_status.hunch ?? "missing"}`],
+        // The audited SessionStart hook always emits, so a real current-hunch run must observe it.
+        ["hunch-hooks-observed", agent.metrics.hook_events >= 1 && agent.metrics.hunch_dynamic_chars.hooks > 0,
+          `${agent.metrics.hook_events} hook event(s), ${agent.metrics.hunch_dynamic_chars.hooks} hook char(s)`],
+      );
     } else {
       const hunchTools = init.tool_names.filter((name) => name.startsWith("mcp__hunch__"));
       post.push(
@@ -303,10 +348,19 @@ async function executeRun(ctx: RunContext, task: SuiteTask, rep: number, arm: Be
         ["hunch-hook-output-zero", agent.metrics.hunch_dynamic_chars.hooks === 0, `${agent.metrics.hunch_dynamic_chars.hooks} hook chars`],
       );
     }
+    const denyRoots = [ctx.sourceRepo, ctx.privateRepo, ctx.auditedRoot, ctx.controller, ctx.out].filter((p): p is string => p !== null);
+    const offenders = [...new Set(toolInputStrings(readFileSync(agent.transcript_path, "utf8"))
+      .filter((value) => isOutOfRepoAccess(value, denyRoots, runDir)))];
+    outOfRepoBreach = offenders.length > 0;
+    post.push(["no-out-of-repo-access", !outOfRepoBreach, outOfRepoBreach
+      ? `offending string(s): ${offenders.slice(0, 5).map((s) => s.slice(0, 200)).join(" | ")}`
+      : "no out-of-repo access in tool inputs"]);
+
     for (const [id, ok, detail] of post) {
       isolation.push(`post ${id}: ${ok ? "ok" : "FAIL"} (${detail})`);
       if (!ok) invalid = true;
     }
+    isolation.push(`auto-memory-path: ${init?.memory_paths_auto ?? "missing"}`);
     if (!invalid) {
       validator = await runValidator({
         repo: prepared.repo, validatorFile: resolve(dirname(ctx.suitePath), task.validator.file), runDir,
@@ -323,7 +377,7 @@ async function executeRun(ctx: RunContext, task: SuiteTask, rep: number, arm: Be
   const changed = fingerprintPaths.filter((path) => before[path]?.head !== after[path]?.head || before[path]?.status !== after[path]?.status);
   if (changed.length) isolation.push(`isolation breach: HEAD or git status changed in ${changed.join(", ")}`);
 
-  const status: EfficiencyRun["status"] = changed.length ? "isolation_breach"
+  const status: EfficiencyRun["status"] = changed.length || outOfRepoBreach ? "isolation_breach"
     : invalid || !agent ? "invalid_exposure"
       : agent.timed_out ? "timed_out"
         : agent.exit_code !== 0 || agent.metrics.result?.is_error !== false ? "agent_error"
@@ -434,9 +488,13 @@ export async function runBenchmark(opts: RunBenchmarkOptions): Promise<RunBenchm
       if (file.manifest?.suite_hash !== suiteHash) {
         throw new Stop(2, `suite hash ${suiteHash} != manifest suite_hash ${String(file.manifest?.suite_hash)}`);
       }
+      const manifestArms = file.manifest.arms;
+      if (opts.armsExplicit && (arms.length !== manifestArms.length || arms.some((arm, i) => arm !== manifestArms[i]))) {
+        throw new Stop(1, `--arms ${arms.join(",")} != manifest arms ${manifestArms.join(",")}`);
+      }
       const inManifest = new Set((file.manifest.tasks ?? []).map((task) => task.id));
       const suite = { ...selected, tasks: selected.tasks.filter((task) => inManifest.has(task.id)) };
-      return { exitCode: 0, manifestPath, reportPath: writeReport(out, suite, file.manifest_sha256, arms, log) };
+      return { exitCode: 0, manifestPath, reportPath: writeReport(out, suite, file.manifest_sha256, manifestArms, log) };
     }
 
     const missing = (["runnerConfig", "sourceRepo", "privateRepo", "audited"] as const).filter((key) => !opts[key]);
@@ -558,7 +616,7 @@ export async function runBenchmark(opts: RunBenchmarkOptions): Promise<RunBenchm
 
     const ctx: RunContext = {
       out, suitePath, suite: selected, suiteHash, manifest, manifestSha, cfg, sourceRepo, controller, privateRepo, auditedRoot,
-      noNpmCi: !!opts.noNpmCi, snapshots, log,
+      noNpmCi: !!opts.noNpmCi, snapshots, claudeHome: opts.claudeHome ?? join(homedir(), ".claude"), log,
     };
     for (const task of selected.tasks) {
       const taskRuns: EfficiencyRun[] = [];

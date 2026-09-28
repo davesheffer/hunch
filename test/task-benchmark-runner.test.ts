@@ -23,7 +23,8 @@ test("parseTranscript counts distinct calls and only Hunch-injected text", () =>
   const hunchText = `hunch says fnd_aaaaaaaaaa and ${HTASK}`;
   const transcript = [
     line({ type: "system", subtype: "init", model: "claude-opus-5-5[1m]", apiKeySource: "none",
-      mcp_servers: [{ name: "hunch", status: "connected" }], tools: ["Read", "Grep", "mcp__hunch__hunch_context"] }),
+      mcp_servers: [{ name: "hunch", status: "connected" }], tools: ["Read", "Grep", "mcp__hunch__hunch_context"],
+      memory_paths: { auto: "/home/x/.claude/projects/-repo/memory/MEMORY.md" } }),
     line({ type: "system", subtype: "hook_started", hook_event: "SessionStart" }),
     line({ type: "system", subtype: "hook_response", hook_event: "SessionStart", exit_code: 0, outcome: "success", stderr: "",
       stdout: line({ hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: "ctx dec_0123456789" }, systemMessage: "sys", reason: 5 }) + "\n" }),
@@ -47,6 +48,7 @@ test("parseTranscript counts distinct calls and only Hunch-injected text", () =>
   assert.deepEqual(metrics.init, {
     model: "claude-opus-5-5[1m]", api_key_source: "none", mcp_servers: ["hunch"], mcp_server_status: { hunch: "connected" },
     tool_names: ["Read", "Grep", "mcp__hunch__hunch_context"],
+    memory_paths_auto: "/home/x/.claude/projects/-repo/memory/MEMORY.md",
   });
   assert.equal(metrics.result, null);
   assert.equal(metrics.usage, null);

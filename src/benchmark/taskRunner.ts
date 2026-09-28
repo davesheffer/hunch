@@ -191,6 +191,7 @@ export async function preflight(cfg: RunnerConfig, opts: { workDir: string; prob
 
   const leaked = Object.keys(childEnv).filter(isForbiddenChildEnvKey);
   const envOk = add("stripped-env", leaked.length === 0, leaked.length ? `forbidden keys remain: ${leaked.join(", ")}` : "no forbidden keys");
+  let probeInit: AgentRunResult["metrics"]["init"] = null;
 
   if (found && versioned && envOk) {
     try {
@@ -204,6 +205,7 @@ export async function preflight(cfg: RunnerConfig, opts: { workDir: string; prob
           cfg, prompt: "Reply with exactly: OK", cwd: probeDir, mcpConfigPath, env: childEnv,
           timeoutMs: opts.probeTimeoutMs ?? 180_000, outDir: join(opts.workDir, "probe-run"),
         });
+        probeInit = run.metrics.init;
         reportedModel = run.metrics.init?.model ?? null;
         const ok = run.exit_code === 0 && !run.timed_out && run.metrics.init?.api_key_source === "none" && run.metrics.result?.is_error === false;
         add("probe", ok, `exit ${run.exit_code}, timed_out ${run.timed_out}, apiKeySource ${run.metrics.init?.api_key_source ?? "missing"}, `
@@ -213,6 +215,15 @@ export async function preflight(cfg: RunnerConfig, opts: { workDir: string; prob
       add("probe", false, `probe failed: ${(error as Error).message}`);
     }
   } else add("probe", false, "skipped: an earlier check failed");
+
+  const probeMcpServers = probeInit?.mcp_servers ?? null;
+  add("probe-mcp-empty", probeMcpServers !== null && probeMcpServers.length === 0,
+    probeMcpServers !== null
+      ? `${probeMcpServers.length} MCP server(s)${probeMcpServers.length ? `: ${probeMcpServers.join(", ")}` : ""}`
+      : "no probe init event");
+  const probeMcpTools = probeInit?.tool_names.filter((name) => name.startsWith("mcp__")) ?? null;
+  add("probe-no-mcp-tools", probeMcpTools !== null && probeMcpTools.length === 0,
+    probeMcpTools !== null ? (probeMcpTools.length ? probeMcpTools.join(", ") : "no mcp__ tool") : "no probe init event");
 
   return {
     ok: checks.every((check) => check.ok),

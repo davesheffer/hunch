@@ -6,7 +6,7 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { runBenchmark, type RunBenchmarkOptions } from "../src/benchmark/orchestrate.js";
+import { isOutOfRepoAccess, runBenchmark, type RunBenchmarkOptions } from "../src/benchmark/orchestrate.js";
 import { armOrder } from "../src/benchmark/schedule.js";
 import type { BenchmarkArm, EfficiencyRun } from "../src/benchmark/types.js";
 
@@ -35,6 +35,9 @@ const events = [
   { type: "user", message: { content: [{ type: "tool_result", tool_use_id: "tu_1", content: "edited" }] } },
 ];
 if (hunch) {
+  // The audited SessionStart hook always emits: stand in for its injected context.
+  events.splice(1, 0, { type: "system", subtype: "hook_response", hook_event: "SessionStart",
+    stdout: JSON.stringify({ hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: "ctx dec_bbbbbbbbbb" } }) });
   events.push({ type: "assistant", message: { id: "msg_2", content: [{ type: "tool_use", id: "tu_2", name: "mcp__hunch__hunch_context", input: {} }] } });
   events.push({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "tu_2", content: "see dec_bbbbbbbbbb" }] } });
 }
@@ -230,6 +233,15 @@ test("task benchmark runs, resumes, reruns an interrupted run, rebuilds the repo
   assert.equal(reportOnly.exitCode, 0, logs.join("\n"));
   assert.match(readFileSync(join(out, "report.md"), "utf8").split("\n")[0]!, /FIXTURE EVIDENCE/);
 
+  // F6: --report-only takes arms from the manifest; an explicit --arms mismatch refuses,
+  // but the CLI default (armsExplicit unset) never triggers the check.
+  const reversedArms = [...ARMS].reverse();
+  const implicitReversed = await runBenchmark({ ...opts, reportOnly: true, arms: reversedArms });
+  assert.equal(implicitReversed.exitCode, 0, logs.join("\n"));
+  const explicitReversed = await runBenchmark({ ...opts, reportOnly: true, arms: reversedArms, armsExplicit: true });
+  assert.equal(explicitReversed.exitCode, 1);
+  assert.ok(logs.some((line) => line.includes("!= manifest arms")), logs.join("\n"));
+
   // A changed seed changes the manifest: exit 2, no new run dir, no spawn.
   const dirsBefore = runDirs();
   const changed = await runBenchmark({ ...opts, seed: "another-seed" });
@@ -237,4 +249,22 @@ test("task benchmark runs, resumes, reruns an interrupted run, rebuilds the repo
   assert.deepEqual(runDirs(), dirsBefore);
   assert.equal(readLines(counter).length, 5);
   assert.ok(logs.some((line) => line.includes("first differing key: seed")), logs.join("\n"));
+});
+
+test("isOutOfRepoAccess flags deny roots outside the run dir and traversal, in either path style", () => {
+  const denyRoots = ["C:\\src\\hunch", "/home/dave/hunch-private", "/home/dave/audited", "C:\\out"];
+  const runDir = "C:\\out\\runs\\task-1\\1-current-hunch";
+  assert.equal(isOutOfRepoAccess(join(runDir, "notes.md"), denyRoots, runDir), false, "own run dir is allowed");
+  assert.equal(isOutOfRepoAccess("C:/out/runs/task-1/1-current-hunch/notes.md", denyRoots, runDir), false, "forward-slash own run dir");
+  assert.equal(isOutOfRepoAccess("cd /c/out/runs/task-1/1-current-hunch/repo && grep -rn foo \"C:\\out\\runs\\task-1\\1-current-hunch\\repo\\src\"", denyRoots, runDir), false, "own run dir inside a shell command, MSYS and Windows style");
+  assert.equal(isOutOfRepoAccess("C:\\src\\hunch-bench\\x", denyRoots, runDir), false, "a deny root is matched on a path boundary only");
+  assert.equal(isOutOfRepoAccess("C:\\out\\runs\\task-1\\2-no-hunch\\transcript.jsonl", denyRoots, runDir), true, "a sibling run dir is denied");
+  assert.equal(isOutOfRepoAccess("C:\\out\\runs\\task-1\\1-current-hunch.interrupted-1\\transcript.jsonl", denyRoots, runDir), true, "an earlier interrupted attempt is denied");
+  assert.equal(isOutOfRepoAccess("ls C:/out/snapshots/task-1/public", denyRoots, runDir), true, "the frozen snapshots are denied");
+  assert.equal(isOutOfRepoAccess("cat /c/src/hunch/.hunch/x.json", denyRoots, runDir), true, "MSYS-style deny root");
+  assert.equal(isOutOfRepoAccess("C:\\src\\hunch\\package.json", denyRoots, runDir), true, "Windows-style deny root");
+  assert.equal(isOutOfRepoAccess("/home/dave/hunch-private/.hunch/decisions", denyRoots, runDir), true, "POSIX-style deny root");
+  assert.equal(isOutOfRepoAccess("../../../etc/passwd", denyRoots, runDir), true, "POSIX traversal");
+  assert.equal(isOutOfRepoAccess("..\\..\\..\\Windows\\win.ini", denyRoots, runDir), true, "Windows traversal");
+  assert.equal(isOutOfRepoAccess("/HOME/DAVE/HUNCH-PRIVATE/x", denyRoots, runDir), true, "case-insensitive deny root");
 });

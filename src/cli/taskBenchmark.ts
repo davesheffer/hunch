@@ -44,11 +44,12 @@ export function registerTaskBenchmarkCommand(task: Command): void {
     .option("--report-only", "only rebuild report.json + report.md from existing run.json files")
     .option("--no-npm-ci", "skip npm ci in each run repo (fixture provider only)")
     .option("--allow-dirty-controller", "allow uncommitted changes in the controller checkout (fixture provider only)")
-    .action(async (flags: TaskBenchmarkFlags) => {
+    .action(async (flags: TaskBenchmarkFlags, cmd: Command) => {
       const runs = Number(flags.runs);
       const result = await runBenchmark({
         suite: flags.suite,
         arms: list(flags.arms),
+        armsExplicit: cmd.getOptionValueSource("arms") === "cli",
         runs: Number.isInteger(runs) ? runs : Number.NaN,
         seed: flags.seed,
         runnerConfig: flags.runnerConfig,

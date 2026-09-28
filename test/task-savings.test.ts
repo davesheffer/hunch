@@ -80,6 +80,7 @@ test("token pct is withheld when one side is estimated and computed when both ar
   const input = metric(mixed, "input_tokens");
   assert.equal(input.pct_change, null);
   assert.equal(input.pct_reason, "token measurement not provider on both sides");
+  assert.equal(input.delta_median, null, "a withheld token pct prints no delta either");
   assert.equal(input.treatment_median, 800, "estimated tokens never enter the median");
   assert.equal(metric(mixed, "total_wall_clock_ms").pct_change, -10);
 
