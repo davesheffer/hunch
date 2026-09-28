@@ -18,6 +18,7 @@ interface TaskBenchmarkFlags {
   tasks?: string;
   prepareOnly?: boolean;
   reportOnly?: boolean;
+  recount?: boolean;
   npmCi: boolean;
   allowDirtyController?: boolean;
 }
@@ -42,6 +43,7 @@ export function registerTaskBenchmarkCommand(task: Command): void {
     .option("--tasks <ids>", "comma-separated task ids (suite order kept; needs its own --output)")
     .option("--prepare-only", "stop after the manifest")
     .option("--report-only", "only rebuild report.json + report.md from existing run.json files")
+    .option("--recount", "with --report-only: recount token and call fields from each run's transcript.jsonl (run.json untouched)")
     .option("--no-npm-ci", "skip npm ci in each run repo (fixture provider only)")
     .option("--allow-dirty-controller", "allow uncommitted changes in the controller checkout (fixture provider only)")
     .action(async (flags: TaskBenchmarkFlags, cmd: Command) => {
@@ -62,6 +64,7 @@ export function registerTaskBenchmarkCommand(task: Command): void {
         tasks: flags.tasks ? list(flags.tasks) : null,
         prepareOnly: !!flags.prepareOnly,
         reportOnly: !!flags.reportOnly,
+        recount: !!flags.recount,
         noNpmCi: !flags.npmCi,
         allowDirtyController: !!flags.allowDirtyController,
       });

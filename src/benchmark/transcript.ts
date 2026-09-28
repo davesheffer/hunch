@@ -1,7 +1,7 @@
 // Parses a Claude Code `--output-format stream-json --verbose --include-hook-events` transcript
 // into the Gate A metrics (bench/pilot5/GATE-A-HARNESS.md, "Metrics"). Tolerant by design: blank
 // and malformed lines are skipped, never thrown.
-import type { TranscriptMetrics } from "./types.js";
+import type { TaskCost, TokenParts, TranscriptMetrics } from "./types.js";
 
 /** Preregistered investigation tools. */
 export const INVESTIGATION_TOOLS: readonly string[] = ["Read", "Grep", "Glob"];
@@ -12,6 +12,65 @@ type Obj = Record<string, unknown>;
 const isObj = (value: unknown): value is Obj => typeof value === "object" && value !== null && !Array.isArray(value);
 const asString = (value: unknown): string | null => (typeof value === "string" ? value : null);
 const asNumber = (value: unknown): number | null => (typeof value === "number" && Number.isFinite(value) ? value : null);
+
+/** An Anthropic `usage` object (result event or assistant message); missing parts count 0. */
+function usageParts(usage: Obj): TokenParts {
+  return {
+    input: asNumber(usage.input_tokens) ?? 0,
+    cache_creation: asNumber(usage.cache_creation_input_tokens) ?? 0,
+    cache_read: asNumber(usage.cache_read_input_tokens) ?? 0,
+    output: asNumber(usage.output_tokens) ?? 0,
+  };
+}
+
+function addParts(sum: TokenParts | null, parts: TokenParts): TokenParts {
+  if (sum === null) return { ...parts };
+  return {
+    input: sum.input + parts.input,
+    cache_creation: sum.cache_creation + parts.cache_creation,
+    cache_read: sum.cache_read + parts.cache_read,
+    output: sum.output + parts.output,
+  };
+}
+
+/** Input tokens as Gate A counts them: input + cache creation + cache read. */
+const inputOf = (parts: TokenParts): number => parts.input + parts.cache_creation + parts.cache_read;
+
+type TranscriptCost = Pick<TaskCost,
+  | "input_tokens" | "output_tokens" | "token_measurement" | "input_token_parts"
+  | "main_input_tokens" | "main_output_tokens" | "subagent_input_tokens" | "subagent_output_tokens"
+  | "result_events" | "input_tokens_lower_bound" | "output_tokens_lower_bound"
+  | "model_calls" | "main_model_calls" | "subagent_model_calls" | "tool_calls" | "investigation_tool_calls" | "call_measurement">;
+
+/** The token and call fields of a run's TaskCost, from its parsed transcript (null: the agent never ran).
+ *  Shared by the live run and `--report-only --recount`, so both count the same way. */
+export function transcriptCost(metrics: TranscriptMetrics | null): TranscriptCost {
+  const main = metrics?.usage ?? null;
+  const session = metrics?.session_usage ?? null;
+  // Without modelUsage the session total is the main loop (no subagent streamed), so the subagent share is unknown, not 0.
+  const split = session !== null && main !== null && metrics?.model_usage != null;
+  const noResult = metrics !== null && metrics.result_events === 0;
+  const streamed = metrics?.streamed_usage;
+  return {
+    input_tokens: session ? inputOf(session) : null,
+    output_tokens: session ? session.output : null,
+    token_measurement: session ? "provider" : "unavailable",
+    input_token_parts: session ? { input: session.input, cache_creation: session.cache_creation, cache_read: session.cache_read } : null,
+    main_input_tokens: main ? inputOf(main) : null,
+    main_output_tokens: main ? main.output : null,
+    subagent_input_tokens: split ? inputOf(session!) - inputOf(main!) : null,
+    subagent_output_tokens: split ? session!.output - main!.output : null,
+    result_events: metrics ? metrics.result_events : null,
+    input_tokens_lower_bound: noResult && streamed ? streamed.main.input + streamed.subagents.input : null,
+    output_tokens_lower_bound: noResult && streamed ? streamed.main.output + streamed.subagents.output : null,
+    model_calls: metrics ? metrics.model_calls : null,
+    main_model_calls: metrics ? metrics.main_model_calls : null,
+    subagent_model_calls: metrics ? metrics.subagent_model_calls : null,
+    tool_calls: metrics ? metrics.tool_calls : null,
+    investigation_tool_calls: metrics ? metrics.investigation_tool_calls : null,
+    call_measurement: metrics ? "parsed" : "unavailable",
+  };
+}
 
 function toolResultText(content: unknown): string {
   if (typeof content === "string") return content;
@@ -69,11 +128,12 @@ export function parseTranscript(text: string): TranscriptMetrics {
 
   let init: TranscriptMetrics["init"] = null;
   let result: TranscriptMetrics["result"] = null;
+  let resultEvents = 0;
   let usage: TranscriptMetrics["usage"] = null;
   let modelUsage: TranscriptMetrics["model_usage"] = null;
   let hookEvents = 0;
   let hookChars = 0;
-  const messageIds = new Set<string>();
+  const messages = new Map<string, { subagent: boolean; input: number; output: number }>(); // message id -> last usage seen
   const toolUses = new Map<string, string>(); // tool_use id -> tool name
   const injected: string[] = [];
 
@@ -104,7 +164,16 @@ export function parseTranscript(text: string): TranscriptMetrics {
       }
     } else if (event.type === "assistant" && isObj(event.message)) {
       const id = asString(event.message.id);
-      if (id !== null) messageIds.add(id);
+      if (id !== null) {
+        // Subagent messages carry the spawning Agent call's id; the stream repeats a message per content block.
+        const reported = isObj(event.message.usage) ? usageParts(event.message.usage) : null;
+        const previous = messages.get(id);
+        messages.set(id, {
+          subagent: event.parent_tool_use_id !== null && event.parent_tool_use_id !== undefined,
+          input: reported ? inputOf(reported) : previous?.input ?? 0,
+          output: reported ? reported.output : previous?.output ?? 0,
+        });
+      }
       const content = Array.isArray(event.message.content) ? event.message.content : [];
       for (const block of content) {
         if (!isObj(block) || block.type !== "tool_use") continue;
@@ -112,22 +181,42 @@ export function parseTranscript(text: string): TranscriptMetrics {
         if (!toolUses.has(useId)) toolUses.set(useId, asString(block.name) ?? "(unknown)");
       }
     } else if (event.type === "result") {
+      // A background-task notification re-invokes the session and emits another result event. Each
+      // `usage` covers only its own invocation, so they add up; `modelUsage` is cumulative, so the last wins.
+      resultEvents++;
       result = {
         subtype: asString(event.subtype),
         is_error: typeof event.is_error === "boolean" ? event.is_error : null,
         num_turns: asNumber(event.num_turns),
       };
-      const reported = event.usage;
-      usage = isObj(reported)
-        ? {
-            input: asNumber(reported.input_tokens) ?? 0,
-            cache_creation: asNumber(reported.cache_creation_input_tokens) ?? 0,
-            cache_read: asNumber(reported.cache_read_input_tokens) ?? 0,
-            output: asNumber(reported.output_tokens) ?? 0,
-          }
-        : null;
+      if (isObj(event.usage)) usage = addParts(usage, usageParts(event.usage));
+      // Only the last result's: an earlier cumulative value misses the invocations after it.
       modelUsage = isObj(event.modelUsage) ? event.modelUsage : null;
     }
+  }
+
+  const subagentCalls = [...messages.values()].filter((message) => message.subagent).length;
+  // Without modelUsage the main loop is the session only when no subagent ran; otherwise the total is unknown.
+  let sessionUsage: TokenParts | null = resultEvents === 0 || subagentCalls > 0 ? null : usage;
+  if (resultEvents > 0 && modelUsage !== null) {
+    let total: TokenParts = { input: 0, cache_creation: 0, cache_read: 0, output: 0 };
+    for (const model of Object.values(modelUsage)) {
+      if (!isObj(model)) continue;
+      total = addParts(total, {
+        input: asNumber(model.inputTokens) ?? 0,
+        cache_creation: asNumber(model.cacheCreationInputTokens) ?? 0,
+        cache_read: asNumber(model.cacheReadInputTokens) ?? 0,
+        output: asNumber(model.outputTokens) ?? 0,
+      });
+    }
+    // The subagent share is total - main; a total below the main loop is an inconsistent report, not a number.
+    sessionUsage = usage !== null && (inputOf(total) < inputOf(usage) || total.output < usage.output) ? null : total;
+  }
+  const streamed = { main: { input: 0, output: 0 }, subagents: { input: 0, output: 0 } };
+  for (const message of messages.values()) {
+    const side = message.subagent ? streamed.subagents : streamed.main;
+    side.input += message.input;
+    side.output += message.output;
   }
 
   // Results are matched after every tool_use is known, so line order cannot drop one.
@@ -155,9 +244,14 @@ export function parseTranscript(text: string): TranscriptMetrics {
   return {
     init,
     result,
+    result_events: resultEvents,
     usage,
     model_usage: modelUsage,
-    model_calls: messageIds.size,
+    session_usage: sessionUsage,
+    streamed_usage: streamed,
+    model_calls: messages.size,
+    main_model_calls: messages.size - subagentCalls,
+    subagent_model_calls: subagentCalls,
     tool_calls: toolUses.size,
     tool_histogram: histogram,
     investigation_tool_calls: names.filter((name) => INVESTIGATION_TOOLS.includes(name)).length,
