@@ -5,7 +5,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { prepareArm, prepareTaskBase, repoStateFingerprint } from "../src/benchmark/armIsolation.js";
+import { prepareArm, prepareTaskBase, proveExposure, repoStateFingerprint } from "../src/benchmark/armIsolation.js";
 import { buildMemorySnapshot, hashTree, type MemorySnapshot } from "../src/benchmark/memorySnapshot.js";
 
 const CUTOFF = "2026-01-15T00:00:00Z";
@@ -116,6 +116,9 @@ before(() => {
   put(source, "AGENTS.md", AGENTS);
   put(source, ".claude/commands/capture.md", "Capture\n<!-- hunch:generated — refreshed by hunch init; delete this line to take ownership -->\n");
   put(source, ".claude/commands/mine.md", "My own command\n");
+  // F1: user-owned surfaces with no hunch:generated marker but real Hunch content/name.
+  put(source, ".claude/commands/heal.md", "Runs `hunch heal` and calls hunch_capture_decision.\n");
+  put(source, ".cursor/rules/hunch.mdc", "---\ndescription: consult the hunch_* MCP tools\n---\nBody.\n");
   put(source, ".hunch/decisions/dec_aaaaaaaaaa.json", JSON.stringify({ id: "dec_aaaaaaaaaa", created_at: "2025-12-31T00:00:00Z" }) + "\n");
   put(source, ".hunch/decisions/dec_cccccccccc.json", JSON.stringify({ id: "dec_cccccccccc", created_at: "2026-03-01T00:00:00Z" }) + "\n");
   put(source, ".hunch/team.json", JSON.stringify({ url: "https://example.invalid/team" }) + "\n");
@@ -212,7 +215,7 @@ test("prepareArm no-hunch strips markers and generated commands and proves expos
   assert.equal(prepared.exposure.ok, true, JSON.stringify(prepared.exposure.checks));
   assert.deepEqual(prepared.exposure.checks.map((c) => c.id), [
     "markers-absent", "generated-commands-absent", "hunch-dir-absent", "hunch-history-empty",
-    "mcp-empty", "hooks-absent", "env-clean", "worktree-clean",
+    "mcp-empty", "hooks-absent", "env-clean", "agent-surfaces-clean", "worktree-clean",
   ]);
   assert.equal(prepared.exposure.memory_snapshot_sha256, null);
   assert.equal(prepared.exposure.post_setup_hunch_sha256, null);
@@ -220,6 +223,8 @@ test("prepareArm no-hunch strips markers and generated commands and proves expos
   assert.deepEqual(readFileSync(join(prepared.repo, "AGENTS.md")), Buffer.from("Agents intro\r\n\r\nAgents tail\r\n"));
   assert.equal(existsSync(join(prepared.repo, ".claude", "commands", "mine.md")), true);
   assert.equal(existsSync(join(prepared.repo, ".claude", "commands", "capture.md")), false);
+  assert.equal(existsSync(join(prepared.repo, ".claude", "commands", "heal.md")), false, "unmarked but hunch-mentioning command is removed");
+  assert.equal(existsSync(join(prepared.repo, ".cursor", "rules", "hunch.mdc")), false, "hunch-named cursor rule is removed");
   assert.equal(git(prepared.repo, ["status", "--porcelain"]), "");
   assert.equal(git(prepared.repo, ["log", "-1", "--format=%s"]), "bench: arm setup");
   assert.equal(git(prepared.repo, ["remote"]), "");
@@ -228,6 +233,18 @@ test("prepareArm no-hunch strips markers and generated commands and proves expos
   assert.deepEqual(prepared.env, {});
   assert.equal(prepared.static_hunch_chars.grounding_claude_md, 0);
   assert.equal(prepared.static_hunch_chars.grounding_agents_md, 0);
+});
+
+test("agent-surfaces-clean fails on a leftover hunch-matching file under an agent surface dir", () => {
+  const repo = join(root, "surfaces-leftover");
+  mkdirSync(join(repo, ".cursor", "rules"), { recursive: true });
+  writeFileSync(join(repo, ".cursor", "rules", "hunch.mdc"), "---\ndescription: consult the hunch_* MCP tools\n---\n");
+  git(repo, ["init", "-q", "-b", "main"]);
+  const exposure = proveExposure({ arm: "no-hunch", repo, mcpConfigPath: join(root, "missing-mcp.json"), env: {} });
+  const check = exposure.checks.find((c) => c.id === "agent-surfaces-clean");
+  assert.equal(check?.ok, false);
+  assert.match(check?.detail ?? "", /\.cursor\/rules\/hunch\.mdc/);
+  assert.equal(exposure.ok, false);
 });
 
 const CURRENT_HUNCH_CHECKS = [

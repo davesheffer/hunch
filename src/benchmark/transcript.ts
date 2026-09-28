@@ -33,6 +33,26 @@ export function recordIdsIn(text: string): string[] {
   return [...new Set(Array.from(text.matchAll(RECORD_ID), (match) => match[0]))].sort();
 }
 
+/** Every string value, recursively, inside each assistant `tool_use` block's `input` —
+ *  scanned for out-of-repo path access (see orchestrate.ts's no-out-of-repo-access check). */
+export function toolInputStrings(transcriptText: string): string[] {
+  const out: string[] = [];
+  const collect = (value: unknown): void => {
+    if (typeof value === "string") out.push(value);
+    else if (Array.isArray(value)) for (const item of value) collect(item);
+    else if (isObj(value)) for (const item of Object.values(value)) collect(item);
+  };
+  for (const line of transcriptText.split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    let event: unknown;
+    try { event = JSON.parse(line); } catch { continue; }
+    if (!isObj(event) || event.type !== "assistant" || !isObj(event.message)) continue;
+    const content = Array.isArray(event.message.content) ? event.message.content : [];
+    for (const block of content) if (isObj(block) && block.type === "tool_use") collect(block.input);
+  }
+  return out;
+}
+
 export function parseTranscript(text: string): TranscriptMetrics {
   const events: Obj[] = [];
   for (const line of text.split(/\r?\n/)) {
@@ -63,12 +83,14 @@ export function parseTranscript(text: string): TranscriptMetrics {
         const status = asString(server.status);
         if (name !== null && status !== null) serverStatus[name] = status;
       }
+      const memoryPaths = isObj(event.memory_paths) ? event.memory_paths : null;
       init = {
         model: asString(event.model),
         api_key_source: asString(event.apiKeySource),
         mcp_servers: servers.map((server) => (isObj(server) ? asString(server.name) : asString(server))).filter((name): name is string => name !== null),
         mcp_server_status: serverStatus,
         tool_names: Array.isArray(event.tools) ? event.tools.filter((name): name is string => typeof name === "string") : [],
+        memory_paths_auto: memoryPaths ? asString(memoryPaths.auto) : null,
       };
     } else if (event.type === "system" && event.subtype === "hook_response") {
       hookEvents++;

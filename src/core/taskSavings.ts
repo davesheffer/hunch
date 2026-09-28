@@ -185,7 +185,9 @@ function compareMetric(metric: MetricName, a: EfficiencyRun[], b: EfficiencyRun[
   } else if (baseline === null || delta === null) reason = REASON_NO_DATA;
   else if (baseline <= 0) reason = REASON_BASELINE_ZERO;
   const pct = reason === null && baseline !== null && delta !== null ? round6((delta / baseline) * 100) : null;
-  return { metric, baseline_median: baseline, treatment_median: treatment, delta_median: delta, pct_change: pct, pct_reason: reason };
+  // A withheld token pct (mixed/unavailable measurement) means the raw delta is not comparable either.
+  const delta_median = reason === REASON_TOKENS ? null : delta;
+  return { metric, baseline_median: baseline, treatment_median: treatment, delta_median, pct_change: pct, pct_reason: reason };
 }
 
 function compareArms(baseline: BenchmarkArm, treatment: BenchmarkArm, runs: EfficiencyRun[]): ArmComparison {

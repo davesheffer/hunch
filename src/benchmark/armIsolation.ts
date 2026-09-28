@@ -21,6 +21,9 @@ import type { BenchmarkArm, ExposureProof, PreparedArm } from "./types.js";
 const HUNCH_START = "<!-- HUNCH:START";
 const HUNCH_END = "<!-- HUNCH:END -->";
 const GENERATED_COMMAND_MARKER = "hunch:generated";
+/** User-owned agent-surface dirs that can carry hand-written Hunch mentions the
+ *  generated-command marker doesn't cover (skills, agents, Cursor/Codex rules). */
+const AGENT_SURFACE_DIRS = [".claude/commands", ".claude/skills", ".claude/agents", ".cursor/rules", ".codex", ".agents"];
 const HOOK_EVENTS_REQUIRED = ["SessionStart", "UserPromptSubmit", "PreToolUse"] as const;
 const MAX_CHILD_OUTPUT = 256 * 1024 * 1024;
 const AUDITED_CLI_TIMEOUT_MS = 30 * 60_000;
@@ -233,12 +236,56 @@ function generatedCommandFiles(repo: string): string[] {
     .sort();
 }
 
+/** Repo-relative (forward-slash) paths of every file under `dir`, recursing. */
+function listFilesUnder(dir: string): string[] {
+  if (!existsSync(dir)) return [];
+  const out: string[] = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const abs = join(dir, entry.name);
+    if (entry.isDirectory()) out.push(...listFilesUnder(abs));
+    else if (entry.isFile()) out.push(abs);
+  }
+  return out;
+}
+
+/** True when `rel`'s path or file content matches /hunch/i. */
+function matchesHunch(repo: string, rel: string): boolean {
+  if (/hunch/i.test(rel)) return true;
+  try {
+    return /hunch/i.test(readFileSync(join(repo, rel), "utf8"));
+  } catch {
+    return false;
+  }
+}
+
+/** Tracked files under the agent-surface dirs whose path or content matches
+ *  /hunch/i (repo-relative, sorted) — deleted in the no-hunch arm. */
+function trackedAgentSurfaceHunchFiles(repo: string): string[] {
+  const tracked = benchmarkGit(["-C", repo, "ls-files", "-z", "--", ...AGENT_SURFACE_DIRS]).stdout.toString("utf8")
+    .split("\0").filter((p) => p !== "");
+  return tracked.filter((rel) => matchesHunch(repo, rel)).sort();
+}
+
+/** Every file (tracked or not) under the agent-surface dirs whose path or content
+ *  matches /hunch/i (repo-relative, sorted) — the no-hunch exposure check. */
+function agentSurfaceHunchFiles(repo: string): string[] {
+  const offenders: string[] = [];
+  for (const dir of AGENT_SURFACE_DIRS) {
+    for (const abs of listFilesUnder(join(repo, dir))) {
+      const rel = abs.slice(repo.length + 1).replace(/\\/g, "/");
+      if (matchesHunch(repo, rel)) offenders.push(rel);
+    }
+  }
+  return offenders.sort();
+}
+
 function stripHunchExposure(repo: string): void {
   for (const rel of markerFiles(repo)) {
     const file = join(repo, rel);
     writeFileSync(file, Buffer.from(removeHunchBlocks(readFileSync(file).toString("latin1")), "latin1"));
   }
   for (const rel of generatedCommandFiles(repo)) rmSync(join(repo, rel), { force: true });
+  for (const rel of trackedAgentSurfaceHunchFiles(repo)) rmSync(join(repo, rel), { force: true });
   if (existsSync(join(repo, ".hunch"))) throw new Error(`no-hunch arm: ${join(repo, ".hunch")} exists in the rewritten base`);
 }
 
@@ -481,6 +528,10 @@ export function proveExposure(p: {
       : settings.value ? (hunchHooks.length ? `hunch hook commands on ${[...new Set(hunchHooks)].join(", ")}` : "no hunch hook command") : "no .claude/settings.json");
     const hunchKeys = Object.keys(p.env).filter((k) => k.toUpperCase().startsWith("HUNCH_"));
     check("env-clean", hunchKeys.length === 0, hunchKeys.length ? `HUNCH_* keys: ${hunchKeys.join(", ")}` : "no HUNCH_* key");
+    const surfaceOffenders = agentSurfaceHunchFiles(p.repo);
+    check("agent-surfaces-clean", surfaceOffenders.length === 0, surfaceOffenders.length
+      ? `hunch-matching agent surface files: ${surfaceOffenders.join(", ")}`
+      : "no hunch-matching file under agent surface dirs");
   } else {
     const hunchDir = join(p.repo, ".hunch");
     const present = existsSync(hunchDir) && statSync(hunchDir).isDirectory();

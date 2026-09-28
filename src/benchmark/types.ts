@@ -99,6 +99,8 @@ export interface TranscriptMetrics {
     /** Server name -> reported status (e.g. "connected", "failed"); bare-string entries carry no status. */
     mcp_server_status: Record<string, string>;
     tool_names: string[];
+    /** Optional; e.g. `memory_paths.auto`, the auto-memory file Claude Code wrote for this cwd. */
+    memory_paths_auto: string | null;
   } | null;
   result: { subtype: string | null; is_error: boolean | null; num_turns: number | null } | null;
   usage: { input: number; cache_creation: number; cache_read: number; output: number } | null;
