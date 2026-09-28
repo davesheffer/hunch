@@ -226,6 +226,35 @@ function commandPattern(path: string): RegExp {
   return new RegExp(normalizeForMatch(path).replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + COMMAND_END, "g");
 }
 
+/**
+ * `H='<path>'; node "$H" …` — the audited entrypoint assigned to a shell variable and invoked through
+ * it (`export` and quotes optional; the assignment must sit at a command boundary). Dropped only when,
+ * outside its assignments of this path, the name occurs at least once and solely as an invocation:
+ * `$NAME`/`${NAME}` as the command word after a boundary (start, `;`, `&`, `|`, or a newline that is
+ * not a `\` continuation), optionally behind `node`/`node.exe` as that command word, quote optional,
+ * then a subcommand or flag on the same line. Any other occurrence of the name as a word (`cat "$H"`,
+ * `grep node "$H"`, `arr=("$H")`, `G="$H" bash -c …`, `${H%x}`, `process.env.H`, `printenv H`)
+ * leaves the assignment denied: the path is then not provably only-invoked. A `-NAME` flag (`-h`) is
+ * not a reference. The text is lowercased, so `$h` counts against `H` (stricter, never looser).
+ * Assignments are dropped at their own match positions, never by a literal text search.
+ */
+function dropInvokedVarAssignment(rest: string, path: string): string {
+  const escaped = normalizeForMatch(path).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const assign = new RegExp(`(?<=^|[\\s;&|(])(?:export\\s+)?([a-z_][a-z0-9_]*)=(["'])?${escaped}\\2(?=$|[\\s;&|)])`, "g");
+  const others = rest.replace(assign, " ");
+  const invokedOnly = new Set<string>();
+  for (const match of rest.matchAll(assign)) {
+    const name = match[1]!;
+    const word = new RegExp(`(?<![a-z0-9_-])${name}(?![a-z0-9_])`, "g");
+    // `\` normalizes to `/`, so a continuation newline reads `/\n` and is no boundary; `>&`, `<&`, `>|` are
+    // redirections (`echo x >& "$H"` overwrites the entrypoint), not command separators.
+    const invocation = new RegExp(`(?<=(?:^|;|(?<![<>])[&|]|(?<!/)\\n)\\s*(?:node(?:\\.exe)?\\s+)?["']?)\\$(?:${name}|\\{${name}\\})(?![a-z0-9_])(?=["']?[ \\t]+-{0,2}[a-z])`, "g");
+    const invocations = [...others.matchAll(invocation)].length;
+    if (invocations > 0 && [...others.matchAll(word)].length === invocations) invokedOnly.add(name);
+  }
+  return rest.replace(assign, (mention, name: string) => (invokedOnly.has(name) ? " " : mention));
+}
+
 /** `~`, `$HOME`, `${HOME}`, `$env:USERPROFILE`, `%USERPROFILE%` at the start of a path mention -> the normalized home dir. */
 const HOME_TOKEN = /(^|[\s"'`=(;])(~|\$home|\$\{home\}|\$env:userprofile|%userprofile%)(?=\/)/g;
 
@@ -250,7 +279,10 @@ export function isOutOfRepoAccess(
   if (traversal && /(?:\.\.[\\/]+(?:\.[\\/]+)*){3}/.test(value)) return true;
   let rest = normalizeForMatch(value).replace(HOME_TOKEN, (_, prefix) => `${prefix}${normalizeForMatch(home)}`);
   for (const path of Array.isArray(allowed) ? allowed : [allowed]) rest = rest.replace(pathPattern(path), " ");
-  for (const path of commands) rest = rest.replace(commandPattern(path), " ");
+  for (const path of commands) {
+    rest = rest.replace(commandPattern(path), " ");
+    rest = dropInvokedVarAssignment(rest, path);
+  }
   return denyRoots.some((root) => pathPattern(root).test(rest));
 }
 
