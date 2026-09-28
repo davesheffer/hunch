@@ -215,17 +215,36 @@ function pathPattern(path: string): RegExp {
   return new RegExp(normalizeForMatch(path).replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + PATH_END, "g");
 }
 
+/** A command mention is dropped only when it is being invoked: optional closing quote, whitespace, subcommand word. */
+const COMMAND_END = "(?=[\"'`]?\\s+[a-z])";
+
+function commandPattern(path: string): RegExp {
+  return new RegExp(normalizeForMatch(path).replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + COMMAND_END, "g");
+}
+
+/** `~`, `$HOME`, `${HOME}`, `$env:USERPROFILE`, `%USERPROFILE%` at the start of a path mention -> the normalized home dir. */
+const HOME_TOKEN = /(^|[\s"'`=(;])(~|\$home|\$\{home\}|\$env:userprofile|%userprofile%)(?=\/)/g;
+
 /**
- * True when a tool-input string reaches outside the run's own directory: after every mention of
- * each `allowed` path (the run's own `runDir`, and for `current-hunch` the audited CLI entrypoint
- * its hooks tell the agent to run) is dropped, it still names one of the deny roots
- * (source repo, private overlay, audited checkout, controller, `<out>`), or it contains a
- * directory-traversal run ("../../../" or "..\..\..\", either slash style).
+ * True when a tool-input string reaches outside the run's own directory: after home-directory
+ * tokens (`~`, `$HOME`, `${HOME}`, `$env:USERPROFILE`, `%USERPROFILE%`) are rewritten to the real
+ * home dir, every mention of an `allowed` path (a path prefix, e.g. the run's own `runDir`) is
+ * dropped, and every mention of a `commands` path (an executable entrypoint, e.g. the audited CLI,
+ * dropped only where it is being invoked, not merely named) is dropped, it still names one of the
+ * deny roots (source repo, private overlay, audited checkout, controller, `<out>`), or it contains
+ * a directory-traversal run ("../../../" etc., tolerating repeated separators and "./" segments).
  */
-export function isOutOfRepoAccess(value: string, denyRoots: string[], allowed: string | string[]): boolean {
-  if (/(?:\.\.[\\/]){3}/.test(value)) return true;
-  let rest = normalizeForMatch(value);
+export function isOutOfRepoAccess(
+  value: string,
+  denyRoots: string[],
+  allowed: string | string[],
+  commands: string[] = [],
+  home: string = homedir(),
+): boolean {
+  if (/(?:\.\.[\\/]+(?:\.[\\/]+)*){3}/.test(value)) return true;
+  let rest = normalizeForMatch(value).replace(HOME_TOKEN, (_, prefix) => `${prefix}${normalizeForMatch(home)}`);
   for (const path of Array.isArray(allowed) ? allowed : [allowed]) rest = rest.replace(pathPattern(path), " ");
+  for (const path of commands) rest = rest.replace(commandPattern(path), " ");
   return denyRoots.some((root) => pathPattern(root).test(rest));
 }
 
@@ -352,9 +371,9 @@ async function executeRun(ctx: RunContext, task: SuiteTask, rep: number, arm: Be
     }
     const denyRoots = [ctx.sourceRepo, ctx.privateRepo, ctx.auditedRoot, ctx.controller, ctx.out].filter((p): p is string => p !== null);
     // The audited UserPromptSubmit hook tells the agent to run checks through `<node> <audited>/dist/cli/index.js task verify`.
-    const allowed = arm === "current-hunch" ? [runDir, join(ctx.auditedRoot, "dist", "cli", "index.js")] : [runDir];
+    const commands = arm === "current-hunch" ? [join(ctx.auditedRoot, "dist", "cli", "index.js")] : [];
     const offenders = [...new Set(toolInputStrings(readFileSync(agent.transcript_path, "utf8"))
-      .filter((value) => isOutOfRepoAccess(value, denyRoots, allowed)))];
+      .filter((value) => isOutOfRepoAccess(value, denyRoots, [runDir], commands)))];
     outOfRepoBreach = offenders.length > 0;
     post.push(["no-out-of-repo-access", !outOfRepoBreach, outOfRepoBreach
       ? `offending string(s): ${offenders.slice(0, 5).map((s) => s.slice(0, 200)).join(" | ")}`

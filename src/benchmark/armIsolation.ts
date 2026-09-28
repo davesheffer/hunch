@@ -524,6 +524,7 @@ export function proveExposure(p: {
     check("hunch-history-empty", history === "", history ? `.hunch history: ${history.split("\n").length} commit(s)` : "no .hunch history");
     const serverNames = servers ? Object.keys(servers) : [];
     check("mcp-empty", !!servers && serverNames.length === 0, servers ? `${serverNames.length} MCP server(s)${serverNames.length ? `: ${serverNames.join(", ")}` : ""}` : `mcp config unreadable: ${mcpError}`);
+    check("repo-mcp-json-absent", !existsSync(join(p.repo, ".mcp.json")), existsSync(join(p.repo, ".mcp.json")) ? ".mcp.json present" : "no .mcp.json");
     const hunchHooks = Object.entries(hooks).flatMap(([event, entries]) => hookCommands(entries).filter((c) => /hunch/i.test(c)).map(() => event));
     const hooksOk = !settings.error && hunchHooks.length === 0;
     check("hooks-absent", hooksOk, settings.error

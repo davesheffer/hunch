@@ -215,7 +215,7 @@ test("prepareArm no-hunch strips markers and generated commands and proves expos
   assert.equal(prepared.exposure.ok, true, JSON.stringify(prepared.exposure.checks));
   assert.deepEqual(prepared.exposure.checks.map((c) => c.id), [
     "markers-absent", "generated-commands-absent", "hunch-dir-absent", "hunch-history-empty",
-    "mcp-empty", "hooks-absent", "env-clean", "agent-surfaces-clean", "worktree-clean",
+    "mcp-empty", "repo-mcp-json-absent", "hooks-absent", "env-clean", "agent-surfaces-clean", "worktree-clean",
   ]);
   assert.equal(prepared.exposure.memory_snapshot_sha256, null);
   assert.equal(prepared.exposure.post_setup_hunch_sha256, null);
@@ -225,6 +225,7 @@ test("prepareArm no-hunch strips markers and generated commands and proves expos
   assert.equal(existsSync(join(prepared.repo, ".claude", "commands", "capture.md")), false);
   assert.equal(existsSync(join(prepared.repo, ".claude", "commands", "heal.md")), false, "unmarked but hunch-mentioning command is removed");
   assert.equal(existsSync(join(prepared.repo, ".cursor", "rules", "hunch.mdc")), false, "hunch-named cursor rule is removed");
+  assert.equal(existsSync(join(prepared.repo, ".mcp.json")), false);
   assert.equal(git(prepared.repo, ["status", "--porcelain"]), "");
   assert.equal(git(prepared.repo, ["log", "-1", "--format=%s"]), "bench: arm setup");
   assert.equal(git(prepared.repo, ["remote"]), "");
@@ -282,6 +283,7 @@ test("prepareArm current-hunch mounts the snapshot through the audited dist and 
 
   assert.equal(prepared.exposure.ok, true, JSON.stringify(prepared.exposure.checks));
   assert.deepEqual(prepared.exposure.checks.map((c) => c.id), CURRENT_HUNCH_CHECKS);
+  assert.equal(existsSync(join(prepared.repo, ".mcp.json")), true);
   assert.equal(prepared.exposure.memory_snapshot_sha256, snapshot.public.sha256);
   assert.equal(prepared.exposure.post_setup_hunch_sha256, snapshot.public.sha256, "the stub index leaves .hunch untouched");
   assert.equal(git(prepared.repo, ["ls-files", ".hunch"]), ".hunch/decisions/dec_aaaaaaaaaa.json");
@@ -346,6 +348,7 @@ test("prepareArm current-hunch checks the snapshot hash before index rewrites co
 
   assert.equal(prepared.exposure.ok, true, JSON.stringify(prepared.exposure.checks));
   assert.deepEqual(prepared.exposure.checks.map((c) => c.id), CURRENT_HUNCH_CHECKS);
+  assert.equal(existsSync(join(prepared.repo, ".mcp.json")), true);
   assert.equal(prepared.exposure.checks.find((c) => c.id === "snapshot-hash-match")?.ok, true);
   assert.equal(prepared.exposure.memory_snapshot_sha256, snapshot.public.sha256);
   assert.match(prepared.exposure.post_setup_hunch_sha256 ?? "", /^[0-9a-f]{64}$/);
