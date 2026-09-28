@@ -2,6 +2,8 @@
 
 Design for `hunch task benchmark` (plan: `docs/HUNCH-CONTEXT-EFFICIENCY-POC.md`, sections 3.1, 7, 8, 11, 15).
 Frozen before any timed run. A change to any rule below after the first timed run starts a new experiment version.
+Amended 2026-09-28, before any timed run, to close the adversarial review of the harness: agent-surface files that
+mention Hunch are removed in `no-hunch`, and the preflight and post-run checks below were added.
 
 ## Revisions
 
@@ -53,6 +55,10 @@ validator. One setup commit (`bench: arm setup`) so the agent starts from a clea
 `no-hunch`:
 - Remove every `<!-- HUNCH:START … -->` … `<!-- HUNCH:END -->` block from tracked files (CLAUDE.md, AGENTS.md and any other).
 - Delete `.claude/commands/*.md` files that carry the `hunch:generated` marker.
+- Delete every tracked file under `.claude/commands`, `.claude/skills`, `.claude/agents`, `.cursor/rules`, `.codex` and
+  `.agents` whose path or content matches `/hunch/i` (amended 2026-09-28). Reason: the starting commits carry
+  Hunch-scaffolded `capture.md`/`heal.md` without the `hunch:generated` marker, and a `hunch.mdc` rule whose frontmatter
+  survives block removal.
 - No `.hunch/`, no `.mcp.json`, no Hunch hooks, no `HUNCH_*` variables.
 - Child MCP config: `{"mcpServers":{}}` with `--strict-mcp-config`.
 
@@ -67,9 +73,17 @@ The snapshot-hash check runs right after the snapshot is copied, before the audi
 (`index` legitimately rewrites `components/`); the post-setup `.hunch` hash is recorded separately.
 
 Proof before the timer (written to `exposure.json`): marker scan, command scan, hook scan, `.hunch` presence and history,
-MCP config, child environment keys (names only), snapshot hash. Proof after the run from the transcript: the `init`
-event's `mcp_servers` and tool names, and every hook event. A `no-hunch` run with any Hunch tool, hook or marker is
-invalid, not failed.
+MCP config, child environment keys (names only), snapshot hash, and for `no-hunch` `agent-surfaces-clean` (no file,
+tracked or not, under the agent-surface directories above matches `/hunch/i`). Proof after the run from the transcript
+(amended 2026-09-28):
+- `current-hunch`: `mcp-servers-exactly-hunch` (the `init` event lists exactly one MCP server, `hunch`),
+  `mcp-hunch-connected` (its status is `connected`), `hunch-hooks-observed` (at least one hook event with non-empty
+  output; the audited SessionStart hook always emits).
+- `no-hunch`: `mcp-servers-empty`, `hunch-tools-absent` (no `mcp__hunch__*` in the `init` tool names),
+  `hunch-tool-calls-zero`, `hunch-hook-output-zero`.
+- Both arms: `no-out-of-repo-access` (below).
+
+A run that fails any setup or post check is invalid, not failed.
 
 User-level instructions (`~/.claude/CLAUDE.md`) load in both arms under `--setting-sources project`. They are recorded by
 sha256 and must contain no `hunch` string; unrelated user instructions are preserved as the plan requires.
@@ -88,12 +102,20 @@ sha256 and must contain no `hunch` string; unrelated user instructions are prese
   and the arm's own `HUNCH_PRIVATE_DIR`.
 - `claude --version` runs before every timed run; a version other than the manifest's stops the schedule.
 - Preflight (fails closed, no timed run after a failure): executable found, `--version` recorded, stripped environment
-  asserted, one untimed probe with the `no-hunch` flags in an empty directory must succeed with `apiKeySource: "none"`.
+  asserted, one untimed probe with the `no-hunch` flags in an empty directory must succeed with `apiKeySource: "none"`,
+  report no MCP server (`probe-mcp-empty`) and no `mcp__*` tool (`probe-no-mcp-tools`) (amended 2026-09-28).
   Record CLI version, the reported model, and sha256 of the argv with the prompt and paths replaced by placeholders.
 - Timeout: 30 minutes. Windows: `taskkill /pid <pid> /T /F`; POSIX: detached group, `kill(-pid)`.
 - Confinement: `bypassPermissions` does not confine Bash on Windows. Detective control: `git status --porcelain` and
   `HEAD` of the source repository, the controller and the private overlay before and after each run; any change marks
-  the run `isolation_breach`.
+  the run `isolation_breach`. Added 2026-09-28: every string in the transcript's tool inputs is scanned for a path
+  under the source repository, the private overlay, the audited worktree, the controller or the output directory
+  (path-boundary match, MSYS `/c/` paths normalized, mentions of the run's own directory ignored), and for any three
+  consecutive `../` segments; any hit fails `no-out-of-repo-access` and marks the run `isolation_breach`.
+- Auto memory (added 2026-09-28): Claude Code keeps auto memory per working directory under
+  `~/.claude/projects/<path with non-alphanumerics as ->`. Before each run an existing directory for the run's repo path
+  is renamed `.bench-stale-<n>` and logged, so a rerun after an interruption starts without memory; the `init` event's
+  auto-memory path is recorded as evidence.
 
 ## Metrics (section 7 contract)
 
@@ -127,8 +149,7 @@ Exit 0 = passed. Validator files are hashed against the suite before the first r
 
 `quality.outcome` is the validator result for every run with a valid exposure. `success` is true only when the
 validator passed and the run completed: agent exit 0, `result.is_error` false, no timeout, exposure proven before and
-after the run, and no isolation breach. After the run, `current-hunch` requires the `hunch` MCP server reported
-`connected` in the `init` event; `no-hunch` requires no MCP server, no `mcp__hunch__*` tool and no Hunch hook output.
+after the run (every setup and post check above), and no isolation breach.
 
 ## Output
 
