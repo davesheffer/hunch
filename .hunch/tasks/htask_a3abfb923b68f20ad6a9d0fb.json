@@ -3,7 +3,7 @@
   "title": "Assistant task",
   "state": "completed",
   "started_at": "2026-09-28T19:19:07.631Z",
-  "finished_at": "2026-09-28T19:33:55.119Z",
+  "finished_at": "2026-09-28T19:45:08.540Z",
   "coverage": "no-relevant-memory",
   "lessons": [],
   "applied": [],
@@ -14,18 +14,20 @@
   "files": [
     "src/benchmark/orchestrate.ts",
     "test/context-efficiency-e2e.test.ts",
-    "src/benchmark/taskRunner.ts"
+    "src/benchmark/taskRunner.ts",
+    "test/task-benchmark-neutral.test.ts"
   ],
   "supersedes": [],
   "source_snapshot": null,
-  "report_hash": "sha256:0f10c1fc417517bf2b87108e79bd46f6e9a41c6ba37d3b485da204eb0b692714",
+  "report_hash": "sha256:13897f3a92a0b76701b31beca8c24ec5797d0b3a2b7015802e9c2e56e20bdef2",
   "provenance": {
     "source": "task_report",
     "confidence": 1,
     "evidence": [
       "hunch report htask_a3abfb923b68f20ad6a9d0fb",
-      "hunch report htask_de1f588b735577ec5bcef24c"
+      "hunch report htask_de1f588b735577ec5bcef24c",
+      "hunch report htask_f76bef3a147cf9deae4c13a1"
     ],
-    "last_verified": "2026-09-28T19:33:55.119Z"
+    "last_verified": "2026-09-28T19:45:08.540Z"
   }
 }
