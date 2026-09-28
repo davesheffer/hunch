@@ -76,9 +76,11 @@ function fixture(t: { after: (f: () => void) => void }): string {
  *  and fake a delta. Every test gets its own. */
 const sessionId = () => `hunch-dedupe-${process.pid}-${Math.floor(performance.now() * 1000)}`;
 
+/** HUNCH_HOOK_DIET=0: these assert the v1.42.0 delta one-liner (the diet makes a
+ *  repeat silent), so they also prove the kill switch restores it. */
 function runHook(root: string, provider: string, session: string, payload: Record<string, unknown>) {
   const output = execFileSync(process.execPath, ["--import", tsxLoaderUrl(), cli, "hook", "--provider", provider], {
-    cwd: root, env: { ...process.env, HUNCH_PIPELINE: "0" },
+    cwd: root, env: { ...process.env, HUNCH_PIPELINE: "0", HUNCH_HOOK_DIET: "0" },
     input: JSON.stringify({ cwd: root, session_id: session, prompt_id: "prompt-dedupe", turn_id: "turn-1", ...payload }),
     encoding: "utf8",
   }).trim();

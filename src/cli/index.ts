@@ -100,7 +100,7 @@ import { blockingInScope, vetoInScope, proposedEditLines, type BlockingHit } fro
 import { isHumanConfirmed } from "../core/strictgate.js";
 import { appendEvent, readEvents } from "../core/events.js";
 import { computeStats, formatStats } from "../core/stats.js";
-import { injectionMode, resetSessionInjections } from "../core/hookcache.js";
+import { consumeInjectionBudget, injectionMode, peekInjectionMode, resetSessionInjections } from "../core/hookcache.js";
 import { recordServed, servedSummary } from "../core/served.js";
 import { recordTaskDelivery, reportActivity, reportHash, reportPresentationEnabled, unseenLessons } from "../core/taskReport.js";
 import { snapshotDeliveredRecords } from "../core/taskReportEvidence.js";
@@ -4752,8 +4752,9 @@ program
           st = onCommand(st, command, evt.tool_outcome);
           activity = { kind: "command", command };
           // A command that both wrote the file and ran a check just received the
-          // lesson itself; the follow-up waits for the next check.
-          if (!shellGround) {
+          // lesson itself; the follow-up waits for the next check. Under the hook
+          // diet a shell write gets a pointer, never the lesson: the follow-up runs.
+          if (hookDietEnabled() || !shellGround) {
             const followUp = lessonReminder(st, command, (l) => functionBodyHash(root, l.file, l.symbol));
             st = followUp.state;
             lessonNote = followUp.reminder;
@@ -5108,7 +5109,9 @@ program
 
       // advisory / firm / strict(non-blocking): inject the relevant Hunch slice.
       const grounded = fileGrounding(root, store, provider, evt, target, abs);
-      if (!grounded) return; // no noise on files Hunch hasn't learned yet
+      // No noise on files Hunch hasn't learned yet, nor (hook diet) on an
+      // unchanged repeat or a pointer already given.
+      if (!grounded?.text) return;
       emitContext(provider, "PreToolUse", grounded.text, grounded.mode === "full" ? grounded.recalled ?? undefined : undefined);
     } catch (e) {
       // Never block an edit on a hook failure — and never go silent either: an
@@ -7018,11 +7021,37 @@ function toRepoRel(root: string, abs: string): string {
   return isAbsolute(rel) || /^[a-zA-Z]:/.test(rel) ? "" : rel;
 }
 
+/** Hook diet: the pre-edit and shell-write paths stop re-injecting full
+ *  grounding the agent can fetch on demand — a shell write gets a pointer, an
+ *  unchanged repeat gets silence, and full grounding is capped per session and
+ *  agent identity. Kill switch: HUNCH_HOOK_DIET=0 restores the v1.42.0 output
+ *  byte for byte. */
+const hookDietEnabled = () => process.env.HUNCH_HOOK_DIET !== "0";
+/** Full pre-edit grounding one agent identity receives per session (characters). */
+const GROUNDING_SESSION_BUDGET_CHARS = 8_000;
+/** Record ids a pointer lists before collapsing the rest into "(+N more)". */
+const POINTER_MAX_IDS = 6;
+
 /** Files a shell command wrote get the grounding the edit tools would have
  *  delivered before the edit — late, but while the agent can still revise.
- *  Already-served grounding (a delta) is not repeated. */
+ *  Already-served grounding (a delta) is not repeated. Under the hook diet the
+ *  catch-up is a pointer per file (record ids, blocking invariants, hunch_why),
+ *  not the grounding itself, and it counts as no delivery: a later Edit of the
+ *  same file still receives its full grounding. */
 const MAX_SHELL_GROUNDED = 3;
 function shellWriteGrounding(root: string, store: HunchStore, provider: HookProvider, evt: HunchHookInput, written: readonly string[]): string {
+  const more = written.length > MAX_SHELL_GROUNDED ? ` (${written.length - MAX_SHELL_GROUNDED} more written file(s) not checked)` : "";
+  if (hookDietEnabled()) {
+    const pointers: string[] = [];
+    for (const target of written.slice(0, MAX_SHELL_GROUNDED)) {
+      const plan = planFileGrounding(root, store, provider, evt, target, join(root, target));
+      // Grounding this agent already holds needs no pointer to it.
+      if (!plan || peekInjectionMode(evt.session_id, plan.dedupeKey, plan.text, plan.hashInput) === "delta") continue;
+      const pointer = groundingPointer(evt, plan, `${target} was written by a shell command`);
+      if (pointer) pointers.push(pointer);
+    }
+    return pointers.length ? `${pointers.join("\n")}${more ? `\n${more.trim()}` : ""}` : "";
+  }
   const parts: string[] = [];
   const grounded: string[] = [];
   for (const target of written.slice(0, MAX_SHELL_GROUNDED)) {
@@ -7030,21 +7059,52 @@ function shellWriteGrounding(root: string, store: HunchStore, provider: HookProv
     if (g?.mode === "full") { parts.push(g.text); grounded.push(target); }
   }
   if (!parts.length) return "";
-  const more = written.length > MAX_SHELL_GROUNDED ? ` (${written.length - MAX_SHELL_GROUNDED} more written file(s) not checked)` : "";
   const sibling = parts.some((p) => p.startsWith(SIBLING_HEADING)) ? " It starts with a fix a same-shaped function elsewhere received and this file's copy never did: resolve it before you finish." : "";
   return `Hunch: this shell command wrote ${grounded.join(", ")}${more}. Edits made outside the Edit/Write tools skip the pre-edit grounding, so it arrives now: re-check the change against it before relying on it.${sibling}\n\n${parts.join("\n\n")}`;
 }
 
-type FileGrounding = { mode: "delta"; text: string } | { mode: "full"; text: string; recalled: string | null };
+/** One line naming what applies to a file instead of delivering it: the ranked
+ *  record ids the full grounding would show (task supplements excluded), every
+ *  blocking invariant in scope spelled out, and the call that expands it. Has
+ *  none of a delivery's side effects — no lesson state, no pre-edit dedup entry,
+ *  no receipts, no task delivery. Deduped on its own key per session and agent,
+ *  so the same records are pointed at once; "" when already pointed at. */
+function groundingPointer(evt: HunchHookInput, plan: FileGroundingPlan, lead: string): string {
+  const ids = plan.envelope.delivered.map((item) => item.record_id);
+  const sibling = plan.siblings.text ? "; a sibling-fix lesson exists" : "";
+  const records = ids.length
+    ? `. Records that apply: ${ids.slice(0, POINTER_MAX_IDS).join(", ")}${ids.length > POINTER_MAX_IDS ? ` (+${ids.length - POINTER_MAX_IDS} more)` : ""}${sibling}.`
+    : `${sibling}.`;
+  const text = [
+    `Hunch: ${lead}${records} Full grounding: hunch_why("${plan.target}").`,
+    ...plan.blocking.map((c) => `  ⛔ blocking ${c.id}: ${c.statement}`),
+  ].join("\n");
+  return injectionMode(evt.session_id, `ptr:${plan.target}${plan.agentKey}`, text, plan.hashInput) === "delta" ? "" : text;
+}
+
+type FileGrounding = { mode: "delta"; text: string } | { mode: "pointer"; text: string } | { mode: "full"; text: string; recalled: string | null };
 /** Memory budget beside a sibling lesson (the default is 1500 tokens). */
 const SIBLING_MEMORY_BUDGET_TOKENS = 800;
 
+/** Everything one file's grounding IS, computed before any of it is delivered,
+ *  so the pointer paths can name it without the delivery's side effects. */
+interface FileGroundingPlan {
+  target: string;
+  /** Blocking invariants whose scope matches the file. */
+  blocking: Array<{ id: string; statement: string }>;
+  siblings: ReturnType<typeof siblingGrounding>;
+  envelope: ReturnType<typeof buildDeliveryEnvelope>;
+  text: string;
+  reportTaskId: string | null;
+  agentKey: string;
+  dedupeKey: string;
+  hashInput: string;
+}
+
 /** The advisory grounding for one repo-relative file: the ranked memory slice,
- *  retired code, doc anchors, recent tasks and sibling-fix lessons. `delta` when
- *  identical grounding was already served this session, null when Hunch knows
- *  nothing about the file. Serves the pre-edit hook and files a shell command
- *  wrote (which never pass through the edit tools). */
-function fileGrounding(root: string, store: HunchStore, provider: HookProvider, evt: HunchHookInput, target: string, abs: string): FileGrounding | null {
+ *  retired code, doc anchors, recent tasks and sibling-fix lessons. Pure
+ *  compute; null when Hunch knows nothing about the file. */
+function planFileGrounding(root: string, store: HunchStore, provider: HookProvider, evt: HunchHookInput, target: string, abs: string): FileGroundingPlan | null {
   // Decision-grounding for PROSE (doc≠graph): a markdown target that declares
   // <!-- hunch:topic … --> anchors gets each topic's CURRENT decision — the
   // graph outranks the prose being edited, and a stale pin is called out inline.
@@ -7057,29 +7117,14 @@ function fileGrounding(root: string, store: HunchStore, provider: HookProvider, 
   const ctx = store.assembleContext(target);
   // Sibling fixes: a same-shaped function elsewhere was fixed and this copy
   // never was — the concrete lesson a scoped constraint cannot carry.
-  const siblings = siblingGrounding(root, target, store.recs("symbols"),
-    ctx.constraints.filter((c) => c.severity === "blocking" && c.scope.some((g) => pathMatchesGlob(target, g))).map((c) => ({ id: c.id, statement: c.statement })));
-  // Remember what was delivered, so the first check the agent runs can follow
-  // up if the function is still untouched (pipeline.ts lessonReminder).
-  if (siblings.lessons.length && evt.session_id && pipelineEnabled()) {
-    try {
-      savePipelineState(evt.session_id, onLessonsDelivered(loadPipelineState(evt.session_id), siblings.lessons.map((l) => ({
-        id: `${l.file}:${l.symbol}~${l.siblingFile}:${l.sibling}`,
-        file: l.file,
-        symbol: l.symbol,
-        sibling: l.sibling,
-        siblingFile: l.siblingFile,
-        change: l.commits.map((c) => `${c.sha.slice(0, 8)} ${c.subject}`).join("; "),
-        callers: [...(siblings.callers.get(l.symbol) ?? [])],
-        hash: functionBodyHash(root, l.file, l.symbol),
-      }))));
-    } catch { /* the reminder is a convenience; the lesson itself was delivered */ }
-  }
+  const blocking = ctx.constraints.filter((c) => c.severity === "blocking" && c.scope.some((g) => pathMatchesGlob(target, g))).map((c) => ({ id: c.id, statement: c.statement }));
+  const siblings = siblingGrounding(root, target, store.recs("symbols"), blocking);
   // Regression Guard (edit-time grounding): what an in-force decision retired
   // from this file. No diff exists yet, so this is context — "don't re-add X" —
   // not a block; the commit-time `hunch check` does the actual gating.
   const retired = store.retiredForFile(target).filter((r) => r.symbols.length || r.deps.length);
-  const recentTasks = taskSelectionSupplements(store.selectTasksAuto(target, buildTaskRankingQuery(root, hookReportTaskId(root, provider, evt), target, { excludeTargetDeliveries: true })), target);
+  const reportTaskId = hookReportTaskId(root, provider, evt);
+  const recentTasks = taskSelectionSupplements(store.selectTasksAuto(target, buildTaskRankingQuery(root, reportTaskId, target, { excludeTargetDeliveries: true })), target);
   const hasContent =
     ctx.constraints.length ||
     ctx.decisions.length ||
@@ -7116,12 +7161,64 @@ function fileGrounding(root: string, store: HunchStore, provider: HookProvider, 
   // Outside the envelope's budget on purpose: the lesson is a code change, not a
   // one-line supplement, and memory records must not crowd it out.
   const text = [siblings.text, envelope.text.trim()].filter(Boolean).join("\n\n");
+  // A new authoritative prompt gets its own full delivery. An earlier
+  // prompt's session-level delta cannot establish this task's receipt.
+  // A subagent reports to the prompt's task but starts with FRESH context:
+  // it never saw that grounding, so its dedup is scoped by its own agent
+  // identity (hashed — the raw agent_id is never retained in the key).
+  const agentKey = evt.agent_id ? `:${reportHash(evt.agent_id).slice(7, 19)}` : "";
+  return {
+    target, blocking, siblings, envelope, text, reportTaskId, agentKey,
+    dedupeKey: `pre:${target}${reportTaskId ? `:${reportTaskId}` : ""}${agentKey}`,
+    // Dedup on the envelope's stable IDENTITY projection, never on the
+    // rendered block: serving the full text writes delivery receipts, and the
+    // next call's task ranking reads them back and moves the wording ("today"
+    // → "delivered today"), so hashing the presentation made this grounding
+    // self-invalidating and re-sent the full block for unchanged records.
+    hashInput: deliveryDedupeInput(envelope, supplements) + (siblings.identity ? `\u0000sibling-fix\u0000${siblings.identity}` : ""),
+  };
+}
+
+/** The pre-edit grounding for one file, delivered: `delta` when identical
+ *  grounding was already served this session, `pointer` when the hook diet's
+ *  session budget withholds it, null when Hunch knows nothing about the file.
+ *  Serves the pre-edit hook and — with the hook diet off — files a shell
+ *  command wrote (which never pass through the edit tools). */
+function fileGrounding(root: string, store: HunchStore, provider: HookProvider, evt: HunchHookInput, target: string, abs: string): FileGrounding | null {
+  const plan = planFileGrounding(root, store, provider, evt, target, abs);
+  if (!plan) return null;
+  const { siblings, envelope, text, reportTaskId } = plan;
+  const diet = hookDietEnabled();
+  // Session budget (hook diet): full grounding that would push this agent past
+  // its per-session budget is withheld behind a pointer, before anything counts
+  // as delivered. A repeat (would-be delta) is free, so it never charges.
+  if (diet && peekInjectionMode(evt.session_id, plan.dedupeKey, text, plan.hashInput) === "full"
+    && !consumeInjectionBudget(evt.session_id, `grounding${plan.agentKey}`, text.length, GROUNDING_SESSION_BUDGET_CHARS)) {
+    return { mode: "pointer", text: groundingPointer(evt, plan, `grounding for ${target} withheld (session grounding budget reached)`) };
+  }
+  // Remember what was delivered, so the first check the agent runs can follow
+  // up if the function is still untouched (pipeline.ts lessonReminder).
+  if (siblings.lessons.length && evt.session_id && pipelineEnabled()) {
+    try {
+      savePipelineState(evt.session_id, onLessonsDelivered(loadPipelineState(evt.session_id), siblings.lessons.map((l) => ({
+        id: `${l.file}:${l.symbol}~${l.siblingFile}:${l.sibling}`,
+        file: l.file,
+        symbol: l.symbol,
+        sibling: l.sibling,
+        siblingFile: l.siblingFile,
+        change: l.commits.map((c) => `${c.sha.slice(0, 8)} ${c.subject}`).join("; "),
+        callers: [...(siblings.callers.get(l.symbol) ?? [])],
+        hash: functionBodyHash(root, l.file, l.symbol),
+      }))));
+    } catch { /* the reminder is a convenience; the lesson itself was delivered */ }
+  }
   // Identical grounding already shown this session → one-line delta instead of
-  // the full 10-16KB block. Any record change re-sends the full text; the
-  // strict-gate deny path above never routes through this (dec_244397d920).
+  // the full 10-16KB block (silence under the hook diet: the agent still holds
+  // it and hunch_why re-expands it). Any record change re-sends the full text;
+  // the strict-gate deny path above never routes through this (dec_244397d920).
   // Delivery receipts (dec_925f4bcaad): the ledger of what actually reached
-  // an agent. A full injection is a serve; a delta one-liner attests the
-  // earlier serve is still standing. Never throws, never blocks.
+  // an agent. A full injection is a serve; a delta attests the earlier serve
+  // is still standing. Never throws, never blocks.
   const receipts = (event: "served" | "refreshed") => recordServed(root, [
     ...envelope.delivered.map((item) => ({
       event,
@@ -7143,23 +7240,11 @@ function fileGrounding(root: string, store: HunchStore, provider: HookProvider, 
       delivery_profile: envelope.profile, ranking_policy: envelope.ranking_policy,
     })),
   ]);
-  const reportTaskId = hookReportTaskId(root, provider, evt);
-  // A new authoritative prompt gets its own full delivery. An earlier
-  // prompt's session-level delta cannot establish this task's receipt.
-  // A subagent reports to the prompt's task but starts with FRESH context:
-  // it never saw that grounding, so its dedup is scoped by its own agent
-  // identity (hashed — the raw agent_id is never retained in the key).
-  const agentKey = evt.agent_id ? `:${reportHash(evt.agent_id).slice(7, 19)}` : "";
-  // Dedup on the envelope's stable IDENTITY projection, never on the
-  // rendered block: serving the full text writes delivery receipts, and the
-  // next call's task ranking reads them back and moves the wording ("today"
-  // → "delivered today"), so hashing the presentation made this grounding
-  // self-invalidating and re-sent the full block for unchanged records.
-  if (injectionMode(evt.session_id, `pre:${target}${reportTaskId ? `:${reportTaskId}` : ""}${agentKey}`, text, deliveryDedupeInput(envelope, supplements) + (siblings.identity ? `\u0000sibling-fix\u0000${siblings.identity}` : "")) === "delta") {
+  if (injectionMode(evt.session_id, plan.dedupeKey, text, plan.hashInput) === "delta") {
     receipts("refreshed");
     return {
       mode: "delta",
-      text: `Hunch grounding for ${target}: unchanged this session (${envelope.delivered.filter((item) => item.kind === "decisions").length} decision(s), ${envelope.delivered.filter((item) => item.kind === "constraints").length} invariant(s)${siblings.identity ? ", sibling-fix lesson" : ""} shown earlier — still current; hunch_why("${target}") to re-expand).`,
+      text: diet ? "" : `Hunch grounding for ${target}: unchanged this session (${envelope.delivered.filter((item) => item.kind === "decisions").length} decision(s), ${envelope.delivered.filter((item) => item.kind === "constraints").length} invariant(s)${siblings.identity ? ", sibling-fix lesson" : ""} shown earlier — still current; hunch_why("${target}") to re-expand).`,
     };
   }
   receipts("served");

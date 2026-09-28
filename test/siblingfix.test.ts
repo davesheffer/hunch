@@ -588,8 +588,9 @@ test("the real pre-edit hook injects the lesson even when the graph holds no rec
   commit(root, "fix(providers): a mixed hook entry keeps the user's command");
   mkdirSync(join(root, ".hunch"));
   writeFileSync(join(root, ".hunch", "config.json"), JSON.stringify({ firmness: "advisory" }));
+  // HUNCH_HOOK_DIET=0: asserts the v1.42.0 delta one-liner (proves the kill switch).
   const hook = (session: string) => execFileSync(process.execPath, ["--import", tsxLoaderUrl(), resolve("src/cli/index.ts"), "hook"], {
-    cwd: root, env: { ...process.env, HUNCH_PIPELINE: "0" }, encoding: "utf8",
+    cwd: root, env: { ...process.env, HUNCH_PIPELINE: "0", HUNCH_HOOK_DIET: "0" }, encoding: "utf8",
     input: JSON.stringify({ hook_event_name: "PreToolUse", session_id: session, cwd: root, tool_name: "Edit", tool_input: { file_path: join(root, "src", "claude.ts"), old_string: "other = 1", new_string: "other = 2" } }),
   }).trim();
   const first = JSON.parse(hook("sib-session")) as { hookSpecificOutput?: { additionalContext?: string } };
@@ -608,10 +609,12 @@ test("a file edited through a shell command gets the same grounding after the co
   commit(root, "fix(providers): a mixed hook entry keeps the user's command");
   mkdirSync(join(root, ".hunch"));
   writeFileSync(join(root, ".hunch", "config.json"), JSON.stringify({ firmness: "advisory" }));
+  // HUNCH_HOOK_DIET=0: asserts the v1.42.0 full shell-write grounding (the diet
+  // sends a pointer instead — test/hook-diet.test.ts), proving the kill switch.
   for (const pipeline of ["0", "1"]) {
     const session = `sib-shell-${pipeline}-${process.pid}-${Date.now()}`;
     const hook = (event: object) => execFileSync(process.execPath, ["--import", tsxLoaderUrl(), resolve("src/cli/index.ts"), "hook"], {
-      cwd: root, env: { ...process.env, HUNCH_PIPELINE: pipeline }, encoding: "utf8",
+      cwd: root, env: { ...process.env, HUNCH_PIPELINE: pipeline, HUNCH_HOOK_DIET: "0" }, encoding: "utf8",
       input: JSON.stringify({ session_id: session, cwd: root, ...event }),
     }).trim();
     const bash = (command: string) => hook({ hook_event_name: "PostToolUse", tool_name: "Bash", tool_input: { command }, tool_response: { stdout: "" } });
@@ -639,6 +642,49 @@ test("a file edited through a shell command gets the same grounding after the co
     assert.match(followUp, /`isOurClaudeHook` \(src\/claude\.ts\) is unchanged/);
     assert.match(followUp, /`installHooks` calls it/);
     assert.doesNotMatch(check(), /before you finish/, "once per lesson");
+  }
+});
+
+test("hook diet: a shell write gets a pointer naming the lesson, saves no lesson, and never holds back the lesson's follow-up", { timeout: 180_000 }, t => {
+  const root = repo(t);
+  writeFileSync(join(root, "src", "providers.ts"), `\n${fixedMatcher("isOurProviderHook")}\nexport function unrelated(): number {\n  const a = 1;\n  return a + 1;\n}\n`);
+  commit(root, "fix(providers): a mixed hook entry keeps the user's command");
+  mkdirSync(join(root, ".hunch"));
+  writeFileSync(join(root, ".hunch", "config.json"), JSON.stringify({ firmness: "advisory" }));
+  const pointerLine = 'Hunch: src/claude.ts was written by a shell command; a sibling-fix lesson exists. Full grounding: hunch_why("src/claude.ts").';
+  for (const diet of ["1", "0"]) {
+    const session = `sib-diet-${diet}-${process.pid}-${Date.now()}`;
+    const hook = (event: object, prompt: string) => execFileSync(process.execPath, ["--import", tsxLoaderUrl(), resolve("src/cli/index.ts"), "hook"], {
+      cwd: root, env: { ...process.env, HUNCH_PIPELINE: "1", HUNCH_HOOK_DIET: diet }, encoding: "utf8",
+      input: JSON.stringify({ session_id: session, prompt_id: prompt, cwd: root, ...event }),
+    }).trim();
+    const context = (out: string) => (JSON.parse(out || "{}") as { hookSpecificOutput?: { additionalContext?: string } }).hookSpecificOutput?.additionalContext ?? "";
+    const check = (prompt: string) => context(hook({ hook_event_name: "PostToolUse", tool_name: "Bash", tool_input: { command: "npx tsx --test test/claude.test.ts" }, tool_response: { stdout: "" } }, prompt));
+    const shellEdit = (n: number) => writeFileSync(join(root, "src", "claude.ts"), readFileSync(join(root, "src", "claude.ts"), "utf8").replace(/other = \d+/, `other = ${n}`));
+
+    hook({ hook_event_name: "UserPromptSubmit", prompt: "extend the claude matcher" }, "p1");
+    shellEdit(10 + Number(diet));
+    const first = check("p1");
+    if (diet === "1") {
+      assert.equal(first, pointerLine, "no graph record for the file: the pointer names only the lesson");
+      assert.doesNotMatch(first, /## ⚠ Fix not carried|this shell command wrote/, "no lesson body, no header");
+    } else {
+      assert.match(first, /this shell command wrote src\/claude\.ts/);
+      assert.doesNotMatch(first, /Hunch — before you finish/, "v1.42.0: the command that delivered the lesson gets no follow-up");
+    }
+    if (diet === "1") {
+      // The pointer saved no lesson state: the next check has nothing to follow up.
+      assert.doesNotMatch(check("p1"), /Hunch — before you finish/);
+      // The Edit tool delivers the lesson in full (and remembers it).
+      assert.match(context(hook({ hook_event_name: "PreToolUse", tool_name: "Edit", tool_input: { file_path: join(root, "src", "claude.ts"), old_string: "x", new_string: "y" } }, "p1")), /Fix not carried to this function/);
+      // A new prompt is a new task, so its pre-edit grounding is not yet served:
+      // the file gets a pointer again, and the check that wrote it gets the follow-up.
+      hook({ hook_event_name: "UserPromptSubmit", prompt: "now wire it in" }, "p2");
+      shellEdit(20);
+      const both = check("p2");
+      assert.ok(both.startsWith(`${pointerLine}\n\n`), both);
+      assert.match(both, /Hunch — before you finish/, "a pointer is not the lesson, so the check still gets its follow-up");
+    }
   }
 });
 

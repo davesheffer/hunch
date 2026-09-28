@@ -1,9 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { writeFileSync, mkdirSync } from "node:fs";
+import { writeFileSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { injectionMode, resetSessionInjections } from "../src/core/hookcache.js";
+import { consumeInjectionBudget, injectionMode, peekInjectionMode, resetSessionInjections } from "../src/core/hookcache.js";
 
 const SID = () => `hunch-test-${process.pid}-${Math.floor(performance.now() * 1000)}`;
 
@@ -84,4 +84,56 @@ test("hookcache: a corrupt cache file degrades to full (grounded beats deduped),
   writeFileSync(join(dir, `${sid}.json`), "{not json");
   assert.equal(injectionMode(sid, "k", "X"), "full", "corrupt file must not fake a delta");
   assert.equal(injectionMode(sid, "k", "X"), "delta", "cache rebuilt after the corrupt read");
+});
+
+test("hookcache: peekInjectionMode answers like injectionMode but never records", () => {
+  const sid = SID();
+  assert.equal(peekInjectionMode(sid, "pre:src/a.ts", "G", "id-1"), "full");
+  assert.equal(peekInjectionMode(sid, "pre:src/a.ts", "G", "id-1"), "full", "a peek is not a delivery");
+  assert.equal(injectionMode(sid, "pre:src/a.ts", "G", "id-1"), "full", "so the first real injection is still full");
+  assert.equal(peekInjectionMode(sid, "pre:src/a.ts", "G", "id-1"), "delta");
+  assert.equal(peekInjectionMode(sid, "pre:src/a.ts", "G", "id-2"), "full", "a record change reads as full");
+  assert.equal(peekInjectionMode(undefined, "pre:src/a.ts", "G", "id-1"), "full");
+});
+
+test("hookcache: consumeInjectionBudget charges until the limit, refuses the crossing charge, keys are independent", () => {
+  const sid = SID();
+  assert.equal(consumeInjectionBudget(sid, "grounding", 5000, 8000), true);
+  assert.equal(consumeInjectionBudget(sid, "grounding", 3000, 8000), true, "exactly at the limit still fits");
+  assert.equal(consumeInjectionBudget(sid, "grounding", 1, 8000), false, "past the limit is refused");
+  assert.equal(consumeInjectionBudget(sid, "grounding:agent", 8000, 8000), true, "another agent identity has its own budget");
+  const fresh = SID();
+  assert.equal(consumeInjectionBudget(fresh, "grounding", 9000, 8000), false, "a single charge over the limit is refused");
+  assert.equal(consumeInjectionBudget(fresh, "grounding", 8000, 8000), true, "and a refused charge used nothing");
+});
+
+test("hookcache: the budget resets with the session and survives the dedup map's trim", () => {
+  const sid = SID();
+  assert.equal(consumeInjectionBudget(sid, "grounding", 7000, 8000), true);
+  for (let i = 0; i < 350; i++) injectionMode(sid, `pre:src/f${i}.ts`, "G");
+  assert.equal(consumeInjectionBudget(sid, "grounding", 2000, 8000), false, "trimming dedup keys must not hand out a fresh budget");
+  resetSessionInjections(sid);
+  assert.equal(consumeInjectionBudget(sid, "grounding", 2000, 8000), true, "compaction resets the budget");
+});
+
+test("hookcache: the budget fails toward grounding — no session, kill switch, corrupt or unreadable cache", t => {
+  assert.equal(consumeInjectionBudget(undefined, "grounding", 9000, 8000), true);
+  const prev = process.env.HUNCH_HOOK_DEDUP;
+  process.env.HUNCH_HOOK_DEDUP = "0";
+  try {
+    assert.equal(consumeInjectionBudget(SID(), "grounding", 9000, 8000), true, "the dedup kill switch disables the budget");
+  } finally {
+    if (prev === undefined) delete process.env.HUNCH_HOOK_DEDUP;
+    else process.env.HUNCH_HOOK_DEDUP = prev;
+  }
+  const dir = join(tmpdir(), "hunch-hookcache");
+  mkdirSync(dir, { recursive: true });
+  const corrupt = SID();
+  writeFileSync(join(dir, `${corrupt}.json`), "{not json");
+  assert.equal(consumeInjectionBudget(corrupt, "grounding", 9000, 8000), true, "a corrupt cache is a cache error, not an empty budget");
+  const unreadable = SID();
+  mkdirSync(join(dir, `${unreadable}.json`));
+  t.after(() => rmSync(join(dir, `${unreadable}.json`), { recursive: true, force: true }));
+  assert.equal(consumeInjectionBudget(unreadable, "grounding", 9000, 8000), true);
+  assert.equal(peekInjectionMode(unreadable, "k", "X"), "full");
 });

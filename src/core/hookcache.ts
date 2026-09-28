@@ -14,6 +14,10 @@
  * cache error (unwritable tmpdir, corrupt file, missing session id) the answer
  * is "full". Deny decisions are never routed through here: the gate re-checks
  * every edit regardless. Kill switch: HUNCH_HOOK_DEDUP=0.
+ *
+ * The same per-session file carries the hook diet's grounding budget
+ * (consumeInjectionBudget): a running character count per agent identity, so
+ * resetSessionInjections (compaction) resets it together with the dedup map.
  */
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, statSync, rmSync } from "node:fs";
@@ -22,6 +26,9 @@ import { tmpdir } from "node:os";
 
 const MAX_KEYS = 300;
 const SWEEP_AGE_MS = 48 * 3600 * 1000;
+/** Budget counters share the dedup map but are never trimmed with it: evicting
+ *  one would silently hand an agent a fresh budget mid-session. */
+const BUDGET_PREFIX = "budget:";
 
 /** Decide whether this injection should be the FULL grounding block or a delta
  *  one-liner. Records the content hash as a side effect (so the next identical
@@ -39,23 +46,57 @@ export function injectionMode(sessionId: string | undefined, key: string, conten
     const dir = join(tmpdir(), "hunch-hookcache");
     mkdirSync(dir, { recursive: true });
     sweep(dir);
-    const file = join(dir, `${sessionId.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 80)}.json`);
-    const hash = createHash("sha256").update(hashInput).digest("hex").slice(0, 16);
-    let map: Record<string, string>;
-    try {
-      const raw = JSON.parse(readFileSync(file, "utf8")) as unknown;
-      map = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, string>) : {};
-    } catch {
-      map = {};
-    }
+    const file = cacheFile(sessionId);
+    const hash = hashOf(hashInput);
+    const map = readMap(file);
     if (map[key] === hash) return "delta";
     map[key] = hash;
-    const keys = Object.keys(map);
+    const keys = Object.keys(map).filter((k) => !k.startsWith(BUDGET_PREFIX));
     if (keys.length > MAX_KEYS) for (const k of keys.slice(0, keys.length - MAX_KEYS)) delete map[k];
     writeFileSync(file, JSON.stringify(map));
     return "full";
   } catch {
     return "full"; // grounded beats deduped, always
+  }
+}
+
+/** What injectionMode WOULD answer for this key, without recording anything:
+ *  the hook diet asks "was this file's grounding already served?" from paths
+ *  that must not count as serving it (a shell-write pointer, a budget check).
+ *  Never writes, never throws; same "full" answer on any doubt. */
+export function peekInjectionMode(sessionId: string | undefined, key: string, content: string, hashInput: string = content): "full" | "delta" {
+  try {
+    if (!sessionId || process.env.HUNCH_HOOK_DEDUP === "0") return "full";
+    return readMap(cacheFile(sessionId))[key] === hashOf(hashInput) ? "delta" : "full";
+  } catch {
+    return "full";
+  }
+}
+
+/** Session grounding budget (hook diet): charge `chars` to `key`'s running
+ *  total when the total stays within `limit` and answer true; answer false and
+ *  charge nothing when it would cross it — including a single charge larger
+ *  than `limit` on its own. The caller keys it by agent identity, so a
+ *  subagent's fresh context gets its own budget. Fails toward grounding like
+ *  injectionMode: missing session id, the dedup kill switch, or any cache error
+ *  → true. Never throws. */
+export function consumeInjectionBudget(sessionId: string | undefined, key: string, chars: number, limit: number): boolean {
+  try {
+    if (!sessionId || process.env.HUNCH_HOOK_DEDUP === "0") return true;
+    mkdirSync(join(tmpdir(), "hunch-hookcache"), { recursive: true });
+    const file = cacheFile(sessionId);
+    // Unlike the dedup map, an unreadable or corrupt file is not "nothing used
+    // yet": answering from it could withhold grounding on a broken cache.
+    const map = tryReadMap(file);
+    if (!map) return true;
+    const stored = Number(map[BUDGET_PREFIX + key] ?? 0);
+    const used = Number.isFinite(stored) && stored > 0 ? stored : 0;
+    if (used + chars > limit) return false;
+    map[BUDGET_PREFIX + key] = String(used + chars);
+    writeFileSync(file, JSON.stringify(map));
+    return true;
+  } catch {
+    return true; // grounded beats budgeted, always
   }
 }
 
@@ -67,10 +108,33 @@ export function injectionMode(sessionId: string | undefined, key: string, conten
 export function resetSessionInjections(sessionId: string | undefined): void {
   try {
     if (!sessionId) return;
-    const file = join(tmpdir(), "hunch-hookcache", `${sessionId.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 80)}.json`);
-    rmSync(file, { force: true });
+    rmSync(cacheFile(sessionId), { force: true });
   } catch {
     /* unwritable tmpdir — next injectionMode call falls back to "full" anyway */
+  }
+}
+
+function cacheFile(sessionId: string): string {
+  return join(tmpdir(), "hunch-hookcache", `${sessionId.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 80)}.json`);
+}
+
+function hashOf(input: string): string {
+  return createHash("sha256").update(input).digest("hex").slice(0, 16);
+}
+
+/** The session's map; unreadable or corrupt reads as empty (never a fake delta). */
+function readMap(file: string): Record<string, string> {
+  return tryReadMap(file) ?? {};
+}
+
+/** The session's map, empty when the file does not exist yet, null when it
+ *  exists but cannot be read or parsed. */
+function tryReadMap(file: string): Record<string, string> | null {
+  try {
+    const raw = JSON.parse(readFileSync(file, "utf8")) as unknown;
+    return raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, string>) : null;
+  } catch (e) {
+    return (e as NodeJS.ErrnoException).code === "ENOENT" ? {} : null;
   }
 }
 
