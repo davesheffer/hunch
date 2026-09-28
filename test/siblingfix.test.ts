@@ -651,7 +651,8 @@ test("hook diet: a shell write gets a pointer naming the lesson, saves no lesson
   commit(root, "fix(providers): a mixed hook entry keeps the user's command");
   mkdirSync(join(root, ".hunch"));
   writeFileSync(join(root, ".hunch", "config.json"), JSON.stringify({ firmness: "advisory" }));
-  const pointerLine = 'Hunch: src/claude.ts was written by a shell command; a sibling-fix lesson exists. Full grounding: hunch_why("src/claude.ts").';
+  // hunch_context renders the lesson for a file target, so the pointer names it.
+  const pointerLine = 'Hunch: src/claude.ts was written by a shell command; a sibling-fix lesson exists: hunch_context("src/claude.ts"). Full grounding: hunch_why("src/claude.ts").';
   for (const diet of ["1", "0"]) {
     const session = `sib-diet-${diet}-${process.pid}-${Date.now()}`;
     const hook = (event: object, prompt: string) => execFileSync(process.execPath, ["--import", tsxLoaderUrl(), resolve("src/cli/index.ts"), "hook"], {
@@ -677,13 +678,14 @@ test("hook diet: a shell write gets a pointer naming the lesson, saves no lesson
       assert.doesNotMatch(check("p1"), /Hunch — before you finish/);
       // The Edit tool delivers the lesson in full (and remembers it).
       assert.match(context(hook({ hook_event_name: "PreToolUse", tool_name: "Edit", tool_input: { file_path: join(root, "src", "claude.ts"), old_string: "x", new_string: "y" } }, "p1")), /Fix not carried to this function/);
-      // A new prompt is a new task, so its pre-edit grounding is not yet served:
-      // the file gets a pointer again, and the check that wrote it gets the follow-up.
+      // The agent still holds the lesson under a new prompt (the dedupe is
+      // session-wide per agent), so the file gets no pointer; the check that
+      // wrote it still gets the follow-up.
       hook({ hook_event_name: "UserPromptSubmit", prompt: "now wire it in" }, "p2");
       shellEdit(20);
       const both = check("p2");
-      assert.ok(both.startsWith(`${pointerLine}\n\n`), both);
-      assert.match(both, /Hunch — before you finish/, "a pointer is not the lesson, so the check still gets its follow-up");
+      assert.ok(!both.includes(pointerLine), both);
+      assert.match(both, /Hunch — before you finish/, "the lesson is still unapplied, so the check gets its follow-up");
     }
   }
 });

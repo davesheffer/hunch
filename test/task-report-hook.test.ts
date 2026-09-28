@@ -27,11 +27,11 @@ function fixture(t: { after: (f: () => void) => void }) {
 // The per-session injection cache lives in the OS tmpdir keyed by session_id, and
 // these tests reuse session ids; a per-fixture tmpdir keeps one test's dedup state
 // out of the next.
-function hook(root: string, event: string, extra: Record<string, unknown> = {}, provider = "claude") {
+function hook(root: string, event: string, extra: Record<string, unknown> = {}, provider = "claude", env: Record<string, string> = {}) {
   const tmp = join(root, ".tmp");
   mkdirSync(tmp, { recursive: true });
   const output = execFileSync(process.execPath, ["--import", tsxLoaderUrl(), cli, "hook", "--provider", provider], {
-    cwd: root, env: { ...process.env, HUNCH_PIPELINE: "0", TMPDIR: tmp, TMP: tmp, TEMP: tmp },
+    cwd: root, env: { ...process.env, HUNCH_PIPELINE: "0", TMPDIR: tmp, TMP: tmp, TEMP: tmp, ...env },
     input: JSON.stringify({ hook_event_name: event, cwd: root, session_id: "session-a", prompt_id: "prompt-a", ...extra }), encoding: "utf8",
   }).trim();
   return output ? JSON.parse(output) : null;
@@ -263,7 +263,12 @@ test("native pre-edit injections appear in the exact prompt report; deltas do no
   assert.match(hook(root, "Stop").systemMessage, /Recalled.*Preserve existing settings/);
   hook(root, "UserPromptSubmit", { prompt_id: "prompt-b" });
   const second = listReportTasks(root)[0]!;
-  const fresh = hook(root, "PreToolUse", { ...input, prompt_id: "prompt-b" });
+  // Hook diet: the agent already holds this grounding in full, so under a new
+  // prompt it is a repeat — silent, and no delivery to that prompt's task.
+  assert.equal(hook(root, "PreToolUse", { ...input, prompt_id: "prompt-b" }), null);
+  assert.equal(readTaskReport(root, second.task_id).deliveries.length, 0, "a repeat is no delivery to the later prompt");
+  // HUNCH_HOOK_DIET=0 (v1.42.0): deduplication is per task.
+  const fresh = hook(root, "PreToolUse", { ...input, prompt_id: "prompt-b" }, "claude", { HUNCH_HOOK_DIET: "0" });
   assert.match(fresh.systemMessage, /Hunch recalled: Preserve existing settings/, "deduplication is per task, so a new prompt hears the lesson once more");
   assert.equal(readTaskReport(root, second.task_id).deliveries.length, 1, "a previous prompt's delta cannot substitute for a full receipt");
   assert.notEqual(readTaskReport(root, first.task_id).deliveries[0]!.occurrence_id, readTaskReport(root, second.task_id).deliveries[0]!.occurrence_id);
