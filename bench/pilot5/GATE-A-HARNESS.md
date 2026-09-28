@@ -2,8 +2,10 @@
 
 Design for `hunch task benchmark` (plan: `docs/HUNCH-CONTEXT-EFFICIENCY-POC.md`, sections 3.1, 7, 8, 11, 15).
 Frozen before any timed run. A change to any rule below after the first timed run starts a new experiment version.
-Amended 2026-09-28, before any timed run, to close the adversarial review of the harness: agent-surface files that
-mention Hunch are removed in `no-hunch`, and the preflight and post-run checks below were added.
+Amended 2026-09-28, before any Gate A timed run, to close the adversarial review of the harness: agent-surface files
+that mention Hunch are removed in `no-hunch`, and the preflight and post-run checks below were added. Amended again the
+same day after an untimed two-run smoke suite (not part of Gate A) showed two harness artifacts in `current-hunch`: the
+repo `.mcp.json` and the audited CLI entrypoint allowance below.
 
 ## Revisions
 
@@ -68,6 +70,10 @@ validator. One setup commit (`bench: arm setup`) so the agent starts from a clea
   audited dist.
 - `hunch grounding --refresh` and `hunch index` with the audited CLI.
 - Child MCP config: one `hunch` server = `<node> <audited>/dist/cli/index.js mcp --root <repo>`, env `HUNCH_PRIVATE_DIR`.
+- The same single server is written to `<repo>/.mcp.json` (amended 2026-09-28, after an untimed smoke run). A
+  `hunch init` user has that file; without it the audited SessionStart hook injects an "integration needs attention"
+  warning that no real user sees. The child still loads only the MCP config file under `--strict-mcp-config`. Exposure
+  check `repo-mcp-json-matches`.
 
 The snapshot-hash check runs right after the snapshot is copied, before the audited writers and `hunch index` run
 (`index` legitimately rewrites `components/`); the post-setup `.hunch` hash is recorded separately.
@@ -111,7 +117,9 @@ sha256 and must contain no `hunch` string; unrelated user instructions are prese
   the run `isolation_breach`. Added 2026-09-28: every string in the transcript's tool inputs is scanned for a path
   under the source repository, the private overlay, the audited worktree, the controller or the output directory
   (path-boundary match, MSYS `/c/` paths normalized, mentions of the run's own directory ignored), and for any three
-  consecutive `../` segments; any hit fails `no-out-of-repo-access` and marks the run `isolation_breach`.
+  consecutive `../` segments. In `current-hunch`, mentions of the exact file `<audited>/dist/cli/index.js` are also
+  ignored, because the audited UserPromptSubmit hook tells the agent to run checks through
+  `<node> <audited>/dist/cli/index.js task verify`; every other audited path stays denied. Any hit fails `no-out-of-repo-access` and marks the run `isolation_breach`.
 - Auto memory (added 2026-09-28): Claude Code keeps auto memory per working directory under
   `~/.claude/projects/<path with non-alphanumerics as ->`. Before each run an existing directory for the run's repo path
   is renamed `.bench-stale-<n>` and logged, so a rerun after an interruption starts without memory; the `init` event's
