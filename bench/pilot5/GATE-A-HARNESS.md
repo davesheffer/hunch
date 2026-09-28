@@ -117,12 +117,14 @@ sha256 and must contain no `hunch` string; unrelated user instructions are prese
   the run `isolation_breach`. Added 2026-09-28: every string in the transcript's tool inputs is scanned for a path
   under the source repository, the private overlay, the audited worktree, the controller or the output directory
   (path-boundary match, MSYS `/c/` paths normalized, `~`, `$HOME`, `${HOME}`, `$env:USERPROFILE` and `%USERPROFILE%`
-  resolved to the real home, mentions of the run's own directory ignored), and for three `../` segments in a row
-  (repeated separators and `./` between them tolerated). In `current-hunch`, the exact file
-  `<audited>/dist/cli/index.js` is also ignored where it is invoked (optional closing quote, whitespace, subcommand
-  word), because the audited UserPromptSubmit hook tells the agent to run checks through
-  `<node> <audited>/dist/cli/index.js task verify`; the same path followed by `/`, `.` or code punctuation, and every
-  other audited path, stays denied. Harness 4ffe364. Any hit fails `no-out-of-repo-access` and marks the run `isolation_breach`.
+  resolved to the real home, mentions of the run's own directory ignored), and, outside file content (Edit/Write
+  bodies, NotebookEdit source, todo text), for three `../` segments in a row (repeated separators and `./` between
+  them tolerated). In `current-hunch`, the exact file `<audited>/dist/cli/index.js` is also ignored where it is
+  invoked (optional closing quote, whitespace, then a subcommand word or a flag), because the audited
+  UserPromptSubmit hook tells the agent to run checks through `<node> <audited>/dist/cli/index.js task verify`; a
+  bare mention (indistinguishable from reading the file), the same path followed by `/`, `.` or code punctuation, and
+  every other audited path stay denied. Known gaps, adversarial only: `$HOME/..` style climbs and code that builds a
+  deny path from parts. Harness 34bf818. Any hit fails `no-out-of-repo-access` and marks the run `isolation_breach`.
 - Auto memory (added 2026-09-28): Claude Code keeps auto memory per working directory under
   `~/.claude/projects/<path with non-alphanumerics as ->`. Before each run an existing directory for the run's repo path
   is renamed `.bench-stale-<n>` and logged, so a rerun after an interruption starts without memory; the `init` event's
