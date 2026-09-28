@@ -8,12 +8,37 @@ import type { BenchmarkArm, EfficiencyRun } from "./types.js";
 const TIE_BREAK_STATUSES: ReadonlySet<EfficiencyRun["status"]> = new Set(["completed", "timed_out", "agent_error"]);
 
 /**
- * Arm order for one repetition. Rep 1: the last hex digit of sha256(`seed|task|1`) `& 1` keeps
- * (0) or reverses (1) the given order; later reps alternate (even reps reversed, odd reps as rep 1).
+ * The 6 orderings of 3 index positions, in lexicographic order; `basePermutation`'s digest-derived
+ * index selects one of these to seed the "rotate-3" three-arm rule.
+ */
+const PERMUTATIONS_OF_3: readonly (readonly [number, number, number])[] = [
+  [0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0], [2, 0, 1], [2, 1, 0],
+];
+
+/** Deterministic base permutation of exactly 3 arms, drawn once per seed+task from the digest. */
+function basePermutation(digest: string, arms: readonly BenchmarkArm[]): BenchmarkArm[] {
+  const index = Number.parseInt(digest.slice(0, 8), 16) % PERMUTATIONS_OF_3.length;
+  return PERMUTATIONS_OF_3[index]!.map((i) => arms[i]!);
+}
+
+/**
+ * Arm order for one repetition, keyed by sha256(`seed|task|1`).
+ *
+ * Two arms: the digest's last hex digit `& 1` keeps (0) or reverses (1) the order at rep 1; later
+ * reps alternate (even reps reversed, odd reps as rep 1).
+ *
+ * Three arms ("rotate-3" rule): the digest picks one of the 6 base permutations of the arms, once
+ * per seed+task. Repetition r, 0-based (`rep - 1`), runs that base permutation rotated left by
+ * `r % 3`, so every 3 consecutive repetitions of a task run each arm in each position exactly once.
  */
 export function armOrder(seed: string, taskId: string, rep: number, arms: readonly BenchmarkArm[]): BenchmarkArm[] {
   if (!Number.isInteger(rep) || rep < 1) throw new Error(`armOrder: rep must be an integer >= 1, got ${rep}`);
   const digest = createHash("sha256").update(`${seed}|${taskId}|1`).digest("hex");
+  if (arms.length === 3) {
+    const base = basePermutation(digest, arms);
+    const shift = (rep - 1) % 3;
+    return [...base.slice(shift), ...base.slice(0, shift)];
+  }
   const first = (Number.parseInt(digest.at(-1) ?? "0", 16) & 1) === 0 ? [...arms] : [...arms].reverse();
   return rep % 2 === 0 ? first.reverse() : first;
 }

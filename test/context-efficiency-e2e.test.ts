@@ -18,15 +18,17 @@ const TSX_STUB = `import { spawnSync } from "node:child_process";
 const result = spawnSync(process.execPath, process.argv.slice(2).filter((arg) => arg !== "--test"), { stdio: "inherit", windowsHide: true });
 process.exit(result.status ?? 1);
 `;
-/** Fixture agent: records its arm (hunch server in the MCP config => current-hunch), fixes the file,
- *  and prints a stream-json transcript whose init reports every configured server as connected. */
+/** Fixture agent: records its arm (hunch server in the MCP config => current-hunch, diet-hunch when that server
+ *  runs from the diet checkout), fixes the file, and prints a stream-json transcript whose init reports every
+ *  configured server as connected. */
 const AGENT = `import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 readFileSync(0, "utf8");
-const servers = Object.keys(JSON.parse(readFileSync(process.argv[2], "utf8")).mcpServers ?? {});
-const arm = servers.includes("hunch") ? "current-hunch" : "no-hunch";
+const mcpServers = JSON.parse(readFileSync(process.argv[2], "utf8")).mcpServers ?? {};
+const servers = Object.keys(mcpServers);
+const arm = !servers.includes("hunch") ? "no-hunch" : /[\\\\/]diet[\\\\/]dist[\\\\/]/.test(mcpServers.hunch.args[0]) ? "diet-hunch" : "current-hunch";
 appendFileSync(process.env.BENCH_FIXTURE_COUNTER, arm + "\\n");
 writeFileSync("src/sum.mjs", "export const sum = (a, b) => a + b;\\n");
-const hunch = arm === "current-hunch";
+const hunch = arm !== "no-hunch";
 const events = [
   { type: "system", subtype: "init", model: "fixture-model", apiKeySource: "none",
     mcp_servers: servers.map((name) => ({ name, status: "connected" })),
@@ -353,4 +355,65 @@ test("isOutOfRepoAccess flags deny roots outside the run dir and traversal, in e
   assert.equal(isOutOfRepoAccess("cat $HOME/hunch-private/x", denyRoots, runDir, [], home), true, "$HOME home form");
   assert.equal(isOutOfRepoAccess('ls "$env:USERPROFILE\\hunch-private"', denyRoots, runDir, [], home), true, "$env:USERPROFILE home form");
   assert.equal(isOutOfRepoAccess("ls ~/notes", denyRoots, runDir, [], home), false, "a home path outside the deny roots is allowed");
+});
+
+test("task benchmark runs three arms from two checkouts and reports each Hunch arm vs no-hunch plus diet vs current", async () => {
+  const diet = join(root, "diet");
+  writeStubAudited(diet);
+  put(diet, "package.json", JSON.stringify({ type: "module", version: "0.0.0-diet" }) + "\n");
+  const dietCli = join(diet, "dist", "cli", "index.js");
+  put(diet, "dist/cli/index.js", readFileSync(dietCli, "utf8") + "// diet build\n");
+  const dietRevision = commit(diet, "diet build", "2026-01-02 00:00:00 +0000");
+  // A diet checkout at a new revision whose built CLI is byte-identical to the audited one.
+  const dietSame = join(root, "diet-same");
+  writeStubAudited(dietSame);
+  put(dietSame, "package.json", JSON.stringify({ type: "module", version: "0.0.0-diet-same" }) + "\n");
+  commit(dietSame, "diet not rebuilt", "2026-01-02 00:00:00 +0000");
+  const three: BenchmarkArm[] = ["no-hunch", "current-hunch", "diet-hunch"];
+  const out3 = join(root, "out-three");
+  const threeOpts: RunBenchmarkOptions = { ...opts, arms: [...three], runs: 1, output: out3, dietRoot: diet };
+  const spawned = readLines(counter).length;
+
+  assert.equal((await runBenchmark({ ...threeOpts, dietRoot: undefined })).exitCode, 1);
+  assert.ok(logs.some((line) => line.includes("needs --diet-root")), logs.join("\n"));
+  assert.equal((await runBenchmark({ ...opts, output: join(root, "out-refused"), dietRoot: diet })).exitCode, 1);
+  assert.ok(logs.some((line) => line.includes("--diet-root is only accepted")), logs.join("\n"));
+  assert.equal((await runBenchmark({ ...threeOpts, output: join(root, "out-diet-audited"), dietRoot: opts.audited })).exitCode, 1);
+  assert.ok(logs.some((line) => line.includes("is the audited root")), logs.join("\n"));
+  assert.equal((await runBenchmark({ ...threeOpts, output: join(root, "out-diet-same"), dietRoot: dietSame })).exitCode, 1);
+  assert.ok(logs.some((line) => line.includes("identical to the audited build")), logs.join("\n"));
+  assert.equal(readLines(counter).length, spawned, "refusals spawn nothing");
+
+  assert.equal((await runBenchmark(threeOpts)).exitCode, 0, logs.join("\n"));
+  const manifest = JSON.parse(readFileSync(join(out3, "manifest.json"), "utf8"));
+  assert.deepEqual(manifest.manifest.arms, three);
+  assert.deepEqual(manifest.manifest.diet, {
+    revision: dietRevision, version: "0.0.0-diet", cli_sha256: createHash("sha256").update(readFileSync(dietCli)).digest("hex"),
+  });
+  assert.match(manifest.manifest.diet.cli_sha256, /^[0-9a-f]{64}$/);
+  assert.ok(!("cli_sha256" in manifest.manifest.audited), "the audited object is unchanged");
+  assert.notEqual(manifest.manifest.audited.revision, dietRevision);
+  assert.equal(manifest.environment.diet_root, diet);
+  assert.deepEqual(readLines(counter).slice(spawned), armOrder(SEED, TASK, 1, three), "the fixture agent saw each arm's own checkout");
+  const dirs = readdirSync(join(out3, "runs", TASK)).sort();
+  assert.deepEqual(dirs, ["1-current-hunch", "1-diet-hunch", "1-no-hunch"]);
+  for (const dir of dirs) {
+    const run = JSON.parse(readFileSync(join(out3, "runs", TASK, dir, "run.json"), "utf8")) as EfficiencyRun;
+    assert.equal(run.status, "completed", `${dir}: ${run.isolation_evidence.join(" | ")}`);
+    assert.equal(run.audited_hunch_revision,
+      run.arm === "diet-hunch" ? dietRevision : run.arm === "current-hunch" ? manifest.manifest.audited.revision : null);
+    assert.equal(run.memory_revision, run.arm === "no-hunch" ? null : manifest.manifest.tasks[0].snapshot.public.sha256);
+    assert.equal(run.cost.background_wakeups, 0);
+    assert.deepEqual(run.cost.hook_injections?.total, { injections: 0, chars: 0 }, "the fixture hook writes stdout only, not output");
+  }
+  const report = JSON.parse(readFileSync(join(out3, "report.json"), "utf8"));
+  assert.deepEqual(report.arms, { baseline: "no-hunch", treatment: "current-hunch" });
+  assert.deepEqual(report.additional_pairs.map((p: { arms: unknown }) => p.arms), [{ baseline: "no-hunch", treatment: "diet-hunch" }]);
+  assert.deepEqual(report.diet_vs_current.tasks, [TASK]);
+  assert.match(readFileSync(join(out3, "report.md"), "utf8"), /## diet-hunch vs current-hunch/);
+  assert.equal((await runBenchmark({ ...threeOpts, dietRoot: undefined, reportOnly: true, recount: true })).exitCode, 0, logs.join("\n"));
+
+  // The two-arm manifest carries no diet key and no diet_root, so its hash is what it was before diet-hunch existed.
+  const twoArm = JSON.parse(readFileSync(join(out, "manifest.json"), "utf8"));
+  assert.ok(!("diet" in twoArm.manifest) && !("diet_root" in twoArm.environment));
 });

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  buildBenchmarkReport, median, renderBenchmarkMarkdown, summarizeMetric, type BenchmarkReport,
+  buildBenchmarkReport, DIET_MECHANISM_EVENTS, median, renderBenchmarkMarkdown, summarizeMetric, type BenchmarkReport,
 } from "../src/core/taskSavings.js";
 import type { BenchmarkArm, BenchmarkSuite, EfficiencyRun, SuiteTask, TaskCost } from "../src/benchmark/types.js";
 
@@ -169,4 +169,102 @@ test("same input yields identical JSON and Markdown regardless of run order", ()
 
 test("runs for tasks outside the suite are refused", () => {
   assert.throws(() => build([run("t-unknown", "no-hunch", 0)]), /not in suite pilot5/);
+});
+
+const hooks = (pre: number, post: number, other = 5000) => ({
+  by_event: {
+    PreToolUse: { injections: 1, chars: pre }, PostToolUse: { injections: 1, chars: post }, SessionStart: { injections: 1, chars: other },
+  },
+  total: { injections: 3, chars: pre + post + other },
+});
+/** Two paired tasks (t-cont, t-bug), one run per arm each; t-conv has only a valid current-hunch run and must not count. */
+const dietRuns = (diet: Partial<TaskCost> = {}, dietOver: Partial<EfficiencyRun> = {}, bugDietOver: Partial<EfficiencyRun> = {}) => [
+  run("t-cont", "no-hunch", 1, { input_tokens: 2000, main_model_calls: 20 }),
+  run("t-bug", "no-hunch", 1, { input_tokens: 2000, main_model_calls: 20 }),
+  run("t-cont", "current-hunch", 1, { input_tokens: 1000, main_model_calls: 10, hook_injections: hooks(1000, 1000) }),
+  run("t-bug", "current-hunch", 1, { input_tokens: 1000, main_model_calls: 10, hook_injections: hooks(1000, 1000) }),
+  run("t-conv", "current-hunch", 1, { input_tokens: 1, main_model_calls: 1, hook_injections: hooks(1, 1, 1) }),
+  run("t-conv", "diet-hunch", 1, { input_tokens: 1, main_model_calls: 1, hook_injections: hooks(1, 1, 1) }, { status: "invalid_exposure" }),
+  run("t-cont", "diet-hunch", 1, { input_tokens: 800, main_model_calls: 8, hook_injections: hooks(400, 500), ...diet }, dietOver),
+  run("t-bug", "diet-hunch", 1, { input_tokens: 800, main_model_calls: 8, hook_injections: hooks(400, 500), ...diet }, { ...dietOver, ...bugDietOver }),
+];
+const threeArm = { ...opts, extra_treatments: ["diet-hunch" as const] };
+const dietReport = (...args: Parameters<typeof dietRuns>) => buildBenchmarkReport(suite, dietRuns(...args), threeArm).diet_vs_current!;
+
+test("three arms: each Hunch arm gets the pairwise comparison vs no-hunch; two-arm reports gain no keys", () => {
+  const report = buildBenchmarkReport(suite, dietRuns(), threeArm);
+  assert.deepEqual(report.arms, { baseline: "no-hunch", treatment: "current-hunch" });
+  assert.deepEqual(report.additional_pairs!.map((p) => p.arms), [{ baseline: "no-hunch", treatment: "diet-hunch" }]);
+  assert.equal(report.additional_pairs![0]!.criteria.investigation.treatment_median, 6);
+  assert.deepEqual(report.per_arm.map((a) => a.arm), ["current-hunch", "diet-hunch", "no-hunch"]);
+  const markdown = renderBenchmarkMarkdown(report);
+  assert.match(markdown, /^# Context-efficiency pilot report: current-hunch vs no-hunch, diet-hunch vs no-hunch$/m);
+  assert.match(markdown, /## Comparison: current-hunch vs no-hunch \(medians\)/);
+  assert.match(markdown, /## Comparison: diet-hunch vs no-hunch \(medians\)/);
+  assert.match(markdown, /## Existing-Hunch criteria: diet-hunch vs no-hunch \(indicative: 4 tasks\)/);
+  assert.match(markdown, /## Delivery \(diet-hunch, valid runs\)/);
+  assert.match(markdown, /## diet-hunch vs current-hunch \(indicative: 2 tasks with valid runs in both arms\)/);
+
+  const two = build(dietRuns().filter((r) => r.arm !== "diet-hunch"));
+  assert.ok(!("additional_pairs" in two) && !("diet_vs_current" in two));
+  assert.match(renderBenchmarkMarkdown(two), /^# Context-efficiency pilot report: current-hunch vs no-hunch$/m);
+  assert.match(renderBenchmarkMarkdown(two), /## Existing-Hunch criteria \(indicative: 4 tasks\)/);
+  assert.doesNotMatch(renderBenchmarkMarkdown(two), /diet/);
+  // Two arms current-hunch,diet-hunch: the pairwise report plus the diet-vs-current section.
+  const pairOnly = buildBenchmarkReport(suite, dietRuns(), { ...opts, baseline: "current-hunch", treatment: "diet-hunch" });
+  assert.ok(pairOnly.diet_vs_current && !("additional_pairs" in pairOnly));
+  assert.throws(() => buildBenchmarkReport(suite, [], { ...opts, extra_treatments: ["no-hunch"] }), /must differ/);
+});
+
+test("diet-hunch vs current-hunch passes on paired tasks only: mechanism, quality, tokens and steps", () => {
+  const d = dietReport();
+  assert.deepEqual(d.tasks, ["t-cont", "t-bug"], "t-conv has no valid diet-hunch run");
+  assert.deepEqual([d.current_valid_runs, d.diet_valid_runs], [2, 2]);
+  assert.deepEqual(d.quality, { current_success_rate: 1, diet_success_rate: 1, difference_points: 0, threshold_points: 5 });
+  assert.deepEqual(d.input_tokens, { current_median: 1000, diet_median: 800, reason: null });
+  assert.deepEqual(d.main_model_calls, { current_median: 10, diet_median: 8 });
+  assert.deepEqual(d.hook_chars_total, { current_median: 7000, diet_median: 5900 });
+  assert.deepEqual(d.hook_chars_mechanism, { current_median: 2000, diet_median: 900, events: ["PreToolUse", "PostToolUse"] });
+  assert.deepEqual(d.mechanism, { pass: true, max_ratio: 0.5 });
+  assert.deepEqual(d.improvement, { pass: true, mechanism: true, quality: true, input_tokens_lower: true, main_model_calls_lower: true });
+  assert.deepEqual([...DIET_MECHANISM_EVENTS], ["PreToolUse", "PostToolUse"]);
+  assert.equal(dietReport({ hook_injections: hooks(500, 500) }).mechanism.pass, true, "exactly half passes");
+  const markdown = renderBenchmarkMarkdown(buildBenchmarkReport(suite, dietRuns(), threeArm));
+  assert.match(markdown, /1\. Mechanism: median PreToolUse\+PostToolUse hook chars <= 50% of current-hunch's: PASS \(2000 -> 900\)/);
+  assert.match(markdown, /2\. Improvement: .*: PASS \(mechanism PASS; quality PASS, 0 points; input tokens PASS; main-agent steps PASS\)/);
+});
+
+test("diet-hunch improvement fails on each condition and is undetermined without data", () => {
+  const mechanism = dietReport({ hook_injections: hooks(600, 500) });
+  assert.equal(mechanism.mechanism.pass, false, "1100 > 50% of 2000");
+  assert.deepEqual(mechanism.improvement, { pass: false, mechanism: false, quality: true, input_tokens_lower: true, main_model_calls_lower: true });
+
+  const quality = dietReport({}, {}, { success: false, quality: { outcome: "failed", validator_id: "v" } });
+  assert.equal(quality.quality.difference_points, -50);
+  assert.deepEqual(quality.improvement, { pass: false, mechanism: true, quality: false, input_tokens_lower: true, main_model_calls_lower: true });
+
+  const tokens = dietReport({ input_tokens: 1000 });
+  assert.deepEqual(tokens.improvement, { pass: false, mechanism: true, quality: true, input_tokens_lower: false, main_model_calls_lower: true });
+
+  const steps = dietReport({ main_model_calls: 10 });
+  assert.deepEqual(steps.improvement, { pass: false, mechanism: true, quality: true, input_tokens_lower: true, main_model_calls_lower: false });
+
+  const estimated = dietReport({ token_measurement: "estimate" });
+  assert.equal(estimated.input_tokens.reason, "token measurement not provider on both sides");
+  assert.deepEqual(estimated.improvement, { pass: null, mechanism: true, quality: true, input_tokens_lower: null, main_model_calls_lower: true });
+  assert.equal(dietReport({ token_measurement: "estimate", main_model_calls: 10 }).improvement.pass, false, "a failure outranks an undetermined condition");
+
+  const noHookData = dietReport({ hook_injections: undefined });
+  assert.equal(noHookData.hook_chars_mechanism.diet_median, null, "run.json from before hook_injections existed");
+  assert.equal(noHookData.mechanism.pass, null);
+  assert.equal(noHookData.improvement.pass, null);
+  assert.match(renderBenchmarkMarkdown(buildBenchmarkReport(suite, dietRuns({ hook_injections: undefined }), threeArm)), /1\. Mechanism: .*: UNDETERMINED/);
+
+  // No PreToolUse/PostToolUse injections in either arm: the diet was not exercised, so undetermined, not a pass.
+  const unexercised = dietRuns({ hook_injections: hooks(0, 0) })
+    .map((r) => (r.arm === "current-hunch" ? { ...r, cost: { ...r.cost, hook_injections: hooks(0, 0) } } : r));
+  const zero = buildBenchmarkReport(suite, unexercised, threeArm).diet_vs_current!;
+  assert.deepEqual([zero.hook_chars_mechanism.current_median, zero.hook_chars_mechanism.diet_median], [0, 0]);
+  assert.equal(zero.mechanism.pass, null);
+  assert.deepEqual(zero.improvement, { pass: null, mechanism: null, quality: true, input_tokens_lower: true, main_model_calls_lower: true });
 });
