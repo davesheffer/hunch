@@ -1,0 +1,45 @@
+{
+  "id": "htask_3ce3fbba2ccb8ba63361833f",
+  "title": "<ide_opened_file>The user opened the file…",
+  "state": "completed",
+  "started_at": "2026-09-28T13:10:51.800Z",
+  "finished_at": "2026-09-28T13:14:13.208Z",
+  "coverage": "delivered",
+  "lessons": [
+    {
+      "kind": "decisions",
+      "record_id": "dec_4e1c8d263d",
+      "content_hash": "sha256:e07c93db31658f1a9e89ae732262045b983fdb13548d2c9de38eff1d52c3846e",
+      "title": "Open VSX is the sole public registry for the VS Code extension"
+    },
+    {
+      "kind": "decisions",
+      "record_id": "dec_847e825811",
+      "content_hash": "sha256:78c6e7e4e1e1300c7e2145295a2fd6732c8f6bc54d745a2e5178f9c951bbfeba",
+      "title": "VS Code surface (v0.17): Memory panel + Journey + Why/Capture — the full file claim"
+    },
+    {
+      "kind": "constraints",
+      "record_id": "con_e04226bd05",
+      "content_hash": "sha256:22fa18e57f979b7757fb0801c0782cdfa41035095473384660c7686374f1f36a",
+      "title": "The MCP server must stay client-agnostic: all assistants point to the same .hunch/ graph; no Claude-only behavior in the server"
+    }
+  ],
+  "applied": [],
+  "saved": [],
+  "checks": [],
+  "conformance": [],
+  "refusals": 0,
+  "files": [],
+  "supersedes": [],
+  "source_snapshot": null,
+  "report_hash": "sha256:6c4025a4f61e7529fd4075dabe6b38a85b696433f4eee3c95a3d2fadd3988c23",
+  "provenance": {
+    "source": "task_report",
+    "confidence": 1,
+    "evidence": [
+      "hunch report htask_3ce3fbba2ccb8ba63361833f"
+    ],
+    "last_verified": "2026-09-28T13:14:13.208Z"
+  }
+}
