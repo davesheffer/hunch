@@ -258,7 +258,7 @@ test("native pre-edit injections appear in the exact prompt report; deltas do no
   assert.match(edit.systemMessage, /^Hunch recalled: Preserve existing settings$/, "the first delivery in a prompt shows the user one line");
   assert.equal(readTaskReport(root, first.task_id).deliveries.length, 1);
   const repeat = hook(root, "PreToolUse", input);
-  assert.equal(repeat.systemMessage, undefined, "a repeat delivery never re-announces the lesson");
+  assert.equal(repeat, null, "an unchanged repeat is silent (hook diet), so it never re-announces the lesson");
   assert.equal(readTaskReport(root, first.task_id).deliveries.length, 1);
   assert.match(hook(root, "Stop").systemMessage, /Recalled.*Preserve existing settings/);
   hook(root, "UserPromptSubmit", { prompt_id: "prompt-b" });

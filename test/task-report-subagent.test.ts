@@ -24,9 +24,11 @@ function fixture(t: { after: (f: () => void) => void }) {
 function evt(root: string, event: string, extra: Record<string, unknown> = {}): HunchHookInput {
   return { hook_event_name: event, cwd: root, session_id: "session-a", prompt_id: "prompt-a", ...extra } as HunchHookInput;
 }
+// HUNCH_HOOK_DIET=0: the subagent test asserts the v1.42.0 delta one-liner, and
+// its fixed session id must not accumulate a grounding budget across runs.
 function hook(root: string, event: string, extra: Record<string, unknown> = {}) {
   const output = execFileSync(process.execPath, ["--import", tsxLoaderUrl(), cli, "hook", "--provider", "claude"], {
-    cwd: root, env: { ...process.env, HUNCH_PIPELINE: "0" },
+    cwd: root, env: { ...process.env, HUNCH_PIPELINE: "0", HUNCH_HOOK_DIET: "0" },
     input: JSON.stringify({ hook_event_name: event, cwd: root, session_id: "session-a", prompt_id: "prompt-a", ...extra }), encoding: "utf8",
   }).trim();
   return output ? JSON.parse(output) : null;
