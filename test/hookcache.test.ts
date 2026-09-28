@@ -116,6 +116,15 @@ test("hookcache: the budget resets with the session and survives the dedup map's
   assert.equal(consumeInjectionBudget(sid, "grounding", 2000, 8000), true, "compaction resets the budget");
 });
 
+test("hookcache: the hook diet's seen: markers survive the dedup map's trim; ordinary keys are still trimmed", () => {
+  const sid = SID();
+  assert.equal(injectionMode(sid, "seen:src/a.ts", "G"), "full");
+  for (let i = 0; i < 350; i++) injectionMode(sid, `pre:src/f${i}.ts`, "G");
+  assert.equal(peekInjectionMode(sid, "seen:src/a.ts", "G"), "delta", "evicting it would re-send grounding the agent holds");
+  assert.equal(peekInjectionMode(sid, "pre:src/f0.ts", "G"), "full", "the oldest ordinary key was trimmed");
+  assert.equal(peekInjectionMode(sid, "pre:src/f349.ts", "G"), "delta");
+});
+
 test("hookcache: the budget fails toward grounding — no session, kill switch, corrupt or unreadable cache", t => {
   assert.equal(consumeInjectionBudget(undefined, "grounding", 9000, 8000), true);
   const prev = process.env.HUNCH_HOOK_DEDUP;

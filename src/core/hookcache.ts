@@ -18,6 +18,8 @@
  * The same per-session file carries the hook diet's grounding budget
  * (consumeInjectionBudget): a running character count per agent identity, so
  * resetSessionInjections (compaction) resets it together with the dedup map.
+ * Budget counters and the diet's `seen:` markers are pinned: the MAX_KEYS trim
+ * evicts only ordinary dedup keys.
  */
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, statSync, rmSync } from "node:fs";
@@ -29,6 +31,10 @@ const SWEEP_AGE_MS = 48 * 3600 * 1000;
 /** Budget counters share the dedup map but are never trimmed with it: evicting
  *  one would silently hand an agent a fresh budget mid-session. */
 const BUDGET_PREFIX = "budget:";
+/** Keys the MAX_KEYS trim never evicts: budget counters, and the hook diet's
+ *  session-wide `seen:` markers (evicting one would re-send grounding the agent
+ *  already holds, and charge its budget for it again). */
+const PINNED_PREFIXES = [BUDGET_PREFIX, "seen:"];
 
 /** Decide whether this injection should be the FULL grounding block or a delta
  *  one-liner. Records the content hash as a side effect (so the next identical
@@ -51,7 +57,7 @@ export function injectionMode(sessionId: string | undefined, key: string, conten
     const map = readMap(file);
     if (map[key] === hash) return "delta";
     map[key] = hash;
-    const keys = Object.keys(map).filter((k) => !k.startsWith(BUDGET_PREFIX));
+    const keys = Object.keys(map).filter((k) => !PINNED_PREFIXES.some((p) => k.startsWith(p)));
     if (keys.length > MAX_KEYS) for (const k of keys.slice(0, keys.length - MAX_KEYS)) delete map[k];
     writeFileSync(file, JSON.stringify(map));
     return "full";
