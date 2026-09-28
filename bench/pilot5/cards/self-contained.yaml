@@ -23,7 +23,7 @@ memory:
   workspace_memory: "replaced per bench/pilot5/GATE-A-HARNESS.md (target history rewritten without .hunch/; current-hunch mounts the cutoff snapshot; no-hunch has none)"
   revision_or_snapshot_sha256: "computed at freeze by the harness (snapshot.json)"
   cutoff_revisions:
-    public: "1625abd896a752d6b6cc5f2e19773df238df8e25" # last first-parent origin/main commit at or before the cutoff (2026-09-22T06:42:00Z), the harness snapshot source
+    public: "1625abd896a752d6b6cc5f2e19773df238df8e25" # last first-parent origin/main commit at or before the cutoff (2026-09-22T06:42:00Z); the harness takes each .hunch/ path of this tree and of the starting tree at its last pre-cutoff commit reachable from the starting commit (per-path rule)
     private_overlay: "9df2298e5cca51fdbfe15c4d364e5dd447e5cda5" # last first-parent overlay commit at or before the cutoff
   eligible_record_ids:
     # Public records whose first-add commit time and own capture time are both before the cutoff (memory rule read literally, DEVIATIONS.md amendment d; same-session records included). Found by grepping for taskReportRender, renderTaskReport, checks.at( and card terms.
@@ -60,7 +60,7 @@ memory:
     - "private first-add: git -C hunch-private log --diff-filter=A --format=%cI -- .hunch/<kind>/<id>.json; content read at the last commit before the cutoff"
     - "git log 43b9339b --since=<cutoff> -- .hunch: only 43b9339b itself adds a record (htask_62a35201), so the starting tree holds exactly one future record"
     - "no public or private constraint, bug or earlier issue governs which checks the card shows; the issue names no earlier issue"
-    - "fnd_e1e9d91cea and fnd_d98451bc6b are in the starting tree 43b9339b but ABSENT from the harness public snapshot commit 1625abd8 (git cat-file -e 1625abd8:.hunch/findings/<id>.json fails): they were committed on the release branch and reached first-parent main after the cutoff. Eligible under the memory rule, they are not mounted in the Hunch arm, so the delivery check will report them as not delivered. htask_8e3a87e6 is present at the private cutoff commit 9df2298e."
+    - "fnd_e1e9d91cea and fnd_d98451bc6b are in the starting tree 43b9339b but absent from the cutoff main commit 1625abd8 (git cat-file -e 1625abd8:.hunch/findings/<id>.json fails): they were committed on the release branch and reached first-parent main after the cutoff. Under the per-path snapshot rule (GATE-A-HARNESS.md, amended 2026-09-27) they ARE mounted: their pre-cutoff first add (07:16:42Z / 07:16:44Z) is reachable from the starting commit. Confirmed in the frozen snapshot.json of the 2026-09-28 prepare, which also drops htask_62a35201 (no pre-cutoff commit reachable). htask_8e3a87e6 is present at the private cutoff commit 9df2298e."
     - "delivery unverified: retrieval of these records under Hunch 1.42 and its budget was not tested"
   relevance_expected: abstain # the only on-topic record (fnd_e1e9d91cea) restates the issue and adds nothing toward the fix
 validator:

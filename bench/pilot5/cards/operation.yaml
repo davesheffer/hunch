@@ -153,7 +153,7 @@ memory:
   workspace_memory: "replaced per bench/pilot5/GATE-A-HARNESS.md (target history rewritten without .hunch/; current-hunch mounts the cutoff snapshot; no-hunch has none)"
   revision_or_snapshot_sha256: "computed at freeze by the harness (snapshot.json)"
   cutoff_revisions:
-    public: "0cdb20f423cd30bd53f24c9856f36b9783ba95a9" # git rev-list -1 --first-parent --before=2026-09-16T13:47:49Z origin/main (2026-09-15T14:07:29Z); also the starting commit
+    public: "0cdb20f423cd30bd53f24c9856f36b9783ba95a9" # git rev-list -1 --first-parent --before=2026-09-16T13:47:49Z origin/main (2026-09-15T14:07:29Z); also the starting commit, so the per-path rule's candidate paths are this tree's .hunch/ paths
     private_overlay: "91167ce9d9645da90c39caba641a62b0e800c4a5" # last first-parent overlay commit before the cutoff
   eligible_record_ids:
     - fnd_70dd5c4034
@@ -195,11 +195,15 @@ memory:
         createdAt (by 6 s and 7 s), and same-session records are not excluded.
         It is NOT in the Hunch arm's snapshot: it is absent from 0cdb20f4's tree
         (git cat-file -e 0cdb20f4:.hunch/findings/fnd_a894c4e4ed.json fails),
-        and 0cdb20f4 is itself the last first-parent origin/main commit at or
-        before the cutoff. Commit 9021f3b7 sat on the feat/serve-mcp-http branch
-        and reached first-parent main only through ac55963 (PR #267,
-        2026-09-17T09:51:31Z). It is also absent from the private overlay at
-        91167ce9. The delivery check will therefore report it as not delivered.
+        and 0cdb20f4 is both the starting commit and the last first-parent
+        origin/main commit at or before the cutoff, so the per-path rule has no
+        candidate path for it. Commit 9021f3b7 sat on the feat/serve-mcp-http
+        branch, which 0cdb20f4 does not reach, and reached first-parent main
+        only through ac55963 (PR #267, 2026-09-17T09:51:31Z). It is also absent
+        from the private overlay at 91167ce9. Confirmed in the frozen
+        snapshot.json of the 2026-09-28 prepare (423 public files, none
+        dropped, id absent). The delivery check will therefore report it as
+        not delivered.
     - record: dec_617976d34a
       title_summary: (public) a general "budget test timeout to measured reality" decision
       first_add_commit_time: "2026-08-06T11:11:11+03:00"

@@ -103,7 +103,7 @@ memory:
   revision_or_snapshot_sha256: "computed at freeze by the harness (snapshot.json)"
   workspace_memory: replaced per bench/pilot5/GATE-A-HARNESS.md
   snapshot_sources:
-    public: "d2fb4a3a70985eb871cfa9807679b777844e44ad" # last first-parent origin/main commit at or before the cutoff (2026-09-19T21:39:41Z)
+    public: "d2fb4a3a70985eb871cfa9807679b777844e44ad" # last first-parent origin/main commit at or before the cutoff (2026-09-19T21:39:41Z); the harness takes each .hunch/ path of this tree and of the starting tree at its last pre-cutoff commit reachable from the starting commit (per-path rule)
     private: "e833cb411943f175ec09cc90ee083bdf54b27cb1" # last hunch-private commit at or before the cutoff (2026-09-19T23:16:40Z)
   eligible_record_ids:
     # Public. First add on origin/main and own timestamp both before the cutoff.
@@ -125,7 +125,7 @@ memory:
     - dec_a788cc039b # first-add 2026-08-09T13:47:16Z; adjacent
     - dec_925f4bcaad # first-add 2026-08-09T13:47:16Z; adjacent
   excluded_future_record_ids:
-    - fnd_72bbb7f236 # public; own timestamp before the cutoff, but first added to origin/main 2026-09-20T08:55:28Z (after); the harness snapshot at d2fb4a3a does not contain it
+    - fnd_72bbb7f236 # public; own timestamp before the cutoff, but first added to origin/main 2026-09-20T08:55:28Z (after); the frozen snapshot.json of the 2026-09-28 prepare drops it (no pre-cutoff commit reachable from the starting commit 43b9339b)
   source_and_timestamp_evidence:
     - "public first-add: git log origin/main --diff-filter=A --format=%cI -- .hunch/<kind>/<id>.json (earliest); own timestamp: valid_from / observed_at at d2fb4a3a"
     - "private first-add: git -C hunch-private log --diff-filter=A --format=%cI -- .hunch/<kind>/<id>.json; own timestamp: valid_from / observed_at / started_at at e833cb41"

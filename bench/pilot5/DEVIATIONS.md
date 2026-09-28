@@ -43,13 +43,16 @@ Dated 2026-09-27. Recorded before any benchmark arm ran.
   card's `eligible_record_ids`. Those ids label expected relevance and are checked for delivery after each run.
 - Reason: a mount of hand-picked relevant records is a distractor-free graph that no user has.
 - Effect: a card's own per-record snapshot hash is replaced by the hash the harness computes at freeze (`snapshot.json`).
-- The public part of the snapshot is the last first-parent `origin/main` commit at or before the cutoff. Some records
-  that are eligible under (d) were committed on a branch and reached first-parent main only after the cutoff, so they
-  are absent from the snapshot:
-  - #268: `fnd_a894c4e4ed` is not in 0cdb20f4.
-  - #394: `fnd_e1e9d91cea` and `fnd_d98451bc6b` are not in 1625abd8.
-
-  The delivery check will report these three as not delivered.
+- The public part of the snapshot follows the per-path rule (`GATE-A-HARNESS.md`, amended 2026-09-27, before any
+  run): each `.hunch/` path in the starting commit's tree or the cutoff main commit's tree, at its last pre-cutoff
+  commit reachable from the starting commit. A record that is eligible under (d) but sat only on a branch the
+  starting commit cannot reach is absent. Checked against the frozen `snapshot.json` of the 2026-09-28 prepare:
+  - #268: `fnd_a894c4e4ed` is absent. Its first add (9021f3b7) is on a branch that 0cdb20f4 does not reach, and the
+    file is in neither candidate tree. The delivery check will report it as not delivered.
+  - #394: `fnd_e1e9d91cea` and `fnd_d98451bc6b` are present. They are in the starting tree 43b9339b with a
+    pre-cutoff commit reachable from it, although the cutoff main commit 1625abd8 lacks them.
+  - Every other card's eligible ids are all present (public or private part). No `excluded_future_record_ids` entry
+    is present in any snapshot.
 
 ## (f) #314 third validator test is stricter than the issue text
 
