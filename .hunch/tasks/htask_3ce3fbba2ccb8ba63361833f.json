@@ -3,7 +3,7 @@
   "title": "<ide_opened_file>The user opened the file…",
   "state": "completed",
   "started_at": "2026-09-28T13:10:51.800Z",
-  "finished_at": "2026-09-28T13:14:13.208Z",
+  "finished_at": "2026-09-28T13:15:41.516Z",
   "coverage": "delivered",
   "lessons": [
     {
@@ -33,13 +33,14 @@
   "files": [],
   "supersedes": [],
   "source_snapshot": null,
-  "report_hash": "sha256:6c4025a4f61e7529fd4075dabe6b38a85b696433f4eee3c95a3d2fadd3988c23",
+  "report_hash": "sha256:cefe971b507d3de598acd703f08b0f0495edd600e3719dc370914b18977a6471",
   "provenance": {
     "source": "task_report",
     "confidence": 1,
     "evidence": [
-      "hunch report htask_3ce3fbba2ccb8ba63361833f"
+      "hunch report htask_3ce3fbba2ccb8ba63361833f",
+      "hunch report htask_d99dea4e67f7fcefed92cab2"
     ],
-    "last_verified": "2026-09-28T13:14:13.208Z"
+    "last_verified": "2026-09-28T13:15:41.516Z"
   }
 }
