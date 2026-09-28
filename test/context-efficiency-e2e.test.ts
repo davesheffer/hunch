@@ -275,6 +275,12 @@ test("isOutOfRepoAccess flags deny roots outside the run dir and traversal, in e
   assert.equal(isOutOfRepoAccess("/home/dave/audited/dist/cli/index.js/../../core/x.js", denyRoots, runDir, [auditedCli]), true, "traversal off the entrypoint is not dropped");
   assert.equal(isOutOfRepoAccess(`node -e "require('path').dirname('/home/dave/audited/dist/cli/index.js')"`, denyRoots, runDir, [auditedCli]), true, "the entrypoint embedded in code, not invoked, is denied");
   assert.equal(isOutOfRepoAccess('"C:\\Program Files\\nodejs\\node.exe" "/home/dave/audited/dist/cli/index.js" why src/x.ts', denyRoots, runDir, [auditedCli]), false, "any subcommand after the invoked entrypoint is dropped");
+  for (const tail of [" --help", " --version", " --timeout 900 task verify htask_1 -- npm test"]) {
+    assert.equal(isOutOfRepoAccess(`& 'C:\\Program Files\\nodejs\\node.exe' '/home/dave/audited/dist/cli/index.js'${tail}`, denyRoots, runDir, [auditedCli]), false, `flag invocation: ${JSON.stringify(tail)}`);
+  }
+  assert.equal(isOutOfRepoAccess("/home/dave/audited/dist/cli/index.js", denyRoots, runDir, [auditedCli]), true, "a bare mention (a Read of the entrypoint) stays denied");
+  assert.equal(isOutOfRepoAccess('import { x } from "../../../src/core/io.js";', denyRoots, runDir, [], "/home/dave", false), false, "file content skips the traversal rule");
+  assert.equal(isOutOfRepoAccess('const p = "/home/dave/hunch-private/x";', denyRoots, runDir, [], "/home/dave", false), true, "file content still hits deny roots");
   assert.equal(isOutOfRepoAccess("../.././../etc/passwd", denyRoots, runDir), true, "traversal tolerating a ./ segment");
   assert.equal(isOutOfRepoAccess("..//..//..//etc/passwd", denyRoots, runDir), true, "traversal tolerating repeated separators");
   assert.equal(isOutOfRepoAccess("ls ../src", denyRoots, runDir), false, "a single .. is not a traversal run");
