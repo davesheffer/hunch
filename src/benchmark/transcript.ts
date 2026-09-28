@@ -33,14 +33,18 @@ export function recordIdsIn(text: string): string[] {
   return [...new Set(Array.from(text.matchAll(RECORD_ID), (match) => match[0]))].sort();
 }
 
+/** Keys whose string is file content (Edit/Write/NotebookEdit bodies, todo text), not a path or command. */
+const CONTENT_KEYS = new Set(["content", "new_string", "old_string", "new_source"]);
+
 /** Every string value, recursively, inside each assistant `tool_use` block's `input` —
- *  scanned for out-of-repo path access (see orchestrate.ts's no-out-of-repo-access check). */
-export function toolInputStrings(transcriptText: string): string[] {
-  const out: string[] = [];
-  const collect = (value: unknown): void => {
-    if (typeof value === "string") out.push(value);
-    else if (Array.isArray(value)) for (const item of value) collect(item);
-    else if (isObj(value)) for (const item of Object.values(value)) collect(item);
+ *  scanned for out-of-repo path access (see orchestrate.ts's no-out-of-repo-access check).
+ *  `content` marks a value under a CONTENT_KEYS key. */
+export function toolInputStrings(transcriptText: string): Array<{ value: string; content: boolean }> {
+  const out: Array<{ value: string; content: boolean }> = [];
+  const collect = (value: unknown, content = false): void => {
+    if (typeof value === "string") out.push({ value, content });
+    else if (Array.isArray(value)) for (const item of value) collect(item, content);
+    else if (isObj(value)) for (const [key, item] of Object.entries(value)) collect(item, content || CONTENT_KEYS.has(key));
   };
   for (const line of transcriptText.split(/\r?\n/)) {
     if (!line.trim()) continue;

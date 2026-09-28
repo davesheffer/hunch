@@ -215,8 +215,9 @@ function pathPattern(path: string): RegExp {
   return new RegExp(normalizeForMatch(path).replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + PATH_END, "g");
 }
 
-/** A command mention is dropped only when it is being invoked: optional closing quote, whitespace, subcommand word. */
-const COMMAND_END = "(?=[\"'`]?\\s+[a-z])";
+/** A command mention is dropped only when it is being invoked: optional closing quote, whitespace, then a subcommand
+ *  word or a flag. A bare mention stays denied: it cannot be told apart from naming the file (a Read of the entrypoint). */
+const COMMAND_END = "(?=[\"'`]?\\s+-{0,2}[a-z])";
 
 function commandPattern(path: string): RegExp {
   return new RegExp(normalizeForMatch(path).replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + COMMAND_END, "g");
@@ -233,6 +234,7 @@ const HOME_TOKEN = /(^|[\s"'`=(;])(~|\$home|\$\{home\}|\$env:userprofile|%userpr
  * dropped only where it is being invoked, not merely named) is dropped, it still names one of the
  * deny roots (source repo, private overlay, audited checkout, controller, `<out>`), or it contains
  * a directory-traversal run ("../../../" etc., tolerating repeated separators and "./" segments).
+ * `traversal: false` skips the traversal rule for file content (an Edit/Write body's relative imports).
  */
 export function isOutOfRepoAccess(
   value: string,
@@ -240,8 +242,9 @@ export function isOutOfRepoAccess(
   allowed: string | string[],
   commands: string[] = [],
   home: string = homedir(),
+  traversal = true,
 ): boolean {
-  if (/(?:\.\.[\\/]+(?:\.[\\/]+)*){3}/.test(value)) return true;
+  if (traversal && /(?:\.\.[\\/]+(?:\.[\\/]+)*){3}/.test(value)) return true;
   let rest = normalizeForMatch(value).replace(HOME_TOKEN, (_, prefix) => `${prefix}${normalizeForMatch(home)}`);
   for (const path of Array.isArray(allowed) ? allowed : [allowed]) rest = rest.replace(pathPattern(path), " ");
   for (const path of commands) rest = rest.replace(commandPattern(path), " ");
@@ -373,7 +376,8 @@ async function executeRun(ctx: RunContext, task: SuiteTask, rep: number, arm: Be
     // The audited UserPromptSubmit hook tells the agent to run checks through `<node> <audited>/dist/cli/index.js task verify`.
     const commands = arm === "current-hunch" ? [join(ctx.auditedRoot, "dist", "cli", "index.js")] : [];
     const offenders = [...new Set(toolInputStrings(readFileSync(agent.transcript_path, "utf8"))
-      .filter((value) => isOutOfRepoAccess(value, denyRoots, [runDir], commands)))];
+      .filter(({ value, content }) => isOutOfRepoAccess(value, denyRoots, [runDir], commands, homedir(), !content))
+      .map(({ value }) => value))];
     outOfRepoBreach = offenders.length > 0;
     post.push(["no-out-of-repo-access", !outOfRepoBreach, outOfRepoBreach
       ? `offending string(s): ${offenders.slice(0, 5).map((s) => s.slice(0, 200)).join(" | ")}`
