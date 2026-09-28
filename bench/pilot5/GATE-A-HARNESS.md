@@ -5,7 +5,8 @@ Frozen before any timed run. A change to any rule below after the first timed ru
 Amended 2026-09-28, before any Gate A timed run, to close the adversarial review of the harness: agent-surface files
 that mention Hunch are removed in `no-hunch`, and the preflight and post-run checks below were added. Amended again the
 same day after an untimed two-run smoke suite (not part of Gate A) showed two harness artifacts in `current-hunch`: the
-repo `.mcp.json` and the audited CLI entrypoint allowance below.
+repo `.mcp.json` and the audited CLI entrypoint allowance below. Amended a third time after the Gate A timed runs, for
+measurement only (Metrics, Output); no run was repeated and no exposure, schedule or validation rule changed.
 
 ## Revisions
 
@@ -125,6 +126,10 @@ sha256 and must contain no `hunch` string; unrelated user instructions are prese
   bare mention (indistinguishable from reading the file), the same path followed by `/`, `.` or code punctuation, and
   every other audited path stay denied. Known gaps, adversarial only: `$HOME/..` style climbs and code that builds a
   deny path from parts. Harness 34bf818. Any hit fails `no-out-of-repo-access` and marks the run `isolation_breach`.
+  Known false positive (recorded 2026-09-28, after the Gate A timed runs; not reclassified): the audited CLI path
+  assigned to a shell variable and invoked through it (`H=<audited>/dist/cli/index.js; node "$H" task verify`) is a
+  bare mention and is denied. Gate A `self-contained-394` `current-hunch` run 2 was marked `isolation_breach` this
+  way; it is excluded, not retried.
 - Auto memory (added 2026-09-28): Claude Code keeps auto memory per working directory under
   `~/.claude/projects/<path with non-alphanumerics as ->`. Before each run an existing directory for the run's repo path
   is renamed `.bench-stale-<n>` and logged, so a rerun after an interruption starts without memory; the `init` event's
@@ -133,10 +138,25 @@ sha256 and must contain no `hunch` string; unrelated user instructions are prese
 ## Metrics (section 7 contract)
 
 From the stream-json transcript:
-- Tokens: `result.usage`; `input_tokens` = input + cache creation + cache read, with the three parts kept;
-  `token_measurement: "provider"`. `modelUsage` kept per model.
-- `model_calls`: distinct assistant `message.id`; `tool_calls`: `tool_use` blocks; `call_measurement: "parsed"`.
-  Per-tool histogram kept. Investigation calls = `Read`, `Grep`, `Glob` (preregistered definition).
+- Tokens (amended 2026-09-28 after the Gate A timed runs; measurement only, no run repeated, no exposure, schedule or
+  validation rule changed): `input_tokens` / `output_tokens` = the whole session, the last `result` event's
+  `modelUsage` summed over models (cumulative across result events, subagents included); `input_token_parts` from the
+  same sum. `main_input_tokens` / `main_output_tokens` = `result.usage` summed over every result event (a
+  background-task notification re-invokes the session and emits another result whose `usage` covers only that
+  invocation). `subagent_*` = session minus main. `input_tokens` = input + cache creation + cache read;
+  `token_measurement: "provider"`. Without `modelUsage` the session is the main loop only when no subagent message was
+  streamed; otherwise the run is `unavailable`. A `modelUsage` total below the main loop is an inconsistent report and
+  makes the run `unavailable`. A run without a result event (timeout, crash) is `unavailable` and carries
+  `input_tokens_lower_bound` from the streamed per-message usage (main + subagents); it never enters a median or
+  percentage. The streamed output lower bound is weak (an early snapshot per message) and is reported only as such.
+  Reason: harness 34bf818 kept only the last result's `usage`, so it dropped earlier invocations (repeated-bug-360
+  `current-hunch` run 1: 59,768 recorded vs 561,603) and every subagent token (convention-314 `current-hunch` run 2:
+  765,305 recorded vs 4,050,506). Gate A report v2 recounts the unchanged transcripts with harness 24fff7e
+  `--report-only --recount`; `run.json` files keep the recorded values as evidence.
+- `model_calls`: distinct assistant `message.id`, main loop and subagents together, split into `main_model_calls` and
+  `subagent_model_calls` by `parent_tool_use_id` (the subagent count comes from the stream and is a lower bound);
+  `tool_calls`: `tool_use` blocks; `call_measurement: "parsed"`. Per-tool histogram kept. Investigation calls =
+  `Read`, `Grep`, `Glob` (preregistered definition).
 - Hunch context estimate: characters of `mcp__hunch__*` tool results, hook-event output, the grounding blocks in
   CLAUDE.md and AGENTS.md, and the `mcp.tools_list` surface from the audited `hunch footprint --json`; tokens =
   ceil(chars / 4), components kept. Zero for `no-hunch` only when the exposure proof passed.
@@ -170,3 +190,7 @@ after the run (every setup and post check above), and no isolation breach.
 exposure.json, validator.txt, run.json}`, `report.json`, `report.md`. The report lists every observation, median and
 range per arm and category, and prints no percentage when either side lacks provider tokens. Transcripts stay in the
 git-ignored output directory, never in durable memory.
+
+`--report-only --recount` (amended 2026-09-28, harness 24fff7e) rebuilds the token and call fields of every run from
+its `transcript.jsonl`, leaves `run.json` untouched, records `token_source: recounted` with the harness revision in
+the report, and lists any run without a transcript. Results: `GATE-A-REPORT.md`.
