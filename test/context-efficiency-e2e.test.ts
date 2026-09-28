@@ -267,4 +267,9 @@ test("isOutOfRepoAccess flags deny roots outside the run dir and traversal, in e
   assert.equal(isOutOfRepoAccess("../../../etc/passwd", denyRoots, runDir), true, "POSIX traversal");
   assert.equal(isOutOfRepoAccess("..\\..\\..\\Windows\\win.ini", denyRoots, runDir), true, "Windows traversal");
   assert.equal(isOutOfRepoAccess("/HOME/DAVE/HUNCH-PRIVATE/x", denyRoots, runDir), true, "case-insensitive deny root");
+  const auditedCli = "/home/dave/audited/dist/cli/index.js";
+  assert.equal(isOutOfRepoAccess("& 'C:\\Program Files\\nodejs\\node.exe' '/home/dave/audited/dist/cli/index.js' task verify htask_1 -- npm test", denyRoots, [runDir, auditedCli]), false, "the allowed audited CLI entrypoint");
+  assert.equal(isOutOfRepoAccess("node /home/dave/audited/dist/cli/index.js task verify htask_1 -- npm test", denyRoots, runDir), true, "the entrypoint is denied without the allowance");
+  assert.equal(isOutOfRepoAccess("cat /home/dave/audited/dist/core/taskReportEvidence.js", denyRoots, [runDir, auditedCli]), true, "other audited files stay denied");
+  assert.equal(isOutOfRepoAccess("cat /home/dave/audited/dist/cli/index.js.map", denyRoots, [runDir, auditedCli]), true, "the allowance is an exact path, not a prefix");
 });

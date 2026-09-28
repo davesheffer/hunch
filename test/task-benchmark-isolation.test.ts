@@ -248,7 +248,7 @@ test("agent-surfaces-clean fails on a leftover hunch-matching file under an agen
 });
 
 const CURRENT_HUNCH_CHECKS = [
-  "hunch-dir-present", "mcp-hunch-server", "hooks-installed", "grounding-present", "worktree-clean",
+  "hunch-dir-present", "mcp-hunch-server", "repo-mcp-json-matches", "hooks-installed", "grounding-present", "worktree-clean",
   "snapshot-hash-match", "private-snapshot-hash-match", "footprint-tools-list",
 ];
 
