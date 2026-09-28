@@ -1,7 +1,7 @@
 // Parses a Claude Code `--output-format stream-json --verbose --include-hook-events` transcript
 // into the Gate A metrics (bench/pilot5/GATE-A-HARNESS.md, "Metrics"). Tolerant by design: blank
 // and malformed lines are skipped, never thrown.
-import type { TaskCost, TokenParts, TranscriptMetrics } from "./types.js";
+import type { HookInjections, TaskCost, TokenParts, TranscriptMetrics } from "./types.js";
 
 /** Preregistered investigation tools. */
 export const INVESTIGATION_TOOLS: readonly string[] = ["Read", "Grep", "Glob"];
@@ -40,7 +40,8 @@ type TranscriptCost = Pick<TaskCost,
   | "input_tokens" | "output_tokens" | "token_measurement" | "input_token_parts"
   | "main_input_tokens" | "main_output_tokens" | "subagent_input_tokens" | "subagent_output_tokens"
   | "result_events" | "input_tokens_lower_bound" | "output_tokens_lower_bound"
-  | "model_calls" | "main_model_calls" | "subagent_model_calls" | "tool_calls" | "investigation_tool_calls" | "call_measurement">;
+  | "model_calls" | "main_model_calls" | "subagent_model_calls" | "tool_calls" | "investigation_tool_calls" | "call_measurement"
+  | "hook_injections" | "background_wakeups">;
 
 /** The token and call fields of a run's TaskCost, from its parsed transcript (null: the agent never ran).
  *  Shared by the live run and `--report-only --recount`, so both count the same way. */
@@ -69,6 +70,8 @@ export function transcriptCost(metrics: TranscriptMetrics | null): TranscriptCos
     tool_calls: metrics ? metrics.tool_calls : null,
     investigation_tool_calls: metrics ? metrics.investigation_tool_calls : null,
     call_measurement: metrics ? "parsed" : "unavailable",
+    hook_injections: metrics ? metrics.hook_injections : null,
+    background_wakeups: metrics ? metrics.background_wakeups : null,
   };
 }
 
@@ -85,6 +88,23 @@ function hookInjectedText(stdout: string): string[] {
   if (!isObj(parsed)) return [stdout.trim()];
   const specific = isObj(parsed.hookSpecificOutput) ? parsed.hookSpecificOutput.additionalContext : undefined;
   return [specific, parsed.systemMessage, parsed.reason].filter((value): value is string => typeof value === "string");
+}
+
+/**
+ * One hook_response's injected context: `output` parsed as JSON when it starts with `{`, its non-empty
+ * `hookSpecificOutput.additionalContext`, keyed by `hook_event` (else `hookEventName`, else `hook_name`).
+ * Null for anything else, so a Stop hook's `systemMessage` and plain-text output never count.
+ */
+export function hookInjection(event: Record<string, unknown>): { event: string; chars: number } | null {
+  const output = asString(event.output) ?? "";
+  if (!output.trimStart().startsWith("{")) return null;
+  let parsed: unknown;
+  try { parsed = JSON.parse(output); } catch { return null; }
+  const specific = isObj(parsed) && isObj(parsed.hookSpecificOutput) ? parsed.hookSpecificOutput : null;
+  const context = specific ? asString(specific.additionalContext) : null;
+  if (!context) return null;
+  const name = asString(event.hook_event) ?? asString(specific!.hookEventName) ?? asString(event.hook_name) ?? "(unknown)";
+  return { event: name, chars: [...context].length };
 }
 
 /** Sorted unique record ids (same pattern as the transcript parser) in `text`. */
@@ -133,11 +153,14 @@ export function parseTranscript(text: string): TranscriptMetrics {
   let modelUsage: TranscriptMetrics["model_usage"] = null;
   let hookEvents = 0;
   let hookChars = 0;
+  const hookInjections: HookInjections = { by_event: {}, total: { injections: 0, chars: 0 } };
+  let initEvents = 0;
   const messages = new Map<string, { subagent: boolean; input: number; output: number }>(); // message id -> last usage seen
   const toolUses = new Map<string, string>(); // tool_use id -> tool name
   const injected: string[] = [];
 
   for (const event of events) {
+    if (event.type === "system" && event.subtype === "init") initEvents++;
     if (event.type === "system" && event.subtype === "init" && !init) {
       const servers = Array.isArray(event.mcp_servers) ? event.mcp_servers : [];
       const serverStatus: Record<string, string> = {};
@@ -161,6 +184,14 @@ export function parseTranscript(text: string): TranscriptMetrics {
       for (const piece of hookInjectedText(asString(event.stdout) ?? "")) {
         hookChars += piece.length;
         injected.push(piece);
+      }
+      const injection = hookInjection(event);
+      if (injection) {
+        const slot = hookInjections.by_event[injection.event] ??= { injections: 0, chars: 0 };
+        slot.injections++;
+        slot.chars += injection.chars;
+        hookInjections.total.injections++;
+        hookInjections.total.chars += injection.chars;
       }
     } else if (event.type === "assistant" && isObj(event.message)) {
       const id = asString(event.message.id);
@@ -258,6 +289,8 @@ export function parseTranscript(text: string): TranscriptMetrics {
     hunch_tool_calls: names.filter((name) => name.startsWith(HUNCH_TOOL_PREFIX)).length,
     hunch_dynamic_chars: { tool_results: toolResultChars, hooks: hookChars },
     hook_events: hookEvents,
+    hook_injections: hookInjections,
+    background_wakeups: Math.max(0, initEvents - 1),
     delivered_record_ids: [...delivered].sort(),
   };
 }

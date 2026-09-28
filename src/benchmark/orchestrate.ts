@@ -22,7 +22,8 @@ export type BenchmarkExitCode = 0 | 1 | 2 | 3;
 
 export interface RunBenchmarkOptions {
   suite: string;
-  /** Exactly two distinct arms; the first is the baseline, the second the treatment. */
+  /** Two or three distinct arms. Two: the first is the baseline, the second the treatment. Three: each Hunch arm
+   *  is compared with no-hunch, and diet-hunch also with current-hunch. */
   arms: string[];
   /** True only when the user passed --arms (vs. the CLI default); gates the --report-only mismatch check. */
   armsExplicit?: boolean;
@@ -41,6 +42,9 @@ export interface RunBenchmarkOptions {
   privateRef?: string;
   /** Required unless `reportOnly`. */
   audited?: string;
+  /** The diet-hunch arm's Hunch checkout, checked like `audited`. Required iff `arms` includes diet-hunch (unless
+   *  `reportOnly`); refused otherwise. */
+  dietRoot?: string;
   tasks?: string[] | null;
   prepareOnly?: boolean;
   reportOnly?: boolean;
@@ -67,7 +71,7 @@ export interface RunBenchmarkResult {
 const MANIFEST_SCHEMA = "hunch.context-efficiency-manifest/1";
 const SUITE_SCHEMA = "hunch.context-efficiency-suite/1";
 const RUNNER_SCHEMA = "hunch.benchmark-runner/1";
-const SUPPORTED_ARMS: readonly BenchmarkArm[] = ["no-hunch", "current-hunch"];
+const SUPPORTED_ARMS: readonly BenchmarkArm[] = ["no-hunch", "current-hunch", "diet-hunch"];
 const HUNCH_START = "<!-- HUNCH:START";
 const HUNCH_END = "<!-- HUNCH:END -->";
 
@@ -82,6 +86,8 @@ interface Manifest {
   suite_hash: string;
   harness_revision: string;
   audited: { revision: string; version: string };
+  /** Only when diet-hunch is an arm (absent, it leaves a two-arm manifest hash unchanged). */
+  diet?: { revision: string; version: string; cli_sha256: string };
   seed: string;
   arms: BenchmarkArm[];
   runs: number;
@@ -141,11 +147,46 @@ function gitStatus(repo: string): string {
   return benchmarkGit(["-C", repo, "status", "--porcelain"]).stdout.toString("utf8").trim();
 }
 
-function parseArms(arms: string[]): BenchmarkArm[] {
-  if (arms.length !== 2 || arms[0] === arms[1] || !arms.every((arm) => (SUPPORTED_ARMS as readonly string[]).includes(arm))) {
-    throw new Stop(1, `--arms needs exactly two distinct arms from ${SUPPORTED_ARMS.join(", ")}; got ${arms.join(",") || "(none)"}`);
+/** `--arms`: two or three distinct supported arms. `--diet-root`: refused unless diet-hunch is an arm, and then
+ *  required unless `reportOnly` (which, like `--audited`, never touches a checkout). */
+export function parseArms(arms: string[], dietRoot: string | null = null, reportOnly = false): BenchmarkArm[] {
+  if ((arms.length !== 2 && arms.length !== 3) || new Set(arms).size !== arms.length
+    || !arms.every((arm) => (SUPPORTED_ARMS as readonly string[]).includes(arm))) {
+    throw new Stop(1, `--arms needs two or three distinct arms from ${SUPPORTED_ARMS.join(", ")}; got ${arms.join(",") || "(none)"}`);
   }
+  const diet = arms.includes("diet-hunch");
+  if (!diet && dietRoot) throw new Stop(1, "--diet-root is only accepted when --arms includes diet-hunch");
+  if (diet && !dietRoot && !reportOnly) throw new Stop(1, "--arms includes diet-hunch, which needs --diet-root");
   return arms as BenchmarkArm[];
+}
+
+/** The Hunch checkouts the confinement check knows about, plus the other deny roots. */
+export interface ConfinementRoots {
+  sourceRepo: string;
+  privateRepo: string | null;
+  auditedRoot: string;
+  dietRoot: string | null;
+  controller: string;
+  out: string;
+}
+
+/** Deny roots and invocation allowance of one arm's no-out-of-repo-access check. Every arm is denied both Hunch
+ *  checkouts; a Hunch arm may invoke only its own checkout's `dist/cli/index.js`, no-hunch none. */
+export function armConfinement(arm: BenchmarkArm, roots: ConfinementRoots): { denyRoots: string[]; commands: string[] } {
+  const denyRoots = [roots.sourceRepo, roots.privateRepo, roots.auditedRoot, roots.dietRoot, roots.controller, roots.out]
+    .filter((p): p is string => p !== null);
+  const own = arm === "current-hunch" ? roots.auditedRoot : arm === "diet-hunch" ? roots.dietRoot : null;
+  return { denyRoots, commands: own === null ? [] : [join(own, "dist", "cli", "index.js")] };
+}
+
+/** A Hunch checkout an arm installs from: built dist/cli/index.js, clean tree, HEAD revision, package.json version. */
+function checkHunchRoot(root: string, label: string): { revision: string; version: string } {
+  if (!existsSync(join(root, "dist", "cli", "index.js"))) throw new Stop(1, `${label} ${root} has no dist/cli/index.js; build it first`);
+  const revision = benchmarkGitText(["-C", root, "rev-parse", "HEAD"]);
+  if (gitStatus(root)) throw new Stop(1, `${label} ${root} has uncommitted changes`);
+  const version = (readJson(join(root, "package.json"), `${label} package.json`) as { version?: unknown }).version;
+  if (typeof version !== "string") throw new Stop(1, `${label} ${root}/package.json has no version`);
+  return { revision, version };
 }
 
 function loadSuite(suitePath: string, filter: string[] | null | undefined): { suite: BenchmarkSuite; selected: BenchmarkSuite; suiteHash: string } {
@@ -305,6 +346,7 @@ interface RunContext {
   controller: string;
   privateRepo: string | null;
   auditedRoot: string;
+  dietRoot: string | null;
   noNpmCi: boolean;
   snapshots: Map<string, MemorySnapshot>;
   claudeHome: string;
@@ -329,7 +371,7 @@ async function executeRun(ctx: RunContext, task: SuiteTask, rep: number, arm: Be
     ctx.log(`interrupted run ${runDir} moved to ${moved}`);
   }
 
-  const fingerprintPaths = [ctx.sourceRepo, ctx.controller, ctx.privateRepo, ctx.auditedRoot].filter((p): p is string => p !== null);
+  const fingerprintPaths = [ctx.sourceRepo, ctx.controller, ctx.privateRepo, ctx.auditedRoot, ctx.dietRoot].filter((p): p is string => p !== null);
   const before = repoStateFingerprint(fingerprintPaths);
   const isolation: string[] = [];
   const validation: string[] = [];
@@ -347,14 +389,14 @@ async function executeRun(ctx: RunContext, task: SuiteTask, rep: number, arm: Be
   try {
     prepared = await prepareArm({
       base: join(ctx.out, "bases", task.id), arm, runDir, env: strippedChildEnv(process.env), npmCi: !ctx.noNpmCi,
-      ...(arm === "current-hunch" ? {
+      ...(arm !== "no-hunch" ? {
         snapshot: {
           publicDir: join(snapshotDir, "public"),
           privateDir: snapshot.private ? join(snapshotDir, "private") : null,
           publicSha256: snapshot.public.sha256,
           privateSha256: snapshot.private?.sha256 ?? null,
         },
-        audited: { root: ctx.auditedRoot },
+        audited: { root: arm === "diet-hunch" ? ctx.dietRoot! : ctx.auditedRoot },
       } : {}),
     });
   } catch (error) {
@@ -389,7 +431,7 @@ async function executeRun(ctx: RunContext, task: SuiteTask, rep: number, arm: Be
     const init = agent.metrics.init;
     const post: Array<[string, boolean, string]> = [];
     if (!init) post.push(["init-present", false, "transcript has no init event"]);
-    else if (arm === "current-hunch") {
+    else if (arm !== "no-hunch") {
       const servers = init.mcp_servers;
       post.push(
         ["mcp-servers-exactly-hunch", servers.length === 1 && servers[0] === "hunch", `${servers.length} MCP server(s)${servers.length ? `: ${servers.join(", ")}` : ""}`],
@@ -407,9 +449,8 @@ async function executeRun(ctx: RunContext, task: SuiteTask, rep: number, arm: Be
         ["hunch-hook-output-zero", agent.metrics.hunch_dynamic_chars.hooks === 0, `${agent.metrics.hunch_dynamic_chars.hooks} hook chars`],
       );
     }
-    const denyRoots = [ctx.sourceRepo, ctx.privateRepo, ctx.auditedRoot, ctx.controller, ctx.out].filter((p): p is string => p !== null);
     // The audited UserPromptSubmit hook tells the agent to run checks through `<node> <audited>/dist/cli/index.js task verify`.
-    const commands = arm === "current-hunch" ? [join(ctx.auditedRoot, "dist", "cli", "index.js")] : [];
+    const { denyRoots, commands } = armConfinement(arm, ctx);
     const offenders = [...new Set(toolInputStrings(readFileSync(agent.transcript_path, "utf8"))
       .filter(({ value, content }) => isOutOfRepoAccess(value, denyRoots, [runDir], commands, homedir(), !content))
       .map(({ value }) => value))];
@@ -461,7 +502,7 @@ async function executeRun(ctx: RunContext, task: SuiteTask, rep: number, arm: Be
   };
   const selected = [...new Set([...(agent?.metrics.delivered_record_ids ?? []), ...setupIds])].sort();
   const eligible = new Set(task.memory.eligible_record_ids);
-  const current = arm === "current-hunch";
+  const hunchArm = arm !== "no-hunch";
   const run: EfficiencyRun = {
     schema: "hunch.context-efficiency-run/1",
     task_id: task.id,
@@ -469,10 +510,10 @@ async function executeRun(ctx: RunContext, task: SuiteTask, rep: number, arm: Be
     run_index: rep,
     suite_hash: ctx.suiteHash,
     harness_revision: ctx.manifest.harness_revision,
-    audited_hunch_revision: current ? ctx.manifest.audited.revision : null,
+    audited_hunch_revision: arm === "current-hunch" ? ctx.manifest.audited.revision : arm === "diet-hunch" ? ctx.manifest.diet?.revision ?? null : null,
     arm_order_seed: ctx.manifest.seed,
     repository_revision: task.starting_commit,
-    memory_revision: current ? snapshot.public.sha256 : null,
+    memory_revision: hunchArm ? snapshot.public.sha256 : null,
     runner: ctx.manifest.runner_identity,
     cache_state: "cold",
     evidence_kind: ctx.cfg.provider === "claude" ? "product" : "fixture",
@@ -492,6 +533,14 @@ async function executeRun(ctx: RunContext, task: SuiteTask, rep: number, arm: Be
   ctx.log(line);
   appendFileSync(join(ctx.out, "progress.log"), line + "\n");
   return run;
+}
+
+/** The report's pairs: two arms as given (baseline first); three arms put no-hunch as the baseline, current-hunch as
+ *  the treatment and diet-hunch as a further treatment. */
+function reportPairs(arms: BenchmarkArm[]): { baseline: BenchmarkArm; treatment: BenchmarkArm; extra_treatments: BenchmarkArm[] } {
+  if (arms.length === 2) return { baseline: arms[0]!, treatment: arms[1]!, extra_treatments: [] };
+  const [treatment, ...extra] = SUPPORTED_ARMS.filter((arm) => arm !== "no-hunch" && arms.includes(arm));
+  return { baseline: "no-hunch", treatment: treatment!, extra_treatments: extra };
 }
 
 /** report.json + report.md over every run.json under the manifest. With `recountRevision`, each run's token and
@@ -526,7 +575,7 @@ function writeReport(
   runs.sort((x, y) => order.get(x.task_id)! - order.get(y.task_id)! || x.run_index - y.run_index || x.arm.localeCompare(y.arm));
   if (recountRevision !== null) log(`recount: token and call fields of ${recounted} of ${runs.length} run(s) recounted from transcript.jsonl`);
   const report = buildBenchmarkReport(suite, runs, {
-    baseline: arms[0]!, treatment: arms[1]!, manifest_sha256: manifestSha, generated_at: new Date().toISOString(),
+    ...reportPairs(arms), manifest_sha256: manifestSha, generated_at: new Date().toISOString(),
     token_source: recountRevision === null
       ? { kind: "recorded" }
       : { kind: "recounted", harness_revision: recountRevision, recounted_runs: recounted, runs: runs.length },
@@ -545,7 +594,7 @@ export async function runBenchmark(opts: RunBenchmarkOptions): Promise<RunBenchm
   const manifestPath = join(out, "manifest.json");
   let manifestWritten: string | null = null;
   try {
-    const arms = parseArms(opts.arms);
+    const arms = parseArms(opts.arms, opts.dietRoot ?? null, !!opts.reportOnly);
     if (!Number.isInteger(opts.runs) || opts.runs < 1) throw new Stop(1, `--runs must be an integer >= 1, got ${opts.runs}`);
     const suitePath = resolve(opts.suite);
     const { selected, suiteHash } = loadSuite(suitePath, opts.tasks);
@@ -590,12 +639,21 @@ export async function runBenchmark(opts: RunBenchmarkOptions): Promise<RunBenchm
     }
 
     const auditedRoot = resolve(opts.audited!);
-    const auditedCli = join(auditedRoot, "dist", "cli", "index.js");
-    if (!existsSync(auditedCli)) throw new Stop(1, `audited ${auditedRoot} has no dist/cli/index.js; build it first`);
-    const auditedRevision = benchmarkGitText(["-C", auditedRoot, "rev-parse", "HEAD"]);
-    if (gitStatus(auditedRoot)) throw new Stop(1, `audited ${auditedRoot} has uncommitted changes`);
-    const auditedVersion = (readJson(join(auditedRoot, "package.json"), "audited package.json") as { version?: unknown }).version;
-    if (typeof auditedVersion !== "string") throw new Stop(1, `audited ${auditedRoot}/package.json has no version`);
+    const audited = checkHunchRoot(auditedRoot, "audited");
+    const dietRoot = arms.includes("diet-hunch") ? resolve(opts.dietRoot!) : null;
+    const dietHunch = dietRoot === null ? null : checkHunchRoot(dietRoot, "diet");
+    let diet: { revision: string; version: string; cli_sha256: string } | null = null;
+    if (dietRoot !== null && dietHunch !== null) {
+      // The diet arm must install a distinct build, or it measures the audited Hunch twice.
+      const sameRoot = process.platform === "win32" ? dietRoot.toLowerCase() === auditedRoot.toLowerCase() : dietRoot === auditedRoot;
+      if (sameRoot) throw new Stop(1, `diet root ${dietRoot} is the audited root; the diet arm needs its own checkout`);
+      if (dietHunch.revision === audited.revision) throw new Stop(1, `diet ${dietRoot} is at the audited revision ${audited.revision}; it cannot contain the diet`);
+      const dietCli = sha256(readFileSync(join(dietRoot, "dist", "cli", "index.js")));
+      if (dietCli === sha256(readFileSync(join(auditedRoot, "dist", "cli", "index.js")))) {
+        throw new Stop(1, `diet build ${join(dietRoot, "dist", "cli", "index.js")} is identical to the audited build, so it cannot contain the diet; rebuild it`);
+      }
+      diet = { ...dietHunch, cli_sha256: dietCli };
+    }
 
     let n = 1;
     while (existsSync(join(out, "preflight", String(n)))) n++;
@@ -635,7 +693,8 @@ export async function runBenchmark(opts: RunBenchmarkOptions): Promise<RunBenchm
       suite_id: selected.id,
       suite_hash: suiteHash,
       harness_revision: harnessRevision,
-      audited: { revision: auditedRevision, version: auditedVersion },
+      audited,
+      ...(diet ? { diet } : {}),
       seed: opts.seed,
       arms,
       runs: opts.runs,
@@ -678,7 +737,8 @@ export async function runBenchmark(opts: RunBenchmarkOptions): Promise<RunBenchm
         manifest,
         environment: {
           output: out, suite_path: suitePath, source_repo: sourceRepo, main_ref: mainRef, private_repo: privateRepo,
-          private_ref: privateRef, audited_root: auditedRoot, controller_root: controller, tasks_filter: opts.tasks ?? null,
+          private_ref: privateRef, audited_root: auditedRoot, ...(dietRoot ? { diet_root: dietRoot } : {}),
+          controller_root: controller, tasks_filter: opts.tasks ?? null,
           created_at: new Date().toISOString(),
         },
       };
@@ -689,7 +749,7 @@ export async function runBenchmark(opts: RunBenchmarkOptions): Promise<RunBenchm
     if (opts.prepareOnly) return { exitCode: 0, manifestPath, reportPath: null };
 
     const ctx: RunContext = {
-      out, suitePath, suite: selected, suiteHash, manifest, manifestSha, cfg, sourceRepo, controller, privateRepo, auditedRoot,
+      out, suitePath, suite: selected, suiteHash, manifest, manifestSha, cfg, sourceRepo, controller, privateRepo, auditedRoot, dietRoot,
       noNpmCi: !!opts.noNpmCi, snapshots, claudeHome: opts.claudeHome ?? join(homedir(), ".claude"), log,
     };
     for (const task of selected.tasks) {

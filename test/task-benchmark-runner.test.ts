@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { parseTranscript, transcriptCost } from "../src/benchmark/transcript.js";
+import { hookInjection, parseTranscript, transcriptCost } from "../src/benchmark/transcript.js";
 import {
   buildClaudeArgv, isForbiddenChildEnvKey, preflight, runAgent, sanitizedArgvHash, strippedChildEnv,
 } from "../src/benchmark/taskRunner.js";
@@ -91,6 +91,66 @@ test("parseTranscript reads the result line and tolerates an empty transcript", 
   assert.equal(empty.model_calls, 0);
   assert.equal(empty.tool_calls, 0);
   assert.deepEqual(empty.delivered_record_ids, []);
+});
+
+// hook_response shape from real PILOT5 transcripts: `output` carries the hook's stdout, JSON for the Hunch hook.
+const hookResponse = (hook_event: string | undefined, output: string, hook_name = `${hook_event ?? "X"}:name`) =>
+  line({ type: "system", subtype: "hook_response", hook_id: "h", hook_name, ...(hook_event ? { hook_event } : {}), output, stdout: output, stderr: "", exit_code: 0, outcome: "success" });
+const contextOutput = (event: string, additionalContext: string, extra: Record<string, unknown> = {}) =>
+  JSON.stringify({ hookSpecificOutput: { hookEventName: event, additionalContext }, ...extra });
+
+test("parseTranscript counts injected hook additionalContext by event; Stop systemMessage, plain text and empty context never count", () => {
+  const pre = "pre ctx \u{1F9E0} dec_0123456789"; // the emoji is one code point, two UTF-16 code units
+  const transcript = [
+    line({ type: "system", subtype: "init", session_id: "s" }),
+    hookResponse("SessionStart", contextOutput("SessionStart", "session ctx")),
+    hookResponse("PreToolUse", contextOutput("PreToolUse", pre, { systemMessage: "also shown" })),
+    hookResponse("PreToolUse", "  " + contextOutput("PreToolUse", "second")),
+    hookResponse("PostToolUse", contextOutput("PostToolUse", "post")),
+    hookResponse("Stop", JSON.stringify({ systemMessage: "stop message, never counted" })),
+    hookResponse("Stop", JSON.stringify({ decision: "block", reason: "not injected context" })),
+    hookResponse("UserPromptSubmit", "plain text output, not JSON"),
+    hookResponse("UserPromptSubmit", "{not json"),
+    hookResponse("PostToolUse", contextOutput("PostToolUse", "")),
+    hookResponse("PostToolUse", JSON.stringify({ hookSpecificOutput: { hookEventName: "PostToolUse" } })),
+    hookResponse(undefined, contextOutput("SubagentStart", "from hookEventName")),
+    hookResponse(undefined, JSON.stringify({ hookSpecificOutput: { additionalContext: "from hook_name" } }), "Notification"),
+    line({ type: "system", subtype: "hook_response", hook_event: "PreToolUse" }),
+  ].join("\n");
+  const metrics = parseTranscript(transcript);
+  assert.deepEqual(metrics.hook_injections, {
+    by_event: {
+      SessionStart: { injections: 1, chars: "session ctx".length },
+      PreToolUse: { injections: 2, chars: [...pre].length + "second".length },
+      PostToolUse: { injections: 1, chars: "post".length },
+      SubagentStart: { injections: 1, chars: "from hookEventName".length },
+      Notification: { injections: 1, chars: "from hook_name".length },
+    },
+    total: { injections: 6, chars: "session ctx".length + [...pre].length + "second".length + "post".length + "from hookEventName".length + "from hook_name".length },
+  });
+  assert.equal(metrics.hook_injections.by_event.PreToolUse!.chars, [...pre].length + "second".length, "chars are code points, not UTF-16 units");
+  assert.equal(metrics.hook_events, 13, "every hook_response is still a hook event");
+  assert.deepEqual(hookInjection({ output: contextOutput("PreToolUse", "x") }), { event: "PreToolUse", chars: 1 }, "falls back to hookEventName");
+  assert.equal(hookInjection({ hook_event: "Stop", output: JSON.stringify({ systemMessage: "s" }) }), null);
+  assert.equal(hookInjection({ hook_event: "PreToolUse", stdout: contextOutput("PreToolUse", "only in stdout") }), null, "only `output` is read");
+
+  const cost = transcriptCost(metrics);
+  assert.deepEqual(cost.hook_injections, metrics.hook_injections);
+  assert.equal(cost.background_wakeups, 0);
+  assert.equal(transcriptCost(null).hook_injections, null);
+  assert.equal(transcriptCost(null).background_wakeups, null);
+});
+
+test("parseTranscript counts every init after the first as a background wake-up", () => {
+  const init = line({ type: "system", subtype: "init", session_id: "s", tools: ["Read"] });
+  const result = line({ type: "result", subtype: "success", is_error: false, usage: { input_tokens: 1, output_tokens: 1 } });
+  assert.equal(parseTranscript("").background_wakeups, 0);
+  assert.equal(parseTranscript(init).background_wakeups, 0);
+  const woken = parseTranscript([init, result, line({ type: "system", subtype: "task_notification" }), init, result, init, result].join("\n"));
+  assert.equal(woken.background_wakeups, 2);
+  assert.equal(woken.result_events, 3);
+  assert.deepEqual(woken.init?.tool_names, ["Read"], "the first init is still the one reported");
+  assert.equal(parseTranscript([result, line({ type: "system", subtype: "hook_response", hook_event: "SessionStart" })].join("\n")).background_wakeups, 0);
 });
 
 // Shapes from real PILOT5 transcripts (CLI 2.1.280): a background-task notification re-invokes the session and

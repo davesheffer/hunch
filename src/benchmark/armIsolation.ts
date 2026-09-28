@@ -352,6 +352,7 @@ export interface PrepareArmOptions {
   env: Record<string, string>;
   /** Frozen snapshot dirs and the hashes recorded for them in snapshot.json. */
   snapshot?: { publicDir: string; privateDir: string | null; publicSha256: string; privateSha256: string | null };
+  /** The Hunch checkout the arm installs from: the audited root for current-hunch, the diet root for diet-hunch. */
   audited?: { root: string };
   npmCi?: boolean;
 }
@@ -360,11 +361,14 @@ export interface PrepareArmOptions {
  * Clone the rewritten base into `<runDir>/repo` and expose exactly one arm:
  * `no-hunch` strips every Hunch marker block and generated command; `current-hunch`
  * mounts the memory snapshot and installs hooks, commands, grounding and index
- * from the audited dist. One `bench: arm setup` commit leaves a clean tree, and the
+ * from the audited dist; `diet-hunch` does exactly the same from the diet root (passed
+ * as `audited`). One `bench: arm setup` commit leaves a clean tree, and the
  * exposure proof is taken before the caller starts any timer.
  */
 export async function prepareArm(opts: PrepareArmOptions): Promise<PreparedArm> {
-  if (opts.arm !== "no-hunch" && opts.arm !== "current-hunch") throw new Error(`arm ${opts.arm} is not supported by prepareArm yet`);
+  if (opts.arm !== "no-hunch" && opts.arm !== "current-hunch" && opts.arm !== "diet-hunch") {
+    throw new Error(`arm ${opts.arm} is not supported by prepareArm yet`);
+  }
   const runDir = resolve(opts.runDir);
   const repo = join(runDir, "repo");
   const nodePath = opts.nodePath ?? process.execPath;
@@ -390,7 +394,7 @@ export async function prepareArm(opts: PrepareArmOptions): Promise<PreparedArm> 
   if (opts.arm === "no-hunch") {
     stripHunchExposure(repo);
   } else {
-    if (!opts.snapshot || !opts.audited) throw new Error("the current-hunch arm needs a memory snapshot and an audited Hunch root");
+    if (!opts.snapshot || !opts.audited) throw new Error(`the ${opts.arm} arm needs a memory snapshot and an audited Hunch root`);
     const auditedRoot = resolve(opts.audited.root);
     const auditedCli = join(auditedRoot, "dist", "cli", "index.js");
     hookCmd = `"${nodePath}" "${auditedCli}" hook`;
@@ -452,7 +456,7 @@ export async function prepareArm(opts: PrepareArmOptions): Promise<PreparedArm> 
   const mcpConfigPath = join(runDir, "mcp.json");
   writeFileAtomic(mcpConfigPath, JSON.stringify(mcpConfig, null, 2) + "\n");
   const exposure = proveExposure({ arm: opts.arm, repo, mcpConfigPath, env: { ...opts.env, ...armEnv }, hookCmd });
-  if (opts.arm === "current-hunch") exposure.memory_snapshot_sha256 = opts.snapshot?.publicSha256 ?? null;
+  if (opts.arm !== "no-hunch") exposure.memory_snapshot_sha256 = opts.snapshot?.publicSha256 ?? null;
   if (setupChecks.length) {
     exposure.checks.push(...setupChecks);
     exposure.ok = exposure.checks.every((c) => c.ok);

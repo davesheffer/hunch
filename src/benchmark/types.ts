@@ -1,7 +1,7 @@
 // Shared contracts for `hunch task benchmark` (Gate A of the context-efficiency plan).
 // Design: bench/pilot5/GATE-A-HARNESS.md on the pilot branch; plan section 7.
 
-export type BenchmarkArm = "no-hunch" | "current-hunch" | "optimized-hunch";
+export type BenchmarkArm = "no-hunch" | "current-hunch" | "diet-hunch";
 export type TokenMeasurement = "provider" | "estimate" | "unavailable";
 export type CallMeasurement = "provider" | "parsed" | "unavailable";
 
@@ -35,6 +35,10 @@ export interface TaskCost {
   tool_calls: number | null;
   investigation_tool_calls: number | null;
   call_measurement: CallMeasurement;
+  /** Hook `additionalContext` injected into the session, by hook event. Optional: absent in run.json written before 2026-09-28. */
+  hook_injections?: HookInjections | null;
+  /** `system/init` events after the first: turns started by a background-task notification. Optional, as above. */
+  background_wakeups?: number | null;
   agent_wall_clock_ms: number;
   validation_ms: number;
   total_wall_clock_ms: number;
@@ -102,13 +106,17 @@ export interface ExposureProof {
   arm: BenchmarkArm;
   ok: boolean;
   checks: { id: string; ok: boolean; detail: string }[];
-  /** The frozen public snapshot hash, verified against the mount before setup (current-hunch). */
+  /** The frozen public snapshot hash, verified against the mount before setup (current-hunch, diet-hunch). */
   memory_snapshot_sha256: string | null;
-  /** Tracked `.hunch/` hash after the audited writers and `hunch index` ran (current-hunch). */
+  /** Tracked `.hunch/` hash after the audited writers and `hunch index` ran (current-hunch, diet-hunch). */
   post_setup_hunch_sha256: string | null;
 }
 
 export interface TokenParts { input: number; cache_creation: number; cache_read: number; output: number }
+
+/** Injection count and summed characters (Unicode code points, as `static_hunch_chars`) of hook `additionalContext`. */
+export interface HookInjectionCount { injections: number; chars: number }
+export interface HookInjections { by_event: Record<string, HookInjectionCount>; total: HookInjectionCount }
 
 /** Parsed from a stream-json transcript. */
 export interface TranscriptMetrics {
@@ -146,6 +154,11 @@ export interface TranscriptMetrics {
   /** Characters Hunch injected during the session: mcp__hunch__* results and hook output. */
   hunch_dynamic_chars: { tool_results: number; hooks: number };
   hook_events: number;
+  /** Non-empty `hookSpecificOutput.additionalContext` in each hook_response `output`, keyed by hook event
+   *  (Stop-hook `systemMessage` and non-JSON output are not counted). */
+  hook_injections: HookInjections;
+  /** `system/init` events after the first: each is a turn a background-task notification started. */
+  background_wakeups: number;
   /** Record ids (dec_/con_/fnd_/bug_/htask_) seen in Hunch-injected text. */
   delivered_record_ids: string[];
 }

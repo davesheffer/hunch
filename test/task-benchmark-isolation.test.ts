@@ -306,6 +306,30 @@ test("prepareArm current-hunch mounts the snapshot through the audited dist and 
   assert.equal(git(prepared.repo, ["status", "--porcelain"]), "");
 });
 
+test("prepareArm diet-hunch is set up exactly like current-hunch, from the diet root", async () => {
+  const base = await prepareTaskBase({ sourceRepo: source, startingCommit: commits.c3!, dest: join(root, "bases", "task-1") });
+  const snapshotDir = join(root, "snapshots", "diet-arm");
+  const snapshot = buildMemorySnapshot({ sourceRepo: source, sourceRef: "main", startingCommit: commits.c3!, privateRepo: overlay, cutoffIso: CUTOFF, dest: snapshotDir });
+  const diet = join(root, "diet");
+  writeStubAudited(diet);
+  const prepared = await prepareArm({
+    base: base.base, arm: "diet-hunch", runDir: join(root, "runs", "diet-hunch"), nodePath: process.execPath, env: childEnv(),
+    snapshot: snapshotOption(snapshotDir, snapshot), audited: { root: diet }, npmCi: false,
+  });
+
+  assert.equal(prepared.arm, "diet-hunch");
+  assert.equal(prepared.exposure.ok, true, JSON.stringify(prepared.exposure.checks));
+  assert.deepEqual(prepared.exposure.checks.map((c) => c.id), CURRENT_HUNCH_CHECKS);
+  assert.equal(prepared.exposure.memory_snapshot_sha256, snapshot.public.sha256);
+  const dietCli = join(diet, "dist", "cli", "index.js");
+  const mcp = JSON.parse(readFileSync(prepared.mcp_config_path, "utf8"));
+  assert.deepEqual(mcp.mcpServers.hunch.args, [dietCli, "mcp", "--root", prepared.repo]);
+  const settings = JSON.parse(readFileSync(join(prepared.repo, ".claude", "settings.json"), "utf8"));
+  assert.equal(settings.hooks.SessionStart[0].hooks[0].command, `"${process.execPath}" "${dietCli}" hook`);
+  await assert.rejects(prepareArm({ base: base.base, arm: "diet-hunch", runDir: join(root, "runs", "diet-bare"), env: childEnv(), npmCi: false }),
+    /the diet-hunch arm needs a memory snapshot and an audited Hunch root/);
+});
+
 test("prepareArm current-hunch fails exposure when the frozen public snapshot was tampered with", async () => {
   const base = await prepareTaskBase({ sourceRepo: source, startingCommit: commits.c3!, dest: join(root, "bases", "task-1") });
   const snapshotDir = join(root, "snapshots", "tampered");
