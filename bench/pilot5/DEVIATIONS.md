@@ -84,3 +84,18 @@ Dated 2026-09-27. Recorded before any benchmark arm ran.
 - Runs 1 and 2 also failed to write `repo-changes.patch` (`GATE-A3-SPEC.md` F2); run 3 never reached that step.
 - Effect: no version 2 run counts. The output directory is kept as evidence, and no file in it contains the login
   token. Version 3 fixes both harness problems and reruns the whole schedule under a new seed.
+
+## (i) Gate A version 3 first attempt void: maintainer sessions wrote to the private overlay
+
+- The first version 3 attempt (output `C:/bench-out/pilot5-gate-a3`, preflight 10 of 10, manifest `d1e13aed…`)
+  started at 09:29:46. Run 1, repeated-bug-360 `current-hunch`, ended `isolation_breach` with "HEAD or git status
+  changed in `hunch-private`". The agent did not cause it. The maintainer's own Claude Code sessions in the `hunch`
+  checkout committed Hunch task reports to the private overlay at every turn end (09:33:23, 09:40:01). Run 1
+  otherwise passed (validator exit 0), and wrote `repo-changes.patch` (F2 confirmed). The controller was stopped
+  during run 2.
+- Fix, operational only (no harness or spec rule changes): for the rerun, the `hunch` checkout's gitignored
+  `.hunch/local.json` points `privateDir` at a clone, `C:/bench-out/hunch-private-shadow`. Maintainer sessions
+  write there, and `hunch-private` stays still. After the run, the setting is restored and the clone's commits are
+  pulled back.
+- Effect: the rerun uses the same seed and a fresh output directory, `C:/bench-out/pilot5-gate-a3r`. The void
+  attempt is kept as evidence and counts for nothing.

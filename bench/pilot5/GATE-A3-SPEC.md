@@ -8,7 +8,7 @@ configuration, criteria, five frozen tasks, two repetitions, model, timeout and 
 runs on this machine (`DEVIATIONS.md` (h)); none of its runs count.
 
 - Seed: `pilot5-gate-a-v3`.
-- Output: `C:/bench-out/pilot5-gate-a3`, outside the user profile.
+- Output: `C:/bench-out/pilot5-gate-a3r`, outside the user profile (the first attempt, `C:/bench-out/pilot5-gate-a3`, is void: `DEVIATIONS.md` (i)).
 - Claude Code: 2.1.284 (version 2 started on 2.1.280). The neutral preflight runs again before the schedule.
 - Harness: `feat/task-benchmark` at `129dd83`.
 
