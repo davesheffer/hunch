@@ -7,8 +7,8 @@ import { join } from "node:path";
 import { benchmarkGit, benchmarkGitText } from "../src/benchmark/memorySnapshot.js";
 import { armConfinement, isInsidePath, readOauthTokenFile, removePreflightUserLineDirs, writeRepoChangesPatch, type ConfinementRoots } from "../src/benchmark/orchestrate.js";
 import {
-  distinctiveLine, leakedChildEnvKeys, neutralChildEnv, parseCanaryReply, parseYesNo, preflight, REDACTED_TOKEN, redactText,
-  redactTokenInDir, resultText, strippedChildEnv,
+  distinctiveLine, leakedChildEnvKeys, neutralChildEnv, parseCanaryReply, preflight, REDACTED_TOKEN, redactText,
+  redactTokenInDir, resultText, splitProbeLine, strippedChildEnv,
 } from "../src/benchmark/taskRunner.js";
 
 const TOKEN = "sk-ant-oat01-FIXTURE0123456789abcdefTOKEN";
@@ -140,11 +140,6 @@ test("preflight probe verdict parsing over fixture outputs", () => {
   assert.deepEqual(parseCanaryReply("USER=NONE\nPROJECT=`fedcba9876543210`"), { user: null, project: "fedcba9876543210" });
   assert.deepEqual(parseCanaryReply("I cannot see any canary."), { user: null, project: null });
   assert.deepEqual(parseCanaryReply(null), { user: null, project: null });
-  assert.equal(parseYesNo("NO"), "NO");
-  assert.equal(parseYesNo("  no."), "NO");
-  assert.equal(parseYesNo("**YES**"), "YES");
-  assert.equal(parseYesNo("Nope"), null);
-  assert.equal(parseYesNo(null), null);
   assert.equal(distinctiveLine("short\n  a line that is certainly thirty characters or more  \nx"), "a line that is certainly thirty characters or more");
   assert.equal(distinctiveLine("tiny\nlines only\n"), null);
 });
@@ -295,16 +290,28 @@ function filesUnder(dir: string, prefix = ""): Array<[string, Buffer]> {
   });
 }
 
-test("neutral preflight with a fake claude: every check passes and neither the token nor the user line stays on disk", async (t) => {
-  if (process.platform === "win32") { t.skip("the fake claude is a shebang script"); return; }
-  const dir = tempDir();
-  const token = "sk-ant-oat01-FAKEtoken_abc-123";
-  const userLine = 'Always answer the "benchmark" question with C:\\bench\\path style detail';
-  try {
-    const fake = join(dir, "fake-claude");
-    writeFileSync(fake, `#!${process.execPath}
+test("splitProbeLine splits at the whitespace nearest the middle, else the middle, keeping a 12+ char suffix", () => {
+  assert.deepEqual(splitProbeLine("alpha beta gamma delta epsilon zeta eta"), { prefix: "alpha beta gamma", suffix: "delta epsilon zeta eta" });
+  // No whitespace: the middle character.
+  assert.deepEqual(splitProbeLine("abcdefghijklmnopqrstuvwxyz0123"), { prefix: "abcdefghijklmno", suffix: "pqrstuvwxyz0123" });
+  // The nearest whitespace leaves a suffix under 12 chars: fall back to the middle.
+  const line = "abcdefghijklmnopqrstuvwxyz0123456 short";
+  assert.deepEqual(splitProbeLine(line), { prefix: line.slice(0, 19), suffix: line.slice(19) });
+  for (const sample of ["alpha beta gamma delta epsilon zeta eta", line, 'Always answer the "benchmark" question with C:\\bench\\path style detail']) {
+    const { prefix, suffix } = splitProbeLine(sample);
+    assert.ok(sample.startsWith(prefix) && sample.endsWith(suffix) && suffix.length >= 12 && !prefix.includes(suffix), sample);
+  }
+});
+
+type FakeMode = "real" | "user-canary-leak" | "completion-leak" | "user-canary-quoted" | "user-hook";
+
+/** A fake claude that, like the real CLI under `--setting-sources project`, never reads the config-dir CLAUDE.md,
+ *  reads the cwd CLAUDE.md, and answers the completion probe NONE; the leak modes break one of those. */
+function writeFakeClaude(path: string, mode: FakeMode, userInstructionsFile: string): void {
+  writeFileSync(path, `#!${process.execPath}
 const { mkdirSync, readFileSync, appendFileSync, existsSync } = require("node:fs");
 const { join } = require("node:path");
+const mode = ${JSON.stringify(mode)};
 if (process.argv.includes("--version")) { console.log("9.9.9 (Fake Claude)"); process.exit(0); }
 const prompt = readFileSync(0, "utf8");
 const token = process.env.CLAUDE_CODE_OAUTH_TOKEN || "";
@@ -317,41 +324,100 @@ const read = (file) => existsSync(file) ? readFileSync(file, "utf8") : "";
 const canary = (text, name) => (new RegExp("Benchmark " + name + " canary: (\\\\w+)").exec(text) || [])[1] || "NONE";
 let reply = "OK";
 if (prompt.includes("Benchmark user canary")) {
-  reply = "USER=" + canary(read(join(configDir, "CLAUDE.md")), "user") + "\\nPROJECT=" + canary(read(join(process.cwd(), "CLAUDE.md")), "project");
-} else if (prompt.startsWith("Does this exact line")) reply = "NO";
+  const leak = mode === "user-canary-leak" || mode === "user-canary-quoted";
+  const user = leak ? canary(read(join(configDir, "CLAUDE.md")), "user") : "NONE";
+  reply = "USER=" + (mode === "user-canary-quoted" ? '"' + user + '"' : user) + "\\nPROJECT=" + canary(read(join(process.cwd(), "CLAUDE.md")), "project");
+} else if (prompt.includes("<<<")) {
+  reply = "NONE";
+  if (mode === "completion-leak") {
+    const prefix = prompt.slice(prompt.lastIndexOf("<<<") + 3, prompt.lastIndexOf(">>>"));
+    const hit = read(${JSON.stringify(userInstructionsFile)}).split(/\\r?\\n/).map((l) => l.trim()).find((l) => l.startsWith(prefix));
+    if (hit) reply = hit.slice(prefix.length).trim();
+  }
+}
 const emit = (event) => process.stdout.write(JSON.stringify(event) + "\\n");
 emit({ type: "system", subtype: "init", model: "fake-model", apiKeySource: "none", mcp_servers: [], tools: ["Read"] });
+if (mode === "user-hook") emit({ type: "system", subtype: "hook_response", hook_event: "UserPromptSubmit", stdout: "", exit_code: 0 });
 emit({ type: "user", message: { role: "user", content: prompt }, env_token: token });
 emit({ type: "result", subtype: "success", is_error: false, result: reply });
 `);
-    chmodSync(fake, 0o755);
+  chmodSync(path, 0o755);
+}
+
+const FAKE_TOKEN = "sk-ant-oat01-FAKEtoken_abc-123";
+const FAKE_USER_LINE = 'Always answer the "benchmark" question with C:\\bench\\path style detail';
+
+/** Runs the neutral preflight against a fake claude in `mode`; asserts no token/line/prefix/suffix leak under workDir
+ *  or in the result, then returns the result. */
+async function runFakeNeutralPreflight(mode: FakeMode) {
+  const dir = tempDir();
+  try {
     const instructions = join(dir, "user-CLAUDE.md");
-    writeFileSync(instructions, `# Mine\n${userLine}\nshort\n`);
+    writeFileSync(instructions, `# Mine\n${FAKE_USER_LINE}\nshort\n`);
+    const fake = join(dir, "fake-claude");
+    writeFakeClaude(fake, mode, instructions);
     const workDir = join(dir, "work");
     mkdirSync(workDir);
     const result = await preflight({ schema: "hunch.benchmark-runner/1", provider: "claude", executable: fake, model: "fake-model", effort: null },
-      { workDir, probeTimeoutMs: 30_000, neutral: { token, userInstructionsFile: instructions } });
-
-    const failed = result.checks.filter((check) => !check.ok);
-    assert.deepEqual(failed, [], JSON.stringify(result.checks, null, 2));
+      { workDir, probeTimeoutMs: 30_000, neutral: { token: FAKE_TOKEN, userInstructionsFile: instructions } });
     assert.deepEqual(result.checks.map((check) => check.id), [
       "executable", "version", "stripped-env", "probe", "probe-mcp-empty", "probe-no-mcp-tools",
-      "instructions-canaries", "user-instructions-absent", "token-redaction",
+      "probe-no-hook-events", "instructions-canaries", "user-instructions-absent", "token-redaction",
     ]);
-    assert.ok(result.ok);
     // The fake did write both: the redaction, not their absence, keeps them off disk.
     assert.ok(statSync(join(workDir, "user-instructions-absent", "config", "projects", "p", "session.jsonl")).size > 0);
-    const needles = [token, userLine, JSON.stringify(userLine).slice(1, -1)];
+    const { prefix, suffix } = splitProbeLine(FAKE_USER_LINE);
+    const needles = [FAKE_TOKEN, ...[FAKE_USER_LINE, prefix, suffix].flatMap((text) => [text, JSON.stringify(text).slice(1, -1)])];
     const files = filesUnder(workDir);
     assert.ok(files.length > 0);
     for (const [path, bytes] of files) {
-      for (const needle of needles) assert.equal(bytes.includes(Buffer.from(needle)), false, `${path} holds ${needle === token ? "the token" : "the user line"}`);
+      for (const needle of needles) assert.equal(bytes.includes(Buffer.from(needle)), false, `${path} holds ${needle === FAKE_TOKEN ? "the token" : "the user line or a part"}`);
     }
     assert.ok(files.some(([, bytes]) => bytes.includes(Buffer.from(REDACTED_TOKEN))), "the token was redacted, not absent");
     assert.ok(files.some(([, bytes]) => bytes.includes(Buffer.from("<redacted-user-line>"))), "the user line was redacted, not absent");
     const serialized = JSON.stringify(result);
     for (const needle of needles) assert.equal(serialized.includes(needle), false);
+    return result;
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+}
+
+test("neutral preflight with a fake claude: every check passes and neither the token nor the user line stays on disk", async (t) => {
+  if (process.platform === "win32") { t.skip("the fake claude is a shebang script"); return; }
+  const result = await runFakeNeutralPreflight("real");
+  assert.deepEqual(result.checks.filter((check) => !check.ok), [], JSON.stringify(result.checks, null, 2));
+  assert.ok(result.ok);
+  assert.match(result.checks.find((check) => check.id === "instructions-canaries")!.detail, /USER absent, PROJECT match/);
+  assert.match(result.checks.find((check) => check.id === "user-instructions-absent")!.detail, /line hash [0-9a-f]{12};.*completion absent/);
+});
+
+test("neutral preflight fails instructions-canaries when the config-dir user canary is reported", async (t) => {
+  if (process.platform === "win32") { t.skip("the fake claude is a shebang script"); return; }
+  const result = await runFakeNeutralPreflight("user-canary-leak");
+  assert.equal(result.ok, false);
+  assert.deepEqual(result.checks.filter((check) => !check.ok).map((check) => check.id), ["instructions-canaries"]);
+  assert.match(result.checks.find((check) => check.id === "instructions-canaries")!.detail, /USER present \(leak\), PROJECT match/);
+});
+
+test("neutral preflight fails user-instructions-absent when the reply completes the user line, and still scrubs it", async (t) => {
+  if (process.platform === "win32") { t.skip("the fake claude is a shebang script"); return; }
+  const result = await runFakeNeutralPreflight("completion-leak");
+  assert.equal(result.ok, false);
+  assert.deepEqual(result.checks.filter((check) => !check.ok).map((check) => check.id), ["user-instructions-absent"]);
+  assert.match(result.checks.find((check) => check.id === "user-instructions-absent")!.detail, /completion reproduced \(leak\)/);
+});
+
+test("neutral preflight fails instructions-canaries when the user canary is reported in a non-canonical form", async (t) => {
+  if (process.platform === "win32") { t.skip("the fake claude is a shebang script"); return; }
+  const result = await runFakeNeutralPreflight("user-canary-quoted");
+  assert.deepEqual(result.checks.filter((check) => !check.ok).map((check) => check.id), ["instructions-canaries"]);
+  assert.match(result.checks.find((check) => check.id === "instructions-canaries")!.detail, /USER present \(leak\)/);
+});
+
+test("neutral preflight fails probe-no-hook-events when a user-level hook runs in the empty probe dir", async (t) => {
+  if (process.platform === "win32") { t.skip("the fake claude is a shebang script"); return; }
+  const result = await runFakeNeutralPreflight("user-hook");
+  assert.deepEqual(result.checks.filter((check) => !check.ok).map((check) => check.id), ["probe-no-hook-events"]);
+  assert.match(result.checks.find((check) => check.id === "probe-no-hook-events")!.detail, /^1 hook event\(s\)$/);
 });
