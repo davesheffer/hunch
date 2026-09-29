@@ -116,3 +116,15 @@ Dated 2026-09-27. Recorded before any benchmark arm ran.
   `hunch private` except for genuinely new record files, which are copied back one by one after the run.
 - Effect: F3 changes a confinement rule after a timed run, so it starts version 4 (`GATE-A4-SPEC.md`) with a new
   seed and output directory. The rerun's output is kept as evidence and counts for nothing.
+
+## (k) Gate A version 4: one run flagged by an unused variable assignment
+
+- Run 8, continuation-375 rep 1 `current-hunch` (334.8 s), ended `isolation_breach`, a harness false positive. The agent's
+  Bash call began `V="'C:/Program Files/nodejs/node.exe' '<audited entrypoint>'"`, an assignment it never used, then ran
+  `task verify` through the POSIX node path and the audited entrypoint, the launcher the Windows hook prints. The
+  confinement check read the entrypoint inside the nested quotes of the assignment as out-of-repo access.
+- Replay through the harness's own `isOutOfRepoAccess`: the call with the assignment is flagged; the next call, the same
+  invocation without it, is not. No read or write outside the run directory occurred.
+- The shape depends on how an agent writes a command, not on the arm: rep 2 of the same task and arm, and the diet arm's
+  rep 1, ran the same launcher without it and passed. So version 4 continued; changing the rule now would start version 5.
+- Effect: the run has no outcome (validator skipped), as in (j). The `current-hunch` arm reports 10 outcomes of 11 (the harness added a tie-break repetition for convention-314).
