@@ -71,3 +71,16 @@ Dated 2026-09-27. Recorded before any benchmark arm ran.
   after the cutoff in the starting commit's history: 43b9339b 1, 7742a3b1 26, 3550f376 22, 0cdb20f4 0. The
   continuation card's starting commit was not checked here.
 - Effect: neither arm sees post-cutoff memory through the workspace or its Git history.
+
+## (h) Gate A version 2 stopped after two runs on Windows
+
+- Version 2 (`GATE-A2-SPEC.md`) started on 2026-09-29 at 08:35 on the Windows machine, output
+  `C:/bench-out/pilot5-gate-a2`, after its neutral preflight passed 10 of 10 on Claude Code 2.1.280. It was stopped
+  during run 3.
+  - Run 1, repeated-bug-360 `no-hunch`: success, 108.7 s.
+  - Run 2, repeated-bug-360 `diet-hunch`: `isolation_breach`, a false positive. The agent ran `task verify` through
+    node's full path held in a variable, as the Windows hook prints it (`GATE-A3-SPEC.md` F1).
+  - Run 3, repeated-bug-360 `current-hunch`: killed mid-run with the controller process tree.
+- Runs 1 and 2 also failed to write `repo-changes.patch` (`GATE-A3-SPEC.md` F2); run 3 never reached that step.
+- Effect: no version 2 run counts. The output directory is kept as evidence, and no file in it contains the login
+  token. Version 3 fixes both harness problems and reruns the whole schedule under a new seed.
