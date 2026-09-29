@@ -1,0 +1,32 @@
+{
+  "id": "htask_9da4ec984c60f78297a69608",
+  "title": "Assistant task",
+  "state": "completed",
+  "started_at": "2026-09-29T01:30:24.116Z",
+  "finished_at": "2026-09-29T01:54:14.336Z",
+  "coverage": "no-relevant-memory",
+  "lessons": [],
+  "applied": [],
+  "saved": [],
+  "checks": [],
+  "conformance": [],
+  "refusals": 0,
+  "files": [
+    "src/benchmark/orchestrate.ts",
+    "test/task-benchmark-neutral.test.ts",
+    "src/benchmark/taskRunner.ts",
+    "src/cli/taskBenchmark.ts",
+    "test/context-efficiency-e2e.test.ts"
+  ],
+  "supersedes": [],
+  "source_snapshot": null,
+  "report_hash": "sha256:2c618d5e554c6e58b80f9bfffb6e640c2c36c4a918776428112c6b481a77bd27",
+  "provenance": {
+    "source": "task_report",
+    "confidence": 1,
+    "evidence": [
+      "hunch report htask_9da4ec984c60f78297a69608"
+    ],
+    "last_verified": "2026-09-29T01:54:14.336Z"
+  }
+}
