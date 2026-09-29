@@ -356,6 +356,41 @@ test("isOutOfRepoAccess flags deny roots outside the run dir and traversal, in e
   assert.equal(isOutOfRepoAccess(`H='/home/dave/audited/dist/cli/index.js'; echo hi >| "$H" x`, denyRoots, runDir, [auditedCli]), true, "a >| redirection is not a command boundary");
   assert.equal(isOutOfRepoAccess(`H='/home/dave/audited/dist/cli/index.js'; echo x |& "$H" task verify htask_1`, denyRoots, runDir, [auditedCli]), false, "a |& pipe is a command boundary");
   assert.equal(isOutOfRepoAccess(`cd repo && H='/home/dave/audited/dist/cli/index.js' && node.exe "$H" task verify htask_1 -h`, denyRoots, runDir, [auditedCli]), false, "&& boundaries, node.exe, and a -h flag that is not a reference");
+  // Known false positive (PILOT5 Gate A v2, repeated-bug-360 rep 1 diet-hunch): on Windows the hook prints node's full
+  // quoted path and the agent kept it in a variable too. Allowed by the Gate A v3 amendment: a double-quoted "$N" reads
+  // as node only while every mention of N is an assignment of a node path or that expansion.
+  const dietCli = "C:\\Users\\x\\hunch-hook-diet\\dist\\cli\\index.js";
+  const withDiet = [...denyRoots, "C:\\Users\\x\\hunch-hook-diet"];
+  const observed = `cd "C:/out/runs/task-1/1-current-hunch/repo"; N='/c/Program Files/nodejs/node.exe'; H='C:\\Users\\x\\hunch-hook-diet\\dist\\cli\\index.js'; "$N" "$H" task verify htask_e4f5045532804a976b4880b7 -- npx tsx --test test/change-ledger.test.ts test/change-ledger-cache.test.ts 2>&1 | grep -E '"exit_code"'; npx tsx --test test/change-ledger.test.ts test/change-ledger-cache.test.ts 2>&1 | grep -E "ℹ (pass|fail)"; "$N" "$H" task verify htask_e4f5045532804a976b4880b7 --timeout 1500 -- npm test > /tmp/full.txt 2>&1; grep -E '"exit_code"' /tmp/full.txt`;
+  assert.equal(isOutOfRepoAccess(observed, withDiet, runDir, [dietCli]), false, "the observed v2 command: node path and entrypoint both in variables");
+  assert.equal(isOutOfRepoAccess(observed.replaceAll('"$N"', "$N"), withDiet, runDir, [dietCli]), true, "the observed v2 command with an unquoted node variable stays denied");
+  for (const name of ["NODE", "NODEJS", "node"]) {
+    assert.equal(isOutOfRepoAccess(`${name}='C:\\Program Files\\nodejs\\node.exe'; H='/home/dave/audited/dist/cli/index.js'; "$${name}" "$H" task verify htask_1`, denyRoots, runDir, [auditedCli]), false, `a node variable named ${name}, a word of its own path`);
+  }
+  assert.equal(isOutOfRepoAccess(`N=/x/node; cat /home/dave/hunch-private"$N"`, denyRoots, runDir, [auditedCli]), true, "a deny root glued to a node variable still matches");
+  assert.equal(isOutOfRepoAccess(`N=/x/node; ls /home/dave/audited"\${N}"; H='/home/dave/audited/dist/cli/index.js'; "$N" "$H" task verify htask_1`, denyRoots, runDir, [auditedCli]), true, "a deny root glued to a braced node variable still matches beside an invocation");
+  assert.equal(isOutOfRepoAccess(`N="C:\\Program Files\\nodejs\\node.exe"; H='/home/dave/audited/dist/cli/index.js'; "\${N}" "$H" --help`, denyRoots, runDir, [auditedCli]), false, "double-quoted Windows node path, braced expansion");
+  assert.equal(isOutOfRepoAccess(`export N=/usr/bin/node; H='/home/dave/audited/dist/cli/index.js'; "$N" "$H" why src/x.ts`, denyRoots, runDir, [auditedCli]), false, "export form, unquoted node path");
+  assert.equal(isOutOfRepoAccess(`N='/c/Program Files/nodejs/node.exe'; H='/home/dave/audited/dist/cli/index.js'; "$N" "$H" task verify htask_1; "$N" --version`, denyRoots, runDir, [auditedCli]), false, "the node variable used for another invocation");
+  assert.equal(isOutOfRepoAccess(`H='/home/dave/audited/dist/cli/index.js'; '/c/Program Files/nodejs/node.exe' "$H" task verify htask_1`, denyRoots, runDir, [auditedCli]), false, "a single-quoted full node path as the interpreter");
+  assert.equal(isOutOfRepoAccess(`H='/home/dave/audited/dist/cli/index.js'; & "C:\\Program Files\\nodejs\\node.exe" "$H" task verify htask_1`, denyRoots, runDir, [auditedCli]), false, "a double-quoted Windows node path as the interpreter");
+  const viaVar = (prefix: string, call = `"$N" "$H" task verify htask_1`) => isOutOfRepoAccess(`${prefix}H='/home/dave/audited/dist/cli/index.js'; ${call}`, denyRoots, runDir, [auditedCli]);
+  assert.equal(viaVar("N='/x/node.exe'; "), false, "the base form each case below changes once");
+  assert.equal(viaVar("N=cat; "), true, "a variable holding another program stays denied");
+  assert.equal(viaVar("N='/usr/bin/cat'; "), true, "a path not ending in node stays denied");
+  assert.equal(viaVar("N='/x/node.exe'; N=cat; "), true, "a node variable reassigned to another program stays denied");
+  assert.equal(viaVar("N='/x/node.exe'; N+=x; "), true, "a node variable appended to stays denied");
+  assert.equal(viaVar("N='/x/node.exe'; read N; "), true, "a node variable read from input stays denied");
+  assert.equal(viaVar("N='/x/node.exe'; ", `for N in cat; do :; done; "$N" "$H" task verify htask_1`), true, "a node variable rebound by a loop stays denied");
+  assert.equal(viaVar("N='/x/node.exe'; ", `"\${N%.exe}" "$H" task verify htask_1`), true, "a parameter-expansion form of the node variable stays denied");
+  assert.equal(viaVar(""), true, "a node variable never assigned in the command stays denied");
+  assert.equal(viaVar("", `"$N" "$H" task verify htask_1; N='/x/node.exe'`), true, "a node variable expanded before its assignment stays denied");
+  assert.equal(viaVar("N='/x/node.exe'; ", `$N "$H" task verify htask_1`), true, "an unquoted node variable stays denied (it word-splits)");
+  assert.equal(viaVar(`N="$(command -v cat)/node"; `), true, "a node path built by expansion stays denied");
+  assert.equal(viaVar("N='/x/node.exe'; ", `"$N" "$H" task verify htask_1; cat "$H"`), true, "the entrypoint read elsewhere still denies it");
+  assert.equal(viaVar("N='/home/dave/audited/node'; "), true, "a deny root inside the node path still matches");
+  assert.equal(viaVar("", `'/usr/bin/cat' "$H" task verify htask_1`), true, "a quoted non-node program as the interpreter stays denied");
+  assert.equal(viaVar("", `echo '/x/node.exe' "$H" task verify htask_1`), true, "a quoted node path that is only an argument stays denied");
   assert.equal(isOutOfRepoAccess('import { x } from "../../../src/core/io.js";', denyRoots, runDir, [], "/home/dave", false), false, "file content skips the traversal rule");
   assert.equal(isOutOfRepoAccess('const p = "/home/dave/hunch-private/x";', denyRoots, runDir, [], "/home/dave", false), true, "file content still hits deny roots");
   assert.equal(isOutOfRepoAccess("../.././../etc/passwd", denyRoots, runDir), true, "traversal tolerating a ./ segment");
