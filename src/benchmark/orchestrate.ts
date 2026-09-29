@@ -5,11 +5,12 @@
 import spawn from "cross-spawn";
 import { createHash } from "node:crypto";
 import { appendFileSync, type Dirent, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { devNull, homedir } from "node:os";
+import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { writeFileAtomic } from "../core/io.js";
 import { buildBenchmarkReport, renderBenchmarkMarkdown } from "../core/taskSavings.js";
+import { gitNullDevice } from "../extractors/git.js";
 import { prepareArm, prepareTaskBase, repoStateFingerprint } from "./armIsolation.js";
 import { benchmarkGit, benchmarkGitText, buildMemorySnapshot, type MemorySnapshot } from "./memorySnapshot.js";
 import { armOrder, canonicalJson, manifestSha256, needsTieBreak } from "./schedule.js";
@@ -265,7 +266,7 @@ export function writeRepoChangesPatch(runDir: string, baseHead: string): void {
   const repo = join(runDir, "repo");
   const index = join(runDir, "repo-changes.index");
   try {
-    const extraEnv = { GIT_INDEX_FILE: index, GIT_CONFIG_GLOBAL: devNull, GIT_CONFIG_NOSYSTEM: "1" };
+    const extraEnv = { GIT_INDEX_FILE: index, GIT_CONFIG_GLOBAL: gitNullDevice(), GIT_CONFIG_NOSYSTEM: "1" };
     benchmarkGit(["-C", repo, "read-tree", baseHead], { extraEnv });
     benchmarkGit(["-C", repo, "add", "-A"], { extraEnv });
     const diff = benchmarkGit(["-C", repo, "-c", "diff.noprefix=false", "-c", "diff.mnemonicPrefix=false", "diff", "--cached",
@@ -399,12 +400,37 @@ function commandPattern(path: string): RegExp {
   return new RegExp(normalizeForMatch(path).replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + COMMAND_END, "g");
 }
 
+/** A node executable as one shell word of normalized text: `node`/`node.exe` or a path ending in `/node` or
+ *  `/node.exe`, single-quoted, double-quoted without `$` or a backtick, or unquoted without shell metacharacters. */
+const NODE_WORD = `(?:'(?:[^'\\n]*/)?node(?:\\.exe)?'|"(?:[^"$\`\\n]*/)?node(?:\\.exe)?"|(?:[^\\s'"$\`;&|<>()]*/)?node(?:\\.exe)?)`;
+
+/**
+ * `N='<…>/node.exe'; "$N" "$H" …` — on Windows the Hunch hook prints node's full path, and agents keep it in
+ * a variable too. Every double-quoted `"$N"`/`"${N}"` reads as `node` when the text keeps N a node executable:
+ * N is assigned a NODE_WORD before any other mention, and outside those assignments (their paths may hold the name,
+ * as `NODE=…/nodejs/node.exe` does) every mention is that quoted expansion. Any other mention (`N=cat`, `read N`,
+ * `N+=x`, `for N in …`, `${N%x}`, an unquoted `$N`) leaves the text as is. The rewrite keeps the quotes, so a path
+ * glued to it still ends at PATH_END, and assignments are never removed, so a deny root inside one still matches.
+ */
+function nodeVarsAsNode(rest: string): string {
+  const assign = new RegExp(`(?<=^|[\\s;&|(])(?:export\\s+)?([a-z_][a-z0-9_]*)=${NODE_WORD}(?=$|[\\s;&|)])`, "g");
+  const firstAssigned = new Map<string, number>();
+  for (const match of rest.matchAll(assign)) if (!firstAssigned.has(match[1]!)) firstAssigned.set(match[1]!, match.index);
+  const others = rest.replace(assign, (mention) => " ".repeat(mention.length));
+  for (const [name, at] of firstAssigned) {
+    const expansion = new RegExp(`"\\$(?:${name}|\\{${name}\\})"`, "g");
+    const words = [...others.matchAll(new RegExp(`(?<![a-z0-9_-])${name}(?![a-z0-9_])`, "g"))].map((match) => match.index);
+    if (words.length > 0 && at < words[0]! && words.length === [...others.matchAll(expansion)].length) rest = rest.replace(expansion, '"node"');
+  }
+  return rest;
+}
+
 /**
  * `H='<path>'; node "$H" …` — the audited entrypoint assigned to a shell variable and invoked through
  * it (`export` and quotes optional; the assignment must sit at a command boundary). Dropped only when,
  * outside its assignments of this path, the name occurs at least once and solely as an invocation:
  * `$NAME`/`${NAME}` as the command word after a boundary (start, `;`, `&`, `|`, or a newline that is
- * not a `\` continuation), optionally behind `node`/`node.exe` as that command word, quote optional,
+ * not a `\` continuation), optionally behind a NODE_WORD as that command word, quote optional,
  * then a subcommand or flag on the same line. Any other occurrence of the name as a word (`cat "$H"`,
  * `grep node "$H"`, `arr=("$H")`, `G="$H" bash -c …`, `${H%x}`, `process.env.H`, `printenv H`)
  * leaves the assignment denied: the path is then not provably only-invoked. A `-NAME` flag (`-h`) is
@@ -421,7 +447,7 @@ function dropInvokedVarAssignment(rest: string, path: string): string {
     const word = new RegExp(`(?<![a-z0-9_-])${name}(?![a-z0-9_])`, "g");
     // `\` normalizes to `/`, so a continuation newline reads `/\n` and is no boundary; `>&`, `<&`, `>|` are
     // redirections (`echo x >& "$H"` overwrites the entrypoint), not command separators.
-    const invocation = new RegExp(`(?<=(?:^|;|(?<![<>])[&|]|(?<!/)\\n)\\s*(?:node(?:\\.exe)?\\s+)?["']?)\\$(?:${name}|\\{${name}\\})(?![a-z0-9_])(?=["']?[ \\t]+-{0,2}[a-z])`, "g");
+    const invocation = new RegExp(`(?<=(?:^|;|(?<![<>])[&|]|(?<!/)\\n)\\s*(?:${NODE_WORD}\\s+)?["']?)\\$(?:${name}|\\{${name}\\})(?![a-z0-9_])(?=["']?[ \\t]+-{0,2}[a-z])`, "g");
     const invocations = [...others.matchAll(invocation)].length;
     if (invocations > 0 && [...others.matchAll(word)].length === invocations) invokedOnly.add(name);
   }
@@ -452,6 +478,7 @@ export function isOutOfRepoAccess(
   if (traversal && /(?:\.\.[\\/]+(?:\.[\\/]+)*){3}/.test(value)) return true;
   let rest = normalizeForMatch(value).replace(HOME_TOKEN, (_, prefix) => `${prefix}${normalizeForMatch(home)}`);
   for (const path of Array.isArray(allowed) ? allowed : [allowed]) rest = rest.replace(pathPattern(path), " ");
+  if (commands.length) rest = nodeVarsAsNode(rest);
   for (const path of commands) {
     rest = rest.replace(commandPattern(path), " ");
     rest = dropInvokedVarAssignment(rest, path);
