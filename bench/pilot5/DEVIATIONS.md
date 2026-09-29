@@ -93,9 +93,10 @@ Dated 2026-09-27. Recorded before any benchmark arm ran.
   checkout committed Hunch task reports to the private overlay at every turn end (09:33:23, 09:40:01). Run 1
   otherwise passed (validator exit 0), and wrote `repo-changes.patch` (F2 confirmed). The controller was stopped
   during run 2.
-- Fix, operational only (no harness or spec rule changes): for the rerun, the `hunch` checkout's gitignored
-  `.hunch/local.json` points `privateDir` at a clone, `C:/bench-out/hunch-private-shadow`. Maintainer sessions
-  write there, and `hunch-private` stays still. After the run, the setting is restored and the clone's commits are
-  pulled back.
+- Fix, operational only (no harness or spec rule changes): for the rerun, `hunch private
+  C:/bench-out/hunch-private-shadow/.hunch --no-hook` registers a clone of the overlay, with no remote, as the private
+  store of the `hunch` checkout and its worktrees (git common dir plus the gitignored `.hunch/local.json`; editing
+  `local.json` alone is ignored). Maintainer sessions write to the clone, and `hunch-private` stays still. After the
+  run, the store is registered back to `../hunch-private/.hunch` and the clone's commits are pulled back.
 - Effect: the rerun uses the same seed and a fresh output directory, `C:/bench-out/pilot5-gate-a3r`. The void
   attempt is kept as evidence and counts for nothing.
