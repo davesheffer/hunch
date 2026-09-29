@@ -147,10 +147,17 @@ export function parseCanaryReply(text: string | null): { user: string | null; pr
   return { user: value("USER"), project: value("PROJECT") };
 }
 
-/** A YES/NO reply's answer (leading punctuation and case ignored), else null. */
-export function parseYesNo(text: string | null): "YES" | "NO" | null {
-  const match = /^\W*(YES|NO)\b/i.exec((text ?? "").trim());
-  return match ? (match[1]!.toUpperCase() as "YES" | "NO") : null;
+/** Splits the user-instructions-absent needle into the prefix the prompt shows and the suffix it withholds: at the
+ *  whitespace nearest the middle (the middle character when there is none), falling back to the middle when the
+ *  trimmed suffix would be under 12 characters. Both parts are trimmed substrings of the line. */
+export function splitProbeLine(line: string): { prefix: string; suffix: string } {
+  const middle = Math.floor(line.length / 2);
+  let at = -1;
+  for (let i = 0; i < line.length; i++) {
+    if (/\s/.test(line[i]!) && (at < 0 || Math.abs(i - middle) < Math.abs(at - middle))) at = i;
+  }
+  if (at < 0 || line.slice(at).trim().length < 12) at = middle;
+  return { prefix: line.slice(0, at).trim(), suffix: line.slice(at).trim() };
 }
 
 /** The longest trimmed line (>= 30 chars) of a user CLAUDE.md, the user-instructions-absent probe's needle. */
@@ -283,7 +290,9 @@ export interface PreflightResult { ok: boolean; identity: RunnerIdentity; checks
 export interface PreflightNeutral { token: string; userInstructionsFile: string }
 
 /** Fails closed: any failed check yields ok:false, and no check throws. With `neutral`, every probe runs under its own
- *  empty config dir and the token, and the instructions-canaries and user-instructions-absent probes are added. */
+ *  empty config dir and the token, and the instructions-canaries and user-instructions-absent probes are added.
+ *  Intent: project instructions (the cwd CLAUDE.md) load, and user-scope instructions do not, not even a CLAUDE.md
+ *  inside the per-run config dir; the real user CLAUDE.md is probed by completion, so its line never enters a prompt. */
 export async function preflight(
   cfg: RunnerConfig, opts: { workDir: string; probeTimeoutMs?: number; neutral?: PreflightNeutral },
 ): Promise<PreflightResult> {
@@ -328,6 +337,7 @@ export async function preflight(
   const leaked = leakedChildEnvKeys(childEnv, harnessEnv);
   const envOk = add("stripped-env", leaked.length === 0, leaked.length ? `forbidden keys remain: ${leaked.join(", ")}` : "no forbidden keys");
   let probeInit: AgentRunResult["metrics"]["init"] = null;
+  let probeHookEvents: number | null = null;
 
   if (found && versioned && envOk) {
     try {
@@ -345,6 +355,7 @@ export async function preflight(
           timeoutMs: opts.probeTimeoutMs ?? 180_000, outDir: join(opts.workDir, "probe-run"),
         });
         probeInit = run.metrics.init;
+        probeHookEvents = run.metrics.hook_events;
         reportedModel = run.metrics.init?.model ?? null;
         const ok = run.exit_code === 0 && !run.timed_out && run.metrics.init?.api_key_source === "none" && run.metrics.result?.is_error === false;
         add("probe", ok, `exit ${run.exit_code}, timed_out ${run.timed_out}, apiKeySource ${run.metrics.init?.api_key_source ?? "missing"}, `
@@ -365,6 +376,9 @@ export async function preflight(
     probeMcpTools !== null ? (probeMcpTools.length ? probeMcpTools.join(", ") : "no mcp__ tool") : "no probe init event");
 
   if (neutral) {
+    // The probe's empty cwd has no project settings, so any hook that runs comes from user-level configuration.
+    add("probe-no-hook-events", probeHookEvents === 0,
+      probeHookEvents === null ? "no probe transcript" : `${probeHookEvents} hook event(s)`);
     const probeOk = checks.find((check) => check.id === "probe")?.ok === true;
     /** One probe in `<workDir>/<name>/` with its own empty cwd and config dir; the reply is the last result text. */
     const neutralProbe = async (name: string, prompt: string, setup: (cwd: string, configDir: string) => void) => {
@@ -398,8 +412,10 @@ export async function preflight(
           });
         const seen = parseCanaryReply(probe.reply);
         const shown = (value: string | null) => (value ?? "NONE").slice(0, 40);
-        add("instructions-canaries", probe.ok && seen.user === userCanary && seen.project === projectCanary,
-          `${probe.detail}; USER ${seen.user === userCanary ? "match" : `mismatch (${shown(seen.user)})`}, `
+        // The raw reply, not the parsed value: a leak reported in any format must fail (16 random hex chars never occur by chance).
+        const userLeak = (probe.reply ?? "").includes(userCanary);
+        add("instructions-canaries", probe.ok && !userLeak && seen.project === projectCanary,
+          `${probe.detail}; USER ${userLeak ? "present (leak)" : seen.user === null ? "absent" : `absent (reply ${shown(seen.user)})`}, `
           + `PROJECT ${seen.project === projectCanary ? "match" : `mismatch (${shown(seen.project)})`}`);
       } catch (error) {
         add("instructions-canaries", false, `probe failed: ${(error as Error).message}`);
@@ -413,19 +429,33 @@ export async function preflight(
       else if (!probeOk) add("user-instructions-absent", false, "skipped: the probe failed");
       else {
         const hash = createHash("sha256").update(line).digest("hex").slice(0, 12);
+        // A completion probe: the prompt shows only the prefix, so a leak shows as the withheld suffix in the reply.
+        const collapse = (text: string) => text.replace(/\s+/g, " ").trim();
+        const { prefix, suffix } = splitProbeLine(collapse(line));
+        const needles = [...new Set([line, collapse(line), prefix, suffix])].filter((needle) => needle.length > 0);
         // The probe dir holds the user's line: scrub it however the probe ends (the signal sweep removes the dir).
-        let scrub: RedactionResult = { count: 0, failures: [] };
+        const scrub: RedactionResult = { count: 0, failures: [] };
         let probe: Awaited<ReturnType<typeof neutralProbe>>;
         try {
           probe = await neutralProbe("user-instructions-absent",
-            `Does this exact line appear anywhere in your instructions or context? Reply YES or NO only. Line: ${line}`, () => {});
+            "If your instructions or context contain a line that begins with the text between the markers, reply with the rest "
+            + `of that line verbatim and nothing else; otherwise reply exactly NONE. <<<${prefix}>>>`, () => {});
         } finally {
-          scrub = redactTokenInDir(join(opts.workDir, "user-instructions-absent"), line, "<redacted-user-line>");
+          for (const needle of needles) {
+            const part = redactTokenInDir(join(opts.workDir, "user-instructions-absent"), needle, "<redacted-user-line>");
+            scrub.count += part.count;
+            scrub.failures.push(...part.failures);
+          }
         }
-        const answer = parseYesNo(probe.reply);
-        add("user-instructions-absent", probe.ok && answer === "NO" && scrub.failures.length === 0,
-          `line hash ${hash}; ${probe.detail}; answer ${answer ?? "unparsed"}`
-          + (scrub.failures.length ? `; line redaction failed: ${scrub.failures.join(", ")}` : ""));
+        const reply = collapse(probe.reply ?? "");
+        const withheld = collapse(suffix);
+        // The tail counts only when the prompt does not show it (an echoed prompt is not a leak).
+        const tail = withheld.slice(-12);
+        const leaked = reply.includes(withheld) || (!collapse(prefix).includes(tail) && reply.includes(tail));
+        let detail = `line hash ${hash}; ${probe.detail}; completion ${leaked ? "reproduced (leak)" : "absent"}`
+          + (scrub.failures.length ? `; line redaction failed: ${[...new Set(scrub.failures)].join(", ")}` : "");
+        for (const needle of needles) detail = redactText(detail, needle, "<redacted-user-line>");
+        add("user-instructions-absent", probe.ok && !leaked && scrub.failures.length === 0, detail);
       }
     } catch (error) {
       add("user-instructions-absent", false, `probe failed: ${(error as Error).message}`);
