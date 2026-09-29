@@ -4,16 +4,16 @@
 // Design: bench/pilot5/GATE-A-HARNESS.md ("Schedule", "Validation", "Output", "Runner", "Metrics").
 import spawn from "cross-spawn";
 import { createHash } from "node:crypto";
-import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync } from "node:fs";
-import { homedir } from "node:os";
-import { basename, dirname, isAbsolute, join, resolve } from "node:path";
+import { appendFileSync, type Dirent, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { devNull, homedir } from "node:os";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { writeFileAtomic } from "../core/io.js";
 import { buildBenchmarkReport, renderBenchmarkMarkdown } from "../core/taskSavings.js";
 import { prepareArm, prepareTaskBase, repoStateFingerprint } from "./armIsolation.js";
 import { benchmarkGit, benchmarkGitText, buildMemorySnapshot, type MemorySnapshot } from "./memorySnapshot.js";
 import { armOrder, canonicalJson, manifestSha256, needsTieBreak } from "./schedule.js";
-import { preflight, runAgent, strippedChildEnv } from "./taskRunner.js";
+import { killLiveChildren, neutralChildEnv, preflight, redactText, redactTokenInDir, runAgent, strippedChildEnv } from "./taskRunner.js";
 import { parseTranscript, recordIdsIn, toolInputStrings, transcriptCost } from "./transcript.js";
 import type { AgentRunResult, BenchmarkArm, BenchmarkSuite, EfficiencyRun, PreparedArm, RunnerConfig, RunnerIdentity, SuiteTask, TaskCost } from "./types.js";
 import { runValidator, type ValidatorResult } from "./validate.js";
@@ -55,6 +55,11 @@ export interface RunBenchmarkOptions {
   noNpmCi?: boolean;
   /** Fixture provider only. */
   allowDirtyController?: boolean;
+  /** Subscription token file (`claude setup-token`) for neutral user config: each run gets its own empty
+   *  CLAUDE_CONFIG_DIR. Required for the claude provider unless `inheritUserConfig`. Its path and content are never recorded. */
+  oauthTokenFile?: string;
+  /** Version 1 behaviour: the child inherits the user's Claude Code configuration. Exclusive with `oauthTokenFile`. */
+  inheritUserConfig?: boolean;
   /** Test seam; default `~/.claude/CLAUDE.md`. */
   userInstructionsFile?: string;
   /** Test seam; default `~/.claude` (Claude Code's per-cwd auto memory lives under its `projects/`). */
@@ -94,6 +99,9 @@ interface Manifest {
   runner_config: RunnerConfig;
   runner_identity: RunnerIdentity;
   user_instructions_sha256: string | null;
+  /** Only in neutral mode (absent, an inherited-config manifest hashes as in version 1). Never the token or its path. */
+  user_config?: "neutral" | "inherited";
+  oauth_token?: "present" | "absent";
   node_version: string;
   platform: string;
   tasks: Array<{
@@ -168,15 +176,139 @@ export interface ConfinementRoots {
   dietRoot: string | null;
   controller: string;
   out: string;
+  /** Neutral user-config mode only: the user-level Claude Code config dir (`~/.claude`), denied to every arm. */
+  userConfigRoot?: string | null;
 }
 
 /** Deny roots and invocation allowance of one arm's no-out-of-repo-access check. Every arm is denied both Hunch
  *  checkouts; a Hunch arm may invoke only its own checkout's `dist/cli/index.js`, no-hunch none. */
 export function armConfinement(arm: BenchmarkArm, roots: ConfinementRoots): { denyRoots: string[]; commands: string[] } {
-  const denyRoots = [roots.sourceRepo, roots.privateRepo, roots.auditedRoot, roots.dietRoot, roots.controller, roots.out]
-    .filter((p): p is string => p !== null);
+  const denyRoots = [roots.sourceRepo, roots.privateRepo, roots.auditedRoot, roots.dietRoot, roots.controller, roots.out, roots.userConfigRoot]
+    .filter((p): p is string => typeof p === "string");
   const own = arm === "current-hunch" ? roots.auditedRoot : arm === "diet-hunch" ? roots.dietRoot : null;
   return { denyRoots, commands: own === null ? [] : [join(own, "dist", "cli", "index.js")] };
+}
+
+/** `path` resolved (canonical case included) through symlinks up to its nearest present ancestor, the missing tail
+ *  appended as given; null when that ancestor cannot be resolved (a dangling symlink). */
+function realpathNearest(path: string): string | null {
+  let head = resolve(path);
+  const tail: string[] = [];
+  for (;;) {
+    try { lstatSync(head); break; } catch { /* missing: step up */ }
+    const parent = dirname(head);
+    if (parent === head) return resolve(path);
+    tail.unshift(basename(head));
+    head = parent;
+  }
+  try { return join(realpathSync.native(head), ...tail); } catch { return null; }
+}
+
+/** True when `child` is `root` or below it (case-insensitive on Windows); neither path has to exist. `either` (the
+ *  refusal direction) accepts a match as given or through symlinks; `resolved` (the acceptance direction) requires the
+ *  match through symlinks, so a link inside `root` pointing out of it, or a dangling one, does not count. */
+export function isInsidePath(child: string, root: string, mode: "either" | "resolved" = "either"): boolean {
+  const inside = (c: string, r: string) => {
+    const fold = (path: string) => (process.platform === "win32" ? path.toLowerCase() : path);
+    const rel = relative(fold(r), fold(c));
+    return rel === "" || (rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
+  };
+  const realChild = realpathNearest(child);
+  const realRoot = realpathNearest(root);
+  const resolvedMatch = realChild !== null && realRoot !== null && inside(realChild, realRoot);
+  return mode === "resolved" ? resolvedMatch : resolvedMatch || inside(resolve(child), resolve(root));
+}
+
+/** Reads and validates `--oauth-token-file`. Refusals never include the path or the content. */
+export function readOauthTokenFile(file: string, harnessRoots: Array<string | null>): string {
+  if (!isAbsolute(file)) throw new Stop(1, "--oauth-token-file must be an absolute path");
+  let dir: string;
+  try {
+    if (!statSync(file).isFile()) throw new Error("not a file");
+    dir = dirname(realpathSync(file));
+  } catch {
+    throw new Stop(1, "--oauth-token-file does not name an existing, accessible file");
+  }
+  // Fail closed: only git's own "not a git repository" answer counts as outside every repository.
+  const inside = benchmarkGit(["-c", "safe.directory=*", "-C", dir, "rev-parse", "--is-inside-work-tree"], { allowFailure: true });
+  if (inside.status === 0 || !/not a git repository/i.test(inside.stderr)) {
+    throw new Stop(1, "--oauth-token-file is inside a git work tree (or git could not tell); keep it outside every repository");
+  }
+  if (harnessRoots.some((root) => root !== null && (isInsidePath(dir, root) || isInsidePath(dirname(resolve(file)), root)))) {
+    throw new Stop(1, "--oauth-token-file is under a benchmark root (source, controller, private, audited, diet or output)");
+  }
+  let token: string;
+  try { token = readFileSync(file, "utf8").trim(); } catch { throw new Stop(1, "--oauth-token-file could not be read"); }
+  if (!token) throw new Stop(1, "--oauth-token-file is empty");
+  if (/\s/.test(token)) throw new Stop(1, "--oauth-token-file must hold a single token on one line with no whitespace");
+  if (!/^[A-Za-z0-9._-]+$/.test(token)) throw new Stop(1, "--oauth-token-file must hold a single token of letters, digits, '.', '_' or '-'");
+  return token;
+}
+
+/** Neutral mode: the child's token may sit in a run repo's git objects (compressed, so the literal redaction pass
+ *  cannot see them); every run repo's .git is removed. Returns the failures (relative path + error code). */
+function removeRunRepoGit(runDir: string): string | null {
+  const git = join(runDir, "repo", ".git");
+  try {
+    if (existsSync(git)) rmSync(git, { recursive: true, force: true });
+    return null;
+  } catch (error) {
+    return `${join("repo", ".git")}: ${(error as NodeJS.ErrnoException).code ?? "error"}`;
+  }
+}
+
+/** `repo-changes.patch`: the run repo's tracked and untracked (non-ignored) changes against `baseHead`, staged into a
+ *  temporary index seeded from `baseHead` (so tracked-but-ignored files are not reported deleted) and leaving the run's
+ *  own index untouched. Global and system git config are off, so the runner's excludes, attributes and diff prefixes
+ *  cannot drop or reshape content; prefixes are pinned and content forced textual against the repo's own config. */
+export function writeRepoChangesPatch(runDir: string, baseHead: string): void {
+  const repo = join(runDir, "repo");
+  const index = join(runDir, "repo-changes.index");
+  try {
+    const extraEnv = { GIT_INDEX_FILE: index, GIT_CONFIG_GLOBAL: devNull, GIT_CONFIG_NOSYSTEM: "1" };
+    benchmarkGit(["-C", repo, "read-tree", baseHead], { extraEnv });
+    benchmarkGit(["-C", repo, "add", "-A"], { extraEnv });
+    const diff = benchmarkGit(["-C", repo, "-c", "diff.noprefix=false", "-c", "diff.mnemonicPrefix=false", "diff", "--cached",
+      "--no-ext-diff", "--no-color", "--no-textconv", "--text", baseHead], { extraEnv });
+    writeFileSync(join(runDir, "repo-changes.patch"), diff.stdout);
+  } finally {
+    rmSync(index, { force: true });
+  }
+}
+
+/** Neutral-mode sweep: removes every `preflight/<n>/user-instructions-absent` dir, which holds a line of the user's
+ *  instructions until its probe scrubs it (an interrupted probe never does). Returns the failures (relative path + code). */
+export function removePreflightUserLineDirs(out: string): string[] {
+  const failures: string[] = [];
+  const preflightRoot = join(out, "preflight");
+  let entries: Dirent[];
+  try { entries = readdirSync(preflightRoot, { withFileTypes: true }); } catch { return failures; }
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const dir = join(preflightRoot, entry.name, "user-instructions-absent");
+    try {
+      rmSync(dir, { recursive: true, force: true });
+    } catch (error) {
+      failures.push(`${relative(out, dir)}: ${(error as NodeJS.ErrnoException).code ?? "error"}`);
+    }
+  }
+  return failures;
+}
+
+/** Startup sweep for neutral mode: removes `runs/<task>/<run>/repo/.git` everywhere (interrupted dirs included). */
+function removeAllRunRepoGits(out: string): string[] {
+  const failures: string[] = [];
+  const runs = join(out, "runs");
+  if (!existsSync(runs)) return failures;
+  for (const taskDir of readdirSync(runs, { withFileTypes: true })) {
+    if (!taskDir.isDirectory()) continue;
+    for (const runDir of readdirSync(join(runs, taskDir.name), { withFileTypes: true })) {
+      if (!runDir.isDirectory()) continue;
+      const failure = removeRunRepoGit(join(runs, taskDir.name, runDir.name));
+      if (failure) failures.push(`${taskDir.name}/${runDir.name}/${failure}`);
+    }
+  }
+  return failures;
 }
 
 /** A Hunch checkout an arm installs from: built dist/cli/index.js, clean tree, HEAD revision, package.json version. */
@@ -350,6 +482,9 @@ interface RunContext {
   noNpmCi: boolean;
   snapshots: Map<string, MemorySnapshot>;
   claudeHome: string;
+  /** Neutral user-config mode iff non-null; never written anywhere. */
+  oauthToken: string | null;
+  userConfigRoot: string | null;
   log: (line: string) => void;
 }
 
@@ -366,6 +501,10 @@ async function executeRun(ctx: RunContext, task: SuiteTask, rep: number, arm: Be
     return existing;
   }
   if (existsSync(runDir)) {
+    if (ctx.oauthToken !== null) {
+      const failures = [removeRunRepoGit(runDir), ...redactTokenInDir(runDir, ctx.oauthToken).failures].filter((f): f is string => f !== null);
+      if (failures.length) ctx.log(`warning: interrupted run ${runDir} not fully scrubbed: ${failures.join(", ")}`);
+    }
     const moved = freeSuffix(runDir, ".interrupted-");
     renameSync(runDir, moved);
     ctx.log(`interrupted run ${runDir} moved to ${moved}`);
@@ -376,8 +515,9 @@ async function executeRun(ctx: RunContext, task: SuiteTask, rep: number, arm: Be
   const isolation: string[] = [];
   const validation: string[] = [];
   // Claude Code keeps auto memory per cwd; a rerun after an .interrupted rename reuses this repo path.
+  // Neutral mode: auto memory lives in the run's own config dir, so there is nothing to move.
   const autoMemoryDir = join(ctx.claudeHome, "projects", join(runDir, "repo").replace(/[^A-Za-z0-9]/g, "-"));
-  if (existsSync(autoMemoryDir)) {
+  if (ctx.oauthToken === null && existsSync(autoMemoryDir)) {
     const moved = freeSuffix(autoMemoryDir, ".bench-stale-");
     renameSync(autoMemoryDir, moved);
     isolation.push(`auto-memory dir ${autoMemoryDir} moved to ${moved}`);
@@ -414,63 +554,109 @@ async function executeRun(ctx: RunContext, task: SuiteTask, rep: number, arm: Be
   let agent: AgentRunResult | null = null;
   let validator: ValidatorResult | null = null;
   let outOfRepoBreach = false;
-  if (prepared && !invalid) {
-    const agentEnv = strippedChildEnv(process.env, { DISABLE_AUTOUPDATER: "1", ...prepared.env });
-    if (ctx.cfg.provider === "claude") {
-      const probe = spawn.sync(ctx.cfg.executable, ["--version"], { encoding: "utf8", windowsHide: true, env: agentEnv, timeout: 30_000 });
-      const version = String(probe.stdout ?? "").split(/\r?\n/).find((line) => line.trim())?.trim() ?? null;
-      if (version !== ctx.manifest.runner_identity.cli_version) {
-        ctx.log(`claude --version is ${version ?? "(none)"} but the manifest pins ${ctx.manifest.runner_identity.cli_version}; stopping the schedule`);
-        return "stop";
-      }
-    }
-    agent = await runAgent({
-      cfg: ctx.cfg, prompt: task.prompt, cwd: prepared.repo, mcpConfigPath: prepared.mcp_config_path,
-      env: agentEnv, timeoutMs: ctx.suite.timeout_ms, outDir: runDir,
-    });
-    const init = agent.metrics.init;
-    const post: Array<[string, boolean, string]> = [];
-    if (!init) post.push(["init-present", false, "transcript has no init event"]);
-    else if (arm !== "no-hunch") {
-      const servers = init.mcp_servers;
-      post.push(
-        ["mcp-servers-exactly-hunch", servers.length === 1 && servers[0] === "hunch", `${servers.length} MCP server(s)${servers.length ? `: ${servers.join(", ")}` : ""}`],
-        ["mcp-hunch-connected", init.mcp_server_status.hunch === "connected", `hunch status ${init.mcp_server_status.hunch ?? "missing"}`],
-        // The audited SessionStart hook always emits, so a real current-hunch run must observe it.
-        ["hunch-hooks-observed", agent.metrics.hook_events >= 1 && agent.metrics.hunch_dynamic_chars.hooks > 0,
-          `${agent.metrics.hook_events} hook event(s), ${agent.metrics.hunch_dynamic_chars.hooks} hook char(s)`],
-      );
-    } else {
-      const hunchTools = init.tool_names.filter((name) => name.startsWith("mcp__hunch__"));
-      post.push(
-        ["mcp-servers-empty", init.mcp_servers.length === 0, `${init.mcp_servers.length} MCP server(s)${init.mcp_servers.length ? `: ${init.mcp_servers.join(", ")}` : ""}`],
-        ["hunch-tools-absent", hunchTools.length === 0, hunchTools.length ? hunchTools.join(", ") : "no mcp__hunch__ tool"],
-        ["hunch-tool-calls-zero", agent.metrics.hunch_tool_calls === 0, `${agent.metrics.hunch_tool_calls} hunch tool call(s)`],
-        ["hunch-hook-output-zero", agent.metrics.hunch_dynamic_chars.hooks === 0, `${agent.metrics.hunch_dynamic_chars.hooks} hook chars`],
-      );
-    }
-    // The audited UserPromptSubmit hook tells the agent to run checks through `<node> <audited>/dist/cli/index.js task verify`.
-    const { denyRoots, commands } = armConfinement(arm, ctx);
-    const offenders = [...new Set(toolInputStrings(readFileSync(agent.transcript_path, "utf8"))
-      .filter(({ value, content }) => isOutOfRepoAccess(value, denyRoots, [runDir], commands, homedir(), !content))
-      .map(({ value }) => value))];
-    outOfRepoBreach = offenders.length > 0;
-    post.push(["no-out-of-repo-access", !outOfRepoBreach, outOfRepoBreach
-      ? `offending string(s): ${offenders.slice(0, 5).map((s) => s.slice(0, 200)).join(" | ")}`
-      : "no out-of-repo access in tool inputs"]);
-
-    for (const [id, ok, detail] of post) {
-      isolation.push(`post ${id}: ${ok ? "ok" : "FAIL"} (${detail})`);
-      if (!ok) invalid = true;
-    }
-    isolation.push(`auto-memory-path: ${init?.memory_paths_auto ?? "missing"}`);
-    if (!invalid) {
-      validator = await runValidator({
-        repo: prepared.repo, validatorFile: resolve(dirname(ctx.suitePath), task.validator.file), runDir,
-        timeoutMs: ctx.suite.validator_timeout_ms, env: strippedChildEnv(process.env, { DISABLE_AUTOUPDATER: "1" }),
-      });
+  const configDir = ctx.oauthToken !== null ? join(runDir, "claude-config") : null;
+  if (prepared && !invalid && configDir !== null) {
+    mkdirSync(configDir, { recursive: true });
+    if (readdirSync(configDir).length) {
+      invalid = true;
+      isolation.push(`setup claude-config: FAIL (${configDir} is not empty)`);
     }
   }
+  try {
+    if (prepared && !invalid) {
+      const neutralEnv = configDir !== null ? neutralChildEnv(configDir, ctx.oauthToken!) : {};
+      const agentEnv = strippedChildEnv(process.env, { DISABLE_AUTOUPDATER: "1", ...prepared.env, ...neutralEnv });
+      if (ctx.cfg.provider === "claude") {
+        const probe = spawn.sync(ctx.cfg.executable, ["--version"], { encoding: "utf8", windowsHide: true, env: agentEnv, timeout: 30_000 });
+        const version = String(probe.stdout ?? "").split(/\r?\n/).find((line) => line.trim())?.trim() ?? null;
+        if (version !== ctx.manifest.runner_identity.cli_version) {
+          ctx.log(`claude --version is ${version ?? "(none)"} but the manifest pins ${ctx.manifest.runner_identity.cli_version}; stopping the schedule`);
+          return "stop";
+        }
+      }
+      agent = await runAgent({
+        cfg: ctx.cfg, prompt: task.prompt, cwd: prepared.repo, mcpConfigPath: prepared.mcp_config_path,
+        env: agentEnv, timeoutMs: ctx.suite.timeout_ms, outDir: runDir,
+      });
+      const init = agent.metrics.init;
+      const post: Array<[string, boolean, string]> = [];
+      if (!init) post.push(["init-present", false, "transcript has no init event"]);
+      else if (arm !== "no-hunch") {
+        const servers = init.mcp_servers;
+        post.push(
+          ["mcp-servers-exactly-hunch", servers.length === 1 && servers[0] === "hunch", `${servers.length} MCP server(s)${servers.length ? `: ${servers.join(", ")}` : ""}`],
+          ["mcp-hunch-connected", init.mcp_server_status.hunch === "connected", `hunch status ${init.mcp_server_status.hunch ?? "missing"}`],
+          // The audited SessionStart hook always emits, so a real current-hunch run must observe it.
+          ["hunch-hooks-observed", agent.metrics.hook_events >= 1 && agent.metrics.hunch_dynamic_chars.hooks > 0,
+            `${agent.metrics.hook_events} hook event(s), ${agent.metrics.hunch_dynamic_chars.hooks} hook char(s)`],
+        );
+      } else {
+        const hunchTools = init.tool_names.filter((name) => name.startsWith("mcp__hunch__"));
+        post.push(
+          ["mcp-servers-empty", init.mcp_servers.length === 0, `${init.mcp_servers.length} MCP server(s)${init.mcp_servers.length ? `: ${init.mcp_servers.join(", ")}` : ""}`],
+          ["hunch-tools-absent", hunchTools.length === 0, hunchTools.length ? hunchTools.join(", ") : "no mcp__hunch__ tool"],
+          ["hunch-tool-calls-zero", agent.metrics.hunch_tool_calls === 0, `${agent.metrics.hunch_tool_calls} hunch tool call(s)`],
+          ["hunch-hook-output-zero", agent.metrics.hunch_dynamic_chars.hooks === 0, `${agent.metrics.hunch_dynamic_chars.hooks} hook chars`],
+        );
+      }
+      if (configDir !== null) {
+        const auto = init?.memory_paths_auto ?? null;
+        post.push(["auto-memory-in-config-dir", auto !== null && isInsidePath(auto, configDir, "resolved"), `auto memory ${auto ?? "missing"}`]);
+      }
+      // The audited UserPromptSubmit hook tells the agent to run checks through `<node> <audited>/dist/cli/index.js task verify`.
+      const { denyRoots, commands } = armConfinement(arm, ctx);
+      const offenders = [...new Set(toolInputStrings(readFileSync(agent.transcript_path, "utf8"))
+        .filter(({ value, content }) => isOutOfRepoAccess(value, denyRoots, [runDir], commands, homedir(), !content))
+        .map(({ value }) => value))];
+      outOfRepoBreach = offenders.length > 0;
+      post.push(["no-out-of-repo-access", !outOfRepoBreach, outOfRepoBreach
+        ? `offending string(s): ${offenders.slice(0, 5).map((s) => s.slice(0, 200)).join(" | ")}`
+        : "no out-of-repo access in tool inputs"]);
+
+      for (const [id, ok, detail] of post) {
+        isolation.push(`post ${id}: ${ok ? "ok" : "FAIL"} (${detail})`);
+        if (!ok) invalid = true;
+      }
+      isolation.push(`auto-memory-path: ${init?.memory_paths_auto ?? "missing"}`);
+      if (!invalid) {
+        validator = await runValidator({
+          repo: prepared.repo, validatorFile: resolve(dirname(ctx.suitePath), task.validator.file), runDir,
+          timeoutMs: ctx.suite.validator_timeout_ms, env: strippedChildEnv(process.env, { DISABLE_AUTOUPDATER: "1" }),
+        });
+      }
+    }
+  } finally {
+    if (ctx.oauthToken !== null) {
+      // Nothing after this point reads the run repo's git (the validator has run; fingerprints cover harness repos only).
+      // prepareArm can throw after the clone: the .git goes whenever it exists, the patch only for a prepared arm.
+      if (existsSync(join(runDir, "repo", ".git"))) {
+        if (prepared) {
+          try {
+            writeRepoChangesPatch(runDir, ctx.manifest.tasks.find((t) => t.id === task.id)?.base_head ?? "HEAD");
+          } catch (error) {
+            isolation.push(`repo-changes.patch not written: ${(error as Error).message.split("\n")[0]}`);
+          }
+        }
+        const failure = removeRunRepoGit(runDir);
+        if (failure) {
+          invalid = true;
+          isolation.push(`repo/.git removal failed: ${failure}`);
+        } else isolation.push("repo/.git removed (neutral mode)");
+      }
+      try {
+        const scrub = redactTokenInDir(runDir, ctx.oauthToken);
+        isolation.push(`token_redactions: ${scrub.count}`);
+        if (scrub.failures.length) {
+          invalid = true;
+          isolation.push(`token redaction failed for: ${scrub.failures.join(", ")}`);
+        }
+      } catch (error) {
+        invalid = true;
+        isolation.push(`token redaction failed: ${(error as Error).message}`);
+      }
+    }
+  }
+
   const validatorId = `${task.id}:${task.validator.sha256.slice(0, 12)}`;
   if (validator) {
     validation.push(`validator ${validatorId}: exit ${validator.exit_code}, timed_out ${validator.timed_out}, copied sha256 ${validator.sha256_of_copied_file}`);
@@ -528,7 +714,8 @@ async function executeRun(ctx: RunContext, task: SuiteTask, rep: number, arm: Be
     validation_evidence: validation,
     manifest_sha256: ctx.manifestSha,
   };
-  writeFileAtomic(runJson, JSON.stringify(run, null, 2) + "\n");
+  const runText = JSON.stringify(run, null, 2) + "\n";
+  writeFileAtomic(runJson, ctx.oauthToken !== null ? redactText(runText, ctx.oauthToken) : runText);
   const line = `${task.id} rep=${rep} arm=${arm} status=${status} success=${success} agent_s=${(agentMs / 1000).toFixed(1)} validator_exit=${validator?.exit_code ?? "-"}`;
   ctx.log(line);
   appendFileSync(join(ctx.out, "progress.log"), line + "\n");
@@ -593,6 +780,7 @@ export async function runBenchmark(opts: RunBenchmarkOptions): Promise<RunBenchm
   const out = resolve(opts.output);
   const manifestPath = join(out, "manifest.json");
   let manifestWritten: string | null = null;
+  let removeSignalHandlers: (() => void) | null = null;
   try {
     const arms = parseArms(opts.arms, opts.dietRoot ?? null, !!opts.reportOnly);
     if (!Number.isInteger(opts.runs) || opts.runs < 1) throw new Stop(1, `--runs must be an integer >= 1, got ${opts.runs}`);
@@ -627,6 +815,11 @@ export async function runBenchmark(opts: RunBenchmarkOptions): Promise<RunBenchm
     if ((opts.noNpmCi || opts.allowDirtyController) && cfg.provider !== "fixture") {
       throw new Stop(1, "--no-npm-ci and --allow-dirty-controller are only accepted with the fixture provider");
     }
+    if (opts.oauthTokenFile && opts.inheritUserConfig) throw new Stop(1, "--oauth-token-file and --inherit-user-config are exclusive");
+    if (!opts.oauthTokenFile && !opts.inheritUserConfig && cfg.provider === "claude") {
+      throw new Stop(1, "the claude provider needs --oauth-token-file <path> (a `claude setup-token` subscription token), "
+        + "or --inherit-user-config to reproduce version 1");
+    }
     const sourceRepo = resolve(opts.sourceRepo!);
     const privateRepo: string | null = resolve(opts.privateRepo!);
     const privateRef = opts.privateRef ?? "main";
@@ -655,16 +848,44 @@ export async function runBenchmark(opts: RunBenchmarkOptions): Promise<RunBenchm
       diet = { ...dietHunch, cli_sha256: dietCli };
     }
 
+    const oauthToken = opts.oauthTokenFile
+      ? readOauthTokenFile(opts.oauthTokenFile, [sourceRepo, controller, privateRepo, auditedRoot, dietRoot, out])
+      : null;
+    if (oauthToken !== null) {
+      // Earlier crashed runs and killed preflight probes may have left the token behind.
+      const sweep = () => {
+        const gitFailures = [...removeAllRunRepoGits(out), ...removePreflightUserLineDirs(out)];
+        const scrub = redactTokenInDir(out, oauthToken);
+        log(`token sweep over ${out}: ${scrub.count} redaction(s)`);
+        const failures = [...gitFailures, ...scrub.failures];
+        if (failures.length) log(`warning: token sweep could not scrub: ${failures.join(", ")}`);
+      };
+      if (existsSync(out)) sweep();
+      const onSignal = (code: number) => () => {
+        killLiveChildren();
+        try { sweep(); } catch { /* exiting anyway */ }
+        process.exit(code);
+      };
+      const onInt = onSignal(130);
+      const onTerm = onSignal(143);
+      process.on("SIGINT", onInt);
+      process.on("SIGTERM", onTerm);
+      removeSignalHandlers = () => { process.off("SIGINT", onInt); process.off("SIGTERM", onTerm); };
+    }
+    const instructionsFile = opts.userInstructionsFile ?? join(homedir(), ".claude", "CLAUDE.md");
+    const claudeHome = opts.claudeHome ?? join(homedir(), ".claude");
+
     let n = 1;
     while (existsSync(join(out, "preflight", String(n)))) n++;
     const preflightDir = join(out, "preflight", String(n));
     mkdirSync(preflightDir, { recursive: true });
-    const pre = await preflight(cfg, { workDir: preflightDir });
+    const pre = await preflight(cfg, {
+      workDir: preflightDir, ...(oauthToken !== null ? { neutral: { token: oauthToken, userInstructionsFile: instructionsFile } } : {}),
+    });
     writeFileAtomic(join(out, "preflight", `${n}.json`), JSON.stringify(pre, null, 2) + "\n");
     if (!pre.ok) {
       throw new Stop(1, `preflight failed (${join(out, "preflight", `${n}.json`)}): ${pre.checks.filter((c) => !c.ok).map((c) => `${c.id}: ${c.detail}`).join("; ")}`);
     }
-    const instructionsFile = opts.userInstructionsFile ?? join(homedir(), ".claude", "CLAUDE.md");
     let userInstructionsSha: string | null = null;
     if (existsSync(instructionsFile)) {
       const bytes = readFileSync(instructionsFile);
@@ -704,6 +925,7 @@ export async function runBenchmark(opts: RunBenchmarkOptions): Promise<RunBenchm
         model_identity: pre.identity.model_identity, model_identity_source: pre.identity.model_identity_source,
       },
       user_instructions_sha256: userInstructionsSha,
+      ...(oauthToken !== null ? { user_config: "neutral" as const, oauth_token: "present" as const } : {}),
       node_version: process.version,
       platform: process.platform,
       tasks: selected.tasks.map((task) => {
@@ -739,6 +961,7 @@ export async function runBenchmark(opts: RunBenchmarkOptions): Promise<RunBenchm
           output: out, suite_path: suitePath, source_repo: sourceRepo, main_ref: mainRef, private_repo: privateRepo,
           private_ref: privateRef, audited_root: auditedRoot, ...(dietRoot ? { diet_root: dietRoot } : {}),
           controller_root: controller, tasks_filter: opts.tasks ?? null,
+          user_config: oauthToken !== null ? "neutral" : "inherited", oauth_token: oauthToken !== null ? "present" : "absent",
           created_at: new Date().toISOString(),
         },
       };
@@ -750,7 +973,7 @@ export async function runBenchmark(opts: RunBenchmarkOptions): Promise<RunBenchm
 
     const ctx: RunContext = {
       out, suitePath, suite: selected, suiteHash, manifest, manifestSha, cfg, sourceRepo, controller, privateRepo, auditedRoot, dietRoot,
-      noNpmCi: !!opts.noNpmCi, snapshots, claudeHome: opts.claudeHome ?? join(homedir(), ".claude"), log,
+      noNpmCi: !!opts.noNpmCi, snapshots, claudeHome, oauthToken, userConfigRoot: oauthToken !== null ? claudeHome : null, log,
     };
     for (const task of selected.tasks) {
       const taskRuns: EfficiencyRun[] = [];
@@ -776,5 +999,7 @@ export async function runBenchmark(opts: RunBenchmarkOptions): Promise<RunBenchm
     }
     log(`hunch task benchmark: ${(error as Error).stack ?? String(error)}`);
     return { exitCode: 1, manifestPath: manifestWritten, reportPath: null };
+  } finally {
+    removeSignalHandlers?.();
   }
 }

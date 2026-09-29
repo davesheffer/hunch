@@ -22,7 +22,17 @@ process.exit(result.status ?? 1);
  *  runs from the diet checkout), fixes the file, and prints a stream-json transcript whose init reports every
  *  configured server as connected. */
 const AGENT = `import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 readFileSync(0, "utf8");
+// Neutral user config: auto memory under the run's own config dir; the token leaks into the transcript (and, on
+// request, into a commit) so the harness's redaction and git-object checks have something to find.
+const configDir = process.env.CLAUDE_CONFIG_DIR;
+const token = process.env.CLAUDE_CODE_OAUTH_TOKEN;
+if (token && process.env.BENCH_FIXTURE_COMMIT_TOKEN) {
+  writeFileSync("leaked-token.txt", token);
+  spawnSync("git", ["-c", "user.name=f", "-c", "user.email=f@example.invalid", "-c", "commit.gpgsign=false", "add", "leaked-token.txt"]);
+  spawnSync("git", ["-c", "user.name=f", "-c", "user.email=f@example.invalid", "-c", "commit.gpgsign=false", "commit", "-q", "-m", "leak"]);
+}
 const mcpServers = JSON.parse(readFileSync(process.argv[2], "utf8")).mcpServers ?? {};
 const servers = Object.keys(mcpServers);
 const arm = !servers.includes("hunch") ? "no-hunch" : /[\\\\/]diet[\\\\/]dist[\\\\/]/.test(mcpServers.hunch.args[0]) ? "diet-hunch" : "current-hunch";
@@ -31,10 +41,11 @@ writeFileSync("src/sum.mjs", "export const sum = (a, b) => a + b;\\n");
 const hunch = arm !== "no-hunch";
 const events = [
   { type: "system", subtype: "init", model: "fixture-model", apiKeySource: "none",
+    ...(configDir ? { memory_paths: { auto: configDir + "/projects/repo/memory/MEMORY.md" } } : {}),
     mcp_servers: servers.map((name) => ({ name, status: "connected" })),
     tools: ["Read", "Edit", ...(hunch ? ["mcp__hunch__hunch_context"] : [])] },
   { type: "assistant", message: { id: "msg_1", content: [{ type: "tool_use", id: "tu_1", name: "Edit", input: {} }] } },
-  { type: "user", message: { content: [{ type: "tool_result", tool_use_id: "tu_1", content: "edited" }] } },
+  { type: "user", message: { content: [{ type: "tool_result", tool_use_id: "tu_1", content: token ? "edited; env " + token : "edited" }] } },
 ];
 if (hunch) {
   // The audited SessionStart hook always emits: stand in for its injected context.
@@ -416,4 +427,99 @@ test("task benchmark runs three arms from two checkouts and reports each Hunch a
   // The two-arm manifest carries no diet key and no diet_root, so its hash is what it was before diet-hunch existed.
   const twoArm = JSON.parse(readFileSync(join(out, "manifest.json"), "utf8"));
   assert.ok(!("diet" in twoArm.manifest) && !("diet_root" in twoArm.environment));
+});
+
+/** A temp dir outside every git work tree (a machine's TMPDIR can itself sit in one); null when there is none. */
+function gitFreeDir(): string | null {
+  for (const base of [tmpdir(), ...(process.platform === "win32" ? [] : ["/tmp"])]) {
+    const dir = mkdtempSync(join(base, "hunch-bench-token-"));
+    try { execFileSync("git", ["-C", dir, "rev-parse", "--is-inside-work-tree"], { stdio: "ignore", windowsHide: true }); } catch { return dir; }
+    rmSync(dir, { recursive: true, force: true });
+  }
+  return null;
+}
+
+function gitDirsUnder(dir: string): string[] {
+  const found: string[] = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    if (entry.name === ".git") found.push(join(dir, entry.name));
+    else found.push(...gitDirsUnder(join(dir, entry.name)));
+  }
+  return found;
+}
+
+function filesUnder(dir: string): string[] {
+  const files: string[] = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) files.push(...filesUnder(path));
+    else if (entry.isFile()) files.push(path);
+  }
+  return files;
+}
+
+test("neutral user config: own config dir per run, token and its path never left under the output", async (t) => {
+  const tokenDir = gitFreeDir();
+  if (tokenDir === null) { t.skip("no temp dir outside a git work tree"); return; }
+  const token = "sk-ant-oat01-E2EFIXTURE0123456789abcdef";
+  const tokenFile = join(tokenDir, "oauth-token.txt");
+  writeFileSync(tokenFile, token + "\n");
+  const outN = join(root, "out-neutral");
+  const nOpts: RunBenchmarkOptions = { ...opts, runs: 1, output: outN, oauthTokenFile: tokenFile, claudeHome: join(root, "claude-home") };
+  const leaks = (dir: string) => filesUnder(dir).filter((file) => readFileSync(file).includes(token));
+  try {
+    assert.equal((await runBenchmark({ ...nOpts, output: join(root, "out-neutral-both"), inheritUserConfig: true })).exitCode, 1);
+    assert.ok(logs.some((line) => line.includes("are exclusive")), logs.join("\n"));
+
+    assert.equal((await runBenchmark(nOpts)).exitCode, 0, logs.join("\n"));
+    const manifestText = readFileSync(join(outN, "manifest.json"), "utf8");
+    const file = JSON.parse(manifestText);
+    assert.equal(file.manifest.user_config, "neutral");
+    assert.equal(file.manifest.oauth_token, "present");
+    assert.equal(file.environment.user_config, "neutral");
+    assert.equal(file.environment.oauth_token, "present");
+    for (const text of [manifestText, ...["report.json", "report.md", "progress.log"].map((name) => readFileSync(join(outN, name), "utf8")), logs.join("\n")]) {
+      assert.ok(!text.includes(token) && !text.includes(tokenFile) && !text.includes(tokenDir), "no token or token path recorded");
+    }
+    for (const dir of readdirSync(join(outN, "runs", TASK))) {
+      const run = JSON.parse(readFileSync(join(outN, "runs", TASK, dir, "run.json"), "utf8")) as EfficiencyRun;
+      assert.equal(run.status, "completed", `${dir}: ${run.isolation_evidence.join(" | ")}`);
+      assert.ok(run.isolation_evidence.some((note) => /^token_redactions: [1-9]/.test(note)), run.isolation_evidence.join(" | "));
+      assert.ok(existsSync(join(outN, "runs", TASK, dir, "claude-config")));
+      assert.ok(existsSync(join(outN, "runs", TASK, dir, "repo-changes.patch")), `${dir}/repo-changes.patch`);
+      assert.match(readFileSync(join(outN, "runs", TASK, dir, "repo-changes.patch"), "utf8"), /src\/sum\.mjs/);
+      assert.ok(run.isolation_evidence.includes("repo/.git removed (neutral mode)"), run.isolation_evidence.join(" | "));
+    }
+    assert.deepEqual(leaks(outN), []);
+
+    // An interrupted run (a crash left the token in a file and in a commit of its repo) is scrubbed and its .git
+    // removed before it is moved aside; the rerun, whose agent also commits the token, leaves neither behind.
+    const crashed = join(outN, "runs", TASK, "1-no-hunch");
+    rmSync(join(crashed, "run.json"));
+    writeFileSync(join(crashed, "crash-left.txt"), token);
+    git(join(crashed, "repo"), ["init", "-q", "-b", "main"]);
+    writeFileSync(join(crashed, "repo", "leaked-token.txt"), token);
+    commit(join(crashed, "repo"), "leak", "2026-01-03 00:00:00 +0000");
+    process.env.BENCH_FIXTURE_COMMIT_TOKEN = "1";
+    assert.equal((await runBenchmark(nOpts)).exitCode, 0, logs.join("\n"));
+    assert.ok(existsSync(join(outN, "runs", TASK, "1-no-hunch.interrupted-1")));
+    assert.deepEqual(gitDirsUnder(join(outN, "runs")), []);
+    assert.deepEqual(leaks(outN), []);
+    assert.ok(existsSync(join(crashed, "repo-changes.patch")));
+
+    // A token committed into the run repo cannot be redacted in place: the repo's .git is removed, the patch redacted.
+    const outC = join(root, "out-neutral-commit");
+    assert.equal((await runBenchmark({ ...nOpts, output: outC, arms: ["no-hunch", "current-hunch"] })).exitCode, 0, logs.join("\n"));
+    for (const dir of readdirSync(join(outC, "runs", TASK))) {
+      const run = JSON.parse(readFileSync(join(outC, "runs", TASK, dir, "run.json"), "utf8")) as EfficiencyRun;
+      assert.ok(run.isolation_evidence.includes("repo/.git removed (neutral mode)"), run.isolation_evidence.join(" | "));
+      assert.match(readFileSync(join(outC, "runs", TASK, dir, "repo-changes.patch"), "utf8"), /leaked-token\.txt[\s\S]*<redacted-oauth-token>/);
+      assert.equal(existsSync(join(outC, "runs", TASK, dir, "repo", ".git")), false);
+    }
+    assert.deepEqual(leaks(outC), []);
+  } finally {
+    delete process.env.BENCH_FIXTURE_COMMIT_TOKEN;
+    rmSync(tokenDir, { recursive: true, force: true });
+  }
 });

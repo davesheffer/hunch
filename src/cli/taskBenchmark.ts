@@ -22,6 +22,8 @@ interface TaskBenchmarkFlags {
   recount?: boolean;
   npmCi: boolean;
   allowDirtyController?: boolean;
+  oauthTokenFile?: string;
+  inheritUserConfig?: boolean;
 }
 
 const list = (value: string): string[] => value.split(",").map((item) => item.trim()).filter(Boolean);
@@ -46,6 +48,9 @@ export function registerTaskBenchmarkCommand(task: Command): void {
     .option("--prepare-only", "stop after the manifest")
     .option("--report-only", "only rebuild report.json + report.md from existing run.json files")
     .option("--recount", "with --report-only: recount token and call fields from each run's transcript.jsonl (run.json untouched)")
+    .option("--oauth-token-file <path>", "subscription token file from `claude setup-token`, outside every repository: each run gets its own empty "
+      + "Claude Code config dir; required for the claude provider unless --inherit-user-config")
+    .option("--inherit-user-config", "let the child inherit the user's Claude Code configuration (version 1 behaviour)")
     .option("--no-npm-ci", "skip npm ci in each run repo (fixture provider only)")
     .option("--allow-dirty-controller", "allow uncommitted changes in the controller checkout (fixture provider only)")
     .action(async (flags: TaskBenchmarkFlags, cmd: Command) => {
@@ -70,6 +75,8 @@ export function registerTaskBenchmarkCommand(task: Command): void {
         recount: !!flags.recount,
         noNpmCi: !flags.npmCi,
         allowDirtyController: !!flags.allowDirtyController,
+        oauthTokenFile: flags.oauthTokenFile,
+        inheritUserConfig: !!flags.inheritUserConfig,
       });
       process.exitCode = result.exitCode;
     });
