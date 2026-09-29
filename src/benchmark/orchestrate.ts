@@ -404,6 +404,14 @@ function commandPattern(path: string): RegExp {
  *  `/node.exe`, single-quoted, double-quoted without `$` or a backtick, or unquoted without shell metacharacters. */
 const NODE_WORD = `(?:'(?:[^'\\n]*/)?node(?:\\.exe)?'|"(?:[^"$\`\\n]*/)?node(?:\\.exe)?"|(?:[^\\s'"$\`;&|<>()]*/)?node(?:\\.exe)?)`;
 
+/** Drive letters of normalized text (`c:/…`, MSYS `/c/…` at a path start) masked to `#`, for counting a variable's
+ *  mentions only: `H='c:/…/node.exe'; C='…'` names drive `c`, not variable `C` (PILOT5 Gate A v3, repeated-bug-360
+ *  rep 1 current-hunch). A letter behind `$`, `{`, `%` or `!` (`$c:/x`, `${c:-x}`, cmd's `%c:/=\%`, `!c:/…`) is a
+ *  reference and stays. */
+function maskDriveLetters(text: string): string {
+  return text.replace(/(?<![$\{%!a-z0-9_-])[a-z](?=:\/)/g, "#").replace(/(?<=(?:^|[\s"'=(;:])\/)[a-z](?=\/)/g, "#");
+}
+
 /**
  * `N='<…>/node.exe'; "$N" "$H" …` — on Windows the Hunch hook prints node's full path, and agents keep it in
  * a variable too. Every double-quoted `"$N"`/`"${N}"` reads as `node` when the text keeps N a node executable:
@@ -416,7 +424,7 @@ function nodeVarsAsNode(rest: string): string {
   const assign = new RegExp(`(?<=^|[\\s;&|(])(?:export\\s+)?([a-z_][a-z0-9_]*)=${NODE_WORD}(?=$|[\\s;&|)])`, "g");
   const firstAssigned = new Map<string, number>();
   for (const match of rest.matchAll(assign)) if (!firstAssigned.has(match[1]!)) firstAssigned.set(match[1]!, match.index);
-  const others = rest.replace(assign, (mention) => " ".repeat(mention.length));
+  const others = maskDriveLetters(rest.replace(assign, (mention) => " ".repeat(mention.length)));
   for (const [name, at] of firstAssigned) {
     const expansion = new RegExp(`"\\$(?:${name}|\\{${name}\\})"`, "g");
     const words = [...others.matchAll(new RegExp(`(?<![a-z0-9_-])${name}(?![a-z0-9_])`, "g"))].map((match) => match.index);
@@ -440,7 +448,7 @@ function nodeVarsAsNode(rest: string): string {
 function dropInvokedVarAssignment(rest: string, path: string): string {
   const escaped = normalizeForMatch(path).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const assign = new RegExp(`(?<=^|[\\s;&|(])(?:export\\s+)?([a-z_][a-z0-9_]*)=(["'])?${escaped}\\2(?=$|[\\s;&|)])`, "g");
-  const others = rest.replace(assign, " ");
+  const others = maskDriveLetters(rest.replace(assign, " "));
   const invokedOnly = new Set<string>();
   for (const match of rest.matchAll(assign)) {
     const name = match[1]!;

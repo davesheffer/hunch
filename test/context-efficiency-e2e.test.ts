@@ -367,6 +367,19 @@ test("isOutOfRepoAccess flags deny roots outside the run dir and traversal, in e
   for (const name of ["NODE", "NODEJS", "node"]) {
     assert.equal(isOutOfRepoAccess(`${name}='C:\\Program Files\\nodejs\\node.exe'; H='/home/dave/audited/dist/cli/index.js'; "$${name}" "$H" task verify htask_1`, denyRoots, runDir, [auditedCli]), false, `a node variable named ${name}, a word of its own path`);
   }
+  // Known false positive (PILOT5 Gate A v3, repeated-bug-360 rep 1 current-hunch): the entrypoint variable was named C,
+  // and the node path's drive letter `C:` read as a second mention of it. A drive letter is not a variable reference.
+  const auditedWin = "C:\\Users\\x\\hunch-audited-v1.42.0\\dist\\cli\\index.js";
+  const withAudited = [...denyRoots, "C:\\Users\\x\\hunch-audited-v1.42.0"];
+  const observedV3 = `cd "C:/out/runs/task-1/1-current-hunch/repo" && H='C:\\Program Files\\nodejs\\node.exe'; C='C:\\Users\\x\\hunch-audited-v1.42.0\\dist\\cli\\index.js'; "$H" "$C" task verify htask_d2f7b82f346359b7497c88b5 -- npx tsx --test test/change-ledger.test.ts test/change-ledger-cache.test.ts 2>&1 | grep -E "^# (pass|fail)|^not ok" ; "$H" "$C" task verify htask_d2f7b82f346359b7497c88b5 -- npm run typecheck 2>&1 | tail -3`;
+  assert.equal(isOutOfRepoAccess(observedV3, withAudited, runDir, [auditedWin]), false, "the observed v3 command: entrypoint variable C beside drive letter C:");
+  assert.equal(isOutOfRepoAccess(observedV3.replaceAll('"$H"', "$H"), withAudited, runDir, [auditedWin]), true, "the observed v3 command with an unquoted node variable stays denied");
+  assert.equal(isOutOfRepoAccess(`C='/home/dave/audited/dist/cli/index.js'; '/c/Program Files/nodejs/node.exe' "$C" task verify htask_1`, denyRoots, runDir, [auditedCli]), false, "an MSYS drive /c/ is not a mention of C");
+  assert.equal(isOutOfRepoAccess(`C='/home/dave/audited/dist/cli/index.js'; node "$C" task verify htask_1; ls "$C:/x"`, denyRoots, runDir, [auditedCli]), true, "$C glued to :/ is still a reference");
+  assert.equal(isOutOfRepoAccess(`C='/home/dave/audited/dist/cli/index.js'; node "$C" task verify htask_1; echo "\${C:-x}"`, denyRoots, runDir, [auditedCli]), true, "\${C:-x} is still a reference");
+  assert.equal(isOutOfRepoAccess(`C='/home/dave/audited/dist/cli/index.js'; node "$C" task verify htask_1; printenv C`, denyRoots, runDir, [auditedCli]), true, "a bare C word is still a reference");
+  assert.equal(isOutOfRepoAccess(`export E='C:\\Users\\x\\hunch-audited-v1.42.0\\dist\\cli\\index.js'; node "$E" task verify htask_1; cmd /c "type %E:/=\\%"`, withAudited, runDir, [auditedWin]), true, "a cmd %E:/=\\% substitution is still a reference");
+  assert.equal(isOutOfRepoAccess(`C='C:\\Program Files\\nodejs\\node.exe'; H='C:\\Users\\x\\hunch-audited-v1.42.0\\dist\\cli\\index.js'; "$C" "$H" task verify htask_1; echo c:/x`, withAudited, runDir, [auditedWin]), false, "a single-letter node variable C beside drive letters c:");
   assert.equal(isOutOfRepoAccess(`N=/x/node; cat /home/dave/hunch-private"$N"`, denyRoots, runDir, [auditedCli]), true, "a deny root glued to a node variable still matches");
   assert.equal(isOutOfRepoAccess(`N=/x/node; ls /home/dave/audited"\${N}"; H='/home/dave/audited/dist/cli/index.js'; "$N" "$H" task verify htask_1`, denyRoots, runDir, [auditedCli]), true, "a deny root glued to a braced node variable still matches beside an invocation");
   assert.equal(isOutOfRepoAccess(`N="C:\\Program Files\\nodejs\\node.exe"; H='/home/dave/audited/dist/cli/index.js'; "\${N}" "$H" --help`, denyRoots, runDir, [auditedCli]), false, "double-quoted Windows node path, braced expansion");
