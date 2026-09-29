@@ -100,3 +100,19 @@ Dated 2026-09-27. Recorded before any benchmark arm ran.
   run, the store is registered back to `../hunch-private/.hunch` and the clone's commits are pulled back.
 - Effect: the rerun uses the same seed and a fresh output directory, `C:/bench-out/pilot5-gate-a3r`. The void
   attempt is kept as evidence and counts for nothing.
+
+## (j) Gate A version 3 rerun stopped after one run: a drive letter read as a variable
+
+- The version 3 rerun (output `C:/bench-out/pilot5-gate-a3r`, preflight 10 of 10, manifest `d1e13aed…`, the same as
+  the void attempt) started at 10:10:33. The overlay redirect held: `hunch-private` did not change during the run.
+- Run 1, repeated-bug-360 `current-hunch` (726.7 s), ended `isolation_breach`, a harness false positive. The agent
+  held node's path in `H` and the audited entrypoint in `C`, and the drive letter `c:` in H's path counted as a
+  mention of `C` (`GATE-A4-SPEC.md` F3). The validator was skipped, so the run has no outcome. The same shape would
+  recur in both Hunch arms, so the controller was stopped at about 10:40, during run 2.
+- A prepare-only call launched through the agent's POSIX shell first collided with a half-built base from its own
+  torn-down earlier attempt (two preflight directories, a leftover `bases/*.src`). That output was deleted and the
+  prepare-only rerun, and the timed launch, went through PowerShell.
+- Correction to (i): the shadow clone is not pulled back wholesale. Its staged changes are CRLF churn from
+  `hunch private` except for genuinely new record files, which are copied back one by one after the run.
+- Effect: F3 changes a confinement rule after a timed run, so it starts version 4 (`GATE-A4-SPEC.md`) with a new
+  seed and output directory. The rerun's output is kept as evidence and counts for nothing.
