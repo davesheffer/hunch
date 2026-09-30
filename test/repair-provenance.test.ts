@@ -1468,6 +1468,7 @@ test("SessionStart orientation surfaces a queued commit-repair escalation for a 
       new RegExp(fixture.decisionId),
       "the public decisions list is empty, but the queued repair is fully answerable via the full store — SessionStart must not bail silently before checking it",
     );
+    assert.doesNotMatch(run.stdout, /Recent:|Roadmap \(/, "SessionStart orientation no longer lists recent work or the roadmap");
   } finally {
     fixture.cleanup();
   }

@@ -1,14 +1,17 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, renameSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, renameSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { tsxLoaderUrl } from "./helpers.js";
+import { mkConstraint, tsxLoaderUrl } from "./helpers.js";
+import { hunchPaths } from "../src/core/paths.js";
+import { HunchStore } from "../src/store/hunchStore.js";
 import { refreshShellBaseline, shellWrittenFiles } from "../src/core/shellwrites.js";
 
 function repo(t: { after: (f: () => void) => void }): string {
-  const root = mkdtempSync(join(tmpdir(), "hunch-shellwrites-"));
+  // Real path: the hook keys baselines by the root it resolves (macOS tmpdir is a /private symlink).
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "hunch-shellwrites-")));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const git = (...args: string[]) => execFileSync("git", ["-C", root, ...args], { env: { ...process.env, GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@t" } });
   git("init", "-q");
@@ -128,4 +131,43 @@ test("the SubagentStart hook takes the new agent's baseline, and never the sessi
   write(join(root, "src", "b.ts"), "export const b = 2;\n", 2);
   subagentStart(root, { session_id: s });
   assert.deepEqual(shellWrittenFiles(root, s), ["src/b.ts"]);
+});
+
+// ---- end-to-end: the shell tool's own PreToolUse and PostToolUse ----
+function hook(root: string, payload: Record<string, unknown>): string {
+  return execFileSync(process.execPath, ["--import", tsxLoaderUrl(), hookCli, "hook", "--provider", "claude"], {
+    cwd: root, env: { ...process.env, HUNCH_PIPELINE: "0" },
+    input: JSON.stringify({ cwd: root, tool_name: "Bash", tool_input: { command: "ls" }, ...payload }), encoding: "utf8",
+  });
+}
+
+test("a file written before the shell command started is not blamed on it", t => {
+  const root = repo(t);
+  mkdirSync(join(root, ".hunch"));
+  const s = session();
+  refreshShellBaseline(root, s); // the prompt
+  write(join(root, "src", "a.ts"), "export const a = 2;\n", 1); // a parallel tool or another process
+  hook(root, { hook_event_name: "PreToolUse", session_id: s });
+  assert.deepEqual(shellWrittenFiles(root, s), [], "a read-only command wrote nothing");
+  hook(root, { hook_event_name: "PreToolUse", session_id: s, agent_id: "agent-x" });
+  write(join(root, "src", "b.ts"), "export const b = 2;\n", 2);
+  assert.deepEqual(shellWrittenFiles(root, s, "agent-x"), ["src/b.ts"], "a subagent's command is measured from its own start");
+});
+
+test("a shell write grounds once: the same file written again by another command stays silent", t => {
+  const root = repo(t);
+  mkdirSync(join(root, ".hunch"));
+  writeFileSync(join(root, ".hunch", "config.json"), JSON.stringify({ firmness: "advisory" }));
+  const store = new HunchStore(hunchPaths(root));
+  store.json.ensureDirs();
+  store.json.put("constraints", mkConstraint({ id: "con_shellrepeat", statement: "Keep module a free of side effects", scope: ["src/a.ts"], severity: "blocking" }));
+  store.reindex(); store.close();
+  const s = session();
+  const run = (text: string, ahead: number): string => {
+    hook(root, { hook_event_name: "PreToolUse", session_id: s });
+    write(join(root, "src", "a.ts"), text, ahead);
+    return hook(root, { hook_event_name: "PostToolUse", session_id: s });
+  };
+  assert.match(run("export const a = 2;\n", 1), /this shell command wrote src\/a\.ts/);
+  assert.doesNotMatch(run("export const a = 3;\n", 2), /this shell command wrote/, "the same grounding is not served twice");
 });

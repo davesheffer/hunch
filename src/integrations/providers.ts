@@ -370,7 +370,8 @@ export function writeCodexHooks(root: string, inv: Invocation): string {
   return writeHookConfig(file, {
     SessionStart: [entry()],
     UserPromptSubmit: [entry()],
-    PreToolUse: [entry("apply_patch")],
+    // The shell entries take the baseline a shell write is measured from.
+    PreToolUse: [entry("apply_patch|Bash|PowerShell|shell|local_shell")],
     // Codex's native command tool arrives as `Bash` (or `PowerShell` on
     // Windows), while older hosts may expose shell/local_shell names.
     PostToolUse: [entry("apply_patch|Bash|PowerShell|shell|local_shell")],

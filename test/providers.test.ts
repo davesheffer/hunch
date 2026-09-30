@@ -59,7 +59,7 @@ test("scaffoldProviders writes MCP config + grounding for every assistant", () =
 
     const codexHooks = JSON.parse(readFileSync(join(root, ".codex/hooks.json"), "utf8"));
     assert.match(codexHooks.hooks.PreToolUse[0].hooks[0].command, /hook.*--provider.*codex/);
-    assert.equal(codexHooks.hooks.PreToolUse[0].matcher, "apply_patch", "Codex edits through apply_patch");
+    assert.equal(codexHooks.hooks.PreToolUse[0].matcher, "apply_patch|Bash|PowerShell|shell|local_shell", "Codex edits through apply_patch; its shell tools take the shell-write baseline");
     assert.equal(codexHooks.hooks.PostToolUse[0].matcher, "apply_patch|Bash|PowerShell|shell|local_shell", "Codex captures native command tools");
     for (const event of ["SessionStart", "UserPromptSubmit", "PostToolUse", "Stop", "PreCompact", "SubagentStart"]) assert.ok(codexHooks.hooks[event]?.length, event);
 

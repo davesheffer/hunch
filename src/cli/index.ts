@@ -4974,7 +4974,7 @@ program
           // in the overlay. Private mode stays public-only: session transcripts travel
           // further than a terminal.
           const decisions = s.advisoryRecs("decisions");
-          const { recent, roadmap, pendingReview } = nowData(decisions, 3);
+          const { pendingReview } = nowData(decisions, 3);
           const escalations = pendingEscalations(decisions);
           escalations.push(...premiseEscalations(decisions, { now: new Date().toISOString(), exists: (p) => existsSync(join(paths.root, p)) }));
           // liveness checked against the full store even in private mode — a
@@ -5009,15 +5009,6 @@ program
           }
           const L: string[] = [];
           L.push(`🧠 Hunch orientation — ${decisions.length} decision(s) in the graph.`);
-          if (recent.length) {
-            L.push("Recent:");
-            for (const r of recent) L.push(`  ${r.date} [${r.status}] ${r.title} (${r.id})`);
-          }
-          if (roadmap.length) {
-            L.push(`Roadmap (${roadmap.length} live proposed): ${roadmap.slice(0, 3).map((r) => (r.unconfirmed ? `${r.title} [unconfirmed, ${r.id}]` : r.title)).join(" · ")}${roadmap.length > 3 ? " · …" : ""}`);
-            const unconfirmed = roadmap.filter((r) => r.unconfirmed).length;
-            if (unconfirmed) L.push(`${unconfirmed} roadmap item(s) are unconfirmed agent testimony — the human confirms each with \`hunch review --confirm <id>${s.unified ? " --private" : ""}\`.`);
-          }
           if (pendingReview > 0) L.push(`${pendingReview} legacy un-vouched draft(s) — adopt as advisory memory with \`hunch adopt-drafts\` (new captures auto-trust).`);
           if (actionableEsc.length) {
             L.push(`⚖ ${actionableEsc.length} decision(s) need YOUR call — ASK the user inline (don't queue): ${actionableEsc.map((e) => e.question).join(" · ")}`);
@@ -5039,6 +5030,14 @@ program
         return;
       }
       if (evt.hook_event_name !== "PreToolUse") return;
+
+      // A shell command's writes are measured from its own start: a file written
+      // before it (a parallel tool call, another process, a host that skipped the
+      // last PostToolUse) is not this command's to be blamed for.
+      if (evt.tool_name === "Bash" || evt.tool_name === "PowerShell") {
+        refreshShellBaseline(root, evt.session_id, evt.agent_id);
+        return;
+      }
 
       const targets = editTargets(root, evt.tool_input);
       // Nothing inside the repo → nothing for Hunch to say.
