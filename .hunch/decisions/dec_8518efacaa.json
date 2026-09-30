@@ -1,0 +1,40 @@
+{
+  "id": "dec_8518efacaa",
+  "title": "SessionStart orientation drops the recent-decisions and roadmap lists",
+  "topic": null,
+  "status": "accepted",
+  "context": "PILOT5 Gate A v4 measured 7% precision for SessionStart's recent-decisions and roadmap lines: they almost never related to the session's task yet cost tokens on every session. Hunch's value is fewer turns/tokens per task net of its own overhead.",
+  "decision": "The SessionStart hook prints only the decision count, the legacy-draft note and actionable escalations. Recent decisions and roadmap proposals are no longer listed; they stay reachable on demand via hunch now / hunch_now and task-scored delivery.",
+  "consequences": [
+    "Lower fixed per-session overhead on every host",
+    "Roadmap visibility moves to explicit commands; unconfirmed-roadmap nudges no longer appear at session start"
+  ],
+  "alternatives_rejected": [
+    "Keep the lists but shorten them to one line each: still untargeted, precision stays ~7%",
+    "Rank the lists by prompt relevance at SessionStart: no prompt exists yet at SessionStart; task-scored selection belongs to the prompt hook (Gate A v5 step 5b)"
+  ],
+  "rejected_tripwires": [],
+  "related_components": [],
+  "related_files": [
+    "src/cli/index.ts"
+  ],
+  "supersedes": "dec_39bc7c8bee",
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "757d0c50",
+  "valid_from": "2026-09-30T05:17:31.055Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "premises": [],
+  "provenance": {
+    "source": "agent_recorded",
+    "confidence": 0.75,
+    "evidence": [
+      "src/cli/index.ts"
+    ]
+  },
+  "date": "2026-09-30T05:17:31.055Z"
+}
