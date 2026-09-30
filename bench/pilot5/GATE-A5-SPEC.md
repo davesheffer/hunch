@@ -39,7 +39,8 @@ removes the arm confound, and judges on steps, tokens and cost first.
 - Same five frozen tasks (`suite.json`), model (`claude-opus-5-5`, CLI default effort), timeout, validators,
   neutral user configuration and confinement rule (with harness fix `171aa037`, below).
 - Seed: `pilot5-gate-a-v5`. Output: `C:/bench-out/pilot5-gate-a5`, outside the user profile.
-- Build: `<release version and SHA, filled in at release>`. Harness: `feat/task-benchmark` at `<SHA at or after
+- Build: `@davesheffer/hunch@1.43.0` (tag `v1.43.0`, commit `f72927a99646c029f4df4cabc78ea713ca63bb41`, published
+  2026-09-30). Harness: `feat/task-benchmark` at `<SHA at or after
   171aa037>`. Claude Code: `<claude --version at preflight>`. All three are pinned in the manifest; a mismatch at any
   run stops the schedule.
 
