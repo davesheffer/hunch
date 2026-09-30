@@ -100,12 +100,13 @@ import { blockingInScope, vetoInScope, proposedEditLines, type BlockingHit } fro
 import { isHumanConfirmed } from "../core/strictgate.js";
 import { appendEvent, readEvents } from "../core/events.js";
 import { computeStats, formatStats } from "../core/stats.js";
-import { injectionMode, resetSessionInjections } from "../core/hookcache.js";
+import { clearTaskSelection, injectionMode, loadTaskSelection, resetSessionInjections, saveTaskSelection, taskSelectionEnabled } from "../core/hookcache.js";
+import { isBareFollowUp, isFilterableSelectionId, liveSelectionRecords, selectForTask } from "../core/taskSelection.js";
 import { recordServed, servedSummary } from "../core/served.js";
-import { recordTaskDelivery, reportActivity, reportHash, reportPresentationEnabled, unseenLessons } from "../core/taskReport.js";
+import { readTaskReport, recordTaskDelivery, reportActivity, reportHash, reportPresentationEnabled, unseenLessons } from "../core/taskReport.js";
 import { snapshotDeliveredRecords } from "../core/taskReportEvidence.js";
 import { renderRecalledLine } from "../core/taskReportRender.js";
-import { closeHookTask, hookReportTaskId, nativeHookCwd, settleHookSession, startHookReport, stopHookReport, observeHookDenial } from "../core/taskReportHook.js";
+import { closeHookTask, hookReportTaskId, isNotificationPrompt, nativeHookCwd, settleHookSession, startHookReport, stopHookReport, observeHookDenial } from "../core/taskReportHook.js";
 import { persistTaskRecord } from "../core/taskRecord.js";
 import { recordHookObservation } from "../core/hookObservations.js";
 import { contextHookOutput, denyHookOutput, hookProvider, normalizeHookEvent, stopHookOutput, type HookProvider, type HunchHookEvent, type HunchHookInput, type HunchToolInput } from "../core/agenthook.js";
@@ -4822,7 +4823,12 @@ program
         // Reporting failure must not suppress the existing correction/policy reminder.
         try {
           const report = startHookReport(root, provider, evt);
-          if (report) parts.push(report);
+          if (report) {
+            parts.push(report);
+            store ??= new HunchStore(paths);
+            const selected = promptTaskSelection(root, store, provider, evt);
+            if (selected) parts.push(selected);
+          }
         } catch { /* passive reporting remains fail-open */ }
         // A task an earlier prompt of this session left open (interrupted before
         // its Stop) is over now: close it and keep its record.
@@ -7034,6 +7040,58 @@ function shellWriteGrounding(root: string, store: HunchStore, provider: HookProv
   return `Hunch: this shell command wrote ${grounded.join(", ")}${more}. Edits made outside the Edit/Write tools skip the pre-edit grounding, so it arrives now: re-check the change against it before relying on it.${sibling}\n\n${parts.join("\n\n")}`;
 }
 
+/** Score the store against this prompt once per task (taskSelection.ts) and keep
+ *  the selected ids — never the prompt — for the task's file grounding. Returns
+ *  the short prompt-time list, or "" when nothing clears the threshold (silence).
+ *  A follow-up prompt widens the qualifying set rather than replacing it, so a
+ *  "go" cannot unselect the task's memory. */
+const TASK_SELECTION_TITLE_CHARS = 80;
+function promptTaskSelection(root: string, store: HunchStore, provider: HookProvider, evt: HunchHookInput): string {
+  // A host notification is not a task prompt: the earlier selection stands untouched.
+  if (!taskSelectionEnabled() || isNotificationPrompt(evt.prompt)) return "";
+  const taskId = hookReportTaskId(root, provider, evt);
+  if (!taskId) return "";
+  const selection = selectForTask(liveSelectionRecords({
+    decisions: store.recs("decisions"),
+    bugs: store.recs("bugs"),
+    constraints: store.recs("constraints"),
+    findings: store.recs("findings"),
+  }), evt.prompt ?? "", { root, pathExists: (p) => existsSync(join(root, p)) });
+  // Same task id again (a notification alias) keeps its own earlier selection; a
+  // new task that CONTINUES the session's previous one inherits that task's
+  // selection only on a bare follow-up ("continue", "go on"), so it is not left
+  // ungrounded. A substantive prompt names its own task: a same-session prompt
+  // inside the continuation window must not hide memory behind an old selection.
+  let previous = loadTaskSelection(taskId);
+  if (!previous && isBareFollowUp(evt.prompt ?? "")) {
+    try {
+      const continues = readTaskReport(root, taskId).task.continues;
+      previous = continues ? loadTaskSelection(continues) : null;
+    } catch { /* no continuity; the prompt's own selection stands */ }
+  }
+  const qualifying = [...new Set([...(previous?.qualifying ?? []), ...selection.qualifying])];
+  // An empty selection is no selection: the task keeps the unfiltered grounding.
+  // Emptiness counts only the kinds grounding filters (decisions, bugs,
+  // findings): constraints always pass, so a constraint-only set would hide every
+  // other record anchored to the file. The prompt-time list may still print.
+  if (!qualifying.some(isFilterableSelectionId)) {
+    clearTaskSelection(taskId);
+  } else {
+    saveTaskSelection({
+      task_id: taskId,
+      qualifying,
+      top: selection.qualifying.length ? selection.top.map((item) => item.id) : previous?.top ?? [],
+    });
+  }
+  // An inherited selection was listed when its own prompt ran: not again.
+  if (!selection.top.length) return "";
+  const clip = (text: string) => {
+    const flat = text.replace(/\s+/g, " ").trim();
+    return flat.length > TASK_SELECTION_TITLE_CHARS ? `${flat.slice(0, TASK_SELECTION_TITLE_CHARS - 1).trimEnd()}…` : flat;
+  };
+  return `Hunch memory for this task: ${selection.top.map((item) => `${item.id} — ${clip(item.title)}`).join(" · ")} (hunch_why(id) for detail)`;
+}
+
 type FileGrounding = { mode: "delta"; text: string } | { mode: "full"; text: string; recalled: string | null };
 /** Memory budget beside a sibling lesson (the default is 1500 tokens). */
 const SIBLING_MEMORY_BUDGET_TOKENS = 800;
@@ -7053,7 +7111,21 @@ function fileGrounding(root: string, store: HunchStore, provider: HookProvider, 
       docGround = renderDocGrounding(parseDocAnchors(readFileSync(abs, "utf8")), store.recs("decisions"));
     } catch { /* unreadable / not yet created — no doc grounding */ }
   }
-  const ctx = store.assembleContext(target);
+  // A task whose prompt was scored (promptTaskSelection) gets the file's
+  // decisions, bugs and findings conditioned on it. Constraints always pass (any
+  // severity): they are scoped rules, including agent-recorded corrections capped
+  // at warning, not relevance guesses. No selection (a host without a prompt
+  // hook, a legacy session, a prompt that selected nothing) keeps the unfiltered
+  // grounding.
+  const selection = loadTaskSelection(hookReportTaskId(root, provider, evt));
+  const assembled = store.assembleContext(target);
+  const selected = selection ? new Set(selection.qualifying) : null;
+  const ctx = selected ? {
+    ...assembled,
+    decisions: assembled.decisions.filter((d) => selected.has(d.id)),
+    bugs: assembled.bugs.filter((b) => selected.has(b.id)),
+    findings: assembled.findings.filter((f) => selected.has(f.id)),
+  } : assembled;
   // Sibling fixes: a same-shaped function elsewhere was fixed and this copy
   // never was — the concrete lesson a scoped constraint cannot carry.
   const siblings = siblingGrounding(root, target, store.recs("symbols"),
@@ -7078,7 +7150,9 @@ function fileGrounding(root: string, store: HunchStore, provider: HookProvider, 
   // from this file. No diff exists yet, so this is context — "don't re-add X" —
   // not a block; the commit-time `hunch check` does the actual gating.
   const retired = store.retiredForFile(target).filter((r) => r.symbols.length || r.deps.length);
-  const recentTasks = taskSelectionSupplements(store.selectTasksAuto(target, buildTaskRankingQuery(root, hookReportTaskId(root, provider, evt), target, { excludeTargetDeliveries: true })), target);
+  // Recent-task history is advisory; under a task selection it is dropped
+  // (`hunch task list` still has it).
+  const recentTasks = selected ? [] : taskSelectionSupplements(store.selectTasksAuto(target, buildTaskRankingQuery(root, hookReportTaskId(root, provider, evt), target, { excludeTargetDeliveries: true })), target);
   const hasContent =
     ctx.constraints.length ||
     ctx.decisions.length ||
