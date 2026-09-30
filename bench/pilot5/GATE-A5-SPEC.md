@@ -50,8 +50,11 @@ removes the arm confound, and judges on steps, tokens and cost first.
 - Seed: `pilot5-gate-a-v5`. Output: `/Users/Shared/bench-out/pilot5-gate-a5`, outside `$HOME` and with no
   `CLAUDE.md` or `.claude/` in any ancestor directory (checked 2026-09-30). At least 15 GiB must be free on the
   output volume before the first timed run, since run repos stay on disk.
+- Source repository: `~/Documents/GitHub/hunch-bench-source`, a fresh clone of the public repository at
+  `origin/main` `f72927a9` with no hooks installed. No session works in it during the schedule, so the harness's
+  source-repo check (HEAD and `git status` unchanged) measures only the runs (`DEVIATIONS.md` (o)).
 - Build: `@davesheffer/hunch@1.43.0` (tag `v1.43.0`, commit `f72927a99646c029f4df4cabc78ea713ca63bb41`, published
-  2026-09-30). Harness: `feat/task-benchmark` at `d6ae3167`. Claude Code: `<claude --version at preflight>`. All three are pinned in the manifest; a mismatch at any
+  2026-09-30). Harness: `feat/task-benchmark` at `2c189270` (`DEVIATIONS.md` (o)). Claude Code: `<claude --version at preflight>`. All three are pinned in the manifest; a mismatch at any
   run stops the schedule.
 
 ## Offline evidence before the run (2026-09-30)

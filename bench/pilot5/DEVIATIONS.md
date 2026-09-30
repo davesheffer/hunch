@@ -171,3 +171,20 @@ independently; the live Gate A version 5 run is the test. All selection rules ar
 - Known limits, accepted: output directories made before this harness cannot be resumed (the command stops; version 5
   uses a fresh output); excluding a whole skills root (for example `.claude/skills`) is only checked as "a skill list
   was reported"; an unreadable `SKILL.md` passes the pre-start scan (the loaded-skills check still applies).
+
+## (o) Gate A version 5 smoke run 1: two harness-side false stops; the smoke is void
+
+- Smoke run 1 (2026-09-30, harness `d6ae3167`, seed `pilot5-gate-a-v5-smoke`, task `continuation-375`, one run per
+  arm) ended `isolation_breach` in both arms. Neither was an escape by the agent. It does not count toward any result.
+- (i) `current-hunch`: the agent stored the whole `task verify` launcher in a variable
+  (`H='<node> <audited build>/dist/cli/index.js task verify <task> --'`) and ran checks as `eval "$H npx tsx --test ..."`.
+  The confinement rule did not recognise the launcher behind `eval` and flagged it. Change, before any timed run:
+  harness `2c189270` accepts an assignment whose whole value is the launcher and contains no `$` or backtick, treats
+  `eval` as a command word, and blanks only the first mention of the variable. Critic: FIX FIRST (expansions inside
+  the value would run through `eval`), fixed, then SHIP. Known limit, pre-existing and unchanged: `$_` is not tracked.
+- (ii) `no-hunch`: the check "HEAD or `git status` changed in the source repository" fired because the maintainer's
+  own session wrote Hunch task-report commits into the main checkout, which was the source repository, during the
+  run. Change: the source repository is now a dedicated clean clone that no session works in (spec, Platform).
+- Also observed and fine: `fable-mode` absent from both run repositories and not among the 18 loaded skills; the
+  repository patch was written; the agent ran the task's covering tests through the launcher.
+- A second smoke run, with harness `2c189270` and the clean clone, must pass before any timed run.
