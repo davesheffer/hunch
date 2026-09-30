@@ -37,11 +37,11 @@ removes the arm confound, and judges on steps, tokens and cost first.
   against 3 of 11 in the Hunch arm, a confound between arms.
 - Repetitions: 4 per task per arm (40 scored runs), up from 2.
 - Same five frozen tasks (`suite.json`), model (`claude-opus-5-5`, CLI default effort), timeout, validators,
-  neutral user configuration and confinement rule (with harness fix `171aa037`, below).
+  neutral user configuration and confinement rule (with harness fixes `171aa037` and `1b22cedb`, below).
 - Seed: `pilot5-gate-a-v5`. Output: `C:/bench-out/pilot5-gate-a5`, outside the user profile.
 - Build: `@davesheffer/hunch@1.43.0` (tag `v1.43.0`, commit `f72927a99646c029f4df4cabc78ea713ca63bb41`, published
   2026-09-30). Harness: `feat/task-benchmark` at `<SHA at or after
-  171aa037>`. Claude Code: `<claude --version at preflight>`. All three are pinned in the manifest; a mismatch at any
+  1b22cedb>`. Claude Code: `<claude --version at preflight>`. All three are pinned in the manifest; a mismatch at any
   run stops the schedule.
 
 ## Offline evidence before the run (2026-09-30)
@@ -117,7 +117,7 @@ Honesty rule: a win is set up here, not promised. The report states whatever the
 
 | Mistake in an earlier version | Where | Guard in version 5 |
 | --- | --- | --- |
-| Confinement false positives stopped or voided runs (node path in a variable, drive letter read as a variable, unused assignment) | `DEVIATIONS.md` (h), (j), (k) | Harness `171aa037`: "invoked" means node or the entry is the command word. Precondition 1 replays all version 4 transcripts with zero unexplained flags allowed. |
+| Confinement false positives stopped or voided runs (node path in a variable, drive letter read as a variable, unused assignment) | `DEVIATIONS.md` (h), (j), (k), (m) | Harness `171aa037`: "invoked" means node or the entry is the command word; `1b22cedb`: a `cd` to a literal absolute path no longer blocks the unused-assignment drop. Precondition 1 replays all version 4 transcripts with zero unexplained flags allowed. |
 | Maintainer sessions wrote to the private overlay mid-run | (i) | The overlay stays registered to the shadow clone for the whole run, as in version 4. |
 | `repo-changes.patch` not written on Windows | (h), `GATE-A3-SPEC.md` F2 | Precondition 4: the smoke run must write it. |
 | The ancestor `~/.claude/CLAUDE.md` leaked into runs | `fnd_3ecd8c0b57` | Output outside `$HOME`; the preflight canary must pass. |

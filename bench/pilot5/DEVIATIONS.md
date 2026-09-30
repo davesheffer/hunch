@@ -141,3 +141,16 @@ anchored to (then term overlap, priority, id), instead of a yes/no path match. T
 recall 34% (14/41). Because the rule was added after seeing the replay, the replay no longer validates it
 independently; the live Gate A version 5 run is the test. All selection rules are frozen from this point. Details:
 `hunch-private/docs/product/gate-a5/replay-2026-09-30.md`.
+
+## (m) Gate A version 5 precondition 1 failed on the real (k) transcript: the fix missed its `cd` prefix
+
+- Precondition 1 ran on the Windows machine on 2026-09-30 with harness `171aa037`
+  (`confinement-replay-v5.json`, 11:35Z): 32 of 33 version 4 runs clear, but the (k) run was still flagged, so the
+  verdict was FAIL.
+- Cause: the (k) fix drops an unused assignment only when the rest of the command parses under a strict grammar in
+  which every shell builtin fails. The real call opened with `cd "<run repo>"`; the synthetic shape the fix was tested
+  on had no `cd`. The earlier "171aa037 clears (k)" check was on that synthetic shape only.
+- Change, before any version 5 run: the grammar accepts one builtin statement, unquoted `cd` with exactly one literal
+  absolute-path argument and no redirection. `cd -`, bare `cd`, relative arguments (zsh `cdablevars`, `CDPATH`), a
+  second argument, a redirection and a quoted `cd` stay denied. Regression tests include the real call verbatim.
+- Precondition 1 is rerun on the Windows machine with the new harness SHA; the spec's harness pin moves to it.
