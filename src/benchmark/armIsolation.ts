@@ -246,11 +246,14 @@ export function removeHunchBlocks(text: string): string {
   return out;
 }
 
-/** Tracked text files containing a HUNCH:START marker (repo-relative). */
+/** Tracked Markdown files (`.md`, `.mdc`) containing a HUNCH:START marker (repo-relative).
+ *  Hunch writes grounding blocks only into Markdown instruction files; source and test
+ *  files that carry the marker as a string literal or fixture are code, and cutting
+ *  them would leave the no-hunch arm a broken repository. */
 function markerFiles(repo: string): string[] {
   const grep = benchmarkGit(["-C", repo, "grep", "-I", "-l", "-z", "-F", HUNCH_START], { allowFailure: true });
   if (grep.status !== 0 && grep.status !== 1) throw new Error(`git grep failed in ${repo} (exit ${grep.status}): ${grep.stderr.trim()}`);
-  return grep.stdout.toString("utf8").split("\0").filter((p) => p !== "");
+  return grep.stdout.toString("utf8").split("\0").filter((p) => p !== "" && /\.mdc?$/i.test(p));
 }
 
 /** `.claude/commands/*.md` files carrying the generated-command marker (repo-relative). */
@@ -617,7 +620,7 @@ export function proveExposure(p: {
 
   if (p.arm === "no-hunch") {
     const markers = markerFiles(p.repo);
-    check("markers-absent", markers.length === 0, markers.length ? `HUNCH:START in ${markers.join(", ")}` : "no HUNCH:START marker in tracked files");
+    check("markers-absent", markers.length === 0, markers.length ? `HUNCH:START in ${markers.join(", ")}` : "no HUNCH:START marker in tracked Markdown files");
     const commands = generatedCommandFiles(p.repo);
     check("generated-commands-absent", commands.length === 0, commands.length ? `generated commands: ${commands.join(", ")}` : "no hunch:generated command");
     check("hunch-dir-absent", !existsSync(join(p.repo, ".hunch")), existsSync(join(p.repo, ".hunch")) ? ".hunch/ exists" : "no .hunch/");
