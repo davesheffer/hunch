@@ -48,7 +48,7 @@ test("installClaudeHooks writes the full lifecycle hook set", () => {
     const r = installClaudeHooks(root, cmd);
     assert.equal(r.action, "created");
     const j = JSON.parse(readFileSync(join(root, ".claude", "settings.json"), "utf8"));
-    assert.equal(j.hooks.PreToolUse[0].matcher, "Edit|Write|MultiEdit");
+    assert.equal(j.hooks.PreToolUse[0].matcher, "Edit|Write|MultiEdit|Bash|PowerShell");
     assert.equal(j.hooks.PreToolUse[0].hooks[0].command, cmd);
     assert.equal(j.hooks.UserPromptSubmit[0].hooks[0].command, cmd);
     assert.ok(j.hooks.UserPromptSubmit[0].matcher === undefined, "UserPromptSubmit has no matcher");

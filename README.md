@@ -12,6 +12,10 @@ Hunch keeps that record in Git and makes the relevant parts available to your ag
 
 The goal is simple: agents working from the same maintained record, with sources they can inspect. Hunch supplies memory and checks; the assistant still does the work.
 
+[![Watch: Hunch Memory in 2 minutes](https://img.youtube.com/vi/m2PM6pV7D9Y/maxresdefault.jpg)](https://www.youtube.com/watch?v=m2PM6pV7D9Y)
+
+▶ **[Watch Hunch Memory in 2 minutes](https://www.youtube.com/watch?v=m2PM6pV7D9Y)**, then the [7-episode series](https://www.youtube.com/playlist?list=PLIXqtdE0LcNI) on setup, hooks, memory capture, delivery, rules, drift and teams.
+
 ## Start with your coding assistant
 
 Requires **Node 22.13+** and a Git repository.

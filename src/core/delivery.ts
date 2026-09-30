@@ -171,7 +171,7 @@ interface Candidate {
   accountedChars?: number;
 }
 
-const SEVERITY = { advisory: 1, warning: 2, blocking: 3, low: 1, medium: 2, high: 3, critical: 4 } as const;
+export const SEVERITY = { advisory: 1, warning: 2, blocking: 3, low: 1, medium: 2, high: 3, critical: 4 } as const;
 const MIN_ADVISORY_CONFIDENCE = 0.5;
 const MIN_UNCONDITIONED_CONFIDENCE = 0.7;
 const MAX_ACTIONABLE_HYPOTHESES = 2;
@@ -179,7 +179,7 @@ const MAX_PROFILE_HEADLINES = 8;
 /** How far a supplement's text is clipped in the rendered line. Shared so
  *  `deliveryDedupeInput` can reconstruct that exact line to project over it. */
 const SUPPLEMENT_HEADLINE_CHARS = 700;
-const PROFILE_BASE_SCORE: Record<DeliveryProfile, Record<DeliveryKind, number>> = {
+export const PROFILE_BASE_SCORE: Record<DeliveryProfile, Record<DeliveryKind, number>> = {
   builder: {
     constraints: 900,
     decisions: 800,
@@ -205,7 +205,7 @@ const PROFILE_BASE_SCORE: Record<DeliveryProfile, Record<DeliveryKind, number>> 
     relationships: 825,
   },
 };
-const TASK_STOP_WORDS = new Set([
+export const TASK_STOP_WORDS = new Set([
   "a", "an", "and", "are", "as", "at", "be", "been", "but", "by", "can", "does", "for", "from",
   "has", "have", "in", "into", "is", "it", "its", "of", "on", "or", "that", "the", "this", "to",
   "use", "uses", "using", "was", "when", "where", "which", "while", "with", "without",
@@ -241,7 +241,7 @@ function stemToken(token: string): string {
   return token;
 }
 
-function lexicalTokens(value: string): Set<string> {
+export function lexicalTokens(value: string): Set<string> {
   const expanded = value.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/[_-]+/g, " ").toLowerCase();
   const words = expanded.match(/[\p{L}\p{N}]+/gu) ?? [];
   return new Set(words.map(stemToken).filter((token) => token.length >= 3 && !TASK_STOP_WORDS.has(token)));

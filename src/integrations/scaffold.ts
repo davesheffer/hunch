@@ -201,9 +201,10 @@ export function installClaudeHooks(root: string, hookCmd: string): ClaudeHookIns
   const keep = (arr?: HookEntry[]) =>
     (Array.isArray(arr) ? arr.map((entry) => withoutHunchCommands(entry, hookCmd)).filter((e): e is HookEntry => e !== null) : []);
 
+  // Shell tools too: their PreToolUse takes the baseline a shell write is measured from.
   json.hooks.PreToolUse = [
     ...keep(json.hooks.PreToolUse),
-    { matcher: "Edit|Write|MultiEdit", hooks: [{ type: "command", command: hookCmd }] },
+    { matcher: "Edit|Write|MultiEdit|Bash|PowerShell", hooks: [{ type: "command", command: hookCmd }] },
   ];
   json.hooks.UserPromptSubmit = [
     ...keep(json.hooks.UserPromptSubmit),

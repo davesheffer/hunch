@@ -367,6 +367,8 @@ test("the prompt hook prints the verify command inline and never asks for a star
   assert.doesNotMatch(text, /verification_argv/);
   assert.match(text, /Never call hunch_task start for it/, "the no-start clause belongs to the path that printed the command");
   assert.match(text, /--timeout <seconds>/, "the timeout budget survives the inline form");
+  assert.match(text, /tests that cover your change/, "the hint steers to targeted tests");
+  assert.match(text, /CI's job/, "the hint leaves the full suite to CI");
   // Finish is conditional, and the host close is what makes that safe.
   assert.match(text, /ONLY if this task used Hunch/);
   assert.match(text, /hook context you acted on/, "hook-injected grounding counts as using Hunch");
