@@ -540,33 +540,45 @@ const SHELL_BUILTINS = new Set(`alias bg bind break builtin caller case cd comma
  * `[a-z0-9_.,:@%+=/-]` runs or quoted strings with no `$`, backtick, backslash or `!` inside, never glued to one
  * another (`s""et`); statements are joined only by `;`, `&&`, `||`, `|` or a newline; redirections are `>`, `>>` or
  * `n>&m` after a command word; and each statement's command word, unquoted, is no builtin and no assignment. Anything
- * else (`$`, `~`, `\`, globs, parens, braces, `<`, `&`, `#`) fails the parse.
+ * else (`$`, `~`, `\`, globs, parens, braces, `<`, `&`, `#`) fails the parse. One builtin statement is accepted: `cd`
+ * with exactly one literal argument that is an absolute path (`/…` or `x:/…`, after blanks left where an allowed path
+ * was dropped) and no redirection. It moves the cwd and reads no variable: zsh's `cdablevars` and `CDPATH` apply
+ * only to arguments that do not start with `/`, and `cd -` (OLDPWD) or bare `cd` (HOME) fail the absolute check
+ * (PILOT5 Gate A v4 continuation-375: every agent command opened with `cd "<run repo>"`, DEVIATIONS (m)).
  */
 function inertShellText(text: string): boolean {
   const token = /[ \t]+|\n|&&|\|\||[;|]|[0-9]?>&[0-9]|[0-9]?>>?|'[^'$`\\!]*'|"[^"$`\\!]*"|[a-z0-9_.,:@%+=/-]+/y;
   let atCommand = true;
   let afterWord = false;
+  // Arguments a `cd` statement has taken so far; null outside a `cd` statement.
+  let cdArgs: number | null = null;
   for (let i = 0; i < text.length; ) {
     token.lastIndex = i;
     const t = token.exec(text)?.[0];
     if (!t) return false;
     i += t.length;
     if (/^[ \t]+$/.test(t)) afterWord = false;
-    else if (/^(?:\n|&&|\|\||;|\|)$/.test(t)) [atCommand, afterWord] = [true, false];
-    else if (/^[0-9]?>/.test(t)) {
-      if (atCommand) return false;
+    else if (/^(?:\n|&&|\|\||;|\|)$/.test(t)) {
+      if (cdArgs !== null && cdArgs !== 1) return false;
+      [atCommand, afterWord, cdArgs] = [true, false, null];
+    } else if (/^[0-9]?>/.test(t)) {
+      if (atCommand || cdArgs !== null) return false;
       afterWord = false;
     } else {
       if (afterWord) return false;
       afterWord = true;
+      const word = /^['"]/.test(t) ? t.slice(1, -1) : t;
       if (atCommand) {
-        const word = /^['"]/.test(t) ? t.slice(1, -1) : t;
-        if (!word || SHELL_BUILTINS.has(word) || word.includes("=")) return false;
+        if (word === "cd" && t === "cd") cdArgs = 0;
+        else if (!word || SHELL_BUILTINS.has(word) || word.includes("=")) return false;
         atCommand = false;
+      } else if (cdArgs !== null) {
+        if (cdArgs > 0 || !/^[ \t]*(?:[a-z]:)?\//.test(word)) return false;
+        cdArgs++;
       }
     }
   }
-  return true;
+  return cdArgs === null || cdArgs === 1;
 }
 
 /** An environment key the agent's shell inherits (case-insensitive, as on Windows); assigning it keeps the export. */

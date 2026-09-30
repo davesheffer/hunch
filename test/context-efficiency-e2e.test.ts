@@ -420,6 +420,18 @@ test("isOutOfRepoAccess flags deny roots outside the run dir and traversal, in e
   assert.equal(isOutOfRepoAccess(observedV4.replace("; ", "\n"), denyRoots, runDir, [auditedCli]), false, "the unused assignment on its own line");
   const unused = (command: string) => isOutOfRepoAccess(command, denyRoots, runDir, [auditedCli]);
   const value = `"'/usr/bin/node' '/home/dave/audited/dist/cli/index.js'"`;
+  // DEVIATIONS (m): the real v4 transcript opened with `cd "<run repo>"`; the synthetic shape above had no cd.
+  assert.equal(unused(`cd "${runDir.replace(/\\/g, "/")}/repo"; ${observedV4}; npm run typecheck 2>&1 | tail -5`), false, "the observed v4 command verbatim, cd prefix included");
+  assert.equal(unused(`cd /tmp/elsewhere && V=${value} && echo ok`), false, "cd to a literal absolute path reads no variable");
+  assert.equal(unused(`cd C:/work && V=${value}`), false, "cd to a drive path");
+  assert.equal(unused(`V=${value}; cd -; cat index.js`), true, "cd - reads OLDPWD, stays denied");
+  assert.equal(unused(`V=${value}; cd; cat x`), true, "a bare cd reads HOME, stays denied");
+  assert.equal(unused(`V=${value}; cd v; cat index.js`), true, "a relative cd may resolve a named directory (cdablevars), stays denied");
+  assert.equal(unused(`V=${value}; cd v/x; cat y`), true, "a relative cd with a slash (~v/x under cdablevars) stays denied");
+  assert.equal(unused(`V=${value}; cd /tmp /x`), true, "cd with two arguments stays denied");
+  assert.equal(unused(`V=${value}; cd /tmp > out.txt`), true, "cd with a redirection stays denied");
+  assert.equal(unused(`V=${value}; "cd" /tmp`), true, "a quoted cd is not the accepted form");
+  assert.equal(unused(`V=${value}; echo cd /tmp /x`), false, "cd as an argument is an ordinary word");
   assert.equal(unused(`V=${value} && echo ok`), false, "an && boundary after the unused assignment");
   assert.equal(unused(`V=${value}; cat "$V"`), true, "a later expansion keeps it denied");
   assert.equal(unused(`V=${value}; export V`), true, "exporting it keeps it denied");
