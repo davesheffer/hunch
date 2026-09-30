@@ -316,6 +316,84 @@ test("isOutOfRepoAccess flags deny roots outside the run dir and traversal, in e
     assert.equal(isOutOfRepoAccess(`& 'C:\\Program Files\\nodejs\\node.exe' '/home/dave/audited/dist/cli/index.js'${tail}`, denyRoots, runDir, [auditedCli]), false, `flag invocation: ${JSON.stringify(tail)}`);
   }
   assert.equal(isOutOfRepoAccess("/home/dave/audited/dist/cli/index.js", denyRoots, runDir, [auditedCli]), true, "a bare mention (a Read of the entrypoint) stays denied");
+  // Gate A v5: invoked means the command word or node's/npx tsx's first argument, followed on the same line.
+  for (const named of [
+    "cp /home/dave/audited/dist/cli/index.js x",
+    "cat /home/dave/audited/dist/cli/index.js\nls",
+    "cat '/home/dave/audited/dist/cli/index.js'\n-v",
+    "node x.js /home/dave/audited/dist/cli/index.js task",
+    "echo x >& /home/dave/audited/dist/cli/index.js --help",
+    "mynode /home/dave/audited/dist/cli/index.js task",
+    "node -e 1 /home/dave/audited/dist/cli/index.js task",
+    "node --require /home/dave/audited/dist/cli/index.js x.js",
+    "node --import=x /home/dave/audited/dist/cli/index.js task",
+    "cat /home/dave/audited/dist/cli/index.js\n-v",
+  ]) assert.equal(isOutOfRepoAccess(named, denyRoots, runDir, [auditedCli]), true, `named, not invoked: ${JSON.stringify(named)}`);
+  for (const invoked of [
+    "/home/dave/audited/dist/cli/index.js task verify htask_1",
+    "cd repo && node /home/dave/audited/dist/cli/index.js why src/x.ts",
+    "npx tsx /home/dave/audited/dist/cli/index.js --help",
+    "ls\n'node' '/home/dave/audited/dist/cli/index.js'\ttask verify htask_1",
+    // Critic pass 1: realistic wrappers around node stay invocations.
+    "timeout 600 node /home/dave/audited/dist/cli/index.js task verify htask_1 -- npm test",
+    "HUNCH_SYNC=1 node /home/dave/audited/dist/cli/index.js sync",
+    "env FOO=1 node /home/dave/audited/dist/cli/index.js --version",
+    `OUT=$(node /home/dave/audited/dist/cli/index.js task verify htask_1 2>&1); echo "$OUT"`,
+    "if node /home/dave/audited/dist/cli/index.js --help; then echo ok; fi",
+    `bash -c "node /home/dave/audited/dist/cli/index.js why src/x.ts"`,
+    "for t in a b; do node /home/dave/audited/dist/cli/index.js why $t; done",
+    // Critic pass 2: continuations, node options, quoted subcommands.
+    "'C:\\Program Files\\nodejs\\node.exe' \\\n  '/home/dave/audited/dist/cli/index.js' task verify htask_1 -- npm test",
+    "node /home/dave/audited/dist/cli/index.js \\\n  task verify htask_1 -- npm test",
+    "node --enable-source-maps /home/dave/audited/dist/cli/index.js task verify htask_1 -- npm test",
+    "node --max-old-space-size=4096 /home/dave/audited/dist/cli/index.js why src/x.ts",
+    `& 'C:\\Program Files\\nodejs\\node.exe' '/home/dave/audited/dist/cli/index.js' 'task' 'verify' 'htask_1'`,
+  ]) assert.equal(isOutOfRepoAccess(invoked, denyRoots, runDir, [auditedCli]), false, `invoked: ${JSON.stringify(invoked)}`);
+  // Critic pass 3: in a shell command node must itself be the command word; a prompt or todo runs nothing.
+  const entry = "/home/dave/audited/dist/cli/index.js";
+  for (const named of [
+    `grep -n node ${entry} -A 3`,
+    `grep -rn "node" ${entry} --include=*.js`,
+    `rg node ${entry} -n`,
+    `ls -la /usr/local/bin/node ${entry} --color`,
+    `diff /usr/bin/node ${entry} -q`,
+    `cp /usr/bin/node ${entry} -f`,
+    `node --redirect-warnings ${entry} x.js`,
+    `node --test-reporter-destination ${entry} x.test.js`,
+    `node --check ${entry} task`,
+    `node --eval=1 ${entry} task`,
+    `cat x \\\r\n${entry} -n`,
+    `cat \`echo -n\` ${entry} -n`,
+    `a=(${entry} -x); cat "\${a[0]}"`,
+    `node --title=x;cp ${entry} ./x`,
+    `node --max-old-space-size=4096|cat ${entry}`,
+    `git push -c "${entry} check"`,
+  ]) assert.equal(isOutOfRepoAccess(named, denyRoots, runDir, [auditedCli]), true, `shell, named: ${JSON.stringify(named)}`);
+  for (const invoked of [
+    `node ${entry}`,
+    `node ${entry} | head -20`,
+    `node ${entry} 2>&1 | tail -20`,
+    `node ${entry} 2>/dev/null`,
+    `for c in why check; do node ${entry} $c src/x.ts; done`,
+    `node ${entry} "$cmd" src/x.ts`,
+    `node ${entry} "$@"`,
+    `node ${entry} \\\r\n  task verify h`,
+    `HUNCH_SYNC=1 ${entry} sync`,
+    `if true; then ${entry} check; fi`,
+    `time ${entry} check`,
+    `timeout 600 ${entry} check`,
+    `(${entry} task)`,
+    `x=$( ${entry} check )`,
+    `sh -c 'node ${entry} why src/x.ts'`,
+    `cd repo && \\\n  node ${entry} task verify h -- npm test`,
+    `HUNCH_SYNC=1 \\\n  node ${entry} sync`,
+    `cd /work/repo/\nnode ${entry} task verify h -- npm test`,
+  ]) assert.equal(isOutOfRepoAccess(invoked, denyRoots, runDir, [auditedCli]), false, `shell, invoked: ${JSON.stringify(invoked)}`);
+  const prose = (text: string) => isOutOfRepoAccess(text, denyRoots, runDir, [auditedCli], undefined, true, false);
+  assert.equal(prose(`Run node ${entry} task verify for the tests`), false, "a prompt quoting the verify instruction");
+  assert.equal(prose(`Check with node ${entry}.`), false, "a sentence ending after the entry");
+  assert.equal(prose(`Read ${entry} first`), true, "a prompt naming the file without a runner stays denied");
+  assert.equal(prose(`see ${entry}.map`), true, "a sibling file in prose stays denied");
   // Known false positive (PILOT5 Gate A, self-contained-394 rep 2): the entrypoint stored in a shell variable and
   // invoked through it read as a bare mention. Allowed by the 2026-09-28 amendment before the next Gate A version:
   // dropped only when every expansion of the variable is itself an invocation.
@@ -333,13 +411,81 @@ test("isOutOfRepoAccess flags deny roots outside the run dir and traversal, in e
     false,
     "two invocations through the same variable, Windows-style assigned path",
   );
-  assert.equal(isOutOfRepoAccess(`H='/home/dave/audited/dist/cli/index.js'`, denyRoots, runDir, [auditedCli]), true, "assigned but never expanded stays denied");
+  // Known false positive (PILOT5 Gate A v4, continuation-375 rep 1 current-hunch, DEVIATIONS (k)): an assignment the
+  // agent never used named the entrypoint inside nested quotes. A standalone, unexported, never-mentioned shell
+  // variable can't reach the path, so its value is dropped; every other use of the name keeps it denied.
+  assert.equal(isOutOfRepoAccess(`H='/home/dave/audited/dist/cli/index.js'`, denyRoots, runDir, [auditedCli]), false, "assigned but never used is no access");
+  const observedV4 = `V="'C:/Program Files/nodejs/node.exe' '/home/dave/audited/dist/cli/index.js'"; '/c/Program Files/nodejs/node.exe' '/home/dave/audited/dist/cli/index.js' task verify htask_1 -- npx tsx --test test/a.test.ts 2>&1 | tail -20`;
+  assert.equal(isOutOfRepoAccess(observedV4, denyRoots, runDir, [auditedCli]), false, "the observed v4 command: an unused assignment beside the real invocation");
+  assert.equal(isOutOfRepoAccess(observedV4.replace("; ", "\n"), denyRoots, runDir, [auditedCli]), false, "the unused assignment on its own line");
+  const unused = (command: string) => isOutOfRepoAccess(command, denyRoots, runDir, [auditedCli]);
+  const value = `"'/usr/bin/node' '/home/dave/audited/dist/cli/index.js'"`;
+  assert.equal(unused(`V=${value} && echo ok`), false, "an && boundary after the unused assignment");
+  assert.equal(unused(`V=${value}; cat "$V"`), true, "a later expansion keeps it denied");
+  assert.equal(unused(`V=${value}; export V`), true, "exporting it keeps it denied");
+  assert.equal(unused(`export V=${value}`), true, "an exported assignment stays denied");
+  assert.equal(unused(`V=${value} node x.js`), true, "an environment prefix for a command stays denied");
+  assert.equal(unused(`node x.js V=${value}`), true, "an assignment-shaped argument stays denied");
+  assert.equal(unused(`V=${value}; node -e "console.log(process.env.V)"`), true, "the bare name anywhere keeps it denied");
+  assert.equal(unused(`set -a; V=${value}`), true, "allexport exports it, stays denied");
+  assert.equal(unused(`set -o allexport; V=${value}`), true, "allexport, long form, stays denied");
+  assert.equal(unused(`bash <<EOF\nV=${value}\nEOF`), true, "a heredoc line stays denied");
+  assert.equal(unused(`echo "x V=" ; cat /home/dave/audited/dist/cli/index.js ; echo " ; true "`), true, "an assignment shape inside quotes is not an assignment");
+  assert.equal(unused(`V="$(cat /home/dave/audited/dist/cli/index.js)"`), true, "a command substitution in the value stays denied");
+  assert.equal(unused(`V=\`cat /home/dave/audited/dist/cli/index.js\``), true, "a backtick substitution stays denied");
+  assert.equal(unused(`V="/home/dave/audited/dist/cli/index.js /home/dave/hunch-private/x"`), true, "another deny root in the value still matches");
+  assert.equal(unused(`cat \\\nV=${value}`), true, "a backslash-continued line is an argument, not a statement");
+  // Critic review of the (k) rule: each of these reaches the path without naming the variable again.
+  assert.equal(unused("cat ${V='/home/dave/audited/dist/cli/index.js'}"), true, "a ${V=…} default expansion is an argument, not a statement");
+  assert.equal(unused("cat ${V=/home/dave/audited/dist/cli/index.js }"), true, "an unquoted ${V=… } default expansion stays denied");
+  assert.equal(unused("V=/home/dave/audited/dist/cli/index.js; source ./helper.sh"), true, "a sourced script shares the shell");
+  assert.equal(unused("V=/home/dave/audited/dist/cli/index.js; . ./helper.sh"), true, "the . builtin shares the shell");
+  for (const set of ["set -e -a", "set -eo allexport", "set -euo pipefail -a", "set -o errexit -o allexport"]) {
+    assert.equal(unused(`${set}; V=/home/dave/audited/dist/cli/index.js; node scripts/x.js`), true, `allexport through ${set}`);
+  }
+  assert.equal(unused("a=(V=/home/dave/audited/dist/cli/index.js); cat ${a[0]#*=}"), true, "an array element is not a statement");
+  assert.equal(unused("hunch_cli=/home/dave/audited/dist/cli/index.js; for v in ${!hu*}; do cat \"${!v}\"; done"), true, "indirect expansion stays denied");
+  assert.equal(unused("v=/home/dave/audited/dist/cli/index.js; for x in $(compgen -v); do cat \"${!x}\"; done"), true, "compgen introspection stays denied");
+  assert.equal(unused("V=/home/dave/audited/dist/cli/index.js; declare -n r=${x:-V}; cat \"$r\""), true, "a nameref built from an expansion stays denied");
+  assert.equal(unused("set -e; V=/home/dave/audited/dist/cli/index.js; echo ok"), true, "any set keeps it denied (the rest must be inert)");
+  // Second critic pass: each of these read the file in real bash while the blocklist rule returned false.
+  assert.equal(unused("HOME=/home/dave/audited/dist/cli/index.js; cat ~"), true, "an inherited name keeps its export; ~ reads HOME");
+  assert.equal(unused("HOME=/home/dave/audited/dist/cli/index.js && node -e \"require('os').homedir()\""), true, "HOME is read by a child without being spelled");
+  assert.equal(unused("NODE_OPTIONS='--require /home/dave/audited/dist/cli/index.js'; node -e 0"), true, "a name a child consumes stays denied");
+  assert.equal(unused("OLDPWD=/home/dave/audited/dist/cli/index.js; cd -"), true, "a name the shell consumes stays denied");
+  assert.equal(unused("V=/home/dave/audited/dist/cli/index.js; set | grep audited | cut -d= -f2- | xargs cat"), true, "a set listing fed to cat stays denied");
+  assert.equal(unused("V=/home/dave/audited/dist/cli/index.js; cat $(set | grep audited | cut -d= -f2-)"), true, "a set listing in a substitution stays denied");
+  assert.equal(unused("V=/home/dave/audited/dist/cli/index.js; eval cat '$'$(echo vv | cut -c1)"), true, "eval with a constructed name stays denied");
+  assert.equal(unused("f(){ local -n r=$1; cat \"$r\"; }; V=/home/dave/audited/dist/cli/index.js; f $(echo vv | cut -c1)"), true, "a local nameref stays denied");
+  assert.equal(unused("V=/home/dave/audited/dist/cli/index.js; history | tail -1"), true, "history can replay the value");
+  // Third critic pass: builtin spellings a word list misses; the rest must parse under a strict grammar instead.
+  const xcat = "printenv | grep index.js | cut -d= -f2- | xargs cat";
+  for (const command of [
+    `\\set -a; V=/home/dave/audited/dist/cli/index.js; ${xcat}`,
+    "V=/home/dave/audited/dist/cli/index.js; \\set | grep index.js | xargs cat",
+    "V=/home/dave/audited/dist/cli/index.js; se\\t | grep index.js | xargs cat",
+    "V=/home/dave/audited/dist/cli/index.js; \\declare -p | xargs cat",
+    "V=/home/dave/audited/dist/cli/index.js; \\. ./h.sh",
+    `s""et -a; V=/home/dave/audited/dist/cli/index.js; ${xcat}`,
+    `V=/home/dave/audited/dist/cli/index.js; ."" ./h.sh`,
+    `V=/home/dave/audited/dist/cli/index.js; sou""rce ./h.sh`,
+    `'set' -a; V=/home/dave/audited/dist/cli/index.js; ${xcat}`,
+    `shopt -so allexport; V=/home/dave/audited/dist/cli/index.js; ${xcat}`,
+    "f() { set | xargs cat; }; V=/home/dave/audited/dist/cli/index.js; f",
+    "V=/home/dave/audited/dist/cli/index.js; trap 'set | xargs cat' EXIT",
+    "READNULLCMD=/home/dave/audited/dist/cli/index.js; </dev/null",
+    "NULLCMD=/home/dave/audited/dist/cli/index.js; >/dev/stderr",
+    "V=/home/dave/audited/dist/cli/index.js/../../core/x.js; echo ok",
+    "V=/home/dave/audited/dist/cli/index.js; echo ok &",
+    "V=/home/dave/audited/dist/cli/index.js; ls *",
+  ]) assert.equal(unused(command), true, command);
+  assert.equal(unused("V=/home/dave/audited/dist/cli/index.js; npx tsx --test test/a.test.ts 2>&1 | tail -20 > out.txt"), false, "a plain pipeline with redirections is inert");
   assert.equal(isOutOfRepoAccess(`H='/home/dave/audited/dist/cli/index.js'; cat "$H" | head`, denyRoots, runDir, [auditedCli]), true, "an expansion that is not an invocation stays denied");
   assert.equal(isOutOfRepoAccess(`H='/home/dave/audited/dist/cli/index.js'; node "$H" task verify htask_1; cat "$H"`, denyRoots, runDir, [auditedCli]), true, "one non-invocation expansion denies the whole assignment even alongside an invocation");
   assert.equal(isOutOfRepoAccess(`H='/home/dave/audited/dist/cli/index.js/../x'; node "$H" task verify htask_1`, denyRoots, runDir, [auditedCli]), true, "traversal off the assigned path is not the exact entrypoint, stays denied");
-  assert.equal(isOutOfRepoAccess(`H='/home/dave/audited/dist/cli/index.js'; echo $HOME`, denyRoots, runDir, [auditedCli]), true, "$HOME is not an expansion of H");
-  assert.equal(isOutOfRepoAccess(`H='/home/dave/audited/dist/cli/index.js'; node "$G" task verify htask_1`, denyRoots, runDir, [auditedCli]), true, "a different variable invoked stays denied");
-  assert.equal(isOutOfRepoAccess(`xH='/home/dave/audited/dist/cli/index.js'; node "$H" task verify htask_1`, denyRoots, runDir, [auditedCli]), true, "an assignment glued to a preceding word is a different variable name, stays denied");
+  assert.equal(isOutOfRepoAccess(`export H='/home/dave/audited/dist/cli/index.js'; echo $HOME`, denyRoots, runDir, [auditedCli]), true, "$HOME is not an expansion of H");
+  assert.equal(isOutOfRepoAccess(`export H='/home/dave/audited/dist/cli/index.js'; node "$G" task verify htask_1`, denyRoots, runDir, [auditedCli]), true, "a different variable invoked stays denied");
+  assert.equal(isOutOfRepoAccess(`xH='/home/dave/audited/dist/cli/index.js'; node "$H" task verify htask_1; echo "$xH"`, denyRoots, runDir, [auditedCli]), true, "an assignment glued to a preceding word is a different variable name, stays denied");
   assert.equal(isOutOfRepoAccess(`H='/home/dave/audited/dist/cli/index.js'; "$H" task verify htask_1`, denyRoots, runDir, [auditedCli]), false, "invoked directly at a command boundary");
   assert.equal(isOutOfRepoAccess(`cli='/home/dave/audited/dist/cli/index.js'; node "$cli" task verify htask_1`, denyRoots, runDir, [auditedCli]), false, "a name that also appears inside the assigned path");
   assert.equal(isOutOfRepoAccess(`H='/home/dave/audited/dist/cli/index.js'; node "$H" task verify htask_1; cat \${H%x}`, denyRoots, runDir, [auditedCli]), true, "a parameter-expansion form is not an invocation");
