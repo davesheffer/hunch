@@ -15,6 +15,11 @@ const CLAUDE_TAIL = "\nTrailing user text.\n";
 const AGENTS_BLOCK = "<!-- HUNCH:START — auto-generated, do not edit by hand -->\r\nblock line\r\n<!-- HUNCH:END -->";
 const AGENTS = `Agents intro\r\n\r\n${AGENTS_BLOCK}\r\n\r\nAgents tail\r\n`;
 const STUB_BLOCK = "<!-- HUNCH:START — stub -->\nstub grounding\n<!-- HUNCH:END -->";
+// Code that carries the markers as string literals (as src/integrations/claudemd.ts and
+// its tests do): the no-hunch arm must leave it byte-identical.
+const MARKER_CODE = 'const START = "<!-- HUNCH:START — auto-generated, do not edit by hand -->";\nconst END = "<!-- HUNCH:END -->";\nexport const markers = [START, END];\n';
+const MARKER_TEST = "const doc = `# Project\n<!-- HUNCH:START -->\nold\n<!-- HUNCH:END -->\n`;\nexport default doc;\n";
+const NESTED_MD = "# Copilot\n\n<!-- HUNCH:START — auto-generated -->\nnested grounding\n<!-- HUNCH:END -->\n";
 
 let root = "";
 let source = "";
@@ -112,6 +117,9 @@ before(() => {
   mkdirSync(source);
   git(source, ["init", "-q", "-b", "main"]);
   put(source, "src/a.ts", "export const a = 1;\n");
+  put(source, "src/markers.ts", MARKER_CODE);
+  put(source, "test/markers.test.ts", MARKER_TEST);
+  put(source, ".github/copilot-instructions.md", NESTED_MD);
   put(source, "CLAUDE.md", CLAUDE_HEAD + CLAUDE_BLOCK + CLAUDE_TAIL);
   put(source, "AGENTS.md", AGENTS);
   put(source, ".claude/commands/capture.md", "Capture\n<!-- hunch:generated — refreshed by hunch init; delete this line to take ownership -->\n");
@@ -271,6 +279,9 @@ test("prepareArm no-hunch strips markers and generated commands and proves expos
   assert.equal(prepared.exposure.post_setup_hunch_sha256, null);
   assert.equal(readFileSync(join(prepared.repo, "CLAUDE.md"), "utf8"), "# Project\n\nUser intro text.\n\nTrailing user text.\n");
   assert.deepEqual(readFileSync(join(prepared.repo, "AGENTS.md")), Buffer.from("Agents intro\r\n\r\nAgents tail\r\n"));
+  assert.equal(readFileSync(join(prepared.repo, "src", "markers.ts"), "utf8"), MARKER_CODE, "marker string literals in code are not cut");
+  assert.equal(readFileSync(join(prepared.repo, "test", "markers.test.ts"), "utf8"), MARKER_TEST, "marker fixtures in tests are not cut");
+  assert.equal(readFileSync(join(prepared.repo, ".github", "copilot-instructions.md"), "utf8"), "# Copilot\n\n", "a nested Markdown block is stripped");
   assert.equal(existsSync(join(prepared.repo, ".claude", "commands", "mine.md")), true);
   assert.equal(existsSync(join(prepared.repo, ".claude", "commands", "capture.md")), false);
   assert.equal(existsSync(join(prepared.repo, ".claude", "commands", "heal.md")), false, "unmarked but hunch-mentioning command is removed");
