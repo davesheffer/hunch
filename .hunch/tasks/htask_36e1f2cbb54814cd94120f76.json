@@ -1,0 +1,29 @@
+{
+  "id": "htask_36e1f2cbb54814cd94120f76",
+  "title": "Assistant task",
+  "state": "completed",
+  "started_at": "2026-09-30T12:28:01.283Z",
+  "finished_at": "2026-09-30T12:30:44.843Z",
+  "coverage": "no-relevant-memory",
+  "lessons": [],
+  "applied": [],
+  "saved": [],
+  "checks": [],
+  "conformance": [],
+  "refusals": 0,
+  "files": [
+    "bench/pilot5/DEVIATIONS.md",
+    "bench/pilot5/GATE-A5-SPEC.md"
+  ],
+  "supersedes": [],
+  "source_snapshot": null,
+  "report_hash": "sha256:34324d2d37de92957ced23225fedca51fd3d5dddd538c83e2b7105e433966036",
+  "provenance": {
+    "source": "task_report",
+    "confidence": 1,
+    "evidence": [
+      "hunch report htask_36e1f2cbb54814cd94120f76"
+    ],
+    "last_verified": "2026-09-30T12:30:44.843Z"
+  }
+}
