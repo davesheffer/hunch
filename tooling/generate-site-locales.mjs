@@ -37,6 +37,7 @@ const locales = {
     logoutTitle: "התנתקות חייבת להפסיק את הגישה מיד.", chosen: "נבחר", chosenBody: "לשמור את מצב ההתחברות בשרת, שם אפשר לסיים אותה מיד.",
     rejected: "נדחה", rejectedBody: "לסמוך על אסימון התחברות עד שתוקפו יפוג.",
     protects: "מגן מפני", protectsBody: "שימוש באסימון גנוב אחרי ההתנתקות.", receiptFoot: "זיכרון לדוגמה · המקור מצורף · בגדר עצה כברירת מחדל",
+    watchAria: "הפעלת סרטון: Hunch Memory בשתי דקות", watchCaption: "<b>Hunch Memory בשתי דקות</b> (באנגלית). אחר כך אפשר להעמיק ב<a>סדרה בת 7 פרקים</a>: התקנה, hooks, תיעוד, מסירה, כללים, סחיפה וצוותים.",
     changesEyebrow: "כך Hunch עובד", changesTitle: "לזכור. לשלוף. לבדוק.", changesIntro: "Hunch נותן לעוזר תדריך ממוקד וכלים לבדיקת העבודה. העוזר עדיין מתכנן ומבצע את המשימה.",
     rememberLabel: "01 / לזכור", rememberTitle: "לשמור את ההיסטוריה השימושית.", rememberBody: "מתעדים החלטות, תיקונים וממצאים ומקשרים אותם לקוד ולמקורות, כדי שיהיה אפשר למצוא את הסיבה גם בהמשך.",
     recallLabel: "02 / לשלוף", recallTitle: "להחזיר את מה שחשוב.", recallBody: "בוחרים זיכרון רלוונטי למשימה דרך MCP והוקים נתמכים של העוזר. היקף הכיסוי תלוי בחיבור.",
@@ -87,6 +88,7 @@ const locales = {
     logoutTitle: "Выход из аккаунта должен сразу прекращать доступ.", chosen: "выбрано", chosenBody: "Хранить данные о входе на сервере, где доступ можно сразу прекратить.",
     rejected: "отвергнуто", rejectedBody: "Доверять токену входа до истечения его срока действия.",
     protects: "защищает от", protectsBody: "Использования украденного токена после выхода из аккаунта.", receiptFoot: "пример памяти · источник приложен · по умолчанию рекомендация",
+    watchAria: "Воспроизвести видео: Hunch Memory за 2 минуты", watchCaption: "<b>Hunch Memory за 2 минуты</b> (на английском). Дальше — <a>серия из 7 эпизодов</a>: установка, хуки, запись, доставка, правила, дрейф и команды.",
     changesEyebrow: "Как работает Hunch", changesTitle: "Помнить. Находить. Проверять.", changesIntro: "Hunch даёт помощнику краткий контекст и инструменты для проверки работы. Планирование и выполнение задачи остаются за помощником.",
     rememberLabel: "01 / помнить", rememberTitle: "Сохраняйте полезную историю.", rememberBody: "Записывайте решения, исправления и наблюдения. Связывайте их с кодом и источниками, чтобы причину можно было найти позже.",
     recallLabel: "02 / находить", recallTitle: "Возвращайте то, что важно.", recallBody: "Выбирайте память для задачи через MCP и поддерживаемые хуки помощников. Охват зависит от интеграции.",
@@ -137,6 +139,7 @@ const locales = {
     logoutTitle: "يجب أن ينهي تسجيل الخروج الوصول فورًا.", chosen: "المختار", chosenBody: "الاحتفاظ بحالة تسجيل الدخول على الخادم، حيث يمكن إنهاؤها فورًا.",
     rejected: "المرفوض", rejectedBody: "الثقة برمز تسجيل الدخول حتى تنتهي صلاحيته.",
     protects: "يحمي من", protectsBody: "استخدام رمز مسروق بعد تسجيل الخروج.", receiptFoot: "ذاكرة توضيحية · المصدر مرفق · إرشادية افتراضيًا",
+    watchAria: "تشغيل الفيديو: Hunch Memory في دقيقتين", watchCaption: "<b>Hunch Memory في دقيقتين</b> (بالإنجليزية). ثم تعمّق في <a>سلسلة من 7 حلقات</a>: الإعداد، والخطافات، والتسجيل، والتسليم، والقواعد، والانحراف، والفرق.",
     changesEyebrow: "كيف يعمل Hunch", changesTitle: "تذكّر. استرجع. تحقّق.", changesIntro: "يقدّم Hunch للمساعد ملخصًا مركّزًا وأدوات للتحقق من عمله. ويظل المساعد مسؤولًا عن تخطيط المهمة وتنفيذها.",
     rememberLabel: "01 / تذكّر", rememberTitle: "احفظ التاريخ المفيد.", rememberBody: "سجّل القرارات والتصحيحات والملاحظات. واربطها بالشيفرة والمصادر ليسهل العثور على السبب لاحقًا.",
     recallLabel: "02 / استرجع", recallTitle: "استعد ما يهم.", recallBody: "اختر الذاكرة الملائمة للمهمة عبر MCP وخطافات المساعد المدعومة. يعتمد نطاق التغطية على التكامل.",
@@ -187,6 +190,7 @@ const locales = {
     logoutTitle: "Cerrar sesión debe poner fin al acceso de inmediato.", chosen: "elegido", chosenBody: "Guardar las sesiones en el servidor, donde pueden cerrarse al instante.",
     rejected: "descartado", rejectedBody: "Confiar en un token de acceso hasta que caduque.",
     protects: "protege de", protectsBody: "El uso de un token robado después de cerrar sesión.", receiptFoot: "memoria de ejemplo · fuente incluida · orientativa por defecto",
+    watchAria: "Reproducir vídeo: Hunch Memory en 2 minutos", watchCaption: "<b>Hunch Memory en 2 minutos</b> (en inglés). Después, profundiza en la <a>serie de 7 episodios</a>: instalación, hooks, captura, entrega, reglas, deriva y equipos.",
     changesEyebrow: "Cómo funciona Hunch", changesTitle: "Recordar. Recuperar. Comprobar.", changesIntro: "Hunch ofrece al asistente un resumen centrado en la tarea y herramientas para comprobar su trabajo. El asistente sigue planificando y ejecutando la tarea.",
     rememberLabel: "01 / recordar", rememberTitle: "Guarda el historial útil.", rememberBody: "Registra decisiones, correcciones y hallazgos. Vincúlalos al código y a sus fuentes para poder encontrar el motivo más adelante.",
     recallLabel: "02 / recuperar", recallTitle: "Recupera lo que importa.", recallBody: "Selecciona memoria relevante para una tarea mediante MCP y los hooks compatibles del asistente. La cobertura depende de la integración.",
@@ -235,6 +239,8 @@ function fragments(c) {
     ["<p class=\"lede rise d2\">Hunch keeps decisions, completed work, and commitments with their sources. Start with engineering memory for coding agents, or connect agents to a self-hosted state server.</p>", `<p class="lede rise d2">${c.heroLede}</p>`],
     ["<span class=\"eyebrow\">available today</span>", `<span class="eyebrow">${c.moatEyebrow}</span>`], ["<h2>Keep the work connected across sessions.</h2>", `<h2>${c.moatTitle}</h2>`],
     ["<p>Hunch keeps structured records in Git. Inspect them in a browser or connect agents through MCP, HTTP, the CLI, TypeScript or Python.</p>", `<p>${c.moatIntro}</p>`],
+    ['aria-label="Play video: Hunch Memory in 2 minutes"', `aria-label="${escAttr(c.watchAria)}"`],
+    ['<figcaption><b>Hunch Memory in 2 minutes.</b> Then go deeper in the <a href="https://www.youtube.com/playlist?list=PLIXqtdE0LcNI" target="_blank" rel="noopener">7-episode series</a>: setup, hooks, capture, delivery, rules, drift and teams.</figcaption>', `<figcaption>${c.watchCaption.replace("<a>", '<a href="https://www.youtube.com/playlist?list=PLIXqtdE0LcNI" target="_blank" rel="noopener">')}</figcaption>`],
     ["<article class=\"tech-item\"><code>memory</code><h3>Keep the reasons</h3><p>Save decisions, rejected approaches, bugs, and open questions alongside the code they explain.</p></article>", `<article class="tech-item"><code>${c.moat1Code}</code><h3>${c.moat1Title}</h3><p>${c.moat1Body}</p></article>`],
     ["<article class=\"tech-item\"><code>decisions</code><h3>Make changes explicit</h3><p>Conflicting current decisions are refused. Replacing a decision leaves a history of what changed.</p></article>", `<article class="tech-item"><code>${c.moat2Code}</code><h3>${c.moat2Title}</h3><p>${c.moat2Body}</p></article>`],
     ["<article class=\"tech-item\"><code>access</code><h3>Share with the right agents</h3><p>Choose which agents can access a partition, then narrow access to individual records when needed. Optional key-bound credentials add request signing.</p></article>", `<article class="tech-item"><code>${c.moat3Code}</code><h3>${c.moat3Title}</h3><p>${c.moat3Body}</p></article>`],
@@ -336,7 +342,7 @@ for (const [locale, copy] of Object.entries(locales)) {
   html = html.replaceAll('href="/changelog"', `href="/${locale}/changelog"`);
   html = html.replace("<!DOCTYPE html>", `<!DOCTYPE html>\n<!-- Generated by tooling/generate-site-locales.mjs. Edit site/index.html or the locale dictionary, then regenerate. -->`);
 
-  const banned = ["Read the thesis", "Agents are probabilistic. Organizations need deterministic state.", "Help AI understand your code", "Your code has DNA", "Hunch learns how your project works", "the missing context", "AI can read your code", "Your team fixes a logout bug", "AI sees complex code", "The right DNA Strand activates first", "how hunch works", "Every task activates the right DNA Strand", "lean by design", "Less context. Better understanding", "right task", "more than context", "A set of tools guides the agent", "Understands why", "Install Hunch", "Install once. Work normally", "Learn the Project DNA", "Hunch gives advice by default", "One project. One DNA"];
+  const banned = ["7-episode series", "Then go deeper", "Read the thesis", "Agents are probabilistic. Organizations need deterministic state.", "Help AI understand your code", "Your code has DNA", "Hunch learns how your project works", "the missing context", "AI can read your code", "Your team fixes a logout bug", "AI sees complex code", "The right DNA Strand activates first", "how hunch works", "Every task activates the right DNA Strand", "lean by design", "Less context. Better understanding", "right task", "more than context", "A set of tools guides the agent", "Understands why", "Install Hunch", "Install once. Work normally", "Learn the Project DNA", "Hunch gives advice by default", "One project. One DNA"];
   const visibleHtml = html.replace(/<script\b[\s\S]*?<\/script>/gi, "").replace(/<style\b[\s\S]*?<\/style>/gi, "").replace(/<!--[\s\S]*?-->/g, "");
   for (const phrase of banned) if (visibleHtml.includes(phrase)) throw new Error(`[${locale}] untranslated visible phrase: ${phrase}`);
 

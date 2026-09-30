@@ -2,7 +2,7 @@
   "id": "dec_39bc7c8bee",
   "title": "Tool-selection audit round 2: moment-grouped grounding, task-phrase context fallback, SessionStart orientation, actionable capture nudge",
   "topic": "agent.tool-ergonomics",
-  "status": "accepted",
+  "status": "superseded",
   "context": "Second agent-perspective audit, focused on WHEN tools get used, not what data exists. Honest usage measurement: 4 of 19 hunch tools used across a 3-day feature build. Root causes found: (1) hunch_context — the task-shaped entry point — returned EMPTY for task phrases ('improve retrieval ranking' whiffed while the graph held that exact roadmap decision one FTS query away); (2) the CLAUDE.md auto block advertised 9 of 19 tools, moment-less, omitting hunch_structure and hunch_context entirely; (3) no orientation at session start — the sit-down moment pulled nothing from the graph; (4) the capture-interview nudge was passive and ignored 12/12 times.",
   "decision": "Four fixes. (1) hunch_context (CLI + MCP) falls back to FTS when the target resolves to no file/symbol — a task phrase now returns the closest graph matches instead of a shrug; tool description says so. (2) renderHunchSection rewritten MOMENT-grouped — Orient / Before designing / Before editing / Before committing / After deciding — covering the full tool surface incl. structure, context, current_decision, pr_impact, merge_verdict, record_correction, timeline, and `hunch now`; agents trigger-match on moments, not tool nouns. (3) SessionStart hook support: `hunch hook` handles the SessionStart event with a cheap public-store orientation (recent decisions, live roadmap, pending-review count) — scaffolded into new installs, added to this repo's local settings. (4) The un-token'd record_decision nudge now embeds the FIRST grilling question inline with the record's own title, so hardening a quick record costs one exchange instead of a flow switch.",
   "consequences": [
@@ -25,11 +25,11 @@
     "src/integrations/scaffold.ts"
   ],
   "supersedes": null,
-  "superseded_by": null,
+  "superseded_by": "dec_8518efacaa",
   "caused_by_bug": null,
   "commit": null,
   "valid_from": "2026-07-05T05:49:00.208Z",
-  "valid_to": null,
+  "valid_to": "2026-09-30T05:17:31.055Z",
   "retired": {
     "symbols": [],
     "deps": []

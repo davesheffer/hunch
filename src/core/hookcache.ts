@@ -18,7 +18,9 @@
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, statSync, rmSync } from "node:fs";
 import { join } from "node:path";
+import { isFilterableSelectionId } from "./taskSelection.js";
 import { tmpdir } from "node:os";
+import { writeFileAtomic } from "./io.js";
 
 const MAX_KEYS = 300;
 const SWEEP_AGE_MS = 48 * 3600 * 1000;
@@ -36,7 +38,7 @@ const SWEEP_AGE_MS = 48 * 3600 * 1000;
 export function injectionMode(sessionId: string | undefined, key: string, content: string, hashInput: string = content): "full" | "delta" {
   try {
     if (!sessionId || process.env.HUNCH_HOOK_DEDUP === "0") return "full";
-    const dir = join(tmpdir(), "hunch-hookcache");
+    const dir = hookCacheDir();
     mkdirSync(dir, { recursive: true });
     sweep(dir);
     const file = join(dir, `${sessionId.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 80)}.json`);
@@ -67,10 +69,69 @@ export function injectionMode(sessionId: string | undefined, key: string, conten
 export function resetSessionInjections(sessionId: string | undefined): void {
   try {
     if (!sessionId) return;
-    const file = join(tmpdir(), "hunch-hookcache", `${sessionId.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 80)}.json`);
+    const file = join(hookCacheDir(), `${sessionId.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 80)}.json`);
     rmSync(file, { force: true });
   } catch {
     /* unwritable tmpdir — next injectionMode call falls back to "full" anyway */
+  }
+}
+
+/** The machine-local directory every hook cache lives in (OS tmpdir). */
+export function hookCacheDir(): string {
+  return join(tmpdir(), "hunch-hookcache");
+}
+
+/** A task's prompt-time memory selection (taskSelection.ts): record ids only —
+ *  never the prompt text it was scored from. Kill switch: HUNCH_TASK_SELECTION=0
+ *  (no selection is written or read, so file grounding stays unfiltered). */
+export interface TaskSelectionFile {
+  task_id: string;
+  qualifying: string[];
+  top: string[];
+}
+
+export function taskSelectionPath(taskId: string): string {
+  return join(hookCacheDir(), `task-${taskId.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 80)}.json`);
+}
+
+/** Persist a task's selection (atomic temp+rename). Throws; callers fail open. */
+export function saveTaskSelection(selection: TaskSelectionFile): void {
+  const dir = hookCacheDir();
+  mkdirSync(dir, { recursive: true });
+  sweep(dir);
+  writeFileAtomic(taskSelectionPath(selection.task_id), JSON.stringify({
+    task_id: selection.task_id, qualifying: [...selection.qualifying], top: [...selection.top],
+  }));
+}
+
+export function taskSelectionEnabled(): boolean {
+  return process.env.HUNCH_TASK_SELECTION !== "0";
+}
+
+/** Remove a task's selection file (an empty selection is no selection). Never throws. */
+export function clearTaskSelection(taskId: string): void {
+  try {
+    rmSync(taskSelectionPath(taskId), { force: true });
+  } catch {
+    /* fail open: a stale file is read back as whatever it holds */
+  }
+}
+
+/** The task's selection, or null when none was written (a host without a prompt
+ *  hook, a legacy session), it holds no decision/bug/finding id (constraints
+ *  are never filtered, so a constraint-only selection would only hide memory),
+ *  it is unreadable, or selection is switched off — callers then keep today's
+ *  unfiltered grounding. Never throws. */
+export function loadTaskSelection(taskId: string | null | undefined): TaskSelectionFile | null {
+  try {
+    if (!taskId || !taskSelectionEnabled()) return null;
+    const raw = JSON.parse(readFileSync(taskSelectionPath(taskId), "utf8")) as Partial<TaskSelectionFile>;
+    if (!raw || raw.task_id !== taskId || !Array.isArray(raw.qualifying) || !Array.isArray(raw.top)) return null;
+    const qualifying = raw.qualifying.filter((id): id is string => typeof id === "string");
+    if (!qualifying.some(isFilterableSelectionId)) return null;
+    return { task_id: taskId, qualifying, top: raw.top.filter((id) => typeof id === "string") };
+  } catch {
+    return null;
   }
 }
 

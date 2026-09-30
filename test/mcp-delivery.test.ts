@@ -72,6 +72,7 @@ test("MCP task lifecycle retains exact delivery, rejects borrowed evidence, and 
   const call = (name: string, args: Record<string, unknown>) => client.callTool({ name, arguments: args });
   const started = await call("hunch_task", { action: "start", title: "Keep delivery machine-readable" });
   assert.ok(!started.isError);
+  assert.match(JSON.stringify(started.content), /tests that cover your change.*CI's job/, "the start hint steers to targeted tests");
   const taskId = (started.structuredContent as { task: { task_id: string } }).task.task_id;
   const delivered = await call("hunch_context", { target: "src/context.ts", task_id: taskId });
   assert.ok(!delivered.isError);
