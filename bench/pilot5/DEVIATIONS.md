@@ -154,3 +154,20 @@ independently; the live Gate A version 5 run is the test. All selection rules ar
   absolute-path argument and no redirection. `cd -`, bare `cd`, relative arguments (zsh `cdablevars`, `CDPATH`), a
   second argument, a redirection and a quoted `cd` stay denied. Regression tests include the real call verbatim.
 - Precondition 1 is rerun on the Windows machine with the new harness SHA; the spec's harness pin moves to it.
+- Rerun on 2026-09-30 with harness `1b22cedb` (`confinement-replay-v5 (1).json`, 11:51Z): 33 of 33 runs clear, zero
+  unexplained flags, the (k) run clear. Verdict PASS; precondition 1 is met.
+
+## (n) Gate A version 5: `fable-mode` removed from the run repositories, not the user configuration
+
+- The spec said `fable-mode` would be removed from both arms' configuration. It is not in the user configuration: the
+  repository commits it at `.claude/skills/fable-mode` and `.agents/skills/fable-mode` at all five starting commits,
+  and Claude Code 2.1.284 loads both (version 4 session start events list it). The harness had no way to remove it.
+- Change, before any version 5 run: harness `d6ae3167` adds a repeatable `--exclude-path <path>` to
+  `hunch task benchmark`. Excluded paths are removed from each run repository's tree and history when it is built;
+  the base proof records them and proves the excluded history is empty. The manifest pins the list (a mismatch stops
+  before any base is built). Before the agent starts, any `SKILL.md` whose directory or frontmatter name matches an
+  excluded skill makes the run `invalid_exposure` and the agent is not spawned. After the run, the session's loaded
+  skill list must be present and must not name an excluded skill. Reviewed by the critic: SHIP.
+- Known limits, accepted: output directories made before this harness cannot be resumed (the command stops; version 5
+  uses a fresh output); excluding a whole skills root (for example `.claude/skills`) is only checked as "a skill list
+  was reported"; an unreadable `SKILL.md` passes the pre-start scan (the loaded-skills check still applies).
