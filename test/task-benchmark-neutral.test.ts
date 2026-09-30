@@ -326,7 +326,7 @@ let reply = "OK";
 if (prompt.includes("Benchmark user canary")) {
   const leak = mode === "user-canary-leak" || mode === "user-canary-quoted";
   const user = leak ? canary(read(join(configDir, "CLAUDE.md")), "user") : "NONE";
-  reply = "USER=" + (mode === "user-canary-quoted" ? '"' + user + '"' : user) + "\\nPROJECT=" + canary(read(join(process.cwd(), "CLAUDE.md")), "project");
+  reply = "USER=" + (mode === "user-canary-quoted" ? '"' + user + '"' : user) + "\\nPROJECT=" + canary(read(join(process.cwd(), "CLAUDE" + ".md")), "project");
 } else if (prompt.includes("<<<")) {
   reply = "NONE";
   if (mode === "completion-leak") {

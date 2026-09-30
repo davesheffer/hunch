@@ -379,9 +379,9 @@ function firstDifferingKey(a: Record<string, unknown>, b: Record<string, unknown
   return keys.find((key) => canonicalJson(a[key] ?? null) !== canonicalJson(b[key] ?? null)) ?? null;
 }
 
-/** backslash -> forward slash, lowercase, MSYS drive paths (/c/…) -> c:/…, no trailing slash. */
+/** CRLF -> LF, a real `/` ending a line gets a space (so only a `\\` continuation reads `/\n`), backslash -> forward slash, lowercase, MSYS drive paths (/c/…) -> c:/…, no trailing slash. */
 function normalizeForMatch(path: string): string {
-  const slashed = path.replace(/\\/g, "/").toLowerCase().replace(/(^|[\s"'`=(;])\/([a-z])\//g, "$1$2:/");
+  const slashed = path.replace(/\r\n?/g, "\n").replace(/\/(?=\n)/g, "/ ").replace(/\\/g, "/").toLowerCase().replace(/(^|[\s"'`=(;])\/([a-z])\//g, "$1$2:/");
   return slashed.endsWith("/") ? slashed.slice(0, -1) : slashed;
 }
 
@@ -392,12 +392,48 @@ function pathPattern(path: string): RegExp {
   return new RegExp(normalizeForMatch(path).replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + PATH_END, "g");
 }
 
-/** A command mention is dropped only when it is being invoked: optional closing quote, whitespace, then a subcommand
- *  word or a flag. A bare mention stays denied: it cannot be told apart from naming the file (a Read of the entrypoint). */
-const COMMAND_END = "(?=[\"'`]?\\s+-{0,2}[a-z])";
+/** A command mention is dropped only when it is being invoked: optional closing quote, spaces or tabs on the same
+ *  line (or across a `\\` continuation, normalized to `/`), then a subcommand word or a flag, quoted or not. A bare mention stays denied: it cannot be told apart from naming the file
+ *  (a Read of the entrypoint). */
+const COMMAND_END = "(?=[\"'`]?(?:[ \\t]+/\\n[ \\t]*|[ \\t]+)[\"']?-{0,2}[a-z])";
 
-function commandPattern(path: string): RegExp {
-  return new RegExp(normalizeForMatch(path).replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + COMMAND_END, "g");
+/** After a runner (`node <entry>`) any word end is an invocation: `node <entry>` alone prints help, and `| head`,
+ *  `2>&1`, `"$cmd"`, `)` or a sentence's full stop follow real runs (PILOT5 Gate A v5, critic pass 3). */
+const RUNNER_END = "(?=[\"'`]?(?:$|[\\s;&|<>),]|\\.(?![a-z0-9_/-])))";
+
+/** Double-dash node options that may sit between node and the entry: `--name=value` (value inline, so the entry is
+ *  still the script) unless it runs or loads other code instead, or a known boolean flag. A value-taking option
+ *  written `--name value` would consume the entry (`--redirect-warnings <entry>` appends to it), so it isn't listed;
+ *  single-dash ones (`-e 1`, `-r x`) never are. */
+const NODE_OPTION = `[ \\t]+--(?:(?!(?:eval|print|require|import|loader|experimental-loader|env-file|input-type)=)[a-z][a-z0-9-]*=[^\\s"'\`;&|<>()]*|(?:enable-source-maps|no-warnings|no-deprecation|pending-deprecation|throw-deprecation|trace-deprecation|trace-warnings|trace-uncaught|trace-exit|experimental-strip-types|no-experimental-strip-types|experimental-vm-modules|experimental-sqlite|preserve-symlinks|preserve-symlinks-main|abort-on-uncaught-exception)(?=[ \\t]))`;
+
+/** Where a shell command word starts: text start, `;`, `&`/`|` but not the `>&`/`<&` redirections, a newline that is
+ *  not a normalized `\\` continuation, `(`/`$(` but not an array's `=(`, or `sh -c "` (a backtick can't be told
+ *  opening from closing, so none counts); then any run of environment assignments
+ *  (`FOO=1`) and prefix words (`env`, `time`, `timeout 600`, `exec`, `command`, `nohup`, `nice`, `do`, `then`,
+ *  `else`, `if`, `while`, `until`, `{`, `!`). */
+const STATEMENT_START = (() => {
+  const boundary = `(?:^|;|(?<![<>])[&|]|(?<!/)\\n|(?<!=)\\(|(?<![a-z0-9_./-])(?:ba|z|da)?sh[ \\t]+-[a-z]*c[ \\t]+["'])`;
+  const assignment = `[a-z_][a-z0-9_]*=(?:'[^'\\n]*'|"[^"\\n]*"|[^\\s;&|<>()'"\`]*)`;
+  const word = `(?:env|time|exec|command|nohup|nice|do|then|else|elif|if|while|until|timeout[ \\t]+[0-9.]+[smhd]?|\\{|!)`;
+  // Blanks may span `\\` continuations (`cd repo && \\⏎ node …`).
+  return `${boundary}(?:[ \\t]|/\\n)*(?:(?:${assignment}|${word})(?:[ \\t]|/\\n)+)*`;
+})();
+
+function commandPattern(path: string, shell: boolean): RegExp {
+  // Invoked means node's (or `npx tsx`'s) first argument, or, without a runner, the command word itself followed by a
+  // subcommand or flag. In a shell command the runner must itself be the command word (STATEMENT_START), so
+  // `grep node <entry>` and `cp /usr/bin/node <entry> -f` name the file as an argument and stay denied. Any other
+  // string (a subagent prompt, a todo) runs nothing, so there `Run node <entry> task verify` anywhere reads as the
+  // instruction it quotes. `cp <entry> x`, `node x.js <entry> task` and `cat <entry>\nls` stay denied (Gate A v5).
+  // A heuristic over text, not a shell parser: a `;` or newline inside quotes or a heredoc body still reads as a
+  // statement start, so this guards against accidental reach, not a deliberate read.
+  const gap = `(?:[ \\t]+/\\n[ \\t]*|[ \\t]+)`;
+  const runnerAt = shell ? STATEMENT_START : `(?<![^\\s;&|(){}=!"'\`])`;
+  const runner = `${runnerAt}(?:${NODE_WORD}(?:${NODE_OPTION})*|npx[ \\t]+tsx)${gap}["'\`]?`;
+  const statement = `${STATEMENT_START}["'\`]?`;
+  const entry = normalizeForMatch(path).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(?<=${runner})${entry}${RUNNER_END}|(?<=${statement})${entry}${COMMAND_END}`, "g");
 }
 
 /** A node executable as one shell word of normalized text: `node`/`node.exe` or a path ending in `/node` or
@@ -462,6 +498,112 @@ function dropInvokedVarAssignment(rest: string, path: string): string {
   return rest.replace(assign, (mention, name: string) => (invokedOnly.has(name) ? " " : mention));
 }
 
+/** Start offsets of the text that sits outside every quote, or null when the quoting can't be read from normalized
+ *  text: `\` became `/`, so `/"` or `/'` may be an escaped quote, and `$(` inside double quotes may nest quotes. */
+function unquotedOffsets(text: string): Set<number> | null {
+  if (/\/["']/.test(text)) return null;
+  const top = new Set<number>();
+  let quote: string | null = null;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i]!;
+    if (quote === null) {
+      top.add(i);
+      if (c === "'" || c === '"') quote = c;
+    } else if (c === quote) quote = null;
+    else if (quote === '"' && c === "$" && text[i + 1] === "(") return null;
+  }
+  return quote === null ? top : null;
+}
+
+const SHELL_READ_NAMES = new Set([
+  "home", "path", "cdpath", "oldpwd", "pwd", "ifs", "env", "bash_env", "shellopts", "bashopts", "globignore", "fignore",
+  "histfile", "histcontrol", "hostfile", "inputrc", "mail", "mailpath", "prompt_command", "ps0", "ps1", "ps2", "ps4",
+  "nullcmd", "readnullcmd", "fpath", "module_path", "tmpprefix", "bash_loadables_path", "execignore", "bash_xtracefd",
+  "tmpdir", "userprofile", "node_options", "node_path", "pythonpath", "pythonstartup", "ld_preload", "ld_library_path",
+  "dyld_insert_libraries", "git_dir", "git_work_tree", "git_config_global",
+  // Set in the agent's shell by the harness, Claude Code or MSYS although absent from the controller's env.
+  "hunch_private_dir", "claude_config_dir", "claude_code_oauth_token", "disable_autoupdater", "claudecode", "shlvl",
+  "msystem", "original_path",
+]);
+
+/** bash and zsh builtins and keywords: any of them at a command position may list, re-read or re-scope variables. */
+const SHELL_BUILTINS = new Set(`alias bg bind break builtin caller case cd command compgen complete compopt continue
+  coproc declare dirs disown do done elif else enable esac eval exec exit export fc fg fi for function getopts hash help
+  history if in jobs kill let local logout mapfile popd printf pushd pwd read readarray readonly return select set shift
+  shopt source suspend test then time times trap type typeset ulimit umask unalias unset until wait while [ [[ ]] { } !
+  : . autoload bindkey bye chdir emulate end float foreach functions getln integer limit noglob nocorrect print private
+  pushln r rehash repeat sched setopt unfunction unhash unlimit unsetopt vared whence where which zcompile zformat zle
+  zmodload zparseopts zstyle`.split(/\s+/));
+
+/**
+ * True when `text` parses as a plain pipeline under a strict grammar in which no word can reach shell state: words are
+ * `[a-z0-9_.,:@%+=/-]` runs or quoted strings with no `$`, backtick, backslash or `!` inside, never glued to one
+ * another (`s""et`); statements are joined only by `;`, `&&`, `||`, `|` or a newline; redirections are `>`, `>>` or
+ * `n>&m` after a command word; and each statement's command word, unquoted, is no builtin and no assignment. Anything
+ * else (`$`, `~`, `\`, globs, parens, braces, `<`, `&`, `#`) fails the parse.
+ */
+function inertShellText(text: string): boolean {
+  const token = /[ \t]+|\n|&&|\|\||[;|]|[0-9]?>&[0-9]|[0-9]?>>?|'[^'$`\\!]*'|"[^"$`\\!]*"|[a-z0-9_.,:@%+=/-]+/y;
+  let atCommand = true;
+  let afterWord = false;
+  for (let i = 0; i < text.length; ) {
+    token.lastIndex = i;
+    const t = token.exec(text)?.[0];
+    if (!t) return false;
+    i += t.length;
+    if (/^[ \t]+$/.test(t)) afterWord = false;
+    else if (/^(?:\n|&&|\|\||;|\|)$/.test(t)) [atCommand, afterWord] = [true, false];
+    else if (/^[0-9]?>/.test(t)) {
+      if (atCommand) return false;
+      afterWord = false;
+    } else {
+      if (afterWord) return false;
+      afterWord = true;
+      if (atCommand) {
+        const word = /^['"]/.test(t) ? t.slice(1, -1) : t;
+        if (!word || SHELL_BUILTINS.has(word) || word.includes("=")) return false;
+        atCommand = false;
+      }
+    }
+  }
+  return true;
+}
+
+/** An environment key the agent's shell inherits (case-insensitive, as on Windows); assigning it keeps the export. */
+function inheritedName(name: string): boolean {
+  return Object.keys(process.env).some((key) => key.toLowerCase() === name);
+}
+
+/**
+ * `V="'<…>/node.exe' '<path>'"; …` with V never mentioned again — an unused assignment (PILOT5 Gate A v4,
+ * continuation-375 rep 1 current-hunch, DEVIATIONS (k)). A shell variable that is neither exported nor read can't
+ * reach the path, so the path's mentions inside the value are dropped. Only when the assignment is a statement of its
+ * own: at a command boundary (start, `;`, `&`, `|`, a newline that is not a `\` continuation) outside every
+ * quote, and followed only by blanks and a boundary, so it is neither an argument (`cmd V=…`) nor a command's
+ * environment prefix (`V=… node x.js`). The value is one single- or double-quoted word, or an unquoted word, holding
+ * no command substitution. Any other mention of the name (`export V`, `$V`, `${V}`, `process.env.V`, `x=V`, a second
+ * `V=…`) keeps it denied. The rest of the command must parse under `inertShellText`'s strict grammar, a positive
+ * grammar rather than a list of leaks (three critic passes each found new spellings: `eval '$'$(…)`, `set | xargs cat`,
+ * `\set`, `s""et`, `shopt -so allexport`). The name must not be one a child or the shell itself reads without it
+ * being spelled: an inherited environment key (an assignment keeps its export attribute) or a shell-consumed variable
+ * (`HOME` for `~` and `cd`, `OLDPWD` for `cd -`, zsh's `NULLCMD`, …). The value must name the path exactly, no `/..`.
+ * Subshell and brace groups (`(V=…)`, `${V=…}`, `{ V=…; }`) are not statements here. Other deny roots in the value still match.
+ */
+function dropUnusedVarAssignment(rest: string, path: string): string {
+  const top = unquotedOffsets(rest);
+  if (top === null) return rest;
+  const assign = /(?<=(?:^|;|(?<!\/)\n|(?<![<>])[&|])[ \t]*)([a-z_][a-z0-9_]*)=('[^']*'|"[^"]*"|[^\s;&|()<>"'`$]+)(?=[ \t]*(?:$|[;&|\n]))/g;
+  const pathRe = pathPattern(path);
+  return rest.replace(assign, (mention, name: string, value: string, at: number) => {
+    if (!top.has(at) || SHELL_READ_NAMES.has(name) || inheritedName(name) || value.includes("/..") || !pathRe.test(value)) return mention;
+    pathRe.lastIndex = 0;
+    const blanked = rest.slice(0, at) + " ".repeat(mention.length) + rest.slice(at + mention.length);
+    if (!inertShellText(blanked)) return mention;
+    if (new RegExp(`(?<![a-z0-9_-])${name}(?![a-z0-9_])`).test(maskDriveLetters(blanked))) return mention;
+    return `${name}=${value.replace(pathRe, " ")}`;
+  });
+}
+
 /** `~`, `$HOME`, `${HOME}`, `$env:USERPROFILE`, `%USERPROFILE%` at the start of a path mention -> the normalized home dir. */
 const HOME_TOKEN = /(^|[\s"'`=(;])(~|\$home|\$\{home\}|\$env:userprofile|%userprofile%)(?=\/)/g;
 
@@ -474,6 +616,7 @@ const HOME_TOKEN = /(^|[\s"'`=(;])(~|\$home|\$\{home\}|\$env:userprofile|%userpr
  * deny roots (source repo, private overlay, audited checkout, controller, `<out>`), or it contains
  * a directory-traversal run ("../../../" etc., tolerating repeated separators and "./" segments).
  * `traversal: false` skips the traversal rule for file content (an Edit/Write body's relative imports).
+ * `shell: false` marks a string no shell runs (a prompt, a todo): there a node runner may sit anywhere.
  */
 export function isOutOfRepoAccess(
   value: string,
@@ -482,14 +625,17 @@ export function isOutOfRepoAccess(
   commands: string[] = [],
   home: string = homedir(),
   traversal = true,
+  shell = true,
 ): boolean {
   if (traversal && /(?:\.\.[\\/]+(?:\.[\\/]+)*){3}/.test(value)) return true;
   let rest = normalizeForMatch(value).replace(HOME_TOKEN, (_, prefix) => `${prefix}${normalizeForMatch(home)}`);
   for (const path of Array.isArray(allowed) ? allowed : [allowed]) rest = rest.replace(pathPattern(path), " ");
   if (commands.length) rest = nodeVarsAsNode(rest);
   for (const path of commands) {
-    rest = rest.replace(commandPattern(path), " ");
+    rest = rest.replace(commandPattern(path, shell), " ");
     rest = dropInvokedVarAssignment(rest, path);
+    // Normalizing turns `\set` into `/set`, which the grammar can't tell from a path: no drop past any backslash.
+    if (!value.includes("\\")) rest = dropUnusedVarAssignment(rest, path);
   }
   return denyRoots.some((root) => pathPattern(root).test(rest));
 }
@@ -641,7 +787,7 @@ async function executeRun(ctx: RunContext, task: SuiteTask, rep: number, arm: Be
       // The audited UserPromptSubmit hook tells the agent to run checks through `<node> <audited>/dist/cli/index.js task verify`.
       const { denyRoots, commands } = armConfinement(arm, ctx);
       const offenders = [...new Set(toolInputStrings(readFileSync(agent.transcript_path, "utf8"))
-        .filter(({ value, content }) => isOutOfRepoAccess(value, denyRoots, [runDir], commands, homedir(), !content))
+        .filter(({ value, content, shell }) => isOutOfRepoAccess(value, denyRoots, [runDir], commands, homedir(), !content, shell))
         .map(({ value }) => value))];
       outOfRepoBreach = offenders.length > 0;
       post.push(["no-out-of-repo-access", !outOfRepoBreach, outOfRepoBreach

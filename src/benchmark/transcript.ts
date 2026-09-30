@@ -118,12 +118,14 @@ const CONTENT_KEYS = new Set(["content", "new_string", "old_string", "new_source
 /** Every string value, recursively, inside each assistant `tool_use` block's `input` —
  *  scanned for out-of-repo path access (see orchestrate.ts's no-out-of-repo-access check).
  *  `content` marks a value under a CONTENT_KEYS key. */
-export function toolInputStrings(transcriptText: string): Array<{ value: string; content: boolean }> {
-  const out: Array<{ value: string; content: boolean }> = [];
-  const collect = (value: unknown, content = false): void => {
-    if (typeof value === "string") out.push({ value, content });
-    else if (Array.isArray(value)) for (const item of value) collect(item, content);
-    else if (isObj(value)) for (const [key, item] of Object.entries(value)) collect(item, content || CONTENT_KEYS.has(key));
+export function toolInputStrings(transcriptText: string): Array<{ value: string; content: boolean; shell: boolean }> {
+  const out: Array<{ value: string; content: boolean; shell: boolean }> = [];
+  // `shell`: the string sits under a `command` key (Claude Code's Bash/PowerShell, or an argv array under one), so a
+  // shell runs it. Other hosts' keys (Codex `exec_command` uses `cmd`) are not read yet; add them with their transcripts.
+  const collect = (value: unknown, content = false, shell = false): void => {
+    if (typeof value === "string") out.push({ value, content, shell });
+    else if (Array.isArray(value)) for (const item of value) collect(item, content, shell);
+    else if (isObj(value)) for (const [key, item] of Object.entries(value)) collect(item, content || CONTENT_KEYS.has(key), shell || key === "command");
   };
   for (const line of transcriptText.split(/\r?\n/)) {
     if (!line.trim()) continue;
