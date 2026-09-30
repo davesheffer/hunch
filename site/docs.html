@@ -280,6 +280,7 @@ if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElem
       <div class="eyebrow">Documentation</div>
       <h1 class="page">Hunch documentation</h1>
       <p class="lead">A shared record for AI agents: what was decided, what happened, and what still needs doing.</p>
+      <div class="note tip watch"><span class="ic">▶</span><b>Watch:</b> <a class="link" href="https://www.youtube.com/watch?v=m2PM6pV7D9Y" target="_blank" rel="noopener">Hunch Memory in 2 minutes</a> (2:33) · <a class="link" href="https://www.youtube.com/playlist?list=PLIXqtdE0LcNI" target="_blank" rel="noopener">full series</a></div>
       <p>Hunch keeps decisions, rules, action records and commitments with their sources. A new agent can check that record instead of rebuilding the story from scratch. Engineering memory explains the reasons behind code; the served state layer extends the same approach to repository, user, team and organization records. Both ship today.</p>
       <p>The vision is for agents working across different tools to share one current record. Wider organizational impact is still being tested in a pilot. Hunch checks defined rules about records and evidence; it does not make every submitted statement true or guarantee that an agent uses what it receives.</p>
       <nav class="start-paths" aria-label="Choose a documentation path">
@@ -306,6 +307,7 @@ if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElem
 
     <section id="initialize">
       <h2>Initialize a repo<a class="anchor" href="#initialize">#</a></h2>
+      <div class="note tip watch"><span class="ic">▶</span><b>Watch:</b> <a class="link" href="https://www.youtube.com/watch?v=3dGR0y9NQdg" target="_blank" rel="noopener">Ep 1 · Memory in one command</a> (2:09) · <a class="link" href="https://www.youtube.com/playlist?list=PLIXqtdE0LcNI" target="_blank" rel="noopener">full series</a></div>
       <p>Run <code>hunch init</code> in the repo you want a memory for. One command scaffolds everything:</p>
       <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">terminal</span><button class="copy">Copy</button></div><pre><span class="k">hunch</span> init               <span class="c"># scaffold .hunch/, index, install hooks, wire up assistants</span>
 <span class="k">hunch</span> backfill --since 90d <span class="c"># cold start: seed decisions from recent git history</span></pre></div>
@@ -370,6 +372,7 @@ if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElem
 
     <section id="mcp">
       <h2>MCP &amp; assistants<a class="anchor" href="#mcp">#</a></h2>
+      <div class="note tip watch"><span class="ic">▶</span><b>Watch:</b> <a class="link" href="https://www.youtube.com/watch?v=uKhrqoEGvkQ" target="_blank" rel="noopener">Ep 2 · What your agent sees before it edits</a> (2:34) · <a class="link" href="https://www.youtube.com/playlist?list=PLIXqtdE0LcNI" target="_blank" rel="noopener">full series</a></div>
       <p>The Hunch MCP server lets supported clients query the same memory. <code>hunch init</code> writes MCP configuration and guidance for supported assistants. Automatic context delivery and edit blocking depend on the host's lifecycle hooks, settings and trust; an MCP connection alone proves neither.</p>
       <table class="tbl">
         <thead><tr><th>Assistant</th><th>MCP config</th><th>Grounding file</th></tr></thead>
@@ -476,6 +479,7 @@ if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElem
 
     <section id="grounding">
       <h2>Decision-grounding<a class="anchor" href="#grounding">#</a></h2>
+      <div class="note tip watch"><span class="ic">▶</span><b>Watch:</b> <a class="link" href="https://www.youtube.com/watch?v=HpdIFxSieIo" target="_blank" rel="noopener">Ep 6 · Memory that won’t go stale</a> (2:03) · <a class="link" href="https://www.youtube.com/playlist?list=PLIXqtdE0LcNI" target="_blank" rel="noopener">full series</a></div>
       <p>Architectural Conformance keeps the <em>code</em> honest to the graph; decision-grounding keeps your <em>docs</em> honest to it. A decision can be anchored to a <strong>topic</strong> (e.g. <code>auth.session</code>), and a topic always has one live answer — the <strong>current</strong> decision, its <strong>history</strong>, and what was <strong>rejected</strong> along the way.</p>
       <p><strong>Capture with <code>/capture</code>.</strong> It interviews the decision to a resolved state — topic, rationale, rejected alternatives — before anything is written, and the graph refuses to hold two live decisions on one topic. A git merge is the one thing that can create two; <code>hunch reconcile-topics</code> catches it for human resolution.</p>
       <h3>Markdown topic anchors — AGENTS.md as a drift surface</h3>
@@ -506,6 +510,7 @@ if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElem
 
     <section id="mcp-tools">
       <h2>MCP tools<a class="anchor" href="#mcp-tools">#</a></h2>
+      <div class="note tip watch"><span class="ic">▶</span><b>Watch:</b> <a class="link" href="https://www.youtube.com/watch?v=8n71JIqmnwk" target="_blank" rel="noopener">Ep 4 · Stop re-explaining your code</a> (2:21) · <a class="link" href="https://www.youtube.com/playlist?list=PLIXqtdE0LcNI" target="_blank" rel="noopener">full series</a></div>
       <p>The tools your assistant calls under the hood. Read tools answer “why / what-must-not-break / blast radius”; write tools persist new memory.</p>
       <table class="tbl">
         <thead><tr><th>Tool</th><th>What it does</th></tr></thead>
@@ -552,6 +557,7 @@ if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElem
 
     <section id="firmness">
       <h2>Firmness levels<a class="anchor" href="#firmness">#</a></h2>
+      <div class="note tip watch"><span class="ic">▶</span><b>Watch:</b> <a class="link" href="https://www.youtube.com/watch?v=KENYF5WtFj8" target="_blank" rel="noopener">Ep 5 · Rules your agent can’t break</a> (2:06) · <a class="link" href="https://www.youtube.com/playlist?list=PLIXqtdE0LcNI" target="_blank" rel="noopener">full series</a></div>
       <p><code>hunch init</code> installs supported lifecycle hooks and guidance for the assistant. Where the host loads and trusts those hooks, they can deliver relevant memory before work. Firmness controls how Hunch responds; use integration checks to see which capabilities were actually observed in your host.</p>
       <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">terminal</span><button class="copy">Copy</button></div><pre><span class="k">hunch</span> firmness          <span class="c"># print the current level</span>
 <span class="k">hunch</span> firmness strict   <span class="c"># change it (takes effect on the next edit; no restart)</span></pre></div>
@@ -569,6 +575,7 @@ if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElem
 
     <section id="memory-loop">
       <h2>The memory loop — it runs itself<a class="anchor" href="#memory-loop">#</a></h2>
+      <div class="note tip watch"><span class="ic">▶</span><b>Watch:</b> <a class="link" href="https://www.youtube.com/watch?v=76bllCiJrk8" target="_blank" rel="noopener">Ep 3 · Commits become memory</a> (2:53) · <a class="link" href="https://www.youtube.com/playlist?list=PLIXqtdE0LcNI" target="_blank" rel="noopener">full series</a></div>
       <p>Captured memory becomes available as <em>advisory</em> context without routine manual triage. Genuine conflicts and authority decisions can still need review. Blocking power requires human confirmation. Configured hooks and synchronization handle much of the loop; task reports show what was observed:</p>
       <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">terminal</span><button class="copy">Copy</button></div><pre><span class="k">hunch</span> log              <span class="c"># the memory timeline: capture · adopt · supersede · prune · repair</span>
 <span class="k">hunch</span> log --diff &lt;sha&gt;  <span class="c"># what one move changed</span>
@@ -777,6 +784,7 @@ Agent: hunch_record_correction({ rule: "never import lodash; use src/utils",
 
     <section id="team">
       <h2>Working as a team — the Matrix <span class="pill ok">v1.9</span><a class="anchor" href="#team">#</a></h2>
+      <div class="note tip watch"><span class="ic">▶</span><b>Watch:</b> <a class="link" href="https://www.youtube.com/watch?v=Kbgi90tepFg" target="_blank" rel="noopener">Ep 7 · One memory for the whole team</a> (1:58) · <a class="link" href="https://www.youtube.com/playlist?list=PLIXqtdE0LcNI" target="_blank" rel="noopener">full series</a></div>
       <p>Matrix mode gives a project one living engineering-memory spine across teammates, branches, worktrees, agents, and operating systems. The source of truth is a <strong>separate private Git repository you control</strong>; You provide the Git hosting; the committed pointer contains no credentials.</p>
       <p>Create that repository first, grant the team normal Git access, and have one maintainer connect it:</p>
       <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">maintainer</span><button class="copy">Copy</button></div><pre><span class="k">npm</span> i -g @davesheffer/hunch

@@ -1,0 +1,117 @@
+{
+  "id": "dec_0986639692",
+  "title": "Privacy-first embedded video links with click-to-load and localized captions",
+  "topic": null,
+  "status": "accepted",
+  "context": "Hunch Memory video series needed to be more discoverable to new users, but embedding YouTube iframes directly creates privacy and performance costs.",
+  "decision": "Use youtube-nocookie.com with click-to-load pattern: embed thumbnail + play button, load iframe only on user click. Distribute video links across README, homepage, and docs with episode-specific links. Manage captions and ARIA labels through the locale generator for multi-language support.",
+  "consequences": [
+    "No third-party tracking until user explicitly clicks to play",
+    "Reduced initial page load cost and network requests",
+    "Requires ongoing translation maintenance for video captions and ARIA labels",
+    "Adds lightweight client-side JavaScript to swap thumbnail for iframe on click",
+    "Video content is discoverable at multiple entry points (README, homepage, contextual docs sections)"
+  ],
+  "alternatives_rejected": [
+    "Direct iframe embedding: simpler but loads YouTube tracking immediately and requires page reload",
+    "Video links only in docs: less discoverable for new users or those reading README",
+    "English-only captions: excludes non-English users from guided learning",
+    "No click-to-load wrapper: trades privacy for simpler implementation"
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Direct iframe embedding: simpler but loads YouTube tracking immediately and requires page reload",
+      "scope": [
+        "tooling/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Video links only in docs: less discoverable for new users or those reading README",
+      "scope": [
+        "tooling/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "English-only captions: excludes non-English users from guided learning",
+      "scope": [
+        "tooling/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "No click-to-load wrapper: trades privacy for simpler implementation",
+      "scope": [
+        "tooling/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_04c6efb58b"
+  ],
+  "related_files": [
+    "README.md",
+    "tooling/generate-site-locales.mjs"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "f11a55f8",
+  "valid_from": "2026-09-30T08:11:47+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft+summary",
+    "confidence": 0.5,
+    "evidence": [
+      "commit:f11a55f8",
+      "synth:provider=claude-cli",
+      "branch:docs/youtube-links",
+      "README.md",
+      "tooling/generate-site-locales.mjs"
+    ],
+    "last_verified": "2026-09-30T05:13:50.581Z"
+  },
+  "date": "2026-09-30T08:11:47+03:00"
+}
