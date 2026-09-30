@@ -61,6 +61,9 @@ export interface RunBenchmarkOptions {
   oauthTokenFile?: string;
   /** Version 1 behaviour: the child inherits the user's Claude Code configuration. Exclusive with `oauthTokenFile`. */
   inheritUserConfig?: boolean;
+  /** `--exclude-path`: repo-relative POSIX paths removed from every task base, history included (both arms), e.g. a
+   *  project skill committed in the source repo. Checked by `parseExcludedPaths`; default none. */
+  excludePaths?: string[];
   /** Test seam; default `~/.claude/CLAUDE.md`. */
   userInstructionsFile?: string;
   /** Test seam; default `~/.claude` (Claude Code's per-cwd auto memory lives under its `projects/`). */
@@ -105,6 +108,8 @@ interface Manifest {
   oauth_token?: "present" | "absent";
   node_version: string;
   platform: string;
+  /** `--exclude-path` list, sorted; always present (`[]` for none) so a different list is a manifest mismatch. */
+  excluded_paths: string[];
   tasks: Array<{
     id: string;
     starting_commit: string;
@@ -167,6 +172,55 @@ export function parseArms(arms: string[], dietRoot: string | null = null, report
   if (!diet && dietRoot) throw new Stop(1, "--diet-root is only accepted when --arms includes diet-hunch");
   if (diet && !dietRoot && !reportOnly) throw new Stop(1, "--arms includes diet-hunch, which needs --diet-root");
   return arms as BenchmarkArm[];
+}
+
+/** `--exclude-path`: each a non-empty repo-relative POSIX path (printable ASCII only — the tree filter reads ls-tree
+ *  as latin1 — and no leading `/`, drive, backslash, `.`/`..`/empty segment or glob character, so the fast-export
+ *  pathspec and the tree filter agree), not `.hunch/` (always excluded). A trailing `/` is dropped. Returns the
+ *  distinct paths sorted. */
+export function parseExcludedPaths(paths: string[]): string[] {
+  const parsed = paths.map((raw) => {
+    const path = raw.endsWith("/") ? raw.slice(0, -1) : raw;
+    const segments = path.split("/");
+    if (path === "" || /[^\x20-\x7e]/.test(raw) || raw.startsWith("/") || /^[A-Za-z]:/.test(path) || /[\\*?[\]]/.test(path) || path.startsWith(":")
+      || segments.some((segment) => segment === "" || segment === "." || segment === "..")) {
+      throw new Stop(1, `--exclude-path needs a printable-ASCII repo-relative POSIX path without ./.. segments or glob characters; got ${JSON.stringify(raw)}`);
+    }
+    if (path === ".hunch" || path.startsWith(".hunch/")) throw new Stop(1, `--exclude-path ${raw}: .hunch/ is always excluded`);
+    return path;
+  });
+  return [...new Set(parsed)].sort();
+}
+
+/** Project skill roots Claude Code discovers skills under. */
+const SKILL_ROOTS = [".claude/skills", ".agents/skills"];
+
+/** The skill names the excluded `.claude/skills/<name>` / `.agents/skills/<name>` paths remove, sorted. */
+export function excludedSkillNames(excludedPaths: string[]): string[] {
+  return [...new Set(excludedPaths.map((path) => /^\.(?:claude|agents)\/skills\/([^/]+)$/.exec(path)?.[1])
+    .filter((name): name is string => !!name))].sort();
+}
+
+/** The skills in `loaded` (the child's init `skills`) that an excluded skill path names: loading one means the
+ *  exclusion failed, so the run is invalid. */
+export function excludedSkillsLoaded(loaded: string[] | null, excludedPaths: string[]): string[] {
+  const excluded = new Set(excludedSkillNames(excludedPaths));
+  return [...new Set((loaded ?? []).filter((name) => excluded.has(name)))].sort();
+}
+
+/** The `excluded-skills-not-loaded` post check, or null when no excluded path names a skill or is (a prefix of) a
+ *  skill root, so a run without such an exclusion keeps its post checks unchanged. Fails closed: without a skills
+ *  list in init the exclusion cannot be shown to hold. */
+export function excludedSkillsCheck(skills: string[] | null, excludedPaths: string[]): { ok: boolean; detail: string } | null {
+  const skillRootExcluded = excludedPaths.some((path) => SKILL_ROOTS.some((root) => root === path || root.startsWith(`${path}/`)));
+  if (!excludedSkillNames(excludedPaths).length && !skillRootExcluded) return null;
+  const loaded = excludedSkillsLoaded(skills, excludedPaths);
+  return {
+    ok: skills !== null && loaded.length === 0,
+    detail: loaded.length
+      ? `excluded skill(s) loaded: ${loaded.join(", ")}`
+      : `no excluded skill loaded (${skills === null ? "init has no skills list" : `${skills.length} skill(s)`})`,
+  };
 }
 
 /** The Hunch checkouts the confinement check knows about, plus the other deny roots. */
@@ -722,6 +776,7 @@ async function executeRun(ctx: RunContext, task: SuiteTask, rep: number, arm: Be
   try {
     prepared = await prepareArm({
       base: join(ctx.out, "bases", task.id), arm, runDir, env: strippedChildEnv(process.env), npmCi: !ctx.noNpmCi,
+      excludedSkillNames: excludedSkillNames(ctx.manifest.excluded_paths),
       ...(arm !== "no-hunch" ? {
         snapshot: {
           publicDir: join(snapshotDir, "public"),
@@ -792,6 +847,8 @@ async function executeRun(ctx: RunContext, task: SuiteTask, rep: number, arm: Be
           ["hunch-hook-output-zero", agent.metrics.hunch_dynamic_chars.hooks === 0, `${agent.metrics.hunch_dynamic_chars.hooks} hook chars`],
         );
       }
+      const skillsCheck = init ? excludedSkillsCheck(init.skills, ctx.manifest.excluded_paths) : null;
+      if (skillsCheck) post.push(["excluded-skills-not-loaded", skillsCheck.ok, skillsCheck.detail]);
       if (configDir !== null) {
         const auto = init?.memory_paths_auto ?? null;
         post.push(["auto-memory-in-config-dir", auto !== null && isInsidePath(auto, configDir, "resolved"), `auto memory ${auto ?? "missing"}`]);
@@ -811,6 +868,7 @@ async function executeRun(ctx: RunContext, task: SuiteTask, rep: number, arm: Be
         if (!ok) invalid = true;
       }
       isolation.push(`auto-memory-path: ${init?.memory_paths_auto ?? "missing"}`);
+      isolation.push(`loaded-skills: ${init?.skills ? (init.skills.length ? init.skills.join(", ") : "none") : "missing"}`);
       if (!invalid) {
         validator = await runValidator({
           repo: prepared.repo, validatorFile: resolve(dirname(ctx.suitePath), task.validator.file), runDir,
@@ -976,12 +1034,14 @@ export async function runBenchmark(opts: RunBenchmarkOptions): Promise<RunBenchm
   let removeSignalHandlers: (() => void) | null = null;
   try {
     const arms = parseArms(opts.arms, opts.dietRoot ?? null, !!opts.reportOnly);
+    const excludedPaths = parseExcludedPaths(opts.excludePaths ?? []);
     if (!Number.isInteger(opts.runs) || opts.runs < 1) throw new Stop(1, `--runs must be an integer >= 1, got ${opts.runs}`);
     const suitePath = resolve(opts.suite);
     const { selected, suiteHash } = loadSuite(suitePath, opts.tasks);
     if (opts.recount && !opts.reportOnly) throw new Stop(1, "--recount only applies with --report-only");
 
     if (opts.reportOnly) {
+      if (excludedPaths.length) throw new Stop(1, "--exclude-path does not apply with --report-only (the manifest pins the list)");
       if (!existsSync(manifestPath)) throw new Stop(1, `--report-only needs an existing ${manifestPath}`);
       const file = readJson(manifestPath, "manifest") as ManifestFile;
       if (file.manifest?.suite_hash !== suiteHash) {
@@ -1086,11 +1146,20 @@ export async function runBenchmark(opts: RunBenchmarkOptions): Promise<RunBenchm
       userInstructionsSha = sha256(bytes);
     }
 
+    // Checked before the bases: an existing base proof for another exclusion list would otherwise refuse the
+    // rebuild (exit 1) before the manifest comparison below could name the mismatch.
+    if (existsSync(manifestPath)) {
+      const pinned = (readJson(manifestPath, "manifest") as ManifestFile).manifest?.excluded_paths;
+      if (JSON.stringify(pinned) !== JSON.stringify(excludedPaths)) {
+        throw new Stop(2, `manifest mismatch in ${out}: first differing key: excluded_paths (manifest ${JSON.stringify(pinned ?? null)}, `
+          + `this invocation ${JSON.stringify(excludedPaths)}). A different --exclude-path list needs its own --output.`);
+      }
+    }
     const bases = new Map<string, string>();
     const snapshots = new Map<string, MemorySnapshot>();
     for (const task of selected.tasks) {
       try {
-        const base = await prepareTaskBase({ sourceRepo, startingCommit: task.starting_commit, dest: join(out, "bases", task.id) });
+        const base = await prepareTaskBase({ sourceRepo, startingCommit: task.starting_commit, dest: join(out, "bases", task.id), excludedPaths });
         bases.set(task.id, base.head);
         snapshots.set(task.id, buildMemorySnapshot({
           sourceRepo, sourceRef: mainRef, startingCommit: task.starting_commit, privateRepo, privateRef,
@@ -1121,6 +1190,7 @@ export async function runBenchmark(opts: RunBenchmarkOptions): Promise<RunBenchm
       ...(oauthToken !== null ? { user_config: "neutral" as const, oauth_token: "present" as const } : {}),
       node_version: process.version,
       platform: process.platform,
+      excluded_paths: excludedPaths,
       tasks: selected.tasks.map((task) => {
         const snap = snapshots.get(task.id)!;
         return {

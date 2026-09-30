@@ -48,7 +48,7 @@ test("parseTranscript counts distinct calls and only Hunch-injected text", () =>
   assert.deepEqual(metrics.init, {
     model: "claude-opus-5-5[1m]", api_key_source: "none", mcp_servers: ["hunch"], mcp_server_status: { hunch: "connected" },
     tool_names: ["Read", "Grep", "mcp__hunch__hunch_context"],
-    memory_paths_auto: "/home/x/.claude/projects/-repo/memory/MEMORY.md",
+    memory_paths_auto: "/home/x/.claude/projects/-repo/memory/MEMORY.md", skills: null,
   });
   assert.equal(metrics.result, null);
   assert.equal(metrics.usage, null);
@@ -76,6 +76,13 @@ test("parseTranscript maps each MCP server to its init status and skips bare-str
   const none = parseTranscript(line({ type: "system", subtype: "init", model: "m", apiKeySource: "none", tools: [] }));
   assert.deepEqual(none.init?.mcp_servers, []);
   assert.deepEqual(none.init?.mcp_server_status, {});
+});
+
+test("parseTranscript reads the init skills list, keeping only strings, and null when absent", () => {
+  const metrics = parseTranscript(line({ type: "system", subtype: "init", model: "m", apiKeySource: "none", tools: [],
+    skills: ["fable-mode", 7, "review"] }));
+  assert.deepEqual(metrics.init?.skills, ["fable-mode", "review"]);
+  assert.equal(parseTranscript(line({ type: "system", subtype: "init", model: "m", tools: [] })).init?.skills, null);
 });
 
 test("parseTranscript reads the result line and tolerates an empty transcript", () => {

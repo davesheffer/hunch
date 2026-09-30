@@ -129,6 +129,8 @@ export interface TranscriptMetrics {
     tool_names: string[];
     /** Optional; e.g. `memory_paths.auto`, the auto-memory file Claude Code wrote for this cwd. */
     memory_paths_auto: string | null;
+    /** The `skills` the child loaded (project, user and plugin skills by name); null when the event carries none. */
+    skills: string[] | null;
   } | null;
   /** The last result event. */
   result: { subtype: string | null; is_error: boolean | null; num_turns: number | null } | null;

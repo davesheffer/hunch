@@ -180,6 +180,7 @@ export function parseTranscript(text: string): TranscriptMetrics {
         mcp_server_status: serverStatus,
         tool_names: Array.isArray(event.tools) ? event.tools.filter((name): name is string => typeof name === "string") : [],
         memory_paths_auto: memoryPaths ? asString(memoryPaths.auto) : null,
+        skills: Array.isArray(event.skills) ? event.skills.filter((name): name is string => typeof name === "string") : null,
       };
     } else if (event.type === "system" && event.subtype === "hook_response") {
       hookEvents++;

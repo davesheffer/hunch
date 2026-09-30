@@ -20,8 +20,8 @@ process.exit(result.status ?? 1);
 `;
 /** Fixture agent: records its arm (hunch server in the MCP config => current-hunch, diet-hunch when that server
  *  runs from the diet checkout), fixes the file, and prints a stream-json transcript whose init reports every
- *  configured server as connected. */
-const AGENT = `import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
+ *  configured server as connected and, as skills, the repo's .claude/skills dirs plus BENCH_FIXTURE_SKILLS. */
+const AGENT = `import { appendFileSync, existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 readFileSync(0, "utf8");
 // Neutral user config: auto memory under the run's own config dir; the token leaks into the transcript (and, on
@@ -39,8 +39,9 @@ const arm = !servers.includes("hunch") ? "no-hunch" : /[\\\\/]diet[\\\\/]dist[\\
 appendFileSync(process.env.BENCH_FIXTURE_COUNTER, arm + "\\n");
 writeFileSync("src/sum.mjs", "export const sum = (a, b) => a + b;\\n");
 const hunch = arm !== "no-hunch";
+const skills = [...(existsSync(".claude/skills") ? readdirSync(".claude/skills") : []), ...(process.env.BENCH_FIXTURE_SKILLS ?? "").split(",").filter(Boolean)];
 const events = [
-  { type: "system", subtype: "init", model: "fixture-model", apiKeySource: "none",
+  { type: "system", subtype: "init", model: "fixture-model", apiKeySource: "none", skills,
     ...(configDir ? { memory_paths: { auto: configDir + "/projects/repo/memory/MEMORY.md" } } : {}),
     mcp_servers: servers.map((name) => ({ name, status: "connected" })),
     tools: ["Read", "Edit", ...(hunch ? ["mcp__hunch__hunch_context"] : [])] },
@@ -147,6 +148,7 @@ before(() => {
   put(source, "CLAUDE.md", "# Fixture\n\n<!-- HUNCH:START — auto -->\n- dec_aaaaaaaaaa\n<!-- HUNCH:END -->\n");
   put(source, "src/sum.mjs", "export const sum = (a, b) => a - b;\n");
   put(source, "node_modules/tsx/dist/cli.mjs", TSX_STUB);
+  put(source, ".claude/skills/fable-mode/SKILL.md", "---\nname: fable-mode\n---\nA project skill.\n");
   put(source, ".hunch/decisions/dec_aaaaaaaaaa.json", JSON.stringify({ id: "dec_aaaaaaaaaa", created_at: "2025-12-31T00:00:00Z" }) + "\n");
   put(source, ".hunch/decisions/dec_cccccccccc.json", JSON.stringify({ id: "dec_cccccccccc", created_at: "2026-03-01T00:00:00Z" }) + "\n");
   commit(source, "c1", "2026-01-01 00:00:00 +0000");
@@ -195,6 +197,7 @@ test("task benchmark runs, resumes, reruns an interrupted run, rebuilds the repo
   assert.equal(first.exitCode, 0, logs.join("\n"));
   const manifest = JSON.parse(readFileSync(join(out, "manifest.json"), "utf8"));
   assert.equal(manifest.manifest.schema, "hunch.context-efficiency-manifest/1");
+  assert.deepEqual(manifest.manifest.excluded_paths, []);
   assert.equal(manifest.manifest.runner_config.executable, "agent.mjs");
   assert.equal(manifest.manifest.user_instructions_sha256, null);
   assert.equal(manifest.manifest.audited.version, "0.0.0-stub");
@@ -214,6 +217,7 @@ test("task benchmark runs, resumes, reruns an interrupted run, rebuilds the repo
     assert.equal(run.manifest_sha256, manifest.manifest_sha256);
     assert.equal(run.evidence_kind, "fixture");
     assert.equal(run.cost.input_tokens, 115);
+    assert.ok(run.isolation_evidence.includes("loaded-skills: fable-mode"), `${dir}: ${run.isolation_evidence.join(" | ")}`);
     if (run.arm === "current-hunch") {
       assert.deepEqual(run.selected_memory_ids, ["dec_aaaaaaaaaa", "dec_bbbbbbbbbb"]);
       assert.deepEqual(run.delivered_eligible_ids, ["dec_aaaaaaaaaa", "dec_bbbbbbbbbb"]);
@@ -286,6 +290,63 @@ test("task benchmark runs, resumes, reruns an interrupted run, rebuilds the repo
   assert.deepEqual(runDirs(), dirsBefore);
   assert.equal(readLines(counter).length, 5);
   assert.ok(logs.some((line) => line.includes("first differing key: seed")), logs.join("\n"));
+
+  // A different --exclude-path list is a manifest mismatch too, named before any base is touched.
+  const excluded = await runBenchmark({ ...opts, excludePaths: [".claude/skills/fable-mode"] });
+  assert.equal(excluded.exitCode, 2);
+  assert.equal(readLines(counter).length, 5);
+  assert.ok(logs.some((line) => line.includes("first differing key: excluded_paths")), logs.join("\n"));
+});
+
+test("--exclude-path removes a project skill from both arms; a run whose child still loads it is invalid", async () => {
+  const spawnsBefore = readLines(counter).length;
+  const excludePaths = [".claude/skills/fable-mode"];
+  const exOut = join(root, "out-excluded");
+  assert.equal((await runBenchmark({ ...opts, runs: 1, output: exOut, excludePaths: ["../x"] })).exitCode, 1);
+  assert.equal((await runBenchmark({ ...opts, reportOnly: true, excludePaths })).exitCode, 1, "--report-only refuses --exclude-path");
+  assert.ok(logs.some((line) => line.includes("--exclude-path does not apply with --report-only")), logs.join("\n"));
+  assert.equal(existsSync(join(exOut, "manifest.json")), false);
+  assert.equal((await runBenchmark({ ...opts, runs: 1, output: exOut, excludePaths })).exitCode, 0, logs.join("\n"));
+  const manifest = JSON.parse(readFileSync(join(exOut, "manifest.json"), "utf8"));
+  assert.deepEqual(manifest.manifest.excluded_paths, excludePaths);
+  const proof = JSON.parse(readFileSync(join(exOut, "bases", `${TASK}.proof.json`), "utf8"));
+  assert.equal(proof.excluded_history_empty, true);
+  assert.equal(git(join(exOut, "bases", TASK), ["log", "--all", "--oneline", "--", ".claude/skills/fable-mode"]), "");
+  for (const arm of ARMS) {
+    const run = JSON.parse(readFileSync(join(exOut, "runs", TASK, `1-${arm}`, "run.json"), "utf8")) as EfficiencyRun;
+    assert.equal(run.status, "completed", `${arm}: ${run.isolation_evidence.join(" | ")}`);
+    assert.ok(run.isolation_evidence.includes("loaded-skills: none"), run.isolation_evidence.join(" | "));
+    assert.ok(run.isolation_evidence.some((line) => line.startsWith("post excluded-skills-not-loaded: ok")), run.isolation_evidence.join(" | "));
+  }
+
+  // The skill reaches the child some other way: each run is flagged and no longer a clean scored run.
+  const leakOut = join(root, "out-excluded-leak");
+  process.env.BENCH_FIXTURE_SKILLS = "fable-mode";
+  try {
+    assert.equal((await runBenchmark({ ...opts, runs: 1, output: leakOut, excludePaths })).exitCode, 0, logs.join("\n"));
+  } finally {
+    delete process.env.BENCH_FIXTURE_SKILLS;
+  }
+  for (const arm of ARMS) {
+    const run = JSON.parse(readFileSync(join(leakOut, "runs", TASK, `1-${arm}`, "run.json"), "utf8")) as EfficiencyRun;
+    assert.equal(run.status, "invalid_exposure", `${arm}: ${run.isolation_evidence.join(" | ")}`);
+    assert.equal(run.success, false);
+    assert.ok(run.isolation_evidence.includes("post excluded-skills-not-loaded: FAIL (excluded skill(s) loaded: fable-mode)"),
+      run.isolation_evidence.join(" | "));
+  }
+  assert.match(readFileSync(join(leakOut, "report.md"), "utf8"), /invalid exposure/);
+  assert.equal(readLines(counter).length - spawnsBefore, 4);
+
+  // Excluding only the .agents/skills copy leaves the .claude/skills one in the run repo: caught before the agent spawns.
+  const copyOut = join(root, "out-excluded-copy");
+  assert.equal((await runBenchmark({ ...opts, runs: 1, output: copyOut, excludePaths: [".agents/skills/fable-mode"] })).exitCode, 0, logs.join("\n"));
+  for (const arm of ARMS) {
+    const run = JSON.parse(readFileSync(join(copyOut, "runs", TASK, `1-${arm}`, "run.json"), "utf8")) as EfficiencyRun;
+    assert.equal(run.status, "invalid_exposure", `${arm}: ${run.isolation_evidence.join(" | ")}`);
+    assert.ok(run.isolation_evidence.includes("setup excluded-skills-absent: FAIL (SKILL.md naming an excluded skill: .claude/skills/fable-mode/SKILL.md)"),
+      run.isolation_evidence.join(" | "));
+  }
+  assert.equal(readLines(counter).length - spawnsBefore, 4, "no agent spawned for a run that failed the skill check");
 });
 
 test("isOutOfRepoAccess flags deny roots outside the run dir and traversal, in either path style", () => {
