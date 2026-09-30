@@ -38,7 +38,14 @@ removes the arm confound, and judges on steps, tokens and cost first.
 - Repetitions: 4 per task per arm (40 scored runs), up from 2.
 - Same five frozen tasks (`suite.json`), model (`claude-opus-5-5`, CLI default effort), timeout, validators,
   neutral user configuration and confinement rule (with harness fixes `171aa037` and `1b22cedb`, below).
-- Seed: `pilot5-gate-a-v5`. Output: `C:/bench-out/pilot5-gate-a5`, outside the user profile.
+- Platform: the preflight, smoke runs and timed runs run on the maintainer's Mac (macOS, Apple silicon), not the
+  Windows machine that ran versions 1 to 4. Both arms run on the same machine, so the arm comparison is unaffected,
+  but absolute times, tokens and costs are not comparable with version 4's. Precondition 1 alone runs on the
+  Windows machine, because it replays version 4's Windows transcripts and needs win32 path semantics. The Mac is
+  kept idle (no other Claude sessions, builds or syncs) for the whole schedule.
+- Seed: `pilot5-gate-a-v5`. Output: `/Users/Shared/bench-out/pilot5-gate-a5`, outside `$HOME` and with no
+  `CLAUDE.md` or `.claude/` in any ancestor directory (checked 2026-09-30). At least 15 GiB must be free on the
+  output volume before the first timed run, since run repos stay on disk.
 - Build: `@davesheffer/hunch@1.43.0` (tag `v1.43.0`, commit `f72927a99646c029f4df4cabc78ea713ca63bb41`, published
   2026-09-30). Harness: `feat/task-benchmark` at `<SHA at or after
   1b22cedb>`. Claude Code: `<claude --version at preflight>`. All three are pinned in the manifest; a mismatch at any
@@ -81,6 +88,7 @@ on that task.
 3. Verify-hint smoke check: in one `current-hunch` preflight session on a suite task, the printed `task verify` hint
    names targeted test files, not the whole suite.
 4. One untimed smoke run per arm, end to end, including validator and `repo-changes.patch`. It does not count.
+   Its on-disk size times 44 must fit in the free space on the output volume.
 5. Eligibility lists: for each task, the eligible record ids are frozen and hashed into the manifest before the
    schedule starts. Records the agent uses in paraphrase, without their id, are reported as unmeasured.
 6. The analysis plan (below) is hashed before the first timed run.
