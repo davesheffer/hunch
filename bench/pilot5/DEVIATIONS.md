@@ -188,3 +188,30 @@ independently; the live Gate A version 5 run is the test. All selection rules ar
 - Also observed and fine: `fable-mode` absent from both run repositories and not among the 18 loaded skills; the
   repository patch was written; the agent ran the task's covering tests through the launcher.
 - A second smoke run, with harness `2c189270` and the clean clone, must pass before any timed run.
+
+## (p) Gate A version 5 smoke run 2: the `no-hunch` arm started from broken code in every version; smoke 2 is void
+
+- Smoke run 2 (2026-09-30, harness `2c189270`, clean source clone, seed `pilot5-gate-a-v5-smoke2`, task
+  `continuation-375`): `current-hunch` succeeded in 225 s; `no-hunch` timed out at 1874 s. No isolation breach. It does
+  not count toward any result.
+- (i) Cause: since harness `51b15beb` (2026-09-27), the `no-hunch` setup cut every `<!-- HUNCH:START -->` to
+  `<!-- HUNCH:END -->` span from every tracked text file, code included. Four source files hold these markers as
+  string constants (`src/cli/index.ts`, `src/constitution/adapters.ts`, `src/extractors/git.ts`,
+  `src/integrations/claudemd.ts`), plus five test files, at all five starting commits. The cut deleted real lines, so
+  `npm run typecheck` failed before the agent did anything. The `no-hunch` agent spent its time chasing that error.
+  Every `no-hunch` run in versions 1 to 4 started from this broken tree, a bias in Hunch's favour, so those results
+  are confounded. Change, before any timed run: harness `4d3590bb` strips Hunch blocks from Markdown files
+  (`.md`, `.mdc`) only, the only files a Hunch block writer targets. A regression test fails on the old code and
+  passes on the fix. Critic: SHIP. Known limits, accepted: `.windsurf/rules/hunch.md` is stripped but kept and
+  `.windsurf/hooks.json` is untouched (Claude Code loads neither); a Markdown file showing the markers inside a
+  fenced example would be cut (none exists at the task commits).
+- (ii) With the fix, the two arms were compared test file by test file at all four distinct starting commits
+  (`3550f376`, `43b9339b`, `7742a3b1`, `0cdb20f4`): a clone per commit, as-is against the `no-hunch` setup (Markdown
+  strip plus `.hunch/` removed), `npm ci`, then every test file that reads the repository root and mentions `.hunch`,
+  `CLAUDE.md`, `AGENTS.md` or `HunchStore` (54 to 64 files per commit), with each commit's own runner. Exactly two
+  files failed only in `no-hunch`, identically at all four commits: `test/grounding-freshness.test.ts` (checks that
+  the committed `CLAUDE.md` block and its record counts match the store) and `test/public-constraint-scope.test.ts`
+  (reads `.hunch/constraints/con_8460b6770f.json`). Other differences were one-off flakes in the as-is arm. The full
+  suite has pre-existing failures on this Mac in both arms. Change: both files are passed to `--exclude-path` and
+  removed from both arms; no task's validator uses them.
+- A third smoke run, with harness `4d3590bb` and the new exclude list, must pass before any timed run.

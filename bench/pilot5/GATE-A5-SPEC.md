@@ -39,6 +39,11 @@ removes the arm confound, and judges on steps, tokens and cost first.
   both. The schedule therefore passes `--exclude-path .claude/skills/fable-mode --exclude-path
   .agents/skills/fable-mode`, which removes both paths from every run repository, history included
   (`DEVIATIONS.md` (n)).
+- Two self-referential test files are removed from both arms: `test/grounding-freshness.test.ts` and
+  `test/public-constraint-scope.test.ts`. They read the repository's own `.hunch/` store and the Hunch block in
+  `CLAUDE.md`, which the `no-hunch` arm deletes, so they fail only there, at every starting commit. The schedule adds
+  `--exclude-path test/grounding-freshness.test.ts --exclude-path test/public-constraint-scope.test.ts`. No task's
+  validator uses them (`DEVIATIONS.md` (p)).
 - Repetitions: 4 per task per arm (40 scored runs), up from 2.
 - Same five frozen tasks (`suite.json`), model (`claude-opus-5-5`, CLI default effort), timeout, validators,
   neutral user configuration and confinement rule (with harness fixes `171aa037` and `1b22cedb`, below).
@@ -54,7 +59,7 @@ removes the arm confound, and judges on steps, tokens and cost first.
   `origin/main` `f72927a9` with no hooks installed. No session works in it during the schedule, so the harness's
   source-repo check (HEAD and `git status` unchanged) measures only the runs (`DEVIATIONS.md` (o)).
 - Build: `@davesheffer/hunch@1.43.0` (tag `v1.43.0`, commit `f72927a99646c029f4df4cabc78ea713ca63bb41`, published
-  2026-09-30). Harness: `feat/task-benchmark` at `2c189270` (`DEVIATIONS.md` (o)). Claude Code: `<claude --version at preflight>`. All three are pinned in the manifest; a mismatch at any
+  2026-09-30). Harness: `feat/task-benchmark` at `4d3590bb` (`DEVIATIONS.md` (o), (p)). Claude Code: `<claude --version at preflight>`. All three are pinned in the manifest; a mismatch at any
   run stops the schedule.
 
 ## Offline evidence before the run (2026-09-30)
@@ -100,7 +105,8 @@ on that task.
    Its on-disk size times 44 must fit in the free space on the output volume.
 5. Eligibility lists: for each task, the eligible record ids are frozen and hashed into the manifest before the
    schedule starts. Records the agent uses in paraphrase, without their id, are reported as unmeasured.
-6. The analysis plan (below) is hashed before the first timed run.
+6. The analysis plan (below) is hashed before the first timed run: `GATE-A5-ANALYSIS-PLAN.md` sha256
+   `e1d12ae5b5996d794088c062243af9aafe7755b97137563891af92119c902659` (2026-09-30).
 
 ## Criteria (pre-registered)
 
@@ -145,5 +151,6 @@ Honesty rule: a win is set up here, not promised. The report states whatever the
 | 7% delivery precision | version 4 report | Task-scored selection, 22% in the offline replay (see `DEVIATIONS.md` (l)). |
 | Two repetitions: 6.9x spread in one cell | version 4 Limitations | 4 repetitions per cell. |
 | Version drift between runs (Claude Code 2.1.280 to 2.1.284) | (h) | Build, harness and Claude Code versions pinned in the manifest; a mismatch stops the schedule. |
+| The `no-hunch` setup cut real code lines holding the `HUNCH:START`/`END` markers, so that arm started from a broken build in versions 1 to 4 | `DEVIATIONS.md` (p) | Harness `4d3590bb` strips Hunch blocks from Markdown only; two self-referential tests are excluded from both arms. |
 | Analysis plan written mid-run | `GATE-A4-ANALYSIS-PLAN.md` | Criteria above and the analysis plan are hashed before the first timed run. |
 | Cache-write price assumed | version 4 Limitations | Same assumption, stated; a 1-hour-rate sensitivity row is reported. |
