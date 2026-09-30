@@ -5,7 +5,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { prepareArm, prepareTaskBase, proveExposure, repoStateFingerprint } from "../src/benchmark/armIsolation.js";
+import { excludedSkillFiles, prepareArm, prepareTaskBase, proveExposure, repoStateFingerprint } from "../src/benchmark/armIsolation.js";
 import { buildMemorySnapshot, hashTree, type MemorySnapshot } from "../src/benchmark/memorySnapshot.js";
 
 const CUTOFF = "2026-01-15T00:00:00Z";
@@ -172,6 +172,56 @@ test("prepareTaskBase rewrites the starting commit without .hunch history and re
   assert.equal(older.head, built.head, "same content and dates rewrite to the same head");
 });
 
+test("prepareTaskBase drops an excluded path from the tree and the whole history, and never reuses a /1 or other-exclusion proof", async () => {
+  const repo = join(root, "source-excluded");
+  mkdirSync(repo);
+  git(repo, ["init", "-q", "-b", "main"]);
+  put(repo, "src/a.ts", "export const a = 1;\n");
+  put(repo, ".claude/skills/fable-mode/SKILL.md", "---\nname: fable-mode\n---\nv1\n");
+  put(repo, ".claude/skills/keep/SKILL.md", "---\nname: keep\n---\n");
+  put(repo, ".hunch/team.json", "{}\n");
+  const e1 = commit(repo, "e1", "2026-01-01 00:00:00 +0000");
+  put(repo, ".claude/skills/fable-mode/SKILL.md", "---\nname: fable-mode\n---\nv2\n");
+  put(repo, "src/a.ts", "export const a = 2;\n");
+  const e2 = commit(repo, "e2", "2026-01-02 00:00:00 +0000");
+  assert.notEqual(git(repo, ["log", "--all", "--oneline", "--", ".claude/skills/fable-mode"]), "", "fixture: the skill is in two commits");
+
+  const excludedPaths = [".claude/skills/fable-mode"];
+  const dest = join(root, "bases", "task-excluded");
+  const built = await prepareTaskBase({ sourceRepo: repo, startingCommit: e2, dest, excludedPaths });
+  assert.equal(built.proof.tree_equal, true);
+  assert.equal(built.proof.hunch_history_empty, true);
+  assert.equal(built.proof.excluded_history_empty, true);
+  assert.deepEqual(built.proof.excluded_paths, excludedPaths);
+  assert.equal(existsSync(join(dest, ".claude", "skills", "fable-mode")), false);
+  assert.equal(readFileSync(join(dest, ".claude", "skills", "keep", "SKILL.md"), "utf8"), "---\nname: keep\n---\n");
+  assert.equal(git(dest, ["log", "--all", "--oneline", "--", ".claude/skills/fable-mode"]), "");
+  assert.equal(git(dest, ["rev-list", "--count", "HEAD"]), "2");
+  const proofPath = join(root, "bases", "task-excluded.proof.json");
+  const proof = JSON.parse(readFileSync(proofPath, "utf8"));
+  assert.equal(proof.schema, "hunch.benchmark-task-base/2");
+  assert.deepEqual(proof.excluded_paths, excludedPaths);
+  assert.equal(proof.excluded_history_empty, true);
+  assert.deepEqual(await prepareTaskBase({ sourceRepo: repo, startingCommit: e2, dest, excludedPaths }), built, "a matching proof is reused");
+
+  // A different exclusion list, or a proof written under /1, is not reused: dest exists, so the rebuild is refused.
+  await assert.rejects(prepareTaskBase({ sourceRepo: repo, startingCommit: e2, dest }), /refusing to rebuild/);
+  await assert.rejects(prepareTaskBase({ sourceRepo: repo, startingCommit: e2, dest, excludedPaths: [".claude/skills/keep"] }), /refusing to rebuild/);
+  writeFileSync(proofPath, JSON.stringify({ ...proof, schema: "hunch.benchmark-task-base/1" }, null, 2) + "\n");
+  await assert.rejects(prepareTaskBase({ sourceRepo: repo, startingCommit: e2, dest, excludedPaths }), /refusing to rebuild/);
+  const legacy = { ...proof, schema: "hunch.benchmark-task-base/1" };
+  delete legacy.excluded_paths;
+  delete legacy.excluded_history_empty;
+  writeFileSync(proofPath, JSON.stringify(legacy, null, 2) + "\n");
+  await assert.rejects(prepareTaskBase({ sourceRepo: repo, startingCommit: e2, dest }), /refusing to rebuild/);
+
+  // Without exclusions the skill stays, and the same starting commit (older one too) rebuilds cleanly.
+  const plain = await prepareTaskBase({ sourceRepo: repo, startingCommit: e1, dest: join(root, "bases", "task-excluded-plain") });
+  assert.equal(plain.proof.excluded_history_empty, true);
+  assert.deepEqual(plain.proof.excluded_paths, []);
+  assert.equal(existsSync(join(root, "bases", "task-excluded-plain", ".claude", "skills", "fable-mode", "SKILL.md")), true);
+});
+
 test("buildMemorySnapshot freezes cutoff-bounded public and private memory with a stable hash", () => {
   const opts = { sourceRepo: source, sourceRef: "main", startingCommit: commits.c3!, privateRepo: overlay, cutoffIso: CUTOFF };
   const first = buildMemorySnapshot({ ...opts, dest: join(root, "snapshots", "one") });
@@ -234,6 +284,36 @@ test("prepareArm no-hunch strips markers and generated commands and proves expos
   assert.deepEqual(prepared.env, {});
   assert.equal(prepared.static_hunch_chars.grounding_claude_md, 0);
   assert.equal(prepared.static_hunch_chars.grounding_agents_md, 0);
+});
+
+test("prepareArm fails exposure before any spawn when a SKILL.md still names an excluded skill anywhere in the run repo", async () => {
+  const repo = join(root, "source-skill-copies");
+  mkdirSync(repo);
+  git(repo, ["init", "-q", "-b", "main"]);
+  put(repo, "src/a.ts", "export const a = 1;\n");
+  put(repo, ".agents/skills/fable-mode/SKILL.md", "---\nname: fable-mode\n---\n");
+  put(repo, "docs/renamed/SKILL.md", "---\r\ndescription: d\r\nname: \"fable-mode\"\r\n---\r\nbody\r\n");
+  put(repo, ".claude/skills/keep/SKILL.md", "---\nname: keep\n---\nmentions fable-mode in the body only\n");
+  put(repo, "node_modules/pkg/fable-mode/SKILL.md", "---\nname: fable-mode\n---\n");
+  const head = commit(repo, "s1", "2026-01-01 00:00:00 +0000");
+  assert.deepEqual(excludedSkillFiles(repo, ["fable-mode"]), [".agents/skills/fable-mode/SKILL.md", "docs/renamed/SKILL.md"]);
+  assert.deepEqual(excludedSkillFiles(repo, []), []);
+
+  // Only .claude/skills/fable-mode was excluded: the .agents copy and the renamed one survive into the run repo.
+  const base = await prepareTaskBase({ sourceRepo: repo, startingCommit: head, dest: join(root, "bases", "task-skill-copies"),
+    excludedPaths: [".claude/skills/fable-mode"] });
+  const leaked = await prepareArm({ base: base.base, arm: "no-hunch", runDir: join(root, "runs", "skill-copies"), env: childEnv(),
+    npmCi: false, excludedSkillNames: ["fable-mode"] });
+  assert.equal(leaked.exposure.ok, false);
+  assert.deepEqual(leaked.exposure.checks.find((c) => c.id === "excluded-skills-absent"), {
+    id: "excluded-skills-absent", ok: false,
+    detail: "SKILL.md naming an excluded skill: .agents/skills/fable-mode/SKILL.md, docs/renamed/SKILL.md",
+  });
+  const clean = await prepareArm({ base: base.base, arm: "no-hunch", runDir: join(root, "runs", "skill-copies-other"), env: childEnv(),
+    npmCi: false, excludedSkillNames: ["other"] });
+  assert.deepEqual(clean.exposure.checks.find((c) => c.id === "excluded-skills-absent"), { id: "excluded-skills-absent", ok: true, detail: "no SKILL.md named other" });
+  const none = await prepareArm({ base: base.base, arm: "no-hunch", runDir: join(root, "runs", "skill-copies-none"), env: childEnv(), npmCi: false });
+  assert.equal(none.exposure.checks.some((c) => c.id === "excluded-skills-absent"), false, "no exclusion, no check");
 });
 
 test("agent-surfaces-clean fails on a leftover hunch-matching file under an agent surface dir", () => {

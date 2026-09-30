@@ -1,6 +1,40 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { armConfinement, isOutOfRepoAccess, parseArms, type ConfinementRoots } from "../src/benchmark/orchestrate.js";
+import {
+  armConfinement, excludedSkillNames, excludedSkillsCheck, excludedSkillsLoaded, isOutOfRepoAccess, parseArms, parseExcludedPaths,
+  type ConfinementRoots,
+} from "../src/benchmark/orchestrate.js";
+
+test("parseExcludedPaths accepts repo-relative POSIX paths and refuses absolute, traversal, empty and .hunch paths", () => {
+  assert.deepEqual(parseExcludedPaths([]), []);
+  assert.deepEqual(parseExcludedPaths([".claude/skills/fable-mode/", "docs", "docs"]), [".claude/skills/fable-mode", "docs"]);
+  for (const bad of ["../x", "a/../b", "/abs", "", "./x", "a//b", "C:/x", "a\\b", "*.md", ".hunch", ".hunch/x", "docs/caf\u00e9", "a\tb", "\u05e9"]) {
+    assert.throws(() => parseExcludedPaths([bad]), /--exclude-path/, JSON.stringify(bad));
+  }
+});
+
+test("excludedSkillsLoaded flags a loaded skill named by an excluded .claude/skills or .agents/skills <name> path only", () => {
+  const excluded = [".claude/skills/fable-mode", "docs/fable-mode"];
+  assert.deepEqual(excludedSkillsLoaded(["review", "fable-mode"], excluded), ["fable-mode"]);
+  assert.deepEqual(excludedSkillsLoaded(["review"], excluded), []);
+  assert.deepEqual(excludedSkillsLoaded(null, excluded), []);
+  assert.deepEqual(excludedSkillsLoaded(["fable-mode"], ["docs/fable-mode", ".claude/skills"]), [], "only a direct skill dir names a skill");
+  assert.deepEqual(excludedSkillsLoaded(["x", "y"], [".agents/skills/x"]), ["x"], ".agents/skills is a skill root too");
+  assert.deepEqual(excludedSkillNames([".agents/skills/x", ".claude/skills/x", ".claude/skills/y/SKILL.md", "docs"]), ["x"]);
+});
+
+test("excludedSkillsCheck: none without a skill exclusion; fails on a loaded excluded skill or a missing skills list", () => {
+  assert.equal(excludedSkillsCheck(null, []), null);
+  assert.equal(excludedSkillsCheck(null, ["docs", ".claude/commands"]), null);
+  assert.deepEqual(excludedSkillsCheck(["review"], [".agents/skills/x"]), { ok: true, detail: "no excluded skill loaded (1 skill(s))" });
+  assert.deepEqual(excludedSkillsCheck(["x"], [".agents/skills/x"]), { ok: false, detail: "excluded skill(s) loaded: x" });
+  assert.deepEqual(excludedSkillsCheck(null, [".claude/skills/x"]), { ok: false, detail: "no excluded skill loaded (init has no skills list)" });
+  // A skill root or a prefix of one names no skill, but still needs the init skills list.
+  for (const root of [".claude", ".claude/skills", ".agents", ".agents/skills"]) {
+    assert.equal(excludedSkillsCheck(null, [root])?.ok, false, root);
+    assert.equal(excludedSkillsCheck([], [root])?.ok, true, root);
+  }
+});
 
 test("parseArms accepts two or three distinct arms and refuses duplicates, unknown arms and other counts", () => {
   assert.deepEqual(parseArms(["no-hunch", "current-hunch"]), ["no-hunch", "current-hunch"]);

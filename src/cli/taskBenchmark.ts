@@ -24,9 +24,11 @@ interface TaskBenchmarkFlags {
   allowDirtyController?: boolean;
   oauthTokenFile?: string;
   inheritUserConfig?: boolean;
+  excludePath: string[];
 }
 
 const list = (value: string): string[] => value.split(",").map((item) => item.trim()).filter(Boolean);
+const collect = (value: string, previous: string[]): string[] => [...previous, value];
 
 export function registerTaskBenchmarkCommand(task: Command): void {
   task.command("benchmark")
@@ -51,6 +53,8 @@ export function registerTaskBenchmarkCommand(task: Command): void {
     .option("--oauth-token-file <path>", "subscription token file from `claude setup-token`, outside every repository: each run gets its own empty "
       + "Claude Code config dir; required for the claude provider unless --inherit-user-config")
     .option("--inherit-user-config", "let the child inherit the user's Claude Code configuration (version 1 behaviour)")
+    .option("--exclude-path <path>", "repo-relative POSIX path removed from every run repo in both arms, git history included "
+      + "(e.g. a project skill: .claude/skills/<name>); repeatable", collect, [] as string[])
     .option("--no-npm-ci", "skip npm ci in each run repo (fixture provider only)")
     .option("--allow-dirty-controller", "allow uncommitted changes in the controller checkout (fixture provider only)")
     .action(async (flags: TaskBenchmarkFlags, cmd: Command) => {
@@ -77,6 +81,7 @@ export function registerTaskBenchmarkCommand(task: Command): void {
         allowDirtyController: !!flags.allowDirtyController,
         oauthTokenFile: flags.oauthTokenFile,
         inheritUserConfig: !!flags.inheritUserConfig,
+        excludePaths: flags.excludePath,
       });
       process.exitCode = result.exitCode;
     });

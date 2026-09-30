@@ -32,6 +32,10 @@ const RM_OPTIONS = { recursive: true, force: true, maxRetries: 10, retryDelay: 1
 export interface TaskBaseProof {
   tree_equal: boolean;
   hunch_history_empty: boolean;
+  /** True when `git log --all` of the rewritten base is empty for every excluded path (vacuously true for none). */
+  excluded_history_empty: boolean;
+  /** The `--exclude-path` list the base was rebuilt without, sorted; `[]` when none. */
+  excluded_paths: string[];
   source_tree_sha256: string;
 }
 
@@ -43,12 +47,15 @@ export interface TaskBase {
 
 /** `<dest>/../<basename>.proof.json`: the map from starting commit to rewritten head. */
 interface TaskBaseProofFile extends TaskBaseProof {
-  schema: "hunch.benchmark-task-base/1";
+  schema: typeof TASK_BASE_SCHEMA;
   starting_commit: string;
   head: string;
 }
 
 type ExposureCheck = ExposureProof["checks"][number];
+
+/** /2 added `excluded_paths` + `excluded_history_empty`; a /1 proof is never reused. */
+const TASK_BASE_SCHEMA = "hunch.benchmark-task-base/2";
 
 function sha256(data: string | Buffer): string {
   return createHash("sha256").update(data).digest("hex");
@@ -56,6 +63,11 @@ function sha256(data: string | Buffer): string {
 
 function isHunchPath(path: string): boolean {
   return path === ".hunch" || path.startsWith(".hunch/");
+}
+
+/** True when `path` is one of `excluded` (repo-relative POSIX) or lies under one. */
+function isExcludedPath(path: string, excluded: string[]): boolean {
+  return excluded.some((ex) => path === ex || path.startsWith(`${ex}/`));
 }
 
 /** `git ls-tree -r -z` entries of `rev`, as byte-preserving latin1 strings. */
@@ -79,13 +91,13 @@ function waitForExit(child: ChildProcess): Promise<number | null> {
   });
 }
 
-/** Stream `git fast-export` of the scratch repo (minus `.hunch/`) into
+/** Stream `git fast-export` of the scratch repo (minus `.hunch/` and every excluded path) into
  *  `git fast-import` of dest: two processes joined by a pipe, no shell. */
-async function pipeFastExport(scratch: string, dest: string): Promise<void> {
+async function pipeFastExport(scratch: string, dest: string, excludedPaths: string[]): Promise<void> {
   const env = benchmarkChildEnv();
   const exporter = spawn("git", [
     ...BENCHMARK_GIT_CONFIG, "-C", scratch, "fast-export", "--signed-tags=strip", "--tag-of-filtered-object=drop",
-    "refs/heads/start", "--", ".", ":(exclude).hunch",
+    "refs/heads/start", "--", ".", ":(exclude).hunch", ...excludedPaths.map((path) => `:(exclude)${path}`),
   ], { env, stdio: ["ignore", "pipe", "pipe"], shell: false, windowsHide: true });
   const importer = spawn("git", [...BENCHMARK_GIT_CONFIG, "-C", dest, "fast-import", "--quiet"], {
     env, stdio: ["pipe", "ignore", "pipe"], shell: false, windowsHide: true,
@@ -105,7 +117,7 @@ async function pipeFastExport(scratch: string, dest: string): Promise<void> {
   }
 }
 
-function reuseTaskBase(dest: string, proofPath: string, startingCommit: string): TaskBase | null {
+function reuseTaskBase(dest: string, proofPath: string, startingCommit: string, excludedPaths: string[]): TaskBase | null {
   if (!existsSync(proofPath) || !existsSync(dest)) return null;
   let record: Partial<TaskBaseProofFile>;
   try {
@@ -113,14 +125,19 @@ function reuseTaskBase(dest: string, proofPath: string, startingCommit: string):
   } catch {
     return null;
   }
-  if (record.tree_equal !== true || record.hunch_history_empty !== true || record.starting_commit !== startingCommit
+  if (record.schema !== TASK_BASE_SCHEMA || record.tree_equal !== true || record.hunch_history_empty !== true
+    || record.excluded_history_empty !== true || record.starting_commit !== startingCommit
+    || JSON.stringify(record.excluded_paths) !== JSON.stringify(excludedPaths)
     || typeof record.head !== "string" || typeof record.source_tree_sha256 !== "string") return null;
   const head = benchmarkGit(["-C", dest, "rev-parse", "HEAD"], { allowFailure: true });
   if (head.status !== 0 || head.stdout.toString("utf8").trim() !== record.head) return null;
   return {
     base: dest,
     head: record.head,
-    proof: { tree_equal: true, hunch_history_empty: true, source_tree_sha256: record.source_tree_sha256 },
+    proof: {
+      tree_equal: true, hunch_history_empty: true, excluded_history_empty: true, excluded_paths: [...excludedPaths],
+      source_tree_sha256: record.source_tree_sha256,
+    },
   };
 }
 
@@ -128,16 +145,21 @@ function reuseTaskBase(dest: string, proofPath: string, startingCommit: string):
  * Rebuild `startingCommit` into `dest` without `.hunch/` anywhere in its history
  * (a worktree of the source would expose future commits through `git log --all`,
  * and the starting commit's own `.hunch/` holds records written after the issue).
- * Proven by an equal tree listing (minus `.hunch/`) and an empty `.hunch` history;
- * the proof is written beside dest and a passing proof is reused on re-call.
- * Throws when the proof fails.
+ * `excludedPaths` (repo-relative POSIX, validated by the caller) are dropped from the
+ * history the same way, e.g. a project skill that must never load in a run.
+ * Proven by an equal tree listing (minus `.hunch/` and the excluded paths) and an empty
+ * history for `.hunch` and each excluded path; the proof is written beside dest and a
+ * passing proof for the same excluded paths is reused on re-call. Throws when the proof fails.
  */
-export async function prepareTaskBase(opts: { sourceRepo: string; startingCommit: string; dest: string }): Promise<TaskBase> {
+export async function prepareTaskBase(opts: {
+  sourceRepo: string; startingCommit: string; dest: string; excludedPaths?: string[];
+}): Promise<TaskBase> {
   const dest = resolve(opts.dest);
   const sourceRepo = resolve(opts.sourceRepo);
+  const excludedPaths = [...new Set(opts.excludedPaths ?? [])].sort();
   const proofPath = join(dirname(dest), `${basename(dest)}.proof.json`);
   const startingCommit = benchmarkGitText(["-C", sourceRepo, "rev-parse", "--verify", `${opts.startingCommit}^{commit}`]);
-  const reused = reuseTaskBase(dest, proofPath, startingCommit);
+  const reused = reuseTaskBase(dest, proofPath, startingCommit, excludedPaths);
   if (reused) return reused;
   if (existsSync(dest)) throw new Error(`refusing to rebuild the task base into existing ${dest} without a passing proof; remove it first`);
 
@@ -147,29 +169,34 @@ export async function prepareTaskBase(opts: { sourceRepo: string; startingCommit
     benchmarkGit(["init", "-q", "--bare", scratch]);
     benchmarkGit(["-C", scratch, "fetch", "-q", "--no-tags", sourceRepo, `${startingCommit}:refs/heads/start`]);
     benchmarkGit(["init", "-q", dest]);
-    await pipeFastExport(scratch, dest);
+    await pipeFastExport(scratch, dest, excludedPaths);
     benchmarkGit(["-C", dest, "checkout", "-q", "start"]);
   } finally {
     rmSync(scratch, RM_OPTIONS);
   }
 
-  const source_tree_sha256 = listingHash(treeEntries(sourceRepo, startingCommit).filter((e) => !isHunchPath(entryPath(e))));
+  const source_tree_sha256 = listingHash(treeEntries(sourceRepo, startingCommit)
+    .filter((e) => !isHunchPath(entryPath(e)) && !isExcludedPath(entryPath(e), excludedPaths)));
   const head = benchmarkGitText(["-C", dest, "rev-parse", "HEAD"]);
   const tree_equal = listingHash(treeEntries(dest, "HEAD")) === source_tree_sha256;
   const hunch_history_empty = benchmarkGitText(["-C", dest, "log", "--all", "--oneline", "--", ".hunch"]) === "";
+  const excluded_history_empty = excludedPaths.every((path) => benchmarkGitText(["-C", dest, "log", "--all", "--oneline", "--", path]) === "");
   const record: TaskBaseProofFile = {
-    schema: "hunch.benchmark-task-base/1",
+    schema: TASK_BASE_SCHEMA,
     starting_commit: startingCommit,
     head,
     tree_equal,
     hunch_history_empty,
+    excluded_history_empty,
+    excluded_paths: excludedPaths,
     source_tree_sha256,
   };
   writeFileAtomic(proofPath, JSON.stringify(record, null, 2) + "\n");
-  if (!tree_equal || !hunch_history_empty) {
-    throw new Error(`task base proof failed for ${startingCommit}: tree_equal=${tree_equal} hunch_history_empty=${hunch_history_empty} (see ${proofPath})`);
+  if (!tree_equal || !hunch_history_empty || !excluded_history_empty) {
+    throw new Error(`task base proof failed for ${startingCommit}: tree_equal=${tree_equal} hunch_history_empty=${hunch_history_empty} `
+      + `excluded_history_empty=${excluded_history_empty} (see ${proofPath})`);
   }
-  return { base: dest, head, proof: { tree_equal, hunch_history_empty, source_tree_sha256 } };
+  return { base: dest, head, proof: { tree_equal, hunch_history_empty, excluded_history_empty, excluded_paths: excludedPaths, source_tree_sha256 } };
 }
 
 /** Trailing newline run (`\n` or `\r\n` units) of `s`. */
@@ -342,6 +369,63 @@ interface AuditedScaffold {
   writeSlashCommands?: (root: string) => unknown;
 }
 
+/** Directories the excluded-skill scan skips: git internals and installed dependencies (neither is a skill root). */
+const SKILL_SCAN_SKIP = new Set([".git", "node_modules"]);
+
+/** The frontmatter `name:` of a SKILL.md (quotes stripped), or null. */
+function skillFrontmatterName(text: string): string | null {
+  const frontmatter = /^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/.exec(text.replace(/^﻿/, ""))?.[1];
+  const name = frontmatter === undefined ? undefined : /^name:[ \t]*(.*?)[ \t]*$/m.exec(frontmatter)?.[1];
+  return name ? name.replace(/^(["'])(.*)\1$/, "$2") : null;
+}
+
+/** Whether the SKILL.md at `file` (in directory `dir`) names one of `wanted` by directory or frontmatter `name:`. */
+function namesExcludedSkill(file: string, dir: string, wanted: Set<string>): boolean {
+  if (wanted.has(basename(dir))) return true;
+  try {
+    const named = skillFrontmatterName(readFileSync(file, "utf8"));
+    return named !== null && wanted.has(named);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Repo-relative `SKILL.md` files anywhere in `repo`'s working tree (tracked or not; `.git/` and `node_modules/`
+ * skipped) whose directory name or frontmatter `name:` is one of `names`, sorted: a copy of an excluded skill the
+ * path exclusion missed (another skill root, a renamed directory). A symlinked directory is checked for a direct
+ * SKILL.md only, never walked, so a link loop cannot hang the scan.
+ */
+export function excludedSkillFiles(repo: string, names: string[]): string[] {
+  const wanted = new Set(names);
+  const found: string[] = [];
+  const isSkillFile = (name: string) => name.toLowerCase() === "skill.md";
+  const walk = (dir: string, rel: string): void => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const path = join(dir, entry.name);
+      const entryRel = rel ? `${rel}/${entry.name}` : entry.name;
+      let isDir = entry.isDirectory();
+      let isFile = entry.isFile();
+      if (entry.isSymbolicLink()) {
+        try {
+          const target = statSync(path);
+          isFile = target.isFile();
+          if (target.isDirectory()) {
+            const linked = readdirSync(path).find(isSkillFile);
+            if (linked && namesExcludedSkill(join(path, linked), path, wanted)) found.push(`${entryRel}/${linked}`);
+          }
+        } catch { /* dangling link */ }
+        isDir = false;
+      }
+      if (isDir) {
+        if (!SKILL_SCAN_SKIP.has(entry.name)) walk(path, entryRel);
+      } else if (isFile && isSkillFile(entry.name) && namesExcludedSkill(path, dir, wanted)) found.push(entryRel);
+    }
+  };
+  if (wanted.size) walk(repo, "");
+  return found.sort();
+}
+
 export interface PrepareArmOptions {
   base: string;
   arm: BenchmarkArm;
@@ -355,6 +439,8 @@ export interface PrepareArmOptions {
   /** The Hunch checkout the arm installs from: the audited root for current-hunch, the diet root for diet-hunch. */
   audited?: { root: string };
   npmCi?: boolean;
+  /** Skill names an `--exclude-path` removed; after setup, any SKILL.md still naming one fails exposure (none: no check). */
+  excludedSkillNames?: string[];
 }
 
 /**
@@ -457,6 +543,17 @@ export async function prepareArm(opts: PrepareArmOptions): Promise<PreparedArm> 
   writeFileAtomic(mcpConfigPath, JSON.stringify(mcpConfig, null, 2) + "\n");
   const exposure = proveExposure({ arm: opts.arm, repo, mcpConfigPath, env: { ...opts.env, ...armEnv }, hookCmd });
   if (opts.arm !== "no-hunch") exposure.memory_snapshot_sha256 = opts.snapshot?.publicSha256 ?? null;
+  // After every setup step (clone, audited writers, npm ci), so nothing written later can bring the skill back.
+  if (opts.excludedSkillNames?.length) {
+    const offenders = excludedSkillFiles(repo, opts.excludedSkillNames);
+    setupChecks.push({
+      id: "excluded-skills-absent",
+      ok: offenders.length === 0,
+      detail: offenders.length
+        ? `SKILL.md naming an excluded skill: ${offenders.join(", ")}`
+        : `no SKILL.md named ${opts.excludedSkillNames.join(", ")}`,
+    });
+  }
   if (setupChecks.length) {
     exposure.checks.push(...setupChecks);
     exposure.ok = exposure.checks.every((c) => c.ok);
