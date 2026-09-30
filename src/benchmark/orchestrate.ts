@@ -534,10 +534,23 @@ function nodeVarsAsNode(rest: string): string {
  * leaves the assignment denied: the path is then not provably only-invoked. A `-NAME` flag (`-h`) is
  * not a reference. The text is lowercased, so `$h` counts against `H` (stricter, never looser).
  * Assignments are dropped at their own match positions, never by a literal text search.
+ *
+ * The value may also be the whole launcher the hook prints, quoted: `H='<node> <path> task verify htask_1 --'`, then
+ * `eval "$H npx tsx --test …"` (PILOT5 Gate A v5 smoke, continuation-375 current-hunch, DEVIATIONS (o)). The value
+ * is a node word, allowed node options, the path (single-quoted inside a double-quoted value, or bare) and arguments,
+ * with no `$` or backtick anywhere in it: eval re-parses the value, so single quotes don't keep one literal and an
+ * expansion inside would run unseen by the mention count (critic, Gate A v5). `eval` counts as a command word before
+ * the invocation; every form
+ * either runs the launcher or fails (`node "$H"` names no file). Only the path's first mention in the value is
+ * dropped, so a deny root or a second mention of the path among its arguments still matches. Not covered, as before
+ * for a direct `node <path>; cat $_`: bash's `$_` after `eval "$H x"` is eval's whole argument, path included.
  */
 function dropInvokedVarAssignment(rest: string, path: string): string {
   const escaped = normalizeForMatch(path).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const assign = new RegExp(`(?<=^|[\\s;&|(])(?:export\\s+)?([a-z_][a-z0-9_]*)=(["'])?${escaped}\\2(?=$|[\\s;&|)])`, "g");
+  const bareNode = `(?:[^\\s'"$\`;&|<>()]*/)?node(?:\\.exe)?`;
+  const singleQuoted = `'(?![^'\\n]*[$\`])${bareNode}(?:${NODE_OPTION})*[ \\t]+${escaped}(?:[ \\t][^'\\n]*)?'`;
+  const doubleQuoted = `"(?![^"\\n]*[$\`])(?:'(?:[^'$\`\\n]*/)?node(?:\\.exe)?'|${bareNode})(?:${NODE_OPTION})*[ \\t]+(?:'${escaped}'|${escaped})(?:[ \\t][^"$\`\\n]*)?"`;
+  const assign = new RegExp(`(?<=^|[\\s;&|(])(?:export\\s+)?([a-z_][a-z0-9_]*)=(?:(["'])?${escaped}\\2|${singleQuoted}|${doubleQuoted})(?=$|[\\s;&|)])`, "g");
   const others = maskDriveLetters(rest.replace(assign, " "));
   const invokedOnly = new Set<string>();
   for (const match of rest.matchAll(assign)) {
@@ -545,11 +558,12 @@ function dropInvokedVarAssignment(rest: string, path: string): string {
     const word = new RegExp(`(?<![a-z0-9_-])${name}(?![a-z0-9_])`, "g");
     // `\` normalizes to `/`, so a continuation newline reads `/\n` and is no boundary; `>&`, `<&`, `>|` are
     // redirections (`echo x >& "$H"` overwrites the entrypoint), not command separators.
-    const invocation = new RegExp(`(?<=(?:^|;|(?<![<>])[&|]|(?<!/)\\n)\\s*(?:${NODE_WORD}\\s+)?["']?)\\$(?:${name}|\\{${name}\\})(?![a-z0-9_])(?=["']?[ \\t]+-{0,2}[a-z])`, "g");
+    const invocation = new RegExp(`(?<=(?:^|;|(?<![<>])[&|]|(?<!/)\\n)\\s*(?:(?:${NODE_WORD}|eval)\\s+)?["']?)\\$(?:${name}|\\{${name}\\})(?![a-z0-9_])(?=["']?[ \\t]+-{0,2}[a-z])`, "g");
     const invocations = [...others.matchAll(invocation)].length;
     if (invocations > 0 && [...others.matchAll(word)].length === invocations) invokedOnly.add(name);
   }
-  return rest.replace(assign, (mention, name: string) => (invokedOnly.has(name) ? " " : mention));
+  const pathRe = new RegExp(`${escaped}${PATH_END}`);
+  return rest.replace(assign, (mention, name: string) => (invokedOnly.has(name) ? mention.replace(pathRe, " ") : mention));
 }
 
 /** Start offsets of the text that sits outside every quote, or null when the quoting can't be read from normalized

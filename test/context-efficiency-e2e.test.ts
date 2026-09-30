@@ -560,6 +560,70 @@ test("isOutOfRepoAccess flags deny roots outside the run dir and traversal, in e
   assert.equal(isOutOfRepoAccess(`export H='/home/dave/audited/dist/cli/index.js'; node "$G" task verify htask_1`, denyRoots, runDir, [auditedCli]), true, "a different variable invoked stays denied");
   assert.equal(isOutOfRepoAccess(`xH='/home/dave/audited/dist/cli/index.js'; node "$H" task verify htask_1; echo "$xH"`, denyRoots, runDir, [auditedCli]), true, "an assignment glued to a preceding word is a different variable name, stays denied");
   assert.equal(isOutOfRepoAccess(`H='/home/dave/audited/dist/cli/index.js'; "$H" task verify htask_1`, denyRoots, runDir, [auditedCli]), false, "invoked directly at a command boundary");
+  // Known false positive (PILOT5 Gate A v5 smoke, continuation-375 current-hunch, DEVIATIONS (o)): the whole printed
+  // launcher kept in a variable and run through eval. The observed command, paths mapped to these roots.
+  const observedV5 = `cd C:/out/runs/task-1/1-current-hunch/repo; python3 - <<'EOF'
+p='src/core/taskQuery.ts'
+s=open(p).read()
+s=s.replace('''  now?: number;
+}''','''  now?: number;
+  /** Leave out this task's own deliveries FOR THE QUERY TARGET. The pre-edit
+   *  hook sets it: its delivery for a file is a function of that file, so reading
+   *  it back only feeds the hook's last output into its next ranking — a "shares
+   *  <rule>" term appears, the picked set moves, and the dedupe re-sends a full
+   *  block with no record changed. Deliveries for other files still count. */
+  excludeTargetDeliveries?: boolean;
+}''',1)
+s=s.replace('''  if (taskId) {
+    try {
+      const report = readTaskReport(root, taskId);
+      for (const d of report.deliveries) {
+''','''  const own = options.excludeTargetDeliveries && targetLooksLikePath(target) ? normalizePath(target) : null;
+  if (taskId) {
+    try {
+      const report = readTaskReport(root, taskId);
+      for (const d of report.deliveries) {
+        if (own && d.target && normalizePath(d.target) === own) continue;
+''',1)
+open(p,'w').write(s)
+p='src/cli/index.ts'
+s=open(p).read()
+old='buildTaskRankingQuery(root, hookReportTaskId(root, provider, evt), target)),'
+assert s.count(old)==1
+s=s.replace(old,'buildTaskRankingQuery(root, hookReportTaskId(root, provider, evt), target, { excludeTargetDeliveries: true })),')
+open(p,'w').write(s)
+EOF
+git diff src; H='/home/dave/.hermes/node/bin/node /home/dave/audited/dist/cli/index.js task verify htask_9cb2159ef48bb5205bd2daab --'
+eval "$H npx tsx --test test/hook-dedupe-stability.test.ts test/task-ranking-store.test.ts test/task-ranking-mode.test.ts test/hookcache.test.ts" 2>&1 | grep -E "^# (tests|pass|fail)|^not ok|verify|exit" ; eval "$H npm run typecheck" 2>&1 | tail -3`;
+  assert.equal(isOutOfRepoAccess(observedV5, denyRoots, runDir, [auditedCli]), false, "the observed v5 command: the launcher in a variable, run through eval");
+  const launcher = "/home/dave/.hermes/node/bin/node /home/dave/audited/dist/cli/index.js task verify htask_1 --";
+  for (const allowed of [
+    `H='${launcher}'; eval "$H npm test"`,
+    `H='${launcher}'; $H npm test`,
+    `H="${launcher}"; eval "$H npm test"`,
+    `H="'/c/program files/nodejs/node.exe' '/home/dave/audited/dist/cli/index.js' task verify htask_1 --"; eval "$H npm test"`,
+    `export H='node --no-warnings /home/dave/audited/dist/cli/index.js task verify htask_1 --' && eval "\${H} npm test"`,
+  ]) assert.equal(isOutOfRepoAccess(allowed, denyRoots, runDir, [auditedCli]), false, allowed);
+  for (const denied of [
+    `H='${launcher}'; eval "$H npm test"; cat "$H"`,
+    `H='${launcher}'; eval "$H npm test"; echo "$H" | cut -d' ' -f2 | xargs cat`,
+    `H='${launcher} cat /home/dave/audited/package.json'; eval "$H x"`,
+    `H='${launcher} cat /home/dave/audited/dist/cli/index.js'; eval "$H x"`,
+    `H='${launcher} cat /home/dave/hunch-private/x'; eval "$H x"`,
+    `H='cat /home/dave/audited/dist/cli/index.js'; eval "$H x"`,
+    `H='node -e 1 /home/dave/audited/dist/cli/index.js'; eval "$H x"`,
+    `H='node --require=./x.js /home/dave/audited/dist/cli/index.js'; eval "$H x"`,
+    `H="node /home/dave/audited/dist/cli/index.js $(cat /tmp/x)"; eval "$H x"`,
+    `H="$N /home/dave/audited/dist/cli/index.js task"; eval "$H x"`,
+    `H='node /home/dave/audited/dist/cli/index.js/../../package.json'; eval "$H x"`,
+    `H='${launcher}'; grep x "$H" -n`,
+    `H='${launcher}'; eval "cat $H"`,
+    `H='${launcher} cat $H'; eval "$H x"`,
+    `G='/home/dave/audited/dist/cli/index.js'; H='${launcher} cat $G'; eval "$H x"; node "$G" task verify htask_1`,
+    `H='${launcher}; cat $_'; eval "$H x"`,
+    `H='${launcher} \`cat $H\`'; eval "$H x"`,
+    `H='node --title=$G /home/dave/audited/dist/cli/index.js task'; eval "$H x"`,
+  ]) assert.equal(isOutOfRepoAccess(denied, denyRoots, runDir, [auditedCli]), true, denied);
   assert.equal(isOutOfRepoAccess(`cli='/home/dave/audited/dist/cli/index.js'; node "$cli" task verify htask_1`, denyRoots, runDir, [auditedCli]), false, "a name that also appears inside the assigned path");
   assert.equal(isOutOfRepoAccess(`H='/home/dave/audited/dist/cli/index.js'; node "$H" task verify htask_1; cat \${H%x}`, denyRoots, runDir, [auditedCli]), true, "a parameter-expansion form is not an invocation");
   assert.equal(isOutOfRepoAccess(`H='/home/dave/audited/dist/cli/index.js'; node "$H" task verify htask_1; cat "$H" -n`, denyRoots, runDir, [auditedCli]), true, "an expansion with a flag tail but not at command position stays denied");
