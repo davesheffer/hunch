@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.43.0 — 2026-09-30
+
+- **Task-scored memory on each prompt.** The prompt hook now picks the records it delivers by what the prompt actually names: repo paths it mentions (markdown links, backticks, quoted paths, with line ranges stripped) and its rarer terms, ranked by named paths covered, then shared terms, priority and id. It replaces the broad landscape delivery. On the Gate A v4 prompts this raised precision from 8% to 22% and recall from 12% to 34% while delivering 10% fewer characters. Set `HUNCH_TASK_SELECTION=0` to restore the previous delivery (#446).
+- **Leaner SessionStart.** Session start no longer lists recent decisions and roadmap entries (measured at 7% precision); escalations and the decision count stay (#443).
+- **Scoped verify hint.** The prompt hook and `hunch_task` start now ask the agent to verify with the tests covering the change and leave the full suite to CI (#443).
+- **Accurate shell-write attribution.** A Bash or PowerShell call refreshes the shell-write baseline before it runs, so it is no longer blamed for a file written earlier by a parallel tool call or another process. Claude Code and Codex pre-tool matchers now include the shell tools (#443).
+- **Memory commits reach protected `main` unattended.** A memory-only PR runs a reduced CI gate, and `tooling/ship-memory.mjs` pushes a hook's local memory commits to a `memory/host-*` branch for auto-merge, merging a diverged `origin/main` with the local merge drivers first (#437, #439).
+- Dependency refresh for fast-uri and ip-address advisories (#445).
+
 ## 1.42.0 — 2026-09-26
 
 - **Smaller MCP footprint.** Host-visible `hunch_context` on a file target shrinks from 8773 to 7035 chars: structured results carry drill-down IDs only, and recent tasks and project DNA are now opt-in (`include: ["recent_tasks","project_dna"]` over MCP, `hunch context --include recent-tasks,project-dna` on the CLI). `hunch_now` defaults to 5 recent decisions and 2 roadmap entries with a "+N more" tail (`roadmap_limit` is new). `hunch_task` finish results drop from 2200 to 568 chars and start from 1230 to 1146. Tool schemas are shorter with no parameter or behavior change. `hunch footprint` gains the `mcp.hunch_task.start`/`finish` surfaces (#368, #370, #371).
