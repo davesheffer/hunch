@@ -19,10 +19,12 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { buildDeliveryEnvelope, deliveryDedupeInput, type DeliverySupplement } from "../src/core/delivery.js";
-import { finishReportTask, recordTaskDelivery, reportHash, startReportTask } from "../src/core/taskReport.js";
+import { finishReportTask, listReportTasks, recordTaskDelivery, reportHash, startReportTask } from "../src/core/taskReport.js";
+import { taskSelectionPath } from "../src/core/hookcache.js";
 import { persistTaskRecord } from "../src/core/taskRecord.js";
 import { HunchStore, type AssembledContext } from "../src/store/hunchStore.js";
 import { hunchPaths } from "../src/core/paths.js";
+import { DecisionSchema } from "../src/core/types.js";
 import { mkConstraint, tsxLoaderUrl } from "./helpers.js";
 
 const cli = resolve("src/cli/index.ts");
@@ -76,13 +78,18 @@ function fixture(t: { after: (f: () => void) => void }): string {
  *  and fake a delta. Every test gets its own. */
 const sessionId = () => `hunch-dedupe-${process.pid}-${Math.floor(performance.now() * 1000)}`;
 
-function runHook(root: string, provider: string, session: string, payload: Record<string, unknown>) {
+function runHook(root: string, provider: string, session: string, payload: Record<string, unknown>, env: Record<string, string> = {}) {
   const output = execFileSync(process.execPath, ["--import", tsxLoaderUrl(), cli, "hook", "--provider", provider], {
-    cwd: root, env: { ...process.env, HUNCH_PIPELINE: "0" },
+    cwd: root, env: { ...process.env, HUNCH_PIPELINE: "0", HUNCH_TASK_SELECTION: "", ...env },
     input: JSON.stringify({ cwd: root, session_id: session, prompt_id: "prompt-dedupe", turn_id: "turn-1", ...payload }),
     encoding: "utf8",
   }).trim();
   return output ? JSON.parse(output) : null;
+}
+
+/** Remove every report task's prompt-time selection file. */
+function dropTaskSelections(root: string): void {
+  for (const task of listReportTasks(root)) rmSync(taskSelectionPath(task.task_id), { force: true });
 }
 
 /** The pre-edit payload each provider's own tool contract carries for one file. */
@@ -98,6 +105,26 @@ const PRE_EDIT: Record<string, (root: string) => Record<string, unknown>> = {
 };
 
 for (const provider of Object.keys(PRE_EDIT)) {
+  test(`${provider}: under a task selection the recent-task supplements are dropped; without one they arrive`, { timeout: 120_000 }, t => {
+    const root = fixture(t);
+    const store = new HunchStore(hunchPaths(root));
+    store.json.put("decisions", DecisionSchema.parse({
+      id: "dec_merge_settings", title: "Merge settings deeply on load", status: "accepted", decision: "", date: "2026-09-11",
+      related_files: ["src/config.ts"], provenance: { source: "human_confirmed", confidence: 1, evidence: [] },
+    }));
+    store.reindex();
+    store.close();
+    const session = sessionId();
+    runHook(root, provider, session, { hook_event_name: "UserPromptSubmit", prompt: "merge the settings" });
+    const payload = PRE_EDIT[provider]!(root);
+    const selected = runHook(root, provider, session, payload)?.hookSpecificOutput?.additionalContext as string;
+    assert.match(selected, /dec_merge_settings/, "the prompt must select the fixture decision");
+    assert.doesNotMatch(selected, /RECENT TASKS|supplemental\/recent-task/, "a task selection drops the recent-task block");
+    const off = runHook(root, provider, session, payload, { HUNCH_TASK_SELECTION: "0" })?.hookSpecificOutput?.additionalContext as string;
+    assert.match(off, /RECENT TASKS/, "with selection switched off the recent-task block is delivered");
+    assert.match(off, /supplemental\/recent-task \| /);
+  });
+
   test(`${provider}: a crowded task selection does not change after its own delivery`, { timeout: 120_000 }, t => {
     const root = fixture(t);
     const store = new HunchStore(hunchPaths(root));
@@ -126,6 +153,7 @@ for (const provider of Object.keys(PRE_EDIT)) {
     // that task's record ids and files, so the recent-task reason flips with no
     // record change. Without a prompt task there is nothing to feed back.
     runHook(root, provider, session, { hook_event_name: "UserPromptSubmit", prompt: "merge the settings" });
+    dropTaskSelections(root); // recent tasks are delivered only when no task selection exists (Gate A v5)
     const payload = PRE_EDIT[provider]!(root);
     const ground = () => runHook(root, provider, session, payload)?.hookSpecificOutput?.additionalContext as string;
 
@@ -153,6 +181,7 @@ for (const provider of Object.keys(PRE_EDIT)) {
     const root = fixture(t);
     const session = sessionId();
     runHook(root, provider, session, { hook_event_name: "UserPromptSubmit", prompt: "merge the settings" });
+    dropTaskSelections(root); // recent tasks are delivered only when no task selection exists (Gate A v5)
     const payload = PRE_EDIT[provider]!(root);
     const ground = () => runHook(root, provider, session, payload)?.hookSpecificOutput?.additionalContext as string;
 
