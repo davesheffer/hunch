@@ -128,3 +128,16 @@ Dated 2026-09-27. Recorded before any benchmark arm ran.
 - The shape depends on how an agent writes a command, not on the arm: rep 2 of the same task and arm, and the diet arm's
   rep 1, ran the same launcher without it and passed. So version 4 continued; changing the rule now would start version 5.
 - Effect: the run has no outcome (validator skipped), as in (j). The `current-hunch` arm reports 10 outcomes of 11 (the harness added a tie-break repetition for convention-314).
+
+## (l) Gate A version 5: one selection ranking rule changed after the offline replay
+
+The version 5 task-scored selection was meant to be fixed before the offline replay. After critic fixes, the replay
+scored 19% micro precision (12/63), just under the 20% bar set in advance. The only task that moved was
+`convention-314`: once `src/integrations/providers.ts:35-46` was correctly read as a path, the hub file
+`providers.ts` tied a dozen records, and rare words from the prompt's boilerplate broke the tie wrongly.
+
+Change, approved by the maintainer on 2026-09-30: rank records by how many of the prompt's named files they are
+anchored to (then term overlap, priority, id), instead of a yes/no path match. The final build scores 22% (14/65),
+recall 34% (14/41). Because the rule was added after seeing the replay, the replay no longer validates it
+independently; the live Gate A version 5 run is the test. All selection rules are frozen from this point. Details:
+`hunch-private/docs/product/gate-a5/replay-2026-09-30.md`.
