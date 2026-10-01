@@ -434,8 +434,9 @@ function firstDifferingKey(a: Record<string, unknown>, b: Record<string, unknown
 }
 
 /** CRLF -> LF, a real `/` ending a line gets a space (so only a `\\` continuation reads `/\n`), backslash -> forward slash, lowercase, MSYS drive paths (/c/…) -> c:/…, no trailing slash. */
-function normalizeForMatch(path: string): string {
-  const slashed = path.replace(/\r\n?/g, "\n").replace(/\/(?=\n)/g, "/ ").replace(/\\/g, "/").toLowerCase().replace(/(^|[\s"'`=(;])\/([a-z])\//g, "$1$2:/");
+function normalizeForMatch(path: string, lower = true): string {
+  const folded = path.replace(/\r\n?/g, "\n").replace(/\/(?=\n)/g, "/ ").replace(/\\/g, "/");
+  const slashed = (lower ? folded.toLowerCase() : folded).replace(/(^|[\s"'`=(;])\/([a-z])\//gi, "$1$2:/");
   return slashed.endsWith("/") ? slashed.slice(0, -1) : slashed;
 }
 
@@ -499,7 +500,7 @@ const NODE_WORD = `(?:'(?:[^'\\n]*/)?node(?:\\.exe)?'|"(?:[^"$\`\\n]*/)?node(?:\
  *  rep 1 current-hunch). A letter behind `$`, `{`, `%` or `!` (`$c:/x`, `${c:-x}`, cmd's `%c:/=\%`, `!c:/…`) is a
  *  reference and stays. */
 function maskDriveLetters(text: string): string {
-  return text.replace(/(?<![$\{%!a-z0-9_-])[a-z](?=:\/)/g, "#").replace(/(?<=(?:^|[\s"'=(;:])\/)[a-z](?=\/)/g, "#");
+  return text.replace(/(?<![$\{%!a-z0-9_-])[a-z](?=:\/)/gi, "#").replace(/(?<=(?:^|[\s"'=(;:])\/)[a-z](?=\/)/gi, "#");
 }
 
 /**
@@ -507,18 +508,57 @@ function maskDriveLetters(text: string): string {
  * a variable too. Every double-quoted `"$N"`/`"${N}"` reads as `node` when the text keeps N a node executable:
  * N is assigned a NODE_WORD before any other mention, and outside those assignments (their paths may hold the name,
  * as `NODE=…/nodejs/node.exe` does) every mention is that quoted expansion. Any other mention (`N=cat`, `read N`,
- * `N+=x`, `for N in …`, `${N%x}`, an unquoted `$N`) leaves the text as is. The rewrite keeps the quotes, so a path
- * glued to it still ends at PATH_END, and assignments are never removed, so a deny root inside one still matches.
+ * `N+=x`, `for N in …`, `${N%x}`, an unquoted `$N` glued to other text) leaves the text as is. The rewrite keeps the
+ * quotes, so a path glued to it still ends at PATH_END, and assignments are never removed, so a deny root inside one
+ * still matches.
+ *
+ * An unquoted `$N`/`${N}` that is a whole word counts too (`N=/x/node; H=…; $N $H task verify …`, PILOT5 Gate A v5
+ * operation-268 rep 3), when it cannot word-split or glob: no assigned value of N holds a blank, `*`, `?` or `[`, and
+ * IFS is never mentioned. Shell variable names are case-sensitive, so mentions are counted on the original-case text
+ * (`nodeVarsAsNode`'s `cased`): Python's `"x\n"` (normalized `/n`, Gate A v5 self-contained-394 rep 1) or a `$n` is no
+ * mention of `N`, while any `N` word (`read \N`, `eval`, `source`, glued, quoted) counts. No rewrite while the text defines a function
+ * or alias named `node` or N (`node() { cat "$@"; }`): the word `node` would then not run node.
  */
-function nodeVarsAsNode(rest: string): string {
-  const assign = new RegExp(`(?<=^|[\\s;&|(])(?:export\\s+)?([a-z_][a-z0-9_]*)=${NODE_WORD}(?=$|[\\s;&|)])`, "g");
+function nodeVarsAsNode(rest: string, cased: string): string {
+  if (cased.length !== rest.length) cased = rest;
+  const assign = new RegExp(`(?<=^|[\\s;&|(])(?:export\\s+)?([a-z_][a-z0-9_]*)=(${NODE_WORD})(?=$|[\\s;&|)])`, "g");
+  // Variable names are case-sensitive (`$n` is no `$N`), so names and mentions are counted on `cased`, the same text
+  // as `rest` with its original case; `rest` (lowercase) still drives the node-word, function and IFS checks.
   const firstAssigned = new Map<string, number>();
-  for (const match of rest.matchAll(assign)) if (!firstAssigned.has(match[1]!)) firstAssigned.set(match[1]!, match.index);
-  const others = maskDriveLetters(rest.replace(assign, (mention) => " ".repeat(mention.length)));
+  const splits = new Set<string>();
+  const ifs = /(?<![a-z0-9_-])ifs(?![a-z0-9_])/.test(rest);
+  let others = cased;
+  for (const match of rest.matchAll(assign)) {
+    const at = match.index + match[0].length - match[2]!.length - match[1]!.length - 1;
+    const name = cased.slice(at, at + match[1]!.length);
+    if (!firstAssigned.has(name)) firstAssigned.set(name, match.index);
+    if (ifs || /[\s*?[]/.test(match[2]!.replace(/^(["'])(.*)\1$/, "$2"))) splits.add(name);
+    others = others.slice(0, match.index) + " ".repeat(match[0].length) + others.slice(match.index + match[0].length);
+  }
+  others = maskDriveLetters(others);
+  // One frozen `others` for every variable: each variable's eligibility and mention offsets are read from the same
+  // text its assignment offset came from, and the rewrites are applied afterwards, last offset first.
+  const splices: { index: number; length: number; replacement: string }[] = [];
   for (const [name, at] of firstAssigned) {
-    const expansion = new RegExp(`"\\$(?:${name}|\\{${name}\\})"`, "g");
-    const words = [...others.matchAll(new RegExp(`(?<![a-z0-9_-])${name}(?![a-z0-9_])`, "g"))].map((match) => match.index);
-    if (words.length > 0 && at < words[0]! && words.length === [...others.matchAll(expansion)].length) rest = rest.replace(expansion, '"node"');
+    const lower = name.toLowerCase();
+    const defined = new RegExp(`(?:^|[\\s;&|(){}])(?:function[ \\t]+(?:node|${lower})(?![a-z0-9_.-])|(?:node|${lower})[ \\t]*\\([ \\t]*\\)|alias(?![a-z0-9_-])[^\\n;&|]*(?<![a-z0-9_-])(?:node|${lower})=)`);
+    if (defined.test(rest)) continue;
+    const quoted = `"\\$(?:${name}|\\{${name}\\})"`;
+    const bare = `(?<=^|[\\s;&|(])\\$(?:${name}|\\{${name}\\})(?=$|[\\s;&|)])`;
+    const expansion = new RegExp(splits.has(name) ? quoted : `${quoted}|${bare}`, "g");
+    const words = [...others.matchAll(new RegExp(`(?<![a-zA-Z0-9_-])${name}(?![a-zA-Z0-9_])`, "g"))].map((match) => match.index);
+    const expansions = [...others.matchAll(expansion)];
+    if (words.length > 0 && at < words[0]! && words.length === expansions.length) {
+      for (const mention of expansions) {
+        splices.push({ index: mention.index, length: mention[0].length, replacement: mention[0].startsWith('"') ? '"node"' : "node" });
+      }
+    }
+  }
+  let end = rest.length;
+  for (const { index, length, replacement } of splices.sort((a, b) => b.index - a.index)) {
+    if (index + length > end) continue;
+    rest = rest.slice(0, index) + replacement + rest.slice(index + length);
+    end = index;
   }
   return rest;
 }
@@ -529,7 +569,7 @@ function nodeVarsAsNode(rest: string): string {
  * outside its assignments of this path, the name occurs at least once and solely as an invocation:
  * `$NAME`/`${NAME}` as the command word after a boundary (start, `;`, `&`, `|`, or a newline that is
  * not a `\` continuation), optionally behind a NODE_WORD as that command word, quote optional,
- * then a subcommand or flag on the same line. Any other occurrence of the name as a word (`cat "$H"`,
+ * then a subcommand, a flag or an end-of-options `--` on the same line. Any other occurrence of the name as a word (`cat "$H"`,
  * `grep node "$H"`, `arr=("$H")`, `G="$H" bash -c …`, `${H%x}`, `process.env.H`, `printenv H`)
  * leaves the assignment denied: the path is then not provably only-invoked. A `-NAME` flag (`-h`) is
  * not a reference. The text is lowercased, so `$h` counts against `H` (stricter, never looser).
@@ -558,7 +598,7 @@ function dropInvokedVarAssignment(rest: string, path: string): string {
     const word = new RegExp(`(?<![a-z0-9_-])${name}(?![a-z0-9_])`, "g");
     // `\` normalizes to `/`, so a continuation newline reads `/\n` and is no boundary; `>&`, `<&`, `>|` are
     // redirections (`echo x >& "$H"` overwrites the entrypoint), not command separators.
-    const invocation = new RegExp(`(?<=(?:^|;|(?<![<>])[&|]|(?<!/)\\n)\\s*(?:(?:${NODE_WORD}|eval)\\s+)?["']?)\\$(?:${name}|\\{${name}\\})(?![a-z0-9_])(?=["']?[ \\t]+-{0,2}[a-z])`, "g");
+    const invocation = new RegExp(`(?<=(?:^|;|(?<![<>])[&|]|(?<!/)\\n)\\s*(?:(?:${NODE_WORD}|eval)\\s+)?["']?)\\$(?:${name}|\\{${name}\\})(?![a-z0-9_])(?=["']?[ \\t]+(?:-{0,2}[a-z]|--[ \\t]))`, "g");
     const invocations = [...others.matchAll(invocation)].length;
     if (invocations > 0 && [...others.matchAll(word)].length === invocations) invokedOnly.add(name);
   }
@@ -708,9 +748,27 @@ export function isOutOfRepoAccess(
   shell = true,
 ): boolean {
   if (traversal && /(?:\.\.[\\/]+(?:\.[\\/]+)*){3}/.test(value)) return true;
-  let rest = normalizeForMatch(value).replace(HOME_TOKEN, (_, prefix) => `${prefix}${normalizeForMatch(home)}`);
-  for (const path of Array.isArray(allowed) ? allowed : [allowed]) rest = rest.replace(pathPattern(path), " ");
-  if (commands.length) rest = nodeVarsAsNode(rest);
+  let rest = normalizeForMatch(value);
+  // The same text with its original case, kept aligned with `rest` through every rewrite below; a non-ASCII
+  // lowercase that changes the length cannot be aligned, and then `rest` stands in for it (every mention counts).
+  let cased = normalizeForMatch(value, false);
+  if (cased.length !== rest.length || normalizeForMatch(home).length !== normalizeForMatch(home, false).length) cased = rest;
+  const rewrite = (re: RegExp, replace: (match: RegExpMatchArray) => [string, string]) => {
+    const parts: [string, string][] = [];
+    let at = 0;
+    for (const match of [...rest.matchAll(re)]) {
+      const [lower, original] = replace(match);
+      parts.push([rest.slice(at, match.index), cased.slice(at, match.index)], [lower, original]);
+      at = match.index + match[0].length;
+    }
+    rest = parts.map(([lower]) => lower).join("") + rest.slice(at);
+    cased = parts.map(([, original]) => original).join("") + cased.slice(at);
+  };
+  const homeLower = normalizeForMatch(home);
+  const homeCased = normalizeForMatch(home, false);
+  rewrite(HOME_TOKEN, (match) => [`${match[1]}${homeLower}`, `${cased.slice(match.index!, match.index! + match[1]!.length)}${homeCased}`]);
+  for (const path of Array.isArray(allowed) ? allowed : [allowed]) rewrite(pathPattern(path), (match) => [" ", " "]);
+  if (commands.length) rest = nodeVarsAsNode(rest, cased);
   for (const path of commands) {
     rest = rest.replace(commandPattern(path, shell), " ");
     rest = dropInvokedVarAssignment(rest, path);
