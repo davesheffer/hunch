@@ -61,6 +61,35 @@ export function injectionMode(sessionId: string | undefined, key: string, conten
   }
 }
 
+/** One invocation's served-constraint marks over the session map: `probe` says
+ *  whether a key was already served and marks it if not; `unmark` forgets one
+ *  key; `rollback` forgets every key this invocation marked, so grounding that
+ *  never reached the agent (not delivered, or a throw before it was emitted) is
+ *  full text next time. Never throws (same posture as injectionMode). */
+export class ServedMarks {
+  private readonly marked = new Set<string>();
+  constructor(private readonly sessionId: string | undefined) {}
+  probe(key: string): boolean {
+    if (injectionMode(this.sessionId, key, "", "served") === "delta") return true;
+    this.marked.add(key);
+    return false;
+  }
+  /** injectionMode for a per-file block, recorded so `rollback` forgets it too:
+   *  a block that was never emitted must not dedup the next one into a delta. */
+  mode(key: string, content: string, hashInput?: string): "full" | "delta" {
+    const m = injectionMode(this.sessionId, key, content, hashInput);
+    if (m === "full") this.marked.add(key);
+    return m;
+  }
+  unmark(key: string): void {
+    injectionMode(this.sessionId, key, "", "unserved");
+    this.marked.delete(key);
+  }
+  rollback(): void {
+    for (const key of [...this.marked]) this.unmark(key);
+  }
+}
+
 /** Forget everything injected into a session. Compaction summarizes injected
  *  grounding out of the agent's context while the dedup map still says
  *  "delivered" — so on PreCompact / SessionStart[source=compact] the map must

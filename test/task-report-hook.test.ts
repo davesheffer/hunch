@@ -371,7 +371,7 @@ test("the prompt hook prints the verify command inline and never asks for a star
   assert.match(text, /CI's job/, "the hint leaves the full suite to CI");
   // Finish is conditional, and the host close is what makes that safe.
   assert.match(text, /ONLY if this task used Hunch/);
-  assert.match(text, /hook context you acted on/, "hook-injected grounding counts as using Hunch");
+  assert.match(text, /hook context acted on/, "hook-injected grounding counts as using Hunch");
   assert.match(text, /action: "finish"/);
 });
 

@@ -1220,9 +1220,9 @@ export interface RootControlOptions {
  * needs no host hook or instruction file. Host-neutral by design (con_e04226bd05);
  * per-host prose (CLAUDE.md, AGENTS.md) and hooks add to it, never replace it. */
 export const MCP_INSTRUCTIONS = [
-  "Hunch is this repo's engineering memory. Call hunch_context(target, task_id) FIRST, before reading or editing; hunch_check_constraints(scope) before shared edits.",
-  "Reuse a prompt hook's task_id, else hunch_task(action:\"start\") once. Finish with hunch_task(action:\"finish\") and show its card unless the hook said the host closes the task AND you made no hunch_* call, acted on no hook context, and claim nothing; a task you started, you finish.",
-  "Hosts without lifecycle hooks: call these tools yourself.",
+  "Hunch is this repo's engineering memory: call hunch_context(target, task_id) FIRST, before reading or editing; hunch_check_constraints(scope) before shared edits.",
+  "Reuse a hook's task_id, else hunch_task(action:\"start\") once. Finish with hunch_task(action:\"finish\"), showing its card; skip it only if the hook said the host closes the task and it used no Hunch (no hunch_* call on its ID, hook context acted on, or claim). Tasks you start, you finish.",
+  "Hosts without hooks: call these tools yourself.",
 ].join("\n");
 
 export function buildServerWithRootControl(initialRoot: string, options: RootControlOptions = {}): RootControlledServer {
@@ -1823,7 +1823,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
     {
       title: "Assemble the minimal relevant Hunch slice for a task",
       description:
-        "Given a file, symbol, or task phrase you're about to work on, return the MINIMAL relevant memory — invariants, decisions, bug history, blast radius — as a compact brief. Call FIRST when starting work. A task phrase with no file/symbol match falls back to the closest graph matches. Returns a budgeted brief plus a delivery receipt. Not for exhaustive rationale on one file (hunch_why) or keyword search (hunch_query). By moment — Start: reuse the hook task_id; orient with hunch_structure, hunch_workspaces, hunch_runbook(task); ask the user about each hunch_escalations() entry. Design: hunch_why(target), hunch_current_decision(topic), hunch_bug_lineage(symptom_or_symbol), hunch_compare(candidates), hunch_query(query). Edit: hunch_check_constraints(scope), hunch_get_dependents(symbol), hunch_blast_radius(target), hunch_findings. Merge: hunch_conformance(), hunch_pr_impact, hunch_merge_verdict; hunch_policy_* where listed (only a human activates a policy). Record with task_id: hunch_capture_decision then hunch_record_decision, hunch_record_correction, hunch_record_finding. Finish: checks via task verify, then hunch_task finish.",
+        "Given a file, symbol, or task phrase you're about to work on, return the MINIMAL relevant memory — invariants, decisions, bug history, blast radius — as a compact brief. Call FIRST when starting work. A task phrase with no file/symbol match falls back to the closest graph matches. Returns a budgeted brief plus a delivery receipt. Not for exhaustive rationale on one file (hunch_why) or keyword search (hunch_query). By moment — Start: reuse the hook task_id; orient with hunch_structure, hunch_workspaces, hunch_runbook(task); ask the user about each hunch_escalations() entry. Design: hunch_why(target), hunch_current_decision(topic), hunch_bug_lineage(symptom_or_symbol), hunch_compare(candidates), hunch_query(query). Edit: hunch_check_constraints(scope), hunch_get_dependents(symbol), hunch_blast_radius(target), hunch_findings. Merge: hunch_conformance(), hunch_pr_impact, hunch_merge_verdict; hunch_policy_* where listed (only a human activates a policy). Record with task_id: hunch_capture_decision then hunch_record_decision, hunch_record_correction, hunch_record_finding. Finish: checks via task verify; hunch_task finish unless its skip rule applies.",
       inputSchema: {
         target: z.string().describe("A file path, symbol, or task phrase you're about to work on."),
         budget_tokens: z.number().optional().describe("Rough token budget for the brief (default 1500)."),
