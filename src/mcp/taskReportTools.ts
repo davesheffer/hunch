@@ -89,9 +89,11 @@ export function registerTaskReportTools(server: McpServer, getRoot: () => string
           task = readTaskReport(root, task_id, reportSourceSnapshot(root).hash).task;
         }
         const launcher = verificationLauncher();
-        // Compact by design (#370): the rules an agent needs to act, and exact
-        // identities; scope, title and timestamps stay in `hunch report <id> --json`.
-        return { content: [{ type: "text" as const, text: `Task ${task.task_id} · ${task.state}. Pass task_id to hunch_context and every decision/correction/finding capture (a capture is not proof of a commit or push). To claim an application, copy occurrence_id, record_id and content_hash exactly from hunch_report(task_id) application_references, with the action you took; omit applications you did not make. Before the final response, finish with hunch_task (outcome "interrupted" if cut short) and include its contribution card verbatim, Evidence line and agent-reported label included, unless presentation_enabled is false. Never rerun an expensive check only for reporting; missing evidence stays unverified. Checks, with this exact installation (a global hunch may be stale): ${launcher.shell} task verify ${task.task_id} -- <command> [arguments]${launcher.note} Verify with the tests that cover your change (the files you edited and their tests); the full suite is CI's job. The default budget is 15 minutes; --timeout <seconds> before -- is only for when the whole suite is really needed.` }], structuredContent: { task: { task_id: task.task_id, state: task.state }, verification_argv: [...launcher.argv, "task", "verify", task.task_id, "--"] } };
+        // Compact by design (#370): the task identity and its exact check command.
+        // The working rules reach every host without this reply: the prompt hook
+        // prints them, the server instructions and tool schema carry the rest;
+        // scope, title and timestamps stay in `hunch report <id> --json`.
+        return { content: [{ type: "text" as const, text: `Task ${task.task_id} · ${task.state}. Checks: ${launcher.shell} task verify ${task.task_id} -- <command> [arguments]${launcher.note}` }], structuredContent: { task: { task_id: task.task_id, state: task.state }, verification_argv: [...launcher.argv, "task", "verify", task.task_id, "--"] } };
       }
       if (!task_id) throw new Error("finish requires the exact task_id");
       for (const claim of applications ?? []) recordReportClaim(root, task_id, claim);
