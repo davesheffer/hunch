@@ -72,8 +72,13 @@ test("MCP task lifecycle retains exact delivery, rejects borrowed evidence, and 
   const call = (name: string, args: Record<string, unknown>) => client.callTool({ name, arguments: args });
   const started = await call("hunch_task", { action: "start", title: "Keep delivery machine-readable" });
   assert.ok(!started.isError);
-  assert.match(JSON.stringify(started.content), /tests that cover your change.*CI's job/, "the start hint steers to targeted tests");
   const taskId = (started.structuredContent as { task: { task_id: string } }).task.task_id;
+  // The start reply is the task identity and its check command; the working rules
+  // come from the prompt hook, server instructions and tool schema, not repeated here.
+  const startText = (started.content as Array<{ text: string }>)[0]!.text;
+  assert.match(startText, new RegExp(`^Task ${taskId} · open\\. Checks: .* task verify ${taskId} -- <command>`));
+  assert.ok(startText.length <= 400, `start reply is ${startText.length} chars`);
+  assert.doesNotMatch(startText, /application_references|contribution card/, "the instruction paragraph is not repeated in the start reply");
   const delivered = await call("hunch_context", { target: "src/context.ts", task_id: taskId });
   assert.ok(!delivered.isError);
   assert.match(JSON.stringify(delivered.content), /Task evidence:/);
@@ -112,11 +117,8 @@ test("MCP task lifecycle retains exact delivery, rejects borrowed evidence, and 
   assert.equal(finished.structuredContent?.deliveries, undefined, "delivery detail stays in hunch_report");
   assert.ok(JSON.stringify(finished.structuredContent).length < 2_000, "a one-delivery finish result stays small");
   const next = await call("hunch_task", { action: "start", title: "A fresh task" });
-  // The reporting rules the grounding block no longer carries (#369) arrive here.
-  const startText = JSON.stringify(next.content);
-  assert.match(startText, /application_references/);
-  assert.match(startText, /card verbatim, Evidence line and agent-reported label included/);
-  assert.match(startText, /interrupted/);
+  // The start reply stays one short line for every start, not only the first.
+  assert.ok((next.content as Array<{ text: string }>)[0]!.text.length <= 400);
   // The launcher must be runnable as-is: a `--import` argument is a URL, never a bare path.
   const argv = (next.structuredContent as { verification_argv: string[] }).verification_argv;
   const importAt = argv.indexOf("--import");
