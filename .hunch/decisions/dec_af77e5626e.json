@@ -42,8 +42,9 @@
       "path_exists": "site/blog/posts.js"
     },
     {
-      "claim": "The pilot re-measurement is due after Monday's baseline compare; re-attest this positioning once the number is public",
-      "review_by": "2026-09-30"
+      "claim": "The pilot re-measurement (Gate A v6) is due; re-attest this positioning once the number is public",
+      "review_by": "2026-10-15",
+      "attested": "2026-10-01"
     }
   ],
   "provenance": {
