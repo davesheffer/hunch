@@ -681,7 +681,91 @@ eval "$H npx tsx --test test/hook-dedupe-stability.test.ts test/task-ranking-sto
   assert.equal(viaVar("N='/x/node.exe'; ", `"\${N%.exe}" "$H" task verify htask_1`), true, "a parameter-expansion form of the node variable stays denied");
   assert.equal(viaVar(""), true, "a node variable never assigned in the command stays denied");
   assert.equal(viaVar("", `"$N" "$H" task verify htask_1; N='/x/node.exe'`), true, "a node variable expanded before its assignment stays denied");
-  assert.equal(viaVar("N='/x/node.exe'; ", `$N "$H" task verify htask_1`), true, "an unquoted node variable stays denied (it word-splits)");
+  assert.equal(viaVar("N='/x y/node.exe'; ", `$N "$H" task verify htask_1`), true, "an unquoted node variable whose value holds a blank stays denied (it word-splits)");
+  assert.equal(viaVar("N='/x/no*/node'; ", `$N "$H" task verify htask_1`), true, "an unquoted node variable whose value globs stays denied");
+  assert.equal(viaVar("IFS=/; N='/x/node.exe'; ", `$N "$H" task verify htask_1`), true, "an unquoted node variable with IFS mentioned stays denied");
+  assert.equal(viaVar("N='/x/node.exe'; ", `$N/x "$H" task verify htask_1`), true, "an unquoted node variable glued to other text stays denied");
+  // Known false positives (PILOT5 Gate A v5): the observed commands, paths mapped to these roots.
+  const nodeBin = "/home/dave/.hermes/node/bin/node";
+  const v5Entry = "/home/dave/audited/dist/cli/index.js";
+  // continuation-375 rep 1: the quoted launcher in a variable, run through eval with an end-of-options `--`.
+  const observed375 = `cd C:/out/runs/task-1/1-current-hunch/repo; V="'${nodeBin}' '${v5Entry}' task verify htask_98c2"; eval "$V -- npx tsx --test test/a.test.ts test/b.test.ts" 2>&1 | tail -15; eval "$V -- npm run typecheck" 2>&1 | tail -5`;
+  assert.equal(isOutOfRepoAccess(observed375, denyRoots, runDir, [auditedCli]), false, "v5 continuation-375: eval \"$V -- …\"");
+  // operation-268 rep 3: node and the entrypoint in two variables, both expanded unquoted.
+  const observed268 = `N='${nodeBin}'; H='${v5Entry}'; $N $H task verify htask_ba64 --json --label "typecheck" -- npm run typecheck | grep -E '"exit_code"|timed_out'; $N $H task verify htask_ba64 --json --label "tests" -- npx tsx --test --test-name-pattern "timed-out check|Windows" test/a.test.ts | grep -E '"exit_code"|timed_out'`;
+  assert.equal(isOutOfRepoAccess(observed268, denyRoots, runDir, [auditedCli]), false, "v5 operation-268: $N $H unquoted");
+  assert.equal(isOutOfRepoAccess(observed268.replace("; H=", "\nH=").replaceAll("; $N", " && $N"), denyRoots, runDir, [auditedCli]), false, "v5 operation-268 with newline and && separators");
+  assert.equal(isOutOfRepoAccess(observed268.replaceAll("$N $H", "${N} ${H}"), denyRoots, runDir, [auditedCli]), false, "v5 operation-268, braced");
+  // self-contained-394 rep 1: a quoted-delimiter heredoc body before the assignments held Python's `\n` (normalized
+  // to `/n`), which read as a mention of N.
+  const observed394 = `cd C:/out/runs/task-1/1-current-hunch/repo; python3 - <<'EOF'
+p='test/a.test.ts'
+s=open(p).read()
+new='''  writeFileSync(f, "x\\\\n");
+'''
+open(p,'w').write(s.replace('X', new + 'X', 1))
+EOF
+N='${nodeBin}'; H='${v5Entry}'
+"$N" "$H" task verify htask_1d9e --label "Typecheck" -- npm run typecheck 2>&1 | tail -5
+"$N" "$H" task verify htask_1d9e --label "Tests" -- npx tsx --test test/a.test.ts 2>&1 | head`;
+  assert.equal(isOutOfRepoAccess(observed394, denyRoots, runDir, [auditedCli]), false, "v5 self-contained-394 rep 1: \"$N\" \"$H\" after a Python heredoc");
+  // self-contained-394 rep 3 stays denied: the entrypoint variable's name C is also the loop variable of the
+  // `python3 -c` program on the same command line, so C is not provably only invoked.
+  const observed394r3 = `cd C:/out/runs/task-1/3-current-hunch/repo; N=${nodeBin}; C=${v5Entry}; "$N" "$C" report htask_5fde --json 2>/dev/null | python3 -c "import json,sys; r=json.load(sys.stdin); [print(c['label'],c['exit_code'],c['current']) for c in r['checks']]"; npx tsx --test test/a.test.ts 2>&1 | grep -E "^# (tests|pass|fail)"`;
+  assert.equal(isOutOfRepoAccess(observed394r3, denyRoots, runDir, [auditedCli]), true, "v5 self-contained-394 rep 3 stays denied");
+  for (const denied of [
+    `N='${nodeBin}'; H='${v5Entry}'; $N $H task verify htask_1; cat "$H"`,
+    `N='${nodeBin}'; H='${v5Entry}'; $N $H task verify htask_1; cat $H`,
+    `N='${nodeBin}'; H='${v5Entry}'; $N $H task verify htask_1; cp $H /tmp/x`,
+    `N='${nodeBin}'; H='${v5Entry}'; $N $H task verify htask_1; grep -n x "$H"`,
+    `N='${nodeBin}'; H='${v5Entry}'; "$N" "$H" task verify htask_1; python3 -c "print(open('$H').read())"`,
+    `N='${nodeBin}'; H='${v5Entry}'; $N /tmp/x.js $H`,
+    `N=cat; H='${v5Entry}'; $N $H task verify htask_1`,
+    `V="'${nodeBin}' '${v5Entry}' task verify htask_1"; eval "$V -- npm test"; cat $V`,
+    `python3 - <<'EOF'\nN='cat'\nEOF\nN='${nodeBin}'; H='${v5Entry}'; $N $H task verify htask_1; less $H`,
+    `source /dev/stdin <<'EOF'\nN=cat\nEOF\nN='${nodeBin}'; H='${v5Entry}'; "$N" "$H" task verify htask_1`,
+    `N='${nodeBin}'; H='${v5Entry}'; cat <<'EOF' | source /dev/stdin\nN=cat\nEOF\n"$N" "$H" task verify htask_1`,
+    `f() { . /dev/stdin; }; N='${nodeBin}'; H='${v5Entry}'; f <<'EOF'\nN=cat\nEOF\n"$N" "$H" task verify htask_1`,
+    `N='${nodeBin}'; H='${v5Entry}'; cat <<EOF\n$H\nEOF\n"$N" "$H" task verify htask_1`,
+    // Critic review of the v5 fix: a heredoc body is no exemption, it may reach the current shell or a child.
+    `export N='${nodeBin}'; export H='${v5Entry}'; "$N" "$H" task verify htask_1; bash <<'EOF'\nN=cat; "$N" "$H" x\nEOF`,
+    `export N='${nodeBin}'; export H='${v5Entry}'; $N $H task verify htask_1; bash <<'EOF'\nN=cat; $N $H x\nEOF`,
+    `N='${nodeBin}' H='${v5Entry}' bash <<'EOF'\nN=cat; $N $H x\nEOF\n$N $H task verify htask_1`,
+    `N='${nodeBin}'; H='${v5Entry}'; cat <<'EOF' > s.sh\nN=cat\nEOF\n. s.sh; $N $H task verify htask_1`,
+    `N='${nodeBin}'; H='${v5Entry}'; cat <<'EOF' | tee s.sh\nN=cat\nEOF\n. ./s.sh; $N $H task verify htask_1`,
+    `N='${nodeBin}'; H='${v5Entry}'; cat <<'EOF' > s.sh\nN=cat\nEOF\neval "$(< s.sh)"; $N $H task verify htask_1`,
+    `N='${nodeBin}'; H='${v5Entry}'; python3 - <<'EOF' |\nprint('N=cat')\nEOF\nsource /dev/stdin; $N $H task verify htask_1`,
+    `N='${nodeBin}'; H='${v5Entry}'; python3 - <<'EOF' |&source /dev/stdin\nprint('N=cat')\nEOF\n$N $H task verify htask_1`,
+    `N='${nodeBin}'; H='${v5Entry}'; alias s='source /dev/stdin'; python3 - <<'EOF' | s\nprint('N=cat')\nEOF\n$N $H task verify htask_1`,
+    // A function or alias named node or N: the word `node` then runs it, not node.
+    `N=node; H='${v5Entry}'; node() { cat "$@"; }; $N $H task verify htask_1`,
+    `N=node; H='${v5Entry}'; node() { cat "$@"; }; "$N" "$H" task verify htask_1`,
+    `N=node; H='${v5Entry}'; function node { cat "$@"; }; $N $H task verify htask_1`,
+    `N=node; H='${v5Entry}'; alias node=cat; $N $H task verify htask_1`,
+    // A backslash starting a word, or re-parsed by eval or source, keeps the name a mention.
+    `N='${nodeBin}'; H='${v5Entry}'; read \\N <<< cat; $N $H task verify htask_1`,
+    `N='${nodeBin}'; H='${v5Entry}'; eval read x\\\\N <<< cat; $N $H task verify htask_1`,
+    `N='${nodeBin}'; H='${v5Entry}'; printf 'read x\\\\N' > s.sh; . s.sh <<< cat; $N $H task verify htask_1`,
+    // Critic round 2: every spelling of a re-parse (eval, source, trap) is covered because mentions are counted
+    // case-sensitively, not by guessing which statements re-parse.
+    `N='${nodeBin}'; H='${v5Entry}'; \\eval read x\\\\N <<< cat; $N $H task verify htask_1`,
+    `N='${nodeBin}'; H='${v5Entry}'; e""val read x\\\\N <<< cat; $N $H task verify htask_1`,
+    `N='${nodeBin}'; H='${v5Entry}'; ev\\al read x\\\\N <<< cat; $N $H task verify htask_1`,
+    `N='${nodeBin}'; H='${v5Entry}'; trap "read \\\\N <<< cat" DEBUG; $N $H task verify htask_1`,
+    `N='${nodeBin}'; H='${v5Entry}'; printf 'read x\\\\N' > s.sh; if true; then . ./s.sh <<< cat; fi; $N $H task verify htask_1`,
+    `N='${nodeBin}'; H='${v5Entry}'; printf 'read x\\\\N' > s.sh; command . ./s.sh <<< cat; $N $H task verify htask_1`,
+    `N='${nodeBin}'; H='${v5Entry}'; printf 'read x\\\\N' > s.sh; builtin source ./s.sh <<< cat; $N $H task verify htask_1`,
+    `N='${nodeBin}'; H='${v5Entry}'; printf 'read x\\\\N' > s.sh; \\. ./s.sh <<< cat; $N $H task verify htask_1`,
+    `N='${nodeBin}'; H='${v5Entry}'; printf 'read x\\\\N' > s.sh; for f in ./s.sh; do . $f <<< cat; done; $N $H task verify htask_1`,
+    // Critic round 3: offsets of a later variable stay valid after earlier variables' rewrites lengthen the text.
+    `N=node; H='${v5Entry}'; ${'"$N" -v; '.repeat(15)}"$M" "$H" task verify htask_1;M=node`,
+    `N=node; H='${v5Entry}'; ${"$N -v; ".repeat(15)}$M $H task verify htask_1;M=node`,
+  ]) assert.equal(isOutOfRepoAccess(denied, denyRoots, runDir, [auditedCli]), true, denied);
+  // Shell variable names are case-sensitive: `n` and `\n` are no mention of `N`.
+  assert.equal(isOutOfRepoAccess(`N='${nodeBin}'; H='${v5Entry}'; read n <<< cat; echo "$n" "\\n"; $N $H task verify htask_1`, denyRoots, runDir, [auditedCli]), false, "a lowercase n is not the node variable N");
+  assert.equal(isOutOfRepoAccess(`n='${nodeBin}'; H='${v5Entry}'; read N <<< cat; "$n" "$H" task verify htask_1`, denyRoots, runDir, [auditedCli]), false, "an uppercase N is not the node variable n");
+  // A home whose lowercase has another length (İ) cannot misalign the case-sensitive text.
+  assert.equal(isOutOfRepoAccess(`N=node; H=~/audited/dist/cli/index.js; "$N" "$H" task verify htask_1`, ["/home/dave/hunch-private"], runDir, ["/home/İsmail/audited/dist/cli/index.js"], "/home/İsmail"), false, "a non-ASCII home keeps the node variable rewrite aligned");
   assert.equal(viaVar(`N="$(command -v cat)/node"; `), true, "a node path built by expansion stays denied");
   assert.equal(viaVar("N='/x/node.exe'; ", `"$N" "$H" task verify htask_1; cat "$H"`), true, "the entrypoint read elsewhere still denies it");
   assert.equal(viaVar("N='/home/dave/audited/node'; "), true, "a deny root inside the node path still matches");
