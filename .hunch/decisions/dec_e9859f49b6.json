@@ -1,0 +1,45 @@
+{
+  "id": "dec_e9859f49b6",
+  "title": "On hosts whose Stop hook closes the task, a task-verify check alone no longer obliges an agent-side hunch_task finish",
+  "topic": "task-report.agent-calls",
+  "status": "accepted",
+  "context": "Measured in the PILOT5 Gate A v5 transcripts: the finish ritual ran on 20/20 Hunch runs and cost roughly 65-115k tokens per run (including deferred-tool schema loads), while for verify-only runs the Stop hook already closes the task and shows the same verify evidence. The maintainer chose this on 2026-10-01 to cut per-task overhead without losing agent-reported applications.",
+  "decision": "Keeps dec_0bf3bda2c1's conditional model (the prompt hook prints the verify launcher; no agent start call) with one change: on hosts whose Stop hook closes the task (HOST_CLOSES_TASK), a `task verify` check by itself no longer counts as 'used Hunch'. The agent calls hunch_task finish only when it made a hunch_* call on the task ID, acted on Hunch hook context, or has an application to claim; otherwise the Stop hook closes the task and renders the verify evidence. Hosts without a Stop hook keep the existing rule (verify counts, finish required). The finish wording stays consistent across the always-loaded block, MCP instructions and the prompt-hook task instruction.",
+  "consequences": [
+    "Verify-only tasks on Claude Code and Codex end with no agent finish call; the Stop hook's card is the record.",
+    "Tasks that used hunch_* tools or have an application to claim still finish agent-side on every host."
+  ],
+  "alternatives_rejected": [
+    "Keep the dec_0bf3bda2c1 rule unchanged (verify counts as use): every verify-only task pays a finish round-trip, plus a tool-schema load on hosts with deferred tools, for a card whose evidence the Stop hook already shows.",
+    "Remove the agent-side finish entirely and rely on the Stop hook: rejected again (as on 2026-09-20). It loses agent-reported applications and the card in the final response, which the host-side notice cannot supply.",
+    "Apply the change to every host: hosts without a Stop hook have nothing else that closes the task or shows the evidence, so they must keep the finish."
+  ],
+  "rejected_tripwires": [],
+  "related_components": [],
+  "related_files": [
+    "src/core/taskReportHook.ts",
+    "src/mcp/server.ts",
+    "src/integrations/claudemd.ts"
+  ],
+  "supersedes": "dec_0bf3bda2c1",
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-10-01T03:17:06.955Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "premises": [],
+  "provenance": {
+    "source": "agent_recorded",
+    "confidence": 0.75,
+    "evidence": [
+      "src/core/taskReportHook.ts",
+      "src/mcp/server.ts",
+      "src/integrations/claudemd.ts"
+    ]
+  },
+  "date": "2026-10-01T03:17:06.955Z"
+}

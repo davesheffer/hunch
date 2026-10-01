@@ -2,7 +2,7 @@
   "id": "dec_0bf3bda2c1",
   "title": "Agent-side hunch_task calls are conditional: the prompt hook prints the verify command, and finish is called only when the task used Hunch",
   "topic": "task-report.agent-calls",
-  "status": "accepted",
+  "status": "superseded",
   "context": "Measured on 2026-09-19 sessions: hunch_task start+finish cost ~87 main-session model calls per day (~6% of the main model's context re-reads), almost all returning an empty report ('No task-linked delivery observed'). The Stop hook already closes the task unconditionally (closeHookTask) and shows the report when non-empty (stopHookReport), and the only reason the hook text demanded a start call was to obtain verification_argv. Decided by David on 2026-09-20 via an inline question (three options offered; he chose the conditional contract).",
   "decision": "On hosts with a prompt hook, the hook's task instruction prints the exact `task verify <task_id> --` launcher inline, so the model no longer calls hunch_task start. The model calls hunch_task finish (and pastes the contribution card) only when the task used Hunch: a hunch_* call made with the task_id, a task-verify check, or an application to claim. Otherwise it skips finish; the host Stop hook closes the task as a host close and renders the evidence when the report is non-empty. Hosts without prompt hooks keep start + finish. start still works and still returns verification_argv. If the launcher cannot be computed the hook falls back to the old start-call wording (fail open).",
   "consequences": [
@@ -25,11 +25,11 @@
     "src/integrations/claudemd.ts"
   ],
   "supersedes": null,
-  "superseded_by": null,
+  "superseded_by": "dec_e9859f49b6",
   "caused_by_bug": null,
   "commit": null,
   "valid_from": "2026-09-19T22:41:18.579Z",
-  "valid_to": null,
+  "valid_to": "2026-10-01T03:17:06.955Z",
   "retired": {
     "symbols": [],
     "deps": []
