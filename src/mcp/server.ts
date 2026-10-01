@@ -1220,10 +1220,9 @@ export interface RootControlOptions {
  * needs no host hook or instruction file. Host-neutral by design (con_e04226bd05);
  * per-host prose (CLAUDE.md, AGENTS.md) and hooks add to it, never replace it. */
 export const MCP_INSTRUCTIONS = [
-  "Hunch is this repository's engineering memory: decisions, bug history, invariants, components, with provenance.",
-  "Per user task: (1) hunch_task(action:\"start\", title) once — skip it when the host's prompt hook already opened the task and printed its verify command, and reuse that task_id; (2) hunch_context(target, task_id) FIRST, before reading or editing, for the file, symbol, or task phrase; (3) hunch_check_constraints(scope) before editing shared code; (4) hunch_task(action:\"finish\", task_id) before the final response, showing its contribution card — required, with one exception: the host's prompt hook opened the task AND its instruction said that host closes the task AND the task used no Hunch (no hunch_* call on this task_id, no task verify check, no hook context you acted on, nothing to claim). A task you started with hunch_task is always finished by you.",
-  "Then by moment: hunch_why(target) for rationale and rejected alternatives, hunch_bug_lineage before fixing a failure, hunch_record_decision after a non-trivial choice, hunch_record_correction when a human corrects you.",
-  "Hosts without lifecycle hooks (Windsurf, Cursor, or Codex before its hooks are trusted) receive no automatic grounding: call these tools yourself.",
+  "Hunch is this repo's engineering memory. Call hunch_context(target, task_id) FIRST, before reading or editing; hunch_check_constraints(scope) before shared edits.",
+  "Reuse a prompt hook's task_id, else hunch_task(action:\"start\") once. Finish with hunch_task(action:\"finish\") and show its card unless the hook said the host closes the task AND you made no hunch_* call, acted on no hook context, and claim nothing; a task you started, you finish.",
+  "Hosts without lifecycle hooks: call these tools yourself.",
 ].join("\n");
 
 export function buildServerWithRootControl(initialRoot: string, options: RootControlOptions = {}): RootControlledServer {
@@ -1822,7 +1821,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
     {
       title: "Assemble the minimal relevant Hunch slice for a task",
       description:
-        "Given a file, symbol, or task phrase you're about to work on, return the MINIMAL relevant memory — invariants, decisions, bug history, blast radius — as a compact brief. Call FIRST when starting work. A task phrase with no file/symbol match falls back to the closest graph matches. Returns a budgeted brief plus a delivery receipt. Not for exhaustive rationale on one file (hunch_why) or keyword search (hunch_query).",
+        "Given a file, symbol, or task phrase you're about to work on, return the MINIMAL relevant memory — invariants, decisions, bug history, blast radius — as a compact brief. Call FIRST when starting work. A task phrase with no file/symbol match falls back to the closest graph matches. Returns a budgeted brief plus a delivery receipt. Not for exhaustive rationale on one file (hunch_why) or keyword search (hunch_query). By moment — Start: reuse the hook task_id; orient with hunch_structure, hunch_workspaces, hunch_runbook(task); ask the user about each hunch_escalations() entry. Design: hunch_why(target), hunch_current_decision(topic), hunch_bug_lineage(symptom_or_symbol), hunch_compare(candidates), hunch_query(query). Edit: hunch_check_constraints(scope), hunch_get_dependents(symbol), hunch_blast_radius(target), hunch_findings. Merge: hunch_conformance(), hunch_pr_impact, hunch_merge_verdict; hunch_policy_* where listed (only a human activates a policy). Record with task_id: hunch_capture_decision then hunch_record_decision, hunch_record_correction, hunch_record_finding. Finish: checks via task verify, then hunch_task finish.",
       inputSchema: {
         target: z.string().describe("A file path, symbol, or task phrase you're about to work on."),
         budget_tokens: z.number().optional().describe("Rough token budget for the brief (default 1500)."),

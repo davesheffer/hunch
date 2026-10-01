@@ -9,32 +9,24 @@ import { writeCursorRule, refreshExistingGrounding, regenerateGrounding, refresh
 import { execFileSync } from "node:child_process";
 import { parseGroundingCounts, classifyGroundingBlock, describeGroundingFreshness } from "../src/core/groundingLag.js";
 
-// The grounding documents each MCP tool's call signature. If a documented param name
-// drifts from the tool's actual inputSchema key, an agent copies the wrong key and the
-// call fails Zod validation ("expected string, received undefined"). Lock the signatures
-// to the real param names in src/mcp/server.ts.
-test("grounding tool signatures match the real MCP param names (no agent-misleading drift)", (t) => {
+// The always-loaded block only routes: one hunch_context line plus named blocking
+// invariants. The per-moment tool list lives in the hunch_context description
+// (test/mcp-instructions.test.ts locks its param names).
+test("grounding block routes to hunch_context and stays small", (t) => {
   const { store, cleanup } = tempStore();
   t.after(cleanup);
+  for (let i = 0; i < 9; i++) {
+    store.json.put("constraints", mkConstraint({
+      id: `con_ceiling00${i}`, severity: "blocking", scope: ["src/a/**", "src/b/**", "src/c/**"],
+      statement: `Blocking invariant ${i} ${"with a long rationale that keeps going ".repeat(8)}END`,
+    }));
+  }
   const md = renderHunchSection(store);
-
-  assert.match(md, /hunch_context\(target, task_id\)/, "context retains its target and carries explicit task correlation");
-  assert.match(md, /hunch_query\(query\)/, "hunch_query param is `query`, not `question`");
-  assert.match(md, /hunch_bug_lineage\(symptom_or_symbol\)/, "hunch_bug_lineage param is `symptom_or_symbol`");
-  assert.match(md, /hunch_runbook\(task\)/, "hunch_runbook is advertised so agents can discover it");
-  assert.match(md, /hunch_compare\(candidates\)/, "hunch_compare is advertised");
-  assert.match(md, /hunch_conformance\(\)/, "hunch_conformance is advertised");
-  assert.match(md, /hunch_policy_plan\(policy_id\)/, "the canonical ProofPlan is discoverable before proof review");
-  assert.match(md, /hunch_policy_card\(policy_id\)/, "the deterministic proof-card review surface is discoverable across clients");
-  assert.match(md, /only a human activates a policy/, "grounding separates proof evidence from authority");
-  assert.match(md, /hunch_why\(target\)/);
-  assert.match(md, /hunch_check_constraints\(scope\)/);
-  assert.match(md, /hunch_get_dependents\(symbol\)/);
-
-  // the old, wrong signatures must not reappear
-  assert.doesNotMatch(md, /hunch_context\(target_or_task\)/);
-  assert.doesNotMatch(md, /hunch_query\(question\)/);
-  assert.doesNotMatch(md, /hunch_bug_lineage\(symptom\)/);
+  assert.match(md, /hunch_context\(target\)` first, before reading or editing/);
+  assert.ok(md.length <= 1_200, `block is ${md.length} chars; ceiling 1,200`);
+  assert.match(md, /- …and 3 more: `hunch_check_constraints\(scope\)`/, "blocking invariants past the limit are counted, not listed");
+  assert.doesNotMatch(md, /\*\*(Start|Design|Edit|Merge|Record|Finish):\*\*/, "no moment list in the block");
+  assert.doesNotMatch(md, /hunch_policy_|Component wiki/);
 });
 
 // A retired constraint has an explicitly closed valid-time window — the invariant it
@@ -88,27 +80,24 @@ test("renderHunchSection doesn't let retired constraints starve active ones out 
     }));
   }
   store.json.put("constraints", mkConstraint({
-    id: "con_active0001", statement: "ACTIVE_MUST_SURVIVE_SLICE", severity: "advisory",
+    id: "con_active0001", statement: "ACTIVE_MUST_SURVIVE_SLICE", severity: "blocking",
   }));
 
   const md = renderHunchSection(store);
   assert.match(md, /ACTIVE_MUST_SURVIVE_SLICE/);
 });
 
-// The policy-tools grounding line must track whether the MCP server actually registers
-// the policy group (src/mcp/toolset.ts) — a root with no policy evidence and no config
-// opt-in must not advertise a tool that isn't listed.
-test("renderHunchSection names the policy tools only when the repo holds a committed policy", (t) => {
+// Policy tools are named in the hunch_context description, never in the block: the
+// committed block must not differ by machine or by a gitignored opt-in.
+test("renderHunchSection never names the policy tools", (t) => {
   const { store, root, cleanup } = tempStore();
   t.after(cleanup);
 
   const withoutPolicies = renderHunchSection(store, root);
   assert.doesNotMatch(withoutPolicies, /hunch_policy_evaluate/);
-
-  // .hunch/config.json is gitignored: a local opt-in must not change the committed block.
   writeFileSync(join(root, ".hunch", "config.json"), JSON.stringify({ firmness: "advisory", mcp_tools: "core,policy" }));
   assert.equal(renderHunchSection(store, root), withoutPolicies);
-  assert.match(renderHunchSection(store), /hunch_policy_evaluate/, "a bare render keeps the full list");
+  assert.doesNotMatch(renderHunchSection(store), /hunch_policy_evaluate/);
 });
 
 // fnd_f6875f475b: the post-commit capture runs the PINNED hunch, which can be older
@@ -294,7 +283,7 @@ test("refreshExistingGrounding keeps newer prose unless forced", (t) => {
   assert.match(forced, /^# Mine/, "user prose outside the block survives");
 });
 
-test("Top invariants never clip a blocking statement; others clip at a word boundary", (t) => {
+test("Top invariants name blocking statements clipped at a word boundary and leave the rest to the pre-edit hook", (t) => {
   const { store, cleanup } = tempStore();
   t.after(cleanup);
   const long = (tag: string) => `${tag} ${"alpha beta gamma delta ".repeat(12)}END_OF_STATEMENT`;
@@ -302,14 +291,12 @@ test("Top invariants never clip a blocking statement; others clip at a word boun
   store.json.put("constraints", mkConstraint({ id: "con_warnlong001", statement: long("WARNING_LONG"), severity: "warning" }));
 
   const md = renderHunchSection(store);
-  assert.ok(long("BLOCKING_LONG").length > 200);
-  assert.ok(md.includes(long("BLOCKING_LONG")), "blocking statement renders in full");
-  const line = md.split("\n").find((l) => l.includes("WARNING_LONG"))!;
-  const m = /\*\*\[warning\]\*\* (.*?) _\(scope:/.exec(line)!;
-  assert.ok(m, line);
+  assert.doesNotMatch(md, /WARNING_LONG/, "non-blocking invariants reach the pre-edit hook, not the block");
+  const m = /^- con_blocklong01: (.*)$/m.exec(md)!;
+  assert.ok(m, md);
   const clipped = m[1];
   assert.ok(clipped.endsWith("…"), clipped);
-  assert.ok(clipped.length <= 200, `clipped to ${clipped.length} chars`);
+  assert.ok(clipped.length <= 120, `clipped to ${clipped.length} chars`);
   assert.doesNotMatch(clipped, /END_OF_STATEMENT/);
   const words = clipped.slice(0, -1).split(" ");
   assert.ok(["alpha", "beta", "gamma", "delta"].includes(words[words.length - 1]), `ends on a whole word: ${clipped}`);

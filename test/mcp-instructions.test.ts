@@ -14,13 +14,37 @@ test("initialize delivers the grounding contract to every client, hooks or not",
   t.after(async () => { await client.close(); await server.close(); cleanup(); });
   const instructions = client.getInstructions();
   assert.equal(instructions, MCP_INSTRUCTIONS);
-  for (const tool of ["hunch_task", "hunch_context", "hunch_check_constraints", "hunch_why"]) assert.ok(instructions?.includes(tool), tool);
+  for (const tool of ["hunch_task", "hunch_context", "hunch_check_constraints"]) assert.ok(instructions?.includes(tool), tool);
   assert.doesNotMatch(instructions ?? "", /claude code only|anthropic/i, "host-neutral (con_e04226bd05)");
-  assert.ok((instructions ?? "").length < 1500, "short enough to survive every client's context budget");
+  assert.ok((instructions ?? "").length <= 500, `${(instructions ?? "").length} chars; ceiling 500`);
   // An MCP-started task has no session key, so no hook ever closes it: the finish
   // skip must read as ONE conjunction gated on the prompt hook's own statement,
   // never as an independent "skippable where the host closes the task" clause.
-  assert.match(instructions ?? "", /its instruction said that host closes the task AND the task used no Hunch/);
-  assert.match(instructions ?? "", /A task you started with hunch_task is always finished by you/);
+  assert.match(instructions ?? "", /unless the hook said the host closes the task AND you made no hunch_\* call/);
+  assert.match(instructions ?? "", /a task you started, you finish/);
   assert.doesNotMatch(instructions ?? "", /skippable/i);
+  assert.doesNotMatch(instructions ?? "", /task verify check/, "a verify check alone never obliges a finish where the host closes the task");
+});
+
+// The always-loaded block routes to hunch_context; its description carries the
+// per-moment tool list, so the documented param names must match the real keys.
+test("hunch_context's description lists the tools by moment with their real param names", async (t) => {
+  const { root, cleanup } = tempStore();
+  const server = buildServer(root);
+  const [ct, st] = InMemoryTransport.createLinkedPair();
+  const client = new Client({ name: "context-description-test", version: "1" });
+  await Promise.all([server.connect(st), client.connect(ct)]);
+  t.after(async () => { await client.close(); await server.close(); cleanup(); });
+  const md = (await client.listTools()).tools.find((tool) => tool.name === "hunch_context")?.description ?? "";
+  for (const moment of ["Start:", "Design:", "Edit:", "Merge:", "Record", "Finish:"]) assert.ok(md.includes(moment), moment);
+  assert.match(md, /hunch_query\(query\)/, "hunch_query param is `query`, not `question`");
+  assert.match(md, /hunch_bug_lineage\(symptom_or_symbol\)/);
+  assert.match(md, /hunch_runbook\(task\)/);
+  assert.match(md, /hunch_compare\(candidates\)/);
+  assert.match(md, /hunch_conformance\(\)/);
+  assert.match(md, /hunch_why\(target\)/);
+  assert.match(md, /hunch_check_constraints\(scope\)/);
+  assert.match(md, /hunch_get_dependents\(symbol\)/);
+  assert.match(md, /only a human activates a policy/);
+  assert.doesNotMatch(md, /hunch_query\(question\)|hunch_bug_lineage\(symptom\)/);
 });
