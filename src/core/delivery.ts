@@ -10,7 +10,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import type { AssembledContext } from "../store/hunchStore.js";
-import type { Component, Decision, Symbol } from "./types.js";
+import type { Component, Constraint, Decision, Symbol } from "./types.js";
 import type { ExecutionObligation } from "./pipeline.js";
 import { pathMatchesGlob, pathsRelated } from "./glob.js";
 import { toPosixTarget } from "./paths.js";
@@ -149,6 +149,13 @@ export interface DeliveryOptions {
   historical?: boolean;
   /** Injectable for deterministic tests. Omit to use the local Git graph. */
   commitReachability?: (commit: string) => CommitReachability;
+  /** false drops the structural lists (blast radius, components, reviewed
+   *  landscape) — the edit hooks' lean grounding. Default true: hunch_context
+   *  and the CLI keep them. */
+  graphLists?: boolean;
+  /** Constraint ids the caller already served this session: each renders as a
+   *  one-line reference (id + short statement) instead of the full headline. */
+  servedConstraints?: ReadonlySet<string>;
 }
 
 type ProvenanceState = DeliveryProvenanceStatus;
@@ -179,6 +186,8 @@ const MAX_PROFILE_HEADLINES = 8;
 /** How far a supplement's text is clipped in the rendered line. Shared so
  *  `deliveryDedupeInput` can reconstruct that exact line to project over it. */
 const SUPPLEMENT_HEADLINE_CHARS = 700;
+/** Statement clip for a constraint already served this session (a reference, not a rule restatement). */
+const SERVED_REFERENCE_CHARS = 80;
 export const PROFILE_BASE_SCORE: Record<DeliveryProfile, Record<DeliveryKind, number>> = {
   builder: {
     constraints: 900,
@@ -655,8 +664,19 @@ export function assertDeliveryEnvelope(envelope: DeliveryEnvelope): void {
  *  Nothing is removed from what the agent SEES — this string is never emitted.
  *  Never throws: on any surprise the caller gets `envelope.text` back, i.e. the
  *  original hash-the-presentation behaviour (a full block, never a wrong delta). */
-export function deliveryDedupeInput(envelope: DeliveryEnvelope, supplements: readonly DeliverySupplement[] = []): string {
+export function deliveryDedupeInput(
+  envelope: DeliveryEnvelope,
+  supplements: readonly DeliverySupplement[] = [],
+  constraints: readonly Pick<Constraint, "id" | "severity" | "statement" | "scope">[] = [],
+): string {
   try {
+    // A constraint renders full on first serve and as a one-line reference
+    // after (servedConstraints): both forms project to the record's identity,
+    // so the switch alone is never a change.
+    const constraintIdentity = new Map(constraints.map((c) => [
+      `- ${c.id} | constraint/`,
+      `- ${c.id} | constraint/${c.severity} | identity\u0000${c.statement}\u0000${c.scope.join(",")}`,
+    ]));
     const identity = new Map<string, string>();
     for (const s of supplements) {
       if (s.hash_text === undefined) continue;
@@ -672,7 +692,8 @@ export function deliveryDedupeInput(envelope: DeliveryEnvelope, supplements: rea
     const flush = () => { if (run.length) { projected.push(...run.sort()); run = []; } };
     for (const line of envelope.text.split("\n")) {
       if (!line.startsWith("- ")) { flush(); projected.push(line); continue; }
-      run.push(identity.get(line) ?? line);
+      const prefix = line.slice(0, line.indexOf(" | constraint/") + " | constraint/".length);
+      run.push(identity.get(line) ?? (line.includes(" | constraint/") ? constraintIdentity.get(prefix) : undefined) ?? line);
     }
     flush();
     return projected.join("\n");
@@ -683,6 +704,7 @@ export function deliveryDedupeInput(envelope: DeliveryEnvelope, supplements: rea
 
 /** Build the one envelope used by CLI, MCP, and the edit hook. */
 export function buildDeliveryEnvelope(ctx: AssembledContext, options: DeliveryOptions = {}): DeliveryEnvelope {
+  if (options.graphLists === false) ctx = { ...ctx, blast_radius: [], components: [], landscape: undefined };
   const profile = options.profile ?? "builder";
   const budget = Number.isFinite(ctx.budget_tokens) ? Math.max(0, Math.floor(ctx.budget_tokens)) : 1500;
   const cap = budget * 4;
@@ -709,7 +731,9 @@ export function buildDeliveryEnvelope(ctx: AssembledContext, options: DeliveryOp
       provenance: validation.state,
       staleDetail: validation.detail,
       retiredDetail: retired ? "constraint is retired at HEAD" : undefined,
-      line: `${constraint.id} | constraint/${constraint.severity} | ${clipHeadline(constraint.statement, 180)} | scope ${clipHeadline(constraint.scope.join(", ") || "repo", 100)} | ${sourceTier(constraint.provenance.source)}/${validation.state} | hunch_why("${constraint.id}")`,
+      line: options.servedConstraints?.has(constraint.id)
+        ? `${constraint.id} | constraint/${constraint.severity} | ${clipHeadline(constraint.statement, SERVED_REFERENCE_CHARS)} | shown earlier this session | hunch_why("${constraint.id}")`
+        : `${constraint.id} | constraint/${constraint.severity} | ${clipHeadline(constraint.statement, 180)} | scope ${clipHeadline(constraint.scope.join(", ") || "repo", 100)} | ${sourceTier(constraint.provenance.source)}/${validation.state} | hunch_why("${constraint.id}")`,
     });
   }
 
