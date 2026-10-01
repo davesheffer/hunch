@@ -215,3 +215,24 @@ independently; the live Gate A version 5 run is the test. All selection rules ar
   suite has pre-existing failures on this Mac in both arms. Change: both files are passed to `--exclude-path` and
   removed from both arms; no task's validator uses them.
 - A third smoke run, with harness `4d3590bb` and the new exclude list, must pass before any timed run.
+
+## (q) Gate A version 5 timed runs: four `current-hunch` runs ended `isolation_breach`; left out as the plan says
+
+- The 40 timed runs (2026-09-30 22:07 to 2026-10-01 04:58, harness `4d3590bb`, seed `pilot5-gate-a-v5`) include four
+  `isolation_breach` runs, all in `current-hunch`: `continuation-375` run 1, `operation-268` run 3 and
+  `self-contained-394` runs 1 and 3. As `GATE-A5-ANALYSIS-PLAN.md` says, they are left out of every measure.
+  `self-contained-394` keeps 2 counted `current-hunch` runs, the minimum, so no task is missing.
+- Replay: `tools/gate-a5-confinement-replay.mts --out /Users/Shared/bench-out/pilot5-gate-a5 --harness <4d3590bb>`
+  rechecked all 40 transcripts through the harness's own `isOutOfRepoAccess`. It flags exactly these four and no
+  other run (exit 1, 4 unexplained, as expected before this entry).
+- What the flagged commands did. In all four, the only paths outside the run repository are the node binary and the
+  audited build's `dist/cli/index.js`, the launcher the prompt hook printed.
+  - Three ran `task verify` through shell variables in forms the (o) fix does not cover: a quoted launcher in `V`
+    run through `eval "$V -- npx tsx --test ..."` (`continuation-375` run 1), and node and the entry in two
+    variables run as `$N $H task verify ...` (`operation-268` run 3) or `"$N" "$H" task verify ...`
+    (`self-contained-394` run 1). These are false positives of the confinement rule, not escapes.
+  - One, `self-contained-394` run 3, ran the audited build's `report <task> --json` (not `task verify`) through
+    `"$N" "$C"`, to read its own task report. That reads only its own arm's memory, so nothing leaked across arms,
+    but it is outside the allowed launcher use, and the flag is correct under the rule as written.
+- Effect: none on the verdict. P2 to P4 are computed over counted runs only, as pre-registered. A harness fix for
+  the variable-split launcher forms is a version 6 change; it is not applied to version 5.
