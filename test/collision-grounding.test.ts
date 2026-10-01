@@ -22,6 +22,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { renderGrounding } from "../src/core/topics.js";
+import { compactGrounding } from "../src/core/delivery.js";
 import { pendingEscalations } from "../src/core/escalations.js";
 import { hunchPaths } from "../src/core/paths.js";
 import { HunchStore } from "../src/store/hunchStore.js";
@@ -72,6 +73,28 @@ test("an UNcontested topic is still asserted normally (no regression) (#5)", () 
   assert.match(out, /• "api\.paging": Page by cursor\. \[dec_solo\]/);
   assert.match(out, /rejected: offset/);
   assert.ok(!/UNRESOLVED/.test(out));
+});
+
+test("compact grounding keeps topic, id, and rejected, fits the cap, and never clips a contested topic", () => {
+  const settled = Array.from({ length: 6 }, (_, i) => DEC({
+    id: `dec_s${i}`, topic: `area.t${i}`, title: "t", decision: "D".repeat(400),
+    alternatives_rejected: ["R".repeat(200)], related_files: ["src/api.ts"],
+  }));
+  const solo = renderGrounding([settled[0]] as never, [settled[0]] as never, { compact: true });
+  assert.match(solo, /• "area\.t0" → dec_s0 \(rejected: R+\)/, "compact bullet: topic → id (rejected)");
+  assert.ok(!solo.includes("DDD"), "the decision text is not repeated; its title is on its own delivered line");
+
+  const all = [...settled, A, B];
+  const out = compactGrounding(renderGrounding([...settled, A, B] as never, all as never, { compact: true }), 320);
+  const unresolved = out.split("\n").find((line) => line.includes("UNRESOLVED"));
+  assert.ok(unresolved && !unresolved.endsWith("…"), "a contested topic's warning is never clipped");
+  assert.ok(unresolved!.includes("dec_graphql") && unresolved!.includes("dec_rest"));
+  // Six settled bullets cannot share what the unclipped warning leaves: they are
+  // named as omitted, never silently dropped.
+  assert.match(out, /anchored decision\(s\) omitted|→ dec_s/);
+  const settledOnly = compactGrounding(renderGrounding(settled as never, settled as never, { compact: true }), 320);
+  assert.ok(settledOnly.length <= 320, `fits the cap (${settledOnly.length})`);
+  for (const d of settled) assert.ok(settledOnly.includes(`→ ${d.id}`), `${d.id} keeps its id`);
 });
 
 test("no anchored decisions still returns empty (no regression) (#5)", () => {

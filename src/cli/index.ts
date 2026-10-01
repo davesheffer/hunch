@@ -7306,7 +7306,7 @@ function fileGrounding(root: string, store: HunchStore, provider: HookProvider, 
       // line (systemMessage); repeats of the same revision stay silent.
       recalled = reportPresentationEnabled(root) ? renderRecalledLine(unseenLessons(root, reportTaskId, snapshots)) : null;
       const occurrence = recordTaskDelivery(root, reportTaskId, envelope, snapshots, undefined, target);
-      reportNotice = `\n\nHunch task ${reportTaskId} · delivery ${occurrence}. Inspect exact application references with hunch_report(task_id).`;
+      reportNotice = `\n\nHunch task ${reportTaskId} · delivery ${occurrence}; claims: hunch_report(task_id).`;
     } catch { reportNotice = "\n\nTask report observation unavailable; this delivery's task contribution remains unverified."; recalled = null; }
   }
   return { mode: "full", text: text + reportNotice, recalled, sibling: siblings.text, memory: envelope.text.trim(), notice: reportNotice.trim() };

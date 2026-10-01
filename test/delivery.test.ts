@@ -52,10 +52,11 @@ function context(overrides: Partial<AssembledContext> = {}): AssembledContext {
 
 test("delivery envelope: budget receipts only records whose headline was rendered", () => {
   const ctx = context({
-    budget_tokens: 105,
+    // A lean decision headline is id + title (clipped at 90), so the titles carry the length.
+    budget_tokens: 60,
     decisions: [
-      fixtureDecision("dec_a", "src/x.ts", "A".repeat(180)),
-      fixtureDecision("dec_b", "src/x.ts", "B".repeat(180)),
+      { ...fixtureDecision("dec_a", "src/x.ts"), title: "A".repeat(180) },
+      { ...fixtureDecision("dec_b", "src/x.ts"), title: "B".repeat(180) },
     ] as never,
   });
   const envelope = buildDeliveryEnvelope(ctx, {
