@@ -116,8 +116,8 @@ There were no timeouts and no agent errors. Every task keeps at least 2 counted 
 
 - 5 tasks and 4 repetitions per cell, with 2 to 4 counted runs per cell after exclusions. No pooled interval for P2
   to P4 excludes 1.00.
-- The four excluded runs were all in the Hunch arm. Three were confinement-rule false positives; one used a Hunch
-  command outside the allowed launcher (`DEVIATIONS.md` (q)). Excluding them follows the plan. Their input tokens
+- The four excluded runs were all in the Hunch arm. All four were confinement-rule false positives
+  (`DEVIATIONS.md` (q), corrected on 2026-10-01 by (r): the fourth was first reported as a launcher misuse). Excluding them follows the plan. Their input tokens
   were mixed against the counted Hunch runs of the same task (continuation higher, operation lower, self-contained
   one above and one below), so they are not a one-sided selection.
 - A single machine (macOS). Absolute times and costs are not comparable with version 4 (Windows).
