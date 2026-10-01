@@ -68,8 +68,11 @@ on real writes (41 of 47 events follow a command that plainly writes); Hunch did
      one-line reference.
   5. **One shell-write block.** A shell command that writes several files gets one merged block, deduplicated
      across files and against grounding already served, not one block per file.
-  6. **No duplicated card.** The `hunch_task` finish card and `task verify` output are sent once, not repeated in
-     `structuredContent`; the start reply drops the long instruction paragraph already printed by the prompt hook.
+  6. **Short start reply.** The `hunch_task` start reply drops the long instruction paragraph already printed by
+     the prompt hook and keeps one line: task id, state and the exact `task verify` command. The finish card stays
+     in both `content` and `structuredContent`: Claude Code shows the model only `structuredContent` when a tool
+     returns both (`fnd_0ad2885943`), and each host reads one channel, so the copy costs no host anything.
+     `task verify` output was checked and is not duplicated.
   7. **No finish call after a verify check alone.** On hosts whose Stop hook closes the task, a `task verify` check
      no longer obliges the agent to call `hunch_task finish`: the Stop hook already closes the task and shows the
      verify evidence. The agent still finishes when it made a `hunch_*` call or has an application to claim. Hosts
@@ -84,7 +87,7 @@ on real writes (41 of 47 events follow a command that plainly writes); Hunch did
   which does not change the verdict (it was left out either way).
 - Seed `pilot5-gate-a-v6`. Output `/Users/Shared/bench-out/pilot5-gate-a6`. Same Mac, kept idle. Build, harness and
   Claude Code versions pinned in the manifest; a mismatch stops the schedule.
-- Build: `<package@version, tag, commit>`. Harness: `feat/task-benchmark` at `<sha>`. Claude Code: `<claude --version
+- Build: `<package@version, tag, commit>`. Harness: `feat/task-benchmark` at `ceaaafde`. Claude Code: `<claude --version
   at preflight>`.
 - Repetitions: 4 per task per arm (40 scored runs), as in version 5.
 
