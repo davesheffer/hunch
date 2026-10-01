@@ -411,6 +411,11 @@ test("the task instruction is identical in substance for every hook provider, an
   for (const text of [claude, codex]) {
     assert.doesNotMatch(text, /Claude Code|Codex/, "host-neutral prose (con_e04226bd05)");
     assert.match(text, /ONLY if this task used Hunch/);
+    // The Stop hook closes the task and shows the verify evidence, so a check alone
+    // is no reason to finish; finishing stays agent-side for real Hunch use.
+    assert.doesNotMatch(text, /used Hunch \([^)]*task verify check/, "a verify check alone does not count as using Hunch here");
+    assert.match(text, /otherwise skip it, even after a task verify check/);
+    assert.match(taskInstruction(task, cwd, text === claude ? "claude" : "codex", undefined, "compact"), /a task verify check alone does not count/);
   }
   // Every other provider — including one whose stop payload carries no native
   // prompt identity, so closeHookTask resolves nothing — keeps finish mandatory,
@@ -420,6 +425,7 @@ test("the task instruction is identical in substance for every hook provider, an
     assert.doesNotThrow(() => { text = taskInstruction(task, cwd, provider); }, `${provider} must not throw`);
     assert.doesNotMatch(text, /ONLY if/, `${provider}: finish is not optional where nothing is proven to close the task`);
     assert.match(text, /No stop hook closes this task, so finish it yourself/);
+    assert.match(text, /used Hunch \([^)]*a task verify check/, `${provider}: nothing else closes the task, so a verify check still counts`);
     assert.match(text, new RegExp(` task verify ${task.task_id} -- `), "the inline verify command is provider-independent");
     assert.doesNotMatch(text, /action: "start"/);
   }

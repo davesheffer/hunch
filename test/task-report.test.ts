@@ -421,7 +421,7 @@ test("upgrade repair refreshes existing instructions and preserves user settings
   const run = (...args: string[]) => execFileSync(process.execPath, ["--import", tsx, cli, ...args], { cwd: root, encoding: "utf8", timeout: 30_000 });
   run("integrations", "repair-pins");
   const upgraded = readFileSync(file, "utf8");
-  assert.match(upgraded, /hunch_task/);
+  assert.match(upgraded, /hunch_context/);
   assert.match(upgraded, /Keep this paragraph/); assert.match(upgraded, /Keep the ending/);
   assert.doesNotMatch(upgraded, /Old Hunch instructions/);
   run("integrations", "repair-pins");
