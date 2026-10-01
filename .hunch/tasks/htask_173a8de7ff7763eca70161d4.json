@@ -1,0 +1,36 @@
+{
+  "id": "htask_173a8de7ff7763eca70161d4",
+  "title": "Assistant task",
+  "state": "completed",
+  "started_at": "2026-10-01T05:00:14.954Z",
+  "finished_at": "2026-10-01T05:29:04.483Z",
+  "coverage": "delivered",
+  "lessons": [
+    {
+      "kind": "decisions",
+      "record_id": "dec_a6d088f409",
+      "content_hash": "sha256:e743552ed08e14348632e6a373bf97bcc08eab012fb109dfee999d3ddfa44de2",
+      "title": "Implement HLG-1 as an additive versioned view over the existing graph"
+    }
+  ],
+  "applied": [],
+  "saved": [],
+  "checks": [],
+  "conformance": [],
+  "refusals": 0,
+  "files": [
+    "test/collision-grounding.test.ts",
+    "test/delivery.test.ts"
+  ],
+  "supersedes": [],
+  "source_snapshot": null,
+  "report_hash": "sha256:32874606a0666b0fe7b53472d017e1870b1ef803291e2c94217f06a35c2031ba",
+  "provenance": {
+    "source": "task_report",
+    "confidence": 1,
+    "evidence": [
+      "hunch report htask_173a8de7ff7763eca70161d4"
+    ],
+    "last_verified": "2026-10-01T05:29:04.483Z"
+  }
+}
