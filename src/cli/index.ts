@@ -100,7 +100,7 @@ import { blockingInScope, vetoInScope, proposedEditLines, type BlockingHit } fro
 import { isHumanConfirmed } from "../core/strictgate.js";
 import { appendEvent, readEvents } from "../core/events.js";
 import { computeStats, formatStats } from "../core/stats.js";
-import { clearTaskSelection, injectionMode, loadTaskSelection, resetSessionInjections, saveTaskSelection, taskSelectionEnabled } from "../core/hookcache.js";
+import { clearTaskSelection, injectionMode, loadTaskSelection, resetSessionInjections, saveTaskSelection, ServedMarks, taskSelectionEnabled } from "../core/hookcache.js";
 import { isBareFollowUp, isFilterableSelectionId, liveSelectionRecords, selectForTask } from "../core/taskSelection.js";
 import { recordServed, servedSummary } from "../core/served.js";
 import { readTaskReport, recordTaskDelivery, reportActivity, reportHash, reportPresentationEnabled, unseenLessons } from "../core/taskReport.js";
@@ -4695,6 +4695,9 @@ program
     // Hoisted so the fail-open catch below can still say which grounding was lost.
     let provider: HookProvider | null = null;
     let eventName: HunchHookEvent | null = null;
+    // Constraints this invocation marked served: rolled back on a throw, so the
+    // agent never gets a reference to text it was not shown.
+    let servedMarks: ServedMarks | null = null;
     try {
       provider = hookProvider(opts.provider);
       if (!provider) return;
@@ -4728,12 +4731,13 @@ program
               // Same rule as the pre-edit path: strict never grounds from stale team rules.
               const stale = firmness === "strict" && opened.teamPullStatus
                 && opened.teamPullStatus !== "updated" && opened.teamPullStatus !== "current";
-              if (!stale) shellGround = shellWriteGrounding(root, store, provider, evt, written);
+              servedMarks = new ServedMarks(evt.session_id);
+              if (!stale) shellGround = shellWriteGrounding(root, store, provider, evt, written, servedMarks);
             }
           } else {
             refreshShellBaseline(root, evt.session_id, evt.agent_id);
           }
-        } catch { shellGround = ""; }
+        } catch { shellGround = ""; servedMarks?.rollback(); }
       }
       if (postTool && evt.session_id && pipelineEnabled()) {
         let st = loadPipelineState(evt.session_id);
@@ -5115,13 +5119,15 @@ program
       }
 
       // advisory / firm / strict(non-blocking): inject the relevant Hunch slice.
-      const grounded = fileGrounding(root, store, provider, evt, target, abs);
+      servedMarks = new ServedMarks(evt.session_id);
+      const grounded = fileGrounding(root, store, provider, evt, target, abs, servedMarks);
       if (!grounded) return; // no noise on files Hunch hasn't learned yet
       emitContext(provider, "PreToolUse", grounded.text, grounded.mode === "full" ? grounded.recalled ?? undefined : undefined);
     } catch (e) {
       // Never block an edit on a hook failure — and never go silent either: an
       // ungrounded edit that looks grounded gets diagnosed as model flakiness.
       // One context line, exit 0 (the launcher itself failing stays out of reach).
+      servedMarks?.rollback();
       const reason = e instanceof Error ? e.message.split("\n")[0] : "unknown error";
       if (provider && (eventName === "PreToolUse" || eventName === "SessionStart" || eventName === "UserPromptSubmit")) {
         const what = eventName === "PreToolUse" ? "for this edit; it proceeds ungrounded" : "for this session";
@@ -7032,7 +7038,7 @@ function toRepoRel(root: string, abs: string): string {
  *  appears once, naming those files. Already-served grounding (a per-file
  *  delta, a constraint served earlier) is not repeated. */
 const MAX_SHELL_GROUNDED = 3;
-function shellWriteGrounding(root: string, store: HunchStore, provider: HookProvider, evt: HunchHookInput, written: readonly string[]): string {
+function shellWriteGrounding(root: string, store: HunchStore, provider: HookProvider, evt: HunchHookInput, written: readonly string[], marks: ServedMarks): string {
   const grounded: string[] = [];
   const siblings: string[] = [];
   const notices: string[] = [];
@@ -7042,7 +7048,7 @@ function shellWriteGrounding(root: string, store: HunchStore, provider: HookProv
   const records = new Map<string, { line: string; files: string[] }>();
   const footers = new Set<string>();
   for (const target of written.slice(0, MAX_SHELL_GROUNDED)) {
-    const g = fileGrounding(root, store, provider, evt, target, join(root, target));
+    const g = fileGrounding(root, store, provider, evt, target, join(root, target), marks);
     if (g?.mode !== "full") continue;
     grounded.push(target);
     if (g.sibling) siblings.push(g.sibling);
@@ -7139,7 +7145,7 @@ const SIBLING_MEMORY_BUDGET_TOKENS = 800;
  *  identical grounding was already served this session, null when Hunch knows
  *  nothing about the file. Serves the pre-edit hook and files a shell command
  *  wrote (which never pass through the edit tools). */
-function fileGrounding(root: string, store: HunchStore, provider: HookProvider, evt: HunchHookInput, target: string, abs: string): FileGrounding | null {
+function fileGrounding(root: string, store: HunchStore, provider: HookProvider, evt: HunchHookInput, target: string, abs: string, marks: ServedMarks): FileGrounding | null {
   // Decision-grounding for PROSE (doc≠graph): a markdown target that declares
   // <!-- hunch:topic … --> anchors gets each topic's CURRENT decision — the
   // graph outranks the prose being edited, and a stale pin is called out inline.
@@ -7230,8 +7236,8 @@ function fileGrounding(root: string, store: HunchStore, provider: HookProvider, 
   // reference. Same session map and scoping as the per-file key below, so a
   // compaction reset or a new task/subagent gets full text again. The probe
   // marks the constraint served; one this envelope then does not deliver is
-  // un-marked below.
-  const served = new Set(ctx.constraints.filter((c) => injectionMode(evt.session_id, servedKey(c.id), "", "served") === "delta").map((c) => c.id));
+  // un-marked below, and the caller rolls `marks` back if it throws first.
+  const served = new Set(ctx.constraints.filter((c) => marks.probe(servedKey(c.id))).map((c) => c.id));
   // A sibling lesson is the most specific thing Hunch knows about this edit:
   // it leads, and the ranked memory gets a smaller budget so it cannot bury it.
   const envelope = buildDeliveryEnvelope(siblings.text ? { ...ctx, budget_tokens: Math.min(ctx.budget_tokens, SIBLING_MEMORY_BUDGET_TOKENS) } : ctx, {
@@ -7246,7 +7252,7 @@ function fileGrounding(root: string, store: HunchStore, provider: HookProvider, 
   });
   const deliveredIds = new Set(envelope.delivered.map((item) => item.record_id));
   for (const c of ctx.constraints) {
-    if (!served.has(c.id) && !deliveredIds.has(c.id)) injectionMode(evt.session_id, servedKey(c.id), "", "unserved");
+    if (!served.has(c.id) && !deliveredIds.has(c.id)) marks.unmark(servedKey(c.id));
   }
   // Outside the envelope's budget on purpose: the lesson is a code change, not a
   // one-line supplement, and memory records must not crowd it out.
@@ -7283,7 +7289,7 @@ function fileGrounding(root: string, store: HunchStore, provider: HookProvider, 
   // next call's task ranking reads them back and moves the wording ("today"
   // → "delivered today"), so hashing the presentation made this grounding
   // self-invalidating and re-sent the full block for unchanged records.
-  if (injectionMode(evt.session_id, `pre:${target}${reportTaskId ? `:${reportTaskId}` : ""}${agentKey}`, text, deliveryDedupeInput(envelope, supplements, ctx.constraints) + (siblings.identity ? `\u0000sibling-fix\u0000${siblings.identity}` : "")) === "delta") {
+  if (marks.mode(`pre:${target}${reportTaskId ? `:${reportTaskId}` : ""}${agentKey}`, text, deliveryDedupeInput(envelope, supplements, ctx.constraints) + (siblings.identity ? `\u0000sibling-fix\u0000${siblings.identity}` : "")) === "delta") {
     receipts("refreshed");
     return {
       mode: "delta",

@@ -12,6 +12,7 @@ import { join, resolve } from "node:path";
 import { buildDeliveryEnvelope } from "../src/core/delivery.js";
 import { PIPELINE_LOOP } from "../src/core/pipeline.js";
 import { hunchPaths } from "../src/core/paths.js";
+import { resetSessionInjections, ServedMarks } from "../src/core/hookcache.js";
 import { DecisionSchema } from "../src/core/types.js";
 import { HunchStore, type AssembledContext } from "../src/store/hunchStore.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -159,4 +160,72 @@ test("hunch_runbook serves the operating loop on request", async () => {
   } finally {
     await client.close(); await server.close(); rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("a constraint the budget omits is not marked served: it is full text next time", t => {
+  const root = repo(t, false);
+  const store = new HunchStore(hunchPaths(root));
+  const filler = "keep every exported helper pure and documented with its failure modes ".repeat(12);
+  for (let i = 0; i < 40; i++) store.json.put("constraints", mkConstraint({ id: `con_bulk_${String(i).padStart(2, "0")}`, statement: `BULK_${i} ${filler}`, scope: ["src/**"], severity: "warning" }));
+  store.reindex();
+  store.close();
+  const s = session();
+  const a = preEdit(root, s, "src/a.ts");
+  const ids = Array.from({ length: 40 }, (_, i) => `con_bulk_${String(i).padStart(2, "0")}`);
+  const shown = ids.filter((id) => a.includes(`- ${id} |`));
+  const omitted = ids.filter((id) => !a.includes(`- ${id} |`));
+  assert.ok(shown.length && omitted.length, `fixture sanity: the budget omits some (${shown.length} shown)`);
+  // A served one probes as served; an omitted one does not (probe marks it, so check each once).
+  assert.equal(new ServedMarks(s).probe(`con:${shown[0]}`), true, "a delivered constraint is marked served");
+  for (const id of omitted) assert.equal(new ServedMarks(s).probe(`con:${id}`), false, `${id} was never shown, so it is not marked`);
+});
+
+test("a served constraint is full text again for a new task and for a subagent", t => {
+  const root = repo(t);
+  const s = session();
+  assert.match(preEdit(root, s, "src/a.ts"), /con_shared_src \| constraint\/blocking \| Every src[^\n]*scope src/);
+  const full = /- con_shared_src \| constraint\/blocking \| Every src module stays free of import-time side effects \| scope src\/\*\*/;
+  // A subagent starts with fresh context: its own agent identity scopes the mark.
+  const sub = hook(root, { hook_event_name: "PreToolUse", session_id: s, agent_id: "agent-sub-1", tool_name: "Edit", tool_input: { file_path: join(root, "src/b.ts"), old_string: "1", new_string: "2" } });
+  assert.match(sub, full, "a subagent gets the full text");
+  assert.doesNotMatch(sub, /con_shared_src[^\n]*shown earlier/);
+  // A prompt that opens a task scopes the mark to that task_id.
+  hook(root, { hook_event_name: "UserPromptSubmit", session_id: s, prompt_id: "p-new", prompt: "next task" });
+  const next = hook(root, { hook_event_name: "PreToolUse", session_id: s, prompt_id: "p-new", tool_name: "Edit", tool_input: { file_path: join(root, "src/b.ts"), old_string: "1", new_string: "2" } });
+  assert.match(next, /Hunch task htask_/, "fixture sanity: the edit reports to the prompt's task");
+  assert.match(next, full, "a new task gets the full text");
+  assert.doesNotMatch(next, /con_shared_src[^\n]*shown earlier/);
+});
+
+test("served marks: rollback after a throw leaves nothing this invocation marked, and keeps earlier serves", () => {
+  const s = session();
+  const earlier = new ServedMarks(s);
+  assert.equal(earlier.probe("con:con_earlier"), false);
+  const marks = new ServedMarks(s);
+  assert.equal(marks.probe("con:con_earlier"), true, "served by an earlier invocation");
+  assert.equal(marks.probe("con:con_now_a"), false);
+  assert.equal(marks.probe("con:con_now_b"), false);
+  try {
+    throw new Error("delivery failed after marking");
+  } catch {
+    marks.rollback();
+  }
+  const after = new ServedMarks(s);
+  assert.equal(after.probe("con:con_now_a"), false, "rolled back: full text next time");
+  assert.equal(after.probe("con:con_now_b"), false, "rolled back: full text next time");
+  assert.equal(after.probe("con:con_earlier"), true, "an earlier serve is not this invocation's to undo");
+});
+
+test("rollback also forgets a per-file block that was never emitted", () => {
+  const sid = session();
+  try {
+    const first = new ServedMarks(sid);
+    assert.equal(first.probe("con:con_X"), false);
+    assert.equal(first.mode("pre:src/a.ts", "block", "identity"), "full");
+    first.rollback(); // the hook threw before emitting
+    const second = new ServedMarks(sid);
+    assert.equal(second.probe("con:con_X"), false, "constraint is full text again");
+    assert.equal(second.mode("pre:src/a.ts", "block", "identity"), "full", "file block is full again, not a delta");
+    assert.equal(new ServedMarks(sid).mode("pre:src/a.ts", "block", "identity"), "delta", "an emitted block still dedups");
+  } finally { resetSessionInjections(sid); }
 });

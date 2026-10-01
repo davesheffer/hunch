@@ -48,7 +48,7 @@ export function preserveNewerTemplate(existing: string, section: string): string
     return !id || rendered.has(id);
   });
   // A heading left with no invariants under it goes too.
-  const h = lines.findIndex((line) => line.startsWith(INVARIANTS_HEADING));
+  const h = lines.findIndex((line) => INVARIANT_HEADINGS.some((head) => line.startsWith(head)));
   if (h >= 0 && !lines.slice(h + 1).some((line) => INVARIANT_LINE_RE.test(line))) {
     lines.splice(lines[h - 1] === "" ? h - 1 : h, lines[h - 1] === "" ? 2 : 1);
   }
@@ -60,7 +60,12 @@ export function preserveNewerTemplate(existing: string, section: string): string
   return have && next ? kept.replace(have.match, next.match) : kept;
 }
 
-const INVARIANTS_HEADING = "### ⛔ Top invariants";
+/** Never begins "### ⛔ Top invariants": a template-2 renderer (still installed
+ *  globally, run by post-commit hooks) strips a heading by that prefix when none
+ *  of its invariant lines follow, which would orphan these `- con_x: …` lines. */
+const INVARIANTS_HEADING = "### ⛔ Blocking invariants";
+/** The headings this and older templates wrote, for preserveNewerTemplate. */
+const INVARIANT_HEADINGS = [INVARIANTS_HEADING, "### ⛔ Top invariants"];
 /** A Top-invariants line, as this template (`- con_x: …`) or template 2
  *  (`- **[sev]** … _(scope: …; con_x)_`) wrote it; the id is group 1 or 2. */
 const INVARIANT_LINE_RE = /^- (?:(con_[A-Za-z0-9_]+): |\*\*\[[a-z]+\]\*\* .*; (con_[A-Za-z0-9_]+)\)_\r?$)/;
@@ -107,7 +112,7 @@ export function renderHunchSection(store: HunchStore, root?: string): string {
   lines.push(`This repo's Hunch graph holds ${renderCountsMatch(counts)}. Call \`hunch_context(target)\` first, before reading or editing; its tool description lists the rest.`);
   if (constraints.length) {
     lines.push("");
-    lines.push(`${INVARIANTS_HEADING} (blocking)`);
+    lines.push(INVARIANTS_HEADING);
     for (const c of constraints) lines.push(`- ${c.id}: ${clip(c.statement, INVARIANT_CHARS)}`);
     if (live.length > constraints.length) lines.push(`- …and ${live.length - constraints.length} more: \`hunch_check_constraints(scope)\``);
   }

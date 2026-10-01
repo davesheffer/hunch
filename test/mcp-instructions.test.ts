@@ -4,6 +4,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { buildServer, MCP_INSTRUCTIONS } from "../src/mcp/server.js";
 import { tempStore } from "./helpers.js";
+import { taskInstruction } from "../src/core/taskReportHook.js";
 
 test("initialize delivers the grounding contract to every client, hooks or not", async (t) => {
   const { root, cleanup } = tempStore();
@@ -20,8 +21,8 @@ test("initialize delivers the grounding contract to every client, hooks or not",
   // An MCP-started task has no session key, so no hook ever closes it: the finish
   // skip must read as ONE conjunction gated on the prompt hook's own statement,
   // never as an independent "skippable where the host closes the task" clause.
-  assert.match(instructions ?? "", /unless the hook said the host closes the task AND you made no hunch_\* call/);
-  assert.match(instructions ?? "", /a task you started, you finish/);
+  assert.match(instructions ?? "", /skip it only if the hook said the host closes the task and it used no Hunch \(no hunch_\* call on its ID, hook context acted on, or claim\)/);
+  assert.match(instructions ?? "", /Tasks you start, you finish/);
   assert.doesNotMatch(instructions ?? "", /skippable/i);
   assert.doesNotMatch(instructions ?? "", /task verify check/, "a verify check alone never obliges a finish where the host closes the task");
 });
@@ -47,4 +48,24 @@ test("hunch_context's description lists the tools by moment with their real para
   assert.match(md, /hunch_get_dependents\(symbol\)/);
   assert.match(md, /only a human activates a policy/);
   assert.doesNotMatch(md, /hunch_query\(question\)|hunch_bug_lineage\(symptom\)/);
+});
+
+// The finish-skip rule reads the same wherever it is stated: the MCP instructions,
+// the hunch_task description, and the prompt hook's instruction (as its mirror);
+// hunch_context's moment list defers to it rather than restating it unconditionally.
+test("the finish-skip rule reads the same in every channel", async (t) => {
+  const { root, cleanup } = tempStore();
+  const server = buildServer(root);
+  const [ct, st] = InMemoryTransport.createLinkedPair();
+  const client = new Client({ name: "finish-rule-test", version: "1" });
+  await Promise.all([server.connect(st), client.connect(ct)]);
+  t.after(async () => { await client.close(); await server.close(); cleanup(); });
+  const { tools } = await client.listTools();
+  const desc = (name: string) => tools.find((tool) => tool.name === name)?.description ?? "";
+  const rule = "skip it only if the hook said the host closes the task and it used no Hunch (no hunch_* call on its ID, hook context acted on, or claim). Tasks you start, you finish.";
+  assert.ok(MCP_INSTRUCTIONS.includes(rule), MCP_INSTRUCTIONS);
+  assert.ok(desc("hunch_task").includes(rule), desc("hunch_task"));
+  assert.match(desc("hunch_context"), /hunch_task finish unless its skip rule applies\.$/);
+  const hook = taskInstruction({ task_id: "htask_0123456789abcdef01234567", title: "t" }, JSON.stringify("/repo"), "claude");
+  assert.match(hook, /ONLY if this task used Hunch \(a hunch_\* call on its ID, hook context acted on, or a claim\)/);
 });

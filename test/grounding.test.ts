@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { renderHunchSection, upsertSection, preserveNewerTemplate, groundingTemplate, GROUNDING_TEMPLATE } from "../src/integrations/claudemd.js";
 import { writeCursorRule, refreshExistingGrounding, regenerateGrounding, refreshCommittableGrounding } from "../src/integrations/providers.js";
 import { execFileSync } from "node:child_process";
-import { parseGroundingCounts, classifyGroundingBlock, describeGroundingFreshness } from "../src/core/groundingLag.js";
+import { parseGroundingCounts, classifyGroundingBlock, describeGroundingFreshness, renderCountsMatch } from "../src/core/groundingLag.js";
 
 // The always-loaded block only routes: one hunch_context line plus named blocking
 // invariants. The per-moment tool list lives in the hunch_context description
@@ -153,7 +153,7 @@ test("a kept newer block drops invariant lines this version no longer renders", 
 
   store.json.dropAll("constraints");
   const none = preserveNewerTemplate(`# Doc\n\n${committed}\n`, renderHunchSection(store));
-  assert.doesNotMatch(none, /Top invariants/, "no orphan heading");
+  assert.doesNotMatch(none, /⛔/, "no orphan heading");
   assert.match(none, /NEWER_PROSE_MUST_SURVIVE/);
 });
 
@@ -300,4 +300,80 @@ test("Top invariants name blocking statements clipped at a word boundary and lea
   assert.doesNotMatch(clipped, /END_OF_STATEMENT/);
   const words = clipped.slice(0, -1).split(" ");
   assert.ok(["alpha", "beta", "gamma", "delta"].includes(words[words.length - 1]), `ends on a whole word: ${clipped}`);
+});
+
+// The template-2 renderer (base f72927a9) stays installed globally and runs from
+// post-commit hooks. Its preserveNewerTemplate, copied verbatim below, must leave a
+// template-3 block intact: it drops a heading starting "### ⛔ Top invariants" when
+// none of ITS invariant lines follow, which would orphan the `- con_x: …` bullets.
+const V2_START = "<!-- HUNCH:START — auto-generated, do not edit by hand -->";
+const V2_END = "<!-- HUNCH:END -->";
+const V2_INVARIANTS_HEADING = "### ⛔ Top invariants";
+const V2_INVARIANT_LINE_RE = /^- \*\*\[[a-z]+\]\*\* .*; (con_[A-Za-z0-9_]+)\)_\r?$/;
+function v2PreserveNewerTemplate(existing: string, section: string): string {
+  const iStart = existing.indexOf(V2_START);
+  const iEnd = existing.indexOf(V2_END);
+  if (iStart < 0 || iEnd <= iStart) return section;
+  const current = existing.slice(iStart, iEnd + V2_END.length);
+  if (groundingTemplate(current) <= groundingTemplate(section)) return section;
+  const rendered = new Set(section.split(/\r?\n/).map((line) => V2_INVARIANT_LINE_RE.exec(line)?.[1]).filter(Boolean));
+  const eol = current.includes("\r\n") ? "\r\n" : "\n";
+  const lines = current.split(/\r?\n/).filter((line) => {
+    const id = V2_INVARIANT_LINE_RE.exec(line)?.[1];
+    return !id || rendered.has(id);
+  });
+  const h = lines.findIndex((line) => line.startsWith(V2_INVARIANTS_HEADING));
+  if (h >= 0 && !lines.slice(h + 1).some((line) => V2_INVARIANT_LINE_RE.test(line))) {
+    lines.splice(lines[h - 1] === "" ? h - 1 : h, lines[h - 1] === "" ? 2 : 1);
+  }
+  const kept = lines.join(eol);
+  const have = parseGroundingCounts(kept);
+  const next = parseGroundingCounts(section);
+  return have && next ? kept.replace(have.match, next.match) : kept;
+}
+
+test("the installed template-2 renderer leaves a template-3 block intact", (t) => {
+  const { store, cleanup } = tempStore();
+  t.after(cleanup);
+  for (let i = 0; i < 8; i++) store.json.put("constraints", mkConstraint({ id: `con_blocking0${i}`, statement: `BLOCKING_${i}`, severity: "blocking" }));
+  const v3 = renderHunchSection(store);
+  assert.match(v3, /^- con_blocking00: BLOCKING_0$/m);
+  assert.match(v3, /^- …and 2 more/m);
+  const counts = parseGroundingCounts(v3)!.counts;
+  // What the template-2 renderer writes for the same store (its invariant lines included).
+  const v2Lines = [V2_START, "<!-- hunch:template 2 -->", "## 🧠 Hunch (Engineering Memory)", "",
+    `This repo has **Hunch**, a graph of *why* the code is the way it is. It holds ${renderCountsMatch(counts)}. Use the \`hunch_*\` MCP tools by moment:`, "",
+    "### ⛔ Top invariants (do not break)"];
+  for (let i = 0; i < 8; i++) v2Lines.push(`- **[blocking]** BLOCKING_${i} _(scope: src/**; con_blocking0${i})_`);
+  v2Lines.push(V2_END);
+  const v2 = v2Lines.join("\n");
+  assert.equal(groundingTemplate(v2), 2);
+
+  assert.equal(v2PreserveNewerTemplate(`# Doc\n\n${v3}\n`, v2), v3, "the block survives unchanged");
+  const moved = renderCountsMatch({ ...counts, decisions: counts.decisions + 5 });
+  const v2Moved = v2.replace(renderCountsMatch(counts), moved);
+  assert.equal(v2PreserveNewerTemplate(`# Doc\n\n${v3}\n`, v2Moved), v3.replace(renderCountsMatch(counts), moved), "only the counts move");
+  // Sanity: under the old heading the same logic orphaned the bullets.
+  const oldHeading = v3.replace(/^### ⛔ .*$/m, "### ⛔ Top invariants (blocking)");
+  assert.doesNotMatch(v2PreserveNewerTemplate(`# Doc\n\n${oldHeading}\n`, v2), /### ⛔/);
+
+  // This renderer still keeps a newer block's heading over either template's lines.
+  for (const block of [v2, v3]) {
+    const kept = preserveNewerTemplate(`# Doc\n\n${newerBlock(block.replace("<!-- hunch:template 2 -->", `<!-- hunch:template ${GROUNDING_TEMPLATE} -->`))}\n`, v3);
+    assert.match(kept, /NEWER_PROSE_MUST_SURVIVE/);
+    assert.match(kept, /^### ⛔ /m);
+    assert.match(kept, /con_blocking00/);
+  }
+  // And replaces either template in place, idempotently.
+  const dir = mkdtempSync(join(tmpdir(), "hunch-v2v3-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  for (const block of [v2, v3]) {
+    const doc = join(dir, "AGENTS.md");
+    writeFileSync(doc, `# Mine\n\n${block}\n\ntail\n`);
+    upsertSection(doc, v3, "# x");
+    const once = readFileSync(doc, "utf8");
+    upsertSection(doc, v3, "# x");
+    assert.equal(readFileSync(doc, "utf8"), once);
+    assert.equal(once, `# Mine\n\n${v3}\n\ntail\n`);
+  }
 });

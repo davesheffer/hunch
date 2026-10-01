@@ -187,7 +187,7 @@ export function taskInstruction(task: { task_id: string; title: string }, cwdLit
   // finish: the Stop hook closes the task and its card shows the verify evidence.
   // Elsewhere nothing else would close it, so the check still counts.
   const closes = HOST_CLOSES_TASK.has(provider);
-  const used = `this task used Hunch (a hunch_* call on this ID, ${closes ? "" : "a task verify check, "}Hunch hook context you acted on, or an application to claim)`;
+  const used = `this task used Hunch (a hunch_* call on its ID, ${closes ? "" : "a task verify check, "}hook context acted on, or a claim)`;
   const finish = closes
     ? ` ONLY if ${used}, call hunch_task(action: "finish", task_id, cwd) before responding and show its card; otherwise skip it, even after a task verify check — this host's stop hook closes the task and shows the evidence.`
     : ` No stop hook closes this task, so finish it yourself whether or not ${used}: call hunch_task(action: "finish", task_id, cwd) before responding and show its card.`;
