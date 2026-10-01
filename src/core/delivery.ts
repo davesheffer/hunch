@@ -186,6 +186,11 @@ const MAX_PROFILE_HEADLINES = 8;
 /** How far a supplement's text is clipped in the rendered line. Shared so
  *  `deliveryDedupeInput` can reconstruct that exact line to project over it. */
 const SUPPLEMENT_HEADLINE_CHARS = 700;
+/** Lean decision headline: id and title only. Status, scope, and provenance are
+ *  one hunch_why away; selection never reads the rendered line. */
+const DECISION_TITLE_CHARS = 90;
+/** Ceiling for the decision-grounding supplement (see compactGrounding). */
+const GROUNDING_SUPPLEMENT_CHARS = 320;
 /** Statement clip for a constraint already served this session (a reference, not a rule restatement). */
 const SERVED_REFERENCE_CHARS = 80;
 export const PROFILE_BASE_SCORE: Record<DeliveryProfile, Record<DeliveryKind, number>> = {
@@ -225,6 +230,21 @@ function clipHeadline(value: string, max: number): string {
   const flat = value.replace(/\s+/g, " ").trim();
   if (flat.length <= max) return flat;
   return `${flat.slice(0, Math.max(0, max - 1)).trimEnd()}…`;
+}
+
+/** Fit a renderGrounding block into `max` chars: the header stays, each settled
+ *  bullet gets an equal share of what is left, and an UNRESOLVED (contested-topic)
+ *  bullet is never clipped, so a conflict can never read as a settled answer. */
+export function compactGrounding(block: string, max: number): string {
+  if (block.length <= max) return block;
+  const [header = "", ...bullets] = block.split("\n");
+  const unresolved = bullets.filter((line) => line.includes("⚠ UNRESOLVED"));
+  const settled = bullets.filter((line) => !line.includes("⚠ UNRESOLVED"));
+  const fixed = header.length + unresolved.reduce((sum, line) => sum + line.length + 1, 0);
+  const share = settled.length ? Math.floor((max - fixed - settled.length) / settled.length) : 0;
+  const clipped = share >= 24 ? settled.map((line) => clipHeadline(line, share)) : [];
+  const dropped = settled.length - clipped.length;
+  return [header, ...clipped, ...unresolved, ...(dropped ? [`(${dropped} anchored decision(s) omitted; hunch_why(id) for detail)`] : [])].join("\n");
 }
 
 function sourceTier(source: string | undefined): string {
@@ -767,7 +787,7 @@ export function buildDeliveryEnvelope(ctx: AssembledContext, options: DeliveryOp
       relevanceTerms,
       line: hypothesis
         ? renderHypothesis(hypothesis, validation.state, decision.provenance.source)
-        : `${decision.id} | decision/${decision.status} | ${clipHeadline(`${decision.title}: ${decision.decision}`, 220)} | scope ${clipHeadline(decision.related_files.join(", ") || decision.related_components.join(", ") || "unanchored", 100)} | ${sourceTier(decision.provenance.source)}/${validation.state} | hunch_why("${decision.id}")`,
+        : `${decision.id} | ${clipHeadline(decision.title, DECISION_TITLE_CHARS)}`,
     });
   }
 
@@ -966,7 +986,7 @@ export function buildDeliveryEnvelope(ctx: AssembledContext, options: DeliveryOp
       : `## 🧠 ${profile === "builder" ? "Ranked" : `${profile[0]!.toUpperCase()}${profile.slice(1)}-ranked`} memory (Invariants · Decisions · Bugs · Known findings)`,
   ];
   if (candidates.some((candidate) => candidate.abstainReason)) {
-    lines.push("Evidence rule: explicit task, repro, and test evidence outranks advisory memory; weak unverified matches are withheld.");
+    lines.push("Evidence rule: task, repro, and test evidence outrank advisory memory; weak matches are withheld.");
   }
   if (query.taskPhrase) {
     lines.push("Diagnostic loop: before editing, call hunch_context again with the first concrete failing assertion, stack frame, expected behavior, and API/code path you observe.");
@@ -1022,7 +1042,7 @@ export function buildDeliveryEnvelope(ctx: AssembledContext, options: DeliveryOp
   );
   const deliveredDecisions = ctx.decisions.filter((decision) => deliveredDecisionIds.has(decision.id));
   const decisionGrounding = options.decisionCorpus?.length && deliveredDecisions.length
-    ? renderGrounding(deliveredDecisions, [...options.decisionCorpus])
+    ? compactGrounding(renderGrounding(deliveredDecisions, [...options.decisionCorpus], { compact: true }), GROUNDING_SUPPLEMENT_CHARS)
     : "";
   const supplementalCandidates: DeliverySupplement[] = [
     ...(decisionGrounding ? [{ id: "decision-grounding", kind: "decision-grounding", text: decisionGrounding, priority: 1_000 }] : []),

@@ -172,7 +172,7 @@ function sessionTaskInstruction(task: { task_id: string; title: string }, cwdLit
  * the only source of both the launcher and the finish instruction, so it carries
  * its own finish sentence. */
 export function taskInstruction(task: { task_id: string; title: string }, cwdLiteral: string, provider: HookProvider, launcher: () => { shell: string; note?: string } = verificationLauncher, form: "full" | "compact" = "full"): string {
-  const head = `Hunch has already opened this prompt's report: ${task.task_id}. Reuse this exact ID; never open another report. Pass this task_id and cwd: ${cwdLiteral} to hunch_context and decision/correction/finding captures.`;
+  const head = `Hunch opened this prompt's report: ${task.task_id}; reuse it, never open another. Pass task_id and cwd: ${cwdLiteral} to hunch_context and captures.`;
   let verify: string;
   try {
     const l = launcher();
@@ -180,7 +180,7 @@ export function taskInstruction(task: { task_id: string; title: string }, cwdLit
       const finishRule = HOST_CLOSES_TASK.has(provider) ? "finish only if this task used Hunch (a task verify check alone does not count)" : `finish it yourself with hunch_task(action: "finish", task_id, cwd)`;
       return `Hunch report for this prompt: ${task.task_id} (cwd: ${cwdLiteral}). Use it instead of any earlier ID. Never call hunch_task start. Checks: ${l.shell} task verify ${task.task_id} -- <command> [arguments]${l.note ?? ""}. Same rules as this session's first report; ${finishRule}.`;
     }
-    verify = ` Never call hunch_task start for it. For checks, run: ${l.shell} task verify ${task.task_id} -- <command> [arguments]${l.note ?? ""}. Verify with the tests that cover your change (the files you edited and their tests); the full suite is CI's job. The default budget is 15 min; add --timeout <seconds> before -- only if the whole suite is really needed.`;
+    verify = ` Never call hunch_task start for it. Checks: ${l.shell} task verify ${task.task_id} -- <command> [arguments]${l.note ?? ""}. Run the tests that cover your change; the full suite is CI's job (15 min budget; --timeout <seconds> before -- only for the whole suite).`;
   }
   catch { return `${head} Call hunch_task(action: "start", task_id: "${task.task_id}", title: ${JSON.stringify(task.title)}, cwd: ${cwdLiteral}) to obtain verification_argv, and finish with hunch_task(action: "finish", task_id, cwd) before responding and show its card.`; }
   // Where the host closes the task, a task verify check alone does not oblige a
@@ -189,7 +189,7 @@ export function taskInstruction(task: { task_id: string; title: string }, cwdLit
   const closes = HOST_CLOSES_TASK.has(provider);
   const used = `this task used Hunch (a hunch_* call on its ID, ${closes ? "" : "a task verify check, "}hook context acted on, or a claim)`;
   const finish = closes
-    ? ` ONLY if ${used}, call hunch_task(action: "finish", task_id, cwd) before responding and show its card; otherwise skip it, even after a task verify check — this host's stop hook closes the task and shows the evidence.`
+    ? ` ONLY if ${used}, call hunch_task(action: "finish", task_id, cwd) and show its card; otherwise skip it, even after a task verify check — the stop hook closes the task.`
     : ` No stop hook closes this task, so finish it yourself whether or not ${used}: call hunch_task(action: "finish", task_id, cwd) before responding and show its card.`;
   return `${head}${verify}${finish}`;
 }

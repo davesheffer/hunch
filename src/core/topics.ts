@@ -93,6 +93,7 @@ export function captureConflicts(
 export function renderGrounding(
   fileDecisions: readonly Decision[],
   allDecisions: readonly Decision[] = fileDecisions,
+  options: { compact?: boolean } = {},
 ): string {
   // A CONTESTED topic must never be stated as authority. This is the same fail-safe
   // currentForTopic applies (`live.length === 1 ? live[0] : null`) and renderDocGrounding
@@ -122,6 +123,9 @@ export function renderGrounding(
     const testimony = d.provenance.source.split("+").includes("agent_recorded")
       ? ` — ⚠ agent-recorded testimony, no human countersign yet (a human confirms it: hunch review --confirm ${d.id})`
       : "";
+    // Compact: the decision's title is already on its own delivered line, so the
+    // bullet keeps only what that line lacks — topic, id, rejected, testimony.
+    if (options.compact) return `• "${d.topic}" → ${d.id}${testimony ? " ⚠ agent-recorded" : ""}${rej}`;
     return `• "${d.topic}": ${d.decision || d.title} [${d.id}]${rej}${testimony}`;
   });
   // Name the conflict instead of silently dropping it: an unexplained absence would read
@@ -132,6 +136,7 @@ export function renderGrounding(
     lines.push(`• "${topic}": ⚠ UNRESOLVED — ${contested.get(topic)!.length} live decisions (${ids}). No current answer; ask the human before choosing. Resolve with \`hunch reconcile-topics\` (supersede one, or split the topic).`);
   }
   if (!lines.length) return "";
+  if (options.compact) return `🧭 Grounding — follow these decisions, not a stale doc:\n${lines.join("\n")}`;
   return `🧭 Hunch grounding — this file is anchored to recorded decisions; follow the graph, not a stale doc:\n${lines.join("\n")}`;
 }
 
