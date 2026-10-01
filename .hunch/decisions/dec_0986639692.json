@@ -94,7 +94,7 @@
   "supersedes": null,
   "superseded_by": null,
   "caused_by_bug": null,
-  "commit": "f11a55f8",
+  "commit": "ed1c43ca",
   "valid_from": "2026-09-30T08:11:47+03:00",
   "valid_to": null,
   "retired": {
@@ -105,7 +105,7 @@
     "source": "llm_draft+summary",
     "confidence": 0.5,
     "evidence": [
-      "commit:f11a55f8",
+      "commit:ed1c43ca",
       "synth:provider=claude-cli",
       "branch:docs/youtube-links",
       "README.md",
