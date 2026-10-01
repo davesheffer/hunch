@@ -14,6 +14,9 @@ import { PIPELINE_LOOP } from "../src/core/pipeline.js";
 import { hunchPaths } from "../src/core/paths.js";
 import { DecisionSchema } from "../src/core/types.js";
 import { HunchStore, type AssembledContext } from "../src/store/hunchStore.js";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { buildServer } from "../src/mcp/server.js";
 import { mkConstraint, prov, tsxLoaderUrl } from "./helpers.js";
 
 const cli = resolve("src/cli/index.ts");
@@ -138,4 +141,22 @@ test("shell write of two files sharing a record: one block, the record once, nam
   assert.match(out, /- con_shared_src \| constraint\/blocking \| Every src[^\n]*scope src\/\*\*[^\n]*\| files src\/a\.ts, src\/b\.ts/);
   assert.match(out, /- con_only_b [^\n]*\| files src\/b\.ts/);
   assert.doesNotMatch(out, /graph \| components/);
+});
+
+test("hunch_runbook serves the operating loop on request", async () => {
+  const root = mkdtempSync(join(tmpdir(), "hunch-lean-runbook-"));
+  const server = buildServer(root);
+  const [ct, st] = InMemoryTransport.createLinkedPair();
+  const client = new Client({ name: "lean-runbook", version: "1" });
+  try {
+    await Promise.all([client.connect(ct), server.connect(st)]);
+    const text = async (task: string) => {
+      const r = await client.callTool({ name: "hunch_runbook", arguments: { task } });
+      return (r.content as { type: string; text: string }[]).map(c => c.text).join("");
+    };
+    assert.equal(await text("show me the Operating Loop"), PIPELINE_LOOP);
+    assert.ok(!(await text("cut a release")).includes(PIPELINE_LOOP));
+  } finally {
+    await client.close(); await server.close(); rmSync(root, { recursive: true, force: true });
+  }
 });
