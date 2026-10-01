@@ -14,7 +14,8 @@
  *
  * Firmness mapping (no new knob):
  *   off      → pipeline inert
- *   advisory → inject the loop at SessionStart + nag on unverified edits; no blocks
+ *   advisory → nag on unverified edits; no blocks (SessionStart injects the
+ *              loop only on opt-in, see sessionLoopEnabled)
  *   firm     → + Stop gate (max 2 blocks per turn)
  *   strict   → same as firm (strict's extra bite lives in the pre-edit deny gate)
  *
@@ -1330,6 +1331,13 @@ const SWEEP_AGE_MS = 48 * 3600 * 1000;
 
 export function pipelineEnabled(): boolean {
   return process.env.HUNCH_PIPELINE !== "0";
+}
+
+/** SessionStart injects PIPELINE_LOOP only on explicit opt-in
+ *  (HUNCH_SESSION_LOOP=1, and never with the pipeline killed): every session
+ *  otherwise pays for a loop most never act on. Default: off. */
+export function sessionLoopEnabled(): boolean {
+  return pipelineEnabled() && process.env.HUNCH_SESSION_LOOP === "1";
 }
 
 /** Load session state; on ANY problem return a fresh state (never throw). */

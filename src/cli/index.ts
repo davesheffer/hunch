@@ -125,6 +125,7 @@ import {
   onPrompt,
   onSkill,
   pipelineEnabled,
+  sessionLoopEnabled,
   proofCheckpoint,
   savePipelineState,
   stopVerdict,
@@ -5006,11 +5007,13 @@ program
           // must bail exactly like an empty one would.
           const actionableEsc = actionableEscalations(escalations);
           if (!decisions.length && !actionableEsc.length) {
-            // Fresh graph and nothing else to raise: nothing to orient on, but
-            // the operating loop still ships. A queued commit-repair escalation
-            // (checked against the full store above) is enough reason NOT to
-            // bail here even when the visible decisions list is empty.
-            if (pipelineEnabled()) emitContext(provider, "SessionStart", [PIPELINE_LOOP, controllerBrief].filter(Boolean).join("\n\n"));
+            // Fresh graph and nothing else to raise: nothing to orient on; only
+            // the controller brief (and the opt-in operating loop) ships. A
+            // queued commit-repair escalation (checked against the full store
+            // above) is enough reason NOT to bail here even when the visible
+            // decisions list is empty.
+            const fresh = [sessionLoopEnabled() ? PIPELINE_LOOP : "", controllerBrief].filter(Boolean).join("\n\n");
+            if (fresh) emitContext(provider, "SessionStart", fresh);
             return;
           }
           const L: string[] = [];
@@ -5020,9 +5023,9 @@ program
             L.push(`⚖ ${actionableEsc.length} decision(s) need YOUR call — ASK the user inline (don't queue): ${actionableEsc.map((e) => e.question).join(" · ")}`);
           }
           L.push("Orient further: hunch_context(task) · hunch_structure() · `hunch now`.");
-          // The operating loop rides session start — guaranteed delivery, once
-          // (the zod bench showed ambient skills are read in ~0% of sessions).
-          if (pipelineEnabled()) L.push("", PIPELINE_LOOP);
+          // The operating loop rides session start only on opt-in
+          // (sessionLoopEnabled): by default every session would pay for it.
+          if (sessionLoopEnabled()) L.push("", PIPELINE_LOOP);
           if (controllerBrief) L.push("", controllerBrief);
           const orientation = L.join("\n");
           // Antigravity's nearest equivalent is PreInvocation, which can fire
@@ -7025,19 +7028,52 @@ function toRepoRel(root: string, abs: string): string {
 
 /** Files a shell command wrote get the grounding the edit tools would have
  *  delivered before the edit — late, but while the agent can still revise.
- *  Already-served grounding (a delta) is not repeated. */
+ *  ONE block for all of them: a record relevant to several written files
+ *  appears once, naming those files. Already-served grounding (a per-file
+ *  delta, a constraint served earlier) is not repeated. */
 const MAX_SHELL_GROUNDED = 3;
 function shellWriteGrounding(root: string, store: HunchStore, provider: HookProvider, evt: HunchHookInput, written: readonly string[]): string {
-  const parts: string[] = [];
   const grounded: string[] = [];
+  const siblings: string[] = [];
+  const notices: string[] = [];
+  let heading = "";
+  // Record lines keyed by record id (supplement and footer lines by their
+  // text), first rendering wins, with every file that carried them.
+  const records = new Map<string, { line: string; files: string[] }>();
+  const footers = new Set<string>();
   for (const target of written.slice(0, MAX_SHELL_GROUNDED)) {
     const g = fileGrounding(root, store, provider, evt, target, join(root, target));
-    if (g?.mode === "full") { parts.push(g.text); grounded.push(target); }
+    if (g?.mode !== "full") continue;
+    grounded.push(target);
+    if (g.sibling) siblings.push(g.sibling);
+    if (g.notice) notices.push(g.notice);
+    for (const line of g.memory.split("\n")) {
+      if (line.startsWith("# Hunch context for ") || !line.trim()) continue;
+      if (line.startsWith("- ")) {
+        const key = line.startsWith("- supplemental/") ? line : line.slice(2).split(" | ")[0]!;
+        const seen = records.get(key);
+        if (seen) seen.files.push(target);
+        else records.set(key, { line, files: [target] });
+      } else if (line.startsWith("## ") && !heading) {
+        heading = line;
+      } else if (!line.startsWith("## ")) {
+        footers.add(line);
+      }
+    }
   }
-  if (!parts.length) return "";
+  if (!grounded.length) return "";
   const more = written.length > MAX_SHELL_GROUNDED ? ` (${written.length - MAX_SHELL_GROUNDED} more written file(s) not checked)` : "";
-  const sibling = parts.some((p) => p.startsWith(SIBLING_HEADING)) ? " It starts with a fix a same-shaped function elsewhere received and this file's copy never did: resolve it before you finish." : "";
-  return `Hunch: this shell command wrote ${grounded.join(", ")}${more}. Edits made outside the Edit/Write tools skip the pre-edit grounding, so it arrives now: re-check the change against it before relying on it.${sibling}\n\n${parts.join("\n\n")}`;
+  const sibling = siblings.length ? " It starts with a fix a same-shaped function elsewhere received and this file's copy never did: resolve it before you finish." : "";
+  const multi = grounded.length > 1;
+  const block = [
+    `# Hunch context for ${grounded.map((t) => `"${t}"`).join(", ")}`,
+    "",
+    ...(heading ? [heading] : []),
+    ...[...footers].filter((l) => !l.startsWith("… ")),
+    ...[...records.values()].map((r) => multi ? `${r.line} | files ${r.files.join(", ")}` : r.line),
+    ...[...footers].filter((l) => l.startsWith("… ")),
+  ].join("\n");
+  return `Hunch: this shell command wrote ${grounded.join(", ")}${more}. Edits made outside the Edit/Write tools skip the pre-edit grounding, so it arrives now: re-check the change against it before relying on it.${sibling}\n\n${[...siblings, block, ...new Set(notices)].join("\n\n")}`;
 }
 
 /** Score the store against this prompt once per task (taskSelection.ts) and keep
@@ -7092,7 +7128,9 @@ function promptTaskSelection(root: string, store: HunchStore, provider: HookProv
   return `Hunch memory for this task: ${selection.top.map((item) => `${item.id} — ${clip(item.title)}`).join(" · ")} (hunch_why(id) for detail)`;
 }
 
-type FileGrounding = { mode: "delta"; text: string } | { mode: "full"; text: string; recalled: string | null };
+/** `memory` is the envelope block alone (sibling lesson and task notice apart),
+ *  so a multi-file caller can merge records across files. */
+type FileGrounding = { mode: "delta"; text: string } | { mode: "full"; text: string; recalled: string | null; sibling: string; memory: string; notice: string };
 /** Memory budget beside a sibling lesson (the default is 1500 tokens). */
 const SIBLING_MEMORY_BUDGET_TOKENS = 800;
 
@@ -7120,16 +7158,21 @@ function fileGrounding(root: string, store: HunchStore, provider: HookProvider, 
   const selection = loadTaskSelection(hookReportTaskId(root, provider, evt));
   const assembled = store.assembleContext(target);
   const selected = selection ? new Set(selection.qualifying) : null;
+  // Only constraints whose own scope covers THIS file: why() also admits ones
+  // scoped to other files sharing a matched symbol, which is hunch_why's
+  // breadth, not an edit's rule set. Unscoped constraints never reach why().
+  const scoped = assembled.constraints.filter((c) => c.scope.some((g) => pathMatchesGlob(target, g)));
   const ctx = selected ? {
     ...assembled,
+    constraints: scoped,
     decisions: assembled.decisions.filter((d) => selected.has(d.id)),
     bugs: assembled.bugs.filter((b) => selected.has(b.id)),
     findings: assembled.findings.filter((f) => selected.has(f.id)),
-  } : assembled;
+  } : { ...assembled, constraints: scoped };
   // Sibling fixes: a same-shaped function elsewhere was fixed and this copy
   // never was — the concrete lesson a scoped constraint cannot carry.
   const siblings = siblingGrounding(root, target, store.recs("symbols"),
-    ctx.constraints.filter((c) => c.severity === "blocking" && c.scope.some((g) => pathMatchesGlob(target, g))).map((c) => ({ id: c.id, statement: c.statement })));
+    ctx.constraints.filter((c) => c.severity === "blocking").map((c) => ({ id: c.id, statement: c.statement })));
   // Remember what was delivered, so the first check the agent runs can follow
   // up if the function is still untouched (pipeline.ts lessonReminder).
   if (siblings.lessons.length && evt.session_id && pipelineEnabled()) {
@@ -7153,14 +7196,13 @@ function fileGrounding(root: string, store: HunchStore, provider: HookProvider, 
   // Recent-task history is advisory; under a task selection it is dropped
   // (`hunch task list` still has it).
   const recentTasks = selected ? [] : taskSelectionSupplements(store.selectTasksAuto(target, buildTaskRankingQuery(root, hookReportTaskId(root, provider, evt), target, { excludeTargetDeliveries: true })), target);
+  // Blast radius, components and landscape are not hook grounding (graphLists
+  // below): a file whose only content was those stays silent.
   const hasContent =
     ctx.constraints.length ||
     ctx.decisions.length ||
     ctx.bugs.length ||
-    ctx.blast_radius.length ||
     ctx.findings.length ||
-    ctx.landscape?.resources.length ||
-    ctx.landscape?.relationships.length ||
     retired.length ||
     recentTasks.length ||
     docGround ||
@@ -7176,6 +7218,20 @@ function fileGrounding(root: string, store: HunchStore, provider: HookProvider, 
     ...(docGround ? [{ id: "doc-grounding", kind: "doc-grounding", priority: 100, text: docGround }] : []),
     ...recentTasks,
   ];
+  const reportTaskId = hookReportTaskId(root, provider, evt);
+  // A new authoritative prompt gets its own full delivery. An earlier
+  // prompt's session-level delta cannot establish this task's receipt.
+  // A subagent reports to the prompt's task but starts with FRESH context:
+  // it never saw that grounding, so its dedup is scoped by its own agent
+  // identity (hashed — the raw agent_id is never retained in the key).
+  const agentKey = evt.agent_id ? `:${reportHash(evt.agent_id).slice(7, 19)}` : "";
+  const servedKey = (id: string) => `con:${id}${reportTaskId ? `:${reportTaskId}` : ""}${agentKey}`;
+  // A constraint already served to this task (any file) is a one-line
+  // reference. Same session map and scoping as the per-file key below, so a
+  // compaction reset or a new task/subagent gets full text again. The probe
+  // marks the constraint served; one this envelope then does not deliver is
+  // un-marked below.
+  const served = new Set(ctx.constraints.filter((c) => injectionMode(evt.session_id, servedKey(c.id), "", "served") === "delta").map((c) => c.id));
   // A sibling lesson is the most specific thing Hunch knows about this edit:
   // it leads, and the ranked memory gets a smaller budget so it cannot bury it.
   const envelope = buildDeliveryEnvelope(siblings.text ? { ...ctx, budget_tokens: Math.min(ctx.budget_tokens, SIBLING_MEMORY_BUDGET_TOKENS) } : ctx, {
@@ -7185,7 +7241,13 @@ function fileGrounding(root: string, store: HunchStore, provider: HookProvider, 
     components: store.recs("components"),
     decisionCorpus: store.recs("decisions"),
     supplements,
+    graphLists: false,
+    servedConstraints: served,
   });
+  const deliveredIds = new Set(envelope.delivered.map((item) => item.record_id));
+  for (const c of ctx.constraints) {
+    if (!served.has(c.id) && !deliveredIds.has(c.id)) injectionMode(evt.session_id, servedKey(c.id), "", "unserved");
+  }
   // Outside the envelope's budget on purpose: the lesson is a code change, not a
   // one-line supplement, and memory records must not crowd it out.
   const text = [siblings.text, envelope.text.trim()].filter(Boolean).join("\n\n");
@@ -7216,19 +7278,12 @@ function fileGrounding(root: string, store: HunchStore, provider: HookProvider, 
       delivery_profile: envelope.profile, ranking_policy: envelope.ranking_policy,
     })),
   ]);
-  const reportTaskId = hookReportTaskId(root, provider, evt);
-  // A new authoritative prompt gets its own full delivery. An earlier
-  // prompt's session-level delta cannot establish this task's receipt.
-  // A subagent reports to the prompt's task but starts with FRESH context:
-  // it never saw that grounding, so its dedup is scoped by its own agent
-  // identity (hashed — the raw agent_id is never retained in the key).
-  const agentKey = evt.agent_id ? `:${reportHash(evt.agent_id).slice(7, 19)}` : "";
   // Dedup on the envelope's stable IDENTITY projection, never on the
   // rendered block: serving the full text writes delivery receipts, and the
   // next call's task ranking reads them back and moves the wording ("today"
   // → "delivered today"), so hashing the presentation made this grounding
   // self-invalidating and re-sent the full block for unchanged records.
-  if (injectionMode(evt.session_id, `pre:${target}${reportTaskId ? `:${reportTaskId}` : ""}${agentKey}`, text, deliveryDedupeInput(envelope, supplements) + (siblings.identity ? `\u0000sibling-fix\u0000${siblings.identity}` : "")) === "delta") {
+  if (injectionMode(evt.session_id, `pre:${target}${reportTaskId ? `:${reportTaskId}` : ""}${agentKey}`, text, deliveryDedupeInput(envelope, supplements, ctx.constraints) + (siblings.identity ? `\u0000sibling-fix\u0000${siblings.identity}` : "")) === "delta") {
     receipts("refreshed");
     return {
       mode: "delta",
@@ -7248,7 +7303,7 @@ function fileGrounding(root: string, store: HunchStore, provider: HookProvider, 
       reportNotice = `\n\nHunch task ${reportTaskId} · delivery ${occurrence}. Inspect exact application references with hunch_report(task_id).`;
     } catch { reportNotice = "\n\nTask report observation unavailable; this delivery's task contribution remains unverified."; recalled = null; }
   }
-  return { mode: "full", text: text + reportNotice, recalled };
+  return { mode: "full", text: text + reportNotice, recalled, sibling: siblings.text, memory: envelope.text.trim(), notice: reportNotice.trim() };
 }
 
 /** The in-repo files a pre-edit event would change, each with the lines the edit
