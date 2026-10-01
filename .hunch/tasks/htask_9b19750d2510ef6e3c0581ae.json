@@ -1,0 +1,46 @@
+{
+  "id": "htask_9b19750d2510ef6e3c0581ae",
+  "title": "Assistant task",
+  "state": "completed",
+  "started_at": "2026-10-01T03:35:03.175Z",
+  "finished_at": "2026-10-01T04:24:49.486Z",
+  "coverage": "no-delivery-observed",
+  "lessons": [],
+  "applied": [],
+  "saved": [],
+  "checks": [
+    {
+      "label": "Verification command",
+      "state": "passed",
+      "exit_code": 0
+    }
+  ],
+  "conformance": [],
+  "refusals": 0,
+  "files": [
+    "docs/cookbook.md",
+    "src/cli/index.ts",
+    "src/core/footprint.ts",
+    "src/core/hookcache.ts",
+    "src/core/taskReportHook.ts",
+    "src/integrations/claudemd.ts",
+    "src/mcp/server.ts",
+    "src/mcp/taskReportTools.ts",
+    "test/footprint.test.ts",
+    "test/grounding.test.ts",
+    "test/lean-delivery.test.ts",
+    "test/mcp-instructions.test.ts",
+    "test/task-report-hook.test.ts"
+  ],
+  "supersedes": [],
+  "source_snapshot": "sha256:5e9cc163bfa8491a6accb8a9c79b1c5eed5570d337c008868951b4bab871a493",
+  "report_hash": "sha256:fb9f5248643617d61c0a8b6e994138acc0b967f7e788cd671338206376c5dc8b",
+  "provenance": {
+    "source": "task_report",
+    "confidence": 1,
+    "evidence": [
+      "hunch report htask_9b19750d2510ef6e3c0581ae"
+    ],
+    "last_verified": "2026-10-01T04:24:49.486Z"
+  }
+}
