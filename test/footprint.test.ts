@@ -16,7 +16,7 @@ const CEILINGS: Record<string, number> = {
   "mcp.hunch_task.start": 1_000,
   "mcp.hunch_task.finish": 1_000,
   "grounding.block": 1_200,
-  "hook.session.pipeline_loop": 1_000,
+  "hook.session.pipeline_loop.opt_in": 1_000,
   "hook.prompt.reminder": 500,
   "hook.prompt.task_instruction": 1_000,
   "hook.prompt.task_instruction.compact": 500,

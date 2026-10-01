@@ -73,7 +73,7 @@ import {
 } from "../core/projectDna.js";
 import { PROJECT_DNA_DELTA_SCHEMA_VERSION, diffProjectDna } from "../core/projectDnaDelta.js";
 import { projectDnaDeliverySupplement } from "../core/projectDnaDelivery.js";
-import { armExecutionObligations, loadPipelineState, savePipelineState } from "../core/pipeline.js";
+import { armExecutionObligations, loadPipelineState, PIPELINE_LOOP, savePipelineState } from "../core/pipeline.js";
 import { recordServed } from "../core/served.js";
 import { TaskIdSchema, recordTaskDelivery, unseenLessons } from "../core/taskReport.js";
 import { renderRecalledLine } from "../core/taskReportRender.js";
@@ -1500,10 +1500,12 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
     {
       title: "Find a runbook for a task",
       description:
-        "Look up the proven 'how-to' (ordered steps + files) for a recurring task — runbook-SCOPED retrieval (searches within runbooks, not the whole graph). Use at the START of a task to reuse a known procedure instead of re-deriving it. Advisory. Not for design rationale (hunch_why) or free-text memory search (hunch_query).",
+        "Look up the proven 'how-to' (ordered steps + files) for a recurring task — runbook-SCOPED retrieval (searches within runbooks, not the whole graph). Use at the START of a task to reuse a known procedure instead of re-deriving it. Advisory. task \"operating loop\" returns Hunch's scope→evidence→change→verify→attack→report loop. Not for design rationale (hunch_why) or free-text memory search (hunch_query).",
       inputSchema: { task: z.string().describe("The task/intent, e.g. 'add an MCP tool' or 'cut a release'.") },
     },
     async ({ task }): Promise<ToolResult> => {
+      // SessionStart no longer injects the loop by default (HUNCH_SESSION_LOOP=1 opts in); it stays one call away here.
+      if (/\b(operating|pipeline)\s+loop\b/i.test(task)) return ok(PIPELINE_LOOP);
       const hits = await store.searchRunbooks(task, 5, { embedder: await embedderReady });
       if (!hits.length) return ok(`No runbook for "${task}" yet. Capture one with: hunch runbook <base>..<head> --task "${task}"`);
       const lines = hits.map((h) => {

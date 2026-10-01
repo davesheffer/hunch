@@ -162,7 +162,8 @@ export async function measureFootprint(root: string, opts: { target?: string } =
     store.close();
   }
 
-  surfaces.push(surface("hook.session.pipeline_loop", PIPELINE_LOOP.length));
+  // Off by default; measured so the HUNCH_SESSION_LOOP=1 opt-in has a ceiling too.
+  surfaces.push(surface("hook.session.pipeline_loop.opt_in", PIPELINE_LOOP.length));
   surfaces.push(surface("hook.prompt.reminder", HOOK_REMINDER.length));
   // Every prompt gets a task instruction: full once per session, compact after.
   // Measured for a host whose stop hook closes the task, with a fixed installed

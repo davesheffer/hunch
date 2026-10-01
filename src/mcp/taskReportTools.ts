@@ -66,7 +66,7 @@ export { verificationLauncherFor };
 export function registerTaskReportTools(server: McpServer, getRoot: () => string, getStore: () => HunchStore): void {
   server.registerTool("hunch_task", {
     title: "Start or finish a task's contribution report",
-    description: "Start once per user task, unless the host's prompt hook already opened one — then reuse its task_id. Pass task_id to hunch_context. Finish before your final response and show the returned contribution card without asking; skip finish only when the hook said the host closes the task and the task used no Hunch (no hunch_* call, verified check, or hook context you acted on). A task you started must always be finished. Applications must name an exact delivered occurrence and record hash. Finishing never implies verification. Not for storing decisions or claiming tests passed; use the CLI task verify wrapper for command results.",
+    description: "Start once per user task, unless the host's prompt hook already opened one — then reuse its task_id. Pass task_id to hunch_context. Finish before your final response and show the returned contribution card without asking; skip finish only when the hook said the host closes the task and the task used no Hunch (no hunch_* call or hook context you acted on). A task you started must always be finished. Applications must name an exact delivered occurrence and record hash. Finishing never implies verification. Not for storing decisions or claiming tests passed; use the CLI task verify wrapper for command results.",
     inputSchema: {
       action: z.enum(["start", "finish"]), task_id: TaskIdSchema.optional(),
       title: z.string().min(1).max(200).optional(),

@@ -53,7 +53,7 @@ What each level may and may not do, and the human act that arms blocking, is spe
 
 ## 3. The verification pipeline (v1.4.0+)
 
-On hosts that support and run the configured hooks, the operating loop — **scope → evidence → change → verify → attack → report** — is delivered at session start. `PostToolUse` records observed product-file edits and subsequent verification-shaped commands. At `firm`/`strict`, a supported `Stop` hook can request continued work when edits lack that evidence, at most twice per turn. This does not prove a check passed or that the model used the context; [task reports](task-reports.md) distinguish those claims.
+The operating loop — **scope → evidence → change → verify → attack → report** — is served on request by `hunch_runbook("operating loop")`; on hosts that run the configured hooks, `HUNCH_SESSION_LOOP=1` also injects it at session start (off by default, to keep every session's opening context small). `PostToolUse` records observed product-file edits and subsequent verification-shaped commands. At `firm`/`strict`, a supported `Stop` hook can request continued work when edits lack that evidence, at most twice per turn. This does not prove a check passed or that the model used the context; [task reports](task-reports.md) distinguish those claims.
 
 **Why it exists (benchmark, 2026-07-08):** instruction skills installed as files were read in **0/20** benchmark sessions; directly supplying the same content changed the hard-bug diagnosis result in the tested cells. That result motivated hook delivery. It is scoped benchmark evidence, not a guarantee about every host or task: even delivered context can be ignored or misunderstood.
 
@@ -61,6 +61,7 @@ Escape hatches:
 
 ```bash
 HUNCH_PIPELINE=0        # kill switch, per env
+HUNCH_SESSION_LOOP=1    # also inject the operating loop at session start
 hunch firmness advisory # keep grounding, drop the gate
 ```
 
