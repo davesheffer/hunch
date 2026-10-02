@@ -5,6 +5,16 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { buildServer, MCP_INSTRUCTIONS } from "../src/mcp/server.js";
 import { tempStore } from "./helpers.js";
 import { taskInstruction } from "../src/core/taskReportHook.js";
+import { HOOK_REMINDER } from "../src/core/hookText.js";
+
+test("prompt reminder requests one brief and conditional follow-ups", () => {
+  assert.match(HOOK_REMINDER, /^Hunch \(engineering memory\) is available/);
+  assert.match(HOOK_REMINDER, /one hunch_context call with the task and known files/);
+  assert.match(HOOK_REMINDER, /hunch_check_constraints for edit scope not covered by the brief/);
+  assert.match(HOOK_REMINDER, /only for missing information or risk/);
+  assert.match(HOOK_REMINDER, /Record new reusable decisions and corrections/);
+  assert.doesNotMatch(HOOK_REMINDER, /Before editing, call hunch_check_constraints/);
+});
 
 test("initialize delivers the grounding contract to every client, hooks or not", async (t) => {
   const { root, cleanup } = tempStore();
@@ -47,6 +57,9 @@ test("hunch_context's description lists the tools by moment with their real para
   assert.match(md, /hunch_check_constraints\(scope\)/);
   assert.match(md, /hunch_get_dependents\(symbol\)/);
   assert.match(md, /only a human activates a policy/);
+  assert.match(md, /Optional follow-up references for missing information, not a per-task checklist/);
+  assert.match(md, /One adequate context brief is sufficient/);
+  assert.match(md, /Record only new reusable knowledge/);
   assert.doesNotMatch(md, /hunch_query\(question\)|hunch_bug_lineage\(symptom\)/);
 });
 

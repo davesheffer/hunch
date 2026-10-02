@@ -989,7 +989,7 @@ export function buildDeliveryEnvelope(ctx: AssembledContext, options: DeliveryOp
     lines.push("Evidence rule: task, repro, and test evidence outrank advisory memory; weak matches are withheld.");
   }
   if (query.taskPhrase) {
-    lines.push("Diagnostic loop: before editing, call hunch_context again with the first concrete failing assertion, stack frame, expected behavior, and API/code path you observe.");
+    lines.push("Diagnostic loop: Refresh with hunch_context only if new concrete evidence changes the target or the prior brief missed a relevant code path; include the failing assertion, stack frame, expected behavior, and API/code path you observe.");
   }
   if ((ctx.landscape?.resources.length ?? 0) + (ctx.landscape?.relationships.length ?? 0) > 0) {
     lines.push(`Landscape: only current human-reviewed ${LANDSCAPE_FRAGMENT_SCHEMA_VERSION} records may share this envelope and budget.`);

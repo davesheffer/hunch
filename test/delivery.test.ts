@@ -202,7 +202,8 @@ test("delivery envelope: a low-authority decision is delivered when task evidenc
   assert.match(envelope.text, /historical pattern: Commit abcdef1/);
   assert.match(envelope.text, /controller: dec_empty_union:inspect:abcdef1/);
   assert.match(envelope.text, /disprove: Reject this hypothesis/);
-  assert.match(envelope.text, /Diagnostic loop: before editing, call hunch_context again/);
+  assert.match(envelope.text, /Refresh with hunch_context only if new concrete evidence changes the target or the prior brief missed a relevant code path/);
+  assert.doesNotMatch(envelope.text, /before editing, call hunch_context again/);
 });
 
 test("delivery envelope: task retrieval exposes at most two testable decision hypotheses", () => {
