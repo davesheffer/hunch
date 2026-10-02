@@ -39,9 +39,7 @@ test("initialize delivers the grounding contract to every client, hooks or not",
   assert.doesNotMatch(instructions ?? "", /task verify check/, "a verify check alone never obliges a finish where the host closes the task");
 });
 
-// The always-loaded block routes to hunch_context; its description carries the
-// per-moment tool list, so the documented param names must match the real keys.
-test("hunch_context's description lists the tools by moment with their real param names", async (t) => {
+test("hunch_context's description gives focused, host-neutral guidance", async (t) => {
   const { root, cleanup } = tempStore();
   const server = buildServer(root);
   const [ct, st] = InMemoryTransport.createLinkedPair();
@@ -49,20 +47,16 @@ test("hunch_context's description lists the tools by moment with their real para
   await Promise.all([server.connect(st), client.connect(ct)]);
   t.after(async () => { await client.close(); await server.close(); cleanup(); });
   const md = (await client.listTools()).tools.find((tool) => tool.name === "hunch_context")?.description ?? "";
-  for (const moment of ["Start:", "Design:", "Edit:", "Merge:", "Record", "Finish:"]) assert.ok(md.includes(moment), moment);
-  assert.match(md, /hunch_query\(query\)/, "hunch_query param is `query`, not `question`");
-  assert.match(md, /hunch_bug_lineage\(symptom_or_symbol\)/);
-  assert.match(md, /hunch_runbook\(task\)/);
-  assert.match(md, /hunch_compare\(candidates\)/);
-  assert.match(md, /hunch_conformance\(\)/);
-  assert.match(md, /hunch_why\(target\)/);
+  assert.ok(md.length <= 900, `${md.length} chars; ceiling 900`);
+  assert.match(md, /Call hunch_context first with the task, known files, and task_id/);
+  assert.match(md, /Apply its constraints/);
   assert.match(md, /hunch_check_constraints\(scope\)/);
-  assert.match(md, /hunch_get_dependents\(symbol\)/);
-  assert.match(md, /only a human activates a policy/);
-  assert.match(md, /Optional follow-up references for missing information, not a per-task checklist/);
-  assert.match(md, /One adequate context brief is sufficient/);
-  assert.match(md, /Record only new reusable knowledge/);
-  assert.doesNotMatch(md, /hunch_query\(question\)|hunch_bug_lineage\(symptom\)/);
+  assert.match(md, /before editing scope the brief does not cover/);
+  assert.match(md, /One sufficient brief is enough/);
+  assert.match(md, /hunch_why\(target\) only when more detail is needed/);
+  assert.match(md, /render result\.content only; structuredContent is the alternative machine-readable representation/);
+  assert.match(md, /Only a human activates a policy/);
+  assert.doesNotMatch(md, /Start:|Design:|Edit:|Merge:|hunch_query\(/);
 });
 
 // The finish-skip rule reads the same wherever it is stated: the MCP instructions,
