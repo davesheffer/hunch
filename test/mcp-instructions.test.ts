@@ -25,6 +25,8 @@ test("initialize delivers the grounding contract to every client, hooks or not",
   t.after(async () => { await client.close(); await server.close(); cleanup(); });
   const instructions = client.getInstructions();
   assert.equal(instructions, MCP_INSTRUCTIONS);
+  assert.match(instructions ?? "", /Apply its constraints; hunch_check_constraints\(scope\) before editing scope not covered by the brief/);
+  assert.doesNotMatch(instructions ?? "", /hunch_check_constraints\(scope\) before shared edits/);
   for (const tool of ["hunch_task", "hunch_context", "hunch_check_constraints"]) assert.ok(instructions?.includes(tool), tool);
   assert.doesNotMatch(instructions ?? "", /claude code only|anthropic/i, "host-neutral (con_e04226bd05)");
   assert.ok((instructions ?? "").length <= 500, `${(instructions ?? "").length} chars; ceiling 500`);

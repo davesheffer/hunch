@@ -1220,9 +1220,8 @@ export interface RootControlOptions {
  * needs no host hook or instruction file. Host-neutral by design (con_e04226bd05);
  * per-host prose (CLAUDE.md, AGENTS.md) and hooks add to it, never replace it. */
 export const MCP_INSTRUCTIONS = [
-  "Hunch is this repo's engineering memory: call hunch_context(target, task_id) FIRST, before reading or editing; hunch_check_constraints(scope) before shared edits.",
+  "Hunch is engineering memory: hunch_context(target, task_id) FIRST, before reading/editing. Apply its constraints; hunch_check_constraints(scope) before editing scope not covered by the brief.",
   "Reuse a hook's task_id, else hunch_task(action:\"start\") once. Finish with hunch_task(action:\"finish\"), showing its card; skip it only if the hook said the host closes the task and it used no Hunch (no hunch_* call on its ID, hook context acted on, or claim). Tasks you start, you finish.",
-  "Hosts without hooks: call these tools yourself.",
 ].join("\n");
 
 export function buildServerWithRootControl(initialRoot: string, options: RootControlOptions = {}): RootControlledServer {
