@@ -109,7 +109,7 @@ export function renderHunchSection(store: HunchStore, root?: string): string {
   lines.push(`<!-- hunch:template ${GROUNDING_TEMPLATE} -->`);
   lines.push("## 🧠 Hunch (Engineering Memory)");
   lines.push("");
-  lines.push(`This repo's Hunch graph holds ${renderCountsMatch(counts)}. Use a task-linked prompt-hook brief for its covered file; otherwise call \`hunch_context(target)\` first, before reading or editing. Its tool description lists the rest.`);
+  lines.push(`This repo's Hunch graph holds ${renderCountsMatch(counts)}. Use a task-linked prompt-hook brief as this task's initial context; otherwise call \`hunch_context(target)\` first, before reading or editing. New files alone do not require another brief; check constraints before editing uncovered scope. Its tool description lists the rest.`);
   if (constraints.length) {
     lines.push("");
     lines.push(INVARIANTS_HEADING);

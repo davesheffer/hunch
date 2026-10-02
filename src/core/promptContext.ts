@@ -87,6 +87,6 @@ export function promptContextBrief(root: string, store: HunchStore, provider: Ho
       rank: item.rank, delivery_reason: item.delivery_reason, provenance_status: item.provenance_status,
       token_cost: item.token_cost, delivery_profile: envelope.profile, ranking_policy: envelope.ranking_policy,
     })));
-    return `Hunch task-linked prompt-hook brief for ${target} (task ${taskId} · occurrence ${occurrence}). This satisfies first context for this file. Apply its constraints; call hunch_check_constraints for edit scope not covered by this brief before editing. Request hunch_context with this task ID and concrete evidence only if more context is needed.\n\n${envelope.text}`;
+    return `Hunch task-linked prompt-hook brief for ${target} (task ${taskId} · occurrence ${occurrence}). This satisfies this task's initial context step. Its file-specific coverage is ${target}; apply its constraints and check hunch_check_constraints before editing uncovered scope. Discovering another file alone does not require another hunch_context call. Request further context only for missing information or risk, with this task ID and concrete evidence.\n\n${envelope.text}`;
   } catch { return null; }
 }

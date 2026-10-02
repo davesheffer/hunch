@@ -72,7 +72,7 @@ for (const provider of ["claude", "codex"]) {
     const [delivery] = report.deliveries;
     assert.equal(delivery?.target, "src/file.ts");
     assert.match(output, new RegExp(`task ${task.task_id} · occurrence ${delivery!.occurrence_id}`));
-    assert.match(output, /satisfies first context for this file/);
+    assert.match(output, /This satisfies this task's initial context step/);
     assert.match(output, /con_file/);
     assert.match(output, /con_global/);
     assert.ok(delivery!.records.some((item) => item.record_id === "con_file"));
@@ -123,7 +123,7 @@ test("advertised team memory keeps the validated manual route instead of public-
   const root = fixture(t);
   writeFileSync(join(root, ".hunch", "team.json"), "invalid team config");
   const output = hook(root, "Update src/file.ts", "codex");
-  assert.doesNotMatch(output, /satisfies first context/);
+  assert.doesNotMatch(output, /This satisfies this task's initial context step/);
   assert.match(output, /hunch_context/);
   for (const task of listReportTasks(root)) assert.equal(readTaskReport(root, task.task_id).deliveries.length, 0);
 });
