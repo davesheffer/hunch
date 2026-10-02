@@ -136,6 +136,91 @@ test("delivery envelope: abstains from low-authority decisions when given only a
   assert.doesNotMatch(envelope.text, /dec_file_only/);
 });
 
+test("delivery envelope: confident unrelated task memory adds no hypothesis or obligations", () => {
+  const decision = {
+    ...fixtureDecision("dec_worker_pool", "src/scheduler.ts", "Keep worker pool size fixed during startup.", modelProvenance(0.95)),
+    title: "Fix worker pool size at startup",
+    commit: "abcdef1",
+  };
+  const envelope = buildDeliveryEnvelope(context({
+    target: "scheduler skips overdue reminders after clock adjustment",
+    decisions: [decision] as never,
+  }), { commitReachability: () => "reachable" });
+
+  assert.deepEqual(envelope.delivered, []);
+  assert.equal(envelope.omitted[0]?.reason, "low-relevance");
+  assert.deepEqual(envelope.hypotheses, []);
+  assert.deepEqual(envelope.obligations, []);
+});
+
+test("delivery envelope: task phrases without evidence cannot bypass relevance through confidence", () => {
+  const decision = {
+    ...fixtureDecision("dec_pool", "src/scheduler.ts", "Keep worker pool size fixed.", modelProvenance(0.95)),
+    title: "Worker pool size",
+    commit: "abcdef1",
+  };
+  for (const target of ["Fix crashes.", "Fix `crashes`", "Fix Scheduler.start()", "Fix crashes!", "Fix crashes?"]) {
+    const envelope = buildDeliveryEnvelope(context({ target, decisions: [decision] as never }), {
+      commitReachability: () => "reachable",
+    });
+    assert.deepEqual(envelope.delivered, [], target);
+    assert.deepEqual(envelope.hypotheses, [], target);
+    assert.deepEqual(envelope.obligations, [], target);
+  }
+});
+
+test("delivery envelope: confident relevant task memory remains actionable", () => {
+  const decision = {
+    ...fixtureDecision("dec_reminders", "src/scheduler.ts", "Recalculate overdue reminders after clock adjustment.", modelProvenance(0.95)),
+    title: "Recalculate overdue reminders after clock adjustment",
+    commit: "abcdef1",
+  };
+  const envelope = buildDeliveryEnvelope(context({
+    target: "overdue reminders disappear after clock adjustment",
+    decisions: [decision] as never,
+  }), { commitReachability: () => "reachable" });
+
+  assert.deepEqual(envelope.delivered.map((item) => item.record_id), ["dec_reminders"]);
+  assert.deepEqual(envelope.hypotheses.map((item) => item.record_id), ["dec_reminders"]);
+  assert.equal(envelope.obligations[0]?.id, "dec_reminders:inspect:abcdef1");
+});
+
+test("delivery envelope: consequence and path words cannot establish task relevance", () => {
+  const target = "calendar export fails when timezone changes";
+  for (const confidence of [0.65, 0.95]) {
+    for (const detail of [
+      { consequences: [target] },
+      { related_files: ["src/calendar-export-fails-when-timezone-changes.ts"] },
+    ]) {
+      const decision = {
+        ...fixtureDecision("dec_pool", "src/calendar.ts", "Keep worker pool size fixed during startup.", modelProvenance(confidence)),
+        title: "Fix worker pool size at startup",
+        ...detail,
+      };
+      const envelope = buildDeliveryEnvelope(context({ target, decisions: [decision] as never }), {
+        commitReachability: () => "reachable",
+      });
+      assert.deepEqual(envelope.delivered, []);
+      assert.equal(envelope.omitted[0]?.reason, "low-relevance");
+    }
+  }
+});
+
+test("delivery envelope: confident explicit-file lookup and human-confirmed task memory remain supported", () => {
+  const confident = fixtureDecision("dec_file", "src/scheduler.ts", "Keep worker pool size fixed.", modelProvenance(0.95));
+  const fileEnvelope = buildDeliveryEnvelope(context({ target: "src/scheduler.ts", decisions: [confident] as never }), {
+    commitReachability: () => "reachable",
+  });
+  assert.deepEqual(fileEnvelope.delivered.map((item) => item.record_id), ["dec_file"]);
+
+  const human = fixtureDecision("dec_human", "src/scheduler.ts", "Keep worker pool size fixed.", provenance);
+  const taskEnvelope = buildDeliveryEnvelope(context({
+    target: "scheduler skips overdue reminders after clock adjustment",
+    decisions: [human] as never,
+  }), { commitReachability: () => "reachable" });
+  assert.deepEqual(taskEnvelope.delivered.map((item) => item.record_id), ["dec_human"]);
+});
+
 test("delivery envelope: a low-authority decision is delivered when task evidence matches", () => {
   const relevant = {
     ...fixtureDecision(

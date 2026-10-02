@@ -314,18 +314,6 @@ function queryProfile(target: string, options: DeliveryOptions): QueryProfile {
   return { taskPhrase, evidenceTerms, allTerms };
 }
 
-function decisionRecordTerms(decision: Decision): Set<string> {
-  return lexicalTokens([
-    decision.title,
-    decision.context,
-    decision.decision,
-    ...decision.consequences,
-    ...decision.alternatives_rejected,
-    ...decision.related_files,
-    ...decision.related_components,
-  ].join(" "));
-}
-
 /** Ranking uses only the record's claim, not consequences or path metadata.
  * Otherwise prose such as "the test moved away from tuple" can falsely make an
  * unrelated lazy-schema decision look tuple-specific. */
@@ -449,15 +437,15 @@ function decisionAbstention(
       detail: `non-human decision confidence ${confidence.toFixed(2)} is below the ${MIN_ADVISORY_CONFIDENCE.toFixed(2)} delivery floor`,
     };
   }
-  if (confidence >= MIN_UNCONDITIONED_CONFIDENCE) return null;
   if (!query.taskPhrase || !query.evidenceTerms.size) {
+    if (!query.taskPhrase && confidence >= MIN_UNCONDITIONED_CONFIDENCE) return null;
     return {
       reason: "insufficient-context",
-      detail: "low-authority prescriptive memory needs a task phrase with symptoms or expected behavior, not only a file/symbol/API target",
+      detail: "non-human prescriptive memory needs a task phrase with symptoms or expected behavior, not only a file/symbol/API target",
     };
   }
 
-  const recordTerms = decisionRecordTerms(decision);
+  const recordTerms = decisionPrimaryTerms(decision);
   const evidenceOverlap = [...query.evidenceTerms].filter((term) => recordTerms.has(term)).length;
   const allOverlap = [...query.allTerms].filter((term) => recordTerms.has(term)).length;
   const requiredEvidence = Math.max(1, Math.ceil(query.evidenceTerms.size * 0.4));
