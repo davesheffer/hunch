@@ -1,0 +1,79 @@
+{
+  "id": "dec_d2d8c0cbe5",
+  "title": "Reuse initial task context when discovering additional files",
+  "topic": null,
+  "status": "accepted",
+  "context": "Previous guidance described prompt-hook context as satisfying context for one file, leaving ambiguity about whether discovering another file required another brief. Touches invariant(s): con_8460b6770f (Config/provider writers must merge idempotently into existing user files and refuse to clobber an unparseable file); con_e04226bd05 (The MCP server must stay client-agnostic: all assistants point to the same .hunch/ graph; no Claude-only behavior in the server).",
+  "decision": "Treat a task-linked prompt-hook brief as satisfying the task's initial context step. Request further context only for missing information or risk, and check constraints before editing scope the brief does not cover.",
+  "consequences": [
+    "Discovering another file alone does not require another hunch_context call.",
+    "File-specific coverage remains explicit; uncovered edits still require hunch_check_constraints.",
+    "Hook text, generated repository guidance, MCP instructions, and tests reflect the same rule."
+  ],
+  "alternatives_rejected": [
+    "Require another context brief solely because an additional file is discovered."
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Require another context brief solely because an additional file is discovered.",
+      "scope": [
+        "src/core/**",
+        "src/integrations/**",
+        "src/mcp/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_863ac67d4a",
+    "cmp_a94a8fe5cc",
+    "cmp_b256a6aed0",
+    "cmp_dfa5b5acde",
+    "cmp_f27fede222"
+  ],
+  "related_files": [
+    "src/core/hookText.ts",
+    "src/core/promptContext.ts",
+    "src/integrations/claudemd.ts",
+    "src/mcp/server.ts",
+    "test/mcp-instructions.test.ts",
+    "test/prompt-context.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "5b7cb18a",
+  "valid_from": "2026-10-02T17:39:41+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft",
+    "confidence": 0.65,
+    "evidence": [
+      "commit:5b7cb18a",
+      "synth:provider=codex-cli",
+      "branch:feat/codex-efficiency-v6",
+      "src/core/hookText.ts",
+      "src/core/promptContext.ts",
+      "src/integrations/claudemd.ts",
+      "src/mcp/server.ts",
+      "test/mcp-instructions.test.ts",
+      "test/prompt-context.test.ts"
+    ],
+    "last_verified": "2026-10-02T14:40:35.730Z"
+  },
+  "date": "2026-10-02T17:39:41+03:00"
+}
