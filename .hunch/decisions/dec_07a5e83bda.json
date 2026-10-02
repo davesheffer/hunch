@@ -1,0 +1,101 @@
+{
+  "id": "dec_07a5e83bda",
+  "title": "Resolve known task paths to make one context brief sufficient",
+  "topic": null,
+  "status": "accepted",
+  "context": "Lexical lookup of a symptom combined with a filename could return only symbols, omitting file-scoped invariants and prior decisions. Existing instructions also required redundant memory queries. Touches invariant(s): con_902759b3dc (All JSON writes to .hunch/ must be atomic (temp-file + rename) so an interrupted write can never truncate the index); con_a87360128b (Semantic vectors are a derived layer in SQLite, never the source of truth; reconcile by content hash on reindex); con_e04226bd05 (The MCP server must stay client-agnostic: all assistants point to the same .hunch/ graph; no Claude-only behavior in the server).",
+  "decision": "Resolve explicit known repository paths embedded in task phrases and merge their scoped memory by record ID. Treat one adequate context brief as sufficient, with follow-up queries only for missing information, uncovered scope, risk, or new evidence that changes the target.",
+  "consequences": [
+    "Embedded relative paths, absolute repository paths, line references, and Markdown links retain scoped memory and blast radius.",
+    "Visibility filtering remains authoritative; outside and unknown paths do not borrow another file's memory.",
+    "Routine implementation of existing decisions skips duplicate capture."
+  ],
+  "alternatives_rejected": [
+    "Rely on lexical lookup alone for task phrases containing known file paths.",
+    "Require another context call before every edit or treat follow-up tools as a per-task checklist."
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Rely on lexical lookup alone for task phrases containing known file paths.",
+      "scope": [
+        "src/core/**",
+        "src/mcp/**",
+        "src/store/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Require another context call before every edit or treat follow-up tools as a per-task checklist.",
+      "scope": [
+        "src/core/**",
+        "src/mcp/**",
+        "src/store/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_a94a8fe5cc",
+    "cmp_b256a6aed0",
+    "cmp_cdfb395bb7",
+    "cmp_dfa5b5acde",
+    "cmp_f27fede222"
+  ],
+  "related_files": [
+    "src/core/delivery.ts",
+    "src/core/hookText.ts",
+    "src/mcp/server.ts",
+    "src/store/hunchStore.ts",
+    "test/delivery.test.ts",
+    "test/mcp-instructions.test.ts",
+    "test/store.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "da5c39f2",
+  "valid_from": "2026-10-02T06:58:36+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft",
+    "confidence": 0.65,
+    "evidence": [
+      "commit:da5c39f2",
+      "synth:provider=codex-cli",
+      "branch:feat/codex-efficiency-v2",
+      "src/core/delivery.ts",
+      "src/core/hookText.ts",
+      "src/mcp/server.ts",
+      "src/store/hunchStore.ts",
+      "test/delivery.test.ts",
+      "test/mcp-instructions.test.ts",
+      "test/store.test.ts"
+    ],
+    "last_verified": "2026-10-02T03:59:29.466Z"
+  },
+  "date": "2026-10-02T06:58:36+03:00"
+}
