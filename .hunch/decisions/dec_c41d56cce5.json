@@ -1,0 +1,43 @@
+{
+  "id": "dec_c41d56cce5",
+  "title": "fix: align MCP constraint queries with sufficient context briefs",
+  "topic": null,
+  "status": "accepted",
+  "context": "Touched 2 file(s) across src/mcp, test/mcp-instructions.test.ts. Touches invariant(s): con_e04226bd05 (The MCP server must stay client-agnostic: all assistants point to the same .hunch/ graph; no Claude-only behavior in the server).",
+  "decision": "Changed code in src/mcp, test/mcp-instructions.test.ts (2 file(s)).",
+  "consequences": [],
+  "alternatives_rejected": [],
+  "rejected_tripwires": [],
+  "related_components": [
+    "cmp_a94a8fe5cc",
+    "cmp_dfa5b5acde",
+    "cmp_f27fede222"
+  ],
+  "related_files": [
+    "src/mcp/server.ts",
+    "test/mcp-instructions.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "154f938a",
+  "valid_from": "2026-10-02T08:26:55+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "inferred",
+    "confidence": 0.3,
+    "evidence": [
+      "commit:154f938a",
+      "synth:provider=deterministic",
+      "branch:feat/codex-efficiency-v3",
+      "src/mcp/server.ts",
+      "test/mcp-instructions.test.ts"
+    ],
+    "last_verified": "2026-10-02T05:27:36.733Z"
+  },
+  "date": "2026-10-02T08:26:55+03:00"
+}
