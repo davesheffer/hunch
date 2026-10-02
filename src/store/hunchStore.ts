@@ -2366,13 +2366,19 @@ export class HunchStore {
       symbols: this.recs("symbols").filter(opts.canRead ?? (() => true)),
       components: this.recs("components").filter(opts.canRead ?? (() => true)),
     };
-    const phrase = /\s/.test(target) && !this.isKnownPath(target, graph)
+    const literalPath = graph.symbols.some(symbol => symbol.file === target)
+      || graph.components.some(component => component.paths.includes(target))
+      || isRepoFile(this.paths.root, target);
+    const phrase = /\s/.test(target) && !literalPath
       && !graph.symbols.some(symbol => symbol.name === target || symbol.id === target)
       && !graph.components.some(component => component.name === target || component.id === target);
     const paths = phrase
       ? promptPaths(target, this.paths.root).filter(path => this.isKnownPath(path, graph))
       : [target];
-    const w: WhyResult = { target, constraints: [], decisions: [], bugs: [], symbols: [], components: [] };
+    // The empty path selects repo-wide rules without interpreting task prose as
+    // a filename (or borrowing a same-basename file through suffix matching).
+    const w: WhyResult = phrase ? this.why("", opts)
+      : { target, constraints: [], decisions: [], bugs: [], symbols: [], components: [] };
     const unique = <T extends { id: string }>(records: T[]): T[] => [...new Map(records.map(record => [record.id, record])).values()];
     for (const path of paths) {
       const scoped = this.why(path, opts);
