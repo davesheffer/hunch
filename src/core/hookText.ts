@@ -2,7 +2,7 @@
  *  every correction). Lives in
  *  core so `hunch footprint` measures the exact text the hook sends. */
 export const HOOK_REMINDER =
-  "Hunch (engineering memory) is available for this repo. Before editing, call " +
-  "hunch_check_constraints(scope) for do-not-break invariants and hunch_why(target) " +
-  "for the rationale; use hunch_get_dependents for blast radius and hunch_bug_lineage " +
-  "for prior root causes. After a non-trivial choice, record it with hunch_record_decision.";
+  "Hunch (engineering memory) is available for this repo. Ask for one hunch_context call with the task and known files. " +
+  "Follow its delivered constraints and evidence; use hunch_check_constraints for edit scope not covered by the brief. " +
+  "Use hunch_why, hunch_get_dependents, or hunch_bug_lineage only for missing information or risk. " +
+  "Record new reusable decisions and corrections; skip duplicate capture for routine implementation of existing decisions.";

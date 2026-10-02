@@ -57,6 +57,28 @@ test("why() returns decisions/bugs/constraints for a file", () => {
   cleanup();
 });
 
+test("context resolves repo paths embedded in a task without losing their scoped memory", () => {
+  const { store, root, cleanup } = seed();
+  try {
+    for (const target of [
+      'Fix token revocation in `src/auth/session.ts:40` after reset',
+      `Fix token revocation in ${join(root, 'src/auth/session.ts')} after reset`,
+      'Fix [sessions](src/auth/session.ts) and src/billing/charge.ts',
+    ]) {
+      const ctx = store.assembleContext(target);
+      assert.deepEqual(ctx.constraints.map(c => c.id), ['con_1'], target);
+      assert.deepEqual(ctx.decisions.map(d => d.id), ['dec_1'], target);
+      assert.deepEqual(ctx.bugs.map(b => b.id), ['bug_1'], target);
+      assert.ok(ctx.blast_radius.some(d => d.id === 'sym_b'), target);
+    }
+    const privateContext = store.assembleContext('Fix src/auth/session.ts token revocation', 1500,
+      { canRead: record => (record as { id: string }).id !== 'dec_1' });
+    assert.deepEqual(privateContext.decisions, [], 'visibility filtering remains authoritative');
+    assert.deepEqual(store.assembleContext('Fix /outside/src/auth/session.ts').constraints, [], 'outside path is not borrowed');
+    assert.deepEqual(store.assembleContext('Fix missing/session.ts').constraints, [], 'unknown path must not suffix-match a different file');
+  } finally { cleanup(); }
+});
+
 test("a 0-byte per-record file (merge-driver tombstone) loads as absent — no corrupt warning, no record (issue #37)", () => {
   const { store, root, cleanup } = seed();
   writeFileSync(join(root, ".hunch", "decisions", "dec_tombstone.json"), "");

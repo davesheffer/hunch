@@ -32,6 +32,7 @@ import { withServedDatabase } from "../core/served.js";
 import { normalizePath, rankTaskRecords, recordIdsOf, selectLatestTasks, selectTaskSlots, type RankingContext, type RankingQuery, type RankingWeights, type SlotOptions, type TaskSelection } from "../core/taskRanking.js";
 import { resolveTaskRankingMode } from "../core/taskRankingMode.js";
 import { currentForTopic, isInForce } from "../core/topics.js";
+import { promptPaths } from "../core/taskSelection.js";
 import { edgeId } from "../core/ids.js";
 import { isStrictBlocker, isVetoBlocker, type VetoTier } from "../core/strictgate.js";
 import { effectiveForbids, matchForbids, type ForbidMatch } from "../core/constraintmatch.js";
@@ -2358,7 +2359,29 @@ export class HunchStore {
     // repo-relative BEFORE it reaches why()/liveFindingsFor() below, or an
     // absolute path never matches the repo-relative stored data (issue #299).
     target = repoRelativeTarget(target, this.paths.root);
-    const w = this.why(target, opts);
+    // Agents commonly send a symptom and its filename together. FTS over that
+    // phrase can return only symbols, dropping the file's scoped invariants and
+    // prior decisions. Resolve explicit known paths before the lexical fallback.
+    const graph = {
+      symbols: this.recs("symbols").filter(opts.canRead ?? (() => true)),
+      components: this.recs("components").filter(opts.canRead ?? (() => true)),
+    };
+    const phrase = /\s/.test(target) && !this.isKnownPath(target, graph)
+      && !graph.symbols.some(symbol => symbol.name === target || symbol.id === target)
+      && !graph.components.some(component => component.name === target || component.id === target);
+    const paths = phrase
+      ? promptPaths(target, this.paths.root).filter(path => this.isKnownPath(path, graph))
+      : [target];
+    const w: WhyResult = { target, constraints: [], decisions: [], bugs: [], symbols: [], components: [] };
+    const unique = <T extends { id: string }>(records: T[]): T[] => [...new Map(records.map(record => [record.id, record])).values()];
+    for (const path of paths) {
+      const scoped = this.why(path, opts);
+      w.constraints = unique([...w.constraints, ...scoped.constraints]);
+      w.decisions = unique([...w.decisions, ...scoped.decisions]);
+      w.bugs = unique([...w.bugs, ...scoped.bugs]);
+      w.symbols = unique([...w.symbols, ...scoped.symbols]);
+      w.components = unique([...w.components, ...scoped.components]);
+    }
     const symIds = w.symbols.map((s) => s.id);
     const blast = new Map<string, { id: string; depth: number; via: string }>();
     for (const id of symIds) {
@@ -2376,7 +2399,8 @@ export class HunchStore {
       bugs,
       blast_radius: [...blast.values()].sort((a, b) => a.depth - b.depth).slice(0, 12),
       components: w.components,
-      findings: this.liveFindingsFor(target).filter(opts.canRead ?? (() => true)).slice(0, 8),
+      findings: unique(paths.flatMap(path => this.liveFindingsFor(path)))
+        .filter(opts.canRead ?? (() => true)).slice(0, 8),
       // Landscape records do not yet carry a valid-time window. A historical
       // query therefore withholds them instead of mixing current graph state
       // into an as-of memory envelope.
