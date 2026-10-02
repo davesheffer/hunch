@@ -1220,7 +1220,7 @@ export interface RootControlOptions {
  * needs no host hook or instruction file. Host-neutral by design (con_e04226bd05);
  * per-host prose (CLAUDE.md, AGENTS.md) and hooks add to it, never replace it. */
 export const MCP_INSTRUCTIONS = [
-  "Hunch is engineering memory: hunch_context(target, task_id) FIRST, before reading/editing. Apply its constraints; hunch_check_constraints(scope) before editing scope not covered by the brief.",
+  "Hunch: task-linked prompt-hook brief covers its file; else hunch_context(target, task_id) FIRST, before reading/editing. Apply constraints; hunch_check_constraints(scope) before editing uncovered scope.",
   "Reuse a hook's task_id, else hunch_task(action:\"start\") once. Finish with hunch_task(action:\"finish\"), showing its card; skip it only if the hook said the host closes the task and it used no Hunch (no hunch_* call on its ID, hook context acted on, or claim). Tasks you start, you finish.",
 ].join("\n");
 
@@ -1822,7 +1822,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
     {
       title: "Assemble the minimal relevant Hunch slice for a task",
       description:
-        "Return a budgeted engineering-memory brief for a file, symbol, or task phrase. Call hunch_context first with the task, known files, and task_id. Apply its constraints; call hunch_check_constraints(scope) before editing scope the brief does not cover. One sufficient brief is enough; use hunch_why(target) only when more detail is needed. When presenting a programmatic result, render result.content only; structuredContent is the alternative machine-readable representation. Only a human activates a policy. Record new reusable knowledge with task_id. Finish with hunch_task finish unless its skip rule applies.",
+        "Return a budgeted engineering-memory brief for a file, symbol, or task phrase. Use a task-linked prompt-hook brief for its covered file; otherwise call hunch_context first with the task, known files, and task_id. Apply its constraints; call hunch_check_constraints(scope) before editing scope the brief does not cover. One sufficient brief is enough; use hunch_why(target) only when more detail is needed. When presenting a programmatic result, render result.content only; structuredContent is the alternative machine-readable representation. Only a human activates a policy. Record new reusable knowledge with task_id. Finish with hunch_task finish unless its skip rule applies.",
       inputSchema: {
         target: z.string().describe("A file path, symbol, or task phrase you're about to work on."),
         budget_tokens: z.number().optional().describe("Rough token budget for the brief (default 1500)."),

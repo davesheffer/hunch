@@ -72,6 +72,7 @@ import { ensureGitignore, ignoreHunchMemory, HUNCH_MEMORY_DIRS, upgradeManagedGi
 import { writeCiWorkflow } from "../integrations/ciAction.js";
 import { updateClaudeMd, renderHunchSection } from "../integrations/claudemd.js";
 import { HOOK_REMINDER } from "../core/hookText.js";
+import { promptContextBrief } from "../core/promptContext.js";
 import { measureFootprint } from "../core/footprint.js";
 import { classifyGroundingBlock, describeGroundingFreshness } from "../core/groundingLag.js";
 import { mergeGroundingFile } from "../core/groundingMerge.js";
@@ -4850,6 +4851,11 @@ program
             parts.push(unverifiedNag(st));
           }
         }
+        try {
+          store ??= new HunchStore(paths);
+          const brief = promptContextBrief(root, store, provider, evt);
+          if (brief) parts.push(brief);
+        } catch { /* manual first-context guidance remains available */ }
         if (!parts.length) return;
         emitContext(provider, "UserPromptSubmit", parts.join("\n\n"));
         return;
