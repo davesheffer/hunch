@@ -39,7 +39,7 @@ This repo's full engineering memory lives in a **private overlay**; a **curated 
 <!-- hunch:template 3 -->
 ## 🧠 Hunch (Engineering Memory)
 
-This repo's Hunch graph holds **342 decisions, 2 bugs, 31 constraints, 22 components, 3 policies, 26 open findings**. Call `hunch_context(target)` first, before reading or editing; its tool description lists the rest.
+This repo's Hunch graph holds **343 decisions, 2 bugs, 31 constraints, 22 components, 3 policies, 26 open findings**. Call `hunch_context(target)` first, before reading or editing; its tool description lists the rest.
 
 ### ⛔ Blocking invariants
 - con_2ce3f2a547: Synthesis must use an explicitly selected coding-assistant subscription CLI or the deterministic local fallback; never…

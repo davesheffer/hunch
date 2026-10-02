@@ -1,0 +1,105 @@
+{
+  "id": "dec_99371e89ea",
+  "title": "Deliver task-linked context in prompt hooks for one explicit file",
+  "topic": null,
+  "status": "accepted",
+  "context": "Existing hook guidance asked agents to request hunch_context even when the prompt named a concrete repository file. Touches invariant(s): con_03a0b94b2e (The agent hook must never block an edit on failure: any error exits 0 and never denies; after the event is recognized it emits at most one 'grounding unavailable' context line, unrecognized input emits nothing); con_8460b6770f (Config/provider writers must merge idempotently into existing user files and refuse to clobber an unparseable file); con_e04226bd05 (The MCP server must stay client-agnostic: all assistants point to the same .hunch/ graph; no Claude-only behavior in the server).",
+  "decision": "Allow UserPromptSubmit hooks to supply first context for one validated, explicitly named file when native session and task linkage are available. Retain the hunch_context route when the brief cannot be supplied.",
+  "consequences": [
+    "Agents can use the brief for its covered file; other edit scopes still require constraint checks.",
+    "Target selection rejects sensitive paths, symlinks, and files outside the repository, and canonicalizes accepted paths.",
+    "Passive delivery is skipped for checkouts advertising team memory unless an explicit private overlay is configured.",
+    "Target resolution does not retain task prose."
+  ],
+  "alternatives_rejected": [
+    "Require a separate hunch_context call even when a task-linked prompt brief covers the file.",
+    "Treat public-only hook memory as sufficient for a checkout advertising team memory."
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Require a separate hunch_context call even when a task-linked prompt brief covers the file.",
+      "scope": [
+        "src/cli/**",
+        "src/core/**",
+        "src/integrations/**",
+        "src/mcp/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Treat public-only hook memory as sufficient for a checkout advertising team memory.",
+      "scope": [
+        "src/cli/**",
+        "src/core/**",
+        "src/integrations/**",
+        "src/mcp/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_50037f41a9",
+    "cmp_863ac67d4a",
+    "cmp_a94a8fe5cc",
+    "cmp_b256a6aed0",
+    "cmp_dfa5b5acde",
+    "cmp_f27fede222"
+  ],
+  "related_files": [
+    "src/cli/index.ts",
+    "src/core/hookText.ts",
+    "src/core/promptContext.ts",
+    "src/integrations/claudemd.ts",
+    "src/mcp/server.ts",
+    "test/mcp-instructions.test.ts",
+    "test/prompt-context.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "33c89dce",
+  "valid_from": "2026-10-02T11:52:35+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft+summary",
+    "confidence": 0.5,
+    "evidence": [
+      "commit:33c89dce",
+      "synth:provider=codex-cli",
+      "branch:feat/codex-efficiency-v5",
+      "src/cli/index.ts",
+      "src/core/hookText.ts",
+      "src/core/promptContext.ts",
+      "src/integrations/claudemd.ts",
+      "src/mcp/server.ts",
+      "test/mcp-instructions.test.ts",
+      "test/prompt-context.test.ts"
+    ],
+    "last_verified": "2026-10-02T08:53:30.792Z"
+  },
+  "date": "2026-10-02T11:52:35+03:00"
+}
