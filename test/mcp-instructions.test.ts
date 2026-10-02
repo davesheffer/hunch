@@ -9,6 +9,7 @@ import { HOOK_REMINDER } from "../src/core/hookText.js";
 
 test("prompt reminder requests one brief and conditional follow-ups", () => {
   assert.match(HOOK_REMINDER, /^Hunch \(engineering memory\) is available/);
+  assert.match(HOOK_REMINDER, /Use a task-linked prompt-hook brief for its covered file; otherwise/);
   assert.match(HOOK_REMINDER, /one hunch_context call with the task and known files/);
   assert.match(HOOK_REMINDER, /hunch_check_constraints for edit scope not covered by the brief/);
   assert.match(HOOK_REMINDER, /only for missing information or risk/);
@@ -25,7 +26,8 @@ test("initialize delivers the grounding contract to every client, hooks or not",
   t.after(async () => { await client.close(); await server.close(); cleanup(); });
   const instructions = client.getInstructions();
   assert.equal(instructions, MCP_INSTRUCTIONS);
-  assert.match(instructions ?? "", /Apply its constraints; hunch_check_constraints\(scope\) before editing scope not covered by the brief/);
+  assert.match(instructions ?? "", /task-linked prompt-hook brief covers its file; else hunch_context/);
+  assert.match(instructions ?? "", /Apply constraints; hunch_check_constraints\(scope\) before editing uncovered scope/);
   assert.doesNotMatch(instructions ?? "", /hunch_check_constraints\(scope\) before shared edits/);
   for (const tool of ["hunch_task", "hunch_context", "hunch_check_constraints"]) assert.ok(instructions?.includes(tool), tool);
   assert.doesNotMatch(instructions ?? "", /claude code only|anthropic/i, "host-neutral (con_e04226bd05)");
@@ -48,7 +50,7 @@ test("hunch_context's description gives focused, host-neutral guidance", async (
   t.after(async () => { await client.close(); await server.close(); cleanup(); });
   const md = (await client.listTools()).tools.find((tool) => tool.name === "hunch_context")?.description ?? "";
   assert.ok(md.length <= 900, `${md.length} chars; ceiling 900`);
-  assert.match(md, /Call hunch_context first with the task, known files, and task_id/);
+  assert.match(md, /Use a task-linked prompt-hook brief for its covered file; otherwise call hunch_context first with the task, known files, and task_id/);
   assert.match(md, /Apply its constraints/);
   assert.match(md, /hunch_check_constraints\(scope\)/);
   assert.match(md, /before editing scope the brief does not cover/);
