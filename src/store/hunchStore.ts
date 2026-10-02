@@ -2405,8 +2405,10 @@ export class HunchStore {
       bugs,
       blast_radius: [...blast.values()].sort((a, b) => a.depth - b.depth).slice(0, 12),
       components: w.components,
-      findings: unique(paths.flatMap(path => this.liveFindingsFor(path)))
-        .filter(opts.canRead ?? (() => true)).slice(0, 8),
+      findings: unique((phrase ? ["", ...paths] : paths).flatMap(path => this.liveFindingsFor(path)))
+        .filter(opts.canRead ?? (() => true))
+        .sort((a, b) => (SEV_FINDING[b.severity] ?? 0) - (SEV_FINDING[a.severity] ?? 0) || a.id.localeCompare(b.id))
+        .slice(0, 8),
       // Landscape records do not yet carry a valid-time window. A historical
       // query therefore withholds them instead of mixing current graph state
       // into an as-of memory envelope.
