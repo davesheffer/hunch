@@ -79,6 +79,23 @@ test("context resolves repo paths embedded in a task without losing their scoped
   } finally { cleanup(); }
 });
 
+test("task context retains global constraints and extracts files despite broad component globs", () => {
+  const { store, cleanup } = seed();
+  try {
+    store.json.put("constraints", { ...store.json.loadAll("constraints")[0], id: "con_global", scope: ["**"] });
+    assert.ok(store.assembleContext("Fix token revocation").constraints.some(c => c.id === "con_global"));
+    assert.ok(!store.assembleContext("Fix token revocation", 1500, {
+      canRead: record => (record as { id: string }).id !== "con_global",
+    }).constraints.some(c => c.id === "con_global"));
+    for (const glob of ["**", "src/**"]) {
+      store.json.replaceAll("components", [{ id: "cmp_all", name: "Application", kind: "module", paths: [glob], responsibility: "app", provenance: prov(), created_at: "2026-05-30T12:00:00Z", updated_at: "2026-05-30T12:00:00Z" }]);
+      for (const target of ["Fix src/auth/session.ts", "src/auth/session.ts token revocation"]) {
+        assert.deepEqual(new Set(store.assembleContext(target).constraints.map(c => c.id)), new Set(["con_1", "con_global"]), `${glob}: ${target}`);
+      }
+    }
+  } finally { cleanup(); }
+});
+
 test("a 0-byte per-record file (merge-driver tombstone) loads as absent — no corrupt warning, no record (issue #37)", () => {
   const { store, root, cleanup } = seed();
   writeFileSync(join(root, ".hunch", "decisions", "dec_tombstone.json"), "");
