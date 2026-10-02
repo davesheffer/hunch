@@ -80,6 +80,27 @@ test("liveFindingsFor sorts worst-severity first", () => {
   cleanup();
 });
 
+test("task context keeps global findings and ranks the merged file findings before truncation", () => {
+  const { store, cleanup } = tempStore();
+  try {
+    store.json.put("symbols", mkSymbol("sym_a", "src/a.ts", "a"));
+    store.json.put("symbols", mkSymbol("sym_b", "src/b.ts", "b"));
+    const global = finding({ title: "global warning", affected_files: ["**"], severity: "high" });
+    const critical = finding({ title: "critical b", affected_files: ["src/b.ts"], severity: "critical" });
+    store.json.put("findings", global);
+    store.json.put("findings", critical);
+    for (let i = 0; i < 8; i++) store.json.put("findings", finding({ title: `low a ${i}`, affected_files: ["src/a.ts"], severity: "low" }));
+    assert.deepEqual(store.assembleContext("Fix token revocation").findings.map(f => f.id), [global.id]);
+    const ids = store.assembleContext("Fix src/a.ts and src/b.ts").findings.map(f => f.id);
+    assert.equal(ids.length, 8);
+    assert.deepEqual(ids.slice(0, 2), [critical.id, global.id]);
+    assert.deepEqual(store.assembleContext("Fix src/b.ts and src/a.ts").findings.map(f => f.id), ids);
+    assert.ok(!store.assembleContext("Fix src/a.ts and src/b.ts", 1500, {
+      canRead: record => (record as { id: string }).id !== critical.id,
+    }).findings.some(f => f.id === critical.id));
+  } finally { cleanup(); }
+});
+
 test("liveFindingsFor rewrites an absolute target to repo-relative and never suffix-leaks an unrelated same-basename file (issue #299)", () => {
   const { store, root, cleanup } = tempStore();
   // A real indexed symbol at the target file — the same "is this path known to
