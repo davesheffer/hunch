@@ -1221,7 +1221,7 @@ export interface RootControlOptions {
  * per-host prose (CLAUDE.md, AGENTS.md) and hooks add to it, never replace it. */
 export const MCP_INSTRUCTIONS = [
   "Hunch: use a task-linked prompt-hook brief as initial context; else hunch_context(target, task_id) FIRST. Apply constraints; hunch_check_constraints(scope) before uncovered edits. More context only if needed.",
-  "Reuse a hook's task_id, else hunch_task(action:\"start\") once. Finish with hunch_task(action:\"finish\"), showing its card; skip it only if the hook said the host closes the task and it used no Hunch (no hunch_* call on its ID, hook context acted on, or claim). Tasks you start, you finish.",
+  "Reuse hook task_id; else hunch_task start once. Finish and show the card unless the hook explicitly says it closes this task and displays its report, even when memory was used. Finish for real application claims (exact occurrence/hash) or interruption. Manually started tasks always finish.",
 ].join("\n");
 
 export function buildServerWithRootControl(initialRoot: string, options: RootControlOptions = {}): RootControlledServer {
@@ -1477,7 +1477,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
     {
       title: "Query Hunch",
       description:
-        "Full-text + graph search across the engineering memory (decisions, bugs, constraints, components, symbols). Returns ranked records with provenance. Use this to ask 'why' questions about the codebase. Not for orienting on a known file or symbol (hunch_context / hunch_why give the curated slice with its blast radius) or for finding where code lives (hunch_structure).",
+        "Search decisions, bugs, constraints, components, and symbols by text and graph links; returns ranked records with provenance. Use for broad 'why' questions. For a known target use hunch_context or hunch_why; for code locations use hunch_structure.",
       inputSchema: { query: z.string().describe("A natural-language question or keywords.") },
     },
     async ({ query }): Promise<ToolResult> => {
@@ -1499,7 +1499,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
     {
       title: "Find a runbook for a task",
       description:
-        "Look up the proven 'how-to' (ordered steps + files) for a recurring task — runbook-SCOPED retrieval (searches within runbooks, not the whole graph). Use at the START of a task to reuse a known procedure instead of re-deriving it. Advisory. task \"operating loop\" returns Hunch's scope→evidence→change→verify→attack→report loop. Not for design rationale (hunch_why) or free-text memory search (hunch_query).",
+        "Find proven, advisory runbooks (ordered steps and files) for a recurring task; search is limited to runbooks. Use at task start. task \"operating loop\" returns the scope→evidence→change→verify→attack→report loop. For rationale use hunch_why; for general memory search use hunch_query.",
       inputSchema: { task: z.string().describe("The task/intent, e.g. 'add an MCP tool' or 'cut a release'.") },
     },
     async ({ task }): Promise<ToolResult> => {
@@ -1524,7 +1524,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
     {
       title: "Explain why a file/symbol is the way it is",
       description:
-        "Return the decisions, bugs, and constraints that explain a file path or symbol — the 'why' and the 'what must not break', with evidence. Pass `as_of` (a commit/tag/branch) to time-travel: see what was believed at that point in history. Use when you need the full rationale for ONE target. Not for a budgeted task brief (hunch_context), keyword search (hunch_query), or where-is-it questions (hunch_structure).",
+        "Explain one file or symbol with evidenced decisions, bugs, and constraints. `as_of` selects a historical commit, tag, or branch. For a budgeted task brief use hunch_context; for keyword search use hunch_query; for code locations use hunch_structure.",
       inputSchema: {
         target: z.string().describe("A file path (e.g. src/auth/session.ts) or symbol name."),
         as_of: z.string().optional().describe("Time-travel ref: a commit sha, tag, or branch (e.g. v0.7.0). Omit for the current view."),
@@ -1584,7 +1584,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
     {
       title: "Check invariants in scope",
       description:
-        "Return constraints whose scope matches a glob/path, sorted by severity. Call this BEFORE editing code to avoid breaking intentional invariants. Returns each constraint's id, severity, enforcement, statement, and rationale. Not for who-depends-on-this (hunch_get_dependents) or invariants reachable only through dependents (hunch_blast_radius).",
+        "Before editing, get constraints matching a path or glob, sorted by severity, with id, severity, enforcement, statement, and rationale. For dependent lists use hunch_get_dependents; for invariants reached through dependents use hunch_blast_radius.",
       inputSchema: { scope: z.string().describe("A path or glob, e.g. src/auth/** or src/auth/session.ts") },
     },
     async ({ scope }): Promise<ToolResult> => {
@@ -1601,7 +1601,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
     {
       title: "Blast radius (transitive dependents)",
       description:
-        "Return everything that transitively depends on a symbol/component (callers + dependent components) so a change's blast radius is known before editing. Returns dependents nearest first with depth and edge kind. Not for the invariants those dependents carry (hunch_blast_radius) or constraints on the target itself (hunch_check_constraints).",
+        "Before editing, list transitive callers and dependent components of a symbol, nearest first with depth and edge kind. For their invariants use hunch_blast_radius; for target constraints use hunch_check_constraints.",
       inputSchema: { symbol: z.string().describe("A symbol id, symbol name, or file path.") },
     },
     async ({ symbol }): Promise<ToolResult> => {
@@ -1630,7 +1630,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
     {
       title: "Blast radius + near-violations for a file",
       description:
-        "Given a file you're about to change, return its dependency blast radius (files whose code depends on it) AND any invariants reached THROUGH that radius — 'near-violations' you could break indirectly without touching their own scope. Call before editing a widely-depended-on file. Mirrors `hunch check --blast`. Not for a bare dependent list (hunch_get_dependents) or constraints scoped to the target alone (hunch_check_constraints).",
+        "Before editing a widely depended on file, list dependent files and invariants reached through them (indirect near-violations). Mirrors `hunch check --blast`. For dependents alone use hunch_get_dependents; for target constraints use hunch_check_constraints.",
       inputSchema: { target: z.string().describe("A file path (e.g. src/auth/jwt.ts) or symbol.") },
     },
     async ({ target }): Promise<ToolResult> => {
@@ -1998,7 +1998,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
     {
       title: "Recent activity + the roadmap (the hot view)",
       description:
-        "What just happened and what's next, straight from the graph: the last N decisions, the ROADMAP, and any inline human question such as an imported ADR awaiting explicit approve/decline. Call at session start to orient, or before planning what to work on. Same data as the wiki's now.md. Public store only, EXCEPT a queued commit-repair's liveness is checked against the full store (so a private-overlay decision's fully-answerable repair doesn't go silently unanswerable); only its id and the commit shas ever surface, never its title.",
+        "At session start or before planning, show the last N decisions, ROADMAP, and inline human questions (including imported ADR approve/decline). Same data as wiki now.md. Public store only; queued commit-repair liveness checks the full store but exposes only its id and commit shas, never a private title.",
       inputSchema: {
         recent_limit: z.number().optional().describe("How many recent decisions to include (default 5)."),
         roadmap_limit: z.number().optional().describe("How many roadmap entries to include (default 2); the rest are counted."),
@@ -2051,7 +2051,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
     {
       title: "Worktrees and branches across machines",
       description:
-        "Worktrees per machine and every local branch with a deterministic verdict — merged (ancestry / squash / rebase), never pushed, upstream gone, dirty — plus a recommended action. Use INSTEAD of git branch / git worktree list to see what is open, stale, or deletable. This machine is read live; others from memory (stale ones marked unverified). Read-only. Not for design rationale (hunch_why) or code structure (hunch_structure).",
+        "Read-only inventory of worktrees and local branches across machines, with merged (ancestry/squash/rebase), never-pushed, upstream-gone, and dirty verdicts plus actions. Use instead of git branch/worktree list for open or stale workspace review. This machine is live; other machines come from memory and stale entries are unverified.",
       inputSchema: {
         view: z.enum(["inventory", "branches"]).optional().describe("inventory = one row per worktree (default); branches = one row per branch with its verdict and action."),
         machine: z.string().optional().describe("Only this machine label."),
@@ -2098,7 +2098,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
     {
       title: "Decisions the human must make now (ask inline, not a queue)",
       description:
-        "Decisions only the human can make, so you ASK THE USER before acting: topic conflicts (>1 live decision per topic), premise-stale decisions (the recorded reason no longer holds; authority is unchanged until the human re-attests, supersedes, or retires), one imported ADR at a time awaiting approve/decline, a queued commit-provenance repair (`hunch repair-provenance --apply`, never applied unattended), and Constitution policies awaiting review or activation. Normally empty. Never decide an entry for the user — silence is never approval. Reads the public or shared-mode store, never private-mode records — except a queued repair, whose liveness is checked against the full store and which surfaces only its id and commit shas.",
+        "Surface decisions to ASK THE USER before acting: topic conflicts (>1 live), premise-stale decisions (recorded reason no longer holds; authority stays until human re-attests, supersedes, or retires), one imported ADR at a time for approve/decline, queued commit-provenance repair (`hunch repair-provenance --apply`, never unattended), and policies awaiting human review/activation. Never decide for the user; silence is not approval. Reads public/shared records; queued repair liveness checks the full store but exposes only id and commit shas.",
       inputSchema: {},
     },
     async (): Promise<ToolResult> => {
@@ -2229,7 +2229,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
     {
       title: "Capture a decision (grilling interview)",
       description:
-        "Start a decision-capture interview ('/capture', 'grill me'): returns the protocol — ONE question at a time until resolved — and a capture-session token; writes nothing. Then commit via hunch_record_decision with the token + confirmed topic. The token is NOT a human signature: human-confirmed authority needs the human's own confirmation (client prompt, or `hunch review --confirm <id>`). Not for corrections (hunch_record_correction) or observations (hunch_record_finding).",
+        "Start a decision interview: returns a one-question-at-a-time protocol and token; writes nothing. Commit with hunch_record_decision using the token and confirmed topic. The token is not a human signature; human-confirmed authority requires the human's own confirmation (client prompt or `hunch review --confirm <id>`). For corrections use hunch_record_correction; for observations use hunch_record_finding.",
       inputSchema: {
         topic: z.string().optional().describe("proposed topic anchor (confirm with the human before committing)"),
         seed: z.string().optional().describe("what the decision is about, to focus the first question"),
@@ -2248,7 +2248,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
     {
       title: "Current decision for a topic",
       description:
-        "Decision-grounding: return the single CURRENT (accepted, non-superseded) decision anchored to a topic — the authoritative answer a doc or diff is checked against, plus what it rejected. A shared-store miss is confirmed against fresh team memory before Hunch says the topic has no current decision. If freshness is unavailable, or a topic has an unresolved collision (>1 live), it injects nothing (fail-safe).",
+        "Return the single accepted, non-superseded decision for a topic, including rejected alternatives, to ground docs or diffs. A shared-store miss is checked against fresh team memory; unavailable freshness or >1 live decision yields no injected authority.",
       inputSchema: { topic: z.string().describe("the decision anchor, e.g. 'auth-transport'") },
     },
     async ({ topic }): Promise<ToolResult> => {
@@ -2559,7 +2559,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
     {
       title: "Capture a correction as an enforced constraint (Never Twice)",
       description:
-        "When a human corrects the agent ('never call X here'), persist it as a SCOPED Constraint with provenance, so the pre-edit hook and CI Constraint Guard hold every assistant to it. severity:'blocking' only when the human said never/must; applies_to_all:true only for a genuinely repo-wide rule (else scoped to scope_hint_file). Returns the constraint id and scope. Not for a design choice (hunch_record_decision) or an observed gap with no rule yet (hunch_record_finding).",
+        "Persist a human correction as a scoped Constraint with provenance for pre-edit and CI guards. Use severity:'blocking' only for human never/must language; applies_to_all:true only for a repo-wide rule, else use scope_hint_file. Returns id and scope. For design choices use hunch_record_decision; for gaps without a rule use hunch_record_finding.",
       inputSchema: {
         rule: z.string().describe("The invariant in the human's words, e.g. \"never call the pay-per-token API here\"."),
         scope_hint_file: z.string().optional().describe("File the correction was about; scopes the constraint to it (conservative default). Prefer a repo-relative path — an absolute one is relativized, and one outside the repo is discarded rather than scoped to a path that could never match."),
@@ -2664,7 +2664,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
     {
       title: "Record a finding (an observation with no code change)",
       description:
-        "Persist an OBSERVATION with no code change — an audit gap, a measured number, a platform fact, an incident — anchored to a date + evidence, not a commit. Advisory: grounds future edits to the affected files (pre-edit hook, hunch_context) and is listed by hunch_findings; never blocks. Re-record the SAME title to update triage (e.g. triage:'resolved' + resolved_commit). If it violates an unrecorded rule, record the rule first (hunch_record_correction) and link it via violates_constraint. Not for a rule to enforce (hunch_record_correction) or a choice between alternatives (hunch_record_decision).",
+        "Record an evidenced, dated observation without a code change or commit anchor. Advisory only: informs pre-edit context and hunch_findings; never blocks. Reuse the exact title to update triage (including resolved_commit). If an unrecorded rule was violated, first record it with hunch_record_correction and link via violates_constraint. For design choices use hunch_record_decision.",
       inputSchema: {
         finding: z.object({
           title: z.string().describe("stable one-line name — re-recording the same title updates the finding"),
@@ -2951,7 +2951,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
     {
       title: "Open findings for a scope",
       description:
-        "List LIVE findings (observed gaps/debt with no fix yet — triage open/accepted-risk/scheduled) for a file, glob, or symbol; omit scope for the whole ledger. Call before planning work in an area to inherit past audits instead of re-discovering them. Lists each finding's first sentence; pass id for one finding's full observation. Advisory; resolved/stale findings are excluded unless all:true. Not for invariants (hunch_check_constraints) or bug history (hunch_bug_lineage): findings are observations, never rules.",
+        "Before planning, list live advisory findings (open, accepted-risk, scheduled) for a file, glob, or symbol; omit scope for all. Returns first sentences; pass id for a full observation. Resolved/stale entries require all:true. Findings are observations, not rules (hunch_check_constraints) or bug history (hunch_bug_lineage).",
       inputSchema: {
         scope: z.string().optional().describe("a path, glob, or symbol (e.g. src/procs/** or dbo.GetOrders); omit for all"),
         all: z.boolean().optional().describe("include resolved/stale findings (the full history)"),
@@ -3072,7 +3072,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
     {
       title: "Causal merge verdict: is this change safe against the recorded WHY?",
       description:
-        "Before opening or merging a PR, replay a diff against memory and return ONE verdict — BLOCK / WARN / PASS — citing the decision and bug behind each invariant in scope, plus advisory blast-radius invariants, re-introduced retired code, and symbols already defined elsewhere. Deterministic, no LLM. Default: staged changes; working:true for all local changes, base (e.g. origin/main) for a PR range, commit for one commit. Not for an advisory impact map (hunch_pr_impact), or intent erosion with no diff (hunch_conformance).",
+        "Before opening or merging a PR, deterministically replay its diff against memory for BLOCK/WARN/PASS. Cites decisions and bugs behind scoped invariants; checks advisory blast-radius invariants, retired code, and duplicate symbols. Defaults to staged; working:true covers local changes, base a PR range, commit one commit. For impact only use hunch_pr_impact; for intent drift without a diff use hunch_conformance.",
       inputSchema: {
         base: z.string().optional().describe("Diff against this base ref (e.g. origin/main) — for a PR/branch."),
         commit: z.string().optional().describe("Diff a single commit (sha/ref). Omit base AND commit to check staged changes."),
@@ -3108,7 +3108,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
     {
       title: "The indexed shape of the repo / a dir / a file / a symbol",
       description:
-        "Orient WITHOUT grep/glob rounds: the graph already holds the repo's structure. No target → repo map (components + directories by symbol weight). A directory → its files with their symbols. A file → its outline (symbols, fan-in/out, callers). An exact symbol name → its definition site(s) with one-hop neighbors. Call this FIRST when exploring unfamiliar code — it tells you exactly which file to read, instead of searching for it. Returns shape only (files, symbols, one-hop neighbors), never why. Not for rationale (hunch_why) or memory search (hunch_query).",
+        "Start here to locate unfamiliar code. No target gives components and directories by symbol weight; directory gives files and symbols; file gives outline, fan-in/out and callers; exact symbol gives definitions and one-hop neighbors. Returns structure only. For rationale use hunch_why; for memory search use hunch_query.",
       inputSchema: {
         target: z.string().optional().describe("A directory, file path, or exact symbol name. Omit for the repo map."),
       },
@@ -3182,7 +3182,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
     {
       title: "Rank candidate solutions by architectural fit",
       description:
-        "Given several candidate branches/commits (e.g. N solutions to one task), replay each against engineering memory and RANK them best-fit first — the candidate that trips the fewest in-force invariants, reverses no decisions, and adds the least sprawl wins. Deterministic (the same merge-verdict per candidate, no LLM). Use to choose among multiple solutions before committing to one.",
+        "Before choosing among branches or commits, deterministically rank each against memory using merge verdicts: fewer violated in-force invariants, reversed decisions, and added sprawl rank better. No LLM.",
       inputSchema: {
         candidates: z.array(z.string()).describe("Refs to compare — branches or commits, e.g. ['feat-a','feat-b','feat-c']."),
         base: z.string().optional().describe("Base to diff each candidate against (3-dot; default: main)."),
@@ -3468,7 +3468,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
     {
       title: "Does the code still satisfy the recorded intent?",
       description:
-        "Intent-conformance (the inversion of a normal guard): for every in-force decision carrying a conformance predicate, deterministically verify the CODE still satisfies its intent over the dependency graph — e.g. 'pay still reaches verifySession'. Returns the violations: intent the code has silently drifted away from, with NO diff required. Run before a refactor or merge to catch intent erosion a diff-only check can't see. Returns the violation list. Not for a diff-scoped verdict (hunch_merge_verdict) or an impact map (hunch_pr_impact).",
+        "Before refactor or merge, deterministically check whether code still satisfies each in-force decision's conformance predicate over the dependency graph. Returns intent violations without needing a diff. For a diff verdict use hunch_merge_verdict; for impact use hunch_pr_impact.",
       inputSchema: {},
     },
     async (): Promise<ToolResult> => {

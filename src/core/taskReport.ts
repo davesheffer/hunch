@@ -395,6 +395,9 @@ function appendEvent(root: string, taskId: string, kind: string, body: unknown, 
       if (prior.task_id !== taskId || prior.kind !== kind || prior.content_hash !== contentHash) throw new Error("report event identity conflicts with existing evidence");
       return id;
     }
+    if (kind === "conformance" && task.session_key && newestSessionTask(db, root, task.session_key)?.task_id !== taskId) {
+      throw new Error("cannot record conformance for an earlier session task");
+    }
     // The task the observation lands on: the named one, unless the host closed
     // it and the session has since moved on.
     let target = task;
@@ -407,7 +410,7 @@ function appendEvent(root: string, taskId: string, kind: string, body: unknown, 
       // Verification stays on its own task (a result must match its start), and
       // a task the agent closed is final. Otherwise the turn went on (another
       // hook's block, a resumed prompt): reopen; the next Stop closes it again.
-      const newest = kind === "check" || kind === "check-start" || !task.session_key ? null : newestSessionTask(db, root, task.session_key);
+      const newest = kind === "check" || kind === "check-start" || kind === "conformance" || !task.session_key ? null : newestSessionTask(db, root, task.session_key);
       if (newest && newest.task_id !== task.task_id && (newest.state === "open" || newest.closed_by === "host")) target = newest;
       if (target.state !== "open") {
         target = TaskSchema.parse({ ...target, state: "open", finished_at: null, closed_by: undefined });

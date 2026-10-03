@@ -23,6 +23,8 @@ process.env.HUNCH_MCP_TOOLS = "all";
 
 function mcpDeliveryFixture(): string {
   const root = mkdtempSync(join(tmpdir(), "hunch-mcp-delivery-"));
+  // Isolate Git discovery when TMPDIR is inside another (ignored) repository.
+  execFileSync("git", ["init", "-q", root]);
   mkdirSync(join(root, "src"), { recursive: true });
   writeFileSync(join(root, "src", "context.ts"), "export const context = true;\n");
   writeFileSync(join(root, "src", "to-json-schema.ts"), [
