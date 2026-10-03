@@ -1,0 +1,67 @@
+{
+  "id": "dec_520f913e96",
+  "title": "Emit complete constraint rules before certifying prompt coverage",
+  "topic": null,
+  "status": "accepted",
+  "context": "Truncated constraint statements could omit prohibitions, and clipped scope lists could omit files, preventing task briefs from certifying actual coverage.",
+  "decision": "When constraintTargets is nonempty, render unserved constraints with complete statements and scope lists before certifying prompt coverage. Preserve existing clipping otherwise and for previously served references.",
+  "consequences": [
+    "Prompt delivery can certify coverage while including the full blocking rule and scope list.",
+    "Constraint output can be longer when prompt targets are supplied.",
+    "Relevance and provenance for decisions and other records remain unchanged."
+  ],
+  "alternatives_rejected": [
+    "Keep truncating prompt constraints and require a detail lookup before certifying coverage."
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Keep truncating prompt constraints and require a detail lookup before certifying coverage.",
+      "scope": [
+        "src/core/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_a94a8fe5cc",
+    "cmp_b256a6aed0",
+    "cmp_f27fede222"
+  ],
+  "related_files": [
+    "src/core/delivery.ts",
+    "test/prompt-context.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "67202b24",
+  "valid_from": "2026-10-03T20:59:07+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft",
+    "confidence": 0.65,
+    "evidence": [
+      "commit:67202b24",
+      "synth:provider=codex-cli",
+      "branch:perf/efficiency-v10",
+      "src/core/delivery.ts",
+      "test/prompt-context.test.ts"
+    ],
+    "last_verified": "2026-10-03T17:59:49.383Z"
+  },
+  "date": "2026-10-03T20:59:07+03:00"
+}
