@@ -139,8 +139,9 @@ export interface DeliveryOptions {
   /** Defaults to builder for day-to-day coding work. */
   profile?: DeliveryProfile;
   root?: string;
-  /** Other confirmed file targets whose constraint anchors may be validated.
-   * Does not expand relevance or provenance for decisions and other records. */
+  /** Confirmed prompt files whose constraint anchors may be validated. Their
+   * rules render in full so a task brief can certify actual coverage. Does not
+   * expand relevance or provenance for decisions and other records. */
   constraintTargets?: readonly string[];
   symbols?: readonly Pick<Symbol, "id" | "name" | "file">[];
   components?: readonly Pick<Component, "id" | "status" | "paths">[];
@@ -745,7 +746,7 @@ export function buildDeliveryEnvelope(ctx: AssembledContext, options: DeliveryOp
       retiredDetail: retired ? "constraint is retired at HEAD" : undefined,
       line: options.servedConstraints?.has(constraint.id)
         ? `${constraint.id} | constraint/${constraint.severity} | ${clipHeadline(constraint.statement, SERVED_REFERENCE_CHARS)} | shown earlier this session | hunch_why("${constraint.id}")`
-        : `${constraint.id} | constraint/${constraint.severity} | ${clipHeadline(constraint.statement, 180)} | scope ${clipHeadline(constraint.scope.join(", ") || "repo", 100)} | ${sourceTier(constraint.provenance.source)}/${validation.state} | hunch_why("${constraint.id}")`,
+        : `${constraint.id} | constraint/${constraint.severity} | ${clipHeadline(constraint.statement, options.constraintTargets?.length ? Infinity : 180)} | scope ${clipHeadline(constraint.scope.join(", ") || "repo", options.constraintTargets?.length ? Infinity : 100)} | ${sourceTier(constraint.provenance.source)}/${validation.state} | hunch_why("${constraint.id}")`,
     });
   }
 

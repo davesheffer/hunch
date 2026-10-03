@@ -162,7 +162,7 @@ test("constraint coverage is bounded to four distinct canonical prompt files", t
   assert.match(output, /check hunch_check_constraints before editing uncovered scope/);
 });
 
-test("coverage does not certify a truncated blocking statement", t => {
+test("prompt coverage retains the full blocking statement before certifying it", t => {
   const root = fixture(t);
   writeFileSync(join(root, "src", "second.ts"), "// second\n");
   const store = new HunchStore(hunchPaths(root));
@@ -172,7 +172,20 @@ test("coverage does not certify a truncated blocking statement", t => {
   assert.match(output, /con_long/, "the rule headline is still delivered");
   const coverage = output.split("\n").find(line => line.startsWith("Constraint coverage"));
   assert.ok(coverage);
-  assert.doesNotMatch(coverage, /src\/second\.ts/, "a missing prohibition still requires a detail lookup");
+  assert.match(output, /Never remove the audit check\./, "the prohibition must actually be emitted");
+  assert.match(coverage, /src\/second\.ts/);
+});
+
+test("prompt coverage retains long scope lists before certifying a named file", t => {
+  const root = fixture(t);
+  writeFileSync(join(root, "src", "second.ts"), "// second\n");
+  const scope = ["src/second.ts", ...Array.from({ length: 12 }, (_, i) => `src/other-long-scope-${i}.ts`)];
+  const store = new HunchStore(hunchPaths(root));
+  store.json.put("constraints", mkConstraint({ id: "con_long_scope", statement: "Retain the check for every scoped file.", scope, severity: "blocking" }));
+  store.reindex(); store.close();
+  const output = hook(root, "Update src/file.ts and src/second.ts", "codex");
+  assert.ok(output.includes(`| scope ${scope.join(", ")} |`), "scope certification requires the complete emitted list");
+  assert.match(output, /Constraint coverage is complete for: src\/file\.ts, src\/second\.ts/);
 });
 
 test("retired and expired global rules do not invalidate active constraint coverage", t => {
