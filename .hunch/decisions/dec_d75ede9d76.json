@@ -1,0 +1,106 @@
+{
+  "id": "dec_d75ede9d76",
+  "title": "Evaluate conformance during native task closure",
+  "topic": null,
+  "status": "accepted",
+  "context": "The commit targets redundant native task completion turns. Host-closed tasks can resume without a new report event, requiring conformance to be refreshed before closure. Touches invariant(s): con_03a0b94b2e (The agent hook must never block an edit on failure: any error exits 0 and never denies; after the event is recognized it emits at most one 'grounding unavailable' context line, unrecognized input emits nothing); con_e04226bd05 (The MCP server must stay client-agnostic: all assistants point to the same .hunch/ graph; no Claude-only behavior in the server).",
+  "decision": "Run conformance evaluation during native closure for the latest session task when it has deliveries and is open or host-closed. Reevaluate before deduplicating identical results, and reject conformance writes to earlier session tasks.",
+  "consequences": [
+    "Repeated native Stops omit identical conformance events while still reevaluating rules.",
+    "Changes to HEAD or stored rule revisions can affect evaluation even when working-file hashes are unchanged.",
+    "Older task conformance cannot be redirected into a newer session task.",
+    "Closure proceeds if conformance evaluation fails."
+  ],
+  "alternatives_rejected": [
+    "Skip reevaluation based only on the working-file hash.",
+    "Append identical conformance results on every native Stop."
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Skip reevaluation based only on the working-file hash.",
+      "scope": [
+        "src/cli/**",
+        "src/core/**",
+        "src/mcp/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Append identical conformance results on every native Stop.",
+      "scope": [
+        "src/cli/**",
+        "src/core/**",
+        "src/mcp/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_50037f41a9",
+    "cmp_a94a8fe5cc",
+    "cmp_b256a6aed0",
+    "cmp_dfa5b5acde",
+    "cmp_f27fede222"
+  ],
+  "related_files": [
+    "src/cli/index.ts",
+    "src/core/taskReport.ts",
+    "src/core/taskReportEvidence.ts",
+    "src/core/taskReportHook.ts",
+    "src/mcp/server.ts",
+    "src/mcp/taskReportTools.ts",
+    "test/mcp-delivery.test.ts",
+    "test/mcp-instructions.test.ts",
+    "test/task-report-hook.test.ts",
+    "test/task-report.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "75da01d0",
+  "valid_from": "2026-10-03T09:28:21+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft+summary",
+    "confidence": 0.5,
+    "evidence": [
+      "commit:75da01d0",
+      "synth:provider=codex-cli",
+      "branch:perf/efficiency-v8",
+      "src/cli/index.ts",
+      "src/core/taskReport.ts",
+      "src/core/taskReportEvidence.ts",
+      "src/core/taskReportHook.ts",
+      "src/mcp/server.ts",
+      "src/mcp/taskReportTools.ts",
+      "test/mcp-delivery.test.ts",
+      "test/mcp-instructions.test.ts"
+    ],
+    "last_verified": "2026-10-03T06:29:06.867Z"
+  },
+  "date": "2026-10-03T09:28:21+03:00"
+}
