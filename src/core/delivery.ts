@@ -139,6 +139,9 @@ export interface DeliveryOptions {
   /** Defaults to builder for day-to-day coding work. */
   profile?: DeliveryProfile;
   root?: string;
+  /** Other confirmed file targets whose constraint anchors may be validated.
+   * Does not expand relevance or provenance for decisions and other records. */
+  constraintTargets?: readonly string[];
   symbols?: readonly Pick<Symbol, "id" | "name" | "file">[];
   components?: readonly Pick<Component, "id" | "status" | "paths">[];
   /** Full decision corpus lets the envelope explain only decisions it actually delivered. */
@@ -726,7 +729,8 @@ export function buildDeliveryEnvelope(ctx: AssembledContext, options: DeliveryOp
     const retired = !options.historical && (constraint.status === "retired" || constraint.valid_to != null);
     const validation = validationState(
       constraint.scope,
-      (anchor) => anchorResolves(anchor, ctx.target, options),
+      (anchor) => anchorResolves(anchor, ctx.target, options)
+        || (options.constraintTargets ?? []).some((target) => isSafeDeliveryAnchor(target) && anchorResolves(anchor, target, options)),
       undefined,
       reachability,
       false,
