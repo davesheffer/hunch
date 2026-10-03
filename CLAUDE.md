@@ -39,7 +39,7 @@ This repo's full engineering memory lives in a **private overlay**; a **curated 
 <!-- hunch:template 4 -->
 ## 🧠 Hunch (Engineering Memory)
 
-Hunch holds **345 decisions, 2 bugs, 31 constraints, 22 components, 3 policies, 26 open findings**. This task's prompt-hook brief satisfies initial context; otherwise call `hunch_context(target)` first, before reading or editing. New files need no repeat brief; use `hunch_check_constraints(scope)` before uncovered edits. Tool descriptions give the workflow.
+Hunch holds **346 decisions, 2 bugs, 31 constraints, 22 components, 3 policies, 26 open findings**. This task's prompt-hook brief satisfies initial context; otherwise call `hunch_context(target)` first, before reading or editing. New files need no repeat brief; use `hunch_check_constraints(scope)` before uncovered edits. Tool descriptions give the workflow.
 
 ### ⛔ Blocking invariants
 - con_2ce3f2a547: Synthesis must use an explicitly selected coding-assistant subscription CLI or the…
