@@ -15,11 +15,11 @@ const END = "<!-- HUNCH:END -->";
 
 /** Version of the block's PROSE. Bump it whenever renderHunchSection's wording
  *  changes. A block without the stamp is template 1. */
-export const GROUNDING_TEMPLATE = 3;
+export const GROUNDING_TEMPLATE = 4;
 /** The pre-edit hook injects each in-scope invariant in full; the always-loaded
  *  list only has to name it (fnd_a65f71f38f, #369), so its statement is cut at a
  *  word boundary within this many chars. */
-const INVARIANT_CHARS = 120;
+const INVARIANT_CHARS = 90;
 /** Blocking invariants named in the block; the rest are counted, not listed. */
 const INVARIANT_LIMIT = 6;
 
@@ -109,7 +109,7 @@ export function renderHunchSection(store: HunchStore, root?: string): string {
   lines.push(`<!-- hunch:template ${GROUNDING_TEMPLATE} -->`);
   lines.push("## 🧠 Hunch (Engineering Memory)");
   lines.push("");
-  lines.push(`This repo's Hunch graph holds ${renderCountsMatch(counts)}. Use a task-linked prompt-hook brief as this task's initial context; otherwise call \`hunch_context(target)\` first, before reading or editing. New files alone do not require another brief; check constraints before editing uncovered scope. Its tool description lists the rest.`);
+  lines.push(`Hunch holds ${renderCountsMatch(counts)}. This task's prompt-hook brief satisfies initial context; otherwise call \`hunch_context(target)\` first, before reading or editing. New files need no repeat brief; use \`hunch_check_constraints(scope)\` before uncovered edits. Tool descriptions give the workflow.`);
   if (constraints.length) {
     lines.push("");
     lines.push(INVARIANTS_HEADING);

@@ -31,12 +31,16 @@ test("scaffoldProviders writes MCP config + grounding for every assistant", () =
     const agents = readFileSync(join(root, "AGENTS.md"), "utf8");
     assert.match(agents, /Hunch/);
     assert.match(agents, /hunch_check_constraints/);
-    assert.match(agents, /hunch_task\(action: "start", title/);
-    assert.match(agents, /hunch_context\(target, task_id\)/);
-    assert.match(agents, /hunch_task\(action: "finish", task_id\)` and show its card verbatim/);
+    // The always-loaded block routes to context; MCP instructions/tool descriptions
+    // carry lifecycle rules (exercised end-to-end in mcp-instructions.test.ts).
+    assert.match(agents, /This task's prompt-hook brief satisfies initial context/);
+    assert.match(agents, /otherwise call `hunch_context\(target\)` first, before reading or editing/);
+    assert.match(agents, /`hunch_check_constraints\(scope\)` before uncovered edits/);
+    assert.match(agents, /Tool descriptions give the workflow/);
 
     const copilot = readFileSync(join(root, ".github/copilot-instructions.md"), "utf8");
-    assert.match(copilot, /hunch_why/);
+    const section = (text: string) => text.slice(text.indexOf("<!-- HUNCH:START"), text.indexOf("<!-- HUNCH:END -->") + "<!-- HUNCH:END -->".length);
+    assert.equal(section(copilot), section(agents), "every provider receives the same routing contract");
 
     const rule = readFileSync(join(root, ".cursor/rules/hunch.mdc"), "utf8");
     assert.match(rule, /alwaysApply: true/);

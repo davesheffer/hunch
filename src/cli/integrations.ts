@@ -1,7 +1,6 @@
 import type { Command } from "commander";
 import { findRoot } from "../core/paths.js";
 import { CAPABILITIES, HARNESSES, inspectIntegrations, integrationHealthFails, formatIntegrationHealth, repairIntegrationPins, type Capability, type Harness } from "../integrations/health.js";
-import { probeIntegration } from "../integrations/probe.js";
 import { describeGitignoreUpgrade, upgradeManagedGitignore } from "../integrations/gitignore.js";
 
 export function registerIntegrationCommands(program: Command, refreshGrounding: () => string[]): void {
@@ -19,7 +18,10 @@ export function registerIntegrationCommands(program: Command, refreshGrounding: 
       if (required.some(c => !(CAPABILITIES as readonly string[]).includes(c))) throw new Error(`--require accepts ${CAPABILITIES.join(",")}`);
       const root = findRoot();
       const report = inspectIntegrations(root, opts.harness as Harness | undefined);
-      if (opts.probe) await probeIntegration(root, opts.harness as Harness, report);
+      if (opts.probe) {
+        const { probeIntegration } = await import("../integrations/probe.js");
+        await probeIntegration(root, opts.harness as Harness, report);
+      }
       console.log(opts.json ? JSON.stringify(report, null, 2) : formatIntegrationHealth(report));
       if (integrationHealthFails(report, required as Capability[])) process.exitCode = 1;
     });

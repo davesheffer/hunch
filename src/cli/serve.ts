@@ -2,7 +2,6 @@ import { readFileSync, statSync } from 'node:fs';
 import { proofPublicKey } from '../core/stateProof.js';
 import type { Command } from "commander";
 import { resolve } from "node:path";
-import { createServeApp } from "../serve/app.js";
 import { initServeConfig, partitionFor, readServeConfig, writeServeConfig } from "../serve/config.js";
 import { compactLedger } from "../store/changeLedger.js";
 import { HunchStore } from "../store/hunchStore.js";
@@ -43,10 +42,11 @@ export function registerServeCommands(program: Command): void {
     .description("Serve nuryel.state/1 over HTTP for organization / team / user / repository partitions (binds 127.0.0.1; put it behind SSH or a reverse proxy)")
     .option("--config <file>", `serve config (nuryel.serve-config/1); default ${DEFAULT_CONFIG}`)
     .option("--port <n>", "override the configured port")
-    .action((opts: { config?: string; port?: string }) => {
+    .action(async (opts: { config?: string; port?: string }) => {
       const config = readServeConfig(resolve(opts.config ?? DEFAULT_CONFIG));
       const port = opts.port ? Number(opts.port) : config.port;
       if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error(`invalid port ${opts.port}`);
+      const { createServeApp } = await import("../serve/app.js");
       const app = createServeApp(config, { version: HUNCH_VERSION });
       // Bind loopback, never expose a port: the orchestrator reaches it over an SSH hop or a
       // reverse proxy that terminates TLS and auth of its own. Folded-in decision from Hunch Memory.
