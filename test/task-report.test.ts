@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { buildDeliveryEnvelope } from "../src/core/delivery.js";
 import type { AssembledContext } from "../src/store/hunchStore.js";
-import { beginReportCheck, CHECK_RESULT_GRACE_MS, finishReportTask, listReportTasks, pruneReportHistory, readLessonHistory, readTaskReport, recordReportCheck, recordReportClaim, recordTaskDelivery, reportHash, settleSessionTasks, startReportTask } from "../src/core/taskReport.js";
+import { beginReportCheck, CHECK_RESULT_GRACE_MS, finishReportTask, listReportTasks, pruneReportHistory, readLessonHistory, readTaskReport, recordReportCheck, recordReportClaim, recordReportConformance, recordTaskDelivery, reportHash, settleSessionTasks, startReportTask } from "../src/core/taskReport.js";
 import { reportSourceSnapshot, runReportCheck, snapshotDeliveredRecords } from "../src/core/taskReportEvidence.js";
 import { CARD_RECALLED_LIMIT, renderRecalledLine, renderTaskReport, renderTaskReportHtml, writeTaskReportHtml } from "../src/core/taskReportRender.js";
 import { recordServed, servedSummary, withServedDatabase } from "../src/core/served.js";
@@ -32,6 +32,29 @@ function envelope(empty = false) {
   return buildDeliveryEnvelope(ctx);
 }
 const record = { record_id: "con_preserve", kind: "constraints", title: "Preserve existing settings", lesson: "Merge settings; preserve values outside the update.", content_hash: reportHash("fixture record revision"), recorded_at: "2026-09-11T00:00:00.000Z" };
+
+test("conformance cannot be attributed to an earlier task in the same session", t => {
+  const evaluation = { source: "local-rule-check" as const, record_id: record.record_id, kind: "constraints" as const,
+    content_hash: record.content_hash, rule: "constraint-forbids" as const, outcome: "satisfied" as const,
+    files: ["src/config.js"], snapshot: reportHash("evaluated source"), detail: "The rule holds." };
+  for (const hostClosed of [false, true]) {
+    const root = fixture(t), sessionKey = reportHash(`conformance-rollover-${hostClosed}`);
+    const a = startReportTask(root, "Earlier prompt", undefined, { session_key: sessionKey });
+    recordTaskDelivery(root, a.task_id, envelope(), [record]);
+    if (hostClosed) finishReportTask(root, a.task_id, "completed", { by: "host" });
+    const b = startReportTask(root, "Newer prompt", undefined, { session_key: sessionKey });
+    const beforeA = readTaskReport(root, a.task_id), beforeB = readTaskReport(root, b.task_id);
+
+    assert.throws(() => recordReportConformance(root, a.task_id, evaluation), /cannot record conformance for an earlier session task/);
+    assert.deepEqual(readTaskReport(root, a.task_id), beforeA);
+    assert.deepEqual(readTaskReport(root, b.task_id), beforeB);
+
+    recordTaskDelivery(root, b.task_id, envelope(), [record]);
+    const eventId = recordReportConformance(root, b.task_id, evaluation);
+    assert.equal(readTaskReport(root, b.task_id).conformance[0]?.event_id, eventId);
+    assert.equal(readTaskReport(root, a.task_id).conformance.length, 0);
+  }
+});
 
 test("lesson history connects exact revisions across tasks without conflating titles or repeated receipts", async t => {
   const api = await import("../src/core/taskReport.js");

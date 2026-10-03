@@ -10,6 +10,7 @@ import type { HookProvider } from "../src/core/agenthook.js";
 import { promptTaskId, taskInstruction } from "../src/core/taskReportHook.js";
 import { verificationLauncher } from "../src/core/verifyLauncher.js";
 import { buildDeliveryEnvelope } from "../src/core/delivery.js";
+import { reportSourceSnapshot, snapshotDeliveredRecords } from "../src/core/taskReportEvidence.js";
 import type { AssembledContext } from "../src/store/hunchStore.js";
 import { HunchStore } from "../src/store/hunchStore.js";
 import { hunchPaths } from "../src/core/paths.js";
@@ -269,6 +270,105 @@ test("native pre-edit injections appear in the exact prompt report; deltas do no
   assert.notEqual(readTaskReport(root, first.task_id).deliveries[0]!.occurrence_id, readTaskReport(root, second.task_id).deliveries[0]!.occurrence_id);
 });
 
+test("native Stop evaluates delivered rules before closing and retains the result without a model finish", t => {
+  const root = fixture(t);
+  mkdirSync(join(root, "src"));
+  writeFileSync(join(root, "src", "config.js"), "export const settings = {};\n");
+  execFileSync("git", ["-C", root, "add", "src/config.js"]);
+  execFileSync("git", ["-C", root, "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-qm", "baseline"]);
+  const store = new HunchStore(hunchPaths(root));
+  const rule = mkConstraint({ id: "con_stop_rule", statement: "Avoid lodash", scope: ["src/config.js"], severity: "blocking", forbids: { deps: ["lodash"], symbols: [], patterns: [] } });
+  store.json.ensureDirs();
+  store.json.put("constraints", rule);
+  store.reindex();
+  const ctx = { target: "src/config.js", constraints: [rule], decisions: [], bugs: [], blast_radius: [], components: [], findings: [], budget_tokens: 1500 } as unknown as AssembledContext;
+  const envelope = buildDeliveryEnvelope(ctx);
+  const snapshots = snapshotDeliveredRecords(store, envelope);
+  store.close();
+  hook(root, "UserPromptSubmit");
+  const task = listReportTasks(root)[0]!;
+  recordTaskDelivery(root, task.task_id, envelope, snapshots, undefined, "src/config.js");
+  writeFileSync(join(root, "src", "config.js"), "import _ from \"lodash\";\nexport const settings = {};\n");
+  const stop = hook(root, "Stop");
+  assert.match(stop.systemMessage, /Violated.*Avoid lodash.*rule broken/);
+  const report = readTaskReport(root, task.task_id, reportSourceSnapshot(root).hash);
+  assert.equal(report.task.state, "completed");
+  assert.equal(report.task.closed_by, "host");
+  assert.equal(report.deliveries.length, 1);
+  assert.equal(report.conformance.length, 1);
+  assert.equal(report.conformance[0]!.outcome, "violated");
+  assert.equal(report.conformance[0]!.current, true);
+  const record = JSON.parse(readFileSync(join(root, ".hunch", "tasks", `${task.task_id}.json`), "utf8")) as { conformance: Array<{ outcome: string }> };
+  assert.equal(record.conformance[0]!.outcome, "violated");
+  hook(root, "Stop");
+  assert.equal(readTaskReport(root, task.task_id).conformance.length, 1, "repeated Stop cannot append another evaluation");
+  // A host can resume after a provisional Stop without another report event.
+  // Deduplicated grounding alone does not reopen the task.
+  writeFileSync(join(root, "src", "config.js"), "export const settings = { fixed: true };\n");
+  assert.equal(readTaskReport(root, task.task_id).task.closed_by, "host");
+  hook(root, "Stop");
+  const resumed = readTaskReport(root, task.task_id, reportSourceSnapshot(root).hash);
+  assert.equal(resumed.conformance.length, 2, "source changes after host close require a fresh evaluation");
+  assert.equal(resumed.conformance.at(-1)!.outcome, "satisfied");
+  assert.equal(resumed.conformance.at(-1)!.current, true);
+  const updated = JSON.parse(readFileSync(join(root, ".hunch", "tasks", `${task.task_id}.json`), "utf8")) as { conformance: Array<{ outcome: string }> };
+  assert.equal(updated.conformance.at(-1)!.outcome, "satisfied");
+  hook(root, "Stop");
+  assert.equal(readTaskReport(root, task.task_id).conformance.length, 2, "unchanged resumed Stop stays deduplicated");
+  hook(root, "UserPromptSubmit", { prompt_id: "next-prompt", prompt: "Continue this work" });
+  const next = listReportTasks(root).find(t => t.task_id !== task.task_id)!;
+  const nextCount = readTaskReport(root, next.task_id).conformance.length;
+  writeFileSync(join(root, "src", "config.js"), "import _ from \"lodash\";\nexport const settings = { changed: true };\n");
+  hook(root, "Stop");
+  assert.equal(readTaskReport(root, task.task_id).conformance.length, 2, "late Stop of an older prompt does not refresh it");
+  assert.equal(readTaskReport(root, next.task_id).conformance.length, nextCount, "late Stop cannot move an old rule evaluation into a newer task");
+  execFileSync(process.execPath, ["--import", tsxLoaderUrl(), cli, "task", "verify", task.task_id, "--json", "--", process.execPath, "-e", "process.exit(0)"], { cwd: root });
+  assert.equal(readTaskReport(root, task.task_id).task.state, "open", "a late verification result reopens its own task");
+  hook(root, "Stop");
+  assert.equal(readTaskReport(root, task.task_id).conformance.length, 2, "an older open task cannot evaluate the newer prompt's edits");
+  assert.equal(readTaskReport(root, next.task_id).conformance.length, nextCount);
+  finishReportTask(root, task.task_id);
+  hook(root, "Stop");
+  assert.equal(readTaskReport(root, task.task_id).conformance.length, 2, "explicit agent closure remains final");
+});
+
+test("native Stop refreshes conformance when the Git baseline changes without changing working files", t => {
+  const root = fixture(t);
+  mkdirSync(join(root, "src"));
+  const file = join(root, "src", "config.js");
+  writeFileSync(file, "export const settings = {};\n");
+  const commit = () => {
+    execFileSync("git", ["-C", root, "add", "src/config.js"]);
+    execFileSync("git", ["-C", root, "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-qm", "baseline"]);
+  };
+  commit();
+  const cleanHead = execFileSync("git", ["-C", root, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+  writeFileSync(file, "import _ from \"lodash\";\nexport const settings = {};\n");
+  commit();
+  writeFileSync(file, "import _ from \"lodash\";\nexport const settings = { edited: true };\n");
+  const store = new HunchStore(hunchPaths(root));
+  const rule = mkConstraint({ id: "con_stop_baseline", statement: "Avoid lodash", scope: ["src/config.js"], severity: "blocking", forbids: { deps: ["lodash"], symbols: [], patterns: [] } });
+  store.json.ensureDirs();
+  store.json.put("constraints", rule);
+  store.reindex();
+  const ctx = { target: "src/config.js", constraints: [rule], decisions: [], bugs: [], blast_radius: [], components: [], findings: [], budget_tokens: 1500 } as unknown as AssembledContext;
+  const envelope = buildDeliveryEnvelope(ctx);
+  const snapshots = snapshotDeliveredRecords(store, envelope);
+  store.close();
+  hook(root, "UserPromptSubmit");
+  const task = listReportTasks(root)[0]!;
+  recordTaskDelivery(root, task.task_id, envelope, snapshots, undefined, "src/config.js");
+  hook(root, "Stop");
+  assert.equal(readTaskReport(root, task.task_id).conformance.at(-1)!.outcome, "satisfied");
+  const before = reportSourceSnapshot(root).hash;
+  execFileSync("git", ["-C", root, "reset", "--soft", cleanHead]);
+  assert.equal(reportSourceSnapshot(root).hash, before, "baseline change leaves the working snapshot unchanged");
+  hook(root, "Stop");
+  assert.equal(readTaskReport(root, task.task_id).conformance.at(-1)!.outcome, "violated");
+  hook(root, "Stop");
+  assert.equal(readTaskReport(root, task.task_id).conformance.length, 2, "identical reevaluated results are not appended twice");
+});
+
 test("strict denial is retained in its prompt report without claiming host compliance", t => {
   const root = fixture(t);
   mkdirSync(join(root, "src"));
@@ -369,9 +469,9 @@ test("the prompt hook prints the verify command inline and never asks for a star
   assert.match(text, /--timeout <seconds>/, "the timeout budget survives the inline form");
   assert.match(text, /tests that cover your change/, "the hint steers to targeted tests");
   assert.match(text, /CI's job/, "the hint leaves the full suite to CI");
-  // Finish is conditional, and the host close is what makes that safe.
-  assert.match(text, /ONLY if this task used Hunch/);
-  assert.match(text, /hook context acted on/, "hook-injected grounding counts as using Hunch");
+  assert.match(text, /through this launcher from the first invocation/);
+  assert.match(text, /closes this task and displays its report automatically, even if memory was used/);
+  assert.match(text, /real application claims \(exact occurrence\/hash\) or an interrupted outcome/);
   assert.match(text, /action: "finish"/);
 });
 
@@ -381,41 +481,45 @@ test("the prompt hook prints the reminder and full task rules once per session, 
     hook(root, "UserPromptSubmit", { prompt_id, ...extra }).hookSpecificOutput.additionalContext as string;
   const first = ctx("p1");
   assert.match(first, /Hunch \(engineering memory\) is available/, "the first prompt carries the availability reminder");
-  assert.match(first, /ONLY if this task used Hunch/, "the first prompt carries the full rules");
+  assert.match(first, /closes this task and displays its report automatically/, "the first prompt carries the full rules");
   const second = ctx("p2");
   const id2 = /htask_[a-f0-9]{24}/.exec(second)?.[0];
   assert.ok(id2 && !first.includes(id2), "each prompt still gets its own ID");
   assert.doesNotMatch(second, /engineering memory\) is available/, "the reminder is not repeated alongside the task report");
-  assert.doesNotMatch(second, /ONLY if this task used Hunch/, "the generic rules are not repeated");
+  assert.doesNotMatch(second, /Run the tests that cover your change/, "the generic rules are not repeated");
   assert.ok(second.includes(` task verify ${id2} -- `), `the compact line keeps this prompt's verify command: ${second}`);
   assert.match(second, /Never call hunch_task start/);
-  assert.match(second, /finish only if this task used Hunch/);
+  assert.match(second, /Checks from first invocation:/);
+  assert.match(second, /Stop closes\/displays this report even after memory use/);
+  assert.match(second, /Finish only for real application claims \(exact occurrence\/hash\) or interruption/);
   // A correction is never deduped, even mid-session.
   assert.match(ctx("p3", { prompt: "no, that's wrong — never do that again" }), /engineering memory\) is available/);
   // Context cleared under the same session id: full rules again.
   hook(root, "SessionStart", { source: "clear" });
-  assert.match(ctx("p3b"), /ONLY if this task used Hunch/);
+  assert.match(ctx("p3b"), /Run the tests that cover your change/);
   // Compaction summarizes the rules away; the next prompt gets them in full again.
   hook(root, "PreCompact");
-  assert.match(ctx("p4"), /ONLY if this task used Hunch/);
+  assert.match(ctx("p4"), /Run the tests that cover your change/);
 });
 
 test("the task instruction is identical in substance for every hook provider, and keeps finish mandatory where no host stop hook closes the task", () => {
   const task = { task_id: "htask_0123456789abcdef01234567", title: "Assistant task" };
   const cwd = JSON.stringify("/repo");
   // claude and codex are the providers that reach this today (NATIVE_PROMPT_HOSTS);
-  // both wire Stop, so both get the conditional finish, with identical substance.
+  // both wire Stop, so both get automatic close, with identical substance.
   const claude = taskInstruction(task, cwd, "claude");
   const codex = taskInstruction(task, cwd, "codex");
   assert.equal(claude, codex, "no provider is left on different wording");
   for (const text of [claude, codex]) {
     assert.doesNotMatch(text, /Claude Code|Codex/, "host-neutral prose (con_e04226bd05)");
-    assert.match(text, /ONLY if this task used Hunch/);
-    // The Stop hook closes the task and shows the verify evidence, so a check alone
-    // is no reason to finish; finishing stays agent-side for real Hunch use.
-    assert.doesNotMatch(text, /used Hunch \([^)]*task verify check/, "a verify check alone does not count as using Hunch here");
-    assert.match(text, /otherwise skip it, even after a task verify check/);
-    assert.match(taskInstruction(task, cwd, text === claude ? "claude" : "codex", undefined, "compact"), /a task verify check alone does not count/);
+    assert.match(text, /through this launcher from the first invocation/);
+    assert.match(text, /closes this task and displays its report automatically, even if memory was used/);
+    assert.match(text, /do not call hunch_task finish just for bookkeeping/);
+    assert.match(text, /real application claims \(exact occurrence\/hash\) or an interrupted outcome/);
+    const compact = taskInstruction(task, cwd, text === claude ? "claude" : "codex", undefined, "compact");
+    assert.match(compact, /Checks from first invocation:/);
+    assert.match(compact, /Stop closes\/displays this report even after memory use/);
+    assert.match(compact, /Finish only for real application claims \(exact occurrence\/hash\) or interruption/);
   }
   // Every other provider — including one whose stop payload carries no native
   // prompt identity, so closeHookTask resolves nothing — keeps finish mandatory,
@@ -423,9 +527,12 @@ test("the task instruction is identical in substance for every hook provider, an
   for (const provider of ["vscode", "cursor", "antigravity", "windsurf", "nosuchhost" as HookProvider, undefined as unknown as HookProvider] as HookProvider[]) {
     let text = "";
     assert.doesNotThrow(() => { text = taskInstruction(task, cwd, provider); }, `${provider} must not throw`);
-    assert.doesNotMatch(text, /ONLY if/, `${provider}: finish is not optional where nothing is proven to close the task`);
-    assert.match(text, /No stop hook closes this task, so finish it yourself/);
-    assert.match(text, /used Hunch \([^)]*a task verify check/, `${provider}: nothing else closes the task, so a verify check still counts`);
+    assert.match(text, /No proven Stop hook closes this task/);
+    assert.match(text, /including after using memory or running checks/);
+    assert.match(text, /through this launcher from the first invocation/);
+    const compact = taskInstruction(task, cwd, provider, undefined, "compact");
+    assert.match(compact, /No proven Stop hook; finish with hunch_task/);
+    assert.match(compact, /Checks from first invocation:/);
     assert.match(text, new RegExp(` task verify ${task.task_id} -- `), "the inline verify command is provider-independent");
     assert.doesNotMatch(text, /action: "start"/);
   }

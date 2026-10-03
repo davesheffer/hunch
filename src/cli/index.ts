@@ -103,8 +103,8 @@ import { computeStats, formatStats } from "../core/stats.js";
 import { clearTaskSelection, injectionMode, loadTaskSelection, resetSessionInjections, saveTaskSelection, ServedMarks, taskSelectionEnabled } from "../core/hookcache.js";
 import { isBareFollowUp, isFilterableSelectionId, liveSelectionRecords, selectForTask } from "../core/taskSelection.js";
 import { recordServed, servedSummary } from "../core/served.js";
-import { readTaskReport, recordTaskDelivery, reportActivity, reportHash, reportPresentationEnabled, unseenLessons } from "../core/taskReport.js";
-import { snapshotDeliveredRecords } from "../core/taskReportEvidence.js";
+import { latestSessionTask, readTaskReport, recordTaskDelivery, reportActivity, reportHash, reportPresentationEnabled, unseenLessons } from "../core/taskReport.js";
+import { runReportConformance, snapshotDeliveredRecords } from "../core/taskReportEvidence.js";
 import { renderRecalledLine } from "../core/taskReportRender.js";
 import { closeHookTask, hookReportTaskId, isNotificationPrompt, nativeHookCwd, settleHookSession, startHookReport, stopHookReport, observeHookDenial } from "../core/taskReportHook.js";
 import { persistTaskRecord } from "../core/taskRecord.js";
@@ -4797,6 +4797,20 @@ program
         // The turn is over: close the prompt's task and keep its record, whether
         // or not the agent called finish. Fail-open: the card below still renders.
         try {
+          const taskId = hookReportTaskId(root, provider, evt);
+          if (taskId) {
+            try {
+              const report = readTaskReport(root, taskId);
+              // A provisional host close can resume without a new report event.
+              // Never refresh an older prompt into the session's newer task.
+              const currentSessionTask = report.task.session_key
+                && latestSessionTask(root, report.task.session_key)?.task_id === taskId;
+              if (currentSessionTask && (report.task.state === "open" || report.task.closed_by === "host") && report.deliveries.length) {
+                store ??= new HunchStore(paths);
+                runReportConformance(root, store, taskId, { deduplicate: true });
+              }
+            } catch { /* unknowns disclose failed evaluation; closing still proceeds */ }
+          }
           const closed = closeHookTask(root, provider, evt);
           if (closed.length) { store ??= new HunchStore(paths); for (const id of closed) persistTaskRecord(root, store, id); }
         } catch { /* the ledger and the card remain authoritative; the next finish retries */ }

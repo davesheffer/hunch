@@ -33,11 +33,10 @@ test("initialize delivers the grounding contract to every client, hooks or not",
   for (const tool of ["hunch_task", "hunch_context", "hunch_check_constraints"]) assert.ok(instructions?.includes(tool), tool);
   assert.doesNotMatch(instructions ?? "", /claude code only|anthropic/i, "host-neutral (con_e04226bd05)");
   assert.ok((instructions ?? "").length <= 500, `${(instructions ?? "").length} chars; ceiling 500`);
-  // An MCP-started task has no session key, so no hook ever closes it: the finish
-  // skip must read as ONE conjunction gated on the prompt hook's own statement,
-  // never as an independent "skippable where the host closes the task" clause.
-  assert.match(instructions ?? "", /skip it only if the hook said the host closes the task and it used no Hunch \(no hunch_\* call on its ID, hook context acted on, or claim\)/);
-  assert.match(instructions ?? "", /Tasks you start, you finish/);
+  // An MCP-started task has no session key, so only an explicit statement by
+  // the hook for this task permits automatic closure.
+  assert.match(instructions ?? "", /unless the hook explicitly says it closes this task and displays its report, even when memory was used/);
+  assert.match(instructions ?? "", /Manually started tasks always finish/);
   assert.doesNotMatch(instructions ?? "", /skippable/i);
   assert.doesNotMatch(instructions ?? "", /task verify check/, "a verify check alone never obliges a finish where the host closes the task");
 });
@@ -74,10 +73,11 @@ test("the finish-skip rule reads the same in every channel", async (t) => {
   t.after(async () => { await client.close(); await server.close(); cleanup(); });
   const { tools } = await client.listTools();
   const desc = (name: string) => tools.find((tool) => tool.name === name)?.description ?? "";
-  const rule = "skip it only if the hook said the host closes the task and it used no Hunch (no hunch_* call on its ID, hook context acted on, or claim). Tasks you start, you finish.";
+  const rule = "unless the hook explicitly says it closes this task and displays its report, even when memory was used. Finish for real application claims (exact occurrence/hash) or interruption. Manually started tasks always finish.";
   assert.ok(MCP_INSTRUCTIONS.includes(rule), MCP_INSTRUCTIONS);
   assert.ok(desc("hunch_task").includes(rule), desc("hunch_task"));
   assert.match(desc("hunch_context"), /hunch_task finish unless its skip rule applies\.$/);
   const hook = taskInstruction({ task_id: "htask_0123456789abcdef01234567", title: "t" }, JSON.stringify("/repo"), "claude");
-  assert.match(hook, /ONLY if this task used Hunch \(a hunch_\* call on its ID, hook context acted on, or a claim\)/);
+  assert.match(hook, /closes this task and displays its report automatically, even if memory was used/);
+  assert.match(hook, /real application claims \(exact occurrence\/hash\) or an interrupted outcome/);
 });

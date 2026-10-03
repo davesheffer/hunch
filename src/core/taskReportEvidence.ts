@@ -77,7 +77,7 @@ export function reportSourceSnapshot(root: string): ReportSnapshot {
  * its conformance predicates over the current working graph, and only when a
  * predicate's subject lives in a changed file. Everything else stays
  * `not-exercised` or `unavailable` — never "satisfied" by file overlap. */
-export function runReportConformance(root: string, store: HunchStore, taskId: string): ReportConformance[] {
+export function runReportConformance(root: string, store: HunchStore, taskId: string, options: { deduplicate?: boolean } = {}): ReportConformance[] {
   const report = readTaskReport(root, taskId);
   if (report.task.state !== "open" && report.task.closed_by !== "host") throw new Error("cannot evaluate rules for a closed task");
   const delivered = [...new Map(report.deliveries.flatMap(d => d.records).filter(r => r.kind === "constraints" || r.kind === "decisions").map(r => [`${r.kind}:${r.record_id}:${r.content_hash}`, r])).values()];
@@ -130,9 +130,15 @@ export function runReportConformance(root: string, store: HunchStore, taskId: st
   }
   const after = reportSourceSnapshot(root).hash;
   const snapshot = before !== null && before === after ? before : null;
+  // Reevaluate first: the working-file hash alone misses changes to HEAD and
+  // stored rule revisions. Repeated native Stops may omit only identical results.
+  const standing = new Map(report.conformance.map(({ event_id, at, current, ...r }) =>
+    [`${r.kind}:${r.record_id}:${r.content_hash}`, reportHash(r)]));
   return results.map(result => {
     const value: ReportConformance = { ...result, snapshot, ...(snapshot === null ? { detail: `${result.detail} Source changed during evaluation, so this result is not bound to a current snapshot.`.slice(0, 1000) } : {}) };
-    recordReportConformance(root, taskId, value);
+    if (!options.deduplicate || standing.get(`${value.kind}:${value.record_id}:${value.content_hash}`) !== reportHash(value)) {
+      recordReportConformance(root, taskId, value);
+    }
     return value;
   });
 }

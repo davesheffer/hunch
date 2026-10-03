@@ -164,33 +164,30 @@ function sessionTaskInstruction(task: { task_id: string; title: string }, cwdLit
  * inline here. Identical in substance for EVERY hook provider that reaches this
  * function; the one variation is capability-driven, never host-named — where the
  * host is not PROVEN to close the task it opened (HOST_CLOSES_TASK) nobody but the
- * next prompt's settle would close it, so finish stays mandatory there. Elsewhere
- * finish is CONDITIONAL: ~87 start/finish round trips a day mostly returned "No
- * task-linked delivery observed", and the host's Stop hook closes the task and
- * shows the evidence either way. FAILS OPEN (con_03a0b94b2e): if the launcher
+ * next prompt's settle would close it, so finish stays mandatory there. For
+ * proven hosts, Stop closes the task and shows the evidence either way.
+ * FAILS OPEN (con_03a0b94b2e): if the launcher
  * cannot be computed, fall back to asking for the start call — that path is then
  * the only source of both the launcher and the finish instruction, so it carries
  * its own finish sentence. */
 export function taskInstruction(task: { task_id: string; title: string }, cwdLiteral: string, provider: HookProvider, launcher: () => { shell: string; note?: string } = verificationLauncher, form: "full" | "compact" = "full"): string {
   const head = `Hunch opened this prompt's report: ${task.task_id}; reuse it, never open another. Pass task_id and cwd: ${cwdLiteral} to hunch_context and captures.`;
+  const closes = HOST_CLOSES_TASK.has(provider);
+  const finish = closes
+    ? ` The Stop hook closes this task and displays its report automatically, even if memory was used; do not call hunch_task finish just for bookkeeping. Call hunch_task(action: "finish", task_id, cwd) and show its card to submit real application claims (exact occurrence/hash) or an interrupted outcome.`
+    : ` No proven Stop hook closes this task; call hunch_task(action: "finish", task_id, cwd) and show its card before responding, including after using memory or running checks.`;
   let verify: string;
   try {
     const l = launcher();
     if (form === "compact") {
-      const finishRule = HOST_CLOSES_TASK.has(provider) ? "finish only if this task used Hunch (a task verify check alone does not count)" : `finish it yourself with hunch_task(action: "finish", task_id, cwd)`;
-      return `Hunch report for this prompt: ${task.task_id} (cwd: ${cwdLiteral}). Use it instead of any earlier ID. Never call hunch_task start. Checks: ${l.shell} task verify ${task.task_id} -- <command> [arguments]${l.note ?? ""}. Same rules as this session's first report; ${finishRule}.`;
+      const closeRule = closes
+        ? "Stop closes/displays this report even after memory use. Finish only for real application claims (exact occurrence/hash) or interruption."
+        : 'No proven Stop hook; finish with hunch_task(action: "finish", task_id, cwd) and show its card.';
+      return `Hunch report: ${task.task_id} (cwd: ${cwdLiteral}). Reuse this ID. Never call hunch_task start. Checks from first invocation: ${l.shell} task verify ${task.task_id} -- <command> [arguments]${l.note ?? ""}. ${closeRule} Other rules: session's first report.`;
     }
-    verify = ` Never call hunch_task start for it. Checks: ${l.shell} task verify ${task.task_id} -- <command> [arguments]${l.note ?? ""}. Run the tests that cover your change; the full suite is CI's job (15 min budget; --timeout <seconds> before -- only for the whole suite).`;
+    verify = ` Never call hunch_task start for it. Run checks through this launcher from the first invocation: ${l.shell} task verify ${task.task_id} -- <command> [arguments]${l.note ?? ""}. Run the tests that cover your change; the full suite is CI's job (15 min budget; --timeout <seconds> before -- only for the whole suite).`;
   }
   catch { return `${head} Call hunch_task(action: "start", task_id: "${task.task_id}", title: ${JSON.stringify(task.title)}, cwd: ${cwdLiteral}) to obtain verification_argv, and finish with hunch_task(action: "finish", task_id, cwd) before responding and show its card.`; }
-  // Where the host closes the task, a task verify check alone does not oblige a
-  // finish: the Stop hook closes the task and its card shows the verify evidence.
-  // Elsewhere nothing else would close it, so the check still counts.
-  const closes = HOST_CLOSES_TASK.has(provider);
-  const used = `this task used Hunch (a hunch_* call on its ID, ${closes ? "" : "a task verify check, "}hook context acted on, or a claim)`;
-  const finish = closes
-    ? ` ONLY if ${used}, call hunch_task(action: "finish", task_id, cwd) and show its card; otherwise skip it, even after a task verify check — the stop hook closes the task.`
-    : ` No stop hook closes this task, so finish it yourself whether or not ${used}: call hunch_task(action: "finish", task_id, cwd) before responding and show its card.`;
   return `${head}${verify}${finish}`;
 }
 /** The session key a hook event maps to: a hash of (root, provider, session,
