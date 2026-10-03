@@ -62,6 +62,21 @@ test("first explicit safe file resolves to a canonical path", t => {
 });
 
 for (const provider of ["claude", "codex"]) {
+  test(`${provider} one brief covers constraints for source and test files explicitly named in the prompt`, t => {
+    const root = fixture(t);
+    mkdirSync(join(root, "test"));
+    writeFileSync(join(root, "test", "file.test.ts"), "// regression\n");
+    const store = new HunchStore(hunchPaths(root));
+    store.json.put("constraints", mkConstraint({ id: "con_test", statement: "Retain regression assertions", scope: ["test/**"], severity: "blocking" }));
+    store.reindex(); store.close();
+    const output = hook(root, "Update src/file.ts and test/file.test.ts", provider);
+    assert.match(output, /con_test/);
+    assert.match(output, /Constraint coverage is complete for: src\/file\.ts, test\/file\.test\.ts/);
+    const report = readTaskReport(root, listReportTasks(root)[0]!.task_id);
+    assert.equal(report.deliveries.length, 1, "one budgeted brief, not another full context per file");
+    assert.ok(report.deliveries[0]!.records.some(record => record.record_id === "con_test"));
+  });
+
   test(`${provider} native prompt delivers a file brief with task evidence and global rules`, t => {
     const root = fixture(t);
     const output = hook(root, `Update \`src/file.ts:12\` ${sentinel}`, provider);
@@ -103,6 +118,84 @@ for (const provider of ["claude", "codex"]) {
     }
   });
 }
+
+test("secondary prompt paths retain privacy exclusions and symlink refusal", t => {
+  const root = fixture(t);
+  symlinkSync(join(root, "src", "file.ts"), join(root, "linked.ts"));
+  const output = hook(root, "Update src/file.ts and credentials.json config-secret.json linked.ts ../outside.ts package.json", "codex");
+  const coverage = output.split("\n").find(line => line.startsWith("Constraint coverage"));
+  assert.ok(coverage);
+  assert.match(coverage, /src\/file\.ts, package\.json/);
+  assert.doesNotMatch(coverage, /credentials|config-secret|linked\.ts|outside/);
+});
+
+test("a secondary file with constraints omitted by budget retains the manual lookup requirement", t => {
+  const root = fixture(t);
+  writeFileSync(join(root, "src", "second.ts"), "export const second = 2;\n");
+  const store = new HunchStore(hunchPaths(root));
+  for (let i = 0; i < 30; i++) store.json.put("constraints", mkConstraint({
+    id: `con_second_${i}`, statement: `Additional rule ${i}: ${"keep this invariant explicit ".repeat(20)}`,
+    scope: ["src/second.ts"], severity: "warning",
+  }));
+  store.reindex(); store.close();
+  const output = hook(root, "Update src/file.ts and src/second.ts", "codex");
+  const coverage = output.split("\n").find(line => line.startsWith("Constraint coverage"));
+  assert.ok(coverage);
+  assert.match(coverage, /src\/file\.ts/);
+  assert.doesNotMatch(coverage, /src\/second\.ts/);
+  assert.match(output, /check hunch_check_constraints before editing uncovered scope/);
+});
+
+test("constraint coverage is bounded to four distinct canonical prompt files", t => {
+  const root = fixture(t);
+  for (const name of ["a", "b", "c", "d"]) writeFileSync(join(root, "src", `${name}.ts`), `export const ${name} = 1;\n`);
+  const store = new HunchStore(hunchPaths(root));
+  store.json.put("constraints", mkConstraint({ id: "con_fifth", statement: "Fifth file needs its own lookup", scope: ["src/d.ts"], severity: "blocking" }));
+  store.reindex(); store.close();
+  const duplicate = existsSync(join(root, "SRC", "FILE.TS")) ? "SRC/FILE.TS" : "src/file.ts";
+  const output = hook(root, `Update src/file.ts ${duplicate} src/a.ts src/b.ts src/c.ts src/d.ts`, "codex");
+  const coverage = output.split("\n").find(line => line.startsWith("Constraint coverage"));
+  assert.ok(coverage);
+  assert.match(coverage, /src\/file\.ts, src\/a\.ts, src\/b\.ts, src\/c\.ts/);
+  assert.doesNotMatch(coverage, /src\/d\.ts/);
+  assert.doesNotMatch(output, /con_fifth/);
+  assert.match(output, /check hunch_check_constraints before editing uncovered scope/);
+});
+
+test("coverage does not certify a truncated blocking statement", t => {
+  const root = fixture(t);
+  writeFileSync(join(root, "src", "second.ts"), "// second\n");
+  const store = new HunchStore(hunchPaths(root));
+  store.json.put("constraints", mkConstraint({ id: "con_long", statement: `${"Long context for the rule. ".repeat(10)}Never remove the audit check.`, scope: ["src/second.ts"], severity: "blocking" }));
+  store.reindex(); store.close();
+  const output = hook(root, "Update src/file.ts and src/second.ts", "codex");
+  assert.match(output, /con_long/, "the rule headline is still delivered");
+  const coverage = output.split("\n").find(line => line.startsWith("Constraint coverage"));
+  assert.ok(coverage);
+  assert.doesNotMatch(coverage, /src\/second\.ts/, "a missing prohibition still requires a detail lookup");
+});
+
+test("retired and expired global rules do not invalidate active constraint coverage", t => {
+  const root = fixture(t);
+  const store = new HunchStore(hunchPaths(root));
+  store.json.put("constraints", mkConstraint({ id: "con_retired_global", statement: "Retired rule", scope: ["**"], status: "retired" }));
+  store.json.put("constraints", mkConstraint({ id: "con_expired_global", statement: "Expired rule", scope: [], valid_to: "2020-01-01T00:00:00Z" }));
+  store.reindex(); store.close();
+  const output = hook(root, "Update src/file.ts and package.json", "codex");
+  assert.match(output, /Constraint coverage is complete for: src\/file\.ts, package\.json/);
+});
+
+test("a glob rule on an unindexed secondary file uses that file for anchor validation", t => {
+  const root = fixture(t);
+  mkdirSync(join(root, "test"));
+  writeFileSync(join(root, "test", "file.test.ts"), "// no symbols\n");
+  const store = new HunchStore(hunchPaths(root));
+  store.json.put("constraints", mkConstraint({ id: "con_secondary_warning", statement: "Retain existing assertions", scope: ["test/**"], severity: "warning" }));
+  store.reindex(); store.close();
+  const output = hook(root, "Update src/file.ts and test/file.test.ts", "codex");
+  assert.match(output, /con_secondary_warning/);
+  assert.match(output, /Constraint coverage is complete for: src\/file\.ts, test\/file\.test\.ts/);
+});
 
 test("unsupported provider receives no automatic brief", t => {
   const root = fixture(t);
