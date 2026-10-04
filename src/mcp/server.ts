@@ -1584,14 +1584,22 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
     {
       title: "Check invariants in scope",
       description:
-        "Before editing, get constraints matching a path or glob, sorted by severity, with id, severity, enforcement, statement, and rationale. For dependent lists use hunch_get_dependents; for invariants reached through dependents use hunch_blast_radius.",
-      inputSchema: { scope: z.string().describe("A path or glob, e.g. src/auth/** or src/auth/session.ts") },
+        "Before editing, get constraints matching a path or glob, sorted by severity, with id, severity, enforcement, statement, and rationale. Pass an array of up to 16 paths/globs to batch uncovered scopes; each scope gets its own complete result, including empty results. Not for dependent lists (hunch_get_dependents) or invariants reached through dependents (hunch_blast_radius).",
+      inputSchema: {
+        scope: z.union([
+          z.string(),
+          z.array(z.string().refine((value) => value.trim().length > 0, "Batch scopes must not be blank")).min(1).max(16),
+        ]).describe("A path or glob, e.g. src/auth/**, or an array of 1–16 paths/globs for one explicit batch check"),
+      },
     },
     async ({ scope }): Promise<ToolResult> => {
-      const cons = store.checkConstraints(scope);
-      if (!cons.length) return ok(`No constraints in scope "${scope}".`);
-      const lines = cons.map((c) => `• ${c.id} [${c.severity}/${c.enforcement}] ${c.statement}\n    rationale: ${c.rationale}${provLine(c)}`);
-      return ok(`Constraints affecting "${scope}":\n\n${lines.join("\n")}`);
+      const scopes = typeof scope === "string" ? [scope] : [...new Set(scope)];
+      return ok(scopes.map((target) => {
+        const cons = store.checkConstraints(target);
+        if (!cons.length) return `No constraints in scope "${target}".`;
+        const lines = cons.map((c) => `• ${c.id} [${c.severity}/${c.enforcement}] ${c.statement}\n    rationale: ${c.rationale}${provLine(c)}`);
+        return `Constraints affecting "${target}":\n\n${lines.join("\n")}`;
+      }).join("\n\n"));
     },
   );
 
