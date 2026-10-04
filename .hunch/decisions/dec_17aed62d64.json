@@ -1,0 +1,92 @@
+{
+  "id": "dec_17aed62d64",
+  "title": "Handle shell post hooks cheaply only when no full-handler work is needed",
+  "topic": null,
+  "status": "accepted",
+  "context": "Shell post hooks previously fell through to the full handler, including observations that needed only bookkeeping.",
+  "decision": "Add a lightweight shell post path guarded by write inspection and pipeline state. Fall back to the full handler when fingerprinting fails, writes are detected, stored lessons exist, or a proof reminder is required. Advance the shell baseline only after accepting the observation.",
+  "consequences": [
+    "Eligible shell post hooks record observations and save proof state without invoking the full handler.",
+    "Rejected observations preserve the shell baseline for the full handler.",
+    "Fingerprint failure is treated as uncertainty, not evidence of no writes."
+  ],
+  "alternatives_rejected": [
+    "Route every shell post hook through the full handler.",
+    "Advance the shell baseline before deciding whether the lightweight path can handle the event."
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Route every shell post hook through the full handler.",
+      "scope": [
+        "src/cli/**",
+        "src/core/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Advance the shell baseline before deciding whether the lightweight path can handle the event.",
+      "scope": [
+        "src/cli/**",
+        "src/core/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_50037f41a9",
+    "cmp_a94a8fe5cc",
+    "cmp_b256a6aed0",
+    "cmp_f27fede222"
+  ],
+  "related_files": [
+    "src/cli/hookStartup.ts",
+    "src/core/shellwrites.ts",
+    "src/core/taskReportHook.ts",
+    "test/hook-startup.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "649985d0",
+  "valid_from": "2026-10-04T06:26:55+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft+summary",
+    "confidence": 0.5,
+    "evidence": [
+      "commit:649985d0",
+      "synth:provider=codex-cli",
+      "branch:perf/efficiency-v14",
+      "src/cli/hookStartup.ts",
+      "src/core/shellwrites.ts",
+      "src/core/taskReportHook.ts",
+      "test/hook-startup.test.ts"
+    ],
+    "last_verified": "2026-10-04T03:27:37.356Z"
+  },
+  "date": "2026-10-04T06:26:55+03:00"
+}
