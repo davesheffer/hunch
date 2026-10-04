@@ -1,0 +1,47 @@
+{
+  "id": "dec_f9067c3bb4",
+  "title": "Batch explicit constraint scopes while preserving complete per-scope results",
+  "topic": null,
+  "status": "accepted",
+  "context": "Checking multiple explicit paths or globs previously required separate MCP calls. Touches invariant(s): con_e04226bd05 (The MCP server must stay client-agnostic: all assistants point to the same .hunch/ graph; no Claude-only behavior in the server).",
+  "decision": "Allow hunch_check_constraints to accept either a legacy string or an array of 1–16 nonblank scopes. Remove exact duplicates and return each remaining scope’s complete result in input order, including empty results.",
+  "consequences": [
+    "Multiple scopes can be checked in one MCP call.",
+    "Overlapping scopes retain their own full constraint lists, including severity ordering, rationale, and provenance.",
+    "Legacy string behavior is preserved; invalid batches are rejected entirely before scope checks."
+  ],
+  "alternatives_rejected": [],
+  "rejected_tripwires": [],
+  "related_components": [
+    "cmp_a94a8fe5cc",
+    "cmp_dfa5b5acde",
+    "cmp_f27fede222"
+  ],
+  "related_files": [
+    "src/mcp/server.ts",
+    "test/mcp-constraint-batch.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "33400794",
+  "valid_from": "2026-10-05T00:33:56+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft",
+    "confidence": 0.65,
+    "evidence": [
+      "commit:33400794",
+      "synth:provider=codex-cli",
+      "branch:perf/efficiency-v16",
+      "src/mcp/server.ts",
+      "test/mcp-constraint-batch.test.ts"
+    ],
+    "last_verified": "2026-10-04T21:34:36.217Z"
+  },
+  "date": "2026-10-05T00:33:56+03:00"
+}
