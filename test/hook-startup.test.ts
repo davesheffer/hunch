@@ -1,15 +1,18 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, realpathSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { cleanupDir } from "./fixtures.js";
-import { tsxLoaderUrl } from "./helpers.js";
+import { mkConstraint, tsxLoaderUrl } from "./helpers.js";
 import { HOOK_PROVIDERS, type HookProvider } from "../src/core/agenthook.js";
 import { readHookObservations } from "../src/core/hookObservations.js";
-import { emptyState } from "../src/core/pipeline.js";
+import { emptyState, onCommand, proofCheckpoint, type PipelineState } from "../src/core/pipeline.js";
+import { HunchStore } from "../src/store/hunchStore.js";
+import { hunchPaths } from "../src/core/paths.js";
+import { functionBodyHash } from "../src/core/siblingfix.js";
 import { listReportTasks } from "../src/core/taskReport.js";
 
 const entry = resolve("src/cli/index.ts");
@@ -143,4 +146,256 @@ test("extra options, unknown providers and help retain Commander behavior", t =>
     assert.deepEqual(invoke(a, entry, "{}", args), invoke(b, legacy, "{}", args), args.join(" "));
   }
   assert.match(readFileSync(entry, "utf8"), /import "\.\/preflight\.js";[^]*?import/);
+});
+
+function traceImports(root: string) {
+  const trace = join(root, ".tmp", "shell-imports.txt");
+  const loader = join(root, ".tmp", "shell-loader.mjs");
+  writeFileSync(loader, `import { appendFileSync } from "node:fs";\nexport async function resolve(s, c, next) { const r = await next(s, c); appendFileSync(${JSON.stringify(trace)}, r.url + "\\n"); return r; }\n`);
+  const registration = "data:text/javascript," + encodeURIComponent(`import { register } from "node:module"; register(${JSON.stringify(pathToFileURL(loader).href)});`);
+  return { trace, registration };
+}
+
+test("no-write shell posts avoid main, store, functionhash and Zod loading", t => {
+  for (const tool of ["Bash", "PowerShell"]) {
+    const root = fixture(t);
+    invoke(root, entry, payload("claude", "PreToolUse", tool));
+    const { trace, registration } = traceImports(root);
+    assert.deepEqual(invoke(root, entry, payload("claude", "PostToolUse", tool), ["hook"], [registration]), { status: 0, stdout: "", stderr: "" });
+    assert.doesNotMatch(readFileSync(trace, "utf8"), /\/cli\/main\.ts|\/store\/hunchStore\.ts|\/(?:functionhash|siblingfix)\.ts|\/node_modules\/zod\//);
+    assert.equal(rows(root).some(row => row.event === "PostToolUse"), true);
+  }
+});
+
+function seedPipeline(root: string, state: PipelineState) {
+  mkdirSync(join(root, ".tmp", "hunch-pipeline"), { recursive: true });
+  writeFileSync(join(root, ".tmp", "hunch-pipeline", "s.json"), JSON.stringify(state));
+}
+function proofState(): PipelineState {
+  return {
+    ...emptyState(), editedFiles: ["src/a.ts"], editGeneration: 2, verifyAfterEdit: false,
+    blocks: 1, proofActivity: 3,
+    obligations: [{ id: "manual:check", origin: "manual", category: "behavior", phase: "after-edit",
+      description: "Exercise the product behavior", command_alternatives: [["npm", "test"]],
+      expected: { success: true, output_includes: ["passed"] }, status: "pending" }],
+  };
+}
+function shellPayload(provider: HookProvider, tool: string, status: "success" | "failure" | "unknown", command = "npm test") {
+  const response = status === "unknown" ? "passed" : { exit_code: status === "success" ? 0 : 1, output: "passed" };
+  const event = status === "failure" ? "PostToolUseFailure" : "PostToolUse";
+  if (provider === "windsurf") return { event: status === "failure" ? event : "post_run_command", trajectory_id: "s", agent_action_name: tool, tool_info: { command }, tool_response: response };
+  if (provider === "cursor") return { event: status === "failure" ? event : "afterShellExecution", conversation_id: "s", tool_name: tool, tool_input: { command }, tool_response: response };
+  return { hook_event_name: event, session_id: "s", agent_id: "agent-a", tool_name: tool, tool_input: { command }, tool_response: response };
+}
+
+test("shell outcomes and proof facts match main across providers, tools and firmness", t => {
+  for (const provider of HOOK_PROVIDERS.filter(p => p !== "antigravity")) for (const firmness of ["off", "advisory", "strict"]) for (const tool of ["Bash", "PowerShell"]) {
+    const a = fixture(t, firmness), b = fixture(t, firmness);
+    const args = ["hook", "--provider", provider];
+    for (const root of [a, b]) invoke(root, entry, payload(provider, "PreToolUse", tool), args);
+    for (const status of ["success", "failure", "unknown"] as const) {
+      const seed = proofState();
+      // A nonmatching pending obligation exercises silent failed/unknown checks.
+      if (status !== "success") seed.obligations[0]!.command_alternatives = [["git", "show"]];
+      for (const root of [a, b]) seedPipeline(root, seed);
+      const input = shellPayload(provider, tool, status);
+      const { trace, registration } = traceImports(a);
+      const result = invoke(a, entry, input, args, [registration]);
+      assert.deepEqual(result, invoke(b, legacy, input, args), `${provider}/${firmness}/${tool}/${status}`);
+      assert.deepEqual(result, { status: 0, stdout: "", stderr: "" });
+      assert.doesNotMatch(readFileSync(trace, "utf8"), /\/cli\/main\.ts|\/store\/hunchStore\.ts|\/(?:functionhash|siblingfix)\.ts|\/node_modules\/zod\//);
+      assert.deepEqual(rows(a), rows(b));
+      assert.deepEqual(scratch(a, "hunch-hookcache"), scratch(b, "hunch-hookcache"));
+      assert.deepEqual(scratch(a, "hunch-pipeline"), scratch(b, "hunch-pipeline"));
+      const [state] = scratch(a, "hunch-pipeline");
+      const expected = firmness === "off" ? seed : proofCheckpoint(seed, onCommand(seed, "npm test", { status, output: "passed" }), { kind: "command", command: "npm test" }).state;
+      assert.deepEqual(state, expected);
+      assert.equal(state.proofActivity, firmness === "off" ? 3 : 4);
+      assert.equal(state.verifyAfterEdit, firmness !== "off" && status !== "failure");
+      assert.equal(state.obligations[0].status, firmness !== "off" && status === "success" ? "satisfied" : "pending");
+      assert.equal(scratch(a, "hunch-hookcache").length, firmness === "off" ? 0 : 1);
+    }
+  }
+});
+
+test("shell writes fall back and ground new paths and dirty rewrites", t => {
+  for (const tool of ["Bash", "PowerShell"]) for (const file of ["src/a.ts", "src/new.ts"]) {
+    const a = fixture(t), b = fixture(t);
+    for (const root of [a, b]) {
+      const store = new HunchStore(hunchPaths(root));
+      store.json.ensureDirs();
+      store.json.put("constraints", mkConstraint({ id: "con_shellstartup", statement: "Keep this module free of side effects", scope: [file], severity: "blocking" }));
+      store.reindex(); store.close();
+      invoke(root, entry, payload("claude", "PreToolUse", tool));
+      seedPipeline(root, proofState());
+      writeFileSync(join(root, file), "export const a = 300;\n");
+      utimesSync(join(root, file), 1_700_000_100, 1_700_000_100);
+    }
+    const { trace, registration } = traceImports(a);
+    const input = shellPayload("claude", tool, "success");
+    const result = invoke(a, entry, input, ["hook"], [registration]);
+    assert.deepEqual(result, invoke(b, legacy, input));
+    assert.match(result.stdout, /this shell command wrote/);
+    assert.match(result.stdout, /Keep this module free of side effects/);
+    assert.match(readFileSync(trace, "utf8"), /\/cli\/main\.ts/);
+    assert.deepEqual(rows(a), rows(b));
+    assert.deepEqual(scratch(a, "hunch-hookcache"), scratch(b, "hunch-hookcache"));
+    assert.deepEqual(scratch(a, "hunch-pipeline"), scratch(b, "hunch-pipeline"));
+  }
+});
+
+test("stored lessons and proof reminders fall back with exact state and output", t => {
+  for (const tool of ["Bash", "PowerShell"]) for (const scenario of ["lesson", "resolved-lesson", "cadence", "failed-proof", "unknown-proof"]) {
+    const a = fixture(t), b = fixture(t);
+    for (const root of [a, b]) {
+      writeFileSync(join(root, "src/a.ts"), "export function a() {\n  const value = 2;\n  const result = value + 0;\n  return result;\n}\n");
+      utimesSync(join(root, "src/a.ts"), 1_700_000_000, 1_700_000_000);
+      invoke(root, entry, payload("claude", "PreToolUse", tool));
+      const seed = proofState();
+      if (scenario.includes("lesson")) assert.notEqual(functionBodyHash(root, "src/a.ts", "a"), null);
+      if (scenario.includes("lesson")) seed.lessons = [{ id: "lesson-a", file: "src/a.ts", symbol: "a", sibling: "b", siblingFile: "src/b.ts", change: "Handle the edge case", callers: [], hash: functionBodyHash(root, "src/a.ts", "a"), reminded: scenario === "resolved-lesson" }];
+      if (scenario === "cadence") {
+        seed.proofActivity = 5;
+        seed.obligations[0]!.command_alternatives = [["git", "show"]];
+      }
+      seedPipeline(root, seed);
+    }
+    const status = scenario === "failed-proof" ? "failure" : scenario === "unknown-proof" ? "unknown" : "success";
+    const input = shellPayload("claude", tool, status);
+    const { trace, registration } = traceImports(a);
+    const result = invoke(a, entry, input, ["hook"], [registration]);
+    assert.deepEqual(result, invoke(b, legacy, input), scenario);
+    assert.match(readFileSync(trace, "utf8"), /\/cli\/main\.ts/);
+    if (scenario === "resolved-lesson") assert.equal(result.stdout, "");
+    else assert.notEqual(result.stdout, "", scenario);
+    assert.deepEqual(rows(a), rows(b));
+    assert.deepEqual(scratch(a, "hunch-hookcache"), scratch(b, "hunch-hookcache"));
+    assert.deepEqual(scratch(a, "hunch-pipeline"), scratch(b, "hunch-pipeline"));
+    const [state] = scratch(a, "hunch-pipeline");
+    assert.equal(state.proofActivity, scenario === "cadence" ? 6 : 4);
+    if (scenario === "lesson") assert.equal(state.lessons[0].reminded, true);
+    if (scenario.includes("proof")) assert.equal(state.obligations[0].last_attempt.outcome, status);
+  }
+});
+
+test("Git inspection failure falls back without advancing the baseline", t => {
+  for (const tool of ["Bash", "PowerShell"]) {
+    const a = fixture(t), b = fixture(t);
+    for (const root of [a, b]) {
+      invoke(root, entry, payload("claude", "PreToolUse", tool));
+      seedPipeline(root, proofState());
+      renameSync(join(root, ".git"), join(root, ".tmp", "git"));
+      writeFileSync(join(root, ".git"), "gitdir: .tmp/missing\n");
+    }
+    const baseline = scratch(a, "hunch-hookcache");
+    const { trace, registration } = traceImports(a);
+    const input = shellPayload("claude", tool, "success");
+    assert.deepEqual(invoke(a, entry, input, ["hook"], [registration]), invoke(b, legacy, input));
+    assert.match(readFileSync(trace, "utf8"), /\/cli\/main\.ts/);
+    assert.deepEqual(rows(a), rows(b));
+    assert.deepEqual(scratch(a, "hunch-hookcache"), baseline);
+    assert.deepEqual(scratch(a, "hunch-hookcache"), scratch(b, "hunch-hookcache"));
+    assert.deepEqual(scratch(a, "hunch-pipeline"), scratch(b, "hunch-pipeline"));
+  }
+});
+
+function directHandler(root: string, pipeline = "1") {
+  const script = join(root, ".tmp", "direct-handler.mjs");
+  writeFileSync(script, `import { readFileSync } from "node:fs";
+import { handleSimpleHook } from ${JSON.stringify(pathToFileURL(resolve("src/cli/hookStartup.ts")).href)};
+process.env.HUNCH_PIPELINE = ${JSON.stringify(pipeline)};
+console.log(handleSimpleHook(readFileSync(0, "utf8"), "claude"));
+`);
+  return script;
+}
+
+test("shell fallback eligibility leaves observations, baseline and pipeline untouched", t => {
+  for (const scenario of ["write", "lesson", "disabled-lesson", "checkpoint", "inspection-failure"]) {
+    const root = fixture(t);
+    invoke(root, entry, payload("claude", "PreToolUse"));
+    const seed = proofState();
+    if (scenario.includes("lesson")) seed.lessons = [{ id: "resolved", file: "src/a.ts", symbol: "a", sibling: "b", siblingFile: "src/b.ts", change: "Fix", callers: [], hash: null, reminded: true }];
+    if (scenario === "checkpoint") {
+      seed.proofActivity = 5;
+      seed.obligations[0]!.command_alternatives = [["git", "show"]];
+    }
+    seedPipeline(root, seed);
+    if (scenario === "write") {
+      writeFileSync(join(root, "src/a.ts"), "export const a = 300;\n");
+      utimesSync(join(root, "src/a.ts"), 1_700_000_100, 1_700_000_100);
+    }
+    if (scenario === "inspection-failure") {
+      renameSync(join(root, ".git"), join(root, ".tmp", "git"));
+      writeFileSync(join(root, ".git"), "gitdir: .tmp/missing\n");
+    }
+    const observations = rows(root), baseline = scratch(root, "hunch-hookcache"), pipeline = scratch(root, "hunch-pipeline");
+    assert.deepEqual(invoke(root, directHandler(root, scenario === "disabled-lesson" ? "0" : "1"), shellPayload("claude", "Bash", "success")), { status: 0, stdout: "false\n", stderr: "" });
+    assert.deepEqual(rows(root), observations, scenario);
+    assert.deepEqual(scratch(root, "hunch-hookcache"), baseline, scenario);
+    assert.deepEqual(scratch(root, "hunch-pipeline"), pipeline, scenario);
+  }
+});
+
+test("off shell posts record delivery while leaving existing baseline and proof state intact", t => {
+  for (const tool of ["Bash", "PowerShell"]) {
+    const a = fixture(t), b = fixture(t);
+    for (const root of [a, b]) {
+      invoke(root, entry, payload("claude", "PreToolUse", tool));
+      const seed = proofState();
+      seed.proofActivity = 5;
+      seed.lessons = [{ id: "lesson", file: "src/a.ts", symbol: "a", sibling: "b", siblingFile: "src/b.ts", change: "Fix", callers: [], hash: null, reminded: false }];
+      seedPipeline(root, seed);
+      writeFileSync(join(root, "src/a.ts"), "export const a = 300;\n");
+      utimesSync(join(root, "src/a.ts"), 1_700_000_100, 1_700_000_100);
+      writeFileSync(join(root, ".hunch/config.json"), JSON.stringify({ firmness: "off" }));
+    }
+    const baseline = scratch(a, "hunch-hookcache"), pipeline = scratch(a, "hunch-pipeline");
+    const { trace, registration } = traceImports(a);
+    const input = shellPayload("claude", tool, "failure");
+    assert.deepEqual(invoke(a, entry, input, ["hook"], [registration]), invoke(b, legacy, input));
+    assert.doesNotMatch(readFileSync(trace, "utf8"), /\/cli\/main\.ts|\/store\/hunchStore\.ts|\/(?:functionhash|siblingfix)\.ts|\/node_modules\/zod\//);
+    assert.deepEqual(rows(a), rows(b));
+    assert.equal(rows(a).some(row => row.event === "PostToolUseFailure"), true);
+    assert.deepEqual(scratch(a, "hunch-hookcache"), baseline);
+    assert.deepEqual(scratch(a, "hunch-pipeline"), pipeline);
+    assert.deepEqual(scratch(a, "hunch-hookcache"), scratch(b, "hunch-hookcache"));
+    assert.deepEqual(scratch(a, "hunch-pipeline"), scratch(b, "hunch-pipeline"));
+  }
+});
+
+test("shell inspection defers advancing its captured fingerprint", t => {
+  const root = fixture(t);
+  invoke(root, entry, payload("claude", "PreToolUse"));
+  writeFileSync(join(root, "src/a.ts"), "export const a = 300;\n");
+  utimesSync(join(root, "src/a.ts"), 1_700_000_100, 1_700_000_100);
+  const script = join(root, ".tmp", "inspect.mjs");
+  writeFileSync(script, `import assert from "node:assert/strict";
+import { readFileSync, readdirSync, writeFileSync, utimesSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { inspectShellWrites, shellWrittenFiles } from ${JSON.stringify(pathToFileURL(resolve("src/core/shellwrites.ts")).href)};
+const root = process.cwd();
+const cache = join(tmpdir(), "hunch-hookcache");
+const file = join(cache, readdirSync(cache)[0]);
+const before = readFileSync(file, "utf8");
+const scan = inspectShellWrites(root, "s", "agent-a");
+assert.deepEqual(scan.written, ["src/a.ts"]);
+assert.equal(readFileSync(file, "utf8"), before);
+writeFileSync(join(root, "src/a.ts"), "export const a = 400;");
+utimesSync(join(root, "src/a.ts"), 1700000200, 1700000200);
+scan.advance();
+assert.equal(JSON.parse(readFileSync(file, "utf8"))["src/a.ts"], "1700000100000:22");
+assert.deepEqual(shellWrittenFiles(root, "s", "agent-a"), ["src/a.ts"]);
+const count = readdirSync(cache).length;
+const first = inspectShellWrites(root, "new-session", "agent-a");
+assert.deepEqual(first.written, []);
+assert.equal(readdirSync(cache).length, count);
+first.advance();
+assert.equal(readdirSync(cache).length, count + 1);
+const absent = inspectShellWrites(root, undefined);
+assert.deepEqual(absent.written, []);
+absent.advance();
+assert.equal(readdirSync(cache).length, count + 1);
+`);
+  assert.deepEqual(invoke(root, script, ""), { status: 0, stdout: "", stderr: "" });
 });
