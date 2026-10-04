@@ -109,16 +109,26 @@ export function refreshShellBaseline(root: string, sessionId: string | undefined
   if (fp) save(snapshotFile(root, sessionId, agentId), fp);
 }
 
+/** Inspect without advancing the baseline; commit only after the caller accepts
+ *  the observation. A failed fingerprint is not evidence of no writes. */
+export function inspectShellWrites(root: string, sessionId: string | undefined, agentId?: string): { written: string[]; advance: () => void } | null {
+  if (!sessionId) return { written: [], advance: () => {} };
+  const file = snapshotFile(root, sessionId, agentId);
+  const before = load(file);
+  const now = fingerprint(root);
+  if (!now) return null;
+  return {
+    written: before ? Object.keys(now).filter((p) => before[p] !== now[p]).sort() : [],
+    advance: () => save(file, now),
+  };
+}
+
 /** Repo-relative files the shell command that just ran wrote (created or
  *  modified), and the baseline moves forward. Empty without a baseline: a
  *  session's first observation cannot tell its own writes from earlier ones. */
 export function shellWrittenFiles(root: string, sessionId: string | undefined, agentId?: string): string[] {
-  if (!sessionId) return [];
-  const file = snapshotFile(root, sessionId, agentId);
-  const before = load(file);
-  const now = fingerprint(root);
-  if (!now) return [];
-  save(file, now);
-  if (!before) return [];
-  return Object.keys(now).filter((p) => before[p] !== now[p]).sort();
+  const inspection = inspectShellWrites(root, sessionId, agentId);
+  if (!inspection) return [];
+  inspection.advance();
+  return inspection.written;
 }
