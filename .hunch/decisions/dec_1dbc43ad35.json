@@ -1,0 +1,151 @@
+{
+  "id": "dec_1dbc43ad35",
+  "title": "Task-scoped escalation asking replaces session-start asking",
+  "topic": null,
+  "status": "accepted",
+  "context": "Session-start orientation was asking every pending escalation, incurring one model turn per Hunch run. This imposed a fixed cost regardless of whether escalations were relevant to the actual work. Touches invariant(s): con_03a0b94b2e (The agent hook must never block an edit on failure: any error exits 0 and never denies; after the event is recognized it emits at most one 'grounding unavailable' context line, unrecognized input emits nothing); con_8460b6770f (Config/provider writers must merge idempotently into existing user files and refuse to clobber an unparseable file); con_e04226bd05 (The MCP server must stay client-agnostic: all assistants point to the same .hunch/ graph; no Claude-only behavior in the server).",
+  "decision": "Escalations are now asked only for the task being worked on (matched by id/topic, prompt paths, related files, policy scope, or task selection context). Session-start asks only if the provider doesn't deliver prompt events; otherwise, the prompt hook asks task-scoped escalations once per session. All entries remain discoverable via `hunch escalations` but aren't surfaced unsolicited.",
+  "consequences": [
+    "Estimated cost ratio drops 0.03–0.12 per session, wall-clock time 0.06–0.12 (measured over Codex PILOT5 runs).",
+    "Escalations become visible only when the task touches them, reducing cognitive overhead for unrelated work.",
+    "Providers without prompt-delivery capability retain session-start asking for backwards compatibility.",
+    "Agent-facing guidance stops recommending recording after routine choices; only human-decided or human-corrected items get recorded (improving signal quality in commit synthesis)."
+  ],
+  "alternatives_rejected": [
+    "Ask all escalations every turn (higher cost than session-start).",
+    "Disable escalation asking entirely (loses visibility into decision items).",
+    "Filter escalations in presentation only (doesn't reduce model cost or improve relevance).",
+    "Use heuristics to predict task-relevance at session start (introduces false positives/negatives)."
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Ask all escalations every turn (higher cost than session-start).",
+      "scope": [
+        "src/cli/**",
+        "src/core/**",
+        "src/integrations/**",
+        "src/mcp/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Disable escalation asking entirely (loses visibility into decision items).",
+      "scope": [
+        "src/cli/**",
+        "src/core/**",
+        "src/integrations/**",
+        "src/mcp/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Filter escalations in presentation only (doesn't reduce model cost or improve relevance).",
+      "scope": [
+        "src/cli/**",
+        "src/core/**",
+        "src/integrations/**",
+        "src/mcp/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Use heuristics to predict task-relevance at session start (introduces false positives/negatives).",
+      "scope": [
+        "src/cli/**",
+        "src/core/**",
+        "src/integrations/**",
+        "src/mcp/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_50037f41a9",
+    "cmp_863ac67d4a",
+    "cmp_a94a8fe5cc",
+    "cmp_b256a6aed0",
+    "cmp_dfa5b5acde",
+    "cmp_f27fede222"
+  ],
+  "related_files": [
+    "src/cli/index.ts",
+    "src/core/agenthook.ts",
+    "src/core/escalations.ts",
+    "src/core/hookText.ts",
+    "src/integrations/scaffold.ts",
+    "src/mcp/server.ts",
+    "test/agenthook.test.ts",
+    "test/escalations.test.ts",
+    "test/mcp-instructions.test.ts",
+    "test/repair-provenance.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "71c795f4",
+  "valid_from": "2026-10-05T23:27:09+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft+summary",
+    "confidence": 0.5,
+    "evidence": [
+      "commit:71c795f4",
+      "synth:provider=claude-cli",
+      "branch:perf/v17-step1-on-main",
+      "src/cli/index.ts",
+      "src/core/agenthook.ts",
+      "src/core/escalations.ts",
+      "src/core/hookText.ts",
+      "src/integrations/scaffold.ts",
+      "src/mcp/server.ts",
+      "test/agenthook.test.ts",
+      "test/escalations.test.ts"
+    ],
+    "last_verified": "2026-10-05T20:28:03.442Z"
+  },
+  "date": "2026-10-05T23:27:09+03:00"
+}
