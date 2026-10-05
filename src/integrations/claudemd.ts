@@ -105,7 +105,7 @@ export function renderHunchSection(store: HunchStore, root?: string): string {
       `${renderCountsMatch(counts)}. Use the \`hunch_*\` MCP tools by moment:`,
   );
   lines.push("");
-  lines.push("- **Start:** reuse the task ID and `task verify` command the prompt hook printed; with none, call `hunch_task(action: \"start\", title)` once. Then `hunch_context(target, task_id)` first. Orient with `hunch_structure`, `hunch_workspaces`, `hunch_runbook(task)`. Ask the user about each `hunch_escalations()` entry; silence is never approval.");
+  lines.push("- **Start:** reuse the task ID and `task verify` command the prompt hook printed; with none, call `hunch_task(action: \"start\", title)` once. Then `hunch_context(target, task_id)` first. Orient with `hunch_structure`, `hunch_workspaces`, `hunch_runbook(task)`. When the prompt hook raises an escalation this task touches, ask the user; silence is never approval. `hunch_escalations()` lists the rest.");
   lines.push("- **Design:** `hunch_why(target)` (includes what was rejected), `hunch_current_decision(topic)`, `hunch_bug_lineage(symptom_or_symbol)`, `hunch_compare(candidates)`, `hunch_query(query)`.");
   lines.push("- **Edit:** `hunch_check_constraints(scope)`, `hunch_get_dependents(symbol)` / `hunch_blast_radius(target)`, `hunch_findings(scope?)`.");
   lines.push(

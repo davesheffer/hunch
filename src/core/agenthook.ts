@@ -8,6 +8,18 @@
 export const HOOK_PROVIDERS = ["claude", "codex", "vscode", "windsurf", "antigravity", "cursor"] as const;
 export type HookProvider = (typeof HOOK_PROVIDERS)[number];
 
+/** Whether a provider's hooks deliver the user's prompt text (a UserPromptSubmit
+ * equivalent). Prompt-scoped behavior needs it; a provider without one gets that
+ * behavior at its session/orientation event instead. Antigravity's PreInvocation
+ * payload carries only conversation/invocation counters, no turn text. A Record,
+ * so a new provider must declare its answer. */
+const PROMPT_EVENT: Record<HookProvider, boolean> = {
+  claude: true, codex: true, vscode: true, windsurf: true, cursor: true, antigravity: false,
+};
+export function deliversPromptEvent(provider: HookProvider): boolean {
+  return PROMPT_EVENT[provider];
+}
+
 export type HunchHookEvent = "PreToolUse" | "PostToolUse" | "PostToolUseFailure" | "UserPromptSubmit" | "SessionStart" | "SubagentStart" | "PreCompact" | "Stop";
 
 /** One file section of a Codex `apply_patch` payload. */

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { buildServer, MCP_INSTRUCTIONS } from "../src/mcp/server.js";
+import { HOOK_REMINDER } from "../src/core/hookText.js";
 import { tempStore } from "./helpers.js";
 
 test("initialize delivers the grounding contract to every client, hooks or not", async (t) => {
@@ -23,4 +24,12 @@ test("initialize delivers the grounding contract to every client, hooks or not",
   assert.match(instructions ?? "", /its instruction said that host closes the task AND the task used no Hunch/);
   assert.match(instructions ?? "", /A task you started with hunch_task is always finished by you/);
   assert.doesNotMatch(instructions ?? "", /skippable/i);
+  // Recording is human-triggered (dec_12ba37db1c): routine choices come from commits.
+  assert.match(instructions ?? "", /hunch_record_correction when a human corrects you/);
+  assert.doesNotMatch(instructions ?? "", /after a non-trivial choice/);
+});
+
+test("prompt reminder records only what the human decides or corrects (dec_12ba37db1c)", () => {
+  assert.match(HOOK_REMINDER, /Record only what the human decides or corrects/);
+  assert.doesNotMatch(HOOK_REMINDER, /non-trivial choice/);
 });

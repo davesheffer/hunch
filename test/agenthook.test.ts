@@ -5,7 +5,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { contextHookOutput, denyHookOutput, normalizeHookEvent, parseApplyPatch, stopHookOutput } from "../src/core/agenthook.js";
+import { contextHookOutput, deliversPromptEvent, denyHookOutput, HOOK_PROVIDERS, normalizeHookEvent, parseApplyPatch, stopHookOutput } from "../src/core/agenthook.js";
 import { hunchPaths } from "../src/core/paths.js";
 import { armExecutionObligations, emptyState, loadPipelineState, onCommand, onEdit, pendingExecutionObligations } from "../src/core/pipeline.js";
 import type { Constraint } from "../src/core/types.js";
@@ -375,4 +375,8 @@ test("PostToolUse skips files outside the repository — a scratch edit is not a
     tool_response: { output: "Success" },
   }, { HUNCH_PIPELINE: "1" });
   assert.deepEqual([...loadPipelineState(session).editedFiles], ["src/other.ts"], "only the in-repo file is recorded for the Stop gate");
+});
+
+test("deliversPromptEvent: only providers whose hooks carry the user's prompt text", () => {
+  for (const p of HOOK_PROVIDERS) assert.equal(deliversPromptEvent(p), p !== "antigravity", p);
 });
