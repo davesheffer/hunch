@@ -14,7 +14,7 @@ test("prompt reminder requests one brief and conditional follow-ups", () => {
   assert.match(HOOK_REMINDER, /hunch_check_constraints before editing uncovered scope/);
   assert.match(HOOK_REMINDER, /only for missing information or risk/);
   assert.match(HOOK_REMINDER, /Discovering another file does not require a second context brief/);
-  assert.match(HOOK_REMINDER, /Record new reusable decisions and corrections/);
+  assert.match(HOOK_REMINDER, /Record only what the human decides or corrects/);
   assert.doesNotMatch(HOOK_REMINDER, /Before editing, call hunch_check_constraints/);
 });
 

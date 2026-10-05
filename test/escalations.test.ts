@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { pendingEscalations, policyEscalations, commitRepairEscalations, actionableEscalations, summarizeEscalations, escalationHeadline, type Escalation, type PolicyLite } from "../src/core/escalations.js";
+import { pendingEscalations, policyEscalations, commitRepairEscalations, actionableEscalations, summarizeEscalations, escalationHeadline, relevantEscalations, type Escalation, type PolicyLite } from "../src/core/escalations.js";
 import type { Decision } from "../src/core/types.js";
 
 const D = (over: Partial<Decision> & { id: string }): Decision => ({
@@ -392,4 +392,23 @@ test("escalationHeadline: a list with nothing actionable (no real producer emits
   const b: Escalation = { kind: "commit-repair-pending", topic: "dec_b", decisionIds: ["dec_b"], question: "q-b", detail: "d-b", resolution: "r-b", actionable: false };
   assert.equal(escalationHeadline([b], "cli"), "Nothing needs your decision right now — 1 entry shown below for context only (resolving another entry will clear them):");
   assert.equal(escalationHeadline([b, b], "mcp"), "Nothing needs the human's call right now — 2 entries shown below for context only (resolving another entry will clear them):");
+});
+
+test("relevantEscalations keeps only entries the prompt's task touches (dec_12ba37db1c)", () => {
+  const esc = (topic: string, ids: string[]): Escalation => ({ kind: "topic-conflict", topic, decisionIds: ids, question: `q ${topic}`, detail: "", resolution: "" });
+  const items = [esc("synthesis-provider", ["dec_a", "dec_b"]), esc("pol_x", ["pol_x"]), esc("dec_c", ["dec_c"])];
+  const files = (id: string) => ({ dec_a: ["src/synthesis/provider.ts"], dec_c: ["docs/a.md"] } as Record<string, string[]>)[id] ?? [];
+  const pick = (prompt: string, paths: string[] = [], selected: string[] = []) =>
+    relevantEscalations(items, { prompt, paths, selectedIds: new Set(selected) }, files).map((e) => e.topic);
+  assert.deepEqual(pick("add a flag to the parser"), [], "unrelated prompt asks nothing");
+  assert.deepEqual(pick("edit it", ["src/synthesis/provider.ts"]), ["synthesis-provider"], "a related file the prompt names");
+  assert.deepEqual(pick("edit it", ["src/synthesis"]), ["synthesis-provider"], "a directory covers the files under it");
+  assert.deepEqual(pick("revisit the synthesis-provider choice"), ["synthesis-provider"], "a topic the prompt names");
+  assert.deepEqual(pick("synthesis-providers are fine"), [], "a topic is matched whole, not as a prefix");
+  assert.deepEqual(pick("prove POL_X now"), ["pol_x"], "an id the prompt names, any case");
+  assert.deepEqual(pick("go", [], ["dec_c"]), ["dec_c"], "an id the task selection chose");
+  assert.deepEqual(pick("edit it", ["src/"]), ["synthesis-provider"], "a trailing slash still names the directory");
+  assert.equal(pick("show me the escalations").length, 3, "asking about escalations asks them all");
+  assert.equal(pick("call hunch_escalations").length, 3, "the tool name counts as asking");
+  assert.deepEqual(pick("de-escalation of the parser"), [], "de-escalation is not a question about escalations");
 });
