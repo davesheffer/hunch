@@ -1,0 +1,129 @@
+{
+  "id": "dec_4fd1ecba8b",
+  "title": "Task-scoped escalations and human-only decision recording",
+  "topic": null,
+  "status": "accepted",
+  "context": "Session start was asking about all pending escalations upfront, and agents were recording routine choices. This created unnecessary prompt noise and unclear ownership of what gets recorded. Touches invariant(s): con_8460b6770f (Config/provider writers must merge idempotently into existing user files and refuse to clobber an unparseable file); con_e04226bd05 (The MCP server must stay client-agnostic: all assistants point to the same .hunch/ graph; no Claude-only behavior in the server).",
+  "decision": "Move escalation questions out of SessionStart and into the prompt hook, asking only about escalations touching the current task. Shift decision recording from agents to humans and commit synthesis; agents no longer record routine choices.",
+  "consequences": [
+    "Escalations stay pending longer, asked only when a prompt touches related code",
+    "Significantly reduces prompt overhead at session start and during typical work",
+    "Clear human accountability for what gets recorded as a decision",
+    "Task-scoped context means fewer irrelevant escalations interrupt the flow",
+    "Requires hunch_escalations to surface pending items for explicit visibility"
+  ],
+  "alternatives_rejected": [
+    "Keep asking all escalations at SessionStart (bloats initial prompt with unrelated context)",
+    "Let agents continue recording routine choices (unclear ownership, unnecessary noise in memory)",
+    "Drop escalations entirely (loses important architectural context)"
+  ],
+  "rejected_tripwires": [
+    {
+      "alternative": "Keep asking all escalations at SessionStart (bloats initial prompt with unrelated context)",
+      "scope": [
+        "src/cli/**",
+        "src/core/**",
+        "src/integrations/**",
+        "src/mcp/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Let agents continue recording routine choices (unclear ownership, unnecessary noise in memory)",
+      "scope": [
+        "src/cli/**",
+        "src/core/**",
+        "src/integrations/**",
+        "src/mcp/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    },
+    {
+      "alternative": "Drop escalations entirely (loses important architectural context)",
+      "scope": [
+        "src/cli/**",
+        "src/core/**",
+        "src/integrations/**",
+        "src/mcp/**",
+        "test/**"
+      ],
+      "forbids": {
+        "deps": [],
+        "symbols": [],
+        "patterns": []
+      },
+      "provenance": {
+        "source": "llm_draft",
+        "confidence": 0.5,
+        "evidence": []
+      }
+    }
+  ],
+  "related_components": [
+    "cmp_50037f41a9",
+    "cmp_863ac67d4a",
+    "cmp_a94a8fe5cc",
+    "cmp_b256a6aed0",
+    "cmp_dfa5b5acde",
+    "cmp_f27fede222"
+  ],
+  "related_files": [
+    "src/cli/main.ts",
+    "src/core/escalations.ts",
+    "src/core/hookText.ts",
+    "src/integrations/scaffold.ts",
+    "src/mcp/server.ts",
+    "test/escalations.test.ts",
+    "test/mcp-instructions.test.ts",
+    "test/repair-provenance.test.ts"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": "b4c7ef7e",
+  "valid_from": "2026-10-05T22:48:49+03:00",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "provenance": {
+    "source": "llm_draft+summary",
+    "confidence": 0.5,
+    "evidence": [
+      "commit:b4c7ef7e",
+      "synth:provider=claude-cli",
+      "branch:perf/efficiency-v17",
+      "src/cli/main.ts",
+      "src/core/escalations.ts",
+      "src/core/hookText.ts",
+      "src/integrations/scaffold.ts",
+      "src/mcp/server.ts",
+      "test/escalations.test.ts",
+      "test/mcp-instructions.test.ts",
+      "test/repair-provenance.test.ts"
+    ],
+    "last_verified": "2026-10-05T19:49:49.406Z"
+  },
+  "date": "2026-10-05T22:48:49+03:00"
+}
