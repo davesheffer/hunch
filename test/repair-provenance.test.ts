@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -1453,28 +1454,27 @@ function privateOverlaySessionStartFixture(): { root: string; overlayRoot: strin
   };
 }
 
-test("SessionStart orientation surfaces a queued commit-repair escalation for a private-overlay decision even when the public store has zero decisions", () => {
+test("a prompt naming the decision's file surfaces a queued commit-repair escalation for a private-overlay decision even when the public store has zero decisions", () => {
   const fixture = privateOverlaySessionStartFixture();
   try {
     const run = spawnSync(process.execPath, [tsx, cli, "hook", "--provider", "claude"], {
       cwd: fixture.root,
       env: fixture.env,
-      input: JSON.stringify({ hook_event_name: "SessionStart", session_id: "s1" }),
+      input: JSON.stringify({ hook_event_name: "UserPromptSubmit", session_id: `s-${randomUUID()}`, prompt: "fix the bug in src/private.ts" }),
       encoding: "utf8",
     });
     assert.equal(run.status, 0, run.stderr);
     assert.match(
       run.stdout,
       new RegExp(fixture.decisionId),
-      "the public decisions list is empty, but the queued repair is fully answerable via the full store — SessionStart must not bail silently before checking it",
+      "the public decisions list is empty, but the queued repair is fully answerable via the full store — the prompt hook must check it",
     );
-    assert.doesNotMatch(run.stdout, /Recent:|Roadmap \(/, "SessionStart orientation no longer lists recent work or the roadmap");
   } finally {
     fixture.cleanup();
   }
 });
 
-test("SessionStart orientation surfaces the withheld (never-resolves) wording, not the ordinary --apply-works wording, when the queued `to` doesn't resolve here (#48 follow-up)", () => {
+test("the prompt hook surfaces the withheld (never-resolves) wording, not the ordinary --apply-works wording, when the queued `to` doesn't resolve here (#48 follow-up)", () => {
   const fixture = privateOverlaySessionStartFixture();
   try {
     // The fixture's own queued `to` ("d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0")
@@ -1488,18 +1488,18 @@ test("SessionStart orientation surfaces the withheld (never-resolves) wording, n
     const run = spawnSync(process.execPath, [tsx, cli, "hook", "--provider", "claude"], {
       cwd: fixture.root,
       env: fixture.env,
-      input: JSON.stringify({ hook_event_name: "SessionStart", session_id: "s1" }),
+      input: JSON.stringify({ hook_event_name: "UserPromptSubmit", session_id: `s-${randomUUID()}`, prompt: "fix the bug in src/private.ts" }),
       encoding: "utf8",
     });
     assert.equal(run.status, 0, run.stderr);
-    assert.match(run.stdout, /doesn't resolve in this repository/, "SessionStart must surface the withheld wording");
+    assert.match(run.stdout, /doesn't resolve in this repository/, "the prompt hook must surface the withheld wording");
     assert.doesNotMatch(run.stdout, new RegExp(`--apply --only ${fixture.decisionId} to accept`), "must never advertise an action that's guaranteed to no-op forever");
   } finally {
     fixture.cleanup();
   }
 });
 
-test("SessionStart orientation does NOT re-surface a private-overlay commit-repair escalation once its exact triple is tombstoned — the same private-overlay liveness path must respect --drop too", () => {
+test("the prompt hook does NOT re-surface a private-overlay commit-repair escalation once its exact triple is tombstoned — the same private-overlay liveness path must respect --drop too", () => {
   const fixture = privateOverlaySessionStartFixture();
   try {
     const queued = (JSON.parse(readFileSync(queueFile(fixture.root), "utf8")) as { id: string; from: string; to: string }[])[0]!;
@@ -1510,20 +1510,44 @@ test("SessionStart orientation does NOT re-surface a private-overlay commit-repa
     const run = spawnSync(process.execPath, [tsx, cli, "hook", "--provider", "claude"], {
       cwd: fixture.root,
       env: fixture.env,
-      input: JSON.stringify({ hook_event_name: "SessionStart", session_id: "s1" }),
+      input: JSON.stringify({ hook_event_name: "UserPromptSubmit", session_id: `s-${randomUUID()}`, prompt: "fix the bug in src/private.ts" }),
       encoding: "utf8",
     });
     assert.equal(run.status, 0, run.stderr);
     assert.doesNotMatch(
       run.stdout,
       new RegExp(fixture.decisionId),
-      "the tombstoned repair must not surface here either — SessionStart shares the same readActivePendingRepairs path as `hunch escalations`, not a raw queue read",
+      "the tombstoned repair must not surface here either — the prompt hook shares the same readActivePendingRepairs path as `hunch escalations`, not a raw queue read",
     );
   } finally {
     fixture.cleanup();
   }
 });
 
+
+test("escalations are task-scoped: SessionStart and an unrelated prompt ask nothing, and the entry stays listed (dec_12ba37db1c)", () => {
+  const fixture = privateOverlaySessionStartFixture();
+  const session = `s-${randomUUID()}`;
+  try {
+    const hook = (input: object) => spawnSync(process.execPath, [tsx, cli, "hook", "--provider", "claude"], {
+      cwd: fixture.root, env: fixture.env, input: JSON.stringify(input), encoding: "utf8",
+    });
+    const start = hook({ hook_event_name: "SessionStart", session_id: session });
+    assert.equal(start.status, 0, start.stderr);
+    assert.doesNotMatch(start.stdout, new RegExp(fixture.decisionId), "session start has no task yet, so it asks nothing");
+    const unrelated = hook({ hook_event_name: "UserPromptSubmit", session_id: session, prompt: "add a flag to src/other.ts" });
+    assert.equal(unrelated.status, 0, unrelated.stderr);
+    assert.doesNotMatch(unrelated.stdout, new RegExp(fixture.decisionId), "a prompt that touches none of its files must not be asked");
+    const listed = spawnSync(process.execPath, [tsx, cli, "escalations", "--json"], { cwd: fixture.root, env: fixture.env, encoding: "utf8" });
+    assert.match(listed.stdout, new RegExp(fixture.decisionId), "the unasked entry is never dropped");
+    const asked = hook({ hook_event_name: "UserPromptSubmit", session_id: session, prompt: "now fix src/private.ts" });
+    assert.match(asked.stdout, new RegExp(fixture.decisionId), "the prompt that touches it asks");
+    const again = hook({ hook_event_name: "UserPromptSubmit", session_id: session, prompt: "and src/private.ts again" });
+    assert.doesNotMatch(again.stdout, new RegExp(fixture.decisionId), "the same question is asked once per session");
+  } finally {
+    fixture.cleanup();
+  }
+});
 
 test("reviewed repair cannot switch targets after an intervening merge", () => {
   const fixture = squashFixture();

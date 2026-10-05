@@ -1830,7 +1830,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
     {
       title: "Assemble the minimal relevant Hunch slice for a task",
       description:
-        "Return a budgeted engineering-memory brief for a file, symbol, or task phrase. A task-linked prompt-hook brief satisfies initial context; otherwise call hunch_context first with the task, known files, and task_id. Apply its constraints; call hunch_check_constraints(scope) before editing scope the brief does not cover. Discovering another file alone does not require another context call. One sufficient brief is enough; use hunch_why(target) only when more detail is needed. When presenting a programmatic result, render result.content only; structuredContent is the alternative machine-readable representation. Only a human activates a policy. Record new reusable knowledge with task_id. Finish with hunch_task finish unless its skip rule applies.",
+        "Return a budgeted engineering-memory brief for a file, symbol, or task phrase. A task-linked prompt-hook brief satisfies initial context; otherwise call hunch_context first with the task, known files, and task_id. Apply its constraints; call hunch_check_constraints(scope) before editing scope the brief does not cover. Discovering another file alone does not require another context call. One sufficient brief is enough; use hunch_why(target) only when more detail is needed. When presenting a programmatic result, render result.content only; structuredContent is the alternative machine-readable representation. Only a human activates a policy. Record only what the human decides or corrects, with task_id. Finish with hunch_task finish unless its skip rule applies.",
       inputSchema: {
         target: z.string().describe("A file path, symbol, or task phrase you're about to work on."),
         budget_tokens: z.number().optional().describe("Rough token budget for the brief (default 1500)."),
@@ -2304,7 +2304,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
     {
       title: "Record a decision (write-back)",
       description:
-        "Persist a Decision (ADR) with provenance after a non-trivial design choice. private:true keeps it in the HUNCH_PRIVATE_DIR overlay, never committed here. Returns id, home, status. Not for an agent-obeyed rule (hunch_record_correction) or an observation (hunch_record_finding). Errors: 'Refused:' a gate held (don't retry); 'Invalid:' fix arguments; 'Failed to' internal.",
+        "Persist a Decision (ADR) with provenance when the human makes or confirms one in conversation; routine choices are captured from commits. private:true keeps it in the HUNCH_PRIVATE_DIR overlay, never committed here. Returns id, home, status. Not for an agent-obeyed rule (hunch_record_correction) or an observation (hunch_record_finding). Errors: 'Refused:' a gate held (don't retry); 'Invalid:' fix arguments; 'Failed to' internal.",
       inputSchema: {
         decision: z.object({
           title: z.string(),

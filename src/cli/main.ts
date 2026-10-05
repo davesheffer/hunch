@@ -102,7 +102,7 @@ import { isHumanConfirmed } from "../core/strictgate.js";
 import { appendEvent, readEvents } from "../core/events.js";
 import { computeStats, formatStats } from "../core/stats.js";
 import { clearTaskSelection, injectionMode, loadTaskSelection, resetSessionInjections, saveTaskSelection, ServedMarks, taskSelectionEnabled } from "../core/hookcache.js";
-import { isBareFollowUp, isFilterableSelectionId, liveSelectionRecords, selectForTask } from "../core/taskSelection.js";
+import { isBareFollowUp, isFilterableSelectionId, liveSelectionRecords, promptPaths, selectForTask } from "../core/taskSelection.js";
 import { recordServed, servedSummary } from "../core/served.js";
 import { latestSessionTask, readTaskReport, recordTaskDelivery, reportActivity, reportHash, reportPresentationEnabled, unseenLessons } from "../core/taskReport.js";
 import { runReportConformance, snapshotDeliveredRecords } from "../core/taskReportEvidence.js";
@@ -149,7 +149,7 @@ import { countersignConstraint, countersignDecision } from "../core/countersign.
 import { applyImportedAdrReview, carryImportedAdrReview, importedAdrReviewHash, importedAdrSourceHash, isImportedAdrDecision, pendingImportedAdrReviews } from "../core/importReview.js";
 import { exportMadrCorpus, isRegenerableMadr } from "../integrations/madrExport.js";
 import { buildMadrManifest, writeMadrManifest, refreshMadrCorpus } from "../integrations/madrManifest.js";
-import { pendingEscalations, policyEscalations, commitRepairEscalations, actionableEscalations, escalationHeadline } from "../core/escalations.js";
+import { pendingEscalations, policyEscalations, commitRepairEscalations, actionableEscalations, escalationHeadline, relevantEscalations } from "../core/escalations.js";
 import { premiseEscalations } from "../core/premises.js";
 import { parseDocAnchors, renderDocGrounding } from "../core/docanchors.js";
 import { pathMatchesGlob } from "../core/glob.js";
@@ -4865,6 +4865,14 @@ program
             parts.push(unverifiedNag(st));
           }
         }
+        // Escalations this prompt's task touches (dec_12ba37db1c): asked once per
+        // session, never answered for the human; the rest stay pending in
+        // `hunch escalations`. A broken store must not take the prompt hook down.
+        try {
+          store ??= new HunchStore(paths);
+          const ask = await promptEscalations(root, store, provider, evt);
+          if (ask) parts.push(ask);
+        } catch { /* escalations stay listed by `hunch escalations` */ }
         try {
           store ??= new HunchStore(paths);
           const brief = promptContextBrief(root, store, provider, evt);
@@ -5006,36 +5014,12 @@ program
           // further than a terminal.
           const decisions = s.advisoryRecs("decisions");
           const { pendingReview } = nowData(decisions, 3);
-          const escalations = pendingEscalations(decisions);
-          escalations.push(...premiseEscalations(decisions, { now: new Date().toISOString(), exists: (p) => existsSync(join(paths.root, p)) }));
-          // liveness checked against the full store even in private mode — a
-          // private-overlay decision's repair is fully answerable via
-          // `hunch repair-provenance` (which reads the full store), so it
-          // must not go silently unanswerable just because its title stays
-          // out of session transcripts. Only the id and commit shas surface.
-          const sessionStartQueue = readActivePendingRepairs(paths.root);
-          escalations.push(...commitRepairEscalations(sessionStartQueue, decisions, s.recs("decisions"), withheldRewrites(paths.root, sessionStartQueue)));
-          try {
-            // Constitution human moments ride the same line; a broken policy store
-            // must never take session-start orientation down (fail open). Public
-            // store only — session transcripts travel further than a terminal.
-            const { ConstitutionService: CS } = await import("../constitution/service.js");
-            escalations.push(...policyEscalations(new CS(s, paths.root).list({ publicOnly: true }).map((p) => ({ ...p, last_action: p.audit.at(-1)?.action ?? null }))));
-          } catch { /* constitution unavailable */ }
-          // Only ACTIONABLE entries are worth asking inline — a duplicate-id
-          // commit-repair follower whose own resolution says "act on a
-          // different entry first" isn't a question the assistant can put to
-          // the human directly (#61). Filtered BEFORE the bail check below so
-          // "is there anything to say" and "what do we say" share one
-          // predicate — an escalations list that's entirely non-actionable
-          // must bail exactly like an empty one would.
-          const actionableEsc = actionableEscalations(escalations);
-          if (!decisions.length && !actionableEsc.length) {
-            // Fresh graph and nothing else to raise: nothing to orient on; only
-            // the controller brief (and the opt-in operating loop) ships. A
-            // queued commit-repair escalation (checked against the full store
-            // above) is enough reason NOT to bail here even when the visible
-            // decisions list is empty.
+          // Escalations are task-scoped (dec_12ba37db1c): session start has no task
+          // yet, so it asks nothing. The prompt hook asks about the ones a prompt
+          // touches; every entry stays pending in `hunch escalations`.
+          if (!decisions.length) {
+            // Fresh graph: nothing to orient on; only the controller brief (and
+            // the opt-in operating loop) ships.
             const fresh = [sessionLoopEnabled() ? PIPELINE_LOOP : "", controllerBrief].filter(Boolean).join("\n\n");
             if (fresh) emitContext(provider, "SessionStart", fresh);
             return;
@@ -5043,9 +5027,6 @@ program
           const L: string[] = [];
           L.push(`🧠 Hunch orientation — ${decisions.length} decision(s) in the graph.`);
           if (pendingReview > 0) L.push(`${pendingReview} legacy un-vouched draft(s) — adopt as advisory memory with \`hunch adopt-drafts\` (new captures auto-trust).`);
-          if (actionableEsc.length) {
-            L.push(`⚖ ${actionableEsc.length} decision(s) need YOUR call — ASK the user inline (don't queue): ${actionableEsc.map((e) => e.question).join(" · ")}`);
-          }
           L.push("Orient further: hunch_context(task) · hunch_structure() · `hunch now`.");
           // The operating loop rides session start only on opt-in
           // (sessionLoopEnabled): by default every session would pay for it.
@@ -7096,6 +7077,36 @@ function shellWriteGrounding(root: string, store: HunchStore, provider: HookProv
  *  A follow-up prompt widens the qualifying set rather than replacing it, so a
  *  "go" cannot unselect the task's memory. */
 const TASK_SELECTION_TITLE_CHARS = 80;
+/** The ASK line for the escalations one prompt touches, or "" (dec_12ba37db1c).
+ *  Titles come from the advisory scope (public-only in private mode: session
+ *  transcripts travel further than a terminal); commit-repair liveness and the
+ *  related-file match read the full store, so a private decision's repair
+ *  stays answerable by id. */
+async function promptEscalations(root: string, store: HunchStore, provider: HookProvider, evt: HunchHookInput): Promise<string> {
+  if (!evt.prompt || isNotificationPrompt(evt.prompt)) return "";
+  const decisions = store.advisoryRecs("decisions");
+  const all = store.recs("decisions");
+  const escalations = pendingEscalations(decisions);
+  escalations.push(...premiseEscalations(decisions, { now: new Date().toISOString(), exists: (p) => existsSync(join(root, p)) }));
+  const queue = readActivePendingRepairs(root);
+  escalations.push(...commitRepairEscalations(queue, decisions, all, withheldRewrites(root, queue)));
+  try {
+    // Constitution human moments ride the same line; fail open, public store only.
+    const { ConstitutionService: CS } = await import("../constitution/service.js");
+    escalations.push(...policyEscalations(new CS(store, root).list({ publicOnly: true }).map((p) => ({ ...p, last_action: p.audit.at(-1)?.action ?? null }))));
+  } catch { /* constitution unavailable */ }
+  // Only ACTIONABLE entries are worth asking inline (#61).
+  const actionable = actionableEscalations(escalations);
+  if (!actionable.length) return "";
+  const files = new Map(all.map((d) => [d.id, d.related_files] as const));
+  const selectedIds = new Set(loadTaskSelection(hookReportTaskId(root, provider, evt))?.top ?? []);
+  const relevant = relevantEscalations(actionable, { prompt: evt.prompt, paths: promptPaths(evt.prompt, root), selectedIds }, (id) => files.get(id) ?? []);
+  // Each question is asked once per session, however the touched set changes.
+  const unasked = relevant.filter((e) => injectionMode(evt.session_id, `prompt-escalation:${e.kind}:${e.topic}:${e.decisionIds.join(",")}`, e.question) === "full");
+  if (!unasked.length) return "";
+  return `⚖ ${unasked.length} decision(s) this task touches need the human's call — ASK the user inline, never decide for them: ${unasked.map((e) => e.question).join(" · ")}`;
+}
+
 function promptTaskSelection(root: string, store: HunchStore, provider: HookProvider, evt: HunchHookInput): string {
   // A host notification is not a task prompt: the earlier selection stands untouched.
   if (!taskSelectionEnabled() || isNotificationPrompt(evt.prompt)) return "";

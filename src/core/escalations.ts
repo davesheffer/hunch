@@ -336,3 +336,47 @@ export function policyEscalations(policies: readonly PolicyLite[]): Escalation[]
   }
   return out;
 }
+
+/** What one prompt is about, for task-scoped escalation delivery (dec_12ba37db1c). */
+export interface EscalationScope {
+  /** the prompt text as the human wrote it. */
+  prompt: string;
+  /** repo-relative paths the prompt names (taskSelection.promptPaths). */
+  paths: readonly string[];
+  /** record ids the prompt's task selection put on top, when there is one. */
+  selectedIds?: ReadonlySet<string>;
+}
+
+const samePathOrNested = (x: string, y: string): boolean => {
+  const a = x.replace(/\/+$/, ""), b = y.replace(/\/+$/, "");
+  return !!a && !!b && (a === b || a.startsWith(`${b}/`) || b.startsWith(`${a}/`));
+};
+const escapeRegExp = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** The escalations one prompt's task touches. A prompt hook asks the human only
+ *  about these; every other entry stays exactly as pending — still listed by
+ *  `hunch escalations`, hunch_escalations and hunch_now, never dropped and
+ *  never answered for the human. Deterministic explicit anchors only: a
+ *  prompt that asks about escalations themselves, an entry id or topic the
+ *  prompt names, an id the task selection chose, or a recorded related file
+ *  the prompt names (a directory covers the files under it). `relatedFiles`
+ *  maps a decision id to its related_files; a policy id has none and is
+ *  matched by its id alone. */
+export function relevantEscalations(
+  items: readonly Escalation[],
+  scope: EscalationScope,
+  relatedFiles: (id: string) => readonly string[],
+): Escalation[] {
+  const prompt = scope.prompt ?? "";
+  if (/(?:^|[^a-z0-9-])escalations?(?:$|[^a-z0-9])/i.test(prompt)) return [...items];
+  const lower = prompt.toLowerCase();
+  const named = (term: string): boolean => {
+    const t = term.trim().toLowerCase();
+    if (t.length < 3) return false;
+    return new RegExp(`(?:^|[^a-z0-9_-])${escapeRegExp(t)}(?:$|[^a-z0-9_-])`).test(lower);
+  };
+  return items.filter((e) =>
+    named(e.topic)
+    || e.decisionIds.some((id) => named(id) || scope.selectedIds?.has(id))
+    || e.decisionIds.some((id) => relatedFiles(id).some((file) => scope.paths.some((p) => samePathOrNested(file, p)))));
+}
