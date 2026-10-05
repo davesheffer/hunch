@@ -1222,7 +1222,7 @@ export interface RootControlOptions {
 export const MCP_INSTRUCTIONS = [
   "Hunch is this repository's engineering memory: decisions, bug history, invariants, components, with provenance.",
   "Per user task: (1) hunch_task(action:\"start\", title) once — skip it when the host's prompt hook already opened the task and printed its verify command, and reuse that task_id; (2) hunch_context(target, task_id) FIRST, before reading or editing, for the file, symbol, or task phrase; (3) hunch_check_constraints(scope) before editing shared code; (4) hunch_task(action:\"finish\", task_id) before the final response, showing its contribution card — required, with one exception: the host's prompt hook opened the task AND its instruction said that host closes the task AND the task used no Hunch (no hunch_* call on this task_id, no task verify check, no hook context you acted on, nothing to claim). A task you started with hunch_task is always finished by you.",
-  "Then by moment: hunch_why(target) for rationale and rejected alternatives, hunch_bug_lineage before fixing a failure, hunch_record_decision after a non-trivial choice, hunch_record_correction when a human corrects you.",
+  "Then by moment: hunch_why(target) for rationale and rejected alternatives, hunch_bug_lineage before fixing a failure, hunch_record_correction when a human corrects you, hunch_record_decision for a decision the human makes; record only what the human decides or corrects.",
   "Hosts without lifecycle hooks (Windsurf, Cursor, or Codex before its hooks are trusted) receive no automatic grounding: call these tools yourself.",
 ].join("\n");
 
@@ -2296,7 +2296,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
     {
       title: "Record a decision (write-back)",
       description:
-        "Persist a Decision (ADR) with provenance after a non-trivial design choice. private:true keeps it in the HUNCH_PRIVATE_DIR overlay, never committed here. Returns id, home, status. Not for an agent-obeyed rule (hunch_record_correction) or an observation (hunch_record_finding). Errors: 'Refused:' a gate held (don't retry); 'Invalid:' fix arguments; 'Failed to' internal.",
+        "Persist a Decision (ADR) with provenance when the human makes or confirms one in conversation; routine choices are captured from commits. private:true keeps it in the HUNCH_PRIVATE_DIR overlay, never committed here. Returns id, home, status. Not for an agent-obeyed rule (hunch_record_correction) or an observation (hunch_record_finding). Errors: 'Refused:' a gate held (don't retry); 'Invalid:' fix arguments; 'Failed to' internal.",
       inputSchema: {
         decision: z.object({
           title: z.string(),

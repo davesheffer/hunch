@@ -22,6 +22,7 @@ import type { Decision } from "./types.js";
 import { topicCollisions } from "./topics.js";
 import { liveRewrites, deadRewrites, commitRepairReviewHash, firstFor, type CommitRewrite } from "./commitrepair.js";
 import { importedAdrReviewHash, importedAdrSourceHash, pendingImportedAdrReviews } from "./importReview.js";
+import { pathMatchesGlob } from "./glob.js";
 
 export type EscalationKind = "topic-conflict" | "imported-adr-review" | "policy-candidate" | "policy-proposal" | "policy-repaired" | "premise-stale" | "commit-repair-pending";
 
@@ -335,4 +336,64 @@ export function policyEscalations(policies: readonly PolicyLite[]): Escalation[]
     }
   }
   return out;
+}
+
+/** What one prompt is about, for task-scoped escalation delivery (dec_12ba37db1c). */
+export interface EscalationScope {
+  /** the prompt text as the human wrote it. */
+  prompt: string;
+  /** repo-relative paths the prompt names (taskSelection.promptPaths). */
+  paths: readonly string[];
+  /** record ids the prompt's task selection put on top, when there is one. */
+  selectedIds?: ReadonlySet<string>;
+}
+
+const trimSlash = (x: string): string => x.replace(/\/+$/, "");
+const samePathOrNested = (x: string, y: string): boolean => {
+  const a = trimSlash(x), b = trimSlash(y);
+  return !!a && !!b && (a === b || a.startsWith(`${b}/`) || b.startsWith(`${a}/`));
+};
+/** A recorded related path or scope glob vs a path the prompt names. A plain
+ *  entry relates both ways by directory nesting; a glob entry matches a path it
+ *  covers, or a directory that holds its literal prefix (`src/` ~ `src/store/**`). */
+const relatedPathHit = (entry: string, promptPath: string): boolean => {
+  if (!/[*?]/.test(entry)) return samePathOrNested(entry, promptPath);
+  if (pathMatchesGlob(promptPath, entry)) return true;
+  const literal = trimSlash(entry.split("/").filter((_, i, segs) => !segs.slice(0, i + 1).some((s) => /[*?]/.test(s))).join("/"));
+  const dir = trimSlash(promptPath);
+  return !!literal && !!dir && (literal === dir || literal.startsWith(`${dir}/`));
+};
+const escapeRegExp = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+/** The prompt's prose without path-like tokens (a `/` or a file extension), so a
+ *  file named `escalations.test.ts` is not a question about escalations. */
+const proseOnly = (prompt: string): string =>
+  prompt.split(/\s+/).filter((t) => { const w = t.replace(/[)\],.;:!?'"`]+$/, ""); return !w.includes("/") && !/\.[a-z0-9]{1,8}$/i.test(w); }).join(" ");
+
+/** The escalations one prompt's task touches. A prompt hook asks the human only
+ *  about these; every other entry stays exactly as pending — still listed by
+ *  `hunch escalations`, hunch_escalations and hunch_now, never dropped and
+ *  never answered for the human. Deterministic explicit anchors only: a
+ *  prompt that asks about escalations themselves (path tokens aside), an entry
+ *  id or topic the prompt names, an id the task selection chose, or a recorded
+ *  anchor path the prompt names (a directory covers the files under it; a glob
+ *  covers the paths it matches). `relatedFiles` maps an entry id to its anchor
+ *  paths: a decision's related_files, a policy's scope paths/globs. An entry
+ *  with no anchor the prompt names stays CLI/MCP-only. */
+export function relevantEscalations(
+  items: readonly Escalation[],
+  scope: EscalationScope,
+  relatedFiles: (id: string) => readonly string[],
+): Escalation[] {
+  const prompt = scope.prompt ?? "";
+  if (/(?:^|[^a-z0-9-])escalations?(?:$|[^a-z0-9])/i.test(proseOnly(prompt))) return [...items];
+  const lower = prompt.toLowerCase();
+  const named = (term: string): boolean => {
+    const t = term.trim().toLowerCase();
+    if (t.length < 3) return false;
+    return new RegExp(`(?:^|[^a-z0-9_-])${escapeRegExp(t)}(?:$|[^a-z0-9_-])`).test(lower);
+  };
+  return items.filter((e) =>
+    named(e.topic)
+    || e.decisionIds.some((id) => named(id) || scope.selectedIds?.has(id))
+    || e.decisionIds.some((id) => relatedFiles(id).some((file) => scope.paths.some((p) => relatedPathHit(file, p)))));
 }

@@ -68,7 +68,7 @@ Follow the Hunch-grounded workflow (DESIGN §5) — do NOT skip the memory looku
 2. Identify the suspect symbol/file, then \`hunch_get_dependents(<symbol>)\` to learn the blast radius.
 3. \`hunch_check_constraints(<scope>)\` — list invariants you must preserve.
 4. Propose a fix that honors past root causes AND constraints. Apply it and run the tests.
-5. If the fix encodes a non-trivial choice, \`hunch_record_decision(...)\` so the next session is grounded in it.
+5. If the human decided or corrected something during the fix, record it (\`hunch_record_decision\` / \`hunch_record_correction\`); the commit itself is captured automatically.
 `;
 
 const FRAGILE_CMD = `---
