@@ -72,11 +72,14 @@ const isObj = (v: unknown): v is Json => !!v && typeof v === "object" && !Array.
 /** A delete step's note: the file held nothing but Hunch's part. */
 const deleted = (note: string): string => `${note.replace(/ \(.*\)$/, "")}; nothing else was in the file`;
 
+/** Text that may hold a Hunch entry: the name, or the CLI entry path a source install writes. */
+const MAY_HOLD_HUNCH = /hunch|(?:dist|src)[\\/]+cli[\\/]+index\.(?:js|ts)/i;
+
 /** Join the text around a removed block, dropping the blank lines the writer added. */
 function joinAround(before: string, after: string, eol: string): string {
   const b = before.replace(/\s+$/, "");
-  const a = after.replace(/^[ \t]*\r?\n/, "").replace(/^\s+/, "");
-  if (!a) return b ? `${b}${eol}` : "";
+  const a = after.replace(/^(?:[ \t]*(?:\r\n|\r|\n))+/, ""); // blank lines only: the next line keeps its indent
+  if (!a.trim()) return b ? `${b}${eol}` : "";
   return b ? `${b}${eol}${eol}${a}` : a;
 }
 
@@ -110,7 +113,12 @@ class Planner {
     const file = join(this.root, rel);
     if (!existsSync(file)) return;
     let json: Json;
-    try { json = readJsonObj(file); } catch (e) { this.refused.push({ path: rel, reason: (e as Error).message }); return; }
+    try { json = readJsonObj(file); } catch (e) {
+      // A file Hunch never wrote into (say, a JSONC file with comments) is not ours to fix.
+      // A source install's hook names only its …/dist|src/cli/index.js entry, not "hunch".
+      if (MAY_HOLD_HUNCH.test(this.text(rel) ?? "")) this.refused.push({ path: rel, reason: (e as Error).message });
+      return;
+    }
     if (!mutate(json)) return;
     if (empty(json)) this.steps.push({ path: rel, kind: "delete", note: deleted(note), run: () => rmSync(file, { force: true }) });
     else this.steps.push({ path: rel, kind: "edit", note, run: () => writeFileAtomic(file, JSON.stringify(json, null, 2) + "\n") });

@@ -1,11 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { cleanupDir, isolatedCliEnv, tempDir } from "./fixtures.js";
 import { hunchCliArgs } from "./cli-invocation.js";
-import { applyUninstall, OPT_OUT_FILE, type UninstallPlan } from "../src/integrations/uninstall.js";
+import { applyUninstall, OPT_OUT_FILE, planUninstall, type UninstallPlan } from "../src/integrations/uninstall.js";
+import { HUNCH_END, HUNCH_START } from "../src/integrations/claudemd.js";
 import { planHookRemoval } from "../src/integrations/hooks.js";
 
 /** #449: `hunch uninstall` removes exactly what `hunch init` installed, and the
@@ -123,7 +124,7 @@ test("an unparseable config is refused and the whole uninstall changes nothing",
   const { base, root, git, hunch } = fixture();
   try {
     assert.equal(hunch("init", "--no-index").status, 0);
-    writeFileSync(join(root, ".cursor", "mcp.json"), "{ not json");
+    writeFileSync(join(root, ".cursor", "mcp.json"), "{ \"mcpServers\": { \"hunch\": { not json");
     const snapshot = (): Record<string, string> => Object.fromEntries(
       [...workTreeFiles(git), ...readdirSync(join(root, ".git", "hooks")).map((h) => `.git/hooks/${h}`)]
         .filter((rel) => existsSync(join(root, rel)))
@@ -149,7 +150,7 @@ test("every command but uninstall/doctor/help refuses in an opted-out repo, and 
     const names = [...String(help.stdout).matchAll(/^ {2}([a-z][a-z0-9-]*)\b/gm)].map((m) => m[1]!).filter((n) => n !== "help");
     assert.ok(names.length > 30 && names.includes("ci") && names.includes("init"), `parsed the command list: ${names.join(" ")}`);
     const quiet = new Set(["hook", "sync", "check", "grounding", "repair-provenance", "workspaces"]);
-    const allowed = new Set(["uninstall", "doctor"]);
+    const allowed = new Set(["uninstall", "doctor", "merge-driver", "merge-driver-grounding"]);
     const run = (name: string) => new Promise<{ name: string; status: number | null }>((resolve) => {
       const child = spawn(process.execPath, hunchCliArgs(name), { cwd: root, env, stdio: ["ignore", "ignore", "ignore"] });
       const timer = setTimeout(() => child.kill(), 120_000);
@@ -199,6 +200,47 @@ test("uninstall whose opt-out marker can't be written says nothing was changed, 
     assert.match(String(r.stdout), /Hunch uninstall: nothing was changed/);
     assert.match(out(r), new RegExp(`✗ ${OPT_OUT_FILE.replace(".", "\\.")}:`));
     assert.match(readFileSync(join(root, "CLAUDE.md"), "utf8"), /HUNCH:START/, "really nothing was removed");
+  } finally { cleanupDir(base); }
+});
+
+test("a JSONC config without a Hunch entry never blocks uninstall; one with Hunch in it still refuses", () => {
+  const { base, root } = fixture();
+  try {
+    mkdirSync(join(root, ".vscode"), { recursive: true });
+    writeFileSync(join(root, ".vscode", "mcp.json"), "{\n  // mine\n  \"servers\": { \"other\": { \"command\": \"x\" } }\n}\n");
+    assert.deepEqual(planUninstall(root).refused, [], "a file Hunch never wrote into is not Hunch's to fix");
+    writeFileSync(join(root, ".vscode", "mcp.json"), "{\n  // mine\n  \"servers\": { \"hunch\": { \"command\": \"hunch\" } }\n}\n");
+    assert.deepEqual(planUninstall(root).refused.map((r) => r.path), [".vscode/mcp.json"]);
+    // A source install's hook names only its CLI entry path, never "hunch".
+    rmSync(join(root, ".vscode", "mcp.json"));
+    mkdirSync(join(root, ".cursor"), { recursive: true });
+    writeFileSync(join(root, ".cursor", "hooks.json"), "{\n  // mine\n  \"hooks\": { \"stop\": [{ \"command\": \"node D:\\\\dev\\\\memtool\\\\dist\\\\cli\\\\index.js hook --provider cursor\" }] }\n}\n");
+    assert.deepEqual(planUninstall(root).refused.map((r) => r.path), [".cursor/hooks.json"]);
+  } finally { cleanupDir(base); }
+});
+
+test("removing the instruction block keeps the indentation of the user's next line", () => {
+  const { base, root } = fixture();
+  try {
+    writeFileSync(join(root, "CLAUDE.md"), `# Mine\n\n${HUNCH_START}\nhunch text\n${HUNCH_END}\n\n    npm test\n`);
+    const step = planUninstall(root).steps.find((s) => s.path === "CLAUDE.md");
+    step?.run();
+    assert.equal(readFileSync(join(root, "CLAUDE.md"), "utf8"), "# Mine\n\n    npm test\n");
+    writeFileSync(join(root, "CLAUDE.md"), `# Mine\n\n${HUNCH_START}\nhunch text\n${HUNCH_END}\n   `);
+    planUninstall(root).steps.find((s) => s.path === "CLAUDE.md")?.run();
+    assert.equal(readFileSync(join(root, "CLAUDE.md"), "utf8"), "# Mine\n", "a whitespace-only tail goes with the block");
+  } finally { cleanupDir(base); }
+});
+
+test("the merge drivers still merge in an opted-out repository, so git never drops `theirs`", { timeout: 120_000 }, () => {
+  const { base, root, hunch } = fixture();
+  try {
+    writeFileSync(join(root, OPT_OUT_FILE), "opted out\n");
+    const [o, a, b] = ["base.txt", "ours.txt", "theirs.txt"].map((f) => join(base, f));
+    writeFileSync(o!, "a\n"); writeFileSync(a!, "a\nb\n"); writeFileSync(b!, "c\na\n");
+    const r = hunch("merge-driver", o!, a!, b!, "x.json");
+    assert.equal(r.status, 0, out(r));
+    assert.equal(readFileSync(a!, "utf8"), "c\na\nb\n", "%A holds the merge, not just ours");
   } finally { cleanupDir(base); }
 });
 

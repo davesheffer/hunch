@@ -249,8 +249,9 @@ registerReviewMemoryCommands(program, (records, repository, privateOnly) => {
 // Opt-out gate (#449): a repository `hunch uninstall` opted out stays out. Setup
 // and every other command refuse; the commands a leftover git or agent hook may
 // still call exit 0 so they never break the user's commit, merge or agent turn
-// (`hook` silently: its stdout is the agent's context).
-const OPT_OUT_ALLOWED = new Set(["uninstall", "doctor", "help"]);
+// (`hook` silently: its stdout is the agent's context). The merge drivers still
+// run: a leftover driver that exits without writing %A would let git drop `theirs`.
+const OPT_OUT_ALLOWED = new Set(["uninstall", "doctor", "help", "merge-driver", "merge-driver-grounding"]);
 const OPT_OUT_QUIET = new Set(["hook", "sync", "check", "grounding", "repair-provenance", "workspaces"]);
 program.hook("preAction", (_thisCommand, actionCommand) => {
   let top = actionCommand;
