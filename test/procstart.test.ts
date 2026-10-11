@@ -199,9 +199,9 @@ test("judge row 2: an UNPROBEABLE owner falls through to the caller's age rule",
   assert.equal(judgeSameHostOwner(owner({ start: `${otherBoot}:1:9:100` }), env({ alive: () => false })), "age");
   // Off linux a token-bearing record is another OS instance's: unprobeable too.
   assert.equal(judgeSameHostOwner(owner({ start: `${BOOT}:1:9:100` }), env({ self: null, platform: "darwin" })), "age");
-  // ON linux a null self is NOT unprobeable: main's pid rule — a live pid stays
-  // live (never age-stolen), a dead one is stale.
-  assert.equal(judgeSameHostOwner(owner({ start: `${BOOT}:1:9:100` }), env({ self: null, platform: "linux" })), "live");
+  // ON linux a null self is NOT unprobeable: main's pid rule — a live pid is not
+  // age-stolen (unproven, i.e. live unless disproved), a dead one is stale.
+  assert.equal(judgeSameHostOwner(owner({ start: `${BOOT}:1:9:100` }), env({ self: null, platform: "linux" })), "unproven");
   assert.equal(judgeSameHostOwner(owner({ start: `${BOOT}:1:9:100` }), env({ self: null, platform: "linux", alive: () => false })), "stale");
 });
 
@@ -243,21 +243,21 @@ test("judge row 6: an UNKNOWN own-pid record with a FOREIGN nonce falls to the a
   }
 });
 
-test("judge row 6: an UNKNOWN own-pid record with NO nonce stays live — nothing to compare", () => {
+test("judge row 7: an UNKNOWN own-pid record with NO nonce is unproven — nothing to compare", () => {
   for (const platform of ["linux", "darwin", "win32"] as const) {
-    assert.equal(judgeSameHostOwner(owner({ pid: 777 }), env({ platform, self: null })), "live", platform);
+    assert.equal(judgeSameHostOwner(owner({ pid: 777 }), env({ platform, self: null })), "unproven", platform);
   }
 });
 
-test("judge row 6: an UNKNOWN record naming ANOTHER live pid stays live on every platform", () => {
-  // The remaining macOS/Windows gap, documented and deliberate: a live pid we
-  // cannot disprove is never stolen on a guess.
+test("judge row 7: an UNKNOWN record naming ANOTHER live pid is unproven on every platform (issue #287)", () => {
+  // A live pid no token can compare is not stolen on a guess; "unproven" lets the
+  // write lock disprove it by the OS creation time of the pid's process.
   for (const platform of ["linux", "darwin", "win32"] as const) {
-    assert.equal(judgeSameHostOwner(owner({ nonce: "theirs" }), env({ platform, self: null })), "live", platform);
-    assert.equal(judgeSameHostOwner(owner(), env({ platform, self: null })), "live", `${platform}, no nonce`);
+    assert.equal(judgeSameHostOwner(owner({ nonce: "theirs" }), env({ platform, self: null })), "unproven", platform);
+    assert.equal(judgeSameHostOwner(owner(), env({ platform, self: null })), "unproven", `${platform}, no nonce`);
   }
   // Same when the probe simply could not read that pid's token.
-  assert.equal(judgeSameHostOwner(owner({ start: `${BOOT}:1:9:100`, nonce: "theirs" }), env({ tokenOf: () => null })), "live");
+  assert.equal(judgeSameHostOwner(owner({ start: `${BOOT}:1:9:100`, nonce: "theirs" }), env({ tokenOf: () => null })), "unproven");
 });
 
 /* ── the real kernel ──────────────────────────────────────────────────────── */

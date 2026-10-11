@@ -143,7 +143,7 @@ test("outside Git, a shipped pointer is ignored even for a store inside the arch
     // The same repository downloaded as an archive: no .git, the pointer still present.
     const archive = join(f.base, "archive");
     cpSync(f.hostile, archive, { recursive: true });
-    rmSync(join(archive, ".git"), { recursive: true, force: true });
+    rmSync(join(archive, ".git"), { recursive: true, force: true }); // rmSync-ok: simulates an archive download with no .git
     assertRefused(archive, f.env, "a pointer at another checkout's store is refused");
 
     // An archive can also ship its own store whose origin is a remote the archive chose.
@@ -181,7 +181,7 @@ test("an archive inside an unrelated Git repository cannot borrow that repositor
     const archive = join(outer, "vendor", "download");
     mkdirSync(join(outer, "vendor"), { recursive: true });
     cpSync(f.hostile, archive, { recursive: true });
-    rmSync(join(archive, ".git"), { recursive: true, force: true });
+    rmSync(join(archive, ".git"), { recursive: true, force: true }); // rmSync-ok: simulates an archive download with no .git
     assertRefused(archive, f.env, "the outer repository never vouches for the archive's pointer");
   } finally {
     cleanupDir(f.base);
@@ -199,7 +199,9 @@ test("a tracked .hunch symlink into another checkout is never followed", { timeo
     git(seed, "add", "-A");
     git(seed, "commit", "-qm", "fixture: linked memory dir");
     const clone = join(f.base, "symlink-clone");
-    git(f.base, "clone", "-q", seed, clone);
+    // Git for Windows checks a symlink out as a plain file unless core.symlinks is on; this
+    // machine can create links (symlinkSync above worked), so keep the clone's link a link.
+    git(f.base, "-c", "core.symlinks=true", "clone", "-q", seed, clone);
     // The pointer behind the link is never followed, and never silently dropped either:
     // opening public here would route captures past the overlay the pointer names.
     assert.throws(() => storeOf(clone, f.env).close(), /never followed/, "the linked pointer fails closed");
@@ -234,7 +236,7 @@ test("a symlinked, non-file, or malformed pointer fails closed; a UTF-8 BOM is t
     rmSync(local);
     mkdirSync(local);
     assert.throws(() => storeOf(victim, f.env).close(), /not a plain file/, "a directory named local.json");
-    rmSync(local, { recursive: true });
+    rmSync(local, { recursive: true }); // rmSync-ok: removes the directory named local.json before the next case
 
     // A leading BOM is stripped, in both pointer files.
     writeFileSync(local, `\uFEFF${localBytes}`);
@@ -510,7 +512,7 @@ test("committed files shaped like a repository never act as the registered point
       git(seed, "add", "-A");
       git(seed, "add", "-f", "evil");
       git(seed, "commit", "-qm", `fixture: ${label}`);
-      rmSync(clone, { recursive: true, force: true });
+      rmSync(clone, { recursive: true, force: true }); // rmSync-ok: resets the clone target before re-cloning the next case
       git(f.base, "clone", "-q", seed, clone);
       assertRefused(join(clone, "evil"), f.env, `a ${label} pointer inside tracked repository-shaped files is refused`);
     }

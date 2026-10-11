@@ -33,7 +33,7 @@ import { knownRepoDeps } from "../synthesis/tripwires.js";
 import { refreshExistingGrounding } from "../integrations/providers.js";
 import { workspaceLedgerView, renderWorktreeTable, renderBranchTable, workspaceSummaryLine, snapshotHasHome, recordWorkspaceSnapshot, branchRows, worktreeRows } from "../integrations/workspaceLedger.js";
 import { workspacesConfig } from "../core/config.js";
-import { revParse, asOfDate, revExists, lastChangeDate, rangeFiles, rangeGateDiff, commitFiles, commitGateDiff, stagedFiles, stagedGateDiff, workingFiles, workingGateDiff, pullHunchStatus, sameRemoteUrl, currentBranch, worktreePaths, pathKnownToHistory, type HunchPullStatus } from "../extractors/git.js";
+import { revParse, asOfDate, revExists, lastChangeDate, checkFreshnessRevision, teamPullIsFresh, rangeFiles, rangeGateDiff, commitFiles, commitGateDiff, stagedFiles, stagedGateDiff, workingFiles, workingGateDiff, pullHunchStatus, sameRemoteUrl, currentBranch, worktreePaths, pathKnownToHistory, type HunchPullStatus } from "../extractors/git.js";
 import { flushCapture, flushMemoryHome, pinSharedRemote } from "../integrations/sync.js";
 import { withWriteLock } from "../serve/writelock.js";
 import { advertisedTeamRemoteContract, ensureTeamOverlay, isTeamStoreTrusted, overlayMatchesTeamRemote, teamWiringConsented, untrustedTeamStoreMessage, readTeamConfig, teamRemoteContract, teamSharedRef } from "../integrations/team.js";
@@ -1008,6 +1008,17 @@ function unconfirmedReason(c: HumanConfirmation): string {
 
 const clipForPrompt = (s: string, max = 400): string => (s.length > max ? `${s.slice(0, max - 1)}…` : s);
 
+/** Whether a re-record changes what a human signed: every field except bookkeeping
+ *  (provenance, date, valid_from). Fails closed: a field added to Decision later counts
+ *  as substance until it is named here. Absent, null and empty-array values are equal. */
+const DECISION_BOOKKEEPING = new Set(["provenance", "date", "valid_from"]);
+export function decisionSubstanceChanged(before: Decision, after: Decision): boolean {
+  const norm = (v: unknown): unknown => (v === undefined || (Array.isArray(v) && v.length === 0) ? null : v);
+  const keys = [...new Set([...Object.keys(before), ...Object.keys(after)])].filter((k) => !DECISION_BOOKKEEPING.has(k)).sort();
+  const substance = (d: Decision) => JSON.stringify(keys.map((k) => [k, norm((d as Record<string, unknown>)[k])]));
+  return substance(before) !== substance(after);
+}
+
 /** The interrogation protocol returned by hunch_capture_decision. With `deciding`,
  *  the choice is NOT yet made: the verdict loop runs first so the record's
  *  alternatives_rejected are attacks that actually ran — not post-hoc fiction. */
@@ -1104,7 +1115,7 @@ function pullBackoff(status: HunchPullStatus, finishedAt: number, failures: numb
   if (status === "busy") {
     return { consecutivePullFailures: failures, nextRemotePullAt: finishedAt + 100 };
   }
-  if (status === "unconfigured") {
+  if (status === "unconfigured" || status === "empty") {
     return { consecutivePullFailures: 0, nextRemotePullAt: finishedAt + 30_000 };
   }
   const consecutivePullFailures = Math.min(failures + 1, 6);
@@ -2150,6 +2161,26 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
       try {
         const decision = store.advisoryRecs("decisions").find((candidate) => candidate.id === decision_id);
         if (!decision) return invalid(`Imported ADR ${decision_id} is not present in the current advisory memory home.`);
+        // Approval grants human authority, so the agent's report that the human approved
+        // is not enough: the human confirms in the client prompt, a channel the agent does
+        // not control, or approves with the CLI. A decline keeps the ADR advisory.
+        if (disposition === "approve") {
+          const confirmation = await askHumanToConfirm(server, [
+            "Hunch: an agent reports that you approved this imported ADR as your decision. Confirm only if YOU approve it.",
+            "",
+            `Title: ${clipForPrompt(decision.title, 200)}`,
+            `Decision: ${clipForPrompt(decision.decision || "(none)")}`,
+            `Source hash: ${expected_source_hash}`,
+            "",
+            "Confirmed, it carries your authority (human_confirmed). Unconfirmed, it stays advisory.",
+          ].join("\n"));
+          if (confirmation !== "confirmed") {
+            return refused(
+              `Not approved: ${unconfirmedReason(confirmation)}, so ${decision_id} stays advisory and nothing was written. ` +
+                `The human approves it by running: hunch review --approve-import ${decision_id} --expected-source-hash ${expected_source_hash} --expected-review-hash ${expected_review_hash} --reviewed-by <you>`,
+            );
+          }
+        }
         const reviewed = applyImportedAdrReview(decision, {
           disposition,
           expectedSourceHash: expected_source_hash,
@@ -2261,7 +2292,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
       // bounded convergence. An unavailable remote produces an explicit abstention.
       if (live.length === 0 && store.mode === "shared" && store.privateDir) {
         const status = pullTeamMemory(true);
-        if (status !== "updated" && status !== "current") {
+        if (status === "cooldown" || status === "not_shared" || !teamPullIsFresh(status)) {
           return err(
             `Shared team memory refresh is ${status}; Hunch cannot confirm that topic "${topic}" has no current decision. Retry when the shared store is available.`,
           );
@@ -2436,6 +2467,8 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
           valid_from: existing?.valid_from ?? now,
           valid_to: existing?.valid_to ?? null,
           retired: existing?.retired ?? { symbols: [], deps: [] },
+          ...(existing?.conformance ? { conformance: existing.conformance } : {}),
+          ...(existing?.visibility ? { visibility: existing.visibility } : {}),
           provenance: { source: "agent_recorded", confidence: 0.75, evidence: (decision.related_files ?? existing?.provenance.evidence ?? []).map(toPosixTarget) },
           date: now,
         };
@@ -2486,6 +2519,27 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
           : null;
         const humanSigned = confirmation === "confirmed";
         if (slotConflict && !humanSigned) return slotRefusal();
+        // An inherited signature covers only the text the human signed. Changed substance
+        // without a fresh confirmation would keep human_confirmed on words nobody vouched for.
+        if (existingIsHuman && !humanSigned) {
+          if (decisionSubstanceChanged(existing!, rec)) {
+            return refused(
+              `Decision ${id} is human-confirmed and this write changes its content; refusing to keep the human's signature on unconfirmed text, so nothing was written. ` +
+                "Record the change through /capture so the human confirms it in the client prompt.",
+            );
+          }
+          // Same substance: the human's record already says this. Rewriting it would only
+          // replace the human's provenance with the agent's, so it is a no-op.
+          return ok(`Decision ${id} is human-confirmed and already says this; nothing was written.`);
+        }
+        // Closing a human-confirmed decision is as much a change to it as rewriting it.
+        const supersededIncumbent = decision.supersedes ? store.recs("decisions").find((d) => d.id === decision.supersedes) : undefined;
+        if (supersededIncumbent && !humanSigned && supersededIncumbent.provenance.source.split("+").includes("human_confirmed")) {
+          return refused(
+            `Decision ${supersededIncumbent.id} is human-confirmed; an unconfirmed write cannot supersede it, so nothing was written. ` +
+              "Record the change through /capture so the human confirms it in the client prompt.",
+          );
+        }
         const tier = humanSigned || existingIsHuman ? "human_confirmed" : "agent_recorded";
         const source = existing && existing.provenance.source.includes("llm_draft")
           ? `llm_draft+${tier}`
@@ -2617,6 +2671,14 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
         }
         const rec = buildCorrectionConstraint({ ...input, knownDeps, root, vouched: false }, now);
         const existing = home === "private" ? store.getPrivateRec("constraints", rec.id) : store.json.get("constraints", rec.id);
+        // A human-confirmed rule is changed only by the same human act that confirmed it.
+        // Writing `rec` here would replace the signature with testimony and cap its severity.
+        if (existing && existing.provenance.source.split("+").includes("human_confirmed")) {
+          return refused(
+            `Constraint ${rec.id} is already human-confirmed; an agent write cannot replace or downgrade it, so nothing was written. ` +
+              `A change needs the human, outside the agent channel: ${confirmCommand(rec.id, { private: home === "private", severity: requested.severity })}`,
+          );
+        }
         // Same cross-home twin guard as the decision path above.
         const stored = store.putCapture("constraints", rec, !!input.private);
         const observed = observeReportCapture(root, input.task_id, "constraints", stored, home, !!existing, home === "private" ? store.privateDir ?? undefined : hunchPaths(root).hunch);
@@ -3088,7 +3150,8 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
         const scope = commit ? `commit ${commit}` : base ? `${base}..HEAD` : working ? "working changes" : "staged changes";
         if (!files.length) return ok(`VERDICT: ✅ PASS — no changed files in ${scope}.`);
         const gate = commit ? commitGateDiff(commit, root) : base ? rangeGateDiff(base, root) : working ? workingGateDiff(root) : stagedGateDiff(root);
-        const report = store.buildCheckReport(files, gate.diff, { strict: true, lastChange: (f) => lastChangeDate(f, root), diffStatus: gate });
+        const freshAt = checkFreshnessRevision({ base, commit }, root);
+        const report = store.buildCheckReport(files, gate.diff, { strict: true, lastChange: (f) => lastChangeDate(f, root, freshAt), diffStatus: gate });
         const v = verdict(report);
         const head = v === "block"
           ? "VERDICT: ⛔ BLOCK — a recorded guard requires review; inspect the cited scope and evidence below before merge."

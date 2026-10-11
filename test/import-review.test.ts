@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { ElicitRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { mapAdrCorpus } from "../src/extractors/adrImport.js";
 import {
   applyImportedAdrReview,
@@ -164,7 +165,14 @@ test("MCP surfaces the question in chat and only the explicit hash-bound answer 
 
   const server = buildServer(root);
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-  const client = new Client({ name: "import-review-test", version: "1.0.0" });
+  // Approval grants human authority, so the server asks the human in the client UI;
+  // this client stands in for a human who confirms.
+  const client = new Client({ name: "import-review-test", version: "1.0.0" }, { capabilities: { elicitation: {} } });
+  const elicited: string[] = [];
+  client.setRequestHandler(ElicitRequestSchema, async (req) => {
+    elicited.push(req.params.message);
+    return { action: "accept", content: { confirm: true } };
+  });
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
   t.after(async () => {
     await client.close();
@@ -189,6 +197,7 @@ test("MCP surfaces the question in chat and only the explicit hash-bound answer 
   }) as ToolText;
   assert.equal(approved.isError, undefined);
   assert.match(text(approved), /now human-confirmed authority/);
+  assert.match(elicited.at(-1)!, /Use PostgreSQL/, "the human saw what they approved");
 
   const cleared = await client.callTool({ name: "hunch_escalations", arguments: {} }) as ToolText;
   assert.match(text(cleared), /Nothing needs a human decision/);

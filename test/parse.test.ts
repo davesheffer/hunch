@@ -1,8 +1,9 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
-import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
@@ -640,7 +641,7 @@ function probe(tmp: string): { parseable: boolean; pid: number; core: string | n
 
 test("a cached copy is reused by the next process, and a corrupt one is rewritten before loading", { skip: process.platform === "win32", timeout: 120_000 }, t => {
   const tmp = realpathSync(mkdtempSync(join(tmpdir(), "hunch-ts-cache-")));
-  t.after(() => rmSync(tmp, { recursive: true, force: true }));
+  t.after(() => cleanupDir(tmp));
   const first = probe(tmp);
   assert.equal(first.parseable, true);
   assert.ok(first.core?.startsWith(join(tmp, "hunch-tree-sitter-cache-")), `loaded from the cache: ${first.core}`);
@@ -659,7 +660,7 @@ test("a cached copy is reused by the next process, and a corrupt one is rewritte
 
 test("a cache dir that is not private to the user falls back to a per-process copy", { skip: process.platform === "win32" || typeof process.getuid !== "function", timeout: 120_000 }, t => {
   const tmp = realpathSync(mkdtempSync(join(tmpdir(), "hunch-ts-refused-")));
-  t.after(() => rmSync(tmp, { recursive: true, force: true }));
+  t.after(() => cleanupDir(tmp));
   const squatted = join(tmp, `hunch-tree-sitter-cache-${process.getuid!()}`);
   mkdirSync(squatted);
   chmodSync(squatted, 0o777); // world-writable: refused

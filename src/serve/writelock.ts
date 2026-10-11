@@ -10,7 +10,10 @@
  * stealable once its owner is provably gone (pid dead — or RECYCLED — on the same
  * host) or older than any plausible write. "Recycled" is decided by comparing the
  * owner's recorded process-instance token with the current holder's, by string
- * equality and never by clock arithmetic (see core/procstart.ts). Removing a stale
+ * equality and never by clock arithmetic (see core/procstart.ts). Where no token can
+ * compare them (macOS, Windows, legacy records) a stale-looking lock whose live pid
+ * belongs to a process CREATED after the lock's recorded `at` is taken over too: that
+ * process cannot be the one that took it (issue #287). Removing a stale
  * lock is itself serialized behind an exclusive `.reclaim` claim directory, because
  * judging and removing are two steps and two contenders can otherwise both "win"
  * (see `takeOver`).
@@ -19,7 +22,7 @@ import { hostname } from "node:os";
 import { randomBytes } from "node:crypto";
 import { closeSync, mkdirSync, openSync, readFileSync, rmSync, rmdirSync, statSync, writeSync } from "node:fs";
 import { join } from "node:path";
-import { heldLockNonces, judgeSameHostOwner, selfStartToken, startTokenOf } from "../core/procstart.js";
+import { heldLockNonces, judgeSameHostOwner, processStartedAt, selfStartToken, startTokenOf } from "../core/procstart.js";
 
 /** Longest a write may hold the lock before another process may steal it: a put plus a
  *  git commit and push — seconds, not minutes. */
@@ -31,6 +34,10 @@ export const ACQUIRE_TIMEOUT_MS = 10_000;
  *  crashed inside it. */
 export const CLAIM_STALE_MS = 10_000;
 const POLL_MS = 25;
+/** How much later than the lock's recorded `at` the pid's current process must
+ *  have been created before it is proven not to be the owner. A genuine owner
+ *  started BEFORE it took the lock; the slack only absorbs clock granularity. */
+export const CREATED_AFTER_SLACK_MS = 5_000;
 
 export interface LockOwner { pid: number; host: string; nonce: string; at: string; start?: string }
 
@@ -38,7 +45,14 @@ export interface LockOwner { pid: number; host: string; nonce: string; at: strin
  *  pid's, plus the platform the decision table should reason about (the own-pid
  *  fallback differs on linux, where pid namespaces exist). Injected by tests so
  *  the identity paths are exercised off linux. */
-export interface StartTokenProbe { self: string | null; of: (pid: number) => string | null; platform?: NodeJS.Platform }
+export interface StartTokenProbe {
+  self: string | null;
+  of: (pid: number) => string | null;
+  platform?: NodeJS.Platform;
+  /** When the process now holding `pid` was created (wall-clock ms), or null.
+   *  Defaults to the OS probe `processStartedAt`. */
+  startedAt?: (pid: number) => number | null;
+}
 
 export class WriteLockTimeout extends Error {
   constructor(readonly path: string, readonly heldBy: LockOwner | undefined, readonly waitedMs: number) {
@@ -106,9 +120,19 @@ function stealable(path: string, owner: LockOwner | undefined, now: number, toke
       selfPid: process.pid,
       heldNonces: heldLockNonces,
     });
+    if (verdict === "unproven") return ageMs > STALE_AFTER_MS && createdAfterLock(owner, token);
     if (verdict !== "age") return verdict === "stale";
   }
   return ageMs > STALE_AFTER_MS;
+}
+
+/** Is the process now holding the owner's pid provably newer than the lock?
+ *  Unreadable either way means not proven, and a live pid keeps its lock. */
+function createdAfterLock(owner: LockOwner, token: StartTokenProbe): boolean {
+  const at = Date.parse(owner.at);
+  if (!Number.isFinite(at)) return false;
+  const started = (token.startedAt ?? processStartedAt)(owner.pid);
+  return started !== null && started > at + CREATED_AFTER_SLACK_MS;
 }
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
@@ -200,7 +224,15 @@ export async function withWriteLock<T>(
 ): Promise<T> {
   const path = writeLockPath(hunchDir);
   const timeoutMs = opts.timeoutMs ?? ACQUIRE_TIMEOUT_MS;
-  const token: StartTokenProbe = opts.startToken ?? { self: selfStartToken(), of: startTokenOf };
+  const probe: StartTokenProbe = opts.startToken ?? { self: selfStartToken(), of: startTokenOf };
+  // The creation-time probe spawns; ask it once per pid for this acquisition, not
+  // on every poll.
+  const createdAt = new Map<number, number | null>();
+  const startedAt = probe.startedAt ?? processStartedAt;
+  const token: StartTokenProbe = { ...probe, startedAt: (pid) => {
+    if (!createdAt.has(pid)) createdAt.set(pid, startedAt(pid));
+    return createdAt.get(pid)!;
+  } };
   const nonce = randomBytes(8).toString("hex");
   const started = Date.now();
   let fd: number | undefined;

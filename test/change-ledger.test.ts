@@ -13,6 +13,7 @@ import { mergeHunchJson } from "../src/store/merge.js";
 import { tempStore } from "./helpers.js";
 import { repositoryScope, subscribeState, writeState } from "../src/store/stateBinding.js";
 import { assertChangeSequence, stateHash } from "../src/core/stateContract.js";
+import { foldLedger } from "../src/store/replay.js";
 
 const scope = { kind: "user" as const, id: "david" };
 const ev = (n: number, at: string, principal = "sofia@david") => ({ facet: "commitments" as const, record_id: `ncm_${String(n).padStart(24, "0")}`, record_hash: stateHash(n), change: "created" as const, invalidates: [], cause: { kind: "write" as const, principal } });
@@ -179,12 +180,10 @@ test("issue #360: an event compacted on one side survives when the other still r
   assert.deepEqual(ledger.events.map((e) => e.record_id.slice(-2)), ["01", "02", "03"], "history retained by either clone survives");
 });
 
-test("issue #285: on a same-`at` tie an ours-only event still sorts before a theirs-only one", () => {
-  // `side` is only consulted on a tie, so the whole batch shares one `at`: two events BOTH sides
-  // retained, then one event only ours has and one only theirs has. `add` keeps base's objects for
-  // the shared pair, and both clones read equal-but-distinct copies off disk — so the old
-  // `ours.events.includes(e)` object-identity rule calls the shared pair "theirs" and sorts it
-  // behind our new event, scrambling a batch order neither clone changed.
+test("issues #285 and #361: a same-`at` batch keeps its place and new ties sort by identity, not by side", () => {
+  // The whole batch shares one `at`: two events BOTH sides retained (equal-but-distinct copies off
+  // disk), then one event only ours has and one only theirs has. The shared pair keeps its place;
+  // the two new events are ordered by identity (70 < 71), the same in either merge direction.
   const tie = "2026-09-08T10:00:09Z";
   const at = (n: number): Ledger["events"][number] => ({ schema: "nuryel.state.subscribe/1", seq: n, at: tie, scope, ...ev(n, "") });
   const base: Ledger = { ...emptyLedger(scope), head_seq: 2, events: [at(1), at(2)] };
@@ -194,7 +193,137 @@ test("issue #285: on a same-`at` tie an ours-only event still sorts before a the
   const ours: Ledger = { ...base, head_seq: 3, events: [...clone(), ourEvent] };
   const theirs: Ledger = { ...base, head_seq: 3, events: [...clone(), theirEvent] };
   const { ledger } = mergeLedgers(base, ours, theirs);
-  assert.deepEqual(ledger.events.map((e) => (e.cause?.kind === "write" ? e.cause.principal : "")), ["sofia@david", "sofia@david", "ours", "theirs"], "the shared pair keeps its place and the ours-only event beats the theirs-only one");
+  assert.deepEqual(ledger.events.map((e) => (e.cause?.kind === "write" ? e.cause.principal : "")), ["sofia@david", "sofia@david", "ours", "theirs"], "the shared pair keeps its place and the new events sort by identity");
+  const swapped = mergeLedgers(base, theirs, ours).ledger;
+  assert.deepEqual(swapped.events, ledger.events, "merge direction does not change the order");
+});
+
+test("issue #361: same-time cross-clone merges converge and a second merge keeps the floor", () => {
+  const tie = "2026-09-08T10:00:09Z";
+  const base = emptyLedger(scope);
+  const event = (n: number, principal: string): Ledger["events"][number] => ({
+    schema: "nuryel.state.subscribe/1", seq: 1, at: tie, scope, ...ev(n, "", principal),
+  });
+  const a: Ledger = { ...base, head_seq: 1, events: [event(80, "a")] };
+  const b: Ledger = { ...base, head_seq: 1, events: [event(81, "b")] };
+  const ab = mergeLedgers(base, a, b).ledger;
+  const ba = mergeLedgers(base, b, a).ledger;
+  assert.deepEqual(ab.events, ba.events, "merge direction cannot change equal-time event order");
+  assert.equal(ab.floor_seq, ba.floor_seq);
+  const settled = mergeLedgers(base, ab, ba).ledger;
+  assert.deepEqual(settled.events, ab.events);
+  assert.equal(settled.floor_seq, ab.floor_seq, "a settled re-merge cannot ratchet the floor");
+});
+
+test("issue #361: concurrent events are placed by instant, not by the text of `at` (no millis, explicit offset)", () => {
+  const base = emptyLedger(scope);
+  const event = (n: number, at: string): Ledger["events"][number] => ({ schema: "nuryel.state.subscribe/1", seq: 1, at, scope, ...ev(n, "", String(n)) });
+  const pairs: Array<[string, string]> = [
+    ["2026-09-08T10:00:09Z", "2026-09-08T10:00:09.500Z"], // "Z" sorts after "." as text
+    ["2026-09-08T11:00:09+02:00", "2026-09-08T10:00:00Z"], // 09:00:09Z, though "11" > "10" as text
+  ];
+  for (const [earlier, later] of pairs) {
+    const ours: Ledger = { ...base, head_seq: 1, events: [event(90, later)] };
+    const theirs: Ledger = { ...base, head_seq: 1, events: [event(91, earlier)] };
+    for (const [x, y] of [[ours, theirs], [theirs, ours]] as const) {
+      assert.deepEqual(mergeLedgers(base, x, y).ledger.events.map((e) => e.at), [earlier, later], `${earlier} happened before ${later}`);
+    }
+  }
+});
+
+test("issue #361: merging identical same-time batches does not renumber published events", () => {
+  const tie = "2026-09-08T10:00:09Z";
+  const base = emptyLedger(scope);
+  const events: Ledger["events"] = [81, 80].map((n, i) => ({
+    schema: "nuryel.state.subscribe/1", seq: i + 1, at: tie, scope, ...ev(n, "", String(n)),
+  }));
+  const both: Ledger = { ...base, head_seq: 2, events };
+  const merged = mergeLedgers(base, both, both).ledger;
+  assert.deepEqual(merged.events, events);
+  assert.equal(merged.floor_seq, 0);
+});
+
+test("issue #361: different merge ancestors still produce one same-time order", () => {
+  const tie = "2026-09-08T10:00:09Z";
+  const empty = emptyLedger(scope);
+  const event = (n: number, seq: number): Ledger["events"][number] => ({
+    schema: "nuryel.state.subscribe/1", seq, at: tie, scope, ...ev(n, "", String(n)),
+  });
+  const a: Ledger = { ...empty, head_seq: 1, events: [event(80, 1)] };
+  const b: Ledger = { ...empty, head_seq: 1, events: [event(81, 1)] };
+  const ab = mergeLedgers(empty, a, b).ledger;
+  const ac: Ledger = { ...a, head_seq: 2, events: [...a.events, event(82, 2)] };
+  const bc: Ledger = { ...b, head_seq: 2, events: [...b.events, event(82, 2)] };
+  const viaA = mergeLedgers(a, ab, ac).ledger;
+  const viaB = mergeLedgers(b, ab, bc).ledger;
+  assert.deepEqual(viaA.events.map((e) => e.record_id), viaB.events.map((e) => e.record_id));
+});
+
+test("issue #361: an unrelated merge cannot reverse published same-time updates to one record", () => {
+  const tie = "2026-09-08T10:00:09Z";
+  const recordId = ev(90, "").record_id;
+  const first = { schema: "nuryel.state.subscribe/1" as const, seq: 1, at: tie, scope, ...ev(90, ""), change: "updated" as const, record_hash: `sha256:${"f".repeat(64)}` };
+  const second = { ...first, seq: 2, record_hash: `sha256:${"a".repeat(64)}`, change: "updated" as const };
+  const base: Ledger = { ...emptyLedger(scope), head_seq: 2, events: [first, second] };
+  const appended = (n: number, at: string): Ledger["events"][number] => ({ schema: "nuryel.state.subscribe/1", seq: 3, at, scope, ...ev(n, "") });
+  const ours: Ledger = { ...base, head_seq: 3, events: [...base.events, appended(91, "2026-09-08T10:00:10Z")] };
+  const theirs: Ledger = { ...base, head_seq: 3, events: [...base.events, appended(92, "2026-09-08T10:00:11Z")] };
+  const merged = mergeLedgers(base, ours, theirs).ledger;
+  assert.deepEqual(merged.events.filter((e) => e.record_id === recordId).map((e) => e.record_hash), [first.record_hash, second.record_hash]);
+  assert.equal(foldLedger(merged).get(recordId)?.record_hash, second.record_hash);
+});
+
+test("issue #361: clones an older merge left with opposite same-time orders converge without a conflict", () => {
+  // The population #361 left behind: base [h1]; one clone appended h2, the other h3, all at one
+  // `at`; the old side-biased merge published [h1,h2,h3] on one clone and [h1,h3,h2] on the other.
+  const tie = "2026-09-08T10:00:03Z";
+  const upd = (h: string, seq: number): Ledger["events"][number] => ({ schema: "nuryel.state.subscribe/1", seq, at: tie, scope, ...ev(1, ""), change: "updated", record_hash: `sha256:${h.repeat(64)}` });
+  const base: Ledger = { ...emptyLedger(scope), head_seq: 1, events: [upd("1", 1)] };
+  const oab: Ledger = { ...base, floor_seq: 3, head_seq: 6, events: [upd("1", 4), upd("2", 5), upd("3", 6)] };
+  const oba: Ledger = { ...base, floor_seq: 3, head_seq: 6, events: [upd("1", 4), upd("3", 5), upd("2", 6)] };
+  const one = mergeLedgers(base, oab, oba);
+  const other = mergeLedgers(base, oba, oab);
+  assert.deepEqual(one.conflicts, [], "the merge driver resolves it instead of leaving conflict markers");
+  assert.equal(mergeHunchJson(JSON.stringify(base), JSON.stringify(oab), JSON.stringify(oba)).conflict, false);
+  assert.deepEqual(one.ledger.events, other.ledger.events, "both clones land on the same order");
+  assert.ok(one.ledger.floor_seq >= 7, "published seqs moved, so every subscriber resyncs");
+  const settled = mergeLedgers(base, one.ledger, other.ledger).ledger;
+  assert.deepEqual(settled.events, one.ledger.events);
+  assert.equal(settled.floor_seq, one.ledger.floor_seq, "and the next merge renumbers nothing");
+  const recordId = ev(1, "").record_id;
+  assert.equal(foldLedger(one.ledger).get(recordId)?.record_hash, foldLedger(other.ledger).get(recordId)?.record_hash);
+});
+
+test("issue #361: merge order independence — random same-time forks converge in one merge", () => {
+  // Deterministic PRNG so a failure reproduces; each round forks a shared base into two clones that
+  // append batches (many sharing one `at`), then merges both directions and re-merges the results.
+  let s = 361;
+  const rand = (n: number): number => { s = (s * 1103515245 + 12345) % 2147483648; return s % n; };
+  const times = ["2026-09-08T10:00:01Z", "2026-09-08T10:00:02Z", "2026-09-08T10:00:03Z"];
+  for (let round = 0; round < 200; round++) {
+    let n = 100;
+    const grow = (l: Ledger, k: number, who: string): Ledger => {
+      const events = [...l.events];
+      for (let i = 0; i < k; i++) events.push({ schema: "nuryel.state.subscribe/1", seq: l.head_seq + i + 1, at: times[rand(times.length)]!, scope, ...ev(n++ + rand(5) * 1000, "", who) });
+      events.sort((x, y) => x.at.localeCompare(y.at) || x.seq - y.seq);
+      return { ...l, head_seq: l.head_seq + k, events: events.map((e, i) => ({ ...e, seq: l.floor_seq + i + 1 })) };
+    };
+    const base = grow(emptyLedger(scope), rand(3), "base");
+    const a = grow(base, 1 + rand(3), "a");
+    const b = grow(base, 1 + rand(3), "b");
+    const ab = mergeLedgers(base, a, b);
+    const ba = mergeLedgers(base, b, a);
+    assert.deepEqual(ab.ledger.events, ba.ledger.events, `round ${round}: direction-independent`);
+    assert.equal(ab.ledger.floor_seq, ba.ledger.floor_seq, `round ${round}: same floor`);
+    const again = mergeLedgers(base, ab.ledger, ba.ledger).ledger;
+    assert.deepEqual(again.events, ab.ledger.events, `round ${round}: re-merge renumbers nothing`);
+    assert.equal(again.floor_seq, ab.ledger.floor_seq, `round ${round}: re-merge keeps the floor`);
+    for (const side of [a, b]) {
+      const pos = new Map(ab.ledger.events.map((e, i) => [`${e.record_id}|${e.cause?.kind === "write" ? e.cause.principal : ""}`, i]));
+      const order = side.events.map((e) => pos.get(`${e.record_id}|${e.cause?.kind === "write" ? e.cause.principal : ""}`)!);
+      assert.deepEqual(order, [...order].sort((x, y) => x - y), `round ${round}: each side keeps its own order`);
+    }
+  }
 });
 
 test("issue #285: a renumbering merge of compacted ledgers respects the existing floor and the events-start-at-floor+1 invariant", () => {

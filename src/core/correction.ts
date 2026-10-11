@@ -5,8 +5,8 @@
  *  agent hook so they are unit-testable without spinning either up:
  *   - looksLikeCorrection(): does a user prompt read like "no / that's wrong /
  *     never do X" — the cue to nudge the agent to persist it.
- *   - buildCorrectionConstraint(): mint the Constraint record (human-confirmed,
- *     scoped conservatively) that the pre-edit hook + CI guard then enforce.
+ *   - buildCorrectionConstraint(): mint the Constraint record (human-confirmed
+ *     only when vouched, scoped conservatively) that the pre-edit hook + CI guard then enforce.
  */
 import { isAbsolute } from "node:path";
 import { constraintId } from "./ids.js";
@@ -72,7 +72,7 @@ export interface CorrectionInput {
    *  enough — any agent can mint and consume one. Determines the TIER, never whether
    *  the write lands: an un-vouched correction still records immediately and still
    *  surfaces at edit time and in CI. Only the authority to DENY waits for a countersign
-   *  (`hunch review --confirm <id>`). */
+   *  (`hunch review --confirm <id>`). Omitted means false. */
   vouched?: boolean;
 }
 
@@ -142,7 +142,8 @@ export function buildCorrectionConstraint(input: CorrectionInput, now: string): 
   // still recorded immediately and still held against every assistant at edit time and
   // in CI — Never Twice keeps its promise. What waits for a countersign is only the
   // authority to DENY.
-  const vouched = input.vouched !== false;
+  // Fails closed: an omitted flag is testimony, never a signature.
+  const vouched = input.vouched === true;
   if (!vouched && severity === "blocking") severity = "warning";
 
   return {

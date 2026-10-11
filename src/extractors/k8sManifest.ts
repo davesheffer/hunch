@@ -1,4 +1,5 @@
-import { sourceLines } from "../core/eol.js";
+import { posix } from "node:path";
+import { eolLengthAt, sourceLines } from "../core/eol.js";
 
 /**
  * Deterministic text scan for Kubernetes manifest cross-resource references —
@@ -697,7 +698,17 @@ function extractLiteralLabelMap(prefix: string, entries: FieldPathEntry[], unres
   return pairs.length > 0 ? Object.fromEntries(pairs) : null;
 }
 
-function buildDocument(text: string, docStartChar: number, entries: FieldPathEntry[], unresolvedContainers: Set<string>, valuelessKeyParents: Set<string>): K8sManifestDocument {
+/** Cluster-scoped kinds Kustomize's namespace transformer leaves alone. None
+ *  of them is in ALLOWED_KINDS today, so this is a guard for the override in
+ *  buildDocument rather than a live branch: an allowlist widening must not
+ *  start stamping a namespace onto a resource that cannot have one. */
+const CLUSTER_SCOPED_KINDS = new Set([
+  "Namespace", "Node", "PersistentVolume", "StorageClass", "CustomResourceDefinition",
+  "ClusterRole", "ClusterRoleBinding", "PriorityClass", "IngressClass", "RuntimeClass",
+  "MutatingWebhookConfiguration", "ValidatingWebhookConfiguration", "APIService",
+]);
+
+function buildDocument(text: string, docStartChar: number, entries: FieldPathEntry[], unresolvedContainers: Set<string>, valuelessKeyParents: Set<string>, namespaceOverride: string | null | undefined): K8sManifestDocument {
   const kindEntry = findEntry(entries, "kind");
   const kind = kindEntry?.value.form === "literal" ? kindEntry.value.value : null;
   if (!kind || !ALLOWED_KINDS.has(kind)) return { resource: null, references: [], selector: null, labels: null };
@@ -706,8 +717,13 @@ function buildDocument(text: string, docStartChar: number, entries: FieldPathEnt
   // scanner's quote-stripping, comment-stripping and CRLF tolerance for free.
   // Read OUTSIDE the `resource` branch below: a document with no
   // metadata.name still emits references, and those references carry this
-  // document's namespace.
-  const namespace = namespaceAt(entries, "metadata.namespace");
+  // document's namespace. A Kustomize namespace transformer (see
+  // kustomizeNamespaces) REPLACES metadata.namespace on every namespaced
+  // resource, explicit or not, so it wins here; an explicit backendRefs
+  // namespace sibling is not rewritten and keeps its own.
+  const namespace = namespaceOverride !== undefined && !CLUSTER_SCOPED_KINDS.has(kind)
+    ? namespaceOverride
+    : namespaceAt(entries, "metadata.namespace");
 
   const nameEntry = findEntry(entries, "metadata.name");
   const resource: K8sResourceDoc | null = nameEntry
@@ -738,11 +754,17 @@ function buildDocument(text: string, docStartChar: number, entries: FieldPathEnt
 // of line.
 const DOC_SEPARATOR = /^(?:---(?:[ \t]+.*)?|\.\.\.)[ \t]*$/;
 
-export function extractK8sManifest(source: string): K8sManifestDocument[] {
+/** `namespace` is a Kustomize transformer namespace for this file (from
+ *  kustomizeNamespaces): undefined = no transformer, null = UNKNOWN (two
+ *  kustomizations render this file into different namespaces). */
+export function extractK8sManifest(source: string, opts: { namespace?: string | null } = {}): K8sManifestDocument[] {
   const docs: K8sManifestDocument[] = [];
   const boundaries: number[] = [];
   for (const line of sourceLines(source)) {
-    if (DOC_SEPARATOR.test(line.content)) boundaries.push(line.start, line.end);
+    if (!DOC_SEPARATOR.test(line.content)) continue;
+    // The next document starts AFTER the separator's line terminator, so the
+    // same document text has the same span wherever it sits (#451).
+    boundaries.push(line.start, line.end + eolLengthAt(source, line.end));
   }
   const starts = [0, ...boundaries.filter((_, i) => i % 2 === 1)];
   const ends = [...boundaries.filter((_, i) => i % 2 === 0), source.length];
@@ -751,7 +773,99 @@ export function extractK8sManifest(source: string): K8sManifestDocument[] {
     const end = ends[i]!;
     const text = source.slice(start, end);
     const { entries, unresolvedContainers, valuelessKeyParents } = scanFieldPaths(text, start);
-    docs.push(buildDocument(text, start, entries, unresolvedContainers, valuelessKeyParents));
+    docs.push(buildDocument(text, start, entries, unresolvedContainers, valuelessKeyParents, opts.namespace));
   }
   return docs;
+}
+
+export interface KustomizationInfo {
+  /** Top-level `namespace:` when it is a valid literal namespace, else null. */
+  namespace: string | null;
+  /** `resources:` entries exactly as written (paths relative to the kustomization's directory). */
+  resources: string[];
+}
+
+const KUSTOMIZATION_FILE = /(?:^|\/)(?:kustomization\.ya?ml|Kustomization)$/;
+
+export function isKustomizationFile(path: string): boolean {
+  return KUSTOMIZATION_FILE.test(path);
+}
+
+/** Reads only the two top-level fields the namespace transformer needs:
+ *  `namespace:` and the `resources:` list (block `- item` lines or a one-line
+ *  flow `[a, b]`). One linear pass; everything else in the file is ignored. */
+export function extractKustomization(source: string): KustomizationInfo {
+  let namespace: string | null = null;
+  const resources: string[] = [];
+  let inResources = false;
+  for (const { content } of sourceLines(source)) {
+    const line = stripTrailingComment(content).trimEnd();
+    if (line.trim() === "") continue;
+    const item = /^\s*-\s+(.+)$/.exec(line);
+    if (inResources && item) { resources.push(stripQuotes(item[1]!.trim())); continue; }
+    if (/^\s/.test(line)) continue; // nested content of some other top-level key
+    inResources = false;
+    const top = /^([A-Za-z]+):[ \t]*(.*)$/.exec(line);
+    if (!top) continue;
+    const value = top[2]!.trim();
+    if (top[1] === "namespace") {
+      const ns = stripQuotes(value);
+      namespace = DNS_LABEL.test(ns) && ns !== "null" ? ns : null;
+    } else if (top[1] === "resources") {
+      if (value === "") inResources = true;
+      else if (value.startsWith("[") && value.endsWith("]")) {
+        for (const part of value.slice(1, -1).split(",")) if (part.trim()) resources.push(stripQuotes(part.trim()));
+      }
+    }
+  }
+  return { namespace, resources };
+}
+
+/** The Kustomize namespace each manifest file is rendered into, keyed by repo
+ *  path. `kustomizations` is keyed by the kustomization's DIRECTORY ("" for
+ *  the repo root); `files` is the indexed file set.
+ *
+ *  A `resources:` entry naming a file applies the namespace to that file; an
+ *  entry naming a directory that holds its own kustomization is a base, and
+ *  the referring (outer) kustomization's namespace wins over the base's, as
+ *  Kustomize applies the overlay transformer to the base's output. Only
+ *  kustomizations no other kustomization references are rendered as roots.
+ *  A file rendered into two different namespaces (one base shared by dev and
+ *  prod overlays, the common layout) maps to null = UNKNOWN; a file rendered
+ *  only without any transformer is absent. Not modelled: remote resources,
+ *  `components:`, the deprecated `bases:` field, and globs. */
+export function kustomizeNamespaces(kustomizations: ReadonlyMap<string, KustomizationInfo>, files: ReadonlySet<string>): Map<string, string | null> {
+  const KEEP = "\0keep";
+  const childFiles = new Map<string, string[]>();
+  const childDirs = new Map<string, string[]>();
+  const referenced = new Set<string>();
+  for (const [dir, k] of kustomizations) {
+    for (const entry of k.resources) {
+      let p = posix.normalize(posix.join(dir, entry)).replace(/\/+$/, "");
+      if (p === ".") p = "";
+      if (p === ".." || p.startsWith("../")) continue;
+      if (files.has(p)) (childFiles.get(dir) ?? childFiles.set(dir, []).get(dir)!).push(p);
+      else if (p !== dir && kustomizations.has(p)) {
+        (childDirs.get(dir) ?? childDirs.set(dir, []).get(dir)!).push(p);
+        referenced.add(p);
+      }
+    }
+  }
+  const seen = new Map<string, Set<string>>();
+  const visited = new Set<string>();
+  const render = (dir: string, outer: string | null) => {
+    const ns = outer ?? kustomizations.get(dir)!.namespace;
+    const key = `${dir}\0${ns ?? KEEP}`;
+    if (visited.has(key)) return; // memoised per (dir, namespace); also breaks cycles
+    visited.add(key);
+    for (const f of childFiles.get(dir) ?? []) (seen.get(f) ?? seen.set(f, new Set()).get(f)!).add(ns ?? KEEP);
+    for (const child of childDirs.get(dir) ?? []) render(child, ns);
+  };
+  for (const dir of [...kustomizations.keys()].sort()) if (!referenced.has(dir)) render(dir, null);
+  const out = new Map<string, string | null>();
+  for (const [file, set] of seen) {
+    if (set.size > 1) out.set(file, null);
+    else { const only = [...set][0]!; if (only !== KEEP) out.set(file, only); }
+  }
+  return out;
 }

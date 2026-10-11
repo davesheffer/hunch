@@ -51,7 +51,7 @@ function hasJsoncComments(raw: string): boolean {
 /** Read a JSON/JSONC object. Returns {} only for an ABSENT or empty file. A
  *  non-empty file we cannot parse THROWS — overwriting it would silently wipe the
  *  user's other MCP servers. */
-function readJsonObj(file: string): Record<string, unknown> {
+export function readJsonObj(file: string): Record<string, unknown> {
   if (!existsSync(file)) return {};
   const raw = readFileSync(file, "utf8");
   if (!raw.trim()) return {};
@@ -126,7 +126,7 @@ function hookCommand(inv: Invocation, provider: HookProvider): string {
   return [inv.command, ...inv.args, "hook", "--provider", provider].map(shellToken).join(" ");
 }
 
-function isHunchProviderHook(entry: unknown): boolean {
+export function isHunchProviderHook(entry: unknown): boolean {
   const e = entry && typeof entry === "object" ? entry as Record<string, unknown> : null;
   // Codex (like Claude Code) nests commands under a matcher entry: an entry
   // whose every nested hook is ours is ours; a mixed entry stays foreign.
@@ -209,8 +209,8 @@ export function writeAntigravityWorkspaceMcp(root: string, inv: Invocation): str
   return writeJson(file, json);
 }
 
-const TOML_START = "# >>> hunch mcp (managed) >>>";
-const TOML_END = "# <<< hunch mcp <<<";
+export const TOML_START = "# >>> hunch mcp (managed) >>>";
+export const TOML_END = "# <<< hunch mcp <<<";
 
 /** Codex CLI: .codex/config.toml — `[mcp_servers.hunch]` stdio entry. We own only
  *  a marker-delimited block; any other TOML the user has is preserved. Paths use

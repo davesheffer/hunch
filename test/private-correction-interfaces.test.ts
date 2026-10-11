@@ -121,6 +121,7 @@ function privateFixture(label: string, autoCommit = false): {
     severity: "blocking",
     rationale: `PRIVATE_${label.toUpperCase()}_RATIONALE_SENTINEL`,
     knownDeps: [dependencySentinel],
+    vouched: true,
   }, NOW);
   configured.putPrivate("constraints", correction);
   configured.reindex();

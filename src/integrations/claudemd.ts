@@ -11,8 +11,10 @@ import { wikiSummary } from "../wiki/wiki.js";
 import { PolicyRepository } from "../constitution/repository.js";
 import { renderCountsMatch, parseGroundingCounts, groundingTemplate } from "../core/groundingLag.js";
 
-const START = "<!-- HUNCH:START — auto-generated, do not edit by hand -->";
-const END = "<!-- HUNCH:END -->";
+export const HUNCH_START = "<!-- HUNCH:START — auto-generated, do not edit by hand -->";
+export const HUNCH_END = "<!-- HUNCH:END -->";
+const START = HUNCH_START;
+const END = HUNCH_END;
 
 /** Version of the block's PROSE. Bump it whenever renderHunchSection's wording
  *  changes. A block without the stamp is template 1. */

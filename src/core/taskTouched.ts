@@ -28,7 +28,7 @@ const EXCLUDED_SEGMENTS = new Set([".hunch", ".hunch-cache", ".git"]);
  * claudemd.ts): a fresh mtime on them is the capture, not the task's work. */
 export const HUNCH_MANAGED_FILES: ReadonlySet<string> = new Set(["CLAUDE.md", "AGENTS.md", ".cursor/rules/hunch.mdc", ".github/copilot-instructions.md", ".windsurf/rules/hunch.md"]);
 /** Commit subjects Hunch writes itself. */
-const HUNCH_COMMIT_SUBJECT = /^hunch:/i;
+export const HUNCH_COMMIT_SUBJECT = /^hunch:/i;
 
 function gitDate(ms: number): string {
   // Second resolution, a format every git accepts.

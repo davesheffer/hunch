@@ -172,39 +172,41 @@ test("parseDocAnchors: an unclosed list-item fence ends with the item, not at EO
   assert.deepEqual(parseDocAnchors(md), [{ topic: "real.topic", pin: "dec_aaaa000001", line: 8 }]);
 });
 
-test("parseDocAnchors: with no list open, an indented ``` line is still an indented code block (issue #331)", () => {
+test("parseDocAnchors: with no list open, an indented ``` line is an indented code block, which hides its marker (issues #331, #381)", () => {
   const md = [
     "Prose.",
     "",
     "    ```",
-    "    <!-- hunch:topic indented.topic dec_ffff000009 -->",  // indented code block, not a fence → live
+    "    <!-- hunch:topic indented.topic dec_ffff000009 -->",  // indented code block, not a fence — still code → inert
     "    ```",
+    "",
+    "<!-- hunch:topic real.topic -->",
   ].join("\n");
-  assert.deepEqual(parseDocAnchors(md), [{ topic: "indented.topic", pin: "dec_ffff000009", line: 4 }]);
+  assert.deepEqual(parseDocAnchors(md), [{ topic: "real.topic", pin: null, line: 7 }]);
 });
 
 test("parseDocAnchors: a thematic break does not open a list item (issue #331)", () => {
   for (const rule of ["- - -", "* * *"]) {
     const md = [
       rule,
-      "",
-      "    ```",
-      "    <!-- hunch:topic break.topic dec_ffff000009 -->",  // no item is open → indented code block → live
-      "    ```",
+      "  ```",                                            // a break: a top-level fence. As items, a fence inside one…
+      "<!-- hunch:topic break.topic dec_ffff000009 -->",  // …that this column-0 line would end, leaving the marker live
+      "  ```",
     ].join("\n");
-    assert.deepEqual(parseDocAnchors(md), [{ topic: "break.topic", pin: "dec_ffff000009", line: 4 }], rule);
+    assert.deepEqual(parseDocAnchors(md), [], rule);
   }
 });
 
-test("parseDocAnchors: an indented code block INSIDE a list item is not a fence (issue #331)", () => {
+test("parseDocAnchors: an indented code block INSIDE a list item is not a fence, and is still code (issues #331, #381)", () => {
   const md = [
     "1. step:",           // content offset 3
     "",
     "       ```",         // 7 spaces = 4 past the item content → indented code block
     "       <!-- hunch:topic deep.topic dec_ffff000009 -->",
     "       ```",
+    "   <!-- hunch:topic item.topic -->",                     // back at the item's content column → live
   ].join("\n");
-  assert.deepEqual(parseDocAnchors(md), [{ topic: "deep.topic", pin: "dec_ffff000009", line: 4 }]);
+  assert.deepEqual(parseDocAnchors(md), [{ topic: "item.topic", pin: null, line: 6 }]);
 });
 
 test("parseDocAnchors: a line of nothing but list markers stays linear, not quadratic (issue #331)", () => {

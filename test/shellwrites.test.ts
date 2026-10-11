@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -12,7 +13,7 @@ import { refreshShellBaseline, shellWrittenFiles } from "../src/core/shellwrites
 function repo(t: { after: (f: () => void) => void }): string {
   // Real path: the hook keys baselines by the root it resolves (macOS tmpdir is a /private symlink).
   const root = realpathSync(mkdtempSync(join(tmpdir(), "hunch-shellwrites-")));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  t.after(() => cleanupDir(root));
   const git = (...args: string[]) => execFileSync("git", ["-C", root, ...args], { env: { ...process.env, GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@t" } });
   git("init", "-q");
   mkdirSync(join(root, "src"));
@@ -74,7 +75,7 @@ test("a renamed file is reported at its new path", t => {
 
 test("outside a git repository or without a session, nothing is reported and nothing throws", t => {
   const dir = mkdtempSync(join(tmpdir(), "hunch-shellwrites-nogit-"));
-  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  t.after(() => cleanupDir(dir));
   refreshShellBaseline(dir, "s");
   assert.deepEqual(shellWrittenFiles(dir, "s"), []);
   const root = repo(t);

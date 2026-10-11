@@ -51,7 +51,8 @@ import {
   normalizeProviderName,
   type SynthPreference,
 } from "../synthesis/provider.js";
-import { isGitRepo, isGitRepoRoot, sameGitPublication, sameRemoteUrl, canonicalRemoteUrl, repositoryUsesRemote, headSha, isolatedHeadSha, logSince, lastChangeDate, firstCommitForFile, stagedFiles, workingFiles, commitFiles, asOfDate, stagedGateDiff, workingGateDiff, commitGateDiff, rangeFiles, rangeGateDiff, rangeSubjects, revExists, revParse, commitAndPushHunch, pullHunchStatus, syncExistingHunch, gitUntrackCached, gitCommonDir, checkoutCommonDir, separateGitDirCandidate, separateGitDirLink, hooksDir, isLinkedWorktree, mainWorktreeRoot, gitMemoryLog, memoryMoveDiff, revertMemoryMove, pushCurrentBranch, commitChanges, commitRepairStatus, mergeRangeChanges, commitsExist, type HunchPullStatus } from "../extractors/git.js";
+import { isGitRepo, isGitRepoRoot, sameGitPublication, sameRemoteUrl, canonicalRemoteUrl, repositoryUsesRemote, headSha, isolatedHeadSha, logSince, lastChangeDate, checkFreshnessRevision, teamPullIsFresh, firstCommitForFile, stagedFiles, workingFiles, commitFiles, asOfDate, stagedGateDiff, workingGateDiff, commitGateDiff, rangeFiles, rangeGateDiff, rangeCommits, revExists, revParse, commitAndPushHunch, pullHunchStatus, syncExistingHunch, gitUntrackCached, gitCommonDir, checkoutCommonDir, separateGitDirCandidate, separateGitDirLink, hooksDir, isLinkedWorktree, mainWorktreeRoot, gitMemoryLog, memoryMoveDiff, revertMemoryMove, pushCurrentBranch, commitChanges, commitRepairStatusAgainst, commitPatchIds, mergeRangeChanges, commitsExist, type HunchPullStatus } from "../extractors/git.js";
+import { runbookDraft } from "../core/runbookDraft.js";
 import { parseMemoryLog, type MemoryMove } from "../core/memorylog.js";
 import { renamesOf, planRepair, repairDecision, repairConstraint, type RepairPlan } from "../core/repair.js";
 import { orphanedCommitDecisions, planCommitRepair, repairDecisionCommit, pickRewrite, commitRepairReviewHash, mergeRewrites, firstFor, deadRewrites, resolvedRewriteIds, withoutDropped, addDropped, withheldForUnresolvableTo, type CommitRewrite, type DroppedRewrite } from "../core/commitrepair.js";
@@ -70,6 +71,7 @@ import { flushCapture, flushMemoryHome, flushMemoryHomes, pinSharedRemote, share
 import { installMergeDriver } from "../integrations/mergeDriver.js";
 import { ensureGitignore, ignoreHunchMemory, HUNCH_MEMORY_DIRS, upgradeManagedGitignore, describeGitignoreUpgrade } from "../integrations/gitignore.js";
 import { writeCiWorkflow } from "../integrations/ciAction.js";
+import { applyUninstall, formatUninstallPlan, isOptedOut, OPT_OUT_FILE, optOutMessage, planUninstall } from "../integrations/uninstall.js";
 import { updateClaudeMd, renderHunchSection } from "../integrations/claudemd.js";
 import { HOOK_REMINDER } from "../core/hookText.js";
 import { measureFootprint } from "../core/footprint.js";
@@ -242,6 +244,23 @@ registerReviewMemoryCommands(program, (records, repository, privateOnly) => {
   // A public artifact must never be model-derived from private overlay statements.
   return { root, existing: store.captureHome(privateOnly) === "private"
     ? store.recs("constraints") : store.json.loadAll("constraints") };
+});
+
+// Opt-out gate (#449): a repository `hunch uninstall` opted out stays out. Setup
+// and every other command refuse; the commands a leftover git or agent hook may
+// still call exit 0 so they never break the user's commit, merge or agent turn
+// (`hook` silently: its stdout is the agent's context). The merge drivers still
+// run: a leftover driver that exits without writing %A would let git drop `theirs`.
+const OPT_OUT_ALLOWED = new Set(["uninstall", "doctor", "help", "merge-driver", "merge-driver-grounding"]);
+const OPT_OUT_QUIET = new Set(["hook", "sync", "check", "grounding", "repair-provenance", "workspaces"]);
+program.hook("preAction", (_thisCommand, actionCommand) => {
+  let top = actionCommand;
+  while (top.parent && top.parent !== program) top = top.parent;
+  const name = top.name();
+  if (OPT_OUT_ALLOWED.has(name)) return;
+  if (!isOptedOut(findRoot())) return;
+  if (name !== "hook") console.error(optOutMessage());
+  process.exit(OPT_OUT_QUIET.has(name) ? 0 : 1);
 });
 
 // Read an already-known update and schedule any registry refresh in a detached
@@ -537,6 +556,43 @@ program
     console.log(reportActivity(root));
     console.log("Cold start? Seed from history:  hunch backfill --since 90d");
     console.log("\n⭐ If Hunch earns its keep, a star helps others find it → https://github.com/davesheffer/hunch");
+  });
+
+// ---- uninstall ------------------------------------------------------------
+program
+  .command("uninstall")
+  .description("Remove everything Hunch installed in this repository (instruction blocks, MCP entries, agent and git hooks, merge driver, slash commands, CI workflow) and opt the repository out so Hunch never sets itself up here again. Keeps .hunch/ (your engineering memory) unless --purge.")
+  .option("--dry-run", "print what would change and write nothing")
+  .option("--purge", "also delete .hunch/ (the engineering memory), the derived cache, Hunch's .gitignore blocks and this clone's pointer in the git dir")
+  .action((opts: { dryRun?: boolean; purge?: boolean }) => {
+    const root = findRoot();
+    const plan = planUninstall(root, { purge: !!opts.purge });
+    if (plan.refused.length) {
+      console.error(`Hunch uninstall at ${root}: nothing was changed — fix the file(s) below, then re-run.`);
+      for (const line of formatUninstallPlan(plan, !!opts.dryRun)) console.error(line);
+      process.exitCode = 1;
+      return;
+    }
+    const { applied, failed } = opts.dryRun ? { applied: plan.steps, failed: [] } : applyUninstall(plan);
+    // The header follows what actually ran: a failed opt-out marker stops
+    // everything, and saying "uninstalled" then would be a lie.
+    const header = opts.dryRun ? "Hunch uninstall (dry run — nothing written)"
+      : !failed.length ? "Hunch uninstalled"
+      : applied.some((s) => s.kind !== "keep") ? "Hunch partly uninstalled"
+      : "Hunch uninstall: nothing was changed";
+    console.log(`${header} at ${root}${opts.purge ? " (--purge)" : ""}`);
+    if (!plan.steps.some((s) => s.kind !== "keep")) console.log("  nothing to remove — Hunch is not installed here");
+    for (const line of formatUninstallPlan({ ...plan, steps: applied }, !!opts.dryRun)) console.log(line);
+    if (failed.length) {
+      console.error(`
+✗ ${failed.length} step(s) could not be applied — close running Hunch processes (\`hunch mcp\`, \`hunch serve\`, editors using them), then re-run \`hunch uninstall${opts.purge ? " --purge" : ""}\`:`);
+      for (const f of failed) console.error(`  ✗ ${f.path}: ${f.error}`);
+      process.exitCode = 1;
+      return;
+    }
+    if (!opts.dryRun && plan.steps.some((s) => s.path === OPT_OUT_FILE)) {
+      console.log(`\nCommit ${OPT_OUT_FILE} (and the removals) so every clone stays opted out. To reinstall later, delete ${OPT_OUT_FILE} and run \`hunch init\`.`);
+    }
   });
 
 // ---- index ----------------------------------------------------------------
@@ -1905,9 +1961,15 @@ program
     if (opts.private && !store.hasPrivate) { store.close(); return fail("--private needs HUNCH_PRIVATE_DIR set to a private store"); }
     const [base, head = "HEAD"] = range.split("..");
     if (!base || !revExists(base, root)) { store.close(); return fail(`base ref "${base ?? ""}" not found (range: ${range})`); }
-    const steps = rangeSubjects(base, root, head);
-    const files = rangeFiles(base, root, head);
-    if (!steps.length && !files.length) { store.close(); return fail(`no commits or changes in range ${range}`); }
+    // Hunch's own capture commits and store/grounding files are bookkeeping, not steps (#425).
+    const commits = rangeCommits(base, root, head);
+    const { steps, files } = runbookDraft(commits, rangeFiles(base, root, head));
+    if (!steps.length && !files.length) {
+      store.close();
+      return fail(commits.length
+        ? `range ${range} only holds Hunch's own capture commits and files; nothing to draft`
+        : `no commits or changes in range ${range}`);
+    }
     const now = new Date().toISOString();
     const rec: Runbook = {
       id: runbookId(opts.task),
@@ -3890,7 +3952,7 @@ program
   .description("Flag changes that touch a do-not-break invariant — the local guardrail AND the CI/PR Constraint Guard. Also flags (advisory) symbols you add that already exist elsewhere — possible re-implementation/sprawl.")
   .option("--staged", "check git staged files (default)")
   .option("--working", "check all working-tree edits vs HEAD (staged, unstaged, and untracked files)")
-  .option("--commit <sha>", "check a specific commit's files")
+  .option("--commit <sha>", "check a specific commit's files (judged alone, against its parent; use --base to gate a whole branch)")
   .option("--base <ref>", "check a PR/branch: files changed vs <ref> (e.g. origin/main) — for CI")
   .option("--strict", "exit non-zero ONLY on a direct, high-confidence, non-stale blocking invariant (near/stale/low-confidence stay advisory)")
   .option("--format <fmt>", "output: text (default) | markdown (a PR comment) | sarif (SARIF 2.1.0 for code scanning)", "text")
@@ -3906,11 +3968,13 @@ program
     const emptyReport: CheckReport = { fileCount: 0, strict: !!opts.strict, direct: [], near: [], regressions: [], vetoes: [], redundant: [], strictBlockers: 0, regBlocking: 0, vetoBlocking: 0 };
 
     const { store, root, teamPullStatus } = storeFor({ requireFreshTeamMemory: !!opts.strict && !opts.publicOnly });
-    const teamFreshnessFailure = teamPullStatus !== null
-      && teamPullStatus !== "updated"
-      && teamPullStatus !== "current"
-      ? `strict check could not refresh the advertised team memory (${teamPullStatus}); refusing a stale pass`
+    const teamFreshnessFailure = teamPullStatus !== null && !teamPullIsFresh(teamPullStatus)
+      ? `strict check could not refresh the advertised team memory (${teamPullStatus}); refusing a stale pass` +
+        (teamPullStatus === "unconfigured" ? " — the shared memory remote has no published branch while this clone has memory; publish it with `hunch shared --sync`" : "")
       : null;
+    // An empty team remote is in sync with a never-committed clone, but it is also what
+    // lost team memory looks like: never let that strict pass be silent (#427).
+    if (teamPullStatus === "empty") console.error("· the advertised team memory has no published branch yet; this strict check ran with no team rules (publish with `hunch shared --sync` after the first capture)");
     // Fail loudly on an unresolvable --base (e.g. CI forgot to fetch the base
     // branch) — otherwise the diff is empty and the guard passes vacuously.
     if (opts.base && !revExists(opts.base, root)) {
@@ -3974,13 +4038,14 @@ program
     // blocking conformance predicate or an active policy guards.
     // The COMPLETE diff (no synthesis byte budget); an incomplete one is flagged so
     // content-matched blocking invariants fail closed instead of passing unseen.
+    const freshAt = checkFreshnessRevision({ base: opts.base, commit: exactCommit }, root);
     const gate = files.length
       ? (exactCommit ? commitGateDiff(exactCommit, root) : opts.base ? rangeGateDiff(opts.base, root) : opts.working ? workingGateDiff(root) : stagedGateDiff(root))
       : { diff: "" };
     const report: CheckReport = files.length
       ? store.buildCheckReport(files, gate.diff, {
         strict: !!opts.strict,
-        lastChange: (f) => lastChangeDate(f, root),
+        lastChange: (f) => lastChangeDate(f, root, freshAt),
         publicOnly: !!opts.publicOnly,
         diffStatus: gate,
       })
@@ -4119,7 +4184,8 @@ const vetoCmd = program
       return;
     }
     const gate = opts.commit ? commitGateDiff(opts.commit, root) : opts.base ? rangeGateDiff(opts.base, root) : stagedGateDiff(root);
-    const full = store.buildCheckReport(files, gate.diff, { strict: !!opts.strict, lastChange: (f) => lastChangeDate(f, root), diffStatus: gate });
+    const freshAt = checkFreshnessRevision({ base: opts.base, commit: opts.commit }, root);
+    const full = store.buildCheckReport(files, gate.diff, { strict: !!opts.strict, lastChange: (f) => lastChangeDate(f, root, freshAt), diffStatus: gate });
     if (!full.vetoes.length) {
       console.log(`✓ ${files.length} changed file(s) reverse no decision you rejected.`);
       store.close();
@@ -4725,8 +4791,7 @@ program
               const opened = openTeamStore(root, { requireFreshTeamMemory: firmness === "strict" });
               store = opened.store;
               // Same rule as the pre-edit path: strict never grounds from stale team rules.
-              const stale = firmness === "strict" && opened.teamPullStatus
-                && opened.teamPullStatus !== "updated" && opened.teamPullStatus !== "current";
+              const stale = firmness === "strict" && opened.teamPullStatus && !teamPullIsFresh(opened.teamPullStatus);
               if (!stale) shellGround = shellWriteGrounding(root, store, provider, evt, written);
             }
           } else {
@@ -5069,8 +5134,7 @@ program
       // never grounding from public/stale memory (dec_77d99014e0).
       const opened = openTeamStore(root, { requireFreshTeamMemory: firmness === "strict" });
       store = opened.store;
-      if (firmness === "strict" && opened.teamPullStatus
-        && opened.teamPullStatus !== "updated" && opened.teamPullStatus !== "current") {
+      if (firmness === "strict" && opened.teamPullStatus && !teamPullIsFresh(opened.teamPullStatus)) {
         // A strict deny is only trustworthy when it includes the latest team
         // rules. Offline/busy/unconfigured team memory is unavailable, so the
         // non-blocking hook says so instead of denying from stale state.
@@ -5912,8 +5976,11 @@ program
       }
 
       const candidates = rangeResolves && !opts.apply && !opts.drop ? mergeRangeChanges(oldRef, newRef, root) : [];
-      const orphaned = candidates.length ? orphanedCommitDecisions(decisions, (sha) => commitRepairStatus(sha, newRef, root)) : [];
-      const freshPlan = candidates.length ? planCommitRepair(orphaned, candidates) : { rewrites: [], records: [] };
+      // Orphaned means HEAD no longer reaches the commit either: a historical
+      // --range tip alone would flag every newer, perfectly reachable commit (#450).
+      const orphaned = candidates.length ? orphanedCommitDecisions(decisions, (sha) => commitRepairStatusAgainst(sha, [newRef, "HEAD"], root)) : [];
+      const patchIds = orphaned.length ? commitPatchIds([...orphaned.map((d) => d.commit!), ...candidates.map((c) => c.sha)], root) : new Map<string, string>();
+      const freshPlan = candidates.length ? planCommitRepair(orphaned, candidates, (sha) => patchIds.get(sha) ?? null) : { rewrites: [], records: [] };
 
       // Detection always queues a fresh match — local-only, never committed, so
       // it's safe to persist unconditionally. This is what makes running
@@ -6067,12 +6134,17 @@ program
           console.log(unresolvedCount
             ? `Would repair ${toApply.length - unresolvedCount} of ${toApply.length} listed:`
             : `Would repair ${toApply.length} commit reference(s):`);
+          // Match strength, so a reviewer can tell an identical change from a
+          // file-overlap guess before applying it into shared memory (#450).
+          const previewPatchIds = commitPatchIds(toApply.flatMap((r) => [r.from, r.to]), root);
           for (const r of toApply) {
             const reason = reasonQueued(r);
+            const samePatch = !!previewPatchIds.get(r.from) && previewPatchIds.get(r.from) === previewPatchIds.get(r.to);
             const label = reason === "invisible" ? "not visible this run — --apply would leave it queued"
               : reason === "withheld" ? "proposed replacement commit doesn't resolve in this repository — --apply would leave it queued"
               : reason === "duplicate" ? "another queued entry for this same decision would be applied instead — --apply would leave this one queued"
-              : null;
+              : samePatch ? "same patch-id: identical change"
+              : "file match only — check the diff before applying";
             console.log(`  ${r.id}  ${r.from} → ${r.to}${label ? `  (${label})` : ""}`);
           }
           const reviewHash = commitRepairReviewHash(queue, withheldRewrites(root, queue));
@@ -6662,6 +6734,12 @@ program
         for (const f of commitUnresolvable) console.log(`· ${f.id} — ${f.detail}`);
         console.log(`\nHeal: this is a HUMAN call — check \`hunch repair-provenance\` for a queued match (the post-merge hook detects these automatically while the commit is still resolvable, but never applies one unattended); run \`hunch repair-provenance --apply\` to confirm it, or if the commit is already gone, manually correct the decision's provenance or leave it as historical record.\n`);
       }
+      const fenceUnclosed = kind("doc-fence-unclosed");
+      if (fenceUnclosed.length) {
+        console.log(`${fenceUnclosed.length} markdown file(s) open a code fence that never closes, hiding the topic markers below it:\n`);
+        for (const f of fenceUnclosed) console.log(`· ${f.id} — ${f.detail}`);
+        console.log(`\nHeal: close the fence (a line of the same \`\`\` or ~~~ run) where the example ends; the markers after it become live again.\n`);
+      }
       console.log(`Hunch never rewrites prose for you; this is a read-only reconciliation report.`);
     } finally {
       store.close();
@@ -6781,7 +6859,18 @@ program
   .command("doctor")
   .description("Diagnose the environment (git, synthesis provider, index freshness).")
   .action(async () => {
-    const integrations = inspectIntegrations(findRoot());
+    const doctorRoot = findRoot();
+    if (isOptedOut(doctorRoot)) {
+      console.log(`Hunch: not installed (opted out — ${OPT_OUT_FILE} is present).`);
+      const left = planUninstall(doctorRoot).steps.filter((s) => s.kind === "edit" || s.kind === "delete");
+      if (left.length) {
+        console.log(`  ⚠ ${left.length} Hunch leftover(s) remain; \`hunch uninstall\` removes them:`);
+        for (const s of left) console.log(`    - ${s.path}`);
+      }
+      console.log(`  To reinstall: delete ${OPT_OUT_FILE}, then run \`hunch init\`.`);
+      return;
+    }
+    const integrations = inspectIntegrations(doctorRoot);
     console.log(formatIntegrationHealth(integrations));
     // A pin npm cannot serve kills every npx launcher (hooks and MCP) before Hunch
     // runs, and the hosts report nothing. Name it here; bounded, offline-safe.

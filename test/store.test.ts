@@ -401,7 +401,7 @@ test("single-file RMW lock: an owner file that vanishes mid-read is a retry, not
     if (String(path).replace(/\\/g, "/").endsWith(".rmw-lock/owner.tmp.json") && ++hits === 2) {
       fs.realpathSync = originalRealpathSync;
       syncBuiltinESMExports();
-      fs.rmSync(lock, { recursive: true, force: true });
+      fs.rmSync(lock, { recursive: true, force: true }); // rmSync-ok: simulates the lock release race
     }
     return originalRealpathSync(path, options);
   }) as typeof fs.realpathSync;
@@ -443,7 +443,7 @@ test("single-file RMW lock: a release AND re-acquire mid-read is a retry, not a 
     if (String(path).replace(/\\/g, "/").endsWith(".rmw-lock/owner.tmp.json") && ++hits === 2) {
       fs.realpathSync = originalRealpathSync;
       syncBuiltinESMExports();
-      fs.rmSync(lock, { recursive: true, force: true });
+      fs.rmSync(lock, { recursive: true, force: true }); // rmSync-ok: simulates the lock release race
       mkdirSync(lock);
       writeFileSync(owner, JSON.stringify({ pid: successor, host: hostname(), nonce: "successor" }));
     }

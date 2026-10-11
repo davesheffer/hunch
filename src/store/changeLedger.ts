@@ -163,10 +163,60 @@ export function compactLedger(hunchDir: string, scope: Scope, opts: { keep?: num
 
 const eventIdentity = (e: ChangeEvent): string => [e.change, e.facet, e.record_id, e.record_hash, e.at, e.cause ? JSON.stringify(e.cause) : ""].join("|");
 
+/** A total order: by instant (so `...:09Z`, `...:09.500Z` and `+02:00` offsets compare as
+ *  times, not text), unparseable `at` after every parseable one, then `at` text, then identity. */
+const byTimeThenIdentity = (a: ChangeEvent, b: ChangeEvent): number => {
+  const ta = Date.parse(a.at), tb = Date.parse(b.at);
+  if (Number.isNaN(ta) !== Number.isNaN(tb)) return Number.isNaN(ta) ? 1 : -1;
+  if (!Number.isNaN(ta) && ta !== tb) return ta < tb ? -1 : 1;
+  if (a.at !== b.at) return a.at < b.at ? -1 : 1;
+  const ka = eventIdentity(a), kb = eventIdentity(b);
+  return ka < kb ? -1 : ka > kb ? 1 : 0;
+};
+
+/** Interleave two event sequences without reordering either (issue #361). Each side's order
+ *  is history it already published — a batch, or successive updates to one record — so it is
+ *  kept; only events neither side orders relative to each other are placed by (time, identity).
+ *  Every rule is mirrored, so swapping the sides yields the same sequence: merge(A,B) and
+ *  merge(B,A) agree, and re-merging their results renumbers nothing. Where the two sides
+ *  order a pair oppositely — clones an older, side-biased merge already left diverged — the
+ *  same (time, identity) rule decides, so even they converge on one order. */
+function interleave(a: readonly ChangeEvent[], b: readonly ChangeEvent[]): ChangeEvent[] {
+  const posA = new Map(a.map((e, i) => [eventIdentity(e), i]));
+  const posB = new Map(b.map((e, i) => [eventIdentity(e), i]));
+  const emitted = new Set<string>();
+  const out: ChangeEvent[] = [];
+  const emit = (e: ChangeEvent): void => { emitted.add(eventIdentity(e)); out.push(e); };
+  let i = 0, j = 0;
+  for (;;) {
+    while (i < a.length && emitted.has(eventIdentity(a[i]!))) i++;
+    while (j < b.length && emitted.has(eventIdentity(b[j]!))) j++;
+    if (i >= a.length) { for (; j < b.length; j++) if (!emitted.has(eventIdentity(b[j]!))) emit(b[j]!); break; }
+    if (j >= b.length) { for (; i < a.length; i++) if (!emitted.has(eventIdentity(a[i]!))) emit(a[i]!); break; }
+    const x = a[i]!, y = b[j]!;
+    const kx = eventIdentity(x), ky = eventIdentity(y);
+    if (kx === ky) { emit(x); continue; }
+    const xLaterInB = (posB.get(kx) ?? -1) > j; // b orders y before x
+    const yLaterInA = (posA.get(ky) ?? -1) > i; // a orders x before y
+    if (xLaterInB && !yLaterInA) emit(y);
+    else if (yLaterInA && !xLaterInB) emit(x);
+    else emit(byTimeThenIdentity(x, y) <= 0 ? x : y);
+  }
+  return out;
+}
+
+function uniqueByIdentity(events: readonly ChangeEvent[]): ChangeEvent[] {
+  const seen = new Set<string>();
+  return events.filter((e) => { const k = eventIdentity(e); if (seen.has(k)) return false; seen.add(k); return true; });
+}
+
 /** Three-way merge of one scope's ledger, for the git merge driver: two clones that both
  *  appended to the same partition. The union of events is kept (identity = what changed, to
- *  which hash, when, by whom), ordered by time then ours-before-theirs, and RE-SEQUENCED from
- *  the higher floor. When that renumbering moves an event either side had already published,
+ *  which hash, when, by whom), interleaved so each side keeps its own order (see `interleave`;
+ *  the result does not depend on which side is "ours"), and RE-SEQUENCED from the higher floor.
+ *  Two sides that published opposite orders (left by the side-biased merge before #361) are
+ *  resolved by (time, identity), never a conflict: that moves published seqs, so the floor
+ *  rule below makes every subscriber resynchronize onto the one merged order. When that renumbering moves an event either side had already published,
  *  no pre-merge cursor of EITHER side can be trusted — a cursor could otherwise sit above an
  *  event that now holds a lower seq and never see it (issue #285). The floor is then raised
  *  past BOTH pre-merge heads, so every such cursor satisfies subscribe's `after_seq <
@@ -177,40 +227,28 @@ const eventIdentity = (e: ChangeEvent): string => [e.change, e.facet, e.record_i
  *  surface (ours is kept). */
 export function mergeLedgers(base: Ledger | null, ours: Ledger, theirs: Ledger): { ledger: Ledger; conflicts: string[] } {
   if (scopePath(ours.scope) !== scopePath(theirs.scope)) throw new Error("ledgers for different scopes cannot be merged");
-  const seen = new Map<string, ChangeEvent>();
-  const order: ChangeEvent[] = [];
-  const add = (e: ChangeEvent): void => { const k = eventIdentity(e); if (!seen.has(k)) { seen.set(k, e); order.push(e); } };
-  const ourIdentities = new Set(ours.events.map(eventIdentity));
-  const theirIdentities = new Set(theirs.events.map(eventIdentity));
-  // Base is a merge ancestor, not a source of history both clones have compacted away.
-  for (const e of base?.events ?? []) {
+  const oursEvents = uniqueByIdentity(ours.events);
+  const theirsEvents = uniqueByIdentity(theirs.events);
+  const ourIdentities = new Set(oursEvents.map(eventIdentity));
+  const theirIdentities = new Set(theirsEvents.map(eventIdentity));
+  // Base is a merge ancestor, not a source of history both clones have compacted away: it adds
+  // only events neither side holds that are still above both floors.
+  const baseOnly = uniqueByIdentity((base?.events ?? []).filter((e) => {
     const key = eventIdentity(e);
-    if (ourIdentities.has(key) || theirIdentities.has(key) || (e.seq > ours.floor_seq && e.seq > theirs.floor_seq)) add(e);
-  }
-  for (const e of ours.events) add(e);
-  for (const e of theirs.events) add(e);
-  // The tiebreak is "ours before theirs", so only an event theirs ALONE contributed sorts late:
-  // side 1 iff theirs holds it and neither ours nor base does. Deciding by object identity
-  // (`includes`) would instead put anything ours compacted away — base's object, which `add`
-  // keeps — after its same-`at` siblings and silently reorder a batch both sides already had.
-  const baseIdentities = new Set((base?.events ?? []).map(eventIdentity));
-  const theirsOnly = (e: ChangeEvent): boolean => {
-    const k = eventIdentity(e);
-    return !ourIdentities.has(k) && !baseIdentities.has(k);
-  };
-  const ranked = order.map((e, i) => ({ e, i, side: (theirsOnly(e) ? 1 : 0) }));
-  ranked.sort((a, b) => a.e.at.localeCompare(b.e.at) || a.side - b.side || a.i - b.i);
-  const theirSeqs = new Map(theirs.events.map((e) => [eventIdentity(e), e.seq]));
-  const ourSeqs = new Map(ours.events.map((e) => [eventIdentity(e), e.seq]));
+    return !ourIdentities.has(key) && !theirIdentities.has(key) && e.seq > ours.floor_seq && e.seq > theirs.floor_seq;
+  }));
+  const merged = interleave(interleave(oursEvents, theirsEvents), baseOnly);
+  const conflicts: string[] = [];
+  const theirSeqs = new Map(theirsEvents.map((e) => [eventIdentity(e), e.seq]));
+  const ourSeqs = new Map(oursEvents.map((e) => [eventIdentity(e), e.seq]));
   let floor = Math.max(base?.floor_seq ?? 0, ours.floor_seq, theirs.floor_seq);
-  const renumbers = ranked.some(({ e }, i) => {
+  const renumbers = merged.some((e, i) => {
     const k = eventIdentity(e);
-    const merged = floor + i + 1;
-    return (ourSeqs.get(k) ?? merged) !== merged || (theirSeqs.get(k) ?? merged) !== merged;
+    const seq = floor + i + 1;
+    return (ourSeqs.get(k) ?? seq) !== seq || (theirSeqs.get(k) ?? seq) !== seq;
   });
   if (renumbers) floor = Math.max(floor, Math.max(ours.head_seq, theirs.head_seq) + 1);
-  const events = ranked.map(({ e }, i) => ({ ...e, seq: floor + i + 1 }));
-  const conflicts: string[] = [];
+  const events = merged.map((e, i) => ({ ...e, seq: floor + i + 1 }));
   const idempotency: Ledger["idempotency"] = { ...(base?.idempotency ?? {}), ...theirs.idempotency, ...ours.idempotency };
   for (const [key, entry] of Object.entries(theirs.idempotency)) {
     const mine = ours.idempotency[key];

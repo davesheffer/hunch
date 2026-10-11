@@ -23,13 +23,13 @@ import type { HunchStore } from "../store/hunchStore.js";
 import { toPosixTarget } from "./paths.js";
 import { currentForTopic, isLive } from "./topics.js";
 import { evaluatePremises, type PremiseEnv } from "./premises.js";
-import { parseDocAnchors } from "./docanchors.js";
+import { scanDocAnchors } from "./docanchors.js";
 import { markdownDocs, STALE_MARKER, SRC_REF } from "./docscan.js";
 import { computeWikiDrift } from "../wiki/wiki.js";
 import { computeMadrDrift } from "../integrations/madrManifest.js";
 import { commitsExist, isGitRepo } from "../extractors/git.js";
 
-export const DRIFT_KINDS = ["dead-ref", "supersede", "doc-stale", "anchor-stale", "doc-anchor-stale", "doc-anchor-dangling", "wiki-stale", "finding-stale", "premise-stale", "commit-unresolvable", "madr-stale", "madr-edited", "madr-orphan"] as const;
+export const DRIFT_KINDS = ["dead-ref", "supersede", "doc-stale", "anchor-stale", "doc-anchor-stale", "doc-anchor-dangling", "doc-fence-unclosed", "wiki-stale", "finding-stale", "premise-stale", "commit-unresolvable", "madr-stale", "madr-edited", "madr-orphan"] as const;
 export type DriftKind = typeof DRIFT_KINDS[number];
 
 export interface DriftFinding {
@@ -177,7 +177,14 @@ export function computeDrift(
     //    been superseded (doc-anchor-stale, the CI-gateable one) or that doesn't
     //    exist (doc-anchor-dangling). Unpinned markers only ground the pre-edit
     //    hook — an explicit pin is the ONLY thing that can fire drift here.
-    for (const a of parseDocAnchors(text)) {
+    //    A fence that never closes hides every marker below it (doc-fence-unclosed,
+    //    advisory): almost always an authoring mistake that disables real anchors.
+    const scan = scanDocAnchors(text);
+    if (scan.unclosedFence) {
+      const { line, hidden } = scan.unclosedFence;
+      findings.push({ kind: "doc-fence-unclosed", id: doc.rel, detail: `fence opened at line ${line} never closes; ${hidden} marker(s) below it are hidden` });
+    }
+    for (const a of scan.anchors) {
       if (!a.pin) continue;
       const pinned = byId.get(a.pin);
       if (!pinned) {

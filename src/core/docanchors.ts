@@ -77,14 +77,18 @@ function thematicBreakSuffixes(probe: string): boolean[] {
   return ok;
 }
 
-/** Character ranges covered by fenced code blocks (``` or ~~~), so a
- *  documentation EXAMPLE of a marker never registers as a live anchor.
- *  CommonMark-lite: a fence of N chars (≤3 leading spaces) closes only on a
- *  line of ≥N of the same char and nothing else; an unclosed fence runs to
- *  EOF; a backtick fence's info string may not itself contain a backtick.
- *  The "≤3 leading spaces" is measured relative to the enclosing LIST ITEM's
- *  content offset, so a fence indented under `1. step` (issue #331) is still a
- *  fence and not an indented code block.
+/** Character ranges covered by code blocks — fenced (``` or ~~~) and indented —
+ *  so a documentation EXAMPLE of a marker never registers as a live anchor.
+ *  A hand scanner, not a markdown parser: it answers only "is this offset inside
+ *  code as a renderer shows it?", line by line and linear in each line's length.
+ *
+ *  Fences, CommonMark-lite: a fence of N chars (≤3 leading spaces) closes only on
+ *  a line of ≥N of the same char and nothing else; an unclosed fence runs to EOF
+ *  (reported as `unclosed`, which drift surfaces — issue #381); a backtick
+ *  fence's info string may not itself contain a backtick. The "≤3 leading
+ *  spaces" is measured relative to the enclosing LIST ITEM's content offset, so a
+ *  fence indented under `1. step` (issue #331) is still a fence and not an
+ *  indented code block.
  *
  *  A fence hosted in a list item ends where the ITEM ends: at the first
  *  non-blank line dedented below the item's content base. That is what the
@@ -94,119 +98,247 @@ function thematicBreakSuffixes(probe: string): boolean[] {
  *  reader sees, not with the author's intent. In sloppy docs that differs from
  *  a flat fence scan; the rendering is the tiebreaker.
  *
+ *  Also as a renderer reads them (issue #381):
+ *  - indented code: ≥4 columns past the container's content, not continuing a
+ *    paragraph, runs until a line dedents below that (blank lines inside it);
+ *  - blockquotes: `>` prefixes are peeled first, so `> ```` opens a fence inside
+ *    the quote, and a line that leaves the quote ends it;
+ *  - HTML blocks (CommonMark types 1–6: script/pre/style/textarea, comments,
+ *    `<?`, `<!X`, CDATA, block-level tags): their lines are raw HTML, so a ``` or
+ *    an indented line inside one opens no code block. A marker inside an HTML
+ *    block stays LIVE: it is an HTML comment there too, not shown as an example;
+ *  - lazy continuation: a paragraph line dedented out of its list item or quote
+ *    that starts no block of its own keeps that item/quote open.
+ *
  *  Tabs expand to the next 4-column tab stop (not a flat 4), so `\t``` ` sits
  *  at column 4 exactly as a renderer places it. Offsets always come from the
  *  ORIGINAL line, never from the expanded probe.
  *
- *  Deliberate limits: no lazy continuations and no blockquote containers — a
- *  `>` prefix is still read as ordinary text. With no list open the item stack
- *  is empty, the base is 0 and behaviour is the plain CommonMark-lite one.
- *  Expects LF-normalized text — see parseDocAnchors's normalization; a caller
- *  that skips it re-opens the CRLF fence-detection bug. */
-function fencedRanges(text: string): Array<[number, number]> {
-  const FENCE = /^ {0,3}(`{3,}|~{3,})(.*)$/;
+ *  Deliberate limits, each a case where it can still disagree with a renderer:
+ *  HTML block type 7 (a lone arbitrary tag line) reads as text; a blockquote
+ *  nested INSIDE a list item is read as a top-level quote; after a tab right
+ *  after a `>`, later tabs on that line expand from the quote's content, not
+ *  the line. With no container
+ *  open the base is 0 and behaviour is the plain CommonMark-lite one.
+ *  Expects LF-normalized, BOM-free text — see parseDocAnchors's normalization;
+ *  a caller that skips it re-opens the CRLF fence-detection bug. */
+function codeRanges(text: string): { ranges: Array<[number, number]>; unclosed: { start: number; line: number } | null } {
   const ranges: Array<[number, number]> = [];
-  let open: { ch: string; len: number; start: number; base: number } | null = null;
-  // Content offsets (columns) of the currently open list items, outermost first.
-  const items: number[] = [];
+  type Open =
+    | { kind: "fence"; ch: string; len: number; start: number; base: number; q: number; line: number }
+    | { kind: "indent"; start: number; end: number; base: number; q: number }
+    | { kind: "html"; end: RegExp | "blank"; q: number };
+  let open: Open | null = null;
+  // Open list items, outermost first: the quote depth each lives in and its content column.
+  const items: Array<{ q: number; base: number }> = [];
+  let curQ = 0; // quote depth of the current block
   let offset = 0;
+  let lineNo = 0;
   // Whether the previous line was a paragraph-continuation line: non-blank,
   // and not itself a container/leaf opener. Only a bullet or a `1.`/`1)` with
   // non-empty content may interrupt such a paragraph (CommonMark), so prose
   // like "see item\n2. the second point" stays one paragraph.
   let inParagraph = false;
+  const closeOpen = (lineStart: number): void => {
+    if (open?.kind === "fence") ranges.push([open.start, lineStart - 1]);
+    else if (open?.kind === "indent") ranges.push([open.start, open.end]);
+    open = null;
+  };
   for (const line of text.split("\n")) {
+    lineNo++;
+    const lineStart = offset;
+    offset += line.length + 1;
     // Matching-only copy: tabs advance to the next 4-column tab stop.
     const probe = expandTabs(line);
-    const indent = probe.length - probe.replace(/^ +/, "").length;
-    const blank = probe.trim() === "";
 
     if (open) {
-      if (!blank && indent < open.base) {
-        // The list item holding the fence ended, which ends the fence too.
-        ranges.push([open.start, offset - 1]);
-        open = null;
+      const held = peelQuotes(probe, open.q);
+      if (held.q < open.q) {
+        closeOpen(lineStart); // the quote holding the block ended, which ends the block too
       } else {
-        const m = FENCE.exec(probe.slice(Math.min(open.base, indent)));
-        if (m && m[1]![0]! === open.ch && m[1]!.length >= open.len && m[2]!.trim() === "") {
-          ranges.push([open.start, offset + line.length]);
-          open = null;
+        const rest = held.rest;
+        const indent = leadingSpaces(rest);
+        const blank = rest.trim() === "";
+        if (open.kind === "fence") {
+          if (!blank && indent < open.base) {
+            closeOpen(lineStart); // the list item holding the fence ended, which ends the fence too
+          } else {
+            const m = FENCE.exec(rest.slice(Math.min(open.base, indent)));
+            if (m && m[1]![0]! === open.ch && m[1]!.length >= open.len && m[2]!.trim() === "") {
+              ranges.push([open.start, lineStart + line.length]);
+              open = null;
+            }
+            continue; // the container stacks are frozen while a fence is open
+          }
+        } else if (open.kind === "indent") {
+          if (blank) continue;
+          if (indent >= open.base + 4) { open.end = lineStart + line.length; continue; }
+          closeOpen(lineStart);
+        } else {
+          if (open.end === "blank" ? blank : open.end.test(rest)) { open = null; inParagraph = false; }
+          continue;
         }
-        offset += line.length + 1;
-        continue; // the item stack is frozen while a fence is open
       }
     }
 
-    if (blank) {
-      offset += line.length + 1;
+    const { q, rest } = peelQuotes(probe, Infinity);
+    const indent = leadingSpaces(rest);
+    if (rest.trim() === "") {
+      while (items.length && items.at(-1)!.q > q) items.pop();
+      curQ = q;
       inParagraph = false;
       continue; // a blank line neither opens nor closes an item here
     }
+    const isBreak = thematicBreakSuffixes(rest);
+    // Lazy continuation: a paragraph line that falls out of its item or quote but
+    // starts no block of its own still belongs to that paragraph, so every
+    // container stays open (`- foo\nbar` — bar is item text).
+    const top = items.at(-1);
+    const leaves = q < curQ || (top !== undefined && top.q === q && top.base > indent);
+    if (inParagraph && leaves && !startsBlock(rest, indent, isBreak)) continue;
     // A dedent that closes an item also closes the paragraph inside it, so the
     // line is a fresh block start: `1. one\n2. two` is two sibling items, not
     // item one's paragraph being "interrupted" by a `2.`.
-    let popped = false;
-    while (items.length && items.at(-1)! > indent) { items.pop(); popped = true; }
-    const isBreak = thematicBreakSuffixes(probe);
+    let popped = q !== curQ;
+    while (items.length && (items.at(-1)!.q !== q || items.at(-1)!.base > indent)) { items.pop(); popped = true; }
+    curQ = q;
     // Walk the line with an INDEX, peeling one list marker per step. Each step
     // is O(marker) and the cheap checks are O(1), so a line costs O(length)
     // however many markers it carries.
-    let base = items.at(-1) ?? 0;
+    let base = items.at(-1)?.base ?? 0;
     let opened = false;
     let thematic = false;
+    let indented = false;
+    let at = base;
     for (;;) {
       // Leading spaces of this nesting level: ≤3, else it is indented content
       // (and `    ---` is paragraph text or code, never a thematic break).
       let i = base;
-      while (i < probe.length && probe[i] === " " && i - base < 4) i++;
-      const lead = i - base;
-      if (lead > 3) break;
+      while (i < rest.length && rest[i] === " " && i - base < 4) i++;
+      at = i;
+      if (i - base > 3) { indented = true; break; }
       if (isBreak[i]) { thematic = true; break; } // thematic break, not a list marker
-      const c = probe[i];
+      const c = rest[i];
       let markerLen = 0;
       if (c === "-" || c === "*" || c === "+") markerLen = 1;
       else if (c !== undefined && c >= "0" && c <= "9") {
         let d = i;
-        while (d < probe.length && probe[d]! >= "0" && probe[d]! <= "9" && d - i < 9) d++;
-        if (probe[d] === "." || probe[d] === ")") markerLen = d - i + 1;
+        while (d < rest.length && rest[d]! >= "0" && rest[d]! <= "9" && d - i < 9) d++;
+        if (rest[d] === "." || rest[d] === ")") markerLen = d - i + 1;
       }
       if (!markerLen) break;
       // Spaces between the marker and the item's content.
       let s = i + markerLen;
-      while (s < probe.length && probe[s] === " ") s++;
+      while (s < rest.length && rest[s] === " ") s++;
       const gap = s - (i + markerLen);
-      const emptyItem = s >= probe.length;
+      const emptyItem = s >= rest.length;
       if (!emptyItem && gap === 0) break; // `-foo` / `1.foo` is not a marker
       if (!opened && !popped && inParagraph && items.length === 0) {
         // Interrupting a paragraph: only a bullet, or `1.`/`1)`, and never with
         // empty content. `2. the second point` mid-prose stays paragraph text.
-        const ordinal = markerLen > 1 ? probe.slice(i, i + markerLen - 1) : "";
+        const ordinal = markerLen > 1 ? rest.slice(i, i + markerLen - 1) : "";
         if (emptyItem || (ordinal !== "" && ordinal !== "1")) break;
       }
       // ≥5 spaces after the marker starts an indented code block, so the
       // item's content begins one column after the marker instead.
       const w = gap >= 1 && gap <= 4 ? gap : 1;
-      base = base + lead + markerLen + w;
-      items.push(base);
+      base = i + markerLen + w;
+      items.push({ q, base });
       opened = true;
       continue; // `- 1. x` nests, and "- ```js" opens a fence on the marker line
     }
-    const m = FENCE.exec(probe.slice(base));
+    if (indented) {
+      // An indented code block cannot interrupt a paragraph: there it is text.
+      if (!inParagraph || opened) {
+        open = { kind: "indent", start: lineStart, end: lineStart + line.length, base, q };
+        inParagraph = false;
+      }
+      continue;
+    }
+    const content = rest.slice(at);
+    const html = htmlBlockEnd(content);
+    if (html) {
+      if (html === "blank" || !html.test(content)) open = { kind: "html", end: html, q };
+      inParagraph = false;
+      continue;
+    }
+    const m = FENCE.exec(rest.slice(base));
     if (m) {
       const ch = m[1]![0]!;
-      if (!(ch === "`" && m[2]!.includes("`"))) open = { ch, len: m[1]!.length, start: offset, base };
+      if (!(ch === "`" && m[2]!.includes("`"))) open = { kind: "fence", ch, len: m[1]!.length, start: lineStart, base, q, line: lineNo };
     }
-    // A fence line or a thematic break ends the paragraph it follows; ordinary
+    // A fence line, a thematic break or a heading (ATX, or a `===` setext
+    // underline beneath a paragraph) ends the paragraph it follows; ordinary
     // text (including an item's own content) continues or starts one.
-    inParagraph = !m && !thematic;
-    offset += line.length + 1;
+    const setext: boolean = inParagraph && /^=+[ \t]*$/.test(content);
+    inParagraph = !m && !thematic && !setext && content.trim() !== "" && !/^#{1,6}(?:[ \t]|$)/.test(content);
   }
-  if (open) ranges.push([open.start, text.length]);
-  return ranges;
+  let unclosed: { start: number; line: number } | null = null;
+  const last = open as Open | null;
+  if (last?.kind === "fence") { ranges.push([last.start, text.length]); unclosed = { start: last.start, line: last.line }; }
+  else if (last?.kind === "indent") ranges.push([last.start, last.end]);
+  return { ranges, unclosed };
+}
+
+const FENCE = /^ {0,3}(`{3,}|~{3,})(.*)$/;
+
+const leadingSpaces = (s: string): number => s.length - s.replace(/^ +/, "").length;
+
+/** Peel up to `max` blockquote markers (`>`, ≤3 spaces before it, one optional
+ *  space after) off a tab-expanded line: the quote depth and what follows. */
+function peelQuotes(probe: string, max: number): { q: number; rest: string } {
+  let q = 0;
+  let i = 0;
+  let col = 0;
+  let pad = 0;
+  while (q < max) {
+    let j = i;
+    while (j < probe.length && probe[j] === " " && j - i < 3) j++;
+    if (probe[j] !== ">") break;
+    col += j - i + 1;
+    i = j + 1;
+    pad = 0;
+    if (probe[i] === " ") { i++; col++; }
+    else if (probe[i] === "\t") {
+      // The tab's first column is the quote's optional space; the rest of it is
+      // content indentation (CommonMark 5.1). `>\t<!-- … -->` is a paragraph, not code.
+      const width = 4 - (col % 4);
+      i++; col += width; pad = width - 1;
+    }
+    q++;
+  }
+  return q ? { q, rest: " ".repeat(pad) + expandTabs(probe.slice(i)) } : { q, rest: probe };
+}
+
+/** Whether a line (≤3 columns in) opens a block of its own, which a lazy
+ *  continuation line by definition does not. */
+function startsBlock(rest: string, indent: number, isBreak: boolean[]): boolean {
+  if (indent > 3) return false;
+  const s = rest.slice(indent);
+  return isBreak[indent] === true || FENCE.test(rest) || /^#{1,6}(?:[ \t]|$)/.test(s) || s[0] === ">"
+    || htmlBlockEnd(s) !== null || /^(?:[-*+]|\d{1,9}[.)])(?:[ \t]|$)/.test(s);
+}
+
+const HTML_BLOCK_TAGS = new Set(("address article aside base basefont blockquote body caption center col colgroup dd details dialog dir div dl dt "
+  + "fieldset figcaption figure footer form frame frameset h1 h2 h3 h4 h5 h6 head header hr html iframe legend li link main menu menuitem "
+  + "nav noframes ol optgroup option p param search section summary table tbody td tfoot th thead title tr track ul").split(" "));
+
+/** The end condition of the HTML block (CommonMark types 1–6) a line opens:
+ *  a pattern that closes it on a later (or the same) line, "blank" for a block
+ *  that runs to the next blank line, or null when the line opens none. */
+function htmlBlockEnd(s: string): RegExp | "blank" | null {
+  if (s[0] !== "<") return null;
+  if (/^<(?:script|pre|style|textarea)(?:[\s>]|$)/i.test(s)) return /<\/(?:script|pre|style|textarea)>/i;
+  if (s.startsWith("<!--")) return /-->/;
+  if (s.startsWith("<?")) return /\?>/;
+  if (s.startsWith("<![CDATA[")) return /\]\]>/;
+  if (/^<![A-Za-z]/.test(s)) return />/;
+  const tag = /^<\/?([A-Za-z][A-Za-z0-9-]*)(?:[\s>]|\/>|$)/.exec(s);
+  return tag && HTML_BLOCK_TAGS.has(tag[1]!.toLowerCase()) ? "blank" : null;
 }
 
 /** Character ranges covered by inline code spans (`…`), same rationale as
- *  fencedRanges: prose quoting a marker in backticks is showing an example.
+ *  codeRanges: prose quoting a marker in backticks is showing an example.
  *  CommonMark-lite: an opener run pairs with the next run of the SAME length
  *  on the same line; unpaired runs never open a span.
  *  Expects LF-normalized text — see parseDocAnchors's normalization.
@@ -233,27 +365,39 @@ function inlineSpanRanges(text: string): Array<[number, number]> {
 }
 
 /** Parse every hunch:topic marker out of a markdown document. Markers inside
- *  fenced code blocks or inline code spans are examples, not declarations,
- *  and are skipped. */
+ *  code blocks or inline code spans are examples, not declarations, and are
+ *  skipped. */
 export function parseDocAnchors(text: string): DocAnchor[] {
-  // fencedRanges is CRLF-sensitive (its fence-line regex's `.` excludes \r, so
+  return scanDocAnchors(text).anchors;
+}
+
+/** parseDocAnchors plus what drift reports about the document: a fence that
+ *  never closes hides every marker below it, almost always by mistake (#381). */
+export function scanDocAnchors(text: string): { anchors: DocAnchor[]; unclosedFence: { line: number; hidden: number } | null } {
+  // codeRanges is CRLF-sensitive (its fence-line regex's `.` excludes \r, so
   // "```\r" never matched at all on a CRLF checkout); inlineSpanRanges is
   // lone-CR-sensitive (split("\n") doesn't split a bare CR — see its
   // docblock). Either way an example marker inside a fence/span registered as
   // a live, pinned anchor. Normalizing both CRLF and lone CR once here keeps
-  // fencedRanges/inlineSpanRanges/MARKER offsets consistent with each other
-  // and with the line numbers reported below.
-  text = normalizeEol(text);
-  const out: DocAnchor[] = [];
-  const skip = [...fencedRanges(text), ...inlineSpanRanges(text)];
+  // codeRanges/inlineSpanRanges/MARKER offsets consistent with each other
+  // and with the line numbers reported below. A leading BOM is dropped too, so
+  // line 1 starts at column 0 (#381); it is one char on line 1, so line numbers hold.
+  text = normalizeEol(text).replace(/^\uFEFF/, "");
+  const anchors: DocAnchor[] = [];
+  const code = codeRanges(text);
+  const skip = [...code.ranges, ...inlineSpanRanges(text)];
+  let hidden = 0;
   MARKER.lastIndex = 0;
   let m: RegExpExecArray | null;
   while ((m = MARKER.exec(text))) {
     const at = m.index;
-    if (skip.some(([s, e]) => at >= s && at <= e)) continue;
-    out.push({ topic: m[1]!, pin: m[2] ?? null, line: text.slice(0, at).split("\n").length });
+    if (skip.some(([s, e]) => at >= s && at <= e)) {
+      if (code.unclosed && at > code.unclosed.start) hidden++;
+      continue;
+    }
+    anchors.push({ topic: m[1]!, pin: m[2] ?? null, line: text.slice(0, at).split("\n").length });
   }
-  return out;
+  return { anchors, unclosedFence: code.unclosed && hidden ? { line: code.unclosed.line, hidden } : null };
 }
 
 const clip = (s: string, n = 220): string => (s.length > n ? s.slice(0, n - 1).trimEnd() + "…" : s);

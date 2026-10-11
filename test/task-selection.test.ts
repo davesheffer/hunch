@@ -104,7 +104,8 @@ test("promptPaths strips :line[:col] and possessives, and folds drive-letter cas
   assert.deepEqual(promptPaths("see foo.ts:12:3 and bar.ts:7"), ["foo.ts", "bar.ts"]);
   assert.deepEqual(promptPaths("src/core/io.ts's writer and src/core/db.ts\u2019s index"), ["src/core/io.ts", "src/core/db.ts"]);
   assert.deepEqual(promptPaths("open C:\\Repo\\src\\a.ts:3", "c:/repo"), ["src/a.ts"]);
-  assert.deepEqual(promptPaths("open /Repo/src/a.ts", "/repo"), [], "a POSIX root stays case-sensitive off Windows");
+  if (process.platform === "win32") assert.deepEqual(promptPaths("open /Repo/src/a.ts", "/repo"), ["src/a.ts"], "Windows paths are case-insensitive");
+  else assert.deepEqual(promptPaths("open /Repo/src/a.ts", "/repo"), [], "a POSIX root stays case-sensitive off Windows");
 });
 
 test("promptPaths strips a :start-end line range and reads markdown link targets", () => {

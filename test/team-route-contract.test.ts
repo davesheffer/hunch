@@ -776,7 +776,9 @@ test("an empty-memory clone auto-joins after exactly one canonical branch is pub
     writeFileSync(join(code.root, "src/app.ts"), "export const transport = () => 'changed';\n");
     const first = runCli(code, ["check", "--working", "--strict"]);
     assert.equal(first.error, undefined, first.error?.message);
-    assert.equal(first.status, 1, output(first));
+    // An empty remote and a never-committed clone are provably in sync (#427): no stale pass to refuse.
+    assert.equal(first.status, 0, output(first));
+    assert.doesNotMatch(output(first), /refusing a stale pass/);
     const overlay = join(code.root, ".hunch-private");
     assert.equal(existsSync(join(overlay, ".git")), true, "the empty clone is retained for bounded later repair");
 

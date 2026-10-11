@@ -2,7 +2,7 @@
   "id": "dec_af77e5626e",
   "title": "Coin the category Deterministic State; the thesis line is the public positioning",
   "topic": "positioning.deterministic-state-category",
-  "status": "accepted",
+  "status": "superseded",
   "context": "David wants to plant a flag fast. The homepage still sells the developer tool (Project DNA hero); the README and changelog carried the thesis but nothing public and dated named the category. Evidence from the Sofia pilot (baseline: 2 of 3 replies unsourced, repeated re-summaries) is not yet re-measured, so a full repositioning would be a promise, not a result.",
   "decision": "The category is named Deterministic State (two words, capitalized as a category). The public thesis line is: Agents are probabilistic. Organizations need deterministic state. Hunch is the layer that holds it between agents and the organization. Coined by a dated, pinned blog post in all five site locales (slug the-state-layer, 2026-09-08) plus a thin band above the homepage navigation linking to it in every locale. The DNA hero stays until the Sofia re-measurement lands; then the hero swaps to the thesis and the DNA story becomes section two. Product name stays Hunch; Nuryel remains deferred (a product name is not a category).",
   "consequences": [
@@ -27,11 +27,11 @@
     "README.md"
   ],
   "supersedes": null,
-  "superseded_by": null,
+  "superseded_by": "dec_327dbd3c78",
   "caused_by_bug": null,
   "commit": null,
   "valid_from": "2026-09-08T12:21:40.652Z",
-  "valid_to": null,
+  "valid_to": "2026-09-09T06:13:45.312Z",
   "retired": {
     "symbols": [],
     "deps": []

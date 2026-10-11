@@ -1536,7 +1536,14 @@ function pushWithOneRemoteAdvanceRetry(
  *  machines' memory. Never throws; leaves a clean tree. Serialized with the commit lock so it
  *  can't race a concurrent flush. Returns true only when the checked-out memory HEAD moved,
  *  allowing callers to avoid rebuilding the derived SQLite index after a no-op pull. */
-export type HunchPullStatus = "updated" | "current" | "busy" | "failed" | "unconfigured";
+export type HunchPullStatus = "updated" | "current" | "busy" | "failed" | "unconfigured" | "empty";
+
+/** A strict guard may pass only on a pull that proved this clone's memory matches the
+ *  advertised remote: it advanced, was already current, or both are provably empty (a
+ *  brand-new shared memory repo before its first capture, #427). */
+export function teamPullIsFresh(status: HunchPullStatus): boolean {
+  return status === "updated" || status === "current" || status === "empty";
+}
 
 export interface PullHunchOptions {
   timeoutMs?: number;
@@ -1560,7 +1567,12 @@ export function pullHunchStatus(hunchDir: string, opts: PullHunchOptions = {}): 
   try {
     const merged = mergeRemote(hunchDir, env, opts.timeoutMs ?? READ_REMOTE_TIMEOUT_MS, opts.remote, opts.allowUnrelatedHistories ?? false);
     if (merged === "failed" || merged === "unconfigured" || !contractReady(opts.remote)) {
-      return merged === "unconfigured" ? merged : "failed";
+      if (merged !== "unconfigured" || !contractReady(opts.remote)) return "failed";
+      // The advertised remote has no branch yet AND this clone never committed memory:
+      // both sides are empty, so there is nothing to be stale against (#427). A clone
+      // WITH memory against an empty remote stays "unconfigured" (unpublished, or the
+      // remote lost its history) so strict guards keep failing closed on it.
+      return opts.remote && !before && !headShaWithEnv(hunchDir, env) ? "empty" : merged;
     }
     return headShaWithEnv(hunchDir, env) !== before ? "updated" : "current";
   } finally {
@@ -2516,6 +2528,47 @@ export function commitRepairStatus(commit: string, ref: string, cwd: string): Co
   }
 }
 
+/** commitRepairStatus against several tips: "orphaned" only when NO ref
+ *  reaches the commit. A historical `--range old..new` must not make a commit
+ *  that HEAD still reaches look orphaned just because it is newer than `new`
+ *  (#450). The first non-orphaned answer wins, so "unknown" is never upgraded. */
+export function commitRepairStatusAgainst(commit: string, refs: readonly string[], cwd: string): CommitRepairStatus {
+  for (const ref of new Set(refs)) {
+    const status = commitRepairStatus(commit, ref, cwd);
+    if (status !== "orphaned") return status;
+  }
+  return "orphaned";
+}
+
+/** `git patch-id --stable` of each commit, keyed by the sha exactly as given
+ *  (full or abbreviated). Same diff flags as the workspace ledger's squash
+ *  check. A merge or empty commit, an unknown sha, or any git failure leaves
+ *  no entry: a missing patch-id is never a match. One `git log` + one
+ *  `git patch-id` process for all of them. */
+export function commitPatchIds(shas: readonly string[], cwd: string): Map<string, string> {
+  const out = new Map<string, string>();
+  // Only shas that resolve: one unknown sha (a withheld queue entry) would make `git log`
+  // fail outright and drop every patch-id. Fed on stdin, so no argv length limit applies.
+  const exists = commitsExist([...new Set(shas)], cwd);
+  const valid = exists ? [...exists] : [];
+  if (!valid.length) return out;
+  let ids: string;
+  try {
+    const log = execFileSync("git", ["-C", cwd, "log", "--stdin", "--no-walk=unsorted", "--format=%H", "-p", "--no-merges", "--binary", "--full-index", "--no-renames", "--no-ext-diff", "--no-textconv", "--"],
+      { input: valid.join("\n") + "\n", maxBuffer: 256 * 1024 * 1024, timeout: 30_000, stdio: ["pipe", "pipe", "ignore"] });
+    if (!log.byteLength) return out;
+    ids = execFileSync("git", ["-C", cwd, "patch-id", "--stable"], { input: log, encoding: "utf8", maxBuffer: 16 * 1024 * 1024, timeout: 30_000, stdio: ["pipe", "pipe", "ignore"] });
+  } catch {
+    return out;
+  }
+  for (const line of ids.split("\n")) {
+    const [patchId = "", commit = ""] = line.trim().split(/\s+/);
+    if (!/^[0-9a-f]{40,64}$/.test(patchId)) continue;
+    for (const sha of valid) if (commit.startsWith(sha.toLowerCase())) out.set(sha, patchId);
+  }
+  return out;
+}
+
 /** Machine-generated paths that carry no design "why" — lockfiles, build output,
  *  vendored deps, snapshots, source maps. Excluded from synthesis diffs via git
  *  pathspec BEFORE git assembles/orders the patch: a huge lockfile sorts ahead of
@@ -2637,9 +2690,22 @@ export function firstCommitForFile(file: string, cwd: string): string {
   return gitSafe(["log", "--reverse", "--format=%H", "--", file], cwd).split("\n").find(Boolean) ?? "";
 }
 
-/** ISO author-date of the most recent commit touching a file ("" if none). */
-export function lastChangeDate(file: string, cwd: string): string {
-  return gitSafe(["log", "-1", "--format=%aI", "--", file], cwd);
+/** ISO author-date of the most recent commit touching a file ("" if none), as of `rev`
+ *  (default HEAD). */
+export function lastChangeDate(file: string, cwd: string, rev?: string): string {
+  return gitSafe(["log", "-1", "--format=%aI", ...(rev ? [rev] : []), "--", file], cwd);
+}
+
+/** The revision a checked change starts from, so freshness is judged WITHOUT the change
+ *  itself: a committed change under review must not make its own guarding record stale
+ *  (#426). `--base` diffs are 3-dot, so the merge-base; `--commit` is its parent;
+ *  staged/working changes are not committed yet, so HEAD (undefined). `--commit` judges
+ *  one commit in isolation, so an earlier commit of the same branch can still age the
+ *  record; `--base` (the CI guard) judges the whole branch and is the authoritative gate. */
+export function checkFreshnessRevision(source: { base?: string; commit?: string }, cwd: string): string | undefined {
+  if (source.commit) return `${source.commit}^`;
+  if (source.base) return gitSafe(["merge-base", source.base, "HEAD"], cwd) || source.base;
+  return undefined;
 }
 
 /**
@@ -2769,11 +2835,16 @@ export function rangeFiles(base: string, cwd: string, head = "HEAD"): string[] {
   return nulPaths(gitOutputOrNull(["-c", "core.quotePath=false", "diff", "--no-ext-diff", "--no-textconv", "--name-only", "-z", "--diff-filter=ACMR", `${base}...${head}`], cwd));
 }
 
-/** Commit subjects on `head` since `base` (2-dot: commits added by the task),
- *  oldest-first, for distilling a runbook's ordered steps (roadmap #5). */
-export function rangeSubjects(base: string, cwd: string, head = "HEAD", max = 50): string[] {
-  const out = gitSafe(["log", "--reverse", `-n${max}`, "--format=%s", `${base}..${head}`], cwd);
-  return out ? out.split("\n").filter(Boolean) : [];
+/** Commits on `head` since `base` (2-dot: commits added by the task), oldest-first, each
+ *  with its subject and the files it changed, for distilling a runbook's ordered steps
+ *  (roadmap #5); `runbookDraft` uses the files to tell Hunch's own captures from the work. */
+export function rangeCommits(base: string, cwd: string, head = "HEAD", max = 50): { subject: string; files: string[] }[] {
+  const out = gitSafe(["-c", "core.quotePath=false", "log", "--reverse", `-n${max}`, "--format=%x1e%s", "--name-only", `${base}..${head}`], cwd);
+  if (!out) return [];
+  return out.split("\x1e").filter(Boolean).map((block) => {
+    const [subject = "", ...files] = block.split("\n");
+    return { subject: subject.trim(), files: files.map((f) => f.trim()).filter(Boolean) };
+  });
 }
 
 /** Complete gating diff of a PR vs `base` (3-dot: the CI Constraint Guard's surface). */

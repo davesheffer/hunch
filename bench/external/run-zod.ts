@@ -59,8 +59,8 @@ const ZOD = resolve(flag("zod", process.env.HUNCH_ZOD_BENCH_REPO ?? "../zod-benc
 const HUNCH_REPO = resolve(flag("hunch", process.env.HUNCH_BENCH_REPO ?? process.cwd()));
 const MEMORY_SOURCE = resolve(flag("memory", process.env.HUNCH_ZOD_MEMORY_REPO ?? ZOD));
 const MODEL = flag("model", "claude-sonnet-5");
-type Arm = "A" | "C" | "S" | "P" | "E" | "X" | "Q" | "R" | "U" | "T" | "W" | "Y" | "Z" | "H" | "I";
-// A = bare, C = +cold hunch graph, S = +fable-mode skill (no graph),
+type Arm = "A" | "C" | "P" | "E" | "X" | "Q" | "R" | "U" | "T" | "W" | "Y" | "Z" | "H" | "I";
+// A = bare, C = +cold hunch graph,
 // P = shipped pipeline, E = bounded execution episode (no graph),
 // X = episode + obligation controller, Q = X + executable falsification probe,
 // R = episode + probe + exactly one compact adjacent-regression obligation,
@@ -82,10 +82,6 @@ const NO_REPRO = argv.includes("--no-repro");
 // --force-hunch: C arm must consult the frozen graph before investigating.
 // This separates memory quality from ambient-instruction/tool-uptake quality.
 const FORCE_HUNCH = argv.includes("--force-hunch");
-// --force-skill: S arm's prompt names the skill explicitly — separates
-// "content doesn't help" from "model never reads it" (measured: 20/20 S
-// sessions never invoked fable-mode unprompted).
-const FORCE_SKILL = argv.includes("--force-skill");
 const MAX_TURNS = Number(flag("max-turns", "50"));
 const REPEATS = Number(flag("repeats", "1"));
 const DRY_FIX = flag("dry-fix", "");
@@ -243,9 +239,6 @@ function makeAttempt(name: string, arm: Arm, task: Task): AttemptDirs {
   // unless diagnosis mode, where they stay hidden until scoring
   if (!NO_REPRO) copyFromTrustedRevision(task.fixSha, task.testFiles, agent);
 
-  if (arm === "S") {
-    cpSync(join(HUNCH_REPO, ".claude", "skills", "fable-mode"), join(agent, ".claude", "skills", "fable-mode"), { recursive: true });
-  }
   if (arm === "C") {
     cpSync(join(MEMORY_SOURCE, ".hunch"), join(agent, ".hunch"), { recursive: true });
     if (existsSync(join(MEMORY_SOURCE, "CLAUDE.md"))) cpSync(join(MEMORY_SOURCE, "CLAUDE.md"), join(agent, "CLAUDE.md"));
@@ -458,7 +451,6 @@ function prompt(task: Task, arm: Arm, inferredRiskHint: ContractAxisRiskHint | n
     : `Failing regression tests already exist — reproduce from the repo root with:  npx vitest run ${task.testFiles.join(" ")}`;
   return [
     ...(FORCE_HUNCH && arm === "C" ? [`First call hunch_context for this bug and use the relevant engineering memory while diagnosing it.`, ``] : []),
-    ...(FORCE_SKILL ? [`First invoke the fable-mode skill (Skill tool) and follow its protocol strictly throughout this task.`, ``] : []),
     ...(EPISODE_ARMS.has(arm) ? [
       `Use the following proven-work episode as bounded historical evidence. It predates this task and is not the answer. First check its applicability against the current code and tests; preserve its stated invariants and reject it where the current evidence differs.`,
       ``,

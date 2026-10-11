@@ -23,19 +23,23 @@
  * puts two writers inside the mutex. Reproduced by simply `utimes`-ing a held
  * lock 30 s into the past. Nothing in this file may read a clock.
  *
- * REMAINING GAP. Only linux exposes a spawn-free, stable process-instance id
- * (`/proc/<pid>/stat` field 22 plus the boot id and the pid/time namespaces). On
- * macOS and Windows a DIFFERENT live process that recycled the owner's pid
- * therefore stays "not proven" and keeps the lock until the age rule applies —
- * today's behaviour, and the safe direction. `ps -o lstart` and PowerShell's
- * `Get-Process ... StartTime` were rejected: both cost a spawn per probe on the
- * contended path, and both return locale/TZ-dependent strings we would have to
- * parse back into a comparable identity. Gating such a probe on age does not
- * rescue them either: the CONTENDER can read the current holder's start time,
- * but a verdict needs something to compare it WITH — either a start time the
- * OWNER recorded when it took the lock (which puts that spawn on every writing
- * process, not just the contended path) or a start-time-vs-mtime comparison,
- * i.e. exactly the cross-clock arithmetic rejected above.
+ * OFF LINUX (issue #287). Only linux exposes a spawn-free, stable process-instance
+ * id (`/proc/<pid>/stat` field 22 plus the boot id and the pid/time namespaces), so
+ * on macOS and Windows a DIFFERENT live process that recycled the owner's pid is
+ * "unproven" here, which this table treats as live. The write lock closes that
+ * forever-deadlock on its own rare path, once a lock already looks stale: it asks
+ * the OS when the process now holding the pid was CREATED (`processStartedAt`, a
+ * spawn) and compares that with the `at` the owner recorded when it took the lock.
+ * A process created after the lock was taken cannot have taken it. Both instants
+ * are the HOST's wall clock, read on this same host, so the filesystem clock never
+ * enters; only a backward clock step of more than the slack between the owner's
+ * start and its acquisition could fake it. macOS and Windows record that creation
+ * instant absolutely; linux does not (`ps lstart` is boot time + uptime, so a
+ * forward clock step after boot moves every live process's "creation" forward and
+ * would fake a reuse), so on linux the probe reports nothing and a tokenless
+ * record keeps main's pid rule — linux writers record a token instead. The earlier objection to such a probe —
+ * that it needs either an owner-recorded start time (a spawn on every write) or a
+ * start-vs-mtime comparison — missed that `at` is already in every record.
  *
  * UNSUPPORTED TOPOLOGIES. A linux-written token carries its boot id and its pid
  * and time namespaces, so a lock written under another boot or another namespace
@@ -51,12 +55,14 @@
  * while our own token is memoized from before the checkpoint — so a restored
  * holder may judge itself against a token that no longer describes it. Tokenless
  * records (a legacy pre-token hunch, any non-linux writer, an unreadable /proc)
- * get main's unchanged pid rule — a live same-host pid keeps its lock, a dead one
- * is stealable — with exactly one exception, the own-pid + foreign-nonce row
+ * get main's unchanged pid rule — a live same-host pid keeps its lock (unless the
+ * write lock's creation-time check above proves the pid reused), a dead one is
+ * stealable — with exactly one exception, the own-pid + foreign-nonce row
  * described in `judgeSameHostOwner`, which gets the AGE rule instead of main's
  * "live forever".
  */
 import { readFileSync, readlinkSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 
 /** `starttime` in clock ticks since boot, as the exact decimal STRING the kernel
  *  printed — it is an identity component, never a quantity, so it is never
@@ -205,10 +211,14 @@ export function ownerInstance(
 export const heldLockNonces = new Set<string>();
 
 /** What a contender should do about a SAME-HOST lock owner.
- *  - `stale` — provably not the owner's process any more: take it over.
- *  - `live`  — authoritative, however old the file looks: never steal it.
- *  - `age`   — nothing is proven; fall back to the caller's own age rule. */
-export type SameHostVerdict = "stale" | "live" | "age";
+ *  - `stale`    — provably not the owner's process any more: take it over.
+ *  - `live`     — authoritative, however old the file looks: never steal it.
+ *  - `unproven` — a live pid whose process instance no token can compare (macOS,
+ *                 Windows, a legacy record). Treated as live; a caller with a
+ *                 better probe may still disprove it (src/serve/writelock.ts
+ *                 asks the OS when that process was created, issue #287).
+ *  - `age`      — nothing is proven; fall back to the caller's own age rule. */
+export type SameHostVerdict = "stale" | "live" | "unproven" | "age";
 
 /** The parts of a lock record this decision reads. Both lock formats supply it. */
 export interface SameHostOwner { pid: number; start?: string; nonce?: string }
@@ -262,7 +272,36 @@ export function judgeSameHostOwner(owner: SameHostOwner, env: SameHostEnv): Same
   //    within the caller's own stale window, without ever stealing a FRESH lock
   //    that a live writer may still hold.
   if (owner.pid === env.selfPid && owner.nonce !== undefined) return "age";
-  // A nonce-less own-pid record stays live: there is nothing to compare, and a
-  // live pid is never stolen on a guess.
-  return "live";
+  // 7. A live pid no token can compare — another process's, or a nonce-less
+  //    record of our own pid. Never stolen on a guess: "unproven" is "live" to a
+  //    caller that has nothing better. The write lock asks the OS for that
+  //    process's creation time, which can prove the pid was reused (issue #287).
+  return "unproven";
+}
+
+/** Wall-clock ms at which the process now holding `pid` was created, from the
+ *  OS, or null when it cannot be read. SPAWNS (PowerShell on Windows, `ps` on
+ *  macOS), so it is for rare paths only — a lock that already looks stale —
+ *  never for every acquisition. Precision is a second on `ps`. Null on every
+ *  other platform: linux derives `lstart` from boot time, which a forward clock
+ *  step shifts for live processes too (see the header). */
+export function processStartedAt(pid: number): number | null {
+  if (!Number.isSafeInteger(pid) || pid <= 0) return null;
+  try {
+    if (process.platform === "win32") {
+      // Epoch milliseconds, not a formatted date: a custom format string follows the
+      // culture's time separator (fi-FI prints `09.04.19`), which Date.parse rejects.
+      const r = spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", `([DateTimeOffset](Get-Process -Id ${pid} -ErrorAction Stop).StartTime).ToUnixTimeMilliseconds()`], { encoding: "utf8", timeout: 3_000, windowsHide: true });
+      const ms = r.status === 0 && /^\d+$/.test(r.stdout.trim()) ? Number(r.stdout.trim()) : NaN;
+      return Number.isFinite(ms) ? ms : null;
+    }
+    if (process.platform !== "darwin") return null;
+    const r = spawnSync("ps", ["-o", "lstart=", "-p", String(pid)], { encoding: "utf8", timeout: 3_000, env: { ...process.env, LC_ALL: "C", LANG: "C" } });
+    const m = /^\s*\w{3}\s+(\w{3})\s+(\d{1,2})\s+(\d{1,2}):(\d{2}):(\d{2})\s+(\d{4})\s*$/.exec(r.status === 0 ? r.stdout : "");
+    const month = m ? ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"].indexOf(m[1]!) : -1;
+    if (!m || month < 0) return null;
+    return new Date(Number(m[6]), month, Number(m[2]), Number(m[3]), Number(m[4]), Number(m[5])).getTime(); // ps prints local time
+  } catch {
+    return null;
+  }
 }

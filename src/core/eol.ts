@@ -8,6 +8,12 @@ export function lineContent(line: string): string {
   return line.endsWith("\r") ? line.slice(0, -1) : line;
 }
 
+/** Length of the line break (CRLF, CR, or LF) starting at `at`, or 0. */
+export function eolLengthAt(text: string, at: number): number {
+  if (text[at] === "\r") return text[at + 1] === "\n" ? 2 : 1;
+  return text[at] === "\n" ? 1 : 0;
+}
+
 /** Read logical lines while keeping offsets in the original UTF-16 source. */
 export function* sourceLines(text: string): Generator<{ content: string; start: number; end: number }> {
   let start = 0;
