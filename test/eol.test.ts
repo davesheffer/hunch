@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { normalizeEol, lineContent, sourceLines } from "../src/core/eol.js";
+import { normalizeEol, lineContent, sourceLines, eolLengthAt } from "../src/core/eol.js";
 
 test("line scanners agree on LF, CRLF, CR, and mixed endings", () => {
   const source = "one\r\ntwo\rthree\nfour";
@@ -9,6 +9,7 @@ test("line scanners agree on LF, CRLF, CR, and mixed endings", () => {
   assert.deepEqual([...sourceLines(source)].map((line) => line.content), ["one", "two", "three", "four"]);
   assert.deepEqual([...sourceLines(source)].map((line) => line.start), [0, 5, 9, 15]);
   assert.equal(lineContent("one\r"), "one");
+  assert.deepEqual([3, 8, 14, 18].map((at) => eolLengthAt(source, at)), [2, 1, 1, 0]);
 });
 
 test("the five line scanners use the shared EOL boundary", () => {

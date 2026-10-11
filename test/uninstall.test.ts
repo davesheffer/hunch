@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { cleanupDir, isolatedCliEnv, tempDir } from "./fixtures.js";
 import { hunchCliArgs } from "./cli-invocation.js";
 import { applyUninstall, OPT_OUT_FILE, type UninstallPlan } from "../src/integrations/uninstall.js";
+import { planHookRemoval } from "../src/integrations/hooks.js";
 
 /** #449: `hunch uninstall` removes exactly what `hunch init` installed, and the
  *  opt-out marker keeps every setup path from bringing it back. */
@@ -198,5 +199,15 @@ test("uninstall whose opt-out marker can't be written says nothing was changed, 
     assert.match(String(r.stdout), /Hunch uninstall: nothing was changed/);
     assert.match(out(r), new RegExp(`✗ ${OPT_OUT_FILE.replace(".", "\\.")}:`));
     assert.match(readFileSync(join(root, "CLAUDE.md"), "utf8"), /HUNCH:START/, "really nothing was removed");
+  } finally { cleanupDir(base); }
+});
+
+test("hook removal keeps a CRLF hook's own bytes and line endings", () => {
+  const { base, root } = fixture();
+  try {
+    const block = "# >>> hunch post-commit >>>\r\nhunch sync\r\n# <<< hunch post-commit <<<\r\n";
+    writeFileSync(join(root, ".git", "hooks", "post-commit"), `#!/bin/sh\r\necho mine\r\n${block}echo after\r\n`);
+    const plan = planHookRemoval(root).find((r) => r.hookName === "post-commit");
+    assert.equal(plan?.next, "#!/bin/sh\r\necho mine\r\necho after\r\n", "only the block and its own line break go");
   } finally { cleanupDir(base); }
 });
