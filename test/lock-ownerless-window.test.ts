@@ -77,7 +77,7 @@ test("a FRESH ownerless lock another process is about to release is waited out, 
       // so a slow runner cannot age the directory past it before the first stat.
       `fs.utimesSync(${JSON.stringify(lock)}, new Date(), new Date());`,
       "sleep(300);",
-      `fs.rmSync(${JSON.stringify(lock)}, { recursive: true, force: true });`,
+      `fs.rmSync(${JSON.stringify(lock)}, { recursive: true, force: true });`, // rmSync-ok: child process releases the lock mid-test
       "process.exit(0);",
     ].join("\n"));
     await waitFor(() => existsSync(ready), 5_000);
@@ -165,7 +165,7 @@ test("a live owner appearing during the ownerless window resets the wait and the
       "sleep(200);",
       "fs.mkdirSync(path.join(lock, `owner-${process.pid}`), { recursive: true });",
       "sleep(3000);",
-      "fs.rmSync(lock, { recursive: true, force: true });",
+      "fs.rmSync(lock, { recursive: true, force: true });", // rmSync-ok: child process releases the lock mid-test
       "process.exit(0);",
     ].join("\n"));
     await waitFor(() => existsSync(ready), 5_000);
@@ -244,7 +244,7 @@ test("an owner that vanishes without releasing is given up on after the window, 
       `fs.writeFileSync(${JSON.stringify(ready)}, "ready\\n");`,
       `waitForMarker(${JSON.stringify(go)});`,
       "sleep(300);",
-      "fs.rmSync(owner, { recursive: true, force: true });",
+      "fs.rmSync(owner, { recursive: true, force: true });", // rmSync-ok: child process drops its owner entry mid-test
       "sleep(30_000);", // stay alive: the pid keeps reading as live if re-read
       "process.exit(0);",
     ].join("\n"));

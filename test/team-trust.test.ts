@@ -227,7 +227,7 @@ test("CLI: `hunch shared --trust` that cannot connect records no trust and says 
     const env = isolatedCliEnv({ ...homeEnv(home), HUNCH_EMBEDDINGS: "off", NO_COLOR: "1", CI: "1" });
     const remote = makeMemoryRemote(base, "memory");
     const project = withIsolatedHome(home, () => makeProject(base, "project", remote));
-    rmSync(remote, { recursive: true, force: true }); // the advertised store is unreachable
+    rmSync(remote, { recursive: true, force: true }); // rmSync-ok: the advertised store is unreachable
     const trusted = spawnSync(process.execPath, hunchCliArgs("shared", "--trust"), {
       cwd: project, env, encoding: "utf8", timeout: 60_000,
     });
@@ -258,7 +258,7 @@ test("CLI: a failed `hunch shared --trust` restores a pre-existing trust file's 
     const priorStores = { "/elsewhere": { shared_repo: "/other.git", trusted_at: "2026-01-01T00:00:00.000Z" } };
     const prior = JSON.stringify({ version: 1, stores: priorStores }) + "\n";
     writeFileSync(file, prior);
-    rmSync(remote, { recursive: true, force: true }); // the advertised store is unreachable
+    rmSync(remote, { recursive: true, force: true }); // rmSync-ok: the advertised store is unreachable
     const trusted = spawnSync(process.execPath, hunchCliArgs("shared", "--trust"), {
       cwd: project, env, encoding: "utf8", timeout: 60_000,
     });

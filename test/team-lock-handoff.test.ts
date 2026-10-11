@@ -88,10 +88,10 @@ test("a contending process drains a record written after the first owner's exact
       "const sleep = (ms) => { const wait = new Int32Array(new SharedArrayBuffer(4)); Atomics.wait(wait, 0, 0, ms); };",
       "const waitForMarker = (marker) => { const deadline = Date.now() + 30_000; while (!fs.existsSync(marker)) { if (Date.now() >= deadline) process.exit(91); sleep(10); } };",
       "waitForMarker(writerSawLive);",
-      "fs.rmSync(path.join(lock, `owner-${process.pid}`), { recursive: true, force: true });",
+      "fs.rmSync(path.join(lock, `owner-${process.pid}`), { recursive: true, force: true });", // rmSync-ok: child process drops its owner entry mid-test
       "waitForMarker(writerSawOwnerless);",
       "waitForMarker(writerSawOwnerlessAgain);",
-      "fs.rmSync(lock, { recursive: true, force: true });",
+      "fs.rmSync(lock, { recursive: true, force: true });", // rmSync-ok: child process releases the lock mid-test
       "process.exit(0);",
     ].join("\n");
     owner = spawn(process.execPath, ["-e", ownerProgram], { stdio: "ignore" });

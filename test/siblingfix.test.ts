@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -81,7 +82,7 @@ const fixedMatcher = (name: string) => `export function ${name}(entry: { hooks?:
 `;
 function repo(t: { after: (f: () => void) => void }): string {
   const root = mkdtempSync(join(tmpdir(), "hunch-sibling-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  t.after(() => cleanupDir(root));
   execFileSync("git", ["init", "-q", root]);
   writeFileSync(join(root, ".gitignore"), ".hunch-cache/\n");
   mkdirSync(join(root, "src"), { recursive: true });
@@ -214,7 +215,7 @@ test("a fix that reached the target inside a whole-file rewrite is shared histor
 
 test("a truncated inventory keeps what it parsed and the next call carries on", t => {
   const root = mkdtempSync(join(tmpdir(), "hunch-sibling-inv-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  t.after(() => cleanupDir(root));
   execFileSync("git", ["init", "-q", root]);
   writeFileSync(join(root, ".gitignore"), ".hunch-cache/\n");
   for (const d of ["a", "z"]) {
@@ -464,7 +465,7 @@ test("the cache directory is pruned to a bound on write, keeping the inventory",
 
 test("a tiny consumer is not a copy of the large producer whose words it uses", t => {
   const root = mkdtempSync(join(tmpdir(), "hunch-sibling-size-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  t.after(() => cleanupDir(root));
   execFileSync("git", ["init", "-q", root]);
   writeFileSync(join(root, ".gitignore"), ".hunch-cache/\n");
   mkdirSync(join(root, "src"));
@@ -497,7 +498,7 @@ test("a tiny consumer is not a copy of the large producer whose words it uses", 
 
 test("a pair exactly twice apart in size is not a copy", t => {
   const root = mkdtempSync(join(tmpdir(), "hunch-sibling-2x-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  t.after(() => cleanupDir(root));
   execFileSync("git", ["init", "-q", root]);
   writeFileSync(join(root, ".gitignore"), ".hunch-cache/\n");
   mkdirSync(join(root, "src"));

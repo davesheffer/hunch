@@ -1,7 +1,8 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { tempStore, mkConstraint } from "./helpers.js";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { renderHunchSection, upsertSection, preserveNewerTemplate, groundingTemplate, GROUNDING_TEMPLATE } from "../src/integrations/claudemd.js";
@@ -172,7 +173,7 @@ test("grounding writers never downgrade newer prose, but still upgrade older pro
   const { store, cleanup } = tempStore();
   t.after(cleanup);
   const root = mkdtempSync(join(tmpdir(), "hunch-template-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  t.after(() => cleanupDir(root));
   const section = renderHunchSection(store, root);
 
   const doc = join(root, "AGENTS.md");
@@ -256,7 +257,7 @@ test("regenerateGrounding (private --migrate) re-renders even a newer-template b
   const { store, cleanup } = tempStore();
   t.after(cleanup);
   const root = mkdtempSync(join(tmpdir(), "hunch-template-migrate-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  t.after(() => cleanupDir(root));
   store.json.put("constraints", mkConstraint({ id: "con_nowprivate1", statement: "NOW_PRIVATE_INVARIANT", severity: "blocking" }));
   const withSecret = newerBlock(renderHunchSection(store, root));
   assert.match(withSecret, /NOW_PRIVATE_INVARIANT/);
@@ -279,7 +280,7 @@ test("refreshExistingGrounding keeps newer prose unless forced", (t) => {
   const { store, cleanup } = tempStore();
   t.after(cleanup);
   const root = mkdtempSync(join(tmpdir(), "hunch-template-force-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  t.after(() => cleanupDir(root));
   const doc = join(root, "CLAUDE.md");
   writeFileSync(doc, `# Mine\n\n${newerBlock(renderHunchSection(store, root))}\n`);
 
