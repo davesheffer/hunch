@@ -106,6 +106,16 @@ hunch integrations check --harness codex --require context
 
 The first command checks configuration. The probe starts a fresh MCP process and reads memory. The context check requires observed hook delivery on the expected version, so run it after the new assistant session begins. `--require` fails when the named capability is not verified; none of these checks proves that a model followed the advice.
 
+## Remove Hunch from a repository
+
+```bash
+hunch uninstall --dry-run   # show what would change
+hunch uninstall             # remove what Hunch installed; keep .hunch/ (your memory)
+hunch uninstall --purge     # also delete .hunch/, the derived cache and Hunch's .gitignore blocks
+```
+
+It removes the instruction blocks, MCP entries, agent and git hooks, merge driver, slash commands and CI workflow that Hunch installed, and leaves your own content in those files alone. If a file it needs to edit can't be parsed, it changes nothing and says which file. It writes `.hunch-removed`: while that file exists, no Hunch command sets Hunch up here again. Commit it so every clone stays opted out; to reinstall, delete it and run `hunch init`. Close running `hunch mcp` / `hunch serve` processes first, so they can't recreate files.
+
 ## See what Hunch contributed
 
 Task reports answer: what memory reached this task, what did the agent say it used, and what checks actually ran?

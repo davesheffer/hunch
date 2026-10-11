@@ -8,6 +8,7 @@ export const changelogLocales = {
       footer: "© Hunch — תיעוד משותף לסוכני AI.", home: "בית", githubReleases: "גרסאות ב-GitHub"
     },
     titles: [
+      "הסרה מלאה, וסבב תיקונים",
       "זיכרון שנבחר לפי המשימה שלפניך",
       "הקשר רזה יותר, מאגרים משותפים באישור, ולקחים מתיקונים במקבילים",
       "כלי סריקת הטקסט משתמשים בכלל אחיד לסיומות שורה",
@@ -91,6 +92,7 @@ export const changelogLocales = {
       footer: "© Hunch — общие записи для ИИ-агентов.", home: "Главная", githubReleases: "Релизы на GitHub"
     },
     titles: [
+      "Удаление и набор исправлений",
       "Память, подобранная под текущую задачу",
       "Меньше контекста, общие хранилища с подтверждением и уроки из исправлений-двойников",
       "Текстовые сканеры используют единое правило для окончаний строк",
@@ -174,6 +176,7 @@ export const changelogLocales = {
       footer: "© Hunch — سجل مشترك لوكلاء الذكاء الاصطناعي.", home: "الرئيسية", githubReleases: "الإصدارات على GitHub"
     },
     titles: [
+      "إزالة كاملة، ومجموعة من الإصلاحات",
       "ذاكرة مختارة للمهمة الحالية",
       "سياق أخف، ومخازن مشتركة بعد الموافقة، ودروس من إصلاحات النسخ المشابهة",
       "الماسحات النصية تستخدم قاعدة موحدة لنهايات الأسطر",
@@ -257,6 +260,7 @@ export const changelogLocales = {
       footer: "© Hunch — un registro compartido para agentes de IA.", home: "Inicio", githubReleases: "Versiones en GitHub"
     },
     titles: [
+      "Desinstalación y una ronda de correcciones",
       "Memoria elegida para la tarea actual",
       "Contexto más ligero, almacenes compartidos con confianza y lecciones de correcciones gemelas",
       "Los analizadores de texto comparten una regla para los finales de línea",
