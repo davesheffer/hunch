@@ -253,3 +253,18 @@ export function describeGitignoreUpgrade(upgrade: ManagedGitignoreUpgrade): stri
   }
   return out;
 }
+
+/** `.gitignore` text with both managed Hunch blocks removed (markers inclusive),
+ *  every other byte kept, for `hunch uninstall --purge` (#449). `damaged` when a
+ *  marker line has no matching end line: the block is never guessed at. */
+export function stripManagedGitignore(text: string): { next: string; damaged: boolean } {
+  let lines = text.split("\n");
+  let damaged = false;
+  for (const [mark, end] of [[MARK, END], [MEM_MARK, MEM_END]] as const) {
+    if (!lines.some((l) => cleanLine(l) === mark)) continue;
+    const span = findBlock(lines, mark, end);
+    if (!span) { damaged = true; continue; }
+    lines = [...lines.slice(0, span.start), ...lines.slice(span.end + 1)];
+  }
+  return { next: lines.join("\n"), damaged };
+}

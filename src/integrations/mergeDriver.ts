@@ -21,13 +21,13 @@ import { GROUNDING_DOC_PATHS } from "./providers.js";
 //
 // The five generated grounding docs get the OTHER driver — narrower in scope
 // (it only ever touches a hard conflict confined to the counts sentence).
-const ATTR_LINES = [
+export const ATTR_LINES: readonly string[] = [
   ".hunch/**/*.json merge=hunch",
   ".hunch/manifest.json merge=text",
   ...GROUNDING_DOC_PATHS.map((f) => `${f} merge=hunch-grounding`),
 ];
 
-function targetRepositoryEnv(): NodeJS.ProcessEnv {
+export function targetRepositoryEnv(): NodeJS.ProcessEnv {
   const env = { ...process.env };
   for (const key of [
     "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_CONFIG", "GIT_CONFIG_PARAMETERS", "GIT_CONFIG_COUNT",

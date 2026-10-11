@@ -70,6 +70,7 @@ import { flushCapture, flushMemoryHome, flushMemoryHomes, pinSharedRemote, share
 import { installMergeDriver } from "../integrations/mergeDriver.js";
 import { ensureGitignore, ignoreHunchMemory, HUNCH_MEMORY_DIRS, upgradeManagedGitignore, describeGitignoreUpgrade } from "../integrations/gitignore.js";
 import { writeCiWorkflow } from "../integrations/ciAction.js";
+import { applyUninstall, formatUninstallPlan, isOptedOut, OPT_OUT_FILE, optOutMessage, planUninstall } from "../integrations/uninstall.js";
 import { updateClaudeMd, renderHunchSection } from "../integrations/claudemd.js";
 import { HOOK_REMINDER } from "../core/hookText.js";
 import { measureFootprint } from "../core/footprint.js";
@@ -242,6 +243,22 @@ registerReviewMemoryCommands(program, (records, repository, privateOnly) => {
   // A public artifact must never be model-derived from private overlay statements.
   return { root, existing: store.captureHome(privateOnly) === "private"
     ? store.recs("constraints") : store.json.loadAll("constraints") };
+});
+
+// Opt-out gate (#449): a repository `hunch uninstall` opted out stays out. Setup
+// and every other command refuse; the commands a leftover git or agent hook may
+// still call exit 0 so they never break the user's commit, merge or agent turn
+// (`hook` silently: its stdout is the agent's context).
+const OPT_OUT_ALLOWED = new Set(["uninstall", "doctor", "help"]);
+const OPT_OUT_QUIET = new Set(["hook", "sync", "check", "grounding", "repair-provenance", "workspaces"]);
+program.hook("preAction", (_thisCommand, actionCommand) => {
+  let top = actionCommand;
+  while (top.parent && top.parent !== program) top = top.parent;
+  const name = top.name();
+  if (OPT_OUT_ALLOWED.has(name)) return;
+  if (!isOptedOut(findRoot())) return;
+  if (name !== "hook") console.error(optOutMessage());
+  process.exit(OPT_OUT_QUIET.has(name) ? 0 : 1);
 });
 
 // Read an already-known update and schedule any registry refresh in a detached
@@ -537,6 +554,38 @@ program
     console.log(reportActivity(root));
     console.log("Cold start? Seed from history:  hunch backfill --since 90d");
     console.log("\n⭐ If Hunch earns its keep, a star helps others find it → https://github.com/davesheffer/hunch");
+  });
+
+// ---- uninstall ------------------------------------------------------------
+program
+  .command("uninstall")
+  .description("Remove everything Hunch installed in this repository (instruction blocks, MCP entries, agent and git hooks, merge driver, slash commands, CI workflow) and opt the repository out so Hunch never sets itself up here again. Keeps .hunch/ (your engineering memory) unless --purge.")
+  .option("--dry-run", "print what would change and write nothing")
+  .option("--purge", "also delete .hunch/ (the engineering memory), the derived cache, Hunch's .gitignore blocks and this clone's pointer in the git dir")
+  .action((opts: { dryRun?: boolean; purge?: boolean }) => {
+    const root = findRoot();
+    const plan = planUninstall(root, { purge: !!opts.purge });
+    if (plan.refused.length) {
+      console.error(`Hunch uninstall at ${root}: nothing was changed — fix the file(s) below, then re-run.`);
+      for (const line of formatUninstallPlan(plan, !!opts.dryRun)) console.error(line);
+      process.exitCode = 1;
+      return;
+    }
+    console.log(`${opts.dryRun ? "Hunch uninstall (dry run — nothing written)" : "Hunch uninstalled"} at ${root}${opts.purge ? " (--purge)" : ""}`);
+    if (!plan.steps.some((s) => s.kind !== "keep")) console.log("  nothing to remove — Hunch is not installed here");
+    const failed = opts.dryRun ? [] : applyUninstall(plan);
+    const failedPaths = new Set(failed.map((f) => f.path));
+    for (const line of formatUninstallPlan({ ...plan, steps: plan.steps.filter((s) => !failedPaths.has(s.path)) }, !!opts.dryRun)) console.log(line);
+    if (failed.length) {
+      console.error(`
+✗ ${failed.length} step(s) could not be applied — close running Hunch processes (\`hunch mcp\`, \`hunch serve\`, editors using them), then re-run \`hunch uninstall${opts.purge ? " --purge" : ""}\`:`);
+      for (const f of failed) console.error(`  ✗ ${f.path}: ${f.error}`);
+      process.exitCode = 1;
+      return;
+    }
+    if (!opts.dryRun && plan.steps.some((s) => s.path === OPT_OUT_FILE)) {
+      console.log(`\nCommit ${OPT_OUT_FILE} (and the removals) so every clone stays opted out. To reinstall later, delete ${OPT_OUT_FILE} and run \`hunch init\`.`);
+    }
   });
 
 // ---- index ----------------------------------------------------------------
@@ -6783,7 +6832,18 @@ program
   .command("doctor")
   .description("Diagnose the environment (git, synthesis provider, index freshness).")
   .action(async () => {
-    const integrations = inspectIntegrations(findRoot());
+    const doctorRoot = findRoot();
+    if (isOptedOut(doctorRoot)) {
+      console.log(`Hunch: not installed (opted out — ${OPT_OUT_FILE} is present).`);
+      const left = planUninstall(doctorRoot).steps.filter((s) => s.kind === "edit" || s.kind === "delete");
+      if (left.length) {
+        console.log(`  ⚠ ${left.length} Hunch leftover(s) remain; \`hunch uninstall\` removes them:`);
+        for (const s of left) console.log(`    - ${s.path}`);
+      }
+      console.log(`  To reinstall: delete ${OPT_OUT_FILE}, then run \`hunch init\`.`);
+      return;
+    }
+    const integrations = inspectIntegrations(doctorRoot);
     console.log(formatIntegrationHealth(integrations));
     // A pin npm cannot serve kills every npx launcher (hooks and MCP) before Hunch
     // runs, and the hosts report nothing. Name it here; bounded, offline-safe.

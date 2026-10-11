@@ -1063,6 +1063,58 @@ export function hookStatus(root: string): { postCommit: boolean; preCommit: bool
   };
 }
 
+/** One git hook file `hunch uninstall` would change. `next === null` deletes the
+ *  file (only a shebang was left); a `reason` means nothing is edited and the
+ *  user removes the block by hand. */
+export interface HookRemoval {
+  path: string;
+  hookName: string;
+  next?: string | null;
+  reason?: string;
+}
+
+/** Plan the removal of every Hunch-managed block from the hooks git runs (#449).
+ *  Read-only. Only a hook file Hunch itself writes (manager "none", or an
+ *  exec/exit file whose block it appended) is edited, and only a block with both
+ *  markers; a hook manager's file, a tracked hooks dir, or an unclosed block is
+ *  reported instead — the same lines Hunch refuses to write on install. */
+export function planHookRemoval(root: string): HookRemoval[] {
+  const ends: Record<string, string> = {
+    [MARK]: ENDMARK, [PRE_MARK]: PRE_END, [GROUNDING_MERGE_MARK]: GROUNDING_MERGE_END,
+    [REPAIR_MERGE_MARK]: REPAIR_MERGE_END, [CHECKOUT_MARK]: CHECKOUT_END,
+  };
+  const byHook = new Map<string, string[]>();
+  for (const [hookName, mark] of managedBlocks()) byHook.set(hookName, [...(byHook.get(hookName) ?? []), mark]);
+  const out: HookRemoval[] = [];
+  for (const [hookName, marks] of byHook) {
+    const t = resolveHookTarget(root, hookName, marks[0]!);
+    if (t.manager !== "none" && t.manager !== "exec-exit") {
+      const owner = readText(t.ownerFile);
+      if (owner !== null && marks.some((m) => owner.includes(m))) {
+        out.push({ path: t.ownerFile, hookName, reason: `${t.manager} owns this hook; remove the Hunch block from it by hand` });
+      }
+      continue;
+    }
+    const cur = readText(t.hookPath);
+    if (cur === null || !marks.some((m) => cur.includes(m))) continue;
+    let next = cur;
+    let damaged = false;
+    for (const mark of marks) {
+      if (!next.includes(mark)) continue;
+      const re = new RegExp(`${escapeRe(mark)}[\\s\\S]*?${escapeRe(ends[mark]!)}\\r?\\n?`);
+      if (!re.test(next)) { damaged = true; continue; }
+      next = next.replace(re, "");
+    }
+    if (damaged) {
+      out.push({ path: t.hookPath, hookName, reason: "a Hunch block here has no closing marker; remove it by hand" });
+      continue;
+    }
+    const body = normalizeEol(next).split("\n").filter((l, i) => !(i === 0 && l.startsWith("#!")));
+    out.push({ path: t.hookPath, hookName, next: body.every((l) => l.trim() === "") ? null : next });
+  }
+  return out;
+}
+
 /** Doctor lines for where each installed/stale hook points (issue #315): hooks
  *  sharing one invocation share one line, and a line whose invocation is not the
  *  Hunch currently running says so. Informational — a hook may legitimately

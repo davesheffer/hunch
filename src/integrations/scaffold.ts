@@ -255,14 +255,10 @@ export function installClaudeHooks(root: string, hookCmd: string): ClaudeHookIns
 
 /** Ownership marker for generated slash commands: its presence means Hunch may
  *  refresh the file; deleting the line hands the file to the user for good. */
-const CMD_MARKER = "<!-- hunch:generated — refreshed by hunch init; delete this line to take ownership -->";
+export const CMD_MARKER = "<!-- hunch:generated — refreshed by hunch init; delete this line to take ownership -->";
 
-export function writeSlashCommands(root: string): { written: string[]; skipped: string[] } {
-  const dir = join(root, ".claude", "commands");
-  mkdirSync(dir, { recursive: true });
-  const written: string[] = [];
-  const skipped: string[] = [];
-  const files: Array<[string, string]> = [
+function slashCommandFiles(): Array<[string, string]> {
+  return [
     ["hunch-why.md", WHY_CMD],
     ["hunch-fix.md", FIX_CMD],
     ["hunch-fragile.md", FRAGILE_CMD],
@@ -271,6 +267,17 @@ export function writeSlashCommands(root: string): { written: string[]; skipped: 
     ["audit.md", AUDIT_CMD],
     ["worktrees.md", WORKTREES_CMD],
   ];
+}
+
+/** File names `writeSlashCommands` writes under .claude/commands/. */
+export const SLASH_COMMAND_FILES: readonly string[] = Object.freeze(slashCommandFiles().map(([name]) => name));
+
+export function writeSlashCommands(root: string): { written: string[]; skipped: string[] } {
+  const dir = join(root, ".claude", "commands");
+  mkdirSync(dir, { recursive: true });
+  const written: string[] = [];
+  const skipped: string[] = [];
+  const files = slashCommandFiles();
   for (const [name, body] of files) {
     const p = join(dir, name);
     // Generic names (capture/heal/audit) are plausibly the USER'S OWN commands;
