@@ -51,7 +51,7 @@ import {
   normalizeProviderName,
   type SynthPreference,
 } from "../synthesis/provider.js";
-import { isGitRepo, isGitRepoRoot, sameGitPublication, sameRemoteUrl, canonicalRemoteUrl, repositoryUsesRemote, headSha, isolatedHeadSha, logSince, lastChangeDate, checkFreshnessRevision, teamPullIsFresh, firstCommitForFile, stagedFiles, workingFiles, commitFiles, asOfDate, stagedGateDiff, workingGateDiff, commitGateDiff, rangeFiles, rangeGateDiff, rangeCommits, revExists, revParse, commitAndPushHunch, pullHunchStatus, syncExistingHunch, gitUntrackCached, gitCommonDir, checkoutCommonDir, separateGitDirCandidate, separateGitDirLink, hooksDir, isLinkedWorktree, mainWorktreeRoot, gitMemoryLog, memoryMoveDiff, revertMemoryMove, pushCurrentBranch, commitChanges, commitRepairStatus, mergeRangeChanges, commitsExist, type HunchPullStatus } from "../extractors/git.js";
+import { isGitRepo, isGitRepoRoot, sameGitPublication, sameRemoteUrl, canonicalRemoteUrl, repositoryUsesRemote, headSha, isolatedHeadSha, logSince, lastChangeDate, checkFreshnessRevision, teamPullIsFresh, firstCommitForFile, stagedFiles, workingFiles, commitFiles, asOfDate, stagedGateDiff, workingGateDiff, commitGateDiff, rangeFiles, rangeGateDiff, rangeCommits, revExists, revParse, commitAndPushHunch, pullHunchStatus, syncExistingHunch, gitUntrackCached, gitCommonDir, checkoutCommonDir, separateGitDirCandidate, separateGitDirLink, hooksDir, isLinkedWorktree, mainWorktreeRoot, gitMemoryLog, memoryMoveDiff, revertMemoryMove, pushCurrentBranch, commitChanges, commitRepairStatusAgainst, commitPatchIds, mergeRangeChanges, commitsExist, type HunchPullStatus } from "../extractors/git.js";
 import { runbookDraft } from "../core/runbookDraft.js";
 import { parseMemoryLog, type MemoryMove } from "../core/memorylog.js";
 import { renamesOf, planRepair, repairDecision, repairConstraint, type RepairPlan } from "../core/repair.js";
@@ -5964,8 +5964,11 @@ program
       }
 
       const candidates = rangeResolves && !opts.apply && !opts.drop ? mergeRangeChanges(oldRef, newRef, root) : [];
-      const orphaned = candidates.length ? orphanedCommitDecisions(decisions, (sha) => commitRepairStatus(sha, newRef, root)) : [];
-      const freshPlan = candidates.length ? planCommitRepair(orphaned, candidates) : { rewrites: [], records: [] };
+      // Orphaned means HEAD no longer reaches the commit either: a historical
+      // --range tip alone would flag every newer, perfectly reachable commit (#450).
+      const orphaned = candidates.length ? orphanedCommitDecisions(decisions, (sha) => commitRepairStatusAgainst(sha, [newRef, "HEAD"], root)) : [];
+      const patchIds = orphaned.length ? commitPatchIds([...orphaned.map((d) => d.commit!), ...candidates.map((c) => c.sha)], root) : new Map<string, string>();
+      const freshPlan = candidates.length ? planCommitRepair(orphaned, candidates, (sha) => patchIds.get(sha) ?? null) : { rewrites: [], records: [] };
 
       // Detection always queues a fresh match — local-only, never committed, so
       // it's safe to persist unconditionally. This is what makes running
@@ -6119,12 +6122,17 @@ program
           console.log(unresolvedCount
             ? `Would repair ${toApply.length - unresolvedCount} of ${toApply.length} listed:`
             : `Would repair ${toApply.length} commit reference(s):`);
+          // Match strength, so a reviewer can tell an identical change from a
+          // file-overlap guess before applying it into shared memory (#450).
+          const previewPatchIds = commitPatchIds(toApply.flatMap((r) => [r.from, r.to]), root);
           for (const r of toApply) {
             const reason = reasonQueued(r);
+            const samePatch = !!previewPatchIds.get(r.from) && previewPatchIds.get(r.from) === previewPatchIds.get(r.to);
             const label = reason === "invisible" ? "not visible this run — --apply would leave it queued"
               : reason === "withheld" ? "proposed replacement commit doesn't resolve in this repository — --apply would leave it queued"
               : reason === "duplicate" ? "another queued entry for this same decision would be applied instead — --apply would leave this one queued"
-              : null;
+              : samePatch ? "same patch-id: identical change"
+              : "file match only — check the diff before applying";
             console.log(`  ${r.id}  ${r.from} → ${r.to}${label ? `  (${label})` : ""}`);
           }
           const reviewHash = commitRepairReviewHash(queue, withheldRewrites(root, queue));

@@ -2528,6 +2528,44 @@ export function commitRepairStatus(commit: string, ref: string, cwd: string): Co
   }
 }
 
+/** commitRepairStatus against several tips: "orphaned" only when NO ref
+ *  reaches the commit. A historical `--range old..new` must not make a commit
+ *  that HEAD still reaches look orphaned just because it is newer than `new`
+ *  (#450). The first non-orphaned answer wins, so "unknown" is never upgraded. */
+export function commitRepairStatusAgainst(commit: string, refs: readonly string[], cwd: string): CommitRepairStatus {
+  for (const ref of new Set(refs)) {
+    const status = commitRepairStatus(commit, ref, cwd);
+    if (status !== "orphaned") return status;
+  }
+  return "orphaned";
+}
+
+/** `git patch-id --stable` of each commit, keyed by the sha exactly as given
+ *  (full or abbreviated). Same diff flags as the workspace ledger's squash
+ *  check. A merge or empty commit, an unknown sha, or any git failure leaves
+ *  no entry: a missing patch-id is never a match. One `git log` + one
+ *  `git patch-id` process for all of them. */
+export function commitPatchIds(shas: readonly string[], cwd: string): Map<string, string> {
+  const out = new Map<string, string>();
+  const valid = [...new Set(shas.filter((sha) => /^[0-9a-f]{7,64}$/i.test(sha)))];
+  if (!valid.length) return out;
+  let ids: string;
+  try {
+    const log = execFileSync("git", ["-C", cwd, "log", "--no-walk=unsorted", "--format=%H", "-p", "--no-merges", "--binary", "--full-index", "--no-renames", "--no-ext-diff", "--no-textconv", ...valid, "--"],
+      { maxBuffer: 256 * 1024 * 1024, timeout: 30_000, stdio: ["ignore", "pipe", "ignore"] });
+    if (!log.byteLength) return out;
+    ids = execFileSync("git", ["-C", cwd, "patch-id", "--stable"], { input: log, encoding: "utf8", maxBuffer: 16 * 1024 * 1024, timeout: 30_000, stdio: ["pipe", "pipe", "ignore"] });
+  } catch {
+    return out;
+  }
+  for (const line of ids.split("\n")) {
+    const [patchId = "", commit = ""] = line.trim().split(/\s+/);
+    if (!/^[0-9a-f]{40,64}$/.test(patchId)) continue;
+    for (const sha of valid) if (commit.startsWith(sha.toLowerCase())) out.set(sha, patchId);
+  }
+  return out;
+}
+
 /** Machine-generated paths that carry no design "why" — lockfiles, build output,
  *  vendored deps, snapshots, source maps. Excluded from synthesis diffs via git
  *  pathspec BEFORE git assembles/orders the patch: a huge lockfile sorts ahead of
