@@ -22,6 +22,15 @@ test("runbookDraft drops capture commits, store-only commits and Hunch's paths, 
   assert.deepEqual(draft.files, ["src/auth.ts", "src/cookie.ts", "AGENTS.md"], "a grounding doc stays only when a human edited it on its own");
 });
 
+test("runbookDraft skips an empty-subject step, and only the root .hunch/ is Hunch's store", () => {
+  const draft = runbookDraft([
+    { subject: "", files: ["src/a.ts"] },
+    { subject: "docs: notes", files: ["docs/.hunch/notes.md"] },
+  ], ["src/a.ts", "docs/.hunch/notes.md"]);
+  assert.deepEqual(draft.steps, ["docs: notes"], "no blank step");
+  assert.deepEqual(draft.files, ["src/a.ts", "docs/.hunch/notes.md"], "a user folder named .hunch below the root is the user's");
+});
+
 test("hunch runbook over a range interleaving capture commits records only the real procedure", { timeout: 300_000 }, () => {
   const base = tempDir("hunch-runbook-425-");
   const root = join(base, "repo");

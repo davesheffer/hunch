@@ -15,7 +15,8 @@ const FULLY_MANAGED = new Set([".cursor/rules/hunch.mdc", ".windsurf/rules/hunch
 const STORE_SEGMENTS = new Set([".hunch", ".hunch-cache"]);
 
 const norm = (p: string): string => p.replace(/\\/g, "/").replace(/^\.\//, "");
-const isStore = (p: string): boolean => norm(p).split("/").some((s) => STORE_SEGMENTS.has(s));
+/** The store lives at the repository root; a user folder named .hunch further down is theirs. */
+const isStore = (p: string): boolean => STORE_SEGMENTS.has(norm(p).split("/")[0]!);
 
 export function runbookDraft(commits: readonly { subject: string; files: readonly string[] }[], rangeFiles: readonly string[]): { steps: string[]; files: string[] } {
   const steps: string[] = [];
@@ -26,7 +27,7 @@ export function runbookDraft(commits: readonly { subject: string; files: readonl
     const touchesStore = files.some(isStore);
     const work = files.filter((f) => !isStore(f) && !FULLY_MANAGED.has(f) && !(touchesStore && HUNCH_MANAGED_FILES.has(f)));
     if (files.length && !work.length) continue; // only Hunch's own paths
-    steps.push(c.subject);
+    if (c.subject.trim()) steps.push(c.subject); // an empty-message commit is no step
     for (const f of work) if (HUNCH_MANAGED_FILES.has(f)) workDocs.add(f);
   }
   const files = rangeFiles.filter((raw) => {
