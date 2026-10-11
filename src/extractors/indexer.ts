@@ -14,7 +14,7 @@ import type { HunchStore } from "../store/hunchStore.js";
 import { parseSource, attributeCalls, attributeRelations, MAX_BODY_TEXT_CHARS, type ParsedRelation } from "./parse.js";
 import { isParserLoadError } from "./nativeTreeSitter.js";
 import { extractHelmDirectives } from "./helm.js";
-import { extractK8sManifest, namespacesCompatible, type K8sManifestDocument, type ManifestNameRef } from "./k8sManifest.js";
+import { extractK8sManifest, extractKustomization, isKustomizationFile, kustomizeNamespaces, namespacesCompatible, type K8sManifestDocument, type KustomizationInfo, type ManifestNameRef } from "./k8sManifest.js";
 import { symbolId, componentId, edgeId, sha1 } from "../core/ids.js";
 import { externalImportNodeId, externalPackage } from "../core/externalImports.js";
 import { resolveRelativeImport } from "../core/relativeImports.js";
@@ -201,10 +201,25 @@ export function scanRepo(store: HunchStore, root: string, opts: ScanRepoOptions 
   }
   const gitMeta = useGit ? fileGitMetrics(root, rels, opts.churn === false ? 0 : 90) : null;
   let skipped = 0;
+  // Kustomize namespace transformers must be known before any manifest is
+  // extracted, so kustomization files are read up front (their reads are
+  // reused by the main loop below, not repeated).
+  const preRead = new Map<string, ReturnType<(typeof files)[number]["read"]>>();
+  const kustomizations = new Map<string, KustomizationInfo>();
+  for (const file of files) {
+    if (!isKustomizationFile(file.path)) continue;
+    const read = file.read();
+    preRead.set(file.path, read);
+    if (!read.absent && read.source !== null) {
+      const dir = posix.dirname(file.path);
+      kustomizations.set(dir === "." ? "" : dir, extractKustomization(read.source));
+    }
+  }
+  const kustomizeNamespaceFor = kustomizeNamespaces(kustomizations, new Set(rels));
 
   for (const file of files) {
     const rel = file.path;
-    const read = file.read();
+    const read = preRead.get(rel) ?? file.read();
     if (read.absent) {
       sourceFingerprint.push({ path: rel, mode: read.mode, content: "absent" });
       continue;
@@ -285,20 +300,40 @@ export function scanRepo(store: HunchStore, root: string, opts: ScanRepoOptions 
     // otherwise be indistinguishable by offset alone, and the wrong (Helm)
     // symbol id could get recorded instead of the K8s one.
     const k8sSymbolObjects = new Set<object>();
+    // Identity name a K8s symbol's id is derived from when its kind/name is
+    // NOT unique in this file (issue #382). Absent for the common unique case,
+    // so that id is exactly what it always was; a same-kind/name pair in
+    // different namespaces gets kind/name@namespace for EVERY member, never a
+    // document-order ordinal, so reordering documents can't rename them. The
+    // file path is already in every symbol id, so the same resource repeated
+    // across overlay dirs is distinct by path without any extra disambiguator.
+    const k8sIdNames = new Map<object, string>();
     if (languageFor(rel)?.id === "yaml") {
-      k8sDocs = extractK8sManifest(src);
-      const k8sSymbols = k8sDocs
-        .filter((d): d is K8sManifestDocument & { resource: NonNullable<K8sManifestDocument["resource"]> } => d.resource !== null)
+      k8sDocs = kustomizeNamespaceFor.has(rel)
+        ? extractK8sManifest(src, { namespace: kustomizeNamespaceFor.get(rel)! })
+        : extractK8sManifest(src);
+      const resourceDocs = k8sDocs
+        .filter((d): d is K8sManifestDocument & { resource: NonNullable<K8sManifestDocument["resource"]> } => d.resource !== null);
+      const nameCounts = new Map<string, number>();
+      for (const d of resourceDocs) {
+        const name = `${d.resource.kind}/${displayNameText(d.resource.name)}`;
+        nameCounts.set(name, (nameCounts.get(name) ?? 0) + 1);
+      }
+      const k8sSymbols = resourceDocs
         // k8sManifest.ts's own offsets are named *Char; mapped here into the
         // shared startByte/endByte fields, same as the Helm merge above.
-        .map((d) => ({
-          name: `${d.resource.kind}/${displayNameText(d.resource.name)}`,
-          kind: "variable" as const,
-          startByte: d.resource.startChar,
-          endByte: d.resource.endChar,
-          loc: src.slice(d.resource.startChar, d.resource.endChar).split("\n").length,
-          bodyText: src.slice(d.resource.startChar, d.resource.endChar).slice(0, MAX_BODY_TEXT_CHARS),
-        }));
+        .map((d) => {
+          const sym = {
+            name: `${d.resource.kind}/${displayNameText(d.resource.name)}`,
+            kind: "variable" as const,
+            startByte: d.resource.startChar,
+            endByte: d.resource.endChar,
+            loc: src.slice(d.resource.startChar, d.resource.endChar).split("\n").length,
+            bodyText: src.slice(d.resource.startChar, d.resource.endChar).slice(0, MAX_BODY_TEXT_CHARS),
+          };
+          if ((nameCounts.get(sym.name) ?? 0) > 1) k8sIdNames.set(sym, `${sym.name}@${d.resource.namespace ?? ""}`);
+          return sym;
+        });
       for (const s of k8sSymbols) k8sSymbolObjects.add(s);
       parsed.symbols = [...parsed.symbols, ...k8sSymbols].sort((a, b) => a.startByte - b.startByte);
     }
@@ -312,10 +347,12 @@ export function scanRepo(store: HunchStore, root: string, opts: ScanRepoOptions 
     const idCounts = new Map<string, number>(); // disambiguate same (file,name,kind)
     const k8sSymbolIdByStartByte = new Map<number, string>();
     for (const [index, ps] of parsed.symbols.entries()) {
-      const base = symbolId(rel, ps.name, ps.kind);
+      const base = symbolId(rel, k8sIdNames.get(ps) ?? ps.name, ps.kind);
       const n = idCounts.get(base) ?? 0;
       idCounts.set(base, n + 1);
       // parse() returns symbols sorted by start byte, so the ordinal is stable
+      // (for K8s resources it is only reached by two documents with the SAME
+      // kind, namespace and name in one file -- indistinguishable by identity)
       const id = n === 0 ? base : `${base}_${n}`;
       idsInFile.push(id);
       symbolIndexId.set(index, id);
