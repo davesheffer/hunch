@@ -199,7 +199,9 @@ test("a tracked .hunch symlink into another checkout is never followed", { timeo
     git(seed, "add", "-A");
     git(seed, "commit", "-qm", "fixture: linked memory dir");
     const clone = join(f.base, "symlink-clone");
-    git(f.base, "clone", "-q", seed, clone);
+    // Git for Windows checks a symlink out as a plain file unless core.symlinks is on; this
+    // machine can create links (symlinkSync above worked), so keep the clone's link a link.
+    git(f.base, "-c", "core.symlinks=true", "clone", "-q", seed, clone);
     // The pointer behind the link is never followed, and never silently dropped either:
     // opening public here would route captures past the overlay the pointer names.
     assert.throws(() => storeOf(clone, f.env).close(), /never followed/, "the linked pointer fails closed");
