@@ -51,7 +51,7 @@ import {
   normalizeProviderName,
   type SynthPreference,
 } from "../synthesis/provider.js";
-import { isGitRepo, isGitRepoRoot, sameGitPublication, sameRemoteUrl, canonicalRemoteUrl, repositoryUsesRemote, headSha, isolatedHeadSha, logSince, lastChangeDate, checkFreshnessRevision, firstCommitForFile, stagedFiles, workingFiles, commitFiles, asOfDate, stagedGateDiff, workingGateDiff, commitGateDiff, rangeFiles, rangeGateDiff, rangeSubjects, revExists, revParse, commitAndPushHunch, pullHunchStatus, syncExistingHunch, gitUntrackCached, gitCommonDir, checkoutCommonDir, separateGitDirCandidate, separateGitDirLink, hooksDir, isLinkedWorktree, mainWorktreeRoot, gitMemoryLog, memoryMoveDiff, revertMemoryMove, pushCurrentBranch, commitChanges, commitRepairStatus, mergeRangeChanges, commitsExist, type HunchPullStatus } from "../extractors/git.js";
+import { isGitRepo, isGitRepoRoot, sameGitPublication, sameRemoteUrl, canonicalRemoteUrl, repositoryUsesRemote, headSha, isolatedHeadSha, logSince, lastChangeDate, checkFreshnessRevision, teamPullIsFresh, firstCommitForFile, stagedFiles, workingFiles, commitFiles, asOfDate, stagedGateDiff, workingGateDiff, commitGateDiff, rangeFiles, rangeGateDiff, rangeSubjects, revExists, revParse, commitAndPushHunch, pullHunchStatus, syncExistingHunch, gitUntrackCached, gitCommonDir, checkoutCommonDir, separateGitDirCandidate, separateGitDirLink, hooksDir, isLinkedWorktree, mainWorktreeRoot, gitMemoryLog, memoryMoveDiff, revertMemoryMove, pushCurrentBranch, commitChanges, commitRepairStatus, mergeRangeChanges, commitsExist, type HunchPullStatus } from "../extractors/git.js";
 import { parseMemoryLog, type MemoryMove } from "../core/memorylog.js";
 import { renamesOf, planRepair, repairDecision, repairConstraint, type RepairPlan } from "../core/repair.js";
 import { orphanedCommitDecisions, planCommitRepair, repairDecisionCommit, pickRewrite, commitRepairReviewHash, mergeRewrites, firstFor, deadRewrites, resolvedRewriteIds, withoutDropped, addDropped, withheldForUnresolvableTo, type CommitRewrite, type DroppedRewrite } from "../core/commitrepair.js";
@@ -3906,11 +3906,13 @@ program
     const emptyReport: CheckReport = { fileCount: 0, strict: !!opts.strict, direct: [], near: [], regressions: [], vetoes: [], redundant: [], strictBlockers: 0, regBlocking: 0, vetoBlocking: 0 };
 
     const { store, root, teamPullStatus } = storeFor({ requireFreshTeamMemory: !!opts.strict && !opts.publicOnly });
-    const teamFreshnessFailure = teamPullStatus !== null
-      && teamPullStatus !== "updated"
-      && teamPullStatus !== "current"
-      ? `strict check could not refresh the advertised team memory (${teamPullStatus}); refusing a stale pass`
+    const teamFreshnessFailure = teamPullStatus !== null && !teamPullIsFresh(teamPullStatus)
+      ? `strict check could not refresh the advertised team memory (${teamPullStatus}); refusing a stale pass` +
+        (teamPullStatus === "unconfigured" ? " — the shared memory remote has no published branch while this clone has memory; publish it with `hunch shared --sync`" : "")
       : null;
+    // An empty team remote is in sync with a never-committed clone, but it is also what
+    // lost team memory looks like: never let that strict pass be silent (#427).
+    if (teamPullStatus === "empty") console.error("· the advertised team memory has no published branch yet; this strict check ran with no team rules (publish with `hunch shared --sync` after the first capture)");
     // Fail loudly on an unresolvable --base (e.g. CI forgot to fetch the base
     // branch) — otherwise the diff is empty and the guard passes vacuously.
     if (opts.base && !revExists(opts.base, root)) {
@@ -4727,8 +4729,7 @@ program
               const opened = openTeamStore(root, { requireFreshTeamMemory: firmness === "strict" });
               store = opened.store;
               // Same rule as the pre-edit path: strict never grounds from stale team rules.
-              const stale = firmness === "strict" && opened.teamPullStatus
-                && opened.teamPullStatus !== "updated" && opened.teamPullStatus !== "current";
+              const stale = firmness === "strict" && opened.teamPullStatus && !teamPullIsFresh(opened.teamPullStatus);
               if (!stale) shellGround = shellWriteGrounding(root, store, provider, evt, written);
             }
           } else {
@@ -5071,8 +5072,7 @@ program
       // never grounding from public/stale memory (dec_77d99014e0).
       const opened = openTeamStore(root, { requireFreshTeamMemory: firmness === "strict" });
       store = opened.store;
-      if (firmness === "strict" && opened.teamPullStatus
-        && opened.teamPullStatus !== "updated" && opened.teamPullStatus !== "current") {
+      if (firmness === "strict" && opened.teamPullStatus && !teamPullIsFresh(opened.teamPullStatus)) {
         // A strict deny is only trustworthy when it includes the latest team
         // rules. Offline/busy/unconfigured team memory is unavailable, so the
         // non-blocking hook says so instead of denying from stale state.

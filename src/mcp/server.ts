@@ -33,7 +33,7 @@ import { knownRepoDeps } from "../synthesis/tripwires.js";
 import { refreshExistingGrounding } from "../integrations/providers.js";
 import { workspaceLedgerView, renderWorktreeTable, renderBranchTable, workspaceSummaryLine, snapshotHasHome, recordWorkspaceSnapshot, branchRows, worktreeRows } from "../integrations/workspaceLedger.js";
 import { workspacesConfig } from "../core/config.js";
-import { revParse, asOfDate, revExists, lastChangeDate, checkFreshnessRevision, rangeFiles, rangeGateDiff, commitFiles, commitGateDiff, stagedFiles, stagedGateDiff, workingFiles, workingGateDiff, pullHunchStatus, sameRemoteUrl, currentBranch, worktreePaths, pathKnownToHistory, type HunchPullStatus } from "../extractors/git.js";
+import { revParse, asOfDate, revExists, lastChangeDate, checkFreshnessRevision, teamPullIsFresh, rangeFiles, rangeGateDiff, commitFiles, commitGateDiff, stagedFiles, stagedGateDiff, workingFiles, workingGateDiff, pullHunchStatus, sameRemoteUrl, currentBranch, worktreePaths, pathKnownToHistory, type HunchPullStatus } from "../extractors/git.js";
 import { flushCapture, flushMemoryHome, pinSharedRemote } from "../integrations/sync.js";
 import { withWriteLock } from "../serve/writelock.js";
 import { advertisedTeamRemoteContract, ensureTeamOverlay, isTeamStoreTrusted, overlayMatchesTeamRemote, teamWiringConsented, untrustedTeamStoreMessage, readTeamConfig, teamRemoteContract, teamSharedRef } from "../integrations/team.js";
@@ -1115,7 +1115,7 @@ function pullBackoff(status: HunchPullStatus, finishedAt: number, failures: numb
   if (status === "busy") {
     return { consecutivePullFailures: failures, nextRemotePullAt: finishedAt + 100 };
   }
-  if (status === "unconfigured") {
+  if (status === "unconfigured" || status === "empty") {
     return { consecutivePullFailures: 0, nextRemotePullAt: finishedAt + 30_000 };
   }
   const consecutivePullFailures = Math.min(failures + 1, 6);
@@ -2292,7 +2292,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
       // bounded convergence. An unavailable remote produces an explicit abstention.
       if (live.length === 0 && store.mode === "shared" && store.privateDir) {
         const status = pullTeamMemory(true);
-        if (status !== "updated" && status !== "current") {
+        if (status === "cooldown" || status === "not_shared" || !teamPullIsFresh(status)) {
           return err(
             `Shared team memory refresh is ${status}; Hunch cannot confirm that topic "${topic}" has no current decision. Retry when the shared store is available.`,
           );

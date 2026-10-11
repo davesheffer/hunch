@@ -1536,7 +1536,14 @@ function pushWithOneRemoteAdvanceRetry(
  *  machines' memory. Never throws; leaves a clean tree. Serialized with the commit lock so it
  *  can't race a concurrent flush. Returns true only when the checked-out memory HEAD moved,
  *  allowing callers to avoid rebuilding the derived SQLite index after a no-op pull. */
-export type HunchPullStatus = "updated" | "current" | "busy" | "failed" | "unconfigured";
+export type HunchPullStatus = "updated" | "current" | "busy" | "failed" | "unconfigured" | "empty";
+
+/** A strict guard may pass only on a pull that proved this clone's memory matches the
+ *  advertised remote: it advanced, was already current, or both are provably empty (a
+ *  brand-new shared memory repo before its first capture, #427). */
+export function teamPullIsFresh(status: HunchPullStatus): boolean {
+  return status === "updated" || status === "current" || status === "empty";
+}
 
 export interface PullHunchOptions {
   timeoutMs?: number;
@@ -1560,7 +1567,12 @@ export function pullHunchStatus(hunchDir: string, opts: PullHunchOptions = {}): 
   try {
     const merged = mergeRemote(hunchDir, env, opts.timeoutMs ?? READ_REMOTE_TIMEOUT_MS, opts.remote, opts.allowUnrelatedHistories ?? false);
     if (merged === "failed" || merged === "unconfigured" || !contractReady(opts.remote)) {
-      return merged === "unconfigured" ? merged : "failed";
+      if (merged !== "unconfigured" || !contractReady(opts.remote)) return "failed";
+      // The advertised remote has no branch yet AND this clone never committed memory:
+      // both sides are empty, so there is nothing to be stale against (#427). A clone
+      // WITH memory against an empty remote stays "unconfigured" (unpublished, or the
+      // remote lost its history) so strict guards keep failing closed on it.
+      return opts.remote && !before && !headShaWithEnv(hunchDir, env) ? "empty" : merged;
     }
     return headShaWithEnv(hunchDir, env) !== before ? "updated" : "current";
   } finally {
