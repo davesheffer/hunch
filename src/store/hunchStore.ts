@@ -274,7 +274,10 @@ export class HunchStore {
    *  that re-registers it. Never auto-re-registered: the pointer may be repository content. */
   private unregisteredPointerMessage(dir: string): string {
     const { mode, autoCommit } = this.ignoredLocalPointerSetup;
-    const quoted = /^[\w@%+=:,./-]+$/.test(dir) ? dir : JSON.stringify(dir);
+    // A Windows drive path is shown with forward slashes: it means the same path to Hunch and
+    // pastes unquoted into bash, PowerShell and cmd. JSON quoting would double every backslash.
+    const shown = /^[a-z]:\\/i.test(dir) ? dir.replace(/\\/g, "/") : dir;
+    const quoted = /^[\w@%+=:,./-]+$/.test(shown) ? shown : JSON.stringify(shown);
     const command = `hunch ${mode === "shared" ? "shared" : "private"} ${quoted}${autoCommit === false ? " --no-auto-commit" : ""}`;
     return `.hunch/local.json names a memory store at ${dir} that this machine's setup has not registered in the git common dir, ` +
       "so Hunch refuses to open this repository's memory rather than silently writing captures to the public .hunch/. " +
