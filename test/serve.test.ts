@@ -15,6 +15,7 @@ import { join } from "node:path";
 import { BODY_LIMIT_BYTES, createServeApp } from "../src/serve/app.js";
 import { hashToken, initServeConfig, readServeConfig, resolvePrincipal } from "../src/serve/config.js";
 import { STALE_AFTER_MS, withWriteLock, writeLockPath } from "../src/serve/writelock.js";
+import { processStartedAt } from "../src/core/procstart.js";
 import { createStateClient, StateClientError } from "../src/client/state.js";
 import { stateHash, assertChangeSequence } from "../src/core/stateContract.js";
 import { partitionOf } from "../src/store/stateBinding.js";
@@ -444,25 +445,69 @@ test("the write lock reclaims a lock whose pid now belongs to an unrelated live 
   } finally { child.kill(); cleanupDir(dir); }
 });
 
-test("a live unrelated pid WITHOUT a token keeps the lock — the remaining macOS/Windows gap (issue #287)", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "hunch-writelock-legacy-gap-"));
+for (const platform of ["darwin", "win32", "linux"] as const) {
+  test(`a live tokenless pid keeps the lock unless its process was created after the lock, on ${platform} (issue #287)`, async () => {
+    const dir = mkdtempSync(join(tmpdir(), "hunch-writelock-legacy-gap-"));
+    const child = spawnSleeper();
+    try {
+      const path = writeLockPath(dir);
+      // No `start` in the record (a legacy lock, or any lock written off linux):
+      // the pid is alive and not ours, and no token can tell whether it is the
+      // same process instance.
+      const at = new Date(Date.now() - 5 * 60_000);
+      writeFileSync(path, JSON.stringify({ pid: child.pid, host: hostname(), nonce: "legacy", at: at.toISOString() }));
+      utimesSync(path, at, at);
+      let entered = false;
+      // Its process predates the lock: it may well be the owner. Never stolen on a guess.
+      for (const startedAt of [() => at.getTime() - 60_000, () => null]) {
+        await assert.rejects(
+          withWriteLock(dir, () => { entered = true; }, { timeoutMs: 50, startToken: { self: null, of: () => null, platform, startedAt } }),
+          /write lock .* held by pid/,
+        );
+        assert.equal(entered, false);
+        assert.ok(existsSync(path), "a live pid we cannot disprove keeps its lock");
+      }
+      // Its process was created AFTER the lock was taken: it cannot be the owner,
+      // the pid was reused. Taken over instead of blocking every write forever.
+      await withWriteLock(dir, () => { entered = true; }, { timeoutMs: 2_000, startToken: { self: null, of: () => null, platform, startedAt: () => at.getTime() + 60_000 } });
+      assert.equal(entered, true, "a reused pid no longer vouches for a dead owner");
+      assert.ok(!existsSync(path), "the reclaimed lock is released after the write");
+    } finally { child.kill(); cleanupDir(dir); }
+  });
+}
+
+test("the real creation-time probe reports nothing on linux, where lstart shifts with a forward clock step (issue #287)", { skip: process.platform !== "linux" ? "linux only" : false }, () => {
+  assert.equal(processStartedAt(process.pid), null);
+});
+
+test("a fresh lock is never probed: the creation-time check runs only past STALE_AFTER_MS (issue #287)", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "hunch-writelock-fresh-probe-"));
   const child = spawnSleeper();
   try {
     const path = writeLockPath(dir);
-    // No `start` in the record (a legacy lock, or any lock written off linux):
-    // the pid is alive and not ours, and there is no spawn-free way to tell
-    // whether it is the same process instance. It keeps the lock. Documented,
-    // not fixed — the safe direction is never to steal on a guess.
-    writeFileSync(path, JSON.stringify({ pid: child.pid, host: hostname(), nonce: "legacy", at: new Date().toISOString() }));
-    const old = new Date(Date.now() - 5 * 60_000);
+    writeFileSync(path, JSON.stringify({ pid: child.pid, host: hostname(), nonce: "fresh", at: new Date(Date.now() - 120_000).toISOString() }));
+    let probed = 0;
+    await assert.rejects(
+      withWriteLock(dir, () => {}, { timeoutMs: 100, startToken: { self: null, of: () => null, startedAt: () => { probed++; return Date.now(); } } }),
+      /write lock .* held by pid/,
+      "a lock file modified just now is left alone whatever its recorded `at`",
+    );
+    assert.equal(probed, 0, "no spawn on the contended fast path");
+  } finally { child.kill(); cleanupDir(dir); }
+});
+
+test("the issue #287 repro: a lock dated 2026-01-01 naming a live, unrelated same-host pid is taken over by the real OS probe", { skip: process.platform !== "win32" && process.platform !== "darwin" ? "the creation-time probe runs on macOS and Windows only (linux lstart shifts with clock steps)" : false }, async () => {
+  const dir = mkdtempSync(join(tmpdir(), "hunch-writelock-repro-"));
+  const child = spawnSleeper();
+  try {
+    assert.ok(processStartedAt(child.pid!) !== null, `the OS reports when pid ${child.pid} was created on ${process.platform}`);
+    const path = writeLockPath(dir);
+    writeFileSync(path, JSON.stringify({ pid: child.pid, host: hostname(), nonce: "dead-owner", at: "2026-01-01T00:00:00.000Z" }));
+    const old = new Date("2026-01-01T00:00:00.000Z");
     utimesSync(path, old, old);
     let entered = false;
-    await assert.rejects(
-      withWriteLock(dir, () => { entered = true; }, { timeoutMs: 50 }),
-      /write lock .* held by pid/,
-    );
-    assert.equal(entered, false);
-    assert.ok(existsSync(path), "a live pid we cannot disprove keeps its lock");
+    await withWriteLock(dir, () => { entered = true; }, { timeoutMs: 20_000 });
+    assert.equal(entered, true, "the write lands instead of WriteLockTimeout");
   } finally { child.kill(); cleanupDir(dir); }
 });
 
