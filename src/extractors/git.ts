@@ -2547,12 +2547,15 @@ export function commitRepairStatusAgainst(commit: string, refs: readonly string[
  *  `git patch-id` process for all of them. */
 export function commitPatchIds(shas: readonly string[], cwd: string): Map<string, string> {
   const out = new Map<string, string>();
-  const valid = [...new Set(shas.filter((sha) => /^[0-9a-f]{7,64}$/i.test(sha)))];
+  // Only shas that resolve: one unknown sha (a withheld queue entry) would make `git log`
+  // fail outright and drop every patch-id. Fed on stdin, so no argv length limit applies.
+  const exists = commitsExist([...new Set(shas)], cwd);
+  const valid = exists ? [...exists] : [];
   if (!valid.length) return out;
   let ids: string;
   try {
-    const log = execFileSync("git", ["-C", cwd, "log", "--no-walk=unsorted", "--format=%H", "-p", "--no-merges", "--binary", "--full-index", "--no-renames", "--no-ext-diff", "--no-textconv", ...valid, "--"],
-      { maxBuffer: 256 * 1024 * 1024, timeout: 30_000, stdio: ["ignore", "pipe", "ignore"] });
+    const log = execFileSync("git", ["-C", cwd, "log", "--stdin", "--no-walk=unsorted", "--format=%H", "-p", "--no-merges", "--binary", "--full-index", "--no-renames", "--no-ext-diff", "--no-textconv", "--"],
+      { input: valid.join("\n") + "\n", maxBuffer: 256 * 1024 * 1024, timeout: 30_000, stdio: ["pipe", "pipe", "ignore"] });
     if (!log.byteLength) return out;
     ids = execFileSync("git", ["-C", cwd, "patch-id", "--stable"], { input: log, encoding: "utf8", maxBuffer: 16 * 1024 * 1024, timeout: 30_000, stdio: ["pipe", "pipe", "ignore"] });
   } catch {

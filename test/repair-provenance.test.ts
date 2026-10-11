@@ -13,6 +13,7 @@ import { HunchStore } from "../src/store/hunchStore.js";
 import { commitRepairReviewHash } from "../src/core/commitrepair.js";
 import { readActivePendingRepairs, withheldRewrites } from "../src/core/repairqueue.js";
 import { ensureGitignore } from "../src/integrations/gitignore.js";
+import { commitPatchIds, commitRepairStatus, commitRepairStatusAgainst } from "../src/extractors/git.js";
 
 const projectRoot = process.cwd();
 const tsx = join(projectRoot, "node_modules/tsx/dist/cli.mjs");
@@ -1623,27 +1624,35 @@ function repoWith(build: (root: string, commit: (msg: string, files: Record<stri
 }
 
 test("repair-provenance --range over a historical commit never proposes rewriting a decision whose commit HEAD still reaches (#450)", () => {
-  let old = "";
+  let old = "", later = "";
   const fixture = repoWith((_root, commit) => {
     commit("base", { "src/base.ts": "1\n" });
     old = commit("release", { "src/feature.ts": "v1\n", "src/other.ts": "1\n" });
-    return { commit: commit("later change", { "src/feature.ts": "v2\n" }), related: ["src/feature.ts"] };
+    later = commit("later change", { "src/feature.ts": "v2\n" });
+    return { commit: later, related: ["src/feature.ts"] };
   });
   try {
     const run = runCliRaw(fixture.root, "repair-provenance", "--range", `${old}^..${old}`);
     assert.equal(run.status, 0, run.stderr);
     assert.doesNotMatch(run.stdout, /Would repair/);
     assert.deepEqual(readActivePendingRepairs(fixture.root), [], "the cited commit is on main: nothing is orphaned");
+    // Control: judged against the range tip alone (the old rule) the same commit IS orphaned.
+    assert.equal(commitRepairStatus(later, old, fixture.root), "orphaned");
+    assert.equal(commitRepairStatusAgainst(later, [old, "HEAD"], fixture.root), "current");
   } finally { fixture.cleanup(); }
 });
 
 test("repair-provenance prefers the same-patch-id commit over the unique file-superset one, and says which kind of match it is (#450)", () => {
-  let base = "", picked = "", head = "";
+  let base = "", picked = "", head = "", orphanSha = "";
   const fixture = repoWith((root, commit) => {
     base = commit("base", { "CHANGELOG.md": "# log\n", "src/a.ts": "1\n", "package.json": "{}\n" });
     git(root, "checkout", "-qb", "feature");
     const orphan = commit("feat: script", { "CHANGELOG.md": "# log\n- script\n", "scripts/x.sh": "echo x\n" });
+    orphanSha = orphan;
     git(root, "checkout", "-q", "main");
+    // Main moves first, so the cherry-pick can never be byte-identical to the orphan
+    // (same tree, parent, message and second) and thus the very same commit.
+    commit("unrelated", { "docs/other.md": "x\n" });
     git(root, "cherry-pick", orphan);
     picked = git(root, "rev-parse", "HEAD");
     head = commit("release", { "CHANGELOG.md": "# log\n- script\n- release\n", "src/a.ts": "2\n", "package.json": "{\"v\":1}\n" });
@@ -1656,5 +1665,7 @@ test("repair-provenance prefers the same-patch-id commit over the unique file-su
     assert.equal(queued.length, 1, run.stdout);
     assert.ok(picked.startsWith(queued[0]!.to), `the cherry-picked commit, not the release commit (got ${queued[0]!.to})`);
     assert.match(run.stdout, /same patch-id: identical change/);
+    // An unresolvable sha (a withheld queue entry) must not wipe out every other patch-id.
+    assert.ok(commitPatchIds([orphanSha, "deadbeefdeadbeef"], fixture.root).has(orphanSha));
   } finally { fixture.cleanup(); }
 });
