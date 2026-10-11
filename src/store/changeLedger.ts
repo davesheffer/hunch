@@ -163,7 +163,12 @@ export function compactLedger(hunchDir: string, scope: Scope, opts: { keep?: num
 
 const eventIdentity = (e: ChangeEvent): string => [e.change, e.facet, e.record_id, e.record_hash, e.at, e.cause ? JSON.stringify(e.cause) : ""].join("|");
 
+/** A total order: by instant (so `...:09Z`, `...:09.500Z` and `+02:00` offsets compare as
+ *  times, not text), unparseable `at` after every parseable one, then `at` text, then identity. */
 const byTimeThenIdentity = (a: ChangeEvent, b: ChangeEvent): number => {
+  const ta = Date.parse(a.at), tb = Date.parse(b.at);
+  if (Number.isNaN(ta) !== Number.isNaN(tb)) return Number.isNaN(ta) ? 1 : -1;
+  if (!Number.isNaN(ta) && ta !== tb) return ta < tb ? -1 : 1;
   if (a.at !== b.at) return a.at < b.at ? -1 : 1;
   const ka = eventIdentity(a), kb = eventIdentity(b);
   return ka < kb ? -1 : ka > kb ? 1 : 0;

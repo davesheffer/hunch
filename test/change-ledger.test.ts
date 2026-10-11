@@ -215,6 +215,22 @@ test("issue #361: same-time cross-clone merges converge and a second merge keeps
   assert.equal(settled.floor_seq, ab.floor_seq, "a settled re-merge cannot ratchet the floor");
 });
 
+test("issue #361: concurrent events are placed by instant, not by the text of `at` (no millis, explicit offset)", () => {
+  const base = emptyLedger(scope);
+  const event = (n: number, at: string): Ledger["events"][number] => ({ schema: "nuryel.state.subscribe/1", seq: 1, at, scope, ...ev(n, "", String(n)) });
+  const pairs: Array<[string, string]> = [
+    ["2026-09-08T10:00:09Z", "2026-09-08T10:00:09.500Z"], // "Z" sorts after "." as text
+    ["2026-09-08T11:00:09+02:00", "2026-09-08T10:00:00Z"], // 09:00:09Z, though "11" > "10" as text
+  ];
+  for (const [earlier, later] of pairs) {
+    const ours: Ledger = { ...base, head_seq: 1, events: [event(90, later)] };
+    const theirs: Ledger = { ...base, head_seq: 1, events: [event(91, earlier)] };
+    for (const [x, y] of [[ours, theirs], [theirs, ours]] as const) {
+      assert.deepEqual(mergeLedgers(base, x, y).ledger.events.map((e) => e.at), [earlier, later], `${earlier} happened before ${later}`);
+    }
+  }
+});
+
 test("issue #361: merging identical same-time batches does not renumber published events", () => {
   const tie = "2026-09-08T10:00:09Z";
   const base = emptyLedger(scope);
