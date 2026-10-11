@@ -360,13 +360,21 @@ const PRUNE_DIRS = [
  *  running `hunch mcp`/`hunch serve` on Windows, a permission) does not stop the
  *  others; the failures are returned so the caller can say what is left and that a
  *  re-run — idempotent — finishes the job. */
-export function applyUninstall(plan: UninstallPlan): Array<{ path: string; error: string }> {
+/** What applyUninstall actually did: the steps that ran (so output never
+ *  claims a step that was skipped), and the ones that failed. */
+export interface UninstallResult {
+  applied: UninstallStep[];
+  failed: Array<{ path: string; error: string }>;
+}
+
+export function applyUninstall(plan: UninstallPlan): UninstallResult {
   if (plan.refused.length) throw new Error("refusing to apply an uninstall plan that has refusals");
+  const applied: UninstallStep[] = [];
   const failed: Array<{ path: string; error: string }> = [];
   for (const step of plan.steps) {
-    try { step.run?.(); } catch (e) {
+    try { step.run?.(); applied.push(step); } catch (e) {
       failed.push({ path: step.path, error: (e as Error).message });
-      if (step.path === OPT_OUT_FILE) return failed; // never strip Hunch without the marker that keeps it out
+      if (step.path === OPT_OUT_FILE) return { applied, failed }; // never strip Hunch without the marker that keeps it out
     }
   }
   for (const rel of PRUNE_DIRS) {
@@ -380,7 +388,7 @@ export function applyUninstall(plan: UninstallPlan): Array<{ path: string; error
       try { if (readdirSync(dir).length === 0) rmdirSync(dir); } catch { /* absent or not empty */ }
     }
   }
-  return failed;
+  return { applied, failed };
 }
 
 export function formatUninstallPlan(plan: UninstallPlan, dryRun: boolean): string[] {

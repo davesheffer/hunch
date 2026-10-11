@@ -171,13 +171,32 @@ test("applyUninstall keeps going past a failed step and reports it; a failed opt
   const plan = (steps: UninstallPlan["steps"]): UninstallPlan => ({ root: tempDir("hunch-uninstall-apply-"), purge: false, steps, refused: [] });
   const p1 = plan([step(OPT_OUT_FILE), step(".hunch/", true), step(".hunch-cache/")]);
   try {
-    assert.deepEqual(applyUninstall(p1), [{ path: ".hunch/", error: "EBUSY: .hunch/" }]);
+    const r1 = applyUninstall(p1);
+    assert.deepEqual(r1.failed, [{ path: ".hunch/", error: "EBUSY: .hunch/" }]);
+    assert.deepEqual(r1.applied.map((s) => s.path), [OPT_OUT_FILE, ".hunch-cache/"], "only the steps that ran are reported as done");
     assert.deepEqual(ran, [OPT_OUT_FILE, ".hunch/", ".hunch-cache/"], "the remaining steps still ran");
   } finally { cleanupDir(p1.root); }
   ran.length = 0;
   const p2 = plan([step(OPT_OUT_FILE, true), step("CLAUDE.md")]);
   try {
-    assert.equal(applyUninstall(p2).length, 1);
+    const r2 = applyUninstall(p2);
+    assert.equal(r2.failed.length, 1);
+    assert.deepEqual(r2.applied, [], "nothing is reported as done");
     assert.deepEqual(ran, [OPT_OUT_FILE], "nothing is removed without the marker that keeps Hunch out");
   } finally { cleanupDir(p2.root); }
+});
+
+test("uninstall whose opt-out marker can't be written says nothing was changed, not 'uninstalled'", { timeout: 300_000 }, () => {
+  const { base, root, hunch } = fixture();
+  try {
+    assert.equal(hunch("init", "--no-index").status, 0);
+    // A directory where the marker file goes: the atomic write's rename fails.
+    mkdirSync(join(root, OPT_OUT_FILE, "blocker"), { recursive: true });
+    const r = hunch("uninstall");
+    assert.equal(r.status, 1, out(r));
+    assert.doesNotMatch(String(r.stdout), /Hunch uninstalled|✓ (edited|deleted|created)/, "no step is claimed as done");
+    assert.match(String(r.stdout), /Hunch uninstall: nothing was changed/);
+    assert.match(out(r), new RegExp(`✗ ${OPT_OUT_FILE.replace(".", "\\.")}:`));
+    assert.match(readFileSync(join(root, "CLAUDE.md"), "utf8"), /HUNCH:START/, "really nothing was removed");
+  } finally { cleanupDir(base); }
 });

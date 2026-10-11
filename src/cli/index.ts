@@ -572,11 +572,16 @@ program
       process.exitCode = 1;
       return;
     }
-    console.log(`${opts.dryRun ? "Hunch uninstall (dry run — nothing written)" : "Hunch uninstalled"} at ${root}${opts.purge ? " (--purge)" : ""}`);
+    const { applied, failed } = opts.dryRun ? { applied: plan.steps, failed: [] } : applyUninstall(plan);
+    // The header follows what actually ran: a failed opt-out marker stops
+    // everything, and saying "uninstalled" then would be a lie.
+    const header = opts.dryRun ? "Hunch uninstall (dry run — nothing written)"
+      : !failed.length ? "Hunch uninstalled"
+      : applied.some((s) => s.kind !== "keep") ? "Hunch partly uninstalled"
+      : "Hunch uninstall: nothing was changed";
+    console.log(`${header} at ${root}${opts.purge ? " (--purge)" : ""}`);
     if (!plan.steps.some((s) => s.kind !== "keep")) console.log("  nothing to remove — Hunch is not installed here");
-    const failed = opts.dryRun ? [] : applyUninstall(plan);
-    const failedPaths = new Set(failed.map((f) => f.path));
-    for (const line of formatUninstallPlan({ ...plan, steps: plan.steps.filter((s) => !failedPaths.has(s.path)) }, !!opts.dryRun)) console.log(line);
+    for (const line of formatUninstallPlan({ ...plan, steps: applied }, !!opts.dryRun)) console.log(line);
     if (failed.length) {
       console.error(`
 ✗ ${failed.length} step(s) could not be applied — close running Hunch processes (\`hunch mcp\`, \`hunch serve\`, editors using them), then re-run \`hunch uninstall${opts.purge ? " --purge" : ""}\`:`);
