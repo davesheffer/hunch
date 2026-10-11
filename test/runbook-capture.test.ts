@@ -68,6 +68,11 @@ test("hunch runbook over a range interleaving capture commits records only the r
     const rec = JSON.parse(readFileSync(join(dir, file!), "utf8")) as { steps: string[]; files: string[] };
     assert.deepEqual(rec.steps, ["feat(auth): rate-limit logins", "feat(auth): session cookie flags", "test(auth): cover login lockout"]);
     assert.deepEqual([...rec.files].sort(), ["src/auth.ts", "src/cookie.ts", "test/auth.test.ts"]);
+
+    commit("hunch: capture dec_9876543210", { ".hunch/notes/d.json": "{}\n" });
+    const ownOnly = hunch("runbook", "HEAD~1..HEAD", "--task", "nothing but bookkeeping");
+    assert.equal(ownOnly.status, 1);
+    assert.match(String(ownOnly.stderr), /only holds Hunch's own capture commits and files; nothing to draft/, "not 'no commits' when commits exist");
   } finally {
     cleanupDir(base);
   }

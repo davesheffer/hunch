@@ -193,7 +193,8 @@ test("shared CLI mutators pump their actual home and rejection leaves the next c
       "MATRIX_FAILURE_PUMP", "a teammate receives the captured failure on its next command");
 
     const runbookTask = "PUMP_RUNBOOK: revise the tiny app safely";
-    const runbookOutput = expectCli(architect, "runbook", "HEAD~1..HEAD", "--task", runbookTask);
+    // A range over the app change itself: Hunch's own .hunch/-only commits are not runbook steps (#425).
+    const runbookOutput = expectCli(architect, "runbook", `${appCommit}~1..${appCommit}`, "--task", runbookTask);
     const runbookId = runbookOutput.match(/runbook (rb_[A-Za-z0-9_-]+)/)?.[1];
     assert.ok(runbookId, runbookOutput);
     assert.equal(remoteJson<{ task: string }>(memoryRemote, `.hunch/runbooks/${runbookId}.json`).task, runbookTask);
@@ -227,7 +228,7 @@ test("shared CLI mutators pump their actual home and rejection leaves the next c
     assert.equal(teammateRejected.status, "rejected", "a second clone observes the rejection on its next command");
 
     const afterTask = "PUMP_AFTER_REJECT: prove the graph is still alive";
-    const afterOutput = expectCli(architect, "runbook", "HEAD~1..HEAD", "--task", afterTask);
+    const afterOutput = expectCli(architect, "runbook", `${appCommit}~1..${appCommit}`, "--task", afterTask);
     const afterId = afterOutput.match(/runbook (rb_[A-Za-z0-9_-]+)/)?.[1];
     assert.ok(afterId, afterOutput);
     assert.equal(remoteJson<{ task: string }>(memoryRemote, `.hunch/runbooks/${afterId}.json`).task, afterTask,

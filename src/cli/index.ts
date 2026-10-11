@@ -1961,8 +1961,14 @@ program
     const [base, head = "HEAD"] = range.split("..");
     if (!base || !revExists(base, root)) { store.close(); return fail(`base ref "${base ?? ""}" not found (range: ${range})`); }
     // Hunch's own capture commits and store/grounding files are bookkeeping, not steps (#425).
-    const { steps, files } = runbookDraft(rangeCommits(base, root, head), rangeFiles(base, root, head));
-    if (!steps.length && !files.length) { store.close(); return fail(`no commits or changes in range ${range}`); }
+    const commits = rangeCommits(base, root, head);
+    const { steps, files } = runbookDraft(commits, rangeFiles(base, root, head));
+    if (!steps.length && !files.length) {
+      store.close();
+      return fail(commits.length
+        ? `range ${range} only holds Hunch's own capture commits and files; nothing to draft`
+        : `no commits or changes in range ${range}`);
+    }
     const now = new Date().toISOString();
     const rec: Runbook = {
       id: runbookId(opts.task),
