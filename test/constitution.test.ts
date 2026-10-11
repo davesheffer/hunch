@@ -3142,6 +3142,7 @@ test("Phase 2C local adapters normalize corrections, test failures, and incident
   const { root, store, cleanup } = layeredRepo();
   try {
     const correction = buildCorrectionConstraint({
+      vouched: true,
       rule: "never import the unsafe transport in payments",
       scope_hint_file: "src/payments/charge.ts",
       severity: "blocking",
@@ -3201,6 +3202,7 @@ test("MD-1a upgrades one exact top-level package correction into an idempotent n
   const { root, store, cleanup } = layeredRepo();
   try {
     const correction = buildCorrectionConstraint({
+      vouched: true,
       rule: "never import axios",
       scope_hint_file: "src/api/orders.ts",
       severity: "blocking",
@@ -3276,6 +3278,7 @@ test("MD-1a rejects a proof when a merge resolution changes source outside every
   const { root, store, cleanup } = layeredRepo();
   try {
     const correction = buildCorrectionConstraint({
+      vouched: true,
       rule: "never import axios",
       scope_hint_file: "src/api/orders.ts",
       severity: "blocking",
@@ -3340,6 +3343,7 @@ test("MD-1a activation gates fail closed at advisory and blocking runtime evalua
   const { root, store, cleanup } = layeredRepo();
   try {
     const correction = buildCorrectionConstraint({
+      vouched: true,
       rule: "never import axios",
       scope_hint_file: "src/api/orders.ts",
       severity: "blocking",
@@ -3402,6 +3406,7 @@ test("MD-1a automatic correction paths reject human-confirmed provenance lookali
     const sources = ["not_human_confirmed", "human_confirmed_pending"];
     for (const [index, source] of sources.entries()) {
       const correction = buildCorrectionConstraint({
+        vouched: true,
         rule: `never import lookalike-package-${index}`,
         scope_hint_file: "src/api/orders.ts",
         severity: "blocking",
@@ -3461,6 +3466,7 @@ test("MD-1a private proof packet is byte-reusable across differently named linke
     producerStore = new HunchStore(hunchPaths(producer));
     indexRepo(producerStore, producer, { churn: false });
     const correction = buildCorrectionConstraint({
+      vouched: true,
       rule: "never import axios",
       scope_hint_file: "src/api/orders.ts",
       severity: "blocking",
@@ -3566,6 +3572,7 @@ test("MD-1a private proof packet is byte-reusable across ordinary clones after o
     producerStore = new HunchStore(hunchPaths(producer));
     indexRepo(producerStore, producer, { churn: false });
     const correction = buildCorrectionConstraint({
+      vouched: true,
       rule: "never import axios",
       scope_hint_file: "src/api/orders.ts",
       severity: "blocking",
@@ -3633,6 +3640,7 @@ test("MD-1a never reuses an orphan proof packet or rewrites an incumbent human l
   const orphanFixture = layeredRepo();
   try {
     const correction = buildCorrectionConstraint({
+      vouched: true,
       rule: "never import axios",
       scope_hint_file: "src/api/orders.ts",
       knownDeps: ["axios"],
@@ -3655,6 +3663,7 @@ test("MD-1a never reuses an orphan proof packet or rewrites an incumbent human l
   const authorityFixture = layeredRepo();
   try {
     const correction = buildCorrectionConstraint({
+      vouched: true,
       rule: "never import axios",
       scope_hint_file: "src/api/orders.ts",
       knownDeps: ["axios"],
@@ -3712,6 +3721,7 @@ test("MD-1a never reuses an orphan proof packet or rewrites an incumbent human l
   const forgedFixture = layeredRepo();
   try {
     const correction = buildCorrectionConstraint({
+      vouched: true,
       rule: "never import axios",
       scope_hint_file: "src/api/orders.ts",
       knownDeps: ["axios"],
@@ -3738,6 +3748,7 @@ test("MD-1a never reuses an orphan proof packet or rewrites an incumbent human l
   const oversizedFixture = layeredRepo();
   try {
     const correction = buildCorrectionConstraint({
+      vouched: true,
       rule: "never import axios",
       scope_hint_file: "src/api/orders.ts",
       knownDeps: ["axios"],
@@ -3778,6 +3789,7 @@ test("MD-1a keeps unsupported corrections on the unchanged legacy fast path and 
   const { root, store, cleanup } = layeredRepo();
   try {
     const correction = buildCorrectionConstraint({
+      vouched: true,
       rule: "never bypass the service boundary",
       scope_hint_file: "src/api/orders.ts",
       severity: "blocking",
@@ -3814,6 +3826,7 @@ test("MD-1a rejects package subpaths, built-ins, and scheme specifiers instead o
     for (const dependency of ["lodash/fp", "fs", "fs/promises", "node:fs", "foo:bar"]) {
       const correction: Constraint = {
         ...buildCorrectionConstraint({
+          vouched: true,
           rule: `never import ${dependency}`,
           scope_hint_file: "src/api/orders.ts",
           severity: "blocking",
@@ -3845,6 +3858,7 @@ test("MD-1a keeps non-TypeScript/JavaScript corrections on the legacy path", () 
 
     const correction: Constraint = {
       ...buildCorrectionConstraint({
+        vouched: true,
         rule: "never import axios",
         scope_hint_file: "src/app.py",
         severity: "blocking",
@@ -3886,6 +3900,7 @@ test("MD-1a rejects a tracked source symlink without touching its external targe
 
     const correction: Constraint = {
       ...buildCorrectionConstraint({
+        vouched: true,
         rule: "never import axios",
         scope_hint_file: "src/api/orders.ts",
         severity: "blocking",
@@ -3984,6 +3999,7 @@ test("MD-1a treats a same-id semantic collision as conflict instead of coverage"
   const { root, store, cleanup } = layeredRepo();
   try {
     const correction = buildCorrectionConstraint({
+      vouched: true,
       rule: "never import axios",
       scope_hint_file: "src/api/orders.ts",
       knownDeps: ["axios"],
@@ -4022,6 +4038,7 @@ test("MD-1a refuses publication when HEAD or the exact correction changes during
   const headFixture = layeredRepo();
   try {
     const correction = buildCorrectionConstraint({
+      vouched: true,
       rule: "never import axios",
       scope_hint_file: "src/api/orders.ts",
       knownDeps: ["axios"],
@@ -4048,6 +4065,7 @@ test("MD-1a refuses publication when HEAD or the exact correction changes during
   const correctionFixture = layeredRepo();
   try {
     const correction = buildCorrectionConstraint({
+      vouched: true,
       rule: "never import axios",
       scope_hint_file: "src/api/orders.ts",
       knownDeps: ["axios"],
@@ -4076,6 +4094,7 @@ test("MD-1a refuses publication when HEAD or the exact correction changes during
   const conflictFixture = layeredRepo();
   try {
     const correction = buildCorrectionConstraint({
+      vouched: true,
       rule: "never import axios",
       scope_hint_file: "src/api/orders.ts",
       knownDeps: ["axios"],
@@ -4118,6 +4137,7 @@ test("MD-1a leaves an exact correction pending when the forbidden import is stil
   const { root, store, cleanup } = layeredRepo('import axios from "axios";\nexport function listOrders(u){ return axios.get(u); }\n');
   try {
     const correction = buildCorrectionConstraint({
+      vouched: true,
       rule: "never import axios",
       scope_hint_file: "src/api/orders.ts",
       severity: "blocking",
@@ -4144,6 +4164,7 @@ test("MD-1a waits for a clean committed source baseline before publishing a proo
   const { root, store, cleanup } = layeredRepo();
   try {
     const correction = buildCorrectionConstraint({
+      vouched: true,
       rule: "never import axios",
       scope_hint_file: "src/api/orders.ts",
       severity: "blocking",
@@ -4181,6 +4202,7 @@ test("MD-1a discloses anchor churn and fails unknown when the anchor symbol is r
   const { root, store, cleanup } = layeredRepo();
   try {
     const correction = buildCorrectionConstraint({
+      vouched: true,
       rule: "never import axios",
       scope_hint_file: "src/api/orders.ts",
       knownDeps: ["axios"],
@@ -4211,6 +4233,7 @@ test("MD-1a private correction batch leaves exact-zero public artifacts and publ
   const store = new HunchStore(hunchPaths(root));
   try {
     const correction = buildCorrectionConstraint({
+      vouched: true,
       rule: "never import @secret/billing",
       scope_hint_file: "src/api/orders.ts",
       severity: "blocking",
@@ -4268,6 +4291,7 @@ test("MD-1a rejects public references to private-only decisions before evidence 
   store.putPrivate("decisions", privateDecision);
   const injected = {
     ...buildCorrectionConstraint({
+      vouched: true,
       rule: "never import axios",
       scope_hint_file: "src/api/orders.ts",
       knownDeps: ["axios"],
@@ -4329,6 +4353,7 @@ test("MD-1a CLI stays plain and MCP requires an explicit flag for full proof art
   let client: Client | null = null;
   try {
     const correction = buildCorrectionConstraint({
+      vouched: true,
       rule: "never import axios",
       scope_hint_file: "src/api/orders.ts",
       severity: "blocking",
@@ -4495,6 +4520,7 @@ test("MD-1a post-commit sync retries the durable correction queue without an exp
   const [tsx, cli] = hunchCliArgs();
   try {
     const correction = buildCorrectionConstraint({
+      vouched: true,
       rule: "never import axios",
       scope_hint_file: "src/api/orders.ts",
       severity: "blocking",
@@ -4533,6 +4559,7 @@ test("MD-1a normal public sync folds capture, correction review, graph, and grou
     ensureGitignore(fixture.root);
     commitFiles(fixture.root, ["AGENTS.md", ".gitignore"], "fixture: track generated grounding target");
     const correction = buildCorrectionConstraint({
+      vouched: true,
       rule: "never import axios",
       scope_hint_file: "src/api/orders.ts",
       severity: "blocking",
@@ -4607,6 +4634,7 @@ test("MD-1a private split sync commits its proposal only to a standalone overlay
     });
     const configured = new HunchStore(hunchPaths(fixture.root));
     const correction = buildCorrectionConstraint({
+      vouched: true,
       rule: "PRIVATE_CORRECTION_SENTINEL: never import @secret/billing",
       scope_hint_file: "src/api/orders.ts",
       severity: "blocking",
@@ -4685,6 +4713,7 @@ test("Phase 2C correction ingestion inherits private home and public reads revea
   const store = new HunchStore(hunchPaths(root));
   try {
     const correction = buildCorrectionConstraint({
+      vouched: true,
       rule: "never expose the private billing transport",
       scope_hint_file: "src/private/SECRET-billing.ts",
       severity: "blocking",

@@ -58,7 +58,7 @@ test("CORRECTION_NUDGE points at the write tool and is client-agnostic", () => {
 });
 
 test("buildCorrectionConstraint scopes to the hinted file by default (conservative)", () => {
-  const c = buildCorrectionConstraint({ rule: "never call the API here", scope_hint_file: "src/synthesis/provider.ts", severity: "blocking" }, NOW);
+  const c = buildCorrectionConstraint({ rule: "never call the API here", scope_hint_file: "src/synthesis/provider.ts", severity: "blocking", vouched: true }, NOW);
   assert.deepEqual(c.scope, ["src/synthesis/provider.ts"]);
   assert.equal(c.severity, "blocking");
   assert.equal(c.status, "active");
@@ -74,14 +74,14 @@ test("buildCorrectionConstraint normalizes a Windows-style scope hint to POSIX",
 });
 
 test("buildCorrectionConstraint allows blocking + ** ONLY when applies_to_all is explicit", () => {
-  const all = buildCorrectionConstraint({ rule: "no console.log in shipped code", severity: "blocking", applies_to_all: true }, NOW);
+  const all = buildCorrectionConstraint({ rule: "no console.log in shipped code", severity: "blocking", applies_to_all: true, vouched: true }, NOW);
   assert.deepEqual(all.scope, ["**"]);
   assert.equal(all.severity, "blocking");
 });
 
 test("buildCorrectionConstraint DOWNGRADES a repo-wide blocking rule that wasn't opted in (scope footgun guard)", () => {
   // no scope_hint_file and no applies_to_all => scope is ** ; blocking would mute every edit under strict, so down-rank.
-  const c = buildCorrectionConstraint({ rule: "always prefer composition", severity: "blocking" }, NOW);
+  const c = buildCorrectionConstraint({ rule: "always prefer composition", severity: "blocking", vouched: true }, NOW);
   assert.deepEqual(c.scope, ["**"]);
   assert.equal(c.severity, "warning");
 });
@@ -125,9 +125,9 @@ test("a recorded correction enforces: blockingInScope flags a direct edit to its
     mkdirSync(join(root, "src"), { recursive: true });
     writeFileSync(join(root, "src/danger.ts"), "export const x = 1;\n");
     store.json.ensureDirs();
-    // Mint exactly what hunch_record_correction would, then persist + index.
+    // Mint a human-confirmed correction (what `hunch review --confirm` yields), then persist + index.
     const rec = buildCorrectionConstraint(
-      { rule: "never call the pay-per-token API in this file", scope_hint_file: "src/danger.ts", severity: "blocking" },
+      { rule: "never call the pay-per-token API in this file", scope_hint_file: "src/danger.ts", severity: "blocking", vouched: true },
       NOW,
     );
     store.json.put("constraints", rec);

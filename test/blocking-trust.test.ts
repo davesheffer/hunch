@@ -30,7 +30,7 @@ const inRoot = (rel: string): string => (process.platform === "win32" ? `${ROOT}
 
 test("an absolute scope_hint_file is relativized, so the rule actually matches (#2)", () => {
   const con = buildCorrectionConstraint(
-    { rule: "never widen this API", scope_hint_file: inRoot("src/core/check.ts"), severity: "blocking", root: ROOT },
+    { rule: "never widen this API", scope_hint_file: inRoot("src/core/check.ts"), severity: "blocking", root: ROOT, vouched: true },
     NOW,
   );
   assert.deepEqual(con.scope, ["src/core/check.ts"], "scope is repo-relative POSIX");
@@ -52,7 +52,7 @@ test("no local filesystem path leaks into the committed record (#2)", () => {
 test("an absolute hint OUTSIDE the repo never becomes a blocking scope (#2)", () => {
   const outside = process.platform === "win32" ? "C:\\elsewhere\\other.ts" : "/elsewhere/other.ts";
   const con = buildCorrectionConstraint(
-    { rule: "never do the bad thing", scope_hint_file: outside, severity: "blocking", root: ROOT },
+    { rule: "never do the bad thing", scope_hint_file: outside, severity: "blocking", root: ROOT, vouched: true },
     NOW,
   );
   assert.deepEqual(con.scope, ["**"], "an unrelativizable hint falls back to repo-wide");
@@ -62,7 +62,7 @@ test("an absolute hint OUTSIDE the repo never becomes a blocking scope (#2)", ()
 
 test("a relative hint is untouched (no regression) (#2)", () => {
   const con = buildCorrectionConstraint(
-    { rule: "never widen this API", scope_hint_file: "src/core/check.ts", severity: "blocking", root: ROOT },
+    { rule: "never widen this API", scope_hint_file: "src/core/check.ts", severity: "blocking", root: ROOT, vouched: true },
     NOW,
   );
   assert.deepEqual(con.scope, ["src/core/check.ts"]);

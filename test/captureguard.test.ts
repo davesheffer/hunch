@@ -94,7 +94,12 @@ test("shared mode: supersede of an OVERLAY incumbent with private:false SUCCEEDS
   const s = await sharedSetup();
   let client: Client | undefined;
   t.after(() => s.cleanup(client));
-  writeFileSync(join(s.overlay, "decisions", "dec_privbbbbbb.json"), JSON.stringify(DEC("dec_privbbbbbb", "guard.ovl", "overlay incumbent")));
+  writeFileSync(join(s.overlay, "decisions", "dec_privbbbbbb.json"), JSON.stringify({
+    ...DEC("dec_privbbbbbb", "guard.ovl", "overlay incumbent"),
+    // Agent-recorded: this test is about store routing; superseding a human-confirmed
+    // decision needs the human (record-provenance-hardening.test.ts).
+    provenance: { source: "agent_recorded", confidence: 0.75, evidence: [] },
+  }));
   client = await s.connect();
 
   const r = await record(client, { title: "successor", topic: "guard.ovl", status: "accepted", decision: "new", supersedes: "dec_privbbbbbb" });

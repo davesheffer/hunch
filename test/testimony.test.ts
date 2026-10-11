@@ -165,14 +165,24 @@ test("an un-token'd re-record INHERITS an existing human signature — testimony
     // The SAME decision is re-recorded by an agent with no token — exactly what the
     // un-token'd nudge instructs. This used to rewrite source to plain agent_recorded.
     await s.call("hunch_record_decision", {
-      decision: { title: "Sessions are JWT-only", decision: "JWT only, refined.", topic: "auth.transport" },
+      decision: { title: "Sessions are JWT-only", decision: "JWT only.", topic: "auth.transport" },
     });
     const after = readDecisions(s.root)[0]!;
     assert.match(
       after.provenance.source, /human_confirmed/,
       `an un-vouched write must not strip the human signature — got "${after.provenance.source}"`,
     );
-    assert.equal(after.decision, "JWT only, refined.", "the refinement still lands; only the signature is protected");
+    assert.equal(after.decision, "JWT only.");
+
+    // Changed substance without a fresh confirmation must not ride the inherited
+    // signature: the write is refused and the signed text stays.
+    const changed = await s.call("hunch_record_decision", {
+      decision: { title: "Sessions are JWT-only", decision: "JWT only, refined.", topic: "auth.transport" },
+    });
+    assert.match(changed, /^Refused: .*human-confirmed and this write changes its content/);
+    const kept = readDecisions(s.root)[0]!;
+    assert.match(kept.provenance.source, /human_confirmed/);
+    assert.equal(kept.decision, "JWT only.", "unsigned text never lands under the human's signature");
   } finally { s.cleanup(); }
 });
 
