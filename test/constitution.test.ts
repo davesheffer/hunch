@@ -4915,6 +4915,8 @@ test("Phase 2D review/conversation exports validate as one batch and preserve ex
       items: [{
         ...exported.items[0],
         id: "cli-review-roundtrip",
+        // The CLI has no --now: date the item relative to the real clock so the 90d window always holds it.
+        occurred_at: new Date(Date.now() - 86_400_000).toISOString(),
         text: "CLI_RAW_TEXT must hash but never persist.",
       }],
     }));
