@@ -6714,6 +6714,12 @@ program
         for (const f of commitUnresolvable) console.log(`· ${f.id} — ${f.detail}`);
         console.log(`\nHeal: this is a HUMAN call — check \`hunch repair-provenance\` for a queued match (the post-merge hook detects these automatically while the commit is still resolvable, but never applies one unattended); run \`hunch repair-provenance --apply\` to confirm it, or if the commit is already gone, manually correct the decision's provenance or leave it as historical record.\n`);
       }
+      const fenceUnclosed = kind("doc-fence-unclosed");
+      if (fenceUnclosed.length) {
+        console.log(`${fenceUnclosed.length} markdown file(s) open a code fence that never closes, hiding the topic markers below it:\n`);
+        for (const f of fenceUnclosed) console.log(`· ${f.id} — ${f.detail}`);
+        console.log(`\nHeal: close the fence (a line of the same \`\`\` or ~~~ run) where the example ends; the markers after it become live again.\n`);
+      }
       console.log(`Hunch never rewrites prose for you; this is a read-only reconciliation report.`);
     } finally {
       store.close();
