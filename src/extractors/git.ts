@@ -2637,9 +2637,22 @@ export function firstCommitForFile(file: string, cwd: string): string {
   return gitSafe(["log", "--reverse", "--format=%H", "--", file], cwd).split("\n").find(Boolean) ?? "";
 }
 
-/** ISO author-date of the most recent commit touching a file ("" if none). */
-export function lastChangeDate(file: string, cwd: string): string {
-  return gitSafe(["log", "-1", "--format=%aI", "--", file], cwd);
+/** ISO author-date of the most recent commit touching a file ("" if none), as of `rev`
+ *  (default HEAD). */
+export function lastChangeDate(file: string, cwd: string, rev?: string): string {
+  return gitSafe(["log", "-1", "--format=%aI", ...(rev ? [rev] : []), "--", file], cwd);
+}
+
+/** The revision a checked change starts from, so freshness is judged WITHOUT the change
+ *  itself: a committed change under review must not make its own guarding record stale
+ *  (#426). `--base` diffs are 3-dot, so the merge-base; `--commit` is its parent;
+ *  staged/working changes are not committed yet, so HEAD (undefined). `--commit` judges
+ *  one commit in isolation, so an earlier commit of the same branch can still age the
+ *  record; `--base` (the CI guard) judges the whole branch and is the authoritative gate. */
+export function checkFreshnessRevision(source: { base?: string; commit?: string }, cwd: string): string | undefined {
+  if (source.commit) return `${source.commit}^`;
+  if (source.base) return gitSafe(["merge-base", source.base, "HEAD"], cwd) || source.base;
+  return undefined;
 }
 
 /**

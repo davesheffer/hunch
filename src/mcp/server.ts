@@ -33,7 +33,7 @@ import { knownRepoDeps } from "../synthesis/tripwires.js";
 import { refreshExistingGrounding } from "../integrations/providers.js";
 import { workspaceLedgerView, renderWorktreeTable, renderBranchTable, workspaceSummaryLine, snapshotHasHome, recordWorkspaceSnapshot, branchRows, worktreeRows } from "../integrations/workspaceLedger.js";
 import { workspacesConfig } from "../core/config.js";
-import { revParse, asOfDate, revExists, lastChangeDate, rangeFiles, rangeGateDiff, commitFiles, commitGateDiff, stagedFiles, stagedGateDiff, workingFiles, workingGateDiff, pullHunchStatus, sameRemoteUrl, currentBranch, worktreePaths, pathKnownToHistory, type HunchPullStatus } from "../extractors/git.js";
+import { revParse, asOfDate, revExists, lastChangeDate, checkFreshnessRevision, rangeFiles, rangeGateDiff, commitFiles, commitGateDiff, stagedFiles, stagedGateDiff, workingFiles, workingGateDiff, pullHunchStatus, sameRemoteUrl, currentBranch, worktreePaths, pathKnownToHistory, type HunchPullStatus } from "../extractors/git.js";
 import { flushCapture, flushMemoryHome, pinSharedRemote } from "../integrations/sync.js";
 import { withWriteLock } from "../serve/writelock.js";
 import { advertisedTeamRemoteContract, ensureTeamOverlay, isTeamStoreTrusted, overlayMatchesTeamRemote, teamWiringConsented, untrustedTeamStoreMessage, readTeamConfig, teamRemoteContract, teamSharedRef } from "../integrations/team.js";
@@ -3150,7 +3150,8 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
         const scope = commit ? `commit ${commit}` : base ? `${base}..HEAD` : working ? "working changes" : "staged changes";
         if (!files.length) return ok(`VERDICT: ✅ PASS — no changed files in ${scope}.`);
         const gate = commit ? commitGateDiff(commit, root) : base ? rangeGateDiff(base, root) : working ? workingGateDiff(root) : stagedGateDiff(root);
-        const report = store.buildCheckReport(files, gate.diff, { strict: true, lastChange: (f) => lastChangeDate(f, root), diffStatus: gate });
+        const freshAt = checkFreshnessRevision({ base, commit }, root);
+        const report = store.buildCheckReport(files, gate.diff, { strict: true, lastChange: (f) => lastChangeDate(f, root, freshAt), diffStatus: gate });
         const v = verdict(report);
         const head = v === "block"
           ? "VERDICT: ⛔ BLOCK — a recorded guard requires review; inspect the cited scope and evidence below before merge."

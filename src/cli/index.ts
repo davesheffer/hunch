@@ -51,7 +51,7 @@ import {
   normalizeProviderName,
   type SynthPreference,
 } from "../synthesis/provider.js";
-import { isGitRepo, isGitRepoRoot, sameGitPublication, sameRemoteUrl, canonicalRemoteUrl, repositoryUsesRemote, headSha, isolatedHeadSha, logSince, lastChangeDate, firstCommitForFile, stagedFiles, workingFiles, commitFiles, asOfDate, stagedGateDiff, workingGateDiff, commitGateDiff, rangeFiles, rangeGateDiff, rangeSubjects, revExists, revParse, commitAndPushHunch, pullHunchStatus, syncExistingHunch, gitUntrackCached, gitCommonDir, checkoutCommonDir, separateGitDirCandidate, separateGitDirLink, hooksDir, isLinkedWorktree, mainWorktreeRoot, gitMemoryLog, memoryMoveDiff, revertMemoryMove, pushCurrentBranch, commitChanges, commitRepairStatus, mergeRangeChanges, commitsExist, type HunchPullStatus } from "../extractors/git.js";
+import { isGitRepo, isGitRepoRoot, sameGitPublication, sameRemoteUrl, canonicalRemoteUrl, repositoryUsesRemote, headSha, isolatedHeadSha, logSince, lastChangeDate, checkFreshnessRevision, firstCommitForFile, stagedFiles, workingFiles, commitFiles, asOfDate, stagedGateDiff, workingGateDiff, commitGateDiff, rangeFiles, rangeGateDiff, rangeSubjects, revExists, revParse, commitAndPushHunch, pullHunchStatus, syncExistingHunch, gitUntrackCached, gitCommonDir, checkoutCommonDir, separateGitDirCandidate, separateGitDirLink, hooksDir, isLinkedWorktree, mainWorktreeRoot, gitMemoryLog, memoryMoveDiff, revertMemoryMove, pushCurrentBranch, commitChanges, commitRepairStatus, mergeRangeChanges, commitsExist, type HunchPullStatus } from "../extractors/git.js";
 import { parseMemoryLog, type MemoryMove } from "../core/memorylog.js";
 import { renamesOf, planRepair, repairDecision, repairConstraint, type RepairPlan } from "../core/repair.js";
 import { orphanedCommitDecisions, planCommitRepair, repairDecisionCommit, pickRewrite, commitRepairReviewHash, mergeRewrites, firstFor, deadRewrites, resolvedRewriteIds, withoutDropped, addDropped, withheldForUnresolvableTo, type CommitRewrite, type DroppedRewrite } from "../core/commitrepair.js";
@@ -3890,7 +3890,7 @@ program
   .description("Flag changes that touch a do-not-break invariant — the local guardrail AND the CI/PR Constraint Guard. Also flags (advisory) symbols you add that already exist elsewhere — possible re-implementation/sprawl.")
   .option("--staged", "check git staged files (default)")
   .option("--working", "check all working-tree edits vs HEAD (staged, unstaged, and untracked files)")
-  .option("--commit <sha>", "check a specific commit's files")
+  .option("--commit <sha>", "check a specific commit's files (judged alone, against its parent; use --base to gate a whole branch)")
   .option("--base <ref>", "check a PR/branch: files changed vs <ref> (e.g. origin/main) — for CI")
   .option("--strict", "exit non-zero ONLY on a direct, high-confidence, non-stale blocking invariant (near/stale/low-confidence stay advisory)")
   .option("--format <fmt>", "output: text (default) | markdown (a PR comment) | sarif (SARIF 2.1.0 for code scanning)", "text")
@@ -3974,13 +3974,14 @@ program
     // blocking conformance predicate or an active policy guards.
     // The COMPLETE diff (no synthesis byte budget); an incomplete one is flagged so
     // content-matched blocking invariants fail closed instead of passing unseen.
+    const freshAt = checkFreshnessRevision({ base: opts.base, commit: exactCommit }, root);
     const gate = files.length
       ? (exactCommit ? commitGateDiff(exactCommit, root) : opts.base ? rangeGateDiff(opts.base, root) : opts.working ? workingGateDiff(root) : stagedGateDiff(root))
       : { diff: "" };
     const report: CheckReport = files.length
       ? store.buildCheckReport(files, gate.diff, {
         strict: !!opts.strict,
-        lastChange: (f) => lastChangeDate(f, root),
+        lastChange: (f) => lastChangeDate(f, root, freshAt),
         publicOnly: !!opts.publicOnly,
         diffStatus: gate,
       })
@@ -4119,7 +4120,8 @@ const vetoCmd = program
       return;
     }
     const gate = opts.commit ? commitGateDiff(opts.commit, root) : opts.base ? rangeGateDiff(opts.base, root) : stagedGateDiff(root);
-    const full = store.buildCheckReport(files, gate.diff, { strict: !!opts.strict, lastChange: (f) => lastChangeDate(f, root), diffStatus: gate });
+    const freshAt = checkFreshnessRevision({ base: opts.base, commit: opts.commit }, root);
+    const full = store.buildCheckReport(files, gate.diff, { strict: !!opts.strict, lastChange: (f) => lastChangeDate(f, root, freshAt), diffStatus: gate });
     if (!full.vetoes.length) {
       console.log(`✓ ${files.length} changed file(s) reverse no decision you rejected.`);
       store.close();

@@ -359,7 +359,8 @@ export function deriveChangeProof(
     // A diff cut at MAX_DIFF_BYTES is a prefix: content-matched blocking rules over the
     // files it omits fail closed rather than read as compliant (dec_20db57c576).
     diffStatus: diff.gaps.length ? { incomplete: `the guard diff exceeded ${MAX_DIFF_BYTES} bytes and was cut`, truncated: true } : undefined,
-    lastChange: (path) => lastChangeAt(root, change.head_revision, path),
+    // Freshness as of the base: the change under proof must not make its own guard stale (#426).
+    lastChange: (path) => lastChangeAt(root, change.base_revision, path),
   });
   const allStrictBlockerIds = sortedUnique([
     ...guardReport.direct.filter((item) => item.strictBlocks).map((item) => item.id),
