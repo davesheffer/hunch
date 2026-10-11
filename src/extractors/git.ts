@@ -2794,11 +2794,16 @@ export function rangeFiles(base: string, cwd: string, head = "HEAD"): string[] {
   return nulPaths(gitOutputOrNull(["-c", "core.quotePath=false", "diff", "--no-ext-diff", "--no-textconv", "--name-only", "-z", "--diff-filter=ACMR", `${base}...${head}`], cwd));
 }
 
-/** Commit subjects on `head` since `base` (2-dot: commits added by the task),
- *  oldest-first, for distilling a runbook's ordered steps (roadmap #5). */
-export function rangeSubjects(base: string, cwd: string, head = "HEAD", max = 50): string[] {
-  const out = gitSafe(["log", "--reverse", `-n${max}`, "--format=%s", `${base}..${head}`], cwd);
-  return out ? out.split("\n").filter(Boolean) : [];
+/** Commits on `head` since `base` (2-dot: commits added by the task), oldest-first, each
+ *  with its subject and the files it changed, for distilling a runbook's ordered steps
+ *  (roadmap #5); `runbookDraft` uses the files to tell Hunch's own captures from the work. */
+export function rangeCommits(base: string, cwd: string, head = "HEAD", max = 50): { subject: string; files: string[] }[] {
+  const out = gitSafe(["-c", "core.quotePath=false", "log", "--reverse", `-n${max}`, "--format=%x1e%s", "--name-only", `${base}..${head}`], cwd);
+  if (!out) return [];
+  return out.split("\x1e").filter(Boolean).map((block) => {
+    const [subject = "", ...files] = block.split("\n");
+    return { subject: subject.trim(), files: files.map((f) => f.trim()).filter(Boolean) };
+  });
 }
 
 /** Complete gating diff of a PR vs `base` (3-dot: the CI Constraint Guard's surface). */
