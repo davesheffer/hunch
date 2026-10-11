@@ -1,17 +1,16 @@
-# bench — does the skill / the graph actually help?
+# bench — does the graph actually help?
 
 > **Historical harness only.** `bench/run.ts`, `bench/tasks.json`, and every
 > existing `bench/results` file predate the fresh G3 preregistrations and are
 > explicitly excluded from EXP-01 and EXP-03. They must never be relabeled as a
 > preregistered sample or merged into the new denominators.
 
-Measures whether the fable-mode skill and the Hunch graph make a model converge
-faster and answer better **on this repo**. Three arms, identical tasks:
+Measures whether the Hunch graph makes a model converge
+faster and answer better **on this repo**. Two arms, identical tasks:
 
 | arm | skills (`.claude/skills`) | hunch MCP | CLAUDE.md hunch section |
 |-----|---------------------------|-----------|-------------------------|
 | A   | stripped                  | no        | stripped                |
-| B   | kept                      | no        | stripped                |
 | C   | kept                      | yes (published `@davesheffer/hunch` over `.mcp.json`) | kept |
 
 Each run gets a fresh detached worktree at a pinned commit (node_modules
@@ -26,7 +25,7 @@ final answer; fix tasks = hidden test passes AND was not modified.
 ```bash
 npx tsx bench/run.ts --dry-fix f1-guard-keying   # plumbing check, no model
 npx tsx bench/run.ts --smoke                     # 1 cheap haiku run end-to-end
-npx tsx bench/run.ts                             # the real thing: 6 tasks x 3 arms x 2 reps = 36 Opus sessions
+npx tsx bench/run.ts                             # the real thing: 6 tasks x 2 arms x 2 reps = 24 Opus sessions
 npx tsx bench/run.ts --arms A,C --reps 1 --model claude-opus-4-8 --only q1-capture-flow
 ```
 
@@ -36,7 +35,7 @@ calls (hunch calls counted separately), duration, cost.
 
 Honest-reading notes:
 - Expect C to win broad cross-file questions and to carry overhead on narrow
-  ones (prior A/B finding). B's marginal effect is the open question.
+  ones (prior A/B finding).
 - The graph contains decisions ABOUT the seeded bugs (that's the product
   working, not leakage — but say so when publishing numbers).
 - Checklist scoring measures fact coverage, not prose quality. Read a few

@@ -1,9 +1,9 @@
 /**
- * A/B/C benchmark: does the fable-mode skill and/or the Hunch graph make a
+ * A/C benchmark: does the Hunch graph make a
  * cheaper model converge faster and answer better on THIS repo?
  *
  *   arm A — bare model            (skills stripped, no MCP, CLAUDE.md hunch section stripped)
- *   arm B — + fable-mode skill    (skills kept, no MCP, CLAUDE.md hunch section stripped)
+ *   (arm B, the removed skill-only arm, is retired; letters kept so old results stay readable)
  *   arm C — + hunch MCP           (skills kept, .mcp.json wired to the published hunch, CLAUDE.md intact)
  *
  * Each run: fresh detached git worktree at a pinned commit, node_modules
@@ -13,11 +13,11 @@
  *   fix tasks      — hidden test file passes AND was not modified
  *
  * Usage:
- *   npx tsx bench/run.ts --arms A,B,C --reps 2 --model claude-opus-4-8
+ *   npx tsx bench/run.ts --arms A,C --reps 2 --model claude-opus-4-8
  *   npx tsx bench/run.ts --smoke            # 1 cheap haiku run to verify plumbing
  *
  * Results land in bench/results/<stamp>.json + a printed markdown table.
- * Cost warning: 6 tasks x 3 arms x 2 reps = 36 sessions on your subscription.
+ * Cost warning: 6 tasks x 2 arms x 2 reps = 24 sessions on your subscription.
  */
 import { execSync } from "node:child_process";
 import { mkdirSync, rmSync, rmdirSync, writeFileSync, readFileSync, existsSync, readdirSync } from "node:fs";
@@ -35,7 +35,7 @@ const flag = (name: string, dflt: string): string => {
 };
 const SMOKE = argv.includes("--smoke");
 const MODEL = flag("model", SMOKE ? "claude-haiku-4-5-20251001" : "claude-opus-4-8");
-const ARMS = (SMOKE ? "A" : flag("arms", "A,B,C")).split(",") as Array<"A" | "B" | "C">;
+const ARMS = (SMOKE ? "A" : flag("arms", "A,C")).split(",") as Array<"A" | "C">;
 const REPS = SMOKE ? 1 : Number(flag("reps", "2"));
 const MAX_TURNS = Number(flag("max-turns", SMOKE ? "8" : "40"));
 const ONLY = flag("only", SMOKE ? "w1-collision-null" : "");
@@ -106,7 +106,7 @@ const REVERTS: Record<string, Array<{ file: string; from: string; to: string }>>
 const sh = (cmd: string, cwd = REPO): string => execSync(cmd, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
 const BASE = sh("git rev-parse HEAD").trim();
 
-function makeWorktree(name: string, arm: "A" | "B" | "C", task: Task): string {
+function makeWorktree(name: string, arm: "A" | "C", task: Task): string {
   const dir = join(tmpdir(), "hunch-bench", name);
   rmSync(dir, { recursive: true, force: true });
   mkdirSync(join(tmpdir(), "hunch-bench"), { recursive: true });

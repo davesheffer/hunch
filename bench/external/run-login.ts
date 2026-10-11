@@ -1,7 +1,7 @@
 /**
  * Frontend-design bench: identical login-screen task, per model, two arms.
  *   arm A — bare model        (skills stripped, no MCP, CLAUDE.md hunch section stripped)
- *   arm F — skill + hunch     (fable-mode + frontend-design skills, hunch MCP, CLAUDE.md intact)
+ *   arm F — skill + hunch     (frontend-design skill, hunch MCP, CLAUDE.md intact)
  *
  * Each cell: fresh hunch-repo worktree, one headless `claude -p` session, harvest
  * login-screen/index.html into bench/external/results/login/. No deterministic
