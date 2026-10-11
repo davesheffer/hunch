@@ -761,7 +761,11 @@ export function extractK8sManifest(source: string, opts: { namespace?: string | 
   const docs: K8sManifestDocument[] = [];
   const boundaries: number[] = [];
   for (const line of sourceLines(source)) {
-    if (DOC_SEPARATOR.test(line.content)) boundaries.push(line.start, line.end);
+    if (!DOC_SEPARATOR.test(line.content)) continue;
+    // The next document starts AFTER the separator's line terminator, so the
+    // same document text has the same span wherever it sits (#451).
+    const eol = source.startsWith("\r\n", line.end) ? 2 : line.end < source.length ? 1 : 0;
+    boundaries.push(line.start, line.end + eol);
   }
   const starts = [0, ...boundaries.filter((_, i) => i % 2 === 1)];
   const ends = [...boundaries.filter((_, i) => i % 2 === 0), source.length];

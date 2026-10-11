@@ -142,3 +142,21 @@ test("kustomizeNamespaces: outer overlay wins over its base; a base shared by tw
   assert.equal(out.get("solo/base/cm.yaml"), "prod", "a single overlay's namespace applies to its base");
   assert.equal(out.has("plain/x.yaml"), false, "no transformer namespace -> no override");
 });
+
+test("a document starts at the line after its separator, so its span, hash and line count do not depend on its position (#451)", () => {
+  const span = (src: string) => extractK8sManifest(src).map((d) => src.slice(d.resource!.startChar, d.resource!.endChar));
+  for (const eol of ["\n", "\r\n"]) {
+    const a = ["apiVersion: v1", "kind: Service", "metadata:", "  name: web", "  namespace: a", ""].join(eol);
+    const b = a.replace("namespace: a", "namespace: b");
+    const [a1, b1] = span(`${a}---${eol}${b}`);
+    const [b2, a2] = span(`${b}--- # tagged${eol}${a}`);
+    assert.equal(a1, a2, "the same document has the same span first or second");
+    assert.equal(b1, b2);
+    assert.equal(a1, a);
+  }
+  const one = indexFixture("hunch-k8s-span1-", { "app.yaml": `${svcA}---\n${svcB}` });
+  const two = indexFixture("hunch-k8s-span2-", { "app.yaml": `${svcB}---\n${svcA}` });
+  const sig = (ix: Indexed) => ix.symbols.filter((s) => s.name.includes("/")).map((s) => `${s.id}#${s.signature_hash}`).sort();
+  assert.deepEqual(sig(one), sig(two), "reordering reports no resource as changed");
+});
+
