@@ -116,8 +116,9 @@ function thematicBreakSuffixes(probe: string): boolean[] {
  *
  *  Deliberate limits, each a case where it can still disagree with a renderer:
  *  HTML block type 7 (a lone arbitrary tag line) reads as text; a blockquote
- *  nested INSIDE a list item is read as a top-level quote; a tab right after a
- *  `>` is measured from the quote's content, not the line. With no container
+ *  nested INSIDE a list item is read as a top-level quote; after a tab right
+ *  after a `>`, later tabs on that line expand from the quote's content, not
+ *  the line. With no container
  *  open the base is 0 and behaviour is the plain CommonMark-lite one.
  *  Expects LF-normalized, BOM-free text — see parseDocAnchors's normalization;
  *  a caller that skips it re-opens the CRLF fence-detection bug. */
@@ -266,9 +267,11 @@ function codeRanges(text: string): { ranges: Array<[number, number]>; unclosed: 
       const ch = m[1]![0]!;
       if (!(ch === "`" && m[2]!.includes("`"))) open = { kind: "fence", ch, len: m[1]!.length, start: lineStart, base, q, line: lineNo };
     }
-    // A fence line, a thematic break or a heading ends the paragraph it follows;
-    // ordinary text (including an item's own content) continues or starts one.
-    inParagraph = !m && !thematic && content.trim() !== "" && !/^#{1,6}(?:[ \t]|$)/.test(content);
+    // A fence line, a thematic break or a heading (ATX, or a `===` setext
+    // underline beneath a paragraph) ends the paragraph it follows; ordinary
+    // text (including an item's own content) continues or starts one.
+    const setext: boolean = inParagraph && /^=+[ \t]*$/.test(content);
+    inParagraph = !m && !thematic && !setext && content.trim() !== "" && !/^#{1,6}(?:[ \t]|$)/.test(content);
   }
   let unclosed: { start: number; line: number } | null = null;
   const last = open as Open | null;
@@ -286,15 +289,25 @@ const leadingSpaces = (s: string): number => s.length - s.replace(/^ +/, "").len
 function peelQuotes(probe: string, max: number): { q: number; rest: string } {
   let q = 0;
   let i = 0;
+  let col = 0;
+  let pad = 0;
   while (q < max) {
     let j = i;
     while (j < probe.length && probe[j] === " " && j - i < 3) j++;
     if (probe[j] !== ">") break;
+    col += j - i + 1;
     i = j + 1;
-    if (probe[i] === " ") i++;
+    pad = 0;
+    if (probe[i] === " ") { i++; col++; }
+    else if (probe[i] === "\t") {
+      // The tab's first column is the quote's optional space; the rest of it is
+      // content indentation (CommonMark 5.1). `>\t<!-- … -->` is a paragraph, not code.
+      const width = 4 - (col % 4);
+      i++; col += width; pad = width - 1;
+    }
     q++;
   }
-  return q ? { q, rest: expandTabs(probe.slice(i)) } : { q, rest: probe };
+  return q ? { q, rest: " ".repeat(pad) + expandTabs(probe.slice(i)) } : { q, rest: probe };
 }
 
 /** Whether a line (≤3 columns in) opens a block of its own, which a lazy

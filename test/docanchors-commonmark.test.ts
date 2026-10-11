@@ -65,6 +65,13 @@ test("drift reports an unclosed fence as doc-fence-unclosed (advisory)", (t) => 
   assert.match(findings[0]!.detail, /fence opened at line 3 never closes; 1 marker\(s\) below it are hidden/);
 });
 
+test("a tab after `>` is the quote's space plus indentation, and a `===` underline ends the paragraph", () => {
+  assert.deepEqual(topics(">\t<!-- hunch:topic quoted.tab -->"), ["quoted.tab"], "two columns of content: a paragraph, not indented code");
+  assert.deepEqual(topics(doc(">\t    <!-- hunch:topic quoted.code -->")), [], "a tab plus four spaces is still indented code in the quote");
+  assert.deepEqual(topics(doc("Title", "=====", "    <!-- hunch:topic setext.code -->")), [], "a setext heading closes the paragraph; the next 4-space line is code");
+  assert.deepEqual(topics(doc("Title", "-----", "    <!-- hunch:topic setext.dash -->")), [], "the `---` underline already did");
+});
+
 test("the scanner stays linear on a long quoted, nested line", () => {
   const line = "> ".repeat(20_000) + "- ".repeat(20_000) + "x";
   const started = Date.now();
