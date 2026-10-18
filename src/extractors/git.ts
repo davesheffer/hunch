@@ -188,6 +188,11 @@ function canonicalPath(path: string): string {
   try { return realpathSync(path); } catch { return resolve(path); }
 }
 
+function pathIsWithinRoot(path: string, root: string): boolean {
+  const rel = relative(canonicalPath(root), canonicalPath(path));
+  return rel === "" || (rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
+}
+
 export function gitNullDevice(): string {
   return process.platform === "win32" ? "NUL" : devNull;
 }
@@ -443,18 +448,54 @@ function gitRemoteIdentities(cwd: string, direction: "fetch" | "push" | "any" = 
 /** True when two worktrees can publish to the same local Git history OR name
  * the same configured remote repository. Separate clones of one remote are a
  * single publication boundary even though their local common dirs differ. */
-export function sameGitPublication(left: string, right: string): boolean {
+export function sameGitPublication(left: string, right: string, opts: { allowSharedHistory?: boolean | (() => boolean) } = {}): boolean {
   if (sameGitRepository(left, right)) return true;
   // A clone of the code repository with its origin removed still carries the
   // same commit objects. Treat shared history as one publication boundary; a
-  // memory overlay must start from an independent graph history.
-  if (repositoriesShareCommitObjects(left, right)) return true;
+  // memory overlay must start from an independent graph history. The single
+  // exception is a machine-registered waiver (sharedHistoryOverlayAccepted):
+  // every remote and same-repository clause below still applies.
+  // The waiver may be a thunk so its pointer read runs only when shared history
+  // would otherwise decide the verdict (no extra spawns on the common path).
+  if (repositoriesShareCommitObjects(left, right)) {
+    const waived = typeof opts.allowSharedHistory === "function" ? opts.allowSharedHistory() : !!opts.allowSharedHistory;
+    if (!waived) return true;
+  }
   for (const target of localRemoteTargets(left)) if (repositoryTargetMatches(target, right)) return true;
   for (const target of localRemoteTargets(right)) if (repositoryTargetMatches(target, left)) return true;
   const leftRemotes = gitRemoteIdentities(left);
   if (!leftRemotes.size) return false;
   for (const remote of gitRemoteIdentities(right)) if (leftRemotes.has(remote)) return true;
   return false;
+}
+
+/** Whether this machine explicitly accepted `overlayRoot` as a private overlay
+ * whose Git history shares commits with the code repository at `codeRoot`
+ * (for example an overlay that began as a copy of the code repository and
+ * cannot have its history rewritten). Pushing such an overlay publishes the
+ * shared code ancestors to the overlay's remote, so the waiver is honored only
+ * from `<git-common-dir>/hunch/local.json` — written on this machine, never
+ * supplied by a clone or checkout (an archive that includes `.git/` carries it,
+ * at the same trust level as its hooks and remotes) — and only when its
+ * `acceptSharedHistoryOverlay` names this exact repository root. A symlinked
+ * or unreadable pointer, a relative path, or any other overlay reads as no
+ * waiver. */
+export function sharedHistoryOverlayAccepted(overlayRoot: string, codeRoot: string): boolean {
+  const common = checkoutCommonDir(codeRoot);
+  if (!common) return false;
+  const file = join(common, "hunch", "local.json");
+  try {
+    const dir = lstatSync(dirname(file));
+    const entry = lstatSync(file);
+    if (dir.isSymbolicLink() || !dir.isDirectory() || entry.isSymbolicLink() || !entry.isFile()) return false;
+    const raw = readFileSync(file, "utf8");
+    const accepted = (JSON.parse(raw.startsWith("﻿") ? raw.slice(1) : raw) as { acceptSharedHistoryOverlay?: unknown })
+      .acceptSharedHistoryOverlay;
+    if (typeof accepted !== "string" || !accepted.trim() || !isAbsolute(accepted.trim())) return false;
+    return isGitRepoRoot(overlayRoot) && sameFilesystemEntry(accepted.trim(), overlayRoot);
+  } catch {
+    return false;
+  }
 }
 
 /** Preflight a requested overlay URL before clone/attach can mutate a remote. */
@@ -562,7 +603,12 @@ function unsafeOverlayPublication(hunchDir: string, protectedRepoRoot: string): 
   let currentOverlayRoot = dirname(resolve(hunchDir));
   try { currentOverlayRoot = dirname(realpathSync(hunchDir)); } catch { return true; }
   const standalone = isGitRepoRoot(currentOverlayRoot);
-  const overlapsCode = standalone ? sameGitPublication(currentOverlayRoot, protectedRepoRoot) : null;
+  const overlapsCode = standalone
+    ? sameGitPublication(currentOverlayRoot, protectedRepoRoot, {
+      allowSharedHistory: () => !pathIsWithinRoot(currentOverlayRoot, protectedRepoRoot)
+        && sharedHistoryOverlayAccepted(currentOverlayRoot, protectedRepoRoot),
+    })
+    : null;
   const unsafe = !standalone || overlapsCode === true;
   if (unsafe && process.env.HUNCH_TEAM_CLONE_DEBUG === "1") {
     process.stderr.write(

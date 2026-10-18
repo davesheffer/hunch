@@ -6,7 +6,7 @@
  */
 import { existsSync, readFileSync, mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { checkoutCommonDir, claimSeparateGitDir } from "../extractors/git.js";
+import { checkoutCommonDir, claimSeparateGitDir, sameFilesystemEntry } from "../extractors/git.js";
 import { writeFileAtomic } from "../core/io.js";
 
 /** Register the resolved private overlay at the shared git common dir, so every worktree
@@ -23,7 +23,10 @@ export function ensureSharedOverlayPointer(root: string, overlayDir: string | un
   const common = overlayDir ? checkoutCommonDir(root) || (claimSeparateGitDirLayout ? claimSeparateGitDir(root) : "") : "";
   if (!common || !overlayDir) return false;
   const file = join(common, "hunch", "local.json");
-  const want = JSON.stringify({ privateDir: resolve(overlayDir), autoCommit, mode }, null, 2) + "\n";
+  const want = JSON.stringify({
+    privateDir: resolve(overlayDir), autoCommit, mode,
+    ...retainedSharedHistoryWaiver(file, overlayDir),
+  }, null, 2) + "\n";
   try {
     if (!(existsSync(file) && readFileSync(file, "utf8") === want)) {
       mkdirSync(join(common, "hunch"), { recursive: true });
@@ -32,5 +35,22 @@ export function ensureSharedOverlayPointer(root: string, overlayDir: string | un
     return true;
   } catch {
     return false;
+  }
+}
+
+/** A hand-registered `acceptSharedHistoryOverlay` waiver survives re-registration
+ *  of the SAME overlay (`hunch init`, `hunch worktree`, team auto-wiring), so routine
+ *  setup never silently re-breaks an accepted overlay. Pointing the registration at
+ *  a different overlay drops it: a waiver is never carried to a store it did not name. */
+function retainedSharedHistoryWaiver(file: string, overlayDir: string): { acceptSharedHistoryOverlay?: string } {
+  try {
+    const raw = readFileSync(file, "utf8");
+    const existing = JSON.parse(raw.startsWith("﻿") ? raw.slice(1) : raw) as { privateDir?: unknown; acceptSharedHistoryOverlay?: unknown };
+    if (typeof existing.privateDir !== "string" || typeof existing.acceptSharedHistoryOverlay !== "string") return {};
+    return sameFilesystemEntry(existing.privateDir, resolve(overlayDir))
+      ? { acceptSharedHistoryOverlay: existing.acceptSharedHistoryOverlay }
+      : {};
+  } catch {
+    return {};
   }
 }

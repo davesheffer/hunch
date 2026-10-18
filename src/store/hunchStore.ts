@@ -25,6 +25,7 @@ import {
   isolatedHeadSha,
   sameGitPublication,
   scopedLastChangeDates,
+  sharedHistoryOverlayAccepted,
 } from "../extractors/git.js";
 import { pathMatchesGlob, pathsRelated, isIndexedPath, matchSymbolsTiered } from "../core/glob.js";
 import { cochangeFor } from "../core/cochange.js";
@@ -139,6 +140,11 @@ export class HunchStore {
   /** How privateDir was selected. Multi-store consumers can use this instead of
    *  inferring process-global routing from process.env. */
   readonly overlaySource: OverlayResolutionSource;
+  /** True only when the overlay was found to share Git history with the code
+   *  repository AND this machine's registered pointer accepted it
+   *  (acceptSharedHistoryOverlay). A stale waiver on an independent overlay stays false. */
+  get sharedHistoryAccepted(): boolean { return this.sharedHistoryWaived; }
+  private sharedHistoryWaived = false;
   /** A per-worktree overlay pointer this machine's setup never registered (ignored). */
   private ignoredLocalPointer: string | null = null;
   /** The routing that ignored pointer asked for, so the refusal can name the exact
@@ -224,13 +230,21 @@ export class HunchStore {
       const nestedBoundary = pathIsWithin(resolve(candidate), resolve(this.paths.root))
         || pathIsWithin(publicationProbe, publicRoot);
       const distinctNestedRoot = nestedBoundary ? gitWorktreeRoot(publicationProbe) : null;
+      // A machine-registered waiver for a standalone overlay that shares code
+      // history (sharedHistoryOverlayAccepted). Never for a nested overlay, and
+      // never for the same repository or a shared remote: those still throw.
+      const allowSharedHistory = (): boolean => {
+        const waived = !nestedBoundary && sharedHistoryOverlayAccepted(publicationProbe, this.paths.root);
+        this.sharedHistoryWaived = waived;
+        return waived;
+      };
       if (
         canonical(candidate) === canonical(this.paths.hunch) ||
         (nestedBoundary && (!distinctNestedRoot || sameGitPublication(distinctNestedRoot, this.paths.root))) ||
         // If these paths are identical, the nested-boundary clause just ran
         // this exact proof. Different probe paths still need their own check;
         // no result is retained across store opens or publication operations.
-        (distinctNestedRoot !== publicationProbe && sameGitPublication(publicationProbe, this.paths.root))
+        (distinctNestedRoot !== publicationProbe && sameGitPublication(publicationProbe, this.paths.root, { allowSharedHistory }))
       ) {
         throw new Error(
           `Unsafe private overlay "${candidate}" shares the public code repository's local or remote publication boundary. ` +

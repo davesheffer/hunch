@@ -7010,6 +7010,9 @@ program
       console.log(store.mode === "shared"
         ? `shared:     on → ${store.privateDir} (UNIFIED — every capture routes here; one source of truth across branches, worktrees, teammates, agents; source: ${store.overlaySource})`
         : `private:    on → ${store.privateDir} (local overlay — unioned into queries; never committed or posted publicly; source: ${store.overlaySource})`);
+      if (store.sharedHistoryAccepted) {
+        console.log(`            ⚠ shares Git history with this code repo — accepted by acceptSharedHistoryOverlay in the git common dir's hunch/local.json; pushing the overlay also publishes those shared code commits to its remote`);
+      }
     } else {
       const team = readTeamConfig(root);
       console.log(team
