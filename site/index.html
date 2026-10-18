@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Hunch — A shared record for AI agents</title>
-  <meta name="description" content="Keep decisions, completed work, and commitments available to AI agents, with their sources. Git-native engineering memory and a self-hosted state server." />
-  <meta property="og:title" content="Hunch — A shared record for AI agents" />
-  <meta property="og:description" content="Give agents a shared record to work from: project decisions, action records, and commitments, with sources and clear rules for updates." />
+  <title>Hunch — Shared memory for AI agents</title>
+  <meta name="description" content="Every AI session starts from zero. Hunch keeps your team’s decisions, finished work and open commitments — with sources, in Git — so the next agent picks up where the last one left off." />
+  <meta property="og:title" content="Hunch — Shared memory for AI agents" />
+  <meta property="og:description" content="Your agents forget. Hunch remembers: what was decided, what got done and what’s still owed — with sources, in Git." />
 <meta property="og:image" content="https://www.hunchmemory.com/hunch-og.png" />
 <meta property="og:url" content="https://www.hunchmemory.com/" />
 <meta property="og:locale" content="en_US" />
@@ -375,8 +375,8 @@
        Decorative: aria-hidden, pointer-events none, reduced-motion aware. -->
   <div class="hero-art" aria-hidden="true"><canvas id="holdline"></canvas></div>
   <div class="hero-copy">
-    <h1 class="rise d1">Give every agent<br /><b>a shared record to work from.</b></h1>
-    <p class="lede rise d2">Hunch keeps decisions, completed work, and commitments with their sources. Start with engineering memory for coding agents, or connect agents to a self-hosted state server.</p>
+    <h1 class="rise d1">Your agents forget.<br /><b>Hunch remembers.</b></h1>
+    <p class="lede rise d2">Every AI session starts from zero. Hunch keeps what your team decided, what got done and what’s still owed — with sources, in Git — so the next agent picks up where the last one left off.</p>
     <div class="hero-cta rise d3">
       <a class="btn" href="#start">Get started</a>
       <a class="btn ghost" href="#story">See how it works</a>
@@ -389,26 +389,26 @@
   <div class="wrap">
     <div class="sec-head">
       <span class="eyebrow">the missing context</span>
-      <h2>AI can read your code. It cannot see the whole story.</h2>
-      <p>It sees files, not why decisions were made, what failed before, or what a small change could break.</p>
+      <h2>AI reads your code. It wasn’t there when you decided.</h2>
+      <p>It sees what the code does — not why, what broke last time, or what a small change will break next.</p>
     </div>
     <div class="story-grid">
       <div class="story-beats">
         <article class="story-beat">
           <span class="story-when">Monday</span>
-          <div><h3>Your team fixes a logout bug.</h3><p>They keep sign-ins on the server so a stolen key stops working as soon as someone logs out.</p></div>
+          <div><h3>Your team fixes a logout bug.</h3><p>Sign-ins move to the server, so a stolen key dies the moment someone logs out.</p></div>
         </article>
         <article class="story-beat">
           <span class="story-when">Months later</span>
-          <div><h3>The code stays. The reason gets lost.</h3><p>The old discussion is hard to find. The safer code now looks more complicated than it needs to be.</p></div>
+          <div><h3>The code stays. The reason doesn’t.</h3><p>The discussion is buried. The safe code now just looks overcomplicated.</p></div>
         </article>
         <article class="story-beat">
           <span class="story-when">Next session</span>
-          <div><h3>AI sees complex code and “simplifies” it.</h3><p>The change looks clean, but it brings the same logout bug back.</p></div>
+          <div><h3>An AI “cleans it up.”</h3><p>The diff looks great. The logout bug is back.</p></div>
         </article>
         <article class="story-beat">
           <span class="story-when">With Hunch</span>
-          <div><h3>The original reason reaches the next agent.</h3><p>With the lesson recorded and the integration active, Hunch can show the decision and the bug it prevents before the edit.</p></div>
+          <div><h3>The reason shows up first.</h3><p>Once the lesson is recorded, Hunch puts the decision — and the bug it prevents — in front of the agent before it edits the file.</p></div>
         </article>
       </div>
       <aside class="receipt" aria-label="Example project memory">
@@ -419,7 +419,7 @@
           <div class="receipt-row"><span>chosen</span><p>Keep sign-ins on the server, where they can be ended at once.</p></div>
           <div class="receipt-row"><span>rejected</span><p>Trust a login token until its timer runs out.</p></div>
           <div class="receipt-row"><span>protects</span><p>A stolen token being used after logout.</p></div>
-          <p class="receipt-foot">example memory · source included · advisory by default</p>
+          <p class="receipt-foot">example memory · source attached · advice, not a block</p>
         </div>
       </aside>
     </div>
@@ -439,17 +439,17 @@
     <div class="tech-intro">
       <div class="sec-head">
         <span class="eyebrow">available today</span>
-        <h2>Keep the work connected across sessions.</h2>
+        <h2>One record. Every session. Every agent.</h2>
       </div>
-      <p>Hunch keeps structured records in Git. Inspect them in a browser or connect agents through MCP, HTTP, the CLI, TypeScript or Python.</p>
+      <p>Plain files in Git. Browse them in your browser, or plug agents in through MCP, HTTP, the CLI, TypeScript or Python.</p>
     </div>
     <div class="tech-grid">
-      <article class="tech-item"><code>memory</code><h3>Keep the reasons</h3><p>Save decisions, rejected approaches, bugs, and open questions alongside the code they explain.</p></article>
-      <article class="tech-item"><code>decisions</code><h3>Make changes explicit</h3><p>Conflicting current decisions are refused. Replacing a decision leaves a history of what changed.</p></article>
-      <article class="tech-item"><code>access</code><h3>Share with the right agents</h3><p>Choose which agents can access a partition, then narrow access to individual records when needed. Optional key-bound credentials add request signing.</p></article>
-      <article class="tech-item"><code>actions</code><h3>Track done and still to do</h3><p>Inspect completed work, open commitments and cited sources in the browser. Unknown or unverified work keeps that status.</p></article>
-      <article class="tech-item"><code>control</code><h3>Choose what becomes a rule</h3><p>Record sourced user, team and organization conventions. They stay advisory; blocking requires an explicitly trusted rule and strict mode.</p></article>
-      <article class="tech-item"><code>git</code><h3>Keep the record yours</h3><p>Records are readable files. Git lets you review and revert committed changes; indexes can be rebuilt.</p></article>
+      <article class="tech-item"><code>memory</code><h3>Keep the reasons</h3><p>Decisions, rejected ideas, bugs and open questions live next to the code they explain.</p></article>
+      <article class="tech-item"><code>decisions</code><h3>No silent contradictions</h3><p>Hunch refuses two current decisions that conflict. Replace one, and the history shows what changed.</p></article>
+      <article class="tech-item"><code>access</code><h3>Each agent sees its share</h3><p>Pick which agents can open each space, down to single records. Add a key per agent to sign what it writes.</p></article>
+      <article class="tech-item"><code>actions</code><h3>Know what’s done and what’s owed</h3><p>See finished work, open commitments and their sources in one place. Work nobody verified stays marked unverified.</p></article>
+      <article class="tech-item"><code>control</code><h3>You decide what’s a rule</h3><p>Record how you, your team or your company does things. It stays advice until you trust a rule and turn on strict mode.</p></article>
+      <article class="tech-item"><code>git</code><h3>Your record, your repo</h3><p>Readable files in Git. Review a change, revert it, rebuild the index any time.</p></article>
     </div>
   </div>
 </section>
@@ -460,12 +460,12 @@
     <div class="sec-head">
       <span class="eyebrow">how hunch works</span>
       <h2>Remember. Retrieve. Check.</h2>
-      <p>Hunch gives the assistant a focused brief and tools to check its work. The assistant still plans and carries out the task.</p>
+      <p>Hunch gives the agent a short brief and a way to check its work. The agent still does the work.</p>
     </div>
     <div class="outcome-grid">
-      <article class="outcome"><span class="step-n">01 / remember</span><h3>Save the useful history.</h3><p>Capture decisions, corrections, and findings. Link them to code and sources so the reason remains findable.</p></article>
-      <article class="outcome"><span class="step-n">02 / retrieve</span><h3>Bring back what matters.</h3><p>Select relevant memory for a task through MCP and supported assistant hooks. Coverage depends on the integration.</p></article>
-      <article class="outcome"><span class="step-n">03 / check</span><h3>Check and show the result.</h3><p>Evaluate supported rules and keep a task report of delivered memory, reported use, and observed checks.</p></article>
+      <article class="outcome"><span class="step-n">01 / remember</span><h3>Save what you learned.</h3><p>Capture decisions, corrections and findings, linked to the code and the source they came from.</p></article>
+      <article class="outcome"><span class="step-n">02 / retrieve</span><h3>Bring it back at the right moment.</h3><p>When a task starts, Hunch picks the memory that matters and delivers it through MCP or your assistant’s hooks. What arrives depends on the assistant.</p></article>
+      <article class="outcome"><span class="step-n">03 / check</span><h3>Check, then show the receipt.</h3><p>Hunch runs the rules you trust and writes a task report: what it delivered, what the agent used, what actually passed.</p></article>
     </div>
   </div>
 </section>
@@ -476,17 +476,17 @@
       <div class="release-head">
         <div>
           <span class="eyebrow">see the evidence</span>
-          <h2 id="release-proof-title">See what reached the agent—and what was checked.</h2>
-          <p class="release-copy">Task reports show the memory delivered, what the agent says it used, and the results of rules and commands that actually ran.</p>
+          <h2 id="release-proof-title">Don’t trust the agent. Read the receipt.</h2>
+          <p class="release-copy">Every task report keeps three things apart that most tools blur together.</p>
         </div>
         <code class="release-install">npm i -g @davesheffer/hunch</code>
       </div>
       <div class="release-metrics" aria-label="What task reports distinguish">
-        <div class="release-metric"><strong>delivered</strong><span>the memory Hunch supplied to this task</span></div>
-        <div class="release-metric"><strong>reported</strong><span>what the agent says it applied</span></div>
-        <div class="release-metric"><strong>checked</strong><span>rule and command results kept as separate evidence</span></div>
+        <div class="release-metric"><strong>delivered</strong><span>what Hunch handed the agent</span></div>
+        <div class="release-metric"><strong>reported</strong><span>what the agent says it used</span></div>
+        <div class="release-metric"><strong>checked</strong><span>what rules and commands actually ran</span></div>
       </div>
-      <p class="release-caveat">A passing test alone does not prove Hunch caused the result. Missing evidence stays unverified. <a href="/docs#task-reports">Read a task report →</a></p>
+      <p class="release-caveat">A green test alone doesn’t prove Hunch helped. No evidence, no claim — it stays unverified. <a href="/docs#task-reports">Read a task report →</a></p>
     </div>
   </div>
 </section>
@@ -497,17 +497,17 @@
     <div class="tech-intro">
       <div class="sec-head">
         <span class="eyebrow">inside the coding tools</span>
-        <h2>Understand a change before making it.</h2>
+        <h2>Know what a change breaks before you make it.</h2>
       </div>
-      <p>Engineering memory connects the reasons behind code to its dependencies and the rules the team chose to protect.</p>
+      <p>For code, Hunch connects the reasons to the dependencies and to the rules your team chose to protect.</p>
     </div>
     <div class="tech-grid">
-      <article class="tech-item"><code class="literal">why</code><h3>Find the reason</h3><p>Read decisions, rejected ideas, and past failures behind a file or symbol.</p></article>
-      <article class="tech-item"><code>blast radius</code><h3>See what depends on it</h3><p>Follow indexed code relationships to understand what a change could affect.</p></article>
-      <article class="tech-item"><code>project DNA</code><h3>Learn the conventions</h3><p>Inspect observed terminology and working habits. These observations stay advisory.</p></article>
-      <article class="tech-item"><code>compare</code><h3>Compare changes</h3><p>Compare candidate branches against recorded decisions and constraints.</p></article>
-      <article class="tech-item"><code>conform</code><h3>Check recorded intent</h3><p>Check supported code relationships, such as whether a payment path still calls authorization.</p></article>
-      <article class="tech-item"><code>change gate</code><h3>Protect trusted rules</h3><p>Flag conflicts with supported rules. Strict mode blocks only where the rule and integration permit it.</p></article>
+      <article class="tech-item"><code class="literal">why</code><h3>Find the reason</h3><p>Decisions, rejected ideas and past failures behind any file or function.</p></article>
+      <article class="tech-item"><code>blast radius</code><h3>See what depends on it</h3><p>Follow the code’s real connections to see what a change can reach.</p></article>
+      <article class="tech-item"><code>project DNA</code><h3>Learn the house style</h3><p>See the terms and habits Hunch observed in this repo. Advice only.</p></article>
+      <article class="tech-item"><code>compare</code><h3>Compare options</h3><p>Line up candidate branches against what you already decided.</p></article>
+      <article class="tech-item"><code>conform</code><h3>Check the code still keeps its promises</h3><p>For example: does the payment path still check authorization?</p></article>
+      <article class="tech-item"><code>change gate</code><h3>Guard the rules you trust</h3><p>Flags changes that break a trusted rule. Strict mode blocks only where that rule and your assistant allow it.</p></article>
     </div>
     <p class="tech-link">Want the technical details? <a href="/docs">Read how Hunch works →</a></p>
   </div>
@@ -518,14 +518,14 @@
   <div class="wrap">
     <div class="sec-head">
       <span class="eyebrow">get started</span>
-      <h2>Start in a repository.</h2>
+      <h2>Start in one repository.</h2>
     </div>
     <div class="qs">
       <div class="qs-steps">
         <div class="steps" style="margin-top:0">
-          <div class="step"><div><h3>Install Hunch</h3><p>Install the CLI and run hunch init inside the project you want it to remember.</p></div></div>
-          <div class="step"><div><h3>Add the reasons behind the code</h3><p>Optionally backfill recent Git history, then review the captured decisions and sources.</p></div></div>
-          <div class="step"><div><h3>Connect and ask</h3><p>Reload your assistant and ask why a file is built this way. In Codex, trust the hooks through /hooks first.</p></div></div>
+          <div class="step"><div><h3>Install Hunch</h3><p>Install the CLI, then run hunch init in the project you want it to remember.</p></div></div>
+          <div class="step"><div><h3>Teach it your history</h3><p>Optional: backfill the last few months of Git, then review what it captured.</p></div></div>
+          <div class="step"><div><h3>Ask why</h3><p>Reload your assistant and ask why a file is built this way. Using Codex? Trust the hooks in /hooks first.</p></div></div>
         </div>
         <div class="prov" aria-label="Supported assistants">
           <span>Claude Code</span><span>Cursor</span><span>VS Code</span><span>Windsurf</span><span>Codex</span><span>Antigravity</span><span>AGENTS.md</span>
@@ -554,7 +554,7 @@
           <button class="copybtn" data-copy="#install-cmd">copy</button>
         </div>
         <p class="install-note" style="font-family:var(--mono);font-size:12.5px;color:var(--mut);margin:14px 2px 0;line-height:1.7">
-          Hunch gives advice by default. Blocking requires your explicit choice. To update, run <code>hunch update</code>, reconnect the assistant, and review changed Codex commands in <code>/hooks</code>.<br /><br />
+          Hunch advises by default — nothing blocks until you say so. To update, run <code>hunch update</code>, reconnect your assistant, and in Codex review changed commands in <code>/hooks</code>.<br /><br />
           Claude Code? Install as a plugin instead:<br />
           <code>/plugin marketplace add davesheffer/hunch</code> → <code>/plugin install hunch@hunch</code>
           <br /><a href="https://open-vsx.org/extension/davesheffer/hunch-vscode">Open VSX</a>
@@ -568,8 +568,8 @@
 <section class="cta">
   <div class="cta-art" aria-hidden="true"><canvas id="cta-dna"></canvas></div>
   <div class="wrap">
-    <h2>Built for continuity across agents.</h2>
-    <p>The goal: a customer issue becomes a code fix and a verified follow-up. Shared state ships today; the Sofia pilot is testing the complete handoff.</p>
+    <h2>One record, from customer issue to verified fix.</h2>
+    <p>That’s the goal: a customer reports a problem, an agent fixes the code, another confirms it’s done. Shared state ships today; the Sofia pilot is testing the full handoff.</p>
     <div class="hero-cta">
       <a class="btn" href="#start">Get started</a>
       <a class="btn ghost" href="/docs">Read the docs</a>
@@ -582,7 +582,7 @@
   <div class="wrap foot">
     <div>
       <a class="brand" href="/"><span class="brand-mark" aria-hidden="true"></span>hunch</a>
-      <p class="about">Hunch keeps the decisions, work records, and commitments that agents need to share.</p>
+      <p class="about">Hunch keeps the decisions, finished work and commitments your agents need to share.</p>
     </div>
     <div>
       <h4>product</h4>
