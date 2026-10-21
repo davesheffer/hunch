@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { isLinkedWorktree } from '../src/extractors/git.js';
 // @ts-expect-error tooling is JavaScript
@@ -18,8 +18,15 @@ test('one-task launcher refuses primary/dirty worktrees, retains proposal identi
   try {
     git(repo, 'init', '-b', 'agent/primary'); git(repo, 'config', 'user.name', 'Fixture'); git(repo, 'config', 'user.email', 'fixture@example.invalid');
     git(repo, 'config', 'core.hooksPath', join(dir, 'no-hooks'));
-    const proposal = JSON.parse(readFileSync(resolve('.hunch/decisions/dec_064fb9b70e.json'), 'utf8'));
-    Object.assign(proposal, { status: 'proposed', valid_to: null, superseded_by: null });
+    const proposal = {
+      id: 'dec_064fb9b70e', title: 'Fixture proposal', topic: null, status: 'proposed',
+      context: 'Fixture context.', decision: 'Fixture decision.', consequences: ['Fixture consequence.'],
+      alternatives_rejected: [], rejected_tripwires: [], related_components: [], related_files: ['src/fixture.ts'],
+      supersedes: null, superseded_by: null, caused_by_bug: null, commit: '754058d',
+      valid_from: '2026-09-13T23:20:29+03:00', valid_to: null, retired: { symbols: [], deps: [] },
+      provenance: { source: 'human', confidence: 1, evidence: ['commit:754058d'] },
+      date: '2026-09-13T23:20:29+03:00',
+    };
     mkdirSync(join(repo, '.hunch/decisions'), { recursive: true });
     writeFileSync(join(repo, '.hunch/decisions', proposal.id + '.json'), JSON.stringify(proposal));
     git(repo, 'add', '.'); git(repo, 'commit', '-m', 'fixture'); git(repo, 'worktree', 'add', '-b', 'agent/test', worktree);

@@ -33,13 +33,13 @@ Data flows: **events → extract → synthesize → store → ground**. Source o
 - `src/mcp/server.ts` — MCP server (`hunch mcp`) exposing the `hunch_*` tools; must stay client-agnostic. Decision-grounding adds `hunch_capture_decision` (returns a one-question-at-a-time grilling protocol + a capture-session token) and `hunch_current_decision(topic)`; `hunch_record_decision` is now GATED by the store-scoped uniqueness guard (refuses a SECOND live decision per topic — never silently two) and accepts an optional `capture_token` (un-token'd writes still work but get nudged toward `/capture`).
 - `src/integrations/` — writers that wire Hunch into a repo: `scaffold.ts`, `providers.ts`, `hooks.ts` (git post-commit, pre-commit, and post-merge — the last opportunistically detects a decision's commit provenance going orphaned by a squash-merge via `hunch repair-provenance` and queues the match in `.hunch/pending-commit-repairs.json`; a human confirms with `--apply`, since the match signal isn't strong enough to trust an unattended write), `claudemd.ts` (regenerates the auto block below), `ciAction.ts` (CI Constraint Guard), `mergeDriver.ts`, `gitignore.ts`.
 
-This repo's full engineering memory lives in a **private overlay**; a **curated subset** — foundational decisions whose substance is already public in commit messages, plus the enforced constraints — is committed under `.hunch/` so the repo demos its own graph (the counts below). Maintainers with the overlay configured (`hunch private`) see the full graph via the `hunch_*` MCP tools.
+This repo's full engineering memory lives in a **private overlay**; only the enforced constraints, policies and components are committed under `.hunch/`, so public CI can check them. Maintainers with the overlay configured (`hunch private`) see the full graph via the `hunch_*` MCP tools.
 
 <!-- HUNCH:START — auto-generated, do not edit by hand -->
 <!-- hunch:template 2 -->
 ## 🧠 Hunch (Engineering Memory)
 
-This repo has **Hunch**, a graph of *why* the code is the way it is. It holds **340 decisions, 2 bugs, 31 constraints, 22 components, 3 policies, 26 open findings**. Use the `hunch_*` MCP tools by moment:
+This repo has **Hunch**, a graph of *why* the code is the way it is. It holds **0 decisions, 0 bugs, 31 constraints, 22 components, 3 policies**. Use the `hunch_*` MCP tools by moment:
 
 - **Start:** reuse the task ID and `task verify` command the prompt hook printed; with none, call `hunch_task(action: "start", title)` once. Then `hunch_context(target, task_id)` first. Orient with `hunch_structure`, `hunch_workspaces`, `hunch_runbook(task)`. Ask the user about each `hunch_escalations()` entry; silence is never approval.
 - **Design:** `hunch_why(target)` (includes what was rejected), `hunch_current_decision(topic)`, `hunch_bug_lineage(symptom_or_symbol)`, `hunch_compare(candidates)`, `hunch_query(query)`.
