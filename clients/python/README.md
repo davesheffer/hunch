@@ -54,8 +54,7 @@ as a complete history. Keep `floor_seq` and observation page cursors intact.
 
 ## Key-bound credentials
 
-Register the public key and exact HTTPS origin on the server as described in
-[key-bound principals](../../docs/key-bound-principals.md), then:
+Register the public key and exact HTTPS origin on the server, then:
 
 ```python
 from pathlib import Path

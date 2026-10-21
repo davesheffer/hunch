@@ -18,7 +18,7 @@ proof = ["cryptography>=46"]
 
 [project.urls]
 Repository = "https://github.com/davesheffer/hunch"
-Documentation = "https://github.com/davesheffer/hunch/blob/main/docs/python-state-client.md"
+Documentation = "https://www.hunchmemory.com/docs"
 
 [tool.setuptools.package-data]
 hunch_state = ["py.typed", "schemas.json"]

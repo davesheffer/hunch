@@ -147,7 +147,6 @@ jobs:
             || path === "package.json"
             || path === "server.json"
             || path === "bench/constitution-exp03-v1.json"
-            || path === "tooling/competitive-watch.mjs"
             || path === "tooling/md1-benchmark.mjs"
             || /^contracts\/change-proof\/hunch\.change-proof\.v1\.(?:example|schema)\.json$/.test(path)
             || /^dist\/.+\.d\.ts$/.test(path)
@@ -691,7 +690,6 @@ jobs:
             || path === "package.json"
             || path === "server.json"
             || path === "bench/constitution-exp03-v1.json"
-            || path === "tooling/competitive-watch.mjs"
             || path === "tooling/md1-benchmark.mjs"
             || /^contracts\/change-proof\/hunch\.change-proof\.v1\.(?:example|schema)\.json$/.test(path)
             || /^dist\/.+\.d\.ts$/.test(path)
