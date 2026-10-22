@@ -69,7 +69,7 @@ import { installPostCommitHook, installPreCommitHook, installPostMergeHook, inst
 import { ensureSharedOverlayPointer } from "../integrations/worktree.js";
 import { flushCapture, flushMemoryHome, flushMemoryHomes, pinSharedRemote, sharedRemoteFor, type MemoryHome } from "../integrations/sync.js";
 import { installMergeDriver } from "../integrations/mergeDriver.js";
-import { ensureGitignore, ignoreHunchMemory, HUNCH_MEMORY_DIRS, upgradeManagedGitignore, describeGitignoreUpgrade } from "../integrations/gitignore.js";
+import { ensureGitignore, ignoreHunchMemory, HUNCH_MEMORY_DIRS, upgradeManagedGitignore, describeGitignoreUpgrade, memoryIgnoreRule, describeMemoryIgnoreRule } from "../integrations/gitignore.js";
 import { writeCiWorkflow } from "../integrations/ciAction.js";
 import { applyUninstall, formatUninstallPlan, isOptedOut, OPT_OUT_FILE, optOutMessage, planUninstall } from "../integrations/uninstall.js";
 import { updateClaudeMd, renderHunchSection } from "../integrations/claudemd.js";
@@ -78,7 +78,7 @@ import { measureFootprint } from "../core/footprint.js";
 import { classifyGroundingBlock, describeGroundingFreshness } from "../core/groundingLag.js";
 import { mergeGroundingFile } from "../core/groundingMerge.js";
 import { writeMcpJson, writeSlashCommands, installClaudeHooks } from "../integrations/scaffold.js";
-import { scaffoldProviders, regenerateGrounding, refreshExistingGrounding, refreshCommittableGrounding, GROUNDING_DOC_PATHS } from "../integrations/providers.js";
+import { scaffoldProviders, detectAssistants, PROVIDER_ASSISTANTS, regenerateGrounding, refreshExistingGrounding, refreshCommittableGrounding, GROUNDING_DOC_PATHS } from "../integrations/providers.js";
 import { healClaudeConfigCaseSplit } from "../integrations/claudeConfig.js";
 import { formatContext, formatSearchHit, formatStructure } from "../core/format.js";
 import { isStateKind, renderStateLine, stateSupplements, type StateRecord } from "../core/stateDelivery.js";
@@ -384,7 +384,9 @@ program
   .option("--private-sync", "post-commit synthesis writes captured decisions into the overlay repo (HUNCH_PRIVATE_DIR), never the public store")
   .option("--shared-sync", "alias of --private-sync (for teams using one shared overlay repo for any code repo)")
   .option("--no-auto-commit", "DON'T auto-commit captures (default: ON in every mode — the overlay repo is committed+pushed; the public .hunch/ is committed only and rides your next push)")
-  .action((opts: { index: boolean; enforce: boolean; enforceStrict?: boolean; providers: boolean; agentHooks: boolean; firmness?: string; privateSync?: boolean; sharedSync?: boolean; autoCommit: boolean }) => {
+  .option("--all-assistants", "configure every supported assistant, not only those found on this machine or in this repository")
+  .option("--details", "print every setup step and the per-assistant integration status")
+  .action((opts: { index: boolean; enforce: boolean; enforceStrict?: boolean; providers: boolean; agentHooks: boolean; firmness?: string; privateSync?: boolean; sharedSync?: boolean; autoCommit: boolean; allAssistants?: boolean; details?: boolean }) => {
     // Validate --firmness up front, before any side effects (indexing, git hooks,
     // .mcp.json) or opening the store — a bad value must not leave a half-init.
     if (opts.firmness !== undefined && !isFirmness(opts.firmness)) {
@@ -397,31 +399,47 @@ program
     // teammate/agent resolves the same single source of truth with zero manual setup.
     const { store, teamWired } = openTeamStore(root);
     const inv = resolveInvocation();
-    console.log(`🧠 Initializing Hunch at ${root}`);
+    // Step lines are collected: the default output is a short summary with one next
+    // step; `--details` prints every step as written. Warnings always print.
+    const lines: Array<{ text: string; warn: boolean }> = [];
+    const say = (text: string) => { lines.push({ text, warn: text.includes("⚠") }); };
+    // A hook warning is followed by the snippet to add by hand: keep the group together.
+    const sayHook = (group: string[], installed: string) => {
+      const warn = group.some((l) => l.includes("⚠"));
+      for (const text of group) lines.push({ text, warn });
+      if (!warn) summary.hooks.push(installed);
+    };
+    const summary = { index: "", hooks: [] as string[], assistants: ["Claude Code"] as string[], skipped: [] as string[] };
+    say(`🧠 Initializing Hunch at ${root}`);
 
     store.json.ensureDirs(); // stamps the manifest at the current version when fresh
-    console.log(`  ✓ .hunch/ scaffolded (schema v${readManifest(paths).schema_version})`);
-    if (teamWired) console.log(`  ✓ connected to the team's shared memory store (from .hunch/team.json) → ${teamWired}`);
+    say(`  ✓ .hunch/ scaffolded (schema v${readManifest(paths).schema_version})`);
+    if (teamWired) say(`  ✓ connected to the team's shared memory store (from .hunch/team.json) → ${teamWired}`);
 
     // Exclude the derived SQLite index BEFORE it's written, so the working tree
     // never goes dirty on the MCP server's index writes (which blocks branch
     // switches). The .hunch/*.json graph stays tracked.
     const gi = ensureGitignore(root);
-    if (gi.action !== "unchanged") console.log(`  ✓ .gitignore ${gi.action} (Hunch runtime index excluded)`);
+    if (gi.action !== "unchanged") say(`  ✓ .gitignore ${gi.action} (Hunch runtime index excluded)`);
     // A repo migrated to a private overlay by an older release: bring its private-only
     // block up to date (and stop publishing newly ignored memory dirs).
-    for (const line of describeGitignoreUpgrade(upgradeManagedGitignore(root))) console.log(`  ✓ ${line}`);
+    for (const line of describeGitignoreUpgrade(upgradeManagedGitignore(root))) say(`  ✓ ${line}`);
+    if (!store.privateDir) {
+      const ignored = memoryIgnoreRule(root);
+      if (ignored) say(`  ⚠ ${describeMemoryIgnoreRule(ignored)}`);
+    }
 
     if (opts.index !== false) {
       if (isGitRepo(root) && revExists("HEAD", root)) {
         const res = indexRepo(store, root, { source: { kind: "commit", ref: "HEAD" } });
         store.reindex();
-        console.log(`  ✓ indexed committed HEAD (${res.files} files) → ${res.symbols} symbols, ${res.edges} edges, ${res.components} components`);
+        say(`  ✓ indexed committed HEAD (${res.files} files) → ${res.symbols} symbols, ${res.edges} edges, ${res.components} components`);
+        summary.index = `indexed committed HEAD (${res.files} files, ${res.symbols} symbols)`;
         for (const item of res.coverage) {
           const reasons = Object.entries(item.reasons).map(([reason, count]) => `${reason}:${count}`).join(", ");
-          console.log(`    coverage ${item.language}: ${item.eligible} eligible · ${item.parsed} parsed · ${item.skipped} skipped${reasons ? ` (${reasons})` : ""}`);
+          say(`    coverage ${item.language}: ${item.eligible} eligible · ${item.parsed} parsed · ${item.skipped} skipped${reasons ? ` (${reasons})` : ""}`);
         }
-        if (res.skipped) console.log(`  ⚠ ${res.skipped} file(s) could not be parsed (skipped)`);
+        if (res.skipped) say(`  ⚠ ${res.skipped} file(s) could not be parsed (skipped)`);
       } else {
         // A checkout-derived graph can be swept into a later memory commit by
         // any mutator. With no commit identity there is no safe public source,
@@ -430,7 +448,7 @@ program
         store.json.replaceAll("edges", mergeScannedEdges(store.json.loadAll("edges"), []));
         store.json.replaceAll("components", []);
         store.reindex();
-        console.log("  ⚠ skipped code graph: no committed HEAD — commit code, then run `hunch index`");
+        say("  ⚠ skipped code graph: no committed HEAD — commit code, then run `hunch index`");
       }
     }
 
@@ -452,10 +470,10 @@ program
         }
       }
       if (existing === null) {
-        console.warn(`  ⚠ refusing to rewrite ${localFile}: it is not a JSON object and may hold your private-overlay pointer. Fix or remove it, then re-run \`hunch init --no-auto-commit\`.`);
+        say(`  ⚠ refusing to rewrite ${localFile}: it is not a JSON object and may hold your private-overlay pointer. Fix or remove it, then re-run \`hunch init --no-auto-commit\`.`);
       } else {
         writeFileAtomic(localFile, JSON.stringify({ ...existing, autoCommit: false }, null, 2) + "\n");
-        console.log("  ✓ local auto-commit preference OFF (an explicit hook --commit flag still takes precedence)");
+        say("  ✓ local auto-commit preference OFF (an explicit hook --commit flag still takes precedence)");
       }
     }
 
@@ -473,18 +491,18 @@ program
       }
       const h = installPostCommitHook(root, inv.shell, { private: syncToOverlay, commit: hookCommit, localOnly: syncToOverlay });
       installs.push(h);
-      for (const line of formatHookInstall(root, "post-commit hook", h, ` (learning loop)${syncToOverlay ? " — syncs to the shared overlay" : ""}${hookCommit ? " — auto-commit on" : ""}`)) console.log(line);
+      sayHook(formatHookInstall(root, "post-commit hook", h, ` (learning loop)${syncToOverlay ? " — syncs to the shared overlay" : ""}${hookCommit ? " — auto-commit on" : ""}`), hookCommit ? "post-commit (auto-commit on)" : "post-commit");
       if (opts.autoCommit === false && hookReport(root).postCommit.flags?.includes("--commit")) {
-        console.log("  ⚠ the shared post-commit hook still auto-commits. To change it, re-run `hunch init --no-auto-commit` using a global install or the main checkout's Hunch.");
+        say("  ⚠ the shared post-commit hook still auto-commits. To change it, re-run `hunch init --no-auto-commit` using a global install or the main checkout's Hunch.");
       }
       const pm = installPostMergeHook(root, inv.shell);
       installs.push(pm);
-      for (const line of formatHookInstall(root, "post-merge hook", pm, " (squash-merge provenance repair + re-syncs grounding docs after a merge that brought memory in)")) console.log(line);
+      sayHook(formatHookInstall(root, "post-merge hook", pm, " (squash-merge provenance repair + re-syncs grounding docs after a merge that brought memory in)"), "post-merge");
       const pc = installPostCheckoutHook(root, inv.shell);
       installs.push(pc);
-      for (const line of formatHookInstall(root, "post-checkout hook", pc, " (workspace ledger: records this machine's branches + worktrees on checkout)")) console.log(line);
+      sayHook(formatHookInstall(root, "post-checkout hook", pc, " (workspace ledger: records this machine's branches + worktrees on checkout)"), "post-checkout");
       const m = installMergeDriver(root, inv.shell);
-      console.log(`  ✓ team merge driver ${m.action}`);
+      say(`  ✓ team merge driver ${m.action}`);
       // Auto-install the pre-commit guard by default (advisory: flags invariants
       // touched directly OR via blast radius, never blocks). Opt out with
       // --no-enforce; --enforce-strict makes blocking near/direct hits fail the commit.
@@ -492,10 +510,10 @@ program
         const strict = !!opts.enforceStrict;
         const p = installPreCommitHook(root, inv.shell, strict);
         installs.push(p);
-        for (const line of formatHookInstall(root, "pre-commit constraint guard", p, ` (${strict ? "strict — fails only on direct, high-confidence, non-stale blocking invariants" : "advisory — flags invariants in scope or blast radius"})`)) console.log(line);
+        sayHook(formatHookInstall(root, "pre-commit constraint guard", p, ` (${strict ? "strict — fails only on direct, high-confidence, non-stale blocking invariants" : "advisory — flags invariants in scope or blast radius"})`), `pre-commit guard (${strict ? "strict" : "advisory"})`);
       }
     } else {
-      console.log("  ⚠ not a git repo — skipped hooks (run `git init` to enable the learning loop)");
+      say("  ⚠ not a git repo — skipped hooks (run `git init` to enable the learning loop)");
     }
 
     // .mcp.json is the CANONICAL registration: Claude Code resolves it by file path,
@@ -504,17 +522,17 @@ program
     // existing file is refused (con_8460b6770f) — warn and continue, never clobber.
     try {
       const mcp = writeMcpJson(root, inv.mcp);
-      console.log(`  ✓ wrote ${rel(root, mcp)} (registers the Hunch MCP server — canonical, path-keyed; prefer over a global \`claude mcp add\`)`);
+      say(`  ✓ wrote ${rel(root, mcp)} (registers the Hunch MCP server — canonical, path-keyed; prefer over a global \`claude mcp add\`)`);
     } catch (e) {
-      console.log(`  ⚠ skipped .mcp.json: ${(e as Error).message}`);
+      say(`  ⚠ skipped .mcp.json: ${(e as Error).message}`);
     }
     const cmds = writeSlashCommands(root);
-    console.log(`  ✓ wrote ${cmds.written.length} slash commands (/hunch-why, /hunch-fix, /hunch-fragile, /capture, /heal, /audit)`);
+    say(`  ✓ wrote ${cmds.written.length} slash commands (/hunch-why, /hunch-fix, /hunch-fragile, /capture, /heal, /audit)`);
     for (const s of cmds.skipped) {
-      console.log(`  ⚠ kept your existing ${rel(root, s)} (no hunch:generated marker — delete the file and re-run init to adopt Hunch's version)`);
+      say(`  ⚠ kept your existing ${rel(root, s)} (no hunch:generated marker — delete the file and re-run init to adopt Hunch's version)`);
     }
     const cmd = updateClaudeMd(root, store);
-    console.log(`  ✓ updated ${rel(root, cmd)} with ambient Hunch context`);
+    say(`  ✓ updated ${rel(root, cmd)} with ambient Hunch context`);
 
     // Firmness: stamp .hunch/config.json (default advisory) so `hunch hook` reads a
     // level even before the user runs `hunch firmness` (--firmness validated above).
@@ -524,17 +542,22 @@ program
     // adapter reads firmness at run time, so changing it needs no config rewrite.
     if (opts.agentHooks !== false) {
       const a = installClaudeHooks(root, `${inv.agentHookShell} hook`);
-      console.log(`  ✓ Claude Code agent hooks ${a.action} (firmness: ${firmness} — change with \`hunch firmness <level>\`)`);
+      say(`  ✓ Claude Code agent hooks ${a.action} (firmness: ${firmness} — change with \`hunch firmness <level>\`)`);
     }
 
     // Multi-assistant compatibility: MCP + grounding + lifecycle adapters share
     // the same .hunch/ graph across Cursor / VS Code / Windsurf / Antigravity.
     if (opts.providers !== false) {
-      const ps = scaffoldProviders(root, inv.mcp, store, { agentHooks: opts.agentHooks !== false });
+      const detected = detectAssistants(root);
+      const only = opts.allAssistants || detected.size === 0 ? undefined : detected;
+      const ps = scaffoldProviders(root, inv.mcp, store, { agentHooks: opts.agentHooks !== false, only });
       const ok = ps.filter((p) => !p.error);
+      summary.assistants.push(...ok.map((p) => p.assistant === "Any (AGENTS.md)" ? "any tool that reads AGENTS.md" : p.assistant));
+      if (only) summary.skipped = PROVIDER_ASSISTANTS.filter((a) => !only.has(a));
+      if (summary.skipped.length) say(`  ✓ not configured (not found on this machine or in this repository): ${summary.skipped.join(", ")} — add them with \`hunch init --all-assistants\``);
       const total = ok.reduce((a, p) => a + p.files.length, 0);
-      console.log(`  ✓ wrote ${total} multi-assistant config file(s) → ${ok.map((p) => p.assistant).join(", ")}`);
-      for (const p of ps) if (p.error) console.log(`  ⚠ skipped ${p.assistant}: ${p.error}`);
+      say(`  ✓ wrote ${total} multi-assistant config file(s) → ${ok.map((p) => p.assistant).join(", ")}`);
+      for (const p of ps) if (p.error) say(`  ⚠ skipped ${p.assistant}: ${p.error}`);
     }
 
     // Windows self-heal: if an earlier global `claude mcp add` left a drive-letter
@@ -546,16 +569,30 @@ program
     // worktree of this repo auto-discovers it (also backfills pre-0.32 single-worktree setups),
     // and note when we're initializing inside a linked worktree (memory is shared, not separate).
     if (ensureSharedOverlayPointer(root, store.privateDir, store.privateAutoCommit, store.mode === "shared" ? "shared" : "private", true)) {
-      console.log(`  ✓ private overlay registered at the git common dir — shared by every worktree of this repo`);
+      say(`  ✓ private overlay registered at the git common dir — shared by every worktree of this repo`);
     }
-    for (const line of sharedHooksNote(root, installs)) console.log(line);
+    for (const line of sharedHooksNote(root, installs)) say(line);
 
     store.close();
-    console.log("\n" + formatIntegrationHealth(inspectIntegrations(root)));
-    console.log("\nTask reporting is configured through Hunch's agent instructions; actual agent activity has not been verified by setup. Reconnect the agent, then work normally. Completed task reports are available with `hunch report`.");
-    console.log(reportActivity(root));
-    console.log("Cold start? Seed from history:  hunch backfill --since 90d");
-    console.log("\n⭐ If Hunch earns its keep, a star helps others find it → https://github.com/davesheffer/hunch");
+    if (opts.details) {
+      for (const l of lines) console.log(l.text);
+      console.log("\n" + formatIntegrationHealth(inspectIntegrations(root)));
+      console.log("\nTask reporting is configured through Hunch's agent instructions; actual agent activity has not been verified by setup. Reconnect the agent, then work normally. Completed task reports are available with `hunch report`.");
+      console.log(reportActivity(root));
+      console.log("Cold start? Seed from history:  hunch backfill --since 90d");
+      console.log("\n⭐ If Hunch earns its keep, a star helps others find it → https://github.com/davesheffer/hunch");
+      return;
+    }
+    console.log(`🧠 Hunch is set up in ${root}`);
+    console.log(`  ✓ memory: .hunch/${teamWired ? ` (connected to your team's shared store)` : ""}`);
+    if (summary.index) console.log(`  ✓ code index: ${summary.index}`);
+    if (summary.hooks.length) console.log(`  ✓ git hooks: ${summary.hooks.join(", ")}`);
+    console.log(`  ✓ assistants: ${summary.assistants.join(", ")}`);
+    if (summary.skipped.length) console.log(`    not found here, so not configured: ${summary.skipped.join(", ")} (add with --all-assistants)`);
+    for (const l of lines) if (l.warn) console.log(l.text);
+    console.log("\nNext: reload your assistant, then ask it why a file you're about to change is built that way.");
+    console.log("No memory yet? Draft it from this repository's history: hunch backfill --since 90d");
+    console.log("More: hunch init --details (everything that was written) · hunch doctor (check the setup)");
   });
 
 // ---- uninstall ------------------------------------------------------------
@@ -7015,6 +7052,8 @@ program
       console.log(team
         ? `overlay:    off, but .hunch/team.json advertises the team store (${team.shared_repo}) — ${isTeamStoreTrusted(root, team) ? "run \`hunch init\` to auto-connect" : "if it is your team's store, run \`hunch shared --trust\` to connect"}`
         : dim(`private:    off — run \`hunch shared\` (or \`hunch private\`) to use one overlay repo across teammates/worktrees (or set HUNCH_PRIVATE_DIR)`));
+      const ignored = memoryIgnoreRule(root);
+      if (ignored) console.log(`memory:     ⚠ ${describeMemoryIgnoreRule(ignored)}`);
     }
     // Worktree posture: linked worktrees share ONE memory via the git common dir. Only
     // surfaced in a linked worktree (no noise in a normal single checkout), so a

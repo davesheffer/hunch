@@ -12,6 +12,8 @@ import {
   upgradeManagedGitignore,
   describeGitignoreUpgrade,
   HUNCH_MEMORY_DIRS,
+  memoryIgnoreRule,
+  describeMemoryIgnoreRule,
 } from "../src/integrations/gitignore.js";
 import { ENTITY_KINDS } from "../src/core/types.js";
 
@@ -303,5 +305,37 @@ test("re-running `hunch private <dir>` on a repo migrated by an older release up
       assert.ok(existsSync(join(root, ".hunch", "tasks", "x.json")), "kept on disk");
       assert.match(git(root, "ls-files"), /app\.ts/, "code stays tracked");
     });
+  });
+});
+
+test("memoryIgnoreRule names the user's rule that keeps .hunch/ memory out of Git", () => {
+  inTmp((root) => {
+    execFileSync("git", ["init", "-q"], { cwd: root });
+    assert.equal(memoryIgnoreRule(root), null, "no .gitignore: nothing to report");
+    writeFileSync(join(root, ".gitignore"), "node_modules/\n.hunch/\n");
+    const rule = memoryIgnoreRule(root);
+    assert.deepEqual(rule, { source: ".gitignore", line: 2, pattern: ".hunch/" });
+    assert.match(describeMemoryIgnoreRule(rule!), /\.gitignore line 2 \(`\.hunch\/`\) ignores \.hunch\/, so captured memory is never committed/);
+  });
+});
+
+test("memoryIgnoreRule stays quiet for Hunch's own private-only block and for a re-include", () => {
+  inTmp((root) => {
+    execFileSync("git", ["init", "-q"], { cwd: root });
+    ensureGitignore(root);
+    ignoreHunchMemory(root);
+    assert.equal(memoryIgnoreRule(root), null, "a private-migrated repository ignores memory on purpose");
+  });
+  inTmp((root) => {
+    execFileSync("git", ["init", "-q"], { cwd: root });
+    writeFileSync(join(root, ".gitignore"), ".hunch/decisions/\n!.hunch/decisions/\n");
+    assert.equal(memoryIgnoreRule(root), null, "a later negation re-includes memory");
+  });
+});
+
+test("memoryIgnoreRule returns null outside a git repository", () => {
+  inTmp((root) => {
+    writeFileSync(join(root, ".gitignore"), ".hunch/\n");
+    assert.equal(memoryIgnoreRule(root), null);
   });
 });

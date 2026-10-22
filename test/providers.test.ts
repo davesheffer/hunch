@@ -1,9 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, existsSync, chmodSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { tempStore } from "./helpers.js";
-import { scaffoldProviders, writeCursorMcp, writeVscodeMcp, writeCodexConfig, writeCodexHooks, writeCursorHooks, writeWindsurfMcp, writeAntigravityWorkspaceMcp, writeAntigravityHooks } from "../src/integrations/providers.js";
+import { scaffoldProviders, detectAssistants, writeCursorMcp, writeVscodeMcp, writeCodexConfig, writeCodexHooks, writeCursorHooks, writeWindsurfMcp, writeAntigravityWorkspaceMcp, writeAntigravityHooks } from "../src/integrations/providers.js";
 import { writeSlashCommands } from "../src/integrations/scaffold.js";
 import { publishedMcpInvocation } from "../src/cli/invocation.js";
 
@@ -375,4 +375,38 @@ test("writeCodexHooks merges idempotently and leaves foreign Codex hooks in plac
     assert.match(json.hooks.PreToolUse[1].hooks[0].command, /hunch hook --provider codex$/);
     assert.doesNotMatch(json.hooks.PreToolUse[1].hooks[0].command, /"/, "unquoted published tokens");
   } finally { cleanup(); }
+});
+
+test("detectAssistants finds assistants from the repository, the home folder or PATH", () => {
+  const { root, cleanup } = tempStore();
+  try {
+    const home = join(root, "home"), bin = join(root, "bin");
+    mkdirSync(home, { recursive: true });
+    mkdirSync(bin, { recursive: true });
+    const env = { PATH: bin, PATHEXT: ".EXE;.CMD;.BAT" };
+    assert.deepEqual([...detectAssistants(root, home, env)], [], "nothing installed");
+
+    mkdirSync(join(home, ".cursor"));
+    mkdirSync(join(root, ".vscode"));
+    const codex = join(bin, process.platform === "win32" ? "codex.cmd" : "codex");
+    writeFileSync(codex, "");
+    chmodSync(codex, 0o755);
+    assert.deepEqual([...detectAssistants(root, home, env)].sort(), ["Codex CLI", "Cursor", "VS Code (Copilot)"]);
+  } finally {
+    cleanup();
+  }
+});
+
+test("scaffoldProviders with `only` writes the chosen assistants plus AGENTS.md", () => {
+  const { store, root, cleanup } = tempStore();
+  try {
+    const written = scaffoldProviders(root, inv, store, { home: root, only: new Set(["Cursor"]) });
+    assert.deepEqual(written.map((p) => p.assistant), ["Cursor", "Any (AGENTS.md)"]);
+    assert.ok(existsSync(join(root, ".cursor/mcp.json")));
+    assert.ok(existsSync(join(root, "AGENTS.md")));
+    assert.ok(!existsSync(join(root, ".vscode/mcp.json")), "VS Code was not chosen");
+    assert.ok(!existsSync(join(root, ".codex/config.toml")), "Codex was not chosen");
+  } finally {
+    cleanup();
+  }
 });

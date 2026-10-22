@@ -12,6 +12,7 @@
  * block written by an older release gains entries added later) and is otherwise
  * byte-identical; everything outside the markers is left untouched.
  */
+import { spawnSync } from "node:child_process";
 import { readFileSync, existsSync, lstatSync, realpathSync } from "node:fs";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { writeFileAtomic } from "../core/io.js";
@@ -252,6 +253,41 @@ export function describeGitignoreUpgrade(upgrade: ManagedGitignoreUpgrade): stri
     out.push(`removed ${upgrade.untracked.length} newly ignored memory file(s) from the git index, kept on disk (commit the removal): ${shown}`);
   }
   return out;
+}
+
+export interface MemoryIgnoreRule {
+  /** Ignore file that holds the rule, as git reports it (e.g. `.gitignore`). */
+  source: string;
+  /** 1-based line of the rule in `source`. */
+  line: number;
+  pattern: string;
+}
+
+/** The user's ignore rule that keeps engineering memory out of Git, or null.
+ *  A repository that ignores `.hunch/` (or `.hunch/decisions/`) silently loses every
+ *  capture: the records are written, never committed, and gone on a fresh clone.
+ *  Hunch's own private-only block ignores the same paths on purpose (memory lives
+ *  in an overlay), so a rule inside that block is not reported. Unknown git state
+ *  yields null: the caller then says nothing rather than guessing. */
+export function memoryIgnoreRule(root: string): MemoryIgnoreRule | null {
+  const probe = ".hunch/decisions/dec_0000000000.json";
+  const r = spawnSync("git", ["check-ignore", "-v", "--no-index", "--", probe], { cwd: root, encoding: "utf8", windowsHide: true });
+  if (r.error || r.status !== 0) return null;
+  const m = /^(.*):(\d+):(.*)\t/.exec(r.stdout ?? "");
+  if (!m) return null;
+  const rule: MemoryIgnoreRule = { source: m[1]!, line: Number(m[2]), pattern: m[3]! };
+  if (rule.pattern.startsWith("!")) return null;
+  const file = resolve(root, rule.source);
+  if (existsSync(file)) {
+    const span = findBlock(readFileSync(file, "utf8").split("\n"), MEM_MARK, MEM_END);
+    if (span && rule.line - 1 > span.start && rule.line - 1 < span.end) return null;
+  }
+  return rule;
+}
+
+/** One line telling the user their memory will not reach Git, and how to fix it. */
+export function describeMemoryIgnoreRule(rule: MemoryIgnoreRule): string {
+  return `${rule.source} line ${rule.line} (\`${rule.pattern}\`) ignores .hunch/, so captured memory is never committed or shared and is lost on a fresh clone. Remove that line, or keep memory in a private repository with \`hunch private --repo <url>\`.`;
 }
 
 /** `.gitignore` text with both managed Hunch blocks removed (markers inclusive),
