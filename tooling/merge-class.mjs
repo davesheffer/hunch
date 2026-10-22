@@ -64,7 +64,6 @@ export const GROUNDING_DOCS = Object.freeze(["CLAUDE.md", "AGENTS.md"]);
 export const MEMORY_GRAPH_TESTS = Object.freeze([
   "test/grounding-freshness.test.ts",
   "test/public-constraint-scope.test.ts",
-  "test/development-preparation.test.ts",
 ]);
 
 export function classifyPath(path) {

@@ -44,7 +44,6 @@
     "contracts/change-proof/*.json",
     "server.json",
     "bench/constitution-exp03-v1.json",
-    "tooling/competitive-watch.mjs",
     "tooling/md1-benchmark.mjs",
     "LICENSE",
     "NOTICE"
@@ -91,8 +90,6 @@
     "site:proof": "npm run build && node tooling/generate-public-proof.mjs",
     "site:sitemap": "node tooling/generate-sitemap.mjs",
     "bench:md1": "node tooling/md1-benchmark.mjs",
-    "research:competitors": "node tooling/competitive-watch.mjs",
-    "outreach": "node tooling/outreach-pipeline.mjs",
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
