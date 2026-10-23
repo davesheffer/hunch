@@ -23,11 +23,11 @@
  * Every provider returns the same shape so the rest of the system never knows
  * (or cares) which one ran.
  */
-import { execFile, spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { isIP } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { boundedSpawn } from "../core/boundedSpawn.js";
 import { writeFileAtomic } from "../core/io.js";
 import { summarizeDiff, type DiffAnalysis } from "../extractors/diff.js";
 import { languageFor } from "../extractors/languages.js";
@@ -48,7 +48,7 @@ const IS_WIN = process.platform === "win32";
  *      win32 routes through cmd.exe so the shim resolves. Safe here because
  *      every argv we pass is a trusted, space-free flag (the prompt is stdin).
  */
-export function pexecIn(
+export async function pexecIn(
   cmd: string,
   args: string[],
   opts: {
@@ -59,77 +59,27 @@ export function pexecIn(
     maxBuffer?: number;
   } = {},
 ): Promise<{ stdout: string }> {
-  return new Promise((resolve, reject) => {
-    // Windows: launch through cmd.exe so the `claude` .cmd/.ps1 shim resolves,
-    // and pass the whole line as ONE shell string (args are trusted, space-free
-    // flags) — avoids Node's DEP0190 warning for `args + shell:true`. The prompt
-    // is never here; it goes via stdin below. POSIX: no shell, argv as-is.
-    const child = IS_WIN
-      ? spawn([cmd, ...args].join(" "), {
-          shell: true,
-          env: initiatorChildEnv(opts.env ?? process.env),
-          cwd: opts.cwd,
-          windowsHide: true,
-        })
-      : spawn(cmd, args, {
-          env: initiatorChildEnv(opts.env ?? process.env),
-          cwd: opts.cwd,
-          windowsHide: true,
-        });
-    const max = opts.maxBuffer ?? 16 * 1024 * 1024;
-    let out = "";
-    let err = "";
-    let outLen = 0;
-    let settled = false;
-    // Windows spawns through a cmd.exe wrapper (shell:true), and child.kill()
-    // terminates only that wrapper — the actual agent CLI survives as an orphan,
-    // still burning the user's subscription after every timeout, accumulating
-    // with each post-commit hook fire (issue #44). taskkill /T fells the tree.
-    // Best-effort by design: the wrapper kill below still runs either way.
-    const killTree = (): void => {
-      if (IS_WIN && child.pid) {
-        try {
-          execFile("taskkill", ["/pid", String(child.pid), "/T", "/F"], { windowsHide: true }, () => { /* tree may already be gone */ });
-        } catch { /* taskkill unavailable — fall through to the wrapper kill */ }
-      }
-      child.kill();
-    };
-    const done = (fn: () => void) => {
-      if (settled) return;
-      settled = true;
-      if (timer) clearTimeout(timer);
-      fn();
-    };
-    const timer = opts.timeout
-      ? setTimeout(() => {
-          killTree();
-          done(() => reject(new Error(`"${cmd}" timed out after ${opts.timeout}ms`)));
-        }, opts.timeout)
-      : null;
-    child.on("error", (e) => done(() => reject(e)));
-    child.stdout.on("data", (d: Buffer) => {
-      outLen += d.length;
-      if (outLen > max) {
-        killTree();
-        done(() => reject(new Error(`"${cmd}" exceeded maxBuffer (${max} bytes)`)));
-        return;
-      }
-      out += d.toString();
-    });
-    child.stderr.on("data", (d: Buffer) => {
-      err += d.toString();
-    });
-    child.on("close", (code) => {
-      done(() => {
-        if (code === 0) resolve({ stdout: out });
-        else reject(new Error(`"${cmd}" exited ${code}: ${err.slice(0, 300)}`));
-      });
-    });
-    // Feed stdin (the prompt) then close it; commands with no input just get EOF.
-    if (opts.input != null) child.stdin.write(opts.input);
-    child.stdin.on("error", () => {}); // ignore EPIPE if the child exits early
-    child.stdin.end();
+  // Windows: launch through cmd.exe so the `claude` .cmd/.ps1 shim resolves,
+  // and pass the whole line as ONE shell string (args are trusted, space-free
+  // flags) — avoids Node's DEP0190 warning for `args + shell:true`. The prompt
+  // is never here; it goes via stdin. POSIX: no shell, argv as-is.
+  // boundedSpawn owns the timer and, on timeout or overflow, kills the WHOLE
+  // tree while the root is alive: on Windows child.kill() alone ends only the
+  // cmd.exe wrapper and orphans the agent CLI, still burning the user's
+  // subscription after every timeout (issues #44, #489).
+  const result = await boundedSpawn(IS_WIN ? [cmd, ...args].join(" ") : cmd, IS_WIN ? [] : args, {
+    shell: IS_WIN,
+    env: initiatorChildEnv(opts.env ?? process.env),
+    cwd: opts.cwd,
+    input: opts.input,
+    timeoutMs: opts.timeout,
+    maxBuffer: opts.maxBuffer ?? 16 * 1024 * 1024,
   });
+  if (result.error) throw result.error;
+  if (result.timedOut) throw new Error(`"${cmd}" timed out after ${opts.timeout}ms`);
+  if (result.overflowed) throw new Error(`"${cmd}" exceeded maxBuffer (${opts.maxBuffer ?? 16 * 1024 * 1024} bytes)`);
+  if (result.status !== 0) throw new Error(`"${cmd}" exited ${result.status}: ${result.stderr.slice(0, 300)}`);
+  return { stdout: result.stdout };
 }
 
 export interface DecisionDraft {

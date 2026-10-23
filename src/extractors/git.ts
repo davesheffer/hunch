@@ -7,6 +7,7 @@ import { isAbsolute, resolve, join, basename, dirname, relative, sep, posix } fr
 import { mkdtempSync, openSync, closeSync, readSync, mkdirSync, rmSync, statSync, lstatSync, realpathSync, readFileSync, renameSync, readdirSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { MEMLOG_FORMAT } from "../core/memorylog.js";
+import { boundedExecFileSync } from "../core/boundedSpawn.js";
 import { writeFileAtomic } from "../core/io.js";
 import { hunchAttributesAreSafe, hunchTreeAttributesAreSafe, safeOverlayGitTreeListing, safeOverlayTree } from "../core/overlaySafety.js";
 import { createRepoFileReader } from "../core/safeRepoFile.js";
@@ -1178,16 +1179,13 @@ function contractRemoteHeads(
   const hooksDir = disabledHooksDir(hunchDir);
   if (!hooksDir) return null;
   try {
-    const out = execFileSync("git", [
+    // Network git runs under boundedExecFileSync: execFileSync's timeout kills only
+    // the root, orphaning git-remote-https.exe on Windows (issue #498).
+    const out = boundedExecFileSync("git", [
       "-C", hunchDir,
       "-c", `core.hooksPath=${hooksDir}`,
       "ls-remote", "--refs", "--heads", "--upload-pack=git-upload-pack", url,
-    ], {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-      env: boundedTeamEnv(env),
-      timeout: timeoutMs,
-    });
+    ], { env: boundedTeamEnv(env), timeout: timeoutMs });
     if (!contractReady(contract)) return null;
     const heads: Array<{ oid: string; ref: string }> = [];
     for (const line of out.split(/\r?\n/).filter(Boolean)) {
@@ -1212,12 +1210,12 @@ function fetchContractRef(
   const hooksDir = disabledHooksDir(hunchDir);
   if (!hooksDir) return "";
   try {
-    execFileSync("git", [
+    boundedExecFileSync("git", [
       "-C", hunchDir,
       "-c", `core.hooksPath=${hooksDir}`,
       "fetch", "--no-tags", "--no-write-fetch-head", "--upload-pack=git-upload-pack",
       contract.fetchUrl, `+${contract.ref}:${TEAM_FETCH_REF}`,
-    ], { stdio: ["ignore", "ignore", "pipe"], env: boundedTeamEnv(env), timeout: timeoutMs });
+    ], { stdout: "ignore", env: boundedTeamEnv(env), timeout: timeoutMs });
     if (!contractReady(contract)) return "";
     const oid = execFileSync("git", ["-C", hunchDir, "rev-parse", "--verify", TEAM_FETCH_REF], {
       encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], env, timeout: pullLocalGitTimeoutMs(),
@@ -1370,16 +1368,14 @@ function mergeRemote(
     const startedAt = Date.now();
     lastPullGitError = undefined;
     try {
-      execFileSync("git", [
+      boundedExecFileSync("git", [
         "-C", hunchDir,
         "-c", `core.hooksPath=${hooksDir}`,
         "-c", `core.attributesFile=${gitNullDevice()}`,
         "-c", "core.autocrlf=false",
         "-c", "commit.gpgsign=false",
         ...args,
-      ], {
-        stdio: ["ignore", "ignore", "pipe"], env, timeout,
-      });
+      ], { stdout: "ignore", env, timeout });
       return true;
     }
     catch (error) {
@@ -1463,18 +1459,18 @@ function upstreamSha(hunchDir: string, env: NodeJS.ProcessEnv): string {
  * Spool privately for the duration of the command, read at most 1 MB afterward,
  * and discard oversized/unavailable output without changing its exit result. */
 function runObservedPush(args: string[], env: NodeJS.ProcessEnv, timeoutMs: number, observe: boolean): string | null {
-  if (!observe) { execFileSync("git", args, { stdio: "ignore", env, timeout: timeoutMs }); return null; }
+  if (!observe) { boundedExecFileSync("git", args, { stdout: "ignore", env, timeout: timeoutMs }); return null; }
   let directory: string | undefined, descriptor: number | undefined;
   try {
     directory = mkdtempSync(join(tmpdir(), "hunch-push-observation-"));
     descriptor = openSync(join(directory, "stdout"), "wx+", 0o600);
   } catch {
     if (directory) { try { rmSync(directory, { recursive: true, force: true }); } catch {} }
-    execFileSync("git", args, { stdio: "ignore", env, timeout: timeoutMs });
+    boundedExecFileSync("git", args, { stdout: "ignore", env, timeout: timeoutMs });
     return null;
   }
   try {
-    execFileSync("git", args, { stdio: ["ignore", descriptor, "ignore"], env, timeout: timeoutMs });
+    boundedExecFileSync("git", args, { stdout: descriptor, env, timeout: timeoutMs });
     try {
       const buffer = Buffer.alloc(1_000_001);
       const bytes = readSync(descriptor, buffer, 0, buffer.length, 0);
@@ -1502,8 +1498,8 @@ function observePushResult(hunchDir: string, env: NodeJS.ProcessEnv, output: str
     if (range) { observeGit(observer, { kind: "published", commitSha: range[1]!, ref, basis: "push-status" }); continue; }
     if (!destination || /[\x00-\x1f\x7f]/.test(destination) || Date.now() >= deadline) continue;
     try {
-      const result = execFileSync("git", ["-C", hunchDir, "ls-remote", "--refs", "--exit-code", "--", destination, ref], {
-        env, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: Math.max(1, deadline - Date.now()), maxBuffer: 16_384,
+      const result = boundedExecFileSync("git", ["-C", hunchDir, "ls-remote", "--refs", "--exit-code", "--", destination, ref], {
+        env, timeout: Math.max(1, deadline - Date.now()), maxBuffer: 16_384,
       }).trim();
       const rows = result.split("\n").filter(row => row.split("\t")[1] === ref);
       const commitSha = rows.length === 1 ? rows[0]!.split("\t")[0]! : "";
@@ -1591,12 +1587,7 @@ function establishEmptyRemoteUpstream(
   const before = pushIdentity();
   if (!before) return false;
   try {
-    const refs = execFileSync("git", ["-C", hunchDir, "ls-remote", "--refs", remote], {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-      env,
-      timeout: timeoutMs,
-    }).trim();
+    const refs = boundedExecFileSync("git", ["-C", hunchDir, "ls-remote", "--refs", remote], { env, timeout: timeoutMs }).trim();
     if (refs) return false;
   } catch {
     return false;

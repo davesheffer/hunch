@@ -12,6 +12,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, realpathSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { foreignRepoEnv, gitCommonDir, mainWorktreeRoot, stableRepositoryName } from "./git.js";
+import { boundedSpawnSync } from "../core/boundedSpawn.js";
 import { extracted } from "../core/types.js";
 import {
   CONTROL_CHARS, MAX_BRANCHES, MAX_WORKTREES, WORKSPACE_SCHEMA_VERSION, WorkspaceSchema, isSafeBranchName, workspaceId, worktreeId,
@@ -334,7 +335,8 @@ function fetchedAt(root: string): string | null {
 export function snapshotWorkspace(root: string, opts: SnapshotOptions): Workspace {
   const now = opts.now ?? new Date();
   const main = mainWorktreeRoot(root);
-  if (opts.fetch) run(main, ["fetch", "--prune", "--quiet"], 120_000);
+  // Network fetch: bounded so a timeout kills git's whole tree, not just the root (#498).
+  if (opts.fetch) boundedSpawnSync("git", ["fetch", "--prune", "--quiet"], { cwd: main, env: env(), stdout: "ignore", timeout: 120_000 });
   const def = defaultBranch(main);
   const searched = opts.squashSearchCommits ?? DEFAULT_SQUASH_SEARCH_COMMITS;
   let patchIds: ReturnType<typeof patchIdsOf> | null = null;

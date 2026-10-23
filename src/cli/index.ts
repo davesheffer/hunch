@@ -22,6 +22,7 @@ import { fileURLToPath } from "node:url";
 import { Command } from "commander";
 import { hunchPaths, hunchPathsForDir, findRoot, toPosixTarget, isDir, realpathNorm, repoRelativeTarget } from "../core/paths.js";
 import { writeFileAtomic } from "../core/io.js";
+import { boundedSpawnSync } from "../core/boundedSpawn.js";
 import { looksLikeCorrection, CORRECTION_NUDGE } from "../core/correction.js";
 import { HUNCH_VERSION } from "../core/version.js";
 import { registerIntegrationCommands } from "./integrations.js";
@@ -992,13 +993,12 @@ function discoverSharedRemote(remoteUrl: string): { ref: string | null; empty: b
       if (prefix && (/^url\..*\.insteadof$/.test(key) || /^url\..*\.pushinsteadof$/.test(key))
         && remoteUrl.startsWith(prefix)) return null;
     }
-    const listed = spawnSync("git", [
+    // Bounded so a timeout kills git's whole tree, not just the root (#498).
+    const listed = boundedSpawnSync("git", [
       "-C", probe,
       "-c", `core.hooksPath=${hooksDir}`,
       "ls-remote", "--refs", "--heads", "--upload-pack=git-upload-pack", remoteUrl,
     ], {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
       env: boundedTeamGitEnv(),
       timeout: 15_000,
     });

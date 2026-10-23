@@ -197,11 +197,11 @@ test("external:provider: a hung CLI times out (tree killed) and the safe wrapper
 
 const alive = (pid: number): boolean => { try { process.kill(pid, 0); return true; } catch { return false; } };
 
-// REAL BUG (Windows): pexecIn's timeout kills the cmd.exe wrapper with child.kill()
-// while taskkill /T runs asynchronously, so the wrapper dies first and the actual
-// CLI (the cmd's node/claude grandchild) is orphaned — issue #44 regressed. The
-// orphan also holds the stdout pipe, keeping the hook/test process alive.
-test("external:provider: a timed-out CLI process tree is fully killed (no orphan)", { timeout: 60_000, todo: IS_WIN ? "pexecIn orphans the CLI grandchild on Windows after timeout (issue #44 regression)" : false }, async (t) => {
+// Issue #489 (regression of #44): pexecIn used to kill the cmd.exe wrapper with
+// child.kill() while taskkill /T ran asynchronously, so the wrapper died first and
+// the actual CLI was orphaned. boundedSpawn now waits for taskkill before killing
+// the root (POSIX: kills the process group).
+test("external:provider: a timed-out CLI process tree is fully killed (no orphan)", { timeout: 60_000 }, async (t) => {
   const fx = providerFixture(t);
   process.env.FAKE_MODE = "hang";
   await assert.rejects(pexecIn("claude", ["-p"], { input: "prompt", timeout: 1500 }), /timed out/);
