@@ -11,7 +11,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, join, posix } from "node:path";
 import type { HunchStore } from "../store/hunchStore.js";
-import { parseSource, attributeCalls, attributeRelations, MAX_BODY_TEXT_CHARS, type ParsedRelation } from "./parse.js";
+import { parseSource, attributeCalls, attributeQualifiedCalls, attributeRelations, MAX_BODY_TEXT_CHARS, type ParsedRelation, type QualifiedCall } from "./parse.js";
 import { isParserLoadError } from "./nativeTreeSitter.js";
 import { extractHelmDirectives } from "./helm.js";
 import { extractK8sManifest, extractKustomization, isKustomizationFile, kustomizeNamespaces, namespacesCompatible, type K8sManifestDocument, type KustomizationInfo, type ManifestNameRef } from "./k8sManifest.js";
@@ -173,7 +173,7 @@ export function scanRepo(store: HunchStore, root: string, opts: ScanRepoOptions 
   const nameIndex = new Map<string, string[]>(); // symbol name -> [symbol ids]
   const fileSymbols = new Map<string, string[]>(); // file -> symbol ids (in-file resolution)
   const fileSymbolIndexId = new Map<string, Map<number, string>>(); // file -> (symbol index in parsed.symbols -> id)
-  const perFileCalls: Array<{ file: string; bySym: Map<number, Map<string, boolean>> }> = [];
+  const perFileCalls: Array<{ file: string; bySym: Map<number, Map<string, boolean>>; qualified: Map<number, QualifiedCall[]> }> = [];
   const perFileImports: Array<{ file: string; imports: string[] }> = [];
   const perFileRelations: Array<{ file: string; bySym: Map<number, ParsedRelation[]> }> = [];
   // `namespace` on all four: a Kubernetes reference only resolves WITHIN a
@@ -384,7 +384,7 @@ export function scanRepo(store: HunchStore, root: string, opts: ScanRepoOptions 
     }
     fileSymbols.set(rel, idsInFile);
     fileSymbolIndexId.set(rel, symbolIndexId);
-    perFileCalls.push({ file: rel, bySym: attributeCalls(parsed) });
+    perFileCalls.push({ file: rel, bySym: attributeCalls(parsed), qualified: attributeQualifiedCalls(parsed) });
     perFileImports.push({ file: rel, imports: parsed.imports });
     perFileRelations.push({ file: rel, bySym: attributeRelations(parsed) });
     if (languageFor(rel)?.id === "php") {
@@ -417,7 +417,7 @@ export function scanRepo(store: HunchStore, root: string, opts: ScanRepoOptions 
         trackedFiles,
       );
     }
-    return [resolveImport(file, spec, fileSymbols)].filter((target): target is string => !!target);
+    return [resolveImport(file, spec, trackedFiles)].filter((target): target is string => !!target);
   };
   const importedFiles = new Map(perFileImports.map(({ file, imports }) => {
     const targets = new Set(imports.flatMap((specifier) => resolveImportTargets(file, specifier)));
@@ -437,7 +437,7 @@ export function scanRepo(store: HunchStore, root: string, opts: ScanRepoOptions 
     edges.push(e);
   };
 
-  for (const { file, bySym } of perFileCalls) {
+  for (const { file, bySym, qualified } of perFileCalls) {
     // Most languages leave this unset and get "calls" — YAML's alias->anchor
     // references aren't function calls, so its LanguageSpec declares "references".
     const edgeType = languageFor(file)?.referenceEdgeType ?? "calls";
@@ -475,6 +475,39 @@ export function scanRepo(store: HunchStore, root: string, opts: ScanRepoOptions 
           id: edgeId(callerId, calleeId, edgeType),
           from: callerId, to: calleeId, type: edgeType,
           reason: `${callerName} ${edgeType} ${calleeName}`, strength: 0.8,
+          provenance: extracted(0.8, [file]),
+          environment: null,
+          metadata: {},
+        });
+      }
+    }
+    // Calls pinned to one imported module (`ns.fn()`, aliased `g()`): the member
+    // gate above drops them, so resolve the name ONLY inside that module's files —
+    // a unique match there is the binding; zero or several -> no edge.
+    // A module binding exposes top-level exports, so `U.helper()` prefers a function
+    // `helper` over a same-named class method `Foo.helper`; a sole method match still
+    // binds, since `module.exports = { helper() {} }` parses as a method too.
+    const moduleFiles = new Map<string, Set<string>>(); // resolve each module once per file
+    for (const [callerIndex, targets] of qualified) {
+      const callerId = indexToId.get(callerIndex);
+      if (!callerId) continue;
+      const callerName = byId.get(callerId)?.name ?? "?";
+      for (const { callee, module } of targets) {
+        let files = moduleFiles.get(module);
+        if (!files) moduleFiles.set(module, files = new Set(resolveImportTargets(file, module)));
+        const inModule = (nameIndex.get(callee) ?? []).filter((id) => {
+          const sym = byId.get(id);
+          return !!sym && files.has(sym.file);
+        });
+        const nonMethods = inModule.filter((id) => byId.get(id)!.kind !== "method");
+        const matches = nonMethods.length > 0 ? nonMethods : inModule;
+        if (matches.length !== 1 || matches[0] === callerId) continue;
+        const calleeId = matches[0]!;
+        addEdge({
+          schema: "hunch.edge/1",
+          id: edgeId(callerId, calleeId, edgeType),
+          from: callerId, to: calleeId, type: edgeType,
+          reason: `${callerName} ${edgeType} ${callee}`, strength: 0.8,
           provenance: extracted(0.8, [file]),
           environment: null,
           metadata: {},
@@ -811,8 +844,8 @@ function resolveName(
 }
 
 /** Resolve a relative import specifier to a concrete tracked file path. */
-function resolveImport(fromFile: string, spec: string, fileSymbols: Map<string, string[]>): string | null {
-  return resolveRelativeImport(fromFile, spec, fileSymbols.keys()).path;
+function resolveImport(fromFile: string, spec: string, trackedFiles: ReadonlySet<string>): string | null {
+  return resolveRelativeImport(fromFile, spec, trackedFiles).path;
 }
 
 /** First of `${modulePath}.py` / `${modulePath}/__init__.py` that's a tracked file,

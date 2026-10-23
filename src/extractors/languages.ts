@@ -28,6 +28,15 @@ export interface LanguageSpec {
   defKindOf: Record<string, ParsedSymbolKind>;
   /** Query capture-name (ending in ".name") -> the matching ".def" capture-name. */
   nameToDef: Record<string, string>;
+  /** Optional query binding a local name to an imported module, run with
+   *  matches() so captures pair up: @bind.src (module specifier), @bind.local
+   *  (local name), @bind.name (an imported member, `from X import name`). Feeds
+   *  qualified calls (`ns.fn()`), resolved only inside the bound module's files. */
+  bindingQuery?: string;
+  /** Local name an import binds when @bind.local is absent (Go `"a/geo"` -> geo). */
+  defaultBindingLocal?(src: string): string | null;
+  /** Module path of `from <src> import <name>` when name is itself a submodule. */
+  joinSubmodule?(src: string, name: string): string;
   /** Optional semantic relationship captures. The generic parser/indexer emit
    * these through the normal graph path; languages only describe syntax. */
   relationKindOf?: Record<string, { edgeType: Edge["type"]; label: string }>;
@@ -92,7 +101,14 @@ const TS_QUERY = `
   (variable_declarator
      name: (identifier) @arrow.name
      value: [(arrow_function) (function_expression)]) @arrow.def
+  ;; Class-field arrows (\`handler = () => {}\`) are methods in every way that matters.
+  (public_field_definition
+     name: (property_identifier) @method.name
+     value: [(arrow_function) (function_expression)]) @method.def
   (import_statement source: (string) @import.src)
+  ;; require("./x") and dynamic import("./x") are imports too, when the specifier is literal.
+  (call_expression function: (identifier) @_require arguments: (arguments . (string) @import.src .) (#eq? @_require "require"))
+  (call_expression function: (import) arguments: (arguments . (string) @import.src .))
   (call_expression function: (identifier) @call.id)
   (call_expression function: (member_expression property: (property_identifier) @call.member))
   ;; Construction IS a call. Without these, \`new Foo()\` produced no edge at all, so
@@ -101,6 +117,26 @@ const TS_QUERY = `
   ;; could never see its own counterexample.
   (new_expression constructor: (identifier) @call.id)
   (new_expression constructor: (member_expression property: (property_identifier) @call.member))
+`;
+
+/** Rendering a component IS a call; lowercase tags are intrinsic elements, not symbols. */
+const TSX_QUERY = `${TS_QUERY}
+  (jsx_opening_element name: (identifier) @call.id (#match? @call.id "^[A-Z]"))
+  (jsx_self_closing_element name: (identifier) @call.id (#match? @call.id "^[A-Z]"))
+  (jsx_opening_element name: (member_expression property: (property_identifier) @call.member))
+  (jsx_self_closing_element name: (member_expression property: (property_identifier) @call.member))
+`;
+
+/** Module-object bindings: \`import * as ns\`, \`const m = require()\`, \`const m = await import()\`. */
+const TS_BINDING_QUERY = `
+  (import_statement (import_clause (namespace_import (identifier) @bind.local)) source: (string) @bind.src)
+  (variable_declarator
+     name: (identifier) @bind.local
+     value: (call_expression function: (identifier) @_require arguments: (arguments . (string) @bind.src .))
+     (#eq? @_require "require"))
+  (variable_declarator
+     name: (identifier) @bind.local
+     value: (await_expression (call_expression function: (import) arguments: (arguments . (string) @bind.src .))))
 `;
 
 const TS_BUILTIN_METHODS = new Set([
@@ -122,6 +158,7 @@ const TS_SHARED = {
   defNodeTypes: new Set([
     "function_declaration", "generator_function_declaration", "method_definition",
     "class_declaration", "interface_declaration", "type_alias_declaration", "variable_declarator",
+    "public_field_definition",
   ]),
   defKindOf: {
     "fn.def": "function", "method.def": "method", "class.def": "class",
@@ -132,6 +169,7 @@ const TS_SHARED = {
     "iface.name": "iface.def", "type.name": "type.def", "arrow.name": "arrow.def",
   },
   builtinMethods: TS_BUILTIN_METHODS,
+  bindingQuery: TS_BINDING_QUERY,
   // ES2018 relaxed template literals: an INVALID escape (`\x` with no hex, `\u`
   // short, `\u{` unterminated) is legal inside a TAGGED template — the cooked
   // value is undefined and the raw text survives, which is the entire point of
@@ -160,6 +198,7 @@ const TSX: LanguageSpec = {
   extensions: [".tsx", ".jsx"],
   grammarKey: "tsx",
   loadGrammar: () => loadNativeTreeSitter().tsx,
+  query: TSX_QUERY,
   // tree-sitter-javascript rejects a bare ampersand in JSX text even though JSX
   // accepts it (tree-sitter-javascript#366). The ERROR is a direct jsx_element
   // child and its text begins at the ampersand. Require both facts plus text that

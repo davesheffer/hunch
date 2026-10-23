@@ -32,7 +32,10 @@ export function resolveRelativeImport(
   specifier: string,
   availableFiles: Iterable<string>,
 ): { path: string | null; matches: string[] } {
-  const available = new Set(availableFiles);
-  const matches = relativeImportCandidates(fromFile, specifier).filter((candidate) => available.has(candidate));
+  // Bare/non-relative specifiers have no candidates: skip the O(N) file-set copy.
+  const candidates = relativeImportCandidates(fromFile, specifier);
+  if (candidates.length === 0) return { path: null, matches: [] };
+  const available: ReadonlySet<string> = availableFiles instanceof Set ? availableFiles : new Set(availableFiles);
+  const matches = candidates.filter((candidate) => available.has(candidate));
   return { path: matches[0] ?? null, matches };
 }
