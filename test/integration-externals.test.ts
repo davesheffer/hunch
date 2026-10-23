@@ -200,7 +200,8 @@ const alive = (pid: number): boolean => { try { process.kill(pid, 0); return tru
 // Issue #489 (regression of #44): pexecIn used to kill the cmd.exe wrapper with
 // child.kill() while taskkill /T ran asynchronously, so the wrapper died first and
 // the actual CLI was orphaned. boundedSpawn now waits for taskkill before killing
-// the root (POSIX: kills the process group).
+// the root (POSIX: signals every descendant found by walking a ps snapshot
+// from the root, SIGTERM then SIGKILL).
 test("external:provider: a timed-out CLI process tree is fully killed (no orphan)", { timeout: 60_000 }, async (t) => {
   const fx = providerFixture(t);
   process.env.FAKE_MODE = "hang";

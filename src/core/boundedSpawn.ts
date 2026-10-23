@@ -13,7 +13,8 @@
  * - Windows: `taskkill /pid <root> /T /F` runs to completion BEFORE the root
  *   is killed.
  * - POSIX: the descendants are found by walking a `ps -A -o pid=,ppid=`
- *   snapshot from the root, taken while the root is still alive. The tree gets
+ *   snapshot (on Linux without ps, `/proc/<pid>/stat`) from the root, taken
+ *   while the root is still alive. The tree gets
  *   SIGTERM first (git removes its ref/pack lock files on SIGTERM, not on
  *   SIGKILL), then SIGKILL for whatever is still alive after a short grace.
  *
@@ -58,25 +59,49 @@ process.stdin.on("end", () => {
     if (pid === child.pid) return !rootGone();
     try { process.kill(pid, 0); return true; } catch (e) { return false; }
   };
-  // Every pid reachable from roots in a fresh ps snapshot (roots included).
-  const tree = (roots, cb) => {
-    execFile("ps", ["-A", "-o", "pid=,ppid="], { timeout: 2000, windowsHide: true }, (err, out) => {
-      const kids = new Map();
-      if (!err) for (const line of String(out).split("\\n")) {
-        const f = line.trim().split(/\\s+/);
-        if (f.length < 2) continue;
-        const pid = Number(f[0]), ppid = Number(f[1]);
-        if (!kids.has(ppid)) kids.set(ppid, []);
-        kids.get(ppid).push(pid);
-      }
-      const seen = new Set(roots), stack = roots.slice();
-      while (stack.length) {
-        for (const c of kids.get(stack.pop()) || []) {
-          if (c !== process.pid && !seen.has(c)) { seen.add(c); stack.push(c); }
+  // pid -> ppid for every process: ps, else (Linux without procps, e.g.
+  // busybox) /proc/*/stat, else an empty map (only the root gets signalled).
+  const snapshot = (cb) => {
+    execFile(spec.psFile || "ps", ["-A", "-o", "pid=,ppid="], { timeout: 2000, windowsHide: true }, (err, out) => {
+      const ppids = new Map();
+      if (!err) {
+        for (const line of String(out).split("\\n")) {
+          const f = line.trim().split(/\\s+/);
+          if (f.length >= 2) ppids.set(Number(f[0]), Number(f[1]));
         }
+        return cb(ppids);
       }
-      cb(Array.from(seen));
+      if (process.platform !== "linux") return cb(ppids);
+      try {
+        const fs = require("node:fs");
+        for (const d of fs.readdirSync("/proc")) {
+          if (!/^\\d+$/.test(d)) continue;
+          try {
+            // "pid (comm) state ppid ...": comm may hold spaces and ')', so
+            // parse past the LAST ')'.
+            const stat = fs.readFileSync("/proc/" + d + "/stat", "utf8");
+            const f = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
+            ppids.set(Number(d), Number(f[1]));
+          } catch (e) { /* exited mid-scan */ }
+        }
+      } catch (e) {}
+      cb(ppids);
     });
+  };
+  // Every pid reachable from roots in a pid -> ppid snapshot (roots included).
+  const reach = (roots, ppids) => {
+    const kids = new Map();
+    for (const [pid, ppid] of ppids) {
+      if (!kids.has(ppid)) kids.set(ppid, []);
+      kids.get(ppid).push(pid);
+    }
+    const seen = new Set(roots), stack = roots.slice();
+    while (stack.length) {
+      for (const c of kids.get(stack.pop()) || []) {
+        if (c !== process.pid && !seen.has(c)) { seen.add(c); stack.push(c); }
+      }
+    }
+    return Array.from(seen);
   };
   const signalAll = (pids, sig) => {
     // Descendants first, the root last: the root stays alive (and the tree
@@ -99,7 +124,8 @@ process.stdin.on("end", () => {
       });
       return;
     }
-    tree([child.pid], (pids) => {
+    snapshot((first) => {
+      const pids = reach([child.pid], first);
       signalAll(pids, "SIGTERM");
       result.killSignal = "SIGTERM";
       const deadline = Date.now() + spec.killGraceMs;
@@ -108,7 +134,13 @@ process.stdin.on("end", () => {
         if (left.length === 0) return finish();
         if (Date.now() < deadline) { setTimeout(poll, 50); return; }
         // Re-walk from the survivors: anything they spawned during the grace.
-        tree(left, (rest) => {
+        // A survivor whose parent is no longer the recorded one (and not in the
+        // tree either) may be a recycled pid: it is not walked from.
+        snapshot((now) => {
+          const set = new Set(pids);
+          const roots = left.filter((pid) => pid === child.pid
+            || now.get(pid) === first.get(pid) || set.has(now.get(pid)));
+          const rest = new Set(left.concat(reach(roots, now)));
           for (const pid of rest) { try { process.kill(pid, "SIGKILL"); } catch (e) {} }
           try { child.kill("SIGKILL"); } catch (e) {}
           result.killSignal = "SIGKILL";
@@ -177,6 +209,8 @@ export interface BoundedSpawnOptions {
   shell?: boolean;
   /** POSIX: how long the tree gets after SIGTERM before SIGKILL. Default 1500. */
   killGraceMs?: number;
+  /** Test seam: the ps binary used for the POSIX tree snapshot. Default "ps". */
+  psFile?: string;
 }
 
 export interface BoundedSpawnResult {
@@ -216,6 +250,7 @@ function supervisorRequest(file: string, args: string[], opts: BoundedSpawnOptio
     maxBuffer,
     shell: opts.shell === true,
     stdout: opts.stdout ?? "pipe",
+    psFile: opts.psFile ?? null,
   });
   // The supervisor itself must not inherit user NODE_OPTIONS (loaders, --inspect).
   const env: NodeJS.ProcessEnv = { ...process.env, ELECTRON_RUN_AS_NODE: "1" };

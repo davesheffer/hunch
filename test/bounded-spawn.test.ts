@@ -84,6 +84,20 @@ test("boundedSpawn: timeout kills the whole tree and resolves as timed out", { t
   await assertDead(await waitForPid(pidFile));
 });
 
+// Without a working ps (busybox, no procps) Linux walks /proc/*/stat instead;
+// anywhere else the root is still killed and the call still resolves.
+test("boundedSpawn: a missing ps falls back to /proc on Linux, else still kills the root", { skip: IS_WIN && "taskkill walks the tree", timeout: 30_000 }, async (t) => {
+  const pidFile = join(tempDir(t), "grandchild.pid");
+  const started = Date.now();
+  const r = await boundedSpawn(process.execPath, ["-e", treeScript(pidFile)], { timeoutMs: 1_000, killGraceMs: 300, psFile: "/nonexistent/hunch-no-ps" });
+  assert.equal(r.timedOut, true);
+  assert.equal(r.status, null);
+  assert.ok(Date.now() - started < 15_000, "resolved promptly after the deadline");
+  const grandchild = await waitForPid(pidFile);
+  if (process.platform === "linux") await assertDead(grandchild);
+  else try { process.kill(grandchild, "SIGKILL"); } catch { /* gone */ }
+});
+
 test("boundedSpawn: spawn failure resolves with an error, not a throw", async () => {
   const r = await boundedSpawn("hunch-definitely-not-a-real-binary", [], { timeoutMs: 5_000 });
   assert.ok(r.error);

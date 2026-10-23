@@ -1367,15 +1367,19 @@ function mergeRemote(
   const tryGit = (args: string[], timeout = timeoutMs): boolean => {
     const startedAt = Date.now();
     lastPullGitError = undefined;
+    const argv = [
+      "-C", hunchDir,
+      "-c", `core.hooksPath=${hooksDir}`,
+      "-c", `core.attributesFile=${gitNullDevice()}`,
+      "-c", "core.autocrlf=false",
+      "-c", "commit.gpgsign=false",
+      ...args,
+    ];
     try {
-      boundedExecFileSync("git", [
-        "-C", hunchDir,
-        "-c", `core.hooksPath=${hooksDir}`,
-        "-c", `core.attributesFile=${gitNullDevice()}`,
-        "-c", "core.autocrlf=false",
-        "-c", "commit.gpgsign=false",
-        ...args,
-      ], { stdout: "ignore", env, timeout });
+      // Only the network call pays for the tree-killing supervisor (#498); the
+      // merge of an already-fetched sha and rev-parse/abort stay local.
+      if (args[0] === "fetch") boundedExecFileSync("git", argv, { stdout: "ignore", env, timeout });
+      else execFileSync("git", argv, { stdio: ["ignore", "ignore", "pipe"], env, timeout });
       return true;
     }
     catch (error) {
@@ -2246,7 +2250,9 @@ export function memoryMoveDiff(sha: string, root: string): string {
  *  false when there is no upstream / offline / not a repo. */
 export function pushCurrentBranch(root: string): boolean {
   try {
-    execFileSync("git", ["-C", root, "push"], { stdio: "ignore" });
+    // Bounded so an unreachable remote can't hang the caller, and a timeout
+    // kills git's whole tree, not just the root (#498).
+    boundedExecFileSync("git", ["-C", root, "push"], { stdout: "ignore", timeout: CAPTURE_REMOTE_TIMEOUT_MS });
     return true;
   } catch {
     return false;
