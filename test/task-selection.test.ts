@@ -193,6 +193,9 @@ test("a part shared by two common camel compounds does not depend on prompt word
   assert.deepEqual(selectForTask(records({ decisions: [...filler, ...gha] }), "configure GitHubActions").qualifying, []);
   const quota = dec("dec_quota", "QuotaReaper runs hourly");
   assert.deepEqual(selectForTask(records({ decisions: [...filler, quota] }), "why QuotaReaper").qualifying, ["dec_quota"], "a near-unique compound still qualifies");
+  // Prose starting with "at" is no frame: its compounds still group.
+  const seen = Array.from({ length: 5 }, (_, i) => dec(`dec_seen_${i}`, `seen in PowerShell ${i}`));
+  assert.deepEqual(selectForTask(records({ decisions: [...filler, ...seen] }), "at startup PowerShell hangs").qualifying, []);
 });
 
 test("a dotted SQL name in the prompt selects the decision that names the bare procedure", () => {

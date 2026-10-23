@@ -270,9 +270,9 @@ interface Scored {
 export function selectForTask(records: TaskSelectionRecords, promptText: string, opts: TaskSelectionOptions = {}): TaskSelection {
   const k = Math.max(0, opts.k ?? DEFAULT_K);
   // Stack-frame lines name library APIs (writeFileSync, processTicksAndRejections), not the task:
-  // extract no identifiers from them; their words drop only when the prompt holds a real trace.
-  const promptIdentifiers = (promptText ?? "").split(/\r?\n/).filter((line) => !/^\s*at\s+\S/.test(line) && !/node:internal|\(node:/.test(line)).join("\n");
-  const taskTerms = new Set([...lexicalTokens(promptWordText(promptText ?? "")), ...identifierTokens(promptIdentifiers)]);
+  // when the prompt holds a real trace, neither their words nor their identifiers count.
+  const promptIdentifiers = promptWordText(promptText ?? "");
+  const taskTerms = new Set([...lexicalTokens(promptIdentifiers), ...identifierTokens(promptIdentifiers)]);
   // Without an existence check (pure/offline) only a slashed token is trusted as a
   // path: "e.g.", "Node.js" or "v1.2" would otherwise match a broad glob.
   const paths = promptPaths(promptText ?? "", opts.root).filter((p) => opts.pathExists ? opts.pathExists(p) : p.includes("/"));
