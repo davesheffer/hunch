@@ -1,10 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, existsSync, rmSync, openSync, closeSync } from "node:fs";
+import { mkdtempSync, readFileSync, existsSync, openSync, closeSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
 import { pathToFileURL } from "node:url";
+import { cleanupDir } from "./fixtures.js";
 import { boundedSpawn, boundedExecFileSync, __setPsFileForTests, type BoundedExecError } from "../src/core/boundedSpawn.js";
 
 // Issues #489 / #498: a timed-out child must take its whole tree with it.
@@ -47,7 +48,7 @@ async function assertDead(pid: number): Promise<void> {
 
 function tempDir(t: { after: (fn: () => void) => void }): string {
   const dir = mkdtempSync(join(tmpdir(), "hunch-bounded-spawn-"));
-  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  t.after(() => cleanupDir(dir));
   return dir;
 }
 
