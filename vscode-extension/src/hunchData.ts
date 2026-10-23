@@ -397,7 +397,7 @@ export function decisionFilePath(hunchOrRoot: Hunch | string, id: string): strin
     : path.join(root, ".hunch", "decisions", `${id}.json`);
 }
 
-const RECORD_DIRS: Record<string, string> = { dec: "decisions", con: "constraints", bug: "bugs", comp: "components" };
+const RECORD_DIRS: Record<string, string> = { dec: "decisions", con: "constraints", bug: "bugs", cmp: "components" };
 
 /** Resolve a record to the store where it actually lives, overlay-first. */
 export function recordFilePath(root: string, id: string): string | null {
