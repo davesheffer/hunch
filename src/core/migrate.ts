@@ -32,6 +32,9 @@ export interface Migration {
   /** The version this migration PRODUCES (i.e. it upgrades version-1 → `version`). */
   version: number;
   description: string;
+  /** The kinds `up` changes. Omitted = it may touch any kind (conservative: a
+   *  failed record of any kind then holds the manifest version). */
+  kinds?: EntityKind[];
   /** Transform one raw record (untrusted JSON) of `kind` to the next shape. */
   up(kind: EntityKind, raw: Record<string, unknown>): Record<string, unknown>;
 }
@@ -44,6 +47,7 @@ export const MIGRATIONS: Migration[] = [
     // losslessly — no record is dropped, and `valid_from` is populated BEFORE the
     // Zod pass. Defensive: input is untrusted JSON.
     version: 2,
+    kinds: ["decisions", "constraints"],
     description: "Add valid_from/valid_to/superseded_by/retired (decisions) and status/valid_from/valid_to (constraints)",
     up(kind, raw) {
       if (kind === "decisions") {
@@ -70,6 +74,7 @@ export const MIGRATIONS: Migration[] = [
     // relationship schema is validated; newly written resource relationships use
     // hunch.resource-relationship/1 and keep their currentness/metadata.
     version: 3,
+    kinds: ["edges"],
     description: "Version existing graph edges before adding Engineering Landscape resources and relationships",
     up(kind, raw) {
       if (kind === "edges") {
@@ -118,9 +123,20 @@ export function migrateRaw(
   toVersion: number = SCHEMA_VERSION,
 ): unknown {
   if (raw === null || typeof raw !== "object" || Array.isArray(raw)) return raw;
+  const steps = migrations.filter((m) => m.version > fromVersion && m.version <= toVersion);
+  if (steps.length === 0) return raw; // nothing to apply: no copy needed
   let rec = structuredClone(raw) as Record<string, unknown>;
-  for (const m of [...migrations].sort((a, b) => a.version - b.version)) {
-    if (m.version > fromVersion && m.version <= toVersion) rec = m.up(kind, rec);
-  }
+  for (const m of steps.sort((a, b) => a.version - b.version)) rec = m.up(kind, rec);
   return rec;
+}
+
+/** Whether some migration in (fromVersion, toVersion] may change a record of
+ *  `kind` — i.e. whether re-running migrations could ever fix a failed one. */
+export function hasPendingMigration(
+  kind: EntityKind,
+  fromVersion: number,
+  migrations: Migration[] = MIGRATIONS,
+  toVersion: number = SCHEMA_VERSION,
+): boolean {
+  return migrations.some((m) => m.version > fromVersion && m.version <= toVersion && (!m.kinds || m.kinds.includes(kind)));
 }

@@ -5699,10 +5699,13 @@ program
     const res = target.persistMigration();
     writeManifest(paths, res.version); // held at `from` while any record failed to migrate
     store.reindex();
-    pumpMemoryHome(store, root, store.unified ? "private" : "public", `hunch: migrate schema v${from} to v${SCHEMA_VERSION}`);
-    console.log(`✓ Migrated v${from} → v${SCHEMA_VERSION}: ${res.migrated} record(s) upgraded.`);
+    pumpMemoryHome(store, root, store.unified ? "private" : "public", `hunch: migrate schema v${from} to v${res.version}`);
+    console.log(`✓ Migrated v${from} → v${res.version}: ${res.migrated} record(s) upgraded.`);
     if (res.skipped) {
-      console.warn(`⚠ ${res.skipped} record(s) could NOT be migrated and will no longer load. They are preserved on disk in their old shape under .hunch/ for manual recovery; the schema stays at v${res.version}, so re-running \`hunch migrate\` after a fix completes the migration.`);
+      console.warn(`⚠ ${res.skipped} record(s) could not be migrated. They are preserved on disk in their old shape under .hunch/ for manual recovery; the schema stays at v${res.version}, so re-running \`hunch migrate\` after a fix completes the migration to v${SCHEMA_VERSION}.`);
+    }
+    if (res.invalid) {
+      console.warn(`⚠ ${res.invalid} record(s) are invalid or unreadable and no pending migration applies to them. They were left untouched under .hunch/; fix them by hand.`);
     }
     store.close();
   });
