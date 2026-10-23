@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import type { Invocation } from "../integrations/scaffold.js";
 import { probeOllamaNumCtx, type ProviderResolution } from "../synthesis/provider.js";
 import { HUNCH_NPX_PACKAGE_SPEC } from "../core/version.js";
+import { verificationLauncherFor } from "../core/verifyLauncher.js";
 
 export interface ResolvedInvocation {
   /** Shell command prefix for the git hook (e.g. `node /abs/dist/cli/index.js`). */
@@ -145,4 +146,19 @@ export function resolveInvocation(): ResolvedInvocation {
     mcp,
     installed,
   };
+}
+
+/** The command prefix for the git merge drivers. git runs a driver with the
+ *  repository being merged as its cwd, so the dev-mode `npx tsx <entry>` would
+ *  resolve tsx from THAT repo (or fetch it from the registry), not from Hunch's
+ *  own checkout (#492). In dev mode, launch the absolute node binary with the
+ *  tsx loader resolved from this checkout, as verificationLauncherFor does;
+ *  every other invocation (published, dist, or a caller-supplied one) passes
+ *  through unchanged. Double-quoted like `shell`, since git hands the driver
+ *  to /bin/sh on every platform. */
+export function mergeDriverShell(invShell: string): string {
+  const inv = resolveInvocation();
+  if (inv.installed || !inv.shell.startsWith("npx tsx ") || invShell !== inv.shell) return invShell;
+  const { argv } = verificationLauncherFor(import.meta.url, (specifier) => import.meta.resolve(specifier));
+  return argv.map((a) => JSON.stringify(a)).join(" ");
 }

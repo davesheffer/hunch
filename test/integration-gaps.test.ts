@@ -26,7 +26,7 @@ function fixtureEnv(home: string): NodeJS.ProcessEnv {
     HUNCH_PRIVATE_DIR: "", HUNCH_EMBEDDINGS: "off", HOME: home, USERPROFILE: home, APPDATA: join(home, "AppData"),
     XDG_CONFIG_HOME: join(home, ".config"), GIT_CONFIG_NOSYSTEM: "1", NO_COLOR: "1", CI: "1",
     GIT_TERMINAL_PROMPT: "0",
-    // The dev-mode driver is `npx tsx ...`: never let npx reach the registry.
+    // Defensive: never let any npx a launcher spawns reach the registry.
     npm_config_offline: "true", npm_config_yes: "false",
   });
 }
@@ -57,6 +57,18 @@ test("integrations->cli: the installed merge driver command launches hunch", () 
     assert.match(driver, /merge-driver "%O" "%A" "%B" "%P"$/, "init registered the structured JSON driver");
     const grounding = git("config", "--get", "merge.hunch-grounding.driver").trim();
     assert.match(grounding, /merge-driver-grounding "%O" "%A" "%B" "%P"$/, "init registered the grounding driver");
+    if (process.env.HUNCH_TEST_COMPILED_CLI !== "1") {
+      // #492: a source-checkout driver must not resolve tsx from the merged repo.
+      assert.doesNotMatch(driver, /\bnpx\b/, "dev-mode driver never runs npx inside the merged repo");
+      const loader = `"${pathToFileURL(join(PROJECT_ROOT, "node_modules", "tsx")).href}/`;
+      for (const d of [driver, grounding]) {
+        assert.ok(d.startsWith(`${JSON.stringify(process.execPath)} "--import" ${loader}`), `driver uses Hunch's own tsx loader: ${d}`);
+      }
+      const again = spawnSync(process.execPath, hunchCliArgs("init", "--no-index"), { cwd: repo, env, encoding: "utf8", timeout: 180_000 });
+      assert.equal(again.status, 0, `${again.stdout}${again.stderr}`);
+      assert.equal(git("config", "--get", "merge.hunch.driver").trim(), driver, "re-running init leaves a correct driver unchanged");
+      assert.equal(git("config", "--get", "merge.hunch-grounding.driver").trim(), grounding, "re-running init leaves a correct grounding driver unchanged");
+    }
     assert.match(readFileSync(join(repo, ".gitattributes"), "utf8"), /\.hunch\/\*\*\/\*\.json merge=hunch/);
 
     // Isolate the merge from hunch's own hooks: only the driver is under test.
