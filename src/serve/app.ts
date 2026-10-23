@@ -36,6 +36,8 @@ import { MCP_PATH, handleMcpRequest, type ProblemShape, type StateRoute } from "
 
 export const BODY_LIMIT_BYTES = 1024 * 1024;
 const POST_ROUTES = new Map<string, StateRoute>([["/nuryel/v1/read", "read"], ["/nuryel/v1/write", "write"], ["/nuryel/v1/capture", "capture"], ["/nuryel/v1/capture-batch", "capture-batch"], ["/nuryel/v1/subscribe", "subscribe"], ["/nuryel/v1/records", "records"]]);
+/** GET-only routes: any other method is 405 with `Allow: GET`, not a POST-table 404. */
+const GET_ROUTES = new Set(["/nuryel/v1/health", "/nuryel/v1/capabilities"]);
 export const PROBLEM_TYPE = "https://www.hunchmemory.com/problems/nuryel.state/1/";
 
 export class HttpProblem extends Error {
@@ -256,6 +258,7 @@ export function createServeApp(config: ServeConfig, opts: ServeOptions = {}): Se
         return send(res, 200, { ...liveness, partitions: activeConfig.partitions.map((p) => scopePath(p.scope)) });
       }
       const principal = await authenticate(req, res, url, activeConfig);
+      if (GET_ROUTES.has(url.pathname) && req.method !== "GET") { res.setHeader("allow", "GET"); throw problem(405, "method-not-allowed", `${req.method} is not allowed on ${url.pathname}`); }
 
       if (url.pathname === "/nuryel/v1/capabilities" && req.method === "GET") {
         const scope = parseScopeParam(url.searchParams.get("scope"));
@@ -268,7 +271,7 @@ export function createServeApp(config: ServeConfig, opts: ServeOptions = {}): Se
         const message = await readBody(req);
         return await handleMcpRequest(req, res, message, (route, body) => dispatch(route, principal, body, activeConfig), (error) => problemBody(problemOf(error)), version);
       }
-      if (req.method !== "POST") throw problem(405, "method-not-allowed", `${req.method} is not allowed on ${url.pathname}`);
+      if (req.method !== "POST") { res.setHeader("allow", "POST"); throw problem(405, "method-not-allowed", `${req.method} is not allowed on ${url.pathname}`); }
       const route = POST_ROUTES.get(url.pathname);
       if (!route) throw problem(404, "not-found", `${url.pathname} is not a nuryel.state/1 route`);
       const { status, payload } = await dispatch(route, principal, await readBody(req), activeConfig);

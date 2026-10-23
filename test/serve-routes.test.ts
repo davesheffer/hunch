@@ -232,14 +232,14 @@ for (const path of Object.keys(POST_BODIES)) {
   });
 }
 
-test("REST 405 names the allowed method (RFC 9110 §15.5.6)", { todo: "REST routes answer 405 without an Allow header; only /nuryel/v1/mcp sets one" }, async () => {
+test("REST 405 names the allowed method (RFC 9110 §15.5.6)", async () => {
   const base = await main.base;
   const res = await call(base, "GET", "/nuryel/v1/read", { token: main.sofia });
   assert.equal(res.status, 405);
   assert.equal(res.headers.get("allow"), "POST");
 });
 
-test("a wrong method on a GET-only route is 405, not 404", { todo: "POST /nuryel/v1/capabilities and POST /nuryel/v1/health (authenticated) fall through to the POST table and answer 404 not-found" }, async () => {
+test("a wrong method on a GET-only route is 405, not 404", async () => {
   const base = await main.base;
   assert.equal(code(await call(base, "POST", "/nuryel/v1/capabilities", { token: main.sofia, body: {} })), "405 method-not-allowed");
   assert.equal(code(await call(base, "POST", "/nuryel/v1/health", { token: main.sofia, body: {} })), "405 method-not-allowed");
