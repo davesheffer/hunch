@@ -10,8 +10,9 @@ import { initServeConfig } from '../dist/serve/config.js';
 import { HunchStore } from '../dist/store/hunchStore.js';
 import { hunchPaths } from '../dist/core/paths.js';
 import { writeState } from '../dist/store/stateBinding.js';
-const older = resolve(process.argv[2] ?? ''), dir = mkdtempSync(join(tmpdir(), 'hunch-old-reader-'));
+// Validate before creating the temp dir: a refused run must leave nothing behind.
 assert.ok(process.argv[2], 'pass an existing older package installation');
+const older = resolve(process.argv[2]), dir = mkdtempSync(join(tmpdir(), 'hunch-old-reader-'));
 let child, store;
 try {
   const scope = { kind: 'organization', id: 'upgrade' }, file = join(dir, 'serve.json');
