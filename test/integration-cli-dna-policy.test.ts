@@ -242,7 +242,7 @@ describe("CLI dna, policy lifecycle and constitution inspection", () => {
     const human = ok(f, "dna", "inspect", "--ref", firstSha);
     assert.match(human.stdout, new RegExp(`^Project DNA at ${firstSha}`, "m"));
     assert.match(human.stdout, /Advisory observation only; no trait was adopted into graph authority\./);
-    refused(f, /Git revision "no-such-ref-xyz" does not name a commit/, "dna", "inspect", "--ref", "no-such-ref-xyz");
+    refused(f, /Git revision .no-such-ref-xyz. does not name a commit/, "dna", "inspect", "--ref", "no-such-ref-xyz");
     assertUnchanged(before, f.root, "dna inspect");
   });
 
@@ -252,7 +252,7 @@ describe("CLI dna, policy lifecycle and constitution inspection", () => {
     assert.ok(text.stdout.trim().length > 0);
     const json = ok(f, "dna", "context", "--json");
     assert.ok(json.stdout.trim().startsWith("{") || json.stdout.trim() === "null", json.stdout);
-    refused(f, /Git revision "no-such-ref-xyz" does not name a commit/, "dna", "context", "--ref", "no-such-ref-xyz");
+    refused(f, /Git revision .no-such-ref-xyz. does not name a commit/, "dna", "context", "--ref", "no-such-ref-xyz");
     assertUnchanged(before, f.root, "dna context");
   });
 
@@ -278,7 +278,7 @@ describe("CLI dna, policy lifecycle and constitution inspection", () => {
     const same = ok(f, "dna", "diff", "HEAD", "HEAD");
     assert.match(same.stdout, /no observed change/);
     assert.match(same.stdout, /Observation only; no Project DNA profile or graph authority was rewritten\./);
-    refused(f, /Git revision "no-such-ref-xyz" does not name a commit/, "dna", "diff", "no-such-ref-xyz", "HEAD");
+    refused(f, /Git revision .no-such-ref-xyz. does not name a commit/, "dna", "diff", "no-such-ref-xyz", "HEAD");
     assertUnchanged(before, f.root, "dna diff");
   });
 
