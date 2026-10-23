@@ -315,7 +315,7 @@ test("all generated adapters are inspected and repaired against the consuming de
     installClaudeHooks(root, command("1.22.0"));
     scaffoldProviders(root, launcher("1.22.0"), store, { home: root });
     assert.equal(inspectIntegrations(root).harnesses.length, Object.keys(HARNESSES).length);
-    assert.equal(repairIntegrationPins(root).length, 12);
+    assert.equal(repairIntegrationPins(root).length, 13); // + .devin/hooks.json (#494)
     assert.deepEqual(inspectIntegrations(root).issues, []);
   } finally { cleanup(); }
 });
