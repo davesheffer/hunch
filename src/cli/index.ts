@@ -28,6 +28,7 @@ import { registerIntegrationCommands } from "./integrations.js";
 import { registerTaskReportCommands } from "./taskReport.js";
 import { registerStateCommands } from "./state.js";
 import { DEFAULT_CONFIG as SERVE_DEFAULT_CONFIG_FILE, registerServeCommands } from "./serve.js";
+import { readServeConfig } from "../serve/config.js";
 import { registerUpdateCommand } from "./update.js";
 import { registerVerifyCommand } from "./verify.js";
 import { registerReviewMemoryCommands } from "./reviewMemory.js";
@@ -72,7 +73,7 @@ import { flushCapture, flushMemoryHome, flushMemoryHomes, pinSharedRemote, share
 import { installMergeDriver } from "../integrations/mergeDriver.js";
 import { ensureGitignore, ignoreHunchMemory, HUNCH_MEMORY_DIRS, upgradeManagedGitignore, describeGitignoreUpgrade, memoryIgnoreRule, describeMemoryIgnoreRule } from "../integrations/gitignore.js";
 import { writeCiWorkflow } from "../integrations/ciAction.js";
-import { applyUninstall, formatUninstallPlan, isOptedOut, OPT_OUT_FILE, optedOutAt, optOutMessage, planUninstall } from "../integrations/uninstall.js";
+import { applyUninstall, formatUninstallPlan, isOptedOut, OPT_OUT_FILE, optOutMarkerAt, optOutMessage, planUninstall } from "../integrations/uninstall.js";
 import { updateClaudeMd, renderHunchSection } from "../integrations/claudemd.js";
 import { HOOK_REMINDER } from "../core/hookText.js";
 import { measureFootprint } from "../core/footprint.js";
@@ -256,26 +257,115 @@ registerReviewMemoryCommands(program, (records, repository, privateOnly) => {
 // run: a leftover driver that exits without writing %A would let git drop `theirs`.
 const OPT_OUT_ALLOWED = new Set(["uninstall", "doctor", "help", "merge-driver", "merge-driver-grounding"]);
 const OPT_OUT_QUIET = new Set(["hook", "sync", "check", "grounding", "repair-provenance", "workspaces"]);
+/** Locations a command writes to (#488), keyed by command path: an opted-out repository
+ *  must never receive them, so their repository is gated IN ADDITION to the cwd's.
+ *  `base` is what the command itself resolves a relative value against: the cwd's
+ *  repository root (`findRoot`), Git's top level (`verify`), or the cwd; `join` marks a
+ *  command that joins the value onto that base even when absolute (`export-adr`).
+ *  `checkout` marks a command that also writes into the MAIN checkout (the overlay
+ *  anchor) and the git common dir (the shared-overlay pointer, the shared git hooks),
+ *  so both are gated; with no target (`init`) only those are. */
+const OPT_OUT_OUTPUTS: Record<string, { arg?: number; option?: string; base: "root" | "toplevel" | "cwd"; join?: boolean; checkout?: boolean }> = {
+  "init": { base: "root", checkout: true },
+  "private": { arg: 0, base: "root", checkout: true },
+  "shared": { arg: 0, base: "root", checkout: true },
+  "worktree": { arg: 0, base: "root", checkout: true },
+  "export-adr": { arg: 0, base: "root", join: true },
+  "review-memory auto": { option: "output", base: "cwd" },
+  "verify": { option: "map", base: "toplevel" },
+};
+
+/** Where `hunch private`/`shared` anchor the default overlay store: the MAIN worktree
+ *  root, shared by the write and the opt-out gate so they cannot diverge. */
+function overlayAnchor(root: string): string {
+  return mainWorktreeRoot(root);
+}
+
+/** Git's top level for the cwd, as `hunch verify` resolves it; findRoot() outside Git. */
+function gitToplevel(): string {
+  try {
+    return execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8", windowsHide: true, stdio: ["ignore", "pipe", "ignore"] }).trim() || findRoot();
+  } catch { return findRoot(); }
+}
+
+/** The marker gating `path` (the cwd, or a location a command writes to). Its own store
+ *  or repository root (`findRoot`: git-less stores included) counts first; inside a
+ *  repository the walk then passes any nested `.hunch` store up to the repository
+ *  (#488). A stray marker in a non-store, non-repository ancestor (e.g. ~) gates nothing. */
+function markerFor(path: string): string | null {
+  const real = realpathNorm(path);
+  const root = findRoot(real);
+  if (isOptedOut(root)) return join(root, OPT_OUT_FILE);
+  return optOutMarkerAt(real, { withinRepo: true });
+}
+
+/** Every location whose repository the opt-out gate judges for this invocation (#458,
+ *  #488). A `--root` or a `serve` config names the repository the command acts on, so
+ *  it REPLACES the cwd; `serve` also gates every partition root its config names (an
+ *  unreadable config gates its directory only; the command itself then fails). An
+ *  output location only ADDS to the cwd. */
+function optOutTargets(top: Command, action: Command): { targets: string[]; outputs: string[]; cwd: boolean } {
+  const path: string[] = [];
+  for (let c: Command | null = action; c && c !== program; c = c.parent) path.unshift(c.name());
+  const given = (v: unknown): v is string => typeof v === "string" && v.trim() !== "";
+  const actionOpts = action.opts() as Record<string, unknown>;
+  const targets: string[] = [];
+  let cwd = true;
+  if (given(actionOpts.root)) { targets.push(resolve(actionOpts.root)); cwd = false; }
+  if (top.name() === "serve" && (path[1] === "init" || cwd)) {
+    // `serve` and `serve init` both take --config; the command reads the parent's first.
+    const configOpt = (top.opts() as { config?: unknown }).config ?? actionOpts.config;
+    const configFile = resolve(given(configOpt) ? configOpt : SERVE_DEFAULT_CONFIG_FILE);
+    targets.push(dirname(configFile));
+    if (cwd) {
+      try { for (const p of readServeConfig(configFile).partitions) targets.push(p.root); } catch { /* the command reports it */ }
+    }
+    cwd = false;
+  }
+  // Output locations follow the cwd rule: a marker gates them only inside a repository,
+  // never from a non-repository ancestor (bare / --separate-git-dir common dirs included).
+  const outputs: string[] = [];
+  const out = OPT_OUT_OUTPUTS[path.join(" ")];
+  if (out) {
+    const value: unknown = out.option !== undefined ? actionOpts[out.option] : action.processedArgs[out.arg ?? 0];
+    if (given(value)) {
+      const base = out.base === "root" ? findRoot() : out.base === "toplevel" ? gitToplevel() : process.cwd();
+      // `join`: the path the command writes, plus the absolute path the user named.
+      if (out.join) outputs.push(join(base, toPosixTarget(value)));
+      outputs.push(resolve(base, value));
+    }
+    if (out.checkout) {
+      const root = findRoot();
+      const common = gitCommonDir(root);
+      // Only a real linked worktree shares a common dir with a main checkout; a submodule's
+      // common dir (super/.git/modules/x) must not pull the superproject's marker in.
+      if (common && mainWorktreeRoot(root) !== root) outputs.push(overlayAnchor(root), resolve(root, common));
+    }
+  }
+  return { targets, outputs, cwd };
+}
+
 program.hook("preAction", (_thisCommand, actionCommand) => {
   let top = actionCommand;
   while (top.parent && top.parent !== program) top = top.parent;
   const name = top.name();
   if (OPT_OUT_ALLOWED.has(name)) return;
-  // Gate the repository the command acts on (#458): a `--root` names it (`hunch mcp
-  // --root`, `hunch serve ... --root`), so its real path is gated with every ancestor
-  // up to its store or repository and the cwd's repository is irrelevant; without
-  // one, the command acts on the cwd's repository. `serve init` also writes its
-  // config file (resolved against the cwd), so the directory it lands in gates it too.
-  const rootOpt = (actionCommand.opts() as { root?: unknown }).root;
-  const rootGiven = typeof rootOpt === "string" && rootOpt.trim() !== "";
-  let gated = rootGiven ? optedOutAt(realpathNorm(resolve(rootOpt as string))) : isOptedOut(findRoot());
-  if (!gated && name === "serve" && actionCommand.name() === "init") {
-    const configOpt = (top.opts() as { config?: unknown }).config ?? (actionCommand.opts() as { config?: unknown }).config;
-    const configFile = resolve(typeof configOpt === "string" ? configOpt : SERVE_DEFAULT_CONFIG_FILE);
-    gated = optedOutAt(realpathNorm(dirname(configFile)));
+  // Gate the repository each location acts on (#458, #488): its real path is walked up
+  // through its ancestors to its repository, past any nested `.hunch` store (fail
+  // closed, so a cwd inside a nested store is gated too), and the refusal names the
+  // marker that actually gates it.
+  const { targets, outputs, cwd } = optOutTargets(top, actionCommand);
+  let marker = cwd ? markerFor(process.cwd()) : null;
+  for (const target of targets) {
+    if (marker) break;
+    marker = optOutMarkerAt(realpathNorm(target));
   }
-  if (!gated) return;
-  if (name !== "hook") console.error(optOutMessage());
+  for (const target of outputs) {
+    if (marker) break;
+    marker = markerFor(target);
+  }
+  if (!marker) return;
+  if (name !== "hook") console.error(optOutMessage(marker));
   process.exit(OPT_OUT_QUIET.has(name) ? 0 : 1);
 });
 
@@ -579,8 +669,8 @@ program
 
     // Windows self-heal: if an earlier global `claude mcp add` left a drive-letter
     // case-split in ~/.claude.json, merge it so hunch resolves under either casing.
-    // No-op (silent) off Windows.
-    reportClaudeConfigHeal();
+    // No-op (silent) off Windows; the no-op line belongs to --details (#493).
+    reportClaudeConfigHeal(say);
 
     // Worktree-seamless: register any configured overlay at the git common dir so EVERY
     // worktree of this repo auto-discovers it (also backfills pre-0.32 single-worktree setups),
@@ -1325,7 +1415,7 @@ function configureOverlay(dir: string | undefined, opts: OverlaySetupOpts, mode:
   // Anchor the default store at the MAIN worktree root: a linked worktree can be
   // `git worktree remove`d, which would take the store (and every other worktree's
   // absolute pointer to it) down with it. An explicit [dir] still resolves from here.
-  const anchor = mainWorktreeRoot(root);
+  const anchor = overlayAnchor(root);
   if (opts.repo) {
     const dest = join(anchor, ".hunch-private");
     // Canonicalize once in the invocation context so clone, attach, fetch, and
@@ -7114,24 +7204,25 @@ function rel(root: string, p: string): string {
 
 /** Run the Windows ~/.claude.json drive-letter case-split heal and print what it
  *  did. Silent + no-op off Windows. A parse refusal is surfaced as a warning, never
- *  thrown out of doctor/init (those commands must still complete). */
-function reportClaudeConfigHeal(): void {
+ *  thrown out of doctor/init (those commands must still complete). `say` lets `init`
+ *  route the lines into its buffered output (shown with --details; warnings always). */
+function reportClaudeConfigHeal(say: (text: string) => void = (text) => console.log(text)): void {
   let res;
   try {
     res = healClaudeConfigCaseSplit();
   } catch (e) {
-    console.log(`  ⚠ Claude config: ${(e as Error).message}`);
+    say(`  ⚠ Claude config: ${(e as Error).message}`);
     return;
   }
   if (!res.applicable) return; // non-Windows: the case-split bug can't occur
   if (!res.changed) {
-    console.log(dim(`Claude config: no drive-letter project split (${res.file})`));
+    say(dim(`Claude config: no drive-letter project split (${res.file})`));
     return;
   }
   for (const g of res.groups) {
-    console.log(`✓ healed Claude Code project case-split: mirrored [${g.servers.join(", ")}] across ${g.casings.join("  ·  ")}`);
+    say(`✓ healed Claude Code project case-split: mirrored [${g.servers.join(", ")}] across ${g.casings.join("  ·  ")}`);
   }
-  console.log(dim(`  ↳ backup: ${res.backup}`));
+  say(dim(`  ↳ backup: ${res.backup}`));
 }
 function fail(msg: string): void {
   console.error(`error: ${msg}`);

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import { cleanupDir, isolatedCliEnv, tempDir } from "./fixtures.js";
 import { hunchCliArgs } from "./cli-invocation.js";
@@ -183,6 +183,131 @@ test("the opt-out gate judges the --root a command acts on, not the cwd's reposi
       assert.match(out(init), optedOut, `serve init ${config.join(" ")} from an opted-out cwd is refused`);
       assert.ok(!existsSync(join(root, "hunch-serve.json")), "no serve config was written into the opted-out repository");
       assert.ok(!existsSync(join(away, ".hunch")), "no partition store was created");
+    }
+  } finally { cleanupDir(base); }
+});
+
+test("the opt-out gate judges the repository each location option acts on, and names its marker (#488)", { timeout: 300_000 }, () => {
+  const { base, root, env, hunch } = fixture();
+  try {
+    assert.equal(hunch("init", "--no-index", "--no-providers").status, 0);
+    assert.equal(hunch("uninstall", "--purge").status, 0);
+    const marker = join(realpathSync(root), OPT_OUT_FILE);
+    const clean = join(base, "clean");
+    mkdirSync(clean);
+    execFileSync("git", ["init", "-q", "-b", "main"], { cwd: clean, env, stdio: "pipe" });
+    const at = (cwd: string, ...args: string[]) => spawnSync(process.execPath, hunchCliArgs(...args), { cwd, env, encoding: "utf8", input: "", timeout: 60_000 });
+    const refused = (r: ReturnType<typeof spawnSync>) => out(r).includes("removed from this repository on purpose");
+
+    // Output locations: into the opted-out repository from a clean cwd is refused and
+    // names THAT repository's marker; the same option into a clean place is not gated.
+    for (const [args, into, given] of [
+      [["private"], join(root, "store")], [["shared"], join(root, "sub", "store")], [["worktree"], join(root, "wt")],
+      // export-adr joins its dir onto the cwd's repository: a relative `..` escape reaches the opted-out one.
+      [["export-adr"], join(root, "adr"), "../repo/adr"], [["verify", "--list", "--map"], join(root, "map.json")],
+      [["review-memory", "auto", "--repository", "o/r", "--dry-run", "--output"], join(root, "report.json")],
+    ] as Array<[string[], string, string?]>) {
+      const r = at(clean, ...args, given ?? into);
+      assert.ok(refused(r), `${args.join(" ")} into the opted-out repository is refused:\n${out(r)}`);
+      assert.notEqual(r.status, 0);
+      assert.ok(out(r).includes(marker), `the refusal names the checked marker ${marker}:\n${out(r)}`);
+      assert.ok(!existsSync(into), `${args.join(" ")} wrote nothing into the opted-out repository`);
+      const ok = at(clean, ...args, join(clean, "elsewhere-out"));
+      assert.ok(!refused(ok), `${args.join(" ")} into a clean location is not gated:\n${out(ok)}`);
+    }
+
+    // `serve --config` names the repository it serves: the config's directory and every
+    // partition root it lists decide the gate, not the cwd.
+    const init = at(clean, "serve", "init", "--partition", "user:x", "--root", join(clean, "part"), "--config", join(clean, "hunch-serve.json"));
+    assert.equal(init.status, 0, out(init));
+    const configFile = join(clean, "hunch-serve.json");
+    const fromOptedOut = at(root, "serve", "revoke", "--principal", "nobody", "--config", configFile);
+    assert.ok(!refused(fromOptedOut), `a clean serve config is not gated by an opted-out cwd:\n${out(fromOptedOut)}`);
+    const config = JSON.parse(readFileSync(configFile, "utf8")) as { partitions: Array<{ root: string }> };
+    config.partitions[0]!.root = join(root, "partitions", "x");
+    writeFileSync(configFile, JSON.stringify(config, null, 2));
+    const intoOptedOut = at(clean, "serve", "revoke", "--principal", "nobody", "--config", configFile);
+    assert.ok(refused(intoOptedOut), `a config serving a partition inside an opted-out repository is refused:\n${out(intoOptedOut)}`);
+    assert.ok(out(intoOptedOut).includes(marker));
+
+    // A cwd inside a store nested in an opted-out repository is gated (no --root needed).
+    const nested = join(root, "nested");
+    mkdirSync(join(nested, ".hunch"), { recursive: true });
+    const inNested = at(nested, "index");
+    assert.equal(inNested.status, 1, out(inNested));
+    assert.ok(refused(inNested) && out(inNested).includes(marker), out(inNested));
+    assert.ok(!existsSync(join(nested, ".hunch", "index.db")), "nothing was indexed into the nested store");
+
+    // A linked worktree whose branch lacks the marker still writes the default overlay
+    // store and the shared-overlay pointer into the MAIN checkout: gated by its marker.
+    const linked = join(base, "linked");
+    execFileSync("git", ["worktree", "add", "-q", "-b", "linked", linked], { cwd: root, env, stdio: "pipe" });
+    assert.ok(!existsSync(join(linked, OPT_OUT_FILE)));
+    // `init` too: git hooks live in the common dir the worktrees share (#488).
+    for (const args of [["init", "--no-index", "--no-providers"], ["private"], ["shared"], ["worktree", join(base, "wt2")]]) {
+      const r = at(linked, ...args);
+      assert.ok(refused(r) && out(r).includes(marker), `${args.join(" ")} from a linked worktree of an opted-out checkout is refused:\n${out(r)}`);
+      assert.notEqual(r.status, 0);
+    }
+    assert.ok(!existsSync(join(root, ".hunch-private")), "no overlay store was created in the opted-out main checkout");
+    assert.ok(!existsSync(join(root, ".git", "hunch")), "no shared-overlay pointer was written");
+    assert.ok(!existsSync(join(base, "wt2")));
+    const hooks = join(root, ".git", "hooks");
+    for (const f of existsSync(hooks) ? readdirSync(hooks).filter((n) => !n.endsWith(".sample")) : []) {
+      assert.ok(!/hunch/i.test(readFileSync(join(hooks, f), "utf8")), `the opted-out main checkout's shared ${f} hook carries no Hunch`);
+    }
+
+    // A submodule of the opted-out superproject is its own repository: its common dir
+    // (super/.git/modules/x) is not a main checkout, so `init` there is not refused.
+    const subSrc = join(base, "subsrc");
+    const submodule = join(root, "vendored");
+    mkdirSync(subSrc);
+    const sg = (cwd: string, ...a: string[]) => execFileSync("git", ["-c", "protocol.file.allow=always", ...a], { cwd, env, stdio: "pipe" });
+    sg(subSrc, "init", "-q", "-b", "main");
+    sg(subSrc, "config", "user.name", "Fixture"); sg(subSrc, "config", "user.email", "fixture@test.invalid"); sg(subSrc, "config", "commit.gpgsign", "false");
+    writeFileSync(join(subSrc, "f.txt"), "x\n");
+    sg(subSrc, "add", "-A"); sg(subSrc, "commit", "-qm", "init");
+    sg(root, "submodule", "add", "-q", subSrc, "vendored");
+    const inSub = at(submodule, "init", "--no-index", "--no-providers");
+    assert.ok(!refused(inSub), `init inside a submodule of an opted-out superproject is not refused:\n${out(inSub)}`);
+
+    // Outside any repository a stray marker in an ancestor gates nothing.
+    const loose = join(base, "loose");
+    mkdirSync(join(loose, "child"), { recursive: true });
+    writeFileSync(join(loose, OPT_OUT_FILE), "stray\n");
+    const outside = at(join(loose, "child"), "query", "anything");
+    assert.ok(!refused(outside), `an ancestor marker outside a repository does not gate:\n${out(outside)}`);
+
+    // A git-less Hunch store that opted out is still gated as an output target.
+    const store = join(base, "gitless-store");
+    mkdirSync(join(store, ".hunch"), { recursive: true });
+    writeFileSync(join(store, OPT_OUT_FILE), "opted out\n");
+    const storeMarker = join(realpathSync(store), OPT_OUT_FILE);
+    for (const [args, into] of [
+      [["private", "--no-hook"], join(store, "sub")],
+      [["review-memory", "auto", "--repository", "o/r", "--dry-run", "--output"], join(store, "r.json")],
+    ] as Array<[string[], string]>) {
+      const r = at(clean, ...args, into);
+      assert.ok(refused(r) && out(r).includes(storeMarker), `${args.join(" ")} into a git-less opted-out store is refused:\n${out(r)}`);
+      assert.notEqual(r.status, 0);
+      assert.ok(!existsSync(into), "nothing was written into the opted-out store");
+    }
+    assert.ok(!existsSync(join(store, ".git")), "no git init inside the opted-out store");
+
+    // Bare-clone and --separate-git-dir layouts: the git common dir has no `.git` entry,
+    // so a stray marker in a non-repository ancestor must not gate the overlay commands.
+    const layouts = join(loose, "layouts");
+    mkdirSync(layouts);
+    const g = (cwd: string, ...args: string[]) => execFileSync("git", args, { cwd, env, stdio: "pipe" });
+    g(layouts, "clone", "-q", "--bare", root, "proj.git");
+    g(join(layouts, "proj.git"), "worktree", "add", "-q", "-b", "bare-wt", join(layouts, "wt"));
+    mkdirSync(join(layouts, "sep"));
+    g(join(layouts, "sep"), "init", "-q", "-b", "main", "--separate-git-dir", join(layouts, "sep.gitdir"));
+    for (const cwd of [join(layouts, "wt"), join(layouts, "sep")]) {
+      for (const args of [["private", "--no-hook"], ["shared", "--no-hook"], ["worktree", join(layouts, `wt-${cwd.endsWith("sep") ? "s" : "b"}`)]]) {
+        const r = at(cwd, ...args);
+        assert.ok(!refused(r), `${args.join(" ")} in ${cwd} is not gated by a stray ancestor marker:\n${out(r)}`);
+      }
     }
   } finally { cleanupDir(base); }
 });

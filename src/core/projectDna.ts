@@ -159,7 +159,15 @@ function gitText(root: string, args: string[]): string {
 
 function exactCommit(root: string, ref: string): string {
   if (!ref.trim() || /[\0\r\n]/.test(ref) || ref.length > 1_024) throw new Error("Git revision is invalid");
-  const revision = gitText(root, ["rev-parse", "--verify", "--end-of-options", `${ref}^{commit}`]);
+  let revision: string;
+  try {
+    revision = gitText(root, ["rev-parse", "--verify", "--end-of-options", `${ref}^{commit}`]);
+  } catch (error) {
+    // Git's own text ("fatal: Needed a single revision") never names the ref (#493);
+    // any other failure keeps its original message.
+    if (!/Needed a single revision|unknown revision|bad revision/i.test((error as Error).message)) throw error;
+    throw new Error(`Git revision ${JSON.stringify(ref)} does not name a commit in this repository`);
+  }
   if (!GIT_OBJECT.test(revision)) throw new Error("Git did not return an exact commit object");
   return revision;
 }
