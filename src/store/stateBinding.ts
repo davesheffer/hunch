@@ -699,13 +699,17 @@ function writeStateAuthorized(store: HunchStore, input: unknown, opts: WriteOpti
     // Supersession stays inside one partition: closing another partition's record from here would
     // land its `superseded` event in THIS ledger, invisible to that partition's subscribers.
     if (!inScope(supersededRecord)) throw new StateRefusal("conflict", `supersedes ${request.supersedes} is on record in ${scopePath(recordScope(supersededRecord, repo))}, not ${scopePath(request.scope)}: a write supersedes only a record in its own partition`, { incumbent_id: String(supersededRecord.id), reason: "supersede target in another partition" });
+    const matches = typeof request.expected_version === 'number'
+      ? latestSeqFor(ledger, String(supersededRecord.id)) === request.expected_version
+      : request.expected_version === stateHash(supersededRecord);
     if (stateHash(supersededVisibility ?? null) !== stateHash(nextVisibility ?? null)) {
       if (supersededVisibility ? supersededVisibility.owner !== request.principal.id : request.principal.kind !== 'human') deny();
-      const matches = typeof request.expected_version === 'number'
-        ? latestSeqFor(readLedger(hunchDir, request.scope), String(supersededRecord.id)) === request.expected_version
-        : request.expected_version === stateHash(supersededRecord);
-      if (!matches) throw new StateRefusal('malformed', 'changing visibility during supersession requires the predecessor expected_version');
+      if (request.expected_version === null) throw new StateRefusal('malformed', 'changing visibility during supersession requires the predecessor expected_version');
     }
+    // A supersession's expected_version names the predecessor (#510): a stale one is a conflict.
+    if (request.expected_version !== null && !matches) throw new StateRefusal("conflict", `expected_version does not match the superseded ${supersededRecord.id}`, { incumbent_id: String(supersededRecord.id), reason: "expected_version mismatch" });
+  } else if (request.supersedes && request.expected_version !== null) {
+    throw new StateRefusal("conflict", `expected_version names ${request.supersedes}, which is not on record`, { incumbent_id: request.supersedes, reason: "expected_version without incumbent" });
   }
   if (!incumbent && !supersededRecord && nextVisibility?.owner !== undefined && nextVisibility.owner !== request.principal.id) deny();
   if (incumbent && stateHash(previousVisibility ?? null) !== stateHash(nextVisibility ?? null)) {
@@ -759,6 +763,13 @@ function writeStateAuthorized(store: HunchStore, input: unknown, opts: WriteOpti
       ? latestSeqFor(ledger, id) === request.expected_version
       : stateHash(existing) === request.expected_version;
     if (!ok) throw new StateRefusal("conflict", `expected_version does not match the incumbent ${id}`, { incumbent_id: id, reason: "expected_version mismatch" });
+  }
+  // Compare-and-swap with no incumbent (#510): a writer naming a version believes a record exists,
+  // so a fresh create under it is a stale read, never silently accepted. Numeric 0 is the ledger's
+  // "never seen" and asserts absence; a supersession's expected_version names its predecessor.
+  if (!existing && request.expected_version !== null && !request.supersedes
+    && !(typeof request.expected_version === "number" && latestSeqFor(ledger, id) === request.expected_version)) {
+    throw new StateRefusal("conflict", `expected_version ${JSON.stringify(request.expected_version)} names a version, but ${id} has none on record: pass null to create it (0 asserts the id was never written)`, { incumbent_id: id, reason: "expected_version without incumbent" });
   }
 
   if (replayLink) {

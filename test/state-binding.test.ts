@@ -9,7 +9,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { tempStore } from "./helpers.js";
+import { mkConstraint, tempStore } from "./helpers.js";
 import { hunchPaths } from "../src/core/paths.js";
 import { HunchStore } from "../src/store/hunchStore.js";
 import { StateRefusal, capabilities, mergeReadResponses, readState, recordsState, repositoryScope, subscribeState, writeState } from "../src/store/stateBinding.js";
@@ -196,6 +196,21 @@ test("write + read: derived state must carry dependencies; superseding it closes
   } finally { cleanup(); }
 });
 
+test("read: facets filter the state of record, never the delivery envelope (#510)", () => {
+  const { store, cleanup } = tempStore();
+  try {
+    const repo = repositoryScope(store);
+    store.json.put("constraints", mkConstraint({ id: "con_facets510", statement: "Orders must be idempotent", scope: ["**"], severity: "blocking" }));
+    store.reindex();
+    const read = (facets?: string[]) => readState(store, { schema: "nuryel.state.read/1", principal: principalFor(store), scope: repo, task: "change src/orders.ts", ...(facets ? { facets } : {}) });
+    const all = read(); const receiptsOnly = read(["receipts"]);
+    assert.equal(receiptsOnly.response.state_of_record, null, "no subject, no state of record to filter");
+    const ids = (e: typeof all.envelope) => e.delivered.map((d) => d.record_id);
+    assert.ok(ids(all.envelope).includes("con_facets510"), "the fixture constraint is delivered");
+    assert.deepEqual(ids(receiptsOnly.envelope), ids(all.envelope), "a facet filter never drops a constraint in force from the envelope");
+  } finally { cleanup(); }
+});
+
 test("read: a matching record in a scope outside the grants is named in denied_scopes, never described", () => {
   const { store, cleanup } = tempStore();
   try {
@@ -278,6 +293,27 @@ test("write: expected_version guards an update — hash or seq — and a matchin
     assert.equal(same.outcome, "replayed", "same content under a new key is a replay, not a new event");
     assert.equal(readLedger(join(root, ".hunch"), repo).head_seq, 3);
     assert.equal(readLedger(join(root, ".hunch"), repo).idempotency["idem-v-6"]?.record_id, first.record_id, "the new key is remembered against the incumbent");
+  } finally { cleanup(); }
+});
+
+test("write: expected_version on a create is a stale read (#510) — only null or 0 create the record", () => {
+  const { store, cleanup } = tempStore();
+  try {
+    const repo = repositoryScope(store);
+    const commitment = (title: string, status = "open") => ({ schema: "nuryel.commitment/1", scope: repo, subject: customer, title, owner: "david", due: "2026-09-10", status, valid_from: "2026-09-07T08:00:00Z", valid_to: null, provenance: prov });
+    const byHash = refusal(() => write(store, "commitments", commitment("by hash"), "c-1", { expected_version: `sha256:${"0".repeat(64)}` }), "conflict");
+    assert.equal(byHash.conflict?.reason, "expected_version without incumbent");
+    assert.equal(refusal(() => write(store, "commitments", commitment("by seq"), "c-2", { expected_version: 3 }), "conflict").conflict?.reason, "expected_version without incumbent");
+    const absent = write(store, "commitments", commitment("assert absent"), "c-3", { expected_version: 0 });
+    assert.equal(absent.outcome, "created");
+    assert.equal(write(store, "commitments", commitment("assert absent"), "c-3", { expected_version: 0 }).outcome, "replayed", "a retried create-if-absent replays");
+    assert.equal(refusal(() => write(store, "commitments", commitment("assert absent", "waiting"), "c-4", { expected_version: 0 }), "conflict").conflict?.reason, "expected_version mismatch", "0 on an existing record is a mismatch");
+    const plain = write(store, "commitments", commitment("no version"), "c-5");
+    assert.equal(plain.outcome, "created");
+    const stale = refusal(() => write(store, "commitments", commitment("successor"), "c-6", { supersedes: plain.record_id, expected_version: `sha256:${"f".repeat(64)}` }), "conflict");
+    assert.equal(stale.conflict?.reason, "expected_version mismatch", "a supersession checks expected_version against its predecessor");
+    refusal(() => write(store, "commitments", commitment("successor"), "c-7", { supersedes: "com_missing", expected_version: plain.record_hash }), "conflict");
+    assert.notEqual(write(store, "commitments", commitment("successor"), "c-8", { supersedes: plain.record_id, expected_version: plain.record_hash }).outcome, "replayed", "the predecessor's hash supersedes it");
   } finally { cleanup(); }
 });
 
