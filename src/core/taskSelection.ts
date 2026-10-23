@@ -216,6 +216,20 @@ export function identifierTokens(text: string): Set<string> {
   return new Set(scanIdentifiers(text).keys());
 }
 
+/** Word -> group key (the compound's `id:` term) for the words a two-part camel word splits
+ *  into (PowerShell -> power, shell), so a weak compound can count as ONE word toward the two,
+ *  as its identifier does. A word the prompt also uses on its own keeps its own group. */
+function weakCompoundGroups(text: string): Map<string, string> {
+  const groups = new Map<string, string>();
+  const weak = (text.match(CAMEL_IDENTIFIER) ?? []).filter((m) => camelParts(m) < 3);
+  if (!weak.length) return groups;
+  const standalone = lexicalTokens(text.replace(CAMEL_IDENTIFIER, (m) => camelParts(m) < 3 ? " " : m));
+  for (const m of weak) {
+    for (const word of lexicalTokens(m)) if (!standalone.has(word) && !groups.has(word)) groups.set(word, ID_PREFIX + m.toLowerCase());
+  }
+  return groups;
+}
+
 const termTokens = (text: string): Set<string> => new Set([...lexicalTokens(text), ...identifierTokens(text)]);
 
 interface Scored {
@@ -238,9 +252,9 @@ interface Scored {
 export function selectForTask(records: TaskSelectionRecords, promptText: string, opts: TaskSelectionOptions = {}): TaskSelection {
   const k = Math.max(0, opts.k ?? DEFAULT_K);
   // Stack-frame lines name library APIs (writeFileSync, processTicksAndRejections), not the task:
-  // keep their words, but extract no identifiers from them.
+  // neither their words (process, tick, internal, sync) nor their identifiers count.
   const promptIdentifiers = (promptText ?? "").split(/\r?\n/).filter((line) => !/^\s*at\s+\S/.test(line) && !/node:internal|\(node:/.test(line)).join("\n");
-  const taskTerms = new Set([...lexicalTokens(promptText ?? ""), ...identifierTokens(promptIdentifiers)]);
+  const taskTerms = new Set([...lexicalTokens(promptIdentifiers), ...identifierTokens(promptIdentifiers)]);
   // Without an existence check (pure/offline) only a slashed token is trusted as a
   // path: "e.g.", "Node.js" or "v1.2" would otherwise match a broad glob.
   const paths = promptPaths(promptText ?? "", opts.root).filter((p) => opts.pathExists ? opts.pathExists(p) : p.includes("/"));
@@ -269,6 +283,9 @@ export function selectForTask(records: TaskSelectionRecords, promptText: string,
   const dfCap = Math.max(MIN_DF_CAP, Math.ceil(DF_CAP_RATIO * candidates.length));
   const df = new Map<string, number>();
   for (const c of candidates) for (const term of c.tokens) df.set(term, (df.get(term) ?? 0) + 1);
+  // A two-part camel word in many records is a brand (GitHub, PowerShell): its parts count as one
+  // word. A near-unique one (df <= MIN_DF_CAP, e.g. QuotaReaper) names this project: its parts count apart.
+  const wordGroups = new Map([...weakCompoundGroups(promptIdentifiers)].filter(([, group]) => (df.get(group) ?? 0) > MIN_DF_CAP));
   const strongIds = new Set([...scanIdentifiers(promptIdentifiers)].filter(([, strong]) => strong).map(([term]) => term));
   const rareTerms = new Map<string, { weight: number; strong: boolean }>();
   for (const term of taskTerms) {
@@ -284,17 +301,17 @@ export function selectForTask(records: TaskSelectionRecords, promptText: string,
   }
   const scored: Scored[] = [];
   for (const { tokens, anchors, ...rest } of candidates) {
-    let words = 0;
+    const words = new Set<string>();
     let identifiers = 0;
     let termScore = 0;
     for (const [term, { weight, strong }] of rareTerms) {
       if (!tokens.has(term)) continue;
-      if (strong) identifiers++; else words++;
+      if (strong) identifiers++; else words.add(wordGroups.get(term) ?? term);
       termScore += weight;
     }
     const pathHits = paths.filter((p) => anchors.some((anchor) => pathMatchesGlob(p, anchor))).length;
     // One rare identifier alone qualifies (it counts double); a lone rare word does not.
-    if (pathHits > 0 || words + IDENTIFIER_WEIGHT * identifiers >= MIN_DISTINCT_TERMS) scored.push({ ...rest, pathHits, termScore });
+    if (pathHits > 0 || words.size + IDENTIFIER_WEIGHT * identifiers >= MIN_DISTINCT_TERMS) scored.push({ ...rest, pathHits, termScore });
   }
   // A record anchored to more of the files the prompt names outranks one that
   // shares a single (often hub) file with it; idf-weighted rare terms break the remaining ties.

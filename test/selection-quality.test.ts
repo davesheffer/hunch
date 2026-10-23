@@ -304,7 +304,6 @@ const PRECISION: PrecisionPrompt[] = [
     name: "brand: PowerShell on Windows", prompt: "run this in PowerShell on Windows",
     // dec_g_078 also shares "window"+"run"; dec_g_268/dec_g_309 share "run". The other 9 share only PowerShell.
     allowed: ["dec_g_078", "dec_g_268", "dec_g_309"],
-    todo: "a two-part camel brand word (PowerShell -> power+shell) counts as two rare words and qualifies a record alone; the identifier scan calls it weak/one word but lexicalTokens still splits it",
   },
   { name: "brand: SQLite on macOS", prompt: "upgrade SQLite to 3.46.0 on macOS", allowed: [] },
   { name: "brand: useEffect", prompt: "the useEffect cleanup runs twice", allowed: ["dec_g_315"] /* useEffect + "twice" */ },
@@ -326,7 +325,6 @@ const PRECISION: PrecisionPrompt[] = [
       "    at processTicksAndRejections (node:internal/process/task_queues:95:5)",
     ].join("\n"),
     allowed: ["bug_p_enoent_config"],
-    todo: "frame lines are excluded from identifiers but their words (process, tick, rejection, internal, queue, object, read, file, sync) still count, so any record with a pasted node stack trace qualifies",
   },
   {
     name: "stack trace: unrelated TypeError through shared node frames",
@@ -338,7 +336,6 @@ const PRECISION: PrecisionPrompt[] = [
     ].join("\n"),
     // Same error genre ("TypeError: Cannot read properties of ..."), so arguably related.
     allowed: ["bug_s_undefinedtitle"],
-    todo: "records sharing only node-internal stack frames qualify (same cause as the ENOENT trace)",
   },
 ];
 
@@ -378,7 +375,7 @@ const select = (prompt: string, records: TaskSelectionRecords = corpus.records) 
 
 /** Measured on this corpus when the test was written; a lower recall or a higher
  *  false-qualifier count is a regression. Tighten these when selection improves. */
-const BASELINE = { recallAt3: 1, falseQualifiers: 24 };
+const BASELINE = { recallAt3: 1, falseQualifiers: 0 };
 
 test("the corpus is realistic: ~500 live records, head words above the DF cap, brand words inside it", () => {
   const n = liveCount(corpus.records);
