@@ -607,6 +607,8 @@ export interface HunchRemoteContract {
 }
 
 const CAPTURE_REMOTE_TIMEOUT_MS = 15_000;
+/** A user's whole branch can be large, so `hunch push` gets far longer than a memory capture push. */
+const BRANCH_PUSH_TIMEOUT_MS = 300_000;
 export const DEFAULT_READ_REMOTE_TIMEOUT_MS = 5_000;
 // A capture can spend roughly 90s in commit + bounded merge/push/retry seams.
 // A contending writer waits beyond that proven ceiling, then takes the lock and
@@ -2252,7 +2254,7 @@ export function pushCurrentBranch(root: string): boolean {
   try {
     // Bounded so an unreachable remote can't hang the caller, and a timeout
     // kills git's whole tree, not just the root (#498).
-    boundedExecFileSync("git", ["-C", root, "push"], { stdout: "ignore", timeout: CAPTURE_REMOTE_TIMEOUT_MS });
+    boundedExecFileSync("git", ["-C", root, "push"], { stdout: "ignore", timeout: BRANCH_PUSH_TIMEOUT_MS });
     return true;
   } catch {
     return false;
