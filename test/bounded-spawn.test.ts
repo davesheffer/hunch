@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
 import { pathToFileURL } from "node:url";
-import { boundedSpawn, boundedExecFileSync, type BoundedExecError } from "../src/core/boundedSpawn.js";
+import { boundedSpawn, boundedExecFileSync, __setPsFileForTests, type BoundedExecError } from "../src/core/boundedSpawn.js";
 
 // Issues #489 / #498: a timed-out child must take its whole tree with it.
 
@@ -89,13 +89,32 @@ test("boundedSpawn: timeout kills the whole tree and resolves as timed out", { t
 test("boundedSpawn: a missing ps falls back to /proc on Linux, else still kills the root", { skip: IS_WIN && "taskkill walks the tree", timeout: 30_000 }, async (t) => {
   const pidFile = join(tempDir(t), "grandchild.pid");
   const started = Date.now();
-  const r = await boundedSpawn(process.execPath, ["-e", treeScript(pidFile)], { timeoutMs: 1_000, killGraceMs: 300, psFile: "/nonexistent/hunch-no-ps" });
+  __setPsFileForTests("/nonexistent/hunch-no-ps");
+  t.after(() => __setPsFileForTests(null));
+  const r = await boundedSpawn(process.execPath, ["-e", treeScript(pidFile)], { timeoutMs: 1_000, killGraceMs: 300 });
   assert.equal(r.timedOut, true);
   assert.equal(r.status, null);
   assert.ok(Date.now() - started < 15_000, "resolved promptly after the deadline");
   const grandchild = await waitForPid(pidFile);
   if (process.platform === "linux") await assertDead(grandchild);
   else try { process.kill(grandchild, "SIGKILL"); } catch { /* gone */ }
+});
+
+// A survivor whose parent died on SIGTERM is reparented (to pid 1 or a
+// subreaper); the SIGKILL re-walk must still reach what it spawned in the grace.
+test("boundedSpawn: the SIGKILL re-walk reaches children of a reparented survivor", { skip: IS_WIN && "taskkill walks the tree", timeout: 30_000 }, async (t) => {
+  const qFile = join(tempDir(t), "q.pid");
+  // P ignores SIGTERM and, on SIGTERM, spawns Q; the middle process exits on SIGTERM.
+  const p = `const { spawn } = require("node:child_process"); const fs = require("node:fs");
+process.on("SIGTERM", () => { const q = spawn(process.execPath, ["-e", "setTimeout(() => {}, 60000)"], { stdio: "ignore" }); fs.writeFileSync(${JSON.stringify(qFile)}, String(q.pid)); });
+setInterval(() => {}, 1000);`;
+  const middle = `const { spawn } = require("node:child_process");
+spawn(process.execPath, ["-e", ${JSON.stringify(p)}], { stdio: "ignore" });
+setInterval(() => {}, 1000);`;
+  const r = await boundedSpawn(process.execPath, ["-e", middle], { timeoutMs: 1_500, killGraceMs: 800 });
+  assert.equal(r.timedOut, true);
+  assert.equal(r.signal, "SIGKILL", "P ignored SIGTERM, so the tree was SIGKILLed");
+  await assertDead(await waitForPid(qFile));
 });
 
 test("boundedSpawn: spawn failure resolves with an error, not a throw", async () => {

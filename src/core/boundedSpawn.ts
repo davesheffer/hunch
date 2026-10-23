@@ -124,8 +124,8 @@ process.stdin.on("end", () => {
       });
       return;
     }
-    snapshot((first) => {
-      const pids = reach([child.pid], first);
+    snapshot((ppids) => {
+      const pids = reach([child.pid], ppids);
       signalAll(pids, "SIGTERM");
       result.killSignal = "SIGTERM";
       const deadline = Date.now() + spec.killGraceMs;
@@ -134,13 +134,8 @@ process.stdin.on("end", () => {
         if (left.length === 0) return finish();
         if (Date.now() < deadline) { setTimeout(poll, 50); return; }
         // Re-walk from the survivors: anything they spawned during the grace.
-        // A survivor whose parent is no longer the recorded one (and not in the
-        // tree either) may be a recycled pid: it is not walked from.
         snapshot((now) => {
-          const set = new Set(pids);
-          const roots = left.filter((pid) => pid === child.pid
-            || now.get(pid) === first.get(pid) || set.has(now.get(pid)));
-          const rest = new Set(left.concat(reach(roots, now)));
+          const rest = reach(left, now);
           for (const pid of rest) { try { process.kill(pid, "SIGKILL"); } catch (e) {} }
           try { child.kill("SIGKILL"); } catch (e) {}
           result.killSignal = "SIGKILL";
@@ -209,8 +204,6 @@ export interface BoundedSpawnOptions {
   shell?: boolean;
   /** POSIX: how long the tree gets after SIGTERM before SIGKILL. Default 1500. */
   killGraceMs?: number;
-  /** Test seam: the ps binary used for the POSIX tree snapshot. Default "ps". */
-  psFile?: string;
 }
 
 export interface BoundedSpawnResult {
@@ -238,6 +231,14 @@ interface SupervisorOutcome {
   error: { code?: string; message: string } | null;
 }
 
+let psFileOverride: string | null = null;
+
+/** Test seam: replace the ps binary used for the POSIX tree snapshot
+ *  (null restores "ps"). Not for production callers. */
+export function __setPsFileForTests(file: string | null): void {
+  psFileOverride = file;
+}
+
 function supervisorRequest(file: string, args: string[], opts: BoundedSpawnOptions & { stdout?: "pipe" | "ignore" | "inherit" }) {
   const maxBuffer = opts.maxBuffer ?? 16 * 1024 * 1024;
   const spec = JSON.stringify({
@@ -250,7 +251,7 @@ function supervisorRequest(file: string, args: string[], opts: BoundedSpawnOptio
     maxBuffer,
     shell: opts.shell === true,
     stdout: opts.stdout ?? "pipe",
-    psFile: opts.psFile ?? null,
+    psFile: psFileOverride,
   });
   // The supervisor itself must not inherit user NODE_OPTIONS (loaders, --inspect).
   const env: NodeJS.ProcessEnv = { ...process.env, ELECTRON_RUN_AS_NODE: "1" };
