@@ -368,11 +368,8 @@ describe("helm chart", () => {
     assert.match(why.stdout + why.stderr, /deployment\.yaml/, `why output:\n${why.stdout}\n${why.stderr}`);
   });
 
-  // REAL GAP: getDependents (hunchStore.ts) walks only calls/depends_on/imports/contains/implements
-  // edges, never `references` — the only edge type YAML/Helm emits — so a helper's blast radius is empty.
-  test("helm: hunch_get_dependents on a helper lists its includers", {
-    todo: "getDependents ignores `references` edges, so a Helm helper reports 'Nothing depends on' despite include edges",
-  }, async () => {
+  // Issue #486: `references` is the only edge type YAML/Helm emits, so getDependents must follow it.
+  test("helm: hunch_get_dependents on a helper lists its includers", async () => {
     const server = buildServer(repo.root);
     const [ct, st] = InMemoryTransport.createLinkedPair();
     await server.connect(st);
@@ -386,6 +383,16 @@ describe("helm chart", () => {
     } finally {
       await client.close();
       await server.close();
+    }
+  });
+
+  test("helm: a helper's file blast radius (check --blast) includes the templates that include it", () => {
+    const store = new HunchStore(hunchPaths(repo.root));
+    try {
+      const files = store.blastRadiusFiles(helpers).map((b) => b.file);
+      assert.ok(files.includes(deploy), `blast radius of ${helpers}: ${files.join(", ")}`);
+    } finally {
+      store.close();
     }
   });
 });
