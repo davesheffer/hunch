@@ -165,6 +165,36 @@ test("stack-frame identifiers, brand words and common strong identifiers do not 
   assert.deepEqual(selectForTask(records({ decisions: [...common, ...rest] }), "ShowInForms").qualifying, [], "df 4 > 3: not a lone qualifier");
 });
 
+test("prose starting with \"at\" and a Node warning's (node:pid) keep their words; only a real trace drops them (#490)", () => {
+  const filler = Array.from({ length: 30 }, (_, i) => dec(`dec_fill_${String(i).padStart(2, "0")}`, `Unrelated filler note ${i}`));
+  const renewal = dec("dec_renewal", "Ledger renewal lock goes stale at startup");
+  const reaper = dec("dec_reaper", "Quota reaper skips expired leases");
+  const compactor = dec("dec_compactor", "Compactor triggers the SQLite experimental warning");
+  const all = records({ decisions: [...filler, renewal, reaper, compactor] });
+  assert.deepEqual(selectForTask(all, "at startup the ledger renewal lock goes stale").qualifying, ["dec_renewal"]);
+  assert.deepEqual(selectForTask(all, "at least once a day the quota reaper skips expired leases").qualifying, ["dec_reaper"]);
+  assert.deepEqual(selectForTask(all, "fix this: (node:48213) ExperimentalWarning: SQLite is an experimental feature, raised by the compactor").qualifying, ["dec_compactor"]);
+  // Two frame lines are a trace: their words (ledger, renewal, lock) no longer qualify the record.
+  const trace = "Error: boom\n    at ledgerRenewal (src/ledger.ts:12:3)\n    at renewalLock (src/lock.ts:4:9)";
+  assert.deepEqual(selectForTask(all, trace).qualifying, []);
+});
+
+test("a part shared by two common camel compounds does not depend on prompt word order (#490)", () => {
+  const filler = Array.from({ length: 200 }, (_, i) => dec(`dec_fill_${String(i).padStart(3, "0")}`, `Unrelated filler note ${i}`));
+  const ps = Array.from({ length: 4 }, (_, i) => dec(`dec_ps_${i}`, `Launch scripts through PowerShell ${i}`));
+  const sc = Array.from({ length: 4 }, (_, i) => dec(`dec_sc_${i}`, `Lint scripts with ShellCheck ${i}`));
+  const all = records({ decisions: [...filler, ...ps, ...sc] });
+  const a = selectForTask(all, "run ShellCheck from PowerShell");
+  const b = selectForTask(all, "run PowerShell from ShellCheck");
+  assert.deepEqual(a.qualifying, []);
+  assert.deepEqual(b.qualifying, a.qualifying);
+  // Three-part compounds group too: GitHubActions in 5 records is one word, not git+hub+actions.
+  const gha = Array.from({ length: 5 }, (_, i) => dec(`dec_gha_${i}`, `Release via GitHubActions ${i}`));
+  assert.deepEqual(selectForTask(records({ decisions: [...filler, ...gha] }), "configure GitHubActions").qualifying, []);
+  const quota = dec("dec_quota", "QuotaReaper runs hourly");
+  assert.deepEqual(selectForTask(records({ decisions: [...filler, quota] }), "why QuotaReaper").qualifying, ["dec_quota"], "a near-unique compound still qualifies");
+});
+
 test("a dotted SQL name in the prompt selects the decision that names the bare procedure", () => {
   const d = dec("dec_sql", "Paginate GetOrders results");
   const other = dec("dec_other", "Unrelated wording entirely");

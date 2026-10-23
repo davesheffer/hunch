@@ -216,18 +216,36 @@ export function identifierTokens(text: string): Set<string> {
   return new Set(scanIdentifiers(text).keys());
 }
 
-/** Word -> group key (the compound's `id:` term) for the words a two-part camel word splits
- *  into (PowerShell -> power, shell), so a weak compound can count as ONE word toward the two,
- *  as its identifier does. A word the prompt also uses on its own keeps its own group. */
-function weakCompoundGroups(text: string): Map<string, string> {
-  const groups = new Map<string, string>();
-  const weak = (text.match(CAMEL_IDENTIFIER) ?? []).filter((m) => camelParts(m) < 3);
-  if (!weak.length) return groups;
-  const standalone = lexicalTokens(text.replace(CAMEL_IDENTIFIER, (m) => camelParts(m) < 3 ? " " : m));
-  for (const m of weak) {
-    for (const word of lexicalTokens(m)) if (!standalone.has(word) && !groups.has(word)) groups.set(word, ID_PREFIX + m.toLowerCase());
+/** Word -> the `id:` terms of the camel compounds the prompt splits it out of (PowerShell ->
+ *  power, shell; GitHubActions -> git, hub, actions), sorted so prompt word order never matters.
+ *  A word the prompt also uses on its own belongs to no compound. */
+function camelCompoundGroups(text: string): Map<string, string[]> {
+  const groups = new Map<string, string[]>();
+  const compounds = text.match(CAMEL_IDENTIFIER) ?? [];
+  if (!compounds.length) return groups;
+  const standalone = lexicalTokens(text.replace(CAMEL_IDENTIFIER, " "));
+  for (const m of compounds) {
+    const key = ID_PREFIX + m.toLowerCase();
+    for (const word of lexicalTokens(m)) {
+      if (standalone.has(word)) continue;
+      const keys = groups.get(word) ?? [];
+      if (!keys.includes(key)) keys.push(key);
+      groups.set(word, keys.sort());
+    }
   }
   return groups;
+}
+
+/** A pasted stack frame: `at fn (file:line:col)`, `at file:line:col`, `at X (<anonymous>)`, `at X (node:...)`.
+ *  Prose that merely starts with "at" ("at startup the lock goes stale") has no such tail. */
+const FRAME_LINE = /^\s*at\s+\S+.*(?::\d+:\d+\)?|\(<anonymous>\)|\(node:[^)]*\))\s*$/;
+/** Text whose words count: every line, unless the prompt holds an actual trace (2+ frame
+ *  lines), whose frames name library internals (process, tick, sync), not the task. A Node
+ *  warning's `(node:<pid>)` prefix is noise either way; the words after it stay. */
+function promptWordText(prompt: string): string {
+  const lines = prompt.split(/\r?\n/);
+  const trace = lines.filter((line) => FRAME_LINE.test(line)).length >= 2;
+  return (trace ? lines.filter((line) => !FRAME_LINE.test(line)) : lines).join("\n").replace(/\(node:\d+\)/g, " ");
 }
 
 const termTokens = (text: string): Set<string> => new Set([...lexicalTokens(text), ...identifierTokens(text)]);
@@ -252,9 +270,9 @@ interface Scored {
 export function selectForTask(records: TaskSelectionRecords, promptText: string, opts: TaskSelectionOptions = {}): TaskSelection {
   const k = Math.max(0, opts.k ?? DEFAULT_K);
   // Stack-frame lines name library APIs (writeFileSync, processTicksAndRejections), not the task:
-  // neither their words (process, tick, internal, sync) nor their identifiers count.
+  // extract no identifiers from them; their words drop only when the prompt holds a real trace.
   const promptIdentifiers = (promptText ?? "").split(/\r?\n/).filter((line) => !/^\s*at\s+\S/.test(line) && !/node:internal|\(node:/.test(line)).join("\n");
-  const taskTerms = new Set([...lexicalTokens(promptIdentifiers), ...identifierTokens(promptIdentifiers)]);
+  const taskTerms = new Set([...lexicalTokens(promptWordText(promptText ?? "")), ...identifierTokens(promptIdentifiers)]);
   // Without an existence check (pure/offline) only a slashed token is trusted as a
   // path: "e.g.", "Node.js" or "v1.2" would otherwise match a broad glob.
   const paths = promptPaths(promptText ?? "", opts.root).filter((p) => opts.pathExists ? opts.pathExists(p) : p.includes("/"));
@@ -283,9 +301,14 @@ export function selectForTask(records: TaskSelectionRecords, promptText: string,
   const dfCap = Math.max(MIN_DF_CAP, Math.ceil(DF_CAP_RATIO * candidates.length));
   const df = new Map<string, number>();
   for (const c of candidates) for (const term of c.tokens) df.set(term, (df.get(term) ?? 0) + 1);
-  // A two-part camel word in many records is a brand (GitHub, PowerShell): its parts count as one
-  // word. A near-unique one (df <= MIN_DF_CAP, e.g. QuotaReaper) names this project: its parts count apart.
-  const wordGroups = new Map([...weakCompoundGroups(promptIdentifiers)].filter(([, group]) => (df.get(group) ?? 0) > MIN_DF_CAP));
+  // A camel compound in many records is a brand (GitHub, PowerShell, GitHubActions): in a record
+  // holding it, its parts count as one word. A near-unique one (df <= MIN_DF_CAP, e.g. QuotaReaper)
+  // names this project, and in a record without the compound a part is an ordinary word.
+  const wordGroups = new Map<string, string[]>();
+  for (const [word, keys] of camelCompoundGroups(promptIdentifiers)) {
+    const common = keys.filter((key) => (df.get(key) ?? 0) > MIN_DF_CAP);
+    if (common.length) wordGroups.set(word, common);
+  }
   const strongIds = new Set([...scanIdentifiers(promptIdentifiers)].filter(([, strong]) => strong).map(([term]) => term));
   const rareTerms = new Map<string, { weight: number; strong: boolean }>();
   for (const term of taskTerms) {
@@ -306,7 +329,7 @@ export function selectForTask(records: TaskSelectionRecords, promptText: string,
     let termScore = 0;
     for (const [term, { weight, strong }] of rareTerms) {
       if (!tokens.has(term)) continue;
-      if (strong) identifiers++; else words.add(wordGroups.get(term) ?? term);
+      if (strong) identifiers++; else words.add(wordGroups.get(term)?.find((key) => tokens.has(key)) ?? term);
       termScore += weight;
     }
     const pathHits = paths.filter((p) => anchors.some((anchor) => pathMatchesGlob(p, anchor))).length;
