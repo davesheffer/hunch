@@ -237,16 +237,9 @@ type Case = {
 const esc = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 // Today's real gaps (asserted, kept, reported). Remove an entry when the tool learns
-// to confirm its miss against fresh team memory.
-const LOCAL_MISS = "answers from the local store without confirming the miss against fresh team memory (no confirmSharedMiss)";
-const TODO: Record<string, string> = {
-  "hunch_why#absent": `record-id lookup ${LOCAL_MISS}`,
-  hunch_findings: `findings(id) ${LOCAL_MISS}`,
-  "hunch_findings#absent": `findings(id) ${LOCAL_MISS}`,
-  hunch_policy_upgrade_correction: `correction lookup ${LOCAL_MISS}`,
-  "hunch_policy_upgrade_correction#absent": `correction lookup ${LOCAL_MISS}`,
-  "hunch_review_imported_adr#absent": `imported-ADR lookup ${LOCAL_MISS}`,
-};
+// to confirm its miss against fresh team memory. Empty since #487: every checked
+// tool routes its miss through confirmSharedMiss.
+const TODO: Record<string, string> = {};
 
 test("team absence claims: id-taking MCP tools never present local absence as team absence", { timeout: 330_000 }, async (t) => {
   const sandbox = mkdtempSync(join(tmpdir(), "hunch-absence-claims-"));
@@ -468,6 +461,9 @@ test("team absence claims: id-taking MCP tools never present local absence as te
           const result = await mcpResult(b, x.tool, x.args);
           assert.doesNotMatch(result.text, x.absence, `${x.tool} claimed absence it cannot confirm: ${result.text}`);
           assert.match(result.text, ABSTAIN, `${x.tool} must abstain explicitly: ${result.text}`);
+          assert.match(result.text, /^Shared team memory refresh is \S+; Hunch cannot confirm that .+\. Retry when the shared store is available\.$/,
+            `${x.tool} must use the shared miss confirmation: ${result.text}`);
+          assert.equal(result.isError, true, `${x.tool} abstention is an error result: ${result.text}`);
         });
       }
     } finally {
