@@ -33,7 +33,7 @@ export interface SyncResult {
 
 // Below this many changed code lines, a commit with no structural change and no
 // explanatory body isn't worth a paid LLM call. Tunable via HUNCH_SIG_MIN_LINES.
-const SIG_MIN_LINES = Number(process.env.HUNCH_SIG_MIN_LINES) || 12;
+const SIG_MIN_LINES = ((raw) => Number.isFinite(raw) && raw > 0 ? raw : 12)(Number(process.env.HUNCH_SIG_MIN_LINES));
 const SIG_MIN_BODY = 40;
 
 /** Trivial-subject commits (merge/revert/bump/format/...) are noise UNLESS the body
