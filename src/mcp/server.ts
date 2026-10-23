@@ -93,7 +93,7 @@ import { HUNCH_VERSION } from "../core/version.js";
 import { assertCompleteRepoScan, indexRepo, scanRepo } from "../extractors/indexer.js";
 import type { Decision, Finding, Symbol } from "../core/types.js";
 import { liveForTopic, historyForTopic, rejectedForTopic, captureConflicts } from "../core/topics.js";
-import { formatWhyRecord, more, WHY_CAP } from "../core/whyRecord.js"; // WHY_CAP: per record-type cap in hunch_why
+import { formatWhyRecord, more, WHY_CAP, WHY_RECORD_ID } from "../core/whyRecord.js"; // WHY_CAP: per record-type cap in hunch_why
 import { pendingEscalations, policyEscalations, commitRepairEscalations, actionableEscalations, escalationHeadline, type Escalation } from "../core/escalations.js";
 import { readActivePendingRepairs, withheldRewrites } from "../core/repairqueue.js";
 import { scanRecord, publicationWarning, loadVocabulary } from "../core/publication.js";
@@ -1348,6 +1348,11 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
     }
     return null;
   };
+  // Exact-id record reads (findings, corrections, imported ADRs, why-by-id): the
+  // same confirmation, gated to shared mode. Null means "re-read; absence is
+  // confirmed or the store is not shared", else the abstention to return instead.
+  const confirmSharedRecord = (subject: string): string | null =>
+    store.mode === "shared" && store.privateDir ? confirmSharedMiss(`${subject} is absent from shared team memory`, subject) : null;
   // Policy reads: confirm a local policy (or its referenced proof) miss against
   // fresh shared memory before the service reports "not found". Public-only reads
   // and non-shared stores never consult the team remote.
@@ -1625,15 +1630,21 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
       const asOf = as_of ? asOfDate(as_of, root) : undefined;
       if (as_of && !asOf) return invalid(`Could not resolve as_of "${as_of}" to a commit.`);
       let w = store.why(target, { asOf });
+      // An id-shaped target is an id miss when the store reported one (generated
+      // shape) or, for a hand-written id, when nothing else matched it either.
+      const idMiss = (r: typeof w): boolean => !r.byId?.record && (r.byId !== undefined || (WHY_RECORD_ID.test(target)
+        && !r.decisions.length && !r.constraints.length && !r.bugs.length && !r.components.length && !r.symbols.length));
       // "No record <id>" is a team-absence claim in shared mode: confirm the local
       // miss against a fresh pull first, like hunch_current_decision. A record held
       // locally but outside its as_of window is not a team-absence claim: no pull.
-      if (w.byId && !w.byId.record && store.mode === "shared" && store.privateDir
-        && !(asOf && store.why(target).byId?.record)) {
-        const abstention = confirmSharedMiss(`record ${w.byId.id} is absent from shared team memory`, `record ${w.byId.id}`);
+      const heldNow = (): boolean => !!(asOf && store.why(target).byId?.record);
+      if (idMiss(w) && !heldNow()) {
+        const abstention = confirmSharedRecord(`record ${w.byId?.id ?? target}`);
         if (abstention) return err(abstention);
         w = store.why(target, { asOf });
       }
+      // A hand-written id held now but not in force at as_of: say so, like a generated id.
+      if (asOf && !w.byId && idMiss(w) && heldNow()) w = { ...w, byId: { id: target, record: null, asOf } };
       if (w.byId?.record) return ok(formatWhyRecord(w.byId).join("\n"));
       // Highest-signal first, then cap: invariants by severity, decisions by
       // confidence, bugs by severity — so a hot file's trim drops the tail, not
@@ -2250,7 +2261,13 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
     },
     async ({ decision_id, expected_source_hash, expected_review_hash, disposition, reviewed_by }): Promise<ToolResult> => {
       try {
-        const decision = store.advisoryRecs("decisions").find((candidate) => candidate.id === decision_id);
+        const find = () => store.advisoryRecs("decisions").find((candidate) => candidate.id === decision_id);
+        let decision = find();
+        if (!decision) {
+          const abstention = confirmSharedRecord(`imported ADR ${decision_id}`);
+          if (abstention) return err(abstention);
+          decision = find();
+        }
         if (!decision) return invalid(`Imported ADR ${decision_id} is not present in the current advisory memory home.`);
         // Approval grants human authority, so the agent's report that the human approved
         // is not enough: the human confirms in the client prompt, a channel the agent does
@@ -3103,7 +3120,13 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
       const concerns = (f: Finding): string => [...f.affected_files, ...f.affected_symbols].join(", ") || "(unscoped)";
       const links = (f: Finding): string => [f.violates_constraint ? `violates ${f.violates_constraint}` : "", f.method ? `re-verify via ${f.method}` : "", f.resolved_commit ? `fixed in ${f.resolved_commit.slice(0, 9)}` : ""].filter(Boolean).join("; ");
       if (id) {
-        const f = store.recs("findings").find((r) => r.id === id);
+        const find = (): Finding | undefined => store.recs("findings").find((r) => r.id === id);
+        let f = find();
+        if (!f) {
+          const abstention = confirmSharedRecord(`finding ${id}`);
+          if (abstention) return err(abstention);
+          f = find();
+        }
         if (!f) return ok(`No finding "${id}".`);
         return ok(`[${f.triage}/${f.severity}] ${f.title} (${f.id}, observed ${f.observed_at.slice(0, 10)})\n${f.observation}\nconcerns: ${concerns(f)}${links(f) ? `\n${links(f)}` : ""}`);
       }
@@ -3139,6 +3162,15 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
     async ({ constraint_id, public_only, private_only, include_artifacts }): Promise<ToolResult> => {
       try {
         if (public_only && private_only) return invalid("Choose only one of public_only or private_only.");
+        // A correction missing from every home this call may read is confirmed against
+        // fresh shared memory before the upgrade reports it "not found". Public-only
+        // reads never consult the team remote.
+        const heldCorrection = (): boolean => !!(store.getPrivateRec("constraints", constraint_id)
+          || (!private_only && store.json.get("constraints", constraint_id)));
+        if (!public_only && !heldCorrection()) {
+          const abstention = confirmSharedRecord(`correction ${constraint_id}`);
+          if (abstention) return err(abstention);
+        }
         // Resolve the correction's exact home before any writes. Overlay-first is
         // the same selection contract as ConstitutionService.upgradeCorrection;
         // deriving this later from a policy id is unsafe when legacy public and
