@@ -342,6 +342,9 @@ test("hunch_why(<record id>) confirms a shared-memory miss against a fresh pull 
     const futureId = "dec_5ca1ab1e02";
     const future: Decision = { ...decision, id: futureId, title: "Future paging", valid_from: "2099-01-01T00:00:00.000Z", date: "2099-01-01T00:00:00.000Z" };
     writeFileSync(join(staging, ".hunch", "decisions", `${futureId}.json`), JSON.stringify(future, null, 2));
+    // Same window, hand-written id shape (not hex): still "No record <id> as of" (#493).
+    const handId = "dec_future_paging";
+    writeFileSync(join(staging, ".hunch", "decisions", `${handId}.json`), JSON.stringify({ ...future, id: handId }, null, 2));
     git(staging, "add", "-A");
     git(staging, "commit", "-qm", "hunch: record decision");
 
@@ -386,6 +389,10 @@ test("hunch_why(<record id>) confirms a shared-memory miss against a fresh pull 
       assert.equal(windowed.isError, false, windowed.text);
       assert.match(windowed.text, new RegExp(`No record ${futureId} as of`));
       assert.doesNotMatch(windowed.text, /cannot confirm/);
+      const handWindowed = await mcpResult(client, "hunch_why", { target: handId, as_of: "HEAD" });
+      assert.equal(handWindowed.isError, false, handWindowed.text);
+      assert.match(handWindowed.text, new RegExp(`No record ${handId} as of`));
+      assert.doesNotMatch(handWindowed.text, /cannot confirm|No recorded/);
     } finally {
       renameSync(unavailableObjects, remoteObjects);
     }

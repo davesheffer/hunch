@@ -90,7 +90,8 @@ jobs:
     # A failed classify still runs the leg, in full: never a skipped required check.
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # The release gate alone runs the full suite in 17-20 min; 20 cancelled main (f93798da).
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -191,7 +192,7 @@ jobs:
       matrix:
         os: [windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
+    timeout-minutes: 20
     env:
       MEMORY_ONLY: ${{ needs.classify.outputs.memory_only == 'true' }}
       # Slow Windows runners intermittently time out the 5s team-memory pull (#482).
