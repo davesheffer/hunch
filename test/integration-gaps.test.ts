@@ -10,7 +10,7 @@ import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { hunchCliArgs } from "./cli-invocation.js";
 import { gitRun } from "../src/integrations/hooks.js";
 import { withInitiator } from "../src/synthesis/initiator.js";
@@ -60,9 +60,9 @@ test("integrations->cli: the installed merge driver command launches hunch", () 
     if (process.env.HUNCH_TEST_COMPILED_CLI !== "1") {
       // #492: a source-checkout driver must not resolve tsx from the merged repo.
       assert.doesNotMatch(driver, /\bnpx\b/, "dev-mode driver never runs npx inside the merged repo");
-      const loader = `"${pathToFileURL(join(PROJECT_ROOT, "node_modules", "tsx")).href}/`;
+      const cli = fileURLToPath(import.meta.resolve("tsx/cli"));
       for (const d of [driver, grounding]) {
-        assert.ok(d.startsWith(`${JSON.stringify(process.execPath)} "--import" ${loader}`), `driver uses Hunch's own tsx loader: ${d}`);
+        assert.ok(d.startsWith(`'${process.execPath}' '${cli}' `), `driver uses Hunch's own tsx cli: ${d}`);
       }
       const again = spawnSync(process.execPath, hunchCliArgs("init", "--no-index"), { cwd: repo, env, encoding: "utf8", timeout: 180_000 });
       assert.equal(again.status, 0, `${again.stdout}${again.stderr}`);

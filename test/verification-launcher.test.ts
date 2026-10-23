@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { verificationLauncherFor } from "../src/mcp/taskReportTools.js";
 import { verificationLauncher, verificationLauncherFor as fromCore } from "../src/core/verifyLauncher.js";
+import { devMergeDriverShell, mergeDriverShell, resolveInvocation } from "../src/cli/invocation.js";
 
 test("the verification launcher never resolves tsx on the published path, where it is not installed (#261)", () => {
   const missing = (specifier: string): string => { throw Object.assign(new Error(`Cannot find package '${specifier}'`), { code: "ERR_MODULE_NOT_FOUND" }); };
@@ -70,4 +71,20 @@ test("the Windows hint is PowerShell-quoted and says how to use it in a POSIX sh
   assert.equal(posix.shell, posix.argv.map(a => `'${a.replace(/'/g, "'\\''")}'`).join(" "));
   assert.equal(posix.note, "", "no note where only one shell form applies");
   assert.deepEqual(win.argv, posix.argv, "only the hint varies by platform; argv is the same");
+});
+
+test("the dev-mode merge driver launches Hunch's own tsx by path, never npx in the merged repo (#492)", () => {
+  const inv = resolveInvocation();
+  const shell = mergeDriverShell(inv.shell);
+  assert.doesNotMatch(shell, /\bnpx\b/);
+  assert.doesNotMatch(shell, /file:/, "a URL's percent-escapes would be expanded by git");
+  if (!inv.installed && inv.shell.startsWith("npx tsx ")) assert.match(shell, /tsx[\\/]dist[\\/]cli\.mjs' /);
+  assert.equal(mergeDriverShell("hunch"), "hunch", "a caller-supplied invocation passes through");
+  // A checkout path with `%`, non-ASCII letters, `$` and a quote survives git's
+  // `%` expansion and /bin/sh: `%%` is git's literal percent.
+  const root = "/home/Zoë/גיט/100%$HOME/it's";
+  assert.equal(
+    devMergeDriverShell("/usr/bin/node", `${root}/node_modules/tsx/dist/cli.mjs`, `${root}/src/cli/index.ts`),
+    `'/usr/bin/node' '/home/Zoë/גיט/100%%$HOME/it'\\''s/node_modules/tsx/dist/cli.mjs' '/home/Zoë/גיט/100%%$HOME/it'\\''s/src/cli/index.ts'`,
+  );
 });

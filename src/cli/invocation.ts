@@ -8,7 +8,6 @@ import { fileURLToPath } from "node:url";
 import type { Invocation } from "../integrations/scaffold.js";
 import { probeOllamaNumCtx, type ProviderResolution } from "../synthesis/provider.js";
 import { HUNCH_NPX_PACKAGE_SPEC } from "../core/version.js";
-import { verificationLauncherFor } from "../core/verifyLauncher.js";
 
 export interface ResolvedInvocation {
   /** Shell command prefix for the git hook (e.g. `node /abs/dist/cli/index.js`). */
@@ -151,14 +150,23 @@ export function resolveInvocation(): ResolvedInvocation {
 /** The command prefix for the git merge drivers. git runs a driver with the
  *  repository being merged as its cwd, so the dev-mode `npx tsx <entry>` would
  *  resolve tsx from THAT repo (or fetch it from the registry), not from Hunch's
- *  own checkout (#492). In dev mode, launch the absolute node binary with the
- *  tsx loader resolved from this checkout, as verificationLauncherFor does;
- *  every other invocation (published, dist, or a caller-supplied one) passes
- *  through unchanged. Double-quoted like `shell`, since git hands the driver
- *  to /bin/sh on every platform. */
+ *  own checkout (#492). In dev mode, launch the absolute node binary against
+ *  this checkout's tsx cli.mjs, the same shape selfBuildInvocation gives the
+ *  git hooks (src/integrations/hooks.ts); every other invocation (published,
+ *  dist, or a caller-supplied one) passes through unchanged. */
 export function mergeDriverShell(invShell: string): string {
   const inv = resolveInvocation();
   if (inv.installed || !inv.shell.startsWith("npx tsx ") || invShell !== inv.shell) return invShell;
-  const { argv } = verificationLauncherFor(import.meta.url, (specifier) => import.meta.resolve(specifier));
-  return argv.map((a) => JSON.stringify(a)).join(" ");
+  const entry = fileURLToPath(import.meta.url).replace(/invocation\.ts$/, "index.ts");
+  return devMergeDriverShell(process.execPath, fileURLToPath(import.meta.resolve("tsx/cli")), entry);
+}
+
+/** Filesystem paths, never a file URL: git expands `%`-escapes in the driver
+ *  command, so a percent-encoded URL (any non-ASCII checkout path) would be
+ *  corrupted. POSIX single quotes keep `$`, backticks and `"` literal under the
+ *  /bin/sh git runs drivers with on every platform, and a literal `%` in a path
+ *  is doubled so git expands it back to one. */
+export function devMergeDriverShell(execPath: string, tsxCli: string, entry: string): string {
+  const quote = (s: string) => `'${s.replace(/'/g, "'\\''")}'`.replace(/%/g, "%%");
+  return [execPath, tsxCli, entry].map(quote).join(" ");
 }
