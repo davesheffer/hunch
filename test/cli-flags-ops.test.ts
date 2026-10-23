@@ -382,14 +382,15 @@ test("cli:repair-provenance --expect and cli:repair-ref --private refuse without
   }
 });
 
-test("cli:serve init --grant refuses a partition the config does not serve", {
-  todo: "BUG: --grant help says the partition 'must be served by this config', but initServeConfig (src/serve/config.ts) stores any kind:id grant",
-}, () => {
+test("cli:serve init --grant refuses a partition the config does not serve", () => {
   const f = makeFixture("grant");
   try {
     const config = join(f.sandbox, "hunch-serve.json");
     const r = run(f, ["serve", "init", "--partition", "user:david", "--root", join(f.sandbox, "david"), "--config", config, "--principal", "y@david", "--grant", "team:nobody"]);
     assert.notEqual(r.status, 0, "--grant must name a served partition");
+    assert.match(r.out, /cannot grant team\/nobody: this server does not serve it/);
+    assert.ok(!existsSync(config), "a refused init writes no config");
+    assert.ok(!existsSync(join(f.sandbox, "david")), "a refused init writes no partition root");
   } finally {
     cleanupDir(f.sandbox);
   }
