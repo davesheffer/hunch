@@ -130,7 +130,7 @@ test("HUNCH_SIG_MIN_LINES moves the churn threshold for model synthesis; garbage
 });
 
 test("HUNCH_SIG_MIN_LINES negative value should fall back to the default", () => {
-  assert.deepEqual(significant("-5", [0, 11]), [false, false]);
+  assert.deepEqual(significant("-5", [0, 11, 12]), [false, false, true]);
 });
 
 // ---------------------------------------------------------------- adapter configs
