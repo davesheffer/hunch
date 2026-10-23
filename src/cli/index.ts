@@ -5697,12 +5697,12 @@ program
       return;
     }
     const res = target.persistMigration();
-    writeManifest(paths, SCHEMA_VERSION);
+    writeManifest(paths, res.version); // held at `from` while any record failed to migrate
     store.reindex();
     pumpMemoryHome(store, root, store.unified ? "private" : "public", `hunch: migrate schema v${from} to v${SCHEMA_VERSION}`);
     console.log(`✓ Migrated v${from} → v${SCHEMA_VERSION}: ${res.migrated} record(s) upgraded.`);
     if (res.skipped) {
-      console.warn(`⚠ ${res.skipped} record(s) could NOT be migrated and will no longer load. They are preserved on disk in their old shape under .hunch/ for manual recovery.`);
+      console.warn(`⚠ ${res.skipped} record(s) could NOT be migrated and will no longer load. They are preserved on disk in their old shape under .hunch/ for manual recovery; the schema stays at v${res.version}, so re-running \`hunch migrate\` after a fix completes the migration.`);
     }
     store.close();
   });

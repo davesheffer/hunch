@@ -106,7 +106,10 @@ export function writeManifest(paths: HunchPaths, version: number = SCHEMA_VERSIO
 }
 
 /** Apply every migration in (fromVersion, toVersion] to a single raw record. Skips
- *  non-object input untouched (the loader's Zod pass will reject it). */
+ *  non-object input untouched (the loader's Zod pass will reject it). All-or-nothing:
+ *  the steps run on a deep copy, so `raw` is never mutated and a caller that rejects
+ *  the result (or a step that throws) keeps the original record intact — never a
+ *  half-migrated one. */
 export function migrateRaw(
   kind: EntityKind,
   raw: unknown,
@@ -115,7 +118,7 @@ export function migrateRaw(
   toVersion: number = SCHEMA_VERSION,
 ): unknown {
   if (raw === null || typeof raw !== "object" || Array.isArray(raw)) return raw;
-  let rec = raw as Record<string, unknown>;
+  let rec = structuredClone(raw) as Record<string, unknown>;
   for (const m of [...migrations].sort((a, b) => a.version - b.version)) {
     if (m.version > fromVersion && m.version <= toVersion) rec = m.up(kind, rec);
   }

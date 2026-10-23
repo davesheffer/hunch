@@ -929,10 +929,13 @@ export class JsonStore {
   }
 
   /** Persist a schema migration: rewrite every LOADABLE record in its current shape.
-   *  A record that still fails validation after migration is kept untouched (never
-   *  deleted) and counted as `skipped`, so migration can't lose data. The caller
-   *  bumps the manifest afterward. */
-  persistMigration(): { migrated: number; skipped: number } {
+   *  A record that still fails validation after migration (or whose migration
+   *  throws) is kept in its ORIGINAL shape (never deleted, never half-migrated) and
+   *  counted as `skipped`, so migration can't lose data. The caller stamps the
+   *  manifest at the returned `version`: SCHEMA_VERSION only when nothing was
+   *  skipped, else the FROM version, so a manual fix plus a rerun re-applies the
+   *  (idempotent) migrations to the skipped records instead of skipping them. */
+  persistMigration(): { migrated: number; skipped: number; version: number } {
     let migrated = 0;
     let skipped = 0;
     this.cache.clear(); // every record is rewritten; drop all memoized loads
@@ -959,7 +962,7 @@ export class JsonStore {
         }
         const kept: unknown[] = [];
         for (const raw of arr) {
-          const r = schema.safeParse(this.migrate(kind, raw, version));
+          const r = this.tryMigrate(kind, raw, version);
           if (r.success) {
             kept.push(r.data);
             migrated++;
@@ -981,7 +984,7 @@ export class JsonStore {
             skipped++;
             continue;
           }
-          const r = schema.safeParse(this.migrate(kind, raw, version));
+          const r = this.tryMigrate(kind, raw, version);
           if (r.success) {
             this.writeContainedFile(directory, p, encode(r.data), this.maxBytes(kind));
             migrated++;
@@ -991,6 +994,16 @@ export class JsonStore {
         }
       }
     }
-    return { migrated, skipped };
+    return { migrated, skipped, version: skipped ? version : SCHEMA_VERSION };
+  }
+
+  /** Migrate + validate one raw record for persistMigration; a throwing migration
+   *  step counts as a failure, so the record stays in its original shape. */
+  private tryMigrate(kind: EntityKind, raw: unknown, version: number): { success: true; data: unknown } | { success: false } {
+    try {
+      return SCHEMAS[kind].safeParse(this.migrate(kind, raw, version));
+    } catch {
+      return { success: false };
+    }
   }
 }
