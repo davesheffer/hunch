@@ -13,7 +13,9 @@
  * equality and never by clock arithmetic (see core/procstart.ts). Where no token can
  * compare them (macOS, Windows, legacy records) a stale-looking lock whose live pid
  * belongs to a process CREATED after the lock's recorded `at` is taken over too: that
- * process cannot be the one that took it (issue #287). Removing a stale
+ * process cannot be the one that took it (issue #287). That creation-time check
+ * runs on macOS and Windows only; on linux `processStartedAt` returns null, so a
+ * tokenless live pid there is never taken over. Removing a stale
  * lock is itself serialized behind an exclusive `.reclaim` claim directory, because
  * judging and removing are two steps and two contenders can otherwise both "win"
  * (see `takeOver`).
@@ -39,7 +41,9 @@ export const ACQUIRE_TIMEOUT_MS = 10_000;
 export const CLAIM_STALE_MS = 10_000;
 const POLL_MS = 25;
 
-export interface LockOwner { pid: number; host: string; nonce: string; at: string; start?: string }
+/** `nonce` is optional on READ only: this lock always writes one, but a legacy or
+ *  foreign writer's record may lack it (issue #491). */
+export interface LockOwner { pid: number; host: string; nonce?: string; at: string; start?: string }
 
 /** Token seam: the caller's own process-instance token and a probe for another
  *  pid's, plus the platform the decision table should reason about (the own-pid
@@ -70,11 +74,18 @@ export function writeLockPath(hunchDir: string): string {
 function readOwner(path: string): LockOwner | undefined {
   try {
     const parsed = JSON.parse(readFileSync(path, "utf8")) as Partial<LockOwner>;
-    if (typeof parsed.pid !== "number" || typeof parsed.nonce !== "string") return undefined;
+    // A missing nonce is not unreadable metadata: the pid still names a
+    // same-host owner, so it gets the live-pid judgement `.rmw-lock` gives it,
+    // never the age fallback that would steal a live writer's lock (#491).
+    // The pid check mirrors `.rmw-lock`'s: `kill(0|-n, 0)` signals a process
+    // group and always "succeeds" (a live wedge forever), and a fractional or
+    // huge pid throws (stolen even when fresh) — so such a record is unreadable
+    // and age decides.
+    if (typeof parsed.pid !== "number" || !Number.isInteger(parsed.pid) || parsed.pid < 1) return undefined;
     return {
       pid: parsed.pid,
       host: typeof parsed.host === "string" ? parsed.host : "",
-      nonce: parsed.nonce,
+      ...(typeof parsed.nonce === "string" ? { nonce: parsed.nonce } : {}),
       at: typeof parsed.at === "string" ? parsed.at : "",
       ...(typeof parsed.start === "string" ? { start: parsed.start } : {}),
     };
@@ -262,6 +273,11 @@ export async function withWriteLock<T>(
     // from, the file now protects another writer. The nonce is dropped in a
     // `finally` of its own, so a throw from the conditional remove can never
     // leave us vouching for a lock we no longer hold.
+    //
+    // DIFFERS from `.rmw-lock` on release: a readable record WITHOUT a nonce is
+    // left in place here (it is not ours — a legacy or foreign writer replaced
+    // our file), where `.rmw-lock` removes it. Only an unreadable record is
+    // removed unconditionally.
     try {
       const current = readOwner(path);
       if (!current || current.nonce === nonce) rmSync(path, { force: true });
