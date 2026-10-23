@@ -34,6 +34,24 @@ export const HARNESSES = {
   antigravity: { mcp: ".agents/mcp_config.json", hooks: ".agents/hooks.json", key: "mcpServers", events: ["PreInvocation", "PreToolUse", "", ""] },
 } as const;
 export type Harness = keyof typeof HARNESSES;
+/** Devin Desktop (formerly Windsurf) reads workspace hooks from .devin/hooks.json
+ * and falls back to the legacy .windsurf/hooks.json only when that file is absent
+ * or defines no hooks (docs.devin.ai/desktop/cascade/hooks, #494). */
+export const DEVIN_HOOKS = ".devin/hooks.json";
+
+/** The hooks file the host actually reads, so doctor inspects the active one. */
+export function activeHooksFile(root: string, harness: Harness): string {
+  const legacy = HARNESSES[harness].hooks;
+  if (harness !== "windsurf" || !existsSync(join(root, DEVIN_HOOKS))) return legacy;
+  try {
+    const hooks = (parseJsonc(readFileSync(join(root, DEVIN_HOOKS), "utf8")) as Obj | null)?.hooks;
+    if (hooks && typeof hooks === "object" && Object.values(hooks).some(v => Array.isArray(v) && v.length > 0)) return DEVIN_HOOKS;
+    return legacy;
+  } catch {
+    // An unparseable .devin/hooks.json is reported against itself, not masked.
+    return DEVIN_HOOKS;
+  }
+}
 type Obj = Record<string, unknown>;
 export interface HealthIssue { file: string; code: string; detail: string }
 export interface HarnessHealth {
@@ -153,11 +171,12 @@ export function inspectIntegrations(root: string, selected?: Harness): Integrati
   try { observed = readHookObservations(root); } catch { observed = []; }
   for (const harness of selected ? [selected] : Object.keys(HARNESSES) as Harness[]) {
     const spec = HARNESSES[harness];
-    if (!selected && !existsSync(join(root, spec.mcp)) && (!spec.hooks || !existsSync(join(root, spec.hooks)))) continue;
+    const hooksFile = activeHooksFile(root, harness);
+    if (!selected && !existsSync(join(root, spec.mcp)) && (!hooksFile || !existsSync(join(root, hooksFile)))) continue;
     const capabilities = Object.fromEntries(CAPABILITIES.map(c => [c, { status: "untested", detail: "No runtime evidence" }])) as HarnessHealth["capabilities"];
     report.harnesses.push({ harness, capabilities });
     const mcpPath = join(root, spec.mcp);
-    const hooksFileExists = Boolean(spec.hooks && existsSync(join(root, spec.hooks)));
+    const hooksFileExists = Boolean(hooksFile && existsSync(join(root, hooksFile)));
     let mcpEntryAbsent = false;
     try { lstatSync(mcpPath); }
     catch (e) { mcpEntryAbsent = (e as NodeJS.ErrnoException).code === "ENOENT"; }
@@ -189,19 +208,19 @@ export function inspectIntegrations(root: string, selected?: Harness): Integrati
     // A hooks file that was never written is a coverage gap (the adapter is
     // not installed), not configuration drift: report it, never fail on it.
     // `--require` still refuses, because nothing unverified counts.
-    const hooksAbsent = !!spec.hooks && !existsSync(join(root, spec.hooks));
-    if (spec.hooks && !hooksAbsent) {
+    const hooksAbsent = !!hooksFile && !existsSync(join(root, hooksFile));
+    if (hooksFile && !hooksAbsent) {
       try {
-        const config = object(parseJsonc(readFileSync(join(root, spec.hooks), "utf8")));
+        const config = object(parseJsonc(readFileSync(join(root, hooksFile), "utf8")));
         disabled = config.disableAllHooks === true;
         events = object(harness === "antigravity" ? config.hunch : config.hooks);
         const commands = Object.values(events).flatMap(v => hookCommands(v));
-        recordPins(spec.hooks, commands);
+        recordPins(hooksFile, commands);
         if (commands.some(misroutedHook)) report.issues.push({
-          file: spec.hooks, code: "hook-command",
+          file: hooksFile, code: "hook-command",
           detail: "Hunch hooks invoke the MCP subcommand instead of the hook handler; run hunch integrations repair-pins",
         });
-      } catch (e) { report.issues.push({ file: spec.hooks, code: "hook-config", detail: (e as Error).message }); }
+      } catch (e) { report.issues.push({ file: hooksFile, code: "hook-config", detail: (e as Error).message }); }
     }
     for (const [i, capability] of (["context", "edit-blocking", "failure-capture", "compaction"] as const).entries()) {
       const event = spec.events[i];
@@ -215,7 +234,7 @@ export function inspectIntegrations(root: string, selected?: Harness): Integrati
         status.status = capability === "context" ? "advisory-only" : "unsupported";
         status.detail = capability === "context" ? "Hunch relies on instructions and voluntary MCP calls on this adapter" : "No Hunch lifecycle adapter for this capability";
       } else if (hooksAbsent) {
-        status.detail = `No ${spec.hooks}; run hunch init to install this host's lifecycle hooks`;
+        status.detail = `No ${hooksFile}; run hunch init to install this host's lifecycle hooks`;
       } else if (disabled || firmness === "off" || ((capability === "failure-capture") && process.env.HUNCH_PIPELINE === "0")) {
         status.status = "unsupported";
         status.detail = "Disabled by local hook settings, firmness, or HUNCH_PIPELINE";
@@ -225,7 +244,7 @@ export function inspectIntegrations(root: string, selected?: Harness): Integrati
           status.detail = `Hunch ${event} handler disabled by local hook settings`;
         } else {
           status.detail = `Missing Hunch ${event} handler`;
-          report.issues.push({ file: spec.hooks, code: "missing-hook", detail: status.detail });
+          report.issues.push({ file: hooksFile, code: "missing-hook", detail: status.detail });
         }
       } else if (capability === "edit-blocking" && firmness !== "strict") {
         status.status = "advisory-only";
@@ -273,7 +292,7 @@ export function repairIntegrationPins(root: string, opts: { skip?: (file: string
   const version = expectedVersion(root);
   const pending: Array<{ file: string; before: string; after: string }> = [];
   for (const [name, spec] of Object.entries(HARNESSES)) {
-    for (const file of [spec.mcp, spec.hooks].filter(Boolean)) {
+    for (const file of [spec.mcp, spec.hooks, ...(name === "windsurf" ? [DEVIN_HOOKS] : [])].filter(Boolean)) {
       const path = join(root, file);
       if (!existsSync(path) || opts.skip?.(file)) continue;
       // Never follow a config symlink or symlinked parent into another project.
@@ -304,7 +323,7 @@ export function repairIntegrationPins(root: string, opts: { skip?: (file: string
         const replacements = new Map(values.map(v => {
           // Every recognized npm token is shell-safe. Bare tokens also repair
           // the legacy quoted executable, which PowerShell treats as a string.
-          const published = file === spec.hooks ? publishedHookCommand(v) : undefined;
+          const published = file === spec.hooks || file === DEVIN_HOOKS ? publishedHookCommand(v) : undefined;
           const repaired = published?.replace(" hunch mcp hook", " hunch hook") ?? v;
           return [v, replace(repaired)];
         }).filter(([a, b]) => a !== b) as Array<[string, string]>);

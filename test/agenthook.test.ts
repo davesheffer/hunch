@@ -505,3 +505,25 @@ test("a host that reports command outcomes keeps the deny-until-receipt probe ga
   codexHook(root, { hook_event_name: "PostToolUse", session_id: session, tool_name: "Bash", tool_input: { command: probePlan[0]!.command }, tool_response: { exit_code: 1, output: "HUNCH_PROBE windsurf broken=true" } }, env);
   assert.equal(edit(), null, "a known failing outcome with the expected output is the receipt that releases the gate");
 });
+
+test("Cursor shell results reach the probe gate (issue #496)", () => {
+  // postToolUse: tool_output is a JSON-stringified payload with the exit code.
+  const ok = normalizeHookEvent({ hook_event_name: "postToolUse", tool_name: "Shell", tool_input: { command: "npm test" }, tool_output: JSON.stringify({ exitCode: 0, stdout: "All tests passed" }) }, "cursor");
+  assert.equal(ok?.tool_name, "Bash");
+  assert.equal(ok?.tool_input?.command, "npm test");
+  assert.deepEqual(ok?.tool_outcome, { status: "success", output: "All tests passed" });
+  const bad = normalizeHookEvent({ hook_event_name: "postToolUse", tool_name: "Shell", tool_input: { command: "npm test" }, tool_output: JSON.stringify({ exitCode: 1, stdout: "1 failed" }) }, "cursor");
+  assert.equal(bad?.tool_outcome?.status, "failure");
+  const text = normalizeHookEvent({ hook_event_name: "postToolUse", tool_name: "Shell", tool_input: { command: "npm test" }, tool_output: "Exit code: 0" }, "cursor");
+  assert.equal(text?.tool_outcome?.status, "unknown", "non-JSON tool_output carries no status");
+  const failed = normalizeHookEvent({ hook_event_name: "postToolUseFailure", tool_name: "Shell", tool_input: { command: "npm test" }, error_message: "Command timed out after 30s" }, "cursor");
+  assert.deepEqual(failed?.tool_outcome, { status: "failure", output: "Command timed out after 30s" });
+  // afterShellExecution: top-level command/output, documented without an exit status.
+  const after = normalizeHookEvent({ hook_event_name: "afterShellExecution", command: "npm test", output: "All tests passed", duration: 12 }, "cursor");
+  assert.equal(after?.tool_name, "Bash");
+  assert.equal(after?.tool_input?.command, "npm test");
+  assert.equal(after?.tool_outcome?.status, "unknown", "terminal output alone is never a receipt");
+  assert.equal(after?.tool_outcome?.output, "All tests passed", "afterShellExecution's top-level output is captured");
+  // Other providers keep ignoring tool_output.
+  assert.equal(normalizeHookEvent({ hook_event_name: "PostToolUse", tool_name: "Bash", tool_input: { command: "x" }, tool_output: JSON.stringify({ exitCode: 0 }) }, "claude")?.tool_outcome?.status, "unknown");
+});

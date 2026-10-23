@@ -294,6 +294,7 @@ export function planUninstall(root: string, opts: { purge?: boolean } = {}): Uni
   p.hookConfig(".codex/hooks.json", providerEntry);
   p.hookConfig(".github/hooks/hunch.json", providerEntry);
   p.hookConfig(".windsurf/hooks.json", providerEntry);
+  p.hookConfig(".devin/hooks.json", providerEntry);
   p.json(".agents/hooks.json", "removed the hunch hook group", (json) => {
     if (!("hunch" in json)) return false;
     delete json.hunch;
@@ -428,7 +429,7 @@ export function planUninstall(root: string, opts: { purge?: boolean } = {}): Uni
 
 /** Directories Hunch's writers create; removed only when left empty. Deepest first. */
 const PRUNE_DIRS = [
-  ".claude/commands", ".claude", ".cursor/rules", ".cursor", ".windsurf/rules", ".windsurf",
+  ".claude/commands", ".claude", ".cursor/rules", ".cursor", ".windsurf/rules", ".windsurf", ".devin",
   ".vscode", ".github/hooks", ".github/workflows", ".github", ".codex", ".agents",
 ];
 
