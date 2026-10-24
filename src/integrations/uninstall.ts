@@ -12,7 +12,7 @@
  *
  * `.hunch/` holds the engineering memory, so it stays unless `--purge`.
  */
-import { existsSync, lstatSync, readFileSync, readdirSync, rmdirSync, rmSync, statSync, writeFileSync, chmodSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, rmdirSync, rmSync, statSync, writeFileSync, chmodSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { parse as parseToml } from "smol-toml";
@@ -26,13 +26,9 @@ import { gitRun, isInside, planHookRemoval, worktreeTops } from "./hooks.js";
 import { ATTR_LINES, targetRepositoryEnv } from "./mergeDriver.js";
 import { antigravityMcpFile, isHunchProviderHook, readJsonObj, TOML_END, TOML_START, windsurfMcpFile } from "./providers.js";
 import { SLASH_COMMAND_FILES } from "./scaffold.js";
+import { isOptedOut, OPT_OUT_FILE } from "./optout.js";
 
-/** The opt-out marker, at the repository root. Commit it so every clone stays opted out. */
-export const OPT_OUT_FILE = ".hunch-removed";
-
-export function isOptedOut(root: string): boolean {
-  try { return lstatSync(join(root, OPT_OUT_FILE)).isFile(); } catch { return false; }
-}
+export { isOptedOut, OPT_OUT_FILE };
 
 /** Whether `start`, or the repository containing it, opted out: walks up through
  *  `start`'s ancestors (which need not exist yet), stopping after the first one holding
@@ -41,17 +37,29 @@ export function isOptedOut(root: string): boolean {
  *  store is deliberately not a boundary: a partition store nested in an opted-out
  *  repository stays gated (fail closed). */
 export function optedOutAt(start: string): boolean {
+  return optOutMarkerAt(start) !== null;
+}
+
+/** The opt-out marker that gates `start` (walked as in `optedOutAt`), or null. With
+ *  `withinRepo`, a marker counts only when the walk reaches a repository: outside one,
+ *  an ancestor's marker gates nothing. */
+export function optOutMarkerAt(start: string, opts: { withinRepo?: boolean } = {}): string | null {
+  let found: string | null = null;
   for (let dir = resolve(start); ; ) {
-    if (isOptedOut(dir)) return true;
-    if (existsSync(join(dir, ".git"))) return false;
+    if (!found && isOptedOut(dir)) {
+      found = join(dir, OPT_OUT_FILE);
+      if (!opts.withinRepo) return found;
+    }
+    if (existsSync(join(dir, ".git"))) return found;
     const parent = dirname(dir);
-    if (parent === dir) return false;
+    if (parent === dir) return opts.withinRepo ? null : found;
     dir = parent;
   }
 }
 
-export function optOutMessage(): string {
-  return `Hunch was removed from this repository on purpose (${OPT_OUT_FILE}), so it will not set itself up here again. To reinstall, delete ${OPT_OUT_FILE} and run \`hunch init\`.`;
+/** The refusal, naming the marker of the repository actually checked (#488). */
+export function optOutMessage(marker: string = OPT_OUT_FILE): string {
+  return `Hunch was removed from this repository on purpose (${marker}), so it will not set itself up here again. To reinstall, delete ${marker} and run \`hunch init\`.`;
 }
 
 function markerText(): string {

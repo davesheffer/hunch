@@ -193,7 +193,7 @@ describe("cli flags: governance commands", { timeout: 900_000 }, () => {
     assert.equal(head.repository_revision, git(f, "rev-parse", "HEAD"));
     const old = JSON.parse(ok(f, "dna", "match", "--kind", "commit", "--title", "fix: x", "--ref", firstSha, "--json").stdout) as { repository_revision: string };
     assert.equal(old.repository_revision, firstSha);
-    refused(f, /could not inspect repository DNA/, "dna", "match", "--kind", "commit", "--title", "fix: x", "--ref", "no-such-ref-xyz");
+    refused(f, /Git revision .no-such-ref-xyz. does not name a commit/, "dna", "match", "--kind", "commit", "--title", "fix: x", "--ref", "no-such-ref-xyz");
   });
 
   test("constitution ingest --instructions adds committed instruction evidence; --max-events is validated", () => {

@@ -19,6 +19,7 @@ import { join, isAbsolute, dirname, basename, relative, resolve } from "node:pat
 import { homedir } from "node:os";
 import { hooksDir, gitCommonDir, isLinkedWorktree, mainWorktreeRoot } from "../extractors/git.js";
 import { initiatorChildEnv } from "../synthesis/initiator.js";
+import { isOptedOut, OPT_OUT_FILE } from "./optout.js";
 import { HUNCH_NPX_PACKAGE_SPEC, HUNCH_PACKAGE_NAME } from "../core/version.js";
 import { eolLengthAt, normalizeEol } from "../core/eol.js";
 
@@ -93,8 +94,10 @@ export interface HookInstall {
    *  managed-elsewhere: a hook manager owns the hook — nothing was written.
    *  unreachable: the existing hook ends in exec/exit before our block, or the
    *  block in it has no closing marker and so cannot be replaced in place —
-   *  nothing was written. */
-  action: "created" | "appended" | "updated" | "unchanged" | "kept-shared" | "managed-elsewhere" | "unreachable";
+   *  nothing was written.
+   *  opted-out: the main checkout opted out (#488) and git hooks live in the
+   *  common dir every worktree shares — nothing was written, on purpose. */
+  action: "created" | "appended" | "updated" | "unchanged" | "kept-shared" | "managed-elsewhere" | "unreachable" | "opted-out";
   manager?: HookManagerKind;
   /** Why nothing was written (non-writing actions only). */
   reason?: string;
@@ -704,6 +707,10 @@ function sharedInvocationFor(root: string, mark: string, invocation: string, own
  *  or the block would sit after an exec/exit, nothing is written and the result
  *  carries the snippet to add by hand (issue #311). */
 function installManagedBlock(root: string, hookName: string, mark: string, end: string, build: BlockBuilder, invocation: string): HookInstall {
+  // A linked worktree whose branch predates the opt-out marker shares the main
+  // checkout's hooks dir: never re-hook a repository `hunch uninstall` opted out (#488).
+  const main = mainWorktreeRoot(root);
+  if (isOptedOut(main)) return { path: resolve(root, hooksDir(root), hookName), action: "opted-out", reason: `${join(main, OPT_OUT_FILE)} opts this repository out` };
   const t = resolveHookTarget(root, hookName, mark);
   if (t.manager !== "none") {
     const info = blockInfo(t, mark, root);
@@ -922,9 +929,9 @@ function repairProvenanceMergeBlock(invocation: string): string {
  *  (the file itself is new) outranks "appended"/"updated" (an existing file
  *  changed), which outrank "unchanged". Non-writing results are handled before
  *  ranking (they must never be masked by a sibling's success). */
-const ACTION_RANK: Record<HookInstall["action"], number> = { created: 3, appended: 2, updated: 2, unchanged: 1, "kept-shared": 1, "managed-elsewhere": 0, unreachable: 0 };
+const ACTION_RANK: Record<HookInstall["action"], number> = { created: 3, appended: 2, updated: 2, unchanged: 1, "kept-shared": 1, "managed-elsewhere": 0, unreachable: 0, "opted-out": 0 };
 
-const writes = (h: HookInstall): boolean => h.action !== "managed-elsewhere" && h.action !== "unreachable";
+const writes = (h: HookInstall): boolean => h.action !== "managed-elsewhere" && h.action !== "unreachable" && h.action !== "opted-out";
 
 /** Install a post-merge hook carrying TWO independently-managed blocks:
  *  re-sync the committed grounding docs when a merge brought memory in behind
@@ -946,6 +953,7 @@ export function installPostMergeHook(root: string, invocation: string): HookInst
   // passed invocation unchanged — see selfBuildInvocation.
   const grounding = installManagedBlock(root, "post-merge", GROUNDING_MERGE_MARK, GROUNDING_MERGE_END, (inv, ctx) => groundingMergeBlock(ctx.portable ? inv : selfBuildInvocation(root, inv)), invocation);
   const repair = installManagedBlock(root, "post-merge", REPAIR_MERGE_MARK, REPAIR_MERGE_END, repairProvenanceMergeBlock, invocation);
+  if (grounding.action === "opted-out") return grounding;
   if (!writes(grounding) && !writes(repair)) {
     return { ...grounding, snippet: `${grounding.snippet}\n${stripComment(repair.snippet ?? "", grounding.manager)}` };
   }
@@ -1153,6 +1161,7 @@ export function formatHookInstall(root: string, label: string, h: HookInstall, d
     const how = h.keptFlags?.length ? KEPT_HOW : "";
     return [`  ✓ ${label} kept — the shared hook keeps running ${h.sharedInvocation}${flags} (not re-pointed at this worktree)${how}`];
   }
+  if (h.action === "opted-out") return [`  - ${label} skipped — ${h.reason}`];
   if (writes(h)) {
     // A union write (issue #316). Once an option was KEPT, `detail` — which
     // describes only what this run asked for — is no longer the truth about the

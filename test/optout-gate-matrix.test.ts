@@ -71,7 +71,7 @@ const EXPECTED: Record<string, Kind> = {
   "export-adr <dir>": "output",
   "mcp --root": "root",
   "footprint --target": "input",
-  "verify --map": "input",
+  "verify --map": "output",
   "wiki --dir": "confined",
   "repair-ref --from": "input",
   "repair-ref --to": "input",
@@ -80,17 +80,7 @@ const EXPECTED: Record<string, Kind> = {
 };
 
 /** Cases that expose a real gate hole: the assertion stays, marked todo. */
-const KNOWN_HOLES: Record<string, string> = {
-  "serve --config (root) a: cwd opted out, option -> clean repo": "gate judges the cwd for `serve`, never the config it serves (over-refusal)",
-  ...Object.fromEntries((["root", "sub", "store"] as const).flatMap((w) => [
-    [`serve --config (root) b: cwd clean, option -> opted-out ${w}`, "gate ignores `serve --config` (and the partition roots it names)"],
-    [`private <dir> (output) b: cwd clean, option -> opted-out ${w}`, "`hunch private <dir>` creates an overlay store inside an opted-out repository"],
-    [`shared <dir> (output) b: cwd clean, option -> opted-out ${w}`, "`hunch shared <dir>` creates an overlay store inside an opted-out repository"],
-    [`worktree <path> (output) b: cwd clean, option -> opted-out ${w}`, "`hunch worktree <path>` creates a Hunch-wired worktree inside an opted-out repository"],
-    [`review-memory auto --output (output) b: cwd clean, option -> opted-out ${w}`, "--output path is never gated (only reached past network-backed review fetch; not proven to write)"],
-    [`export-adr <dir> (output) b: cwd clean, option -> opted-out ${w}`, "export-adr <dir> is never gated (joined onto the cwd repo; `..` escape not proven)"],
-  ])),
-};
+const KNOWN_HOLES: Record<string, string> = {};
 
 /** Location positionals named "path" that name a directory, not a file. */
 const DIR_SHAPED = new Set(["worktree <path>"]);

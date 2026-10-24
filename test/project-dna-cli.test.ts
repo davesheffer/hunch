@@ -1,4 +1,5 @@
 import { cleanupDir } from "./fixtures.js";
+import { hunchCliArgs } from "./cli-invocation.js";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -25,6 +26,24 @@ function run(root: string, ...args: string[]) {
     ...args,
   ], { cwd: root, encoding: "utf8", env });
 }
+
+test("Project DNA names a bad revision instead of Git's bare 'Needed a single revision' (#493)", (t) => {
+  const root = mkdtempSync(join(tmpdir(), "hunch-project-dna-badref-"));
+  t.after(() => cleanupDir(root));
+  git(root, "init", "-q", "-b", "main");
+  writeFileSync(join(root, "value.txt"), "0\n");
+  git(root, "add", ".");
+  git(root, "commit", "-qm", "init");
+  const bad = run(root, "--revision", "no-such-ref");
+  assert.notEqual(bad.status, 0);
+  assert.match(bad.stderr, /"no-such-ref" does not name a commit/);
+  assert.doesNotMatch(bad.stderr, /Needed a single revision/);
+  // The same through the main CLI's `hunch dna inspect --ref`.
+  const main = spawnSync(process.execPath, hunchCliArgs("dna", "inspect", "--ref", "no-such-ref"), { cwd: root, encoding: "utf8", env });
+  assert.equal(main.status, 1, `${main.stdout}${main.stderr}`);
+  assert.match(main.stderr, /"no-such-ref" does not name a commit/);
+  assert.doesNotMatch(main.stderr, /Needed a single revision|\n\s+at /);
+});
 
 test("Project DNA CLI exposes sealed profile, context, match, and drift", (t) => {
   const root = mkdtempSync(join(tmpdir(), "hunch-project-dna-cli-"));
