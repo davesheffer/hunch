@@ -7,91 +7,76 @@ import { resolveSymbols, resolveFiles } from "../src/mcp/server.js";
 
 function seed() {
   const ctx = tempStore();
-  const { store } = ctx;
-  store.json.replaceAll("symbols", [
-    mkSymbol("sym_db", "src/db.ts", "connect"),
-    mkSymbol("sym_mongo", "src/mongodb.ts", "connectMongo"),
-    // "datastore" merely CONTAINS "store" as a substring — no "/" boundary before it,
-    // so this must never match a "store/db.ts" target (the issue's own example).
-    mkSymbol("sym_datastore_db", "src/datastore/db.ts", "connectDatastore"),
-    mkSymbol("sym_store_db", "src/store/db.ts", "connectStore"),
+  ctx.store.json.replaceAll("symbols", [
+    mkSymbol("sym_db", "src/db.ts", "dbConnect"),
+    mkSymbol("sym_mongo", "src/mongodb.ts", "mongoConnect"),
+    mkSymbol("sym_datastore_db", "src/datastore/db.ts", "datastoreConnect"),
+    mkSymbol("sym_store_db", "src/store/db.ts", "storeConnect"),
     mkSymbol("sym_auth", "src/auth/session.ts", "verifySession"),
-  ]);
-  store.json.put("constraints", {
-    id: "con_1", type: "security", statement: "must not break", scope: ["src/auth/**"], severity: "blocking",
-    enforcement: "advisory_v1", rationale: "x", source_decision: null, violations: [], provenance: prov(0.9),
+  ] as never);
+  ctx.store.json.put("constraints", {
+    id: "con_1", type: "security", statement: "Sessions must be verified", scope: ["src/auth/**"],
+    severity: "blocking", enforcement: "advisory_v1", match: null, rationale: "auth", provenance: prov(1),
+    created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z",
   } as never);
-  store.reindex();
+  ctx.store.reindex();
   return ctx;
 }
 
-test("resolveSymbols matches only a segment-anchored suffix — 'db.ts' must not pull 'mongodb.ts', 'store/db.ts' must not pull 'datastore/db.ts' (issue #300)", () => {
+const ids = (store: ReturnType<typeof seed>["store"], target: string) => resolveSymbols(store, target).map((s) => s.id);
+
+test("resolveSymbols: a bare basename matches whole path segments only (issue #300)", () => {
   const { store, cleanup } = seed();
-  const dbMatches = resolveSymbols(store, "db.ts").map((s) => s.id).sort();
-  assert.deepEqual(dbMatches, ["sym_datastore_db", "sym_db", "sym_store_db"].sort(), "every real db.ts file matches, mongodb.ts never does");
-  const storeDbMatches = resolveSymbols(store, "store/db.ts").map((s) => s.id);
-  assert.deepEqual(storeDbMatches, ["sym_store_db"], "'datastore/db.ts' must not match 'store/db.ts' — 'store' there is a substring, not a path segment");
-  const exact = resolveSymbols(store, "src/db.ts").map((s) => s.id);
-  assert.deepEqual(exact, ["sym_db"]);
+  assert.deepEqual(ids(store, "db.ts").sort(), ["sym_datastore_db", "sym_db", "sym_store_db"]);
+  assert.ok(!ids(store, "db.ts").includes("sym_mongo"), "mongodb.ts is not a db.ts");
+  assert.deepEqual(ids(store, "store/db.ts"), ["sym_store_db"]);
+  assert.deepEqual(ids(store, "src/db.ts"), ["sym_db"]);
   cleanup();
 });
 
-test("resolveSymbols/resolveFiles rewrite an absolute target to repo-relative before matching (issue #296)", () => {
+test("resolveSymbols/resolveFiles: an absolute target is rewritten to its repo-relative form (issue #296)", () => {
   const { store, root, cleanup } = seed();
-  const abs = join(root, "src", "auth", "session.ts");
-  assert.deepEqual(resolveSymbols(store, abs).map((s) => s.id), ["sym_auth"]);
+  const abs = join(root, "src/auth/session.ts");
+  assert.deepEqual(ids(store, abs), ["sym_auth"]);
   assert.deepEqual(resolveFiles(store, abs), ["src/auth/session.ts"]);
   cleanup();
 });
 
-test("resolveSymbols: the absolute-path rewrite is the ONLY thing that produces the right match — without it, a root-level same-basename file leaks in (issue #296/#299)", () => {
-  // Without the repo-relative rewrite, resolveSymbols falls straight to the
-  // segment-anchored suffix tier on the RAW absolute target. That suffix tier
-  // still happens to find the right file too (any relative path is trivially a
-  // suffix of `root + "/" + thatPath`) — which is exactly why a naive "does it
-  // find sym_auth" assertion doesn't discriminate. But an UNRELATED root-level
-  // "session.ts" is *also* a segment-anchored suffix of that same absolute
-  // string ("…/src/auth/session.ts" ends with "/session.ts"), so the suffix
-  // tier alone returns BOTH files. Only the rewrite lets the exact-file tier
-  // resolve first and return the single correct match.
+test("resolveSymbols: the absolute-path rewrite is what discriminates (#296/#299)", () => {
   const { store, root, cleanup } = seed();
-  store.json.put("symbols", mkSymbol("sym_root_session", "session.ts", "unrelatedRootSession") as never);
-  const abs = join(root, "src", "auth", "session.ts");
-  assert.deepEqual(resolveSymbols(store, abs).map((s) => s.id), ["sym_auth"], "must resolve to exactly the target file, never the unrelated root-level same-basename file");
+  // Without the rewrite, the suffix tier on the raw absolute path would also match the
+  // unrelated root-level session.ts, since both end in a "session.ts" segment.
+  store.json.put("symbols", mkSymbol("sym_root_session", "session.ts", "rootSession") as never);
+  assert.deepEqual(ids(store, join(root, "src/auth/session.ts")), ["sym_auth"]);
   cleanup();
 });
 
-test("resolveSymbols: exact match wins over a would-be suffix match when both are indexed (issue #299)", () => {
+test("resolveSymbols: an exact file match beats the suffix tier (#299)", () => {
   const { store, cleanup } = seed();
   store.json.put("symbols", mkSymbol("sym_root_index", "index.ts", "rootIndex") as never);
-  store.json.put("symbols", mkSymbol("sym_nested_index", "a/index.ts", "nestedIndex") as never);
-  assert.deepEqual(resolveSymbols(store, "index.ts").map((s) => s.id), ["sym_root_index"], "the root index.ts must not also pull in a/index.ts via suffix leakage");
-  assert.deepEqual(resolveSymbols(store, "a/index.ts").map((s) => s.id), ["sym_nested_index"]);
+  store.json.put("symbols", mkSymbol("sym_a_index", "a/index.ts", "nestedIndex") as never);
+  assert.deepEqual(ids(store, "index.ts"), ["sym_root_index"]);
+  assert.deepEqual(ids(store, "a/index.ts"), ["sym_a_index"]);
   cleanup();
 });
 
-test("resolveSymbols: a real indexed file with zero symbols returns [] rather than suffix-leaking an unrelated same-basename file (issue #299)", () => {
+test("resolveSymbols: an indexed symbol-less file does not suffix-leak (#299)", () => {
   const { store, cleanup } = seed();
-  // "docs/README.md" has no symbols of its own but IS covered by an indexed
-  // component (a real file with zero tree-sitter symbols — README.md,
-  // package.json, Dockerfile, ...). A root-level "README.md" with a symbol
-  // exists elsewhere in the graph and must never leak in via suffix matching.
-  store.json.put("symbols", mkSymbol("sym_root_readme", "README.md", "rootReadmeSymbol") as never);
+  store.json.put("symbols", mkSymbol("sym_readme", "README.md", "readme") as never);
   store.json.put("components", {
-    id: "cmp_docs", kind: "module", name: "docs", responsibility: "", paths: ["docs/**"], status: "active",
-    owners: [], fragility: 0, provenance: prov(0.9), created_at: "", updated_at: "",
+    id: "cmp_docs", kind: "module", name: "Docs", responsibility: "", paths: ["docs/**"], status: "active",
+    owners: [], fragility: 0, provenance: prov(0.6), created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z",
   } as never);
-  assert.deepEqual(resolveSymbols(store, "docs/README.md").map((s) => s.id), [], "a real, indexed, symbol-less file must not fall through to suffix matching");
-  assert.deepEqual(resolveFiles(store, "docs/README.md"), ["docs/README.md"], "resolveFiles still names the file itself even with zero symbols");
+  assert.deepEqual(ids(store, "docs/README.md"), []);
+  assert.deepEqual(resolveFiles(store, "docs/README.md"), ["docs/README.md"]);
   cleanup();
 });
 
-test("checkConstraints matches an absolute target the same as its repo-relative form (issue #296)", () => {
+test("store.checkConstraints: relative and absolute forms of a path agree", () => {
   const { store, root, cleanup } = seed();
   const rel = store.checkConstraints("src/auth/session.ts").map((c) => c.id);
-  const abs = store.checkConstraints(join(root, "src", "auth", "session.ts")).map((c) => c.id);
   assert.deepEqual(rel, ["con_1"]);
-  assert.deepEqual(abs, rel);
+  assert.deepEqual(store.checkConstraints(join(root, "src/auth/session.ts")).map((c) => c.id), rel);
   cleanup();
 });
 

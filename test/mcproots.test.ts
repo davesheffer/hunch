@@ -303,41 +303,34 @@ test("a stale roots/list response cannot overwrite a newer workspace", async (t)
   assert.equal(control.getRoot(), second);
 });
 
-// Claude Code CLI never advertises `roots`/`roots/list_changed` for an agent-driven
-// `cd` or EnterWorktree (issue #20) — the client-side gap `resolveActiveRoot` above
-// cannot see. These exercise the server-side fallback: an explicit `cwd` argument on
-// the write tools themselves, resolved fresh per call instead of trusted from any
-// cached root.
-test("an explicit cwd argument re-homes a capture to the worktree with no roots protocol involved at all", async (t) => {
+// The Claude Code CLI never advertises roots for an agent `cd` / worktree entry
+// (issue #20), so these tests exercise the server-side fallback: an explicit `cwd`
+// argument on write tools, resolved per call.
+test("an explicit cwd argument re-homes a capture to the worktree with no roots protocol", async (t) => {
   const fixture = repoWithWorktree();
-  writeFileSync(
-    join(fixture.worktree, ".hunch", "local.json"),
-    `${JSON.stringify({ autoCommit: false })}\n`,
-  );
+  writeFileSync(join(fixture.worktree, ".hunch", "local.json"), `${JSON.stringify({ autoCommit: false })}\n`);
   const control = buildServerWithRootControl(fixture.root);
-  const client = new Client({ name: "cwd-hint-test", version: "0.0.0" }); // no roots capability at all
+  const client = new Client({ name: "cwd-hint-test", version: "0.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   t.after(async () => {
     await client.close().catch(() => {});
     await control.server.close().catch(() => {});
     fixture.cleanup();
   });
-
   await Promise.all([control.server.connect(serverTransport), client.connect(clientTransport)]);
-  assert.equal(control.getRoot(), fixture.root, "server stays on its spawn root until told otherwise");
+  assert.equal(control.getRoot(), fixture.root);
 
-  const title = "cwd-hint capture";
+  const title = "Route captures by cwd hint";
   const result = await client.callTool({
     name: "hunch_record_decision",
     arguments: {
-      decision: { title, topic: "cwd-hint-capture", context: "worktree root routing", decision: "Write beside the active work" },
+      decision: { title, topic: "cwd-hint", context: "Roots never fire for worktree entry.", decision: "Accept an explicit cwd." },
       cwd: fixture.worktree,
     },
   }) as { isError?: boolean };
   assert.equal(!!result.isError, false);
-  assert.equal(control.getRoot(), fixture.worktree, "the cwd hint re-homes the server for this and later calls");
-
-  const filename = `${decisionId(`manual:${title}`)}.json`;
+  assert.equal(control.getRoot(), fixture.worktree);
+  const filename = `${decisionId("manual:" + title)}.json`;
   assert.equal(existsSync(join(fixture.worktree, ".hunch", "decisions", filename)), true);
   assert.equal(existsSync(join(fixture.root, ".hunch", "decisions", filename)), false);
 });
@@ -405,48 +398,44 @@ test("a native prompt hook supplies the exact cwd that re-homes a stale MCP sess
 test("a write tool reports where the capture actually landed", async (t) => {
   const fixture = repoWithWorktree();
   const control = buildServerWithRootControl(fixture.root);
-  const client = new Client({ name: "cwd-hint-destination-test", version: "0.0.0" });
+  const client = new Client({ name: "dest-report-test", version: "0.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   t.after(async () => {
     await client.close().catch(() => {});
     await control.server.close().catch(() => {});
     fixture.cleanup();
   });
-
   await Promise.all([control.server.connect(serverTransport), client.connect(clientTransport)]);
 
   const result = await client.callTool({
     name: "hunch_record_decision",
     arguments: {
-      decision: { title: "destination-reported capture", topic: "destination-note", context: "self-diagnosing capture", decision: "Report where it landed" },
+      decision: { title: "Report destination", topic: "dest-report", context: "Silent misroutes are undiscoverable.", decision: "Always show root and branch." },
       cwd: fixture.worktree,
     },
-  }) as { content: Array<{ text: string }>; isError?: boolean };
+  }) as { isError?: boolean; content: Array<{ text?: string }> };
   assert.equal(!!result.isError, false);
   const text = result.content.map((c) => c.text ?? "").join("\n");
-  assert.ok(text.includes(fixture.worktree), `response should name the destination root: ${text}`);
-  assert.ok(text.includes("feature-roots"), `response should name the destination branch: ${text}`);
-
-  // And the commit really did land on the worktree's branch, not the primary checkout's.
-  assert.equal(git(fixture.root, "log", "-1", "--format=%s"), "fixture", "primary checkout has no new commit");
-  assert.equal(git(fixture.worktree, "log", "-1", "--format=%s").startsWith("hunch: capture "), true);
+  assert.ok(text.includes(fixture.worktree), `response names the worktree: ${text}`);
+  assert.ok(text.includes("feature-roots"), `response names the branch: ${text}`);
+  assert.equal(git(fixture.root, "log", "-1", "--format=%s"), "fixture");
+  assert.match(git(fixture.worktree, "log", "-1", "--format=%s"), /^hunch: capture /);
 });
 
-test("a cwd hint that would change roots is refused while another request is in flight, instead of silently using the wrong one", async (t) => {
+test("a cwd hint that would change roots is refused while another request is in flight", async (t) => {
   const fixture = repoWithWorktree();
   const originalSearch = HunchStore.prototype.hybridSearch;
+  let signalStarted = () => {};
+  const started = new Promise<void>((resolve) => { signalStarted = resolve; });
   let releaseSearch = () => {};
-  let markStarted = () => {};
-  const started = new Promise<void>((resolve) => { markStarted = resolve; });
   const gate = new Promise<void>((resolve) => { releaseSearch = resolve; });
-  HunchStore.prototype.hybridSearch = async function delayedSearch(query, limit, options) {
-    markStarted();
+  HunchStore.prototype.hybridSearch = async function (this: HunchStore, query, limit, options) {
+    signalStarted();
     await gate;
     return originalSearch.call(this, query, limit, options);
   };
-
   const control = buildServerWithRootControl(fixture.root);
-  const client = new Client({ name: "cwd-hint-concurrency-test", version: "0.0.0" });
+  const client = new Client({ name: "cwd-inflight-test", version: "0.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   t.after(async () => {
     HunchStore.prototype.hybridSearch = originalSearch;
@@ -455,34 +444,31 @@ test("a cwd hint that would change roots is refused while another request is in 
     await control.server.close().catch(() => {});
     fixture.cleanup();
   });
-
   await Promise.all([control.server.connect(serverTransport), client.connect(clientTransport)]);
 
-  const inFlight = client.callTool({ name: "hunch_query", arguments: { query: "anything" } });
+  const query = client.callTool({ name: "hunch_query", arguments: { query: "anything" } });
   await started;
-
-  const result = await client.callTool({
+  const refused = await client.callTool({
     name: "hunch_record_decision",
     arguments: {
-      decision: { title: "concurrent cwd-hint capture", context: "should be refused" },
+      decision: { title: "Refused mid-flight", topic: "inflight", context: "c", decision: "d" },
       cwd: fixture.worktree,
     },
-  }) as { content: Array<{ text: string }>; isError?: boolean };
-  assert.equal(result.isError, true);
-  const text = result.content.map((c) => c.text ?? "").join("\n");
-  assert.ok(/in flight|retry/i.test(text), `refusal should explain the conflict: ${text}`);
-  assert.equal(control.getRoot(), fixture.root, "the root was never silently swapped mid-request");
+  }) as { isError?: boolean; content: Array<{ text?: string }> };
+  assert.equal(refused.isError, true);
+  assert.match(refused.content.map((c) => c.text ?? "").join("\n"), /in flight|retry/i);
+  assert.equal(control.getRoot(), fixture.root);
 
   releaseSearch();
-  await inFlight;
+  await query;
 });
 
-test("a cwd hint that fails to activate (invalid team.json) reports the error and leaves the previous root active", async (t) => {
+test("a cwd hint that fails to activate reports the error and keeps the previous root", async (t) => {
   const fixture = repoWithWorktree();
-  const invalid = repo("hunch-roots-invalid-team-cwd-");
-  writeFileSync(join(invalid, ".hunch", "team.json"), "{ not-json");
+  const invalid = repo("hunch-roots-invalid-");
+  writeFileSync(join(invalid, ".hunch", "team.json"), "{ not json");
   const control = buildServerWithRootControl(fixture.root);
-  const client = new Client({ name: "cwd-hint-activation-failure-test", version: "0.0.0" });
+  const client = new Client({ name: "cwd-invalid-test", version: "0.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   t.after(async () => {
     await client.close().catch(() => {});
@@ -490,20 +476,18 @@ test("a cwd hint that fails to activate (invalid team.json) reports the error an
     fixture.cleanup();
     cleanupDir(invalid);
   });
-
   await Promise.all([control.server.connect(serverTransport), client.connect(clientTransport)]);
 
   const result = await client.callTool({
     name: "hunch_record_decision",
     arguments: {
-      decision: { title: "cwd hint onto a broken team.json", context: "should surface the activation failure, not crash" },
+      decision: { title: "Invalid target", topic: "invalid", context: "c", decision: "d" },
       cwd: invalid,
     },
-  }) as { content: Array<{ text: string }>; isError?: boolean };
+  }) as { isError?: boolean; content: Array<{ text?: string }> };
   assert.equal(result.isError, true);
-  const text = result.content.map((c) => c.text ?? "").join("\n");
-  assert.ok(/team\.json is invalid or unsafe/.test(text), `should surface the underlying activation error: ${text}`);
-  assert.equal(control.getRoot(), fixture.root, "a failed cwd-hint activation leaves the previous root active");
+  assert.match(result.content.map((c) => c.text ?? "").join("\n"), /team\.json is invalid or unsafe/);
+  assert.equal(control.getRoot(), fixture.root);
 });
 
 test("a pinned root (hunch mcp --root) ignores setRoot from client roots and per-call cwd hints", async (t) => {
