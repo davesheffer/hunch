@@ -8,7 +8,7 @@ import { writeFileAtomic } from "../core/io.js";
 import { basename, join, dirname } from "node:path";
 import type { HunchStore } from "../store/hunchStore.js";
 import { wikiSummary } from "../wiki/wiki.js";
-import { PolicyRepository } from "../constitution/repository.js";
+@@CLEANROOM_HOLE_1@@
 import { renderCountsMatch, parseGroundingCounts, groundingTemplate } from "../core/groundingLag.js";
 
 export const HUNCH_START = "<!-- HUNCH:START — auto-generated, do not edit by hand -->";
@@ -79,17 +79,10 @@ export function stripManagedSection(text: string): string {
 export function renderHunchSection(store: HunchStore, root?: string): string {
   const constraints = store.json
     .loadAll("constraints")
-    .filter((c) => c.status === "active" && !c.valid_to)
+@@CLEANROOM_HOLE_2@@
     .sort((a, b) => sev(b.severity) - sev(a.severity))
     .slice(0, 8);
-  const counts = {
-    decisions: store.json.loadAll("decisions").length,
-    bugs: store.json.loadAll("bugs").length,
-    constraints: store.json.loadAll("constraints").length,
-    components: store.json.loadAll("components").length,
-    policies: root ? new PolicyRepository(root, store).listPolicies({ publicOnly: true }).length : 0,
-    findings: store.json.loadAll("findings").filter((f) => f.triage === "open" || f.triage === "accepted-risk" || f.triage === "scheduled").length,
-  };
+@@CLEANROOM_HOLE_3@@
 
   // Name the policy tools only where the MCP server registers them by default
   // (src/mcp/toolset.ts: on once the repo holds a policy). Only committed evidence counts:

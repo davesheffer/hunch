@@ -144,7 +144,7 @@ function installCheckoutAttack(fixture: Fixture, base: string, globalAttributes:
 function runSharedSetup(
   fixture: Fixture,
   remote: string,
-  opts: { migrate?: boolean; failAfterPublicDrop?: boolean; hook?: boolean } = {},
+@@CLEANROOM_HOLE_1@@
 ) {
   return spawnSync(process.execPath, [
     TSX,
@@ -152,7 +152,7 @@ function runSharedSetup(
     "shared",
     "--repo",
     remote,
-    ...(opts.hook ? [] : ["--no-hook"]),
+@@CLEANROOM_HOLE_2@@
     ...(opts.migrate ? ["--migrate"] : []),
   ], {
     cwd: fixture.root,
@@ -343,25 +343,6 @@ test("a late fresh shared migration failure retains the only migrated memory cop
     cleanupDir(base);
   }
 });
-
-test("a rolled-back fresh setup removes BOTH hooks it installed, not just post-commit", { timeout: 60_000 }, () => {
-  const base = mkdtempSync(join(tmpdir(), "hunch-shared-setup-hook-rollback-"));
-  try {
-    const remote = makeMemoryRemote(base, "safe-memory");
-    const fixture = makeCodeFixture(base, "code");
-    const postCommit = join(fixture.root, ".git", "hooks", "post-commit");
-    const postMerge = join(fixture.root, ".git", "hooks", "post-merge");
-    assert.equal(existsSync(postCommit), false, "fixture starts with no post-commit hook");
-    assert.equal(existsSync(postMerge), false, "fixture starts with no post-merge hook");
-
-    // The injected failure lands AFTER hook installation, so rollback must undo both.
-    const result = runSharedSetup(fixture, remote, { migrate: true, failAfterPublicDrop: true, hook: true });
-
-    assert.equal(result.error, undefined, result.error?.message);
-    assert.equal(result.status, 1, output(result));
-    assert.equal(existsSync(postCommit), false, "rollback removes the post-commit hook this setup created");
-    assert.equal(existsSync(postMerge), false, "rollback removes the post-merge hook this setup created");
-  } finally {
+@@CLEANROOM_HOLE_3@@
     cleanupDir(base);
-  }
-});
+@@CLEANROOM_HOLE_4@@
