@@ -19,9 +19,14 @@
 //  - wait budget: `.rmw-lock` waits a fixed 2 s; the write lock takes timeoutMs.
 //  - shape: `.rmw-lock` is a directory holding owner.tmp.json; write.lock is the
 //    owner file itself. Age is the mtime of the directory / the file.
-//  - record validity: `.rmw-lock` requires `host`, write.lock requires `nonce`
-//    (it has always written one). Every row below carries both, so the rows
-//    exercise the decision, not each parser's notion of "malformed".
+//  - record validity: `.rmw-lock` requires `host`; write.lock reads a missing
+//    `host` as "not this host". Every row below carries a host, so the rows
+//    exercise the decision, not each parser's notion of "malformed". A missing
+//    `nonce` does not change acquisition: both locks judge a nonce-less record
+//    by its pid (issue #491), so the `nonceless` rows assert one outcome. Both
+//    also treat a pid that is not a positive integer as unreadable metadata.
+//  - release of a nonce-less record (not exercised here): write.lock leaves it in
+//    place, `.rmw-lock` removes it.
 import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, existsSync, utimesSync, writeFileSync } from "node:fs";
@@ -48,6 +53,8 @@ interface Scenario {
   /** Owner record shape. `raw` replaces the JSON entirely (garbage metadata). */
   host?: "self" | "foreign";
   legacy?: boolean; // no `at`
+  nonceless?: boolean; // no `nonce` (a legacy or foreign writer; issue #491)
+  rawPid?: number; // the recorded pid verbatim, overriding `pid` (invalid pids)
   held?: boolean; // the nonce is one THIS process currently holds
   raw?: string;
   /** Injected creation time of the process now holding the pid, relative to the
@@ -74,6 +81,18 @@ const SCENARIOS: Scenario[] = [
   { name: "own process holding it (held nonce), aged — not re-entrant, never stolen", pid: "self", age: "aged", held: true, expect: "refused" },
   { name: "own pid, nonce NOT held (predecessor with our pid), aged", pid: "self", age: "aged", expect: "taken" },
   { name: "own pid, nonce NOT held (predecessor with our pid), fresh", pid: "self", age: "fresh", expect: "refused" },
+  // Issue #491: a nonce-less record is judged by its pid, never by age alone.
+  { name: "nonce-less owner alive, creation time unreadable, aged", pid: "alive", age: "aged", nonceless: true, startedRelToAt: null, expect: "refused" },
+  { name: "nonce-less owner alive and genuine (started before `at`), aged", pid: "alive", age: "aged", nonceless: true, startedRelToAt: -60_000, expect: "refused" },
+  { name: "nonce-less owner pid dead, fresh", pid: "dead", age: "fresh", nonceless: true, expect: "taken" },
+  { name: "nonce-less record naming our own pid, aged", pid: "self", age: "aged", nonceless: true, expect: "refused" },
+  // Regression guard, not a #491 detector (it passed before the fix too): the
+  // recycled-pid takeover (#287) still reaches a nonce-less record.
+  { name: "nonce-less owner pid reused after `at` + slack, aged", pid: "alive", age: "aged", nonceless: true, startedRelToAt: CREATED_AFTER_SLACK_MS + 1_000, expect: "taken" },
+  // A pid that is not a positive integer is unreadable metadata: age decides.
+  { name: "owner pid 0, aged", pid: "alive", rawPid: 0, age: "aged", expect: "taken" },
+  { name: "owner pid -1, aged", pid: "alive", rawPid: -1, age: "aged", expect: "taken" },
+  { name: "owner pid 1.5, fresh", pid: "alive", rawPid: 1.5, age: "fresh", expect: "refused" },
 ];
 
 interface LockImpl {
@@ -101,6 +120,7 @@ after(() => {
 });
 
 function pidOf(s: Scenario): number {
+  if (s.rawPid !== undefined) return s.rawPid;
   return s.pid === "alive" ? alivePid : s.pid === "dead" ? deadPid : process.pid;
 }
 
@@ -115,7 +135,7 @@ function ownerRecord(s: Scenario, pid: number, at: number, nonce: string): strin
   return JSON.stringify({
     pid,
     host: s.host === "foreign" ? `parity-foreign-${hostname()}` : hostname(),
-    nonce,
+    ...(s.nonceless ? {} : { nonce }),
     ...(s.legacy ? {} : { at: new Date(at).toISOString() }),
   });
 }
