@@ -155,6 +155,21 @@ test("why(<id>, {asOf}) gates existence and neighbours, and prints the same stor
   }
 });
 
+test("issue #493: a hand-written id outside its as_of window is 'No record <id> as of <ref>', not the generic miss", () => {
+  const { store, cleanup } = tempStore();
+  try {
+    store.json.put("decisions", mkDecision({ id: "dec_session_transport", title: "Session transport", valid_from: "2026-06-01T00:00:00Z" }));
+    const before = store.why("dec_session_transport", { asOf: "2026-03-01T00:00:00Z" });
+    assert.ok(before.byId, "an id on file but not in force at asOf reports a by-id miss");
+    assert.equal(before.byId.record, null);
+    assert.match(formatWhyRecord(before.byId).join("\n"), /No record dec_session_transport as of 2026-03-01/);
+    assert.equal(store.why("dec_session_transport").byId?.record?.kind, "decision", "resolves without asOf");
+    assert.equal(store.why("dec_not_on_file", { asOf: "2026-03-01T00:00:00Z" }).byId, undefined, "an unknown hand-written id still falls through");
+  } finally {
+    cleanup();
+  }
+});
+
 test("by-id output is bounded: lists capped with a 'more' note, long prose clipped", () => {
   const { store, cleanup } = tempStore();
   try {

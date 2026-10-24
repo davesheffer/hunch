@@ -1446,8 +1446,10 @@ export class HunchStore {
     // is "no record"; status stays as stored, like the path view (see whyRecord).
     const lookup = WHY_RECORD_ID.test(target) ? this.whyRecord(target, opts.canRead, opts.asOf) : undefined;
     if (lookup?.record) return { target, decisions: [], bugs: [], constraints: [], symbols: [], components: [], byId: lookup };
-    // A miss is reported only for a generated-shape id; anything else resolves as before.
-    const byId = lookup && WHY_GENERATED_ID.test(target) ? lookup : undefined;
+    // A miss is reported for a generated-shape id, or for any id on file that was not
+    // in force at `asOf` (issue #493); anything else resolves as before.
+    const byId = lookup && (WHY_GENERATED_ID.test(target) || (opts.asOf && this.whyRecord(target, opts.canRead).record))
+      ? lookup : undefined;
     const decisions = this.recs("decisions").filter(opts.canRead ?? (() => true));
     const bugs = this.recs("bugs").filter(opts.canRead ?? (() => true));
     const constraints = this.recs("constraints").filter(opts.canRead ?? (() => true));
@@ -1533,7 +1535,8 @@ export class HunchStore {
 
   /** Transitive blast radius: every symbol/component that (in)directly depends on
    *  `id`, via a recursive CTE over the edges graph (hunch_get_dependents). We
-   *  walk edges BACKWARD (edges.to = current) following call/dep/import/contains. */
+   *  walk edges BACKWARD (edges.to = current) following call/dep/import/contains,
+   *  plus `references` — the only edge YAML/Helm/Kustomize emit (issue #486). */
   getDependents(id: string, maxDepth = 6): Array<{ id: string; depth: number; via: string }> {
     return this.db.prepare(
       /* sql */ `
@@ -1542,7 +1545,7 @@ export class HunchStore {
         UNION
         SELECT e."from", up.depth + 1
         FROM edges e JOIN up ON e."to" = up.node
-        WHERE e.type IN ('calls','depends_on','imports','contains','implements') AND up.depth < ?
+        WHERE e.type IN ('calls','depends_on','imports','contains','implements','references') AND up.depth < ?
       )
       SELECT up.node AS id, MIN(up.depth) AS depth,
              COALESCE(s.name || ' @ ' || s.file, c.name, up.node) AS via
@@ -1588,7 +1591,7 @@ export class HunchStore {
         UNION
         SELECT e."from", up.depth + 1
         FROM edges e JOIN up ON e."to" = up.node
-        WHERE e.type IN ('calls','depends_on','imports','contains','implements') AND up.depth < ?
+        WHERE e.type IN ('calls','depends_on','imports','contains','implements','references') AND up.depth < ?
       )
       SELECT s.file AS file, s.name AS via, MIN(up.depth) AS depth
       FROM up JOIN symbols s ON s.id = up.node
