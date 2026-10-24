@@ -12,7 +12,7 @@ import { hunchAttributesAreSafe } from "../src/core/overlaySafety.js";
 import { classifyGroundingBlock } from "../src/core/groundingLag.js";
 import { OVERLAY_ATTRIBUTES } from "../tooling/matrix-release-verification.mjs";
 
-const REPO_ROOT = resolvePath(fileURLToPath(import.meta.url), "..", "..");
+const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const CLI = [JSON.stringify(process.execPath), resolvePath(REPO_ROOT, "node_modules", "tsx", "dist", "cli.mjs"), resolvePath(REPO_ROOT, "src", "cli", "index.ts")].join(" ");
 
 function git(cwd: string, ...args: string[]): string {
