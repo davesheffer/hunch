@@ -340,11 +340,7 @@ function htmlBlockEnd(s: string): RegExp | "blank" | null {
 /** Character ranges covered by inline code spans (`…`), same rationale as
  *  codeRanges: prose quoting a marker in backticks is showing an example.
  *  CommonMark-lite: an opener run pairs with the next run of the SAME length
- *  on the same line; unpaired runs never open a span.
- *  Expects LF-normalized text — see parseDocAnchors's normalization.
- *  `split("\n")` does not split a bare CR, so on CR-only input the whole
- *  document reads as one line and stray backticks on different lines
- *  falsely pair. */
+@@CLEANROOM_HOLE_1@@
 function inlineSpanRanges(text: string): Array<[number, number]> {
   const ranges: Array<[number, number]> = [];
   let offset = 0;
@@ -375,10 +371,7 @@ export function parseDocAnchors(text: string): DocAnchor[] {
  *  never closes hides every marker below it, almost always by mistake (#381). */
 export function scanDocAnchors(text: string): { anchors: DocAnchor[]; unclosedFence: { line: number; hidden: number } | null } {
   // codeRanges is CRLF-sensitive (its fence-line regex's `.` excludes \r, so
-  // "```\r" never matched at all on a CRLF checkout); inlineSpanRanges is
-  // lone-CR-sensitive (split("\n") doesn't split a bare CR — see its
-  // docblock). Either way an example marker inside a fence/span registered as
-  // a live, pinned anchor. Normalizing both CRLF and lone CR once here keeps
+@@CLEANROOM_HOLE_2@@
   // codeRanges/inlineSpanRanges/MARKER offsets consistent with each other
   // and with the line numbers reported below. A leading BOM is dropped too, so
   // line 1 starts at column 0 (#381); it is one char on line 1, so line numbers hold.

@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { tempStore, prov, indexedFixtureStore, seedRootLevelFileFixture } from "./helpers.js";
+@@CLEANROOM_HOLE_1@@
 import {
   assemblePack, packHash, renderPage, slugFor, readWikiManifestAt, writeWikiManifestAt,
   publicHome, privateHome, wikiStatus, generateWiki, computeWikiDrift, wikiSummary,
@@ -104,30 +104,7 @@ test("assemblePack: ownership by path prefix pulls symbols, decisions, scoped co
   assert.deepEqual(pack.bugs.map((b) => b.id), ["bug_trunc"]);
 });
 
-test("assemblePack: an indexer-derived root component owns only those files, not the whole repo (issue #34)", (t) => {
-  // Ties the fix to its real producer: deriveComponents must emit paths that
-  // owns() (assemblePack's ownership check) actually agrees with. A hand-written
-  // component fixture here would pass even if deriveComponents regressed back
-  // to a "./**" glob — this exercises the real indexer -> wiki path.
-  const { store, cleanup } = indexedFixtureStore(seedRootLevelFileFixture);
-  t.after(cleanup);
-
-  const rootComp = store.json.loadAll("components").find((c) => c.name === ".");
-  assert.ok(rootComp, "indexer derives a '.' component for root-level files");
-  assert.deepEqual(
-    rootComp.paths,
-    ["config.ts", "settings.ts"],
-    "root component paths are exact files, not a './**' glob",
-  );
-
-  const pack = assemblePack(store, rootComp);
-  assert.deepEqual(
-    pack.files,
-    rootComp.paths,
-    "owns() must match every exact root file the indexer recorded, and nothing else",
-  );
-});
-
+@@CLEANROOM_HOLE_2@@
 test("assemblePack: superseded decisions are history, not page content", (t) => {
   const { store, cleanup } = tempStore();
   t.after(cleanup);

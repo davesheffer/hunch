@@ -27,7 +27,7 @@ import { scanDocAnchors } from "./docanchors.js";
 import { markdownDocs, STALE_MARKER, SRC_REF } from "./docscan.js";
 import { computeWikiDrift } from "../wiki/wiki.js";
 import { computeMadrDrift } from "../integrations/madrManifest.js";
-import { commitsExist, isGitRepo } from "../extractors/git.js";
+@@CLEANROOM_HOLE_1@@
 
 export const DRIFT_KINDS = ["dead-ref", "supersede", "doc-stale", "anchor-stale", "doc-anchor-stale", "doc-anchor-dangling", "doc-fence-unclosed", "wiki-stale", "finding-stale", "premise-stale", "commit-unresolvable", "madr-stale", "madr-edited", "madr-orphan"] as const;
 export type DriftKind = typeof DRIFT_KINDS[number];
@@ -42,11 +42,7 @@ export interface DriftReport {
   findings: DriftFinding[];
 }
 
-export function computeDrift(
-  store: HunchStore,
-  root: string,
-  deps: { commitResolvable?: (sha: string) => boolean } = {},
-): DriftReport {
+@@CLEANROOM_HOLE_2@@
   const findings: DriftFinding[] = [];
   const decisions = store.recs("decisions");
   const byId = new Map(decisions.map((d) => [d.id, d] as const));
@@ -66,23 +62,7 @@ export function computeDrift(
     return liveFiles.has(p) || liveDirs.some((dir) => p.startsWith(dir));
   };
   const premiseEnv: PremiseEnv = { now: new Date().toISOString(), exists: (p) => existsSync(join(root, p)) };
-  // A plain existence check is meaningless outside a git repo — computed once,
-  // not per decision, and never a false positive for a directory that merely
-  // happens to hold .hunch/ without being a git checkout. Injectable so tests
-  // (and callers with a cheaper oracle) never have to shell out per decision.
-  const gitRepo = isGitRepo(root);
-  // One batched `git cat-file --batch-check` for every commit-bearing decision,
-  // not one `rev-parse` per decision — skipped entirely when a predicate is
-  // injected (tests/callers with a cheaper oracle never pay for this at all).
-  const resolvableCommits = gitRepo && !deps.commitResolvable
-    ? commitsExist([...new Set(decisions.filter((d) => d.commit).map((d) => d.commit as string))], root)
-    : null;
-  const defaultCommitResolvable = (sha: string): boolean => {
-    if (!gitRepo) return true; // never flag outside a git repo
-    if (resolvableCommits === null) return true; // the batch check itself failed, or was skipped — fail open
-    return resolvableCommits.has(sha);
-  };
-  const commitResolvable = deps.commitResolvable ?? defaultCommitResolvable;
+@@CLEANROOM_HOLE_3@@
 
   for (const d of decisions) {
     // 1. DEAD-REFERENCE — only for in-force decisions; a superseded one referencing
@@ -95,17 +75,7 @@ export function computeDrift(
           findings.push({ kind: "dead-ref", id: d.id, detail: `references missing file "${f}"` });
         }
       }
-
-      // 8. COMMIT-UNRESOLVABLE — an in-force decision's commit provenance no longer
-      //    resolves at all (source branch gone + gc'd past recovery). The
-      //    opportunistic post-merge repair (commitrepair.ts) is the fix path; this
-      //    is purely the "nothing caught it" signal — deterministic, never auto-fixed.
-      //    Mirrors repair.ts:59's live-records-only rule: `inForce` alone doesn't
-      //    exclude a never-adopted "rejected" decision (superseded_by is null for
-      //    those too), so exclude it explicitly here.
-      if (d.commit && d.status !== "rejected" && !commitResolvable(d.commit)) {
-        findings.push({ kind: "commit-unresolvable", id: d.id, detail: `commit ${d.commit} no longer resolves in this repository — provenance may need manual repair` });
-      }
+@@CLEANROOM_HOLE_4@@
     }
 
     // 2. SUPERSEDE-INTEGRITY — a contradiction class: A.supersedes = B, but B is

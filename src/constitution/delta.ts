@@ -42,10 +42,9 @@ function view(file: string, source: string | null): FileView | null {
 
 function viewOfParsed(parsed: ParsedFile): FileView {
   const symbols = new Map(parsed.symbols.map((s) => [symbolKey(s), s]));
-  const byIndex = new Map(parsed.symbols.map((s, i) => [i, s]));
+@@CLEANROOM_HOLE_1@@
   const calls = new Map<string, { caller: string; callee: string; member: boolean }>();
-  for (const [index, callees] of attributeCalls(parsed)) {
-    const caller = byIndex.get(index);
+@@CLEANROOM_HOLE_2@@
     if (!caller) continue;
     for (const [callee, member] of callees) {
       const call = { caller: caller.name, callee, member };

@@ -69,39 +69,7 @@ test("parseDocAnchors: markers inside fenced code blocks are examples, not decla
   assert.deepEqual(parseDocAnchors("```\n<!-- hunch:topic dangling.example -->"), []);
 });
 
-test("parseDocAnchors: a CRLF checkout still detects the fence — an example marker inside one stays inert (issue #298)", () => {
-  const md = [
-    "# How to anchor a doc",
-    "",
-    "```markdown",
-    "<!-- hunch:topic example.topic dec_ffff000009 -->",   // documentation example → must stay ignored on CRLF too
-    "```",
-    "",
-    "<!-- hunch:topic real.topic dec_aaaa000001 -->",      // outside the fence → live
-    "Prose about the real topic.",
-  ].join("\r\n");
-  const anchors = parseDocAnchors(md);
-  assert.deepEqual(anchors, [{ topic: "real.topic", pin: "dec_aaaa000001", line: 7 }]);
-});
-
-test("parseDocAnchors: mixed LF and CRLF line endings in the same document still detect the fence", () => {
-  const md =
-    "# How to anchor a doc\r\n\n```markdown\r\n<!-- hunch:topic example.topic dec_ffff000009 -->\n```\r\n\n<!-- hunch:topic real.topic dec_aaaa000001 -->\r\nProse about the real topic.\n";
-  const anchors = parseDocAnchors(md);
-  assert.deepEqual(anchors, [{ topic: "real.topic", pin: "dec_aaaa000001", line: 7 }]);
-});
-
-test("parseDocAnchors: an unclosed fence on CRLF still swallows everything to EOF", () => {
-  assert.deepEqual(parseDocAnchors("```\r\n<!-- hunch:topic dangling.example -->"), []);
-});
-
-test("parseDocAnchors: a lone-CR document — stray backticks on different lines must not pair into a false span", () => {
-  // split("\n") does not split on a bare \r, so without normalization the whole
-  // document is one "line" and the same-line pairing rule swallows the marker.
-  const md = "stray ` backtick\r<!-- hunch:topic real.topic dec_aaaa000001 -->\ranother stray ` backtick\r";
-  assert.deepEqual(parseDocAnchors(md), [{ topic: "real.topic", pin: "dec_aaaa000001", line: 2 }]);
-});
-
+@@CLEANROOM_HOLE_1@@
 const LIST_DOC = [
   "# How to anchor a doc",
   "",
