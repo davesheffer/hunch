@@ -201,7 +201,7 @@ metadata:
 <p>Hunch is not a Helm renderer. It does not evaluate values, execute templates, or guess dynamically constructed helper names; helper edges require a literal quoted name. The Helm sidecar is a bounded token scan, so Helm-shaped text inside a template comment can produce a phantom reference. Chart-wide lookup can also over-approximate an alias in already-invalid YAML when the matching anchor exists only in a sibling chart file. These failure modes are documented and regression-pinned rather than hidden behind a claim of full template understanding.</p>
 
 <h2>Community work, reconciled into the current graph</h2>
-<p>YAML and Helm support was contributed by <strong>Oliver Sampson</strong>. The release preserves that authorship and reconciles the contribution with the current language registry, component model, schema generation, release gates, and cross-platform native parser matrix. The result is not a side parser bolted onto Hunch; it is another conservative input to the graph every downstream receipt already uses.</p>
+<p>The release reconciles YAML and Helm support with the current language registry, component model, schema generation, release gates, and cross-platform native parser matrix. The result is not a side parser bolted onto Hunch; it is another conservative input to the graph every downstream receipt already uses.</p>
 
 <h2>Upgrade</h2>
 <pre><code>npm i -g @davesheffer/hunch@1.18.0
@@ -348,7 +348,7 @@ git add .gitignore .hunch/team.json</code></pre>
 hunch structure app/services      # the shape, served from the graph
 hunch impact origin/main          # what this branch actually reaches</code></pre>
 <p>The "why" layer — decisions, bugs, constraints — was always language-agnostic, because it reads your commits and diffs. What was missing for Python was the <em>structure</em> underneath: the graph that turns "controllers must not reach the database" from a sentence into a reachability check. Now it's there.</p>
-<p>Credit where it's due: Python support was contributed by <strong>MrSampson</strong> — Hunch's first major community contribution. The same PR cycle also fixed a real synthesizer bug: a squash-merge whose subject line says "Merge …" but whose body carries the actual PR description is no longer discarded as noise.</p>
+<p>The same release also fixed a real synthesizer bug: a squash-merge whose subject line says "Merge …" but whose body carries the actual PR description is no longer discarded as noise.</p>
 
 <h2>Why Python is the language that needs the gate most</h2>
 <p>GitHub's <a class="link" href="https://octoverse.github.com/">Octoverse 2025</a> reported a telling shift: TypeScript surged 66% to become the #1 language, and the analysis attributed it to teams wanting <em>typed guardrails</em> for LLM-generated code. The industry's instinctive answer to "AI writes unreliable code" is <strong>types</strong>.</p>

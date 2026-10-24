@@ -74,7 +74,7 @@ test("native grammar versions stay on the tree-sitter 0.21 peer family", () => {
   assert.equal(packageJson.dependencies["tree-sitter"], "0.21.1");
   assert.equal(packageJson.dependencies["tree-sitter-python"], "0.23.4",
     "0.23.5+ requires tree-sitter 0.22 and makes a clean npm install fail");
-  assert.equal(packageJson.dependencies["@tree-sitter-grammars/tree-sitter-yaml"], "^0.6.1",
+  assert.equal(packageJson.dependencies["tree-sitter-yaml"], "npm:@tree-sitter-grammars/tree-sitter-yaml@^0.6.1",
     "YAML 0.7+ requires tree-sitter 0.22 and must move only with the whole native parser matrix");
   assert.equal(packageJson.dependencies["tree-sitter-php"], "0.23.12",
     "PHP 0.24+ requires tree-sitter 0.22; 0.23.12 is the latest compatible 0.21 peer");
