@@ -10,6 +10,7 @@ import type { HunchStore } from "../store/hunchStore.js";
 import { wikiSummary } from "../wiki/wiki.js";
 import { PolicyRepository } from "../constitution/repository.js";
 import { renderCountsMatch, parseGroundingCounts, groundingTemplate } from "../core/groundingLag.js";
+import type { GroundingCounts } from "../core/groundingLag.js";
 
 export const HUNCH_START = "<!-- HUNCH:START — auto-generated, do not edit by hand -->";
 export const HUNCH_END = "<!-- HUNCH:END -->";
@@ -82,11 +83,13 @@ export function renderHunchSection(store: HunchStore, root?: string): string {
     .filter((c) => c.status === "active" && !c.valid_to)
     .sort((a, b) => sev(b.severity) - sev(a.severity))
     .slice(0, 8);
-  const counts = {
+
+  const counts: GroundingCounts = {
     decisions: store.json.loadAll("decisions").length,
     bugs: store.json.loadAll("bugs").length,
     constraints: store.json.loadAll("constraints").length,
     components: store.json.loadAll("components").length,
+    // Public policies only: private-overlay policies must not change the committed block.
     policies: root ? new PolicyRepository(root, store).listPolicies({ publicOnly: true }).length : 0,
     findings: store.json.loadAll("findings").filter((f) => f.triage === "open" || f.triage === "accepted-risk" || f.triage === "scheduled").length,
   };
