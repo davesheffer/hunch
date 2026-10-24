@@ -14,7 +14,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { RootsListChangedNotificationSchema } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
-import { hunchPaths, findRoot, toPosixTarget, repoRelativeTarget } from "../core/paths.js";
+@@CLEANROOM_HOLE_1@@
 import { matchSymbolsTiered } from "../core/glob.js";
 import { resolveMcpToolset } from "./toolset.js";
 import { installLeanToolList } from "./leanToolList.js";
@@ -94,8 +94,7 @@ import { assertCompleteRepoScan, indexRepo, scanRepo } from "../extractors/index
 import type { Decision, Finding, Symbol } from "../core/types.js";
 import { liveForTopic, historyForTopic, rejectedForTopic, captureConflicts } from "../core/topics.js";
 import { formatWhyRecord, more, WHY_CAP, WHY_RECORD_ID } from "../core/whyRecord.js"; // WHY_CAP: per record-type cap in hunch_why
-import { pendingEscalations, policyEscalations, commitRepairEscalations, actionableEscalations, escalationHeadline, type Escalation } from "../core/escalations.js";
-import { readActivePendingRepairs, withheldRewrites } from "../core/repairqueue.js";
+@@CLEANROOM_HOLE_2@@
 import { scanRecord, publicationWarning, loadVocabulary } from "../core/publication.js";
 import { premiseEscalations } from "../core/premises.js";
 import { applyImportedAdrReview, pendingImportedAdrReviews } from "../core/importReview.js";
@@ -121,15 +120,10 @@ const err = (text: string): ToolResult => ({ content: [{ type: "text", text }], 
 const refused = (text: string): ToolResult => err(`Refused: ${text}`);
 const invalid = (text: string): ToolResult => err(`Invalid: ${text}`);
 
-/** Shared by every auto-committing write tool (issue #20): the MCP `roots` protocol
- *  cannot see an agent-driven `cd`/EnterWorktree, so a stdio server's cached root
- *  never moves on its own — this is the client-agnostic fallback, resolved fresh on
- *  every call by the generic tool wrapper below (see extractCwdHint). */
-const cwdHintField = z.string().optional().describe(
+@@CLEANROOM_HOLE_3@@
   "Your current directory, when it differs from where this session started (e.g. a worktree); " +
   "writes then commit there, not to the original root.",
-);
-
+@@CLEANROOM_HOLE_4@@
 /** Shared by hunch_record_decision/correction/finding — identical text repeated 3x
  *  otherwise. hunch_context's task_id field differs (delivery vs. save) and keeps its
  *  own description. */
@@ -137,15 +131,7 @@ const saveTaskIdField = TaskIdSchema.optional().describe(
   "Task ID, to attribute this save to it; never affects capture authority.",
 );
 
-/** Pull `cwd` out of a tool call's already-parsed input without assuming any one
- *  tool's exact input shape — every write tool spreads the same cwdHintField in,
- *  but the wrapper below runs for every tool, read or write. */
-function extractCwdHint(input: unknown): string | undefined {
-  if (!input || typeof input !== "object") return undefined;
-  const cwd = (input as Record<string, unknown>).cwd;
-  return typeof cwd === "string" && cwd.trim() ? cwd : undefined;
-}
-
+@@CLEANROOM_HOLE_5@@
 /** Honest auto-commit suffix: reports only what flushCapture ACTUALLY did. A skipped
  *  commit (backstop/lock/nothing staged) says nothing — the record is on disk and the
  *  next flush sweeps it up; claiming "auto-committed" there would be a lie. */
@@ -194,16 +180,7 @@ const publicHomeNote = (
   return "\nℹ Landed in the COMMITTED PUBLIC store (publishes with the repo). For sensitive/strategy content, re-record with private:true — the overlay store." + risk;
 };
 
-/** Self-diagnosing destination report (issue #17/#20): the exact failure mode this
- *  guards against is silent — a capture landing in the wrong repo/branch with no
- *  sign of it short of a manual `git log` audit. Every auto-committing write tool
- *  appends this so the destination is always visible in the response, whether or
- *  not a cwd hint was involved in choosing it. */
-const destinationNote = (destRoot: string): string => {
-  const branch = currentBranch(destRoot);
-  return ` [captured${branch ? ` on branch ${branch}` : ""} in ${destRoot}]`;
-};
-
+@@CLEANROOM_HOLE_6@@
 /** The cwd-hint fallback (see `cwdHintField` above) only helps when the CALLER
  *  remembers to pass it — a subagent spawned straight into its own linked
  *  worktree has no reason to think of the session's "starting directory" as
@@ -629,14 +606,7 @@ function nuryelWriteSubject(facet: StateFacet, record: Record<string, unknown>):
   return `${kind}${typeof label === "string" ? ` "${label.slice(0, 60)}"` : ""} (nuryel_write)`;
 }
 
-/** Where a capture keyed to `home` actually lands: the private overlay directory when
- *  one is configured, else the public repo root. Centralizes the branch used at every
- *  destination-reporting call site below — `hunch_policy_upgrade_correction` once
- *  diverged from this (computing its own `artifactHome` but reporting the public root
- *  regardless), silently misreporting the destination for a private-homed proof. */
-const resolveDestRoot = (home: "public" | "private", store: HunchStore, root: string): string =>
-  home === "private" && store.privateDir ? store.privateDir : root;
-
+@@CLEANROOM_HOLE_7@@
 // Read-side token budgets: every tool result is injected into a Claude Code
 // session, so an uncapped list pollutes the context window. Cap each list to its
 // highest-signal head (records are pre-sorted by severity/confidence) and tell the
@@ -1062,16 +1032,9 @@ function qualityNudge(rec: Decision): string {
   return "";
 }
 
-/** Resolve a free-form target (symbol id / name / file path) to symbol records.
- *  Tiered exact-id > exact-name > exact-file > segment-anchored-suffix matching,
- *  shared with `HunchStore.why()` via `matchSymbolsTiered` so the two don't drift
- *  apart on the same question. */
-export function resolveSymbols(store: HunchStore, target: string): Symbol[] {
-  // An absolute target (an agent's edit-payload path, verbatim) never matched
-  // the repo-relative stored file paths below (issue #296).
-  target = repoRelativeTarget(target, store.publicRoot);
+@@CLEANROOM_HOLE_8@@
   const syms = store.json.loadAll("symbols");
-  const components = store.json.loadAll("components");
+@@CLEANROOM_HOLE_9@@
   // A target that IS a real path (has a symbol, is covered by an indexed
   // component even with zero symbols — README.md, package.json, ... — or, last
   // resort, is a real working-tree file the index cannot see at all, issue
@@ -1082,14 +1045,14 @@ export function resolveSymbols(store: HunchStore, target: string): Symbol[] {
   // #299). `store.isKnownPath` is the one definition of that question; it is
   // asked here over the PUBLIC graph only, matching the records resolved below.
   const indexed = store.isKnownPath(target, { symbols: syms, components });
-  return matchSymbolsTiered(target, syms, indexed);
+@@CLEANROOM_HOLE_10@@
 }
 
 /** Resolve a target to canonical indexed file path(s) (for file-granular blast
  *  radius). Falls back to the literal target so direct-scope checks still run. */
-export function resolveFiles(store: HunchStore, target: string): string[] {
+@@CLEANROOM_HOLE_11@@
   const files = new Set(resolveSymbols(store, target).map((s) => s.file));
-  return files.size ? [...files] : [repoRelativeTarget(target, store.publicRoot)];
+@@CLEANROOM_HOLE_12@@
 }
 
 type PreparedRoot = {
@@ -1479,33 +1442,11 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
   ) => unknown;
   server.registerTool = ((name: string, config: unknown, callback: UntypedToolHandler) =>
     hiddenTools.has(name) ? undefined : registerTool(name, config, async (...args: unknown[]) => {
-      // Claude Code CLI never advertises `roots`/`roots/list_changed` for an agent-driven
-      // `cd` or EnterWorktree (issue #20) — the cached `root` above just never moves, so a
-      // write silently lands wherever the process was spawned. Write tools accept an
-      // optional `cwd` argument (see cwdHintField) as a client-agnostic fallback: resolved
-      // fresh on EVERY call instead of trusted from a cache, and re-homing this stdio
-      // process the same way a `roots` notification would. Only safe when this is the
-      // sole in-flight request — re-homing under a concurrent request would tear its
-      // root/store out from under it, so that case is refused rather than risked.
-      const cwdHint = extractCwdHint(args[0]);
+@@CLEANROOM_HOLE_13@@
       // A pinned root is the whole point of `hunch mcp --root`: a served partition must not
       // follow the caller's working directory into some other checkout.
       if (cwdHint !== undefined && !pinned) {
-        const target = canonicalRootPath(findRoot(cwdHint));
-        if (target !== canonicalRootPath(root)) {
-          if (activeRequests) {
-            return err(
-              `Hunch is mid-request against ${root} and cannot safely switch to the working directory you passed ` +
-              `(resolves to ${target}) while another call is in flight. Retry this call once the other one completes.`,
-            );
-          }
-          try {
-            setRoot(cwdHint);
-          } catch (error) {
-            return err(`Failed to switch Hunch to your working directory (${cwdHint}): ${(error as Error).message}`);
-          }
-        }
-      }
+@@CLEANROOM_HOLE_14@@
       activeRequests++;
       try {
         // Routing is live state, not a startup constant. A branch switch or
@@ -2102,16 +2043,13 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
   // -- hunch_now (the hot view: recent activity + roadmap) --------------------
   // PUBLIC store only, per dec_29eff08c69's jurisdiction rule: an assistant may
   // paste this anywhere, so it must be publishable by construction. Union view
-  // stays behind `hunch now --private` on the local terminal. EXCEPTION: a
-  // queued commit-repair's liveness is checked against the full store (see
-  // below), so a private-overlay decision's id and commit shas — never its
-  // title — can surface in the escalation line.
+@@CLEANROOM_HOLE_15@@
   server.registerTool(
     "hunch_now",
     {
       title: "Recent activity + the roadmap (the hot view)",
       description:
-        "What just happened and what's next, straight from the graph: the last N decisions, the ROADMAP, and any inline human question such as an imported ADR awaiting explicit approve/decline. Call at session start to orient, or before planning what to work on. Same data as the wiki's now.md. Public store only, EXCEPT a queued commit-repair's liveness is checked against the full store (so a private-overlay decision's fully-answerable repair doesn't go silently unanswerable); only its id and the commit shas ever surface, never its title.",
+@@CLEANROOM_HOLE_16@@
       inputSchema: {
         recent_limit: z.number().optional().describe("How many recent decisions to include (default 5)."),
         roadmap_limit: z.number().optional().describe("How many roadmap entries to include (default 2); the rest are counted."),
@@ -2138,18 +2076,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
       if (ws) L.push("", ws);
       const escalations = pendingEscalations(store.advisoryRecs("decisions"));
       escalations.push(...premiseEscalations(store.advisoryRecs("decisions"), { now: new Date().toISOString(), exists: (p) => existsSync(join(root, p)) }));
-      // liveness checked against the full store (repair-provenance reads the
-      // full store too) even though the title stays scoped to advisoryRecs —
-      // an overlay decision's repair is fully answerable, so it must not go
-      // silent here just because its title is private.
-      const hunchNowQueue = readActivePendingRepairs(root);
-      escalations.push(...commitRepairEscalations(hunchNowQueue, store.advisoryRecs("decisions"), store.recs("decisions"), withheldRewrites(root, hunchNowQueue)));
-      // Only ACTIONABLE entries are a question the assistant can put to the human
-      // directly — a duplicate-id commit-repair follower whose own resolution
-      // says "act on a different entry first" isn't one (#61).
-      const actionableNow = actionableEscalations(escalations);
-      if (actionableNow.length) {
-        L.push("", `⚖ ${actionableNow.length} decision(s) need the human's call — ASK inline (never queue): ${actionableNow.map((e) => e.question).join(" · ")}`);
+@@CLEANROOM_HOLE_17@@
       }
       return ok(L.join("\n"));
     },
@@ -2219,23 +2146,14 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
       // Premise decay: a live decision whose recorded reason died. Question-framed
       // like every entry here — authority never changes until the human answers.
       items.push(...premiseEscalations(store.advisoryRecs("decisions"), { now: new Date().toISOString(), exists: (p) => existsSync(join(root, p)) }));
-      // See the sibling hunch_now handler above for why `live` is the full store.
-      const hunchEscalationsQueue = readActivePendingRepairs(root);
-      items.push(...commitRepairEscalations(hunchEscalationsQueue, store.advisoryRecs("decisions"), store.recs("decisions"), withheldRewrites(root, hunchEscalationsQueue)));
+@@CLEANROOM_HOLE_18@@
       try {
         items.push(...policyEscalations(new ConstitutionService(store, root).list({ publicOnly: true }).map((p) => ({ ...p, last_action: p.audit.at(-1)?.action ?? null }))));
       } catch { /* constitution unavailable — memory escalations still surface */ }
       if (!items.length) return ok("✓ Nothing needs a human decision — memory is auto-trusted and self-consistent.");
-      // Only ACTIONABLE entries are a question to ask the human directly — a
-      // duplicate-id commit-repair follower whose own resolution says "act on
-      // a different entry first" still surfaces below for transparency, but
-      // isn't itself something to raise as a decision (#61).
-      const L = [escalationHeadline(items, "mcp"), ""];
+@@CLEANROOM_HOLE_19@@
       for (const e of items) {
-        // Marked distinctly (never the "⚖ question" glyph) when it isn't
-        // itself something to raise — an entry whose own answer is "act on a
-        // different entry first" reads as informational, not as a question.
-        L.push(`${e.actionable === false ? "·" : "⚖"} ${e.question}`);
+@@CLEANROOM_HOLE_20@@
         L.push(`   ${e.detail}`);
         L.push(`   → ${e.resolution}`, "");
       }
@@ -2454,7 +2372,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
         }),
         capture_token: z.string().optional().describe("token from hunch_capture_decision — proves this write tails a grilling interview (not a signature: the client may still ask the human to confirm). Omit only for a quick manual record (returns a deprecation nudge)."),
         task_id: saveTaskIdField,
-        cwd: cwdHintField,
+@@CLEANROOM_HOLE_21@@
       },
     },
     async ({ decision, capture_token, task_id }): Promise<ToolResult> => {
@@ -2688,7 +2606,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
         const where = decision.private
           ? ` [PRIVATE overlay — not committed to this repo]${flushed}`
           : home === "private" ? ` [SHARED store — one source of truth for the whole team]${flushed}` : flushed;
-        const dest = destinationNote(resolveDestRoot(home, store, root));
+@@CLEANROOM_HOLE_22@@
         // The chain (nuryel.state/1): a `shipped` receipt in an organization drawer rests on
         // this decision by id + the hash ON FILE + this repository's partition. Hand the ref
         // over now so the agent never rests on a pre-store hash or re-derives the scope.
@@ -2720,7 +2638,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
         private: z.boolean().optional().describe("write into the PRIVATE overlay store (HUNCH_PRIVATE_DIR), not the committed repo — enforced locally (pre-edit hook + check), never in a public PR comment. Errors if no private store is configured."),
         capture_token: z.string().optional().describe("token from hunch_capture_decision. Recorded and enforced either way, as agent testimony capped at severity 'warning'. A token never lets it DENY: blocking authority needs a human running the printed `hunch review --confirm <id> --severity <s>`."),
         task_id: saveTaskIdField,
-        cwd: cwdHintField,
+@@CLEANROOM_HOLE_23@@
       },
     },
     async (input): Promise<ToolResult> => {
@@ -2807,8 +2725,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
         const tierNote = `
 
 ⚠ ${why} — this rule is agent_recorded TESTIMONY${capped ? ` and was capped from "${requested.severity}" to "${rec.severity}"` : ""}. It IS enforced: the pre-edit hook and CI surface it on every matching edit from now on. What it cannot do is DENY an edit — only a rule a human confirmed outside the agent channel may block. The human confirms it by running: ${confirmCommand(rec.id, { private: home === "private", severity: requested.severity })}`;
-        const dest = destinationNote(resolveDestRoot(home, store, root));
-        return ok(`${existing ? "Updated" : "Recorded"} ${rec.severity} constraint ${rec.id}: "${rec.statement}" (scope: ${rec.scope.join(", ")}).${where}${dest} It now ${enforce}.${reviewNote}${tierNote}`);
+@@CLEANROOM_HOLE_24@@
       } catch (e) {
         return err(`Failed to record correction: ${(e as Error).message}`);
       }
@@ -2838,7 +2755,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
           private: z.boolean().optional().describe("write into the PRIVATE overlay store, not the committed repo. Errors if no private store is configured."),
         }),
         task_id: saveTaskIdField,
-        cwd: cwdHintField,
+@@CLEANROOM_HOLE_25@@
       },
     },
     async ({ finding, task_id }): Promise<ToolResult> => {
@@ -2890,8 +2807,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
           ? `\n\n△ violates_constraint ${rec.violates_constraint} resolves to no known constraint — if the rule isn't recorded yet, hunch_record_correction it and re-record this finding with the real id.`
           : "";
         const noEvidence = rec.evidence.length ? "" : "\n\n△ No evidence attached — a finding without the query/output that produced it is an opinion. Re-record with evidence when you have it.";
-        const dest = destinationNote(resolveDestRoot(home, store, root));
-        return ok(`${existing ? "Updated" : "Recorded"} finding ${id}: "${rec.title}" (${rec.triage}/${rec.severity}, observed ${rec.observed_at.slice(0, 10)}).${where}${dest} It now grounds edits to: ${[...rec.affected_files, ...rec.affected_symbols].join(", ") || "(nothing — add affected_files/symbols so it surfaces at edit time)"}.${danglingCon}${noEvidence}`);
+@@CLEANROOM_HOLE_26@@
       } catch (e) {
         return err(`Failed to record finding: ${(e as Error).message}`);
       }
@@ -3156,7 +3072,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
         public_only: z.boolean().optional().describe("Read and write only the public correction home."),
         private_only: z.boolean().optional().describe("Keep correction-derived artifacts in the private overlay; the public source-code graph is refreshed before proof."),
         include_artifacts: z.boolean().optional().describe("Include the full Policy IR, proof plan, receipts, and evidence. Default is a concise review envelope."),
-        cwd: cwdHintField,
+@@CLEANROOM_HOLE_27@@
       },
     },
     async ({ constraint_id, public_only, private_only, include_artifacts }): Promise<ToolResult> => {
@@ -3215,9 +3131,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
             startupTeamRoute ?? undefined,
           );
         }
-        const destRoot = resolveDestRoot(artifactHome, store, root);
-        const destination = { root: destRoot, branch: currentBranch(destRoot) };
-        if (include_artifacts) return ok(JSON.stringify({ ...upgrade, destination }, null, 2));
+@@CLEANROOM_HOLE_28@@
         return ok(JSON.stringify({
           status: upgrade.status,
           correction_id: upgrade.correction_id,
@@ -3230,7 +3144,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
           authority: upgrade.authority,
           effects: upgrade.effects,
           activation: upgrade.activation,
-          destination,
+@@CLEANROOM_HOLE_29@@
         }, null, 2));
       } catch (e) {
         return err(`Failed to upgrade correction: ${(e as Error).message}`);
@@ -3413,7 +3327,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
       inputSchema: {
         policy_id: z.string().describe("Policy id (pol_*)."),
         public_only: z.boolean().optional().describe("Exclude private-overlay policy and evidence records."),
-        cwd: cwdHintField,
+@@CLEANROOM_HOLE_30@@
       },
     },
     async ({ policy_id, public_only }): Promise<ToolResult> => {
@@ -3425,8 +3339,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
         const home = public_only ? "public" : service.repository.homeOfPolicy(policy_id);
         if (!home) throw new Error(`policy ${policy_id} has no exact storage home`);
         flushMemoryHome(store, hunchPaths(root).hunch, home, `hunch: plan policy ${policy_id}`, startupTeamRoute ?? undefined);
-        const destRoot = resolveDestRoot(home, store, root);
-        return ok(JSON.stringify({ ...plan, destination: { root: destRoot, branch: currentBranch(destRoot) } }, null, 2));
+@@CLEANROOM_HOLE_31@@
       } catch (e) {
         return err(`Failed to generate policy proof plan: ${(e as Error).message}`);
       }
@@ -3771,7 +3684,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
         limit: z.number().int().min(1).max(100).optional().describe("Item limit used by the exact review packet (default 30)."),
         allow_install_scripts: z.array(z.string().min(1).max(214)).max(20).optional().describe("Exact dependency package names allowed to run lifecycle scripts while provisioning snapshots."),
         dependency_timeout_ms: z.number().int().min(1).max(900000).optional().describe("Timeout for each exact dependency snapshot operation (default 300000ms)."),
-        cwd: cwdHintField,
+@@CLEANROOM_HOLE_32@@
       },
     },
     async ({ decision_id, since, max_commits, limit, allow_install_scripts, dependency_timeout_ms }): Promise<ToolResult> => {
@@ -3785,8 +3698,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
           dependencyTimeoutMs: dependency_timeout_ms ?? 300_000,
         });
         flushMemoryHome(store, hunchPaths(root).hunch, "private", "hunch: materialize G2 behavior policies", startupTeamRoute ?? undefined);
-        const destRoot = resolveDestRoot("private", store, root);
-        return ok(JSON.stringify({ ...materialized, destination: { root: destRoot, branch: currentBranch(destRoot) } }, null, 2));
+@@CLEANROOM_HOLE_33@@
       } catch (e) {
         return err(`Failed to materialize G2 behavior policies: ${(e as Error).message}`);
       }
