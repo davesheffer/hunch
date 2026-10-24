@@ -14,6 +14,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { writeFileAtomic } from "../core/io.js";
 import { assertSafeTopLevelConfigFile } from "./gitignore.js";
 import { GROUNDING_DOC_PATHS } from "./providers.js";
+import { mergeDriverShell } from "../cli/invocation.js";
 
 // Route the .hunch JSON records through the structured driver — but NOT the
 // manifest (an id-less `{schema_version}` object the driver can't merge by id; a
@@ -60,9 +61,10 @@ export function installMergeDriver(root: string, invShell: string): { action: st
 
   // 2. Local git config — the driver definitions are per-clone (they reference
   //    this machine's node + cli path), so they are NOT committed; teammates
-  //    re-run init.
-  const driver = `${invShell} merge-driver "%O" "%A" "%B" "%P"`;
-  const groundingDriver = `${invShell} merge-driver-grounding "%O" "%A" "%B" "%P"`;
+  //    re-run init. Dev mode swaps `npx tsx` for Hunch's own loader (#492).
+  const shell = mergeDriverShell(invShell);
+  const driver = `${shell} merge-driver "%O" "%A" "%B" "%P"`;
+  const groundingDriver = `${shell} merge-driver-grounding "%O" "%A" "%B" "%P"`;
   const env = targetRepositoryEnv();
   try {
     execFileSync("git", ["config", "merge.hunch.name", "hunch structured JSON merge"], { cwd: root, env });
