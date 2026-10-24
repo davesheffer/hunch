@@ -122,7 +122,11 @@ test("private sync preserves a human-confirmed overlay decision even under --for
     git("config", "user.name", "Test");
     mkdirSync(join(root, "src"), { recursive: true });
     writeFileSync(join(root, "src", "billing.ts"), "export const total = (n: number) => n * 1.2;\n");
-@@CLEANROOM_HOLE_1@@
+    // Stage only the file under test: the private store fixture already wrote .hunch/
+    // scaffold files into the root before the repo init, and a blanket add would commit
+    // them, trip the .hunch/** synthesis guard, and skip the commit before the
+    // human-confirmed check this test targets.
+    git("add", "src/billing.ts");
     git("commit", "-qm", "feat: add billing");
     const sha = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
     const now = new Date().toISOString();

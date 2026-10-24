@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { tempStore, prov } from "./helpers.js";
-@@CLEANROOM_HOLE_1@@
+import { recordFailure, salientTerms, isSignificant, isTrivialSubject } from "../src/synthesis/synthesize.js";
 import { selectProvider } from "../src/synthesis/provider.js";
 import type { DiffAnalysis } from "../src/extractors/diff.js";
 
@@ -32,7 +32,30 @@ test("isSignificant gates the paid LLM: trivia â†’ deterministic; real signal â†
   assert.equal(isSignificant({ body: "x".repeat(50) }, analysis(), ["src/a.ts"]), true);
 });
 
-@@CLEANROOM_HOLE_2@@
+test("isTrivialSubject: SKIP_SUBJECT match is skipped UNLESS the body is substantive (regression #4)", () => {
+  assert.equal(isTrivialSubject({ subject: "Merge branch 'main' into feature", body: "" }), true);
+  assert.equal(isTrivialSubject({ subject: "bump: lodash to 4.2.0", body: "" }), true);
+  assert.equal(isTrivialSubject({ subject: "wip", body: "   \n  " }), true);
+  assert.equal(isTrivialSubject({ subject: "format: prettier", body: "x".repeat(39) }), true);
+  assert.equal(isTrivialSubject({ subject: "Merge branch 'main' into feature", body: "x".repeat(40) }), false);
+  assert.equal(
+    isTrivialSubject({ subject: "Merge pull request #42 from a/b", body: "Moves session storage to Redis so replicas share state across restarts." }),
+    false,
+  );
+  assert.equal(isTrivialSubject({ subject: "feat: add x", body: "" }), false);
+  assert.equal(isTrivialSubject({ subject: "feat: add x", body: "y".repeat(100) }), false);
+});
+
+test("isTrivialSubject: chore(deps) subjects are recognized as SKIP_SUBJECT (regex fix, regression #4)", () => {
+  // A word boundary after the closing parenthesis can never match (")" and ":" are
+  // both non-word characters), so chore(deps): was silently never skipped.
+  assert.equal(isTrivialSubject({ subject: "chore(deps): bump lodash from 4.1.0 to 4.2.0", body: "" }), true);
+  assert.equal(isTrivialSubject({ subject: "chore(deps): bump lodash from 4.1.0 to 4.2.0", body: "z".repeat(40) }), false);
+  for (const subject of ["Merge branch 'main'", "revert: bad change", "bump: lodash to 4.2.0", "format: prettier", "lint: eslint fixes", "wip"]) {
+    assert.equal(isTrivialSubject({ subject, body: "" }), true, subject);
+  }
+});
+
 test("deterministic provider is always available and drafts a low-confidence decision", async () => {
   const p = await selectProvider();
   assert.equal(p.name, "deterministic");
@@ -41,7 +64,12 @@ test("deterministic provider is always available and drafts a low-confidence dec
   assert.ok(d.confidence <= 0.4, "auto-captured = advisory/low-confidence");
 });
 
-@@CLEANROOM_HOLE_3@@
+test("deterministic provider's empty-subject title fallback doesn't claim \"Code\" for a markdown-only commit (issue #12)", async () => {
+  const p = await selectProvider();
+  const d = await p.draftDecision({ subject: "", body: "", files: ["docs/adr/0001-x.md"], diff: "" });
+  assert.doesNotMatch(d.title, /\bcode\b/i);
+});
+
 test("recordFailure ranks suspects, writes a bug, and promotes a constraint on recurrence", async () => {
   const { store, root, cleanup } = tempStore();
   store.json.replaceAll("symbols", [

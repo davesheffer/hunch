@@ -17,9 +17,13 @@ import { pathMatchesGlob } from "../core/glob.js";
 import { draftTripwires, knownRepoDeps } from "./tripwires.js";
 import type { Decision, Bug, Constraint, Component, Symbol } from "../core/types.js";
 import type { TestReport } from "../extractors/testreport.js";
-@@CLEANROOM_HOLE_1@@
+import { isSubstantive } from "../extractors/languages.js";
 
-@@CLEANROOM_HOLE_2@@
+// Subjects that signal mechanical churn. `chore(deps):` is matched as a literal
+// prefix on its own: a word-boundary check after the closing parenthesis would
+// never fire (both ")" and ":" are non-word characters), so it cannot share the
+// `\b` alternative.
+const SKIP_SUBJECT = /^(?:(?:merge|revert|bump|format|lint|wip)\b|chore\(deps\):)/i;
 
 export interface SyncResult {
   status: "written" | "skipped";
@@ -33,17 +37,28 @@ export interface SyncResult {
 const SIG_MIN_LINES = ((raw) => Number.isFinite(raw) && raw > 0 ? raw : 12)(Number(process.env.HUNCH_SIG_MIN_LINES));
 const SIG_MIN_BODY = 40;
 
-@@CLEANROOM_HOLE_3@@
+/** Is this commit mechanical noise (merge/revert/bump/format/lint/wip, dependency
+ *  chores) with no narrative? Gates on body length alone, not the full significance
+ *  heuristic, so a large auto-generated reformat or dependency bump with no
+ *  narrative stays skipped, while a squash/PR description (a substantive body)
+ *  keeps a trivial-looking subject eligible. */
+export function isTrivialSubject(meta: { subject: string; body: string }): boolean {
+  return SKIP_SUBJECT.test(meta.subject) && meta.body.trim().length < SIG_MIN_BODY;
+}
+
 /** Is a commit substantive enough to spend a paid LLM synthesis call on? Pure and
  *  deterministic. Any structural change (symbol/dependency delta), non-trivial
  *  churn, several files, OR an explanatory commit body signals a real decision
  *  worth the model. Everything below (typo/tweak/one-liner with no message) falls
-@@CLEANROOM_HOLE_4@@
+ *  to the free deterministic draft. The line and file-count checks don't depend on
+ *  the file format; `files` is the explicit list being synthesized (code and/or
+ *  markdown). */
+export function isSignificant(meta: { body: string }, a: DiffAnalysis, files: string[]): boolean {
   const structural =
     a.addedSymbols.length + a.removedSymbols.length + a.changedSymbols.length + a.addedDeps.length + a.removedDeps.length;
   if (structural > 0) return true;
   if (a.addedLines + a.removedLines >= SIG_MIN_LINES) return true;
-@@CLEANROOM_HOLE_5@@
+  if (files.length >= 3) return true;
   if (meta.body.trim().length >= SIG_MIN_BODY) return true;
   return false;
 }
@@ -61,7 +76,15 @@ export async function syncCommit(
   const meta = commitMeta(target, root);
   if (!meta) return { status: "skipped", reason: "commit not found" };
 
-@@CLEANROOM_HOLE_6@@
+  if (isTrivialSubject(meta)) return { status: "skipped", reason: `trivial subject: ${meta.subject}` };
+  // Hunch's own store is circular input. This checks the PATH, not the commit-message
+  // wording, and the decision is per path: a human editing AGENTS.md alone, with no
+  // .hunch change, stays eligible.
+  if (meta.files.some((f) => pathMatchesGlob(f, "**/.hunch/**"))) {
+    return { status: "skipped", reason: "commit touches Hunch's own store (.hunch/**), which is circular and never synthesis input" };
+  }
+  const substantiveFiles = meta.files.filter(isSubstantive);
+  if (!substantiveFiles.length) return { status: "skipped", reason: "no code or markdown files changed" };
 
   // Seed the id from the COMMIT (stable across runs), not the LLM-generated title
   // (which varies) — so re-syncing a commit updates rather than dupes.
@@ -94,7 +117,7 @@ export async function syncCommit(
   // review triage measured 7 of 14 queued drafts as exactly this. A recent
   // human-confirmed decision claiming this commit's files → skip the draft (and
   // the subscription call). Recency-windowed; --force overrides.
-@@CLEANROOM_HOLE_7@@
+  const covered = commitCoveredBy(substantiveFiles, meta.subject, store.recs("decisions"), Date.now());
   if (covered && !opts.force) {
     return {
       status: "skipped",
@@ -123,21 +146,24 @@ export async function syncCommit(
     ? new DeterministicProvider()
     : opts.deep
     ? (await selectEnsemble({ root, samples: opts.samples })) ?? await selectProvider({ root })
-@@CLEANROOM_HOLE_8@@
+    : opts.force || wantVerify || isSignificant(meta, analysis, substantiveFiles)
       ? await selectProvider({ root })
       : new DeterministicProvider();
-@@CLEANROOM_HOLE_9@@
+  const input: CommitInput = { subject: meta.subject, body: meta.body, files: substantiveFiles, diff, analysis };
   let draft = await draftDecisionSafe(provider, input);
   // The Critic pass: audit the draft against the commit, PRUNE unsupported alternatives
   // (BEFORE they scaffold tripwires below) and consequences, and lower confidence on weak
   // grounding. No-ops when no assistant CLI is available; never raises trust (dec_9a2f2fe72a).
   if (wantVerify) draft = await verifyDecisionSafe(await selectVerifier({ root }), input, draft);
 
-@@CLEANROOM_HOLE_10@@
+  // Every telemetry/return value below must report the provider that ACTUALLY drafted
+  // the record (backfill's LLM-vs-heuristic tally reads it from the return value).
+  const actualProvider = draft.fellBackTo ?? provider.name;
+
   // Advisory synthesis telemetry for `hunch review` — which provider ran, how many drafts
   // were reconciled, their agreement, and the verifier's grounding. Rides in `evidence`
   // (no schema change → respects forward-migration invariant con_947c578b2c).
-@@CLEANROOM_HOLE_11@@
+  const synthBits: string[] = [`provider=${actualProvider}`];
   if (draft.samples) synthBits.push(`samples=${draft.samples}`);
   if (draft.agreement != null) synthBits.push(`agreement=${draft.agreement}`);
   if (draft.grounded != null) synthBits.push(`grounded=${draft.grounded}`);
@@ -154,14 +180,14 @@ export async function syncCommit(
 
   const components = store.json.loadAll("components");
   const relatedComponents = components
-@@CLEANROOM_HOLE_12@@
+    .filter((c) => substantiveFiles.some((f) => c.paths.some((g) => pathMatchesGlob(f, g))))
     .map((c) => c.id);
 
   // Surface any do-not-break constraints this commit's files touch (DESIGN §4
   // "constraint touched" flag) right in the decision context, with evidence.
   const touchedConstraints = store.json
     .loadAll("constraints")
-@@CLEANROOM_HOLE_13@@
+    .filter((c) => substantiveFiles.some((f) => c.scope.some((g) => pathMatchesGlob(f, g))));
   const constraintNote = touchedConstraints.length
     ? ` Touches invariant(s): ${touchedConstraints.map((c) => `${c.id} (${c.statement})`).join("; ")}.`
     : "";
@@ -189,9 +215,9 @@ export async function syncCommit(
     // → never block until confirmed via `hunch review --accept` (dec_a466655539).
     rejected_tripwires: existing?.rejected_tripwires?.length
       ? existing.rejected_tripwires
-@@CLEANROOM_HOLE_14@@
+      : draftTripwires(draft.alternatives_rejected, substantiveFiles, knownRepoDeps(root)),
     related_components: relatedComponents,
-@@CLEANROOM_HOLE_15@@
+    related_files: substantiveFiles,
     supersedes: existing?.supersedes ?? null,
     superseded_by: existing?.superseded_by ?? null,
     caused_by_bug: existing?.caused_by_bug ?? null,
@@ -207,7 +233,7 @@ export async function syncCommit(
     provenance: {
       source: draft.source,
       confidence: draft.confidence,
-@@CLEANROOM_HOLE_16@@
+      evidence: [`commit:${meta.shortSha}`, synthEvidence, ...branchTag, ...substantiveFiles.slice(0, 8)],
       last_verified: new Date().toISOString(), // when the Hunch last re-derived this
     },
     date: meta.date, // the commit date
@@ -224,7 +250,7 @@ export async function syncCommit(
   // which read as an accidental bypass and invited exactly that wrong fix.
   if (home === "private") store.putPrivate("decisions", decision);
   else store.json.put("decisions", decision);
-@@CLEANROOM_HOLE_17@@
+  return { status: "written", decision, provider: actualProvider };
 }
 
 export interface FailureResult {
@@ -272,7 +298,8 @@ export async function recordFailure(
     suspects: suspects.map((s) => `${s.name} @ ${s.file}`),
   };
   const draft = await draftBugSafe(provider, input);
-@@CLEANROOM_HOLE_18@@
+  // Report the provider that actually drafted the bug (see syncCommit).
+  const actualProvider = draft.fellBackTo ?? provider.name;
 
   // Seed the id from the test id (stable), not the LLM title — one bug per test.
   const id = bugId(failure.test);
@@ -317,7 +344,7 @@ export async function recordFailure(
   }
   raiseFragility(store, affectedFiles, home);
 
-@@CLEANROOM_HOLE_19@@
+  return { status: "written", bug, constraint, provider: actualProvider, touchedHomes: [home] };
 }
 
 export interface CapturedFailure {
@@ -558,17 +585,23 @@ function recentDiffFor(root: string): string {
 export async function draftDecisionSafe(provider: SynthProvider, input: CommitInput): Promise<DecisionDraft> {
   try {
     return await provider.draftDecision(input);
-@@CLEANROOM_HOLE_20@@
+  } catch (err) {
     // A provider failure (network, bad creds, CLI crash, unparseable output) must
     // never abort the learning loop — fall back to the deterministic heuristic
     // draft, which is honestly labeled ("inferred") rather than a hollow llm_draft.
-@@CLEANROOM_HOLE_21@@
+    // Tell the caller a fallback happened (and why) so it reports the provider that
+    // actually drafted the record rather than the one that was selected.
+    const fallback = await new DeterministicProvider().draftDecision(input);
+    return { ...fallback, fellBackTo: "deterministic", fallbackReason: err instanceof Error ? err.message : String(err) };
   }
 }
 
 export async function draftBugSafe(provider: SynthProvider, input: FailureInput): Promise<BugDraft> {
   try {
     return await provider.draftBug(input);
-@@CLEANROOM_HOLE_22@@
+  } catch (err) {
+    // Same contract as draftDecisionSafe: surface the fallback and its cause.
+    const fallback = await new DeterministicProvider().draftBug(input);
+    return { ...fallback, fellBackTo: "deterministic", fallbackReason: err instanceof Error ? err.message : String(err) };
   }
 }

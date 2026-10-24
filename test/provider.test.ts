@@ -268,14 +268,16 @@ test("draftDecisionSafe: a throwing provider degrades to an honest 'inferred' de
   assert.equal(d.source, "inferred", "never a hollow llm_draft");
   assert.ok(d.confidence <= 0.45);
   assert.ok(d.title.length > 0);
-@@CLEANROOM_HOLE_1@@
+  assert.equal(d.fellBackTo, "deterministic", "the caller must be told a fallback happened");
+  assert.equal(d.fallbackReason, "unparseable output");
 });
 
 test("draftBugSafe: a throwing provider degrades to an honest 'test_failure' deterministic draft", async () => {
   const b = await draftBugSafe(throwingProvider(), FAILURE);
   assert.equal(b.source, "test_failure");
   assert.ok(b.confidence <= 0.3);
-@@CLEANROOM_HOLE_2@@
+  assert.equal(b.fellBackTo, "deterministic");
+  assert.equal(b.fallbackReason, "unparseable output");
 });
 
 test("draftDecisionSafe passes a successful provider draft through unchanged", async () => {
@@ -288,5 +290,5 @@ test("draftDecisionSafe passes a successful provider draft through unchanged", a
   const d = await draftDecisionSafe(passing, COMMIT);
   assert.equal(d.source, "llm_draft");
   assert.equal(d.decision, "D");
-@@CLEANROOM_HOLE_3@@
+  assert.equal(d.fellBackTo, undefined, "a successful draft never carries a fallback marker");
 });
