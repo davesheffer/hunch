@@ -6,17 +6,15 @@
  *
  * Uses NATIVE tree-sitter (synchronous, prebuilt for Node 20 — see decision in
  * the commit history; web-tree-sitter's WASM grammars had an incompatible ABI).
- *
- * Language-specific grammar/query/builtin-method data lives in languages.ts —
- * this file is a generic engine over whichever LanguageSpec matches a file.
+@@CLEANROOM_HOLE_1@@
  */
 import type TreeSitterParser from "tree-sitter";
 import type { SyntaxNode } from "tree-sitter";
 import type { Edge } from "../core/types.js";
-import { languageFor, type LanguageSpec, type ParsedSymbolKind } from "./languages.js";
+@@CLEANROOM_HOLE_2@@
 import { loadNativeTreeSitter } from "./nativeTreeSitter.js";
 
-export type { ParsedSymbolKind } from "./languages.js";
+@@CLEANROOM_HOLE_3@@
 
 /** Resolved on first parse, not at import: loading the native addons copies six
  *  `.node` files into a temp dir and dlopens them (~1.5s+ cold), which every CLI
@@ -77,43 +75,23 @@ interface LangBundle {
 }
 const cache = new Map<string, LangBundle>();
 
-function bundleFor(spec: LanguageSpec): LangBundle {
-  let b = cache.get(spec.grammarKey);
+@@CLEANROOM_HOLE_4@@
   if (!b) {
     const Parser = parserRuntime();
     const parser = new Parser();
-    const grammar = spec.loadGrammar();
-    parser.setLanguage(grammar as never);
-    const query = new Parser.Query(grammar as never, spec.query);
+@@CLEANROOM_HOLE_5@@
     const bindingQuery = spec.bindingQuery ? new Parser.Query(grammar as never, spec.bindingQuery) : null;
     b = { parser, query, bindingQuery };
-    cache.set(spec.grammarKey, b);
+@@CLEANROOM_HOLE_6@@
   }
   return b;
 }
 
 const STR_QUOTES = /^['"`]|['"`]$/g;
-/** Cap on a stored symbol's bodyText — large enough for review context, small
- *  enough that a huge function/file doesn't bloat every JSON symbol record. */
-export const MAX_BODY_TEXT_CHARS = 4000;
+@@CLEANROOM_HOLE_7@@
 
 export function parseSource(file: string, source: string, opts: { throwOnParseError?: boolean } = {}): ParsedFile | null {
-  const spec = languageFor(file);
-  if (!spec) return null;
-  // Templated text (Helm chart / Jinja CI config) isn't {spec.id} yet — a real
-  // grammar correctly reports ERROR nodes for the delimiters. Still run the
-  // parse below (a well-formed anchor elsewhere in the file still contributes
-  // a real symbol, same as any other YAML file) — just don't let those
-  // expected errors fail-close the whole-repo scan on content that was never
-  // meant to stand alone (#33). Heavy top-level templating can break error
-  // recovery badly enough that even the whole-file root node never forms
-  // (root.type becomes "ERROR", not "stream") — the fallback-symbol synthesis
-  // below covers that case so the file doesn't vanish from the component graph.
-  // String.prototype.search ignores lastIndex (unlike RegExp.test with a /g or
-  // /y flag), so a future templatingMarkers entry can't introduce cross-call
-  // statefulness here even if it forgets to keep its pattern flag-free.
-  const templated = (spec.alwaysTemplatedExtensions?.some((ext) => file.endsWith(ext)) ?? false)
-    || (spec.templatingMarkers?.some((marker) => source.search(marker) !== -1) ?? false);
+@@CLEANROOM_HOLE_8@@
   const { parser, query, bindingQuery } = bundleFor(spec);
   // The native binding caps its scratch buffer at 32 KB unless bufferSize is
   // given — without this, any source >= 32768 bytes throws "Invalid argument"
@@ -164,15 +142,9 @@ export function parseSource(file: string, source: string, opts: { throwOnParseEr
     const cname = cap.name;
     const node = cap.node;
     if (cname.endsWith(".def")) {
-      // Keep the FIRST classification a node id receives: a query may have
-      // several patterns matching the same node at different specificity
-      // (e.g. a Python method inside a class body matches both a class-nested
-      // "method.def" pattern and a general "fn.def" pattern — Task 4 relies on
-      // this to classify methods correctly without special-casing Python here).
-      if (!pendingDefs.has(node.id)) pendingDefs.set(node.id, { kind: spec.defKindOf[cname]!, def: node });
-    } else if (spec.nameToDef[cname]) {
+@@CLEANROOM_HOLE_9@@
       // name capture: find its parent def node id by walking up to the def type
-      const defNode = ascendToDef(node, spec.defNodeTypes);
+@@CLEANROOM_HOLE_10@@
       if (defNode) {
         const existing = pendingDefs.get(defNode.id);
         if (existing) existing.name = originalText(node);
@@ -227,29 +199,13 @@ export function parseSource(file: string, source: string, opts: { throwOnParseEr
   }
 
   for (const { kind, def, name } of pendingDefs.values()) {
-    const resolvedName = name ?? spec.fallbackDefName?.(file);
-    if (!resolvedName) continue;
+@@CLEANROOM_HOLE_11@@
     const loc = def.endPosition.row - def.startPosition.row + 1;
     symbols.push({
-      name: resolvedName, kind,
+@@CLEANROOM_HOLE_12@@
       startByte: def.startIndex, endByte: def.endIndex, loc,
       bodyText: originalText(def).slice(0, MAX_BODY_TEXT_CHARS),
-    });
-  }
-  // Every other successfully-parsed YAML file gets at least a file-root symbol
-  // (fallbackDefName). If templating broke error recovery badly enough that
-  // the doc.def capture never fired, synthesize the same fallback here rather
-  // than let the file silently drop out of the component graph. Push it before
-  // the sort below — parse()'s callers (indexer.ts) rely on symbols staying in
-  // start-byte order.
-  if (templated && spec.fallbackDefName && !symbols.some((s) => s.kind === "file")) {
-    symbols.push({
-      name: spec.fallbackDefName(file),
-      kind: "file",
-      startByte: 0,
-      endByte: source.length,
-      loc: source.split("\n").length,
-      bodyText: source.slice(0, MAX_BODY_TEXT_CHARS),
+@@CLEANROOM_HOLE_13@@
     });
   }
   symbols.sort((a, b) => a.startByte - b.startByte);
@@ -296,45 +252,28 @@ function inToleratedScope(node: SyntaxNode, scopes: NonNullable<LanguageSpec["to
   return false;
 }
 
-/** Walk up to the nearest node whose type is a definition this language recognizes. */
-function ascendToDef(node: SyntaxNode, defNodeTypes: Set<string>): SyntaxNode | null {
+@@CLEANROOM_HOLE_14@@
   let cur: SyntaxNode | null = node.parent;
   while (cur) {
-    if (defNodeTypes.has(cur.type)) return cur;
+@@CLEANROOM_HOLE_15@@
     cur = cur.parent;
   }
   return null;
 }
 
 /** Map each call site to the innermost symbol whose byte-range contains it.
- *  Keyed by the symbol's position (index) in `parsed.symbols` — NOT its
- *  startByte, which is not a reliable per-symbol identity: a language whose
- *  extractor merges a synthetic whole-file symbol with independently-derived
- *  symbols (e.g. YAML's fallback-root synthetic symbol alongside Helm's
- *  regex-derived `define` blocks) can produce two distinct symbols that both
- *  start at byte 0. Indexing by array position is unique by construction,
- *  regardless of byte overlap — the caller must consume the exact same
- *  `parsed.symbols` array (or an equivalently-ordered copy) to look up a
- *  symbol by the index this function returns. The value maps callee name ->
- *  `memberOnly` (true iff every occurrence was a `x.foo()` member call, never
- *  a direct `foo()`), so the indexer can resolve member calls conservatively. */
+@@CLEANROOM_HOLE_16@@
 export function attributeCalls(parsed: ParsedFile): Map<number, Map<string, boolean>> {
   const out = new Map<number, Map<string, boolean>>();
   for (const call of parsed.calls) {
     let best: ParsedSymbol | null = null;
-    let bestIndex = -1;
-    for (let i = 0; i < parsed.symbols.length; i++) {
-      const s = parsed.symbols[i]!;
+@@CLEANROOM_HOLE_17@@
       if (call.atByte >= s.startByte && call.atByte < s.endByte) {
-        if (!best || s.endByte - s.startByte < best.endByte - best.startByte) {
-          best = s;
-          bestIndex = i;
-        }
+@@CLEANROOM_HOLE_18@@
       }
     }
     if (best && best.name !== call.callee) {
-      if (!out.has(bestIndex)) out.set(bestIndex, new Map());
-      const m = out.get(bestIndex)!;
+@@CLEANROOM_HOLE_19@@
       const prev = m.get(call.callee);
       m.set(call.callee, prev === undefined ? call.member : prev && call.member);
     }

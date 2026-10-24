@@ -30,12 +30,9 @@ export interface DiffAnalysis {
   changedSymbols: SymbolChange[]; // appeared on both sides of the SAME file
   addedDeps: string[]; // new external (non-relative) imports
   removedDeps: string[];
-  addedLines: number; // substantive lines only (code + prose, per isSubstantive)
+@@CLEANROOM_HOLE_1@@
   removedLines: number;
-  /** Added line bodies (the "+" content, marker stripped) per file — every file,
-   *  not just substantive ones. The text veto's symbol/pattern tiers match against
-   *  — call sites, not just declarations, which addedSymbols can't see. Keyed by
-   *  the same (new-path) key as perFile. */
+@@CLEANROOM_HOLE_2@@
   addedLinesByFile: Map<string, string[]>;
 }
 
@@ -50,27 +47,14 @@ const DECL_PATTERNS: Array<{ kind: SymbolChange["kind"]; re: RegExp }> = [
   { kind: "type", re: /^\s*(?:export\s+)?type\s+([A-Za-z_$][\w$]*)\s*[=<]/ },
   { kind: "const", re: /^\s*(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?(?:\([^)]*\)|[A-Za-z_$][\w$]*)\s*=>/ },
   { kind: "const", re: /^\s*(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?function/ },
-  { kind: "function", re: /^\s*(?:async\s+)?def\s+([A-Za-z_]\w*)\s*\(/ },
-  // No Python-specific class pattern needed: the generic TS `class` pattern above has no
-  // trailing-syntax requirement (no `{`/`:`), so it already matches Python's
-  // `class Foo(Bar):` header too, and — since declOf() returns on the first match —
-  // always wins for Python class lines before any Python-specific pattern would run.
+@@CLEANROOM_HOLE_3@@
 ];
-import { languageFor, isSubstantive } from "./languages.js";
-
+@@CLEANROOM_HOLE_4@@
 const IMPORT_RE = /^\s*import\s+(?:[^'"]*from\s+)?['"]([^'"]+)['"]/;
 const CONT_IMPORT_RE = /^\s*\}?\s*from\s+['"]([^'"]+)['"]/; // multi-line: "} from 'x'"
 const REQUIRE_RE = /\brequire\(\s*['"]([^'"]+)['"]\s*\)/;
 const PHP_REQUIRE_RE = /\b(?:require|require_once|include|include_once)\s*(?:\(\s*)?['"]([^'"]+)['"]/;
-// "import os" / "import a.b.c" / "import os as o" / "import os, sys" / trailing "# comment".
-// Anchored to the END of the line (optional "as alias", comma-separated modules, comment)
-// so it matches a COMPLETE Python import statement only — this deliberately rejects
-// TypeScript's `import Foo = Bar.Baz;` (import-equals), which would otherwise falsely
-// look like a Python "import Foo" prefix match.
-const PY_IMPORT_RE =
-  /^\s*import\s+([A-Za-z_][\w.]*)(?:\s+as\s+\w+)?(?:\s*,\s*[A-Za-z_][\w.]*(?:\s+as\s+\w+)?)*\s*(?:#.*)?$/;
-const PY_FROM_IMPORT_RE = /^\s*from\s+([.\w]+)\s+import\s+/; // "from os import path" / "from . import x"
-const isCode = (p: string) => !!p && languageFor(p) !== null;
+@@CLEANROOM_HOLE_5@@
 
 function declOf(line: string): SymbolChange | null {
   for (const { kind, re } of DECL_PATTERNS) {
@@ -80,13 +64,9 @@ function declOf(line: string): SymbolChange | null {
   return null;
 }
 function importOf(line: string): string | null {
-  const m =
-    IMPORT_RE.exec(line) ??
-    CONT_IMPORT_RE.exec(line) ??
-    REQUIRE_RE.exec(line) ??
+@@CLEANROOM_HOLE_6@@
     PHP_REQUIRE_RE.exec(line) ??
-    PY_FROM_IMPORT_RE.exec(line) ??
-    PY_IMPORT_RE.exec(line);
+@@CLEANROOM_HOLE_7@@
   return m ? m[1]! : null;
 }
 function stripAB(p: string): string {
@@ -299,14 +279,14 @@ export function analyzeDiff(diff: string): DiffAnalysis {
       } else if (raw.startsWith("rename to ") || raw.startsWith("copy to ")) {
         const to = headerPath(raw.slice(raw.indexOf(" to ") + 4));
         curFile = to;
-        if (isSubstantive(to)) filesRenamed.push({ from: renameFrom, to });
+@@CLEANROOM_HOLE_8@@
       } else if (raw.startsWith("--- ")) {
         const p = headerPath(raw.slice(4));
         if (p !== "/dev/null") curFile = stripAB(p); // old path (may be replaced by +++)
       } else if (raw.startsWith("+++ ")) {
         const p = headerPath(raw.slice(4));
         if (p !== "/dev/null") curFile = stripAB(p); // new path preferred
-        if (isSubstantive(curFile)) {
+@@CLEANROOM_HOLE_9@@
           if (curAdded) filesAdded.add(curFile);
           else if (curDeleted) filesDeleted.add(curFile);
         }
@@ -317,32 +297,30 @@ export function analyzeDiff(diff: string): DiffAnalysis {
     // ---- inside a hunk: content lines ----
     if (raw.startsWith("+")) {
       const body = raw.slice(1);
-      // Raw added lines are captured for EVERY file, before the substantive gate:
+@@CLEANROOM_HOLE_10@@
       // content-matched constraints and Veto tripwires are not code-only rules
       // (a blocking invariant legitimately scopes .github/workflows/**, *.sql,
       // Dockerfile). Skipping them here left `scopedAdded` empty, which
       // buildCheckReport reads as "cannot prove a violation ⇒ complies" — so the
       // pre-edit hook denied the edit while `hunch check --strict` passed the
-      // very commit that landed it. The churn counters below now also include
-      // prose (isSubstantive, issue #12); symbol/import extraction stays
-      // code-only (isCode/languageFor) since declarations are a code concept.
+@@CLEANROOM_HOLE_11@@
       let lines = addedLinesBy.get(curFile);
       if (!lines) { lines = []; addedLinesBy.set(curFile, lines); }
       lines.push(body);
-      if (!isSubstantive(curFile)) continue;
+@@CLEANROOM_HOLE_12@@
       addedLines++;
       if (!curAdded && !curDeleted) filesModified.add(curFile);
-      if (isCode(curFile)) {
+@@CLEANROOM_HOLE_13@@
         const d = declOf(body);
         if (d) declsFor(curFile)?.added.set(d.name, d);
         const imp = importOf(body);
         if (imp && !imp.startsWith(".")) addedImports.add(imp);
-      }
+@@CLEANROOM_HOLE_14@@
     } else if (raw.startsWith("-")) {
-      if (!isSubstantive(curFile)) continue;
+@@CLEANROOM_HOLE_15@@
       removedLines++;
       if (!curAdded && !curDeleted) filesModified.add(curFile);
-      if (isCode(curFile)) {
+@@CLEANROOM_HOLE_16@@
         const body = raw.slice(1);
         const d = declOf(body);
         if (d) declsFor(curFile)?.removed.set(d.name, d);
@@ -350,7 +328,7 @@ export function analyzeDiff(diff: string): DiffAnalysis {
         if (imp && !imp.startsWith(".")) removedImports.add(imp);
       }
     }
-  }
+@@CLEANROOM_HOLE_17@@
 
   // per-file symbol classification (added/removed/changed within the same file)
   const addedSymbols: SymbolChange[] = [];

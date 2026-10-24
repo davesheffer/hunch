@@ -13,7 +13,7 @@ import { dirname, join, posix } from "node:path";
 import type { HunchStore } from "../store/hunchStore.js";
 import { parseSource, attributeCalls, attributeQualifiedCalls, attributeRelations, MAX_BODY_TEXT_CHARS, type ParsedRelation, type QualifiedCall } from "./parse.js";
 import { isParserLoadError } from "./nativeTreeSitter.js";
-import { extractHelmDirectives } from "./helm.js";
+@@CLEANROOM_HOLE_1@@
 import { extractK8sManifest, extractKustomization, isKustomizationFile, kustomizeNamespaces, namespacesCompatible, type K8sManifestDocument, type KustomizationInfo, type ManifestNameRef } from "./k8sManifest.js";
 import { symbolId, componentId, edgeId, sha1 } from "../core/ids.js";
 import { externalImportNodeId, externalPackage } from "../core/externalImports.js";
@@ -172,7 +172,7 @@ export function scanRepo(store: HunchStore, root: string, opts: ScanRepoOptions 
   const symbols: Symbol[] = [];
   const nameIndex = new Map<string, string[]>(); // symbol name -> [symbol ids]
   const fileSymbols = new Map<string, string[]>(); // file -> symbol ids (in-file resolution)
-  const fileSymbolIndexId = new Map<string, Map<number, string>>(); // file -> (symbol index in parsed.symbols -> id)
+@@CLEANROOM_HOLE_2@@
   const perFileCalls: Array<{ file: string; bySym: Map<number, Map<string, boolean>>; qualified: Map<number, QualifiedCall[]> }> = [];
   const perFileImports: Array<{ file: string; imports: string[] }> = [];
   const perFileRelations: Array<{ file: string; bySym: Map<number, ParsedRelation[]> }> = [];
@@ -191,14 +191,7 @@ export function scanRepo(store: HunchStore, root: string, opts: ScanRepoOptions 
   // Batched per-file git metrics (churn + last commit) in TWO `git log` spawns
   // total, instead of two per file — the dominant cost of indexing a large repo.
   const rels = files.map((file) => file.path);
-  const chartRootFor = nearestChartRoot(rels);
-  const chartFiles = new Map<string, string[]>();
-  for (const path of rels) {
-    if (languageFor(path)?.id !== "yaml") continue;
-    const chartRoot = chartRootFor(path);
-    if (chartRoot === null) continue;
-    pushInto(chartFiles, chartRoot, path);
-  }
+@@CLEANROOM_HOLE_3@@
   const gitMeta = useGit ? fileGitMetrics(root, rels, opts.churn === false ? 0 : 90) : null;
   let skipped = 0;
   // Kustomize namespace transformers must be known before any manifest is
@@ -267,39 +260,7 @@ export function scanRepo(store: HunchStore, root: string, opts: ScanRepoOptions 
     }
     noteCoverage(rel, "parsed");
 
-    const chartRoot = languageFor(rel)?.id === "yaml" ? chartRootFor(rel) : null;
-    // Explicit null check, not truthiness: a chart rooted at the repo root
-    // itself resolves to "" (empty string), which is a valid chart scope but
-    // JS-falsy — `if (chartRoot)` would silently skip every repo-root chart.
-    if (chartRoot !== null) {
-      const helm = extractHelmDirectives(src);
-      // helm.ts's own offsets are named *Char (they're JS char indices, not
-      // UTF-8 bytes -- see its module doc comment); mapped here into
-      // parsed.symbols/calls's startByte/endByte/atByte fields, which carry
-      // the same char-index values under the shared ParsedSymbol/ParsedCall
-      // naming this merge target already uses.
-      const helmSymbols = helm.symbols.map((s) => ({
-        name: s.name, kind: s.kind, startByte: s.startChar, endByte: s.endChar, loc: s.loc, bodyText: s.bodyText,
-      }));
-      const helmCalls = helm.calls.map((c) => ({
-        callee: c.callee, atByte: c.atChar, endByte: c.endChar, member: c.member,
-      }));
-      parsed.symbols = [...parsed.symbols, ...helmSymbols].sort((a, b) => a.startByte - b.startByte);
-      parsed.calls = [...parsed.calls, ...helmCalls];
-    }
-    // Runs for EVERY yaml file, chart or not (unlike the Helm merge above) --
-    // raw manifests with no Chart.yaml are still in scope; what varies below is
-    // resolution SCOPE (chartRoot ?? this file), not whether extraction runs.
-    let k8sDocs: K8sManifestDocument[] = [];
-    // THIS file's K8s resource symbol OBJECTS (identity, not their byte
-    // offsets) -- scopes the id lookup below to exactly the symbols this pass
-    // creates. Identity, not a Set<number> of startBytes, because a byte
-    // value is not a reliable per-symbol key: a Helm `define` symbol that
-    // happens to share a startByte with a K8s doc symbol in the same .yaml
-    // file (both legitimately synthetic, both can start at byte 0) would
-    // otherwise be indistinguishable by offset alone, and the wrong (Helm)
-    // symbol id could get recorded instead of the K8s one.
-    const k8sSymbolObjects = new Set<object>();
+@@CLEANROOM_HOLE_4@@
     // Identity name a K8s symbol's id is derived from when its kind/name is
     // NOT unique in this file (issue #382). Absent for the common unique case,
     // so that id is exactly what it always was; a same-kind/name pair in
@@ -308,7 +269,7 @@ export function scanRepo(store: HunchStore, root: string, opts: ScanRepoOptions 
     // file path is already in every symbol id, so the same resource repeated
     // across overlay dirs is distinct by path without any extra disambiguator.
     const k8sIdNames = new Map<object, string>();
-    if (languageFor(rel)?.id === "yaml") {
+@@CLEANROOM_HOLE_5@@
       k8sDocs = kustomizeNamespaceFor.has(rel)
         ? extractK8sManifest(src, { namespace: kustomizeNamespaceFor.get(rel)! })
         : extractK8sManifest(src);
@@ -320,33 +281,23 @@ export function scanRepo(store: HunchStore, root: string, opts: ScanRepoOptions 
         nameCounts.set(name, (nameCounts.get(name) ?? 0) + 1);
       }
       const k8sSymbols = resourceDocs
-        // k8sManifest.ts's own offsets are named *Char; mapped here into the
-        // shared startByte/endByte fields, same as the Helm merge above.
+@@CLEANROOM_HOLE_6@@
         .map((d) => {
           const sym = {
-            name: `${d.resource.kind}/${displayNameText(d.resource.name)}`,
-            kind: "variable" as const,
-            startByte: d.resource.startChar,
-            endByte: d.resource.endChar,
-            loc: src.slice(d.resource.startChar, d.resource.endChar).split("\n").length,
-            bodyText: src.slice(d.resource.startChar, d.resource.endChar).slice(0, MAX_BODY_TEXT_CHARS),
+@@CLEANROOM_HOLE_7@@
           };
           if ((nameCounts.get(sym.name) ?? 0) > 1) k8sIdNames.set(sym, `${sym.name}@${d.resource.namespace ?? ""}`);
           return sym;
         });
-      for (const s of k8sSymbols) k8sSymbolObjects.add(s);
-      parsed.symbols = [...parsed.symbols, ...k8sSymbols].sort((a, b) => a.startByte - b.startByte);
-    }
-
+@@CLEANROOM_HOLE_8@@
     const m = gitMeta?.get(rel);
     const churn = opts.churn === false ? (preservedChurn.get(rel) ?? 0) : (m?.churn ?? 0);
     const last = m?.lastCommit ?? "";
 
     const idsInFile: string[] = [];
-    const symbolIndexId = new Map<number, string>();
+@@CLEANROOM_HOLE_9@@
     const idCounts = new Map<string, number>(); // disambiguate same (file,name,kind)
-    const k8sSymbolIdByStartByte = new Map<number, string>();
-    for (const [index, ps] of parsed.symbols.entries()) {
+@@CLEANROOM_HOLE_10@@
       const base = symbolId(rel, k8sIdNames.get(ps) ?? ps.name, ps.kind);
       const n = idCounts.get(base) ?? 0;
       idCounts.set(base, n + 1);
@@ -355,8 +306,7 @@ export function scanRepo(store: HunchStore, root: string, opts: ScanRepoOptions 
       // kind, namespace and name in one file -- indistinguishable by identity)
       const id = n === 0 ? base : `${base}_${n}`;
       idsInFile.push(id);
-      symbolIndexId.set(index, id);
-      pushInto(nameIndex, ps.name, id);
+@@CLEANROOM_HOLE_11@@
       symbols.push({
         id, file: rel, name: ps.name, kind: ps.kind,
         signature_hash: sha1(ps.bodyText).slice(0, 16),
@@ -364,26 +314,17 @@ export function scanRepo(store: HunchStore, root: string, opts: ScanRepoOptions 
         metrics: { loc: ps.loc, churn_90d: churn, bug_count: 0, fan_in: 0, fan_out: 0 },
         last_changed: last,
       });
-      if (k8sSymbolObjects.has(ps)) k8sSymbolIdByStartByte.set(ps.startByte, id);
-    }
-    for (const doc of k8sDocs) {
-      if (!doc.resource) continue;
-      const fromId = k8sSymbolIdByStartByte.get(doc.resource.startChar);
-      if (!fromId) continue;
-      const scope = chartRoot ?? rel;
+@@CLEANROOM_HOLE_12@@
       const namespace = doc.resource.namespace;
       k8sResourceIndex.push({ symbolId: fromId, scope, kind: doc.resource.kind, nameKey: nameKeyText(doc.resource.name), namespace });
-      for (const ref of doc.references) {
-        k8sReferenceCandidates.push({
+@@CLEANROOM_HOLE_13@@
           fromSymbolId: fromId, scope, refKind: ref.refKind, nameKey: nameKeyText(ref.name), namespace: ref.namespace,
-          reason: `${doc.resource.kind}/${displayNameText(doc.resource.name)} references ${ref.refKind}/${displayNameText(ref.name)}`,
-        });
-      }
+@@CLEANROOM_HOLE_14@@
       if (doc.selector) k8sSelectors.push({ symbolId: fromId, scope, namespace, selector: doc.selector });
       if (doc.labels) k8sWorkloadLabels.push({ symbolId: fromId, scope, namespace, labels: doc.labels });
     }
     fileSymbols.set(rel, idsInFile);
-    fileSymbolIndexId.set(rel, symbolIndexId);
+@@CLEANROOM_HOLE_15@@
     perFileCalls.push({ file: rel, bySym: attributeCalls(parsed), qualified: attributeQualifiedCalls(parsed) });
     perFileImports.push({ file: rel, imports: parsed.imports });
     perFileRelations.push({ file: rel, bySym: attributeRelations(parsed) });
@@ -394,13 +335,7 @@ export function scanRepo(store: HunchStore, root: string, opts: ScanRepoOptions 
   }
 
   const byId = new Map(symbols.map((s) => [s.id, s]));
-  // Language-aware import resolution (resolveImportTarget), used by both the
-  // call-resolution gate below (via importedFiles) and the depends_on edge
-  // derivation in pass 3 directly: a Python cross-file call/import must
-  // resolve through the same relative/absolute Python rules as everything
-  // else, not silently fail the JS/TS resolver and look unimported.
-  const hasSrcLayout = [...fileSymbols.keys()].some((f) => f.startsWith("src/"));
-  const pyRoots = hasSrcLayout ? ["", "src"] : [""];
+@@CLEANROOM_HOLE_16@@
   const goModule = readGoModulePath(root);
   const trackedFiles = new Set(fileSymbols.keys());
   const resolveImportTargets = (file: string, spec: string): string[] => {
@@ -419,14 +354,9 @@ export function scanRepo(store: HunchStore, root: string, opts: ScanRepoOptions 
     }
     return [resolveImport(file, spec, trackedFiles)].filter((target): target is string => !!target);
   };
-  const importedFiles = new Map(perFileImports.map(({ file, imports }) => {
+@@CLEANROOM_HOLE_17@@
     const targets = new Set(imports.flatMap((specifier) => resolveImportTargets(file, specifier)));
-    const chartRoot = languageFor(file)?.id === "yaml" ? chartRootFor(file) : null;
-    // Explicit null check, not truthiness — see the matching comment above on
-    // the per-file Helm merge step: a repo-root chart's scope is "", not null.
-    if (chartRoot !== null) for (const sibling of chartFiles.get(chartRoot) ?? []) if (sibling !== file) targets.add(sibling);
-    return [file, targets] as const;
-  }));
+@@CLEANROOM_HOLE_18@@
 
   // ---- pass 2: resolve calls -> symbol-level edges -------------------------
   const edges: Edge[] = [];
@@ -438,14 +368,7 @@ export function scanRepo(store: HunchStore, root: string, opts: ScanRepoOptions 
   };
 
   for (const { file, bySym, qualified } of perFileCalls) {
-    // Most languages leave this unset and get "calls" — YAML's alias->anchor
-    // references aren't function calls, so its LanguageSpec declares "references".
-    const edgeType = languageFor(file)?.referenceEdgeType ?? "calls";
-    const indexToId = fileSymbolIndexId.get(file) ?? new Map<number, string>();
-    for (const [callerIndex, callees] of bySym) {
-      // resolve caller by its stable position in parsed.symbols (not startByte —
-      // startByte is not unique across symbols; see attributeCalls's doc comment)
-      const callerId = indexToId.get(callerIndex);
+@@CLEANROOM_HOLE_19@@
       if (!callerId) continue;
       const callerName = byId.get(callerId)?.name ?? "?";
       for (const [calleeName, memberOnly] of callees) {
@@ -472,9 +395,7 @@ export function scanRepo(store: HunchStore, root: string, opts: ScanRepoOptions 
         }
         addEdge({
           schema: "hunch.edge/1",
-          id: edgeId(callerId, calleeId, edgeType),
-          from: callerId, to: calleeId, type: edgeType,
-          reason: `${callerName} ${edgeType} ${calleeName}`, strength: 0.8,
+@@CLEANROOM_HOLE_20@@
           provenance: extracted(0.8, [file]),
           environment: null,
           metadata: {},
@@ -516,11 +437,7 @@ export function scanRepo(store: HunchStore, root: string, opts: ScanRepoOptions 
     }
   }
 
-  // ---- K8s manifest cross-resource references (Phase 1: name-keyed) --------
-  // Own resolver, not resolveName(): resolveName() indexes by bare symbol name
-  // only, with no concept of Kubernetes kind -- a ConfigMap and a Secret that
-  // happen to share a name would incorrectly conflate. Same ambiguity contract
-  // as resolveName() though: 0 matches or 2+ matches -> no edge, never guess.
+@@CLEANROOM_HOLE_21@@
   //
   // Namespace is a FILTER applied to the candidate list, not part of the key
   // (issue #297): an unknown namespace on either side must still match, which
@@ -529,73 +446,19 @@ export function scanRepo(store: HunchStore, root: string, opts: ScanRepoOptions 
   // a and b" resolve to a instead of declining as ambiguous, while "ref in a,
   // candidates in a and unknown" correctly stays ambiguous.
   const kindNameIndex = new Map<string, typeof k8sResourceIndex>();
-  for (const r of k8sResourceIndex) {
-    const key = `${r.scope}:${r.kind}:${r.nameKey}`;
+@@CLEANROOM_HOLE_22@@
     pushInto(kindNameIndex, key, r);
-  }
-  for (const ref of k8sReferenceCandidates) {
+@@CLEANROOM_HOLE_23@@
     const byName = kindNameIndex.get(`${ref.scope}:${ref.refKind}:${ref.nameKey}`) ?? [];
     const candidates = byName.filter((c) => namespacesCompatible(ref.namespace, c.namespace));
-    if (candidates.length !== 1) continue; // 0 or 2+ -> ambiguous or absent, don't guess
+@@CLEANROOM_HOLE_24@@
     const toId = candidates[0]!.symbolId;
-    if (toId === ref.fromSymbolId) continue;
-    addEdge({
-      schema: "hunch.edge/1",
-      id: edgeId(ref.fromSymbolId, toId, "references"),
-      from: ref.fromSymbolId, to: toId, type: "references",
-      reason: ref.reason, strength: 0.7,
-      provenance: extracted(0.7, [ref.scope]),
-      environment: null,
-      metadata: {},
-    });
-  }
-
-  // ---- K8s manifest cross-resource references (Phase 2: label-selector) ----
-  // Structurally different from Phase 1: no name to look up, a SUBSET match
-  // between a Service's selector and a workload's pod-template labels, within
-  // the same scope. Only ever fires on LITERAL selector/labels (k8sSelectors/
-  // k8sWorkloadLabels are already filtered to literal-only by k8sManifest.ts --
-  // a block-form templated value is never guessed at).
-  //
-  // Deliberately NO ambiguity guard here, unlike Phase 1's "0 or 2+ candidates
-  // -> no edge": a Service legitimately fronting multiple workloads (blue/green,
-  // canary, a shared-label pair of Deployments) is normal, intentional
-  // Kubernetes usage, not an ambiguous match to decline -- Phase 1's guard
-  // exists because a ConfigMap named X is exactly one resource by definition,
-  // which has no analogue here. Fan-out is the correct behavior, not a gap.
-  const selectorsByScope = new Map<string, typeof k8sSelectors>();
-  for (const s of k8sSelectors) pushInto(selectorsByScope, s.scope, s);
-  const labelsByScope = new Map<string, typeof k8sWorkloadLabels>();
-  for (const l of k8sWorkloadLabels) pushInto(labelsByScope, l.scope, l);
-
-  for (const [scope, selectors] of selectorsByScope) {
-    const workloads = labelsByScope.get(scope) ?? [];
-    for (const svc of selectors) {
-      for (const wl of workloads) {
-        // Defensive, not currently reachable: k8sSelectors only ever holds
-        // Service symbols and k8sWorkloadLabels only ever holds symbols for
-        // kinds in LABELS_PATH_BY_KIND, which excludes Service -- so the two
-        // ids can never collide today.
-        if (svc.symbolId === wl.symbolId) continue;
+@@CLEANROOM_HOLE_25@@
         // A Service only ever selects pods in its OWN namespace -- a
         // label-identical workload next door is a different workload (issue
         // #297). Unknown on either side still matches, same rule as Phase 1.
         if (!namespacesCompatible(svc.namespace, wl.namespace)) continue;
-        const isSubset = Object.entries(svc.selector).every(([k, v]) => wl.labels[k] === v);
-        if (!isSubset) continue;
-        addEdge({
-          schema: "hunch.edge/1",
-          id: edgeId(svc.symbolId, wl.symbolId, "references"),
-          from: svc.symbolId, to: wl.symbolId, type: "references",
-          reason: "Service selector matches workload pod-template labels", strength: 0.6,
-          provenance: extracted(0.6, [scope]),
-          environment: null,
-          metadata: {},
-        });
-      }
-    }
-  }
-
+@@CLEANROOM_HOLE_26@@
   // PHP's static type relationships use the same symbol graph and conservative
   // resolver as calls. Ambiguous or dynamic targets produce no edge.
   for (const { file, bySym } of perFileRelations) {
@@ -632,10 +495,9 @@ export function scanRepo(store: HunchStore, root: string, opts: ScanRepoOptions 
     }
   }
 
-  // fan-in / fan-out from resolved call/reference edges
-  const CALL_LIKE_EDGE_TYPES = new Set<Edge["type"]>(["calls", "references"]);
+@@CLEANROOM_HOLE_27@@
   for (const e of edges) {
-    if (!CALL_LIKE_EDGE_TYPES.has(e.type)) continue;
+@@CLEANROOM_HOLE_28@@
     const from = byId.get(e.from);
     const to = byId.get(e.to);
     if (from) {
@@ -773,56 +635,7 @@ export function indexRepo(store: HunchStore, root: string, opts: IndexRepoOption
 
 // ---- helpers --------------------------------------------------------------
 
-/** Append `value` to the array at `key`, creating the array on first use.
- *  Function declaration (not `const`) so it's usable from pass-1 code above
- *  this section via hoisting, without reordering. */
-function pushInto<K, V>(map: Map<K, V[]>, key: K, value: V): void {
-  const bucket = map.get(key);
-  if (bucket) bucket.push(value);
-  else map.set(key, [value]);
-}
-
-/** Nearest-ancestor Chart.yaml lookup, memoized per directory: walks a file's
- *  own directory upward through the tracked-file set until it finds
- *  `<dir>/Chart.yaml`, or returns null if the file isn't under any chart.
- *  Nested subcharts (their own Chart.yaml under charts/<name>/) resolve to
- *  their OWN chart root, not the parent's. This is a conservative
- *  approximation, not full Helm semantics: Helm's template namespace is
- *  actually release-global, so a parent chart can legitimately include a
- *  subchart's define — nearest-ancestor scoping will miss that edge rather
- *  than fabricate a wrong one (test coverage: indexer.test.ts's nested-subchart
- *  and subchart-miss cases). Modeling the release-global namespace itself
- *  remains open — issue #42. */
-function nearestChartRoot(rels: string[]): (file: string) => string | null {
-  const tracked = new Set(rels);
-  const cache = new Map<string, string | null>();
-  const resolveDir = (dir: string): string | null => {
-    if (cache.has(dir)) return cache.get(dir)!;
-    const chartYaml = dir ? `${dir}/Chart.yaml` : "Chart.yaml";
-    const result: string | null = tracked.has(chartYaml)
-      ? dir
-      : dir === "" ? null : resolveDir(dir.includes("/") ? dir.slice(0, dir.lastIndexOf("/")) : "");
-    cache.set(dir, result);
-    return result;
-  };
-  return (file: string): string | null => resolveDir(file.includes("/") ? file.slice(0, file.lastIndexOf("/")) : "");
-}
-
-/** Human-readable text for a name/kind field -- a literal value as-is, or a
- *  template's exact raw `{{ }}` source text (never evaluated). Used for
- *  display (symbol names, edge reasons); NOT for resolution-key equality --
- *  see nameKeyText below for that. */
-function displayNameText(ref: ManifestNameRef): string {
-  return ref.form === "literal" ? ref.value : ref.sourceText;
-}
-
-/** Normalized resolution-key text for a name/kind field: a literal value or a
- *  template's exact raw source text, EACH PREFIXED so a literal "foo" can
- *  never collide with a template whose source text happens to read "foo". */
-function nameKeyText(ref: ManifestNameRef): string {
-  return ref.form === "literal" ? `L:${ref.value}` : `T:${ref.sourceText}`;
-}
-
+@@CLEANROOM_HOLE_29@@
 /** Resolve a callee name to a symbol id: prefer same-file, otherwise require a
  * unique symbol in a statically imported local file. A unique repository-wide
  * name is not evidence of a binding: callback parameters and built-ins often
@@ -848,58 +661,7 @@ function resolveImport(fromFile: string, spec: string, trackedFiles: ReadonlySet
   return resolveRelativeImport(fromFile, spec, trackedFiles).path;
 }
 
-/** First of `${modulePath}.py` / `${modulePath}/__init__.py` that's a tracked file,
- *  or null — the shared "module file vs. package __init__" candidate check used by
- *  both resolvePythonImport branches below. */
-function firstExistingPyModule(modulePath: string, fileSymbols: Map<string, string[]>): string | null {
-  const candidates = [`${modulePath}.py`, `${modulePath}/__init__.py`];
-  for (const c of candidates) if (fileSymbols.has(c)) return c;
-  return null;
-}
-
-/** Resolve a Python import specifier (relative or absolute) to a concrete tracked
- *  file path. Sibling to resolveImport() — Python's leading dot means "N levels up
- *  from the importing module's own directory," not "a relative file-path fragment"
- *  the way JS/TS's `./`/`../` does. Absolute imports are resolved best-effort
- *  against `pyRoots` (repo root, plus a top-level `src/` layout if one exists) —
- *  no sys.path/PYTHONPATH emulation. A module's own package directory is always
- *  its containing directory, so relative resolution needs no repo-wide
- *  package-root search — only dot-counting from `fromFile`'s own location. */
-function resolvePythonImport(
-  fromFile: string,
-  spec: string,
-  fileSymbols: Map<string, string[]>,
-  pyRoots: string[],
-): string | null {
-  if (!spec.startsWith(".")) {
-    const specPath = spec.split(".").join("/");
-    for (const root of pyRoots) {
-      const modulePath = root ? `${root}/${specPath}` : specPath;
-      const found = firstExistingPyModule(modulePath, fileSymbols);
-      if (found) return found;
-    }
-    return null;
-  }
-  const level = spec.length - spec.replace(/^\.+/, "").length;
-  const tail = spec.slice(level);
-  const dir = toPosix(dirname(fromFile));
-  const segments = dir === "." ? [] : dir.split("/");
-  const pop = level - 1;
-  if (pop > segments.length) return null; // import points above the repo root — don't guess
-  const baseSegments = pop > 0 ? segments.slice(0, segments.length - pop) : segments;
-  const baseDir = baseSegments.join("/");
-  if (!tail) {
-    // bare `.`/`..`/etc — `from . import x` only ever resolves to the package's
-    // own __init__.py (we track the module path, never the imported name itself,
-    // matching resolveImport()'s granularity for JS/TS named imports).
-    const initPy = baseDir ? `${baseDir}/__init__.py` : "__init__.py";
-    return fileSymbols.has(initPy) ? initPy : null;
-  }
-  const tailPath = tail.split(".").join("/");
-  const modulePath = baseDir ? `${baseDir}/${tailPath}` : tailPath;
-  return firstExistingPyModule(modulePath, fileSymbols);
-}
-
+@@CLEANROOM_HOLE_30@@
 /** The `module` path declared in the repo's go.mod, or null. A resolution HINT
  *  only (it widens depends_on edge coverage); reading it best-effort from the
  *  filesystem never gates a scan. */
@@ -956,22 +718,13 @@ function deriveComponents(symbols: Symbol[]): ComponentDraft[] {
   const out: ComponentDraft[] = [];
   for (const [dir, fileSet] of groups) {
     const name = dir.split("/").filter(Boolean).pop() ?? dir;
-    // root-level files (dir === ".") have no directory to glob under — list them
-    // exactly rather than emitting "./**", which normalizes to a match-everything
-    // glob (issue #34). A single "*" glob was rejected too: it matches root files
-    // correctly under pathMatchesGlob, but globPrefix("*") is "" and owns() skips
-    // empty prefixes, so the wiki would again own nothing for this component —
-    // the exact failure mode this fix closes. Don't "simplify" this back to a
-    // glob without re-checking both matchers agree. As a consequence, this
-    // component only covers root files present (and symbol-bearing) at the last
-    // index — unlike directory components, a new root file isn't owned until reindex.
-    const paths = dir === "." ? [...fileSet].sort() : [dir.endsWith("/") ? dir + "**" : dir + "/**"];
+@@CLEANROOM_HOLE_31@@
     out.push({
       id: componentId(dir),
       kind: "module",
       name: capitalize(name),
       responsibility: "",
-      paths,
+@@CLEANROOM_HOLE_32@@
       status: "active",
       owners: [],
       fragility: 0,
