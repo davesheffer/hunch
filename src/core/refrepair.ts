@@ -14,7 +14,7 @@ export interface DecisionReferenceRepair {
   evidence: number;
 }
 
-@@CLEANROOM_HOLE_1@@
+export function replaceExact(values: string[], from: string, to: string): { values: string[]; changed: number } {
   let changed = 0;
   const replaced = values.map((value) => {
     if (value !== from) return value;
