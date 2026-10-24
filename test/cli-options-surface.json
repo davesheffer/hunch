@@ -3052,7 +3052,7 @@
       },
       {
         "file": "test/supersede-cli.test.ts",
-        "title": "supersede resolves and closes a decision that lives in the private overlay (issue #294)"
+        "title": "supersede refuses to link a private --by to a public old decision"
       }
     ]
   },
