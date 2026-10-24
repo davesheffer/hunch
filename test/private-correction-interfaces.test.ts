@@ -27,7 +27,7 @@ type PrivateUpgrade = {
   plan: { id: string; data_class: string };
   proof: { id: string; data_class: string };
   authority: string;
-@@CLEANROOM_HOLE_1@@
+  destination?: { root: string; branch: string }; // only the MCP path sets it (self-diagnosing destination report, issue #20)
 };
 
 function git(cwd: string, ...args: string[]): string {
@@ -208,7 +208,7 @@ test("MD-1a private MCP upgrade writes only to a standalone overlay and public M
     const upgrade = JSON.parse((upgradeCall.content[0] as { type: "text"; text: string }).text) as PrivateUpgrade;
     assert.equal(upgrade.status, "proved");
     assertPrivatePacketOnlyInOverlay(fixture.root, fixture.privateRoot, upgrade);
-@@CLEANROOM_HOLE_2@@
+    assert.equal(upgrade.destination?.root, fixture.privateRoot, "the reported destination must be the private overlay, not the public repo");
 
     const privateTokens = [
       fixture.ruleSentinel,

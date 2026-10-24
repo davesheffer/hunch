@@ -24,7 +24,14 @@ import { liveRewrites, deadRewrites, commitRepairReviewHash, firstFor, type Comm
 import { importedAdrReviewHash, importedAdrSourceHash, pendingImportedAdrReviews } from "./importReview.js";
 import { pathMatchesGlob } from "./glob.js";
 
-@@CLEANROOM_HOLE_1@@
+export type EscalationKind =
+  | "topic-conflict"
+  | "imported-adr-review"
+  | "policy-candidate"
+  | "policy-proposal"
+  | "policy-repaired"
+  | "premise-stale"
+  | "commit-repair-pending";
 
 export interface Escalation {
   kind: EscalationKind;
@@ -38,7 +45,45 @@ export interface Escalation {
   detail: string;
   /** the concrete resolution the human's answer maps to. */
   resolution: string;
-@@CLEANROOM_HOLE_2@@
+  /** `false` marks an entry whose resolution depends on first acting on a DIFFERENT
+   *  entry: the non-drop, non-apply follower in a duplicate-id commit-repair queue.
+   *  It still surfaces for transparency, but gating surfaces (the CI exit code and
+   *  "needs your call" tallies) must not count it. Omitted/undefined = actionable. */
+  actionable?: boolean;
+}
+
+/** The entries a human can act on right now (order preserved). */
+export function actionableEscalations(items: readonly Escalation[]): Escalation[] {
+  return items.filter((e) => e.actionable !== false);
+}
+
+export interface EscalationSummary {
+  /** the gating subset. */
+  actionable: Escalation[];
+  /** how many entries were filtered out as context-only. */
+  context: number;
+}
+
+export function summarizeEscalations(items: readonly Escalation[]): EscalationSummary {
+  const actionable = actionableEscalations(items);
+  return { actionable, context: items.length - actionable.length };
+}
+
+/** "cli" speaks to the operator (second person); "mcp" is an assistant relaying to the human (third person). */
+export type EscalationAudience = "cli" | "mcp";
+
+/** One-line heading for a non-empty escalation list. Callers handle the empty list themselves. */
+export function escalationHeadline(items: readonly Escalation[], audience: EscalationAudience): string {
+  const { actionable, context } = summarizeEscalations(items);
+  const mcp = audience === "mcp";
+  if (actionable.length === 0) {
+    const t = items.length;
+    return `Nothing needs ${mcp ? "the human's call" : "your decision"} right now — ${t} ${t === 1 ? "entry" : "entries"} shown below for context only (resolving another entry will clear them):`;
+  }
+  const note = context > 0 ? ` (+${context} shown below for context only, not ${mcp ? "a decision" : "gating"})` : "";
+  return mcp
+    ? `${actionable.length} decision(s) need the human's call — ask each inline, don't decide it for them${note}:`
+    : `${actionable.length} decision(s) need your call — asked here, never decided for you${note}:`;
 }
 
 /** The decisions a human must make NOW, to be asked INLINE. Empty in a healthy graph. */
@@ -77,17 +122,68 @@ export function pendingEscalations(decisions: readonly Decision[]): Escalation[]
   return out;
 }
 
-@@CLEANROOM_HOLE_3@@
+/** A commit-provenance repair the post-merge hook queued but never applied is a human
+ *  question, never a silent write. `decisions` is the caller's VISIBLE scope and supplies
+ *  titles only. `live` is the scope liveness is checked against: callers on an advisory
+ *  scope pass the full store so an overlay decision's repair isn't silenced just because
+ *  its title is private. `withheld` holds entries whose proposed `to` doesn't resolve to a
+ *  real commit; membership is by object identity, not id, so two corrupted entries
+ *  sharing an id stay distinguishable. */
+export function commitRepairEscalations(queued: readonly CommitRewrite[], decisions: readonly Decision[], live: readonly Decision[] = decisions, withheld: ReadonlySet<CommitRewrite> = new Set()): Escalation[] {
   const reviewHash = commitRepairReviewHash(queued, withheld);
-@@CLEANROOM_HOLE_4@@
+  const visible = new Map(decisions.map((d) => [d.id, d]));
+  // Mirror the CLI: dead entries are pruned before --apply/--drop read the queue.
+  const dead = new Set(deadRewrites(queued, live));
+  const survivors = queued.filter((r) => !dead.has(r));
+  const dropTarget = (id: string): CommitRewrite | undefined => firstFor(survivors, id);
+  const applyTarget = (id: string): CommitRewrite | undefined => firstFor(survivors.filter((r) => !withheld.has(r)), id);
+  return liveRewrites(queued, live).map((r) => {
+    const title = visible.get(r.id)?.title;
+    const named = title ? `${r.id} ("${title}")` : r.id;
+    const base = {
+      kind: "commit-repair-pending" as const,
+      topic: r.id,
+      decisionIds: [r.id],
+      detail: `${r.from} → ${r.to}`,
+    };
+    const applyQuestion = `${named}'s commit is no longer reachable from HEAD (likely squash-merged away), and one newly-merged commit touches all its related files — apply the proposed replacement?`;
+    const isDrop = dropTarget(r.id) === r;
+    const isApply = applyTarget(r.id) === r;
+    if (!isDrop && !isApply) {
+      const alsoWithheld = withheld.has(r)
+        ? ` — and this entry's own proposed replacement doesn't resolve here either, so even once it is next in line it stays drop-only unless a fresh detection run supersedes it with a resolvable match`
+        : "";
+      return {
+        ...base,
+        actionable: false,
+        question: `${named} has a further queued replacement candidate (${r.from} → ${r.to}) sitting behind another entry for the same decision — leave it queued for now?`,
           resolution: `not directly actionable by id right now: \`hunch repair-provenance --apply --only ${r.id} --expect ${reviewHash}\`/\`hunch repair-provenance --drop ${r.id} --expect ${reviewHash}\` both act on an entry queued ahead of it, never this one${alsoWithheld}. Dropping that entry brings this one back into consideration on the next run; applying it instead retires this one as stale, since the decision moves past the \`from\` both entries share.`,
-@@CLEANROOM_HOLE_5@@
+      };
+    }
+    if (isApply && !isDrop) {
+      // An earlier withheld sibling sits ahead: --drop would tombstone that one instead.
+      return {
+        ...base,
+        question: applyQuestion,
           resolution: `hunch repair-provenance --apply --only ${r.id} --expect ${reviewHash} to accept just this one — but \`--drop ${r.id}\` won't reject THIS entry: an earlier queued sibling for the same id (whose own replacement doesn't resolve here) sits ahead of it and would be tombstoned instead.`,
-@@CLEANROOM_HOLE_6@@
+      };
+    }
+    if (isDrop && !isApply) {
+      // Equivalent to `r` being withheld.
+      return {
+        ...base,
+        question: `${named}'s commit is no longer reachable from HEAD (likely squash-merged away), and the queued replacement commit doesn't resolve in this repository (corrupted queue entry, or the commit has since been garbage-collected) — reject it?`,
           resolution: `this entry can never be applied as-is — \`hunch repair-provenance --apply\` will leave it queued every run; \`hunch repair-provenance --drop ${r.id} --expect ${reviewHash}\` to reject it, or wait for a fresh match to supersede it`,
-@@CLEANROOM_HOLE_7@@
+      };
+    }
+    return {
+      ...base,
+      question: applyQuestion,
         resolution: `hunch repair-provenance --apply --only ${r.id} --expect ${reviewHash} to accept just this one, hunch repair-provenance --drop ${r.id} --expect ${reviewHash} to reject it (tombstoned durably — this same match won't resurface, though a genuinely different candidate still can), or leave it queued to decide later`,
-@@CLEANROOM_HOLE_8@@
+    };
+  });
+}
+
 /** The minimal policy shape the escalation scan needs — a structural subset of
  *  constitution PolicySpec, so this module stays dependency-free of the
  *  Constitution schemas (core must not import constitution). */

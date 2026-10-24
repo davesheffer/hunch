@@ -10,7 +10,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { writeFileSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
-@@CLEANROOM_HOLE_1@@
+import { tempStore, prov, mkSymbol } from "./helpers.js";
 import { formatContext } from "../src/core/format.js";
 import { computeDrift } from "../src/core/drift.js";
 import { findingId } from "../src/core/ids.js";
@@ -80,7 +80,15 @@ test("liveFindingsFor sorts worst-severity first", () => {
   cleanup();
 });
 
-@@CLEANROOM_HOLE_2@@
+test("liveFindingsFor rewrites an absolute target to repo-relative and never suffix-matches an unrelated same-basename file (issue #299)", () => {
+  const { store, root, cleanup } = tempStore();
+  store.json.replaceAll("symbols", [mkSymbol("sym_auth", "src/auth/session.ts", "verifySession")]);
+  store.json.put("findings", finding({ title: "root-level unrelated", affected_files: ["session.ts"] }));
+  store.json.put("findings", finding({ title: "the real target", affected_files: ["src/auth/session.ts"] }));
+  assert.deepEqual(store.liveFindingsFor(join(root, "src", "auth", "session.ts")).map((f) => f.title), ["the real target"]);
+  cleanup();
+});
+
 test("liveFindingsFor: a REAL working-tree file the index cannot see must not suffix-leak a nested same-basename file's findings (issue #334)", () => {
   const { store, root, cleanup } = tempStore();
   // A comment-only root file: zero tree-sitter symbols and no covering component,
