@@ -1,6 +1,6 @@
 import { cleanupDir } from "./fixtures.js";
 export { cleanupDir, tempDir, isolatedCliEnv } from "./fixtures.js";
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -16,20 +16,17 @@ export function tempStore(): { store: HunchStore; root: string; cleanup: () => v
   return { store, root, cleanup: () => { store.close(); cleanupDir(root); } };
 }
 
-/** Writes a fixture repo with two root-level files (each with a real export, so
- *  they carry symbols) plus one file in a subdirectory — the minimal shape that
- *  exercises the "." root component (issue #34: multiple root files, sorted). */
+/** Minimal repo for the `"."` root component (issue #34): several root-level
+ *  files (indexed output is sorted) plus one nested file. */
 export function seedRootLevelFileFixture(root: string): void {
-  mkdirSync(join(root, "src/auth"), { recursive: true });
-  writeFileSync(join(root, "config.ts"), `export function loadConfig(){ return {}; }\n`);
-  writeFileSync(join(root, "settings.ts"), `export function loadSettings(){ return {}; }\n`);
-  writeFileSync(join(root, "src/auth/session.ts"), `export function verifySession(t){ return t; }\n`);
+  writeFileSync(join(root, "config.ts"), "export function loadConfig() { return {}; }\n");
+  writeFileSync(join(root, "settings.ts"), "export function loadSettings() { return {}; }\n");
+  mkdirSync(join(root, "src", "auth"), { recursive: true });
+  writeFileSync(join(root, "src", "auth", "session.ts"), "export function verifySession(t) { return t; }\n");
 }
 
-/** Writes a fixture repo via `seed`, indexes it for real, and returns the live
- *  store — for tests that need actual indexer output rather than a hand-built
- *  fixture (e.g. so a regression in the producer fails the test, not just a
- *  drifted-apart hand-written expectation). */
+/** A store populated by the REAL indexer (not hand-put records) from a repo that
+ *  `seed` lays out in a fresh temp dir. */
 export function indexedFixtureStore(seed: (root: string) => void): { store: HunchStore; root: string; cleanup: () => void } {
   const root = mkdtempSync(join(tmpdir(), "hunch-idx-"));
   seed(root);
@@ -45,20 +42,36 @@ export const inf = (c = 0.5): Provenance => inferred(c, []);
 
 export function mkConstraint(over: Partial<Constraint> & { id: string }): Constraint {
   return {
-    type: "correctness", statement: "x", scope: ["src/auth/**"], severity: "warning",
-    enforcement: "advisory_v1", match: null, forbids: null, rationale: "", source_decision: null,
-    violations: [], status: "active", valid_from: undefined, valid_to: null,
+    type: "correctness",
+    statement: "x",
+    scope: ["src/auth/**"],
+    severity: "warning",
+    enforcement: "advisory_v1",
+    match: null,
+    forbids: null,
+    rationale: "",
+    source_decision: null,
+    violations: [],
+    status: "active",
+    valid_from: undefined,
+    valid_to: null,
     provenance: { source: "human_confirmed", confidence: 1, evidence: [] },
     ...over,
   };
 }
 
-/** A minimal indexed-symbol fixture — id/file/name are the only fields path-matching
- *  tests usually care about; everything else gets a harmless zero/empty default. */
+/** Minimal indexed-symbol fixture: id, file and name are what path tests care about. */
 export function mkSymbol(id: string, file: string, name: string, over: Partial<Symbol> = {}): Symbol {
   return {
-    id, file, name, kind: "function", signature_hash: "", calls: [], called_by: [],
-    metrics: { loc: 10, churn_90d: 0, bug_count: 0, fan_in: 0, fan_out: 0 }, last_changed: "",
+    id,
+    file,
+    name,
+    kind: "function",
+    signature_hash: "",
+    calls: [],
+    called_by: [],
+    metrics: { loc: 10, churn_90d: 0, bug_count: 0, fan_in: 0, fan_out: 0 },
+    last_changed: "",
     ...over,
   };
 }

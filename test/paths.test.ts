@@ -1,16 +1,14 @@
 import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { isRepoFile, repoRelativeTarget } from "../src/core/paths.js";
+import { join, parse } from "node:path";
+import { isRepoFile, realpathNorm, repoRelativeTarget } from "../src/core/paths.js";
 import { SYMLINK_SKIP } from "./helpers.js";
 
-/** Direct unit coverage for `repoRelativeTarget`'s edge cases — the shared
- *  absolute-to-repo-relative normalizer folded from `src/cli/index.ts`'s
- *  `toRepoRel` (realpath-normalized) and `src/core/correction.ts`'s
- *  `repoRelativeHint` (a thin adapter over this function). */
+// Direct unit tests of `repoRelativeTarget`'s edge cases — the shared normalizer
+// the CLI and the correction module now use.
 
 test("repoRelativeTarget: a plain in-repo absolute path rewrites to repo-relative", () => {
   const root = mkdtempSync(join(tmpdir(), "hunch-paths-"));
@@ -21,11 +19,11 @@ test("repoRelativeTarget: a plain in-repo absolute path rewrites to repo-relativ
   }
 });
 
-test("repoRelativeTarget: a path outside root passes through unchanged — nothing safe to rewrite it to", () => {
-  const root = mkdtempSync(join(tmpdir(), "hunch-paths-root-"));
+test("repoRelativeTarget: a path outside root passes through unchanged", () => {
+  const root = mkdtempSync(join(tmpdir(), "hunch-paths-"));
   const outside = mkdtempSync(join(tmpdir(), "hunch-paths-outside-"));
   try {
-    const target = join(outside, "secret.ts");
+    const target = join(outside, "elsewhere.ts");
     assert.equal(repoRelativeTarget(target, root), target.replace(/\\/g, "/"));
   } finally {
     cleanupDir(root);
@@ -36,15 +34,14 @@ test("repoRelativeTarget: a path outside root passes through unchanged — nothi
 test("repoRelativeTarget: the root path itself has no repo-relative form — passes through unchanged", () => {
   const root = mkdtempSync(join(tmpdir(), "hunch-paths-"));
   try {
-    // relative(root, root) === "" — the guard rejects an empty result (a blank/"."
-    // scope would mint a meaningless repo-wide rule if a caller treated it as valid).
+    // An empty relative result must be refused: a blank scope would mean a repo-wide rule.
     assert.equal(repoRelativeTarget(root, root), root.replace(/\\/g, "/"));
   } finally {
     cleanupDir(root);
   }
 });
 
-test("repoRelativeTarget: a relative glob passes through untouched (not absolute, nothing to rewrite)", () => {
+test("repoRelativeTarget: a relative glob passes through untouched", () => {
   const root = mkdtempSync(join(tmpdir(), "hunch-paths-"));
   try {
     assert.equal(repoRelativeTarget("src/**", root), "src/**");
@@ -55,27 +52,20 @@ test("repoRelativeTarget: a relative glob passes through untouched (not absolute
 });
 
 test("repoRelativeTarget: a Windows drive-letter path rewrites correctly against a Windows-style root", () => {
-  // Neither path exists on this (POSIX) test host, so realpathNorm's fallback walk
-  // resolves both via their longest existing ancestor (this process's cwd) — the
-  // point of this test is that root and target decompose into the SAME ancestor
-  // chain shape (both posix'd before realpath-walking), so the relative offset
-  // between them still comes out right even though nothing on disk backs either.
-  const root = "C:\\Users\\dev\\repo";
-  const target = "C:\\Users\\dev\\repo\\src\\foo.ts";
-  assert.equal(repoRelativeTarget(target, root), "src/foo.ts");
+  // Neither path exists on a POSIX host, so both resolve through the fallback
+  // ancestor walk; both are normalized before the walk so their offset still
+  // comes out right.
+  assert.equal(repoRelativeTarget("C:\\Users\\dev\\repo\\src\\foo.ts", "C:\\Users\\dev\\repo"), "src/foo.ts");
 });
 
 test("repoRelativeTarget: a target arriving via a symlinked root still resolves (dec_e0a36efbf5)", { skip: SYMLINK_SKIP }, () => {
-  // The macOS /var -> /private/var case: findRoot() resolves the real path, but a hook
-  // event's file_path arrives un-resolved through the symlink. A naive relative() would
-  // yield a bogus "../" path; the realpath fold this function was consolidated from
-  // (src/cli/index.ts's toRepoRel) must still cancel that out.
   const base = mkdtempSync(join(tmpdir(), "hunch-paths-symlink-"));
   try {
+    // Models macOS /var vs /private/var: the same directory reached by two spellings.
     const realRoot = join(base, "real-repo");
-    mkdirSync(join(realRoot, "src"), { recursive: true });
-    writeFileSync(join(realRoot, "src", "session.ts"), "x");
     const linkRoot = join(base, "linked-repo");
+    mkdirSync(join(realRoot, "src"), { recursive: true });
+    writeFileSync(join(realRoot, "src", "session.ts"), "export const s = 1;\n");
     symlinkSync(realRoot, linkRoot);
     assert.equal(repoRelativeTarget(join(linkRoot, "src", "session.ts"), realRoot), "src/session.ts");
   } finally {
@@ -136,6 +126,25 @@ test("isRepoFile: a symlink to another file INSIDE the root stays true", { skip:
     writeFileSync(join(root, "a", "real.ts"), "export function f(){ return 1; }\n");
     symlinkSync(join(root, "a", "real.ts"), join(root, "alias.ts"));
     assert.equal(isRepoFile(root, "alias.ts"), true, "the real target is still in the repo");
+  } finally {
+    cleanupDir(root);
+  }
+});
+
+test("realpathNorm: a deep non-existent path walks up to the filesystem root and comes back unchanged", () => {
+  const fsRoot = parse(process.cwd()).root;
+  const deep = join(fsRoot, `hunch-missing-${process.pid}-${Date.now()}`, "a", "b", "c", "d.ts");
+  // Every ancestor below the filesystem root is missing, so the walk must reach
+  // the root, resolve it, and re-append the whole missing tail without throwing.
+  assert.equal(realpathNorm(deep), deep);
+  assert.equal(realpathNorm(fsRoot), realpathSync.native(fsRoot), "the root itself resolves and terminates");
+  assert.equal(realpathNorm(realpathNorm(deep)), deep, "idempotent on its own output");
+});
+
+test("realpathNorm: missing segments under an existing dir are re-appended to its real path", () => {
+  const root = mkdtempSync(join(tmpdir(), "hunch-paths-"));
+  try {
+    assert.equal(realpathNorm(join(root, "x", "y", "z.ts")), join(realpathSync.native(root), "x", "y", "z.ts"));
   } finally {
     cleanupDir(root);
   }

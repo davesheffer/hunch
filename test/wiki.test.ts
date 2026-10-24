@@ -105,27 +105,14 @@ test("assemblePack: ownership by path prefix pulls symbols, decisions, scoped co
 });
 
 test("assemblePack: an indexer-derived root component owns only those files, not the whole repo (issue #34)", (t) => {
-  // Ties the fix to its real producer: deriveComponents must emit paths that
-  // owns() (assemblePack's ownership check) actually agrees with. A hand-written
-  // component fixture here would pass even if deriveComponents regressed back
-  // to a "./**" glob — this exercises the real indexer -> wiki path.
+  // Real indexer output, so a regression in the component producer fails here.
   const { store, cleanup } = indexedFixtureStore(seedRootLevelFileFixture);
   t.after(cleanup);
-
   const rootComp = store.json.loadAll("components").find((c) => c.name === ".");
-  assert.ok(rootComp, "indexer derives a '.' component for root-level files");
-  assert.deepEqual(
-    rootComp.paths,
-    ["config.ts", "settings.ts"],
-    "root component paths are exact files, not a './**' glob",
-  );
-
+  assert.ok(rootComp, "the indexer produces a root component");
+  assert.deepEqual(rootComp.paths, ["config.ts", "settings.ts"], "exact files, not a ./** glob");
   const pack = assemblePack(store, rootComp);
-  assert.deepEqual(
-    pack.files,
-    rootComp.paths,
-    "owns() must match every exact root file the indexer recorded, and nothing else",
-  );
+  assert.deepEqual(pack.files, rootComp.paths);
 });
 
 test("assemblePack: superseded decisions are history, not page content", (t) => {

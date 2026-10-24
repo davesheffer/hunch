@@ -173,59 +173,44 @@ test("drift anchor-stale: un-anchored (topic null) superseded decision is not fl
   assert.equal(computeDrift(store, root).findings.filter((f) => f.kind === "anchor-stale").length, 0);
 });
 
-test("drift commit-unresolvable: a decision's commit that no longer resolves is flagged; a real one is not", (t) => {
+test("drift commit-unresolvable: flagged when the commit does not resolve; a real one is not", (t) => {
   const { store, root, cleanup } = tempStore();
   t.after(cleanup);
   store.json.put("decisions", DEC({ id: "dec_real", commit: "abc1234" }) as never);
   store.json.put("decisions", DEC({ id: "dec_ghost", commit: "deadbeef00" }) as never);
-  store.json.put("decisions", DEC({
-    id: "dec_ghost_superseded", commit: "deadbeef00",
-    status: "superseded", superseded_by: "dec_real",
-  }) as never);
-
-  const resolvable = new Set(["abc1234"]);
-  const findings = computeDrift(store, root, { commitResolvable: (sha) => resolvable.has(sha) })
-    .findings.filter((f) => f.kind === "commit-unresolvable");
+  store.json.put("decisions", DEC({ id: "dec_ghost_superseded", commit: "deadbeef00", status: "superseded", superseded_by: "dec_real" }) as never);
+  const findings = computeDrift(store, root, { commitResolvable: (sha) => sha === "abc1234" }).findings.filter((f) => f.kind === "commit-unresolvable");
   assert.deepEqual(findings.map((f) => f.id), ["dec_ghost"]);
-  assert.match(findings[0]!.detail, /deadbeef00/);
+  assert.ok(findings[0]!.detail.includes("deadbeef00"));
 });
 
-test("drift commit-unresolvable: skipped entirely outside a git repo (never a false positive)", (t) => {
-  // No injected predicate: this exercises the real default's "not a git repo → never flag" branch.
+test("drift commit-unresolvable: skipped entirely outside a git repo", (t) => {
   const { store, root, cleanup } = tempStore();
   t.after(cleanup);
-  store.json.put("decisions", DEC({ id: "dec_x", commit: "deadbeef00deadbeef00deadbeef00deadbeef00" }) as never);
+  store.json.put("decisions", DEC({ id: "dec_ghost", commit: "d".repeat(40) }) as never);
   assert.equal(computeDrift(store, root).findings.filter((f) => f.kind === "commit-unresolvable").length, 0);
 });
 
-test("drift commit-unresolvable: a rejected (never-adopted) decision is not flagged even though it isn't superseded", (t) => {
+test("drift commit-unresolvable: a rejected decision is not flagged", (t) => {
   const { store, root, cleanup } = tempStore();
   t.after(cleanup);
-  store.json.put("decisions", DEC({
-    id: "dec_rejected", status: "rejected", superseded_by: null,
-    commit: "deadbeef00",
-  }) as never);
-
-  assert.equal(
-    computeDrift(store, root, { commitResolvable: () => false }).findings.filter((f) => f.kind === "commit-unresolvable").length,
-    0,
-  );
+  store.json.put("decisions", DEC({ id: "dec_rejected", status: "rejected", superseded_by: null, commit: "d".repeat(40) }) as never);
+  const findings = computeDrift(store, root, { commitResolvable: () => false }).findings.filter((f) => f.kind === "commit-unresolvable");
+  assert.equal(findings.length, 0);
 });
 
-test("drift commit-unresolvable: default wiring against a real git repo (smoke test, no injected predicate)", (t) => {
+test("drift commit-unresolvable: default wiring against a real git repo", (t) => {
   const { store, root, cleanup } = tempStore();
   t.after(cleanup);
   execFileSync("git", ["init", "-q"], { cwd: root });
-  execFileSync("git", ["config", "user.email", "test@example.com"], { cwd: root });
-  execFileSync("git", ["config", "user.name", "Test"], { cwd: root });
-  writeFileSync(join(root, "a.txt"), "x\n");
-  execFileSync("git", ["add", "a.txt"], { cwd: root });
+  execFileSync("git", ["config", "user.email", "t@example.com"], { cwd: root });
+  execFileSync("git", ["config", "user.name", "T"], { cwd: root });
+  writeFileSync(join(root, "a.txt"), "a\n");
+  execFileSync("git", ["add", "-A"], { cwd: root });
   execFileSync("git", ["commit", "-qm", "init"], { cwd: root });
-  const sha = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
-
-  store.json.put("decisions", DEC({ id: "dec_real", commit: sha }) as never);
-  store.json.put("decisions", DEC({ id: "dec_ghost", commit: "deadbeef00deadbeef00deadbeef00deadbeef00" }) as never);
-
+  const head = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
+  store.json.put("decisions", DEC({ id: "dec_real", commit: head }) as never);
+  store.json.put("decisions", DEC({ id: "dec_ghost", commit: "d".repeat(40) }) as never);
   const findings = computeDrift(store, root).findings.filter((f) => f.kind === "commit-unresolvable");
   assert.deepEqual(findings.map((f) => f.id), ["dec_ghost"]);
 });

@@ -1438,8 +1438,8 @@ export class HunchStore {
    *  instant — "what did we believe as of commit X?". Omit `asOf` for the full,
    *  history-inclusive view (backward-compatible default). */
   why(target: string, opts: { asOf?: string; canRead?: (record: unknown) => boolean } = {}): WhyResult {
-    // An absolute target (an agent's edit-payload path, verbatim) never matched
-    // the repo-relative stored file paths below (issue #299).
+    // An agent's verbatim edit-payload path is absolute; stored paths are
+    // repo-relative, so rewrite before any matching (issue #299).
     target = repoRelativeTarget(target, this.paths.root);
     // A record id (every delivered brief line ends in `hunch_why("dec_…")`) resolves
     // to that record directly (issue #474). With `asOf`, a record not in force then
@@ -1461,18 +1461,18 @@ export class HunchStore {
     // so an unanchored suffix pulled unrelated files' records into why()/the
     // pre-edit grounding block (issue #32). Segment-anchored matching only.
     //
-    // A target that IS a path Hunch's index already knows about (README.md,
-    // vscode-extension/index.ts, ...) names exactly one file — suffix-matching
-    // it too pulls in every OTHER file that merely shares a basename (issue
-    // #299: root index.ts delivered vscode-extension/index.ts's rules and vice
-    // versa). "Known to the index" is answered from already-loaded graph data
+    // A target that is a path the index already knows (README.md,
+    // `vscode-extension/index.ts`) names exactly ONE file. Suffix-matching it too
+    // would pull in every other file sharing its basename (issue #299: root
+    // `index.ts` received `vscode-extension/index.ts`'s rules and vice versa). "Known
+    // to the index" is answered from already-loaded graph data, looked up
     // first (a symbol's exact file, or an indexed component's path glob — so a
     // symbol-less indexed file still counts as real), and only then from the
     // working tree, for a real file the index cannot see at all (issue #334).
     // See isKnownPath. Suffix matching stays reserved for a target that is not
     // itself a real path, e.g. a short/partial reference like "x/scenario.ts".
     const indexed = this.isKnownPath(target, { symbols, components });
-    const suffixMatch = (file: string) => !indexed && pathsRelated(file, target);
+    const suffixMatch = (file: string): boolean => !indexed && pathsRelated(file, target);
     const matchedSymbols = matchSymbolsTiered(target, symbols, indexed);
     const symIds = new Set(matchedSymbols.map((s) => s.id));
     const fileSet = new Set(matchedSymbols.map((s) => s.file));
@@ -1795,9 +1795,8 @@ export class HunchStore {
    *  longer enforced. Pass `{ asOf }` to instead return the invariants in force at
    *  that instant (time-travel: "what must I not have broken as of commit X?"). */
   checkConstraints(scope: string, opts: { asOf?: string } = {}): Constraint[] {
-    // Constraint scopes are always repo-relative; an absolute target (an
-    // agent's edit-payload path, verbatim) matched nothing even when a
-    // blocking rule plainly applied (issue #296).
+    // Scopes are repo-relative; an absolute target matched nothing even when a
+    // blocking rule applied (issue #296).
     scope = repoRelativeTarget(scope, this.paths.root);
     const all = this.recs("constraints");
     const asOf = opts.asOf;
@@ -1813,11 +1812,8 @@ export class HunchStore {
    *  glob, and the queried scope may be either too. Advisory only — findings never
    *  enter any block path. Sorted worst-first, then id for stable output. */
   liveFindingsFor(scope: string): Finding[] {
-    // Same absolute-target and same-basename-leak gaps as why() (issue #299): an
-    // un-rewritten absolute scope never matched the repo-relative `affected_files`
-    // below, and an un-guarded suffix fallback could pull in an unrelated file
-    // that merely shares a basename. Normalize once and reuse the same "is this
-    // path known to the index" guard.
+    // Same absolute-target and same-basename-leak gaps as why() (issue #299):
+    // normalize once and reuse the known-path guard.
     const t = repoRelativeTarget(scope, this.paths.root);
     const indexed = this.isKnownPath(t);
     const live = (f: Finding): boolean => f.triage === "open" || f.triage === "accepted-risk" || f.triage === "scheduled";
@@ -2409,9 +2405,7 @@ export class HunchStore {
    *  a task on `target`, ordered by what matters most — invariants first, then the
    *  why, then blast radius and bug history — trimmed to a rough token budget. */
   assembleContext(target: string, budget = 1500, opts: { asOf?: string; canRead?: (record: unknown) => boolean } = {}): AssembledContext {
-    // An absolute target (an agent's edit-payload path, verbatim) must be
-    // repo-relative BEFORE it reaches why()/liveFindingsFor() below, or an
-    // absolute path never matches the repo-relative stored data (issue #299).
+    // Normalize before it reaches why()/liveFindingsFor() below (issue #299).
     target = repoRelativeTarget(target, this.paths.root);
     const w = this.why(target, opts);
     const symIds = w.symbols.map((s) => s.id);

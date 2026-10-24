@@ -151,21 +151,19 @@ test("why() matches on path segments, never a bare suffix — 'io.ts' must not p
   cleanup();
 });
 
-test("why() matches an existing full path exactly, never a same-basename suffix — root index.ts must not pull nested/index.ts's records (issue #299)", () => {
+test("why() matches an existing full path exactly, never a same-basename suffix — root index.ts must not pull nested index.ts's records (issue #299)", () => {
   const { store, cleanup } = seed();
-  // Deliberately no real files on disk: "is this a real indexed path" must be
-  // answerable from already-loaded graph data alone, never the filesystem — a
-  // deleted-but-still-indexed path must answer the same either way (issue #299).
+  // No files are created on disk: "known path" must be answered from graph data.
   store.json.put("symbols", mkSymbol("sym_root_idx", "index.ts", "root", { kind: "variable" }) as never);
   store.json.put("symbols", mkSymbol("sym_nested_idx", "vscode-extension/index.ts", "nested", { kind: "variable" }) as never);
   store.json.put("constraints", { id: "con_nested", type: "correctness", statement: "nested rule", scope: ["vscode-extension/index.ts"], severity: "blocking", enforcement: "advisory_v1", rationale: "x", source_decision: null, violations: [], provenance: prov(0.9) } as never);
   store.reindex();
-  const wRoot = store.why("index.ts");
-  assert.deepEqual(wRoot.symbols.map((s) => s.id), ["sym_root_idx"], "root index.ts must not resolve the nested symbol");
-  assert.deepEqual(wRoot.constraints.map((c) => c.id), [], "root index.ts must not inherit the nested-scoped constraint");
-  const wNested = store.why("vscode-extension/index.ts");
-  assert.deepEqual(wNested.symbols.map((s) => s.id), ["sym_nested_idx"]);
-  assert.deepEqual(wNested.constraints.map((c) => c.id), ["con_nested"]);
+  const root = store.why("index.ts");
+  assert.deepEqual(root.symbols.map((s) => s.id), ["sym_root_idx"]);
+  assert.deepEqual(root.constraints.map((c) => c.id), []);
+  const nested = store.why("vscode-extension/index.ts");
+  assert.deepEqual(nested.symbols.map((s) => s.id), ["sym_nested_idx"]);
+  assert.deepEqual(nested.constraints.map((c) => c.id), ["con_nested"]);
   cleanup();
 });
 

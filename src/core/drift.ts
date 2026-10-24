@@ -42,11 +42,7 @@ export interface DriftReport {
   findings: DriftFinding[];
 }
 
-export function computeDrift(
-  store: HunchStore,
-  root: string,
-  deps: { commitResolvable?: (sha: string) => boolean } = {},
-): DriftReport {
+export function computeDrift(store: HunchStore, root: string, deps: { commitResolvable?: (sha: string) => boolean } = {}): DriftReport {
   const findings: DriftFinding[] = [];
   const decisions = store.recs("decisions");
   const byId = new Map(decisions.map((d) => [d.id, d] as const));
@@ -66,23 +62,17 @@ export function computeDrift(
     return liveFiles.has(p) || liveDirs.some((dir) => p.startsWith(dir));
   };
   const premiseEnv: PremiseEnv = { now: new Date().toISOString(), exists: (p) => existsSync(join(root, p)) };
-  // A plain existence check is meaningless outside a git repo — computed once,
-  // not per decision, and never a false positive for a directory that merely
-  // happens to hold .hunch/ without being a git checkout. Injectable so tests
-  // (and callers with a cheaper oracle) never have to shell out per decision.
-  const gitRepo = isGitRepo(root);
-  // One batched `git cat-file --batch-check` for every commit-bearing decision,
-  // not one `rev-parse` per decision — skipped entirely when a predicate is
-  // injected (tests/callers with a cheaper oracle never pay for this at all).
-  const resolvableCommits = gitRepo && !deps.commitResolvable
-    ? commitsExist([...new Set(decisions.filter((d) => d.commit).map((d) => d.commit as string))], root)
-    : null;
-  const defaultCommitResolvable = (sha: string): boolean => {
-    if (!gitRepo) return true; // never flag outside a git repo
-    if (resolvableCommits === null) return true; // the batch check itself failed, or was skipped — fail open
-    return resolvableCommits.has(sha);
-  };
-  const commitResolvable = deps.commitResolvable ?? defaultCommitResolvable;
+  // Commit-provenance resolver. Injectable so tests/callers avoid spawning git. The
+  // default runs ONE batched existence check over every decision's commit (not a
+  // process per decision), and outside a git repo the check is meaningless, so it
+  // never flags anything there.
+  let commitResolvable = deps.commitResolvable;
+  if (!commitResolvable) {
+    const inRepo = isGitRepo(root);
+    const shas = inRepo ? [...new Set(decisions.map((d) => d.commit).filter((c): c is string => !!c))] : [];
+    const resolvable = inRepo ? commitsExist(shas, root) : null;
+    commitResolvable = (sha) => !inRepo || resolvable === null || resolvable.has(sha);
+  }
 
   for (const d of decisions) {
     // 1. DEAD-REFERENCE — only for in-force decisions; a superseded one referencing
@@ -96,15 +86,18 @@ export function computeDrift(
         }
       }
 
-      // 8. COMMIT-UNRESOLVABLE — an in-force decision's commit provenance no longer
-      //    resolves at all (source branch gone + gc'd past recovery). The
-      //    opportunistic post-merge repair (commitrepair.ts) is the fix path; this
-      //    is purely the "nothing caught it" signal — deterministic, never auto-fixed.
-      //    Mirrors repair.ts:59's live-records-only rule: `inForce` alone doesn't
-      //    exclude a never-adopted "rejected" decision (superseded_by is null for
-      //    those too), so exclude it explicitly here.
+      // 8. COMMIT-UNRESOLVABLE — the commit provenance no longer resolves here (its
+      //    source branch was deleted and garbage-collected). The post-merge repair
+      //    flow is the fix path; this is only the deterministic "nothing caught it"
+      //    signal and is never auto-fixed. Same live-records-only rule as the repair
+      //    module, hence the explicit rejected exclusion (a never-adopted decision
+      //    also has superseded_by null).
       if (d.commit && d.status !== "rejected" && !commitResolvable(d.commit)) {
-        findings.push({ kind: "commit-unresolvable", id: d.id, detail: `commit ${d.commit} no longer resolves in this repository — provenance may need manual repair` });
+        findings.push({
+          kind: "commit-unresolvable",
+          id: d.id,
+          detail: `commit ${d.commit} no longer resolves in this repository — provenance may need manual repair`,
+        });
       }
     }
 

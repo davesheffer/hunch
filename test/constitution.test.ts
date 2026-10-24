@@ -600,11 +600,8 @@ test("Phase 3E applies an exists mutation to isolated source and persists a pars
   }
 });
 
-test("an exists mutation on a file with multi-byte UTF-8 content before the target deletes exactly the right span (issue #85)", () => {
-  // "café — über" is 11 JS chars but 15 UTF-8 bytes (é, —, ü each cost more
-  // bytes than code units) -- placed before fetchOrders so a byte-vs-char
-  // offset bug would misalign the deletion, corrupting or mis-targeting it.
-  const servicesBody = '// café — über multi-byte comment, deliberately before the target\nimport { dbQuery } from "../db/client.js";\nexport function fetchOrders(u){ return dbQuery(u); }\n';
+test("Phase 3E exists mutation deletes the right span when multi-byte text precedes it (issue #85)", () => {
+  const servicesBody = '// café — über\nimport { dbQuery } from "../db/client.js";\nexport function fetchOrders(u){ return dbQuery(u); }\n';
   const { root, store, cleanup } = layeredRepo(undefined, servicesBody);
   try {
     store.json.put("decisions", {
@@ -621,25 +618,21 @@ test("an exists mutation on a file with multi-byte UTF-8 content before the targ
     assert.equal(primary.result, "violated");
     assert.equal(primary.passed, true);
     assert.equal(primary.parseability, "parseable");
-    const diff = primary.source_patch?.diff ?? "";
-    assert.match(diff, /^-export function fetchOrders\(u\)\{ return dbQuery\(u\); \}$/m, "deletes exactly the target line, not a byte-shifted span");
-    assert.match(diff, /^ \/\/ café — über multi-byte comment/m, "the preceding multi-byte comment survives untouched as diff context");
-    assert.doesNotMatch(diff, /^[-+].*(café|über)/m, "the multi-byte comment is never itself added or removed");
+    const lines = (primary.source_patch?.diff ?? "").split("\n");
+    const removed = lines.filter((line) => line.startsWith("-") && !line.startsWith("---"));
+    const added = lines.filter((line) => line.startsWith("+") && !line.startsWith("+++"));
+    assert.ok(removed.includes("-export function fetchOrders(u){ return dbQuery(u); }"), "the fetchOrders export line is removed");
+    assert.ok(lines.includes(" // café — über"), "the multi-byte comment stays as unchanged context");
+    assert.ok(![...removed, ...added].some((line) => /café|über|—/.test(line)), "no changed line touches the multi-byte text");
   } finally {
     cleanup();
   }
 });
 
-test("a forbidden-edge mutation on a file with multi-byte UTF-8 content before the target injects the call inside the right braces (issue #85)", () => {
-  // Exercises the OTHER byte-sensitive path in sourceMutation.ts (the
-  // open-brace search that locates where to inject a call), not the
-  // spliceChars delete path the sibling "exists mutation" test above covers.
-  // Needs enough UTF-8/UTF-16 delta (20 em dashes, 2 extra bytes each = 40
-  // bytes) to exceed the short function body's own length -- with only a
-  // couple of multi-byte characters the old Buffer-based search still finds
-  // the right brace by scanning forward from a too-early start position; at
-  // this size the byte-vs-char gap corrupts the boundary check that follows.
-  const apiBody = `// ${"—".repeat(20)} multi-byte comment, deliberately before the target\nimport { fetchOrders } from "../services/orders.js";\nexport function listOrders(u){ return fetchOrders(u); }\n`;
+test("Phase 3E forbidden-edge mutation injects after the right brace when multi-byte text precedes it (issue #85)", () => {
+  // 20 em dashes open a large byte/char gap that breaks a byte-based brace search.
+  const dashes = "—".repeat(20);
+  const apiBody = `// ${dashes}\nimport { fetchOrders } from "../services/orders.js";\nexport function listOrders(u){ return fetchOrders(u); }\n`;
   const { root, store, cleanup } = layeredRepo(apiBody);
   try {
     store.json.put("decisions", decision("dec_forbidden_edge_source_mutation_utf8"));
@@ -652,15 +645,15 @@ test("a forbidden-edge mutation on a file with multi-byte UTF-8 content before t
     assert.equal(primary.result, "violated");
     assert.equal(primary.passed, true);
     assert.equal(primary.parseability, "parseable");
-    const diff = primary.source_patch?.diff ?? "";
-    // Each unified-diff added line is separately "+"-prefixed, even within
-    // the same logical statement -- assert each line rather than one
-    // multi-line pattern, to keep the expectation legible.
-    assert.match(diff, /^\+export function listOrders\(u\)\{$/m, "the opening brace line is unchanged, not byte-shifted");
-    assert.match(diff, /^\+ {2}dbQuery\(\); \/\/ hunch deterministic source mutation$/m, "the call is injected right after listOrders' opening brace");
-    assert.match(diff, /^\+ return fetchOrders\(u\); \}$/m, "the original body content survives after the injected call");
-    assert.match(diff, /^ \/\/ —+ multi-byte comment/m, "the preceding multi-byte comment survives untouched as diff context");
-    assert.doesNotMatch(diff, /^-.*—/m, "the multi-byte comment is never removed");
+    const lines = (primary.source_patch?.diff ?? "").split("\n");
+    assert.ok(lines.includes("+export function listOrders(u){"), "the brace line stays intact");
+    assert.ok(lines.includes("+  dbQuery(); // hunch deterministic source mutation"), "the call is injected");
+    assert.ok(lines.includes("+ return fetchOrders(u); }"), "the original body follows the injected call");
+    assert.ok(lines.includes(`// ${dashes}`.replace(/^/, " ")), "the em-dash comment is unchanged context");
+    assert.ok(
+      !lines.some((line) => line.startsWith("-") && line.includes(dashes)),
+      "the em-dash comment is never removed",
+    );
   } finally {
     cleanup();
   }
