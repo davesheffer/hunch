@@ -99,7 +99,8 @@ export class EscalationNode extends vscode.TreeItem {
       this.iconPath = new vscode.ThemeIcon("info");
       this.description = "context only";
     } else {
-@@CLEANROOM_HOLE_R1@@
+      const warn = new vscode.ThemeColor("notificationsWarningIcon.foreground");
+      this.iconPath = new vscode.ThemeIcon("question", warn);
     }
     this.contextValue = "hunchEscalation";
     this.tooltip = new vscode.MarkdownString([`**${entry.kind}**`, "", entry.detail, "", `→ ${entry.resolution}`].join("\n"));
