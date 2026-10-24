@@ -178,10 +178,9 @@ module.exports = { cjsCaller };
   malformedSkipped(g, "src/broken.ts");
 });
 
-// Known gap (indexer.ts resolveName member gate): `ns.fn()` only yields an edge when
-// fn is a method or same-file, so namespace-import / dynamic-import / require()
-// member calls to another file's top-level function are invisible to the graph.
-test("typescript: namespace, dynamic-import and require member calls resolve cross-file", { todo: "member calls to cross-file top-level functions are dropped by the indexer's member gate" }, (t) => {
+// `ns.fn()` through a module-object binding resolves only inside the bound module,
+// so the member gate no longer hides namespace / dynamic-import / require() calls.
+test("typescript: namespace, dynamic-import and require member calls resolve cross-file", (t) => {
   const g = indexFixture(t, "ts-ns", {
     "src/util.ts": "export function helper(x: number) { return x; }\n",
     "src/ns.ts": "import * as U from \"./util\";\nexport function viaNs() { return U.helper(1); }\n",
@@ -192,6 +191,38 @@ test("typescript: namespace, dynamic-import and require member calls resolve cro
   assert.ok(g.calls(["viaNs", "src/ns.ts"], ["helper", "src/util.ts"]), "namespace import member call");
   assert.ok(g.calls(["lazyLoad", "src/lazy.mjs"], ["helper", "src/util.ts"]), "dynamic import member call");
   assert.ok(g.calls(["cjsCaller", "src/common.cjs"], ["helper", "src/util.ts"]), "require() member call");
+});
+
+// A module binding exposes exports, not class methods: `U.helper()` binds to the
+// exported `helper`, never to a same-named `Foo.helper` in that module. (A sole
+// method match is still reached by the general member gate, which allows
+// `obj.method()` into imported files, so that case is not asserted here.)
+test("typescript: namespace member call ignores same-named class methods in the module", (t) => {
+  const g = indexFixture(t, "ts-ns-method", {
+    "src/util.ts": "export class Foo { helper(x: number) { return x; } }\nexport function helper(x: number) { return x; }\n",
+    "src/ns.ts": "import * as U from \"./util\";\nexport function viaNs() { return U.helper(1); }\n",
+  });
+  assert.equal(g.status, 0, g.output);
+  const helpers = g.symbols.filter((s) => s.name === "helper" && s.file === "src/util.ts");
+  const fn = helpers.find((s) => s.kind !== "method"), method = helpers.find((s) => s.kind === "method");
+  assert.ok(fn && method, `fixture: function + method helper; have ${helpers.map((s) => s.kind).join(", ")}`);
+  const callee = (id: string) => g.edges.some((e) => e.from === g.sym("viaNs", "src/ns.ts").id && e.to === id && e.type === "calls");
+  assert.ok(callee(fn.id), "U.helper() -> exported helper");
+  assert.ok(!callee(method.id), "no edge from U.helper() to Foo.helper");
+});
+
+test("commonjs: require-bound member call reaches an object-literal export despite a same-named helper elsewhere", (t) => {
+  const g = indexFixture(t, "cjs-objlit", {
+    "src/util.cjs": "module.exports = { helper() { return 1; } };\n",
+    "src/other.cjs": "function helper() { return 2; }\nmodule.exports = { helper };\n",
+    "src/caller.cjs": "const u = require(\"./util.cjs\");\nconst o = require(\"./other.cjs\");\nfunction run() { return u.helper() + o.helper(); }\nmodule.exports = { run };\n",
+  });
+  assert.equal(g.status, 0, g.output);
+  const run = g.sym("run", "src/caller.cjs").id;
+  const target = (file: string) => g.symbols.find((s) => s.name === "helper" && s.file === file)!.id;
+  const callee = (id: string) => g.edges.some((e) => e.from === run && e.to === id && e.type === "calls");
+  assert.ok(callee(target("src/util.cjs")), "u.helper() -> util.cjs object-literal helper");
+  assert.ok(callee(target("src/other.cjs")), "o.helper() -> other.cjs helper");
 });
 
 // ---------------------------------------------------------------- TSX / JSX
@@ -252,16 +283,19 @@ export function Widget({ name }) { return <Button label={formatLabel(name)} />; 
   malformedSkipped(g, "ui/Partial.tsx");
 });
 
-// Known gap: JSX element usage (<Button />, <App />) is not a call_expression, so a
-// component rendered only via JSX has no dependents; class-field arrows are not symbols.
-test("tsx: JSX element usage creates component edges; class-field arrows are symbols", { todo: "TS_QUERY captures call/new expressions only, not jsx_opening_element / jsx_self_closing_element; public_field_definition arrows are not defs" }, (t) => {
+// JSX element usage (<Button />, <ns.Button />) is a call to the component;
+// intrinsic lowercase tags are not. Class-field arrows are method symbols.
+test("tsx: JSX element usage creates component edges; class-field arrows are symbols", (t) => {
   const g = indexFixture(t, "tsx-jsx", {
     "ui/Button.tsx": "export const Button = () => <button />;\n",
     "ui/App.tsx": "import { Button } from \"./Button\";\nexport function App() { return <Button />; }\nexport class Panel { onClick = () => 1; }\n",
+    "ui/Ns.tsx": "import * as B from \"./Button\";\nexport function Ns() { return <B.Button><button /></B.Button>; }\n",
   });
   assert.equal(g.status, 0, g.output);
   assert.ok(g.calls(["App", "ui/App.tsx"], ["Button", "ui/Button.tsx"]), "JSX usage -> component");
-  assert.ok(g.has("onClick", "ui/App.tsx"), "class-field arrow symbol");
+  assert.ok(g.calls(["Ns", "ui/Ns.tsx"], ["Button", "ui/Button.tsx"]), "namespaced JSX usage -> component");
+  assert.equal(g.edges.filter((e) => e.from === g.sym("Ns", "ui/Ns.tsx").id && e.type === "calls").length, 1, "one edge, none to intrinsic tags");
+  assert.equal(g.sym("onClick", "ui/App.tsx").kind, "method", "class-field arrow symbol");
 });
 
 // ---------------------------------------------------------------- Python
