@@ -9,7 +9,7 @@ import { cleanupDir } from "./fixtures.js";
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-@@CLEANROOM_HOLE_1@@
+import { execFileSync, spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -84,7 +84,25 @@ test("an untracked grounding doc stays the user's to stage", () => {
   }
 });
 
-@@CLEANROOM_HOLE_2@@
+/** A child's inherited stderr write is invisible to an in-process spy, so the
+ *  silence check runs headFileContent in a separate Node process. */
+test("headFileContent stays silent for an untracked path", () => {
+  const { root, cleanup } = fixture();
+  try {
+    writeFileSync(join(root, "AGENTS.md"), "# AGENTS\n\nuntracked draft\n");
+    const script = [
+      'import { headFileContent } from "./src/extractors/git.ts";',
+      `if (headFileContent(${JSON.stringify(root)}, "AGENTS.md") !== null) throw new Error("untracked path must be null");`,
+      `if (typeof headFileContent(${JSON.stringify(root)}, "CLAUDE.md") !== "string") throw new Error("tracked path must be a string");`,
+    ].join("\n");
+    const child = spawnSync(process.execPath, ["--import", "tsx", "--input-type=module", "-e", script], { cwd: process.cwd(), encoding: "utf8" });
+    assert.equal(child.status, 0, child.stderr);
+    assert.equal(child.stderr, "");
+  } finally {
+    cleanup();
+  }
+});
+
 test("stripManagedSection removes exactly the generated block", () => {
   const { root, store, cleanup } = fixture();
   try {

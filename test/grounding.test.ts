@@ -1,7 +1,7 @@
 import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-@@CLEANROOM_HOLE_1@@
+import { tempStore, mkConstraint } from "./helpers.js";
 import { mkdtempSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -37,7 +37,47 @@ test("grounding tool signatures match the real MCP param names (no agent-mislead
   assert.doesNotMatch(md, /hunch_query\(question\)/);
   assert.doesNotMatch(md, /hunch_bug_lineage\(symptom\)/);
 });
-@@CLEANROOM_HOLE_2@@
+test("a retired constraint is excluded from the top-invariants list", (t) => {
+  const { store, root, cleanup } = tempStore();
+  t.after(cleanup);
+  store.json.put("constraints", mkConstraint({
+    id: "con_retired_one", severity: "blocking", status: "retired",
+    valid_from: "2024-01-01T00:00:00Z", valid_to: "2025-01-01T00:00:00Z",
+    statement: "RETIREDMARKER-alpha must hold",
+  }));
+  store.json.put("constraints", mkConstraint({
+    id: "con_active_one", severity: "blocking", statement: "ACTIVEMARKER-alpha must hold",
+  }));
+  const md = renderHunchSection(store, root);
+  assert.doesNotMatch(md, /RETIREDMARKER-alpha/);
+  assert.match(md, /ACTIVEMARKER-alpha/);
+});
+
+test("a closed valid_to alone excludes the constraint", (t) => {
+  const { store, root, cleanup } = tempStore();
+  t.after(cleanup);
+  store.json.put("constraints", mkConstraint({
+    id: "con_closed_window", severity: "blocking", status: "active",
+    valid_to: "2025-01-01T00:00:00Z", statement: "CLOSEDMARKER-beta must hold",
+  }));
+  assert.doesNotMatch(renderHunchSection(store, root), /CLOSEDMARKER-beta/);
+});
+
+test("retired constraints do not starve active ones out of the 8-entry cap", (t) => {
+  const { store, root, cleanup } = tempStore();
+  t.after(cleanup);
+  for (let i = 0; i < 8; i++) {
+    store.json.put("constraints", mkConstraint({
+      id: `con_retired_cap_${i}`, severity: "blocking", status: "retired",
+      valid_from: "2024-01-01T00:00:00Z", valid_to: "2025-01-01T00:00:00Z",
+      statement: `RETIREDCAP-${i} must hold`,
+    }));
+  }
+  store.json.put("constraints", mkConstraint({
+    id: "con_active_cap", severity: "advisory", statement: "ACTIVECAPMARKER must hold",
+  }));
+  assert.match(renderHunchSection(store, root), /ACTIVECAPMARKER/);
+});
 
 // The policy-tools grounding line must track whether the MCP server actually registers
 // the policy group (src/mcp/toolset.ts) — a root with no policy evidence and no config

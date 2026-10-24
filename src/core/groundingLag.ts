@@ -49,7 +49,17 @@ export interface GroundingCounts {
 /** Record kinds whose committed count may only ever lag behind the store. */
 export const APPEND_ONLY_COUNT_KINDS = ["decisions", "bugs", "constraints", "components", "policies"] as const;
 
-@@CLEANROOM_HOLE_1@@
+/** Render the bold counts segment `parseGroundingCounts` reads. Shared by claudemd.ts and the merge driver. */
+export function renderCountsMatch(counts: GroundingCounts): string {
+  const tail = counts.findings ? `, ${counts.findings} open findings` : "";
+  return `**${counts.decisions} decisions, ${counts.bugs} bugs, ${counts.constraints} constraints, ${counts.components} components, ${counts.policies} policies${tail}**`;
+}
+
+/** `text` with its counts segment swapped for a neutral token, so two texts compare equal regardless of counts. */
+export function stripCountsMatch(text: string, match: string): string {
+  return text.replace(match, () => "<counts>");
+}
+
 export function parseGroundingCounts(block: string): { counts: GroundingCounts; match: string } | null {
   const m = COUNTS_RE.exec(block);
   if (!m) return null;
@@ -101,7 +111,7 @@ export function classifyGroundingBlock(committed: string, generated: string): Gr
   }
   if (!c) return { kind: "diverged", reason: "the committed block carries no record-counts sentence" };
   if (!g) return { kind: "diverged", reason: "the generated block carries no record-counts sentence" };
-@@CLEANROOM_HOLE_2@@
+  if (stripCountsMatch(committed, c.match) !== stripCountsMatch(generated, g.match)) {
     return { kind: "diverged", reason: "the block differs outside the record-counts sentence" };
   }
   const ahead = APPEND_ONLY_COUNT_KINDS.filter((k) => c.counts[k] > g.counts[k]);

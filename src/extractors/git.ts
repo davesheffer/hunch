@@ -866,7 +866,7 @@ export function headFileContent(root: string, rel: string): string | null {
       encoding: "utf8",
       env: foreignRepoEnv(process.env),
       maxBuffer: 16 * 1024 * 1024,
-@@CLEANROOM_HOLE_1@@
+      stdio: ["ignore", "pipe", "ignore"],
     });
   } catch {
     return null;
@@ -941,7 +941,10 @@ function isDerivedStoreArtifact(relativeName: string): boolean {
     // `hunch serve` flushes INSIDE its cross-process write lock, so the lock file is always
     // staged alongside the record; treating it as a violation made every served write skip
     // the commit quietly and report durability "local" forever (1.26.0/1.26.1).
-@@CLEANROOM_HOLE_2@@
+    || relativeName === "write.lock"
+    // Clone-local scratch that must never ride a public flush or an overlay force-add into shared memory.
+    || relativeName === "pending-commit-repairs.json"
+    || relativeName === "dropped-commit-repairs.json";
 }
 
 /** Enumerate ordinary JSON files already contained under an overlay. Push-capable
@@ -2558,7 +2561,79 @@ export function commitChanges(sha: string, cwd: string): CommitFileChange[] {
   return out;
 }
 
-@@CLEANROOM_HOLE_3@@
+export interface CommitCandidate {
+  sha: string;
+  files: string[];
+}
+
+/** Default cap on commits the range walk inspects: insurance against an unbounded
+ *  background hook run when a pull brings in hundreds of commits. */
+const DEFAULT_RANGE_CAP = 500;
+
+/** Commits in `oldRef..newRef` (most recent `maxCount`, oldest first), each with the
+ *  non-deleted paths it touched. Squash-merge provenance repair reads this. A git
+ *  failure yields []. */
+export function mergeRangeChanges(oldRef: string, newRef: string, cwd: string, maxCount = DEFAULT_RANGE_CAP): CommitCandidate[] {
+  const raw = gitSafe(["rev-list", "--abbrev-commit", `--max-count=${maxCount}`, `${oldRef}..${newRef}`], cwd);
+  if (!raw) return [];
+  const shas = raw.split("\n").map((s) => s.trim()).filter(Boolean).reverse();
+  return shas.map((sha) => ({
+    sha,
+    files: commitChanges(sha, cwd)
+      .filter((c) => c.status !== "deleted")
+      .map((c) => c.after ?? c.before)
+      .filter((f): f is string => !!f),
+  }));
+}
+
+const HEX_COMMIT_RE = /^[0-9a-f]{7,64}$/i;
+
+/** Which of `shas` resolve to a commit, via one `git cat-file --batch-check`.
+ *  Malformed values are dropped before the stdin lines are built (positional mapping).
+ *  Returns null when git itself could not run: callers fail open. */
+export function commitsExist(shas: readonly string[], cwd: string): Set<string> | null {
+  if (!shas.length) return new Set();
+  const valid = shas.filter((s) => HEX_COMMIT_RE.test(s));
+  if (!valid.length) return new Set();
+  let out: string;
+  try {
+    out = execFileSync("git", ["-C", cwd, "cat-file", "--batch-check"], {
+      input: valid.map((s) => `${s}^{commit}`).join("\n") + "\n",
+      encoding: "utf8", timeout: 10_000, stdio: ["pipe", "pipe", "ignore"], maxBuffer: 16 * 1024 * 1024,
+    });
+  } catch {
+    return null;
+  }
+  const lines = out.split("\n");
+  const found = new Set<string>();
+  valid.forEach((sha, i) => {
+    if (lines[i] !== undefined && !/\bmissing$/.test(lines[i]!.trim())) found.add(sha);
+  });
+  return found;
+}
+
+export type CommitRepairStatus = "orphaned" | "current" | "unresolvable" | "unknown";
+
+/** Whether `commit` is reachable from `ref`. Never collapses "no" and "error": only
+ *  "orphaned" is repair-eligible. A missing or non-directory cwd is "unresolvable". */
+export function commitRepairStatus(commit: string, ref: string, cwd: string): CommitRepairStatus {
+  if (!HEX_COMMIT_RE.test(commit)) return "unresolvable";
+  const opts = { cwd, stdio: "ignore" as const, timeout: 5_000 };
+  try {
+    execFileSync("git", ["cat-file", "-e", `${commit}^{commit}`], opts);
+  } catch (e) {
+    const err = e as { status?: unknown; code?: unknown };
+    if (typeof err.status === "number" || err.code === "ENOENT" || err.code === "ENOTDIR") return "unresolvable";
+    return "unknown";
+  }
+  try {
+    execFileSync("git", ["merge-base", "--is-ancestor", commit, ref], opts);
+    return "current";
+  } catch (e) {
+    return (e as { status?: unknown }).status === 1 ? "orphaned" : "unknown";
+  }
+}
+
 /** commitRepairStatus against several tips: "orphaned" only when NO ref
  *  reaches the commit. A historical `--range old..new` must not make a commit
  *  that HEAD still reaches look orphaned just because it is newer than `new`

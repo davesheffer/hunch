@@ -1,19 +1,31 @@
 /**
-@@CLEANROOM_HOLE_1@@
+ * Wires up two independent git merge drivers:
+ *  - `merge=hunch`: the structured `.hunch/` JSON driver (store/merge.ts), which
+ *    resolves concurrent edits by record id;
+ *  - `merge=hunch-grounding`: the generated grounding docs driver
+ *    (core/groundingMerge.ts), which auto-resolves only a hard conflict confined
+ *    to the record-counts sentence.
+ * Both routes live in the committed `.gitattributes`. Both drivers are
+ * registered only in local, per-clone git config, because each references this
+ * machine's node and CLI path; teammates re-run `hunch init`.
  */
 import { execFileSync } from "node:child_process";
 import { readFileSync, existsSync } from "node:fs";
 import { writeFileAtomic } from "../core/io.js";
 import { assertSafeTopLevelConfigFile } from "./gitignore.js";
-@@CLEANROOM_HOLE_2@@
+import { GROUNDING_DOC_PATHS } from "./providers.js";
 import { mergeDriverShell } from "../cli/invocation.js";
 
 // Route the .hunch JSON records through the structured driver — but NOT the
 // manifest (an id-less `{schema_version}` object the driver can't merge by id; a
 // normal text merge with conflict markers is the right behavior for it).
-@@CLEANROOM_HOLE_3@@
+// The five generated grounding docs go to the other driver, which is narrower:
+// it only ever touches a hard conflict confined to the counts sentence.
 export const ATTR_LINES: readonly string[] = [
-@@CLEANROOM_HOLE_4@@
+  ".hunch/**/*.json merge=hunch",
+  ".hunch/manifest.json merge=text",
+  ...GROUNDING_DOC_PATHS.map((p) => `${p} merge=hunch-grounding`),
+];
 
 export function targetRepositoryEnv(): NodeJS.ProcessEnv {
   const env = { ...process.env };
@@ -46,7 +58,8 @@ export function installMergeDriver(root: string, invShell: string): { action: st
     writeFileAtomic(attrPath, text);
   }
 
-@@CLEANROOM_HOLE_5@@
+  // 2. The driver definitions go into local git config. They are per-clone (they
+  //    reference this machine's node and CLI path), so they are never committed; teammates
   //    re-run init. Dev mode swaps `npx tsx` for Hunch's own loader (#492).
   const shell = mergeDriverShell(invShell);
   const driver = `${shell} merge-driver "%O" "%A" "%B" "%P"`;
@@ -55,9 +68,10 @@ export function installMergeDriver(root: string, invShell: string): { action: st
   try {
     execFileSync("git", ["config", "merge.hunch.name", "hunch structured JSON merge"], { cwd: root, env });
     execFileSync("git", ["config", "merge.hunch.driver", driver], { cwd: root, env });
-@@CLEANROOM_HOLE_6@@
+    execFileSync("git", ["config", "merge.hunch-grounding.name", "hunch grounding-counts merge"], { cwd: root, env });
+    execFileSync("git", ["config", "merge.hunch-grounding.driver", groundingDriver], { cwd: root, env });
   } catch {
     return { action: `${attrAction} .gitattributes — but \`git config\` failed (not a git repo?)` };
   }
-@@CLEANROOM_HOLE_7@@
+  return { action: `${attrAction} .gitattributes + registered merge.hunch + merge.hunch-grounding drivers` };
 }
