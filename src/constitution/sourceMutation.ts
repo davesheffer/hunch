@@ -136,8 +136,7 @@ function applyReplacements(source: string, replacements: ReadonlyArray<{ start: 
 function importInsertionOffset(source: string): number {
   if (!source.startsWith("#!")) return 0;
   return Math.max(0, source.indexOf("\n") + 1);
-}
-
+@@CLEANROOM_HOLE_R1@@
 function mutateSource(policy: PolicySpec, base: GraphSnapshot, sourceFile: string, source: string): { file: string; source: string } | { error: string } {
   const assertion = policy.assertion;
   if (assertion.kind === "executable-behavior") return { error: "mutation-executable-behavior-unsupported" };
