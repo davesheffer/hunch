@@ -189,7 +189,7 @@ test("syncCommit skips a dependency-bump commit with an empty body", async () =>
   store.close();
   cleanupDir(root);
 });
-
+@@CLEANROOM_HOLE_R1@@
 function pythonGitRepo(): string {
   const root = mkdtempSync(join(tmpdir(), "hunch-int-py-"));
   const g = (...a: string[]) => execFileSync("git", a, { cwd: root, stdio: ["ignore", "ignore", "ignore"] });
